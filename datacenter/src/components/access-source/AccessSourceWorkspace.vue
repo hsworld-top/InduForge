@@ -4,13 +4,6 @@
       <!-- 头部：单行 toolbar 撑满 -->
       <header class="access-source-workspace__head">
         <div class="access-source-workspace__toolbar">
-          <!-- 概览数字：总数 / 在线 / 异常 -->
-          <div class="access-source-workspace__overview">
-            <span class="access-source-workspace__overview-text">
-              共 {{ overviewTotal }} · 在线 {{ overviewOnline }}<template v-if="overviewError > 0"> · 异常 {{ overviewError }}</template>
-            </span>
-          </div>
-
           <!-- 搜索框 -->
           <el-input
             v-model="searchInputValue"
@@ -84,6 +77,13 @@
           >
             <IconTablerRefresh class="access-source-workspace__icon-btn-icon" />
           </button>
+
+          <!-- 概览数字：总数 / 在线 / 异常，靠右展示 -->
+          <div class="access-source-workspace__overview">
+            <span class="access-source-workspace__overview-text">
+              共 {{ overviewTotal }} · 在线 {{ overviewOnline }}<template v-if="overviewError > 0"> · 异常 {{ overviewError }}</template>
+            </span>
+          </div>
 
           <!-- 新增连接 -->
           <button
@@ -506,7 +506,15 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
   height: 16px;
 }
 
-/* toolbar 左侧概览文字 */
+/* toolbar 右侧概览：占据剩余空间并右对齐文字 */
+.access-source-workspace__overview {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 8px;
+}
+
 .access-source-workspace__overview-text {
   color: var(--dc-text-muted);
   font-size: 12px;

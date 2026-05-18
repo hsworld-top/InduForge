@@ -197,7 +197,8 @@ const loadSubscriptions = async () => {
       props.projectId,
       props.connectionId,
     );
-    subscriptions.value = response.data || [];
+    /* 后端返回结构：{ data: { pagination, subscriptions } } */
+    subscriptions.value = response.data?.subscriptions || [];
   } catch (error) {
     ElMessage.error(
       t("subscription.loadFailed", {

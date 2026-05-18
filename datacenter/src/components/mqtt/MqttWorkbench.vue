@@ -321,7 +321,8 @@ const loadSubscriptions = async () => {
       projectIdText.value,
       props.connection.id,
     );
-    subscriptions.value = response.data || [];
+    /* 后端返回结构：{ data: { pagination, subscriptions } } */
+    subscriptions.value = response.data?.subscriptions || [];
     if (
       subscriptions.value.length > 0 &&
       !subscriptions.value.some(
