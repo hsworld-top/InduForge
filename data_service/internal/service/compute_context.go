@@ -17,6 +17,7 @@ import (
 func (s *ComputeService) prepareComputeSDKContext(ctx context.Context, unit repository.ComputeUnitRecord, runtimeInput map[string]any) (enginecompute.SDKContext, error) {
 	sdk := enginecompute.SDKContext{
 		Datapoints: map[string]enginecompute.SDKDataPointValue{},
+		Variables:  map[string]any{},
 		SQL:        map[string]any{},
 		Metadata: map[string]any{
 			"projectId":     unit.ProjectID,
@@ -29,12 +30,13 @@ func (s *ComputeService) prepareComputeSDKContext(ctx context.Context, unit repo
 		return sdk, nil
 	}
 
-	for _, path := range extractComputeDatapointBindings(unit.InputBindings) {
-		value, err := s.readComputeSDKDatapoint(ctx, unit.ProjectID, path)
+	for _, binding := range extractComputeDatapointVariableBindings(unit.InputBindings) {
+		value, err := s.readComputeSDKDatapoint(ctx, unit.ProjectID, binding.Path)
 		if err != nil {
 			return sdk, err
 		}
-		sdk.Datapoints[path] = value
+		sdk.Datapoints[binding.Path] = value
+		sdk.Variables[binding.Alias] = value.Value
 	}
 
 	for key, binding := range extractComputeSQLBindings(unit.InputBindings) {
@@ -51,6 +53,11 @@ type computeSQLBinding struct {
 	Key        string
 	QueryID    string
 	Parameters map[string]any
+}
+
+type computeDatapointVariableBinding struct {
+	Alias string
+	Path  string
 }
 
 func (s *ComputeService) readComputeSDKDatapoint(ctx context.Context, projectID, path string) (enginecompute.SDKDataPointValue, error) {
@@ -99,33 +106,64 @@ func (s *ComputeService) executeComputeSDKQuery(ctx context.Context, projectID s
 	}, nil
 }
 
-func extractComputeDatapointBindings(input map[string]any) []string {
-	paths := make([]string, 0)
-	var walk func(any)
-	walk = func(value any) {
-		switch typed := value.(type) {
-		case string:
-			if looksLikeDatapointPath(typed) {
-				paths = append(paths, strings.TrimSpace(typed))
+func extractComputeDatapointVariableBindings(input map[string]any) []computeDatapointVariableBinding {
+	raw, ok := input["datapointVariables"]
+	if !ok {
+		return []computeDatapointVariableBinding{}
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		return []computeDatapointVariableBinding{}
+	}
+	bindings := make([]computeDatapointVariableBinding, 0, len(items))
+	seen := map[string]struct{}{}
+	for _, item := range items {
+		mapped, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		alias := strings.TrimSpace(firstString(mapped, "alias", "name"))
+		path := strings.TrimSpace(firstString(mapped, "path", "datapointPath"))
+		if alias == "" || path == "" || !isSafeComputeVariableAlias(alias) {
+			continue
+		}
+		key := alias + "\x00" + path
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		bindings = append(bindings, computeDatapointVariableBinding{Alias: alias, Path: path})
+	}
+	return bindings
+}
+
+func isSafeComputeVariableAlias(alias string) bool {
+	if alias == "" || strings.HasPrefix(alias, "__") {
+		return false
+	}
+	for index, char := range alias {
+		if index == 0 {
+			if !(char == '_' || char == '$' || char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z') {
+				return false
 			}
-		case []any:
-			for _, item := range typed {
-				walk(item)
-			}
-		case map[string]any:
-			if path := strings.TrimSpace(firstString(typed, "path", "datapoint", "datapointPath")); path != "" {
-				paths = append(paths, path)
-			}
-			for key, item := range typed {
-				if key == "queries" || key == "sql" {
-					continue
-				}
-				walk(item)
-			}
+			continue
+		}
+		if !(char == '_' || char == '$' || char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z' || char >= '0' && char <= '9') {
+			return false
 		}
 	}
-	walk(input)
-	return uniqueContractCheckStrings(paths)
+	switch alias {
+	case "arguments", "eval", "await", "break", "case", "catch", "class", "const", "continue",
+		"debugger", "default", "delete", "do", "else", "enum", "export", "extends", "false",
+		"finally", "for", "function", "if", "import", "in", "instanceof", "let", "new", "null",
+		"return", "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void",
+		"while", "with", "yield", "False", "None", "True", "and", "as", "assert", "async",
+		"def", "del", "elif", "except", "from", "global", "is", "lambda", "nonlocal",
+		"not", "or", "pass", "raise":
+		return false
+	default:
+		return true
+	}
 }
 
 func extractComputeSQLBindings(input map[string]any) map[string]computeSQLBinding {
@@ -171,14 +209,6 @@ func sqlBindingFromMap(input map[string]any) computeSQLBinding {
 		parameters = cloneMap(rawParams)
 	}
 	return computeSQLBinding{Key: key, QueryID: queryID, Parameters: parameters}
-}
-
-func looksLikeDatapointPath(value string) bool {
-	value = strings.TrimSpace(value)
-	if value == "" || strings.Contains(value, " ") {
-		return false
-	}
-	return strings.Contains(value, ".")
 }
 
 func dataPointDefaultValue(record repository.DataPointRecord) any {

@@ -8,6 +8,7 @@ import {
   ComputeFolderSchema,
   ComputeDependencySchema,
   ComputeRunResultSchema,
+  ComputeSyntaxCheckResultSchema,
   type ComputeUnit,
   type ComputeUnitDetail,
   type ComputeUnitSave,
@@ -15,6 +16,7 @@ import {
   type ComputeFolder,
   type ComputeDependency,
   type ComputeRunResult,
+  type ComputeSyntaxCheckResult,
 } from "./schemas/compute.schema";
 
 const computeListSchema = listResponseSchema(ComputeUnitSchema);
@@ -183,6 +185,19 @@ export async function debugComputeUnit(
     data: { input, dryRun },
   });
   return ComputeRunResultSchema.parse(unwrapData(res));
+}
+
+/** 检查未保存计算脚本语法 */
+export async function checkComputeSyntax(
+  projectId: string,
+  data: { lang?: string; language?: string; code?: string; scriptCode?: string },
+): Promise<ComputeSyntaxCheckResult> {
+  const res = await request({
+    url: `/data/projects/${projectId}/compute-units/syntax-check`,
+    method: "post",
+    data,
+  });
+  return ComputeSyntaxCheckResultSchema.parse(unwrapData(res));
 }
 
 /** 获取计算单元文件夹树 */

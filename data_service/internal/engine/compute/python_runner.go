@@ -21,6 +21,7 @@ import json
 import os
 import sys
 import traceback
+import keyword
 import urllib.request
 import urllib.error
 
@@ -30,6 +31,8 @@ user_script = os.environ.get("COMPUTE_SCRIPT", "")
 callback_url = os.environ.get("COMPUTE_CALLBACK_URL", "")
 callback_token = os.environ.get("COMPUTE_CALLBACK_TOKEN", "")
 side_effects = []
+argv = input_data.get("argv") if isinstance(input_data.get("argv"), list) else []
+dp = sdk_context.get("variables", {})
 
 def call_compute_callback(path, payload):
     if not callback_url:
@@ -101,18 +104,52 @@ class ComputeSDK:
 
 ctx = ComputeSDK()
 scope = {
-    "input": input_data,
+    "argv": argv,
+    "dp": dp,
     "ctx": ctx,
-    "result": None,
 }
+if isinstance(dp, dict):
+    for name, value in dp.items():
+        if isinstance(name, str) and name.isidentifier() and not name.startswith("__") and not keyword.iskeyword(name):
+            scope[name] = value
 
 try:
-    exec(user_script, {}, scope)
-    payload = {"result": scope.get("result"), "sideEffects": side_effects}
+    exec(user_script, scope, scope)
+    main = scope.get("main")
+    if not callable(main):
+        raise RuntimeError("python 脚本必须定义 main(argv, dp, ctx) 函数")
+    resolved = main(argv, dp, ctx)
+    payload = {"result": resolved, "sideEffects": side_effects}
     sys.stdout.write("__DATA_SERVICE_RESULT__:" + json.dumps(payload))
 except Exception:
     traceback.print_exc(file=sys.stderr)
     sys.exit(1)
+`
+
+const pythonSyntaxCheckScript = `
+import json
+import os
+
+user_script = os.environ.get("COMPUTE_SCRIPT", "")
+try:
+    compile(user_script, "<compute>", "exec")
+    print(json.dumps({"diagnostics": []}))
+except SyntaxError as error:
+    line = int(error.lineno or 1)
+    column = int(error.offset or 1)
+    end_line = int(getattr(error, "end_lineno", None) or line)
+    end_column = int(getattr(error, "end_offset", None) or column + 1)
+    print(json.dumps({
+        "diagnostics": [{
+            "severity": "error",
+            "message": str(error.msg or error),
+            "line": max(1, line),
+            "column": max(1, column),
+            "endLine": max(1, end_line),
+            "endColumn": max(2, end_column),
+            "source": "python"
+        }]
+    }))
 `
 
 // PythonRunner executes Python compute scripts through a short-lived Python process.
@@ -225,6 +262,57 @@ func (r *PythonRunner) Run(ctx context.Context, request ExecuteRequest) (Execute
 	}
 	result.Output = parsedOutput
 	result.SideEffects = sideEffects
+	return result, nil
+}
+
+// CheckSyntax 检查 Python 计算脚本语法。
+func (r *PythonRunner) CheckSyntax(ctx context.Context, request SyntaxCheckRequest) (SyntaxCheckResult, error) {
+	if r == nil {
+		return SyntaxCheckResult{}, fmt.Errorf("python runner 未初始化")
+	}
+
+	timeout := request.Timeout
+	if timeout <= 0 {
+		timeout = defaultRunTimeout
+	}
+
+	probeCtx, probeCancel := context.WithTimeout(ctx, probePythonTimeout)
+	defer probeCancel()
+	binaryPath, resolveErr := resolvePythonBinary(probeCtx, r.binaryPath)
+	if resolveErr != nil {
+		return SyntaxCheckResult{}, resolveErr
+	}
+
+	execCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(execCtx, binaryPath, "-c", pythonSyntaxCheckScript)
+	cmd.Dir = r.runtimeDir
+	cmd.Env = append(os.Environ(), "COMPUTE_SCRIPT="+request.Script)
+
+	var stdoutBuffer bytes.Buffer
+	var stderrBuffer bytes.Buffer
+	cmd.Stdout = &stdoutBuffer
+	cmd.Stderr = &stderrBuffer
+
+	if err := cmd.Run(); err != nil {
+		if errors.Is(execCtx.Err(), context.DeadlineExceeded) {
+			return SyntaxCheckResult{}, ErrTimeout
+		}
+		message := strings.TrimSpace(stderrBuffer.String())
+		if message == "" {
+			message = err.Error()
+		}
+		return SyntaxCheckResult{}, fmt.Errorf("python 语法检查失败: %s", message)
+	}
+
+	var result SyntaxCheckResult
+	if err := json.Unmarshal(stdoutBuffer.Bytes(), &result); err != nil {
+		return SyntaxCheckResult{}, fmt.Errorf("解析 python 语法检查结果失败: %w", err)
+	}
+	if result.Diagnostics == nil {
+		result.Diagnostics = []SyntaxDiagnostic{}
+	}
 	return result, nil
 }
 

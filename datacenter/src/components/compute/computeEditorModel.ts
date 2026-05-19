@@ -9,11 +9,21 @@ export interface ComputeEditorTab {
   dirty: boolean;
 }
 
-export interface ComputeInputRow {
+export interface ComputeParameterRow {
   uid: string;
   name: string;
+  type: string;
+  required: boolean;
+  defaultValue: string;
+  description: string;
+}
+
+export interface ComputeDatapointVariableRow {
+  uid: string;
+  alias: string;
   path: string;
   datapointId?: string;
+  dataType?: string;
 }
 
 export interface ComputeDependencyDraft {
@@ -34,15 +44,16 @@ export interface ComputeDraft {
   timeoutMs: number;
   isEnabled: boolean;
   dependencies: ComputeDependencyDraft[];
-  inputRows: ComputeInputRow[];
+  parameterRows: ComputeParameterRow[];
+  datapointVariableRows: ComputeDatapointVariableRow[];
   dirty: boolean;
 }
 
 const defaultCode = (lang?: string) => {
   if (lang === "python") {
-    return "result = input\n";
+    return "def main(argv, dp, ctx):\n    return argv[0] if len(argv) > 0 else None\n";
   }
-  return "result = input;\n";
+  return "return argv[0] ?? null;\n";
 };
 
 export function toComputeDraft(unit: ComputeUnitDetail): ComputeDraft {
@@ -63,7 +74,8 @@ export function toComputeDraft(unit: ComputeUnitDetail): ComputeDraft {
     timeoutMs: Number(unit.timeoutMs || 3000),
     isEnabled: unit.isEnabled !== false,
     dependencies: toDependencyDrafts(unit.dependencies),
-    inputRows: toInputRows(inputBindings),
+    parameterRows: toParameterRows(inputBindings),
+    datapointVariableRows: toDatapointVariableRows(inputBindings),
     dirty: false,
   };
 }
@@ -76,7 +88,7 @@ export function draftToSavePayload(draft: ComputeDraft): Partial<ComputeUnitSave
     folderId: draft.folderId,
     triggerType: draft.triggerType,
     triggerConfig: draft.triggerConfig,
-    inputBindings: inputRowsToBindings(draft.inputRows),
+    inputBindings: inputRowsToBindings(draft.parameterRows, draft.datapointVariableRows),
     outputBindings: draft.outputBindings,
     timeoutMs: draft.timeoutMs,
     isEnabled: draft.isEnabled,
@@ -104,39 +116,69 @@ function toDependencyDrafts(value: unknown): ComputeDependencyDraft[] {
     .filter((item): item is ComputeDependencyDraft => Boolean(item?.id));
 }
 
-function toInputRows(bindings: Record<string, unknown>): ComputeInputRow[] {
-  const rawInputs = bindings.inputs;
-  if (Array.isArray(rawInputs)) {
-    const rows: Array<ComputeInputRow | null> = rawInputs.map((item) => {
-        if (!item || typeof item !== "object") return null;
-        const record = item as Record<string, unknown>;
-        return {
-          uid: String(crypto.randomUUID()),
-          name: String(record.name || record.key || ""),
-          path: String(record.path || record.datapointPath || ""),
-          datapointId: record.datapointId ? String(record.datapointId) : undefined,
-        };
-      });
-    return rows.filter(
-      (item): item is ComputeInputRow => Boolean(item?.name || item?.path),
-    );
-  }
-
-  return Object.entries(bindings).map(([name, value]) => ({
-    uid: String(crypto.randomUUID()),
-    name,
-    path: String(value || ""),
-  }));
+function toParameterRows(bindings: Record<string, unknown>): ComputeParameterRow[] {
+  const rawParameters = bindings.parameters;
+  if (!Array.isArray(rawParameters)) return [];
+  const rows: Array<ComputeParameterRow | null> = rawParameters.map((item) => {
+    if (!item || typeof item !== "object") return null;
+    const record = item as Record<string, unknown>;
+    return {
+      uid: String(crypto.randomUUID()),
+      name: String(record.name || ""),
+      type: String(record.type || "string"),
+      required: record.required !== false,
+      defaultValue:
+        record.defaultValue === undefined || record.defaultValue === null
+          ? ""
+          : String(record.defaultValue),
+      description: String(record.description || ""),
+    };
+  });
+  return rows.filter((item): item is ComputeParameterRow => Boolean(item?.name));
 }
 
-function inputRowsToBindings(rows: ComputeInputRow[]): Record<string, unknown> {
+function toDatapointVariableRows(
+  bindings: Record<string, unknown>,
+): ComputeDatapointVariableRow[] {
+  const rawVariables = bindings.datapointVariables;
+  if (!Array.isArray(rawVariables)) return [];
+  const rows: Array<ComputeDatapointVariableRow | null> = rawVariables.map((item) => {
+    if (!item || typeof item !== "object") return null;
+    const record = item as Record<string, unknown>;
+    return {
+      uid: String(crypto.randomUUID()),
+      alias: String(record.alias || ""),
+      path: String(record.path || ""),
+      datapointId: record.datapointId ? String(record.datapointId) : undefined,
+      dataType: record.dataType ? String(record.dataType) : undefined,
+    };
+  });
+  return rows.filter(
+    (item): item is ComputeDatapointVariableRow => Boolean(item?.alias && item?.path),
+  );
+}
+
+function inputRowsToBindings(
+  parameters: ComputeParameterRow[],
+  datapointVariables: ComputeDatapointVariableRow[],
+): Record<string, unknown> {
   return {
-    inputs: rows
-      .filter((row) => row.name.trim() && row.path.trim())
+    parameters: parameters
+      .filter((row) => row.name.trim())
       .map((row) => ({
         name: row.name.trim(),
+        type: row.type,
+        required: row.required,
+        defaultValue: row.defaultValue,
+        description: row.description.trim(),
+      })),
+    datapointVariables: datapointVariables
+      .filter((row) => row.alias.trim() && row.path.trim())
+      .map((row) => ({
+        alias: row.alias.trim(),
         path: row.path.trim(),
         datapointId: row.datapointId,
+        dataType: row.dataType,
       })),
   };
 }

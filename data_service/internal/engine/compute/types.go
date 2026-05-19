@@ -28,9 +28,32 @@ type ExecuteResult struct {
 	Duration    time.Duration
 }
 
+// SyntaxCheckRequest 描述一次脚本语法检查请求。
+type SyntaxCheckRequest struct {
+	Script  string
+	Timeout time.Duration
+}
+
+// SyntaxDiagnostic 描述脚本语法诊断。
+type SyntaxDiagnostic struct {
+	Severity  string `json:"severity"`
+	Message   string `json:"message"`
+	Line      int    `json:"line"`
+	Column    int    `json:"column"`
+	EndLine   int    `json:"endLine"`
+	EndColumn int    `json:"endColumn"`
+	Source    string `json:"source"`
+}
+
+// SyntaxCheckResult 描述脚本语法检查结果。
+type SyntaxCheckResult struct {
+	Diagnostics []SyntaxDiagnostic `json:"diagnostics"`
+}
+
 // SDKContext 是由服务端预取后注入脚本运行时的受控上下文。
 type SDKContext struct {
 	Datapoints map[string]SDKDataPointValue `json:"datapoints"`
+	Variables  map[string]any               `json:"variables"`
 	SQL        map[string]any               `json:"sql"`
 	Metadata   map[string]any               `json:"metadata"`
 }
@@ -47,4 +70,9 @@ type SDKDataPointValue struct {
 // Runner 抽象不同脚本语言的执行器。
 type Runner interface {
 	Run(ctx context.Context, request ExecuteRequest) (ExecuteResult, error)
+}
+
+// SyntaxChecker 抽象不同脚本语言的语法检查器。
+type SyntaxChecker interface {
+	CheckSyntax(ctx context.Context, request SyntaxCheckRequest) (SyntaxCheckResult, error)
 }

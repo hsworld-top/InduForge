@@ -118,6 +118,34 @@ func (h *ComputeHandler) Dependencies(w http.ResponseWriter, r *http.Request) er
 	return nil
 }
 
+// CheckSyntax 检查未保存计算脚本语法。
+func (h *ComputeHandler) CheckSyntax(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Language   string `json:"language"`
+		Lang       string `json:"lang"`
+		ScriptCode string `json:"scriptCode"`
+		Code       string `json:"code"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+
+	result, err := h.service.CheckComputeSyntax(r.Context(), claims, r.PathValue("projectId"), service.ComputeSyntaxCheckInput{
+		Language:   firstNonEmpty(request.Language, request.Lang),
+		ScriptCode: firstNonEmpty(request.ScriptCode, request.Code),
+	})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 // ListFolders 返回项目内计算单元文件夹树。
 func (h *ComputeHandler) ListFolders(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)

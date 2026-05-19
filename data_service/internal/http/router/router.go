@@ -994,6 +994,14 @@ func mountComputeRoutes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/compute-units/syntax-check",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.computeHandler.CheckSyntax),
+			),
+		),
+	)
+	mux.Handle(
 		"GET /api/v1/data/projects/{projectId}/compute-units/folders",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:read")(

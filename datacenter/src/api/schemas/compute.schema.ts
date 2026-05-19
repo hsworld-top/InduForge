@@ -125,3 +125,29 @@ export const ComputeRunResultSchema = z
   .passthrough();
 
 export type ComputeRunResult = z.infer<typeof ComputeRunResultSchema>;
+
+export const ComputeSyntaxDiagnosticSchema = z
+  .object({
+    severity: z.string(),
+    message: z.string(),
+    line: z.number(),
+    column: z.number(),
+    endLine: z.number().optional(),
+    endColumn: z.number().optional(),
+    source: z.string().optional(),
+  })
+  .passthrough();
+
+export type ComputeSyntaxDiagnostic = z.infer<
+  typeof ComputeSyntaxDiagnosticSchema
+>;
+
+export const ComputeSyntaxCheckResultSchema = z
+  .object({
+    diagnostics: z.array(ComputeSyntaxDiagnosticSchema).optional(),
+  })
+  .passthrough();
+
+export type ComputeSyntaxCheckResult = z.infer<
+  typeof ComputeSyntaxCheckResultSchema
+>;

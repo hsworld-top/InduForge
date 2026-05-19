@@ -102,11 +102,11 @@ const form = ref({
   name: "calc.sum",
   language: "js",
   timeoutMs: 3000,
-  scriptCode: "result = (input.a || 0) + (input.b || 0);",
+  scriptCode: "return (argv[0] || 0) + (argv[1] || 0);",
 });
 
 const computeUnitId = ref("");
-const inputJSON = ref('{"a":1,"b":2}');
+const inputJSON = ref('{"argv":[1,2]}');
 const outputText = ref(t("compute.notExecuted"));
 
 const creating = ref(false);

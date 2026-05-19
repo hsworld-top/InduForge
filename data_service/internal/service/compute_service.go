@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	defaultComputeTimeoutMS = 3000
-	maxComputeTimeoutMS     = 120000
+	defaultComputeTimeoutMS   = 3000
+	maxComputeTimeoutMS       = 120000
+	defaultSyntaxCheckTimeout = 3 * time.Second
 )
 
 var allowedComputeLanguages = map[string]struct{}{
@@ -132,6 +133,22 @@ type ComputeRunResult struct {
 	FinishedAt   time.Time `json:"finishedAt"`
 }
 
+// ComputeSyntaxDiagnostic 表示计算脚本语法诊断。
+type ComputeSyntaxDiagnostic struct {
+	Severity  string `json:"severity"`
+	Message   string `json:"message"`
+	Line      int    `json:"line"`
+	Column    int    `json:"column"`
+	EndLine   int    `json:"endLine"`
+	EndColumn int    `json:"endColumn"`
+	Source    string `json:"source"`
+}
+
+// ComputeSyntaxCheckResult 表示计算脚本语法检查结果。
+type ComputeSyntaxCheckResult struct {
+	Diagnostics []ComputeSyntaxDiagnostic `json:"diagnostics"`
+}
+
 // CreateComputeUnitInput 描述创建计算单元的输入参数。
 type CreateComputeUnitInput struct {
 	Name          string
@@ -204,6 +221,12 @@ type ComputeRunListFilter struct {
 type RunComputeUnitInput struct {
 	Input  map[string]any
 	DryRun bool
+}
+
+// ComputeSyntaxCheckInput 描述语法检查输入。
+type ComputeSyntaxCheckInput struct {
+	Language   string
+	ScriptCode string
 }
 
 // ComputeService 承载 compute 领域业务逻辑。
@@ -592,6 +615,44 @@ func (s *ComputeService) DebugComputeUnit(ctx context.Context, claims *auth.Clai
 	return s.executeComputeUnit(ctx, claims, projectID, unitID, "debug", input)
 }
 
+// CheckComputeSyntax 检查未保存脚本语法。
+func (s *ComputeService) CheckComputeSyntax(ctx context.Context, claims *auth.Claims, projectID string, input ComputeSyntaxCheckInput) (*ComputeSyntaxCheckResult, error) {
+	if err := s.validateReadAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	language, err := normalizeComputeLanguage(input.Language)
+	if err != nil {
+		return nil, err
+	}
+	checker, err := s.pickSyntaxChecker(language)
+	if err != nil {
+		return nil, err
+	}
+	result, err := checker.CheckSyntax(ctx, enginecompute.SyntaxCheckRequest{
+		Script:  strings.TrimSpace(input.ScriptCode),
+		Timeout: defaultSyntaxCheckTimeout,
+	})
+	if err != nil {
+		if errors.Is(err, enginecompute.ErrTimeout) {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "语法检查超时")
+		}
+		return nil, err
+	}
+	diagnostics := make([]ComputeSyntaxDiagnostic, 0, len(result.Diagnostics))
+	for _, item := range result.Diagnostics {
+		diagnostics = append(diagnostics, ComputeSyntaxDiagnostic{
+			Severity:  normalizeDiagnosticSeverity(item.Severity),
+			Message:   strings.TrimSpace(item.Message),
+			Line:      positiveOrDefault(item.Line, 1),
+			Column:    positiveOrDefault(item.Column, 1),
+			EndLine:   positiveOrDefault(item.EndLine, positiveOrDefault(item.Line, 1)),
+			EndColumn: positiveOrDefault(item.EndColumn, positiveOrDefault(item.Column, 1)+1),
+			Source:    strings.TrimSpace(item.Source),
+		})
+	}
+	return &ComputeSyntaxCheckResult{Diagnostics: diagnostics}, nil
+}
+
 func (s *ComputeService) executeComputeUnit(ctx context.Context, claims *auth.Claims, projectID, unitID, triggerMode string, input RunComputeUnitInput) (*ComputeRunResult, error) {
 	if err := s.validateWriteAccess(claims, projectID); err != nil {
 		return nil, err
@@ -777,6 +838,39 @@ func (s *ComputeService) pickRunner(language string) (enginecompute.Runner, erro
 	default:
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "language 不受支持")
 	}
+}
+
+func (s *ComputeService) pickSyntaxChecker(language string) (enginecompute.SyntaxChecker, error) {
+	runner, err := s.pickRunner(language)
+	if err != nil {
+		return nil, err
+	}
+	checker, ok := runner.(enginecompute.SyntaxChecker)
+	if !ok || checker == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前语言不支持语法检查")
+	}
+	return checker, nil
+}
+
+func normalizeDiagnosticSeverity(severity string) string {
+	switch strings.TrimSpace(strings.ToLower(severity)) {
+	case "warning", "warn":
+		return "warning"
+	case "info", "hint":
+		return "info"
+	default:
+		return "error"
+	}
+}
+
+func positiveOrDefault(value, fallback int) int {
+	if value > 0 {
+		return value
+	}
+	if fallback > 0 {
+		return fallback
+	}
+	return 1
 }
 
 func toComputeUnit(record repository.ComputeUnitRecord) ComputeUnit {

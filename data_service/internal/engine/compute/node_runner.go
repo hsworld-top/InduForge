@@ -25,6 +25,16 @@ const sdkContext = JSON.parse(process.env.COMPUTE_CONTEXT || "{}");
 const userScript = process.env.COMPUTE_SCRIPT || "";
 const callbackURL = process.env.COMPUTE_CALLBACK_URL || "";
 const callbackToken = process.env.COMPUTE_CALLBACK_TOKEN || "";
+const argv = Array.isArray(input.argv) ? input.argv : [];
+const dp = sdkContext.variables || {};
+const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
+const blockedVariableNames = new Set([
+  "arguments", "eval", "await", "break", "case", "catch", "class", "const", "continue",
+  "debugger", "default", "delete", "do", "else", "enum", "export", "extends", "false",
+  "finally", "for", "function", "if", "import", "in", "instanceof", "let", "new", "null",
+  "return", "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void",
+  "while", "with", "yield"
+]);
 
 (async () => {
   const sideEffects = [];
@@ -91,18 +101,69 @@ const callbackToken = process.env.COMPUTE_CALLBACK_TOKEN || "";
     sideEffects
   };
 
-  const runtime = new Function(
-    "input",
+  const variableNames = Object.keys(dp).filter((name) => /^[A-Za-z_$][0-9A-Za-z_$]*$/.test(name) && !blockedVariableNames.has(name));
+  const variableValues = variableNames.map((name) => dp[name]);
+  const runtime = new AsyncFunction(
+    "argv",
+    "dp",
     "ctx",
-    "\"use strict\";\nlet result = null;\n" + userScript + "\nreturn typeof result === 'undefined' ? null : result;"
+    ...variableNames,
+    "\"use strict\";\n" + userScript
   );
-  const resolved = await runtime(input, ctx);
+  const resolved = await runtime(argv, dp, ctx, ...variableValues);
   process.stdout.write("__DATA_SERVICE_RESULT__:" + JSON.stringify({ result: resolved, sideEffects }));
 })().catch((error) => {
   const text = error && error.stack ? error.stack : String(error);
   process.stderr.write(text);
   process.exit(1);
 });
+`
+
+const nodeSyntaxCheckScript = `
+const vm = require("vm");
+const userScript = process.env.COMPUTE_SCRIPT || "";
+const functionBody = "\"use strict\";\n" + userScript;
+const syntaxProbe = "(async function(argv, dp, ctx) {\n" + functionBody + "\n})";
+
+function parseSyntaxLocation(error) {
+  const stack = error && error.stack ? String(error.stack) : "";
+  const lines = stack.split(/\r?\n/);
+  const headerIndex = lines.findIndex((line) => /^<compute>:(\d+)/.test(line));
+  if (headerIndex < 0) {
+    return { line: 1, column: 1 };
+  }
+
+  const header = lines[headerIndex];
+  const lineMatch = header.match(/^<compute>:(\d+)/);
+  const rawLine = lineMatch ? Number(lineMatch[1]) : 1;
+  const sourceLine = lines[headerIndex + 1] || "";
+  const caretLine = lines[headerIndex + 2] || "";
+  const caretIndex = caretLine.indexOf("^");
+  const column = caretIndex >= 0 ? Math.max(1, caretIndex + 1) : 1;
+  const wrapperLineCount = 2;
+  return {
+    line: Math.max(1, rawLine - wrapperLineCount),
+    column: Math.min(Math.max(1, column), Math.max(1, sourceLine.length + 1))
+  };
+}
+
+try {
+  new vm.Script(syntaxProbe, { filename: "<compute>" });
+  process.stdout.write(JSON.stringify({ diagnostics: [] }));
+} catch (error) {
+  const location = parseSyntaxLocation(error);
+  process.stdout.write(JSON.stringify({
+    diagnostics: [{
+      severity: "error",
+      message: error && error.message ? String(error.message) : String(error),
+      line: location.line,
+      column: location.column,
+      endLine: location.line,
+      endColumn: Math.max(2, location.column + 1),
+      source: "javascript"
+    }]
+  }));
+}
 `
 
 // NodeRunner executes JavaScript compute scripts through a short-lived Node process.
@@ -204,5 +265,52 @@ func (r *NodeRunner) Run(ctx context.Context, request ExecuteRequest) (ExecuteRe
 	}
 	result.Output = parsedOutput
 	result.SideEffects = sideEffects
+	return result, nil
+}
+
+// CheckSyntax 检查 JavaScript 计算脚本语法。
+func (r *NodeRunner) CheckSyntax(ctx context.Context, request SyntaxCheckRequest) (SyntaxCheckResult, error) {
+	if r == nil {
+		return SyntaxCheckResult{}, fmt.Errorf("node runner 未初始化")
+	}
+
+	timeout := request.Timeout
+	if timeout <= 0 {
+		timeout = defaultRunTimeout
+	}
+	execCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(execCtx, r.binaryPath, "-e", nodeSyntaxCheckScript)
+	cmd.Dir = r.runtimeDir
+	cmd.Env = append(
+		os.Environ(),
+		"NODE_ENV=production",
+		"COMPUTE_SCRIPT="+request.Script,
+	)
+
+	var stdoutBuffer bytes.Buffer
+	var stderrBuffer bytes.Buffer
+	cmd.Stdout = &stdoutBuffer
+	cmd.Stderr = &stderrBuffer
+
+	if err := cmd.Run(); err != nil {
+		if errors.Is(execCtx.Err(), context.DeadlineExceeded) {
+			return SyntaxCheckResult{}, ErrTimeout
+		}
+		message := strings.TrimSpace(stderrBuffer.String())
+		if message == "" {
+			message = err.Error()
+		}
+		return SyntaxCheckResult{}, fmt.Errorf("node 语法检查失败: %s", message)
+	}
+
+	var result SyntaxCheckResult
+	if err := json.Unmarshal(stdoutBuffer.Bytes(), &result); err != nil {
+		return SyntaxCheckResult{}, fmt.Errorf("解析 node 语法检查结果失败: %w", err)
+	}
+	if result.Diagnostics == nil {
+		result.Diagnostics = []SyntaxDiagnostic{}
+	}
 	return result, nil
 }

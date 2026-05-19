@@ -10,6 +10,16 @@
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
 import * as monaco from "monaco-editor";
 
+type EditorDiagnostic = {
+  severity?: string;
+  message: string;
+  line: number;
+  column: number;
+  endLine?: number;
+  endColumn?: number;
+  source?: string;
+};
+
 // 配置 Monaco Editor 的 worker
 // 使用内联 worker 避免 worker 文件加载问题
 if (typeof window !== "undefined" && !window.MonacoEnvironment) {
@@ -188,11 +198,66 @@ const insertText = (text) => {
   editorInstance.focus();
 };
 
+const severityToMonaco = (severity?: string) => {
+  switch (String(severity || "").toLowerCase()) {
+    case "warning":
+    case "warn":
+      return monaco.MarkerSeverity.Warning;
+    case "info":
+      return monaco.MarkerSeverity.Info;
+    case "hint":
+      return monaco.MarkerSeverity.Hint;
+    default:
+      return monaco.MarkerSeverity.Error;
+  }
+};
+
+const setDiagnostics = (
+  diagnostics: EditorDiagnostic[] = [],
+  owner = "compute-syntax",
+) => {
+  const model = editorInstance?.getModel?.();
+  if (!model) return;
+  monaco.editor.setModelMarkers(
+    model,
+    owner,
+    diagnostics.map((item) => ({
+      severity: severityToMonaco(item.severity),
+      message: item.message,
+      startLineNumber: Math.max(1, Number(item.line) || 1),
+      startColumn: Math.max(1, Number(item.column) || 1),
+      endLineNumber: Math.max(
+        1,
+        Number(item.endLine || item.line) || Number(item.line) || 1,
+      ),
+      endColumn: Math.max(
+        2,
+        Number(item.endColumn || item.column + 1) ||
+          Number(item.column || 1) + 1,
+      ),
+      source: item.source || owner,
+    })),
+  );
+};
+
+const revealPosition = (line: number, column = 1) => {
+  if (!editorInstance) return;
+  const position = {
+    lineNumber: Math.max(1, Number(line) || 1),
+    column: Math.max(1, Number(column) || 1),
+  };
+  editorInstance.setPosition(position);
+  editorInstance.revealPositionInCenter(position);
+  editorInstance.focus();
+};
+
 // 暴露方法给父组件
 defineExpose({
   getValue: () => editorInstance?.getValue() || "",
   setValue: (value) => editorInstance?.setValue(value || ""),
   insertText,
+  setDiagnostics,
+  revealPosition,
   format: formatCode,
   focus: () => editorInstance?.focus(),
   dispose: () => {

@@ -366,27 +366,15 @@ func checkAlarmContracts(rules []repository.AlarmRuleRecord, datapoints map[stri
 
 func collectBindingPaths(input map[string]any) []string {
 	paths := make([]string, 0)
-	var walk func(any)
-	walk = func(value any) {
-		switch typed := value.(type) {
-		case string:
-			if strings.Contains(typed, ".") {
-				paths = append(paths, strings.TrimSpace(typed))
-			}
-		case map[string]any:
-			if rawPath, ok := typed["path"].(string); ok && strings.TrimSpace(rawPath) != "" {
-				paths = append(paths, strings.TrimSpace(rawPath))
-			}
-			for _, child := range typed {
-				walk(child)
-			}
-		case []any:
-			for _, child := range typed {
-				walk(child)
+	if variables, ok := input["datapointVariables"].([]any); ok {
+		for _, item := range variables {
+			if mapped, ok := item.(map[string]any); ok {
+				if rawPath, ok := mapped["path"].(string); ok && strings.TrimSpace(rawPath) != "" {
+					paths = append(paths, strings.TrimSpace(rawPath))
+				}
 			}
 		}
 	}
-	walk(input)
 	return uniqueContractCheckStrings(paths)
 }
 
