@@ -18,6 +18,33 @@ type DatapointListResp = {
   };
 };
 
+const unwrapData = (value: unknown) => {
+  if (
+    value &&
+    typeof value === "object" &&
+    "code" in value &&
+    "data" in value
+  ) {
+    return (value as { data?: unknown }).data;
+  }
+  return value;
+};
+
+function normalizeDatapointListResponse(res: unknown) {
+  const payload = unwrapData(res);
+  if (Array.isArray(payload)) {
+    return { list: payload };
+  }
+  if (!payload || typeof payload !== "object") {
+    return { list: [] };
+  }
+  const record = payload as Record<string, unknown>;
+  return {
+    ...record,
+    list: record.list ?? record.datapoints ?? record.items ?? [],
+  };
+}
+
 /** 获取数据点列表 */
 export async function getDatapoints(
   projectId: string,
@@ -28,8 +55,9 @@ export async function getDatapoints(
     method: "get",
     params,
   });
-  // request 已解包 data 层，res 即后端 data 字段
-  return datapointListSchema.parse(res);
+  // request 已解包 data 层。旧后端字段为 datapoints，新页面统一使用 list。
+  const normalized = normalizeDatapointListResponse(res);
+  return datapointListSchema.parse(normalized);
 }
 
 /** 获取单个数据点详情 */
@@ -41,7 +69,7 @@ export async function getDatapoint(
     url: `/data/projects/${projectId}/datapoints/${datapointId}`,
     method: "get",
   });
-  return DatapointSchema.parse(res);
+  return DatapointSchema.parse(unwrapData(res));
 }
 
 /** 更新数据点 */
@@ -56,7 +84,7 @@ export async function updateDatapoint(
     method: "put",
     data: body,
   });
-  return DatapointSchema.parse(res);
+  return DatapointSchema.parse(unwrapData(res));
 }
 
 /** 更新数据点运行态权限 */
@@ -70,7 +98,7 @@ export async function updateDatapointRuntimeGrant(
     method: "put",
     data,
   });
-  return DatapointSchema.parse(res);
+  return DatapointSchema.parse(unwrapData(res));
 }
 
 /** 删除数据点 */

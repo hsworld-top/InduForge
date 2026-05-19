@@ -64,12 +64,17 @@ func (h *ComputeHandler) Create(w http.ResponseWriter, r *http.Request) error {
 
 	var request struct {
 		Name          string         `json:"name"`
+		Description   *string        `json:"description"`
 		Language      string         `json:"language"`
+		Lang          string         `json:"lang"`
 		ScriptCode    string         `json:"scriptCode"`
+		Code          string         `json:"code"`
+		FolderID      *string        `json:"folderId"`
 		TriggerType   string         `json:"triggerType"`
 		TriggerConfig map[string]any `json:"triggerConfig"`
 		InputBindings map[string]any `json:"inputBindings"`
 		OutputBinding map[string]any `json:"outputBindings"`
+		Dependencies  []any          `json:"dependencies"`
 		TimeoutMS     *int           `json:"timeoutMs"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
@@ -78,12 +83,15 @@ func (h *ComputeHandler) Create(w http.ResponseWriter, r *http.Request) error {
 
 	result, err := h.service.CreateComputeUnit(r.Context(), claims, r.PathValue("projectId"), service.CreateComputeUnitInput{
 		Name:          request.Name,
-		Language:      request.Language,
-		ScriptCode:    request.ScriptCode,
+		Description:   request.Description,
+		FolderID:      request.FolderID,
+		Language:      firstNonEmpty(request.Language, request.Lang),
+		ScriptCode:    firstNonEmpty(request.ScriptCode, request.Code),
 		TriggerType:   request.TriggerType,
 		TriggerConfig: request.TriggerConfig,
 		InputBindings: request.InputBindings,
 		OutputBinding: request.OutputBinding,
+		Dependencies:  request.Dependencies,
 		TimeoutMS:     request.TimeoutMS,
 	})
 	if err != nil {
@@ -91,6 +99,100 @@ func (h *ComputeHandler) Create(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// Dependencies 返回计算单元可用依赖清单。
+func (h *ComputeHandler) Dependencies(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+
+	result, err := h.service.ListComputeDependencies(r.Context(), claims, r.PathValue("projectId"))
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// ListFolders 返回项目内计算单元文件夹树。
+func (h *ComputeHandler) ListFolders(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+
+	result, err := h.service.ListComputeFolders(r.Context(), claims, r.PathValue("projectId"))
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// CreateFolder 创建计算单元文件夹。
+func (h *ComputeHandler) CreateFolder(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+
+	var request struct {
+		Name     string  `json:"name"`
+		ParentID *string `json:"parentId"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+
+	result, err := h.service.CreateComputeFolder(r.Context(), claims, r.PathValue("projectId"), service.CreateComputeFolderInput{
+		Name:     request.Name,
+		ParentID: request.ParentID,
+	})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// UpdateFolder 更新计算单元文件夹。
+func (h *ComputeHandler) UpdateFolder(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	input, err := decodeUpdateComputeFolderInput(r)
+	if err != nil {
+		return err
+	}
+
+	result, err := h.service.UpdateComputeFolder(r.Context(), claims, r.PathValue("projectId"), r.PathValue("folderId"), input)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// DeleteFolder 删除计算单元文件夹。
+func (h *ComputeHandler) DeleteFolder(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+
+	if err := h.service.DeleteComputeFolder(r.Context(), claims, r.PathValue("projectId"), r.PathValue("folderId")); err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"deleted": true})
 	return nil
 }
 
@@ -205,14 +307,16 @@ func (h *ComputeHandler) Debug(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var request struct {
-		Input map[string]any `json:"input"`
+		Input  map[string]any `json:"input"`
+		DryRun bool           `json:"dryRun"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
 	}
 
 	result, err := h.service.DebugComputeUnit(r.Context(), claims, r.PathValue("projectId"), r.PathValue("id"), service.RunComputeUnitInput{
-		Input: request.Input,
+		Input:  request.Input,
+		DryRun: request.DryRun,
 	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
@@ -275,15 +379,41 @@ func decodeUpdateComputeUnitInput(r *http.Request) (service.UpdateComputeUnitInp
 	} else if ok {
 		input.Name = value
 	}
+	if value, ok, err := optionalNullableStringField(raw, "description"); err != nil {
+		return service.UpdateComputeUnitInput{}, err
+	} else if ok {
+		input.Description = value
+		input.HasDescription = true
+	}
 	if value, ok, err := optionalStringField(raw, "language"); err != nil {
 		return service.UpdateComputeUnitInput{}, err
 	} else if ok {
 		input.Language = value
 	}
+	if input.Language == nil {
+		if value, ok, err := optionalStringField(raw, "lang"); err != nil {
+			return service.UpdateComputeUnitInput{}, err
+		} else if ok {
+			input.Language = value
+		}
+	}
 	if value, ok, err := optionalStringField(raw, "scriptCode"); err != nil {
 		return service.UpdateComputeUnitInput{}, err
 	} else if ok {
 		input.ScriptCode = value
+	}
+	if input.ScriptCode == nil {
+		if value, ok, err := optionalStringField(raw, "code"); err != nil {
+			return service.UpdateComputeUnitInput{}, err
+		} else if ok {
+			input.ScriptCode = value
+		}
+	}
+	if value, ok, err := optionalNullableStringField(raw, "folderId"); err != nil {
+		return service.UpdateComputeUnitInput{}, err
+	} else if ok {
+		input.FolderID = value
+		input.HasFolderID = true
 	}
 	if value, ok, err := optionalStringField(raw, "triggerType"); err != nil {
 		return service.UpdateComputeUnitInput{}, err
@@ -308,6 +438,12 @@ func decodeUpdateComputeUnitInput(r *http.Request) (service.UpdateComputeUnitInp
 		input.OutputBinding = value
 		input.HasOutputBinding = true
 	}
+	if value, ok, err := optionalArrayField(raw, "dependencies"); err != nil {
+		return service.UpdateComputeUnitInput{}, err
+	} else if ok {
+		input.Dependencies = value
+		input.HasDependencies = true
+	}
 	if value, ok, err := optionalIntField(raw, "timeoutMs"); err != nil {
 		return service.UpdateComputeUnitInput{}, err
 	} else if ok {
@@ -321,10 +457,46 @@ func decodeUpdateComputeUnitInput(r *http.Request) (service.UpdateComputeUnitInp
 	return input, nil
 }
 
+func decodeUpdateComputeFolderInput(r *http.Request) (service.UpdateComputeFolderInput, error) {
+	var raw map[string]any
+	if err := decodeJSONBody(r, &raw); err != nil {
+		return service.UpdateComputeFolderInput{}, err
+	}
+
+	var input service.UpdateComputeFolderInput
+	if value, ok, err := optionalStringField(raw, "name"); err != nil {
+		return service.UpdateComputeFolderInput{}, err
+	} else if ok {
+		input.Name = value
+	}
+	if value, ok, err := optionalNullableStringField(raw, "parentId"); err != nil {
+		return service.UpdateComputeFolderInput{}, err
+	} else if ok {
+		input.ParentID = value
+		input.HasParentID = true
+	}
+	return input, nil
+}
+
 func optionalStringField(raw map[string]any, field string) (*string, bool, error) {
 	value, exists := raw[field]
 	if !exists {
 		return nil, false, nil
+	}
+	text, ok := value.(string)
+	if !ok {
+		return nil, false, invalidComputeField(field)
+	}
+	return &text, true, nil
+}
+
+func optionalNullableStringField(raw map[string]any, field string) (*string, bool, error) {
+	value, exists := raw[field]
+	if !exists {
+		return nil, false, nil
+	}
+	if value == nil {
+		return nil, true, nil
 	}
 	text, ok := value.(string)
 	if !ok {
@@ -346,6 +518,21 @@ func optionalObjectField(raw map[string]any, field string) (map[string]any, bool
 		return nil, false, invalidComputeField(field)
 	}
 	return object, true, nil
+}
+
+func optionalArrayField(raw map[string]any, field string) ([]any, bool, error) {
+	value, exists := raw[field]
+	if !exists {
+		return nil, false, nil
+	}
+	if value == nil {
+		return []any{}, true, nil
+	}
+	list, ok := value.([]any)
+	if !ok {
+		return nil, false, invalidComputeField(field)
+	}
+	return list, true, nil
 }
 
 func optionalIntField(raw map[string]any, field string) (*int, bool, error) {

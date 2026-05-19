@@ -318,11 +318,12 @@
       </div>
     </template>
 
-    <div
-      v-else-if="activeModule === 'compute'"
-      class="module-card h-full overflow-hidden p-5"
-    >
-      <ComputeWorkspace v-if="projectId" :project-id="projectId" />
+    <div v-else-if="activeModule === 'compute'" class="h-full overflow-hidden">
+      <ComputeWorkspace
+        v-if="projectId"
+        :project-id="projectId"
+        :selected-unit-id="activeObjectId"
+      />
     </div>
 
     <div
@@ -485,6 +486,7 @@ const resolveModuleFromRoute = (): DatacenterModuleId => {
 };
 
 const activeModule = ref<DatacenterModuleId>(resolveModuleFromRoute());
+const activeObjectId = computed(() => String(route.params.objectId || ""));
 
 /** 监听路由变化，同步 activeModule（如从 NavRail 外部 push 路由时） */
 watch(

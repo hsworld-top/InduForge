@@ -2,8 +2,11 @@
   脚本面板：定时器折叠块（树 + 拖拽）
 -->
 <script setup lang="ts">
+import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
+import IconEpPlus from "~icons/ep/plus";
 import IconEpTimer from "~icons/ep/timer";
 
 interface ScriptTreeNodeLike {
@@ -12,7 +15,7 @@ interface ScriptTreeNodeLike {
   type: string;
 }
 
-defineProps<{
+const props = defineProps<{
   tree: ScriptTreeNodeLike[];
   allowDrop: (draggingNode: unknown, dropNode: unknown, dropType: unknown) => boolean;
   allowDrag: (draggingNode: unknown) => boolean;
@@ -25,7 +28,18 @@ const emit = defineEmits([
   "nodeContextmenu",
   "nodeDrop",
   "nodeClick",
+  "createScript",
 ]);
+const { t } = useI18n();
+
+const itemCount = computed(() => countItems(props.tree));
+
+function countItems(nodes: ScriptTreeNodeLike[]): number {
+  return nodes.reduce((sum, node: any) => {
+    if (node.type === "item") return sum + 1;
+    return sum + countItems(node.children || []);
+  }, 0);
+}
 
 function handleNodeDblclick(data: ScriptTreeNodeLike) {
   emit("nodeDblclick", data);
@@ -42,15 +56,28 @@ function handleNodeDrop(draggingNode: unknown, dropNode: unknown, dropType: unkn
 function handleNodeClick(data: ScriptTreeNodeLike, event: MouseEvent) {
   emit("nodeClick", data, event);
 }
-const { t } = useI18n();
 </script>
 
 <template>
   <el-collapse-item name="timers">
-    <template #title> {{ t("scriptPanel.sections.timers") }} </template>
+    <template #title>
+      <div class="section-title">
+        <span>{{ t("scriptPanel.sections.globalTimers") }}</span>
+        <span class="section-count">{{ itemCount }}</span>
+        <el-tooltip :content="t('scriptPanel.actions.create')" placement="top">
+          <el-button class="section-action" size="small" text circle @click.stop="emit('createScript')">
+            <IconEpPlus />
+          </el-button>
+        </el-tooltip>
+      </div>
+    </template>
     <div class="scripts-layout">
       <div class="scripts-list is-full" @contextmenu="emit('blankContextmenu', $event)">
+        <div v-if="itemCount === 0" class="empty-state">
+          <div class="empty-text">{{ t("scriptPanel.empty.timers") }}</div>
+        </div>
         <el-tree
+          v-else
           :data="tree"
           node-key="id"
           :default-expand-all="true"
@@ -78,6 +105,11 @@ const { t } = useI18n();
               <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{
                 data.label
               }}</span>
+              <el-tooltip v-if="data.type === 'item'" :content="t('scriptPanel.actions.edit')" placement="top">
+                <el-button class="row-action" size="small" text circle @click.stop="handleNodeDblclick(data)">
+                  <IconEpEditPen />
+                </el-button>
+              </el-tooltip>
             </div>
           </template>
         </el-tree>
@@ -88,25 +120,20 @@ const { t } = useI18n();
 
 <style scoped>
 .scripts-layout {
-  display: flex;
-  gap: 12px;
-  flex: 1;
-  padding: 6px 4px;
+  display: block;
+  padding: 4px 4px 8px;
   box-sizing: border-box;
-  min-height: 320px;
 }
 
 .scripts-list {
   width: 100%;
-  border: 1px solid var(--designer-border-color);
-  border-radius: 10px;
+  border: 0;
+  border-radius: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--designer-shell-surface);
-  box-shadow: var(--designer-shadow-panel);
-  min-height: 320px;
-  flex: 1;
+  background: transparent;
+  min-height: 0;
 }
 
 .scripts-list.is-full {
@@ -114,13 +141,70 @@ const { t } = useI18n();
 }
 
 :deep(.scripts-list .el-tree) {
-  flex: 1;
   overflow: auto;
-  padding: 10px 8px;
+  padding: 0;
+  background: transparent;
 }
 
 :deep(.scripts-list .el-tree-node__content) {
-  height: 38px;
+  height: 32px;
+  background: transparent;
+}
+
+:deep(.scripts-list .el-tree-node__content:hover) {
+  background: transparent;
+}
+
+:deep(.scripts-list .el-tree-node__expand-icon.is-leaf) {
+  display: none;
+}
+
+:deep(.scripts-list .el-tree-node__expand-icon) {
+  margin-right: 2px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.section-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--designer-border-color) 55%, white);
+  color: var(--designer-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+  font-weight: 500;
+}
+
+.section-action {
+  margin-left: auto;
+  color: var(--designer-text-muted);
+  opacity: 0;
+}
+
+.section-title:hover .section-action {
+  color: var(--designer-primary-text);
+  opacity: 1;
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  padding: 0 8px;
+  color: var(--designer-text-muted);
+}
+
+.empty-text {
+  font-size: 13px;
 }
 
 .tree-node {
@@ -129,7 +213,8 @@ const { t } = useI18n();
   gap: 8px;
   min-width: 0;
   width: 100%;
-  padding: 6px 8px;
+  height: 32px;
+  padding: 0 8px;
   border-radius: 6px;
   transition: background-color 0.2s;
 }
@@ -157,6 +242,8 @@ const { t } = useI18n();
 }
 
 .node-label {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
   color: var(--designer-text-primary);
   white-space: nowrap;
@@ -166,5 +253,15 @@ const { t } = useI18n();
 
 .node-label.is-group {
   font-weight: 600;
+}
+
+.row-action {
+  opacity: 0;
+  color: var(--designer-primary-text);
+}
+
+.tree-node:hover .row-action,
+.tree-node.is-selected .row-action {
+  opacity: 1;
 }
 </style>

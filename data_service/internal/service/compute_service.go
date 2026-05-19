@@ -37,16 +37,51 @@ type ComputeUnit struct {
 	ID            string         `json:"id"`
 	ProjectID     string         `json:"projectId"`
 	Name          string         `json:"name"`
+	Description   *string        `json:"description,omitempty"`
+	FolderID      *string        `json:"folderId,omitempty"`
 	Language      string         `json:"language"`
+	Lang          string         `json:"lang,omitempty"`
 	ScriptCode    string         `json:"scriptCode"`
+	Code          string         `json:"code,omitempty"`
 	TriggerType   string         `json:"triggerType"`
 	TriggerConfig map[string]any `json:"triggerConfig"`
 	InputBindings map[string]any `json:"inputBindings"`
 	OutputBinding map[string]any `json:"outputBindings"`
+	Dependencies  []any          `json:"dependencies"`
 	TimeoutMS     int            `json:"timeoutMs"`
 	IsEnabled     bool           `json:"isEnabled"`
+	Status        string         `json:"status"`
+	Path          string         `json:"path"`
+	OutputPath    string         `json:"outputPath"`
 	CreatedAt     time.Time      `json:"createdAt"`
 	UpdatedAt     time.Time      `json:"updatedAt"`
+}
+
+// ComputeFolder 表示计算单元文件夹。
+type ComputeFolder struct {
+	ID        string           `json:"id"`
+	ProjectID string           `json:"projectId"`
+	Name      string           `json:"name"`
+	ParentID  *string          `json:"parentId,omitempty"`
+	Children  []*ComputeFolder `json:"children,omitempty"`
+	CreatedAt time.Time        `json:"createdAt"`
+	UpdatedAt time.Time        `json:"updatedAt"`
+}
+
+// ComputeDependency 表示计算单元可用依赖。
+type ComputeDependency struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Runtime     string `json:"runtime"`
+	Version     string `json:"version"`
+	Description string `json:"description"`
+	Status      string `json:"status"`
+	ImportName  string `json:"importName"`
+}
+
+// ComputeDependencyListResult 表示依赖清单响应。
+type ComputeDependencyListResult struct {
+	List []ComputeDependency `json:"list"`
 }
 
 // ComputeUnitPagination 表示计算单元分页信息。
@@ -88,8 +123,10 @@ type ComputeRunListResult struct {
 type ComputeRunResult struct {
 	Status       string    `json:"status"`
 	DurationMS   int       `json:"durationMs"`
+	DryRun       bool      `json:"dryRun"`
 	Output       any       `json:"output"`
 	SideEffects  []any     `json:"sideEffects,omitempty"`
+	Logs         []string  `json:"logs,omitempty"`
 	ErrorMessage string    `json:"errorMessage,omitempty"`
 	StartedAt    time.Time `json:"startedAt"`
 	FinishedAt   time.Time `json:"finishedAt"`
@@ -98,18 +135,38 @@ type ComputeRunResult struct {
 // CreateComputeUnitInput 描述创建计算单元的输入参数。
 type CreateComputeUnitInput struct {
 	Name          string
+	Description   *string
+	FolderID      *string
 	Language      string
 	ScriptCode    string
 	TriggerType   string
 	TriggerConfig map[string]any
 	InputBindings map[string]any
 	OutputBinding map[string]any
+	Dependencies  []any
 	TimeoutMS     *int
+}
+
+// CreateComputeFolderInput 描述创建计算文件夹的输入参数。
+type CreateComputeFolderInput struct {
+	Name     string
+	ParentID *string
+}
+
+// UpdateComputeFolderInput 描述更新计算文件夹的输入参数。
+type UpdateComputeFolderInput struct {
+	Name        *string
+	ParentID    *string
+	HasParentID bool
 }
 
 // UpdateComputeUnitInput 描述更新计算单元的输入参数。
 type UpdateComputeUnitInput struct {
 	Name             *string
+	Description      *string
+	HasDescription   bool
+	FolderID         *string
+	HasFolderID      bool
 	Language         *string
 	ScriptCode       *string
 	TriggerType      *string
@@ -119,6 +176,8 @@ type UpdateComputeUnitInput struct {
 	HasInputBindings bool
 	OutputBinding    map[string]any
 	HasOutputBinding bool
+	Dependencies     []any
+	HasDependencies  bool
 	TimeoutMS        *int
 	IsEnabled        *bool
 }
@@ -143,7 +202,8 @@ type ComputeRunListFilter struct {
 
 // RunComputeUnitInput 描述运行/调试计算单元时的输入参数。
 type RunComputeUnitInput struct {
-	Input map[string]any
+	Input  map[string]any
+	DryRun bool
 }
 
 // ComputeService 承载 compute 领域业务逻辑。
@@ -243,6 +303,14 @@ func (s *ComputeService) GetComputeUnit(ctx context.Context, claims *auth.Claims
 	return &unit, nil
 }
 
+// ListComputeDependencies 返回计算运行时内置依赖清单。
+func (s *ComputeService) ListComputeDependencies(ctx context.Context, claims *auth.Claims, projectID string) (*ComputeDependencyListResult, error) {
+	if err := s.validateReadAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	return &ComputeDependencyListResult{List: builtInComputeDependencies()}, nil
+}
+
 // CreateComputeUnit 创建计算单元定义。
 func (s *ComputeService) CreateComputeUnit(ctx context.Context, claims *auth.Claims, projectID string, input CreateComputeUnitInput) (*ComputeUnit, error) {
 	if err := s.validateWriteAccess(claims, projectID); err != nil {
@@ -252,17 +320,23 @@ func (s *ComputeService) CreateComputeUnit(ctx context.Context, claims *auth.Cla
 	if err != nil {
 		return nil, err
 	}
+	if err := s.ensureComputeFolderInProject(ctx, projectID, normalized.FolderID); err != nil {
+		return nil, err
+	}
 
 	record, err := s.repository.CreateUnit(ctx, repository.CreateComputeUnitParams{
 		ProjectID:     projectID,
 		UserID:        claims.UserID,
 		Name:          normalized.Name,
+		Description:   normalized.Description,
+		FolderID:      normalized.FolderID,
 		Language:      normalized.Language,
 		ScriptCode:    normalized.ScriptCode,
 		TriggerType:   normalized.TriggerType,
 		TriggerConfig: normalized.TriggerConfig,
 		InputBindings: normalized.InputBindings,
 		OutputBinding: normalized.OutputBinding,
+		Dependencies:  normalized.Dependencies,
 		TimeoutMS:     normalized.TimeoutMS,
 	})
 	if err != nil {
@@ -274,6 +348,112 @@ func (s *ComputeService) CreateComputeUnit(ctx context.Context, claims *auth.Cla
 
 	unit := toComputeUnit(*record)
 	return &unit, nil
+}
+
+// ListComputeFolders 查询项目下计算文件夹。
+func (s *ComputeService) ListComputeFolders(ctx context.Context, claims *auth.Claims, projectID string) ([]*ComputeFolder, error) {
+	if err := s.validateReadAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	records, err := s.repository.ListFolders(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return toComputeFolderTree(records), nil
+}
+
+// CreateComputeFolder 创建计算文件夹。
+func (s *ComputeService) CreateComputeFolder(ctx context.Context, claims *auth.Claims, projectID string, input CreateComputeFolderInput) (*ComputeFolder, error) {
+	if err := s.validateWriteAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	name, err := normalizeComputeFolderName(input.Name)
+	if err != nil {
+		return nil, err
+	}
+	parentID, err := normalizeOptionalComputeFolderID(input.ParentID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.ensureComputeFolderInProject(ctx, projectID, parentID); err != nil {
+		return nil, err
+	}
+	record, err := s.repository.CreateFolder(ctx, repository.CreateComputeFolderParams{
+		ProjectID: projectID,
+		UserID:    claims.UserID,
+		Name:      name,
+		ParentID:  parentID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	folder := toComputeFolder(*record)
+	return &folder, nil
+}
+
+// UpdateComputeFolder 更新计算文件夹。
+func (s *ComputeService) UpdateComputeFolder(ctx context.Context, claims *auth.Claims, projectID, folderID string, input UpdateComputeFolderInput) (*ComputeFolder, error) {
+	if err := s.validateWriteAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	if err := validateComputeFolderID(folderID); err != nil {
+		return nil, err
+	}
+	records, err := s.repository.ListFolders(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	current, ok := findComputeFolderRecord(records, folderID)
+	if !ok {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "计算文件夹不存在")
+	}
+	if input.Name == nil && !input.HasParentID {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "至少需要提供一个待更新字段")
+	}
+
+	name := current.Name
+	if input.Name != nil {
+		name, err = normalizeComputeFolderName(*input.Name)
+		if err != nil {
+			return nil, err
+		}
+	}
+	parentID := cloneOptionalString(current.ParentID)
+	if input.HasParentID {
+		parentID, err = normalizeOptionalComputeFolderID(input.ParentID)
+		if err != nil {
+			return nil, err
+		}
+		if parentID != nil {
+			if *parentID == folderID {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "上级文件夹不能指向自身")
+			}
+			if _, ok := findComputeFolderRecord(records, *parentID); !ok {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "上级计算文件夹不存在")
+			}
+			if isDescendantComputeFolder(records, folderID, *parentID) {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "上级文件夹不能指向下级文件夹")
+			}
+		}
+	}
+
+	record, err := s.repository.UpdateFolder(ctx, projectID, folderID, claims.UserID, name, parentID)
+	if err != nil {
+		return nil, err
+	}
+	folder := toComputeFolder(*record)
+	return &folder, nil
+}
+
+// DeleteComputeFolder 删除计算文件夹。
+func (s *ComputeService) DeleteComputeFolder(ctx context.Context, claims *auth.Claims, projectID, folderID string) error {
+	if err := s.validateWriteAccess(claims, projectID); err != nil {
+		return err
+	}
+	if err := validateComputeFolderID(folderID); err != nil {
+		return err
+	}
+	return s.repository.DeleteFolder(ctx, projectID, folderID)
 }
 
 // UpdateComputeUnit 更新计算单元定义。
@@ -292,18 +472,24 @@ func (s *ComputeService) UpdateComputeUnit(ctx context.Context, claims *auth.Cla
 	if err != nil {
 		return nil, err
 	}
+	if err := s.ensureComputeFolderInProject(ctx, projectID, normalized.FolderID); err != nil {
+		return nil, err
+	}
 
 	record, err := s.repository.UpdateUnit(ctx, repository.UpdateComputeUnitParams{
 		ID:            current.ID,
 		ProjectID:     projectID,
 		UserID:        claims.UserID,
 		Name:          normalized.Name,
+		Description:   normalized.Description,
+		FolderID:      normalized.FolderID,
 		Language:      normalized.Language,
 		ScriptCode:    normalized.ScriptCode,
 		TriggerType:   normalized.TriggerType,
 		TriggerConfig: normalized.TriggerConfig,
 		InputBindings: normalized.InputBindings,
 		OutputBinding: normalized.OutputBinding,
+		Dependencies:  normalized.Dependencies,
 		TimeoutMS:     normalized.TimeoutMS,
 		IsEnabled:     normalized.IsEnabled,
 	})
@@ -397,6 +583,7 @@ func (s *ComputeService) ListComputeRuns(ctx context.Context, claims *auth.Claim
 
 // RunComputeUnit 触发一次正式运行。
 func (s *ComputeService) RunComputeUnit(ctx context.Context, claims *auth.Claims, projectID, unitID string, input RunComputeUnitInput) (*ComputeRunResult, error) {
+	input.DryRun = false
 	return s.executeComputeUnit(ctx, claims, projectID, unitID, "run", input)
 }
 
@@ -420,6 +607,7 @@ func (s *ComputeService) executeComputeUnit(ctx context.Context, claims *auth.Cl
 	if !unit.IsEnabled {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算单元已禁用")
 	}
+	dryRun := input.DryRun && triggerMode == "debug"
 
 	runner, err := s.pickRunner(unit.Language)
 	if err != nil {
@@ -430,7 +618,7 @@ func (s *ComputeService) executeComputeUnit(ctx context.Context, claims *auth.Cl
 		return nil, err
 	}
 
-	callback, err := s.startComputeSDKCallback(*unit)
+	callback, err := s.startComputeSDKCallback(*unit, dryRun)
 	if err != nil {
 		return nil, err
 	}
@@ -485,15 +673,17 @@ func (s *ComputeService) executeComputeUnit(ctx context.Context, claims *auth.Cl
 		}
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算脚本执行失败", executeErr)
 	}
-	if status == "success" {
+	if status == "success" && !dryRun {
 		_ = s.writeComputeOutputValues(ctx, *unit, executeResult.Output, claims.UserID)
 	}
 
 	return &ComputeRunResult{
 		Status:      status,
 		DurationMS:  int(executeResult.Duration.Milliseconds()),
+		DryRun:      dryRun,
 		Output:      executeResult.Output,
 		SideEffects: cloneJSONArray(executeResult.SideEffects),
+		Logs:        computeRunLogs(executeResult),
 		StartedAt:   startedAt,
 		FinishedAt:  finishedAt,
 	}, nil
@@ -507,13 +697,38 @@ func (s *ComputeService) validateDependencies() error {
 }
 
 func computeRunOutputPayload(result enginecompute.ExecuteResult) any {
-	if len(result.SideEffects) == 0 {
+	logs := computeRunLogs(result)
+	if len(result.SideEffects) == 0 && len(logs) == 0 {
 		return result.Output
 	}
 	return map[string]any{
 		"result":      result.Output,
 		"sideEffects": cloneJSONArray(result.SideEffects),
+		"logs":        logs,
 	}
+}
+
+func computeRunLogs(result enginecompute.ExecuteResult) []string {
+	logs := make([]string, 0, 2)
+	if stdout := computeVisibleLog(result.Stdout); stdout != "" {
+		logs = append(logs, stdout)
+	}
+	if stderr := strings.TrimSpace(result.Stderr); stderr != "" {
+		logs = append(logs, stderr)
+	}
+	return logs
+}
+
+func computeVisibleLog(stdout string) string {
+	stdout = strings.TrimSpace(stdout)
+	if stdout == "" {
+		return ""
+	}
+	index := strings.LastIndex(stdout, "__DATA_SERVICE_RESULT__:")
+	if index < 0 {
+		return stdout
+	}
+	return strings.TrimSpace(stdout[:index])
 }
 
 func (s *ComputeService) validateReadAccess(claims *auth.Claims, projectID string) error {
@@ -539,6 +754,20 @@ func (s *ComputeService) validateWriteAccess(claims *auth.Claims, projectID stri
 	return validateUserID(claims.UserID)
 }
 
+func (s *ComputeService) ensureComputeFolderInProject(ctx context.Context, projectID string, folderID *string) error {
+	if folderID == nil {
+		return nil
+	}
+	records, err := s.repository.ListFolders(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if _, ok := findComputeFolderRecord(records, *folderID); !ok {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算文件夹不存在")
+	}
+	return nil
+}
+
 func (s *ComputeService) pickRunner(language string) (enginecompute.Runner, error) {
 	switch strings.TrimSpace(strings.ToLower(language)) {
 	case "js":
@@ -551,21 +780,77 @@ func (s *ComputeService) pickRunner(language string) (enginecompute.Runner, erro
 }
 
 func toComputeUnit(record repository.ComputeUnitRecord) ComputeUnit {
+	status := "disabled"
+	if record.IsEnabled {
+		status = "enabled"
+	}
+	path := "calc." + normalizeDatapointSegment(record.Name)
 	return ComputeUnit{
 		ID:            record.ID,
 		ProjectID:     record.ProjectID,
 		Name:          record.Name,
+		Description:   cloneOptionalString(record.Description),
+		FolderID:      cloneOptionalString(record.FolderID),
 		Language:      record.Language,
+		Lang:          computeLanguageForFrontend(record.Language),
 		ScriptCode:    record.ScriptCode,
+		Code:          record.ScriptCode,
 		TriggerType:   record.TriggerType,
 		TriggerConfig: cloneMap(record.TriggerConfig),
 		InputBindings: cloneMap(record.InputBindings),
 		OutputBinding: cloneMap(record.OutputBinding),
+		Dependencies:  cloneJSONArray(record.Dependencies),
 		TimeoutMS:     record.TimeoutMS,
 		IsEnabled:     record.IsEnabled,
+		Status:        status,
+		Path:          path,
+		OutputPath:    path,
 		CreatedAt:     record.CreatedAt,
 		UpdatedAt:     record.UpdatedAt,
 	}
+}
+
+func computeLanguageForFrontend(language string) string {
+	switch strings.TrimSpace(strings.ToLower(language)) {
+	case "js":
+		return "javascript"
+	default:
+		return strings.TrimSpace(strings.ToLower(language))
+	}
+}
+
+func toComputeFolder(record repository.ComputeFolderRecord) ComputeFolder {
+	return ComputeFolder{
+		ID:        record.ID,
+		ProjectID: record.ProjectID,
+		Name:      record.Name,
+		ParentID:  cloneOptionalString(record.ParentID),
+		CreatedAt: record.CreatedAt,
+		UpdatedAt: record.UpdatedAt,
+	}
+}
+
+func toComputeFolderTree(records []repository.ComputeFolderRecord) []*ComputeFolder {
+	nodes := make(map[string]*ComputeFolder, len(records))
+	result := make([]*ComputeFolder, 0)
+	for _, record := range records {
+		folder := toComputeFolder(record)
+		nodes[folder.ID] = &folder
+	}
+	for _, record := range records {
+		node := nodes[record.ID]
+		if node == nil {
+			continue
+		}
+		if record.ParentID != nil {
+			if parent := nodes[*record.ParentID]; parent != nil {
+				parent.Children = append(parent.Children, node)
+				continue
+			}
+		}
+		result = append(result, node)
+	}
+	return result
 }
 
 func toComputeRun(record repository.ComputeRunRecord) ComputeRun {
@@ -586,12 +871,15 @@ func toComputeRun(record repository.ComputeRunRecord) ComputeRun {
 
 type normalizedComputeUnitInput struct {
 	Name          string
+	Description   *string
+	FolderID      *string
 	Language      string
 	ScriptCode    string
 	TriggerType   string
 	TriggerConfig map[string]any
 	InputBindings map[string]any
 	OutputBinding map[string]any
+	Dependencies  []any
 	TimeoutMS     int
 	IsEnabled     bool
 }
@@ -609,6 +897,10 @@ func normalizeCreateComputeInput(input CreateComputeUnitInput) (normalizedComput
 	if err != nil {
 		return normalizedComputeUnitInput{}, err
 	}
+	folderID, err := normalizeOptionalComputeFolderID(input.FolderID)
+	if err != nil {
+		return normalizedComputeUnitInput{}, err
+	}
 	triggerType, err := normalizeComputeTriggerType(input.TriggerType)
 	if err != nil {
 		return normalizedComputeUnitInput{}, err
@@ -619,37 +911,52 @@ func normalizeCreateComputeInput(input CreateComputeUnitInput) (normalizedComput
 	}
 	return normalizedComputeUnitInput{
 		Name:          name,
+		Description:   normalizeOptionalText(input.Description),
+		FolderID:      folderID,
 		Language:      language,
 		ScriptCode:    scriptCode,
 		TriggerType:   triggerType,
 		TriggerConfig: cloneMap(input.TriggerConfig),
 		InputBindings: cloneMap(input.InputBindings),
 		OutputBinding: cloneMap(input.OutputBinding),
+		Dependencies:  cloneJSONArray(input.Dependencies),
 		TimeoutMS:     timeoutMS,
 		IsEnabled:     true,
 	}, nil
 }
 
 func mergeComputeUpdateInput(current repository.ComputeUnitRecord, input UpdateComputeUnitInput) (normalizedComputeUnitInput, error) {
-	if input.Name == nil && input.Language == nil && input.ScriptCode == nil && input.TriggerType == nil &&
-		!input.HasTriggerConfig && !input.HasInputBindings && !input.HasOutputBinding && input.TimeoutMS == nil && input.IsEnabled == nil {
+	if input.Name == nil && !input.HasDescription && input.Language == nil && input.ScriptCode == nil && input.TriggerType == nil &&
+		!input.HasFolderID && !input.HasTriggerConfig && !input.HasInputBindings && !input.HasOutputBinding && !input.HasDependencies && input.TimeoutMS == nil && input.IsEnabled == nil {
 		return normalizedComputeUnitInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "至少需要提供一个待更新字段")
 	}
 
 	result := normalizedComputeUnitInput{
 		Name:          current.Name,
+		Description:   cloneOptionalString(current.Description),
+		FolderID:      cloneOptionalString(current.FolderID),
 		Language:      current.Language,
 		ScriptCode:    current.ScriptCode,
 		TriggerType:   current.TriggerType,
 		TriggerConfig: cloneMap(current.TriggerConfig),
 		InputBindings: cloneMap(current.InputBindings),
 		OutputBinding: cloneMap(current.OutputBinding),
+		Dependencies:  cloneJSONArray(current.Dependencies),
 		TimeoutMS:     current.TimeoutMS,
 		IsEnabled:     current.IsEnabled,
 	}
 	var err error
 	if input.Name != nil {
 		result.Name, err = normalizeComputeName(*input.Name)
+		if err != nil {
+			return normalizedComputeUnitInput{}, err
+		}
+	}
+	if input.HasDescription {
+		result.Description = normalizeOptionalText(input.Description)
+	}
+	if input.HasFolderID {
+		result.FolderID, err = normalizeOptionalComputeFolderID(input.FolderID)
 		if err != nil {
 			return normalizedComputeUnitInput{}, err
 		}
@@ -681,6 +988,9 @@ func mergeComputeUpdateInput(current repository.ComputeUnitRecord, input UpdateC
 	if input.HasOutputBinding {
 		result.OutputBinding = cloneMap(input.OutputBinding)
 	}
+	if input.HasDependencies {
+		result.Dependencies = cloneJSONArray(input.Dependencies)
+	}
 	if input.TimeoutMS != nil {
 		result.TimeoutMS, err = normalizeComputeTimeout(input.TimeoutMS, current.TimeoutMS)
 		if err != nil {
@@ -706,6 +1016,12 @@ func normalizeComputeName(name string) (string, error) {
 
 func normalizeComputeLanguage(language string) (string, error) {
 	language = strings.TrimSpace(strings.ToLower(language))
+	if language == "" {
+		language = "js"
+	}
+	if language == "javascript" {
+		language = "js"
+	}
 	if _, ok := allowedComputeLanguages[language]; !ok {
 		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "language 仅支持 js/python")
 	}
@@ -715,9 +1031,13 @@ func normalizeComputeLanguage(language string) (string, error) {
 func normalizeComputeScript(scriptCode string) (string, error) {
 	scriptCode = strings.TrimSpace(scriptCode)
 	if scriptCode == "" {
-		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "scriptCode 不能为空")
+		return defaultComputeScript(), nil
 	}
 	return scriptCode, nil
+}
+
+func defaultComputeScript() string {
+	return "result = input;"
 }
 
 func normalizeComputeTriggerType(triggerType string) (string, error) {
@@ -747,6 +1067,108 @@ func validateComputeUnitID(unitID string) error {
 		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "id 格式无效", err)
 	}
 	return nil
+}
+
+func validateComputeFolderID(folderID string) error {
+	if _, err := uuid.Parse(strings.TrimSpace(folderID)); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "id 格式无效", err)
+	}
+	return nil
+}
+
+func normalizeOptionalComputeFolderID(folderID *string) (*string, error) {
+	if folderID == nil {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(*folderID)
+	if trimmed == "" {
+		return nil, nil
+	}
+	if _, err := uuid.Parse(trimmed); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "folderId 格式无效", err)
+	}
+	return &trimmed, nil
+}
+
+func normalizeComputeFolderName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "name 不能为空")
+	}
+	if len([]rune(name)) > 100 {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "name 长度不能超过 100")
+	}
+	return name, nil
+}
+
+func builtInComputeDependencies() []ComputeDependency {
+	return []ComputeDependency{
+		{
+			ID:          "js:dayjs",
+			Name:        "dayjs",
+			Runtime:     "javascript",
+			Version:     "1.11.x",
+			Description: "时间解析、格式化和计算。",
+			Status:      "enabled",
+			ImportName:  "dayjs",
+		},
+		{
+			ID:          "js:lodash",
+			Name:        "lodash",
+			Runtime:     "javascript",
+			Version:     "4.17.x",
+			Description: "集合、对象和数组处理工具。",
+			Status:      "enabled",
+			ImportName:  "_",
+		},
+		{
+			ID:          "python:math",
+			Name:        "math",
+			Runtime:     "python",
+			Version:     "stdlib",
+			Description: "Python 标准数学函数库。",
+			Status:      "enabled",
+			ImportName:  "math",
+		},
+		{
+			ID:          "python:statistics",
+			Name:        "statistics",
+			Runtime:     "python",
+			Version:     "stdlib",
+			Description: "Python 标准统计函数库。",
+			Status:      "enabled",
+			ImportName:  "statistics",
+		},
+	}
+}
+
+func findComputeFolderRecord(records []repository.ComputeFolderRecord, folderID string) (repository.ComputeFolderRecord, bool) {
+	for _, record := range records {
+		if record.ID == folderID {
+			return record, true
+		}
+	}
+	return repository.ComputeFolderRecord{}, false
+}
+
+func isDescendantComputeFolder(records []repository.ComputeFolderRecord, folderID, possibleDescendantID string) bool {
+	currentID := possibleDescendantID
+	visited := map[string]struct{}{}
+	for currentID != "" {
+		if currentID == folderID {
+			return true
+		}
+		if _, exists := visited[currentID]; exists {
+			return false
+		}
+		visited[currentID] = struct{}{}
+		current, ok := findComputeFolderRecord(records, currentID)
+		if !ok || current.ParentID == nil {
+			return false
+		}
+		currentID = *current.ParentID
+	}
+	return false
 }
 
 type computeOutputBinding struct {

@@ -38,7 +38,6 @@ const STATUS_LABELS: Record<I18nScanStatus, string> = {
   "missing-current": "待补翻译",
   "source-changed": "原文有变化",
   orphan: "无效文案",
-  "missing-resource": "文案配置缺失",
   "binding-conflict": "不可维护",
 };
 
@@ -49,7 +48,6 @@ const STATUS_TIPS: Record<I18nScanStatus, string> = {
   "missing-current": "翻译语言还没有填写。",
   "source-changed": "页面里的原文和已维护文案不一致，需要确认是否更新。",
   orphan: "原页面、组件或字段已不存在，可以删除。",
-  "missing-resource": "页面字段引用了一个不存在的文案配置。",
   "binding-conflict": "这个字段使用了动态绑定，国际化只处理静态文案。",
 };
 
@@ -60,7 +58,6 @@ const STATUS_TAG_TYPES: Record<I18nScanStatus, "primary" | "success" | "warning"
   "missing-current": "warning",
   "source-changed": "warning",
   orphan: "danger",
-  "missing-resource": "danger",
   "binding-conflict": "warning",
 };
 
@@ -80,6 +77,7 @@ const lastScanAt = ref("");
 const targetAfterScan = ref<OpenPayload | null>(null);
 const selectedRowId = ref("");
 const affectedPageIds = ref<Set<string>>(new Set());
+const draftValues = ref<Record<string, Record<string, string>>>({});
 
 const enabledLocales = computed(() => localSettings.value.locales.filter((item) => item.enabled));
 const defaultLocale = computed(() => localSettings.value.defaultLocale);
@@ -105,8 +103,7 @@ const filteredRows = computed(() => {
         if (
           row.status !== "source-changed" &&
           row.status !== "orphan" &&
-          row.status !== "binding-conflict" &&
-          row.status !== "missing-resource"
+          row.status !== "binding-conflict"
         ) {
           return false;
         }
@@ -167,6 +164,16 @@ function rebuildRows() {
   rows.value = result.rows;
 }
 
+function setDraftValue(rowId: string, locale: string, value: string) {
+  draftValues.value = {
+    ...draftValues.value,
+    [rowId]: {
+      ...(draftValues.value[rowId] || {}),
+      [locale]: value,
+    },
+  };
+}
+
 function buildCurrentPageInput(): I18nScanPageInput | null {
   if (!doc.value || !currentPageId.value) return null;
   const schema = editorStore.serializer.exportToSchema(doc.value);
@@ -206,6 +213,7 @@ async function scanProject() {
       });
     }
     pageInputs.value = inputs;
+    draftValues.value = {};
     rebuildRows();
     lastScanAt.value = nowText();
     if (targetAfterScan.value) {
@@ -263,26 +271,39 @@ function ensureResourceForRow(row: I18nResourceRow): boolean {
 }
 
 function handleValueChange(row: I18nResourceRow, locale: string, value: string) {
-  const nextRow = {
-    ...row,
-    defaultValue: locale === defaultLocale.value ? value : row.defaultValue,
-    currentValue: locale === defaultLocale.value ? row.currentValue : value,
-  };
-  if (!row.resourceKey || !localSettings.value.resources[row.resourceKey]) {
-    if (!ensureResourceForRow(nextRow)) return;
-    rebuildRows();
-    selectedRowId.value = row.id;
-    return;
-  }
-  localSettings.value = updateI18nResourceValue(
-    localSettings.value,
-    row.resourceKey,
-    locale,
-    value,
-    nowText(),
-  );
-  rebuildRows();
+  setDraftValue(row.id, locale, value);
+  if (locale === defaultLocale.value) row.defaultValue = value;
+  else row.currentValue = value;
   selectedRowId.value = row.id;
+}
+
+function applyDraftValues() {
+  const entries = Object.entries(draftValues.value);
+  if (!entries.length) return;
+  entries.forEach(([rowId, localeValues]) => {
+    const row = rows.value.find((item) => item.id === rowId);
+    if (!row) return;
+    Object.entries(localeValues).forEach(([locale, value]) => {
+      const nextRow = {
+        ...row,
+        defaultValue: locale === defaultLocale.value ? value : row.defaultValue,
+        currentValue: locale === defaultLocale.value ? row.currentValue : value,
+      };
+      if (!row.resourceKey || !localSettings.value.resources[row.resourceKey]) {
+        if (!ensureResourceForRow(nextRow)) return;
+      } else {
+        localSettings.value = updateI18nResourceValue(
+          localSettings.value,
+          row.resourceKey,
+          locale,
+          value,
+          nowText(),
+        );
+      }
+    });
+  });
+  draftValues.value = {};
+  rebuildRows();
 }
 
 async function saveAffectedPages() {
@@ -305,6 +326,7 @@ async function handleSave(closeAfterSave = false) {
   if (!projectId.value) return;
   saving.value = true;
   try {
+    applyDraftValues();
     editorStore.setProjectI18n(localSettings.value);
     const settingsResult = await editorStore.saveProjectSettings();
     if (!settingsResult.ok) {

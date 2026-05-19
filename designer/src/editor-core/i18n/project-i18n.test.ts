@@ -40,6 +40,69 @@ describe("project i18n", () => {
     expect(result.rows.some((row) => row.fieldPath === "icon")).toBe(false);
   });
 
+  it("扫描明确文案字段里的英文按钮文本", () => {
+    const schema = buildSchema();
+    const node = schema.nodesById.node_submit;
+    if (node) node.props = { text: "button", icon: "Search", type: "primary" };
+
+    const result = scanProjectI18nResources(
+      [{ pageId: "page_home", pageName: "首页", schema }],
+      normalizeProjectI18nSettings(null),
+    );
+
+    expect(
+      result.rows.some(
+        (row) =>
+          row.nodeId === "node_submit" &&
+          row.fieldPath === "text" &&
+          row.sourceText === "button",
+      ),
+    ).toBe(true);
+    expect(result.rows.some((row) => row.fieldPath === "icon")).toBe(false);
+    expect(result.rows.some((row) => row.fieldPath === "type")).toBe(false);
+  });
+
+  it("不扫描布局组件 text 字段里的英文内部状态值", () => {
+    const schema = createEmptySchema({ projectId: "proj_1" });
+    const page = createPageNode({ id: "page_home", name: "首页" });
+    const root = createComponentNode("FreeContainer", { id: page.rootNodeId });
+    const tabs = createComponentNode("Tabs", {
+      id: "node_tabs",
+      label: "选项卡布局",
+      props: {
+        text: "activeTab",
+        tabs: [{ name: "base", label: "Base" }],
+      },
+    });
+    root.children = [tabs.id];
+    schema.pagesById[page.id] = page;
+    schema.nodesById[root.id] = root;
+    schema.nodesById[tabs.id] = tabs;
+    schema.entry.homePageId = page.id;
+
+    const result = scanProjectI18nResources(
+      [{ pageId: "page_home", pageName: "首页", schema }],
+      normalizeProjectI18nSettings(null),
+    );
+
+    expect(
+      result.rows.some(
+        (row) =>
+          row.nodeId === "node_tabs" &&
+          row.fieldPath === "tabs.0.label" &&
+          row.sourceText === "Base",
+      ),
+    ).toBe(true);
+    expect(
+      result.rows.some(
+        (row) =>
+          row.nodeId === "node_tabs" &&
+          row.fieldPath === "text" &&
+          row.sourceText === "activeTab",
+      ),
+    ).toBe(false);
+  });
+
   it("扫描物料默认 props 中的静态文案", () => {
     const schema = createEmptySchema({ projectId: "proj_1" });
     const page = createPageNode({ id: "page_home", name: "首页" });
@@ -86,6 +149,48 @@ describe("project i18n", () => {
           row.nodeId === "node_collapse" &&
           row.fieldPath === "items.0.content" &&
           row.sourceText === "内容1",
+      ),
+    ).toBe(true);
+  });
+
+  it("扫描按钮别名类型的默认文案", () => {
+    const schema = createEmptySchema({ projectId: "proj_1" });
+    const page = createPageNode({ id: "page_home", name: "首页" });
+    const root = createComponentNode("FreeContainer", { id: page.rootNodeId });
+    const button = createComponentNode("button", {
+      id: "node_lower_button",
+      label: "按钮",
+    });
+    const elButton = createComponentNode("ElButton", {
+      id: "node_el_button",
+      label: "确认按钮",
+    });
+    root.children = [button.id, elButton.id];
+    schema.pagesById[page.id] = page;
+    schema.nodesById[root.id] = root;
+    schema.nodesById[button.id] = button;
+    schema.nodesById[elButton.id] = elButton;
+    schema.entry.homePageId = page.id;
+
+    const result = scanProjectI18nResources(
+      [{ pageId: "page_home", pageName: "首页", schema }],
+      normalizeProjectI18nSettings(null),
+    );
+
+    expect(
+      result.rows.some(
+        (row) =>
+          row.nodeId === "node_lower_button" &&
+          row.fieldPath === "text" &&
+          row.sourceText === "按钮",
+      ),
+    ).toBe(true);
+    expect(
+      result.rows.some(
+        (row) =>
+          row.nodeId === "node_el_button" &&
+          row.fieldPath === "text" &&
+          row.sourceText === "按钮",
       ),
     ).toBe(true);
   });

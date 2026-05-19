@@ -5,13 +5,10 @@
 <script setup lang="ts">
 import { ElMessage, ElMessageBox } from "element-plus";
 import { storeToRefs } from "pinia";
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import IconEpDocument from "~icons/ep/document";
-import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpList from "~icons/ep/list";
-import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
 import {
   resolvePageVariableSnippet,
   resolveProjectVariableSnippet,
@@ -19,6 +16,7 @@ import {
 } from "@/services/data-variable-mapping";
 import { useEditorStore } from "@/stores/editor-store";
 import { buildComponentMethodCompletions } from "@/ui/shared/helpers/component-methods";
+import ScriptEditorDialog from "./ScriptEditorDialog.vue";
 import ScriptVarsCustomSection from "./ScriptVarsCustomSection.vue";
 import ScriptVarsMetaFormDialog from "./ScriptVarsMetaFormDialog.vue";
 import ScriptVarsSystemScriptDialog from "./ScriptVarsSystemScriptDialog.vue";
@@ -62,6 +60,10 @@ const editorOriginalCode = ref("");
 const editorOriginalInterval = ref(1000);
 const editorInterval = ref(1000);
 const editorParams = ref("");
+const systemEditorTab = ref("startup");
+const scriptEditorTab = ref("");
+const systemDrafts = ref<Record<string, string>>({});
+const scriptDrafts = ref<Record<string, string>>({});
 
 const systemEditorRef = ref<any>(null);
 const activeEditorRef = ref<any>(null);
@@ -124,10 +126,8 @@ const variableGroups = computed<Array<any>>(
 );
 
 const scriptSearch = ref("");
-const customScriptTreeRef = ref<any>(null);
 const pageSearch = ref("");
 const pageVariableSearch = ref("");
-const pageTreeRef = ref<any>(null);
 const variableEnumVisible = ref(false);
 const enumVariableSearch = ref("");
 const enumGroupTreeRef = ref<any>(null);
@@ -165,6 +165,22 @@ const editorMetaTitle = computed(
 );
 const editorMetaDescription = computed(
   () => getSelectedItem(scriptEditorModule.value)?.description || t("scriptPanel.editor.noDescription"),
+);
+const scriptEditorKindLabel = computed(() => {
+  if (scriptEditorModule.value === "timers") return t("scriptPanel.editor.timerScript");
+  if (scriptEditorModule.value === "variableChanges") return t("scriptPanel.editor.variableChangeScript");
+  return t("scriptPanel.editor.customScript");
+});
+const systemEditorTabs = computed(() => [
+  { key: "startup", label: t("scriptPanel.sections.startup") },
+  { key: "shutdown", label: t("scriptPanel.sections.shutdown") },
+]);
+const activeEditorItems = computed(() => getItemsByModule(scriptEditorModule.value));
+const scriptEditorTabs = computed(() =>
+  activeEditorItems.value.map((item) => ({
+    key: item.id,
+    label: item.name || item.variable || t("scriptPanel.editor.untitledScript"),
+  })),
 );
 
 const customScriptSidebarTree = computed(() =>
@@ -432,6 +448,7 @@ const metaDialogTitle = computed(() => {
 });
 
 function syncSystemCode() {
+  if (systemEditorVisible.value) return;
   const system = globalScripts.value?.system || {};
   systemCode.value =
     selectedSystemKey.value === "startup"
@@ -439,8 +456,51 @@ function syncSystemCode() {
       : system.shutdown?.code || "";
 }
 
+function getSystemCodeByKey(key: string) {
+  const system = globalScripts.value?.system || {};
+  return key === "startup" ? system.startup?.code || "" : system.shutdown?.code || "";
+}
+
+function getItemDraftKey(module: string, id: string) {
+  return `${module}:${id}`;
+}
+
+function getItemCodeById(module: string, id: string) {
+  const item = getItemsByModule(module).find((row) => row.id === id);
+  return item?.code || "";
+}
+
 watch(selectedSystemKey, syncSystemCode, { immediate: true });
 watch(() => globalScripts.value?.system, syncSystemCode, { deep: true });
+
+watch(systemEditorTab, (nextKey, prevKey) => {
+  if (!systemEditorVisible.value) return;
+  if (prevKey) systemDrafts.value = { ...systemDrafts.value, [prevKey]: systemCode.value || "" };
+  selectedSystemKey.value = nextKey;
+  systemCode.value = systemDrafts.value[nextKey] ?? getSystemCodeByKey(nextKey);
+});
+
+watch(scriptEditorTab, (nextId, prevId) => {
+  if (!scriptEditorVisible.value) return;
+  const module = scriptEditorModule.value;
+  if (prevId) {
+    scriptDrafts.value = {
+      ...scriptDrafts.value,
+      [getItemDraftKey(module, prevId)]: editorCode.value || "",
+    };
+  }
+  if (!nextId) return;
+  const selected = getItemsByModule(module).find((item) => item.id === nextId);
+  if (!selected) return;
+  if (module === "timers") selectedTimerId.value = nextId;
+  if (module === "variableChanges") selectedVariableId.value = nextId;
+  if (module === "custom") selectedCustomId.value = nextId;
+  editorCode.value =
+    scriptDrafts.value[getItemDraftKey(module, nextId)] ?? getItemCodeById(module, nextId);
+  const interval = Number(selected.interval ?? selected.time ?? selected.schedule ?? 1000);
+  editorInterval.value = Number.isFinite(interval) ? interval : 1000;
+  editorParams.value = selected.params || selected.args || "";
+});
 
 watch(selectedTimer, (item) => {
   if (!item) return;
@@ -456,14 +516,6 @@ watch(selectedCustom, (item) => {
   if (!item) return;
   editorCode.value = item.code || "";
   editorParams.value = item.params || item.args || "";
-});
-
-watch(scriptSearch, (value) => {
-  customScriptTreeRef.value?.filter?.(value);
-});
-
-watch(pageSearch, (value) => {
-  pageTreeRef.value?.filter?.(value);
 });
 
 function buildScriptTree(groups: Array<any>, items: Array<any>): Array<any> {
@@ -699,7 +751,14 @@ function formatActiveCode() {
 function openSystemEditor(key?: string) {
   if (contextMenuVisible.value) closeContextMenu();
   if (key) selectedSystemKey.value = key;
-  systemOriginalCode.value = systemCode.value || "";
+  const activeKey = key || selectedSystemKey.value;
+  systemEditorTab.value = activeKey;
+  systemDrafts.value = {
+    startup: getSystemCodeByKey("startup"),
+    shutdown: getSystemCodeByKey("shutdown"),
+  };
+  systemCode.value = systemDrafts.value[activeKey] || "";
+  systemOriginalCode.value = JSON.stringify(systemDrafts.value);
   systemEditorVisible.value = true;
 }
 
@@ -718,6 +777,10 @@ function openScriptEditor(module: any, data?: any) {
   editorOriginalInterval.value = editorInterval.value;
   editorParams.value = selected.params || selected.args || "";
   scriptEditorModule.value = module;
+  scriptDrafts.value = Object.fromEntries(
+    getItemsByModule(module).map((item) => [getItemDraftKey(module, item.id), item.code || ""]),
+  );
+  scriptEditorTab.value = selected.id;
   scriptEditorVisible.value = true;
 }
 
@@ -733,6 +796,8 @@ async function persistGlobals() {
 }
 
 async function saveSystemScript() {
+  const activeKey = systemEditorTab.value || selectedSystemKey.value;
+  systemDrafts.value = { ...systemDrafts.value, [activeKey]: systemCode.value || "" };
   const scripts = (globalScripts.value || {}) as Record<string, any>;
   const system = (scripts.system || {
     startup: { code: "" },
@@ -740,13 +805,18 @@ async function saveSystemScript() {
   }) as Record<string, any>;
   const next = {
     ...system,
-    [selectedSystemKey.value]: {
-      ...system[selectedSystemKey.value],
-      code: systemCode.value || "",
+    startup: {
+      ...system.startup,
+      code: systemDrafts.value.startup || "",
+    },
+    shutdown: {
+      ...system.shutdown,
+      code: systemDrafts.value.shutdown || "",
     },
   };
   (globalScripts.value as any) = { ...scripts, system: next };
-  systemOriginalCode.value = systemCode.value || "";
+  systemOriginalCode.value = JSON.stringify(systemDrafts.value);
+  selectedSystemKey.value = activeKey;
   await persistGlobals();
   showSuccess(t("scriptPanel.messages.savedScript"));
 }
@@ -1221,16 +1291,25 @@ function isDescendantGroup(targetId: any, parentId: any, module: any): boolean {
 function saveScriptCode(module: any) {
   const selected = getSelectedItem(module);
   if (!selected) return;
+  if (scriptEditorTab.value) {
+    scriptDrafts.value = {
+      ...scriptDrafts.value,
+      [getItemDraftKey(module, scriptEditorTab.value)]: editorCode.value || "",
+    };
+  }
   const items = getItemsByModule(module).map((item) =>
-    item.id === selected.id
+    scriptDrafts.value[getItemDraftKey(module, item.id)] !== undefined
       ? {
           ...item,
-          code: editorCode.value || "",
+          code: scriptDrafts.value[getItemDraftKey(module, item.id)] || "",
           interval: module === "timers" ? Number(editorInterval.value) || 1000 : item.interval,
         }
       : item,
   );
   updateModuleItems(module, items);
+  scriptDrafts.value = Object.fromEntries(
+    items.map((item) => [getItemDraftKey(module, item.id), item.code || ""]),
+  );
   editorOriginalCode.value = editorCode.value || "";
   editorOriginalInterval.value = editorInterval.value;
   showSuccess(t("scriptPanel.messages.savedScript"));
@@ -1246,7 +1325,13 @@ function saveActiveScript() {
   }
 }
 async function handleSystemBeforeClose(done: any) {
-  const isDirty = (systemCode.value || "") !== (systemOriginalCode.value || "");
+  if (systemEditorTab.value) {
+    systemDrafts.value = {
+      ...systemDrafts.value,
+      [systemEditorTab.value]: systemCode.value || "",
+    };
+  }
+  const isDirty = JSON.stringify(systemDrafts.value) !== (systemOriginalCode.value || "");
   if (!isDirty) {
     done();
     return;
@@ -1266,9 +1351,19 @@ async function handleSystemBeforeClose(done: any) {
 }
 
 async function handleScriptBeforeClose(done: any) {
-  const codeDirty = (editorCode.value || "") !== (editorOriginalCode.value || "");
+  if (scriptEditorTab.value) {
+    scriptDrafts.value = {
+      ...scriptDrafts.value,
+      [getItemDraftKey(scriptEditorModule.value, scriptEditorTab.value)]: editorCode.value || "",
+    };
+  }
+  const selected = getSelectedItem(scriptEditorModule.value);
+  const codeDirty = getItemsByModule(scriptEditorModule.value).some((item) => {
+    const key = getItemDraftKey(scriptEditorModule.value, item.id);
+    return (scriptDrafts.value[key] ?? item.code ?? "") !== (item.code || "");
+  });
   const intervalDirty =
-    scriptEditorModule.value === "timers" && editorInterval.value !== editorOriginalInterval.value;
+    scriptEditorModule.value === "timers" && !!selected && editorInterval.value !== editorOriginalInterval.value;
   const isDirty = codeDirty || intervalDirty;
   if (!isDirty) {
     done();
@@ -1438,6 +1533,7 @@ onUnmounted(() => {
             handleScriptDrop('timers', draggingNode, dropNode, dropType)
         "
         @node-click="(data, event) => handleScriptNodeClick('timers', data, event)"
+        @create-script="openMetaDialog('timers', 'create')"
       />
       <ScriptVarsVariableChangesSection
         :tree="variableChangeTree"
@@ -1455,6 +1551,7 @@ onUnmounted(() => {
             handleScriptDrop('variableChanges', draggingNode, dropNode, dropType)
         "
         @node-click="(data, event) => handleScriptNodeClick('variableChanges', data, event)"
+        @create-script="openMetaDialog('variableChanges', 'create')"
       />
       <ScriptVarsCustomSection
         :tree="customTree"
@@ -1472,6 +1569,7 @@ onUnmounted(() => {
             handleScriptDrop('custom', draggingNode, dropNode, dropType)
         "
         @node-click="(data, event) => handleScriptNodeClick('custom', data, event)"
+        @create-script="openMetaDialog('custom', 'create')"
       />
     </el-collapse>
     <VariableGroupFormDialog
@@ -1499,8 +1597,10 @@ onUnmounted(() => {
       v-model:script-search="scriptSearch"
       v-model:page-search="pageSearch"
       v-model:page-variable-search="pageVariableSearch"
-      :dialog-title="`${selectedSystemLabel}${t('scriptPanel.editor.genericScript')}`"
+      v-model:active-tab="systemEditorTab"
+      :dialog-title="t('scriptPanel.editor.systemScript')"
       :meta-title="selectedSystemLabel"
+      :tabs="systemEditorTabs"
       :custom-script-sidebar-tree="customScriptSidebarTree"
       :page-sidebar-tree="pageSidebarTree"
       :page-variable-rows="pageVariableRows"
@@ -1513,18 +1613,32 @@ onUnmounted(() => {
       @page-insert="handlePageInsert"
       @page-variable-insert="handlePageVariableInsert"
     />
-    <el-dialog
+    <ScriptEditorDialog
+      ref="activeEditorRef"
       v-model="scriptEditorVisible"
-      :title="scriptEditorTitle"
-      width="980px"
-      top="3vh"
-      :close-on-click-modal="false"
-      :lock-scroll="false"
+      v-model:code="editorCode"
+      v-model:script-search="scriptSearch"
+      v-model:page-search="pageSearch"
+      v-model:page-variable-search="pageVariableSearch"
+      v-model:active-tab="scriptEditorTab"
+      scope="global"
+      :dialog-title="scriptEditorTitle"
+      :meta-title="editorMetaTitle"
+      :meta-description="scriptEditorKindLabel"
+      :tabs="scriptEditorTabs"
+      :custom-script-sidebar-tree="customScriptSidebarTree"
+      :page-sidebar-tree="pageSidebarTree"
+      :page-variable-rows="pageVariableRows"
+      :js-completions="jsCompletions"
+      :filter-sidebar-node="filterSidebarNode"
       :before-close="handleScriptBeforeClose"
+      @open-variable-enum="openVariableEnum"
+      @save="saveActiveScript"
+      @custom-insert="handleCustomScriptInsert"
+      @page-insert="handlePageInsert"
+      @page-variable-insert="handlePageVariableInsert"
     >
-      <div class="editor-meta">
-        <div class="meta-title">{{ editorMetaTitle }}</div>
-        <div class="meta-desc">{{ editorMetaDescription }}</div>
+      <template #meta-extra>
         <div v-if="scriptEditorModule === 'timers'" class="meta-inline">
           <span class="meta-label">{{ t("scriptPanel.editor.timeMs") }}</span>
           <el-input-number v-model="editorInterval" :min="100" :step="100" size="small" />
@@ -1533,109 +1647,8 @@ onUnmounted(() => {
           <span class="meta-label">{{ t("scriptPanel.editor.params") }}</span>
           <span class="meta-value">{{ editorParams || t("scriptPanel.editor.none") }}</span>
         </div>
-        <div class="meta-actions">
-          <el-tooltip :content="t('scriptPanel.editor.variableEnum')" placement="top">
-            <el-button class="icon-button" size="small" circle @click="openVariableEnum">
-              <IconEpList />
-            </el-button>
-          </el-tooltip>
-        </div>
-      </div>
-      <div class="editor-body">
-        <div class="editor-main">
-          <MonacoEditor
-            ref="activeEditorRef"
-            v-model="editorCode"
-            language="javascript"
-            height="520px"
-            :completions="jsCompletions"
-          />
-        </div>
-        <div class="editor-sidebar">
-          <div class="sidebar-section">
-            <div class="sidebar-title">{{ t("scriptPanel.editor.customScripts") }}</div>
-            <el-input v-model="scriptSearch" size="small" :placeholder="t('scriptPanel.editor.searchScripts')" clearable />
-            <div class="sidebar-scroll">
-              <el-tree
-                ref="customScriptTreeRef"
-                :data="customScriptSidebarTree"
-                node-key="id"
-                :default-expand-all="true"
-                :expand-on-click-node="false"
-                :filter-node-method="filterSidebarNode"
-                @node-click="handleCustomScriptInsert"
-              >
-                <template #default="{ data }">
-                  <div class="tree-node" :class="`node-${data.type}`">
-                    <el-icon class="node-icon icon-custom">
-                      <IconEpFolder v-if="data.type === 'group'" />
-                      <IconEpEditPen v-else />
-                    </el-icon>
-                    <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{
-                      data.label
-                    }}</span>
-                  </div>
-                </template>
-              </el-tree>
-            </div>
-          </div>
-          <div class="sidebar-section">
-            <div class="sidebar-title">{{ t("scriptPanel.editor.pageVariables") }}</div>
-            <el-input
-              v-model="pageVariableSearch"
-              size="small"
-              :placeholder="t('scriptPanel.editor.searchPageVariables')"
-              clearable
-            />
-            <div class="sidebar-scroll page-var-list">
-              <div
-                v-for="row in pageVariableRows"
-                :key="row.name"
-                class="page-var-item"
-                @click="handlePageVariableInsert(row)"
-              >
-                <el-icon class="node-icon icon-variable">
-                  <IconEpList />
-                </el-icon>
-                <span class="node-label">{{ row.name }}</span>
-                <span class="page-var-type">{{ row.type }}</span>
-              </div>
-            </div>
-          </div>
-          <div class="sidebar-section">
-            <div class="sidebar-title">{{ t("scriptPanel.editor.pages") }}</div>
-            <el-input v-model="pageSearch" size="small" :placeholder="t('scriptPanel.editor.searchPages')" clearable />
-            <div class="sidebar-scroll">
-              <el-tree
-                ref="pageTreeRef"
-                :data="pageSidebarTree"
-                node-key="id"
-                :default-expand-all="true"
-                :expand-on-click-node="false"
-                :filter-node-method="filterSidebarNode"
-                @node-click="handlePageInsert"
-              >
-                <template #default="{ data }">
-                  <div class="tree-node" :class="`node-${data.type}`">
-                    <el-icon class="node-icon icon-page">
-                      <IconEpFolder v-if="data.type === 'folder'" />
-                      <IconEpDocument v-else />
-                    </el-icon>
-                    <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{
-                      data.label
-                    }}</span>
-                  </div>
-                </template>
-              </el-tree>
-            </div>
-          </div>
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="scriptEditorVisible = false">{{ t("scriptPanel.editor.cancel") }}</el-button>
-        <el-button type="primary" @click="saveActiveScript">{{ t("scriptPanel.editor.saveShortcut") }}</el-button>
       </template>
-    </el-dialog>
+    </ScriptEditorDialog>
 
     <el-dialog
       v-model="variableEnumVisible"
@@ -1790,59 +1803,46 @@ onUnmounted(() => {
 }
 
 .scripts-collapse {
+  --el-collapse-header-height: 40px;
   flex: 1;
   overflow: auto;
   padding-bottom: 8px;
-  display: flex;
-  flex-direction: column;
 }
 
 :deep(.scripts-collapse .el-collapse-item__header) {
   font-weight: 600;
+  height: 40px;
+  line-height: 40px;
+  padding: 0 4px;
 }
 
 :deep(.scripts-collapse .el-collapse-item) {
-  display: flex;
-  flex-direction: column;
-}
-
-:deep(.scripts-collapse .el-collapse-item.is-active) {
-  flex: 1;
+  border-bottom: 1px solid color-mix(in srgb, var(--designer-border-color) 70%, transparent);
 }
 
 :deep(.scripts-collapse .el-collapse-item__wrap) {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+  border-bottom: 0;
 }
 
 :deep(.scripts-collapse .el-collapse-item__content) {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
   padding: 0;
 }
 
 .scripts-layout {
-  display: flex;
-  gap: 12px;
-  flex: 1;
+  display: block;
   padding: 6px 4px;
   box-sizing: border-box;
-  min-height: 320px;
 }
 
 .scripts-list {
   width: 100%;
-  border: 1px solid var(--designer-border-color);
-  border-radius: 10px;
+  border: 0;
+  border-radius: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--designer-shell-surface);
-  box-shadow: var(--designer-shadow-panel);
-  min-height: 320px;
-  flex: 1;
+  background: transparent;
+  min-height: 48px;
 }
 
 .scripts-list.is-full {
@@ -1851,32 +1851,6 @@ onUnmounted(() => {
 
 .list-menu {
   border-right: 0;
-}
-
-.editor-body {
-  display: flex;
-  gap: 12px;
-  flex: 1;
-  align-items: stretch;
-  height: 520px;
-}
-
-.editor-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 16px;
-  padding: 10px 12px;
-  border: 1px solid var(--designer-border-color);
-  border-radius: 6px;
-  background: var(--designer-group-surface);
-  margin-bottom: 10px;
-  align-items: center;
-}
-
-.meta-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--designer-text-primary);
 }
 
 .meta-desc {
@@ -1900,56 +1874,10 @@ onUnmounted(() => {
   color: var(--designer-text-primary);
 }
 
-.meta-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-}
-
-.icon-button {
-  background: var(--designer-primary-soft);
-  border: none;
-  color: var(--designer-primary-text);
-}
-
-.icon-button:hover {
-  background: var(--designer-hover-surface);
-}
-
-.editor-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.editor-sidebar {
-  width: 200px;
-  height: 520px;
-  border-left: 1px solid var(--designer-border-color);
-  padding-left: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.sidebar-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex: 1;
-  min-height: 0;
-}
-
 .sidebar-title {
   font-size: 12px;
   font-weight: 600;
   color: var(--designer-text-secondary);
-}
-
-.sidebar-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding-right: 4px;
 }
 
 .tree-node {
@@ -2003,32 +1931,6 @@ onUnmounted(() => {
 
 .tree-node:hover {
   background: var(--designer-hover-surface);
-}
-
-.page-var-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.page-var-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 28px;
-  padding: 4px 6px;
-  border-radius: var(--designer-radius-sm);
-  cursor: pointer;
-}
-
-.page-var-item:hover {
-  background: var(--designer-hover-surface);
-}
-
-.page-var-type {
-  margin-left: auto;
-  color: var(--designer-text-muted);
-  font-size: 12px;
 }
 
 .tree-node.is-selected {

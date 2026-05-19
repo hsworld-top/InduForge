@@ -29,6 +29,13 @@ const sharedStubs = {
     props: ["content"],
     template: "<div><slot />{{ content }}</div>",
   },
+  "el-tabs": {
+    template: "<div><slot /></div>",
+  },
+  "el-tab-pane": {
+    props: ["label"],
+    template: "<div>{{ label }}</div>",
+  },
   "el-tree": { template: "<div><slot :data=\"{ type: 'group', label: 'node' }\" /></div>" },
   MonacoEditor: { template: "<div>monaco</div>" },
   "el-button": { template: "<button><slot /></button>" },
@@ -90,7 +97,6 @@ describe("Script dialogs i18n", () => {
       },
     });
 
-    expect(wrapper.text()).toContain("系统脚本");
     expect(wrapper.text()).toContain("自定义脚本");
     expect(wrapper.text()).toContain("页面");
     expect(wrapper.text()).toContain("保存 (Ctrl+S)");
@@ -98,7 +104,6 @@ describe("Script dialogs i18n", () => {
     i18n.global.locale.value = "en";
     await nextTick();
 
-    expect(wrapper.text()).toContain("System Script");
     expect(wrapper.text()).toContain("Custom Scripts");
     expect(wrapper.text()).toContain("Pages");
     expect(wrapper.text()).toContain("Save (Ctrl+S)");

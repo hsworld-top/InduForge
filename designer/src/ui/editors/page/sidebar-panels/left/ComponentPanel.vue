@@ -3,9 +3,11 @@
   当前版本仅保留：6 个布局容器 + Button
 -->
 <script setup lang="ts">
+import { storeToRefs } from "pinia";
 import { computed, h, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { componentRegistry } from "@/editor-core";
+import { useEditorStore } from "@/stores/editor-store";
 import { endDrag, startDrag } from "@/ui/editors/page/canvas/composables/use-drag-state";
 
 interface ComponentItemLike {
@@ -16,8 +18,10 @@ interface ComponentItemLike {
 type PreviewComponentMapLike = Record<string, () => ReturnType<typeof h>>;
 
 const keyword = ref("");
-const activeSections = ref(["layout", "ui"]);
+const activeSections = ref(["layout", "ui", "system"]);
 const { t, locale } = useI18n();
+const editorStore = useEditorStore();
+const { projectI18n } = storeToRefs(editorStore);
 
 const layoutTypeOrder = [
   "HorizontalLayout",
@@ -51,12 +55,37 @@ function filterItemsByCategory(category: string): ComponentItemLike[] {
   return filtered.sort((a, b) => layoutTypeOrder.indexOf(a.type) - layoutTypeOrder.indexOf(b.type));
 }
 
+function filterSystemItems(): ComponentItemLike[] {
+  void locale.value;
+  if (!projectI18n.value.enabled) return [];
+  const keywordValue = keyword.value.trim().toLowerCase();
+  const item = componentRegistry.get("LanguageSwitcher") as ComponentItemLike | undefined;
+  if (!item) return [];
+  if (!keywordValue) return [item];
+  return item.type.toLowerCase().includes(keywordValue) ||
+    item.name.toLowerCase().includes(keywordValue)
+    ? [item]
+    : [];
+}
+
 const layoutItems = computed<ComponentItemLike[]>(() => filterItemsByCategory("layout"));
 const uiItems = computed<ComponentItemLike[]>(() => filterItemsByCategory("uiPc"));
+const systemItems = computed<ComponentItemLike[]>(filterSystemItems);
+const showSystemSection = computed(() => projectI18n.value.enabled);
 
 function getPreviewComponent(type: string): { render: () => ReturnType<typeof h> } {
   const previewMap: PreviewComponentMapLike = {
-    Button: () => h("div", { class: "preview-button" }, t("componentPanel.previewButton")),
+    Button: () =>
+      h("div", { class: "preview-button" }, [
+        h("span", { class: "preview-button-line" }),
+      ]),
+    LanguageSwitcher: () =>
+      h("div", { class: "preview-language-switcher" }, [
+        h("span", { class: "preview-language-content" }, [
+          h("span", { class: "preview-language-line" }),
+          h("span", { class: "preview-language-arrow" }),
+        ]),
+      ]),
     HorizontalLayout: () =>
       h("div", { class: "preview-flex" }, [
         h("div", { class: "preview-block" }),
@@ -103,22 +132,24 @@ function getPreviewComponent(type: string): { render: () => ReturnType<typeof h>
 function getPreviewIcon(type: string): string {
   const iconMap: Record<string, string> = {
     Button:
-      '<div style="width:58px;height:26px;border:1px solid #3b6cff;border-radius:4px;background:#fff;"></div>',
+      '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;background:#fff;box-sizing:border-box;display:flex;align-items:center;justify-content:center;"><span style="width:36px;height:10px;background:#3b6cff;border-radius:2px;"></span></div>',
+    LanguageSwitcher:
+      '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;display:flex;align-items:center;justify-content:center;background:#fff;color:#3b6cff;box-sizing:border-box;"><span style="width:42px;height:16px;background:#3b6cff;border-radius:2px;display:flex;align-items:center;justify-content:center;gap:5px;"><span style="width:22px;height:4px;background:#fff;border-radius:2px;"></span><span style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid #fff;"></span></span></div>',
     HorizontalLayout:
-      '<div style="width:58px;height:36px;border:1px solid #3b6cff;border-radius:4px;display:flex;gap:4px;padding:4px;"><div style="flex:1;background:#3b6cff;border-radius:2px;"></div><div style="flex:1;background:#3b6cff;border-radius:2px;"></div><div style="flex:1;background:#3b6cff;border-radius:2px;"></div></div>',
+      '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;display:flex;gap:4px;padding:4px;box-sizing:border-box;"><div style="flex:1;background:#3b6cff;border-radius:2px;"></div><div style="flex:1;background:#3b6cff;border-radius:2px;"></div><div style="flex:1;background:#3b6cff;border-radius:2px;"></div></div>',
     VerticalLayout:
-      '<div style="width:58px;height:36px;border:1px solid #3b6cff;border-radius:4px;display:flex;flex-direction:column;gap:4px;padding:4px;"><div style="height:6px;background:#3b6cff;border-radius:2px;"></div><div style="height:6px;background:#3b6cff;border-radius:2px;"></div><div style="height:6px;background:#3b6cff;border-radius:2px;"></div></div>',
+      '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;display:flex;flex-direction:column;gap:4px;padding:4px;box-sizing:border-box;"><div style="height:6px;background:#3b6cff;border-radius:2px;"></div><div style="height:6px;background:#3b6cff;border-radius:2px;"></div><div style="height:6px;background:#3b6cff;border-radius:2px;"></div></div>',
     FormLayout:
-      '<div style="width:58px;height:36px;border:1px solid #3b6cff;border-radius:4px;display:flex;flex-direction:column;gap:4px;padding:4px;"><div style="height:6px;border:1px solid #3b6cff;border-radius:2px;"></div><div style="height:6px;border:1px solid #3b6cff;border-radius:2px;"></div><div style="height:6px;border:1px solid #3b6cff;border-radius:2px;"></div></div>',
+      '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;display:flex;flex-direction:column;gap:4px;padding:4px;box-sizing:border-box;"><div style="height:6px;border:1px solid #3b6cff;border-radius:2px;"></div><div style="height:6px;border:1px solid #3b6cff;border-radius:2px;"></div><div style="height:6px;border:1px solid #3b6cff;border-radius:2px;"></div></div>',
     ElContainer:
-      '<div style="width:58px;height:36px;border:1px solid #3b6cff;border-radius:4px;display:flex;flex-direction:column;gap:3px;padding:4px;"><div style="height:5px;background:#3b6cff;border-radius:2px;"></div><div style="flex:1;display:flex;gap:3px;"><div style="width:10px;background:#3b6cff;border-radius:2px;"></div><div style="flex:1;background:#e4e7ed;border-radius:2px;"></div></div><div style="height:5px;background:#3b6cff;border-radius:2px;"></div></div>',
-    Tabs: '<div style="width:58px;height:36px;border:1px solid #3b6cff;border-radius:4px;"><div style="height:9px;background:#3b6cff;"></div><div style="height:16px;margin:5px;border:1px solid #3b6cff;border-radius:2px;"></div></div>',
+      '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;display:flex;flex-direction:column;gap:3px;padding:4px;box-sizing:border-box;"><div style="height:5px;background:#3b6cff;border-radius:2px;"></div><div style="flex:1;display:flex;gap:3px;"><div style="width:10px;background:#3b6cff;border-radius:2px;"></div><div style="flex:1;background:#e4e7ed;border-radius:2px;"></div></div><div style="height:5px;background:#3b6cff;border-radius:2px;"></div></div>',
+    Tabs: '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;box-sizing:border-box;"><div style="height:9px;background:#3b6cff;"></div><div style="height:18px;margin:5px;border:1px solid #3b6cff;border-radius:2px;"></div></div>',
     Collapse:
-      '<div style="width:58px;height:36px;border:1px solid #3b6cff;border-radius:4px;"><div style="height:9px;background:#3b6cff;"></div><div style="height:14px;margin:5px;border:1px solid #3b6cff;border-radius:2px;"></div></div>',
+      '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;box-sizing:border-box;"><div style="height:9px;background:#3b6cff;"></div><div style="height:16px;margin:5px;border:1px solid #3b6cff;border-radius:2px;"></div></div>',
   };
   return (
     iconMap[type] ||
-    '<div style="width:58px;height:36px;border:1px dashed #c0c4cc;border-radius:4px;"></div>'
+    '<div style="width:60px;height:40px;border:1px dashed #c0c4cc;border-radius:4px;box-sizing:border-box;"></div>'
   );
 }
 
@@ -190,6 +221,29 @@ function handleDragEnd(): void {
             </div>
           </div>
           <div v-else class="empty-tip">{{ t("componentPanel.emptyLayout") }}</div>
+        </el-collapse-item>
+
+        <el-collapse-item v-if="showSystemSection" name="system">
+          <template #title>
+            <span class="component-section-title">{{ t("componentPanel.system") }}</span>
+          </template>
+          <div v-if="systemItems.length" class="component-grid">
+            <div
+              v-for="item in systemItems"
+              :key="item.type"
+              class="component-card"
+              draggable="true"
+              @mousedown="handlePointerStart(item, $event)"
+              @dragstart="handleDragStart(item, $event)"
+              @dragend="handleDragEnd"
+            >
+              <div class="card-preview">
+                <component :is="getPreviewComponent(item.type)" />
+              </div>
+              <div class="card-name">{{ item.name }}</div>
+            </div>
+          </div>
+          <div v-else class="empty-tip">{{ t("componentPanel.emptySystem") }}</div>
         </el-collapse-item>
 
         <el-collapse-item name="ui">
@@ -279,7 +333,7 @@ function handleDragEnd(): void {
 
 .component-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+  grid-template-columns: repeat(auto-fill, 76px);
   gap: 6px;
 }
 
@@ -288,7 +342,7 @@ function handleDragEnd(): void {
   flex-direction: column;
   align-items: center;
   min-width: 0;
-  min-height: 70px;
+  min-height: 74px;
   border: 1px solid transparent;
   border-radius: 6px;
   overflow: hidden;
@@ -310,7 +364,7 @@ function handleDragEnd(): void {
 }
 
 .card-preview {
-  height: 40px;
+  height: 44px;
   width: 100%;
   display: flex;
   align-items: center;
@@ -340,10 +394,11 @@ function handleDragEnd(): void {
 }
 
 .preview-button {
-  width: 40px;
-  height: 20px;
+  width: 44px;
+  height: 32px;
   border: 1.5px solid var(--designer-material-icon-color, #888d92);
   border-radius: 4px;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -352,9 +407,56 @@ function handleDragEnd(): void {
   background: transparent;
 }
 
+.preview-button-line {
+  width: 28px;
+  height: 8px;
+  background: var(--designer-material-icon-color, #888d92);
+  border-radius: 2px;
+}
+
+.preview-language-switcher {
+  width: 44px;
+  height: 32px;
+  border: 1.5px solid var(--designer-material-icon-color, #888d92);
+  border-radius: 4px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--designer-material-icon-color, #888d92);
+  background: transparent;
+}
+
+.preview-language-content {
+  width: 32px;
+  height: 13px;
+  background: var(--designer-material-icon-color, #888d92);
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.preview-language-line {
+  width: 17px;
+  height: 3px;
+  background: var(--designer-shell-surface);
+  border-radius: 2px;
+}
+
+.preview-language-arrow {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--designer-shell-surface);
+  flex: 0 0 auto;
+}
+
 .preview-flex {
-  width: 40px;
-  height: 28px;
+  width: 44px;
+  height: 32px;
   border: 1.5px solid var(--designer-material-icon-color, #888d92);
   border-radius: 4px;
   display: flex;
@@ -374,8 +476,8 @@ function handleDragEnd(): void {
 }
 
 .preview-form {
-  width: 40px;
-  height: 28px;
+  width: 44px;
+  height: 32px;
   border: 1.5px solid var(--designer-material-icon-color, #888d92);
   border-radius: 4px;
   display: flex;
@@ -392,8 +494,8 @@ function handleDragEnd(): void {
 }
 
 .preview-el-container {
-  width: 40px;
-  height: 28px;
+  width: 44px;
+  height: 32px;
   border: 1.5px solid var(--designer-material-icon-color, #888d92);
   border-radius: 4px;
   display: flex;
@@ -429,8 +531,8 @@ function handleDragEnd(): void {
 }
 
 .preview-tabs {
-  width: 40px;
-  height: 28px;
+  width: 44px;
+  height: 32px;
   border: 1.5px solid var(--designer-material-icon-color, #888d92);
   border-radius: 4px;
   padding: 3px;
@@ -445,14 +547,14 @@ function handleDragEnd(): void {
 
 .preview-tabs-body {
   margin-top: 3px;
-  height: 13px;
+  height: 17px;
   border: 1px solid var(--designer-material-icon-color, #888d92);
   border-radius: 2px;
 }
 
 .preview-collapse {
-  width: 40px;
-  height: 28px;
+  width: 44px;
+  height: 32px;
   border: 1.5px solid var(--designer-material-icon-color, #888d92);
   border-radius: 4px;
   background: transparent;

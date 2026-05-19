@@ -160,12 +160,14 @@ type ArtifactDataPointRecord struct {
 type ArtifactComputeUnitRecord struct {
 	ID             string         `json:"id"`
 	Name           string         `json:"name"`
+	Description    *string        `json:"description,omitempty"`
 	Language       string         `json:"language"`
 	ScriptCode     string         `json:"scriptCode"`
 	TriggerType    string         `json:"triggerType"`
 	TriggerConfig  map[string]any `json:"triggerConfig"`
 	InputBindings  map[string]any `json:"inputBindings"`
 	OutputBindings map[string]any `json:"outputBindings"`
+	Dependencies   []any          `json:"dependencies"`
 	TimeoutMS      int            `json:"timeoutMs"`
 	IsEnabled      bool           `json:"isEnabled"`
 }
@@ -422,12 +424,14 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 		computeUnits = append(computeUnits, ArtifactComputeUnitRecord{
 			ID:             unit.ID,
 			Name:           unit.Name,
+			Description:    unit.Description,
 			Language:       unit.Language,
 			ScriptCode:     unit.ScriptCode,
 			TriggerType:    unit.TriggerType,
 			TriggerConfig:  cloneSnapshotObject(unit.TriggerConfig),
 			InputBindings:  cloneSnapshotObject(unit.InputBindings),
 			OutputBindings: cloneSnapshotObject(unit.OutputBinding),
+			Dependencies:   cloneSnapshotAnyArray(unit.Dependencies),
 			TimeoutMS:      unit.TimeoutMS,
 			IsEnabled:      unit.IsEnabled,
 		})
@@ -614,8 +618,8 @@ func (r *ProjectSnapshotRepository) listDataPoints(ctx context.Context, projectI
 
 func (r *ProjectSnapshotRepository) listComputeUnits(ctx context.Context, projectID string) ([]ComputeUnitRecord, error) {
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, name, language, script_code, trigger_type, trigger_config,
-               input_bindings, output_bindings, timeout_ms, is_enabled, created_at, updated_at
+        SELECT id, project_id, name, description, folder_id, language, script_code, trigger_type, trigger_config,
+               input_bindings, output_bindings, dependencies, timeout_ms, is_enabled, created_at, updated_at
         FROM data_compute_units
         WHERE project_id = $1
         ORDER BY created_at ASC
@@ -1031,16 +1035,20 @@ func (r *ProjectSnapshotRepository) insertComputeUnits(ctx context.Context, tx p
 		if err != nil {
 			return err
 		}
+		dependenciesBytes, err := json.Marshal(unit.Dependencies)
+		if err != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照计算单元依赖格式无效", err)
+		}
 		createdAt := coalesceTime(unit.CreatedAt)
 		updatedAt := coalesceTime(unit.UpdatedAt)
 		if _, err := tx.Exec(ctx, `
             INSERT INTO data_compute_units (
-                id, project_id, name, language, script_code, trigger_type, trigger_config,
-                input_bindings, output_bindings, timeout_ms, is_enabled, created_by, updated_by, created_at, updated_at
+                id, project_id, name, description, folder_id, language, script_code, trigger_type, trigger_config,
+                input_bindings, output_bindings, dependencies, timeout_ms, is_enabled, created_by, updated_by, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11, $12, $13, $14, $15)
-        `, unit.ID, projectID, unit.Name, unit.Language, unit.ScriptCode, unit.TriggerType, string(triggerConfigBytes),
-			string(inputBindingsBytes), string(outputBindingsBytes), unit.TimeoutMS, unit.IsEnabled, actorID, actorID, createdAt, updatedAt); err != nil {
+            VALUES ($1, $2, $3, $4, NULL, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12, $13, $14, $15, $16, $17)
+        `, unit.ID, projectID, unit.Name, unit.Description, unit.Language, unit.ScriptCode, unit.TriggerType, string(triggerConfigBytes),
+			string(inputBindingsBytes), string(outputBindingsBytes), string(dependenciesBytes), unit.TimeoutMS, unit.IsEnabled, actorID, actorID, createdAt, updatedAt); err != nil {
 			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入快照计算单元失败", err)
 		}
 	}

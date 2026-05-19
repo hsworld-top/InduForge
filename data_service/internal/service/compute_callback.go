@@ -22,6 +22,7 @@ import (
 type computeSDKCallbackServer struct {
 	URL    string
 	Token  string
+	DryRun bool
 	server *http.Server
 }
 
@@ -37,7 +38,7 @@ type computeMQTTPublishRequest struct {
 	Payload any    `json:"payload"`
 }
 
-func (s *ComputeService) startComputeSDKCallback(unit repository.ComputeUnitRecord) (*computeSDKCallbackServer, error) {
+func (s *ComputeService) startComputeSDKCallback(unit repository.ComputeUnitRecord, dryRun bool) (*computeSDKCallbackServer, error) {
 	if s == nil || (s.queries == nil && s.mqtt == nil) {
 		return nil, nil
 	}
@@ -47,7 +48,7 @@ func (s *ComputeService) startComputeSDKCallback(unit repository.ComputeUnitReco
 	}
 
 	mux := http.NewServeMux()
-	callback := &computeSDKCallbackServer{Token: token}
+	callback := &computeSDKCallbackServer{Token: token, DryRun: dryRun}
 	mux.HandleFunc("/sql/query", s.computeCallbackAuth(token, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeComputeCallbackError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -77,6 +78,10 @@ func (s *ComputeService) startComputeSDKCallback(unit repository.ComputeUnitReco
 		var request computeMQTTPublishRequest
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&request); err != nil {
 			writeComputeCallbackError(w, http.StatusBadRequest, "invalid mqtt publish callback payload")
+			return
+		}
+		if callback.DryRun {
+			writeComputeCallbackJSON(w, http.StatusOK, computeMQTTDryRunEffect(request))
 			return
 		}
 		effect, err := s.publishComputeSDKMQTT(r.Context(), unit, request)
@@ -191,6 +196,19 @@ func (s *ComputeService) publishComputeSDKMQTT(ctx context.Context, unit reposit
 	effect["published"] = true
 	effect["qos"] = connection.QOS
 	return effect, nil
+}
+
+func computeMQTTDryRunEffect(request computeMQTTPublishRequest) map[string]any {
+	return map[string]any{
+		"type":      "mqtt.publish",
+		"source":    strings.TrimSpace(request.Source),
+		"topic":     strings.TrimSpace(request.Topic),
+		"payload":   request.Payload,
+		"accepted":  true,
+		"published": false,
+		"dryRun":    true,
+		"reason":    "dry-run 未真实发布",
+	}
 }
 
 func computeMqttPublishAllowed(unit repository.ComputeUnitRecord, source, topic string) bool {

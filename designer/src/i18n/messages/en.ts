@@ -77,7 +77,7 @@ export const enMessages = {
     material: "Materials",
     data: "Data & Variables",
     i18n: "i18n",
-    script: "Scripts",
+    script: "Global Scripts",
     props: "Properties",
     advanced: "Advanced",
     variables: "Page Variables",
@@ -188,8 +188,10 @@ export const enMessages = {
     searchPlaceholder: "Search components",
     layout: "Layout",
     ui: "UI Components",
+    system: "System Components",
     emptyLayout: "No layout components available",
     emptyUi: "No UI components available",
+    emptySystem: "No system components available",
     previewButton: "Button",
   },
   pageInspector: {
@@ -672,6 +674,11 @@ export const enMessages = {
     variableColumnKind: "Kind",
     variableColumnType: "Data Type",
     variableColumnMapping: "Mapped Path",
+    variableColumnAction: "View",
+    variableDetailAction: "View Details",
+    variableDetailTitle: "Variable Details",
+    variableDetailDescription: "Description",
+    variableDetailDefault: "Default Value",
     variableMappingNone: "-",
     moveToChildGroupBlocked: "Cannot move into a child group",
     invalidArrayJson: "Array type requires a JSON array",
@@ -821,6 +828,16 @@ export const enMessages = {
     },
   },
   scriptPanel: {
+    global: {
+      title: "Global Project Scripts",
+      description: "Applies to the whole project in preview and runtime",
+      scope: "Project Global",
+    },
+    page: {
+      title: "Page Scripts",
+      description: "Applies only to the current page",
+      scope: "Current Page",
+    },
     sections: {
       system: "System Scripts",
       startup: "System Startup",
@@ -828,6 +845,21 @@ export const enMessages = {
       timers: "Timers",
       variableChanges: "Variable Changes",
       custom: "Custom Scripts",
+      globalTimers: "Global Timers",
+      globalVariableChanges: "Global Variable Watchers",
+      globalCustom: "Global Custom Functions",
+    },
+    actions: {
+      create: "Create",
+      edit: "Edit",
+    },
+    status: {
+      fixed: "Fixed",
+    },
+    empty: {
+      timers: "No timers",
+      variableChanges: "No variable watchers",
+      custom: "No custom functions",
     },
     editor: {
       untitledScript: "Untitled Script",

@@ -12,6 +12,7 @@ import * as XLSX from "xlsx";
 import IconEpEditPen from "~icons/ep/edit-pen";
 import IconEpFolder from "~icons/ep/folder";
 import IconEpLink from "~icons/ep/link";
+import IconEpView from "~icons/ep/view";
 import { TIME_FORMAT } from "@/constants";
 import { datacenterApi } from "@/services";
 import {
@@ -156,6 +157,7 @@ const types: VariableType[] = [
 ];
 
 const treeRef = ref<TreeControllerLike | null>(null);
+const treeWrapRef = ref<HTMLElement | null>(null);
 const selectedNode = ref<TreeNodeLike | null>(null);
 const selectedNodes = ref<TreeNodeLike[]>([]);
 const varClipboard = ref<ClipboardLike | null>(null);
@@ -185,6 +187,9 @@ const editValueHasErrors = ref(false);
 const variableSearchKey = ref("");
 const variableKindFilter = ref<"" | "project" | "mapped">("");
 const variableDataTypeFilter = ref("");
+const variableTableWidth = ref(0);
+const variableDetailVisible = ref(false);
+const variableDetailNode = ref<TreeNodeLike | null>(null);
 
 const groupVisible = ref(false);
 const groupEditMode = ref(false);
@@ -293,6 +298,14 @@ const variableTree = computed(() =>
 const filteredVariableTree = computed(() => filterVariableTree(variableTree.value));
 const filteredVariableNodes = computed(() => collectVariableNodes(filteredVariableTree.value));
 const filteredVariableCount = computed(() => filteredVariableNodes.value.length);
+const showVariableActionColumn = computed(() => variableTableWidth.value >= 190);
+const showVariableKindColumn = computed(() => variableTableWidth.value >= 230);
+const showVariableDataTypeColumn = computed(() => variableTableWidth.value >= 286);
+const variableDetailTitle = computed(() => {
+  const node = variableDetailNode.value;
+  if (!node) return t("datapointPanel.variableDetailTitle");
+  return `${t("datapointPanel.variableDetailTitle")}：${node.label}`;
+});
 
 const contextMenuStyle = computed(() => ({
   left: `${contextMenuPosition.value.x}px`,
@@ -414,6 +427,11 @@ function getVariableKindLabel(node: TreeNodeLike): string {
 function getVariableMappingPath(node: TreeNodeLike): string {
   if (node.type !== "variable") return "";
   return String(node.meta?.source?.path || "");
+}
+
+function openVariableDetail(row: TreeNodeLike): void {
+  variableDetailNode.value = row;
+  variableDetailVisible.value = true;
 }
 
 function resolveVariableTableRowClass({ row }: { row: TreeNodeLike }): string {
@@ -1931,6 +1949,7 @@ function handleEditValueMarkers(markers: unknown): void {
 }
 
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let variableTableResizeObserver: ResizeObserver | null = null;
 watch([searchKey, quickStatusFilter, quickTypeFilter, quickSourceIdFilter], () => {
   if (!quickVisible.value) return;
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
@@ -1944,10 +1963,19 @@ watch([searchKey, quickStatusFilter, quickTypeFilter, quickSourceIdFilter], () =
 
 onMounted(() => {
   document.addEventListener("click", handleClickOutside);
+  if (treeWrapRef.value) {
+    variableTableWidth.value = treeWrapRef.value.clientWidth;
+    variableTableResizeObserver = new ResizeObserver(([entry]) => {
+      variableTableWidth.value = Math.floor(entry?.contentRect.width || 0);
+    });
+    variableTableResizeObserver.observe(treeWrapRef.value);
+  }
 });
 
 onUnmounted(() => {
   document.removeEventListener("click", handleClickOutside);
+  variableTableResizeObserver?.disconnect();
+  variableTableResizeObserver = null;
 });
 </script>
 
@@ -2021,7 +2049,7 @@ onUnmounted(() => {
         </el-button>
       </div>
     </div>
-    <div class="tree-wrap" @contextmenu="handleBlankContextMenu">
+    <div ref="treeWrapRef" class="tree-wrap" @contextmenu="handleBlankContextMenu">
       <el-table
         ref="treeRef"
         :data="filteredVariableTree"
@@ -2042,7 +2070,7 @@ onUnmounted(() => {
           (row: TreeNodeLike, _column: unknown, event: MouseEvent) => handleNodeDblClick(event, row)
         "
       >
-        <el-table-column :label="t('datapointPanel.variableColumnName')" min-width="220">
+        <el-table-column :label="t('datapointPanel.variableColumnName')" min-width="96">
           <template #default="{ row }">
             <div class="variable-name-cell">
               <el-checkbox
@@ -2070,34 +2098,51 @@ onUnmounted(() => {
                 <IconEpLink v-else-if="row.meta?.mapped" />
                 <IconEpEditPen v-else />
               </el-icon>
-              <span class="node-label" :class="{ 'is-group': row.type === 'group' }">
+              <span
+                class="node-label"
+                :class="{ 'is-group': row.type === 'group' }"
+                :title="row.label"
+              >
                 {{ row.label }}
               </span>
             </div>
           </template>
         </el-table-column>
-        <el-table-column :label="t('datapointPanel.variableColumnKind')" width="112">
+        <el-table-column v-if="showVariableKindColumn" :label="t('datapointPanel.variableColumnKind')" width="64">
           <template #default="{ row }">
-            <span class="variable-kind">{{ getVariableKindLabel(row) }}</span>
+            <span class="variable-kind" :title="getVariableKindLabel(row)">
+              {{ getVariableKindLabel(row) }}
+            </span>
           </template>
         </el-table-column>
-        <el-table-column :label="t('datapointPanel.variableColumnType')" width="90">
+        <el-table-column v-if="showVariableDataTypeColumn" :label="t('datapointPanel.variableColumnType')" width="72">
           <template #default="{ row }">
-            <span v-if="row.type === 'variable'" class="node-meta">
+            <span
+              v-if="row.type === 'variable'"
+              class="node-meta"
+              :title="row.meta?.type || 'string'"
+            >
               {{ row.meta?.type || "string" }}
             </span>
-            <span v-else class="node-meta">-</span>
+            <span v-else class="node-meta" title="-">-</span>
           </template>
         </el-table-column>
         <el-table-column
-          :label="t('datapointPanel.variableColumnMapping')"
-          min-width="180"
-          show-overflow-tooltip
+          v-if="showVariableActionColumn"
+          :label="t('datapointPanel.variableColumnAction')"
+          width="40"
+          align="center"
         >
           <template #default="{ row }">
-            <span class="mapping-path">
-              {{ getVariableMappingPath(row) || t("datapointPanel.variableMappingNone") }}
-            </span>
+            <el-button
+              class="variable-detail-button"
+              :aria-label="t('datapointPanel.variableDetailAction')"
+              text
+              size="small"
+              @click.stop="openVariableDetail(row)"
+            >
+              <el-icon><IconEpView /></el-icon>
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -2132,6 +2177,65 @@ onUnmounted(() => {
       @remove-group="removeGroup"
       @move-to="handleMoveTo"
     />
+
+    <el-dialog
+      v-model="variableDetailVisible"
+      class="variable-detail-dialog"
+      :title="variableDetailTitle"
+      width="520px"
+      append-to-body
+    >
+      <div v-if="variableDetailNode" class="variable-detail">
+        <div class="variable-detail__hero">
+          <div class="variable-detail__icon">
+            <el-icon>
+              <IconEpFolder v-if="variableDetailNode.type === 'group'" />
+              <IconEpLink v-else-if="variableDetailNode.meta?.mapped" />
+              <IconEpEditPen v-else />
+            </el-icon>
+          </div>
+          <div class="variable-detail__heading">
+            <strong>{{ variableDetailNode.label }}</strong>
+            <span>{{ getVariableKindLabel(variableDetailNode) }}</span>
+          </div>
+        </div>
+
+        <div class="variable-detail__meta">
+          <div class="variable-detail__meta-item">
+            <span>{{ t("datapointPanel.variableColumnType") }}</span>
+            <strong v-if="variableDetailNode.type === 'variable'">
+              {{ variableDetailNode.meta?.type || "string" }}
+            </strong>
+            <strong v-else>-</strong>
+          </div>
+          <div class="variable-detail__meta-item">
+            <span>{{ t("datapointPanel.variableColumnMapping") }}</span>
+            <strong>
+              {{
+                getVariableMappingPath(variableDetailNode) ||
+                t("datapointPanel.variableMappingNone")
+              }}
+            </strong>
+          </div>
+        </div>
+
+        <div class="variable-detail__section">
+          <div class="variable-detail__section-title">
+            {{ t("datapointPanel.variableDetailDescription") }}
+          </div>
+          <div class="variable-detail__text">
+            {{ variableDetailNode.meta?.description || "-" }}
+          </div>
+        </div>
+
+        <div class="variable-detail__section">
+          <div class="variable-detail__section-title">
+            {{ t("datapointPanel.variableDetailDefault") }}
+          </div>
+          <pre>{{ formatValue(variableDetailNode.meta?.default ?? variableDetailNode.meta?.value) || "-" }}</pre>
+        </div>
+      </div>
+    </el-dialog>
 
     <DatapointVariableEditDialog
       v-model="editVisible"
@@ -2352,10 +2456,144 @@ onUnmounted(() => {
   color: var(--designer-text-muted);
 }
 
-.variable-kind,
-.mapping-path {
+.variable-kind {
   font-size: 12px;
   color: var(--designer-text-muted);
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.variable-detail-button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+
+.variable-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.variable-detail__hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--designer-border-color);
+  border-radius: 8px;
+  background: var(--designer-shell-muted);
+}
+
+.variable-detail__icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--designer-primary-text);
+  background: var(--designer-primary-soft);
+  flex: 0 0 auto;
+}
+
+.variable-detail__heading {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.variable-detail__heading strong {
+  min-width: 0;
+  color: var(--designer-text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.variable-detail__heading span {
+  color: var(--designer-text-muted);
+  font-size: 12px;
+}
+
+.variable-detail__meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.variable-detail__meta-item {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--designer-border-color);
+  border-radius: 8px;
+  background: var(--designer-shell-surface);
+}
+
+.variable-detail__meta-item span,
+.variable-detail__section-title {
+  display: block;
+  color: var(--designer-text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.variable-detail__meta-item strong {
+  display: block;
+  min-width: 0;
+  margin-top: 5px;
+  color: var(--designer-text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.variable-detail__section {
+  padding: 10px;
+  border: 1px solid var(--designer-border-color);
+  border-radius: 8px;
+  background: var(--designer-shell-surface);
+}
+
+.variable-detail__text {
+  margin-top: 6px;
+  color: var(--designer-text-primary);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.variable-detail__section pre {
+  max-height: 180px;
+  margin: 6px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border: 1px solid var(--designer-border-color);
+  border-radius: 6px;
+  background: var(--designer-shell-muted);
+  color: var(--designer-text-primary);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.variable-table :deep(.el-table__inner-wrapper::before) {
+  display: none;
+}
+
+.variable-table :deep(.el-table__body),
+.variable-table :deep(.el-table__header) {
+  width: 100% !important;
+}
+
+.variable-table :deep(.el-table__body-wrapper) {
+  overflow-x: hidden;
 }
 
 .node-checkbox {

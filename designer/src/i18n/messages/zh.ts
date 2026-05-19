@@ -77,7 +77,7 @@ export const zhMessages = {
     material: "物料",
     data: "数据与变量",
     i18n: "国际",
-    script: "脚本",
+    script: "全局脚本",
     props: "属性",
     advanced: "高级",
     variables: "页面变量",
@@ -188,8 +188,10 @@ export const zhMessages = {
     searchPlaceholder: "搜索组件",
     layout: "布局",
     ui: "UI组件",
+    system: "系统组件",
     emptyLayout: "暂无可用布局",
     emptyUi: "暂无可用 UI 组件",
+    emptySystem: "暂无可用系统组件",
     previewButton: "按钮",
   },
   pageInspector: {
@@ -665,6 +667,11 @@ export const zhMessages = {
     variableColumnKind: "类型",
     variableColumnType: "数据类型",
     variableColumnMapping: "映射路径",
+    variableColumnAction: "查看",
+    variableDetailAction: "查看详情",
+    variableDetailTitle: "变量详情",
+    variableDetailDescription: "描述",
+    variableDetailDefault: "默认值",
     variableMappingNone: "-",
     moveToChildGroupBlocked: "无法移动到子分组",
     invalidArrayJson: "数组类型需要 JSON 数组",
@@ -814,6 +821,16 @@ export const zhMessages = {
     },
   },
   scriptPanel: {
+    global: {
+      title: "工程全局脚本",
+      description: "对整个工程预览和运行态生效",
+      scope: "工程全局",
+    },
+    page: {
+      title: "页面脚本",
+      description: "只对当前页面生效",
+      scope: "当前页面",
+    },
     sections: {
       system: "系统脚本",
       startup: "系统启动",
@@ -821,6 +838,21 @@ export const zhMessages = {
       timers: "定时器",
       variableChanges: "变量改变",
       custom: "自定义脚本",
+      globalTimers: "全局定时器",
+      globalVariableChanges: "全局变量监听",
+      globalCustom: "全局自定义函数",
+    },
+    actions: {
+      create: "新建",
+      edit: "编辑",
+    },
+    status: {
+      fixed: "固定",
+    },
+    empty: {
+      timers: "暂无定时器",
+      variableChanges: "暂无变量监听",
+      custom: "暂无自定义函数",
     },
     editor: {
       untitledScript: "未命名脚本",

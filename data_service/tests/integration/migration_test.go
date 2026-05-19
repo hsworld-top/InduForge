@@ -70,6 +70,7 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_modbus_configs",
 		"data_tdengine_configs",
 		"data_preview_sessions",
+		"data_compute_folders",
 		"data_compute_units",
 		"data_compute_runs",
 	} {
@@ -82,8 +83,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&appliedCount); err != nil {
 		t.Fatalf("鏌ヨ schema_migrations 澶辫触: %v", err)
 	}
-	if appliedCount != 11 {
-		t.Fatalf("expected 11 migration records, got %d", appliedCount)
+	if appliedCount != 16 {
+		t.Fatalf("expected 16 migration records, got %d", appliedCount)
 	}
 
 	if err := migrator.DownAll(ctx); err != nil {
@@ -107,6 +108,7 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_modbus_configs",
 		"data_tdengine_configs",
 		"data_preview_sessions",
+		"data_compute_folders",
 		"data_compute_units",
 		"data_compute_runs",
 	} {
@@ -163,6 +165,10 @@ func TestMigrationIndexes(t *testing.T) {
 		"data_compute_units_project_name_key",
 		"data_compute_units_project_enabled_idx",
 		"data_compute_units_project_language_idx",
+		"data_compute_units_project_folder_idx",
+		"data_compute_folders_project_parent_idx",
+		"data_compute_folders_project_root_name_key",
+		"data_compute_folders_project_parent_name_key",
 		"data_compute_runs_unit_created_idx",
 		"data_compute_runs_project_created_idx",
 	} {

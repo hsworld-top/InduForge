@@ -1,166 +1,370 @@
 <template>
-  <div class="compute-workspace">
-    <aside class="compute-workspace__side">
-      <div class="compute-workspace__section-title">任务模式</div>
-      <button
-        v-for="mode in computeTaskModes"
-        :key="mode.id"
-        type="button"
-        class="compute-workspace__mode"
-        :class="{ 'is-active': mode.id === activeMode }"
-        @click="activeMode = mode.id"
-      >
-        <span>
-          <strong>{{ mode.label }}</strong>
-          <small>{{ mode.summary }}</small>
-        </span>
-        <em>{{ mode.badge }}</em>
-      </button>
+  <div
+    class="compute-workspace"
+    :class="{ 'is-tree-collapsed': treeCollapsed }"
+  >
+    <ComputeTree
+      :units="computeStore.list"
+      :folders="computeStore.folders"
+      :selected-unit-id="selectedUnitId"
+      :loading="computeStore.loading || computeStore.foldersLoading"
+      :list-error="computeStore.listError"
+      :folders-error="computeStore.foldersError"
+      :collapsed="treeCollapsed"
+      @select-unit="selectUnit"
+      @create-unit="showCreateUnitDialog = true"
+      @create-folder="showCreateFolderDialog = true"
+      @refresh="loadWorkspace"
+      @toggle-collapse="treeCollapsed = !treeCollapsed"
+    />
 
-      <div class="compute-workspace__section-title is-spaced">触发方式</div>
-      <button
-        v-for="trigger in computeTriggerModes"
-        :key="trigger.id"
-        type="button"
-        class="compute-workspace__trigger"
-        :class="{ 'is-active': trigger.id === activeTrigger }"
-        @click="activeTrigger = trigger.id"
-      >
-        <span>{{ trigger.label }}</span>
-        <small>{{ trigger.badge }}</small>
-      </button>
-    </aside>
+    <ComputeEditorShell
+      :project-id="String(projectId)"
+      :tabs="tabs"
+      :active-id="activeTabId"
+      :active-draft="activeDraft"
+      :loading="computeStore.detailLoading"
+      :saving="computeStore.saving"
+      :deleting="computeStore.deleting"
+      :error="computeStore.detailError"
+      :dependencies="computeStore.dependencies"
+      :dependencies-loading="computeStore.dependenciesLoading"
+      :dependencies-error="computeStore.dependenciesError"
+      @activate-tab="activateTab"
+      @close-tab="closeTab"
+      @save="saveTab"
+      @toggle-enabled="toggleEnabled"
+      @delete-unit="deleteUnit"
+      @mark-dirty="markDirty"
+      @refresh-dependencies="loadDependencies"
+    />
 
-    <section class="compute-workspace__main">
-      <div class="compute-workspace__hero">
-        <div>
-          <span class="compute-workspace__eyebrow">计算单元 / 脚本任务</span>
-          <h2>计算不等于必须输出数据点</h2>
-          <p>
-            计算可以不输出数据点，可以在脚本内写库、发布 MQTT/Kafka、发
-            HTTP 请求；也可以输出 calc.* 数据点，或两者混合。
-          </p>
-        </div>
-        <div class="compute-workspace__hero-badge">
-          {{ selectedMode?.label }}
-        </div>
-      </div>
+    <CreateComputeUnitDialog
+      v-model="showCreateUnitDialog"
+      :folders="computeStore.folders"
+      :loading="computeStore.creating"
+      :error="computeStore.createError"
+      @submit="handleCreateUnit"
+    />
 
-      <div class="compute-workspace__mode-strip">
-        <article
-          v-for="mode in computeTaskModes"
-          :key="mode.id"
-          class="compute-workspace__mode-card"
-          :class="{ 'is-active': mode.id === activeMode }"
-        >
-          <div>
-            <strong>{{ mode.label }}</strong>
-            <span>{{ mode.badge }}</span>
-          </div>
-          <p>{{ mode.summary }}</p>
-        </article>
-      </div>
-
-      <div class="compute-workspace__script-card">
-        <div class="compute-workspace__script-head">
-          <div>
-            <strong>脚本任务区</strong>
-            <p>下方保留现有创建、运行、调试能力，不引入新的必需后端路径。</p>
-          </div>
-          <span>{{ selectedTrigger?.label }}</span>
-        </div>
-        <ComputeUnitPanel :project-id="projectId" />
-      </div>
-    </section>
-
-    <aside class="compute-workspace__detail">
-      <div class="compute-workspace__section-title">能力面板 / API</div>
-      <div class="compute-workspace__capability-list">
-        <article
-          v-for="capability in computeCapabilities"
-          :key="`${capability.category}-${capability.signature}`"
-          class="compute-workspace__capability"
-        >
-          <div>
-            <strong>{{ capability.title }}</strong>
-            <code>{{ capability.signature }}</code>
-          </div>
-          <p>{{ capability.summary }}</p>
-        </article>
-      </div>
-
-      <div class="compute-workspace__panel">
-        <div class="compute-workspace__section-title">安全约束</div>
-        <ul>
-          <li
-            v-for="constraint in computeSafetyConstraints"
-            :key="constraint"
-          >
-            {{ constraint }}
-          </li>
-        </ul>
-      </div>
-
-      <div class="compute-workspace__panel">
-        <div class="compute-workspace__section-title">调试提示</div>
-        <ul>
-          <li v-for="hint in computeDebugHints" :key="hint">{{ hint }}</li>
-        </ul>
-      </div>
-    </aside>
+    <CreateComputeFolderDialog
+      v-model="showCreateFolderDialog"
+      :folders="computeStore.folders"
+      :loading="computeStore.creating"
+      :error="computeStore.createError"
+      @submit="handleCreateFolder"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import ComputeUnitPanel from "@/components/compute/ComputeUnitPanel.vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
+import { ElMessage, ElMessageBox } from "element-plus";
+import type {
+  ComputeFolderSave,
+  ComputeUnitSave,
+} from "@/api/schemas/compute.schema";
+import { useComputeStore } from "@/stores/compute.store";
+import { getApiErrorMessage } from "@/utils/request";
+import ComputeEditorShell from "./ComputeEditorShell.vue";
+import ComputeTree from "./ComputeTree.vue";
+import CreateComputeFolderDialog from "./CreateComputeFolderDialog.vue";
+import CreateComputeUnitDialog from "./CreateComputeUnitDialog.vue";
 import {
-  computeCapabilities,
-  computeDebugHints,
-  computeSafetyConstraints,
-  computeTaskModes,
-  computeTriggerModes,
-  type ComputeTaskModeId,
-  type ComputeTriggerModeId,
-} from "@/components/compute/computeCapabilities";
+  draftToSavePayload,
+  toComputeDraft,
+  type ComputeDraft,
+  type ComputeEditorTab,
+} from "./computeEditorModel";
 
-defineProps<{
+const props = defineProps<{
   projectId: string;
+  selectedUnitId?: string | null;
 }>();
 
-const activeMode = ref<ComputeTaskModeId>("side-effect");
-const activeTrigger = ref<ComputeTriggerModeId>("manual-debug");
+const route = useRoute();
+const router = useRouter();
+const computeStore = useComputeStore();
 
-const selectedMode = computed(() =>
-  computeTaskModes.find((mode) => mode.id === activeMode.value),
+const showCreateUnitDialog = ref(false);
+const showCreateFolderDialog = ref(false);
+const treeCollapsed = ref(false);
+const drafts = ref<Record<string, ComputeDraft>>({});
+const activeTabId = ref<string | null>(null);
+
+const selectedUnitId = computed(() => props.selectedUnitId || null);
+
+const computeBasePath = computed(() => {
+  const prefix = route.path.startsWith("/debug/") ? "/debug" : "";
+  return `${prefix}/compute`;
+});
+
+const tabs = computed<ComputeEditorTab[]>(() =>
+  Object.values(drafts.value).map((draft) => ({
+    id: draft.id,
+    name: draft.name,
+    dirty: draft.dirty,
+  })),
 );
 
-const selectedTrigger = computed(() =>
-  computeTriggerModes.find((trigger) => trigger.id === activeTrigger.value),
+const activeDraft = computed(() => {
+  if (!activeTabId.value) return null;
+  return drafts.value[activeTabId.value] || null;
+});
+
+const hasDirtyTabs = computed(() =>
+  Object.values(drafts.value).some((draft) => draft.dirty),
 );
+
+async function loadWorkspace() {
+  const projectId = String(props.projectId);
+  const results = await Promise.allSettled([
+    computeStore.fetchList(projectId),
+    computeStore.fetchFolders(projectId),
+  ]);
+  const failed = results.find((result) => result.status === "rejected");
+  if (failed) {
+    ElMessage.warning("计算单元部分能力未启用");
+  }
+}
+
+function loadDependencies() {
+  computeStore.fetchDependencies(String(props.projectId)).catch(() => undefined);
+}
+
+function selectUnit(id: string) {
+  void router.push({
+    path: `${computeBasePath.value}/${id}`,
+    query: route.query,
+  });
+}
+
+async function openSelectedUnit(id: string | null) {
+  if (!id) {
+    activeTabId.value = null;
+    return;
+  }
+  if (drafts.value[id]) {
+    activeTabId.value = id;
+    return;
+  }
+  try {
+    const unit = await computeStore.openForEdit(String(props.projectId), id);
+    drafts.value = {
+      ...drafts.value,
+      [id]: toComputeDraft(unit),
+    };
+    activeTabId.value = id;
+  } catch {
+    // 错误文案已写入 store，由编辑区展示。
+  }
+}
+
+function activateTab(id: string) {
+  activeTabId.value = id;
+  selectUnit(id);
+}
+
+async function closeTab(id: string) {
+  const draft = drafts.value[id];
+  if (!draft) return;
+  if (draft.dirty) {
+    const action = await confirmDirtyClose(draft.name);
+    if (action === "cancel") return;
+    if (action === "save") {
+      const saved = await saveTab(id);
+      if (!saved) return;
+    }
+  }
+  const nextDrafts = { ...drafts.value };
+  delete nextDrafts[id];
+  drafts.value = nextDrafts;
+  if (activeTabId.value === id) {
+    const next = Object.keys(nextDrafts)[0] || null;
+    activeTabId.value = next;
+    if (next) {
+      selectUnit(next);
+    } else {
+      void router.push({ path: computeBasePath.value, query: route.query });
+    }
+  }
+}
+
+function markDirty(id: string) {
+  const draft = drafts.value[id];
+  if (!draft) return;
+  draft.dirty = true;
+}
+
+async function saveTab(id: string): Promise<boolean> {
+  const draft = drafts.value[id];
+  if (!draft) return false;
+  try {
+    const unit = await computeStore.saveUnit(
+      String(props.projectId),
+      id,
+      draftToSavePayload(draft),
+    );
+    drafts.value = {
+      ...drafts.value,
+      [id]: toComputeDraft(unit),
+    };
+    ElMessage.success("计算单元已保存");
+    await computeStore.fetchList(String(props.projectId)).catch(() => undefined);
+    return true;
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, "保存计算单元失败"));
+    return false;
+  }
+}
+
+async function toggleEnabled(id: string, enabled: boolean) {
+  try {
+    const unit = await computeStore.setUnitEnabled(
+      String(props.projectId),
+      id,
+      enabled,
+    );
+    drafts.value = {
+      ...drafts.value,
+      [id]: toComputeDraft(unit),
+    };
+    ElMessage.success(enabled ? "计算单元已启用" : "计算单元已停用");
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, "更新计算单元状态失败"));
+  }
+}
+
+async function deleteUnit(id: string) {
+  const draft = drafts.value[id];
+  const ok = await ElMessageBox.confirm(
+    `确认删除计算单元「${draft?.name || id}」？此操作不可恢复。`,
+    "删除计算单元",
+    {
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      type: "warning",
+    },
+  )
+    .then(() => true)
+    .catch(() => false);
+  if (!ok) return;
+  try {
+    await computeStore.removeUnit(String(props.projectId), id);
+    const nextDrafts = { ...drafts.value };
+    delete nextDrafts[id];
+    drafts.value = nextDrafts;
+    const next = Object.keys(nextDrafts)[0] || null;
+    activeTabId.value = next;
+    if (next) {
+      selectUnit(next);
+    } else {
+      void router.push({ path: computeBasePath.value, query: route.query });
+    }
+    ElMessage.success("计算单元已删除");
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, "删除计算单元失败"));
+  }
+}
+
+async function confirmDirtyClose(name: string) {
+  try {
+    await ElMessageBox.confirm(`计算单元「${name}」有未保存修改。`, "关闭标签", {
+      confirmButtonText: "保存",
+      cancelButtonText: "丢弃",
+      distinguishCancelAndClose: true,
+      type: "warning",
+      closeOnClickModal: false,
+    });
+    return "save" as const;
+  } catch (action) {
+    if (action === "cancel") return "discard" as const;
+    return "cancel" as const;
+  }
+}
+
+function handleBeforeUnload(event: BeforeUnloadEvent) {
+  if (!hasDirtyTabs.value) return;
+  event.preventDefault();
+  event.returnValue = "";
+}
+
+onBeforeRouteLeave(async () => {
+  if (!hasDirtyTabs.value) return true;
+  return ElMessageBox.confirm(
+    "当前存在未保存的计算单元修改，离开后这些修改不会保存。",
+    "离开计算单元",
+    {
+      confirmButtonText: "离开",
+      cancelButtonText: "取消",
+      type: "warning",
+    },
+  )
+    .then(() => true)
+    .catch(() => false);
+});
+
+async function handleCreateUnit(data: ComputeUnitSave) {
+  try {
+    const unit = await computeStore.createUnit(String(props.projectId), data);
+    showCreateUnitDialog.value = false;
+    drafts.value = {
+      ...drafts.value,
+      [String(unit.id)]: toComputeDraft(unit),
+    };
+    selectUnit(String(unit.id));
+    ElMessage.success("计算单元已创建");
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, "新建计算单元失败"));
+  }
+}
+
+async function handleCreateFolder(data: ComputeFolderSave) {
+  try {
+    await computeStore.createFolder(String(props.projectId), data);
+    showCreateFolderDialog.value = false;
+    ElMessage.success("文件夹已创建");
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, "新建文件夹失败"));
+  }
+}
+
+watch(
+  () => props.projectId,
+  () => {
+    drafts.value = {};
+    activeTabId.value = null;
+    void loadWorkspace();
+    loadDependencies();
+  },
+);
+
+watch(
+  selectedUnitId,
+  (id) => {
+    void openSelectedUnit(id);
+  },
+  { immediate: true },
+);
+
+onMounted(() => {
+  void loadWorkspace();
+  loadDependencies();
+  window.addEventListener("beforeunload", handleBeforeUnload);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("beforeunload", handleBeforeUnload);
+});
 </script>
 
 <style scoped>
 .compute-workspace {
-  --compute-paper: var(--dc-surface-raised);
-  --compute-canvas: var(--dc-surface-subtle);
-  --compute-line: var(--dc-border);
-  --compute-ink: var(--dc-text);
-  --compute-muted: var(--dc-text-secondary);
-  --compute-accent: var(--dc-primary);
-  --compute-soft: var(--dc-primary-soft);
-
   height: 100%;
-  display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(300px, 360px);
-  gap: 12px;
-  color: var(--compute-ink);
-}
-
-.compute-workspace__side,
-.compute-workspace__main,
-.compute-workspace__detail {
   min-height: 0;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
   overflow: hidden;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-md);
@@ -168,299 +372,14 @@ const selectedTrigger = computed(() =>
   box-shadow: var(--dc-shadow-surface);
 }
 
-.compute-workspace__side,
-.compute-workspace__detail {
-  padding: 12px;
-  overflow-y: auto;
+.compute-workspace.is-tree-collapsed {
+  grid-template-columns: 48px minmax(0, 1fr);
 }
 
-.compute-workspace__main {
-  display: flex;
-  flex-direction: column;
-  background: var(--compute-canvas);
-}
-
-.compute-workspace__section-title {
-  margin-bottom: 12px;
-  color: var(--compute-ink);
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.compute-workspace__section-title.is-spaced {
-  margin-top: 20px;
-}
-
-.compute-workspace__mode,
-.compute-workspace__trigger {
-  width: 100%;
-  border: 1px solid var(--dc-border);
-  background: var(--dc-surface-muted);
-  color: var(--dc-text-secondary);
-  text-align: left;
-}
-
-.compute-workspace__mode {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  margin-bottom: 8px;
-  padding: 10px;
-  border-radius: var(--dc-radius-sm);
-}
-
-.compute-workspace__mode strong,
-.compute-workspace__mode small {
-  display: block;
-}
-
-.compute-workspace__mode small {
-  margin-top: 5px;
-  color: var(--compute-muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.compute-workspace__mode em,
-.compute-workspace__trigger small,
-.compute-workspace__hero-badge,
-.compute-workspace__script-head span,
-.compute-workspace__mode-card span {
-  border-radius: 4px;
-  background: var(--compute-soft);
-  color: var(--dc-primary);
-  font-size: 11px;
-  font-style: normal;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.compute-workspace__mode em {
-  align-self: start;
-  padding: 4px 8px;
-}
-
-.compute-workspace__mode.is-active,
-.compute-workspace__trigger.is-active,
-.compute-workspace__mode-card.is-active {
-  border-color: var(--compute-accent);
-  background: var(--dc-primary-soft);
-  font-weight: 700;
-}
-
-.compute-workspace__trigger {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
-  padding: 9px 10px;
-  border-radius: var(--dc-radius-sm);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.compute-workspace__trigger small {
-  padding: 3px 7px;
-}
-
-.compute-workspace__hero {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 16px 18px 14px;
-  border-bottom: 1px solid var(--dc-border);
-  background: var(--compute-paper);
-}
-
-.compute-workspace__eyebrow {
-  color: var(--dc-primary);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.compute-workspace__hero h2 {
-  margin: 6px 0 8px;
-  font-size: 22px;
-  line-height: 1.2;
-}
-
-.compute-workspace__hero p {
-  max-width: 780px;
-  margin: 0;
-  color: var(--compute-muted);
-  font-size: 13px;
-  line-height: 1.7;
-}
-
-.compute-workspace__hero-badge {
-  align-self: start;
-  padding: 7px 11px;
-}
-
-.compute-workspace__mode-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  padding: 12px;
-}
-
-.compute-workspace__mode-card {
-  min-height: 94px;
-  padding: 12px;
-  border: 1px solid var(--compute-line);
-  border-radius: var(--dc-radius-md);
-  background: var(--dc-surface-raised);
-}
-
-.compute-workspace__mode-card div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.compute-workspace__mode-card span {
-  padding: 4px 8px;
-}
-
-.compute-workspace__mode-card p {
-  margin: 8px 0 0;
-  color: var(--compute-muted);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.compute-workspace__script-card {
-  min-height: 0;
-  margin: 0 12px 12px;
-  overflow: hidden;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  border: 1px solid var(--compute-line);
-  border-radius: var(--dc-radius-md);
-  background: var(--compute-paper);
-}
-
-.compute-workspace__script-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--dc-border);
-  background: var(--dc-surface-subtle);
-}
-
-.compute-workspace__script-head strong {
-  font-size: 14px;
-}
-
-.compute-workspace__script-head p {
-  margin: 4px 0 0;
-  color: var(--compute-muted);
-  font-size: 12px;
-}
-
-.compute-workspace__script-head span {
-  align-self: start;
-  padding: 5px 9px;
-}
-
-.compute-workspace__script-card :deep(.compute-panel) {
-  padding: 16px;
-}
-
-.compute-workspace__capability-list {
-  display: grid;
-  gap: 8px;
-}
-
-.compute-workspace__capability,
-.compute-workspace__panel {
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-md);
-  background: var(--dc-surface-subtle);
-}
-
-.compute-workspace__capability {
-  padding: 10px;
-}
-
-.compute-workspace__capability strong,
-.compute-workspace__capability code {
-  display: block;
-}
-
-.compute-workspace__capability strong {
-  font-size: 13px;
-}
-
-.compute-workspace__capability code {
-  margin-top: 4px;
-  color: var(--dc-primary);
-  font-size: 11px;
-  white-space: normal;
-  word-break: break-all;
-}
-
-.compute-workspace__capability p,
-.compute-workspace__panel li {
-  color: var(--compute-muted);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.compute-workspace__capability p {
-  margin: 6px 0 0;
-}
-
-.compute-workspace__panel {
-  margin-top: 12px;
-  padding: 12px;
-}
-
-.compute-workspace__panel ul {
-  margin: 0;
-  padding-left: 18px;
-}
-
-.compute-workspace__panel li + li {
-  margin-top: 7px;
-}
-
-@media (max-width: 1260px) {
-  .compute-workspace {
-    grid-template-columns: 230px minmax(0, 1fr);
-  }
-
-  .compute-workspace__detail {
-    display: none;
-  }
-}
-
-@media (max-width: 820px) {
+@media (max-width: 900px) {
   .compute-workspace {
     grid-template-columns: 1fr;
-    overflow-y: auto;
-  }
-
-  .compute-workspace__side,
-  .compute-workspace__main {
-    min-height: 360px;
-  }
-
-  .compute-workspace__mode-strip {
-    grid-template-columns: 1fr;
-  }
-
-  .compute-workspace__hero {
-    display: block;
-  }
-
-  .compute-workspace__hero-badge {
-    display: inline-flex;
-    margin-top: 12px;
+    grid-template-rows: minmax(260px, 42vh) minmax(0, 1fr);
   }
 }
 </style>

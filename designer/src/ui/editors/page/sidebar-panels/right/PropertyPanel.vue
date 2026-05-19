@@ -46,7 +46,6 @@ import IconEpFolder from "~icons/ep/folder";
 import IconEpGrid from "~icons/ep/grid";
 import IconEpLink from "~icons/ep/link";
 import IconEpList from "~icons/ep/list";
-import IconLucideLanguages from "~icons/lucide/languages";
 import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
 import { getManifest } from "@/materials/manifests";
 import { resolveButtonShapeProps } from "@/editor-core/descriptors/button-props";
@@ -2388,11 +2387,6 @@ function buildElementPlusPropDefs(type: string | undefined): AnyArray {
 function shouldShowBindButton(propDef: AnyRecord) {
   if (!propDef) return false;
   return propDef.bindable === true;
-}
-
-function shouldShowI18nButton(propDef: AnyRecord) {
-  if (!propDef) return false;
-  return propDef.type === "string" && propDef.editor !== "icon";
 }
 
 /**
@@ -6373,10 +6367,6 @@ function hasPropBinding(propName: string): boolean {
   return Boolean(currentElement.value?.bindings?.[propName]);
 }
 
-function hasPropI18nBinding(propName: string): boolean {
-  return Boolean(selectedNode.value?.i18n?.props?.[propName]);
-}
-
 /**
  * 当前是否有样式选择目标
  */
@@ -6842,20 +6832,6 @@ function handleBindClick(propDef: AnyRecord) {
   };
   bindingEditorCode.value = resolveBindingExpr(propDef.name);
   bindingDialogVisible.value = true;
-}
-
-function handleI18nClick(propDef: AnyRecord) {
-  if (!propDef?.name || !selectedNode.value || !currentPageId.value) return;
-  window.dispatchEvent(
-    new CustomEvent("designer:i18n-open-resource", {
-      detail: {
-        scan: true,
-        pageId: currentPageId.value,
-        nodeId: selectedNode.value.id,
-        fieldPath: propDef.name,
-      },
-    }),
-  );
 }
 
 /**
@@ -7485,19 +7461,6 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
                           <IconEpLink class="bind-icon" />
                         </button>
                       </el-tooltip>
-                      <el-tooltip
-                        v-if="shouldShowI18nButton(propDef)"
-                        content="国际化"
-                        placement="top"
-                      >
-                        <button
-                          class="bind-btn i18n-btn"
-                          :class="{ 'is-active': hasPropI18nBinding(propDef.name) }"
-                          @click="handleI18nClick(propDef)"
-                        >
-                          <IconLucideLanguages class="bind-icon" />
-                        </button>
-                      </el-tooltip>
                     </div>
                     <PropEditor
                       :prop="propDef"
@@ -8084,12 +8047,6 @@ function updateNodeRuntimeAccess(key: "visibleSchemeId" | "operableSchemeId", va
   color: var(--designer-shell-surface);
   background: var(--designer-primary);
   box-shadow: none;
-}
-
-.i18n-btn {
-  border-color: #a7f3d0;
-  background: #ecfdf5;
-  color: #047857;
 }
 
 .bind-icon {

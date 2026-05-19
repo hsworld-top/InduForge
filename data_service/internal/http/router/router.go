@@ -986,6 +986,46 @@ func mountComputeRoutes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/compute-units/dependencies",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.computeHandler.Dependencies),
+			),
+		),
+	)
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/compute-units/folders",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.computeHandler.ListFolders),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/compute-units/folders",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.computeHandler.CreateFolder),
+			),
+		),
+	)
+	mux.Handle(
+		"PUT /api/v1/data/projects/{projectId}/compute-units/folders/{folderId}",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.computeHandler.UpdateFolder),
+			),
+		),
+	)
+	mux.Handle(
+		"DELETE /api/v1/data/projects/{projectId}/compute-units/folders/{folderId}",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.computeHandler.DeleteFolder),
+			),
+		),
+	)
+	mux.Handle(
 		"GET /api/v1/data/projects/{projectId}/compute-units/{id}",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:read")(

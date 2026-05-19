@@ -37,6 +37,12 @@ const TEXT_PROP_KEYS = new Set([
   "prefix",
   "suffix",
 ]);
+const MANIFEST_TYPE_ALIASES: Record<string, string> = {
+  button: "Button",
+  elbutton: "Button",
+  "el-button": "Button",
+};
+const PLAIN_TEXT_FIELD_COMPONENTS = new Set(["Button", "DownloadLink"]);
 
 export type I18nScanStatus =
   | "candidate"
@@ -45,7 +51,6 @@ export type I18nScanStatus =
   | "missing-current"
   | "source-changed"
   | "orphan"
-  | "missing-resource"
   | "binding-conflict";
 
 export interface I18nTextCandidate {
@@ -255,11 +260,12 @@ function isTextCandidateKey(key: string, depth: number): boolean {
   return depth === 0 && !EXCLUDED_PROP_KEYS.has(key);
 }
 
-function shouldKeepTextValue(value: string): boolean {
+function shouldKeepTextValue(value: string, key = "", allowPlainText = false): boolean {
   const text = value.trim();
   if (!text) return false;
   if (/^\{\{[\s\S]*\}\}$/.test(text)) return false;
-  if (/^[\w.-]+$/.test(text) && !/[\u4E00-\u9FA5\s]/.test(text)) return false;
+  const isPlainToken = /^[\w.-]+$/.test(text) && !/[\u4E00-\u9FA5\s]/.test(text);
+  if (isPlainToken) return allowPlainText || key !== "text";
   return true;
 }
 
@@ -268,24 +274,37 @@ function collectTextFields(
   out: Array<{ path: string; text: string }>,
   prefix = "",
   depth = 0,
+  allowPlainTextFields = false,
 ): void {
   if (typeof value === "string") {
     const key = prefix.split(".").pop() || "";
-    if (isTextCandidateKey(key, depth) && shouldKeepTextValue(value)) {
+    if (isTextCandidateKey(key, depth) && shouldKeepTextValue(value, key, allowPlainTextFields)) {
       out.push({ path: prefix, text: value });
     }
     return;
   }
   if (Array.isArray(value)) {
     value.forEach((item, index) => {
-      collectTextFields(item, out, prefix ? `${prefix}.${index}` : String(index), depth + 1);
+      collectTextFields(
+        item,
+        out,
+        prefix ? `${prefix}.${index}` : String(index),
+        depth + 1,
+        allowPlainTextFields,
+      );
     });
     return;
   }
   if (!isRecord(value)) return;
   Object.entries(value).forEach(([key, child]) => {
     if (depth === 0 && EXCLUDED_PROP_KEYS.has(key)) return;
-    collectTextFields(child, out, prefix ? `${prefix}.${key}` : key, depth + 1);
+    collectTextFields(
+      child,
+      out,
+      prefix ? `${prefix}.${key}` : key,
+      depth + 1,
+      allowPlainTextFields,
+    );
   });
 }
 
@@ -294,9 +313,16 @@ function cloneDefaultValue(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value));
 }
 
+function resolveManifestType(type: string): string {
+  const normalized = String(type || "").trim();
+  if (!normalized) return "";
+  const alias = MANIFEST_TYPE_ALIASES[normalized.toLowerCase()];
+  return alias || normalized;
+}
+
 function resolveNodePropsForScan(node: ComponentNode): Record<string, unknown> {
   const defaultProps: Record<string, unknown> = {};
-  const manifest = getManifest(node.type);
+  const manifest = getManifest(resolveManifestType(node.type));
   manifest?.props?.forEach((prop) => {
     if (prop.defaultValue !== undefined) {
       defaultProps[prop.name] = cloneDefaultValue(prop.defaultValue);
@@ -331,7 +357,7 @@ function resolveStatus(args: {
   const { candidate, resource, settings } = args;
   if (candidate.hasDynamicBinding) return "binding-conflict";
   if (!candidate.resourceKey) return "candidate";
-  if (!resource) return "missing-resource";
+  if (!resource) return "candidate";
   if (!String(resource.values?.[settings.currentLocale] ?? "").trim()) return "missing-current";
   if (resource.sourceText !== candidate.sourceText) return "source-changed";
   return "complete";
@@ -353,7 +379,13 @@ export function scanProjectI18nResources(
       const propsForScan = resolveNodePropsForScan(node);
       if (!Object.keys(propsForScan).length) return;
       const fields: Array<{ path: string; text: string }> = [];
-      collectTextFields(propsForScan, fields);
+      collectTextFields(
+        propsForScan,
+        fields,
+        "",
+        0,
+        PLAIN_TEXT_FIELD_COMPONENTS.has(resolveManifestType(node.type)),
+      );
       fields.forEach((field) => {
         const topProp = field.path.split(".")[0] || field.path;
         const resourceKey = node.i18n?.props?.[field.path] || "";

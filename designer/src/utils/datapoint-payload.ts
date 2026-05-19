@@ -42,6 +42,9 @@ export function extractDatapointValue(payload: unknown, datapointId: string): un
 
 /** GET .../connections 解包后的业务体 */
 export function requireConnectionsPayload(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
   if (!isRecord(payload)) {
     throw new Error("连接列表响应无效");
   }

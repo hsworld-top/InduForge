@@ -136,6 +136,7 @@ const lifecycleItems: LifecycleItem[] = [
 const scriptCode = ref("");
 const editorVisible = ref(false);
 const editorRef = ref<MonacoEditorExposeLike | null>(null);
+const editorSidebarTab = ref("custom");
 const customTreeRef = ref<any>(null);
 const scriptSearch = ref("");
 const componentSearch = ref("");
@@ -150,7 +151,6 @@ const activeLifecycleKey = ref("");
 const lifecycleToggleState = ref<Record<string, boolean>>({});
 const activeItemType = ref<"" | "lifecycle" | "timer" | "variableChanges">("");
 const activeItemId = ref("");
-const selectedIds = ref<SelectionState>({ timers: [], variableChanges: [] });
 const createDialogVisible = ref(false);
 const createDialogType = ref<"timer" | "variable">("timer");
 const createForm = ref<CreateFormState>({
@@ -178,7 +178,7 @@ const variableChangeItems = computed<VariableChangeItemLike[]>(() => {
   return Array.isArray(list) ? list : [];
 });
 const createDialogTitle = computed<string>(() => {
-  return createDialogType.value === "timer" ? "新建定时器" : "新建变量改变";
+  return createDialogType.value === "timer" ? "新建定时器" : "新建变量监听";
 });
 const pageVariableOptions = computed<string[]>(() => {
   void docVersion.value;
@@ -320,7 +320,7 @@ const editorDescription = computed(() => {
   }
   if (activeItemType.value === "variableChanges") {
     const item = variableChangeItems.value.find((entry) => entry.id === activeItemId.value);
-    const label = item?.name || "变量改变";
+    const label = item?.name || "变量监听";
     return `${pageTitle.value}${label}脚本`;
   }
   const item = lifecycleItems.find((entry) => entry.key === activeLifecycleKey.value);
@@ -678,10 +678,6 @@ function handleCreateConfirm(): void {
       },
     ];
     nextLifecycle.timers = nextItems;
-    selectedIds.value = {
-      ...selectedIds.value,
-      timers: [nextItems.at(-1)?.id || ""],
-    };
   } else {
     const variable = createForm.value.variable.trim();
     if (!variable) {
@@ -699,10 +695,6 @@ function handleCreateConfirm(): void {
       },
     ];
     nextLifecycle.variableChanges = nextItems;
-    selectedIds.value = {
-      ...selectedIds.value,
-      variableChanges: [nextItems.at(-1)?.id || ""],
-    };
   }
   editorStore.updateCurrentPage({ lifecycle: nextLifecycle });
   void editorStore.saveCurrentPage?.();
@@ -720,28 +712,6 @@ function createId(prefix: string): string {
       ? crypto.randomUUID().replace(UUID_DASH_PATTERN, "").slice(0, 8)
       : Math.random().toString(16).slice(2, 10);
   return `${prefix}_${Date.now().toString(16)}_${random}`;
-}
-
-/**
- * 判断是否选中条目
- * @param {'timers' | 'variableChanges'} type - 类型
- * @param {string} id - 条目 ID
- * @returns {boolean} 是否选中
- */
-function isSelectedItem(type: keyof SelectionState, id: string): boolean {
-  return selectedIds.value[type].includes(id);
-}
-
-/**
- * 切换条目选中状态
- * @param {'timers' | 'variableChanges'} type - 类型
- * @param {string} id - 条目 ID
- * @param {boolean} checked - 是否选中
- */
-function toggleSelection(type: keyof SelectionState, id: string, checked: boolean): void {
-  const list = selectedIds.value[type] || [];
-  const nextList = checked ? [...new Set([...list, id])] : list.filter((item) => item !== id);
-  selectedIds.value = { ...selectedIds.value, [type]: nextList };
 }
 
 /**
@@ -785,33 +755,26 @@ function openItemEditor(
 /**
  * 删除条目
  */
-function handleDelete(): void {
+function handleDeleteItem(type: keyof SelectionState, item: TimerItemLike | VariableChangeItemLike): void {
   if (!currentPage.value) return;
-  const timerIds = selectedIds.value.timers || [];
-  const variableIds = selectedIds.value.variableChanges || [];
-  const total = timerIds.length + variableIds.length;
-  if (total === 0) {
-    ElMessage.info({ message: "请选择需要删除的条目" } as any);
-    return;
-  }
-  ElMessageBox.confirm(`确认删除已选的${total}条记录吗？`, "删除确认", {
+  const label = type === "timers" ? "定时器" : "变量监听";
+  const name = item.name || label;
+  ElMessageBox.confirm(`确认删除${label}「${name}」吗？`, "删除确认", {
     confirmButtonText: "删除",
     cancelButtonText: "取消",
     type: "warning",
   })
     .then(() => {
       const nextLifecycle: Record<string, unknown> = { ...(pageSnapshot.value?.lifecycle || {}) };
-      if (timerIds.length > 0) {
-        nextLifecycle.timers = timerItems.value.filter((item) => !timerIds.includes(item.id));
-      }
-      if (variableIds.length > 0) {
+      if (type === "timers") {
+        nextLifecycle.timers = timerItems.value.filter((entry) => entry.id !== item.id);
+      } else {
         nextLifecycle.variableChanges = variableChangeItems.value.filter(
-          (item) => !variableIds.includes(item.id),
+          (entry) => entry.id !== item.id,
         );
       }
       editorStore.updateCurrentPage({ lifecycle: nextLifecycle });
       void editorStore.saveCurrentPage?.();
-      selectedIds.value = { timers: [], variableChanges: [] };
     })
     .catch(() => {});
 }
@@ -820,7 +783,6 @@ watch(
   () => [currentPage.value?.id],
   () => {
     syncLifecycleToggleState();
-    selectedIds.value = { timers: [], variableChanges: [] };
   },
   { immediate: true },
 );
@@ -858,32 +820,27 @@ watch(
       <div class="empty-hint">请选择页面以配置绑定</div>
     </template>
     <template v-else>
-      <div class="binding-toolbar">
-        <el-dropdown trigger="click" @command="handleCreateCommand">
-          <el-button class="toolbar-button" size="small" circle>
-            <IconEpPlus />
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="timer">创建定时器</el-dropdown-item>
-              <el-dropdown-item command="variable">变量改变</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-        <el-tooltip content="删除" placement="top">
-          <el-button class="toolbar-button" size="small" circle @click="handleDelete">
-            <IconEpDelete />
-          </el-button>
+      <div class="binding-context">
+        <div>
+          <div class="binding-context-title">页面脚本</div>
+          <div class="binding-context-desc">{{ pageTitle }}</div>
+        </div>
+        <el-tooltip content="仅作用于当前页面" placement="top">
+          <span class="binding-context-tag">页面级</span>
         </el-tooltip>
       </div>
+
       <div class="binding-section">
-        <div class="section-header">基本</div>
+        <div class="section-header">
+          <span class="section-title">页面生命周期</span>
+          <span class="section-count">{{ lifecycleItems.length }}</span>
+        </div>
         <div class="section-body">
           <div v-for="item in lifecycleItems" :key="item.key" class="binding-row">
             <div class="binding-name">{{ item.label }}</div>
             <div class="binding-actions">
               <div class="binding-toggle">
-                <span class="binding-toggle-label">启动</span>
+                <span class="binding-toggle-label">启用</span>
                 <el-switch
                   :model-value="getLifecycleEnabled(item.key)"
                   @change="(value: any) => handleToggleLifecycle(item.key, value)"
@@ -900,24 +857,36 @@ watch(
       </div>
 
       <div class="binding-section">
-        <div class="section-header">定时器</div>
-        <div v-if="timerItems.length === 0" class="empty-block">暂无数据</div>
+        <div class="section-header">
+          <span class="section-title">页面定时器</span>
+          <span class="section-count">{{ timerItems.length }}</span>
+          <el-tooltip content="新建定时器" placement="top">
+            <el-button
+              class="section-action"
+              size="small"
+              circle
+              @click.stop="handleCreateCommand('timer')"
+            >
+              <IconEpPlus />
+            </el-button>
+          </el-tooltip>
+        </div>
+        <div v-if="timerItems.length === 0" class="empty-block" @click="handleCreateCommand('timer')">
+          暂无定时器
+        </div>
         <div v-else class="section-body">
           <div
             v-for="item in timerItems"
             :key="item.id"
-            class="binding-row is-shifted"
-            :class="{ 'is-active': isSelectedItem('timers', item.id) }"
+            class="binding-row"
           >
-            <el-checkbox
-              class="select-check"
-              :model-value="isSelectedItem('timers', item.id)"
-              @change="(value: any) => toggleSelection('timers', item.id, value)"
-            />
-            <div class="binding-name">{{ item.name }}</div>
+            <div class="binding-name">
+              <span>{{ item.name }}</span>
+              <span class="binding-meta">{{ item.interval || 1000 }}ms</span>
+            </div>
             <div class="binding-actions">
               <div class="binding-toggle">
-                <span class="binding-toggle-label">启动</span>
+                <span class="binding-toggle-label">启用</span>
                 <el-switch
                   :model-value="item.enabled !== false"
                   @change="(value: any) => handleToggleItem('timers', item.id, value)"
@@ -933,30 +902,53 @@ watch(
                   <IconEpEditPen />
                 </el-button>
               </el-tooltip>
+              <el-tooltip content="删除" placement="top">
+                <el-button
+                  class="icon-button danger"
+                  size="small"
+                  circle
+                  @click.stop="handleDeleteItem('timers', item)"
+                >
+                  <IconEpDelete />
+                </el-button>
+              </el-tooltip>
             </div>
           </div>
         </div>
       </div>
 
       <div class="binding-section">
-        <div class="section-header">变量改变</div>
-        <div v-if="variableChangeItems.length === 0" class="empty-block">暂无数据</div>
+        <div class="section-header">
+          <span class="section-title">页面变量监听</span>
+          <span class="section-count">{{ variableChangeItems.length }}</span>
+          <el-tooltip content="新建变量监听" placement="top">
+            <el-button
+              class="section-action"
+              size="small"
+              circle
+              @click.stop="handleCreateCommand('variable')"
+            >
+              <IconEpPlus />
+            </el-button>
+          </el-tooltip>
+        </div>
+        <div
+          v-if="variableChangeItems.length === 0"
+          class="empty-block"
+          @click="handleCreateCommand('variable')"
+        >
+          暂无变量监听
+        </div>
         <div v-else class="section-body">
           <div
             v-for="item in variableChangeItems"
             :key="item.id"
-            class="binding-row is-shifted"
-            :class="{ 'is-active': isSelectedItem('variableChanges', item.id) }"
+            class="binding-row"
           >
-            <el-checkbox
-              class="select-check"
-              :model-value="isSelectedItem('variableChanges', item.id)"
-              @change="(value: any) => toggleSelection('variableChanges', item.id, value)"
-            />
             <div class="binding-name">{{ item.name }}</div>
             <div class="binding-actions">
               <div class="binding-toggle">
-                <span class="binding-toggle-label">启动</span>
+                <span class="binding-toggle-label">启用</span>
                 <el-switch
                   :model-value="item.enabled !== false"
                   @change="(value: any) => handleToggleItem('variableChanges', item.id, value)"
@@ -972,6 +964,16 @@ watch(
                   <IconEpEditPen />
                 </el-button>
               </el-tooltip>
+              <el-tooltip content="删除" placement="top">
+                <el-button
+                  class="icon-button danger"
+                  size="small"
+                  circle
+                  @click.stop="handleDeleteItem('variableChanges', item)"
+                >
+                  <IconEpDelete />
+                </el-button>
+              </el-tooltip>
             </div>
           </div>
         </div>
@@ -981,23 +983,12 @@ watch(
 
   <el-dialog
     v-model="editorVisible"
-    :title="editorTitle"
-    width="980px"
+    :title="editorDescription"
+    width="1120px"
     top="3vh"
     :close-on-click-modal="false"
     :lock-scroll="false"
   >
-    <div class="editor-meta">
-      <div class="meta-title">{{ editorTitle }}</div>
-      <div class="meta-desc">{{ editorDescription }}</div>
-      <div class="meta-actions">
-        <el-tooltip content="枚举变量" placement="top">
-          <el-button class="icon-button" size="small" circle @click="openVariableEnum">
-            <IconEpList />
-          </el-button>
-        </el-tooltip>
-      </div>
-    </div>
     <div class="editor-body">
       <div class="editor-main">
         <MonacoEditor
@@ -1009,78 +1000,96 @@ watch(
         />
       </div>
       <div class="editor-sidebar">
-        <div class="sidebar-section">
-          <div class="sidebar-title">自定义脚本</div>
-          <el-input v-model="scriptSearch" size="small" placeholder="搜索脚本/分组" clearable />
-          <div class="sidebar-scroll">
-            <el-tree
-              ref="customTreeRef"
-              :data="customScriptTree"
-              node-key="id"
-              :default-expand-all="true"
-              :expand-on-click-node="false"
-              :filter-node-method="filterSidebarNode"
-              @node-click="handleCustomScriptInsert"
-            >
-              <template #default="{ data }">
-                <div class="tree-node" :class="`node-${data.type}`">
-                  <el-icon class="node-icon icon-custom">
-                    <IconEpFolder v-if="data.type === 'group'" />
-                    <IconEpEditPen v-else />
-                  </el-icon>
-                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">
-                    {{ data.label }}
-                  </span>
-                </div>
-              </template>
-            </el-tree>
-          </div>
+        <div class="editor-sidebar-head">
+          <span>插入资源</span>
+          <el-tooltip content="枚举工程变量" placement="top">
+            <el-button class="icon-button" size="small" circle @click="openVariableEnum">
+              <IconEpList />
+            </el-button>
+          </el-tooltip>
         </div>
-        <div class="sidebar-section">
-          <div class="sidebar-title">页面变量</div>
-          <el-input v-model="pageVarSearch" size="small" placeholder="搜索页面变量" clearable />
-          <div class="sidebar-scroll page-var-list">
-            <div
-              v-for="row in pageVariableRows"
-              :key="row.name"
-              class="page-var-item"
-              @click="handlePageVariableInsert(row)"
-            >
-              <el-icon class="node-icon icon-variable">
-                <IconEpList />
-              </el-icon>
-              <span class="node-label">{{ row.name }}</span>
-              <span class="page-var-type">{{ row.type }}</span>
+        <el-tabs v-model="editorSidebarTab" class="editor-tabs" stretch>
+          <el-tab-pane label="脚本" name="custom">
+            <div class="sidebar-section">
+              <el-input v-model="scriptSearch" size="small" placeholder="搜索脚本/分组" clearable />
+              <div class="sidebar-scroll">
+                <el-tree
+                  ref="customTreeRef"
+                  :data="customScriptTree"
+                  node-key="id"
+                  :default-expand-all="true"
+                  :expand-on-click-node="false"
+                  :filter-node-method="filterSidebarNode"
+                  @node-click="handleCustomScriptInsert"
+                >
+                  <template #default="{ data }">
+                    <div class="tree-node" :class="`node-${data.type}`">
+                      <el-icon class="node-icon icon-custom">
+                        <IconEpFolder v-if="data.type === 'group'" />
+                        <IconEpEditPen v-else />
+                      </el-icon>
+                      <span class="node-label" :class="{ 'is-group': data.type === 'group' }">
+                        {{ data.label }}
+                      </span>
+                    </div>
+                  </template>
+                </el-tree>
+              </div>
             </div>
-          </div>
-        </div>
-        <div class="sidebar-section">
-          <div class="sidebar-title">页面组件</div>
-          <el-input v-model="componentSearch" size="small" placeholder="搜索组件/分组" clearable />
-          <div class="sidebar-scroll">
-            <el-tree
-              ref="componentTreeRef"
-              :data="pageComponentTree"
-              node-key="id"
-              :default-expand-all="true"
-              :expand-on-click-node="false"
-              :filter-node-method="filterSidebarNode"
-              @node-click="handleComponentInsert"
-            >
-              <template #default="{ data }">
-                <div class="tree-node" :class="`node-${data.type}`">
-                  <el-icon class="node-icon icon-component">
-                    <IconEpFolder v-if="data.type === 'group'" />
-                    <IconEpGrid v-else />
+          </el-tab-pane>
+          <el-tab-pane label="变量" name="variable">
+            <div class="sidebar-section">
+              <el-input v-model="pageVarSearch" size="small" placeholder="搜索页面变量" clearable />
+              <div class="sidebar-scroll page-var-list">
+                <div
+                  v-for="row in pageVariableRows"
+                  :key="row.name"
+                  class="page-var-item"
+                  @click="handlePageVariableInsert(row)"
+                >
+                  <el-icon class="node-icon icon-variable">
+                    <IconEpList />
                   </el-icon>
-                  <span class="node-label" :class="{ 'is-group': data.type === 'group' }">
-                    {{ data.label }}
-                  </span>
+                  <span class="node-label">{{ row.name }}</span>
+                  <span class="page-var-type">{{ row.type }}</span>
                 </div>
-              </template>
-            </el-tree>
-          </div>
-        </div>
+              </div>
+            </div>
+          </el-tab-pane>
+          <el-tab-pane label="组件" name="component">
+            <div class="sidebar-section">
+              <el-input
+                v-model="componentSearch"
+                size="small"
+                placeholder="搜索组件/分组"
+                clearable
+              />
+              <div class="sidebar-scroll">
+                <el-tree
+                  ref="componentTreeRef"
+                  :data="pageComponentTree"
+                  node-key="id"
+                  :default-expand-all="true"
+                  :expand-on-click-node="false"
+                  :filter-node-method="filterSidebarNode"
+                  @node-click="handleComponentInsert"
+                >
+                  <template #default="{ data }">
+                    <div class="tree-node" :class="`node-${data.type}`">
+                      <el-icon class="node-icon icon-component">
+                        <IconEpFolder v-if="data.type === 'group'" />
+                        <IconEpGrid v-else />
+                      </el-icon>
+                      <span class="node-label" :class="{ 'is-group': data.type === 'group' }">
+                        {{ data.label }}
+                      </span>
+                    </div>
+                  </template>
+                </el-tree>
+              </div>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
       </div>
     </div>
     <template #footer>
@@ -1189,116 +1198,203 @@ watch(
 .binding-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
-.binding-toolbar {
+.binding-context {
   display: flex;
-  justify-content: flex-start;
-  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 2px 8px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
-.toolbar-button {
-  background: #f5f7fa;
-  border: 1px solid #e4e7ed;
-  color: #606266;
+.binding-context-title {
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
 }
 
-.toolbar-button:hover {
-  background: #eef2ff;
-  color: #4f46e5;
+.binding-context-desc {
+  max-width: 180px;
+  overflow: hidden;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.binding-context-tag {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 20px;
 }
 
 .binding-section {
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
-  background: var(--designer-shell-surface);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
 .section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 2px;
+}
+
+.section-title {
+  flex: 1;
+  min-width: 0;
+  color: var(--el-text-color-regular);
   font-size: 12px;
   font-weight: 600;
-  color: var(--el-text-color-regular);
-  padding: 8px 10px;
-  border-bottom: 1px solid #e4e7ed;
-  background: #f7f8fa;
+}
+
+.section-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-secondary);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.section-action {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--el-text-color-secondary);
+  opacity: 0;
+}
+
+.section-header:hover .section-action {
+  opacity: 1;
+}
+
+.section-action:hover {
+  background: #eef2ff;
+  color: #4f46e5;
 }
 
 .section-body {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
+  gap: 3px;
 }
 
 .binding-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 6px;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 4px 0 8px;
   border-radius: 6px;
   cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.binding-row:hover {
+  background: var(--el-fill-color-lighter);
 }
 
 .binding-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
   font-size: 12px;
   color: var(--el-text-color-regular);
-  min-width: 120px;
 }
 
-.binding-row.is-active {
-  background: #eef2ff;
+.binding-name > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.binding-row.is-shifted .binding-actions {
-  transform: translateX(-18px);
-}
-
-.select-check {
-  margin-right: 2px;
+.binding-meta {
+  flex-shrink: 0;
+  color: var(--el-text-color-placeholder);
+  font-size: 11px;
 }
 
 .binding-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.binding-check {
-  font-size: 12px;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .binding-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 6px;
+  gap: 4px;
+  padding: 0 2px;
   border-radius: 6px;
-  background: var(--el-fill-color-lighter);
 }
 
 .binding-toggle-label {
   font-size: 12px;
-  color: var(--el-text-color-regular);
+  color: var(--el-text-color-secondary);
   white-space: nowrap;
 }
 
+.binding-row :deep(.el-switch) {
+  --el-switch-on-color: #4f46e5;
+}
+
 .icon-button {
-  background: #eef2ff;
+  width: 24px;
+  height: 24px;
+  background: transparent;
   border: none;
-  color: #4f46e5;
+  color: var(--el-text-color-secondary);
+  opacity: 0;
+}
+
+.binding-row:hover .icon-button,
+.editor-sidebar-head .icon-button {
+  opacity: 1;
 }
 
 .icon-button:hover {
+  color: #4f46e5;
   background: #e0e7ff;
 }
 
+.icon-button.danger:hover {
+  color: var(--el-color-danger);
+  background: var(--el-color-danger-light-9);
+}
+
 .empty-block {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: 6px;
   font-size: 12px;
   color: var(--el-text-color-secondary);
-  text-align: center;
-  padding: 18px 0;
+  cursor: pointer;
+}
+
+.empty-block:hover {
+  background: var(--el-fill-color-lighter);
+  color: var(--el-text-color-regular);
 }
 
 .empty-hint {
@@ -1308,38 +1404,9 @@ watch(
   padding: 16px 0;
 }
 
-.editor-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 16px;
-  padding: 10px 12px;
-  border: 1px solid #e4e7ed;
-  border-radius: 6px;
-  background: #fafafa;
-  margin-bottom: 10px;
-  align-items: center;
-}
-
-.meta-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.meta-desc {
-  font-size: 12px;
-  color: #606266;
-}
-
-.meta-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-}
-
 .editor-body {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   flex: 1;
   align-items: stretch;
   height: 520px;
@@ -1351,20 +1418,46 @@ watch(
 }
 
 .editor-sidebar {
-  width: 220px;
+  width: 260px;
   height: 520px;
   border-left: 1px solid #e4e7ed;
-  padding-left: 12px;
+  padding-left: 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
+}
+
+.editor-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.editor-tabs {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.editor-tabs :deep(.el-tabs__content) {
+  min-height: 0;
+  flex: 1;
+}
+
+.editor-tabs :deep(.el-tab-pane) {
+  height: 100%;
 }
 
 .sidebar-section {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  flex: 1;
+  height: 100%;
   min-height: 0;
 }
 

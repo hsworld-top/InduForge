@@ -173,10 +173,26 @@ const formatCode = () => {
   }
 };
 
+const insertText = (text) => {
+  if (!editorInstance) return;
+  const selection = editorInstance.getSelection();
+  const range =
+    selection ||
+    new monaco.Range(
+      editorInstance.getPosition()?.lineNumber || 1,
+      editorInstance.getPosition()?.column || 1,
+      editorInstance.getPosition()?.lineNumber || 1,
+      editorInstance.getPosition()?.column || 1,
+    );
+  editorInstance.executeEdits("insert-text", [{ range, text }]);
+  editorInstance.focus();
+};
+
 // 暴露方法给父组件
 defineExpose({
   getValue: () => editorInstance?.getValue() || "",
   setValue: (value) => editorInstance?.setValue(value || ""),
+  insertText,
   format: formatCode,
   focus: () => editorInstance?.focus(),
   dispose: () => {
