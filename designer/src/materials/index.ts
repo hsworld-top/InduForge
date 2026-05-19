@@ -12,6 +12,7 @@ import { descriptor as HorizontalLayoutDescriptor } from "./HorizontalLayout";
 import { descriptor as ImageDescriptor } from "./Image";
 import { descriptor as LanguageSwitcherDescriptor } from "./LanguageSwitcher";
 import { descriptor as TabsDescriptor } from "./Tabs";
+import { descriptor as UserAvatarMenuDescriptor } from "./UserAvatarMenu";
 import { descriptor as VerticalLayoutDescriptor } from "./VerticalLayout";
 import { descriptor as VideoDescriptor } from "./Video";
 import {
@@ -42,6 +43,7 @@ export function registerAllDescriptors() {
   registerDescriptor("Video", VideoDescriptor);
   registerDescriptor("DownloadLink", DownloadLinkDescriptor);
   registerDescriptor("LanguageSwitcher", LanguageSwitcherDescriptor);
+  registerDescriptor("UserAvatarMenu", UserAvatarMenuDescriptor);
 }
 
 export {

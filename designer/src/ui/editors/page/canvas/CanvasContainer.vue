@@ -117,7 +117,15 @@ const wrapperRef = ref<HTMLElement | null>(null);
 const canvasRef = ref<HTMLElement | null>(null);
 const zoomAnchor = ref<CanvasViewportZoomAnchor | null>(null);
 const editorStore = useEditorStore();
-const { doc, selection, pages, currentPageId, currentPage, docVersion } = storeToRefs(editorStore);
+const {
+  doc,
+  selection,
+  pages,
+  currentPageId,
+  currentPage,
+  docVersion,
+  projectRuntimeTheme,
+} = storeToRefs(editorStore);
 const dragState = useDragState();
 const minorStep = CANVAS_RULER_MINOR_STEP;
 const majorStep = CANVAS_RULER_MAJOR_STEP;
@@ -1490,6 +1498,7 @@ onBeforeUnmount(() => {
           :style="canvasStyle"
           :data-page-style-root="currentPageId || undefined"
           :data-page-dom-id="pageDomId"
+          :data-runtime-theme="projectRuntimeTheme"
           @dragover="handleDragOver"
           @drop="handleDrop"
         >
@@ -1541,6 +1550,21 @@ onBeforeUnmount(() => {
   transform-origin: 0 0;
 }
 
-.dark .canvas {
+.canvas[data-runtime-theme="light"] {
+  --runtime-bg-color: #ffffff;
+  --runtime-surface-color: #ffffff;
+  --runtime-text-color: #1f2937;
+  --runtime-text-muted-color: #667085;
+  --runtime-border-color: #d0d5dd;
+  --runtime-primary-color: #1677ff;
+}
+
+.canvas[data-runtime-theme="dark"] {
+  --runtime-bg-color: #111827;
+  --runtime-surface-color: #1f2937;
+  --runtime-text-color: #f9fafb;
+  --runtime-text-muted-color: #98a2b3;
+  --runtime-border-color: #344054;
+  --runtime-primary-color: #60a5fa;
 }
 </style>

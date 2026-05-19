@@ -220,6 +220,7 @@ export const useEditorStore = defineStore("editor", () => {
   const globalScripts = ref(getDefaultGlobalScripts());
   const projectI18n = ref<ProjectI18nSettings>(normalizeProjectI18nSettings(null));
   const projectRuntimeLocale = ref(projectI18n.value.defaultLocale);
+  const projectRuntimeTheme = ref<"light" | "dark">("light");
   const runtimeRoleCodes = ref<string[]>([]);
   const runtimeRoles = ref<RuntimeRoleRecord[]>([]);
   const runtimeUsers = ref<RuntimeUserRecord[]>([]);
@@ -587,6 +588,10 @@ export const useEditorStore = defineStore("editor", () => {
       ...projectI18n.value,
       currentLocale: projectRuntimeLocale.value,
     };
+  };
+
+  const setProjectRuntimeTheme = (theme: string) => {
+    projectRuntimeTheme.value = theme === "dark" ? "dark" : "light";
   };
 
   /**
@@ -2726,6 +2731,7 @@ export const useEditorStore = defineStore("editor", () => {
     globalScripts,
     projectI18n,
     projectRuntimeLocale,
+    projectRuntimeTheme,
     runtimeRoleCodes,
     runtimeRoles,
     runtimeUsers,
@@ -2755,6 +2761,7 @@ export const useEditorStore = defineStore("editor", () => {
     saveProjectSettings,
     setProjectI18n,
     setProjectRuntimeLocale,
+    setProjectRuntimeTheme,
     setSelectedPreviewRuntimeUserId,
     loadProjectSettings,
     loadPage,

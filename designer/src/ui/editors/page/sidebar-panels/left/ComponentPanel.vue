@@ -57,21 +57,27 @@ function filterItemsByCategory(category: string): ComponentItemLike[] {
 
 function filterSystemItems(): ComponentItemLike[] {
   void locale.value;
-  if (!projectI18n.value.enabled) return [];
   const keywordValue = keyword.value.trim().toLowerCase();
-  const item = componentRegistry.get("LanguageSwitcher") as ComponentItemLike | undefined;
-  if (!item) return [];
-  if (!keywordValue) return [item];
-  return item.type.toLowerCase().includes(keywordValue) ||
-    item.name.toLowerCase().includes(keywordValue)
-    ? [item]
-    : [];
+  const types = [
+    "UserAvatarMenu",
+    ...(projectI18n.value.enabled ? ["LanguageSwitcher"] : []),
+  ];
+  return types
+    .map((type) => componentRegistry.get(type) as ComponentItemLike | undefined)
+    .filter((item): item is ComponentItemLike => Boolean(item))
+    .filter((item) => {
+      if (!keywordValue) return true;
+      return (
+        item.type.toLowerCase().includes(keywordValue) ||
+        item.name.toLowerCase().includes(keywordValue)
+      );
+    });
 }
 
 const layoutItems = computed<ComponentItemLike[]>(() => filterItemsByCategory("layout"));
 const uiItems = computed<ComponentItemLike[]>(() => filterItemsByCategory("uiPc"));
 const systemItems = computed<ComponentItemLike[]>(filterSystemItems);
-const showSystemSection = computed(() => projectI18n.value.enabled);
+const showSystemSection = computed(() => systemItems.value.length > 0 || !keyword.value.trim());
 
 function getPreviewComponent(type: string): { render: () => ReturnType<typeof h> } {
   const previewMap: PreviewComponentMapLike = {
@@ -85,6 +91,15 @@ function getPreviewComponent(type: string): { render: () => ReturnType<typeof h>
           h("span", { class: "preview-language-line" }),
           h("span", { class: "preview-language-arrow" }),
         ]),
+      ]),
+    UserAvatarMenu: () =>
+      h("div", { class: "preview-user-avatar" }, [
+        h("span", { class: "preview-user-avatar-circle" }),
+        h("span", { class: "preview-user-avatar-lines" }, [
+          h("span", { class: "preview-user-avatar-line" }),
+          h("span", { class: "preview-user-avatar-subline" }),
+        ]),
+        h("span", { class: "preview-user-avatar-arrow" }),
       ]),
     HorizontalLayout: () =>
       h("div", { class: "preview-flex" }, [
@@ -135,6 +150,8 @@ function getPreviewIcon(type: string): string {
       '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;background:#fff;box-sizing:border-box;display:flex;align-items:center;justify-content:center;"><span style="width:36px;height:10px;background:#3b6cff;border-radius:2px;"></span></div>',
     LanguageSwitcher:
       '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;display:flex;align-items:center;justify-content:center;background:#fff;color:#3b6cff;box-sizing:border-box;"><span style="width:42px;height:16px;background:#3b6cff;border-radius:2px;display:flex;align-items:center;justify-content:center;gap:5px;"><span style="width:22px;height:4px;background:#fff;border-radius:2px;"></span><span style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid #fff;"></span></span></div>',
+    UserAvatarMenu:
+      '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;display:flex;align-items:center;justify-content:center;background:#fff;box-sizing:border-box;"><span style="width:44px;height:18px;border:1px solid #3b6cff;border-radius:12px;display:flex;align-items:center;gap:4px;padding:2px 4px;box-sizing:border-box;"><span style="width:10px;height:10px;border-radius:50%;background:#3b6cff;"></span><span style="width:16px;height:4px;background:#3b6cff;border-radius:2px;"></span><span style="width:0;height:0;border-left:3px solid transparent;border-right:3px solid transparent;border-top:4px solid #3b6cff;"></span></span></div>',
     HorizontalLayout:
       '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;display:flex;gap:4px;padding:4px;box-sizing:border-box;"><div style="flex:1;background:#3b6cff;border-radius:2px;"></div><div style="flex:1;background:#3b6cff;border-radius:2px;"></div><div style="flex:1;background:#3b6cff;border-radius:2px;"></div></div>',
     VerticalLayout:
@@ -452,6 +469,56 @@ function handleDragEnd(): void {
   border-right: 4px solid transparent;
   border-top: 5px solid var(--designer-shell-surface);
   flex: 0 0 auto;
+}
+
+.preview-user-avatar {
+  width: 44px;
+  height: 32px;
+  border: 1.5px solid var(--designer-material-icon-color, #888d92);
+  border-radius: 4px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: transparent;
+}
+
+.preview-user-avatar-circle {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--designer-material-icon-color, #888d92);
+}
+
+.preview-user-avatar-lines {
+  display: flex;
+  width: 16px;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.preview-user-avatar-line,
+.preview-user-avatar-subline {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--designer-material-icon-color, #888d92);
+}
+
+.preview-user-avatar-subline {
+  width: 11px;
+  opacity: 0.62;
+}
+
+.preview-user-avatar-arrow {
+  width: 0;
+  height: 0;
+  flex: 0 0 auto;
+  border-top: 4px solid var(--designer-material-icon-color, #888d92);
+  border-right: 3px solid transparent;
+  border-left: 3px solid transparent;
 }
 
 .preview-flex {

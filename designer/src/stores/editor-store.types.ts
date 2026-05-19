@@ -61,6 +61,7 @@ export type EditorStorePreviewShell = Pick<
   | "globalScripts"
   | "projectI18n"
   | "projectRuntimeLocale"
+  | "projectRuntimeTheme"
 >;
 
 /** Designer 壳层常用窄接口（随实际引用可继续扩展 Pick） */

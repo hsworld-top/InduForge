@@ -259,6 +259,7 @@ const {
   projectVariables,
   globalScripts,
   projectId,
+  projectRuntimeTheme,
   runtimeUsers,
   selectedPreviewRuntimeUserId,
 } = storeToRefs(editorStore);
@@ -632,6 +633,7 @@ onBeforeUnmount(() => {
               :style="canvasStyle"
               :data-page-style-root="currentPageId || undefined"
               :data-page-dom-id="pageDomId"
+              :data-runtime-theme="projectRuntimeTheme"
             >
               <PageStyleInjector :css="pageStyleConfig" :page-id="currentPageId || ''" />
               <NodeRenderer
@@ -658,6 +660,24 @@ onBeforeUnmount(() => {
 
 .preview-canvas {
   flex-shrink: 0;
+}
+
+.preview-canvas[data-runtime-theme="light"] {
+  --runtime-bg-color: #ffffff;
+  --runtime-surface-color: #ffffff;
+  --runtime-text-color: #1f2937;
+  --runtime-text-muted-color: #667085;
+  --runtime-border-color: #d0d5dd;
+  --runtime-primary-color: #1677ff;
+}
+
+.preview-canvas[data-runtime-theme="dark"] {
+  --runtime-bg-color: #111827;
+  --runtime-surface-color: #1f2937;
+  --runtime-text-color: #f9fafb;
+  --runtime-text-muted-color: #98a2b3;
+  --runtime-border-color: #344054;
+  --runtime-primary-color: #60a5fa;
 }
 
 .preview-page-shell {

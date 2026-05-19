@@ -15,6 +15,7 @@ import "@/materials/Image/manifest";
 import "@/materials/Video/manifest";
 import "@/materials/DownloadLink/manifest";
 import "@/materials/LanguageSwitcher/manifest";
+import "@/materials/UserAvatarMenu/manifest";
 
 export {
   getAllManifests,

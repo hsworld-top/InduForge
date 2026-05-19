@@ -53,17 +53,19 @@ describe("ComponentPanel system components", () => {
     componentRegistry.clear();
   });
 
-  it("国际化关闭时不展示系统组件区域", () => {
+  it("国际化关闭时展示用户头像但不展示语言切换", () => {
     const wrapper = mountPanel(false);
 
-    expect(wrapper.text()).not.toContain("系统组件");
+    expect(wrapper.text()).toContain("系统组件");
+    expect(wrapper.text()).toContain("用户头像");
     expect(wrapper.text()).not.toContain("语言切换");
   });
 
-  it("国际化开启时展示语言切换系统组件", () => {
+  it("国际化开启时展示用户头像和语言切换系统组件", () => {
     const wrapper = mountPanel(true);
 
     expect(wrapper.text()).toContain("系统组件");
+    expect(wrapper.text()).toContain("用户头像");
     expect(wrapper.text()).toContain("语言切换");
   });
 
@@ -74,5 +76,14 @@ describe("ComponentPanel system components", () => {
 
     expect(wrapper.text()).toContain("系统组件");
     expect(wrapper.text()).toContain("语言切换");
+  });
+
+  it("系统组件支持按用户头像类型搜索", async () => {
+    const wrapper = mountPanel(false);
+
+    await wrapper.find("input").setValue("UserAvatarMenu");
+
+    expect(wrapper.text()).toContain("系统组件");
+    expect(wrapper.text()).toContain("用户头像");
   });
 });
