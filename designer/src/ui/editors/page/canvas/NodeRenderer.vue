@@ -969,11 +969,28 @@ function handleModelValueUpdate(value: any): void {
   });
 }
 
+function handlePropValueUpdate(propName: string, value: any): void {
+  if (!node.value || !propName) return;
+  if (props.readonly && !isRuntimeOperable.value) return;
+  if (props.readonly) {
+    applyPreviewPatch({ props: { [propName]: value } });
+    return;
+  }
+  editorStore.updateNode(node.value.id, {
+    props: { ...(node.value.props || {}), [propName]: value },
+  });
+}
+
 const componentEventListeners = computed<EventListenerMap>(() => {
   if (!node.value) return {};
   const listeners: EventListenerMap = {};
   if (supportsModelValue.value) {
     listeners["update:modelValue"] = handleModelValueUpdate;
+    listeners["update:model-value"] = handleModelValueUpdate;
+  }
+  if (node.value.type === "Pagination") {
+    listeners["update:currentPage"] = (value: any) => handlePropValueUpdate("currentPage", value);
+    listeners["update:current-page"] = (value: any) => handlePropValueUpdate("currentPage", value);
   }
   if (!props.readonly) return listeners;
   const manifest = componentRegistry.get(node.value.type);
@@ -1072,8 +1089,13 @@ function handleDragLeave(): void {
         v-else-if="customRendererComponent"
         :node="node"
         :resolved-props="resolvedProps"
+        v-on="mergedEventListeners"
+        @update:model-value="handleModelValueUpdate"
+        @update:modelValue="handleModelValueUpdate"
+        @update:current-page="(value: any) => handlePropValueUpdate('currentPage', value)"
+        @update:currentPage="(value: any) => handlePropValueUpdate('currentPage', value)"
       />
-      <template v-if="isSelectType">
+      <template v-if="isSelectType && !customRendererComponent">
         <el-option
           v-for="option in selectOptionsList"
           :key="option.value ?? option.label"
@@ -1081,7 +1103,7 @@ function handleDragLeave(): void {
           :value="option.value"
         />
       </template>
-      <template v-if="isRadioType">
+      <template v-if="isRadioType && !customRendererComponent">
         <el-radio
           v-for="option in radioOptionsList"
           v-show="option.visible !== false"
@@ -1092,7 +1114,7 @@ function handleDragLeave(): void {
           {{ option.label }}
         </el-radio>
       </template>
-      <template v-if="isCheckboxType">
+      <template v-if="isCheckboxType && !customRendererComponent">
         <el-checkbox
           v-for="option in checkboxOptionsList"
           v-show="option.visible !== false"
@@ -1103,7 +1125,7 @@ function handleDragLeave(): void {
           {{ option.label }}
         </el-checkbox>
       </template>
-      <template v-if="isTableType">
+      <template v-if="isTableType && !customRendererComponent">
         <el-table-column
           v-for="column in tableColumnsList"
           :key="column.prop ?? column.label"

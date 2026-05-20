@@ -11,6 +11,7 @@ import "@/materials/FormLayout/manifest";
 import "@/materials/ElContainer/manifest";
 import "@/materials/FreeContainer/manifest";
 import "@/materials/Button/manifest";
+import "@/materials/ElementPlusCore/manifest";
 import "@/materials/Image/manifest";
 import "@/materials/Video/manifest";
 import "@/materials/DownloadLink/manifest";

@@ -34,7 +34,17 @@ const layoutTypeOrder = [
 
 const allowedTypesByCategory: Record<string, string[]> = {
   layout: layoutTypeOrder,
-  uiPc: ["Button"],
+  uiPc: [
+    "Button",
+    "Input",
+    "InputNumber",
+    "Select",
+    "Radio",
+    "Checkbox",
+    "Switch",
+    "Table",
+    "Pagination",
+  ],
 };
 
 function filterItemsByCategory(category: string): ComponentItemLike[] {
@@ -84,6 +94,46 @@ function getPreviewComponent(type: string): { render: () => ReturnType<typeof h>
     Button: () =>
       h("div", { class: "preview-button" }, [
         h("span", { class: "preview-button-line" }),
+      ]),
+    Input: () =>
+      h("div", { class: "preview-input" }, [
+        h("span", { class: "preview-input-line" }),
+      ]),
+    InputNumber: () =>
+      h("div", { class: "preview-input-number" }, [
+        h("span", { class: "preview-input-number-line" }),
+        h("span", { class: "preview-input-number-step" }),
+      ]),
+    Select: () =>
+      h("div", { class: "preview-select" }, [
+        h("span", { class: "preview-select-line" }),
+        h("span", { class: "preview-select-arrow" }),
+      ]),
+    Radio: () =>
+      h("div", { class: "preview-choice" }, [
+        h("span", { class: "preview-radio-dot" }),
+        h("span", { class: "preview-choice-line" }),
+      ]),
+    Checkbox: () =>
+      h("div", { class: "preview-choice" }, [
+        h("span", { class: "preview-checkbox-box" }),
+        h("span", { class: "preview-choice-line" }),
+      ]),
+    Switch: () =>
+      h("div", { class: "preview-switch" }, [
+        h("span", { class: "preview-switch-dot" }),
+      ]),
+    Table: () =>
+      h("div", { class: "preview-table" }, [
+        h("span", { class: "preview-table-row is-head" }),
+        h("span", { class: "preview-table-row" }),
+        h("span", { class: "preview-table-row" }),
+      ]),
+    Pagination: () =>
+      h("div", { class: "preview-pagination" }, [
+        h("span"),
+        h("span", { class: "is-active" }),
+        h("span"),
       ]),
     LanguageSwitcher: () =>
       h("div", { class: "preview-language-switcher" }, [
@@ -148,6 +198,22 @@ function getPreviewIcon(type: string): string {
   const iconMap: Record<string, string> = {
     Button:
       '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;background:#fff;box-sizing:border-box;display:flex;align-items:center;justify-content:center;"><span style="width:36px;height:10px;background:#3b6cff;border-radius:2px;"></span></div>',
+    Input:
+      '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;background:#fff;box-sizing:border-box;display:flex;align-items:center;justify-content:center;"><span style="width:42px;height:14px;border:1px solid #3b6cff;border-radius:3px;display:flex;align-items:center;padding-left:5px;box-sizing:border-box;"><span style="width:22px;height:3px;background:#3b6cff;border-radius:2px;"></span></span></div>',
+    InputNumber:
+      '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;background:#fff;box-sizing:border-box;display:flex;align-items:center;justify-content:center;"><span style="width:42px;height:14px;border:1px solid #3b6cff;border-radius:3px;display:flex;align-items:center;justify-content:space-between;padding-left:5px;box-sizing:border-box;"><span style="width:16px;height:3px;background:#3b6cff;border-radius:2px;"></span><span style="width:10px;height:12px;background:#3b6cff;"></span></span></div>',
+    Select:
+      '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;background:#fff;box-sizing:border-box;display:flex;align-items:center;justify-content:center;"><span style="width:42px;height:14px;border:1px solid #3b6cff;border-radius:3px;display:flex;align-items:center;gap:7px;padding:0 5px;box-sizing:border-box;"><span style="width:18px;height:3px;background:#3b6cff;border-radius:2px;"></span><span style="width:0;height:0;border-left:3px solid transparent;border-right:3px solid transparent;border-top:4px solid #3b6cff;"></span></span></div>',
+    Radio:
+      '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;background:#fff;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:5px;"><span style="width:10px;height:10px;border:2px solid #3b6cff;border-radius:50%;box-sizing:border-box;"></span><span style="width:24px;height:4px;background:#3b6cff;border-radius:2px;"></span></div>',
+    Checkbox:
+      '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;background:#fff;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:5px;"><span style="width:10px;height:10px;border:2px solid #3b6cff;border-radius:2px;box-sizing:border-box;"></span><span style="width:24px;height:4px;background:#3b6cff;border-radius:2px;"></span></div>',
+    Switch:
+      '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;background:#fff;box-sizing:border-box;display:flex;align-items:center;justify-content:center;"><span style="width:34px;height:16px;background:#3b6cff;border-radius:12px;display:flex;align-items:center;justify-content:flex-end;padding:2px;box-sizing:border-box;"><span style="width:12px;height:12px;background:#fff;border-radius:50%;"></span></span></div>',
+    Table:
+      '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;background:#fff;box-sizing:border-box;display:flex;align-items:center;justify-content:center;"><span style="width:42px;height:24px;border:1px solid #3b6cff;border-radius:2px;display:grid;grid-template-rows:repeat(3,1fr);box-sizing:border-box;overflow:hidden;"><span style="background:#3b6cff;"></span><span style="border-top:1px solid #3b6cff;"></span><span style="border-top:1px solid #3b6cff;"></span></span></div>',
+    Pagination:
+      '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;background:#fff;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:3px;"><span style="width:8px;height:8px;border:1px solid #3b6cff;border-radius:2px;"></span><span style="width:10px;height:10px;background:#3b6cff;border-radius:2px;"></span><span style="width:8px;height:8px;border:1px solid #3b6cff;border-radius:2px;"></span></div>',
     LanguageSwitcher:
       '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;display:flex;align-items:center;justify-content:center;background:#fff;color:#3b6cff;box-sizing:border-box;"><span style="width:42px;height:16px;background:#3b6cff;border-radius:2px;display:flex;align-items:center;justify-content:center;gap:5px;"><span style="width:22px;height:4px;background:#fff;border-radius:2px;"></span><span style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid #fff;"></span></span></div>',
     UserAvatarMenu:
@@ -429,6 +495,163 @@ function handleDragEnd(): void {
   height: 8px;
   background: var(--designer-material-icon-color, #888d92);
   border-radius: 2px;
+}
+
+.preview-input,
+.preview-input-number,
+.preview-select {
+  width: 44px;
+  height: 32px;
+  border: 1.5px solid var(--designer-material-icon-color, #888d92);
+  border-radius: 4px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: transparent;
+}
+
+.preview-input-line,
+.preview-select-line {
+  width: 27px;
+  height: 4px;
+  background: var(--designer-material-icon-color, #888d92);
+  border-radius: 2px;
+}
+
+.preview-input-number-line {
+  width: 20px;
+  height: 4px;
+  background: var(--designer-material-icon-color, #888d92);
+  border-radius: 2px;
+}
+
+.preview-input-number-step {
+  width: 8px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--designer-material-icon-color, #888d92);
+}
+
+.preview-select-arrow {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--designer-material-icon-color, #888d92);
+}
+
+.preview-choice {
+  width: 44px;
+  height: 32px;
+  border: 1.5px solid var(--designer-material-icon-color, #888d92);
+  border-radius: 4px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: transparent;
+}
+
+.preview-radio-dot {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--designer-material-icon-color, #888d92);
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.preview-checkbox-box {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--designer-material-icon-color, #888d92);
+  border-radius: 2px;
+  box-sizing: border-box;
+}
+
+.preview-choice-line {
+  width: 20px;
+  height: 4px;
+  background: var(--designer-material-icon-color, #888d92);
+  border-radius: 2px;
+}
+
+.preview-switch {
+  width: 44px;
+  height: 32px;
+  border: 1.5px solid var(--designer-material-icon-color, #888d92);
+  border-radius: 4px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.preview-switch::before {
+  content: "";
+  width: 32px;
+  height: 16px;
+  border-radius: 12px;
+  background: var(--designer-material-icon-color, #888d92);
+}
+
+.preview-switch-dot {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin-left: 14px;
+  border-radius: 50%;
+  background: var(--designer-shell-surface);
+}
+
+.preview-table {
+  width: 44px;
+  height: 32px;
+  border: 1.5px solid var(--designer-material-icon-color, #888d92);
+  border-radius: 4px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 5px;
+  background: transparent;
+}
+
+.preview-table-row {
+  flex: 1;
+  border: 1px solid var(--designer-material-icon-color, #888d92);
+  border-radius: 2px;
+}
+
+.preview-table-row.is-head {
+  background: var(--designer-material-icon-color, #888d92);
+}
+
+.preview-pagination {
+  width: 44px;
+  height: 32px;
+  border: 1.5px solid var(--designer-material-icon-color, #888d92);
+  border-radius: 4px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: transparent;
+}
+
+.preview-pagination span {
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--designer-material-icon-color, #888d92);
+  border-radius: 2px;
+}
+
+.preview-pagination .is-active {
+  background: var(--designer-material-icon-color, #888d92);
 }
 
 .preview-language-switcher {

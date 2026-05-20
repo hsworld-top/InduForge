@@ -126,6 +126,29 @@ function queryNodeElement(nodeId: string): HTMLElement | null {
   return document.querySelector<HTMLElement>(`[data-node-id="${escapeNodeIdForSelector(nodeId)}"]`);
 }
 
+function isNativeInteractiveTarget(target: Element | null): boolean {
+  return Boolean(
+    target?.closest(
+      [
+        "input",
+        "textarea",
+        "select",
+        "button",
+        "[contenteditable='true']",
+        ".el-input",
+        ".el-input-number",
+        ".el-select",
+        ".el-radio",
+        ".el-radio-button",
+        ".el-checkbox",
+        ".el-checkbox-button",
+        ".el-switch",
+        ".core-pagination",
+      ].join(","),
+    ),
+  );
+}
+
 function resolveNodeRenderedSize(
   nodeId: string,
   layout: AbsoluteLayoutLike,
@@ -440,6 +463,7 @@ export function useNodePointer(deps: UseNodePointerDeps): {
     if (event.pointerType === "mouse" && event.button !== 0) return;
     const targetElement = event.target instanceof Element ? event.target : null;
     if (targetElement?.closest(".resize-handle")) return;
+    if (isNativeInteractiveTarget(targetElement)) return;
     const targetNodeEl = targetElement?.closest("[data-node-id]");
     const targetNodeId = targetNodeEl?.getAttribute?.("data-node-id");
     if (node.value.type === "Tabs" && targetNodeId && targetNodeId !== node.value.id) {

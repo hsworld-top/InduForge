@@ -2338,12 +2338,96 @@ const elementPlusPropLabelMap: AnyRecord = {
   },
 };
 
+const sizePropOptions = [
+  { label: "large", value: "large" },
+  { label: "default", value: "default" },
+  { label: "small", value: "small" },
+];
+
+const elementPlusPropMetaMap: AnyRecord = {
+  Input: {
+    type: {
+      type: "enum",
+      options: [
+        { label: "text", value: "text" },
+        { label: "textarea", value: "textarea" },
+        { label: "password", value: "password" },
+      ],
+    },
+    size: { type: "enum", options: sizePropOptions },
+    clearable: { type: "boolean" },
+    showPassword: { type: "boolean" },
+    readonly: { type: "boolean" },
+    maxlength: { type: "number" },
+    minlength: { type: "number" },
+  },
+  InputNumber: {
+    size: { type: "enum", options: sizePropOptions },
+    controls: { type: "boolean" },
+    controlsPosition: {
+      type: "enum",
+      options: [
+        { label: "默认", value: "" },
+        { label: "右侧", value: "right" },
+      ],
+    },
+  },
+  Select: {
+    size: { type: "enum", options: sizePropOptions },
+    multiple: { type: "boolean" },
+    clearable: { type: "boolean" },
+    filterable: { type: "boolean" },
+    collapseTags: { type: "boolean" },
+    collapseTagsTooltip: { type: "boolean" },
+    emptyValues: { type: "array" },
+  },
+  Table: {
+    size: { type: "enum", options: sizePropOptions },
+    stripe: { type: "boolean" },
+    border: { type: "boolean" },
+    highlightCurrentRow: { type: "boolean" },
+    height: { type: "number" },
+    maxHeight: { type: "number" },
+  },
+  BigDataTable: {
+    size: { type: "enum", options: sizePropOptions },
+    stripe: { type: "boolean" },
+    border: { type: "boolean" },
+    highlightCurrentRow: { type: "boolean" },
+    height: { type: "number" },
+    maxHeight: { type: "number" },
+  },
+  Radio: {
+    size: { type: "enum", options: sizePropOptions },
+  },
+  Checkbox: {
+    size: { type: "enum", options: sizePropOptions },
+  },
+  Switch: {
+    size: { type: "enum", options: sizePropOptions },
+  },
+  Pagination: {
+    currentPage: { type: "number", min: 1 },
+    pageSize: { type: "number", min: 1 },
+    total: { type: "number", min: 0 },
+    pagerCount: { type: "number", min: 5, step: 2 },
+    pageSizes: { type: "array" },
+    size: { type: "enum", options: sizePropOptions },
+    background: { type: "boolean" },
+    small: { type: "boolean" },
+    disabled: { type: "boolean" },
+    hideOnSinglePage: { type: "boolean" },
+  },
+};
+
 function buildElementPlusPropDefs(type: string | undefined): AnyArray {
   const comp = resolveElementPlusComponent(type);
   const rawProps: AnyRecord | AnyArray | null = comp?.props || comp?.__props || null;
   if (!rawProps || typeof rawProps !== "object") return [];
-  const labelMap: AnyRecord | null = elementPlusPropLabelMap[elementTypeName(type)] || null;
+  const normalizedType = elementTypeName(type);
+  const labelMap: AnyRecord | null = elementPlusPropLabelMap[normalizedType] || null;
   if (!labelMap) return [];
+  const metaMap: AnyRecord = elementPlusPropMetaMap[normalizedType] || {};
   const entries = (
     Array.isArray(rawProps)
       ? rawProps.map((key: string) => [key, {}])
@@ -2365,16 +2449,22 @@ function buildElementPlusPropDefs(type: string | undefined): AnyArray {
     .map(([name, prop]: [string, AnyRecord]) => {
       const typeValue = resolvePropType(prop);
       const def = typeof prop?.default === "function" ? prop.default() : prop?.default;
-      const options = Array.isArray(prop?.values)
+      const meta = metaMap[name] || {};
+      const options = Array.isArray(meta.options)
+        ? meta.options
+        : Array.isArray(prop?.values)
         ? prop.values.map((value) => ({ label: String(value), value }))
         : undefined;
       return {
         name,
-        type: options ? "enum" : typeValue,
+        type: meta.type || (options ? "enum" : typeValue),
         label: labelMap[name] || name,
         group: "官方属性",
         defaultValue: def,
         options,
+        min: meta.min,
+        max: meta.max,
+        step: meta.step,
       };
     });
 }

@@ -6,6 +6,16 @@ import { descriptor as ButtonDescriptor } from "./Button";
 import { descriptor as CollapseDescriptor } from "./Collapse";
 import { descriptor as DownloadLinkDescriptor } from "./DownloadLink";
 import { descriptor as ElContainerDescriptor } from "./ElContainer";
+import {
+  checkboxDescriptor,
+  inputDescriptor,
+  inputNumberDescriptor,
+  paginationDescriptor,
+  radioDescriptor,
+  selectDescriptor,
+  switchDescriptor,
+  tableDescriptor,
+} from "./ElementPlusCore";
 import { descriptor as FormLayoutDescriptor } from "./FormLayout";
 import { descriptor as FreeContainerDescriptor } from "./FreeContainer";
 import { descriptor as HorizontalLayoutDescriptor } from "./HorizontalLayout";
@@ -44,6 +54,14 @@ export function registerAllDescriptors() {
   registerDescriptor("DownloadLink", DownloadLinkDescriptor);
   registerDescriptor("LanguageSwitcher", LanguageSwitcherDescriptor);
   registerDescriptor("UserAvatarMenu", UserAvatarMenuDescriptor);
+  registerDescriptor("Input", inputDescriptor);
+  registerDescriptor("InputNumber", inputNumberDescriptor);
+  registerDescriptor("Select", selectDescriptor);
+  registerDescriptor("Radio", radioDescriptor);
+  registerDescriptor("Checkbox", checkboxDescriptor);
+  registerDescriptor("Switch", switchDescriptor);
+  registerDescriptor("Table", tableDescriptor);
+  registerDescriptor("Pagination", paginationDescriptor);
 }
 
 export {
