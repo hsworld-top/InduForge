@@ -83,8 +83,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&appliedCount); err != nil {
 		t.Fatalf("鏌ヨ schema_migrations 澶辫触: %v", err)
 	}
-	if appliedCount != 16 {
-		t.Fatalf("expected 16 migration records, got %d", appliedCount)
+	if appliedCount != 17 {
+		t.Fatalf("expected 17 migration records, got %d", appliedCount)
 	}
 
 	if err := migrator.DownAll(ctx); err != nil {
@@ -178,6 +178,55 @@ func TestMigrationIndexes(t *testing.T) {
 	}
 }
 
+func TestAlarmRuleFinalModelMigration(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	fixture := setupTestDatabase(t, ctx)
+	migrator := setupMigrator(t, fixture.pool)
+	if err := migrator.Up(ctx); err != nil {
+		t.Fatalf("migrate up failed: %v", err)
+	}
+
+	suppressionType, suppressionDefault := loadColumnTypeAndDefault(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_rules", "suppression")
+	if suppressionType != "jsonb" {
+		t.Fatalf("suppression data_type = %q, want jsonb", suppressionType)
+	}
+	if !strings.Contains(suppressionDefault, "'{}'::jsonb") {
+		t.Fatalf("suppression default = %q, want empty jsonb object", suppressionDefault)
+	}
+
+	messageTemplateType, messageTemplateDefault := loadColumnTypeAndDefault(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_rules", "message_template")
+	if messageTemplateType != "text" {
+		t.Fatalf("message_template data_type = %q, want text", messageTemplateType)
+	}
+	if !strings.Contains(messageTemplateDefault, "''") {
+		t.Fatalf("message_template default = %q, want empty string", messageTemplateDefault)
+	}
+
+	assertInsertAlarmRuleWithTypeAndSeverity(ctx, t, fixture.pool, "H", "major")
+	assertInsertAlarmRuleWithTypeAndSeverity(ctx, t, fixture.pool, "cel", "critical")
+
+	if _, err := fixture.pool.Exec(ctx, `
+        INSERT INTO data_alarm_rules (
+            project_id,
+            name,
+            target_path,
+            rule_type,
+            severity,
+            created_by
+        )
+        VALUES (gen_random_uuid(), '非法规则类型', 'metrics.bad_type', 'threshold', 'warning', gen_random_uuid())
+    `); err == nil {
+		t.Fatalf("expected old rule_type to violate check constraint")
+	}
+
+	indexes := loadIndexNames(ctx, t, fixture.pool, fixture.schemaName)
+	if _, ok := indexes["data_alarm_rules_project_updated_idx"]; !ok {
+		t.Fatalf("expected data_alarm_rules_project_updated_idx to exist, got %v", mapsKeys(indexes))
+	}
+}
+
 func setupMigrator(t *testing.T, pool *pgxpool.Pool) *migrate.Migrator {
 	t.Helper()
 
@@ -187,6 +236,43 @@ func setupMigrator(t *testing.T, pool *pgxpool.Pool) *migrate.Migrator {
 	}
 
 	return migrator
+}
+
+func loadColumnTypeAndDefault(ctx context.Context, t *testing.T, pool *pgxpool.Pool, schemaName string, tableName string, columnName string) (string, string) {
+	t.Helper()
+
+	var dataType string
+	var columnDefault *string
+	if err := pool.QueryRow(ctx, `
+        SELECT data_type, column_default
+        FROM information_schema.columns
+        WHERE table_schema = $1 AND table_name = $2 AND column_name = $3
+    `, schemaName, tableName, columnName).Scan(&dataType, &columnDefault); err != nil {
+		t.Fatalf("expected column %s.%s: %v", tableName, columnName, err)
+	}
+
+	if columnDefault == nil {
+		return dataType, ""
+	}
+	return dataType, *columnDefault
+}
+
+func assertInsertAlarmRuleWithTypeAndSeverity(ctx context.Context, t *testing.T, pool *pgxpool.Pool, ruleType string, severity string) {
+	t.Helper()
+
+	if _, err := pool.Exec(ctx, `
+        INSERT INTO data_alarm_rules (
+            project_id,
+            name,
+            target_path,
+            rule_type,
+            severity,
+            created_by
+        )
+        VALUES (gen_random_uuid(), $1, $2, $3, $4, gen_random_uuid())
+    `, "规则"+ruleType+severity, "metrics."+strings.ToLower(ruleType)+"."+severity, ruleType, severity); err != nil {
+		t.Fatalf("insert alarm rule ruleType=%s severity=%s failed: %v", ruleType, severity, err)
+	}
 }
 
 type testDatabase struct {
@@ -312,7 +398,8 @@ func loadIndexNames(ctx context.Context, t *testing.T, pool *pgxpool.Pool, schem
               'data_tdengine_configs',
               'data_preview_sessions',
               'data_compute_units',
-              'data_compute_runs'
+              'data_compute_runs',
+              'data_alarm_rules'
           )
     `, schemaName)
 	if err != nil {

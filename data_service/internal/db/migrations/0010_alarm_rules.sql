@@ -6,11 +6,13 @@ CREATE TABLE IF NOT EXISTS data_alarm_rules (
     description text,
     target_datapoint_id uuid,
     target_path text NOT NULL CHECK (char_length(target_path) <= 255),
-    rule_type text NOT NULL DEFAULT 'threshold' CHECK (rule_type IN ('threshold', 'range', 'expression')),
+    rule_type text NOT NULL DEFAULT 'H' CHECK (rule_type IN ('H', 'L', 'HH', 'LL', 'deviation_high', 'deviation_low', 'rate_of_change', 'cel')),
     condition jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(condition) = 'object'),
-    severity text NOT NULL DEFAULT 'warning' CHECK (severity IN ('info', 'warning', 'critical')),
+    severity text NOT NULL DEFAULT 'warning' CHECK (severity IN ('info', 'warning', 'major', 'critical')),
     hysteresis double precision CHECK (hysteresis IS NULL OR hysteresis >= 0),
     sample_window_ms integer CHECK (sample_window_ms IS NULL OR sample_window_ms >= 0),
+    suppression jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(suppression) = 'object'),
+    message_template text NOT NULL DEFAULT '',
     contract jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(contract) = 'object'),
     is_enabled boolean NOT NULL DEFAULT true,
     created_by uuid NOT NULL,
@@ -27,6 +29,9 @@ CREATE INDEX IF NOT EXISTS data_alarm_rules_project_enabled_idx
 
 CREATE INDEX IF NOT EXISTS data_alarm_rules_project_target_path_idx
     ON data_alarm_rules (project_id, target_path);
+
+CREATE INDEX IF NOT EXISTS data_alarm_rules_project_updated_idx
+    ON data_alarm_rules (project_id, updated_at DESC);
 
 CREATE INDEX IF NOT EXISTS data_alarm_rules_target_datapoint_idx
     ON data_alarm_rules (target_datapoint_id);
