@@ -146,6 +146,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	connectionRepository := repository.NewConnectionRepository(pool)
 	accessSourceRepository := repository.NewAccessSourceRepository(pool)
 	alarmRuleRepository := repository.NewAlarmRuleRepository(pool)
+	alarmPolicyRepository := repository.NewAlarmPolicyRepository(pool)
 	contractCheckRepository := repository.NewContractCheckRepository(pool)
 	queryRepository := repository.NewQueryRepository(pool)
 	dataPointRepository := repository.NewDataPointRepository(pool)
@@ -157,6 +158,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 
 	accessSourceService := service.NewAccessSourceService(connectionRepository, mqttRepository, accessSourceRepository)
 	alarmRuleService := service.NewAlarmRuleService(alarmRuleRepository, dataPointRepository)
+	alarmPolicyService := service.NewAlarmPolicyService(alarmPolicyRepository, dataPointRepository)
 	contractCheckService := service.NewContractCheckService(dataPointRepository, computeRepository, alarmRuleRepository, queryRepository, contractCheckRepository)
 	connectionService := service.NewConnectionService(connectionRepository)
 	queryService := service.NewQueryService(queryRepository, connectionRepository, dataPointRepository)
@@ -178,6 +180,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 
 	accessSourceHandler := handler.NewAccessSourceHandler(accessSourceService)
 	alarmRuleHandler := handler.NewAlarmRuleHandler(alarmRuleService)
+	alarmPolicyHandler := handler.NewAlarmPolicyHandler(alarmPolicyService)
 	contractCheckHandler := handler.NewContractCheckHandler(contractCheckService)
 	connectionHandler := handler.NewConnectionHandler(connectionService)
 	queryHandler := handler.NewQueryHandler(queryService)
@@ -190,6 +193,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 
 	routeOptions := []router.Option{
 		router.WithAlarmRuleRoutes(alarmRuleHandler, jwtValidator),
+		router.WithAlarmPolicyRoutes(alarmPolicyHandler, jwtValidator),
 		router.WithAccessSourceRoutes(accessSourceHandler, jwtValidator),
 		router.WithContractCheckRoutes(contractCheckHandler, jwtValidator),
 		router.WithConnectionRoutes(connectionHandler, jwtValidator),
