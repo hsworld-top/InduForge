@@ -1,659 +1,575 @@
 <template>
   <div class="alarm-workspace">
-    <aside class="alarm-workspace__side">
-      <div class="alarm-workspace__section-title">规则分组</div>
-      <button
-        v-for="group in ruleGroups"
-        :key="group.name"
-        type="button"
-        class="alarm-workspace__group"
-        :class="{ 'is-active': group.name === activeGroup }"
-        @click="activeGroup = group.name"
-      >
-        <span>{{ group.name }}</span>
-        <em>{{ group.count }}</em>
-      </button>
+    <aside class="alarm-workspace__list">
+      <header class="alarm-workspace__list-head">
+        <div>
+          <strong>报警规则</strong>
+          <span>{{ alarmStore.total }} 条</span>
+        </div>
+        <button type="button" aria-label="刷新报警规则" @click="reloadList">
+          刷新
+        </button>
+      </header>
 
-      <div class="alarm-workspace__section-title is-spaced">规则类型</div>
+      <div v-if="alarmStore.listError" class="alarm-workspace__error">
+        {{ alarmStore.listError }}
+      </div>
+      <div v-else-if="alarmStore.loading" class="alarm-workspace__empty">
+        加载中
+      </div>
+      <div v-else-if="!alarmStore.list.length" class="alarm-workspace__empty">
+        暂无报警规则
+      </div>
+
       <button
-        v-for="type in alarmRuleTypes"
-        :key="type.id"
+        v-for="rule in alarmStore.list"
+        :key="rule.id"
         type="button"
-        class="alarm-workspace__type"
-        :class="{ 'is-active': type.id === draft.ruleType }"
-        @click="selectType(type.id)"
+        class="alarm-workspace__row"
+        :class="{ 'is-active': rule.id === selectedRuleId }"
+        @click="selectRule(rule.id)"
       >
+        <i :class="`is-${rule.severity}`"></i>
         <span>
-          <strong>{{ type.label }}</strong>
-          <small>{{ type.summary }}</small>
+          <strong>{{ rule.name }}</strong>
+          <code>{{ rule.targetPath }}</code>
         </span>
-        <em>{{ type.badge }}</em>
+        <em>{{ rule.isEnabled ? "启用" : "停用" }}</em>
       </button>
     </aside>
 
     <section class="alarm-workspace__main">
-      <div class="alarm-workspace__hero">
+      <header class="alarm-workspace__head">
         <div>
-          <span class="alarm-workspace__eyebrow">报警单元 / 规则构建</span>
-          <h2>只构建规则，不管理运行态事件</h2>
-          <p>
-            数据中心负责目标数据点、质量条件、阈值表达式、抑制恢复策略和消息模板；
-            节点侧运行态负责执行规则、产生事件和处理确认流程。
-          </p>
+          <strong>{{ activeDraft?.name || "未选择报警规则" }}</strong>
+          <span>{{ activeDraft?.targetPath || "从左侧选择规则" }}</span>
         </div>
-        <span class="alarm-workspace__hero-badge">契约预览</span>
-      </div>
-
-      <div class="alarm-workspace__toolbar">
-        <div>
-          <strong>当前规则：{{ selectedRule.name }}</strong>
-          <span>{{ selectedRule.targetPath }}</span>
-        </div>
-        <div class="alarm-workspace__toolbar-actions">
-          <button type="button">保存草稿</button>
-          <button type="button">样本试算</button>
-          <button type="button" class="is-primary">校验契约</button>
-        </div>
-      </div>
-
-      <div class="alarm-workspace__builder">
-        <article class="alarm-workspace__form-card">
-          <div class="alarm-workspace__card-title">
-            <span>规则构建器</span>
-            <em>{{ selectedRuleType?.badge }}</em>
-          </div>
-
-          <div class="alarm-workspace__form-grid">
-            <label class="alarm-workspace__field">
-              <span>目标数据点</span>
-              <input v-model="draft.targetPath" type="text" />
-            </label>
-            <label class="alarm-workspace__field">
-              <span>质量条件</span>
-              <input v-model="draft.qualityCondition" type="text" />
-            </label>
-            <label class="alarm-workspace__field">
-              <span>在线条件</span>
-              <input v-model="draft.onlineCondition" type="text" />
-            </label>
-            <label class="alarm-workspace__field">
-              <span>规则类型</span>
-              <select v-model="draft.ruleType">
-                <option
-                  v-for="type in alarmRuleTypes"
-                  :key="type.id"
-                  :value="type.id"
-                >
-                  {{ type.label }}
-                </option>
-              </select>
-            </label>
-            <label class="alarm-workspace__field">
-              <span>阈值或表达式</span>
-              <input v-model="draft.trigger" type="text" />
-            </label>
-            <label class="alarm-workspace__field">
-              <span>严重级别</span>
-              <select v-model="draft.severity">
-                <option
-                  v-for="severity in alarmSeverities"
-                  :key="severity.id"
-                  :value="severity.id"
-                >
-                  {{ severity.label }}
-                </option>
-              </select>
-            </label>
-            <label class="alarm-workspace__field">
-              <span>抑制策略</span>
-              <input v-model="draft.suppression" type="text" />
-            </label>
-            <label class="alarm-workspace__field">
-              <span>恢复策略</span>
-              <input v-model="draft.recovery" type="text" />
-            </label>
-            <label class="alarm-workspace__field is-wide">
-              <span>消息模板</span>
-              <textarea v-model="draft.messageTemplate" rows="3" />
-            </label>
-            <label class="alarm-workspace__field is-wide">
-              <span>运行态节点契约</span>
-              <input v-model="draft.runtimeNodeContract" type="text" />
-            </label>
-          </div>
-        </article>
-
-        <article class="alarm-workspace__rule-list">
-          <div class="alarm-workspace__card-title">
-            <span>规则清单</span>
-            <em>{{ filteredRules.length }} 条</em>
-          </div>
+        <div class="alarm-workspace__actions">
           <button
-            v-for="rule in filteredRules"
-            :key="rule.id"
             type="button"
-            class="alarm-workspace__rule-row"
-            :class="{ 'is-active': rule.id === selectedRuleId }"
-            @click="selectedRuleId = rule.id"
+            :disabled="!activeDraft || alarmStore.saving"
+            @click="saveActiveDraft"
           >
-            <span>
-              <strong>{{ rule.name }}</strong>
-              <small>{{ rule.targetPath }}</small>
-            </span>
-            <em :class="`is-${rule.contractStatus}`">{{ rule.contractStatus }}</em>
+            保存
           </button>
-        </article>
-      </div>
-    </section>
-
-    <aside class="alarm-workspace__detail">
-      <div class="alarm-workspace__section-title">运行态契约预览</div>
-      <pre class="alarm-workspace__contract">{{ contractPreview }}</pre>
-
-      <div class="alarm-workspace__panel">
-        <div class="alarm-workspace__section-title">校验提示</div>
-        <div
-          v-for="field in alarmContractFields"
-          :key="field.key"
-          class="alarm-workspace__contract-row"
-        >
-          <strong>{{ field.label }}</strong>
-          <span>{{ field.required ? "必填" : "可选" }}</span>
-          <p>{{ field.summary }}</p>
+          <button
+            type="button"
+            :disabled="!activeDraft || alarmStore.saving"
+            @click="toggleEnabled"
+          >
+            {{ activeDraft?.isEnabled ? "停用" : "启用" }}
+          </button>
+          <button
+            type="button"
+            class="is-danger"
+            :disabled="!activeDraft || alarmStore.deleting"
+            @click="deleteRule"
+          >
+            删除
+          </button>
         </div>
-      </div>
+      </header>
 
-      <div class="alarm-workspace__panel is-boundary">
-        <div class="alarm-workspace__section-title">职责边界</div>
-        <p v-for="note in alarmRuntimeBoundaryNotes" :key="note">
-          {{ note }}
-        </p>
+      <div v-if="alarmStore.detailError" class="alarm-workspace__error">
+        {{ alarmStore.detailError }}
       </div>
-    </aside>
+      <div v-else-if="alarmStore.detailLoading" class="alarm-workspace__empty">
+        详情加载中
+      </div>
+      <div v-else-if="activeDraft" class="alarm-workspace__editor">
+        <label>
+          <span>规则名</span>
+          <input v-model="activeDraft.name" type="text" @input="markDirty" />
+        </label>
+        <label>
+          <span>目标路径</span>
+          <input v-model="activeDraft.targetPath" type="text" @input="markDirty" />
+        </label>
+        <label>
+          <span>规则类型</span>
+          <select v-model="activeDraft.ruleType" @change="markDirty">
+            <option
+              v-for="item in alarmRuleTypeOptions"
+              :key="item.value"
+              :value="item.value"
+            >
+              {{ item.label }}
+            </option>
+          </select>
+        </label>
+        <label>
+          <span>严重度</span>
+          <select v-model="activeDraft.severity" @change="markDirty">
+            <option
+              v-for="item in alarmSeverityOptions"
+              :key="item.value"
+              :value="item.value"
+            >
+              {{ item.label }}
+            </option>
+          </select>
+        </label>
+        <label class="is-wide">
+          <span>描述</span>
+          <textarea v-model="activeDraft.description" rows="3" @input="markDirty" />
+        </label>
+      </div>
+      <div v-else class="alarm-workspace__empty">暂无选中规则</div>
+
+      <footer class="alarm-workspace__panel">
+        <nav class="alarm-workspace__tabs">
+          <button
+            v-for="tab in tabs"
+            :key="tab"
+            type="button"
+            :class="{ 'is-active': activeTab === tab }"
+            @click="selectTab(tab)"
+          >
+            {{ tabLabels[tab] }}
+          </button>
+        </nav>
+
+        <div v-if="activeTab === 'config'" class="alarm-workspace__panel-body">
+          <pre>{{ draftPreview }}</pre>
+        </div>
+        <div v-else-if="activeTab === 'test'" class="alarm-workspace__panel-body">
+          <button
+            type="button"
+            :disabled="!selectedRuleId || alarmStore.trial.running"
+            @click="runTrial"
+          >
+            试算
+          </button>
+          <pre>{{ trialPreview }}</pre>
+        </div>
+        <div v-else class="alarm-workspace__panel-body">
+          <button
+            type="button"
+            :disabled="!selectedRuleId || alarmStore.contract.loading"
+            @click="loadContract"
+          >
+            读取契约
+          </button>
+          <pre>{{ contractPreview }}</pre>
+        </div>
+      </footer>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useAlarmStore } from "@/stores/alarm.store";
 import {
-  alarmContractFields,
-  alarmRuntimeBoundaryNotes,
-  alarmRuleSamples,
-  alarmRuleTypes,
-  alarmSeverities,
-  type AlarmRuleSample,
-  type AlarmRuleTypeId,
+  alarmRuleTypeOptions,
+  alarmSeverityOptions,
+  draftToAlarmSavePayload,
+  toAlarmDraft,
+  type AlarmRuleDraft,
 } from "@/components/alarm/alarmRuleModel";
 
 const props = defineProps<{
   projectId: string;
 }>();
 
-const selectedRuleId = ref(alarmRuleSamples[0].id);
-const activeGroup = ref(alarmRuleSamples[0].group);
+type WorkspaceTab = "config" | "test" | "contract";
 
-const selectedRule = computed(
-  () =>
-    alarmRuleSamples.find((rule) => rule.id === selectedRuleId.value) ??
-    alarmRuleSamples[0],
+const tabs: WorkspaceTab[] = ["config", "test", "contract"];
+const tabLabels: Record<WorkspaceTab, string> = {
+  config: "规则配置",
+  test: "试算",
+  contract: "契约",
+};
+
+const route = useRoute();
+const router = useRouter();
+const alarmStore = useAlarmStore();
+const activeDraft = ref<AlarmRuleDraft | null>(null);
+
+const selectedRuleId = computed(() => {
+  const value = route.params.objectId;
+  return typeof value === "string" ? value : "";
+});
+
+const activeTab = computed<WorkspaceTab>(() => {
+  const value = route.params.tab;
+  return tabs.includes(value as WorkspaceTab) ? (value as WorkspaceTab) : "config";
+});
+
+const draftPreview = computed(() =>
+  JSON.stringify(activeDraft.value ? draftToAlarmSavePayload(activeDraft.value) : {}, null, 2),
 );
 
-const draft = reactive<AlarmRuleSample>({ ...selectedRule.value });
-
-const ruleGroups = computed(() =>
-  alarmRuleSamples.reduce<Array<{ name: string; count: number }>>((groups, rule) => {
-    const group = groups.find((item) => item.name === rule.group);
-    if (group) {
-      group.count += 1;
-    } else {
-      groups.push({ name: rule.group, count: 1 });
-    }
-    return groups;
-  }, []),
-);
-
-const filteredRules = computed(() =>
-  alarmRuleSamples.filter((rule) => rule.group === activeGroup.value),
-);
-
-const selectedRuleType = computed(() =>
-  alarmRuleTypes.find((type) => type.id === draft.ruleType),
-);
-
-const selectedSeverity = computed(() =>
-  alarmSeverities.find((severity) => severity.id === draft.severity),
-);
-
-const contractPreview = computed(() =>
+const trialPreview = computed(() =>
   JSON.stringify(
-    {
-      projectId: props.projectId,
-      ruleId: draft.id,
-      targetPath: draft.targetPath,
-      conditions: {
-        quality: draft.qualityCondition,
-        online: draft.onlineCondition,
-        trigger: draft.trigger,
-        recovery: draft.recovery,
-      },
-      ruleType: draft.ruleType,
-      severity: selectedSeverity.value?.level,
-      suppression: draft.suppression,
-      messageTemplate: draft.messageTemplate,
-      runtimeNodeContract: draft.runtimeNodeContract,
-      executionOwner: "runtime-node",
-    },
+    alarmStore.trial.error || alarmStore.trial.result || { state: "idle" },
     null,
     2,
   ),
 );
 
-const selectType = (typeId: AlarmRuleTypeId) => {
-  draft.ruleType = typeId;
+const contractPreview = computed(() =>
+  JSON.stringify(
+    alarmStore.contract.error || alarmStore.contract.data || { state: "idle" },
+    null,
+    2,
+  ),
+);
+
+const routeBase = computed(() => (route.path.startsWith("/debug/") ? "/debug" : ""));
+
+const replaceAlarmRoute = (ruleId?: string, tab: WorkspaceTab = "config") => {
+  const tabPath = tab === "config" ? "" : `/${tab}`;
+  const rulePath = ruleId ? `/${ruleId}${tabPath}` : "";
+  router.push(`${routeBase.value}/alarm${rulePath}`);
 };
 
-watch(selectedRule, (rule) => {
-  Object.assign(draft, rule);
+const reloadList = () => alarmStore.fetchList(props.projectId);
+
+const selectRule = (ruleId: string) => {
+  replaceAlarmRoute(ruleId, "config");
+};
+
+const selectTab = (tab: WorkspaceTab) => {
+  replaceAlarmRoute(selectedRuleId.value, tab);
+};
+
+const markDirty = () => {
+  if (activeDraft.value) {
+    activeDraft.value.dirty = true;
+  }
+};
+
+const saveActiveDraft = async () => {
+  if (!selectedRuleId.value || !activeDraft.value) {
+    return;
+  }
+  const rule = await alarmStore.saveRule(
+    props.projectId,
+    selectedRuleId.value,
+    draftToAlarmSavePayload(activeDraft.value),
+  );
+  activeDraft.value = toAlarmDraft(rule);
+};
+
+const toggleEnabled = async () => {
+  if (!selectedRuleId.value || !activeDraft.value) {
+    return;
+  }
+  const rule = await alarmStore.setRuleEnabled(
+    props.projectId,
+    selectedRuleId.value,
+    !activeDraft.value.isEnabled,
+  );
+  activeDraft.value = toAlarmDraft(rule);
+};
+
+const deleteRule = async () => {
+  if (!selectedRuleId.value || !window.confirm("确认删除当前报警规则？")) {
+    return;
+  }
+  await alarmStore.removeRule(props.projectId, selectedRuleId.value);
+  replaceAlarmRoute(alarmStore.list[0]?.id);
+};
+
+const runTrial = () => {
+  if (selectedRuleId.value) {
+    alarmStore.runTrial(props.projectId, selectedRuleId.value, {});
+  }
+};
+
+const loadContract = () => {
+  if (selectedRuleId.value) {
+    alarmStore.fetchContract(props.projectId, selectedRuleId.value);
+  }
+};
+
+watch(
+  () => props.projectId,
+  async () => {
+    activeDraft.value = null;
+    alarmStore.closeEdit();
+    await reloadList();
+  },
+);
+
+watch(
+  selectedRuleId,
+  async (ruleId) => {
+    if (!ruleId) {
+      activeDraft.value = null;
+      alarmStore.closeEdit();
+      return;
+    }
+    const rule = await alarmStore.openForEdit(props.projectId, ruleId);
+    activeDraft.value = toAlarmDraft(rule);
+  },
+  { immediate: true },
+);
+
+watch(activeTab, (tab) => {
+  if (tab === "contract" && selectedRuleId.value) {
+    loadContract();
+  }
 });
 
-watch(activeGroup, (group) => {
-  const firstRule = alarmRuleSamples.find((rule) => rule.group === group);
-  if (firstRule) {
-    selectedRuleId.value = firstRule.id;
-  }
+onMounted(() => {
+  reloadList();
 });
 </script>
 
 <style scoped>
 .alarm-workspace {
-  --alarm-paper: var(--dc-surface-raised);
-  --alarm-canvas: var(--dc-surface-subtle);
-  --alarm-line: var(--dc-border);
-  --alarm-ink: var(--dc-text);
-  --alarm-muted: var(--dc-text-secondary);
-  --alarm-accent: var(--dc-primary);
-  --alarm-accent-dark: var(--dc-primary);
-  --alarm-soft: var(--dc-primary-soft);
-
   height: 100%;
-  display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(310px, 380px);
-  gap: 12px;
-  color: var(--alarm-ink);
-}
-
-.alarm-workspace__side,
-.alarm-workspace__main,
-.alarm-workspace__detail {
   min-height: 0;
-  overflow: hidden;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-md);
-  background: var(--dc-surface-raised);
-  box-shadow: var(--dc-shadow-surface);
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  background: var(--dc-surface-subtle);
+  color: var(--dc-text);
 }
 
-.alarm-workspace__side,
-.alarm-workspace__detail {
-  padding: 12px;
+.alarm-workspace__list {
+  min-height: 0;
   overflow-y: auto;
+  border-right: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
+}
+
+.alarm-workspace__list-head,
+.alarm-workspace__head {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid var(--dc-border);
+}
+
+.alarm-workspace__list-head strong,
+.alarm-workspace__head strong,
+.alarm-workspace__list-head span,
+.alarm-workspace__head span {
+  display: block;
+}
+
+.alarm-workspace__list-head span,
+.alarm-workspace__head span {
+  margin-top: 4px;
+  color: var(--dc-text-secondary);
+  font-size: 12px;
 }
 
 .alarm-workspace__main {
-  display: flex;
-  flex-direction: column;
-  background: var(--alarm-canvas);
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) 280px;
 }
 
-.alarm-workspace__section-title {
-  margin-bottom: 12px;
-  color: var(--alarm-ink);
-  font-size: 14px;
+.alarm-workspace__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.alarm-workspace button {
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
+  color: var(--dc-text);
+  font-size: 12px;
   font-weight: 700;
 }
 
-.alarm-workspace__section-title.is-spaced {
-  margin-top: 20px;
+.alarm-workspace__list-head button,
+.alarm-workspace__actions button,
+.alarm-workspace__panel-body button {
+  height: 32px;
+  padding: 0 12px;
 }
 
-.alarm-workspace__group,
-.alarm-workspace__type,
-.alarm-workspace__rule-row,
-.alarm-workspace__toolbar-actions button {
-  border: 1px solid var(--dc-border);
-  background: var(--dc-surface-muted);
-  color: var(--dc-text-secondary);
+.alarm-workspace button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
-.alarm-workspace__group,
-.alarm-workspace__type {
-  width: 100%;
-  margin-bottom: 8px;
-  border-radius: var(--dc-radius-sm);
+.alarm-workspace__actions .is-danger {
+  border-color: #d9a6a0;
+  color: #9f3427;
+}
+
+.alarm-workspace__row {
+  width: calc(100% - 16px);
+  display: grid;
+  grid-template-columns: 4px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin: 8px;
+  padding: 10px;
   text-align: left;
 }
 
-.alarm-workspace__group {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 12px;
-  font-size: 13px;
-  font-weight: 800;
+.alarm-workspace__row.is-active {
+  border-color: var(--dc-primary);
+  background: var(--dc-primary-soft);
 }
 
-.alarm-workspace__group em,
-.alarm-workspace__type em,
-.alarm-workspace__hero-badge,
-.alarm-workspace__card-title em,
-.alarm-workspace__rule-row em {
-  border-radius: 4px;
-  background: var(--alarm-soft);
-  color: var(--alarm-accent-dark);
-  font-size: 11px;
-  font-style: normal;
-  font-weight: 700;
+.alarm-workspace__row i {
+  width: 4px;
+  height: 34px;
+  border-radius: 2px;
+  background: var(--dc-border);
 }
 
-.alarm-workspace__group em,
-.alarm-workspace__type em,
-.alarm-workspace__hero-badge,
-.alarm-workspace__card-title em {
-  padding: 4px 8px;
+.alarm-workspace__row i.is-info {
+  background: #5b8def;
 }
 
-.alarm-workspace__type {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  padding: 12px;
+.alarm-workspace__row i.is-warning {
+  background: #d99a22;
 }
 
-.alarm-workspace__type strong,
-.alarm-workspace__type small,
-.alarm-workspace__rule-row strong,
-.alarm-workspace__rule-row small {
+.alarm-workspace__row i.is-major {
+  background: #d96f22;
+}
+
+.alarm-workspace__row i.is-critical {
+  background: #c74335;
+}
+
+.alarm-workspace__row strong,
+.alarm-workspace__row code {
   display: block;
-}
-
-.alarm-workspace__type small,
-.alarm-workspace__rule-row small,
-.alarm-workspace__hero p,
-.alarm-workspace__toolbar span,
-.alarm-workspace__contract-row p,
-.alarm-workspace__panel p {
-  color: var(--alarm-muted);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.alarm-workspace__type small,
-.alarm-workspace__rule-row small {
-  margin-top: 5px;
-}
-
-.alarm-workspace__group.is-active,
-.alarm-workspace__type.is-active,
-.alarm-workspace__rule-row.is-active {
-  border-color: var(--alarm-accent);
-  background: var(--alarm-soft);
-  font-weight: 700;
-}
-
-.alarm-workspace__hero {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 16px 18px 14px;
-  border-bottom: 1px solid var(--dc-border);
-  background: var(--alarm-paper);
-}
-
-.alarm-workspace__eyebrow {
-  color: var(--alarm-accent-dark);
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.alarm-workspace__hero h2 {
-  margin: 6px 0 8px;
-  font-size: 22px;
-  line-height: 1.2;
-}
-
-.alarm-workspace__hero p {
-  max-width: 760px;
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.7;
-}
-
-.alarm-workspace__hero-badge {
-  align-self: start;
-}
-
-.alarm-workspace__toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 12px;
-}
-
-.alarm-workspace__toolbar strong,
-.alarm-workspace__toolbar span {
-  display: block;
-}
-
-.alarm-workspace__toolbar-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.alarm-workspace__toolbar-actions button {
-  padding: 8px 12px;
-  border-radius: var(--dc-radius-sm);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.alarm-workspace__toolbar-actions button.is-primary {
-  border-color: var(--alarm-accent);
-  background: var(--alarm-accent);
-  color: var(--dc-surface-raised);
-}
-
-.alarm-workspace__builder {
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
-  gap: 12px;
-  padding: 0 12px 12px;
-  flex: 1;
-}
-
-.alarm-workspace__form-card,
-.alarm-workspace__rule-list,
-.alarm-workspace__panel {
-  border: 1px solid var(--alarm-line);
-  border-radius: var(--dc-radius-md);
-  background: var(--alarm-paper);
-}
-
-.alarm-workspace__form-card,
-.alarm-workspace__rule-list {
-  min-height: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.alarm-workspace__card-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--dc-border);
-  background: var(--dc-surface-subtle);
-  font-size: 14px;
-  font-weight: 700;
+.alarm-workspace__row code {
+  margin-top: 4px;
+  color: var(--dc-text-secondary);
+  font-size: 12px;
 }
 
-.alarm-workspace__form-grid {
+.alarm-workspace__row em {
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.alarm-workspace__editor {
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  padding: 14px;
+  align-content: start;
+  gap: 14px;
+  padding: 16px;
   overflow-y: auto;
 }
 
-.alarm-workspace__field {
+.alarm-workspace__editor label {
   display: grid;
   gap: 6px;
 }
 
-.alarm-workspace__field.is-wide {
+.alarm-workspace__editor label.is-wide {
   grid-column: 1 / -1;
 }
 
-.alarm-workspace__field span {
-  color: var(--alarm-muted);
+.alarm-workspace__editor span {
+  color: var(--dc-text-secondary);
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 700;
 }
 
-.alarm-workspace__field input,
-.alarm-workspace__field select,
-.alarm-workspace__field textarea {
+.alarm-workspace__editor input,
+.alarm-workspace__editor select,
+.alarm-workspace__editor textarea {
   width: 100%;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-muted);
-  color: var(--alarm-ink);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text);
   font-size: 13px;
   outline: none;
 }
 
-.alarm-workspace__field input,
-.alarm-workspace__field select {
-  height: 38px;
-  padding: 0 12px;
+.alarm-workspace__editor input,
+.alarm-workspace__editor select {
+  height: 36px;
+  padding: 0 10px;
 }
 
-.alarm-workspace__field textarea {
+.alarm-workspace__editor textarea {
+  padding: 10px;
   resize: vertical;
-  padding: 10px 12px;
-}
-
-.alarm-workspace__rule-list {
-  overflow-y: auto;
-}
-
-.alarm-workspace__rule-row {
-  width: calc(100% - 24px);
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  margin: 10px 12px 0;
-  padding: 12px;
-  border-radius: 8px;
-  text-align: left;
-}
-
-.alarm-workspace__rule-row em {
-  align-self: start;
-  padding: 4px 8px;
-}
-
-.alarm-workspace__rule-row em.is-valid {
-  background: #dceee7;
-  color: #27664c;
-}
-
-.alarm-workspace__rule-row em.is-pending {
-  background: #faecd0;
-  color: #8a5b17;
-}
-
-.alarm-workspace__rule-row em.is-broken {
-  background: #f6d8d1;
-  color: #8f3322;
-}
-
-.alarm-workspace__contract {
-  margin: 0 0 12px;
-  padding: 12px;
-  overflow-x: auto;
-  border: 1px solid var(--alarm-line);
-  border-radius: 8px;
-  background: #111827;
-  color: #e5e7eb;
-  font-size: 11px;
-  line-height: 1.55;
 }
 
 .alarm-workspace__panel {
-  margin-top: 12px;
-  padding: 12px;
-}
-
-.alarm-workspace__contract-row {
-  padding: 10px 0;
+  min-height: 0;
   border-top: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
 }
 
-.alarm-workspace__contract-row:first-of-type {
-  border-top: 0;
+.alarm-workspace__tabs {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--dc-border);
 }
 
-.alarm-workspace__contract-row strong {
+.alarm-workspace__tabs button {
+  height: 30px;
+  padding: 0 12px;
+}
+
+.alarm-workspace__tabs button.is-active {
+  border-color: var(--dc-primary);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+}
+
+.alarm-workspace__panel-body {
+  height: calc(100% - 47px);
+  padding: 12px;
+  overflow: auto;
+}
+
+.alarm-workspace__panel-body pre {
+  margin: 10px 0 0;
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.alarm-workspace__empty,
+.alarm-workspace__error {
+  margin: 12px;
+  padding: 14px;
+  border: 1px dashed var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  color: var(--dc-text-secondary);
   font-size: 13px;
 }
 
-.alarm-workspace__contract-row span {
-  float: right;
-  color: var(--alarm-accent-dark);
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.alarm-workspace__contract-row p,
-.alarm-workspace__panel p {
-  margin: 5px 0 0;
-}
-
-.alarm-workspace__panel.is-boundary {
-  background: var(--dc-accent-soft);
-}
-
-@media (max-width: 1280px) {
-  .alarm-workspace {
-    grid-template-columns: 230px minmax(0, 1fr);
-  }
-
-  .alarm-workspace__detail {
-    display: none;
-  }
+.alarm-workspace__error {
+  border-color: #d9a6a0;
+  color: #9f3427;
 }
 
 @media (max-width: 920px) {
-  .alarm-workspace,
-  .alarm-workspace__builder {
+  .alarm-workspace {
     grid-template-columns: 1fr;
-    overflow-y: auto;
   }
 
-  .alarm-workspace__hero,
-  .alarm-workspace__toolbar {
-    display: block;
+  .alarm-workspace__list {
+    max-height: 320px;
+    border-right: 0;
+    border-bottom: 1px solid var(--dc-border);
   }
 
-  .alarm-workspace__toolbar-actions {
-    justify-content: flex-start;
-    margin-top: 10px;
-  }
-
-  .alarm-workspace__form-grid {
+  .alarm-workspace__editor {
     grid-template-columns: 1fr;
   }
 }
