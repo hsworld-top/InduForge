@@ -987,7 +987,7 @@ func normalizeCreateComputeInput(input CreateComputeUnitInput) (normalizedComput
 	if err != nil {
 		return normalizedComputeUnitInput{}, err
 	}
-	scriptCode, err := normalizeComputeScript(input.ScriptCode)
+	scriptCode, err := normalizeComputeScript(input.ScriptCode, language)
 	if err != nil {
 		return normalizedComputeUnitInput{}, err
 	}
@@ -1012,7 +1012,7 @@ func normalizeCreateComputeInput(input CreateComputeUnitInput) (normalizedComput
 		TriggerType:   triggerType,
 		TriggerConfig: cloneMap(input.TriggerConfig),
 		InputBindings: cloneMap(input.InputBindings),
-		OutputBinding: cloneMap(input.OutputBinding),
+		OutputBinding: normalizeComputeOutputBinding(input.OutputBinding),
 		Dependencies:  cloneJSONArray(input.Dependencies),
 		TimeoutMS:     timeoutMS,
 		IsEnabled:     true,
@@ -1062,7 +1062,7 @@ func mergeComputeUpdateInput(current repository.ComputeUnitRecord, input UpdateC
 		}
 	}
 	if input.ScriptCode != nil {
-		result.ScriptCode, err = normalizeComputeScript(*input.ScriptCode)
+		result.ScriptCode, err = normalizeComputeScript(*input.ScriptCode, result.Language)
 		if err != nil {
 			return normalizedComputeUnitInput{}, err
 		}
@@ -1080,7 +1080,7 @@ func mergeComputeUpdateInput(current repository.ComputeUnitRecord, input UpdateC
 		result.InputBindings = cloneMap(input.InputBindings)
 	}
 	if input.HasOutputBinding {
-		result.OutputBinding = cloneMap(input.OutputBinding)
+		result.OutputBinding = normalizeComputeOutputBinding(input.OutputBinding)
 	}
 	if input.HasDependencies {
 		result.Dependencies = cloneJSONArray(input.Dependencies)
@@ -1094,6 +1094,7 @@ func mergeComputeUpdateInput(current repository.ComputeUnitRecord, input UpdateC
 	if input.IsEnabled != nil {
 		result.IsEnabled = *input.IsEnabled
 	}
+	result.OutputBinding = normalizeComputeOutputBinding(result.OutputBinding)
 	return result, nil
 }
 
@@ -1122,16 +1123,19 @@ func normalizeComputeLanguage(language string) (string, error) {
 	return language, nil
 }
 
-func normalizeComputeScript(scriptCode string) (string, error) {
+func normalizeComputeScript(scriptCode, language string) (string, error) {
 	scriptCode = strings.TrimSpace(scriptCode)
 	if scriptCode == "" {
-		return defaultComputeScript(), nil
+		return defaultComputeScript(language), nil
 	}
 	return scriptCode, nil
 }
 
-func defaultComputeScript() string {
-	return "result = input;"
+func defaultComputeScript(language string) string {
+	if strings.TrimSpace(strings.ToLower(language)) == "python" {
+		return "def main(argv, dp, ctx):\n    return argv[0] if len(argv) > 0 else None"
+	}
+	return "return argv[0] ?? null;"
 }
 
 func normalizeComputeTriggerType(triggerType string) (string, error) {
@@ -1387,6 +1391,21 @@ func extractComputeOutputBindings(unit repository.ComputeUnitRecord) []computeOu
 		}
 	}
 	return outputs
+}
+
+func normalizeComputeOutputBinding(input map[string]any) map[string]any {
+	result := cloneMap(input)
+	if len(extractComputeOutputBindings(repository.ComputeUnitRecord{
+		Name:          "default",
+		OutputBinding: result,
+	})) > 0 {
+		return result
+	}
+	result["outputs"] = []any{map[string]any{
+		"name":     "result",
+		"dataType": "object",
+	}}
+	return result
 }
 
 func outputBindingFromMap(unit repository.ComputeUnitRecord, fallbackName string, input map[string]any) computeOutputBinding {

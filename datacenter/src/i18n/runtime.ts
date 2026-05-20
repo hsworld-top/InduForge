@@ -265,9 +265,9 @@ export const datacenterMessages = {
       unitIdPlaceholder: "创建后自动回填，也可手动输入已有ID",
       script: "脚本",
       scriptPlaceholder:
-        "JavaScript 示例：result = (input.a || 0) + (input.b || 0);",
+        "JavaScript 示例：return (argv[0] || 0) + (argv[1] || 0);",
       inputJson: "输入JSON",
-      inputJsonPlaceholder: '例如：{"a":1,"b":2}',
+      inputJsonPlaceholder: '例如：{"argv":[1,2]}',
       resultTitle: "运行结果",
       notExecuted: "尚未执行",
       invalidJson: "输入 JSON 格式无效",
@@ -625,9 +625,9 @@ export const datacenterMessages = {
         "Auto-filled after creation, or enter an existing ID manually",
       script: "Script",
       scriptPlaceholder:
-        "JavaScript example: result = (input.a || 0) + (input.b || 0);",
+        "JavaScript example: return (argv[0] || 0) + (argv[1] || 0);",
       inputJson: "Input JSON",
-      inputJsonPlaceholder: 'Example: {"a":1,"b":2}',
+      inputJsonPlaceholder: 'Example: {"argv":[1,2]}',
       resultTitle: "Run Result",
       notExecuted: "Not executed yet",
       invalidJson: "Invalid input JSON",

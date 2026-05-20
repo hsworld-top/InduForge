@@ -124,12 +124,11 @@ func TestComputeRunJSPython(t *testing.T) {
 	jsUnit := mustCreateComputeUnit(t, server.URL, token, projectID, map[string]any{
 		"name":       "sum-js-unit",
 		"language":   "js",
-		"scriptCode": "result = (input.a || 0) + (input.b || 0);",
+		"scriptCode": "return (argv[0] || 0) + (argv[1] || 0);",
 		"timeoutMs":  3000,
 	})
 	jsRun := mustRunComputeUnit(t, server.URL, token, projectID, jsUnit.ID, map[string]any{
-		"a": 1,
-		"b": 2,
+		"argv": []any{1, 2},
 	})
 	if jsRun.Status != "success" {
 		t.Fatalf("expected js run status success, got %q", jsRun.Status)
@@ -141,18 +140,97 @@ func TestComputeRunJSPython(t *testing.T) {
 	pythonUnit := mustCreateComputeUnit(t, server.URL, token, projectID, map[string]any{
 		"name":       "sum-python-unit",
 		"language":   "python",
-		"scriptCode": "result = (input.get('a', 0) or 0) + (input.get('b', 0) or 0)",
+		"scriptCode": "def main(argv, dp, ctx):\n    return (argv[0] or 0) + (argv[1] or 0)",
 		"timeoutMs":  3000,
 	})
 	pythonRun := mustRunComputeUnit(t, server.URL, token, projectID, pythonUnit.ID, map[string]any{
-		"a": 4,
-		"b": 5,
+		"argv": []any{4, 5},
 	})
 	if pythonRun.Status != "success" {
 		t.Fatalf("expected python run status success, got %q", pythonRun.Status)
 	}
 	if pythonRun.Output != float64(9) {
 		t.Fatalf("expected python output 9, got %#v", pythonRun.Output)
+	}
+}
+
+func TestComputeOutputDataPointGeneratedOnSave(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	fixture := setupTestDatabase(t, ctx)
+	migrator := setupMigrator(t, fixture.pool)
+	if err := migrator.Up(ctx); err != nil {
+		t.Fatalf("migrate up failed: %v", err)
+	}
+
+	projectID := uuid.NewString()
+	userID := uuid.NewString()
+	secret := "compute-output-datapoint-secret-01"
+
+	srv, err := app.NewServer(config.Config{
+		Addr:               ":0",
+		DatabaseURL:        fixture.databaseURL,
+		DatabaseSearchPath: fixture.schemaName,
+		JWTSecret:          secret,
+	})
+	if err != nil {
+		t.Fatalf("create server failed: %v", err)
+	}
+	t.Cleanup(srv.Close)
+
+	server := httptest.NewServer(srv.Handler())
+	t.Cleanup(server.Close)
+
+	token := mustSignIntegrationJWT(t, secret, &auth.Claims{
+		UserID:       userID,
+		TenantID:     "tenant-compute-output",
+		ProjectIDs:   []string{projectID},
+		Capabilities: []string{"project:read", "project:write"},
+	})
+
+	unit := mustCreateComputeUnit(t, server.URL, token, projectID, map[string]any{
+		"name":       "output-default-unit",
+		"language":   "js",
+		"scriptCode": "return argv[0] ?? null;",
+		"timeoutMs":  3000,
+	})
+
+	createdOutputs := mustListDataPoints(t, server.URL, token, projectID, "type=calc.output&search=calc.output-default-unit.result")
+	if len(createdOutputs.DataPoints) != 1 {
+		t.Fatalf("expected created compute output datapoint, got %d", len(createdOutputs.DataPoints))
+	}
+	if createdOutputs.DataPoints[0].Path != "calc.output-default-unit.result" {
+		t.Fatalf("expected output datapoint path calc.output-default-unit.result, got %q", createdOutputs.DataPoints[0].Path)
+	}
+	if createdOutputs.DataPoints[0].SourceID == nil || *createdOutputs.DataPoints[0].SourceID != unit.ID {
+		t.Fatalf("expected output datapoint source id %q, got %#v", unit.ID, createdOutputs.DataPoints[0].SourceID)
+	}
+
+	if _, err := fixture.pool.Exec(ctx, `
+		UPDATE data_compute_units
+		SET output_bindings = '{}'::jsonb
+		WHERE project_id = $1 AND id = $2
+	`, projectID, unit.ID); err != nil {
+		t.Fatalf("reset compute output bindings failed: %v", err)
+	}
+	if _, err := fixture.pool.Exec(ctx, `
+		DELETE FROM data_points
+		WHERE project_id = $1 AND source_type = 'calc.output' AND source_id = $2
+	`, projectID, unit.ID); err != nil {
+		t.Fatalf("delete generated output datapoint failed: %v", err)
+	}
+
+	mustUpdateComputeUnit(t, server.URL, token, projectID, unit.ID, map[string]any{
+		"name": "output-default-unit",
+	})
+
+	savedOutputs := mustListDataPoints(t, server.URL, token, projectID, "type=calc.output&search=calc.output-default-unit.result")
+	if len(savedOutputs.DataPoints) != 1 {
+		t.Fatalf("expected saved compute output datapoint, got %d", len(savedOutputs.DataPoints))
+	}
+	if savedOutputs.DataPoints[0].Status != "active" {
+		t.Fatalf("expected saved output datapoint active, got %q", savedOutputs.DataPoints[0].Status)
 	}
 }
 
@@ -178,6 +256,17 @@ func mustCreateComputeUnit(t *testing.T, baseURL, token, projectID string, paylo
 	var result computeUnitPayload
 	if err := json.Unmarshal(responseEnvelope.Data, &result); err != nil {
 		t.Fatalf("decode compute create response failed: %v", err)
+	}
+	return result
+}
+
+func mustUpdateComputeUnit(t *testing.T, baseURL, token, projectID, unitID string, payload map[string]any) computeUnitPayload {
+	t.Helper()
+
+	responseEnvelope := doJSONRequest(t, http.MethodPut, baseURL+"/api/v1/data/projects/"+projectID+"/compute-units/"+unitID, token, payload)
+	var result computeUnitPayload
+	if err := json.Unmarshal(responseEnvelope.Data, &result); err != nil {
+		t.Fatalf("decode compute update response failed: %v", err)
 	}
 	return result
 }

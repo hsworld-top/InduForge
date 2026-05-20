@@ -89,10 +89,22 @@ export function draftToSavePayload(draft: ComputeDraft): Partial<ComputeUnitSave
     triggerType: draft.triggerType,
     triggerConfig: draft.triggerConfig,
     inputBindings: inputRowsToBindings(draft.parameterRows, draft.datapointVariableRows),
-    outputBindings: draft.outputBindings,
+    outputBindings: outputBindingsToSave(draft.outputBindings),
     timeoutMs: draft.timeoutMs,
     isEnabled: draft.isEnabled,
     dependencies: draft.dependencies.map((item) => ({ id: item.id })),
+  };
+}
+
+function outputBindingsToSave(bindings: Record<string, unknown>): Record<string, unknown> {
+  const outputBindings = asRecord(bindings);
+  const outputs = outputBindings.outputs;
+  if (Array.isArray(outputs) && outputs.length > 0) {
+    return outputBindings;
+  }
+  return {
+    ...outputBindings,
+    outputs: [{ name: "result", dataType: "object" }],
   };
 }
 
