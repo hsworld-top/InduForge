@@ -322,6 +322,75 @@ func TestComputeUnitRenameMoveUpdatesOutputDataPoint(t *testing.T) {
 	}
 }
 
+func TestDataPointListRefreshMarksMismatchedGeneratedPointInvalid(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	fixture := setupTestDatabase(t, ctx)
+	migrator := setupMigrator(t, fixture.pool)
+	if err := migrator.Up(ctx); err != nil {
+		t.Fatalf("migrate up failed: %v", err)
+	}
+
+	projectID := uuid.NewString()
+	userID := uuid.NewString()
+	secret := "datapoint-validity-secret-01"
+
+	srv, err := app.NewServer(config.Config{
+		Addr:               ":0",
+		DatabaseURL:        fixture.databaseURL,
+		DatabaseSearchPath: fixture.schemaName,
+		JWTSecret:          secret,
+	})
+	if err != nil {
+		t.Fatalf("create server failed: %v", err)
+	}
+	t.Cleanup(srv.Close)
+
+	server := httptest.NewServer(srv.Handler())
+	t.Cleanup(server.Close)
+
+	token := mustSignIntegrationJWT(t, secret, &auth.Claims{
+		UserID:       userID,
+		TenantID:     "tenant-datapoint-validity",
+		ProjectIDs:   []string{projectID},
+		Capabilities: []string{"project:read", "project:write"},
+	})
+
+	unit := mustCreateComputeUnit(t, server.URL, token, projectID, map[string]any{
+		"name":       "valid-source-unit",
+		"language":   "js",
+		"scriptCode": "return argv[0] ?? null;",
+		"timeoutMs":  3000,
+	})
+
+	outputs := mustListDataPoints(t, server.URL, token, projectID, "type=calc.output&search=calc.valid-source-unit.result")
+	if len(outputs.DataPoints) != 1 {
+		t.Fatalf("expected generated output datapoint, got %d", len(outputs.DataPoints))
+	}
+	point := outputs.DataPoints[0]
+	if _, err := fixture.pool.Exec(ctx, `
+		UPDATE data_points
+		SET path = $3,
+		    name = $4,
+		    updated_at = now()
+		WHERE project_id = $1 AND id = $2
+	`, projectID, point.ID, "calc.wrong-source-unit.result", "wrong-source-unit"); err != nil {
+		t.Fatalf("corrupt generated datapoint failed: %v", err)
+	}
+
+	refreshed := mustListDataPoints(t, server.URL, token, projectID, "type=calc.output&search=calc.wrong-source-unit.result")
+	if len(refreshed.DataPoints) != 1 {
+		t.Fatalf("expected mismatched output datapoint visible, got %d", len(refreshed.DataPoints))
+	}
+	if refreshed.DataPoints[0].Status != "invalid" {
+		t.Fatalf("expected mismatched output datapoint invalid, got %q", refreshed.DataPoints[0].Status)
+	}
+	if refreshed.DataPoints[0].SourceID == nil || *refreshed.DataPoints[0].SourceID != unit.ID {
+		t.Fatalf("expected source id %q unchanged, got %#v", unit.ID, refreshed.DataPoints[0].SourceID)
+	}
+}
+
 type computeUnitPayload struct {
 	ID         string  `json:"id"`
 	ProjectID  string  `json:"projectId"`

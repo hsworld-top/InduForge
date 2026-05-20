@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -116,15 +117,17 @@ type DataPointService struct {
 	repository *repository.DataPointRepository
 	queries    *QueryService
 	mqtt       *repository.MqttRepository
+	computes   *repository.ComputeRepository
 }
 
 // NewDataPointService ????????
 // MQTT ?????????????????????? MQTT ???????
-func NewDataPointService(repo *repository.DataPointRepository, queryService *QueryService, mqttRepository *repository.MqttRepository) *DataPointService {
+func NewDataPointService(repo *repository.DataPointRepository, queryService *QueryService, mqttRepository *repository.MqttRepository, computeRepository *repository.ComputeRepository) *DataPointService {
 	return &DataPointService{
 		repository: repo,
 		queries:    queryService,
 		mqtt:       mqttRepository,
+		computes:   computeRepository,
 	}
 }
 
@@ -149,6 +152,9 @@ func (s *DataPointService) ListDataPoints(ctx context.Context, projectID string,
 		PageSize:  normalizedFilter.PageSize,
 	})
 	if err != nil {
+		return nil, err
+	}
+	if err := s.refreshDataPointValidity(ctx, projectID, records); err != nil {
 		return nil, err
 	}
 
@@ -527,6 +533,191 @@ func toDataPoint(record repository.DataPointRecord) DataPoint {
 		CreatedAt:          record.CreatedAt,
 		UpdatedAt:          record.UpdatedAt,
 	}
+}
+
+func (s *DataPointService) refreshDataPointValidity(ctx context.Context, projectID string, records []repository.DataPointRecord) error {
+	if s == nil || s.repository == nil {
+		return nil
+	}
+	for index := range records {
+		record := &records[index]
+		if record.Status == "invalid" || !isGeneratedDataPoint(record.SourceType) || record.SourceID == nil || strings.TrimSpace(*record.SourceID) == "" {
+			continue
+		}
+		valid, err := s.isDataPointSourceValid(ctx, projectID, *record)
+		if err != nil {
+			return err
+		}
+		if valid {
+			continue
+		}
+		if err := s.repository.MarkInvalidByID(ctx, projectID, record.ID, record.UpdatedBy); err != nil {
+			return err
+		}
+		record.Status = "invalid"
+		record.UpdatedAt = time.Now()
+	}
+	return nil
+}
+
+func isGeneratedDataPoint(sourceType string) bool {
+	switch strings.TrimSpace(sourceType) {
+	case "calc.output", "db.query", "mqtt.subscription", "mqtt.tag":
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *DataPointService) isDataPointSourceValid(ctx context.Context, projectID string, record repository.DataPointRecord) (bool, error) {
+	switch record.SourceType {
+	case "calc.output":
+		return s.isComputeOutputDataPointValid(ctx, projectID, record)
+	case "db.query":
+		return s.isQueryDataPointValid(ctx, projectID, record)
+	case "mqtt.subscription":
+		return s.isMqttSubscriptionDataPointValid(ctx, projectID, record)
+	case "mqtt.tag":
+		return s.isMqttTagDataPointValid(ctx, projectID, record)
+	default:
+		return true, nil
+	}
+}
+
+func (s *DataPointService) isComputeOutputDataPointValid(ctx context.Context, projectID string, record repository.DataPointRecord) (bool, error) {
+	if s.computes == nil || record.SourceID == nil {
+		return true, nil
+	}
+	unit, err := s.computes.GetUnitByProjectAndID(ctx, projectID, *record.SourceID)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	outputName := strings.TrimSpace(firstString(record.SourceConfig, "outputName"))
+	if outputName == "" {
+		outputName = datapointOutputNameFromPath(record.Path)
+	}
+	for _, output := range extractComputeOutputBindings(*unit) {
+		if output.Name == outputName && record.Name == unit.Name && isGeneratedPathMatch(record.Path, output.Path, unit.ID) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (s *DataPointService) isQueryDataPointValid(ctx context.Context, projectID string, record repository.DataPointRecord) (bool, error) {
+	if s.queries == nil || s.queries.repository == nil || s.queries.connections == nil || record.SourceID == nil {
+		return true, nil
+	}
+	query, err := s.queries.repository.GetByProjectAndID(ctx, projectID, *record.SourceID)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if query.QueryType != "sql" {
+		return false, nil
+	}
+	connection, err := s.queries.connections.GetByProjectAndID(ctx, projectID, query.ConnectionID)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if connection.Type != "relational" {
+		return false, nil
+	}
+	expectedPath := "db." + normalizeDatapointSegment(connection.Name) + "." + normalizeDatapointSegment(query.Name)
+	return record.Name == query.Name && isGeneratedPathMatch(record.Path, expectedPath, query.ID), nil
+}
+
+func (s *DataPointService) isMqttSubscriptionDataPointValid(ctx context.Context, projectID string, record repository.DataPointRecord) (bool, error) {
+	if s.mqtt == nil || record.SourceID == nil {
+		return true, nil
+	}
+	subscription, err := s.mqtt.GetSubscription(ctx, projectID, *record.SourceID)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	connection, err := s.mqtt.GetConnectionDetail(ctx, projectID, subscription.ConnectionID)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	expectedPath := "mqtt." + normalizeDatapointSegment(connection.Name) + "." + normalizeDatapointSegment(subscription.Name)
+	return record.Name == subscription.Name && isGeneratedPathMatch(record.Path, expectedPath, subscription.ID), nil
+}
+
+func (s *DataPointService) isMqttTagDataPointValid(ctx context.Context, projectID string, record repository.DataPointRecord) (bool, error) {
+	if s.mqtt == nil || record.SourceID == nil {
+		return true, nil
+	}
+	tag, err := s.mqtt.GetTag(ctx, projectID, *record.SourceID)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	subscription, err := s.mqtt.GetSubscription(ctx, projectID, tag.SubscriptionID)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	connection, err := s.mqtt.GetConnectionDetail(ctx, projectID, subscription.ConnectionID)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	groupSegment := "默认分组"
+	if tag.GroupID != nil && strings.TrimSpace(*tag.GroupID) != "" {
+		group, err := s.mqtt.GetTagGroup(ctx, projectID, *tag.GroupID)
+		if isNotFoundError(err) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		groupSegment = group.Name
+	}
+	expectedPath := "mqtt." + normalizeDatapointSegment(connection.Name) + "." + normalizeDatapointSegment(groupSegment) + "." + normalizeDatapointSegment(tag.Name)
+	return record.Name == tag.Name && isGeneratedPathMatch(record.Path, expectedPath, tag.ID), nil
+}
+
+func isNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var appErr *apperrors.AppError
+	return errors.As(err, &appErr) && appErr.Code == apperrors.ErrorCodeNotFound
+}
+
+func isGeneratedPathMatch(actualPath, basePath, sourceID string) bool {
+	actualPath = strings.TrimSpace(actualPath)
+	basePath = strings.TrimSpace(basePath)
+	if actualPath == "" || basePath == "" {
+		return false
+	}
+	if actualPath == basePath {
+		return true
+	}
+	if len(sourceID) >= 8 && actualPath == basePath+"_"+sourceID[:8] {
+		return true
+	}
+	return strings.HasPrefix(actualPath, basePath+"_")
 }
 
 func (s *DataPointService) enrichDataPointPreview(ctx context.Context, projectID string, record repository.DataPointRecord, target *DataPoint) {

@@ -323,3 +323,23 @@ func (r *DataPointRepository) MarkInvalidBySource(ctx context.Context, projectID
 	}
 	return commandTag.RowsAffected(), nil
 }
+
+// MarkInvalidByID 按主键标记数据点失效。
+func (r *DataPointRepository) MarkInvalidByID(ctx context.Context, projectID, id string, userID *string) error {
+	commandTag, err := r.pool.Exec(ctx, `
+        UPDATE data_points
+        SET status = 'invalid',
+            updated_by = COALESCE($3, updated_by),
+            updated_at = now()
+        WHERE project_id = $1
+          AND id = $2
+          AND status <> 'invalid'
+    `, projectID, id, userID)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "标记数据点失效失败", err)
+	}
+	if commandTag.RowsAffected() == 0 {
+		return nil
+	}
+	return nil
+}
