@@ -44,6 +44,17 @@ type MqttConnectionDetailRecord struct {
 	UpdatedAt             time.Time
 }
 
+// MqttConnectionSummaryRecord 表示 MQTT 连接主表摘要。
+type MqttConnectionSummaryRecord struct {
+	ID        string
+	ProjectID string
+	Name      string
+	Type      string
+	Status    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 // MqttSubscriptionRecord 表示 MQTT 订阅投影。
 type MqttSubscriptionRecord struct {
 	ID               string
@@ -278,6 +289,26 @@ func (r *MqttRepository) ListConnectionDetails(ctx context.Context, projectID st
 	}
 
 	return result, total, nil
+}
+
+// GetConnectionSummary 按项目与主键读取 MQTT 连接主表摘要。
+func (r *MqttRepository) GetConnectionSummary(ctx context.Context, projectID, connectionID string) (*MqttConnectionSummaryRecord, error) {
+	row := r.pool.QueryRow(ctx, `
+        SELECT id, project_id, name, type, status, created_at, updated_at
+        FROM data_connections
+        WHERE project_id = $1
+          AND id = $2
+          AND type = 'mqtt'
+    `, projectID, connectionID)
+
+	var record MqttConnectionSummaryRecord
+	if err := row.Scan(&record.ID, &record.ProjectID, &record.Name, &record.Type, &record.Status, &record.CreatedAt, &record.UpdatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "MQTT 连接不存在")
+		}
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 MQTT 连接失败", err)
+	}
+	return &record, nil
 }
 
 // GetConnectionDetail 按项目与主键读取 MQTT 连接详情。

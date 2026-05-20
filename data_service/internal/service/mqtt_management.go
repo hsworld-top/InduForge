@@ -140,6 +140,17 @@ func (s *MqttService) GetMqttConnection(ctx context.Context, projectID, connecti
 	return &result, nil
 }
 
+// GetConnectionSummary 读取 MQTT 连接主表摘要。
+func (s *MqttService) GetConnectionSummary(ctx context.Context, projectID, connectionID string) (*repository.MqttConnectionSummaryRecord, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateConnectionID(connectionID); err != nil {
+		return nil, err
+	}
+	return s.repository.GetConnectionSummary(ctx, projectID, connectionID)
+}
+
 // UpdateMqttConnection 更新 MQTT 连接配置。
 func (s *MqttService) UpdateMqttConnection(ctx context.Context, projectID, connectionID, userID string, input CreateMqttConnectionInput) (*MqttConnectionDetail, error) {
 	if err := validateProjectID(projectID); err != nil {

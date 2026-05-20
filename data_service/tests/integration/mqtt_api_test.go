@@ -170,6 +170,68 @@ func TestMqttSubscriptionChineseNameDataPointStaysActive(t *testing.T) {
 	}
 }
 
+func TestMqttSubscriptionDataPointValidWithoutMqttConfig(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	fixture := setupTestDatabase(t, ctx)
+	migrator := setupMigrator(t, fixture.pool)
+	if err := migrator.Up(ctx); err != nil {
+		t.Fatalf("migrate up failed: %v", err)
+	}
+
+	projectID := uuid.NewString()
+	userID := uuid.NewString()
+	secret := "mqtt-subscription-no-config-secret-01"
+
+	srv, err := app.NewServer(config.Config{
+		Addr:               ":0",
+		DatabaseURL:        fixture.databaseURL,
+		DatabaseSearchPath: fixture.schemaName,
+		JWTSecret:          secret,
+	})
+	if err != nil {
+		t.Fatalf("create server failed: %v", err)
+	}
+	t.Cleanup(srv.Close)
+
+	server := httptest.NewServer(srv.Handler())
+	t.Cleanup(server.Close)
+
+	token := mustSignIntegrationJWT(t, secret, &auth.Claims{
+		UserID:       userID,
+		TenantID:     "tenant-mqtt-no-config",
+		ProjectIDs:   []string{projectID},
+		Capabilities: []string{"project:read", "project:write"},
+	})
+
+	connectionID := uuid.NewString()
+	if _, err := fixture.pool.Exec(ctx, `
+		INSERT INTO data_connections (id, project_id, name, type, category, status, metadata, created_by, updated_by)
+		VALUES ($1, $2, 'aaaa', 'mqtt', 'protocol', 'unknown', '{}'::jsonb, $3, $3)
+	`, connectionID, projectID, userID); err != nil {
+		t.Fatalf("insert mqtt connection without config failed: %v", err)
+	}
+
+	subscription := mustCreateMqttSubscription(t, server.URL, token, projectID, connectionID, map[string]any{
+		"name":             "仅订阅测试",
+		"topic":            "only/subscription",
+		"qos":              0,
+		"isEnabled":        true,
+		"messageRetention": 100,
+	})
+	datapoints := mustListDataPoints(t, server.URL, token, projectID, "type=mqtt.subscription&search=仅订阅测试")
+	if len(datapoints.DataPoints) != 1 {
+		t.Fatalf("expected subscription datapoint, got %d", len(datapoints.DataPoints))
+	}
+	if datapoints.DataPoints[0].SourceID == nil || *datapoints.DataPoints[0].SourceID != subscription.ID {
+		t.Fatalf("expected source id %q, got %#v", subscription.ID, datapoints.DataPoints[0].SourceID)
+	}
+	if datapoints.DataPoints[0].Status != "active" {
+		t.Fatalf("expected subscription datapoint active, got %q", datapoints.DataPoints[0].Status)
+	}
+}
+
 type mqttConnectionPayload struct {
 	ID        string `json:"id"`
 	ProjectID string `json:"projectId"`

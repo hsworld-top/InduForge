@@ -657,7 +657,7 @@ func (s *DataPointService) isMqttSubscriptionDataPointValid(ctx context.Context,
 	if err != nil {
 		return false, err
 	}
-	connection, err := s.mqtt.GetConnectionDetail(ctx, projectID, subscription.ConnectionID)
+	connection, err := s.mqtt.GetConnectionSummary(ctx, projectID, subscription.ConnectionID)
 	if isNotFoundError(err) {
 		return false, nil
 	}
@@ -686,7 +686,7 @@ func (s *DataPointService) isMqttTagDataPointValid(ctx context.Context, projectI
 	if err != nil {
 		return false, err
 	}
-	connection, err := s.mqtt.GetConnectionDetail(ctx, projectID, subscription.ConnectionID)
+	connection, err := s.mqtt.GetConnectionSummary(ctx, projectID, subscription.ConnectionID)
 	if isNotFoundError(err) {
 		return false, nil
 	}
