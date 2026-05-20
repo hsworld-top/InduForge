@@ -389,6 +389,14 @@ func TestDataPointListRefreshMarksMismatchedGeneratedPointInvalid(t *testing.T) 
 	if refreshed.DataPoints[0].SourceID == nil || *refreshed.DataPoints[0].SourceID != unit.ID {
 		t.Fatalf("expected source id %q unchanged, got %#v", unit.ID, refreshed.DataPoints[0].SourceID)
 	}
+	expectedReason := "计算单元输出已失效：计算单元不存在，或输出名称、路径已变更"
+	if refreshed.DataPoints[0].InvalidReason == nil || *refreshed.DataPoints[0].InvalidReason != expectedReason {
+		t.Fatalf("expected invalid reason %q, got %#v", expectedReason, refreshed.DataPoints[0].InvalidReason)
+	}
+	detail := mustGetDataPoint(t, server.URL, token, projectID, refreshed.DataPoints[0].ID)
+	if detail.InvalidReason == nil || *detail.InvalidReason != expectedReason {
+		t.Fatalf("expected detail invalid reason %q, got %#v", expectedReason, detail.InvalidReason)
+	}
 }
 
 type computeUnitPayload struct {

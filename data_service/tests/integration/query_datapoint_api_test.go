@@ -360,6 +360,7 @@ type dataPointPayload struct {
 	SourceID           *string                  `json:"sourceId"`
 	Unit               *string                  `json:"unit"`
 	Status             string                   `json:"status"`
+	InvalidReason      *string                  `json:"invalidReason"`
 	RuntimePermissions dataPointPermissionGroup `json:"runtimePermissions"`
 }
 

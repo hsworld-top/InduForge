@@ -71,7 +71,7 @@ func (s *DataPointService) GetDataPointStatuses(ctx context.Context, projectID s
 			DataType: record.DataType,
 		}
 		if record.Status == "invalid" {
-			reason := "数据点已失效"
+			reason := deriveDataPointInvalidReason(record)
 			info.StatusReason = &reason
 		}
 		result = append(result, info)

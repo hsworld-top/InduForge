@@ -5,6 +5,7 @@ import { IdSchema, TimeFieldSchema, RuntimeGrantSchema } from "./common.schema";
 export const DatapointStatusSchema = z.enum([
   "active",
   "inactive",
+  "invalid",
   "error",
   "unknown",
 ]);
@@ -22,6 +23,8 @@ export const DatapointSchema = z
     unit: z.string().optional().nullable(),
     description: z.string().optional().nullable(),
     status: DatapointStatusSchema.optional(),
+    sourceError: z.string().optional().nullable(),
+    invalidReason: z.string().optional().nullable(),
     runtimeGrant: RuntimeGrantSchema.optional(),
     createdAt: TimeFieldSchema,
     updatedAt: TimeFieldSchema,

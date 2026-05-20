@@ -53,6 +53,7 @@ type DataPoint struct {
 	LastUpdatedAt      *time.Time                             `json:"lastUpdatedAt,omitempty"`
 	SourceStatus       string                                 `json:"sourceStatus"`
 	SourceError        *string                                `json:"sourceError,omitempty"`
+	InvalidReason      *string                                `json:"invalidReason,omitempty"`
 	ConsumeMode        string                                 `json:"consumeMode"`
 	CreatedAt          time.Time                              `json:"createdAt"`
 	UpdatedAt          time.Time                              `json:"updatedAt"`
@@ -727,8 +728,9 @@ func (s *DataPointService) enrichDataPointPreview(ctx context.Context, projectID
 	if record.Status == "invalid" {
 		target.Quality = "bad"
 		target.SourceStatus = "invalid"
-		reason := "数据点已失效"
+		reason := deriveDataPointInvalidReason(record)
 		target.SourceError = &reason
+		target.InvalidReason = &reason
 		return
 	}
 
@@ -745,6 +747,21 @@ func (s *DataPointService) enrichDataPointPreview(ctx context.Context, projectID
 	target.LastUpdatedAt = &value.Timestamp
 	if value.Quality == "good" {
 		target.SourceStatus = "ready"
+	}
+}
+
+func deriveDataPointInvalidReason(record repository.DataPointRecord) string {
+	switch strings.TrimSpace(record.SourceType) {
+	case "calc.output":
+		return "计算单元输出已失效：计算单元不存在，或输出名称、路径已变更"
+	case "db.query":
+		return "查询数据点已失效：查询不存在、查询类型已变更，或连接、路径已变更"
+	case "mqtt.subscription":
+		return "MQTT 订阅数据点已失效：订阅不存在，或订阅名称、路径已变更"
+	case "mqtt.tag":
+		return "MQTT 变量数据点已失效：变量、订阅、分组或连接不存在，或路径已变更"
+	default:
+		return "数据点已失效"
 	}
 }
 
