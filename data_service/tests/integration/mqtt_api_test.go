@@ -85,6 +85,75 @@ func TestMqttConnectionLifecycle(t *testing.T) {
 	}
 }
 
+func TestMqttSubscriptionChineseNameDataPointStaysActive(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	fixture := setupTestDatabase(t, ctx)
+	migrator := setupMigrator(t, fixture.pool)
+	if err := migrator.Up(ctx); err != nil {
+		t.Fatalf("migrate up failed: %v", err)
+	}
+
+	projectID := uuid.NewString()
+	userID := uuid.NewString()
+	secret := "mqtt-chinese-subscription-secret-01"
+
+	srv, err := app.NewServer(config.Config{
+		Addr:               ":0",
+		DatabaseURL:        fixture.databaseURL,
+		DatabaseSearchPath: fixture.schemaName,
+		JWTSecret:          secret,
+	})
+	if err != nil {
+		t.Fatalf("create server failed: %v", err)
+	}
+	t.Cleanup(srv.Close)
+
+	server := httptest.NewServer(srv.Handler())
+	t.Cleanup(server.Close)
+
+	token := mustSignIntegrationJWT(t, secret, &auth.Claims{
+		UserID:       userID,
+		TenantID:     "tenant-mqtt-chinese",
+		ProjectIDs:   []string{projectID},
+		Capabilities: []string{"project:read", "project:write"},
+	})
+
+	connection := mustCreateMqttConnection(t, server.URL, token, projectID, map[string]any{
+		"name":      "aaaa",
+		"brokerUrl": "tcp://localhost:1883",
+		"protocol":  "mqtt",
+		"port":      1883,
+		"qos":       1,
+	})
+	subscription := mustCreateMqttSubscription(t, server.URL, token, projectID, connection.ID, map[string]any{
+		"name":             "撒大苏打",
+		"topic":            "aaaa",
+		"qos":              0,
+		"isEnabled":        true,
+		"messageRetention": 100,
+	})
+
+	datapoints := mustListDataPoints(t, server.URL, token, projectID, "type=mqtt.subscription&search=撒大苏打")
+	if len(datapoints.DataPoints) != 1 {
+		t.Fatalf("expected mqtt subscription datapoint, got %d", len(datapoints.DataPoints))
+	}
+	point := datapoints.DataPoints[0]
+	if point.Name != "撒大苏打" {
+		t.Fatalf("expected datapoint name 撒大苏打, got %q", point.Name)
+	}
+	if point.Path != "mqtt.aaaa.aaaa" {
+		t.Fatalf("expected datapoint path mqtt.aaaa.aaaa, got %q", point.Path)
+	}
+	if point.Status != "active" {
+		t.Fatalf("expected datapoint active, got %q", point.Status)
+	}
+	if point.SourceID == nil || *point.SourceID != subscription.ID {
+		t.Fatalf("expected source id %q, got %#v", subscription.ID, point.SourceID)
+	}
+}
+
 type mqttConnectionPayload struct {
 	ID        string `json:"id"`
 	ProjectID string `json:"projectId"`
@@ -95,6 +164,11 @@ type mqttConnectionPayload struct {
 
 type mqttConnectionStatusPayload struct {
 	Status string `json:"status"`
+}
+
+type mqttSubscriptionPayload struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 type mqttMessagePayload struct {
@@ -116,6 +190,20 @@ func mustCreateMqttConnection(t *testing.T, baseURL, token, projectID string, pa
 	}
 	if result.ID == "" {
 		t.Fatal("expected mqtt connection id in response")
+	}
+	return result
+}
+
+func mustCreateMqttSubscription(t *testing.T, baseURL, token, projectID, connectionID string, payload map[string]any) mqttSubscriptionPayload {
+	t.Helper()
+
+	responseEnvelope := doJSONRequest(t, http.MethodPost, baseURL+"/api/v1/data/projects/"+projectID+"/mqtt/connections/"+connectionID+"/subscriptions", token, payload)
+	var result mqttSubscriptionPayload
+	if err := json.Unmarshal(responseEnvelope.Data, &result); err != nil {
+		t.Fatalf("decode mqtt create subscription response failed: %v", err)
+	}
+	if result.ID == "" {
+		t.Fatal("expected mqtt subscription id in response")
 	}
 	return result
 }

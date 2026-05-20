@@ -653,7 +653,7 @@ func (s *DataPointService) isMqttSubscriptionDataPointValid(ctx context.Context,
 	if err != nil {
 		return false, err
 	}
-	expectedPath := "mqtt." + normalizeDatapointSegment(connection.Name) + "." + normalizeDatapointSegment(subscription.Name)
+	expectedPath := "mqtt." + normalizeDatapointSegment(connection.Name) + "." + mqttSubscriptionPathSegment(*subscription)
 	return record.Name == subscription.Name && isGeneratedPathMatch(record.Path, expectedPath, subscription.ID), nil
 }
 

@@ -784,7 +784,7 @@ func (s *MqttService) syncSubscriptionDatapoint(ctx context.Context, subscriptio
 	if err != nil {
 		return err
 	}
-	basePath := "mqtt." + normalizeDatapointSegment(connection.Name) + "." + normalizeDatapointSegment(subscription.Name)
+	basePath := "mqtt." + normalizeDatapointSegment(connection.Name) + "." + mqttSubscriptionPathSegment(subscription)
 	path := s.allocateDataPointPath(ctx, subscription.ProjectID, basePath, subscription.ID, "mqtt.subscription")
 
 	return s.upsertMqttDataPoint(ctx, repository.CreateDataPointParams{
@@ -843,28 +843,8 @@ func (s *MqttService) syncTagDatapoint(ctx context.Context, tag repository.MqttT
 func (s *MqttService) upsertMqttDataPoint(ctx context.Context, input repository.CreateDataPointParams) error {
 	existing, err := s.datapoints.GetByProjectAndSource(ctx, input.ProjectID, input.SourceType, *input.SourceID)
 	if err == nil && existing != nil {
-		_, updateErr := s.datapoints.Update(ctx, repository.UpdateDataPointParams{
-			ID:                existing.ID,
-			ProjectID:         existing.ProjectID,
-			UserID:            valueOrDefault(input.UserID, existing.UpdatedBy),
-			Name:              input.Name,
-			Description:       cloneOptionalString(input.Description),
-			SourceType:        input.SourceType,
-			SourceID:          cloneOptionalString(input.SourceID),
-			SourceConfig:      cloneMap(input.SourceConfig),
-			DataType:          input.DataType,
-			Unit:              cloneOptionalString(input.Unit),
-			PrecisionNum:      cloneOptionalInt(input.PrecisionNum),
-			DefaultValue:      cloneOptionalString(input.DefaultValue),
-			MinValue:          cloneOptionalFloat64(input.MinValue),
-			MaxValue:          cloneOptionalFloat64(input.MaxValue),
-			AlarmLow:          cloneOptionalFloat64(input.AlarmLow),
-			AlarmHigh:         cloneOptionalFloat64(input.AlarmHigh),
-			Tags:              cloneJSONArray(input.Tags),
-			RefreshMode:       input.RefreshMode,
-			RefreshIntervalMS: cloneOptionalInt(input.RefreshIntervalMS),
-			Status:            input.Status,
-		})
+		input.UserID = stringPtr(valueOrDefault(input.UserID, existing.UpdatedBy))
+		_, updateErr := s.datapoints.UpdateGeneratedOutput(ctx, existing.ID, input)
 		return updateErr
 	}
 
@@ -902,6 +882,14 @@ func normalizeDatapointSegment(segment string) string {
 		return "unnamed"
 	}
 	return normalized
+}
+
+func mqttSubscriptionPathSegment(subscription repository.MqttSubscriptionRecord) string {
+	segment := normalizeDatapointSegment(subscription.Name)
+	if segment != "unnamed" {
+		return segment
+	}
+	return normalizeDatapointSegment(subscription.Topic)
 }
 
 func toMqttConnectionDetail(record repository.MqttConnectionDetailRecord) MqttConnectionDetail {
