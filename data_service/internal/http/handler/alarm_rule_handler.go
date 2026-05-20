@@ -42,31 +42,35 @@ func (h *AlarmRuleHandler) Create(w http.ResponseWriter, r *http.Request) error 
 		return err
 	}
 	var request struct {
-		Name           string         `json:"name"`
-		Description    *string        `json:"description"`
-		TargetPath     string         `json:"targetPath"`
-		RuleType       string         `json:"ruleType"`
-		Condition      map[string]any `json:"condition"`
-		Severity       string         `json:"severity"`
-		Hysteresis     *float64       `json:"hysteresis"`
-		SampleWindowMS *int           `json:"sampleWindowMs"`
-		Contract       map[string]any `json:"contract"`
-		IsEnabled      *bool          `json:"isEnabled"`
+		Name            string         `json:"name"`
+		Description     *string        `json:"description"`
+		TargetPath      string         `json:"targetPath"`
+		RuleType        string         `json:"ruleType"`
+		Condition       map[string]any `json:"condition"`
+		Severity        string         `json:"severity"`
+		Hysteresis      *float64       `json:"hysteresis"`
+		SampleWindowMS  *int           `json:"sampleWindowMs"`
+		Suppression     map[string]any `json:"suppression"`
+		MessageTemplate string         `json:"messageTemplate"`
+		Contract        map[string]any `json:"contract"`
+		IsEnabled       *bool          `json:"isEnabled"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
 	}
 	result, err := h.service.Create(r.Context(), claims, r.PathValue("projectId"), service.CreateAlarmRuleInput{
-		Name:           request.Name,
-		Description:    request.Description,
-		TargetPath:     request.TargetPath,
-		RuleType:       request.RuleType,
-		Condition:      request.Condition,
-		Severity:       request.Severity,
-		Hysteresis:     request.Hysteresis,
-		SampleWindowMS: request.SampleWindowMS,
-		Contract:       request.Contract,
-		IsEnabled:      request.IsEnabled,
+		Name:            request.Name,
+		Description:     request.Description,
+		TargetPath:      request.TargetPath,
+		RuleType:        request.RuleType,
+		Condition:       request.Condition,
+		Severity:        request.Severity,
+		Hysteresis:      request.Hysteresis,
+		SampleWindowMS:  request.SampleWindowMS,
+		Suppression:     request.Suppression,
+		MessageTemplate: request.MessageTemplate,
+		Contract:        request.Contract,
+		IsEnabled:       request.IsEnabled,
 	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
@@ -117,6 +121,68 @@ func (h *AlarmRuleHandler) Delete(w http.ResponseWriter, r *http.Request) error 
 	return nil
 }
 
+func (h *AlarmRuleHandler) ToggleEnabled(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		IsEnabled bool `json:"isEnabled"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.ToggleEnabled(r.Context(), claims, r.PathValue("projectId"), r.PathValue("id"), request.IsEnabled)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+func (h *AlarmRuleHandler) ValidateDraft(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Name            string         `json:"name"`
+		Description     *string        `json:"description"`
+		TargetPath      string         `json:"targetPath"`
+		RuleType        string         `json:"ruleType"`
+		Condition       map[string]any `json:"condition"`
+		Severity        string         `json:"severity"`
+		Hysteresis      *float64       `json:"hysteresis"`
+		SampleWindowMS  *int           `json:"sampleWindowMs"`
+		Suppression     map[string]any `json:"suppression"`
+		MessageTemplate string         `json:"messageTemplate"`
+		Contract        map[string]any `json:"contract"`
+		IsEnabled       *bool          `json:"isEnabled"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.ValidateDraft(r.Context(), claims, r.PathValue("projectId"), service.CreateAlarmRuleInput{
+		Name:            request.Name,
+		Description:     request.Description,
+		TargetPath:      request.TargetPath,
+		RuleType:        request.RuleType,
+		Condition:       request.Condition,
+		Severity:        request.Severity,
+		Hysteresis:      request.Hysteresis,
+		SampleWindowMS:  request.SampleWindowMS,
+		Suppression:     request.Suppression,
+		MessageTemplate: request.MessageTemplate,
+		Contract:        request.Contract,
+		IsEnabled:       request.IsEnabled,
+	})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 func (h *AlarmRuleHandler) ValidateTarget(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
@@ -136,8 +202,9 @@ func (h *AlarmRuleHandler) Test(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var request struct {
-		Value     any     `json:"value"`
-		Timestamp *string `json:"timestamp"`
+		Value     any            `json:"value"`
+		Timestamp *string        `json:"timestamp"`
+		Context   map[string]any `json:"context"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
@@ -153,6 +220,7 @@ func (h *AlarmRuleHandler) Test(w http.ResponseWriter, r *http.Request) error {
 	result, err := h.service.Test(r.Context(), claims, r.PathValue("projectId"), r.PathValue("id"), service.AlarmRuleTestInput{
 		Value:     request.Value,
 		Timestamp: timestamp,
+		Context:   request.Context,
 	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
@@ -235,6 +303,17 @@ func decodeUpdateAlarmRuleInput(r *http.Request) (service.UpdateAlarmRuleInput, 
 	} else if ok {
 		input.Condition = value
 		input.HasCondition = true
+	}
+	if value, ok, err := alarmObjectField(raw, "suppression"); err != nil {
+		return service.UpdateAlarmRuleInput{}, err
+	} else if ok {
+		input.Suppression = value
+		input.HasSuppression = true
+	}
+	if value, ok, err := alarmStringField(raw, "messageTemplate"); err != nil {
+		return service.UpdateAlarmRuleInput{}, err
+	} else if ok {
+		input.MessageTemplate = value
 	}
 	if value, ok, err := alarmObjectField(raw, "contract"); err != nil {
 		return service.UpdateAlarmRuleInput{}, err

@@ -25,11 +25,15 @@ type AlarmRuleRecord struct {
 	Description       *string
 	TargetDataPointID *string
 	TargetPath        string
+	TargetName        *string
+	TargetDataType    string
 	RuleType          string
 	Condition         map[string]any
 	Severity          string
 	Hysteresis        *float64
 	SampleWindowMS    *int
+	Suppression       map[string]any
+	MessageTemplate   string
 	Contract          map[string]any
 	IsEnabled         bool
 	CreatedAt         time.Time
@@ -58,6 +62,8 @@ type CreateAlarmRuleParams struct {
 	Severity          string
 	Hysteresis        *float64
 	SampleWindowMS    *int
+	Suppression       map[string]any
+	MessageTemplate   string
 	Contract          map[string]any
 	IsEnabled         bool
 }
@@ -75,6 +81,8 @@ type UpdateAlarmRuleParams struct {
 	Severity          string
 	Hysteresis        *float64
 	SampleWindowMS    *int
+	Suppression       map[string]any
+	MessageTemplate   string
 	Contract          map[string]any
 	IsEnabled         bool
 }
@@ -93,17 +101,20 @@ func (r *AlarmRuleRepository) ListByProject(ctx context.Context, projectID strin
 	whereSQL, args := buildAlarmRuleWhereClause(projectID, filter)
 
 	var total int
-	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM data_alarm_rules WHERE `+whereSQL, args...).Scan(&total); err != nil {
+	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM data_alarm_rules ar WHERE `+whereSQL, args...).Scan(&total); err != nil {
 		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "统计报警规则失败", err)
 	}
 
 	selectArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, name, description, target_datapoint_id, target_path, rule_type, condition,
-               severity, hysteresis, sample_window_ms, contract, is_enabled, created_at, updated_at
-        FROM data_alarm_rules
+        SELECT ar.id, ar.project_id, ar.name, ar.description, ar.target_datapoint_id, ar.target_path,
+               dp.name, COALESCE(dp.data_type, ''), ar.rule_type, ar.condition,
+               ar.severity, ar.hysteresis, ar.sample_window_ms, ar.suppression, ar.message_template,
+               ar.contract, ar.is_enabled, ar.created_at, ar.updated_at
+        FROM data_alarm_rules ar
+        LEFT JOIN data_points dp ON dp.id = ar.target_datapoint_id
         WHERE `+whereSQL+`
-        ORDER BY updated_at DESC, created_at DESC
+        ORDER BY ar.updated_at DESC, ar.created_at DESC
         LIMIT $`+fmt.Sprint(len(args)+1)+` OFFSET $`+fmt.Sprint(len(args)+2)+`
     `, selectArgs...)
 	if err != nil {
@@ -127,10 +138,13 @@ func (r *AlarmRuleRepository) ListByProject(ctx context.Context, projectID strin
 
 func (r *AlarmRuleRepository) GetByProjectAndID(ctx context.Context, projectID, id string) (*AlarmRuleRecord, error) {
 	record, err := scanAlarmRule(r.pool.QueryRow(ctx, `
-        SELECT id, project_id, name, description, target_datapoint_id, target_path, rule_type, condition,
-               severity, hysteresis, sample_window_ms, contract, is_enabled, created_at, updated_at
-        FROM data_alarm_rules
-        WHERE project_id = $1 AND id = $2
+        SELECT ar.id, ar.project_id, ar.name, ar.description, ar.target_datapoint_id, ar.target_path,
+               dp.name, COALESCE(dp.data_type, ''), ar.rule_type, ar.condition,
+               ar.severity, ar.hysteresis, ar.sample_window_ms, ar.suppression, ar.message_template,
+               ar.contract, ar.is_enabled, ar.created_at, ar.updated_at
+        FROM data_alarm_rules ar
+        LEFT JOIN data_points dp ON dp.id = ar.target_datapoint_id
+        WHERE ar.project_id = $1 AND ar.id = $2
     `, projectID, id))
 	if err != nil {
 		return nil, err
@@ -147,16 +161,29 @@ func (r *AlarmRuleRepository) Create(ctx context.Context, params CreateAlarmRule
 	if err != nil {
 		return nil, err
 	}
+	suppressionPayload, err := marshalJSONObject(params.Suppression)
+	if err != nil {
+		return nil, err
+	}
 	record, err := scanAlarmRule(r.pool.QueryRow(ctx, `
-        INSERT INTO data_alarm_rules (
+        WITH inserted AS (
+            INSERT INTO data_alarm_rules (
             project_id, name, description, target_datapoint_id, target_path, rule_type, condition,
-            severity, hysteresis, sample_window_ms, contract, is_enabled, created_by, updated_by
+            severity, hysteresis, sample_window_ms, suppression, message_template, contract, is_enabled, created_by, updated_by
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11::jsonb, $12, $13::jsonb, $14, $15, $15)
+            RETURNING id, project_id, name, description, target_datapoint_id, target_path, rule_type, condition,
+                      severity, hysteresis, sample_window_ms, suppression, message_template, contract, is_enabled, created_at, updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11::jsonb, $12, $13, $13)
-        RETURNING id, project_id, name, description, target_datapoint_id, target_path, rule_type, condition,
-                  severity, hysteresis, sample_window_ms, contract, is_enabled, created_at, updated_at
+        SELECT inserted.id, inserted.project_id, inserted.name, inserted.description, inserted.target_datapoint_id, inserted.target_path,
+               dp.name, COALESCE(dp.data_type, ''), inserted.rule_type, inserted.condition,
+               inserted.severity, inserted.hysteresis, inserted.sample_window_ms, inserted.suppression, inserted.message_template,
+               inserted.contract, inserted.is_enabled, inserted.created_at, inserted.updated_at
+        FROM inserted
+        LEFT JOIN data_points dp ON dp.id = inserted.target_datapoint_id
     `, params.ProjectID, params.Name, params.Description, params.TargetDataPointID, params.TargetPath, params.RuleType,
-		string(conditionPayload), params.Severity, params.Hysteresis, params.SampleWindowMS, string(contractPayload), params.IsEnabled, params.UserID))
+		string(conditionPayload), params.Severity, params.Hysteresis, params.SampleWindowMS, string(suppressionPayload),
+		params.MessageTemplate, string(contractPayload), params.IsEnabled, params.UserID))
 	if err != nil {
 		return nil, translateAlarmRuleWriteError(err)
 	}
@@ -172,26 +199,41 @@ func (r *AlarmRuleRepository) Update(ctx context.Context, params UpdateAlarmRule
 	if err != nil {
 		return nil, err
 	}
+	suppressionPayload, err := marshalJSONObject(params.Suppression)
+	if err != nil {
+		return nil, err
+	}
 	record, err := scanAlarmRule(r.pool.QueryRow(ctx, `
-        UPDATE data_alarm_rules
-        SET name = $3,
-            description = $4,
-            target_datapoint_id = $5,
-            target_path = $6,
-            rule_type = $7,
-            condition = $8::jsonb,
-            severity = $9,
-            hysteresis = $10,
-            sample_window_ms = $11,
-            contract = $12::jsonb,
-            is_enabled = $13,
-            updated_by = $14,
-            updated_at = now()
-        WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, name, description, target_datapoint_id, target_path, rule_type, condition,
-                  severity, hysteresis, sample_window_ms, contract, is_enabled, created_at, updated_at
+        WITH updated AS (
+            UPDATE data_alarm_rules
+            SET name = $3,
+                description = $4,
+                target_datapoint_id = $5,
+                target_path = $6,
+                rule_type = $7,
+                condition = $8::jsonb,
+                severity = $9,
+                hysteresis = $10,
+                sample_window_ms = $11,
+                suppression = $12::jsonb,
+                message_template = $13,
+                contract = $14::jsonb,
+                is_enabled = $15,
+                updated_by = $16,
+                updated_at = now()
+            WHERE project_id = $1 AND id = $2
+            RETURNING id, project_id, name, description, target_datapoint_id, target_path, rule_type, condition,
+                      severity, hysteresis, sample_window_ms, suppression, message_template, contract, is_enabled, created_at, updated_at
+        )
+        SELECT updated.id, updated.project_id, updated.name, updated.description, updated.target_datapoint_id, updated.target_path,
+               dp.name, COALESCE(dp.data_type, ''), updated.rule_type, updated.condition,
+               updated.severity, updated.hysteresis, updated.sample_window_ms, updated.suppression, updated.message_template,
+               updated.contract, updated.is_enabled, updated.created_at, updated.updated_at
+        FROM updated
+        LEFT JOIN data_points dp ON dp.id = updated.target_datapoint_id
     `, params.ProjectID, params.ID, params.Name, params.Description, params.TargetDataPointID, params.TargetPath, params.RuleType,
-		string(conditionPayload), params.Severity, params.Hysteresis, params.SampleWindowMS, string(contractPayload), params.IsEnabled, params.UserID))
+		string(conditionPayload), params.Severity, params.Hysteresis, params.SampleWindowMS, string(suppressionPayload),
+		params.MessageTemplate, string(contractPayload), params.IsEnabled, params.UserID))
 	if err != nil {
 		return nil, translateAlarmRuleWriteError(err)
 	}
@@ -213,7 +255,9 @@ func scanAlarmRule(row pgx.Row) (AlarmRuleRecord, error) {
 	var record AlarmRuleRecord
 	var description sql.NullString
 	var targetDataPointID sql.NullString
+	var targetName sql.NullString
 	var conditionPayload []byte
+	var suppressionPayload []byte
 	var contractPayload []byte
 	if err := row.Scan(
 		&record.ID,
@@ -222,11 +266,15 @@ func scanAlarmRule(row pgx.Row) (AlarmRuleRecord, error) {
 		&description,
 		&targetDataPointID,
 		&record.TargetPath,
+		&targetName,
+		&record.TargetDataType,
 		&record.RuleType,
 		&conditionPayload,
 		&record.Severity,
 		&record.Hysteresis,
 		&record.SampleWindowMS,
+		&suppressionPayload,
+		&record.MessageTemplate,
 		&contractPayload,
 		&record.IsEnabled,
 		&record.CreatedAt,
@@ -239,7 +287,12 @@ func scanAlarmRule(row pgx.Row) (AlarmRuleRecord, error) {
 	}
 	record.Description = nullStringToPtr(description)
 	record.TargetDataPointID = nullStringToPtr(targetDataPointID)
+	record.TargetName = nullStringToPtr(targetName)
 	condition, err := unmarshalAlarmJSONObject(conditionPayload)
+	if err != nil {
+		return AlarmRuleRecord{}, err
+	}
+	suppression, err := unmarshalAlarmJSONObject(suppressionPayload)
 	if err != nil {
 		return AlarmRuleRecord{}, err
 	}
@@ -248,32 +301,33 @@ func scanAlarmRule(row pgx.Row) (AlarmRuleRecord, error) {
 		return AlarmRuleRecord{}, err
 	}
 	record.Condition = condition
+	record.Suppression = suppression
 	record.Contract = contract
 	return record, nil
 }
 
 func buildAlarmRuleWhereClause(projectID string, filter AlarmRuleListFilter) (string, []any) {
-	conditions := []string{"project_id = $1"}
+	conditions := []string{"ar.project_id = $1"}
 	args := []any{projectID}
 	if filter.TargetPath = strings.TrimSpace(filter.TargetPath); filter.TargetPath != "" {
 		args = append(args, filter.TargetPath)
-		conditions = append(conditions, fmt.Sprintf("target_path = $%d", len(args)))
+		conditions = append(conditions, fmt.Sprintf("ar.target_path = $%d", len(args)))
 	}
 	if filter.RuleType = strings.TrimSpace(filter.RuleType); filter.RuleType != "" {
 		args = append(args, filter.RuleType)
-		conditions = append(conditions, fmt.Sprintf("rule_type = $%d", len(args)))
+		conditions = append(conditions, fmt.Sprintf("ar.rule_type = $%d", len(args)))
 	}
 	if filter.Severity = strings.TrimSpace(filter.Severity); filter.Severity != "" {
 		args = append(args, filter.Severity)
-		conditions = append(conditions, fmt.Sprintf("severity = $%d", len(args)))
+		conditions = append(conditions, fmt.Sprintf("ar.severity = $%d", len(args)))
 	}
 	if filter.Enabled != nil {
 		args = append(args, *filter.Enabled)
-		conditions = append(conditions, fmt.Sprintf("is_enabled = $%d", len(args)))
+		conditions = append(conditions, fmt.Sprintf("ar.is_enabled = $%d", len(args)))
 	}
 	if search := strings.TrimSpace(filter.Search); search != "" {
 		args = append(args, "%"+search+"%")
-		conditions = append(conditions, fmt.Sprintf("(name ILIKE $%d OR target_path ILIKE $%d)", len(args), len(args)))
+		conditions = append(conditions, fmt.Sprintf("(ar.name ILIKE $%d OR ar.target_path ILIKE $%d)", len(args), len(args)))
 	}
 	return strings.Join(conditions, " AND "), args
 }

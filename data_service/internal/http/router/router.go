@@ -198,6 +198,22 @@ func mountAlarmRuleRoutes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
+		"PATCH /api/v1/data/projects/{projectId}/alarm-rules/{id}/enabled",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.alarmRuleHandler.ToggleEnabled),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/alarm-rules/validate-draft",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.alarmRuleHandler.ValidateDraft),
+			),
+		),
+	)
+	mux.Handle(
 		"POST /api/v1/data/projects/{projectId}/alarm-rules/{id}/validate-target",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:read")(

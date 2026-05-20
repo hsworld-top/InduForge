@@ -41,6 +41,7 @@ type AlarmRule struct {
 	Description       *string        `json:"description,omitempty"`
 	TargetDataPointID *string        `json:"targetDatapointId,omitempty"`
 	TargetPath        string         `json:"targetPath"`
+	TargetName        *string        `json:"targetName,omitempty"`
 	TargetDataType    string         `json:"targetDataType,omitempty"`
 	RuleType          string         `json:"ruleType"`
 	Condition         map[string]any `json:"condition"`
@@ -231,6 +232,8 @@ func (s *AlarmRuleService) Create(ctx context.Context, claims *auth.Claims, proj
 		Severity:          normalized.Severity,
 		Hysteresis:        normalized.Hysteresis,
 		SampleWindowMS:    normalized.SampleWindowMS,
+		Suppression:       normalized.Suppression,
+		MessageTemplate:   normalized.MessageTemplate,
 		Contract:          contract,
 		IsEnabled:         normalized.IsEnabled,
 	})
@@ -273,6 +276,8 @@ func (s *AlarmRuleService) Update(ctx context.Context, claims *auth.Claims, proj
 		Severity:          normalized.Severity,
 		Hysteresis:        normalized.Hysteresis,
 		SampleWindowMS:    normalized.SampleWindowMS,
+		Suppression:       normalized.Suppression,
+		MessageTemplate:   normalized.MessageTemplate,
 		Contract:          contract,
 		IsEnabled:         normalized.IsEnabled,
 	})
@@ -291,6 +296,70 @@ func (s *AlarmRuleService) Delete(ctx context.Context, claims *auth.Claims, proj
 		return err
 	}
 	return s.repository.Delete(ctx, projectID, ruleID)
+}
+
+func (s *AlarmRuleService) ToggleEnabled(ctx context.Context, claims *auth.Claims, projectID, ruleID string, enabled bool) (*AlarmRule, error) {
+	if err := s.validateWriteAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	if err := validateAlarmRuleID(ruleID); err != nil {
+		return nil, err
+	}
+	current, err := s.repository.GetByProjectAndID(ctx, projectID, ruleID)
+	if err != nil {
+		return nil, err
+	}
+	input := UpdateAlarmRuleInput{IsEnabled: &enabled}
+	normalized, target, err := s.mergeUpdateInput(ctx, projectID, *current, input)
+	if err != nil {
+		return nil, err
+	}
+	contract := buildAlarmRuleContract(normalized, target, current.ID, projectID)
+	record, err := s.repository.Update(ctx, repository.UpdateAlarmRuleParams{
+		ID:                current.ID,
+		ProjectID:         projectID,
+		UserID:            claims.UserID,
+		Name:              normalized.Name,
+		Description:       normalized.Description,
+		TargetDataPointID: &target.ID,
+		TargetPath:        normalized.TargetPath,
+		RuleType:          normalized.RuleType,
+		Condition:         normalized.Condition,
+		Severity:          normalized.Severity,
+		Hysteresis:        normalized.Hysteresis,
+		SampleWindowMS:    normalized.SampleWindowMS,
+		Suppression:       normalized.Suppression,
+		MessageTemplate:   normalized.MessageTemplate,
+		Contract:          contract,
+		IsEnabled:         normalized.IsEnabled,
+	})
+	if err != nil {
+		return nil, err
+	}
+	rule := toAlarmRule(*record)
+	return &rule, nil
+}
+
+func (s *AlarmRuleService) ValidateDraft(ctx context.Context, claims *auth.Claims, projectID string, input CreateAlarmRuleInput) (map[string]any, error) {
+	if err := s.validateReadAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	normalized, target, err := s.normalizeCreateInput(ctx, projectID, input)
+	if err != nil {
+		return nil, err
+	}
+	contract := buildAlarmRuleContract(normalized, target, "", projectID)
+	return map[string]any{
+		"valid":    true,
+		"errors":   []any{},
+		"contract": contract,
+		"target": map[string]any{
+			"datapointId": target.ID,
+			"path":        target.Path,
+			"name":        target.Name,
+			"dataType":    target.DataType,
+		},
+	}, nil
 }
 
 func (s *AlarmRuleService) ValidateTarget(ctx context.Context, claims *auth.Claims, projectID, ruleID string) (*AlarmRuleTargetValidation, error) {
@@ -462,8 +531,8 @@ func (s *AlarmRuleService) mergeUpdateInput(ctx context.Context, projectID strin
 		Severity:        current.Severity,
 		Hysteresis:      cloneOptionalFloat64(current.Hysteresis),
 		SampleWindowMS:  cloneOptionalInt(current.SampleWindowMS),
-		Suppression:     mapFromContract(current.Contract, "suppression"),
-		MessageTemplate: stringFromContract(current.Contract, "messageTemplate"),
+		Suppression:     cloneMap(current.Suppression),
+		MessageTemplate: current.MessageTemplate,
 		Contract:        cloneMap(current.Contract),
 		IsEnabled:       current.IsEnabled,
 	}
@@ -555,14 +624,15 @@ func toAlarmRule(record repository.AlarmRuleRecord) AlarmRule {
 		Description:       cloneOptionalString(record.Description),
 		TargetDataPointID: cloneOptionalString(record.TargetDataPointID),
 		TargetPath:        record.TargetPath,
-		TargetDataType:    stringFromContract(record.Contract, "targetDataType"),
+		TargetName:        cloneOptionalString(record.TargetName),
+		TargetDataType:    record.TargetDataType,
 		RuleType:          record.RuleType,
 		Condition:         cloneMap(record.Condition),
 		Severity:          record.Severity,
 		Hysteresis:        cloneOptionalFloat64(record.Hysteresis),
 		SampleWindowMS:    cloneOptionalInt(record.SampleWindowMS),
-		Suppression:       mapFromContract(record.Contract, "suppression"),
-		MessageTemplate:   stringFromContract(record.Contract, "messageTemplate"),
+		Suppression:       cloneMap(record.Suppression),
+		MessageTemplate:   record.MessageTemplate,
 		Contract:          cloneMap(record.Contract),
 		IsEnabled:         record.IsEnabled,
 		CreatedAt:         record.CreatedAt,
