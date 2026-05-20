@@ -12,6 +12,12 @@
     </div>
 
     <div class="alarm-editor-header__actions">
+      <button type="button" :disabled="!draft?.targetDatapointId" @click="emit('openTarget')">
+        打开点位
+      </button>
+      <button type="button" :disabled="!draft" @click="emit('checkCurrent')">
+        检查规则
+      </button>
       <button type="button" :disabled="!draft || saving" @click="emit('save')">
         保存
       </button>
@@ -43,6 +49,8 @@ const emit = defineEmits<{
   save: [];
   toggle: [];
   delete: [];
+  openTarget: [];
+  checkCurrent: [];
 }>();
 </script>
 

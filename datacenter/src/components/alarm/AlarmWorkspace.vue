@@ -19,11 +19,21 @@
       :error="alarmStore.detailError"
       :saving="alarmStore.saving"
       :deleting="alarmStore.deleting"
+      :trial-result="alarmStore.trial.result"
+      :trial-running="alarmStore.trial.running"
+      :trial-error="alarmStore.trial.error"
+      :contract="alarmStore.contract.data"
+      :contract-loading="alarmStore.contract.loading"
+      :contract-error="alarmStore.contract.error"
       @update="updateActiveDraft"
       @save="saveActiveDraft"
       @toggle="toggleEnabled"
       @delete="deleteRule"
       @select-tab="selectTab"
+      @run-trial="runTrial"
+      @refresh-contract="refreshContract"
+      @open-target="openTarget"
+      @check-current="checkCurrent"
     />
 
     <CreateAlarmRuleDialog
@@ -40,7 +50,10 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
-import type { AlarmRuleSave } from "@/api/schemas/alarm.schema";
+import type {
+  AlarmRuleSave,
+  AlarmTrialPayload,
+} from "@/api/schemas/alarm.schema";
 import { useAlarmStore } from "@/stores/alarm.store";
 import {
   draftToAlarmSavePayload,
@@ -79,6 +92,7 @@ const activeTab = computed<WorkspaceTab>(() => {
 });
 
 const routeBase = computed(() => (route.path.startsWith("/debug/") ? "/debug" : ""));
+const debugPrefix = computed(() => (route.path.startsWith("/debug/") ? "/debug" : ""));
 
 const replaceAlarmRoute = (ruleId?: string, tab: WorkspaceTab = "config") => {
   const tabPath = tab === "config" ? "" : `/${tab}`;
@@ -116,6 +130,55 @@ const selectRule = (ruleId: string) => {
 
 const selectTab = (tab: WorkspaceTab) => {
   replaceAlarmRoute(selectedRuleId.value, tab);
+};
+
+const refreshContract = async () => {
+  if (!selectedRuleId.value) {
+    return;
+  }
+  try {
+    await alarmStore.fetchContract(props.projectId, selectedRuleId.value);
+  } catch {
+    // 错误文案由 store 写入并传给契约面板展示。
+  }
+};
+
+const runTrial = async (payload: AlarmTrialPayload) => {
+  if (!selectedRuleId.value) {
+    return;
+  }
+  try {
+    await alarmStore.runTrial(props.projectId, selectedRuleId.value, payload);
+  } catch {
+    // 错误文案由 store 写入并传给试算面板展示。
+  }
+};
+
+const openTarget = () => {
+  const targetDatapointId = activeDraft.value?.targetDatapointId;
+  if (!targetDatapointId) {
+    return;
+  }
+  router.push(`${debugPrefix.value}/datapoint/${targetDatapointId}`);
+};
+
+const checkCurrent = async () => {
+  if (!activeDraft.value) {
+    return;
+  }
+  try {
+    const result = await alarmStore.validateDraft(
+      props.projectId,
+      draftToAlarmSavePayload(activeDraft.value),
+    );
+    if (result.valid) {
+      ElMessage.success("规则检查通过");
+    } else {
+      ElMessage.warning("规则检查未通过");
+    }
+  } catch {
+    ElMessage.error(alarmStore.validationError || "报警草稿校验失败");
+  }
 };
 
 const updateActiveDraft = (patch: Partial<AlarmRuleDraft>) => {
@@ -179,6 +242,16 @@ watch(
     }
     const rule = await alarmStore.openForEdit(props.projectId, ruleId);
     activeDraft.value = toAlarmDraft(rule);
+  },
+  { immediate: true },
+);
+
+watch(
+  [activeTab, selectedRuleId],
+  ([tab, ruleId]) => {
+    if (tab === "contract" && ruleId) {
+      void refreshContract();
+    }
   },
   { immediate: true },
 );

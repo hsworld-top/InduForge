@@ -7,6 +7,8 @@
       @save="emit('save')"
       @toggle="emit('toggle')"
       @delete="emit('delete')"
+      @open-target="emit('openTarget')"
+      @check-current="emit('checkCurrent')"
     />
 
     <div v-if="error" class="alarm-editor-shell__state is-error">
@@ -45,31 +47,55 @@
         <AlarmSuppressionPanel :draft="draft" @update="emit('update', $event)" />
         <AlarmMessageTemplatePanel :draft="draft" @update="emit('update', $event)" />
       </div>
+      <div v-else-if="activeTab === 'test'" class="alarm-editor-shell__panel">
+        <AlarmTestPanel
+          :result="trialResult"
+          :running="trialRunning"
+          :error="trialError"
+          @run="emit('runTrial', $event)"
+        />
+      </div>
       <div v-else class="alarm-editor-shell__panel">
-        <strong>{{ tabTitle }}</strong>
-        <span>任务 8 实现</span>
+        <AlarmContractPanel
+          :contract="contract"
+          :loading="contractLoading"
+          :error="contractError"
+          @refresh="emit('refreshContract')"
+        />
       </div>
     </footer>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import type {
+  AlarmContract,
+  AlarmTrialPayload,
+  AlarmTrialResult,
+} from "@/api/schemas/alarm.schema";
 import type { AlarmRuleDraft } from "@/components/alarm/alarmRuleModel";
+import AlarmContractPanel from "./AlarmContractPanel.vue";
 import AlarmEditorHeader from "./AlarmEditorHeader.vue";
 import AlarmMessageTemplatePanel from "./AlarmMessageTemplatePanel.vue";
 import AlarmRuleForm from "./AlarmRuleForm.vue";
 import AlarmSuppressionPanel from "./AlarmSuppressionPanel.vue";
+import AlarmTestPanel from "./AlarmTestPanel.vue";
 
 export type AlarmEditorTab = "config" | "test" | "contract";
 
-const props = defineProps<{
+defineProps<{
   draft: AlarmRuleDraft | null;
   activeTab: AlarmEditorTab;
   loading: boolean;
   error: string;
   saving: boolean;
   deleting: boolean;
+  trialResult: AlarmTrialResult | null;
+  trialRunning: boolean;
+  trialError: string;
+  contract: AlarmContract | null;
+  contractLoading: boolean;
+  contractError: string;
 }>();
 
 const emit = defineEmits<{
@@ -78,6 +104,10 @@ const emit = defineEmits<{
   toggle: [];
   delete: [];
   selectTab: [tab: AlarmEditorTab];
+  runTrial: [payload: AlarmTrialPayload];
+  refreshContract: [];
+  openTarget: [];
+  checkCurrent: [];
 }>();
 
 const tabs: Array<{ value: AlarmEditorTab; label: string }> = [
@@ -85,10 +115,6 @@ const tabs: Array<{ value: AlarmEditorTab; label: string }> = [
   { value: "test", label: "试算" },
   { value: "contract", label: "契约" },
 ];
-
-const tabTitle = computed(() =>
-  props.activeTab === "test" ? "报警试算" : "规则契约",
-);
 </script>
 
 <style scoped>
