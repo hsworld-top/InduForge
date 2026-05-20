@@ -542,7 +542,7 @@ func (s *DataPointService) refreshDataPointValidity(ctx context.Context, project
 	}
 	for index := range records {
 		record := &records[index]
-		if record.Status == "invalid" || !isGeneratedDataPoint(record.SourceType) || record.SourceID == nil || strings.TrimSpace(*record.SourceID) == "" {
+		if !isGeneratedDataPoint(record.SourceType) || record.SourceID == nil || strings.TrimSpace(*record.SourceID) == "" {
 			continue
 		}
 		valid, err := s.isDataPointSourceValid(ctx, projectID, *record)
@@ -550,6 +550,16 @@ func (s *DataPointService) refreshDataPointValidity(ctx context.Context, project
 			return err
 		}
 		if valid {
+			if record.Status == "invalid" {
+				if err := s.repository.MarkActiveByID(ctx, projectID, record.ID, record.UpdatedBy); err != nil {
+					return err
+				}
+				record.Status = "active"
+				record.UpdatedAt = time.Now()
+			}
+			continue
+		}
+		if record.Status == "invalid" {
 			continue
 		}
 		if err := s.repository.MarkInvalidByID(ctx, projectID, record.ID, record.UpdatedBy); err != nil {

@@ -343,3 +343,23 @@ func (r *DataPointRepository) MarkInvalidByID(ctx context.Context, projectID, id
 	}
 	return nil
 }
+
+// MarkActiveByID 按主键恢复数据点有效状态。
+func (r *DataPointRepository) MarkActiveByID(ctx context.Context, projectID, id string, userID *string) error {
+	commandTag, err := r.pool.Exec(ctx, `
+        UPDATE data_points
+        SET status = 'active',
+            updated_by = COALESCE($3, updated_by),
+            updated_at = now()
+        WHERE project_id = $1
+          AND id = $2
+          AND status = 'invalid'
+    `, projectID, id, userID)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "恢复数据点有效状态失败", err)
+	}
+	if commandTag.RowsAffected() == 0 {
+		return nil
+	}
+	return nil
+}

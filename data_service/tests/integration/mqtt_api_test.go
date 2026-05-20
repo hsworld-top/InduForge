@@ -152,6 +152,22 @@ func TestMqttSubscriptionChineseNameDataPointStaysActive(t *testing.T) {
 	if point.SourceID == nil || *point.SourceID != subscription.ID {
 		t.Fatalf("expected source id %q, got %#v", subscription.ID, point.SourceID)
 	}
+
+	if _, err := fixture.pool.Exec(ctx, `
+		UPDATE data_points
+		SET status = 'invalid',
+		    updated_at = now()
+		WHERE project_id = $1 AND id = $2
+	`, projectID, point.ID); err != nil {
+		t.Fatalf("mark subscription datapoint invalid failed: %v", err)
+	}
+	refreshed := mustListDataPoints(t, server.URL, token, projectID, "type=mqtt.subscription&search=撒大苏打")
+	if len(refreshed.DataPoints) != 1 {
+		t.Fatalf("expected refreshed mqtt subscription datapoint, got %d", len(refreshed.DataPoints))
+	}
+	if refreshed.DataPoints[0].Status != "active" {
+		t.Fatalf("expected refreshed datapoint active, got %q", refreshed.DataPoints[0].Status)
+	}
 }
 
 type mqttConnectionPayload struct {
