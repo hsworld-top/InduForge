@@ -1,11 +1,19 @@
 import request from "@/utils/request";
 import { listResponseSchema } from "./schemas/common.schema";
 import {
+  AlarmContractSchema,
+  AlarmDraftValidationSchema,
   AlarmRuleSchema,
   AlarmRuleSaveSchema,
+  AlarmRuleUpdateSchema,
+  AlarmTrialPayloadSchema,
   AlarmTrialResultSchema,
+  type AlarmContract,
+  type AlarmDraftValidation,
   type AlarmRule,
   type AlarmRuleSave,
+  type AlarmRuleUpdate,
+  type AlarmTrialPayload,
   type AlarmTrialResult,
 } from "./schemas/alarm.schema";
 
@@ -20,10 +28,19 @@ type AlarmListResp = {
   };
 };
 
-/**
- * 获取报警规则列表。
- * 后端接口待实现，404 由 useApiError 兜底。
- */
+const unwrapData = (value: unknown) => {
+  if (
+    value &&
+    typeof value === "object" &&
+    "code" in value &&
+    "data" in value
+  ) {
+    return (value as { data?: unknown }).data;
+  }
+  return value;
+};
+
+/** 获取报警规则列表 */
 export async function getAlarmRules(
   projectId: string,
   params: Record<string, unknown> = {},
@@ -33,7 +50,7 @@ export async function getAlarmRules(
     method: "get",
     params,
   });
-  return alarmListSchema.parse(res);
+  return alarmListSchema.parse(unwrapData(res));
 }
 
 /** 获取报警规则详情 */
@@ -45,7 +62,7 @@ export async function getAlarmRule(
     url: `/data/projects/${projectId}/alarm-rules/${ruleId}`,
     method: "get",
   });
-  return AlarmRuleSchema.parse(res);
+  return AlarmRuleSchema.parse(unwrapData(res));
 }
 
 /** 创建报警规则 */
@@ -59,21 +76,36 @@ export async function createAlarmRule(
     method: "post",
     data: body,
   });
-  return AlarmRuleSchema.parse(res);
+  return AlarmRuleSchema.parse(unwrapData(res));
 }
 
 /** 更新报警规则 */
 export async function updateAlarmRule(
   projectId: string,
   ruleId: string,
-  data: Partial<AlarmRuleSave>,
+  data: AlarmRuleUpdate,
 ): Promise<AlarmRule> {
+  const body = AlarmRuleUpdateSchema.parse(data);
   const res = await request({
     url: `/data/projects/${projectId}/alarm-rules/${ruleId}`,
     method: "put",
-    data,
+    data: body,
   });
-  return AlarmRuleSchema.parse(res);
+  return AlarmRuleSchema.parse(unwrapData(res));
+}
+
+/** 启停报警规则 */
+export async function toggleAlarmRule(
+  projectId: string,
+  ruleId: string,
+  isEnabled: boolean,
+): Promise<AlarmRule> {
+  const res = await request({
+    url: `/data/projects/${projectId}/alarm-rules/${ruleId}/enabled`,
+    method: "patch",
+    data: { isEnabled },
+  });
+  return AlarmRuleSchema.parse(unwrapData(res));
 }
 
 /** 删除报警规则 */
@@ -87,19 +119,43 @@ export async function deleteAlarmRule(
   });
 }
 
-/**
- * 试算报警规则（模拟触发评估）。
- * 后端接口待实现。
- */
-export async function trialAlarmRule(
+/** 试算报警规则 */
+export async function testAlarmRule(
   projectId: string,
   ruleId: string,
-  context: Record<string, unknown> = {},
+  payload: AlarmTrialPayload = {},
 ): Promise<AlarmTrialResult> {
+  const body = AlarmTrialPayloadSchema.parse(payload);
   const res = await request({
-    url: `/data/projects/${projectId}/alarm-rules/${ruleId}/trial`,
+    url: `/data/projects/${projectId}/alarm-rules/${ruleId}/test`,
     method: "post",
-    data: context,
+    data: body,
   });
-  return AlarmTrialResultSchema.parse(res);
+  return AlarmTrialResultSchema.parse(unwrapData(res));
+}
+
+/** 获取报警规则契约 */
+export async function getAlarmRuleContract(
+  projectId: string,
+  ruleId: string,
+): Promise<AlarmContract> {
+  const res = await request({
+    url: `/data/projects/${projectId}/alarm-rules/${ruleId}/contract`,
+    method: "get",
+  });
+  return AlarmContractSchema.parse(unwrapData(res));
+}
+
+/** 校验未保存草稿 */
+export async function validateAlarmRuleDraft(
+  projectId: string,
+  data: AlarmRuleSave,
+): Promise<AlarmDraftValidation> {
+  const body = AlarmRuleSaveSchema.parse(data);
+  const res = await request({
+    url: `/data/projects/${projectId}/alarm-rules/validate-draft`,
+    method: "post",
+    data: body,
+  });
+  return AlarmDraftValidationSchema.parse(unwrapData(res));
 }

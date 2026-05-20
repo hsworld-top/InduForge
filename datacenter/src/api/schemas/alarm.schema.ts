@@ -1,32 +1,55 @@
 import { z } from "zod";
-import { IdSchema, TimeFieldSchema } from "./common.schema";
+import { TimeFieldSchema } from "./common.schema";
 
-// 报警级别
-export const AlarmLevelSchema = z.enum([
-  "critical",
-  "major",
-  "minor",
-  "warning",
-  "info",
+const ObjectRecordSchema = z.record(z.string(), z.unknown());
+
+export const AlarmRuleTypeSchema = z.enum([
+  "H",
+  "L",
+  "HH",
+  "LL",
+  "deviation_high",
+  "deviation_low",
+  "rate_of_change",
+  "cel",
 ]);
 
-export type AlarmLevel = z.infer<typeof AlarmLevelSchema>;
+export type AlarmRuleType = z.infer<typeof AlarmRuleTypeSchema>;
 
-// 报警规则状态
-export const AlarmRuleStatusSchema = z.enum(["enabled", "disabled"]);
+export const AlarmSeveritySchema = z.enum([
+  "info",
+  "warning",
+  "major",
+  "critical",
+]);
 
-export type AlarmRuleStatus = z.infer<typeof AlarmRuleStatusSchema>;
+export type AlarmSeverity = z.infer<typeof AlarmSeveritySchema>;
 
-// 报警规则
+export const AlarmTrialStateSchema = z.enum([
+  "triggered",
+  "not_triggered",
+  "insufficient_input",
+]);
+
+export type AlarmTrialState = z.infer<typeof AlarmTrialStateSchema>;
+
 export const AlarmRuleSchema = z
   .object({
-    id: IdSchema,
+    id: z.string(),
+    projectId: z.string(),
     name: z.string(),
-    level: AlarmLevelSchema.or(z.string()).optional(),
-    status: AlarmRuleStatusSchema.or(z.string()).optional(),
     description: z.string().optional().nullable(),
-    condition: z.record(z.string(), z.unknown()).optional(),
-    notifyChannels: z.array(z.string()).optional(),
+    targetDatapointId: z.string(),
+    targetPath: z.string(),
+    targetName: z.string().optional().nullable(),
+    targetDataType: z.string(),
+    ruleType: AlarmRuleTypeSchema,
+    condition: ObjectRecordSchema,
+    severity: AlarmSeveritySchema,
+    isEnabled: z.boolean(),
+    suppression: ObjectRecordSchema,
+    messageTemplate: z.string(),
+    contract: ObjectRecordSchema,
     createdAt: TimeFieldSchema,
     updatedAt: TimeFieldSchema,
   })
@@ -34,27 +57,61 @@ export const AlarmRuleSchema = z
 
 export type AlarmRule = z.infer<typeof AlarmRuleSchema>;
 
-// 报警规则创建/更新参数
 export const AlarmRuleSaveSchema = z
   .object({
     name: z.string(),
-    level: z.string().optional(),
-    condition: z.record(z.string(), z.unknown()).optional(),
     description: z.string().optional().nullable(),
-    notifyChannels: z.array(z.string()).optional(),
+    targetPath: z.string(),
+    ruleType: AlarmRuleTypeSchema,
+    condition: ObjectRecordSchema,
+    severity: AlarmSeveritySchema,
+    isEnabled: z.boolean(),
+    suppression: ObjectRecordSchema,
+    messageTemplate: z.string(),
   })
   .passthrough();
 
 export type AlarmRuleSave = z.infer<typeof AlarmRuleSaveSchema>;
 
-// 报警试算结果
+export const AlarmRuleUpdateSchema = AlarmRuleSaveSchema.partial();
+
+export type AlarmRuleUpdate = z.infer<typeof AlarmRuleUpdateSchema>;
+
+export const AlarmTrialPayloadSchema = z
+  .object({
+    value: z.unknown().optional(),
+    timestamp: z.string().optional(),
+    context: ObjectRecordSchema.optional(),
+  })
+  .passthrough();
+
+export type AlarmTrialPayload = z.infer<typeof AlarmTrialPayloadSchema>;
+
 export const AlarmTrialResultSchema = z
   .object({
-    triggered: z.boolean().optional(),
+    triggered: z.boolean(),
+    state: AlarmTrialStateSchema,
+    severity: AlarmSeveritySchema,
+    ruleType: AlarmRuleTypeSchema,
+    targetPath: z.string(),
     message: z.string().optional().nullable(),
-    matchedDatapoints: z.array(z.string()).optional(),
-    evaluatedAt: TimeFieldSchema,
+    diagnostics: ObjectRecordSchema,
   })
   .passthrough();
 
 export type AlarmTrialResult = z.infer<typeof AlarmTrialResultSchema>;
+
+export const AlarmDraftValidationSchema = z
+  .object({
+    valid: z.boolean(),
+    errors: z.array(z.unknown()).default([]),
+    target: ObjectRecordSchema.optional(),
+    contract: ObjectRecordSchema.optional(),
+  })
+  .passthrough();
+
+export type AlarmDraftValidation = z.infer<typeof AlarmDraftValidationSchema>;
+
+export const AlarmContractSchema = ObjectRecordSchema;
+
+export type AlarmContract = z.infer<typeof AlarmContractSchema>;
