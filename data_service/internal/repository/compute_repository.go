@@ -391,7 +391,57 @@ func (r *ComputeRepository) UpdateFolder(ctx context.Context, projectID, folderI
 	return &record, nil
 }
 
-// DeleteFolder 删除计算单元文件夹，子文件夹级联删除，单元自动回到根目录。
+// ListUnitIDsByFolderTree 查询文件夹及其子文件夹内的计算单元 ID。
+func (r *ComputeRepository) ListUnitIDsByFolderTree(ctx context.Context, projectID, folderID string) ([]string, error) {
+	rows, err := r.pool.Query(ctx, `
+        WITH RECURSIVE target_folders AS (
+            SELECT id
+            FROM data_compute_folders
+            WHERE project_id = $1 AND id = $2
+            UNION ALL
+            SELECT child.id
+            FROM data_compute_folders child
+            INNER JOIN target_folders parent ON child.parent_id = parent.id
+            WHERE child.project_id = $1
+        )
+        SELECT id
+        FROM data_compute_units
+        WHERE project_id = $1 AND folder_id IN (SELECT id FROM target_folders)
+    `, projectID, folderID)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询计算文件夹内单元失败", err)
+	}
+	defer rows.Close()
+
+	ids := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取计算文件夹内单元失败", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历计算文件夹内单元失败", err)
+	}
+	return ids, nil
+}
+
+// DeleteUnits 按项目批量删除计算单元。
+func (r *ComputeRepository) DeleteUnits(ctx context.Context, projectID string, unitIDs []string) error {
+	if len(unitIDs) == 0 {
+		return nil
+	}
+	if _, err := r.pool.Exec(ctx, `
+        DELETE FROM data_compute_units
+        WHERE project_id = $1 AND id = ANY($2::uuid[])
+    `, projectID, unitIDs); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "批量删除计算单元失败", err)
+	}
+	return nil
+}
+
+// DeleteFolder 删除计算单元文件夹，子文件夹级联删除。
 func (r *ComputeRepository) DeleteFolder(ctx context.Context, projectID, folderID string) error {
 	commandTag, err := r.pool.Exec(ctx, `
         DELETE FROM data_compute_folders

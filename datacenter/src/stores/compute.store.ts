@@ -8,6 +8,7 @@ import {
   createComputeFolder,
   updateComputeFolder,
   updateComputeUnit,
+  deleteComputeFolder,
   deleteComputeUnit,
   toggleComputeUnit,
   getComputeDependencies,
@@ -56,7 +57,10 @@ export const useComputeStore = defineStore("compute", () => {
 
   const hasEditing = computed(() => editing.value !== null);
 
-  async function fetchList(projectId: string, params: Record<string, unknown> = {}) {
+  async function fetchList(
+    projectId: string,
+    params: Record<string, unknown> = {},
+  ) {
     loading.value = true;
     listError.value = "";
     try {
@@ -130,7 +134,10 @@ export const useComputeStore = defineStore("compute", () => {
     createError.value = "";
     try {
       const folder = await createComputeFolder(projectId, data);
-      folders.value = [folder, ...folders.value.filter((item) => item.id !== folder.id)];
+      folders.value = [
+        folder,
+        ...folders.value.filter((item) => item.id !== folder.id),
+      ];
       fetchFolders(projectId).catch(() => undefined);
       return folder;
     } catch (error) {
@@ -188,7 +195,21 @@ export const useComputeStore = defineStore("compute", () => {
     }
   }
 
-  async function setUnitEnabled(projectId: string, id: string, enabled: boolean) {
+  async function removeFolder(projectId: string, folderId: string) {
+    deleting.value = true;
+    try {
+      await deleteComputeFolder(projectId, folderId);
+      await Promise.allSettled([fetchList(projectId), fetchFolders(projectId)]);
+    } finally {
+      deleting.value = false;
+    }
+  }
+
+  async function setUnitEnabled(
+    projectId: string,
+    id: string,
+    enabled: boolean,
+  ) {
     saving.value = true;
     try {
       const unit = await toggleComputeUnit(projectId, id, enabled);
@@ -217,7 +238,10 @@ export const useComputeStore = defineStore("compute", () => {
   }
 
   /** 开始调试会话 */
-  function startDebug(unitId: string | number, input: Record<string, unknown> = {}) {
+  function startDebug(
+    unitId: string | number,
+    input: Record<string, unknown> = {},
+  ) {
     debugSession.value = { unitId, input, result: null, running: true };
   }
 
@@ -262,6 +286,7 @@ export const useComputeStore = defineStore("compute", () => {
     saveFolder,
     saveUnit,
     removeUnit,
+    removeFolder,
     setUnitEnabled,
     fetchDependencies,
     startDebug,

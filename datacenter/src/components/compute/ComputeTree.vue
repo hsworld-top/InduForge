@@ -1,56 +1,41 @@
 <template>
-  <aside class="compute-tree" :class="{ 'is-collapsed': collapsed }">
+  <aside class="compute-tree">
     <header class="compute-tree__head">
-      <div v-if="!collapsed">
+      <div class="compute-tree__title">
         <h2>计算单元</h2>
-        <p>{{ total }} 个单元</p>
       </div>
-      <button
-        type="button"
-        class="compute-tree__icon-btn"
-        :title="collapsed ? '展开资源树' : '收起资源树'"
-        :aria-label="collapsed ? '展开资源树' : '收起资源树'"
-        @click="$emit('toggleCollapse')"
-      >
-        <IconTablerLayoutSidebarLeftCollapse
-          v-if="!collapsed"
-          class="compute-tree__icon"
-        />
-        <IconTablerLayoutSidebarLeftExpand v-else class="compute-tree__icon" />
-      </button>
+      <div class="compute-tree__actions">
+        <button
+          type="button"
+          class="compute-tree__primary"
+          title="新建单元"
+          aria-label="新建单元"
+          @click="$emit('createUnit')"
+        >
+          <IconTablerPlus class="compute-tree__button-icon" />
+        </button>
+        <button
+          type="button"
+          class="compute-tree__secondary"
+          title="新建文件夹"
+          aria-label="新建文件夹"
+          @click="$emit('createFolder')"
+        >
+          <IconTablerFolderPlus class="compute-tree__button-icon" />
+        </button>
+        <button
+          type="button"
+          class="compute-tree__secondary compute-tree__refresh"
+          title="刷新"
+          aria-label="刷新"
+          @click="$emit('refresh')"
+        >
+          <IconTablerRefresh class="compute-tree__button-icon" />
+        </button>
+      </div>
     </header>
 
-    <div v-if="collapsed" class="compute-tree__rail">
-      <button
-        type="button"
-        class="compute-tree__rail-btn"
-        title="新建单元"
-        aria-label="新建单元"
-        @click="$emit('createUnit')"
-      >
-        <IconTablerPlus class="compute-tree__button-icon" />
-      </button>
-      <button
-        type="button"
-        class="compute-tree__rail-btn"
-        title="新建文件夹"
-        aria-label="新建文件夹"
-        @click="$emit('createFolder')"
-      >
-        <IconTablerFolderPlus class="compute-tree__button-icon" />
-      </button>
-      <button
-        type="button"
-        class="compute-tree__rail-btn"
-        title="刷新"
-        aria-label="刷新"
-        @click="$emit('refresh')"
-      >
-        <IconTablerRefresh class="compute-tree__button-icon" />
-      </button>
-    </div>
-
-    <div v-else class="compute-tree__toolbar">
+    <div class="compute-tree__searchbar">
       <el-input
         v-model="keyword"
         class="compute-tree__search"
@@ -59,49 +44,22 @@
         placeholder="搜索计算单元"
         :prefix-icon="SearchIcon"
       />
-      <button
-        type="button"
-        class="compute-tree__primary"
-        title="新建单元"
-        aria-label="新建单元"
-        @click="$emit('createUnit')"
-      >
-        <IconTablerPlus class="compute-tree__button-icon" />
-      </button>
-      <button
-        type="button"
-        class="compute-tree__secondary"
-        title="新建文件夹"
-        aria-label="新建文件夹"
-        @click="$emit('createFolder')"
-      >
-        <IconTablerFolderPlus class="compute-tree__button-icon" />
-      </button>
-      <button
-        type="button"
-        class="compute-tree__secondary compute-tree__refresh"
-        title="刷新"
-        aria-label="刷新"
-        @click="$emit('refresh')"
-      >
-        <IconTablerRefresh class="compute-tree__button-icon" />
-      </button>
     </div>
 
-    <div v-if="listError && !collapsed" class="compute-tree__error">
+    <div v-if="listError" class="compute-tree__error">
       <IconTablerAlertCircle class="compute-tree__error-icon" />
       <span>{{ listError }}</span>
     </div>
-    <div v-else-if="foldersError && !collapsed" class="compute-tree__warn">
+    <div v-else-if="foldersError" class="compute-tree__warn">
       <IconTablerAlertCircle class="compute-tree__error-icon" />
       <span>{{ foldersError }}</span>
     </div>
 
-    <div v-if="loading && !collapsed" class="compute-tree__loading">
+    <div v-if="loading" class="compute-tree__loading">
       <el-skeleton :rows="8" animated />
     </div>
 
-    <div v-else-if="!collapsed" class="compute-tree__body">
+    <div v-else class="compute-tree__body">
       <ComputeTreeBranch
         v-for="folder in filteredFolders"
         :key="folder.id"
@@ -123,15 +81,13 @@
         <IconTablerFileCode class="compute-tree__unit-icon" />
         <span class="compute-tree__unit-main">
           <span class="compute-tree__unit-name">{{ unit.name }}</span>
-          <span class="compute-tree__unit-path">
-            {{ unit.outputPath || unit.path || "calc.*" }}
-          </span>
         </span>
-        <StatusBadge
+        <span
           class="compute-tree__unit-status"
-          :tone="statusTone(unit.status)"
-          :text="statusText(unit.status)"
-        />
+          :class="`is-${statusTone(unit.status)}`"
+          :title="statusText(unit.status)"
+          :aria-label="statusText(unit.status)"
+        ></span>
       </button>
 
       <EmptyState
@@ -143,6 +99,8 @@
         "
       />
     </div>
+
+    <footer class="compute-tree__foot">{{ total }} 个单元</footer>
 
     <Teleport to="body">
       <div
@@ -164,6 +122,14 @@
             <IconTablerFolderSymlink class="compute-tree__menu-icon" />
             <span>移动到分组</span>
           </button>
+          <button
+            type="button"
+            class="is-danger"
+            @click="emitContextAction('delete')"
+          >
+            <IconTablerTrash class="compute-tree__menu-icon" />
+            <span>删除</span>
+          </button>
         </div>
       </div>
     </Teleport>
@@ -177,17 +143,12 @@ import IconTablerAlertCircle from "~icons/tabler/alert-circle";
 import IconTablerFileCode from "~icons/tabler/file-code";
 import IconTablerFolderPlus from "~icons/tabler/folder-plus";
 import IconTablerFolderSymlink from "~icons/tabler/folder-symlink";
-import IconTablerLayoutSidebarLeftCollapse from "~icons/tabler/layout-sidebar-left-collapse";
-import IconTablerLayoutSidebarLeftExpand from "~icons/tabler/layout-sidebar-left-expand";
 import IconTablerPencil from "~icons/tabler/pencil";
 import IconTablerPlus from "~icons/tabler/plus";
 import IconTablerRefresh from "~icons/tabler/refresh";
-import type {
-  ComputeFolder,
-  ComputeUnit,
-} from "@/api/schemas/compute.schema";
+import IconTablerTrash from "~icons/tabler/trash";
+import type { ComputeFolder, ComputeUnit } from "@/api/schemas/compute.schema";
 import EmptyState from "@/components/shared/EmptyState.vue";
-import StatusBadge from "@/components/shared/StatusBadge.vue";
 import ComputeTreeBranch from "./ComputeTreeBranch.vue";
 import {
   buildComputeFolderTree,
@@ -205,14 +166,12 @@ const props = withDefaults(
     loading?: boolean;
     listError?: string;
     foldersError?: string;
-    collapsed?: boolean;
   }>(),
   {
     selectedUnitId: null,
     loading: false,
     listError: "",
     foldersError: "",
-    collapsed: false,
   },
 );
 
@@ -221,11 +180,12 @@ const emit = defineEmits<{
   (event: "createUnit"): void;
   (event: "createFolder"): void;
   (event: "refresh"): void;
-  (event: "toggleCollapse"): void;
   (event: "renameUnit", unit: ComputeUnit): void;
   (event: "moveUnit", unit: ComputeUnit): void;
+  (event: "deleteUnit", unit: ComputeUnit): void;
   (event: "renameFolder", folder: ComputeFolderTreeNode): void;
   (event: "moveFolder", folder: ComputeFolderTreeNode): void;
+  (event: "deleteFolder", folder: ComputeFolderTreeNode): void;
 }>();
 
 const keyword = ref("");
@@ -248,7 +208,11 @@ const contextMenu = ref<{
 const total = computed(() => props.units.length);
 const tree = computed(() => buildComputeFolderTree(props.folders, props.units));
 const filteredTree = computed(() =>
-  filterComputeTree(tree.value.rootFolders, tree.value.rootUnits, keyword.value),
+  filterComputeTree(
+    tree.value.rootFolders,
+    tree.value.rootUnits,
+    keyword.value,
+  ),
 );
 const filteredFolders = computed(() => filteredTree.value.folders);
 const filteredRootUnits = computed(() => filteredTree.value.units);
@@ -258,7 +222,7 @@ function openUnitMenu(event: MouseEvent, unit: ComputeUnit) {
     visible: true,
     type: "unit",
     x: Math.min(event.clientX, window.innerWidth - 180),
-    y: Math.min(event.clientY, window.innerHeight - 96),
+    y: Math.min(event.clientY, window.innerHeight - 126),
     unit,
     folder: null,
   };
@@ -269,7 +233,7 @@ function openFolderMenu(event: MouseEvent, folder: ComputeFolderTreeNode) {
     visible: true,
     type: "folder",
     x: Math.min(event.clientX, window.innerWidth - 180),
-    y: Math.min(event.clientY, window.innerHeight - 96),
+    y: Math.min(event.clientY, window.innerHeight - 126),
     unit: null,
     folder,
   };
@@ -279,12 +243,16 @@ function closeContextMenu() {
   contextMenu.value.visible = false;
 }
 
-function emitContextAction(action: "rename" | "move") {
+function emitContextAction(action: "rename" | "move" | "delete") {
   const { type, unit, folder } = contextMenu.value;
   closeContextMenu();
   if (type === "unit" && unit) {
     if (action === "rename") {
       emit("renameUnit", unit);
+      return;
+    }
+    if (action === "delete") {
+      emit("deleteUnit", unit);
       return;
     }
     emit("moveUnit", unit);
@@ -293,6 +261,10 @@ function emitContextAction(action: "rename" | "move") {
   if (type === "folder" && folder) {
     if (action === "rename") {
       emit("renameFolder", folder);
+      return;
+    }
+    if (action === "delete") {
+      emit("deleteFolder", folder);
       return;
     }
     emit("moveFolder", folder);
@@ -341,11 +313,6 @@ const statusTone = (status?: string) => {
   border-bottom: 1px solid var(--dc-border);
 }
 
-.compute-tree.is-collapsed .compute-tree__head {
-  justify-content: center;
-  padding: 8px;
-}
-
 .compute-tree__head h2 {
   margin: 0;
   color: var(--dc-text);
@@ -354,27 +321,23 @@ const statusTone = (status?: string) => {
   line-height: 1.3;
 }
 
-.compute-tree__head p {
-  margin: 2px 0 0;
-  color: var(--dc-text-muted);
-  font-size: 12px;
+.compute-tree__title {
+  min-width: 0;
 }
 
-.compute-tree__toolbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 30px 30px 30px;
+.compute-tree__actions {
+  display: flex;
+  align-items: center;
   gap: 6px;
-  padding: 8px;
-  border-bottom: 1px solid var(--dc-border);
+  flex: 0 0 auto;
 }
 
-.compute-tree__search {
-  grid-column: auto;
+.compute-tree__searchbar {
+  padding: 8px;
 }
 
 .compute-tree__primary,
-.compute-tree__secondary,
-.compute-tree__icon-btn {
+.compute-tree__secondary {
   min-width: 0;
   display: inline-flex;
   align-items: center;
@@ -403,55 +366,22 @@ const statusTone = (status?: string) => {
   color: var(--dc-surface-raised);
 }
 
-.compute-tree__secondary,
-.compute-tree__icon-btn {
+.compute-tree__secondary {
   border: 1px solid var(--dc-border);
   background: var(--dc-surface-raised);
   color: var(--dc-text-secondary);
 }
 
 .compute-tree__primary:hover,
-.compute-tree__secondary:hover,
-.compute-tree__icon-btn:hover {
+.compute-tree__secondary:hover {
   transform: translateY(-1px);
 }
 
-.compute-tree__secondary:hover,
-.compute-tree__icon-btn:hover {
+.compute-tree__secondary:hover {
   border-color: rgba(29, 78, 216, 0.28);
   color: var(--dc-primary);
 }
 
-.compute-tree__icon-btn {
-  width: 30px;
-  height: 30px;
-}
-
-.compute-tree__rail {
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  padding: 10px 8px;
-}
-
-.compute-tree__rail-btn {
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-raised);
-  color: var(--dc-text-secondary);
-}
-
-.compute-tree__rail-btn:hover {
-  color: var(--dc-primary);
-  background: var(--dc-primary-soft);
-}
-
-.compute-tree__icon,
 .compute-tree__button-icon,
 .compute-tree__error-icon,
 .compute-tree__unit-icon {
@@ -464,8 +394,8 @@ const statusTone = (status?: string) => {
   flex: 1;
   display: grid;
   align-content: start;
-  gap: 4px;
-  padding: 8px;
+  gap: 2px;
+  padding: 6px;
   overflow-y: auto;
 }
 
@@ -513,12 +443,12 @@ const statusTone = (status?: string) => {
 }
 
 .compute-tree__unit {
-  min-height: 38px;
+  min-height: 30px;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  padding: 5px 7px;
+  gap: 6px;
+  padding: 3px 6px;
 }
 
 .compute-tree__unit.is-active {
@@ -529,12 +459,10 @@ const statusTone = (status?: string) => {
 
 .compute-tree__unit-main {
   min-width: 0;
-  display: grid;
-  gap: 3px;
+  display: block;
 }
 
-.compute-tree__unit-name,
-.compute-tree__unit-path {
+.compute-tree__unit-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -547,13 +475,36 @@ const statusTone = (status?: string) => {
   font-weight: 700;
 }
 
-.compute-tree__unit-path {
-  color: var(--dc-text-muted);
-  font-size: 11px;
+.compute-tree__unit-status {
+  width: 8px;
+  height: 8px;
+  justify-self: end;
+  border-radius: 999px;
+  background: var(--dc-text-muted);
 }
 
-.compute-tree__unit-status {
-  max-width: 76px;
+.compute-tree__unit-status.is-success {
+  background: var(--dc-success);
+}
+
+.compute-tree__unit-status.is-danger {
+  background: var(--dc-danger);
+}
+
+.compute-tree__unit-status.is-muted {
+  background: var(--dc-text-muted);
+}
+
+.compute-tree__unit-status.is-info {
+  background: var(--dc-primary);
+}
+
+.compute-tree__foot {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  color: var(--dc-text-muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .compute-tree__menu-mask {
@@ -590,6 +541,11 @@ const statusTone = (status?: string) => {
 .compute-tree__context-menu button:hover {
   background: var(--dc-surface-muted);
   color: var(--dc-primary);
+}
+
+.compute-tree__context-menu button.is-danger:hover {
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
 }
 
 .compute-tree__menu-icon {

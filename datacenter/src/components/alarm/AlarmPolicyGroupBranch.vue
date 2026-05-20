@@ -53,9 +53,6 @@
         <IconTablerBell class="alarm-policy-branch__row-icon" />
         <span class="alarm-policy-branch__row-main">
           <span class="alarm-policy-branch__row-name">{{ policy.name }}</span>
-          <span class="alarm-policy-branch__row-path">
-            {{ policySummary(policy) }}
-          </span>
         </span>
         <StatusBadge
           class="alarm-policy-branch__row-status"
@@ -128,19 +125,12 @@ const isSelected = (id: string) => {
 const groupAllSelected = (ids: string[]) =>
   ids.length > 0 && ids.every((id) => isSelected(id));
 const groupSomeSelected = (ids: string[]) => ids.some((id) => isSelected(id));
-
-const policySummary = (policy: AlarmPolicy) => {
-  if (policy.mode === "derived") {
-    return policy.derivedExpression || "计算后判断";
-  }
-  return policy.targets.map((target) => target.path).join("、") || "逐点判断";
-};
 </script>
 
 <style scoped>
 .alarm-policy-branch {
   display: grid;
-  gap: 4px;
+  gap: 2px;
 }
 
 .alarm-policy-branch__group,
@@ -153,12 +143,12 @@ const policySummary = (policy: AlarmPolicy) => {
 }
 
 .alarm-policy-branch__group {
-  min-height: 32px;
+  min-height: 28px;
   display: grid;
   grid-template-columns: 16px auto 18px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px;
+  gap: 5px;
+  padding: 0 6px;
   font-size: 13px;
   font-weight: 700;
   text-align: left;
@@ -190,8 +180,7 @@ const policySummary = (policy: AlarmPolicy) => {
 }
 
 .alarm-policy-branch__group-name,
-.alarm-policy-branch__row-name,
-.alarm-policy-branch__row-path {
+.alarm-policy-branch__row-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -210,19 +199,18 @@ const policySummary = (policy: AlarmPolicy) => {
 
 .alarm-policy-branch__children {
   display: grid;
-  gap: 4px;
-  margin-left: 12px;
-  padding-left: 8px;
-  border-left: 1px solid var(--dc-border);
+  gap: 2px;
+  margin-left: 10px;
+  padding-left: 6px;
 }
 
 .alarm-policy-branch__row {
-  min-height: 44px;
+  min-height: 30px;
   display: grid;
   grid-template-columns: auto 18px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 6px;
+  padding: 3px 6px;
   text-align: left;
 }
 
@@ -238,19 +226,13 @@ const policySummary = (policy: AlarmPolicy) => {
 
 .alarm-policy-branch__row-main {
   min-width: 0;
-  display: grid;
-  gap: 3px;
+  display: block;
 }
 
 .alarm-policy-branch__row-name {
   color: var(--dc-text);
   font-size: 13px;
   font-weight: 700;
-}
-
-.alarm-policy-branch__row-path {
-  color: var(--dc-text-muted);
-  font-size: 11px;
 }
 
 .alarm-policy-branch__row-status {

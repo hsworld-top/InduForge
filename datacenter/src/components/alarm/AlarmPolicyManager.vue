@@ -1,70 +1,10 @@
 <template>
-  <aside class="alarm-policy-manager" :class="{ 'is-collapsed': collapsed }">
+  <aside class="alarm-policy-manager">
     <header class="alarm-policy-manager__head">
-      <div v-if="!collapsed">
+      <div class="alarm-policy-manager__title">
         <h2>{{ t("alarm.policies") }}</h2>
-        <p>{{ t("alarm.policyCount", { count: total }) }}</p>
       </div>
-      <button
-        type="button"
-        class="alarm-policy-manager__icon-btn"
-        :title="collapsed ? t('actions.expand') : t('actions.collapse')"
-        :aria-label="collapsed ? t('actions.expand') : t('actions.collapse')"
-        @click="collapsed = !collapsed"
-      >
-        <IconTablerLayoutSidebarLeftCollapse
-          v-if="!collapsed"
-          class="alarm-policy-manager__icon"
-        />
-        <IconTablerLayoutSidebarLeftExpand
-          v-else
-          class="alarm-policy-manager__icon"
-        />
-      </button>
-    </header>
-
-    <div v-if="collapsed" class="alarm-policy-manager__rail">
-      <button
-        type="button"
-        class="alarm-policy-manager__rail-btn"
-        :title="t('alarm.createPolicy')"
-        :aria-label="t('alarm.createPolicy')"
-        @click="emit('create')"
-      >
-        <IconTablerPlus class="alarm-policy-manager__button-icon" />
-      </button>
-      <button
-        type="button"
-        class="alarm-policy-manager__rail-btn"
-        :title="t('alarm.createGroup')"
-        :aria-label="t('alarm.createGroup')"
-        @click="emit('createGroup')"
-      >
-        <IconTablerFolderPlus class="alarm-policy-manager__button-icon" />
-      </button>
-      <button
-        type="button"
-        class="alarm-policy-manager__rail-btn"
-        :title="t('actions.refresh')"
-        :aria-label="t('alarm.refreshPolicies')"
-        :disabled="loading"
-        @click="emit('refresh')"
-      >
-        <IconTablerRefresh class="alarm-policy-manager__button-icon" />
-      </button>
-    </div>
-
-    <template v-else>
-      <div class="alarm-policy-manager__toolbar">
-        <el-input
-          v-model="filters.search"
-          class="alarm-policy-manager__search"
-          clearable
-          size="small"
-          :placeholder="t('alarm.searchPlaceholder')"
-          :prefix-icon="SearchIcon"
-          @input="emitFilter"
-        />
+      <div class="alarm-policy-manager__actions">
         <button
           type="button"
           class="alarm-policy-manager__primary"
@@ -94,178 +34,224 @@
           <IconTablerRefresh class="alarm-policy-manager__button-icon" />
         </button>
       </div>
+    </header>
 
-      <div class="alarm-policy-manager__filters">
-        <label>
-          <span>{{ t("alarm.status") }}</span>
-          <select v-model="filters.enabled" @change="emitFilter">
-            <option
-              v-for="item in enabledOptions"
-              :key="item.value"
-              :value="item.value"
-            >
-              {{ item.label }}
-            </option>
-          </select>
-        </label>
-        <label>
-          <span>{{ t("alarm.type") }}</span>
-          <select v-model="filters.conditionType" @change="emitFilter">
-            <option value="">{{ t("alarm.all") }}</option>
-            <option
-              v-for="item in conditionTypeOptions"
-              :key="item.value"
-              :value="item.value"
-            >
-              {{ item.label }}
-            </option>
-          </select>
-        </label>
-      </div>
+    <div class="alarm-policy-manager__filterbar">
+      <el-input
+        v-model="filters.search"
+        class="alarm-policy-manager__search"
+        clearable
+        size="small"
+        :placeholder="t('alarm.searchPlaceholder')"
+        :prefix-icon="SearchIcon"
+        @input="emitFilter"
+      />
+      <el-popover
+        trigger="click"
+        placement="bottom-start"
+        :width="130"
+        transition=""
+        :hide-after="0"
+        popper-class="alarm-policy-manager__popover"
+      >
+        <template #reference>
+          <PillButton
+            class="alarm-policy-manager__filter-pill"
+            :active="filters.enabled !== ''"
+          >
+            {{ enabledLabel }}
+          </PillButton>
+        </template>
+        <div class="alarm-policy-manager__pop-list">
+          <button
+            v-for="item in enabledOptions"
+            :key="item.value"
+            type="button"
+            class="alarm-policy-manager__pop-item"
+            :class="{ 'is-active': filters.enabled === item.value }"
+            @click="selectEnabled(item.value)"
+          >
+            {{ item.label }}
+          </button>
+        </div>
+      </el-popover>
 
-      <div class="alarm-policy-manager__selectbar">
-        <label>
-          <input
-            type="checkbox"
-            :checked="allVisibleSelected"
-            :indeterminate.prop="someVisibleSelected && !allVisibleSelected"
-            :disabled="!visiblePolicies.length"
-            @change="toggleVisible(checked($event))"
-          />
-          <span>{{ t("alarm.currentResult") }}</span>
-        </label>
+      <el-popover
+        trigger="click"
+        placement="bottom-start"
+        :width="170"
+        transition=""
+        :hide-after="0"
+        popper-class="alarm-policy-manager__popover"
+      >
+        <template #reference>
+          <PillButton
+            class="alarm-policy-manager__filter-pill"
+            :active="filters.conditionType !== ''"
+          >
+            {{ conditionTypeLabel }}
+          </PillButton>
+        </template>
+        <div class="alarm-policy-manager__pop-list">
+          <button
+            v-for="item in conditionFilterOptions"
+            :key="item.value"
+            type="button"
+            class="alarm-policy-manager__pop-item"
+            :class="{ 'is-active': filters.conditionType === item.value }"
+            @click="selectConditionType(item.value)"
+          >
+            {{ item.label }}
+          </button>
+        </div>
+      </el-popover>
+    </div>
+
+    <div class="alarm-policy-manager__selectbar">
+      <label class="alarm-policy-manager__select-control">
+        <input
+          type="checkbox"
+          :checked="allVisibleSelected"
+          :indeterminate.prop="someVisibleSelected && !allVisibleSelected"
+          :disabled="!visiblePolicies.length"
+          @change="toggleVisible(checked($event))"
+        />
+      </label>
+      <div class="alarm-policy-manager__select-actions">
         <button
+          v-if="hasFilters"
           type="button"
           :disabled="!visiblePolicies.length"
           @click="selectFiltered"
         >
-          {{ t("alarm.selectFiltered") }}
+          {{ t("alarm.selectMatched") }}
         </button>
         <button
           v-if="selectedCount"
           type="button"
           @click="emit('clearSelection')"
         >
-          {{ t("actions.clean") }}
+          {{ t("alarm.cancelSelection") }}
         </button>
       </div>
+    </div>
 
-      <div v-if="selectedCount" class="alarm-policy-manager__bulk">
-        <strong>{{
-          t("alarm.selectedCount", { count: selectedCount })
-        }}</strong>
-        <button
-          type="button"
-          :disabled="!selectedCount"
-          @click="emit('batchEnable')"
-        >
-          {{ t("common.enabled") }}
-        </button>
-        <button
-          type="button"
-          :disabled="!selectedCount"
-          @click="emit('batchDisable')"
-        >
-          {{ t("alarm.stopped") }}
-        </button>
-        <button
-          type="button"
-          :disabled="!selectedCount"
-          @click="emit('batchConditions')"
-        >
-          {{ t("alarm.batchConditions") }}
-        </button>
-        <select
-          :disabled="!selectedCount"
-          :aria-label="t('alarm.batchMoveGroup')"
-          @change="moveSelected(value($event))"
-        >
-          <option value="">{{ t("alarm.moveTo") }}</option>
-          <option value="__root__">{{ t("alarm.root") }}</option>
-          <option
-            v-for="group in flatGroupOptions"
-            :key="group.id"
-            :value="group.id"
-          >
-            {{ group.label }}
-          </option>
-        </select>
-      </div>
+    <div v-if="error" class="alarm-policy-manager__state is-error">
+      <IconTablerAlertCircle class="alarm-policy-manager__state-icon" />
+      <span>{{ error }}</span>
+      <button type="button" @click="emit('refresh')">
+        {{ t("alarm.retry") }}
+      </button>
+    </div>
+    <div v-else-if="loading" class="alarm-policy-manager__loading">
+      <el-skeleton :rows="8" animated />
+    </div>
 
-      <div v-if="error" class="alarm-policy-manager__state is-error">
-        <IconTablerAlertCircle class="alarm-policy-manager__state-icon" />
-        <span>{{ error }}</span>
-        <button type="button" @click="emit('refresh')">
-          {{ t("alarm.retry") }}
-        </button>
-      </div>
-      <div v-else-if="loading" class="alarm-policy-manager__loading">
-        <el-skeleton :rows="8" animated />
-      </div>
+    <div v-else class="alarm-policy-manager__body">
+      <AlarmPolicyGroupBranch
+        v-for="group in policyTree.groups"
+        :key="group.id"
+        :node="group"
+        :selection="selection"
+        :selected-id="selectedId"
+        @select="emit('select', $event)"
+        @select-policy="(id, selected) => emit('selectPolicy', id, selected)"
+        @select-group="(ids, selected) => emit('selectGroup', ids, selected)"
+        @policy-contextmenu="
+          (mouseEvent, policy) => openPolicyMenu(mouseEvent, policy)
+        "
+        @group-contextmenu="
+          (mouseEvent, group) => openGroupMenu(mouseEvent, group)
+        "
+      />
 
-      <div v-else class="alarm-policy-manager__body">
-        <AlarmPolicyGroupBranch
-          v-for="group in policyTree.groups"
-          :key="group.id"
-          :node="group"
-          :selection="selection"
-          :selected-id="selectedId"
-          @select="emit('select', $event)"
-          @select-policy="(id, selected) => emit('selectPolicy', id, selected)"
-          @select-group="(ids, selected) => emit('selectGroup', ids, selected)"
-          @policy-contextmenu="
-            (mouseEvent, policy) => openPolicyMenu(mouseEvent, policy)
-          "
-          @group-contextmenu="
-            (mouseEvent, group) => openGroupMenu(mouseEvent, group)
-          "
+      <button
+        v-for="policy in policyTree.rootPolicies"
+        :key="policy.id"
+        type="button"
+        class="alarm-policy-manager__row"
+        :class="{
+          'is-active': policy.id === selectedId,
+          'is-disabled': !policy.effectiveEnabled,
+        }"
+        @click="emit('select', policy.id)"
+        @contextmenu.prevent.stop="openPolicyMenu($event, policy)"
+      >
+        <input
+          type="checkbox"
+          :checked="isSelected(policy.id)"
+          @click.stop
+          @change="emit('selectPolicy', policy.id, checked($event))"
         />
-
-        <button
-          v-for="policy in policyTree.rootPolicies"
-          :key="policy.id"
-          type="button"
-          class="alarm-policy-manager__row"
-          :class="{
-            'is-active': policy.id === selectedId,
-            'is-disabled': !policy.effectiveEnabled,
-          }"
-          @click="emit('select', policy.id)"
-          @contextmenu.prevent.stop="openPolicyMenu($event, policy)"
-        >
-          <input
-            type="checkbox"
-            :checked="isSelected(policy.id)"
-            @click.stop
-            @change="emit('selectPolicy', policy.id, checked($event))"
-          />
-          <IconTablerBell class="alarm-policy-manager__row-icon" />
-          <span class="alarm-policy-manager__row-main">
-            <span class="alarm-policy-manager__row-name">{{
-              policy.name
-            }}</span>
-            <span class="alarm-policy-manager__row-path">
-              {{ policySummary(policy) }}
-            </span>
-          </span>
-          <StatusBadge
-            class="alarm-policy-manager__row-status"
-            :tone="policy.effectiveEnabled ? 'success' : 'muted'"
-            :text="policy.isEnabled ? t('common.enabled') : t('alarm.stopped')"
-          />
-        </button>
-
-        <EmptyState
-          v-if="
-            policyTree.groups.length === 0 &&
-            policyTree.rootPolicies.length === 0
+        <IconTablerBell class="alarm-policy-manager__row-icon" />
+        <span class="alarm-policy-manager__row-main">
+          <span class="alarm-policy-manager__row-name">{{ policy.name }}</span>
+        </span>
+        <span
+          class="alarm-policy-manager__row-status"
+          :class="policy.effectiveEnabled ? 'is-success' : 'is-muted'"
+          :title="policy.isEnabled ? t('common.enabled') : t('alarm.stopped')"
+          :aria-label="
+            policy.isEnabled ? t('common.enabled') : t('alarm.stopped')
           "
-          icon-name="alarm"
-          :title="t('alarm.emptyPolicies')"
-          :description="t('alarm.emptyPoliciesHint')"
-        />
-      </div>
-    </template>
+        ></span>
+      </button>
+
+      <EmptyState
+        v-if="
+          policyTree.groups.length === 0 && policyTree.rootPolicies.length === 0
+        "
+        icon-name="alarm"
+        :title="t('alarm.emptyPolicies')"
+        :description="t('alarm.emptyPoliciesHint')"
+      />
+    </div>
+
+    <div v-if="selectedCount" class="alarm-policy-manager__bulk">
+      <button
+        type="button"
+        :disabled="!selectedCount"
+        @click="emit('batchEnable')"
+      >
+        {{ t("common.enabled") }}
+      </button>
+      <button
+        type="button"
+        :disabled="!selectedCount"
+        @click="emit('batchDisable')"
+      >
+        {{ t("alarm.stopped") }}
+      </button>
+      <button
+        type="button"
+        :disabled="!selectedCount"
+        @click="emit('batchConditions')"
+      >
+        {{ t("alarm.conditions") }}
+      </button>
+      <button
+        type="button"
+        :disabled="!selectedCount"
+        @click="emit('batchMoveDialog')"
+      >
+        {{ t("alarm.move") }}
+      </button>
+      <button
+        type="button"
+        class="alarm-policy-manager__bulk-danger"
+        :disabled="!selectedCount"
+        @click="emit('batchDelete')"
+      >
+        {{ t("actions.delete") }}
+      </button>
+    </div>
+
+    <footer class="alarm-policy-manager__foot">
+      <span>{{ t("alarm.policyCount", { count: total }) }}</span>
+      <span v-if="selectedCount">
+        {{ t("alarm.selectedItemCount", { count: selectedCount }) }}
+      </span>
+    </footer>
 
     <Teleport to="body">
       <div
@@ -287,6 +273,14 @@
             <IconTablerFolderSymlink class="alarm-policy-manager__menu-icon" />
             <span>{{ t("alarm.moveToGroup") }}</span>
           </button>
+          <button
+            type="button"
+            class="is-danger"
+            @click="emitContextAction('delete')"
+          >
+            <IconTablerTrash class="alarm-policy-manager__menu-icon" />
+            <span>删除</span>
+          </button>
         </div>
       </div>
     </Teleport>
@@ -300,11 +294,10 @@ import IconTablerAlertCircle from "~icons/tabler/alert-circle";
 import IconTablerBell from "~icons/tabler/bell";
 import IconTablerFolderPlus from "~icons/tabler/folder-plus";
 import IconTablerFolderSymlink from "~icons/tabler/folder-symlink";
-import IconTablerLayoutSidebarLeftCollapse from "~icons/tabler/layout-sidebar-left-collapse";
-import IconTablerLayoutSidebarLeftExpand from "~icons/tabler/layout-sidebar-left-expand";
 import IconTablerPencil from "~icons/tabler/pencil";
 import IconTablerPlus from "~icons/tabler/plus";
 import IconTablerRefresh from "~icons/tabler/refresh";
+import IconTablerTrash from "~icons/tabler/trash";
 import type {
   AlarmBulkSelection,
   AlarmPolicy,
@@ -312,12 +305,11 @@ import type {
   AlarmPolicyTree,
 } from "@/api/schemas/alarm.schema";
 import EmptyState from "@/components/shared/EmptyState.vue";
-import StatusBadge from "@/components/shared/StatusBadge.vue";
+import PillButton from "@/components/shared/PillButton.vue";
 import { t } from "@/i18n/runtime";
 import AlarmPolicyGroupBranch from "./AlarmPolicyGroupBranch.vue";
 import {
   buildAlarmPolicyGroupTree,
-  flattenAlarmPolicyGroups,
   type AlarmPolicyGroupNode,
 } from "./alarmPolicyTreeModel";
 
@@ -356,13 +348,16 @@ const emit = defineEmits<{
   batchDisable: [];
   batchConditions: [];
   batchMove: [groupId: string | null];
+  batchMoveDialog: [];
+  batchDelete: [];
   renamePolicy: [policy: AlarmPolicy];
   movePolicy: [policy: AlarmPolicy];
+  deletePolicy: [policy: AlarmPolicy];
   renameGroup: [group: AlarmPolicyGroup];
   moveGroup: [group: AlarmPolicyGroup];
+  deleteGroup: [group: AlarmPolicyGroupNode];
 }>();
 
-const collapsed = ref(false);
 const filters = reactive({
   search: "",
   enabled: "",
@@ -394,27 +389,49 @@ const conditionTypeOptions = computed(() => [
   { value: "rate_of_change", label: t("alarm.conditionTypes.rateOfChange") },
   { value: "cel", label: t("alarm.conditionTypes.cel") },
 ]);
+const conditionFilterOptions = computed(() => [
+  { value: "", label: t("alarm.all") },
+  ...conditionTypeOptions.value,
+]);
+const enabledLabel = computed(() => {
+  const found = enabledOptions.value.find(
+    (item) => item.value === filters.enabled,
+  );
+  return found && filters.enabled ? found.label : t("alarm.status");
+});
+const conditionTypeLabel = computed(() => {
+  const found = conditionFilterOptions.value.find(
+    (item) => item.value === filters.conditionType,
+  );
+  return found && filters.conditionType ? found.label : t("alarm.type");
+});
 
 const visiblePolicies = computed(() => props.tree.policies);
 
 const policyTree = computed(() =>
   buildAlarmPolicyGroupTree(props.tree.groups, props.tree.policies),
 );
-const flatGroupOptions = computed(() =>
-  flattenAlarmPolicyGroups(policyTree.value.groups),
-);
 
 const checked = (event: Event) => (event.target as HTMLInputElement).checked;
-const value = (event: Event) =>
-  (event.target as HTMLInputElement | HTMLSelectElement).value;
 
 const cleanFilters = () =>
   Object.fromEntries(
     Object.entries(filters).filter(([, value]) => value.trim() !== ""),
   );
+const hasFilters = computed(() => Object.keys(cleanFilters()).length > 0);
 
 const emitFilter = () => {
   emit("filter", cleanFilters());
+};
+
+const selectEnabled = (value: string) => {
+  filters.enabled = value;
+  emitFilter();
+};
+
+const selectConditionType = (value: string) => {
+  filters.conditionType = value;
+  emitFilter();
 };
 
 const isSelected = (id: string) => {
@@ -445,19 +462,12 @@ const selectFiltered = () => {
   emit("selectFiltered", cleanFilters());
 };
 
-const moveSelected = (raw: string) => {
-  if (!raw) {
-    return;
-  }
-  emit("batchMove", raw === "__root__" ? null : raw);
-};
-
 const openPolicyMenu = (event: MouseEvent, policy: AlarmPolicy) => {
   contextMenu.value = {
     visible: true,
     type: "policy",
     x: Math.min(event.clientX, window.innerWidth - 180),
-    y: Math.min(event.clientY, window.innerHeight - 96),
+    y: Math.min(event.clientY, window.innerHeight - 126),
     policy,
     group: null,
   };
@@ -468,7 +478,7 @@ const openGroupMenu = (event: MouseEvent, group: AlarmPolicyGroupNode) => {
     visible: true,
     type: "group",
     x: Math.min(event.clientX, window.innerWidth - 180),
-    y: Math.min(event.clientY, window.innerHeight - 96),
+    y: Math.min(event.clientY, window.innerHeight - 126),
     policy: null,
     group,
   };
@@ -478,12 +488,16 @@ const closeContextMenu = () => {
   contextMenu.value.visible = false;
 };
 
-const emitContextAction = (action: "rename" | "move") => {
+const emitContextAction = (action: "rename" | "move" | "delete") => {
   const current = contextMenu.value;
   closeContextMenu();
   if (current.type === "policy" && current.policy) {
     if (action === "rename") {
       emit("renamePolicy", current.policy);
+      return;
+    }
+    if (action === "delete") {
+      emit("deletePolicy", current.policy);
       return;
     }
     emit("movePolicy", current.policy);
@@ -494,15 +508,12 @@ const emitContextAction = (action: "rename" | "move") => {
       emit("renameGroup", current.group);
       return;
     }
+    if (action === "delete") {
+      emit("deleteGroup", current.group);
+      return;
+    }
     emit("moveGroup", current.group);
   }
-};
-
-const policySummary = (policy: AlarmPolicy) => {
-  if (policy.mode === "derived") {
-    return policy.derivedExpression || "计算后判断";
-  }
-  return policy.targets.map((target) => target.path).join("、") || "逐点判断";
 };
 </script>
 
@@ -528,11 +539,6 @@ const policySummary = (policy: AlarmPolicy) => {
   border-bottom: 1px solid var(--dc-border);
 }
 
-.alarm-policy-manager.is-collapsed .alarm-policy-manager__head {
-  justify-content: center;
-  padding: 8px;
-}
-
 .alarm-policy-manager__head h2 {
   margin: 0;
   color: var(--dc-text);
@@ -541,29 +547,25 @@ const policySummary = (policy: AlarmPolicy) => {
   line-height: 1.3;
 }
 
-.alarm-policy-manager__head p {
-  margin: 2px 0 0;
-  color: var(--dc-text-muted);
-  font-size: 12px;
-}
-
 .alarm-policy-manager button,
 .alarm-policy-manager input,
 .alarm-policy-manager select {
   font-family: inherit;
 }
 
-.alarm-policy-manager__toolbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 30px 30px 30px;
+.alarm-policy-manager__title {
+  min-width: 0;
+}
+
+.alarm-policy-manager__actions {
+  display: flex;
+  align-items: center;
   gap: 6px;
-  padding: 8px;
-  border-bottom: 1px solid var(--dc-border);
+  flex: 0 0 auto;
 }
 
 .alarm-policy-manager__primary,
-.alarm-policy-manager__secondary,
-.alarm-policy-manager__icon-btn {
+.alarm-policy-manager__secondary {
   min-width: 0;
   display: inline-flex;
   align-items: center;
@@ -591,55 +593,22 @@ const policySummary = (policy: AlarmPolicy) => {
   color: var(--dc-surface-raised);
 }
 
-.alarm-policy-manager__secondary,
-.alarm-policy-manager__icon-btn {
+.alarm-policy-manager__secondary {
   border: 1px solid var(--dc-border);
   background: var(--dc-surface-raised);
   color: var(--dc-text-secondary);
 }
 
 .alarm-policy-manager__primary:hover,
-.alarm-policy-manager__secondary:hover,
-.alarm-policy-manager__icon-btn:hover {
+.alarm-policy-manager__secondary:hover {
   transform: translateY(-1px);
 }
 
-.alarm-policy-manager__secondary:hover,
-.alarm-policy-manager__icon-btn:hover {
+.alarm-policy-manager__secondary:hover {
   border-color: rgba(29, 78, 216, 0.28);
   color: var(--dc-primary);
 }
 
-.alarm-policy-manager__icon-btn {
-  width: 30px;
-  height: 30px;
-}
-
-.alarm-policy-manager__rail {
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  padding: 10px 8px;
-}
-
-.alarm-policy-manager__rail-btn {
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-raised);
-  color: var(--dc-text-secondary);
-}
-
-.alarm-policy-manager__rail-btn:hover {
-  background: var(--dc-primary-soft);
-  color: var(--dc-primary);
-}
-
-.alarm-policy-manager__icon,
 .alarm-policy-manager__button-icon,
 .alarm-policy-manager__state-icon,
 .alarm-policy-manager__row-icon {
@@ -647,64 +616,91 @@ const policySummary = (policy: AlarmPolicy) => {
   height: 16px;
 }
 
-.alarm-policy-manager__filters {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 8px;
+.alarm-policy-manager__filterbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 8px;
-  border-bottom: 1px solid var(--dc-border);
-  background: var(--dc-surface-subtle);
-}
-
-.alarm-policy-manager__filters label {
-  min-width: 0;
-  display: grid;
-  gap: 4px;
-}
-
-.alarm-policy-manager__filters span {
-  color: var(--dc-text-muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.alarm-policy-manager__filters select,
-.alarm-policy-manager__bulk select {
-  width: 100%;
-  height: 30px;
-  min-width: 0;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
   background: var(--dc-surface-raised);
-  color: var(--dc-text);
+}
+
+.alarm-policy-manager__search {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.alarm-policy-manager__filter-pill {
+  flex: 0 0 auto;
+  height: 24px;
+  max-width: 72px;
+  padding: 0 7px;
+  border-radius: 9px;
   font-size: 12px;
-  outline: none;
-  padding: 0 8px;
+  font-weight: 600;
+}
+
+.alarm-policy-manager__pop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0;
+}
+
+.alarm-policy-manager__pop-item {
+  width: 100%;
+  padding: 7px 12px;
+  border: none;
+  border-radius: var(--dc-radius-sm);
+  background: transparent;
+  color: var(--dc-text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  transition:
+    background-color 0.14s ease,
+    color 0.14s ease;
+}
+
+.alarm-policy-manager__pop-item:hover {
+  background: var(--dc-surface-muted);
+  color: var(--dc-text);
+}
+
+.alarm-policy-manager__pop-item.is-active {
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+  font-weight: 700;
 }
 
 .alarm-policy-manager__selectbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
-  padding: 7px 8px;
-  border-bottom: 1px solid var(--dc-border);
+  gap: 8px;
+  min-height: 28px;
+  padding: 3px 8px 3px 12px;
   background: var(--dc-surface-raised);
 }
 
-.alarm-policy-manager__selectbar label {
-  min-width: 0;
+.alarm-policy-manager__select-control {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  color: var(--dc-text-secondary);
-  font-size: 12px;
-  font-weight: 700;
+}
+
+.alarm-policy-manager__select-control input {
+  margin: 0;
+}
+
+.alarm-policy-manager__select-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
 }
 
 .alarm-policy-manager__selectbar button,
 .alarm-policy-manager__bulk button,
-.alarm-policy-manager__bulk select,
 .alarm-policy-manager__state button {
   height: 28px;
   display: inline-flex;
@@ -721,24 +717,38 @@ const policySummary = (policy: AlarmPolicy) => {
   white-space: nowrap;
 }
 
+.alarm-policy-manager__selectbar button {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dc-primary);
+  font-weight: 700;
+}
+
+.alarm-policy-manager__selectbar button:hover:not(:disabled) {
+  color: var(--dc-primary);
+}
+
 .alarm-policy-manager__bulk {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   align-items: center;
-  gap: 6px;
-  padding: 8px;
-  border-bottom: 1px solid var(--dc-border);
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 6px 8px;
+  background: var(--dc-surface-raised);
 }
 
-.alarm-policy-manager__bulk strong {
-  color: var(--dc-text);
-  font-size: 12px;
-  margin-right: 2px;
+.alarm-policy-manager__bulk button {
+  width: 100%;
+  height: 26px;
+  min-width: 0;
+  padding: 0 4px;
 }
 
-.alarm-policy-manager__bulk select {
-  width: auto;
-  min-width: 112px;
+.alarm-policy-manager__bulk-danger {
+  color: var(--dc-danger);
 }
 
 .alarm-policy-manager button:disabled,
@@ -752,8 +762,8 @@ const policySummary = (policy: AlarmPolicy) => {
   flex: 1;
   display: grid;
   align-content: start;
-  gap: 4px;
-  padding: 8px;
+  gap: 2px;
+  padding: 6px;
   overflow-y: auto;
 }
 
@@ -779,8 +789,7 @@ const policySummary = (policy: AlarmPolicy) => {
   color: var(--dc-primary);
 }
 
-.alarm-policy-manager__row-name,
-.alarm-policy-manager__row-path {
+.alarm-policy-manager__row-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -788,12 +797,12 @@ const policySummary = (policy: AlarmPolicy) => {
 }
 
 .alarm-policy-manager__row {
-  min-height: 44px;
+  min-height: 30px;
   display: grid;
   grid-template-columns: auto 18px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 6px;
+  padding: 3px 6px;
   text-align: left;
 }
 
@@ -809,8 +818,7 @@ const policySummary = (policy: AlarmPolicy) => {
 
 .alarm-policy-manager__row-main {
   min-width: 0;
-  display: grid;
-  gap: 3px;
+  display: block;
 }
 
 .alarm-policy-manager__row-name {
@@ -819,13 +827,32 @@ const policySummary = (policy: AlarmPolicy) => {
   font-weight: 700;
 }
 
-.alarm-policy-manager__row-path {
-  color: var(--dc-text-muted);
-  font-size: 11px;
+.alarm-policy-manager__row-status {
+  width: 8px;
+  height: 8px;
+  justify-self: end;
+  border-radius: 999px;
+  background: var(--dc-text-muted);
 }
 
-.alarm-policy-manager__row-status {
-  max-width: 76px;
+.alarm-policy-manager__row-status.is-success {
+  background: var(--dc-success);
+}
+
+.alarm-policy-manager__row-status.is-muted {
+  background: var(--dc-text-muted);
+}
+
+.alarm-policy-manager__foot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  color: var(--dc-text-muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .alarm-policy-manager__menu-mask {
@@ -862,6 +889,11 @@ const policySummary = (policy: AlarmPolicy) => {
 .alarm-policy-manager__context-menu button:hover {
   background: var(--dc-surface-muted);
   color: var(--dc-primary);
+}
+
+.alarm-policy-manager__context-menu button.is-danger:hover {
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
 }
 
 .alarm-policy-manager__menu-icon {

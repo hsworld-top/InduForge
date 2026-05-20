@@ -29,9 +29,6 @@
         <IconTablerFileCode class="compute-tree-branch__unit-icon" />
         <span class="compute-tree-branch__unit-main">
           <span class="compute-tree-branch__unit-name">{{ unit.name }}</span>
-          <span class="compute-tree-branch__unit-path">
-            {{ unit.outputPath || unit.path || "calc.*" }}
-          </span>
         </span>
         <StatusBadge
           class="compute-tree-branch__status"
@@ -87,7 +84,8 @@ defineEmits<{
 const expanded = ref(true);
 
 const countUnits = (node: ComputeFolderTreeNode): number =>
-  node.units.length + node.children.reduce((sum, child) => sum + countUnits(child), 0);
+  node.units.length +
+  node.children.reduce((sum, child) => sum + countUnits(child), 0);
 
 const totalCount = computed(() => countUnits(props.node));
 
@@ -114,7 +112,7 @@ const statusTone = (status?: string) => {
 <style scoped>
 .compute-tree-branch {
   display: grid;
-  gap: 4px;
+  gap: 2px;
 }
 
 .compute-tree-branch__folder,
@@ -127,12 +125,12 @@ const statusTone = (status?: string) => {
 }
 
 .compute-tree-branch__folder {
-  min-height: 32px;
+  min-height: 28px;
   display: grid;
   grid-template-columns: 16px 18px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px;
+  gap: 5px;
+  padding: 0 6px;
   font-size: 13px;
   font-weight: 700;
   text-align: left;
@@ -164,8 +162,7 @@ const statusTone = (status?: string) => {
 }
 
 .compute-tree-branch__folder-name,
-.compute-tree-branch__unit-name,
-.compute-tree-branch__unit-path {
+.compute-tree-branch__unit-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -184,19 +181,18 @@ const statusTone = (status?: string) => {
 
 .compute-tree-branch__children {
   display: grid;
-  gap: 4px;
-  margin-left: 12px;
-  padding-left: 8px;
-  border-left: 1px solid var(--dc-border);
+  gap: 2px;
+  margin-left: 10px;
+  padding-left: 6px;
 }
 
 .compute-tree-branch__unit {
-  min-height: 44px;
+  min-height: 30px;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 6px;
+  padding: 3px 6px;
   text-align: left;
 }
 
@@ -208,19 +204,13 @@ const statusTone = (status?: string) => {
 
 .compute-tree-branch__unit-main {
   min-width: 0;
-  display: grid;
-  gap: 3px;
+  display: block;
 }
 
 .compute-tree-branch__unit-name {
   color: var(--dc-text);
   font-size: 13px;
   font-weight: 700;
-}
-
-.compute-tree-branch__unit-path {
-  color: var(--dc-text-muted);
-  font-size: 11px;
 }
 
 .compute-tree-branch__status {

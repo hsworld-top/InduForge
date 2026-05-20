@@ -1,13 +1,8 @@
 <template>
   <div class="datacenter-shell">
-    <DataCenterNavRail
-      :modules="modules"
-      :active-module="activeModule"
-      :preview-session-active="previewSessionActive"
-      :preview-session-state="previewSessionState"
-      @update:activeModule="$emit('update:activeModule', $event)"
-      @previewIndicatorClick="$emit('previewIndicatorClick', $event)"
-    >
+    <DataCenterNavRail :modules="modules" :active-module="activeModule" :preview-session-active="previewSessionActive"
+      :preview-session-state="previewSessionState" @update:activeModule="$emit('update:activeModule', $event)"
+      @previewIndicatorClick="$emit('previewIndicatorClick', $event)">
       <template #actions>
         <slot name="actions" :active-module="activeModule" />
       </template>
@@ -59,7 +54,7 @@ defineEmits<{
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 12px;
+  padding: 10px;
 }
 
 .datacenter-shell__body {

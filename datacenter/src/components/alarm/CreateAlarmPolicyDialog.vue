@@ -27,10 +27,6 @@
           <option value="derived">{{ t("alarm.modes.derived") }}</option>
         </select>
       </label>
-      <label class="is-switch">
-        <input v-model="draft.isEnabled" type="checkbox" />
-        <span>{{ t("common.enabled") }}</span>
-      </label>
       <label class="is-wide">
         <span>{{ t("alarm.description") }}</span>
         <textarea v-model="draft.description" rows="4" :placeholder="t('alarm.descriptionPlaceholder')" />
@@ -113,7 +109,12 @@ const submit = () => {
     localError.value = t("alarm.nameRequired");
     return;
   }
-  emit("submit", { ...draft, name: draft.name.trim(), dirty: true });
+  emit("submit", {
+    ...draft,
+    name: draft.name.trim(),
+    isEnabled: false,
+    dirty: true,
+  });
 };
 
 watch(
@@ -143,13 +144,6 @@ watch(
   grid-column: 1 / -1;
 }
 
-.create-alarm-policy label.is-switch {
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  align-content: end;
-  min-height: 34px;
-}
-
 .create-alarm-policy label > span {
   color: var(--dc-text-secondary);
   font-size: 12px;
@@ -174,13 +168,6 @@ watch(
 .create-alarm-policy select {
   height: 34px;
   padding: 0 9px;
-}
-
-.create-alarm-policy input[type="checkbox"] {
-  width: 15px;
-  height: 15px;
-  padding: 0;
-  accent-color: var(--dc-primary);
 }
 
 .create-alarm-policy textarea {

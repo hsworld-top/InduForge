@@ -105,7 +105,6 @@
             @click="saveAfterSyntaxCheck"
           >
             <IconTablerDeviceFloppy class="compute-editor__action-icon" />
-            <span>保存</span>
           </button>
         </div>
       </div>
@@ -2022,9 +2021,7 @@ const statusTone = (status?: string) => {
 }
 
 .compute-editor__save {
-  gap: 6px;
-  min-width: 68px;
-  padding: 0 10px;
+  width: 30px;
   border: 1px solid var(--dc-primary);
   background: var(--dc-primary);
   color: var(--dc-surface-raised);

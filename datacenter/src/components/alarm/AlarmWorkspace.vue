@@ -21,10 +21,14 @@
       @batch-disable="batchDisable"
       @batch-conditions="openBulkConditionDialog"
       @batch-move="batchMove"
+      @batch-move-dialog="openBulkMoveDialog"
+      @batch-delete="batchDelete"
       @rename-policy="openRenamePolicyDialog"
       @move-policy="openMovePolicyDialog"
+      @delete-policy="deletePolicyFromTree"
       @rename-group="openRenameGroupDialog"
       @move-group="openMoveGroupDialog"
+      @delete-group="deleteGroupFromTree"
     />
 
     <AlarmEditorShell
@@ -73,6 +77,14 @@
       @submit="batchApplyConditions"
     />
 
+    <MoveAlarmPoliciesDialog
+      v-model="bulkMoveDialogVisible"
+      :groups="alarmStore.groups"
+      :selected-count="alarmStore.selectedCount"
+      :loading="alarmStore.saving"
+      @submit="batchMove"
+    />
+
     <RenameAlarmPolicyDialog
       v-model="renamePolicyDialogVisible"
       :policy="contextPolicy"
@@ -108,7 +120,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import type {
   AlarmCondition,
   AlarmPolicy,
@@ -130,8 +142,10 @@ import CreateAlarmGroupDialog from "./CreateAlarmGroupDialog.vue";
 import CreateAlarmPolicyDialog from "./CreateAlarmPolicyDialog.vue";
 import MoveAlarmGroupDialog from "./MoveAlarmGroupDialog.vue";
 import MoveAlarmPolicyDialog from "./MoveAlarmPolicyDialog.vue";
+import MoveAlarmPoliciesDialog from "./MoveAlarmPoliciesDialog.vue";
 import RenameAlarmGroupDialog from "./RenameAlarmGroupDialog.vue";
 import RenameAlarmPolicyDialog from "./RenameAlarmPolicyDialog.vue";
+import type { AlarmPolicyGroupNode } from "./alarmPolicyTreeModel";
 
 const props = defineProps<{
   projectId: string;
@@ -148,6 +162,7 @@ const activeDraft = ref<AlarmPolicyDraft | null>(null);
 const createDialogVisible = ref(false);
 const createGroupDialogVisible = ref(false);
 const bulkConditionDialogVisible = ref(false);
+const bulkMoveDialogVisible = ref(false);
 const renamePolicyDialogVisible = ref(false);
 const movePolicyDialogVisible = ref(false);
 const renameGroupDialogVisible = ref(false);
@@ -157,11 +172,12 @@ const contextPolicy = ref<AlarmPolicy | null>(null);
 const contextGroup = ref<AlarmPolicyGroup | null>(null);
 
 const selectedPolicyId = computed(() => {
+  if (route.params.module !== "alarm") {
+    return "";
+  }
   const value = route.params.objectId;
   return typeof value === "string" ? value : "";
 });
-
-const isCreatingDraft = computed(() => selectedPolicyId.value === "__new__");
 
 const activeTab = computed<WorkspaceTab>(() => {
   const value = route.params.tab;
@@ -207,14 +223,19 @@ const createGroup = async (payload: AlarmPolicyGroupSave) => {
 };
 
 const createPolicy = async (draft: AlarmPolicyDraft) => {
-  activeDraft.value = {
-    ...createDefaultAlarmPolicyDraft(),
-    ...draft,
-    id: undefined,
-    dirty: true,
-  };
+  const policy = await alarmStore.createPolicy(
+    props.projectId,
+    draftToAlarmPolicySavePayload({
+      ...createDefaultAlarmPolicyDraft(),
+      ...draft,
+      isEnabled: false,
+    }),
+  );
+  activeDraft.value = toAlarmPolicyDraft(policy);
   createDialogVisible.value = false;
-  replaceAlarmRoute("__new__", "config");
+  await reloadList();
+  replaceAlarmRoute(policy.id, "config");
+  ElMessage.success("报警策略已创建");
 };
 
 const selectPolicy = (policyId: string) => {
@@ -226,7 +247,7 @@ const selectTab = (tab: WorkspaceTab) => {
 };
 
 const refreshContract = async () => {
-  if (!selectedPolicyId.value || isCreatingDraft.value) {
+  if (!selectedPolicyId.value) {
     return;
   }
   try {
@@ -237,7 +258,7 @@ const refreshContract = async () => {
 };
 
 const runTrial = async (payload: AlarmPolicyTrialPayload) => {
-  if (!selectedPolicyId.value || isCreatingDraft.value) {
+  if (!selectedPolicyId.value) {
     return;
   }
   try {
@@ -276,13 +297,16 @@ const updateActiveDraft = (patch: Partial<AlarmPolicyDraft>) => {
   }
 };
 
-const validateActiveDraft = () => {
+const validateActiveDraft = (requireReady = true) => {
   if (!activeDraft.value) {
     return false;
   }
   if (!activeDraft.value.name.trim()) {
     ElMessage.warning("请输入策略名");
     return false;
+  }
+  if (!requireReady) {
+    return true;
   }
   if (
     activeDraft.value.mode === "per_target" &&
@@ -312,18 +336,7 @@ const saveActiveDraft = async () => {
   if (!activeDraft.value) {
     return;
   }
-  if (!validateActiveDraft()) {
-    return;
-  }
-  if (isCreatingDraft.value) {
-    const policy = await alarmStore.createPolicy(
-      props.projectId,
-      draftToAlarmPolicySavePayload(activeDraft.value),
-    );
-    activeDraft.value = toAlarmPolicyDraft(policy);
-    await reloadList();
-    replaceAlarmRoute(policy.id, "config");
-    ElMessage.success("报警策略已创建");
+  if (!validateActiveDraft(activeDraft.value.isEnabled)) {
     return;
   }
   if (!selectedPolicyId.value) {
@@ -342,32 +355,100 @@ const toggleEnabled = async () => {
   if (!selectedPolicyId.value || !activeDraft.value) {
     return;
   }
-  if (isCreatingDraft.value) {
-    updateActiveDraft({ isEnabled: !activeDraft.value.isEnabled });
-    return;
+  const enable = !activeDraft.value.isEnabled;
+  if (enable) {
+    if (!validateActiveDraft(true)) {
+      return;
+    }
+    if (activeDraft.value.dirty) {
+      const saved = await alarmStore.savePolicy(
+        props.projectId,
+        selectedPolicyId.value,
+        draftToAlarmPolicySavePayload(activeDraft.value),
+      );
+      activeDraft.value = toAlarmPolicyDraft(saved);
+    }
   }
   const policy = await alarmStore.setPolicyEnabled(
     props.projectId,
     selectedPolicyId.value,
-    !activeDraft.value.isEnabled,
+    enable,
   );
   activeDraft.value = toAlarmPolicyDraft(policy);
   await reloadList();
 };
 
 const deletePolicy = async () => {
-  if (isCreatingDraft.value) {
-    activeDraft.value = null;
-    replaceAlarmRoute();
+  if (!selectedPolicyId.value) {
     return;
   }
-  if (!selectedPolicyId.value || !window.confirm("确认删除当前报警策略？")) {
-    return;
-  }
-  await alarmStore.removePolicy(props.projectId, selectedPolicyId.value);
-  await reloadList();
-  replaceAlarmRoute(alarmStore.tree.policies[0]?.id);
+  await confirmAndDeletePolicy(selectedPolicyId.value, activeDraft.value?.name);
 };
+
+const deletePolicyFromTree = async (policy: AlarmPolicy) => {
+  await confirmAndDeletePolicy(policy.id, policy.name);
+};
+
+const confirmAndDeletePolicy = async (policyId: string, name?: string) => {
+  const ok = await ElMessageBox.confirm(
+    `确认删除报警策略「${name || policyId}」？此操作不可恢复。`,
+    "删除报警策略",
+    {
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      type: "warning",
+    },
+  )
+    .then(() => true)
+    .catch(() => false);
+  if (!ok) {
+    return;
+  }
+  await alarmStore.removePolicy(props.projectId, policyId);
+  await reloadList();
+  if (selectedPolicyId.value === policyId) {
+    activeDraft.value = null;
+    replaceAlarmRoute(alarmStore.tree.policies[0]?.id);
+  }
+  ElMessage.success("报警策略已删除");
+};
+
+const deleteGroupFromTree = async (group: AlarmPolicyGroupNode) => {
+  const childGroupCount = countAlarmChildGroups(group);
+  const policyCount = group.policyIds.length;
+  const detail =
+    childGroupCount > 0 || policyCount > 0
+      ? `该分组包含 ${childGroupCount} 个子分组、${policyCount} 条报警策略。确认后会一起删除。`
+      : "该分组为空。确认后会删除该分组。";
+  const ok = await ElMessageBox.confirm(
+    `确认删除分组「${group.name}」？${detail}此操作不可恢复。`,
+    "删除分组",
+    {
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      type: "warning",
+    },
+  )
+    .then(() => true)
+    .catch(() => false);
+  if (!ok) {
+    return;
+  }
+  const removed = new Set(group.policyIds);
+  await alarmStore.removeGroup(props.projectId, group.id);
+  await reloadList();
+  if (removed.has(selectedPolicyId.value)) {
+    activeDraft.value = null;
+    replaceAlarmRoute(alarmStore.tree.policies[0]?.id);
+  }
+  ElMessage.success("分组已删除");
+};
+
+const countAlarmChildGroups = (group: AlarmPolicyGroupNode): number =>
+  group.children.reduce(
+    (total, child) => total + 1 + countAlarmChildGroups(child),
+    0,
+  );
 
 const selectPolicyForBatch = (id: string, selected: boolean) => {
   alarmStore.selectPolicy(id, selected);
@@ -395,6 +476,10 @@ const openBulkConditionDialog = () => {
   bulkConditionDialogVisible.value = true;
 };
 
+const openBulkMoveDialog = () => {
+  bulkMoveDialogVisible.value = true;
+};
+
 const batchApplyConditions = async (conditions: AlarmCondition[]) => {
   await alarmStore.batchApplyConditions(props.projectId, conditions);
   bulkConditionDialogVisible.value = false;
@@ -403,7 +488,36 @@ const batchApplyConditions = async (conditions: AlarmCondition[]) => {
 
 const batchMove = async (groupId: string | null) => {
   await alarmStore.batchMove(props.projectId, groupId);
+  bulkMoveDialogVisible.value = false;
   await reloadList();
+};
+
+const batchDelete = async () => {
+  const ids = alarmStore.selectedPolicyIds;
+  if (!ids.length) {
+    return;
+  }
+  const ok = await ElMessageBox.confirm(
+    `确认删除已选 ${ids.length} 条报警策略？此操作不可恢复。`,
+    "批量删除报警策略",
+    {
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      type: "warning",
+    },
+  )
+    .then(() => true)
+    .catch(() => false);
+  if (!ok) {
+    return;
+  }
+  await alarmStore.batchDelete(props.projectId);
+  await reloadList();
+  if (selectedPolicyId.value && !alarmStore.tree.policies.some((item) => item.id === selectedPolicyId.value)) {
+    activeDraft.value = null;
+    replaceAlarmRoute(alarmStore.tree.policies[0]?.id);
+  }
+  ElMessage.success("已删除已选报警策略");
 };
 
 const openRenamePolicyDialog = (policy: AlarmPolicy) => {
@@ -493,10 +607,10 @@ watch(
       alarmStore.closeEdit();
       return;
     }
-    if (policyId === "__new__") {
+    const policy = await alarmStore.openPolicy(props.projectId, policyId);
+    if (selectedPolicyId.value !== policyId) {
       return;
     }
-    const policy = await alarmStore.openPolicy(props.projectId, policyId);
     activeDraft.value = toAlarmPolicyDraft(policy);
   },
   { immediate: true },
@@ -505,7 +619,7 @@ watch(
 watch(
   [activeTab, selectedPolicyId],
   ([tab, policyId]) => {
-    if (tab === "contract" && policyId && policyId !== "__new__") {
+    if (tab === "contract" && policyId) {
       void refreshContract();
     }
   },
@@ -522,16 +636,16 @@ onMounted(() => {
   height: 100%;
   min-height: 0;
   display: flex;
+  overflow: hidden;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
   background: var(--dc-surface-subtle);
+  box-shadow: var(--dc-shadow-surface);
   color: var(--dc-text);
 }
 
 .alarm-workspace :deep(.alarm-policy-manager) {
   flex: 0 0 260px;
-}
-
-.alarm-workspace :deep(.alarm-policy-manager.is-collapsed) {
-  flex-basis: 48px;
 }
 
 .alarm-workspace :deep(.alarm-editor-shell) {
@@ -545,7 +659,7 @@ onMounted(() => {
   }
 
   .alarm-workspace :deep(.alarm-policy-manager),
-  .alarm-workspace :deep(.alarm-policy-manager.is-collapsed) {
+  .alarm-workspace :deep(.alarm-policy-manager) {
     flex: 0 0 auto;
   }
 }

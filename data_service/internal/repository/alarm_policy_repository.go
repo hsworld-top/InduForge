@@ -211,6 +211,54 @@ func (r *AlarmPolicyRepository) DeleteGroup(ctx context.Context, projectID, id s
 	return nil
 }
 
+func (r *AlarmPolicyRepository) ListPolicyIDsByGroupTree(ctx context.Context, projectID, groupID string) ([]string, error) {
+	rows, err := r.pool.Query(ctx, `
+        WITH RECURSIVE target_groups AS (
+            SELECT id
+            FROM data_alarm_policy_groups
+            WHERE project_id = $1 AND id = $2
+            UNION ALL
+            SELECT child.id
+            FROM data_alarm_policy_groups child
+            INNER JOIN target_groups parent ON child.parent_id = parent.id
+            WHERE child.project_id = $1
+        )
+        SELECT id
+        FROM data_alarm_policies
+        WHERE project_id = $1 AND group_id IN (SELECT id FROM target_groups)
+    `, projectID, groupID)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询报警分组内策略失败", err)
+	}
+	defer rows.Close()
+
+	ids := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取报警分组内策略失败", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历报警分组内策略失败", err)
+	}
+	return ids, nil
+}
+
+func (r *AlarmPolicyRepository) DeletePolicies(ctx context.Context, projectID string, policyIDs []string) error {
+	if len(policyIDs) == 0 {
+		return nil
+	}
+	if _, err := r.pool.Exec(ctx, `
+        DELETE FROM data_alarm_policies
+        WHERE project_id = $1 AND id = ANY($2::uuid[])
+    `, projectID, policyIDs); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "批量删除报警策略失败", err)
+	}
+	return nil
+}
+
 func (r *AlarmPolicyRepository) ListPolicies(ctx context.Context, projectID string, filter AlarmPolicyListFilter) ([]AlarmPolicyRecord, int, error) {
 	page, pageSize := normalizePageAndSize(filter.Page, filter.PageSize, 20, 100)
 	whereSQL, args := buildAlarmPolicyWhereClause(projectID, filter)

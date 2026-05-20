@@ -1,8 +1,5 @@
 <template>
-  <div
-    class="compute-workspace"
-    :class="{ 'is-tree-collapsed': treeCollapsed }"
-  >
+  <div class="compute-workspace">
     <ComputeTree
       :units="computeStore.list"
       :folders="computeStore.folders"
@@ -10,16 +7,16 @@
       :loading="computeStore.loading || computeStore.foldersLoading"
       :list-error="computeStore.listError"
       :folders-error="computeStore.foldersError"
-      :collapsed="treeCollapsed"
       @select-unit="selectUnit"
       @create-unit="showCreateUnitDialog = true"
       @create-folder="showCreateFolderDialog = true"
       @refresh="loadWorkspace"
-      @toggle-collapse="treeCollapsed = !treeCollapsed"
       @rename-unit="openRenameUnitDialog"
       @move-unit="openMoveUnitDialog"
+      @delete-unit="handleDeleteUnitFromTree"
       @rename-folder="openRenameFolderDialog"
       @move-folder="openMoveFolderDialog"
+      @delete-folder="handleDeleteFolder"
     />
 
     <ComputeEditorShell
@@ -135,7 +132,6 @@ const showRenameFolderDialog = ref(false);
 const showMoveFolderDialog = ref(false);
 const contextUnit = ref<ComputeUnit | null>(null);
 const contextFolder = ref<ComputeFolderTreeNode | null>(null);
-const treeCollapsed = ref(false);
 const drafts = ref<Record<string, ComputeDraft>>({});
 const activeTabId = ref<string | null>(null);
 
@@ -176,7 +172,9 @@ async function loadWorkspace() {
 }
 
 function loadDependencies() {
-  computeStore.fetchDependencies(String(props.projectId)).catch(() => undefined);
+  computeStore
+    .fetchDependencies(String(props.projectId))
+    .catch(() => undefined);
 }
 
 function selectUnit(id: string) {
@@ -189,6 +187,7 @@ function selectUnit(id: string) {
 async function openSelectedUnit(id: string | null) {
   if (!id) {
     activeTabId.value = null;
+    computeStore.closeEdit();
     return;
   }
   if (drafts.value[id]) {
@@ -197,6 +196,9 @@ async function openSelectedUnit(id: string | null) {
   }
   try {
     const unit = await computeStore.openForEdit(String(props.projectId), id);
+    if (selectedUnitId.value !== id) {
+      return;
+    }
     drafts.value = {
       ...drafts.value,
       [id]: toComputeDraft(unit),
@@ -292,8 +294,16 @@ async function toggleEnabled(id: string, enabled: boolean) {
 
 async function deleteUnit(id: string) {
   const draft = drafts.value[id];
+  await confirmAndDeleteUnit(id, draft?.name);
+}
+
+async function handleDeleteUnitFromTree(unit: ComputeUnit) {
+  await confirmAndDeleteUnit(String(unit.id), unit.name);
+}
+
+async function confirmAndDeleteUnit(id: string, name?: string) {
   const ok = await ElMessageBox.confirm(
-    `确认删除计算单元「${draft?.name || id}」？此操作不可恢复。`,
+    `确认删除计算单元「${name || id}」？此操作不可恢复。`,
     "删除计算单元",
     {
       confirmButtonText: "删除",
@@ -322,15 +332,88 @@ async function deleteUnit(id: string) {
   }
 }
 
+async function handleDeleteFolder(folder: ComputeFolderTreeNode) {
+  const childFolderCount = countComputeChildFolders(folder);
+  const unitCount = countComputeFolderUnits(folder);
+  const detail =
+    childFolderCount > 0 || unitCount > 0
+      ? `该分组包含 ${childFolderCount} 个子分组、${unitCount} 个计算单元。确认后会一起删除。`
+      : "该分组为空。确认后会删除该分组。";
+  const ok = await ElMessageBox.confirm(
+    `确认删除分组「${folder.name}」？${detail}此操作不可恢复。`,
+    "删除分组",
+    {
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      type: "warning",
+    },
+  )
+    .then(() => true)
+    .catch(() => false);
+  if (!ok) return;
+  try {
+    const removedIds = collectComputeFolderUnitIds(folder);
+    await computeStore.removeFolder(String(props.projectId), folder.id);
+    if (removedIds.length) {
+      const removed = new Set(removedIds);
+      const nextDrafts = { ...drafts.value };
+      for (const id of removed) {
+        delete nextDrafts[id];
+      }
+      drafts.value = nextDrafts;
+      if (activeTabId.value && removed.has(activeTabId.value)) {
+        const next = Object.keys(nextDrafts)[0] || null;
+        activeTabId.value = next;
+        if (next) {
+          selectUnit(next);
+        } else {
+          void router.push({ path: computeBasePath.value, query: route.query });
+        }
+      }
+    }
+    ElMessage.success("分组已删除");
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, "删除分组失败"));
+  }
+}
+
+function countComputeChildFolders(folder: ComputeFolderTreeNode): number {
+  return folder.children.reduce(
+    (total, child) => total + 1 + countComputeChildFolders(child),
+    0,
+  );
+}
+
+function countComputeFolderUnits(folder: ComputeFolderTreeNode): number {
+  return (
+    folder.units.length +
+    folder.children.reduce(
+      (total, child) => total + countComputeFolderUnits(child),
+      0,
+    )
+  );
+}
+
+function collectComputeFolderUnitIds(folder: ComputeFolderTreeNode): string[] {
+  return [
+    ...folder.units.map((unit) => String(unit.id)),
+    ...folder.children.flatMap(collectComputeFolderUnitIds),
+  ];
+}
+
 async function confirmDirtyClose(name: string) {
   try {
-    await ElMessageBox.confirm(`计算单元「${name}」有未保存修改。`, "关闭标签", {
-      confirmButtonText: "保存",
-      cancelButtonText: "丢弃",
-      distinguishCancelAndClose: true,
-      type: "warning",
-      closeOnClickModal: false,
-    });
+    await ElMessageBox.confirm(
+      `计算单元「${name}」有未保存修改。`,
+      "关闭标签",
+      {
+        confirmButtonText: "保存",
+        cancelButtonText: "丢弃",
+        distinguishCancelAndClose: true,
+        type: "warning",
+        closeOnClickModal: false,
+      },
+    );
     return "save" as const;
   } catch (action) {
     if (action === "cancel") return "discard" as const;
@@ -406,9 +489,13 @@ async function handleRenameUnit(name: string) {
   const unit = contextUnit.value;
   if (!unit) return;
   try {
-    const saved = await computeStore.saveUnit(String(props.projectId), String(unit.id), {
-      name,
-    });
+    const saved = await computeStore.saveUnit(
+      String(props.projectId),
+      String(unit.id),
+      {
+        name,
+      },
+    );
     patchDraftFromSavedUnit(saved);
     showRenameUnitDialog.value = false;
     contextUnit.value = saved;
@@ -423,9 +510,13 @@ async function handleMoveUnit(folderId: string | null) {
   const unit = contextUnit.value;
   if (!unit) return;
   try {
-    const saved = await computeStore.saveUnit(String(props.projectId), String(unit.id), {
-      folderId,
-    });
+    const saved = await computeStore.saveUnit(
+      String(props.projectId),
+      String(unit.id),
+      {
+        folderId,
+      },
+    );
     patchDraftFromSavedUnit(saved);
     showMoveUnitDialog.value = false;
     contextUnit.value = saved;
@@ -533,10 +624,6 @@ onBeforeUnmount(() => {
   border-radius: var(--dc-radius-md);
   background: var(--dc-surface-raised);
   box-shadow: var(--dc-shadow-surface);
-}
-
-.compute-workspace.is-tree-collapsed {
-  grid-template-columns: 48px minmax(0, 1fr);
 }
 
 @media (max-width: 900px) {

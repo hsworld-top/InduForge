@@ -206,7 +206,7 @@
                 <!-- 报警单元 -->
                 <div
                   v-else-if="tab.type === 'alarm-units'"
-                  class="module-card flex-1 overflow-hidden p-5"
+                  class="flex-1 flex flex-col overflow-hidden"
                 >
                   <AlarmWorkspace v-if="projectId" :project-id="projectId" />
                 </div>
@@ -322,14 +322,11 @@
       <ComputeWorkspace
         v-if="projectId"
         :project-id="projectId"
-        :selected-unit-id="activeObjectId"
+        :selected-unit-id="selectedComputeUnitId"
       />
     </div>
 
-    <div
-      v-else-if="activeModule === 'alarm'"
-      class="module-card h-full overflow-hidden p-5"
-    >
+    <div v-else-if="activeModule === 'alarm'" class="h-full overflow-hidden">
       <AlarmWorkspace v-if="projectId" :project-id="projectId" />
     </div>
   </DataCenterShell>
@@ -487,12 +484,17 @@ const resolveModuleFromRoute = (): DatacenterModuleId => {
 
 const activeModule = ref<DatacenterModuleId>(resolveModuleFromRoute());
 const activeObjectId = computed(() => String(route.params.objectId || ""));
+const selectedComputeUnitId = computed(() =>
+  route.params.module === "compute" ? activeObjectId.value : "",
+);
 
 /** 监听路由变化，同步 activeModule（如从 NavRail 外部 push 路由时） */
 watch(
   () => route.params.module,
   (m) => {
-    const next = (m && VALID_MODULES.has(m as V2ModuleId) ? m : DEFAULT_MODULE) as DatacenterModuleId;
+    const next = (
+      m && VALID_MODULES.has(m as V2ModuleId) ? m : DEFAULT_MODULE
+    ) as DatacenterModuleId;
     if (activeModule.value !== next) {
       activeModule.value = next;
     }
@@ -503,7 +505,10 @@ watch(
 watch(activeModule, (newModule, oldModule) => {
   if (newModule === oldModule) return;
   // 切换模块时清空 objectId/tab，保留 query string
-  router.replace({ path: `/${newModule}`, query: stripHandoffQuery(route.query) });
+  router.replace({
+    path: `/${newModule}`,
+    query: stripHandoffQuery(route.query),
+  });
 });
 const project = computed(() => {
   const projectId =
@@ -528,7 +533,9 @@ const previewSessionStore = usePreviewSessionStore();
 const previewSessionActive = computed(() => previewSessionStore.active);
 // NavRail 只需要 connected/disconnected 两态；store 暂未暴露 socket state，默认 connected
 const previewSessionState = computed(() =>
-  previewSessionStore.active ? ("connected" as const) : ("disconnected" as const),
+  previewSessionStore.active
+    ? ("connected" as const)
+    : ("disconnected" as const),
 );
 
 // 使用 composable
@@ -1133,7 +1140,9 @@ const syncProjectStore = () => {
   if (project.value?.id) {
     projectStore.bootstrap({
       projectId: String(project.value.id),
-      tenantId: project.value.tenantId ? String(project.value.tenantId) : undefined,
+      tenantId: project.value.tenantId
+        ? String(project.value.tenantId)
+        : undefined,
     });
   }
 };
@@ -1148,9 +1157,12 @@ onMounted(() => {
 });
 
 // 路由中 project 变化时（如正式入口 bootstrap 完成后路由元数据更新）也同步
-watch(() => project.value?.id, (newId) => {
-  if (newId) syncProjectStore();
-});
+watch(
+  () => project.value?.id,
+  (newId) => {
+    if (newId) syncProjectStore();
+  },
+);
 
 // 组件卸载时清理
 onBeforeUnmount(() => {

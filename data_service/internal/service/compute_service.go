@@ -476,6 +476,18 @@ func (s *ComputeService) DeleteComputeFolder(ctx context.Context, claims *auth.C
 	if err := validateComputeFolderID(folderID); err != nil {
 		return err
 	}
+	unitIDs, err := s.repository.ListUnitIDsByFolderTree(ctx, projectID, folderID)
+	if err != nil {
+		return err
+	}
+	if err := s.repository.DeleteUnits(ctx, projectID, unitIDs); err != nil {
+		return err
+	}
+	if s.datapoints != nil {
+		for _, unitID := range unitIDs {
+			_, _ = s.datapoints.MarkInvalidBySource(ctx, projectID, "calc.output", unitID, &claims.UserID)
+		}
+	}
 	return s.repository.DeleteFolder(ctx, projectID, folderID)
 }
 

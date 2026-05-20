@@ -329,6 +329,13 @@ func (s *AlarmPolicyService) DeleteGroup(ctx context.Context, claims *auth.Claim
 	if err := validateAlarmPolicyID(groupID); err != nil {
 		return err
 	}
+	policyIDs, err := s.repository.ListPolicyIDsByGroupTree(ctx, projectID, groupID)
+	if err != nil {
+		return err
+	}
+	if err := s.repository.DeletePolicies(ctx, projectID, policyIDs); err != nil {
+		return err
+	}
 	return s.repository.DeleteGroup(ctx, projectID, groupID)
 }
 
@@ -501,6 +508,8 @@ func (s *AlarmPolicyService) ValidateDraft(ctx context.Context, claims *auth.Cla
 	if err := s.validateReadAccess(claims, projectID); err != nil {
 		return nil, err
 	}
+	enabled := true
+	input.IsEnabled = &enabled
 	normalized, err := s.normalizeCreateInput(ctx, projectID, input)
 	if err != nil {
 		return nil, err
@@ -537,7 +546,7 @@ func (s *AlarmPolicyService) BatchApplyConditions(ctx context.Context, claims *a
 	if err := s.validateWriteAccess(claims, projectID); err != nil {
 		return err
 	}
-	if err := validateAlarmConditions(conditions, false); err != nil {
+	if err := validateAlarmConditions(conditions, false, true); err != nil {
 		return err
 	}
 	ids, err := s.resolveSelectionIDs(ctx, projectID, selection)
@@ -587,6 +596,10 @@ func (s *AlarmPolicyService) normalizeCreateInput(ctx context.Context, projectID
 	if err != nil {
 		return normalizedAlarmPolicyInput{}, err
 	}
+	enabled := true
+	if input.IsEnabled != nil {
+		enabled = *input.IsEnabled
+	}
 	mode, err := validateAlarmPolicyMode(input.Mode)
 	if err != nil {
 		return normalizedAlarmPolicyInput{}, err
@@ -600,23 +613,17 @@ func (s *AlarmPolicyService) normalizeCreateInput(ctx context.Context, projectID
 		return normalizedAlarmPolicyInput{}, err
 	}
 	derivedExpression := strings.TrimSpace(input.DerivedExpression)
-	if err := validateAlarmPolicyShape(mode, targets, inputs, derivedExpression); err != nil {
-		return normalizedAlarmPolicyInput{}, err
+	if enabled {
+		if err := validateAlarmPolicyShape(mode, targets, inputs, derivedExpression); err != nil {
+			return normalizedAlarmPolicyInput{}, err
+		}
 	}
-	numericOnly := mode == "per_target" && allTargetsNumeric(targets)
-	if mode == "derived" {
-		numericOnly = true
-	}
-	if err := validateAlarmConditions(input.Conditions, numericOnly); err != nil {
+	if err := validateAlarmConditions(input.Conditions, policyRequiresNumericConditions(mode, targets), enabled); err != nil {
 		return normalizedAlarmPolicyInput{}, err
 	}
 	suppression, err := normalizeAlarmSuppression(input.Suppression)
 	if err != nil {
 		return normalizedAlarmPolicyInput{}, err
-	}
-	enabled := true
-	if input.IsEnabled != nil {
-		enabled = *input.IsEnabled
 	}
 	if input.GroupID != nil {
 		groupID := strings.TrimSpace(*input.GroupID)
@@ -703,11 +710,12 @@ func (s *AlarmPolicyService) mergeUpdateInput(ctx context.Context, projectID str
 			result.GroupID = &groupID
 		}
 	}
-	if err := validateAlarmPolicyShape(result.Mode, result.Targets, result.Inputs, result.DerivedExpression); err != nil {
-		return normalizedAlarmPolicyInput{}, err
+	if result.IsEnabled {
+		if err := validateAlarmPolicyShape(result.Mode, result.Targets, result.Inputs, result.DerivedExpression); err != nil {
+			return normalizedAlarmPolicyInput{}, err
+		}
 	}
-	numericOnly := result.Mode == "derived" || allTargetsNumeric(result.Targets)
-	if err := validateAlarmConditions(result.Conditions, numericOnly); err != nil {
+	if err := validateAlarmConditions(result.Conditions, policyRequiresNumericConditions(result.Mode, result.Targets), result.IsEnabled); err != nil {
 		return normalizedAlarmPolicyInput{}, err
 	}
 	return result, nil
@@ -777,6 +785,17 @@ func (s *AlarmPolicyService) setSelectedPoliciesEnabled(ctx context.Context, cla
 	ids, err := s.resolveSelectionIDs(ctx, projectID, selection)
 	if err != nil {
 		return err
+	}
+	if enabled {
+		for _, id := range ids {
+			current, err := s.repository.GetPolicyByProjectAndID(ctx, projectID, id)
+			if err != nil {
+				return err
+			}
+			if err := validateAlarmPolicyReady(toAlarmPolicy(*current)); err != nil {
+				return err
+			}
+		}
 	}
 	return s.repository.SetPoliciesEnabled(ctx, projectID, claims.UserID, ids, enabled)
 }
@@ -875,7 +894,18 @@ func validateAlarmPolicyShape(mode string, targets []AlarmTargetRef, inputs []Al
 	return nil
 }
 
-func validateAlarmConditions(conditions []AlarmCondition, numericOnly bool) error {
+func policyRequiresNumericConditions(mode string, targets []AlarmTargetRef) bool {
+	return mode == "derived" || allTargetsNumeric(targets)
+}
+
+func validateAlarmPolicyReady(policy AlarmPolicy) error {
+	if err := validateAlarmPolicyShape(policy.Mode, policy.Targets, policy.Inputs, policy.DerivedExpression); err != nil {
+		return err
+	}
+	return validateAlarmConditions(policy.Conditions, policyRequiresNumericConditions(policy.Mode, policy.Targets), true)
+}
+
+func validateAlarmConditions(conditions []AlarmCondition, numericOnly bool, requireEnabled bool) error {
 	enabledCount := 0
 	for _, condition := range conditions {
 		if !condition.IsEnabled {
@@ -895,7 +925,7 @@ func validateAlarmConditions(conditions []AlarmCondition, numericOnly bool) erro
 			return err
 		}
 	}
-	if enabledCount == 0 {
+	if requireEnabled && enabledCount == 0 {
 		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "条件集至少需要一个启用条件")
 	}
 	return nil

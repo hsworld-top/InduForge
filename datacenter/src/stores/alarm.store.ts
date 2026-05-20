@@ -8,6 +8,7 @@ import {
   createAlarmPolicyGroup,
   createAlarmPolicy,
   deleteAlarmPolicy,
+  deleteAlarmPolicyGroup,
   getAlarmPolicy,
   getAlarmPolicyContract,
   getAlarmPolicyGroups,
@@ -102,6 +103,15 @@ export const useAlarmStore = defineStore("alarm", () => {
       0,
       tree.value.matchedPolicyCount - selection.value.excludePolicyIds.length,
     );
+  });
+  const selectedPolicyIds = computed(() => {
+    if (selection.value.mode === "ids") {
+      return selection.value.policyIds;
+    }
+    const excluded = new Set(selection.value.excludePolicyIds);
+    return tree.value.policies
+      .filter((policy) => !excluded.has(policy.id))
+      .map((policy) => policy.id);
   });
 
   const mergePolicyIntoList = (policy: AlarmPolicy) => {
@@ -275,6 +285,16 @@ export const useAlarmStore = defineStore("alarm", () => {
     }
   }
 
+  async function removeGroup(projectId: string, groupId: string) {
+    deleting.value = true;
+    try {
+      await deleteAlarmPolicyGroup(projectId, groupId);
+      await fetchTree(projectId);
+    } finally {
+      deleting.value = false;
+    }
+  }
+
   async function setPolicyEnabled(
     projectId: string,
     id: string,
@@ -370,6 +390,20 @@ export const useAlarmStore = defineStore("alarm", () => {
       );
     } finally {
       saving.value = false;
+    }
+  }
+
+  async function batchDelete(projectId: string) {
+    const ids = selectedPolicyIds.value;
+    if (!ids.length) {
+      return;
+    }
+    deleting.value = true;
+    try {
+      await Promise.all(ids.map((id) => deleteAlarmPolicy(projectId, id)));
+      clearSelection();
+    } finally {
+      deleting.value = false;
     }
   }
 
@@ -475,6 +509,7 @@ export const useAlarmStore = defineStore("alarm", () => {
     validationLoading,
     validationError,
     hasEditing,
+    selectedPolicyIds,
     fetchGroups,
     createGroup,
     updateGroup,
@@ -489,6 +524,7 @@ export const useAlarmStore = defineStore("alarm", () => {
     saveRule: savePolicy,
     removePolicy,
     removeRule: removePolicy,
+    removeGroup,
     setPolicyEnabled,
     setRuleEnabled: setPolicyEnabled,
     selectPolicy,
@@ -498,6 +534,7 @@ export const useAlarmStore = defineStore("alarm", () => {
     batchEnable,
     batchDisable,
     batchMove,
+    batchDelete,
     batchMovePolicies,
     batchApplyConditions,
     runTrial,
