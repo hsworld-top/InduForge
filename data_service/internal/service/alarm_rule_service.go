@@ -16,14 +16,20 @@ import (
 )
 
 var allowedAlarmRuleTypes = map[string]struct{}{
-	"threshold":  {},
-	"range":      {},
-	"expression": {},
+	"H":              {},
+	"L":              {},
+	"HH":             {},
+	"LL":             {},
+	"deviation_high": {},
+	"deviation_low":  {},
+	"rate_of_change": {},
+	"cel":            {},
 }
 
 var allowedAlarmSeverities = map[string]struct{}{
 	"info":     {},
 	"warning":  {},
+	"major":    {},
 	"critical": {},
 }
 
@@ -35,11 +41,14 @@ type AlarmRule struct {
 	Description       *string        `json:"description,omitempty"`
 	TargetDataPointID *string        `json:"targetDatapointId,omitempty"`
 	TargetPath        string         `json:"targetPath"`
+	TargetDataType    string         `json:"targetDataType,omitempty"`
 	RuleType          string         `json:"ruleType"`
 	Condition         map[string]any `json:"condition"`
 	Severity          string         `json:"severity"`
 	Hysteresis        *float64       `json:"hysteresis,omitempty"`
 	SampleWindowMS    *int           `json:"sampleWindowMs,omitempty"`
+	Suppression       map[string]any `json:"suppression"`
+	MessageTemplate   string         `json:"messageTemplate"`
 	Contract          map[string]any `json:"contract"`
 	IsEnabled         bool           `json:"isEnabled"`
 	CreatedAt         time.Time      `json:"createdAt"`
@@ -69,16 +78,18 @@ type AlarmRuleListFilter struct {
 }
 
 type CreateAlarmRuleInput struct {
-	Name           string
-	Description    *string
-	TargetPath     string
-	RuleType       string
-	Condition      map[string]any
-	Severity       string
-	Hysteresis     *float64
-	SampleWindowMS *int
-	Contract       map[string]any
-	IsEnabled      *bool
+	Name            string
+	Description     *string
+	TargetPath      string
+	RuleType        string
+	Condition       map[string]any
+	Severity        string
+	Hysteresis      *float64
+	SampleWindowMS  *int
+	Suppression     map[string]any
+	MessageTemplate string
+	Contract        map[string]any
+	IsEnabled       *bool
 }
 
 type UpdateAlarmRuleInput struct {
@@ -93,6 +104,9 @@ type UpdateAlarmRuleInput struct {
 	ClearHysteresis     bool
 	SampleWindowMS      *int
 	ClearSampleWindowMS bool
+	Suppression         map[string]any
+	HasSuppression      bool
+	MessageTemplate     *string
 	Contract            map[string]any
 	HasContract         bool
 	IsEnabled           *bool
@@ -116,13 +130,22 @@ type AlarmRuleDatapoint struct {
 type AlarmRuleTestInput struct {
 	Value     any
 	Timestamp *time.Time
+	Context   map[string]any
 }
 
 type AlarmRuleTestResult struct {
 	Triggered   bool           `json:"triggered"`
+	State       string         `json:"state"`
 	Severity    string         `json:"severity"`
 	RuleType    string         `json:"ruleType"`
 	TargetPath  string         `json:"targetPath"`
+	Message     string         `json:"message"`
+	Diagnostics map[string]any `json:"diagnostics"`
+}
+
+type AlarmRuleEvaluationResult struct {
+	Triggered   bool           `json:"triggered"`
+	State       string         `json:"state"`
 	Diagnostics map[string]any `json:"diagnostics"`
 }
 
@@ -195,7 +218,7 @@ func (s *AlarmRuleService) Create(ctx context.Context, claims *auth.Claims, proj
 	if err != nil {
 		return nil, err
 	}
-	contract := buildAlarmRuleContract(normalized, target, "")
+	contract := buildAlarmRuleContract(normalized, target, "", projectID)
 	record, err := s.repository.Create(ctx, repository.CreateAlarmRuleParams{
 		ProjectID:         projectID,
 		UserID:            claims.UserID,
@@ -235,7 +258,7 @@ func (s *AlarmRuleService) Update(ctx context.Context, claims *auth.Claims, proj
 	}
 	contract := normalized.Contract
 	if !input.HasContract {
-		contract = buildAlarmRuleContract(normalized, target, current.ID)
+		contract = buildAlarmRuleContract(normalized, target, current.ID, projectID)
 	}
 	record, err := s.repository.Update(ctx, repository.UpdateAlarmRuleParams{
 		ID:                current.ID,
@@ -292,9 +315,9 @@ func (s *AlarmRuleService) ValidateTarget(ctx context.Context, claims *auth.Clai
 	if !result.Valid {
 		result.Reason = "目标数据点不是 active 状态"
 	}
-	if target.DataType != "number" && target.DataType != "integer" && rule.RuleType != "expression" {
+	if target.DataType != "number" && target.DataType != "integer" && rule.RuleType != "cel" {
 		result.Valid = false
-		result.Reason = "阈值/区间规则需要数值型数据点"
+		result.Reason = "非 CEL 规则需要数值型数据点"
 	}
 	return result, nil
 }
@@ -304,18 +327,21 @@ func (s *AlarmRuleService) Test(ctx context.Context, claims *auth.Claims, projec
 	if err != nil {
 		return nil, err
 	}
-	triggered, diagnostics, err := evaluateAlarmRule(rule.RuleType, rule.Condition, input.Value)
+	result, err := evaluateAlarmRule(rule.RuleType, rule.Condition, input.Value, input.Context)
 	if err != nil {
 		return nil, err
 	}
+	diagnostics := cloneMap(result.Diagnostics)
 	if input.Timestamp != nil {
 		diagnostics["timestamp"] = input.Timestamp.Format(time.RFC3339)
 	}
 	return &AlarmRuleTestResult{
-		Triggered:   triggered,
+		Triggered:   result.Triggered,
+		State:       result.State,
 		Severity:    rule.Severity,
 		RuleType:    rule.RuleType,
 		TargetPath:  rule.TargetPath,
+		Message:     renderAlarmMessage(rule.MessageTemplate, rule, input.Value),
 		Diagnostics: diagnostics,
 	}, nil
 }
@@ -327,11 +353,14 @@ func (s *AlarmRuleService) Contract(ctx context.Context, claims *auth.Claims, pr
 	}
 	contract := cloneMap(rule.Contract)
 	contract["ruleId"] = rule.ID
-	contract["targetPath"] = rule.TargetPath
+	contract["projectId"] = projectID
+	contract["schemaVersion"] = "alarm.rule.v1"
 	contract["ruleType"] = rule.RuleType
 	contract["severity"] = rule.Severity
+	contract["suppression"] = cloneMap(rule.Suppression)
+	contract["messageTemplate"] = rule.MessageTemplate
 	contract["enabled"] = rule.IsEnabled
-	contract["version"] = rule.UpdatedAt.Format(time.RFC3339)
+	contract["updatedAt"] = rule.UpdatedAt.Format(time.RFC3339)
 	return contract, nil
 }
 
@@ -359,16 +388,18 @@ func (s *AlarmRuleService) validateWriteAccess(claims *auth.Claims, projectID st
 }
 
 type normalizedAlarmRuleInput struct {
-	Name           string
-	Description    *string
-	TargetPath     string
-	RuleType       string
-	Condition      map[string]any
-	Severity       string
-	Hysteresis     *float64
-	SampleWindowMS *int
-	Contract       map[string]any
-	IsEnabled      bool
+	Name            string
+	Description     *string
+	TargetPath      string
+	RuleType        string
+	Condition       map[string]any
+	Severity        string
+	Hysteresis      *float64
+	SampleWindowMS  *int
+	Suppression     map[string]any
+	MessageTemplate string
+	Contract        map[string]any
+	IsEnabled       bool
 }
 
 func (s *AlarmRuleService) normalizeCreateInput(ctx context.Context, projectID string, input CreateAlarmRuleInput) (normalizedAlarmRuleInput, *repository.DataPointRecord, error) {
@@ -385,44 +416,56 @@ func (s *AlarmRuleService) normalizeCreateInput(ctx context.Context, projectID s
 		return normalizedAlarmRuleInput{}, nil, err
 	}
 	if ruleType == "" {
-		ruleType = "threshold"
+		ruleType = "H"
 	}
 	if severity == "" {
 		severity = "warning"
 	}
+	if err := validateAlarmTargetDataType(ruleType, target.DataType); err != nil {
+		return normalizedAlarmRuleInput{}, nil, err
+	}
 	if err := validateAlarmCondition(ruleType, input.Condition); err != nil {
 		return normalizedAlarmRuleInput{}, nil, err
 	}
+	suppression, err := normalizeAlarmSuppression(input.Suppression)
+	if err != nil {
+		return normalizedAlarmRuleInput{}, nil, err
+	}
+	messageTemplate := normalizeAlarmMessageTemplate(input.MessageTemplate, target.Path, ruleType)
 	enabled := true
 	if input.IsEnabled != nil {
 		enabled = *input.IsEnabled
 	}
 	return normalizedAlarmRuleInput{
-		Name:           name,
-		Description:    trimOptionalString(input.Description),
-		TargetPath:     target.Path,
-		RuleType:       ruleType,
-		Condition:      cloneMap(input.Condition),
-		Severity:       severity,
-		Hysteresis:     input.Hysteresis,
-		SampleWindowMS: input.SampleWindowMS,
-		Contract:       cloneMap(input.Contract),
-		IsEnabled:      enabled,
+		Name:            name,
+		Description:     trimOptionalString(input.Description),
+		TargetPath:      target.Path,
+		RuleType:        ruleType,
+		Condition:       cloneMap(input.Condition),
+		Severity:        severity,
+		Hysteresis:      input.Hysteresis,
+		SampleWindowMS:  input.SampleWindowMS,
+		Suppression:     suppression,
+		MessageTemplate: messageTemplate,
+		Contract:        cloneMap(input.Contract),
+		IsEnabled:       enabled,
 	}, target, nil
 }
 
 func (s *AlarmRuleService) mergeUpdateInput(ctx context.Context, projectID string, current repository.AlarmRuleRecord, input UpdateAlarmRuleInput) (normalizedAlarmRuleInput, *repository.DataPointRecord, error) {
 	result := normalizedAlarmRuleInput{
-		Name:           current.Name,
-		Description:    cloneOptionalString(current.Description),
-		TargetPath:     current.TargetPath,
-		RuleType:       current.RuleType,
-		Condition:      cloneMap(current.Condition),
-		Severity:       current.Severity,
-		Hysteresis:     cloneOptionalFloat64(current.Hysteresis),
-		SampleWindowMS: cloneOptionalInt(current.SampleWindowMS),
-		Contract:       cloneMap(current.Contract),
-		IsEnabled:      current.IsEnabled,
+		Name:            current.Name,
+		Description:     cloneOptionalString(current.Description),
+		TargetPath:      current.TargetPath,
+		RuleType:        current.RuleType,
+		Condition:       cloneMap(current.Condition),
+		Severity:        current.Severity,
+		Hysteresis:      cloneOptionalFloat64(current.Hysteresis),
+		SampleWindowMS:  cloneOptionalInt(current.SampleWindowMS),
+		Suppression:     mapFromContract(current.Contract, "suppression"),
+		MessageTemplate: stringFromContract(current.Contract, "messageTemplate"),
+		Contract:        cloneMap(current.Contract),
+		IsEnabled:       current.IsEnabled,
 	}
 	var err error
 	if input.Name != nil {
@@ -452,6 +495,15 @@ func (s *AlarmRuleService) mergeUpdateInput(ctx context.Context, projectID strin
 	if input.HasCondition {
 		result.Condition = cloneMap(input.Condition)
 	}
+	if input.HasSuppression {
+		result.Suppression, err = normalizeAlarmSuppression(input.Suppression)
+		if err != nil {
+			return normalizedAlarmRuleInput{}, nil, err
+		}
+	}
+	if input.MessageTemplate != nil {
+		result.MessageTemplate = strings.TrimSpace(*input.MessageTemplate)
+	}
 	if input.Hysteresis != nil || input.ClearHysteresis {
 		result.Hysteresis = input.Hysteresis
 	}
@@ -470,6 +522,12 @@ func (s *AlarmRuleService) mergeUpdateInput(ctx context.Context, projectID strin
 	target, err := s.resolveAlarmTarget(ctx, projectID, result.TargetPath)
 	if err != nil {
 		return normalizedAlarmRuleInput{}, nil, err
+	}
+	if err := validateAlarmTargetDataType(result.RuleType, target.DataType); err != nil {
+		return normalizedAlarmRuleInput{}, nil, err
+	}
+	if result.MessageTemplate == "" {
+		result.MessageTemplate = normalizeAlarmMessageTemplate("", target.Path, result.RuleType)
 	}
 	return result, target, nil
 }
@@ -497,11 +555,14 @@ func toAlarmRule(record repository.AlarmRuleRecord) AlarmRule {
 		Description:       cloneOptionalString(record.Description),
 		TargetDataPointID: cloneOptionalString(record.TargetDataPointID),
 		TargetPath:        record.TargetPath,
+		TargetDataType:    stringFromContract(record.Contract, "targetDataType"),
 		RuleType:          record.RuleType,
 		Condition:         cloneMap(record.Condition),
 		Severity:          record.Severity,
 		Hysteresis:        cloneOptionalFloat64(record.Hysteresis),
 		SampleWindowMS:    cloneOptionalInt(record.SampleWindowMS),
+		Suppression:       mapFromContract(record.Contract, "suppression"),
+		MessageTemplate:   stringFromContract(record.Contract, "messageTemplate"),
 		Contract:          cloneMap(record.Contract),
 		IsEnabled:         record.IsEnabled,
 		CreatedAt:         record.CreatedAt,
@@ -510,7 +571,7 @@ func toAlarmRule(record repository.AlarmRuleRecord) AlarmRule {
 }
 
 func normalizeAlarmFilters(ruleType, severity string) (string, string, error) {
-	ruleType = strings.TrimSpace(strings.ToLower(ruleType))
+	ruleType = strings.TrimSpace(ruleType)
 	if ruleType != "" {
 		if _, ok := allowedAlarmRuleTypes[ruleType]; !ok {
 			return "", "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "ruleType 不受支持")
@@ -544,67 +605,180 @@ func validateAlarmRuleID(ruleID string) error {
 }
 
 func validateAlarmCondition(ruleType string, condition map[string]any) error {
-	if ruleType == "expression" {
-		if strings.TrimSpace(fmt.Sprintf("%v", condition["expression"])) == "" {
-			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "expression 规则需要 condition.expression")
+	switch ruleType {
+	case "H", "HH", "L", "LL", "deviation_high", "deviation_low", "rate_of_change":
+		if _, err := anyToFloat64(condition["limit"]); err != nil {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "condition.limit 必须是数值")
 		}
-	}
-	if _, _, err := evaluateAlarmRule(ruleType, condition, 0); err != nil {
-		return err
+		if ruleType == "rate_of_change" {
+			if _, err := anyToFloat64(condition["windowMs"]); err != nil {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "rate_of_change 规则需要数值 condition.windowMs")
+			}
+		}
+	case "cel":
+		if strings.TrimSpace(fmt.Sprintf("%v", condition["expression"])) == "" {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "cel 规则需要 condition.expression")
+		}
+	default:
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "ruleType 不受支持")
 	}
 	return nil
 }
 
-func evaluateAlarmRule(ruleType string, condition map[string]any, value any) (bool, map[string]any, error) {
-	diagnostics := map[string]any{"sampleValue": value, "condition": cloneMap(condition)}
+func evaluateAlarmRule(ruleType string, condition map[string]any, value any, context map[string]any) (*AlarmRuleEvaluationResult, error) {
 	switch ruleType {
-	case "threshold":
-		number, err := anyToFloat64(value)
-		if err != nil {
-			return false, nil, err
-		}
-		threshold, err := anyToFloat64(condition["value"])
-		if err != nil {
-			return false, nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "threshold 规则需要数值 condition.value")
-		}
-		operator := strings.TrimSpace(fmt.Sprintf("%v", condition["operator"]))
-		if operator == "" {
-			operator = ">="
-		}
-		triggered, err := compareAlarmValue(number, threshold, operator)
-		if err != nil {
-			return false, nil, err
-		}
-		diagnostics["operator"] = operator
-		diagnostics["threshold"] = threshold
-		return triggered, diagnostics, nil
-	case "range":
-		number, err := anyToFloat64(value)
-		if err != nil {
-			return false, nil, err
-		}
-		low, lowErr := anyToFloat64(condition["low"])
-		high, highErr := anyToFloat64(condition["high"])
-		if lowErr != nil || highErr != nil || low > high {
-			return false, nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "range 规则需要有效的 condition.low/high")
-		}
-		diagnostics["low"] = low
-		diagnostics["high"] = high
-		return number < low || number > high, diagnostics, nil
-	case "expression":
-		expression := strings.TrimSpace(fmt.Sprintf("%v", condition["expression"]))
-		triggered, err := evaluateAlarmExpression(expression, value)
-		if err != nil {
-			return false, nil, err
-		}
-		diagnostics["expression"] = expression
-		return triggered, diagnostics, nil
+	case "H", "HH":
+		return evaluateUpperLimit(ruleType, condition, value)
+	case "L", "LL":
+		return evaluateLowerLimit(ruleType, condition, value)
+	case "deviation_high", "deviation_low":
+		return evaluateDeviation(ruleType, condition, value, context)
+	case "rate_of_change":
+		return evaluateRateOfChange(condition, value, context)
+	case "cel":
+		return evaluateCEL(condition, value, context)
 	default:
-		return false, nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "ruleType 不受支持")
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "ruleType 不受支持")
 	}
 }
 
-func evaluateAlarmExpression(expression string, value any) (bool, error) {
+func evaluateUpperLimit(ruleType string, condition map[string]any, value any) (*AlarmRuleEvaluationResult, error) {
+	number, err := anyToFloat64(value)
+	if err != nil {
+		return nil, err
+	}
+	limit, err := anyToFloat64(condition["limit"])
+	if err != nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "condition.limit 必须是数值")
+	}
+	triggered := number >= limit
+	return alarmEvaluation(triggered, map[string]any{
+		"sampleValue": number,
+		"limit":       limit,
+		"ruleType":    ruleType,
+		"reason":      "value >= limit",
+	}), nil
+}
+
+func evaluateLowerLimit(ruleType string, condition map[string]any, value any) (*AlarmRuleEvaluationResult, error) {
+	number, err := anyToFloat64(value)
+	if err != nil {
+		return nil, err
+	}
+	limit, err := anyToFloat64(condition["limit"])
+	if err != nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "condition.limit 必须是数值")
+	}
+	triggered := number <= limit
+	return alarmEvaluation(triggered, map[string]any{
+		"sampleValue": number,
+		"limit":       limit,
+		"ruleType":    ruleType,
+		"reason":      "value <= limit",
+	}), nil
+}
+
+func evaluateDeviation(ruleType string, condition map[string]any, value any, context map[string]any) (*AlarmRuleEvaluationResult, error) {
+	number, err := anyToFloat64(value)
+	if err != nil {
+		return nil, err
+	}
+	baseline, ok := contextValue(context, "baselineValue")
+	if !ok {
+		return insufficientAlarmInput(map[string]any{"missing": "baselineValue"}), nil
+	}
+	baselineValue, err := anyToFloat64(baseline)
+	if err != nil {
+		return nil, err
+	}
+	limit, err := anyToFloat64(condition["limit"])
+	if err != nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "condition.limit 必须是数值")
+	}
+	deviation := number - baselineValue
+	triggered := deviation >= limit
+	reason := "value - baselineValue >= limit"
+	if ruleType == "deviation_low" {
+		triggered = baselineValue-number >= limit
+		reason = "baselineValue - value >= limit"
+	}
+	return alarmEvaluation(triggered, map[string]any{
+		"sampleValue":   number,
+		"baselineValue": baselineValue,
+		"deviation":     deviation,
+		"limit":         limit,
+		"reason":        reason,
+	}), nil
+}
+
+func evaluateRateOfChange(condition map[string]any, value any, context map[string]any) (*AlarmRuleEvaluationResult, error) {
+	number, err := anyToFloat64(value)
+	if err != nil {
+		return nil, err
+	}
+	previous, ok := contextValue(context, "previousValue")
+	if !ok {
+		return insufficientAlarmInput(map[string]any{"missing": "previousValue"}), nil
+	}
+	previousValue, err := anyToFloat64(previous)
+	if err != nil {
+		return nil, err
+	}
+	limit, err := anyToFloat64(condition["limit"])
+	if err != nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "condition.limit 必须是数值")
+	}
+	windowMs, err := anyToFloat64(condition["windowMs"])
+	if err != nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "rate_of_change 规则需要数值 condition.windowMs")
+	}
+	delta := number - previousValue
+	direction := strings.TrimSpace(fmt.Sprintf("%v", condition["direction"]))
+	if direction == "" {
+		direction = "up"
+	}
+	triggered := delta >= limit
+	reason := "value - previousValue >= limit"
+	if direction == "down" {
+		triggered = previousValue-number >= limit
+		reason = "previousValue - value >= limit"
+	}
+	return alarmEvaluation(triggered, map[string]any{
+		"sampleValue":   number,
+		"previousValue": previousValue,
+		"delta":         delta,
+		"limit":         limit,
+		"windowMs":      windowMs,
+		"direction":     direction,
+		"reason":        reason,
+	}), nil
+}
+
+func evaluateCEL(condition map[string]any, value any, context map[string]any) (*AlarmRuleEvaluationResult, error) {
+	expression := strings.TrimSpace(fmt.Sprintf("%v", condition["expression"]))
+	triggered, err := evaluateAlarmExpression(expression, value, context)
+	if err != nil {
+		return nil, err
+	}
+	return alarmEvaluation(triggered, map[string]any{
+		"sampleValue": value,
+		"expression":  expression,
+	}), nil
+}
+
+func alarmEvaluation(triggered bool, diagnostics map[string]any) *AlarmRuleEvaluationResult {
+	state := "not_triggered"
+	if triggered {
+		state = "triggered"
+	}
+	return &AlarmRuleEvaluationResult{Triggered: triggered, State: state, Diagnostics: diagnostics}
+}
+
+func insufficientAlarmInput(diagnostics map[string]any) *AlarmRuleEvaluationResult {
+	return &AlarmRuleEvaluationResult{Triggered: false, State: "insufficient_input", Diagnostics: diagnostics}
+}
+
+func evaluateAlarmExpression(expression string, value any, context map[string]any) (bool, error) {
 	expression = strings.TrimSpace(expression)
 	if expression == "" {
 		return false, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "expression 不能为空")
@@ -612,7 +786,7 @@ func evaluateAlarmExpression(expression string, value any) (bool, error) {
 	if strings.Contains(expression, "||") {
 		parts := strings.Split(expression, "||")
 		for _, part := range parts {
-			matched, err := evaluateAlarmExpression(strings.TrimSpace(part), value)
+			matched, err := evaluateAlarmExpression(strings.TrimSpace(part), value, context)
 			if err != nil {
 				return false, err
 			}
@@ -625,7 +799,7 @@ func evaluateAlarmExpression(expression string, value any) (bool, error) {
 	if strings.Contains(expression, "&&") {
 		parts := strings.Split(expression, "&&")
 		for _, part := range parts {
-			matched, err := evaluateAlarmExpression(strings.TrimSpace(part), value)
+			matched, err := evaluateAlarmExpression(strings.TrimSpace(part), value, context)
 			if err != nil {
 				return false, err
 			}
@@ -635,10 +809,10 @@ func evaluateAlarmExpression(expression string, value any) (bool, error) {
 		}
 		return true, nil
 	}
-	return evaluateAlarmExpressionClause(expression, value)
+	return evaluateAlarmExpressionClause(expression, value, context)
 }
 
-func evaluateAlarmExpressionClause(clause string, value any) (bool, error) {
+func evaluateAlarmExpressionClause(clause string, value any, context map[string]any) (bool, error) {
 	clause = strings.TrimSpace(strings.Trim(clause, "() "))
 	for _, operator := range []string{">=", "<=", "==", "!=", ">", "<"} {
 		index := strings.Index(clause, operator)
@@ -647,10 +821,11 @@ func evaluateAlarmExpressionClause(clause string, value any) (bool, error) {
 		}
 		left := strings.TrimSpace(clause[:index])
 		right := strings.TrimSpace(clause[index+len(operator):])
-		if left != "value" && left != "$value" && left != "sample" && left != "sampleValue" {
-			return false, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "expression 仅支持 value/sampleValue 变量")
+		actual, ok := alarmExpressionVariable(left, value, context)
+		if !ok {
+			return false, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "expression 包含不支持的变量")
 		}
-		return compareExpressionValue(value, right, operator)
+		return compareExpressionValue(actual, right, operator)
 	}
 	return false, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "expression 子句格式无效")
 }
@@ -678,6 +853,25 @@ func compareExpressionValue(sample any, rawExpected, operator string) (bool, err
 		return false, err
 	}
 	return compareAlarmValue(actual, expected, operator)
+}
+
+func alarmExpressionVariable(name string, value any, context map[string]any) (any, bool) {
+	switch name {
+	case "value":
+		return value, true
+	case "quality", "timestamp", "baselineValue", "previousValue":
+		return contextValue(context, name)
+	default:
+		return nil, false
+	}
+}
+
+func contextValue(context map[string]any, name string) (any, bool) {
+	if context == nil {
+		return nil, false
+	}
+	value, ok := context[name]
+	return value, ok
 }
 
 func compareAlarmValue(sample, threshold float64, operator string) (bool, error) {
@@ -718,17 +912,89 @@ func anyToFloat64(value any) (float64, error) {
 	return 0, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "样本值必须是数值")
 }
 
-func buildAlarmRuleContract(input normalizedAlarmRuleInput, target *repository.DataPointRecord, ruleID string) map[string]any {
+func validateAlarmTargetDataType(ruleType, dataType string) error {
+	if ruleType == "cel" {
+		return nil
+	}
+	if dataType == "number" || dataType == "integer" {
+		return nil
+	}
+	return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "非 CEL 规则只能绑定数值型数据点")
+}
+
+func normalizeAlarmSuppression(input map[string]any) (map[string]any, error) {
+	suppression := cloneMap(input)
+	if suppression == nil {
+		suppression = map[string]any{}
+	}
+	if enabled, ok := suppression["enabled"].(bool); ok && enabled {
+		duration, err := anyToFloat64(suppression["durationMs"])
+		if err != nil || duration <= 0 {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "suppression.durationMs 必须大于 0")
+		}
+	}
+	return suppression, nil
+}
+
+func normalizeAlarmMessageTemplate(input, targetPath, ruleType string) string {
+	input = strings.TrimSpace(input)
+	if input != "" {
+		return input
+	}
+	return "{{targetPath}} 触发 {{ruleType}}"
+}
+
+func renderAlarmMessage(template string, rule *AlarmRule, value any) string {
+	if rule == nil {
+		return template
+	}
+	if strings.TrimSpace(template) == "" {
+		template = normalizeAlarmMessageTemplate("", rule.TargetPath, rule.RuleType)
+	}
+	replacer := strings.NewReplacer(
+		"{{targetPath}}", rule.TargetPath,
+		"{{ruleType}}", rule.RuleType,
+		"{{severity}}", rule.Severity,
+		"{{value}}", fmt.Sprintf("%v", value),
+	)
+	return replacer.Replace(template)
+}
+
+func mapFromContract(contract map[string]any, key string) map[string]any {
+	value, ok := contract[key].(map[string]any)
+	if !ok {
+		return map[string]any{}
+	}
+	return cloneMap(value)
+}
+
+func stringFromContract(contract map[string]any, key string) string {
+	value, ok := contract[key].(string)
+	if !ok {
+		return ""
+	}
+	return value
+}
+
+func buildAlarmRuleContract(input normalizedAlarmRuleInput, target *repository.DataPointRecord, ruleID string, projectID string) map[string]any {
 	contract := cloneMap(input.Contract)
+	contract["schemaVersion"] = "alarm.rule.v1"
 	contract["ruleId"] = ruleID
-	contract["targetPath"] = input.TargetPath
-	contract["targetDatapointId"] = target.ID
-	contract["targetDataType"] = target.DataType
+	contract["projectId"] = projectID
+	contract["target"] = map[string]any{
+		"datapointId": target.ID,
+		"path":        input.TargetPath,
+		"dataType":    target.DataType,
+	}
 	contract["ruleType"] = input.RuleType
 	contract["condition"] = cloneMap(input.Condition)
 	contract["severity"] = input.Severity
-	contract["hysteresis"] = input.Hysteresis
-	contract["sampleWindowMs"] = input.SampleWindowMS
+	contract["suppression"] = cloneMap(input.Suppression)
+	contract["messageTemplate"] = input.MessageTemplate
 	contract["enabled"] = input.IsEnabled
+	contract["updatedAt"] = ""
+	contract["targetPath"] = input.TargetPath
+	contract["targetDatapointId"] = target.ID
+	contract["targetDataType"] = target.DataType
 	return contract
 }
