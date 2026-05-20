@@ -4,6 +4,7 @@
       type="button"
       class="compute-tree-branch__folder"
       @click="expanded = !expanded"
+      @contextmenu.prevent.stop="$emit('folderContextmenu', $event, node)"
     >
       <IconTablerChevronRight
         class="compute-tree-branch__chevron"
@@ -45,6 +46,9 @@
         :node="child"
         :selected-unit-id="selectedUnitId"
         @select-unit="$emit('selectUnit', $event)"
+        @folder-contextmenu="
+          (mouseEvent, folder) => $emit('folderContextmenu', mouseEvent, folder)
+        "
         @unit-contextmenu="
           (mouseEvent, unit) => $emit('unitContextmenu', mouseEvent, unit)
         "
@@ -73,6 +77,11 @@ const props = defineProps<{
 defineEmits<{
   (event: "selectUnit", id: string): void;
   (event: "unitContextmenu", mouseEvent: MouseEvent, unit: ComputeUnit): void;
+  (
+    event: "folderContextmenu",
+    mouseEvent: MouseEvent,
+    folder: ComputeFolderTreeNode,
+  ): void;
 }>();
 
 const expanded = ref(true);

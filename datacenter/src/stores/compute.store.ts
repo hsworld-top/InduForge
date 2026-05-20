@@ -6,6 +6,7 @@ import {
   getComputeFolders,
   createComputeUnit,
   createComputeFolder,
+  updateComputeFolder,
   updateComputeUnit,
   deleteComputeUnit,
   toggleComputeUnit,
@@ -140,6 +141,21 @@ export const useComputeStore = defineStore("compute", () => {
     }
   }
 
+  async function saveFolder(
+    projectId: string,
+    folderId: string,
+    data: Partial<ComputeFolderSave>,
+  ) {
+    saving.value = true;
+    try {
+      const folder = await updateComputeFolder(projectId, folderId, data);
+      fetchFolders(projectId).catch(() => undefined);
+      return folder;
+    } finally {
+      saving.value = false;
+    }
+  }
+
   async function saveUnit(
     projectId: string,
     id: string,
@@ -243,6 +259,7 @@ export const useComputeStore = defineStore("compute", () => {
     closeEdit,
     createUnit,
     createFolder,
+    saveFolder,
     saveUnit,
     removeUnit,
     setUnitEnabled,

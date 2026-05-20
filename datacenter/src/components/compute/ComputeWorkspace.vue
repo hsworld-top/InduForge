@@ -18,6 +18,8 @@
       @toggle-collapse="treeCollapsed = !treeCollapsed"
       @rename-unit="openRenameUnitDialog"
       @move-unit="openMoveUnitDialog"
+      @rename-folder="openRenameFolderDialog"
+      @move-folder="openMoveFolderDialog"
     />
 
     <ComputeEditorShell
@@ -71,6 +73,21 @@
       :loading="computeStore.saving"
       @submit="handleMoveUnit"
     />
+
+    <RenameComputeFolderDialog
+      v-model="showRenameFolderDialog"
+      :folder="contextFolder"
+      :loading="computeStore.saving"
+      @submit="handleRenameFolder"
+    />
+
+    <MoveComputeFolderDialog
+      v-model="showMoveFolderDialog"
+      :folder="contextFolder"
+      :folders="computeStore.folders"
+      :loading="computeStore.saving"
+      @submit="handleMoveFolder"
+    />
   </div>
 </template>
 
@@ -90,13 +107,16 @@ import ComputeTree from "./ComputeTree.vue";
 import CreateComputeFolderDialog from "./CreateComputeFolderDialog.vue";
 import CreateComputeUnitDialog from "./CreateComputeUnitDialog.vue";
 import MoveComputeUnitDialog from "./MoveComputeUnitDialog.vue";
+import MoveComputeFolderDialog from "./MoveComputeFolderDialog.vue";
 import RenameComputeUnitDialog from "./RenameComputeUnitDialog.vue";
+import RenameComputeFolderDialog from "./RenameComputeFolderDialog.vue";
 import {
   draftToSavePayload,
   toComputeDraft,
   type ComputeDraft,
   type ComputeEditorTab,
 } from "./computeEditorModel";
+import type { ComputeFolderTreeNode } from "./computeTreeModel";
 
 const props = defineProps<{
   projectId: string;
@@ -111,7 +131,10 @@ const showCreateUnitDialog = ref(false);
 const showCreateFolderDialog = ref(false);
 const showRenameUnitDialog = ref(false);
 const showMoveUnitDialog = ref(false);
+const showRenameFolderDialog = ref(false);
+const showMoveFolderDialog = ref(false);
 const contextUnit = ref<ComputeUnit | null>(null);
+const contextFolder = ref<ComputeFolderTreeNode | null>(null);
 const treeCollapsed = ref(false);
 const drafts = ref<Record<string, ComputeDraft>>({});
 const activeTabId = ref<string | null>(null);
@@ -361,6 +384,16 @@ function openMoveUnitDialog(unit: ComputeUnit) {
   showMoveUnitDialog.value = true;
 }
 
+function openRenameFolderDialog(folder: ComputeFolderTreeNode) {
+  contextFolder.value = folder;
+  showRenameFolderDialog.value = true;
+}
+
+function openMoveFolderDialog(folder: ComputeFolderTreeNode) {
+  contextFolder.value = folder;
+  showMoveFolderDialog.value = true;
+}
+
 function patchDraftFromSavedUnit(unit: ComputeUnit) {
   const id = String(unit.id);
   const draft = drafts.value[id];
@@ -400,6 +433,53 @@ async function handleMoveUnit(folderId: string | null) {
     ElMessage.success("计算单元已移动");
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, "移动计算单元失败"));
+  }
+}
+
+async function handleRenameFolder(name: string) {
+  const folder = contextFolder.value;
+  if (!folder) return;
+  try {
+    const saved = await computeStore.saveFolder(
+      String(props.projectId),
+      folder.id,
+      {
+        name,
+      },
+    );
+    showRenameFolderDialog.value = false;
+    contextFolder.value = {
+      ...folder,
+      name: saved.name,
+      parentId: saved.parentId ? String(saved.parentId) : null,
+    };
+    await refreshComputeTree();
+    ElMessage.success("分组已重命名");
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, "重命名分组失败"));
+  }
+}
+
+async function handleMoveFolder(parentId: string | null) {
+  const folder = contextFolder.value;
+  if (!folder) return;
+  try {
+    const saved = await computeStore.saveFolder(
+      String(props.projectId),
+      folder.id,
+      {
+        parentId,
+      },
+    );
+    showMoveFolderDialog.value = false;
+    contextFolder.value = {
+      ...folder,
+      parentId: saved.parentId ? String(saved.parentId) : null,
+    };
+    await refreshComputeTree();
+    ElMessage.success("分组已移动");
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, "移动分组失败"));
   }
 }
 

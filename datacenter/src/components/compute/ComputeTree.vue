@@ -108,6 +108,7 @@
         :node="folder"
         :selected-unit-id="selectedUnitId"
         @select-unit="$emit('selectUnit', $event)"
+        @folder-contextmenu="openFolderMenu"
         @unit-contextmenu="openUnitMenu"
       />
       <button
@@ -145,21 +146,21 @@
 
     <Teleport to="body">
       <div
-        v-if="unitMenu.visible"
+        v-if="contextMenu.visible"
         class="compute-tree__menu-mask"
-        @click="closeUnitMenu"
-        @contextmenu.prevent="closeUnitMenu"
+        @click="closeContextMenu"
+        @contextmenu.prevent="closeContextMenu"
       >
         <div
           class="compute-tree__context-menu"
-          :style="{ left: `${unitMenu.x}px`, top: `${unitMenu.y}px` }"
+          :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
           @click.stop
         >
-          <button type="button" @click="emitUnitAction('rename')">
+          <button type="button" @click="emitContextAction('rename')">
             <IconTablerPencil class="compute-tree__menu-icon" />
             <span>重命名</span>
           </button>
-          <button type="button" @click="emitUnitAction('move')">
+          <button type="button" @click="emitContextAction('move')">
             <IconTablerFolderSymlink class="compute-tree__menu-icon" />
             <span>移动到分组</span>
           </button>
@@ -191,6 +192,7 @@ import ComputeTreeBranch from "./ComputeTreeBranch.vue";
 import {
   buildComputeFolderTree,
   filterComputeTree,
+  type ComputeFolderTreeNode,
 } from "./computeTreeModel";
 
 const SearchIcon = Search;
@@ -222,19 +224,25 @@ const emit = defineEmits<{
   (event: "toggleCollapse"): void;
   (event: "renameUnit", unit: ComputeUnit): void;
   (event: "moveUnit", unit: ComputeUnit): void;
+  (event: "renameFolder", folder: ComputeFolderTreeNode): void;
+  (event: "moveFolder", folder: ComputeFolderTreeNode): void;
 }>();
 
 const keyword = ref("");
-const unitMenu = ref<{
+const contextMenu = ref<{
   visible: boolean;
+  type: "unit" | "folder" | null;
   x: number;
   y: number;
   unit: ComputeUnit | null;
+  folder: ComputeFolderTreeNode | null;
 }>({
   visible: false,
+  type: null,
   x: 0,
   y: 0,
   unit: null,
+  folder: null,
 });
 
 const total = computed(() => props.units.length);
@@ -246,27 +254,50 @@ const filteredFolders = computed(() => filteredTree.value.folders);
 const filteredRootUnits = computed(() => filteredTree.value.units);
 
 function openUnitMenu(event: MouseEvent, unit: ComputeUnit) {
-  unitMenu.value = {
+  contextMenu.value = {
     visible: true,
+    type: "unit",
     x: Math.min(event.clientX, window.innerWidth - 180),
     y: Math.min(event.clientY, window.innerHeight - 96),
     unit,
+    folder: null,
   };
 }
 
-function closeUnitMenu() {
-  unitMenu.value.visible = false;
+function openFolderMenu(event: MouseEvent, folder: ComputeFolderTreeNode) {
+  contextMenu.value = {
+    visible: true,
+    type: "folder",
+    x: Math.min(event.clientX, window.innerWidth - 180),
+    y: Math.min(event.clientY, window.innerHeight - 96),
+    unit: null,
+    folder,
+  };
 }
 
-function emitUnitAction(action: "rename" | "move") {
-  const unit = unitMenu.value.unit;
-  closeUnitMenu();
-  if (!unit) return;
-  if (action === "rename") {
-    emit("renameUnit", unit);
+function closeContextMenu() {
+  contextMenu.value.visible = false;
+}
+
+function emitContextAction(action: "rename" | "move") {
+  const { type, unit, folder } = contextMenu.value;
+  closeContextMenu();
+  if (type === "unit" && unit) {
+    if (action === "rename") {
+      emit("renameUnit", unit);
+      return;
+    }
+    emit("moveUnit", unit);
     return;
   }
-  emit("moveUnit", unit);
+  if (type === "folder" && folder) {
+    if (action === "rename") {
+      emit("renameFolder", folder);
+      return;
+    }
+    emit("moveFolder", folder);
+    return;
+  }
 }
 
 const statusText = (status?: string) => {
