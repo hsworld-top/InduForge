@@ -203,6 +203,9 @@ func TestComputeOutputDataPointGeneratedOnSave(t *testing.T) {
 	if createdOutputs.DataPoints[0].Path != "calc.output-default-unit.result" {
 		t.Fatalf("expected output datapoint path calc.output-default-unit.result, got %q", createdOutputs.DataPoints[0].Path)
 	}
+	if createdOutputs.DataPoints[0].Name != "output-default-unit" {
+		t.Fatalf("expected output datapoint name output-default-unit, got %q", createdOutputs.DataPoints[0].Name)
+	}
 	if createdOutputs.DataPoints[0].SourceID == nil || *createdOutputs.DataPoints[0].SourceID != unit.ID {
 		t.Fatalf("expected output datapoint source id %q, got %#v", unit.ID, createdOutputs.DataPoints[0].SourceID)
 	}
@@ -232,15 +235,107 @@ func TestComputeOutputDataPointGeneratedOnSave(t *testing.T) {
 	if savedOutputs.DataPoints[0].Status != "active" {
 		t.Fatalf("expected saved output datapoint active, got %q", savedOutputs.DataPoints[0].Status)
 	}
+	if savedOutputs.DataPoints[0].Name != "output-default-unit" {
+		t.Fatalf("expected saved output datapoint name output-default-unit, got %q", savedOutputs.DataPoints[0].Name)
+	}
+}
+
+func TestComputeUnitRenameMoveUpdatesOutputDataPoint(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	fixture := setupTestDatabase(t, ctx)
+	migrator := setupMigrator(t, fixture.pool)
+	if err := migrator.Up(ctx); err != nil {
+		t.Fatalf("migrate up failed: %v", err)
+	}
+
+	projectID := uuid.NewString()
+	userID := uuid.NewString()
+	secret := "compute-rename-move-secret-01"
+
+	srv, err := app.NewServer(config.Config{
+		Addr:               ":0",
+		DatabaseURL:        fixture.databaseURL,
+		DatabaseSearchPath: fixture.schemaName,
+		JWTSecret:          secret,
+	})
+	if err != nil {
+		t.Fatalf("create server failed: %v", err)
+	}
+	t.Cleanup(srv.Close)
+
+	server := httptest.NewServer(srv.Handler())
+	t.Cleanup(server.Close)
+
+	token := mustSignIntegrationJWT(t, secret, &auth.Claims{
+		UserID:       userID,
+		TenantID:     "tenant-compute-rename-move",
+		ProjectIDs:   []string{projectID},
+		Capabilities: []string{"project:read", "project:write"},
+	})
+
+	folder := mustCreateComputeFolder(t, server.URL, token, projectID, map[string]any{
+		"name": "目标分组",
+	})
+	unit := mustCreateComputeUnit(t, server.URL, token, projectID, map[string]any{
+		"name":       "old-unit",
+		"language":   "js",
+		"scriptCode": "return argv[0] ?? null;",
+		"timeoutMs":  3000,
+	})
+
+	initialOutputs := mustListDataPoints(t, server.URL, token, projectID, "type=calc.output&search=calc.old-unit.result")
+	if len(initialOutputs.DataPoints) != 1 {
+		t.Fatalf("expected initial output datapoint, got %d", len(initialOutputs.DataPoints))
+	}
+	initialID := initialOutputs.DataPoints[0].ID
+
+	updated := mustUpdateComputeUnit(t, server.URL, token, projectID, unit.ID, map[string]any{
+		"name":     "new-unit",
+		"folderId": folder.ID,
+	})
+	if updated.Name != "new-unit" {
+		t.Fatalf("expected compute unit renamed, got %q", updated.Name)
+	}
+	if updated.FolderID == nil || *updated.FolderID != folder.ID {
+		t.Fatalf("expected compute unit moved to folder %q, got %#v", folder.ID, updated.FolderID)
+	}
+
+	newOutputs := mustListDataPoints(t, server.URL, token, projectID, "type=calc.output&search=calc.new-unit.result")
+	if len(newOutputs.DataPoints) != 1 {
+		t.Fatalf("expected renamed output datapoint, got %d", len(newOutputs.DataPoints))
+	}
+	if newOutputs.DataPoints[0].ID != initialID {
+		t.Fatalf("expected output datapoint id unchanged, got %q want %q", newOutputs.DataPoints[0].ID, initialID)
+	}
+	if newOutputs.DataPoints[0].Name != "new-unit" {
+		t.Fatalf("expected output datapoint name new-unit, got %q", newOutputs.DataPoints[0].Name)
+	}
+	if newOutputs.DataPoints[0].Status != "active" {
+		t.Fatalf("expected output datapoint active, got %q", newOutputs.DataPoints[0].Status)
+	}
+
+	oldOutputs := mustListDataPoints(t, server.URL, token, projectID, "type=calc.output&search=calc.old-unit.result")
+	if len(oldOutputs.DataPoints) != 0 {
+		t.Fatalf("expected old output datapoint path removed, got %d", len(oldOutputs.DataPoints))
+	}
 }
 
 type computeUnitPayload struct {
-	ID         string `json:"id"`
-	ProjectID  string `json:"projectId"`
-	Name       string `json:"name"`
-	Language   string `json:"language"`
-	ScriptCode string `json:"scriptCode"`
-	TimeoutMS  int    `json:"timeoutMs"`
+	ID         string  `json:"id"`
+	ProjectID  string  `json:"projectId"`
+	Name       string  `json:"name"`
+	Language   string  `json:"language"`
+	ScriptCode string  `json:"scriptCode"`
+	TimeoutMS  int     `json:"timeoutMs"`
+	FolderID   *string `json:"folderId"`
+}
+
+type computeFolderPayload struct {
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	ParentID *string `json:"parentId"`
 }
 
 type computeRunPayload struct {
@@ -256,6 +351,17 @@ func mustCreateComputeUnit(t *testing.T, baseURL, token, projectID string, paylo
 	var result computeUnitPayload
 	if err := json.Unmarshal(responseEnvelope.Data, &result); err != nil {
 		t.Fatalf("decode compute create response failed: %v", err)
+	}
+	return result
+}
+
+func mustCreateComputeFolder(t *testing.T, baseURL, token, projectID string, payload map[string]any) computeFolderPayload {
+	t.Helper()
+
+	responseEnvelope := doJSONRequest(t, http.MethodPost, baseURL+"/api/v1/data/projects/"+projectID+"/compute-units/folders", token, payload)
+	var result computeFolderPayload
+	if err := json.Unmarshal(responseEnvelope.Data, &result); err != nil {
+		t.Fatalf("decode compute folder create response failed: %v", err)
 	}
 	return result
 }

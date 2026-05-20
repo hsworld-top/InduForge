@@ -108,6 +108,7 @@
         :node="folder"
         :selected-unit-id="selectedUnitId"
         @select-unit="$emit('selectUnit', $event)"
+        @unit-contextmenu="openUnitMenu"
       />
       <button
         v-for="unit in filteredRootUnits"
@@ -116,6 +117,7 @@
         class="compute-tree__unit"
         :class="{ 'is-active': String(unit.id) === selectedUnitId }"
         @click="$emit('selectUnit', String(unit.id))"
+        @contextmenu.prevent.stop="openUnitMenu($event, unit)"
       >
         <IconTablerFileCode class="compute-tree__unit-icon" />
         <span class="compute-tree__unit-main">
@@ -140,6 +142,30 @@
         "
       />
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="unitMenu.visible"
+        class="compute-tree__menu-mask"
+        @click="closeUnitMenu"
+        @contextmenu.prevent="closeUnitMenu"
+      >
+        <div
+          class="compute-tree__context-menu"
+          :style="{ left: `${unitMenu.x}px`, top: `${unitMenu.y}px` }"
+          @click.stop
+        >
+          <button type="button" @click="emitUnitAction('rename')">
+            <IconTablerPencil class="compute-tree__menu-icon" />
+            <span>重命名</span>
+          </button>
+          <button type="button" @click="emitUnitAction('move')">
+            <IconTablerFolderSymlink class="compute-tree__menu-icon" />
+            <span>移动到分组</span>
+          </button>
+        </div>
+      </div>
+    </Teleport>
   </aside>
 </template>
 
@@ -149,8 +175,10 @@ import { Search } from "@element-plus/icons-vue";
 import IconTablerAlertCircle from "~icons/tabler/alert-circle";
 import IconTablerFileCode from "~icons/tabler/file-code";
 import IconTablerFolderPlus from "~icons/tabler/folder-plus";
+import IconTablerFolderSymlink from "~icons/tabler/folder-symlink";
 import IconTablerLayoutSidebarLeftCollapse from "~icons/tabler/layout-sidebar-left-collapse";
 import IconTablerLayoutSidebarLeftExpand from "~icons/tabler/layout-sidebar-left-expand";
+import IconTablerPencil from "~icons/tabler/pencil";
 import IconTablerPlus from "~icons/tabler/plus";
 import IconTablerRefresh from "~icons/tabler/refresh";
 import type {
@@ -186,15 +214,28 @@ const props = withDefaults(
   },
 );
 
-defineEmits<{
+const emit = defineEmits<{
   (event: "selectUnit", id: string): void;
   (event: "createUnit"): void;
   (event: "createFolder"): void;
   (event: "refresh"): void;
   (event: "toggleCollapse"): void;
+  (event: "renameUnit", unit: ComputeUnit): void;
+  (event: "moveUnit", unit: ComputeUnit): void;
 }>();
 
 const keyword = ref("");
+const unitMenu = ref<{
+  visible: boolean;
+  x: number;
+  y: number;
+  unit: ComputeUnit | null;
+}>({
+  visible: false,
+  x: 0,
+  y: 0,
+  unit: null,
+});
 
 const total = computed(() => props.units.length);
 const tree = computed(() => buildComputeFolderTree(props.folders, props.units));
@@ -203,6 +244,30 @@ const filteredTree = computed(() =>
 );
 const filteredFolders = computed(() => filteredTree.value.folders);
 const filteredRootUnits = computed(() => filteredTree.value.units);
+
+function openUnitMenu(event: MouseEvent, unit: ComputeUnit) {
+  unitMenu.value = {
+    visible: true,
+    x: Math.min(event.clientX, window.innerWidth - 180),
+    y: Math.min(event.clientY, window.innerHeight - 96),
+    unit,
+  };
+}
+
+function closeUnitMenu() {
+  unitMenu.value.visible = false;
+}
+
+function emitUnitAction(action: "rename" | "move") {
+  const unit = unitMenu.value.unit;
+  closeUnitMenu();
+  if (!unit) return;
+  if (action === "rename") {
+    emit("renameUnit", unit);
+    return;
+  }
+  emit("moveUnit", unit);
+}
 
 const statusText = (status?: string) => {
   const map: Record<string, string> = {
@@ -458,6 +523,48 @@ const statusTone = (status?: string) => {
 
 .compute-tree__unit-status {
   max-width: 76px;
+}
+
+.compute-tree__menu-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+}
+
+.compute-tree__context-menu {
+  position: fixed;
+  min-width: 148px;
+  padding: 4px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-surface);
+}
+
+.compute-tree__context-menu button {
+  width: 100%;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--dc-radius-sm);
+  background: transparent;
+  color: var(--dc-text-secondary);
+  font-size: 13px;
+  text-align: left;
+}
+
+.compute-tree__context-menu button:hover {
+  background: var(--dc-surface-muted);
+  color: var(--dc-primary);
+}
+
+.compute-tree__menu-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
 }
 
 @media (max-width: 900px) {

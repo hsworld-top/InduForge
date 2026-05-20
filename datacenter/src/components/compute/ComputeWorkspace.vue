@@ -16,6 +16,8 @@
       @create-folder="showCreateFolderDialog = true"
       @refresh="loadWorkspace"
       @toggle-collapse="treeCollapsed = !treeCollapsed"
+      @rename-unit="openRenameUnitDialog"
+      @move-unit="openMoveUnitDialog"
     />
 
     <ComputeEditorShell
@@ -54,6 +56,21 @@
       :error="computeStore.createError"
       @submit="handleCreateFolder"
     />
+
+    <RenameComputeUnitDialog
+      v-model="showRenameUnitDialog"
+      :unit="contextUnit"
+      :loading="computeStore.saving"
+      @submit="handleRenameUnit"
+    />
+
+    <MoveComputeUnitDialog
+      v-model="showMoveUnitDialog"
+      :unit="contextUnit"
+      :folders="computeStore.folders"
+      :loading="computeStore.saving"
+      @submit="handleMoveUnit"
+    />
   </div>
 </template>
 
@@ -62,6 +79,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import type {
+  ComputeUnit,
   ComputeFolderSave,
   ComputeUnitSave,
 } from "@/api/schemas/compute.schema";
@@ -71,6 +89,8 @@ import ComputeEditorShell from "./ComputeEditorShell.vue";
 import ComputeTree from "./ComputeTree.vue";
 import CreateComputeFolderDialog from "./CreateComputeFolderDialog.vue";
 import CreateComputeUnitDialog from "./CreateComputeUnitDialog.vue";
+import MoveComputeUnitDialog from "./MoveComputeUnitDialog.vue";
+import RenameComputeUnitDialog from "./RenameComputeUnitDialog.vue";
 import {
   draftToSavePayload,
   toComputeDraft,
@@ -89,6 +109,9 @@ const computeStore = useComputeStore();
 
 const showCreateUnitDialog = ref(false);
 const showCreateFolderDialog = ref(false);
+const showRenameUnitDialog = ref(false);
+const showMoveUnitDialog = ref(false);
+const contextUnit = ref<ComputeUnit | null>(null);
 const treeCollapsed = ref(false);
 const drafts = ref<Record<string, ComputeDraft>>({});
 const activeTabId = ref<string | null>(null);
@@ -211,12 +234,20 @@ async function saveTab(id: string): Promise<boolean> {
       [id]: toComputeDraft(unit),
     };
     ElMessage.success("计算单元已保存");
-    await computeStore.fetchList(String(props.projectId)).catch(() => undefined);
+    await refreshComputeTree();
     return true;
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, "保存计算单元失败"));
     return false;
   }
+}
+
+function refreshComputeTree() {
+  const projectId = String(props.projectId);
+  return Promise.allSettled([
+    computeStore.fetchList(projectId),
+    computeStore.fetchFolders(projectId),
+  ]);
 }
 
 async function toggleEnabled(id: string, enabled: boolean) {
@@ -317,6 +348,58 @@ async function handleCreateUnit(data: ComputeUnitSave) {
     ElMessage.success("计算单元已创建");
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, "新建计算单元失败"));
+  }
+}
+
+function openRenameUnitDialog(unit: ComputeUnit) {
+  contextUnit.value = unit;
+  showRenameUnitDialog.value = true;
+}
+
+function openMoveUnitDialog(unit: ComputeUnit) {
+  contextUnit.value = unit;
+  showMoveUnitDialog.value = true;
+}
+
+function patchDraftFromSavedUnit(unit: ComputeUnit) {
+  const id = String(unit.id);
+  const draft = drafts.value[id];
+  if (!draft) return;
+  draft.name = unit.name;
+  draft.folderId = unit.folderId ? String(unit.folderId) : null;
+}
+
+async function handleRenameUnit(name: string) {
+  const unit = contextUnit.value;
+  if (!unit) return;
+  try {
+    const saved = await computeStore.saveUnit(String(props.projectId), String(unit.id), {
+      name,
+    });
+    patchDraftFromSavedUnit(saved);
+    showRenameUnitDialog.value = false;
+    contextUnit.value = saved;
+    await refreshComputeTree();
+    ElMessage.success("计算单元已重命名");
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, "重命名计算单元失败"));
+  }
+}
+
+async function handleMoveUnit(folderId: string | null) {
+  const unit = contextUnit.value;
+  if (!unit) return;
+  try {
+    const saved = await computeStore.saveUnit(String(props.projectId), String(unit.id), {
+      folderId,
+    });
+    patchDraftFromSavedUnit(saved);
+    showMoveUnitDialog.value = false;
+    contextUnit.value = saved;
+    await refreshComputeTree();
+    ElMessage.success("计算单元已移动");
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, "移动计算单元失败"));
   }
 }
 

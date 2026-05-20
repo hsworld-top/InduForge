@@ -1281,19 +1281,35 @@ func (s *ComputeService) syncComputeOutputDataPoints(ctx context.Context, unit r
 	if s == nil || s.datapoints == nil {
 		return nil
 	}
+	existingOutputs, err := s.datapoints.ListByProjectAndSource(ctx, unit.ProjectID, "calc.output", unit.ID)
+	if err != nil {
+		return err
+	}
+	existingByOutputName := make(map[string]repository.DataPointRecord, len(existingOutputs))
+	for _, existing := range existingOutputs {
+		outputName := strings.TrimSpace(firstString(existing.SourceConfig, "outputName"))
+		if outputName == "" {
+			outputName = datapointOutputNameFromPath(existing.Path)
+		}
+		if outputName != "" {
+			existingByOutputName[outputName] = existing
+		}
+	}
 	_, _ = s.datapoints.MarkInvalidBySource(ctx, unit.ProjectID, "calc.output", unit.ID, &userID)
 	outputs := extractComputeOutputBindings(unit)
 	for _, output := range outputs {
 		path := output.Path
+		existingOutput, hasExistingOutput := existingByOutputName[output.Name]
 		if existing, err := s.datapoints.GetByProjectAndPath(ctx, unit.ProjectID, path); err == nil && existing != nil &&
+			existing.ID != existingOutput.ID &&
 			(existing.SourceID == nil || *existing.SourceID != unit.ID || existing.SourceType != "calc.output") {
 			path = path + "_" + unit.ID[:8]
 		}
-		_, err := s.datapoints.UpsertByPath(ctx, repository.CreateDataPointParams{
+		params := repository.CreateDataPointParams{
 			ProjectID:    unit.ProjectID,
 			UserID:       &userID,
 			Path:         path,
-			Name:         output.Name,
+			Name:         unit.Name,
 			Description:  cloneOptionalString(output.Description),
 			SourceType:   "calc.output",
 			SourceID:     &unit.ID,
@@ -1303,12 +1319,29 @@ func (s *ComputeService) syncComputeOutputDataPoints(ctx context.Context, unit r
 			Tags:         []any{},
 			RefreshMode:  "manual",
 			Status:       "active",
-		})
+		}
+		if hasExistingOutput {
+			_, err = s.datapoints.UpdateGeneratedOutput(ctx, existingOutput.ID, params)
+		} else {
+			_, err = s.datapoints.UpsertByPath(ctx, params)
+		}
 		if err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func datapointOutputNameFromPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	index := strings.LastIndex(path, ".")
+	if index < 0 || index == len(path)-1 {
+		return ""
+	}
+	return strings.TrimSpace(path[index+1:])
 }
 
 func (s *ComputeService) writeComputeOutputValues(ctx context.Context, unit repository.ComputeUnitRecord, output any, userID string) error {

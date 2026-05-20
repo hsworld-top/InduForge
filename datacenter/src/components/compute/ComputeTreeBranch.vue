@@ -23,6 +23,7 @@
         class="compute-tree-branch__unit"
         :class="{ 'is-active': String(unit.id) === selectedUnitId }"
         @click="$emit('selectUnit', String(unit.id))"
+        @contextmenu.prevent.stop="$emit('unitContextmenu', $event, unit)"
       >
         <IconTablerFileCode class="compute-tree-branch__unit-icon" />
         <span class="compute-tree-branch__unit-main">
@@ -44,6 +45,9 @@
         :node="child"
         :selected-unit-id="selectedUnitId"
         @select-unit="$emit('selectUnit', $event)"
+        @unit-contextmenu="
+          (mouseEvent, unit) => $emit('unitContextmenu', mouseEvent, unit)
+        "
       />
     </div>
   </section>
@@ -56,6 +60,7 @@ import IconTablerFileCode from "~icons/tabler/file-code";
 import IconTablerFolder from "~icons/tabler/folder";
 import IconTablerFolderOpen from "~icons/tabler/folder-open";
 import StatusBadge from "@/components/shared/StatusBadge.vue";
+import type { ComputeUnit } from "@/api/schemas/compute.schema";
 import type { ComputeFolderTreeNode } from "./computeTreeModel";
 
 defineOptions({ name: "ComputeTreeBranch" });
@@ -67,6 +72,7 @@ const props = defineProps<{
 
 defineEmits<{
   (event: "selectUnit", id: string): void;
+  (event: "unitContextmenu", mouseEvent: MouseEvent, unit: ComputeUnit): void;
 }>();
 
 const expanded = ref(true);

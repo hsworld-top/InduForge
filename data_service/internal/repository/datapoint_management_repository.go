@@ -53,6 +53,35 @@ func (r *DataPointRepository) GetByProjectAndSource(ctx context.Context, project
 	return &record, nil
 }
 
+// ListByProjectAndSource 按来源读取数据点列表。
+func (r *DataPointRepository) ListByProjectAndSource(ctx context.Context, projectID, sourceType, sourceID string) ([]DataPointRecord, error) {
+	rows, err := r.pool.Query(ctx, `
+        SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
+               unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
+               refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+        FROM data_points
+        WHERE project_id = $1 AND source_type = $2 AND source_id = $3
+        ORDER BY created_at ASC
+    `, projectID, sourceType, sourceID)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "按来源读取数据点失败", err)
+	}
+	defer rows.Close()
+
+	records := make([]DataPointRecord, 0)
+	for rows.Next() {
+		record, scanErr := scanDataPointRecord(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历来源数据点失败", err)
+	}
+	return records, nil
+}
+
 // ListByProjectAndPaths 按项目与路径批量读取数据点。
 func (r *DataPointRepository) ListByProjectAndPaths(ctx context.Context, projectID string, paths []string) ([]DataPointRecord, error) {
 	if len(paths) == 0 {
@@ -229,6 +258,53 @@ func (r *DataPointRepository) UpsertByPath(ctx context.Context, params CreateDat
 	}
 
 	return r.Create(ctx, params)
+}
+
+// UpdateGeneratedOutput 更新计算输出生成的数据点。
+func (r *DataPointRepository) UpdateGeneratedOutput(ctx context.Context, id string, params CreateDataPointParams) (*DataPointRecord, error) {
+	sourceConfigBytes, err := marshalJSONObject(params.SourceConfig)
+	if err != nil {
+		return nil, err
+	}
+	tagsBytes, err := marshalJSONArray(params.Tags)
+	if err != nil {
+		return nil, err
+	}
+
+	row := r.pool.QueryRow(ctx, `
+        UPDATE data_points
+        SET path = $3,
+            name = $4,
+            description = $5,
+            source_type = $6,
+            source_id = $7,
+            source_config = $8::jsonb,
+            data_type = $9,
+            unit = $10,
+            precision_num = $11,
+            default_value = $12,
+            min_value = $13,
+            max_value = $14,
+            alarm_low = $15,
+            alarm_high = $16,
+            tags = $17::jsonb,
+            refresh_mode = $18,
+            refresh_interval_ms = $19,
+            status = $20,
+            updated_by = COALESCE($21, updated_by),
+            updated_at = now()
+        WHERE project_id = $1
+          AND id = $2
+        RETURNING id, project_id, path, name, description, source_type, source_id, source_config, data_type,
+                  unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
+                  refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+    `, params.ProjectID, id, params.Path, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID)
+
+	record, err := scanDataPointRecord(row)
+	if err != nil {
+		return nil, translateDataPointWriteError(err)
+	}
+	return &record, nil
 }
 
 // MarkInvalidBySource 按来源标记数据点失效。
