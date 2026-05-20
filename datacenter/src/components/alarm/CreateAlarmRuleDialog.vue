@@ -197,17 +197,14 @@ const submit = () => {
   emit("submit", {
     name: draft.name,
     description: draft.description ?? "",
-    targetDatapointId: selectedDatapoint.value.id,
     targetPath: selectedDatapoint.value.path,
-    targetName: selectedDatapoint.value.name,
-    targetDataType: selectedDatapoint.value.dataType,
     ruleType: draft.ruleType,
     condition: buildCondition(),
     severity: draft.severity,
     isEnabled: draft.isEnabled,
     suppression: { enabled: false },
     messageTemplate: "",
-  } as AlarmRuleSave);
+  });
 };
 
 watch(

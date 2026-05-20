@@ -69,7 +69,7 @@ export const AlarmRuleSaveSchema = z
     suppression: ObjectRecordSchema,
     messageTemplate: z.string(),
   })
-  .passthrough();
+  .strict();
 
 export type AlarmRuleSave = z.infer<typeof AlarmRuleSaveSchema>;
 
