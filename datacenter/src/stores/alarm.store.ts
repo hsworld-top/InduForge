@@ -1,49 +1,70 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import {
-  createAlarmRule,
-  deleteAlarmRule,
-  getAlarmRule,
-  getAlarmRuleContract,
-  getAlarmRules,
-  testAlarmRule,
-  toggleAlarmRule,
-  updateAlarmRule,
-  validateAlarmRuleDraft,
+  batchApplyAlarmConditions,
+  batchDisableAlarmPolicies,
+  batchEnableAlarmPolicies,
+  batchMoveAlarmPolicies,
+  createAlarmPolicy,
+  deleteAlarmPolicy,
+  getAlarmPolicy,
+  getAlarmPolicyContract,
+  getAlarmPolicyGroups,
+  getAlarmPolicyTree,
+  getAlarmPolicies,
+  testAlarmPolicy,
+  toggleAlarmPolicy,
+  updateAlarmPolicy,
+  validateAlarmPolicyDraft,
 } from "@/api/alarm.api";
 import type {
-  AlarmContract,
+  AlarmBulkSelection,
+  AlarmCondition,
   AlarmDraftValidation,
-  AlarmRule,
-  AlarmRuleSave,
-  AlarmRuleUpdate,
-  AlarmTrialPayload,
-  AlarmTrialResult,
+  AlarmPolicy,
+  AlarmPolicyContract,
+  AlarmPolicyGroup,
+  AlarmPolicySave,
+  AlarmPolicyTree,
+  AlarmPolicyTrialPayload,
+  AlarmPolicyTrialResult,
+  AlarmPolicyUpdate,
 } from "@/api/schemas/alarm.schema";
 import { getApiErrorMessage } from "@/utils/request";
 
 type TrialState = {
-  ruleId: string;
-  payload: AlarmTrialPayload;
-  result: AlarmTrialResult | null;
+  policyId: string;
+  payload: AlarmPolicyTrialPayload;
+  result: AlarmPolicyTrialResult | null;
   running: boolean;
   error: string;
 };
 
 type ContractState = {
-  ruleId: string;
-  data: AlarmContract | null;
+  policyId: string;
+  data: AlarmPolicyContract | null;
   loading: boolean;
   error: string;
 };
 
+const emptyTree = (): AlarmPolicyTree => ({
+  groups: [],
+  rootPolicies: [],
+  policies: [],
+  matchedPolicyCount: 0,
+  totalPolicyCount: 0,
+});
+
 export const useAlarmStore = defineStore("alarm", () => {
-  const list = ref<AlarmRule[]>([]);
+  const groups = ref<AlarmPolicyGroup[]>([]);
+  const tree = ref<AlarmPolicyTree>(emptyTree());
+  const list = ref<AlarmPolicy[]>([]);
   const total = ref(0);
   const loading = ref(false);
   const listError = ref("");
+  const selection = ref<AlarmBulkSelection>({ mode: "ids", policyIds: [] });
 
-  const editing = ref<AlarmRule | null>(null);
+  const editing = ref<AlarmPolicy | null>(null);
   const detailLoading = ref(false);
   const detailError = ref("");
 
@@ -53,14 +74,14 @@ export const useAlarmStore = defineStore("alarm", () => {
   const deleting = ref(false);
 
   const trial = ref<TrialState>({
-    ruleId: "",
+    policyId: "",
     payload: {},
     result: null,
     running: false,
     error: "",
   });
   const contract = ref<ContractState>({
-    ruleId: "",
+    policyId: "",
     data: null,
     loading: false,
     error: "",
@@ -70,41 +91,94 @@ export const useAlarmStore = defineStore("alarm", () => {
   const validationError = ref("");
 
   const hasEditing = computed(() => editing.value !== null);
+  const selectedCount = computed(() => {
+    if (selection.value.mode === "ids") {
+      return selection.value.policyIds.length;
+    }
+    return Math.max(
+      0,
+      tree.value.matchedPolicyCount - selection.value.excludePolicyIds.length,
+    );
+  });
 
-  const mergeRuleIntoList = (rule: AlarmRule) => {
-    const exists = list.value.some((item) => item.id === rule.id);
+  const mergePolicyIntoList = (policy: AlarmPolicy) => {
+    const exists = list.value.some((item) => item.id === policy.id);
     list.value = exists
-      ? list.value.map((item) => (item.id === rule.id ? { ...item, ...rule } : item))
-      : [rule, ...list.value];
+      ? list.value.map((item) =>
+          item.id === policy.id ? { ...item, ...policy } : item,
+        )
+      : [policy, ...list.value];
+    tree.value = {
+      ...tree.value,
+      policies: tree.value.policies.map((item) =>
+        item.id === policy.id ? { ...item, ...policy } : item,
+      ),
+      rootPolicies: tree.value.rootPolicies.map((item) =>
+        item.id === policy.id ? { ...item, ...policy } : item,
+      ),
+    };
     total.value = Math.max(total.value, list.value.length);
   };
 
-  async function fetchList(projectId: string, params: Record<string, unknown> = {}) {
+  async function fetchGroups(projectId: string) {
+    groups.value = await getAlarmPolicyGroups(projectId);
+    return groups.value;
+  }
+
+  async function fetchTree(
+    projectId: string,
+    params: Record<string, unknown> = {},
+  ) {
     loading.value = true;
     listError.value = "";
     try {
-      const res = await getAlarmRules(projectId, params);
-      list.value = res.list;
-      total.value = res.pagination?.total ?? res.list.length;
+      tree.value = await getAlarmPolicyTree(projectId, params);
+      groups.value = tree.value.groups;
+      list.value = tree.value.policies.length
+        ? tree.value.policies
+        : tree.value.rootPolicies;
+      total.value = tree.value.matchedPolicyCount;
+      return tree.value;
     } catch (error) {
+      tree.value = emptyTree();
       list.value = [];
       total.value = 0;
-      listError.value = getApiErrorMessage(error, "报警规则列表不可用");
+      listError.value = getApiErrorMessage(error, "报警策略树不可用");
       throw error;
     } finally {
       loading.value = false;
     }
   }
 
-  async function openForEdit(projectId: string, id: string) {
+  async function fetchList(
+    projectId: string,
+    params: Record<string, unknown> = {},
+  ) {
+    loading.value = true;
+    listError.value = "";
+    try {
+      const res = await getAlarmPolicies(projectId, params);
+      list.value = res.list;
+      total.value = res.pagination?.total ?? res.list.length;
+    } catch (error) {
+      list.value = [];
+      total.value = 0;
+      listError.value = getApiErrorMessage(error, "报警策略列表不可用");
+      throw error;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function openPolicy(projectId: string, id: string) {
     detailLoading.value = true;
     detailError.value = "";
     try {
-      editing.value = await getAlarmRule(projectId, id);
+      editing.value = await getAlarmPolicy(projectId, id);
       return editing.value;
     } catch (error) {
       editing.value = null;
-      detailError.value = getApiErrorMessage(error, "报警规则详情不可用");
+      detailError.value = getApiErrorMessage(error, "报警策略详情不可用");
       throw error;
     } finally {
       detailLoading.value = false;
@@ -116,39 +190,49 @@ export const useAlarmStore = defineStore("alarm", () => {
     detailError.value = "";
   }
 
-  async function createRule(projectId: string, data: AlarmRuleSave) {
+  async function createPolicy(projectId: string, data: AlarmPolicySave) {
     creating.value = true;
     createError.value = "";
     try {
-      const rule = await createAlarmRule(projectId, data);
-      mergeRuleIntoList(rule);
-      editing.value = rule;
-      return rule;
+      const policy = await createAlarmPolicy(projectId, data);
+      mergePolicyIntoList(policy);
+      editing.value = policy;
+      return policy;
     } catch (error) {
-      createError.value = getApiErrorMessage(error, "新建报警规则失败");
+      createError.value = getApiErrorMessage(error, "新建报警策略失败");
       throw error;
     } finally {
       creating.value = false;
     }
   }
 
-  async function saveRule(projectId: string, id: string, data: AlarmRuleUpdate) {
+  async function savePolicy(
+    projectId: string,
+    id: string,
+    data: AlarmPolicyUpdate,
+  ) {
     saving.value = true;
     try {
-      const rule = await updateAlarmRule(projectId, id, data);
-      editing.value = rule;
-      mergeRuleIntoList(rule);
-      return rule;
+      const policy = await updateAlarmPolicy(projectId, id, data);
+      editing.value = policy;
+      mergePolicyIntoList(policy);
+      return policy;
     } finally {
       saving.value = false;
     }
   }
 
-  async function removeRule(projectId: string, id: string) {
+  async function removePolicy(projectId: string, id: string) {
     deleting.value = true;
     try {
-      await deleteAlarmRule(projectId, id);
+      await deleteAlarmPolicy(projectId, id);
       list.value = list.value.filter((item) => item.id !== id);
+      tree.value = {
+        ...tree.value,
+        policies: tree.value.policies.filter((item) => item.id !== id),
+        rootPolicies: tree.value.rootPolicies.filter((item) => item.id !== id),
+        matchedPolicyCount: Math.max(0, tree.value.matchedPolicyCount - 1),
+      };
       total.value = Math.max(0, total.value - 1);
       if (editing.value?.id === id) {
         closeEdit();
@@ -158,13 +242,94 @@ export const useAlarmStore = defineStore("alarm", () => {
     }
   }
 
-  async function setRuleEnabled(projectId: string, id: string, isEnabled: boolean) {
+  async function setPolicyEnabled(
+    projectId: string,
+    id: string,
+    isEnabled: boolean,
+  ) {
     saving.value = true;
     try {
-      const rule = await toggleAlarmRule(projectId, id, isEnabled);
-      editing.value = rule;
-      mergeRuleIntoList(rule);
-      return rule;
+      const policy = await toggleAlarmPolicy(projectId, id, isEnabled);
+      editing.value = policy;
+      mergePolicyIntoList(policy);
+      return policy;
+    } finally {
+      saving.value = false;
+    }
+  }
+
+  function selectPolicy(id: string, selected: boolean) {
+    if (selection.value.mode === "filtered") {
+      const excluded = new Set(selection.value.excludePolicyIds);
+      if (selected) {
+        excluded.delete(id);
+      } else {
+        excluded.add(id);
+      }
+      selection.value = {
+        ...selection.value,
+        excludePolicyIds: [...excluded],
+      };
+      return;
+    }
+
+    const ids = new Set(selection.value.policyIds);
+    if (selected) {
+      ids.add(id);
+    } else {
+      ids.delete(id);
+    }
+    selection.value = { mode: "ids", policyIds: [...ids] };
+  }
+
+  function selectGroup(policyIds: string[], selected: boolean) {
+    for (const id of policyIds) {
+      selectPolicy(id, selected);
+    }
+  }
+
+  function selectFiltered(filters: Record<string, unknown>) {
+    selection.value = { mode: "filtered", filters, excludePolicyIds: [] };
+  }
+
+  function clearSelection() {
+    selection.value = { mode: "ids", policyIds: [] };
+  }
+
+  async function batchEnable(projectId: string) {
+    saving.value = true;
+    try {
+      await batchEnableAlarmPolicies(projectId, selection.value);
+    } finally {
+      saving.value = false;
+    }
+  }
+
+  async function batchDisable(projectId: string) {
+    saving.value = true;
+    try {
+      await batchDisableAlarmPolicies(projectId, selection.value);
+    } finally {
+      saving.value = false;
+    }
+  }
+
+  async function batchMove(projectId: string, groupId: string | null) {
+    saving.value = true;
+    try {
+      await batchMoveAlarmPolicies(projectId, selection.value, groupId);
+    } finally {
+      saving.value = false;
+    }
+  }
+
+  async function batchApplyConditions(
+    projectId: string,
+    conditions: AlarmCondition[],
+  ) {
+    saving.value = true;
+    try {
+      await batchApplyAlarmConditions(projectId, selection.value, conditions);
     } finally {
       saving.value = false;
     }
@@ -173,21 +338,21 @@ export const useAlarmStore = defineStore("alarm", () => {
   async function runTrial(
     projectId: string,
     id: string,
-    payload: AlarmTrialPayload = {},
+    payload: AlarmPolicyTrialPayload = {},
   ) {
     trial.value = {
-      ruleId: id,
+      policyId: id,
       payload,
       result: null,
       running: true,
       error: "",
     };
     try {
-      const result = await testAlarmRule(projectId, id, payload);
+      const result = await testAlarmPolicy(projectId, id, payload);
       trial.value.result = result;
       return result;
     } catch (error) {
-      trial.value.error = getApiErrorMessage(error, "报警规则试算失败");
+      trial.value.error = getApiErrorMessage(error, "报警策略试算失败");
       throw error;
     } finally {
       trial.value.running = false;
@@ -196,7 +361,7 @@ export const useAlarmStore = defineStore("alarm", () => {
 
   function clearTrial() {
     trial.value = {
-      ruleId: "",
+      policyId: "",
       payload: {},
       result: null,
       running: false,
@@ -206,32 +371,32 @@ export const useAlarmStore = defineStore("alarm", () => {
 
   async function fetchContract(projectId: string, id: string) {
     contract.value = {
-      ruleId: id,
+      policyId: id,
       data: null,
       loading: true,
       error: "",
     };
     try {
-      const data = await getAlarmRuleContract(projectId, id);
+      const data = await getAlarmPolicyContract(projectId, id);
       contract.value.data = data;
       return data;
     } catch (error) {
-      contract.value.error = getApiErrorMessage(error, "报警规则契约不可用");
+      contract.value.error = getApiErrorMessage(error, "报警策略契约不可用");
       throw error;
     } finally {
       contract.value.loading = false;
     }
   }
 
-  async function validateDraft(projectId: string, payload: AlarmRuleSave) {
+  async function validateDraft(projectId: string, payload: AlarmPolicySave) {
     validationLoading.value = true;
     validationError.value = "";
     try {
-      validation.value = await validateAlarmRuleDraft(projectId, payload);
+      validation.value = await validateAlarmPolicyDraft(projectId, payload);
       return validation.value;
     } catch (error) {
       validation.value = null;
-      validationError.value = getApiErrorMessage(error, "报警草稿校验失败");
+      validationError.value = getApiErrorMessage(error, "报警策略草稿校验失败");
       throw error;
     } finally {
       validationLoading.value = false;
@@ -239,10 +404,14 @@ export const useAlarmStore = defineStore("alarm", () => {
   }
 
   return {
+    groups,
+    tree,
     list,
     total,
     loading,
     listError,
+    selection,
+    selectedCount,
     editing,
     detailLoading,
     detailError,
@@ -256,13 +425,28 @@ export const useAlarmStore = defineStore("alarm", () => {
     validationLoading,
     validationError,
     hasEditing,
+    fetchGroups,
+    fetchTree,
     fetchList,
-    openForEdit,
+    openPolicy,
+    openForEdit: openPolicy,
     closeEdit,
-    createRule,
-    saveRule,
-    removeRule,
-    setRuleEnabled,
+    createPolicy,
+    createRule: createPolicy,
+    savePolicy,
+    saveRule: savePolicy,
+    removePolicy,
+    removeRule: removePolicy,
+    setPolicyEnabled,
+    setRuleEnabled: setPolicyEnabled,
+    selectPolicy,
+    selectGroup,
+    selectFiltered,
+    clearSelection,
+    batchEnable,
+    batchDisable,
+    batchMove,
+    batchApplyConditions,
     runTrial,
     clearTrial,
     fetchContract,

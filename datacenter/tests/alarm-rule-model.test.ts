@@ -1,62 +1,85 @@
 import { describe, expect, test } from "vitest";
 
+import type { AlarmPolicy } from "../src/api/schemas/alarm.schema";
 import {
-  alarmRuleTypeOptions,
-  createAlarmDraft,
-  draftToAlarmSavePayload,
-  toAlarmDraft,
-} from "../src/components/alarm/alarmRuleModel";
+  createDefaultAlarmPolicyDraft,
+  draftToAlarmPolicySavePayload,
+  makeFilteredSelection,
+  togglePolicyInSelection,
+  toAlarmPolicyDraft,
+} from "../src/components/alarm/alarmPolicyModel";
 
-describe("alarm rule model", () => {
-  test("规则类型覆盖最终枚举", () => {
-    expect(alarmRuleTypeOptions.map((item) => item.value)).toEqual([
-      "H",
-      "L",
-      "HH",
-      "LL",
-      "deviation_high",
-      "deviation_low",
-      "rate_of_change",
-      "cel",
-    ]);
+describe("alarm policy model", () => {
+  test("创建逐点判断草稿", () => {
+    const draft = createDefaultAlarmPolicyDraft();
+
+    expect(draft.mode).toBe("per_target");
+    expect(draft.targets).toEqual([]);
+    expect(draft.conditions).toEqual([]);
   });
 
-  test("新建草稿序列化为最终保存 payload", () => {
-    const draft = createAlarmDraft();
-    draft.name = "温度高报";
-    draft.targetPath = "metrics.temperature";
-    draft.ruleType = "H";
-    draft.condition.limit = 80;
-    draft.severity = "major";
-
-    expect(draftToAlarmSavePayload(draft)).toMatchObject({
-      name: "温度高报",
-      targetPath: "metrics.temperature",
-      ruleType: "H",
-      condition: { limit: 80 },
-      severity: "major",
+  test("序列化多个条件", () => {
+    const payload = draftToAlarmPolicySavePayload({
+      ...createDefaultAlarmPolicyDraft(),
+      name: "温度策略",
+      conditions: [
+        {
+          id: "c-h",
+          type: "H",
+          name: "高限",
+          isEnabled: true,
+          severity: "major",
+          params: { limit: 80 },
+        },
+        {
+          id: "c-l",
+          type: "L",
+          name: "低限",
+          isEnabled: true,
+          severity: "warning",
+          params: { limit: 20 },
+        },
+      ],
     });
+
+    expect(payload.conditions).toHaveLength(2);
   });
 
-  test("详情转草稿保留脏状态为 false", () => {
-    const draft = toAlarmDraft({
-      id: "rule-1",
-      projectId: "project-1",
-      name: "温度高报",
-      targetDatapointId: "dp-1",
-      targetPath: "metrics.temperature",
-      targetDataType: "number",
-      ruleType: "H",
-      condition: { limit: 80 },
-      severity: "major",
-      isEnabled: true,
-      suppression: { enabled: false },
-      messageTemplate: "",
-      contract: {},
-      createdAt: "2026-05-20T00:00:00Z",
-      updatedAt: "2026-05-20T00:00:00Z",
-    });
+  test("未分组策略保留 groupId null", () => {
+    const draft = toAlarmPolicyDraft(makePolicy({ groupId: null }));
 
-    expect(draft.dirty).toBe(false);
+    expect(draft.groupId).toBeNull();
+  });
+
+  test("筛选后全选支持排除单个策略", () => {
+    const selection = makeFilteredSelection({ search: "温度", enabled: true });
+    const next = togglePolicyInSelection(selection, "policy-2", false);
+
+    expect(next.mode).toBe("filtered");
+    if (next.mode === "filtered") {
+      expect(next.excludePolicyIds).toContain("policy-2");
+    }
   });
 });
+
+function makePolicy(patch: Partial<AlarmPolicy> = {}): AlarmPolicy {
+  return {
+    id: "policy-1",
+    projectId: "project-1",
+    groupId: null,
+    name: "温度策略",
+    mode: "per_target",
+    targets: [],
+    inputs: [],
+    derivedExpression: "",
+    conditions: [],
+    suppression: {},
+    messageTemplate: "",
+    isEnabled: true,
+    effectiveEnabled: true,
+    contract: {},
+    createdAt: "2026-05-20T00:00:00Z",
+    updatedAt: "2026-05-20T00:00:00Z",
+    ...patch,
+  };
+}

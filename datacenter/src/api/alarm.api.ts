@@ -1,26 +1,37 @@
 import request from "@/utils/request";
 import { listResponseSchema } from "./schemas/common.schema";
 import {
-  AlarmContractSchema,
+  AlarmBulkSelectionSchema,
   AlarmDraftValidationSchema,
-  AlarmRuleSchema,
-  AlarmRuleSaveSchema,
-  AlarmRuleUpdateSchema,
-  AlarmTrialPayloadSchema,
-  AlarmTrialResultSchema,
-  type AlarmContract,
+  AlarmPolicyContractSchema,
+  AlarmPolicyGroupSaveSchema,
+  AlarmPolicyGroupSchema,
+  AlarmPolicyGroupUpdateSchema,
+  AlarmPolicySaveSchema,
+  AlarmPolicySchema,
+  AlarmPolicyTreeSchema,
+  AlarmPolicyTrialPayloadSchema,
+  AlarmPolicyTrialResultSchema,
+  AlarmPolicyUpdateSchema,
+  type AlarmBulkSelection,
   type AlarmDraftValidation,
-  type AlarmRule,
-  type AlarmRuleSave,
-  type AlarmRuleUpdate,
-  type AlarmTrialPayload,
-  type AlarmTrialResult,
+  type AlarmPolicy,
+  type AlarmPolicyContract,
+  type AlarmPolicyGroup,
+  type AlarmPolicyGroupSave,
+  type AlarmPolicyGroupUpdate,
+  type AlarmPolicySave,
+  type AlarmPolicyTree,
+  type AlarmPolicyTrialPayload,
+  type AlarmPolicyTrialResult,
+  type AlarmPolicyUpdate,
 } from "./schemas/alarm.schema";
 
-const alarmListSchema = listResponseSchema(AlarmRuleSchema);
+const alarmPolicyListSchema = listResponseSchema(AlarmPolicySchema);
+const alarmPolicyGroupListSchema = AlarmPolicyGroupSchema.array();
 
-type AlarmListResp = {
-  list: AlarmRule[];
+type AlarmPolicyListResp = {
+  list: AlarmPolicy[];
   pagination?: {
     page?: number;
     pageSize?: number;
@@ -40,122 +51,242 @@ const unwrapData = (value: unknown) => {
   return value;
 };
 
-/** 获取报警规则列表 */
-export async function getAlarmRules(
+export async function getAlarmPolicyGroups(
   projectId: string,
-  params: Record<string, unknown> = {},
-): Promise<AlarmListResp> {
+): Promise<AlarmPolicyGroup[]> {
   const res = await request({
-    url: `/data/projects/${projectId}/alarm-rules`,
-    method: "get",
-    params,
-  });
-  return alarmListSchema.parse(unwrapData(res));
-}
-
-/** 获取报警规则详情 */
-export async function getAlarmRule(
-  projectId: string,
-  ruleId: string,
-): Promise<AlarmRule> {
-  const res = await request({
-    url: `/data/projects/${projectId}/alarm-rules/${ruleId}`,
+    url: `/data/projects/${projectId}/alarm-policy-groups`,
     method: "get",
   });
-  return AlarmRuleSchema.parse(unwrapData(res));
+  return alarmPolicyGroupListSchema.parse(unwrapData(res));
 }
 
-/** 创建报警规则 */
-export async function createAlarmRule(
+export async function createAlarmPolicyGroup(
   projectId: string,
-  data: AlarmRuleSave,
-): Promise<AlarmRule> {
-  const body = AlarmRuleSaveSchema.parse(data);
+  data: AlarmPolicyGroupSave,
+): Promise<AlarmPolicyGroup> {
+  const body = AlarmPolicyGroupSaveSchema.parse(data);
   const res = await request({
-    url: `/data/projects/${projectId}/alarm-rules`,
+    url: `/data/projects/${projectId}/alarm-policy-groups`,
     method: "post",
     data: body,
   });
-  return AlarmRuleSchema.parse(unwrapData(res));
+  return AlarmPolicyGroupSchema.parse(unwrapData(res));
 }
 
-/** 更新报警规则 */
-export async function updateAlarmRule(
+export async function updateAlarmPolicyGroup(
   projectId: string,
-  ruleId: string,
-  data: AlarmRuleUpdate,
-): Promise<AlarmRule> {
-  const body = AlarmRuleUpdateSchema.parse(data);
+  groupId: string,
+  data: AlarmPolicyGroupUpdate,
+): Promise<AlarmPolicyGroup> {
+  const body = AlarmPolicyGroupUpdateSchema.parse(data);
   const res = await request({
-    url: `/data/projects/${projectId}/alarm-rules/${ruleId}`,
+    url: `/data/projects/${projectId}/alarm-policy-groups/${groupId}`,
     method: "put",
     data: body,
   });
-  return AlarmRuleSchema.parse(unwrapData(res));
+  return AlarmPolicyGroupSchema.parse(unwrapData(res));
 }
 
-/** 启停报警规则 */
-export async function toggleAlarmRule(
+export async function toggleAlarmPolicyGroup(
   projectId: string,
-  ruleId: string,
+  groupId: string,
   isEnabled: boolean,
-): Promise<AlarmRule> {
+): Promise<AlarmPolicyGroup> {
   const res = await request({
-    url: `/data/projects/${projectId}/alarm-rules/${ruleId}/enabled`,
+    url: `/data/projects/${projectId}/alarm-policy-groups/${groupId}/enabled`,
     method: "patch",
     data: { isEnabled },
   });
-  return AlarmRuleSchema.parse(unwrapData(res));
+  return AlarmPolicyGroupSchema.parse(unwrapData(res));
 }
 
-/** 删除报警规则 */
-export async function deleteAlarmRule(
+export async function deleteAlarmPolicyGroup(
   projectId: string,
-  ruleId: string,
+  groupId: string,
 ): Promise<void> {
   await request({
-    url: `/data/projects/${projectId}/alarm-rules/${ruleId}`,
+    url: `/data/projects/${projectId}/alarm-policy-groups/${groupId}`,
     method: "delete",
   });
 }
 
-/** 试算报警规则 */
-export async function testAlarmRule(
+export async function getAlarmPolicyTree(
   projectId: string,
-  ruleId: string,
-  payload: AlarmTrialPayload = {},
-): Promise<AlarmTrialResult> {
-  const body = AlarmTrialPayloadSchema.parse(payload);
+  params: Record<string, unknown> = {},
+): Promise<AlarmPolicyTree> {
   const res = await request({
-    url: `/data/projects/${projectId}/alarm-rules/${ruleId}/test`,
+    url: `/data/projects/${projectId}/alarm-policies/tree`,
+    method: "get",
+    params,
+  });
+  return AlarmPolicyTreeSchema.parse(unwrapData(res));
+}
+
+export async function getAlarmPolicies(
+  projectId: string,
+  params: Record<string, unknown> = {},
+): Promise<AlarmPolicyListResp> {
+  const res = await request({
+    url: `/data/projects/${projectId}/alarm-policies`,
+    method: "get",
+    params,
+  });
+  return alarmPolicyListSchema.parse(unwrapData(res));
+}
+
+export async function getAlarmPolicy(
+  projectId: string,
+  policyId: string,
+): Promise<AlarmPolicy> {
+  const res = await request({
+    url: `/data/projects/${projectId}/alarm-policies/${policyId}`,
+    method: "get",
+  });
+  return AlarmPolicySchema.parse(unwrapData(res));
+}
+
+export async function createAlarmPolicy(
+  projectId: string,
+  data: AlarmPolicySave,
+): Promise<AlarmPolicy> {
+  const body = AlarmPolicySaveSchema.parse(data);
+  const res = await request({
+    url: `/data/projects/${projectId}/alarm-policies`,
     method: "post",
     data: body,
   });
-  return AlarmTrialResultSchema.parse(unwrapData(res));
+  return AlarmPolicySchema.parse(unwrapData(res));
 }
 
-/** 获取报警规则契约 */
-export async function getAlarmRuleContract(
+export async function updateAlarmPolicy(
   projectId: string,
-  ruleId: string,
-): Promise<AlarmContract> {
+  policyId: string,
+  data: AlarmPolicyUpdate,
+): Promise<AlarmPolicy> {
+  const body = AlarmPolicyUpdateSchema.parse(data);
   const res = await request({
-    url: `/data/projects/${projectId}/alarm-rules/${ruleId}/contract`,
+    url: `/data/projects/${projectId}/alarm-policies/${policyId}`,
+    method: "put",
+    data: body,
+  });
+  return AlarmPolicySchema.parse(unwrapData(res));
+}
+
+export async function toggleAlarmPolicy(
+  projectId: string,
+  policyId: string,
+  isEnabled: boolean,
+): Promise<AlarmPolicy> {
+  const res = await request({
+    url: `/data/projects/${projectId}/alarm-policies/${policyId}/enabled`,
+    method: "patch",
+    data: { isEnabled },
+  });
+  return AlarmPolicySchema.parse(unwrapData(res));
+}
+
+export async function deleteAlarmPolicy(
+  projectId: string,
+  policyId: string,
+): Promise<void> {
+  await request({
+    url: `/data/projects/${projectId}/alarm-policies/${policyId}`,
+    method: "delete",
+  });
+}
+
+export async function testAlarmPolicy(
+  projectId: string,
+  policyId: string,
+  payload: AlarmPolicyTrialPayload = {},
+): Promise<AlarmPolicyTrialResult> {
+  const body = AlarmPolicyTrialPayloadSchema.parse(payload);
+  const res = await request({
+    url: `/data/projects/${projectId}/alarm-policies/${policyId}/test`,
+    method: "post",
+    data: body,
+  });
+  return AlarmPolicyTrialResultSchema.parse(unwrapData(res));
+}
+
+export async function getAlarmPolicyContract(
+  projectId: string,
+  policyId: string,
+): Promise<AlarmPolicyContract> {
+  const res = await request({
+    url: `/data/projects/${projectId}/alarm-policies/${policyId}/contract`,
     method: "get",
   });
-  return AlarmContractSchema.parse(unwrapData(res));
+  return AlarmPolicyContractSchema.parse(unwrapData(res));
 }
 
-/** 校验未保存草稿 */
-export async function validateAlarmRuleDraft(
+export async function validateAlarmPolicyDraft(
   projectId: string,
-  data: AlarmRuleSave,
+  data: AlarmPolicySave,
 ): Promise<AlarmDraftValidation> {
-  const body = AlarmRuleSaveSchema.parse(data);
+  const body = AlarmPolicySaveSchema.parse(data);
   const res = await request({
-    url: `/data/projects/${projectId}/alarm-rules/validate-draft`,
+    url: `/data/projects/${projectId}/alarm-policies/validate-draft`,
     method: "post",
     data: body,
   });
   return AlarmDraftValidationSchema.parse(unwrapData(res));
 }
+
+export async function batchEnableAlarmPolicies(
+  projectId: string,
+  selection: AlarmBulkSelection,
+): Promise<void> {
+  await request({
+    url: `/data/projects/${projectId}/alarm-policies/batch-enable`,
+    method: "post",
+    data: { selection: AlarmBulkSelectionSchema.parse(selection) },
+  });
+}
+
+export async function batchDisableAlarmPolicies(
+  projectId: string,
+  selection: AlarmBulkSelection,
+): Promise<void> {
+  await request({
+    url: `/data/projects/${projectId}/alarm-policies/batch-disable`,
+    method: "post",
+    data: { selection: AlarmBulkSelectionSchema.parse(selection) },
+  });
+}
+
+export async function batchMoveAlarmPolicies(
+  projectId: string,
+  selection: AlarmBulkSelection,
+  groupId: string | null,
+): Promise<void> {
+  await request({
+    url: `/data/projects/${projectId}/alarm-policies/batch-move`,
+    method: "post",
+    data: { selection: AlarmBulkSelectionSchema.parse(selection), groupId },
+  });
+}
+
+export async function batchApplyAlarmConditions(
+  projectId: string,
+  selection: AlarmBulkSelection,
+  conditions: AlarmPolicy["conditions"],
+): Promise<void> {
+  await request({
+    url: `/data/projects/${projectId}/alarm-policies/batch-apply-conditions`,
+    method: "post",
+    data: { selection: AlarmBulkSelectionSchema.parse(selection), conditions },
+  });
+}
+
+// 旧名称暂时保留给未改造组件引用。工作区切完后删除。
+export const getAlarmRules = getAlarmPolicies;
+export const getAlarmRule = getAlarmPolicy;
+export const createAlarmRule = createAlarmPolicy;
+export const updateAlarmRule = updateAlarmPolicy;
+export const toggleAlarmRule = toggleAlarmPolicy;
+export const deleteAlarmRule = deleteAlarmPolicy;
+export const testAlarmRule = testAlarmPolicy;
+export const getAlarmRuleContract = getAlarmPolicyContract;
+export const validateAlarmRuleDraft = validateAlarmPolicyDraft;

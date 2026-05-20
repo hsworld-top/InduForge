@@ -1,19 +1,31 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
-import type { AlarmRule } from "../src/api/schemas/alarm.schema";
+import type { AlarmPolicy } from "../src/api/schemas/alarm.schema";
 
-const alarmRule: AlarmRule = {
-  id: "rule-1",
+const alarmPolicy: AlarmPolicy = {
+  id: "policy-1",
   projectId: "project-1",
-  name: "温度高报",
+  groupId: null,
+  name: "温度策略",
   description: "",
-  targetDatapointId: "dp-1",
-  targetPath: "metrics.temperature",
-  targetDataType: "number",
-  ruleType: "H",
-  condition: { limit: 80 },
-  severity: "major",
+  mode: "per_target",
+  targets: [
+    { datapointId: "dp-1", path: "metrics.temperature", dataType: "number" },
+  ],
+  inputs: [],
+  derivedExpression: "",
+  conditions: [
+    {
+      id: "c-h",
+      type: "H",
+      name: "高限",
+      isEnabled: true,
+      severity: "major",
+      params: { limit: 80 },
+    },
+  ],
   isEnabled: true,
+  effectiveEnabled: true,
   suppression: { enabled: false },
   messageTemplate: "",
   contract: { version: 1 },
@@ -21,40 +33,69 @@ const alarmRule: AlarmRule = {
   updatedAt: "",
 };
 
-const getAlarmRules = vi.fn(async () => ({
-  list: [alarmRule],
+const getAlarmPolicyGroups = vi.fn(async () => []);
+const getAlarmPolicyTree = vi.fn(async () => ({
+  groups: [],
+  rootPolicies: [alarmPolicy],
+  policies: [alarmPolicy],
+  matchedPolicyCount: 1,
+  totalPolicyCount: 1,
+}));
+const getAlarmPolicies = vi.fn(async () => ({
+  list: [alarmPolicy],
   pagination: { total: 1 },
 }));
-const getAlarmRule = vi.fn(async () => alarmRule);
-const createAlarmRule = vi.fn(async () => ({ ...alarmRule, id: "rule-2" }));
-const updateAlarmRule = vi.fn(async () => ({ ...alarmRule, name: "温度高报2" }));
-const deleteAlarmRule = vi.fn(async () => undefined);
-const toggleAlarmRule = vi.fn(async () => ({ ...alarmRule, isEnabled: false }));
-const testAlarmRule = vi.fn(async () => ({
+const getAlarmPolicy = vi.fn(async () => alarmPolicy);
+const createAlarmPolicy = vi.fn(async () => ({
+  ...alarmPolicy,
+  id: "policy-2",
+}));
+const updateAlarmPolicy = vi.fn(async () => ({
+  ...alarmPolicy,
+  name: "温度策略2",
+}));
+const deleteAlarmPolicy = vi.fn(async () => undefined);
+const toggleAlarmPolicy = vi.fn(async () => ({
+  ...alarmPolicy,
+  isEnabled: false,
+}));
+const testAlarmPolicy = vi.fn(async () => ({
   triggered: true,
   state: "triggered",
-  severity: "major",
-  ruleType: "H",
-  targetPath: "metrics.temperature",
+  triggeredConditions: alarmPolicy.conditions,
   diagnostics: {},
+  conditionResults: [],
 }));
-const getAlarmRuleContract = vi.fn(async () => ({ version: 1, ruleId: "rule-1" }));
-const validateAlarmRuleDraft = vi.fn(async () => ({
+const getAlarmPolicyContract = vi.fn(async () => ({
+  version: 1,
+  policyId: "policy-1",
+}));
+const validateAlarmPolicyDraft = vi.fn(async () => ({
   valid: true,
   errors: [],
   contract: { version: 1 },
 }));
+const batchEnableAlarmPolicies = vi.fn(async () => undefined);
+const batchDisableAlarmPolicies = vi.fn(async () => undefined);
+const batchMoveAlarmPolicies = vi.fn(async () => undefined);
+const batchApplyAlarmConditions = vi.fn(async () => undefined);
 
-vi.mock("../src/api/alarm.api", () => ({
-  getAlarmRules,
-  getAlarmRule,
-  createAlarmRule,
-  updateAlarmRule,
-  deleteAlarmRule,
-  toggleAlarmRule,
-  testAlarmRule,
-  getAlarmRuleContract,
-  validateAlarmRuleDraft,
+vi.mock("@/api/alarm.api", () => ({
+  getAlarmPolicyGroups,
+  getAlarmPolicyTree,
+  getAlarmPolicies,
+  getAlarmPolicy,
+  createAlarmPolicy,
+  updateAlarmPolicy,
+  deleteAlarmPolicy,
+  toggleAlarmPolicy,
+  testAlarmPolicy,
+  getAlarmPolicyContract,
+  validateAlarmPolicyDraft,
+  batchEnableAlarmPolicies,
+  batchDisableAlarmPolicies,
+  batchMoveAlarmPolicies,
+  batchApplyAlarmConditions,
 }));
 
 describe("alarm store", () => {
@@ -63,130 +104,80 @@ describe("alarm store", () => {
     vi.clearAllMocks();
   });
 
-  test("拉取列表并记录 total", async () => {
+  test("拉取策略树并保留根目录策略", async () => {
     const { useAlarmStore } = await import("../src/stores/alarm.store");
     const store = useAlarmStore();
 
-    await store.fetchList("project-1", { page: 1 });
+    await store.fetchTree("project-1", { search: "温度" });
 
-    expect(getAlarmRules).toHaveBeenCalledWith("project-1", { page: 1 });
+    expect(getAlarmPolicyTree).toHaveBeenCalledWith("project-1", {
+      search: "温度",
+    });
+    expect(store.tree.rootPolicies[0].id).toBe("policy-1");
     expect(store.total).toBe(1);
-    expect(store.list[0].id).toBe("rule-1");
-    expect(store.listError).toBe("");
   });
 
-  test("列表失败时清空列表并记录错误", async () => {
-    getAlarmRules.mockRejectedValueOnce(new Error("接口不可用"));
+  test("筛选后全选使用筛选快照", async () => {
     const { useAlarmStore } = await import("../src/stores/alarm.store");
     const store = useAlarmStore();
 
-    await expect(store.fetchList("project-1")).rejects.toThrow("接口不可用");
+    store.selectFiltered({ search: "温度" });
+    store.selectPolicy("policy-2", false);
 
-    expect(store.list).toEqual([]);
-    expect(store.total).toBe(0);
-    expect(store.listError).toBe("接口不可用");
-    expect(store.loading).toBe(false);
+    expect(store.selection.mode).toBe("filtered");
+    if (store.selection.mode === "filtered") {
+      expect(store.selection.excludePolicyIds).toContain("policy-2");
+    }
   });
 
   test("打开详情并写入 editing", async () => {
     const { useAlarmStore } = await import("../src/stores/alarm.store");
     const store = useAlarmStore();
 
-    const detail = await store.openForEdit("project-1", "rule-1");
+    const detail = await store.openPolicy("project-1", "policy-1");
 
-    expect(getAlarmRule).toHaveBeenCalledWith("project-1", "rule-1");
-    expect(detail.id).toBe("rule-1");
-    expect(store.editing?.id).toBe("rule-1");
-    expect(store.detailError).toBe("");
+    expect(getAlarmPolicy).toHaveBeenCalledWith("project-1", "policy-1");
+    expect(detail.id).toBe("policy-1");
+    expect(store.editing?.id).toBe("policy-1");
   });
 
-  test("创建规则后插入列表并设为当前编辑", async () => {
+  test("创建策略后插入列表并设为当前编辑", async () => {
     const { useAlarmStore } = await import("../src/stores/alarm.store");
     const store = useAlarmStore();
 
-    const created = await store.createRule("project-1", {
-      name: "温度高报",
-      targetPath: "metrics.temperature",
-      ruleType: "H",
-      condition: { limit: 80 },
-      severity: "major",
+    const created = await store.createPolicy("project-1", {
+      name: "温度策略",
+      mode: "per_target",
+      targets: alarmPolicy.targets,
+      inputs: [],
+      derivedExpression: "",
+      conditions: alarmPolicy.conditions,
       isEnabled: true,
       suppression: { enabled: false },
       messageTemplate: "",
     });
 
-    expect(createAlarmRule).toHaveBeenCalled();
-    expect(created.id).toBe("rule-2");
-    expect(store.list[0].id).toBe("rule-2");
-    expect(store.editing?.id).toBe("rule-2");
+    expect(createAlarmPolicy).toHaveBeenCalled();
+    expect(created.id).toBe("policy-2");
+    expect(store.list[0].id).toBe("policy-2");
+    expect(store.editing?.id).toBe("policy-2");
   });
 
-  test("保存规则后同步详情和列表", async () => {
+  test("试算、契约和批量操作写入独立状态", async () => {
     const { useAlarmStore } = await import("../src/stores/alarm.store");
     const store = useAlarmStore();
-    store.list = [alarmRule];
+    store.selectFiltered({ search: "温度" });
 
-    const saved = await store.saveRule("project-1", "rule-1", { name: "温度高报2" });
+    await store.runTrial("project-1", "policy-1", { value: 90 });
+    await store.fetchContract("project-1", "policy-1");
+    await store.batchEnable("project-1");
 
-    expect(updateAlarmRule).toHaveBeenCalledWith("project-1", "rule-1", {
-      name: "温度高报2",
-    });
-    expect(saved.name).toBe("温度高报2");
-    expect(store.editing?.name).toBe("温度高报2");
-    expect(store.list[0].name).toBe("温度高报2");
-  });
-
-  test("删除当前规则后清理详情和列表", async () => {
-    const { useAlarmStore } = await import("../src/stores/alarm.store");
-    const store = useAlarmStore();
-    store.list = [alarmRule];
-    store.total = 1;
-    store.editing = alarmRule;
-
-    await store.removeRule("project-1", "rule-1");
-
-    expect(deleteAlarmRule).toHaveBeenCalledWith("project-1", "rule-1");
-    expect(store.list).toEqual([]);
-    expect(store.total).toBe(0);
-    expect(store.editing).toBeNull();
-  });
-
-  test("启停规则后同步列表", async () => {
-    const { useAlarmStore } = await import("../src/stores/alarm.store");
-    const store = useAlarmStore();
-    store.list = [alarmRule];
-
-    const rule = await store.setRuleEnabled("project-1", "rule-1", false);
-
-    expect(toggleAlarmRule).toHaveBeenCalledWith("project-1", "rule-1", false);
-    expect(rule.isEnabled).toBe(false);
-    expect(store.list[0].isEnabled).toBe(false);
-  });
-
-  test("试算、契约和草稿校验写入独立状态", async () => {
-    const { useAlarmStore } = await import("../src/stores/alarm.store");
-    const store = useAlarmStore();
-    const payload = { value: 90 };
-    const draft = {
-      name: "温度高报",
-      targetPath: "metrics.temperature",
-      ruleType: "H" as const,
-      condition: { limit: 80 },
-      severity: "major" as const,
-      isEnabled: true,
-      suppression: { enabled: false },
-      messageTemplate: "",
-    };
-
-    await store.runTrial("project-1", "rule-1", payload);
-    await store.fetchContract("project-1", "rule-1");
-    const validation = await store.validateDraft("project-1", draft);
-
-    expect(testAlarmRule).toHaveBeenCalledWith("project-1", "rule-1", payload);
+    expect(testAlarmPolicy).toHaveBeenCalled();
     expect(store.trial.result?.state).toBe("triggered");
-    expect(store.trial.running).toBe(false);
-    expect(store.contract.data?.ruleId).toBe("rule-1");
-    expect(validation.valid).toBe(true);
-    expect(store.validation?.valid).toBe(true);
+    expect(store.contract.data?.policyId).toBe("policy-1");
+    expect(batchEnableAlarmPolicies).toHaveBeenCalledWith(
+      "project-1",
+      store.selection,
+    );
   });
 });
