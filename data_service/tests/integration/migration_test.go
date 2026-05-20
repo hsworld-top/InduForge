@@ -73,6 +73,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_compute_folders",
 		"data_compute_units",
 		"data_compute_runs",
+		"data_alarm_policy_groups",
+		"data_alarm_policies",
 	} {
 		if !tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
 			t.Fatalf("expected table %s to exist", tableName)
@@ -83,8 +85,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&appliedCount); err != nil {
 		t.Fatalf("鏌ヨ schema_migrations 澶辫触: %v", err)
 	}
-	if appliedCount != 17 {
-		t.Fatalf("expected 17 migration records, got %d", appliedCount)
+	if appliedCount != 18 {
+		t.Fatalf("expected 18 migration records, got %d", appliedCount)
 	}
 
 	if err := migrator.DownAll(ctx); err != nil {
@@ -111,6 +113,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_compute_folders",
 		"data_compute_units",
 		"data_compute_runs",
+		"data_alarm_policy_groups",
+		"data_alarm_policies",
 	} {
 		if tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
 			t.Fatalf("鏈熸湜琛?%s 宸茶鍒犻櫎", tableName)
@@ -171,6 +175,10 @@ func TestMigrationIndexes(t *testing.T) {
 		"data_compute_folders_project_parent_name_key",
 		"data_compute_runs_unit_created_idx",
 		"data_compute_runs_project_created_idx",
+		"data_alarm_policy_groups_project_sort_idx",
+		"data_alarm_policies_project_group_idx",
+		"data_alarm_policies_project_updated_idx",
+		"data_alarm_policies_project_enabled_idx",
 	} {
 		if _, ok := indexes[indexName]; !ok {
 			t.Fatalf("鏈熸湜绱㈠紩/绾︽潫绱㈠紩 %s 瀛樺湪锛屽綋鍓嶇储寮曢泦鍚堜负 %v", indexName, mapsKeys(indexes))
@@ -227,6 +235,35 @@ func TestAlarmRuleFinalModelMigration(t *testing.T) {
 	}
 }
 
+func TestAlarmPolicyTablesMigration(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	fixture := setupTestDatabase(t, ctx)
+	migrator := setupMigrator(t, fixture.pool)
+	if err := migrator.Up(ctx); err != nil {
+		t.Fatalf("migrate up failed: %v", err)
+	}
+
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policy_groups", "is_enabled", "boolean")
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policies", "group_id", "uuid")
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policies", "targets", "jsonb")
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policies", "conditions", "jsonb")
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policies", "contract", "jsonb")
+
+	if _, err := fixture.pool.Exec(ctx, `
+        INSERT INTO data_alarm_policies (
+            project_id,
+            name,
+            mode,
+            created_by
+        )
+        VALUES (gen_random_uuid(), '非法策略模式', 'single_rule', gen_random_uuid())
+    `); err == nil {
+		t.Fatalf("expected invalid policy mode to violate check constraint")
+	}
+}
+
 func setupMigrator(t *testing.T, pool *pgxpool.Pool) *migrate.Migrator {
 	t.Helper()
 
@@ -255,6 +292,15 @@ func loadColumnTypeAndDefault(ctx context.Context, t *testing.T, pool *pgxpool.P
 		return dataType, ""
 	}
 	return dataType, *columnDefault
+}
+
+func assertColumnExists(ctx context.Context, t *testing.T, pool *pgxpool.Pool, schemaName string, tableName string, columnName string, wantType string) {
+	t.Helper()
+
+	dataType, _ := loadColumnTypeAndDefault(ctx, t, pool, schemaName, tableName, columnName)
+	if dataType != wantType {
+		t.Fatalf("column %s.%s data_type = %q, want %q", tableName, columnName, dataType, wantType)
+	}
 }
 
 func assertInsertAlarmRuleWithTypeAndSeverity(ctx context.Context, t *testing.T, pool *pgxpool.Pool, ruleType string, severity string) {
@@ -399,7 +445,9 @@ func loadIndexNames(ctx context.Context, t *testing.T, pool *pgxpool.Pool, schem
               'data_preview_sessions',
               'data_compute_units',
               'data_compute_runs',
-              'data_alarm_rules'
+              'data_alarm_rules',
+              'data_alarm_policy_groups',
+              'data_alarm_policies'
           )
     `, schemaName)
 	if err != nil {
