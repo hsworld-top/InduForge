@@ -1,42 +1,16 @@
 <template>
   <div class="alarm-workspace">
-    <aside class="alarm-workspace__list">
-      <header class="alarm-workspace__list-head">
-        <div>
-          <strong>报警规则</strong>
-          <span>{{ alarmStore.total }} 条</span>
-        </div>
-        <button type="button" aria-label="刷新报警规则" @click="reloadList">
-          刷新
-        </button>
-      </header>
-
-      <div v-if="alarmStore.listError" class="alarm-workspace__error">
-        {{ alarmStore.listError }}
-      </div>
-      <div v-else-if="alarmStore.loading" class="alarm-workspace__empty">
-        加载中
-      </div>
-      <div v-else-if="!alarmStore.list.length" class="alarm-workspace__empty">
-        暂无报警规则
-      </div>
-
-      <button
-        v-for="rule in alarmStore.list"
-        :key="rule.id"
-        type="button"
-        class="alarm-workspace__row"
-        :class="{ 'is-active': rule.id === selectedRuleId }"
-        @click="selectRule(rule.id)"
-      >
-        <i :class="`is-${rule.severity}`"></i>
-        <span>
-          <strong>{{ rule.name }}</strong>
-          <code>{{ rule.targetPath }}</code>
-        </span>
-        <em>{{ rule.isEnabled ? "启用" : "停用" }}</em>
-      </button>
-    </aside>
+    <AlarmRuleList
+      :rules="alarmStore.list"
+      :total="alarmStore.total"
+      :selected-id="selectedRuleId"
+      :loading="alarmStore.loading"
+      :error="alarmStore.listError"
+      @refresh="reloadList"
+      @create="openCreateDialog"
+      @select="selectRule"
+      @filter="filterList"
+    />
 
     <section class="alarm-workspace__main">
       <header class="alarm-workspace__head">
@@ -154,12 +128,22 @@
         </div>
       </footer>
     </section>
+
+    <CreateAlarmRuleDialog
+      v-model="createDialogVisible"
+      :project-id="projectId"
+      :submitting="alarmStore.creating"
+      :error="alarmStore.createError"
+      @submit="createRule"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { ElMessage } from "element-plus";
+import type { AlarmRuleSave } from "@/api/schemas/alarm.schema";
 import { useAlarmStore } from "@/stores/alarm.store";
 import {
   alarmRuleTypeOptions,
@@ -168,6 +152,8 @@ import {
   toAlarmDraft,
   type AlarmRuleDraft,
 } from "@/components/alarm/alarmRuleModel";
+import AlarmRuleList from "./AlarmRuleList.vue";
+import CreateAlarmRuleDialog from "./CreateAlarmRuleDialog.vue";
 
 const props = defineProps<{
   projectId: string;
@@ -186,6 +172,8 @@ const route = useRoute();
 const router = useRouter();
 const alarmStore = useAlarmStore();
 const activeDraft = ref<AlarmRuleDraft | null>(null);
+const createDialogVisible = ref(false);
+const listParams = ref<Record<string, string>>({});
 
 const selectedRuleId = computed(() => {
   const value = route.params.objectId;
@@ -225,7 +213,29 @@ const replaceAlarmRoute = (ruleId?: string, tab: WorkspaceTab = "config") => {
   router.push(`${routeBase.value}/alarm${rulePath}`);
 };
 
-const reloadList = () => alarmStore.fetchList(props.projectId);
+const cleanParams = (params: Record<string, string>) =>
+  Object.fromEntries(
+    Object.entries(params).filter(([, value]) => value.trim() !== ""),
+  );
+
+const reloadList = () => alarmStore.fetchList(props.projectId, listParams.value);
+
+const filterList = (params: Record<string, string>) => {
+  listParams.value = cleanParams(params);
+  reloadList();
+};
+
+const openCreateDialog = () => {
+  createDialogVisible.value = true;
+};
+
+const createRule = async (payload: AlarmRuleSave) => {
+  const rule = await alarmStore.createRule(props.projectId, payload);
+  activeDraft.value = toAlarmDraft(rule);
+  createDialogVisible.value = false;
+  replaceAlarmRoute(rule.id, "config");
+  ElMessage.success("报警规则已创建");
+};
 
 const selectRule = (ruleId: string) => {
   replaceAlarmRoute(ruleId, "config");
@@ -324,19 +334,18 @@ onMounted(() => {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: 320px minmax(0, 1fr);
   background: var(--dc-surface-subtle);
   color: var(--dc-text);
 }
 
-.alarm-workspace__list {
+.alarm-workspace__main {
+  min-width: 0;
   min-height: 0;
-  overflow-y: auto;
-  border-right: 1px solid var(--dc-border);
-  background: var(--dc-surface-raised);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) 280px;
 }
 
-.alarm-workspace__list-head,
 .alarm-workspace__head {
   min-height: 56px;
   display: flex;
@@ -345,27 +354,22 @@ onMounted(() => {
   gap: 12px;
   padding: 12px;
   border-bottom: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
 }
 
-.alarm-workspace__list-head strong,
 .alarm-workspace__head strong,
-.alarm-workspace__list-head span,
 .alarm-workspace__head span {
   display: block;
 }
 
-.alarm-workspace__list-head span,
+.alarm-workspace__head strong {
+  font-size: 14px;
+}
+
 .alarm-workspace__head span {
   margin-top: 4px;
   color: var(--dc-text-secondary);
   font-size: 12px;
-}
-
-.alarm-workspace__main {
-  min-width: 0;
-  min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) 280px;
 }
 
 .alarm-workspace__actions {
@@ -378,11 +382,12 @@ onMounted(() => {
   border-radius: var(--dc-radius-sm);
   background: var(--dc-surface-muted);
   color: var(--dc-text);
+  font-family: inherit;
   font-size: 12px;
   font-weight: 700;
+  cursor: pointer;
 }
 
-.alarm-workspace__list-head button,
 .alarm-workspace__actions button,
 .alarm-workspace__panel-body button {
   height: 32px;
@@ -395,67 +400,8 @@ onMounted(() => {
 }
 
 .alarm-workspace__actions .is-danger {
-  border-color: #d9a6a0;
-  color: #9f3427;
-}
-
-.alarm-workspace__row {
-  width: calc(100% - 16px);
-  display: grid;
-  grid-template-columns: 4px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  margin: 8px;
-  padding: 10px;
-  text-align: left;
-}
-
-.alarm-workspace__row.is-active {
-  border-color: var(--dc-primary);
-  background: var(--dc-primary-soft);
-}
-
-.alarm-workspace__row i {
-  width: 4px;
-  height: 34px;
-  border-radius: 2px;
-  background: var(--dc-border);
-}
-
-.alarm-workspace__row i.is-info {
-  background: #5b8def;
-}
-
-.alarm-workspace__row i.is-warning {
-  background: #d99a22;
-}
-
-.alarm-workspace__row i.is-major {
-  background: #d96f22;
-}
-
-.alarm-workspace__row i.is-critical {
-  background: #c74335;
-}
-
-.alarm-workspace__row strong,
-.alarm-workspace__row code {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.alarm-workspace__row code {
-  margin-top: 4px;
-  color: var(--dc-text-secondary);
-  font-size: 12px;
-}
-
-.alarm-workspace__row em {
-  color: var(--dc-text-secondary);
-  font-size: 12px;
-  font-style: normal;
+  border-color: rgba(220, 38, 38, 0.28);
+  color: var(--dc-danger, #b91c1c);
 }
 
 .alarm-workspace__editor {
@@ -491,6 +437,7 @@ onMounted(() => {
   border-radius: var(--dc-radius-sm);
   background: var(--dc-surface-raised);
   color: var(--dc-text);
+  font-family: inherit;
   font-size: 13px;
   outline: none;
 }
@@ -554,19 +501,13 @@ onMounted(() => {
 }
 
 .alarm-workspace__error {
-  border-color: #d9a6a0;
-  color: #9f3427;
+  border-color: rgba(220, 38, 38, 0.32);
+  color: var(--dc-danger, #b91c1c);
 }
 
 @media (max-width: 920px) {
   .alarm-workspace {
     grid-template-columns: 1fr;
-  }
-
-  .alarm-workspace__list {
-    max-height: 320px;
-    border-right: 0;
-    border-bottom: 1px solid var(--dc-border);
   }
 
   .alarm-workspace__editor {
