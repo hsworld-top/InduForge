@@ -16,6 +16,7 @@ import {
   testAlarmPolicy,
   toggleAlarmPolicy,
   updateAlarmPolicy,
+  updateAlarmPolicyGroup,
   validateAlarmPolicyDraft,
 } from "@/api/alarm.api";
 import type {
@@ -132,6 +133,29 @@ export const useAlarmStore = defineStore("alarm", () => {
     groups.value = [...groups.value, group];
     tree.value = { ...tree.value, groups: groups.value };
     return group;
+  }
+
+  async function updateGroup(
+    projectId: string,
+    groupId: string,
+    data: Partial<AlarmPolicyGroupSave>,
+  ) {
+    saving.value = true;
+    try {
+      const group = await updateAlarmPolicyGroup(projectId, groupId, data);
+      groups.value = groups.value.map((item) =>
+        item.id === group.id ? group : item,
+      );
+      tree.value = {
+        ...tree.value,
+        groups: tree.value.groups.map((item) =>
+          item.id === group.id ? group : item,
+        ),
+      };
+      return group;
+    } finally {
+      saving.value = false;
+    }
   }
 
   async function fetchTree(
@@ -332,6 +356,23 @@ export const useAlarmStore = defineStore("alarm", () => {
     }
   }
 
+  async function batchMovePolicies(
+    projectId: string,
+    policyIds: string[],
+    groupId: string | null,
+  ) {
+    saving.value = true;
+    try {
+      await batchMoveAlarmPolicies(
+        projectId,
+        { mode: "ids", policyIds },
+        groupId,
+      );
+    } finally {
+      saving.value = false;
+    }
+  }
+
   async function batchApplyConditions(
     projectId: string,
     conditions: AlarmCondition[],
@@ -436,6 +477,7 @@ export const useAlarmStore = defineStore("alarm", () => {
     hasEditing,
     fetchGroups,
     createGroup,
+    updateGroup,
     fetchTree,
     fetchList,
     openPolicy,
@@ -456,6 +498,7 @@ export const useAlarmStore = defineStore("alarm", () => {
     batchEnable,
     batchDisable,
     batchMove,
+    batchMovePolicies,
     batchApplyConditions,
     runTrial,
     clearTrial,

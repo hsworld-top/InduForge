@@ -21,8 +21,10 @@
       @batch-disable="batchDisable"
       @batch-conditions="openBulkConditionDialog"
       @batch-move="batchMove"
-      @rename-policy="renamePolicy"
-      @move-policy="movePolicy"
+      @rename-policy="openRenamePolicyDialog"
+      @move-policy="openMovePolicyDialog"
+      @rename-group="openRenameGroupDialog"
+      @move-group-policies="openMoveGroupPoliciesDialog"
     />
 
     <AlarmEditorShell
@@ -69,6 +71,37 @@
       :submitting="alarmStore.saving"
       @submit="batchApplyConditions"
     />
+
+    <RenameAlarmPolicyDialog
+      v-model="renamePolicyDialogVisible"
+      :policy="contextPolicy"
+      :loading="alarmStore.saving"
+      @submit="renamePolicy"
+    />
+
+    <MoveAlarmPolicyDialog
+      v-model="movePolicyDialogVisible"
+      :policy="contextPolicy"
+      :groups="alarmStore.groups"
+      :loading="alarmStore.saving"
+      @submit="movePolicy"
+    />
+
+    <RenameAlarmGroupDialog
+      v-model="renameGroupDialogVisible"
+      :group="contextGroup"
+      :loading="alarmStore.saving"
+      @submit="renameGroup"
+    />
+
+    <MoveAlarmGroupPoliciesDialog
+      v-model="moveGroupPoliciesDialogVisible"
+      :group="contextGroup"
+      :groups="alarmStore.groups"
+      :policy-count="contextGroupPolicyIds.length"
+      :loading="alarmStore.saving"
+      @submit="moveGroupPolicies"
+    />
   </div>
 </template>
 
@@ -78,6 +111,8 @@ import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import type {
   AlarmCondition,
+  AlarmPolicy,
+  AlarmPolicyGroup,
   AlarmPolicyGroupSave,
   AlarmPolicyTrialPayload,
 } from "@/api/schemas/alarm.schema";
@@ -89,12 +124,14 @@ import {
   type AlarmPolicyDraft,
 } from "@/components/alarm/alarmPolicyModel";
 import AlarmBulkConditionDialog from "./AlarmBulkConditionDialog.vue";
-import AlarmEditorShell, {
-  type AlarmEditorTab,
-} from "./AlarmEditorShell.vue";
+import AlarmEditorShell, { type AlarmEditorTab } from "./AlarmEditorShell.vue";
 import AlarmPolicyManager from "./AlarmPolicyManager.vue";
 import CreateAlarmGroupDialog from "./CreateAlarmGroupDialog.vue";
 import CreateAlarmPolicyDialog from "./CreateAlarmPolicyDialog.vue";
+import MoveAlarmGroupPoliciesDialog from "./MoveAlarmGroupPoliciesDialog.vue";
+import MoveAlarmPolicyDialog from "./MoveAlarmPolicyDialog.vue";
+import RenameAlarmGroupDialog from "./RenameAlarmGroupDialog.vue";
+import RenameAlarmPolicyDialog from "./RenameAlarmPolicyDialog.vue";
 
 const props = defineProps<{
   projectId: string;
@@ -111,7 +148,14 @@ const activeDraft = ref<AlarmPolicyDraft | null>(null);
 const createDialogVisible = ref(false);
 const createGroupDialogVisible = ref(false);
 const bulkConditionDialogVisible = ref(false);
+const renamePolicyDialogVisible = ref(false);
+const movePolicyDialogVisible = ref(false);
+const renameGroupDialogVisible = ref(false);
+const moveGroupPoliciesDialogVisible = ref(false);
 const listParams = ref<Record<string, string>>({});
+const contextPolicy = ref<AlarmPolicy | null>(null);
+const contextGroup = ref<AlarmPolicyGroup | null>(null);
+const contextGroupPolicyIds = ref<string[]>([]);
 
 const selectedPolicyId = computed(() => {
   const value = route.params.objectId;
@@ -122,10 +166,14 @@ const isCreatingDraft = computed(() => selectedPolicyId.value === "__new__");
 
 const activeTab = computed<WorkspaceTab>(() => {
   const value = route.params.tab;
-  return tabs.includes(value as WorkspaceTab) ? (value as WorkspaceTab) : "config";
+  return tabs.includes(value as WorkspaceTab)
+    ? (value as WorkspaceTab)
+    : "config";
 });
 
-const routeBase = computed(() => (route.path.startsWith("/debug/") ? "/debug" : ""));
+const routeBase = computed(() =>
+  route.path.startsWith("/debug/") ? "/debug" : "",
+);
 const replaceAlarmRoute = (policyId?: string, tab: WorkspaceTab = "config") => {
   const tabPath = tab === "config" ? "" : `/${tab}`;
   const policyPath = policyId ? `/${policyId}${tabPath}` : "";
@@ -137,7 +185,8 @@ const cleanParams = (params: Record<string, string>) =>
     Object.entries(params).filter(([, value]) => value.trim() !== ""),
   );
 
-const reloadList = () => alarmStore.fetchTree(props.projectId, listParams.value);
+const reloadList = () =>
+  alarmStore.fetchTree(props.projectId, listParams.value);
 
 const filterList = (params: Record<string, string>) => {
   listParams.value = cleanParams(params);
@@ -236,7 +285,10 @@ const validateActiveDraft = () => {
     ElMessage.warning("请输入策略名");
     return false;
   }
-  if (activeDraft.value.mode === "per_target" && activeDraft.value.targets.length === 0) {
+  if (
+    activeDraft.value.mode === "per_target" &&
+    activeDraft.value.targets.length === 0
+  ) {
     ElMessage.warning("请选择目标点");
     return false;
   }
@@ -355,19 +407,79 @@ const batchMove = async (groupId: string | null) => {
   await reloadList();
 };
 
-const renamePolicy = async (policyId: string, name: string) => {
+const openRenamePolicyDialog = (policy: AlarmPolicy) => {
+  contextPolicy.value = policy;
+  renamePolicyDialogVisible.value = true;
+};
+
+const openMovePolicyDialog = (policy: AlarmPolicy) => {
+  contextPolicy.value = policy;
+  movePolicyDialogVisible.value = true;
+};
+
+const openRenameGroupDialog = (group: AlarmPolicyGroup) => {
+  contextGroup.value = group;
+  renameGroupDialogVisible.value = true;
+};
+
+const openMoveGroupPoliciesDialog = (
+  group: AlarmPolicyGroup,
+  policyIds: string[],
+) => {
+  contextGroup.value = group;
+  contextGroupPolicyIds.value = policyIds;
+  moveGroupPoliciesDialogVisible.value = true;
+};
+
+const renamePolicy = async (name: string) => {
+  if (!contextPolicy.value) {
+    return;
+  }
+  const policyId = contextPolicy.value.id;
   await alarmStore.savePolicy(props.projectId, policyId, { name });
   if (selectedPolicyId.value === policyId && activeDraft.value) {
     activeDraft.value = { ...activeDraft.value, name, dirty: false };
   }
+  renamePolicyDialogVisible.value = false;
   await reloadList();
 };
 
-const movePolicy = async (policyId: string, groupId: string | null) => {
-  const policy = await alarmStore.savePolicy(props.projectId, policyId, { groupId });
+const movePolicy = async (groupId: string | null) => {
+  if (!contextPolicy.value) {
+    return;
+  }
+  const policyId = contextPolicy.value.id;
+  const policy = await alarmStore.savePolicy(props.projectId, policyId, {
+    groupId,
+  });
   if (selectedPolicyId.value === policyId) {
     activeDraft.value = toAlarmPolicyDraft(policy);
   }
+  movePolicyDialogVisible.value = false;
+  await reloadList();
+};
+
+const renameGroup = async (name: string) => {
+  if (!contextGroup.value) {
+    return;
+  }
+  await alarmStore.updateGroup(props.projectId, contextGroup.value.id, {
+    name,
+  });
+  renameGroupDialogVisible.value = false;
+  await reloadList();
+};
+
+const moveGroupPolicies = async (groupId: string | null) => {
+  if (!contextGroup.value || contextGroupPolicyIds.value.length === 0) {
+    return;
+  }
+  await alarmStore.batchMovePolicies(
+    props.projectId,
+    contextGroupPolicyIds.value,
+    groupId,
+  );
+  moveGroupPoliciesDialogVisible.value = false;
   await reloadList();
 };
 
@@ -416,15 +528,32 @@ onMounted(() => {
 .alarm-workspace {
   height: 100%;
   min-height: 0;
-  display: grid;
-  grid-template-columns: 400px minmax(0, 1fr);
+  display: flex;
   background: var(--dc-surface-subtle);
   color: var(--dc-text);
 }
 
+.alarm-workspace :deep(.alarm-policy-manager) {
+  flex: 0 0 400px;
+}
+
+.alarm-workspace :deep(.alarm-policy-manager.is-collapsed) {
+  flex-basis: 48px;
+}
+
+.alarm-workspace :deep(.alarm-editor-shell) {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 @media (max-width: 920px) {
   .alarm-workspace {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .alarm-workspace :deep(.alarm-policy-manager),
+  .alarm-workspace :deep(.alarm-policy-manager.is-collapsed) {
+    flex: 0 0 auto;
   }
 }
 </style>
