@@ -40,17 +40,16 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import type {
-  AlarmRuleDraft,
-  AlarmSuppression,
-} from "@/components/alarm/alarmRuleModel";
+import type { AlarmPolicyDraft } from "@/components/alarm/alarmPolicyModel";
+
+type AlarmSuppression = Record<string, unknown>;
 
 const props = defineProps<{
-  draft: AlarmRuleDraft;
+  draft: AlarmPolicyDraft;
 }>();
 
 const emit = defineEmits<{
-  update: [patch: Partial<AlarmRuleDraft>];
+  update: [patch: Partial<AlarmPolicyDraft>];
 }>();
 
 const enabled = computed(() => props.draft.suppression.enabled === true);

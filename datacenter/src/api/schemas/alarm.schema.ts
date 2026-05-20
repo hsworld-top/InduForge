@@ -170,9 +170,9 @@ export const AlarmPolicyTrialPayloadSchema = z
     timestamp: z.string().optional(),
     context: ObjectRecordSchema.default({}),
   })
-  .default({});
+  .default({ context: {} });
 
-export type AlarmPolicyTrialPayload = z.infer<
+export type AlarmPolicyTrialPayload = z.input<
   typeof AlarmPolicyTrialPayloadSchema
 >;
 
@@ -180,6 +180,7 @@ export const AlarmPolicyTrialResultSchema = z
   .object({
     triggered: z.boolean(),
     state: AlarmTrialStateSchema,
+    message: z.string().optional(),
     triggeredConditions: z.array(AlarmConditionSchema).default([]),
     diagnostics: ObjectRecordSchema.default({}),
     conditionResults: z.array(z.record(z.string(), z.unknown())).default([]),
@@ -204,19 +205,3 @@ export type AlarmDraftValidation = z.infer<typeof AlarmDraftValidationSchema>;
 export const AlarmPolicyContractSchema = ObjectRecordSchema;
 
 export type AlarmPolicyContract = z.infer<typeof AlarmPolicyContractSchema>;
-
-// 兼容旧组件的类型别名会在工作区改造完成后删除。
-export const AlarmRuleTypeSchema = AlarmConditionTypeSchema;
-export type AlarmRuleType = AlarmConditionType;
-export const AlarmRuleSchema = AlarmPolicySchema;
-export type AlarmRule = AlarmPolicy;
-export const AlarmRuleSaveSchema = AlarmPolicySaveSchema;
-export type AlarmRuleSave = AlarmPolicySave;
-export const AlarmRuleUpdateSchema = AlarmPolicyUpdateSchema;
-export type AlarmRuleUpdate = AlarmPolicyUpdate;
-export const AlarmTrialPayloadSchema = AlarmPolicyTrialPayloadSchema;
-export type AlarmTrialPayload = AlarmPolicyTrialPayload;
-export const AlarmTrialResultSchema = AlarmPolicyTrialResultSchema;
-export type AlarmTrialResult = AlarmPolicyTrialResult;
-export const AlarmContractSchema = AlarmPolicyContractSchema;
-export type AlarmContract = AlarmPolicyContract;

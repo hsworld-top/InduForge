@@ -5,6 +5,7 @@ import {
   batchDisableAlarmPolicies,
   batchEnableAlarmPolicies,
   batchMoveAlarmPolicies,
+  createAlarmPolicyGroup,
   createAlarmPolicy,
   deleteAlarmPolicy,
   getAlarmPolicy,
@@ -24,6 +25,7 @@ import type {
   AlarmPolicy,
   AlarmPolicyContract,
   AlarmPolicyGroup,
+  AlarmPolicyGroupSave,
   AlarmPolicySave,
   AlarmPolicyTree,
   AlarmPolicyTrialPayload,
@@ -75,7 +77,7 @@ export const useAlarmStore = defineStore("alarm", () => {
 
   const trial = ref<TrialState>({
     policyId: "",
-    payload: {},
+    payload: { context: {} },
     result: null,
     running: false,
     error: "",
@@ -123,6 +125,13 @@ export const useAlarmStore = defineStore("alarm", () => {
   async function fetchGroups(projectId: string) {
     groups.value = await getAlarmPolicyGroups(projectId);
     return groups.value;
+  }
+
+  async function createGroup(projectId: string, data: AlarmPolicyGroupSave) {
+    const group = await createAlarmPolicyGroup(projectId, data);
+    groups.value = [...groups.value, group];
+    tree.value = { ...tree.value, groups: groups.value };
+    return group;
   }
 
   async function fetchTree(
@@ -338,7 +347,7 @@ export const useAlarmStore = defineStore("alarm", () => {
   async function runTrial(
     projectId: string,
     id: string,
-    payload: AlarmPolicyTrialPayload = {},
+    payload: AlarmPolicyTrialPayload = { context: {} },
   ) {
     trial.value = {
       policyId: id,
@@ -362,7 +371,7 @@ export const useAlarmStore = defineStore("alarm", () => {
   function clearTrial() {
     trial.value = {
       policyId: "",
-      payload: {},
+      payload: { context: {} },
       result: null,
       running: false,
       error: "",
@@ -426,6 +435,7 @@ export const useAlarmStore = defineStore("alarm", () => {
     validationError,
     hasEditing,
     fetchGroups,
+    createGroup,
     fetchTree,
     fetchList,
     openPolicy,

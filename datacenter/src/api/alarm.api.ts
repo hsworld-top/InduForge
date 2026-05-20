@@ -199,7 +199,7 @@ export async function deleteAlarmPolicy(
 export async function testAlarmPolicy(
   projectId: string,
   policyId: string,
-  payload: AlarmPolicyTrialPayload = {},
+  payload: AlarmPolicyTrialPayload = { context: {} },
 ): Promise<AlarmPolicyTrialResult> {
   const body = AlarmPolicyTrialPayloadSchema.parse(payload);
   const res = await request({
@@ -279,14 +279,3 @@ export async function batchApplyAlarmConditions(
     data: { selection: AlarmBulkSelectionSchema.parse(selection), conditions },
   });
 }
-
-// 旧名称暂时保留给未改造组件引用。工作区切完后删除。
-export const getAlarmRules = getAlarmPolicies;
-export const getAlarmRule = getAlarmPolicy;
-export const createAlarmRule = createAlarmPolicy;
-export const updateAlarmRule = updateAlarmPolicy;
-export const toggleAlarmRule = toggleAlarmPolicy;
-export const deleteAlarmRule = deleteAlarmPolicy;
-export const testAlarmRule = testAlarmPolicy;
-export const getAlarmRuleContract = getAlarmPolicyContract;
-export const validateAlarmRuleDraft = validateAlarmPolicyDraft;

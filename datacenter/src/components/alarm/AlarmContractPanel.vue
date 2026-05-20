@@ -2,7 +2,7 @@
   <section class="alarm-contract-panel">
     <div class="alarm-contract-panel__bar">
       <div>
-        <strong>规则契约</strong>
+        <strong>策略契约</strong>
         <span>Runtime Contract JSON</span>
       </div>
       <div class="alarm-contract-panel__actions">
@@ -23,10 +23,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ElMessage } from "element-plus";
-import type { AlarmContract } from "@/api/schemas/alarm.schema";
+import type { AlarmPolicyContract } from "@/api/schemas/alarm.schema";
 
 const props = defineProps<{
-  contract: AlarmContract | null;
+  contract: AlarmPolicyContract | null;
   loading: boolean;
   error: string;
 }>();

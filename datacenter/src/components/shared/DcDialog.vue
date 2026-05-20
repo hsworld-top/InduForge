@@ -73,9 +73,7 @@ const visible = computed({
 <style scoped>
 /* body 内层：高度撑满 el-dialog__body flex 容器，自身滚动 */
 .dc-dialog__body {
-  height: 100%;
-  max-height: var(--dc-dialog-body-max, none);
-  overflow-y: auto;
+  overflow: visible;
 }
 
 .dc-dialog__header {
@@ -112,11 +110,12 @@ const visible = computed({
 }
 
 .dc-dialog .el-dialog__body {
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
-  overflow: hidden;
+  max-height: calc(90vh - 132px);
+  overflow-y: auto;
   padding-top: 8px;
-  padding-bottom: 8px;
+  padding-bottom: 16px;
 }
 
 .dc-dialog .el-dialog__footer {

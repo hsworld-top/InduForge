@@ -26,17 +26,17 @@
 </template>
 
 <script setup lang="ts">
-import type { AlarmRuleDraft } from "@/components/alarm/alarmRuleModel";
+import type { AlarmPolicyDraft } from "@/components/alarm/alarmPolicyModel";
 
 const props = defineProps<{
-  draft: AlarmRuleDraft;
+  draft: AlarmPolicyDraft;
 }>();
 
 const emit = defineEmits<{
-  update: [patch: Partial<AlarmRuleDraft>];
+  update: [patch: Partial<AlarmPolicyDraft>];
 }>();
 
-const tokens = ["{{targetPath}}", "{{ruleType}}", "{{severity}}", "{{value}}"];
+const tokens = ["{{targetPath}}", "{{conditionType}}", "{{severity}}", "{{value}}"];
 
 const inputValue = (event: Event) => (event.target as HTMLTextAreaElement).value;
 

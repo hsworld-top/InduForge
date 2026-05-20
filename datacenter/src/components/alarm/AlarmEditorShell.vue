@@ -1,30 +1,35 @@
 <template>
   <section class="alarm-editor-shell">
-    <AlarmEditorHeader
-      :draft="draft"
-      :saving="saving"
-      :deleting="deleting"
-      @save="emit('save')"
-      @toggle="emit('toggle')"
-      @delete="emit('delete')"
-      @open-target="emit('openTarget')"
-      @check-current="emit('checkCurrent')"
-    />
-
     <div v-if="error" class="alarm-editor-shell__state is-error">
       <strong>详情不可用</strong>
       <span>{{ error }}</span>
     </div>
     <div v-else-if="loading" class="alarm-editor-shell__state">
       <strong>正在读取</strong>
-      <span>加载报警规则详情</span>
+      <span>加载报警策略详情</span>
     </div>
     <div v-else-if="draft" class="alarm-editor-shell__body">
-      <AlarmRuleForm :draft="draft" @update="emit('update', $event)" />
+      <AlarmEditorHeader
+        :draft="draft"
+        :groups="groups"
+        :saving="saving"
+        :deleting="deleting"
+        @update="emit('update', $event)"
+        @save="emit('save')"
+        @toggle="emit('toggle')"
+        @delete="emit('delete')"
+        @check-current="emit('checkCurrent')"
+      />
+
+      <AlarmPolicyForm
+        :project-id="projectId"
+        :draft="draft"
+        @update="emit('update', $event)"
+      />
     </div>
     <div v-else class="alarm-editor-shell__state">
-      <strong>暂无选中规则</strong>
-      <span>从左侧选择一条规则开始编辑</span>
+      <strong>暂无选中策略</strong>
+      <span>从左侧选择一条策略开始编辑</span>
     </div>
 
     <footer class="alarm-editor-shell__bottom">
@@ -41,7 +46,7 @@
       </nav>
 
       <div v-if="!draft" class="alarm-editor-shell__panel">
-        <span>未选择规则</span>
+        <span>未选择策略</span>
       </div>
       <div v-else-if="activeTab === 'config'" class="alarm-editor-shell__config">
         <AlarmSuppressionPanel :draft="draft" @update="emit('update', $event)" />
@@ -69,44 +74,46 @@
 
 <script setup lang="ts">
 import type {
-  AlarmContract,
-  AlarmTrialPayload,
-  AlarmTrialResult,
+  AlarmPolicyContract,
+  AlarmPolicyGroup,
+  AlarmPolicyTrialPayload,
+  AlarmPolicyTrialResult,
 } from "@/api/schemas/alarm.schema";
-import type { AlarmRuleDraft } from "@/components/alarm/alarmRuleModel";
+import type { AlarmPolicyDraft } from "@/components/alarm/alarmPolicyModel";
 import AlarmContractPanel from "./AlarmContractPanel.vue";
 import AlarmEditorHeader from "./AlarmEditorHeader.vue";
 import AlarmMessageTemplatePanel from "./AlarmMessageTemplatePanel.vue";
-import AlarmRuleForm from "./AlarmRuleForm.vue";
+import AlarmPolicyForm from "./AlarmPolicyForm.vue";
 import AlarmSuppressionPanel from "./AlarmSuppressionPanel.vue";
 import AlarmTestPanel from "./AlarmTestPanel.vue";
 
 export type AlarmEditorTab = "config" | "test" | "contract";
 
 defineProps<{
-  draft: AlarmRuleDraft | null;
+  projectId: string;
+  groups: AlarmPolicyGroup[];
+  draft: AlarmPolicyDraft | null;
   activeTab: AlarmEditorTab;
   loading: boolean;
   error: string;
   saving: boolean;
   deleting: boolean;
-  trialResult: AlarmTrialResult | null;
+  trialResult: AlarmPolicyTrialResult | null;
   trialRunning: boolean;
   trialError: string;
-  contract: AlarmContract | null;
+  contract: AlarmPolicyContract | null;
   contractLoading: boolean;
   contractError: string;
 }>();
 
 const emit = defineEmits<{
-  update: [patch: Partial<AlarmRuleDraft>];
+  update: [patch: Partial<AlarmPolicyDraft>];
   save: [];
   toggle: [];
   delete: [];
   selectTab: [tab: AlarmEditorTab];
-  runTrial: [payload: AlarmTrialPayload];
+  runTrial: [payload: AlarmPolicyTrialPayload];
   refreshContract: [];
-  openTarget: [];
   checkCurrent: [];
 }>();
 
@@ -122,12 +129,15 @@ const tabs: Array<{ value: AlarmEditorTab; label: string }> = [
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) 260px;
+  grid-template-rows: minmax(0, 1fr) 260px;
   background: var(--dc-surface-subtle);
 }
 
 .alarm-editor-shell__body {
   min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 12px;
   padding: 12px;
   overflow-y: auto;
 }
@@ -217,7 +227,7 @@ const tabs: Array<{ value: AlarmEditorTab; label: string }> = [
 
 @media (max-width: 920px) {
   .alarm-editor-shell {
-    grid-template-rows: auto minmax(360px, 1fr) auto;
+    grid-template-rows: minmax(360px, 1fr) auto;
   }
 
   .alarm-editor-shell__config {

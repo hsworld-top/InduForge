@@ -50,18 +50,18 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type {
-  AlarmTrialPayload,
-  AlarmTrialResult,
+  AlarmPolicyTrialPayload,
+  AlarmPolicyTrialResult,
 } from "@/api/schemas/alarm.schema";
 
 const props = defineProps<{
-  result: AlarmTrialResult | null;
+  result: AlarmPolicyTrialResult | null;
   running: boolean;
   error: string;
 }>();
 
 const emit = defineEmits<{
-  run: [payload: AlarmTrialPayload];
+  run: [payload: AlarmPolicyTrialPayload];
 }>();
 
 const sampleText = ref(
@@ -93,7 +93,7 @@ const runTrial = () => {
       parseError.value = "JSON 样本必须是对象";
       return;
     }
-    emit("run", payload as AlarmTrialPayload);
+    emit("run", payload as AlarmPolicyTrialPayload);
   } catch (error) {
     parseError.value =
       error instanceof Error ? `JSON 解析失败：${error.message}` : "JSON 解析失败";
