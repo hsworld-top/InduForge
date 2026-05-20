@@ -3,46 +3,67 @@
     v-model="visible"
     title="新建报警分组"
     width="460px"
-    body-max-height="calc(100vh - 220px)"
-    @close="reset"
+    body-max-height="320px"
+    @close="resetForm"
   >
-    <form class="create-alarm-group" @submit.prevent="submit">
-      <label>
-        <span>分组名</span>
-        <input v-model.trim="name" type="text" />
-      </label>
-      <label>
-        <span>描述</span>
-        <textarea v-model.trim="description" rows="3" />
-      </label>
-      <label class="is-switch">
-        <input v-model="isEnabled" type="checkbox" />
-        <span>启用分组</span>
-      </label>
-      <p v-if="localError || error" class="create-alarm-group__error">
-        {{ localError || error }}
-      </p>
-    </form>
+    <el-form label-position="top" class="alarm-group-dialog">
+      <el-form-item label="名称" required>
+        <el-input
+          v-model="form.name"
+          maxlength="40"
+          show-word-limit
+          placeholder="输入报警分组名称"
+        />
+      </el-form-item>
+
+      <el-form-item label="上级分组">
+        <el-select
+          v-model="form.parentId"
+          class="alarm-group-dialog__select"
+          clearable
+          placeholder="根目录"
+        >
+          <el-option label="根目录" :value="null" />
+          <el-option
+            v-for="group in groupOptions"
+            :key="group.id"
+            :label="group.label"
+            :value="group.id"
+          />
+        </el-select>
+      </el-form-item>
+
+      <div v-if="error" class="alarm-group-dialog__error">{{ error }}</div>
+    </el-form>
 
     <template #footer>
-      <div class="create-alarm-group__footer">
-        <button type="button" class="is-ghost" @click="visible = false">取消</button>
-        <button type="button" :disabled="submitting" @click="submit">
-          {{ submitting ? "创建中" : "创建" }}
-        </button>
+      <div class="alarm-group-dialog__footer">
+        <el-button @click="visible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="submitting"
+          :disabled="!canSubmit"
+          @click="submit"
+        >
+          创建
+        </el-button>
       </div>
     </template>
   </DcDialog>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import type { AlarmPolicyGroupSave } from "@/api/schemas/alarm.schema";
+import { computed, reactive, watch } from "vue";
+import type {
+  AlarmPolicyGroup,
+  AlarmPolicyGroupSave,
+} from "@/api/schemas/alarm.schema";
 import DcDialog from "@/components/shared/DcDialog.vue";
 
 const props = withDefaults(
   defineProps<{
     modelValue: boolean;
+    groups: AlarmPolicyGroup[];
     submitting?: boolean;
     error?: string;
   }>(),
@@ -62,116 +83,73 @@ const visible = computed({
   set: (value: boolean) => emit("update:modelValue", value),
 });
 
-const name = ref("");
-const description = ref("");
-const isEnabled = ref(true);
-const localError = ref("");
+const form = reactive<AlarmPolicyGroupSave>({
+  name: "",
+  parentId: null,
+});
 
-const reset = () => {
-  name.value = "";
-  description.value = "";
-  isEnabled.value = true;
-  localError.value = "";
-};
+const canSubmit = computed(
+  () => form.name.trim().length > 0 && !props.submitting,
+);
 
-const submit = () => {
-  localError.value = "";
-  if (!name.value) {
-    localError.value = "请输入分组名";
-    return;
-  }
+const flattenGroups = (
+  groups: AlarmPolicyGroup[],
+  parentId: string | null = null,
+  depth = 0,
+): Array<{ id: string; label: string }> =>
+  groups
+    .filter((group) => (group.parentId || null) === parentId)
+    .flatMap((group) => [
+      { id: group.id, label: `${"　".repeat(depth)}${group.name}` },
+      ...flattenGroups(groups, group.id, depth + 1),
+    ]);
+
+const groupOptions = computed(() => flattenGroups(props.groups));
+
+function resetForm() {
+  form.name = "";
+  form.parentId = null;
+}
+
+function submit() {
+  if (!canSubmit.value) return;
   emit("submit", {
-    name: name.value,
-    description: description.value || null,
-    isEnabled: isEnabled.value,
+    name: form.name.trim(),
+    parentId: form.parentId || null,
   });
-};
+}
+
+watch(
+  () => props.modelValue,
+  (open) => {
+    if (open) resetForm();
+  },
+);
 </script>
 
 <style scoped>
-.create-alarm-group {
+.alarm-group-dialog {
   display: grid;
-  gap: 12px;
+  gap: 2px;
 }
 
-.create-alarm-group label {
-  display: grid;
-  gap: 6px;
-}
-
-.create-alarm-group label > span {
-  color: var(--dc-text-secondary);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.create-alarm-group input,
-.create-alarm-group textarea {
+.alarm-group-dialog__select {
   width: 100%;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-raised);
-  color: var(--dc-text);
-  font-family: inherit;
-  font-size: 13px;
-  outline: none;
 }
 
-.create-alarm-group input {
-  height: 34px;
-  padding: 0 10px;
-}
-
-.create-alarm-group textarea {
+.alarm-group-dialog__error {
   padding: 9px 10px;
-  resize: vertical;
-}
-
-.create-alarm-group .is-switch {
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 8px;
-}
-
-.create-alarm-group .is-switch input {
-  width: 15px;
-  height: 15px;
-  padding: 0;
-  accent-color: var(--dc-primary);
-}
-
-.create-alarm-group__error {
-  margin: 0;
-  padding: 9px 10px;
-  border: 1px solid rgba(220, 38, 38, 0.28);
+  border: 1px solid rgba(220, 38, 38, 0.2);
   border-radius: var(--dc-radius-sm);
-  background: rgba(220, 38, 38, 0.06);
-  color: var(--dc-danger, #b91c1c);
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
   font-size: 13px;
+  line-height: 1.5;
 }
 
-.create-alarm-group__footer {
+.alarm-group-dialog__footer {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-}
-
-.create-alarm-group__footer button {
-  height: 32px;
-  padding: 0 14px;
-  border: 1px solid var(--dc-primary);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-primary);
-  color: #fff;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.create-alarm-group__footer button.is-ghost {
-  border-color: var(--dc-border);
-  background: var(--dc-surface-raised);
-  color: var(--dc-text-secondary);
 }
 </style>

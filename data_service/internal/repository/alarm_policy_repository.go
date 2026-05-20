@@ -22,6 +22,7 @@ type AlarmPolicyGroupRecord struct {
 	ID          string
 	ProjectID   string
 	Name        string
+	ParentID    *string
 	Description *string
 	IsEnabled   bool
 	SortOrder   int
@@ -43,7 +44,7 @@ type AlarmPolicyRecord struct {
 	Inputs            []map[string]any
 	DerivedExpression string
 	Conditions        []map[string]any
-	Suppression        map[string]any
+	Suppression       map[string]any
 	MessageTemplate   string
 	IsEnabled         bool
 	Contract          map[string]any
@@ -67,6 +68,7 @@ type CreateAlarmPolicyGroupParams struct {
 	ProjectID   string
 	UserID      string
 	Name        string
+	ParentID    *string
 	Description *string
 	IsEnabled   bool
 	SortOrder   int
@@ -77,6 +79,7 @@ type UpdateAlarmPolicyGroupParams struct {
 	ProjectID   string
 	UserID      string
 	Name        string
+	ParentID    *string
 	Description *string
 	IsEnabled   bool
 	SortOrder   int
@@ -93,7 +96,7 @@ type CreateAlarmPolicyParams struct {
 	Inputs            []map[string]any
 	DerivedExpression string
 	Conditions        []map[string]any
-	Suppression        map[string]any
+	Suppression       map[string]any
 	MessageTemplate   string
 	IsEnabled         bool
 	Contract          map[string]any
@@ -111,7 +114,7 @@ type UpdateAlarmPolicyParams struct {
 	Inputs            []map[string]any
 	DerivedExpression string
 	Conditions        []map[string]any
-	Suppression        map[string]any
+	Suppression       map[string]any
 	MessageTemplate   string
 	IsEnabled         bool
 	Contract          map[string]any
@@ -128,7 +131,7 @@ func NewAlarmPolicyRepository(pool *pgxpool.Pool) *AlarmPolicyRepository {
 
 func (r *AlarmPolicyRepository) ListGroups(ctx context.Context, projectID string) ([]AlarmPolicyGroupRecord, error) {
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, name, description, is_enabled, sort_order, created_at, updated_at
+        SELECT id, project_id, name, parent_id, description, is_enabled, sort_order, created_at, updated_at
         FROM data_alarm_policy_groups
         WHERE project_id = $1
         ORDER BY sort_order ASC, created_at ASC
@@ -154,7 +157,7 @@ func (r *AlarmPolicyRepository) ListGroups(ctx context.Context, projectID string
 
 func (r *AlarmPolicyRepository) GetGroupByProjectAndID(ctx context.Context, projectID, id string) (*AlarmPolicyGroupRecord, error) {
 	record, err := scanAlarmPolicyGroup(r.pool.QueryRow(ctx, `
-        SELECT id, project_id, name, description, is_enabled, sort_order, created_at, updated_at
+        SELECT id, project_id, name, parent_id, description, is_enabled, sort_order, created_at, updated_at
         FROM data_alarm_policy_groups
         WHERE project_id = $1 AND id = $2
     `, projectID, id))
@@ -167,11 +170,11 @@ func (r *AlarmPolicyRepository) GetGroupByProjectAndID(ctx context.Context, proj
 func (r *AlarmPolicyRepository) CreateGroup(ctx context.Context, params CreateAlarmPolicyGroupParams) (*AlarmPolicyGroupRecord, error) {
 	record, err := scanAlarmPolicyGroup(r.pool.QueryRow(ctx, `
         INSERT INTO data_alarm_policy_groups (
-            project_id, name, description, is_enabled, sort_order, created_by, updated_by
+            project_id, name, parent_id, description, is_enabled, sort_order, created_by, updated_by
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $6)
-        RETURNING id, project_id, name, description, is_enabled, sort_order, created_at, updated_at
-    `, params.ProjectID, params.Name, params.Description, params.IsEnabled, params.SortOrder, params.UserID))
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+        RETURNING id, project_id, name, parent_id, description, is_enabled, sort_order, created_at, updated_at
+    `, params.ProjectID, params.Name, params.ParentID, params.Description, params.IsEnabled, params.SortOrder, params.UserID))
 	if err != nil {
 		return nil, translateAlarmPolicyGroupWriteError("创建报警分组失败", err)
 	}
@@ -182,14 +185,15 @@ func (r *AlarmPolicyRepository) UpdateGroup(ctx context.Context, params UpdateAl
 	record, err := scanAlarmPolicyGroup(r.pool.QueryRow(ctx, `
         UPDATE data_alarm_policy_groups
         SET name = $3,
-            description = $4,
-            is_enabled = $5,
-            sort_order = $6,
-            updated_by = $7,
+            parent_id = $4,
+            description = $5,
+            is_enabled = $6,
+            sort_order = $7,
+            updated_by = $8,
             updated_at = now()
         WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, name, description, is_enabled, sort_order, created_at, updated_at
-    `, params.ProjectID, params.ID, params.Name, params.Description, params.IsEnabled, params.SortOrder, params.UserID))
+        RETURNING id, project_id, name, parent_id, description, is_enabled, sort_order, created_at, updated_at
+    `, params.ProjectID, params.ID, params.Name, params.ParentID, params.Description, params.IsEnabled, params.SortOrder, params.UserID))
 	if err != nil {
 		return nil, translateAlarmPolicyGroupWriteError("更新报警分组失败", err)
 	}
@@ -409,13 +413,15 @@ func (r *AlarmPolicyRepository) ListPolicyIDsByFilter(ctx context.Context, proje
 
 func scanAlarmPolicyGroup(row pgx.Row) (AlarmPolicyGroupRecord, error) {
 	var record AlarmPolicyGroupRecord
+	var parentID sql.NullString
 	var description sql.NullString
-	if err := row.Scan(&record.ID, &record.ProjectID, &record.Name, &description, &record.IsEnabled, &record.SortOrder, &record.CreatedAt, &record.UpdatedAt); err != nil {
+	if err := row.Scan(&record.ID, &record.ProjectID, &record.Name, &parentID, &description, &record.IsEnabled, &record.SortOrder, &record.CreatedAt, &record.UpdatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return AlarmPolicyGroupRecord{}, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "报警分组不存在")
 		}
 		return AlarmPolicyGroupRecord{}, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取报警分组失败", err)
 	}
+	record.ParentID = nullStringToPtr(parentID)
 	record.Description = nullStringToPtr(description)
 	return record, nil
 }

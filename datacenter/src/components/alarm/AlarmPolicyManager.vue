@@ -183,11 +183,11 @@
           <option value="">{{ t("alarm.moveTo") }}</option>
           <option value="__root__">{{ t("alarm.root") }}</option>
           <option
-            v-for="group in tree.groups"
+            v-for="group in flatGroupOptions"
             :key="group.id"
             :value="group.id"
           >
-            {{ group.name }}
+            {{ group.label }}
           </option>
         </select>
       </div>
@@ -204,128 +204,62 @@
       </div>
 
       <div v-else class="alarm-policy-manager__body">
-        <template v-for="node in nodes" :key="node.key">
-          <section
-            v-if="node.type === 'group'"
-            class="alarm-policy-manager__group"
-          >
-            <button
-              type="button"
-              class="alarm-policy-manager__group-head"
-              @click="toggleGroup(node.group.id)"
-              @contextmenu.prevent.stop="openGroupMenu($event, node)"
-            >
-              <IconTablerChevronRight
-                class="alarm-policy-manager__chevron"
-                :class="{ 'is-open': isGroupOpen(node.group.id) }"
-              />
-              <input
-                type="checkbox"
-                :checked="groupAllSelected(node.policyIds)"
-                :indeterminate.prop="
-                  groupSomeSelected(node.policyIds) &&
-                  !groupAllSelected(node.policyIds)
-                "
-                :disabled="!node.policyIds.length"
-                @click.stop
-                @change="emit('selectGroup', node.policyIds, checked($event))"
-              />
-              <IconTablerFolderOpen
-                v-if="isGroupOpen(node.group.id)"
-                class="alarm-policy-manager__folder-icon"
-              />
-              <IconTablerFolder
-                v-else
-                class="alarm-policy-manager__folder-icon"
-              />
-              <span class="alarm-policy-manager__group-name">{{
-                node.group.name
-              }}</span>
-              <span class="alarm-policy-manager__count">{{
-                node.policies.length
-              }}</span>
-            </button>
+        <AlarmPolicyGroupBranch
+          v-for="group in policyTree.groups"
+          :key="group.id"
+          :node="group"
+          :selection="selection"
+          :selected-id="selectedId"
+          @select="emit('select', $event)"
+          @select-policy="(id, selected) => emit('selectPolicy', id, selected)"
+          @select-group="(ids, selected) => emit('selectGroup', ids, selected)"
+          @policy-contextmenu="
+            (mouseEvent, policy) => openPolicyMenu(mouseEvent, policy)
+          "
+          @group-contextmenu="
+            (mouseEvent, group) => openGroupMenu(mouseEvent, group)
+          "
+        />
 
-            <div
-              v-if="isGroupOpen(node.group.id)"
-              class="alarm-policy-manager__children"
-            >
-              <button
-                v-for="policy in node.policies"
-                :key="policy.id"
-                type="button"
-                class="alarm-policy-manager__row"
-                :class="{
-                  'is-active': policy.id === selectedId,
-                  'is-disabled': !policy.effectiveEnabled,
-                }"
-                @click="emit('select', policy.id)"
-                @contextmenu.prevent.stop="openPolicyMenu($event, policy)"
-              >
-                <input
-                  type="checkbox"
-                  :checked="isSelected(policy.id)"
-                  @click.stop
-                  @change="emit('selectPolicy', policy.id, checked($event))"
-                />
-                <IconTablerBell class="alarm-policy-manager__row-icon" />
-                <span class="alarm-policy-manager__row-main">
-                  <span class="alarm-policy-manager__row-name">{{
-                    policy.name
-                  }}</span>
-                  <span class="alarm-policy-manager__row-path">
-                    {{ policySummary(policy) }}
-                  </span>
-                </span>
-                <StatusBadge
-                  class="alarm-policy-manager__row-status"
-                  :tone="policy.effectiveEnabled ? 'success' : 'muted'"
-                  :text="
-                    policy.isEnabled ? t('common.enabled') : t('alarm.stopped')
-                  "
-                />
-              </button>
-            </div>
-          </section>
-
-          <button
-            v-else
-            type="button"
-            class="alarm-policy-manager__row"
-            :class="{
-              'is-active': node.policy.id === selectedId,
-              'is-disabled': !node.policy.effectiveEnabled,
-            }"
-            @click="emit('select', node.policy.id)"
-            @contextmenu.prevent.stop="openPolicyMenu($event, node.policy)"
-          >
-            <input
-              type="checkbox"
-              :checked="isSelected(node.policy.id)"
-              @click.stop
-              @change="emit('selectPolicy', node.policy.id, checked($event))"
-            />
-            <IconTablerBell class="alarm-policy-manager__row-icon" />
-            <span class="alarm-policy-manager__row-main">
-              <span class="alarm-policy-manager__row-name">{{
-                node.policy.name
-              }}</span>
-              <span class="alarm-policy-manager__row-path">
-                {{ policySummary(node.policy) }}
-              </span>
+        <button
+          v-for="policy in policyTree.rootPolicies"
+          :key="policy.id"
+          type="button"
+          class="alarm-policy-manager__row"
+          :class="{
+            'is-active': policy.id === selectedId,
+            'is-disabled': !policy.effectiveEnabled,
+          }"
+          @click="emit('select', policy.id)"
+          @contextmenu.prevent.stop="openPolicyMenu($event, policy)"
+        >
+          <input
+            type="checkbox"
+            :checked="isSelected(policy.id)"
+            @click.stop
+            @change="emit('selectPolicy', policy.id, checked($event))"
+          />
+          <IconTablerBell class="alarm-policy-manager__row-icon" />
+          <span class="alarm-policy-manager__row-main">
+            <span class="alarm-policy-manager__row-name">{{
+              policy.name
+            }}</span>
+            <span class="alarm-policy-manager__row-path">
+              {{ policySummary(policy) }}
             </span>
-            <StatusBadge
-              class="alarm-policy-manager__row-status"
-              :tone="node.policy.effectiveEnabled ? 'success' : 'muted'"
-              :text="
-                node.policy.isEnabled ? t('common.enabled') : t('alarm.stopped')
-              "
-            />
-          </button>
-        </template>
+          </span>
+          <StatusBadge
+            class="alarm-policy-manager__row-status"
+            :tone="policy.effectiveEnabled ? 'success' : 'muted'"
+            :text="policy.isEnabled ? t('common.enabled') : t('alarm.stopped')"
+          />
+        </button>
 
         <EmptyState
-          v-if="nodes.length === 0"
+          v-if="
+            policyTree.groups.length === 0 &&
+            policyTree.rootPolicies.length === 0
+          "
           icon-name="alarm"
           :title="t('alarm.emptyPolicies')"
           :description="t('alarm.emptyPoliciesHint')"
@@ -364,9 +298,6 @@ import { computed, reactive, ref } from "vue";
 import { Search } from "@element-plus/icons-vue";
 import IconTablerAlertCircle from "~icons/tabler/alert-circle";
 import IconTablerBell from "~icons/tabler/bell";
-import IconTablerChevronRight from "~icons/tabler/chevron-right";
-import IconTablerFolder from "~icons/tabler/folder";
-import IconTablerFolderOpen from "~icons/tabler/folder-open";
 import IconTablerFolderPlus from "~icons/tabler/folder-plus";
 import IconTablerFolderSymlink from "~icons/tabler/folder-symlink";
 import IconTablerLayoutSidebarLeftCollapse from "~icons/tabler/layout-sidebar-left-collapse";
@@ -383,20 +314,12 @@ import type {
 import EmptyState from "@/components/shared/EmptyState.vue";
 import StatusBadge from "@/components/shared/StatusBadge.vue";
 import { t } from "@/i18n/runtime";
-
-type GroupNode = {
-  type: "group";
-  key: string;
-  group: AlarmPolicyGroup;
-  policies: AlarmPolicy[];
-  policyIds: string[];
-};
-
-type PolicyNode = {
-  type: "policy";
-  key: string;
-  policy: AlarmPolicy;
-};
+import AlarmPolicyGroupBranch from "./AlarmPolicyGroupBranch.vue";
+import {
+  buildAlarmPolicyGroupTree,
+  flattenAlarmPolicyGroups,
+  type AlarmPolicyGroupNode,
+} from "./alarmPolicyTreeModel";
 
 type ContextMenuState = {
   visible: boolean;
@@ -404,7 +327,7 @@ type ContextMenuState = {
   x: number;
   y: number;
   policy: AlarmPolicy | null;
-  group: GroupNode | null;
+  group: AlarmPolicyGroupNode | null;
 };
 
 const SearchIcon = Search;
@@ -436,11 +359,10 @@ const emit = defineEmits<{
   renamePolicy: [policy: AlarmPolicy];
   movePolicy: [policy: AlarmPolicy];
   renameGroup: [group: AlarmPolicyGroup];
-  moveGroupPolicies: [group: AlarmPolicyGroup, policyIds: string[]];
+  moveGroup: [group: AlarmPolicyGroup];
 }>();
 
 const collapsed = ref(false);
-const openedGroupIds = ref<string[]>([]);
 const filters = reactive({
   search: "",
   enabled: "",
@@ -475,35 +397,12 @@ const conditionTypeOptions = computed(() => [
 
 const visiblePolicies = computed(() => props.tree.policies);
 
-const nodes = computed<Array<GroupNode | PolicyNode>>(() => {
-  const byGroup = new Map<string, AlarmPolicy[]>();
-  for (const policy of props.tree.policies) {
-    if (!policy.groupId) {
-      continue;
-    }
-    const current = byGroup.get(policy.groupId) ?? [];
-    current.push(policy);
-    byGroup.set(policy.groupId, current);
-  }
-
-  const result: Array<GroupNode | PolicyNode> = props.tree.groups.map(
-    (group) => {
-      const policies = byGroup.get(group.id) ?? [];
-      return {
-        type: "group" as const,
-        key: `group-${group.id}`,
-        group,
-        policies,
-        policyIds: policies.map((policy) => policy.id),
-      };
-    },
-  );
-
-  for (const policy of props.tree.rootPolicies) {
-    result.push({ type: "policy", key: `policy-${policy.id}`, policy });
-  }
-  return result;
-});
+const policyTree = computed(() =>
+  buildAlarmPolicyGroupTree(props.tree.groups, props.tree.policies),
+);
+const flatGroupOptions = computed(() =>
+  flattenAlarmPolicyGroups(policyTree.value.groups),
+);
 
 const checked = (event: Event) => (event.target as HTMLInputElement).checked;
 const value = (event: Event) =>
@@ -534,10 +433,6 @@ const someVisibleSelected = computed(() =>
   visiblePolicies.value.some((item) => isSelected(item.id)),
 );
 
-const groupAllSelected = (ids: string[]) =>
-  ids.length > 0 && ids.every((id) => isSelected(id));
-const groupSomeSelected = (ids: string[]) => ids.some((id) => isSelected(id));
-
 const toggleVisible = (selected: boolean) => {
   emit(
     "selectGroup",
@@ -557,14 +452,6 @@ const moveSelected = (raw: string) => {
   emit("batchMove", raw === "__root__" ? null : raw);
 };
 
-const isGroupOpen = (id: string) => !openedGroupIds.value.includes(id);
-
-const toggleGroup = (id: string) => {
-  openedGroupIds.value = isGroupOpen(id)
-    ? [...openedGroupIds.value, id]
-    : openedGroupIds.value.filter((item) => item !== id);
-};
-
 const openPolicyMenu = (event: MouseEvent, policy: AlarmPolicy) => {
   contextMenu.value = {
     visible: true,
@@ -576,7 +463,7 @@ const openPolicyMenu = (event: MouseEvent, policy: AlarmPolicy) => {
   };
 };
 
-const openGroupMenu = (event: MouseEvent, group: GroupNode) => {
+const openGroupMenu = (event: MouseEvent, group: AlarmPolicyGroupNode) => {
   contextMenu.value = {
     visible: true,
     type: "group",
@@ -604,10 +491,10 @@ const emitContextAction = (action: "rename" | "move") => {
   }
   if (current.type === "group" && current.group) {
     if (action === "rename") {
-      emit("renameGroup", current.group.group);
+      emit("renameGroup", current.group);
       return;
     }
-    emit("moveGroupPolicies", current.group.group, current.group.policyIds);
+    emit("moveGroup", current.group);
   }
 };
 
@@ -755,8 +642,7 @@ const policySummary = (policy: AlarmPolicy) => {
 .alarm-policy-manager__icon,
 .alarm-policy-manager__button-icon,
 .alarm-policy-manager__state-icon,
-.alarm-policy-manager__row-icon,
-.alarm-policy-manager__folder-icon {
+.alarm-policy-manager__row-icon {
   width: 16px;
   height: 16px;
 }
@@ -875,12 +761,6 @@ const policySummary = (policy: AlarmPolicy) => {
   padding: 12px;
 }
 
-.alarm-policy-manager__group {
-  display: grid;
-  gap: 4px;
-}
-
-.alarm-policy-manager__group-head,
 .alarm-policy-manager__row {
   width: 100%;
   border: 1px solid transparent;
@@ -889,66 +769,22 @@ const policySummary = (policy: AlarmPolicy) => {
   color: var(--dc-text-secondary);
 }
 
-.alarm-policy-manager__group-head {
-  min-height: 32px;
-  display: grid;
-  grid-template-columns: 16px auto 18px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  font-size: 13px;
-  font-weight: 700;
-  text-align: left;
-}
-
-.alarm-policy-manager__group-head:hover,
 .alarm-policy-manager__row:hover {
   border-color: var(--dc-border);
   background: var(--dc-surface-muted);
   color: var(--dc-text);
 }
 
-.alarm-policy-manager__chevron {
-  width: 14px;
-  height: 14px;
-  transform: rotate(0deg);
-  transition: transform 0.16s ease;
-}
-
-.alarm-policy-manager__chevron.is-open {
-  transform: rotate(90deg);
-}
-
-.alarm-policy-manager__folder-icon,
 .alarm-policy-manager__row-icon {
   color: var(--dc-primary);
 }
 
-.alarm-policy-manager__group-name,
 .alarm-policy-manager__row-name,
 .alarm-policy-manager__row-path {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.alarm-policy-manager__count {
-  min-width: 20px;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: var(--dc-surface-muted);
-  color: var(--dc-text-muted);
-  font-size: 11px;
-  text-align: center;
-}
-
-.alarm-policy-manager__children {
-  display: grid;
-  gap: 4px;
-  margin-left: 12px;
-  padding-left: 8px;
-  border-left: 1px solid var(--dc-border);
 }
 
 .alarm-policy-manager__row {

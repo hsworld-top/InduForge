@@ -1,31 +1,28 @@
 <template>
   <DcDialog
     v-model="visible"
-    title="移动组内策略"
+    title="移动分组"
     width="460px"
     body-max-height="260px"
     @close="resetForm"
   >
     <el-form label-position="top" class="alarm-group-move-dialog">
-      <el-form-item label="目标分组">
+      <el-form-item label="目标上级分组">
         <el-select
-          v-model="groupId"
+          v-model="parentId"
           class="alarm-group-move-dialog__select"
           clearable
           placeholder="根目录"
         >
           <el-option label="根目录" :value="null" />
           <el-option
-            v-for="group in targetGroups"
+            v-for="group in groupOptions"
             :key="group.id"
-            :label="group.name"
+            :label="group.label"
             :value="group.id"
           />
         </el-select>
       </el-form-item>
-      <p class="alarm-group-move-dialog__hint">
-        将当前分组下 {{ policyCount }} 条策略移动到目标分组。
-      </p>
     </el-form>
 
     <template #footer>
@@ -54,7 +51,6 @@ const props = withDefaults(
     modelValue: boolean;
     group: AlarmPolicyGroup | null;
     groups: AlarmPolicyGroup[];
-    policyCount: number;
     loading?: boolean;
   }>(),
   {
@@ -63,8 +59,8 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  (event: "update:modelValue", value: boolean): void;
-  (event: "submit", groupId: string | null): void;
+  "update:modelValue": [value: boolean];
+  submit: [parentId: string | null];
 }>();
 
 const visible = computed({
@@ -72,26 +68,54 @@ const visible = computed({
   set: (value: boolean) => emit("update:modelValue", value),
 });
 
-const groupId = ref<string | null>(null);
-const currentGroupId = computed(() => props.group?.id || null);
-const targetGroups = computed(() =>
-  props.groups.filter((group) => group.id !== currentGroupId.value),
-);
+const parentId = ref<string | null>(null);
+const currentParentId = computed(() => props.group?.parentId || null);
+
+const blockedIds = computed(() => {
+  const ids = new Set<string>();
+  const collect = (groupId?: string | null) => {
+    if (!groupId || ids.has(groupId)) return;
+    ids.add(groupId);
+    props.groups
+      .filter((group) => (group.parentId || null) === groupId)
+      .forEach((group) => collect(group.id));
+  };
+  collect(props.group?.id);
+  return ids;
+});
+
+const flattenGroups = (
+  groups: AlarmPolicyGroup[],
+  parentGroupId: string | null = null,
+  depth = 0,
+): Array<{ id: string; label: string }> =>
+  groups
+    .filter((group) => (group.parentId || null) === parentGroupId)
+    .flatMap((group) => {
+      const children = flattenGroups(groups, group.id, depth + 1);
+      if (blockedIds.value.has(group.id)) return children;
+      return [
+        { id: group.id, label: `${"　".repeat(depth)}${group.name}` },
+        ...children,
+      ];
+    });
+
+const groupOptions = computed(() => flattenGroups(props.groups));
+
 const canSubmit = computed(
   () =>
     Boolean(props.group) &&
-    props.policyCount > 0 &&
-    groupId.value !== currentGroupId.value &&
+    parentId.value !== currentParentId.value &&
     !props.loading,
 );
 
 function resetForm() {
-  groupId.value = currentGroupId.value;
+  parentId.value = currentParentId.value;
 }
 
 function submit() {
   if (!canSubmit.value) return;
-  emit("submit", groupId.value || null);
+  emit("submit", parentId.value || null);
 }
 
 watch(
@@ -117,12 +141,6 @@ watch(
 
 .alarm-group-move-dialog__select {
   width: 100%;
-}
-
-.alarm-group-move-dialog__hint {
-  margin: -2px 0 0;
-  color: var(--dc-text-muted);
-  font-size: 12px;
 }
 
 .alarm-group-move-dialog__footer {

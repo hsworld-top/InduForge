@@ -41,6 +41,7 @@ func (h *AlarmPolicyHandler) CreateGroup(w http.ResponseWriter, r *http.Request)
 	}
 	var request struct {
 		Name        string  `json:"name"`
+		ParentID    *string `json:"parentId"`
 		Description *string `json:"description"`
 		IsEnabled   *bool   `json:"isEnabled"`
 		SortOrder   int     `json:"sortOrder"`
@@ -49,7 +50,7 @@ func (h *AlarmPolicyHandler) CreateGroup(w http.ResponseWriter, r *http.Request)
 		return err
 	}
 	result, err := h.service.CreateGroup(r.Context(), claims, r.PathValue("projectId"), service.CreateAlarmPolicyGroupInput{
-		Name: request.Name, Description: request.Description, IsEnabled: request.IsEnabled, SortOrder: request.SortOrder,
+		Name: request.Name, ParentID: request.ParentID, Description: request.Description, IsEnabled: request.IsEnabled, SortOrder: request.SortOrder,
 	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
@@ -63,17 +64,43 @@ func (h *AlarmPolicyHandler) UpdateGroup(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		return err
 	}
-	var request struct {
-		Name        *string `json:"name"`
-		Description *string `json:"description"`
-		IsEnabled   *bool   `json:"isEnabled"`
-		SortOrder   *int    `json:"sortOrder"`
-	}
-	if err := decodeJSONBody(r, &request); err != nil {
+	var raw map[string]json.RawMessage
+	if err := decodeJSONBody(r, &raw); err != nil {
 		return err
 	}
+	input := service.UpdateAlarmPolicyGroupInput{}
+	if rawValue, ok := raw["parentId"]; ok {
+		input.HasParentID = true
+		if string(rawValue) != "null" {
+			var value string
+			if err := json.Unmarshal(rawValue, &value); err != nil {
+				return invalidAlarmField("parentId")
+			}
+			input.ParentID = &value
+		}
+	}
+	if err := decodePolicyRaw(raw, "name", &input.Name); err != nil {
+		return err
+	}
+	if err := decodePolicyRaw(raw, "description", &input.Description); err != nil {
+		return err
+	}
+	if rawValue, ok := raw["isEnabled"]; ok {
+		var value bool
+		if err := json.Unmarshal(rawValue, &value); err != nil {
+			return invalidAlarmField("isEnabled")
+		}
+		input.IsEnabled = &value
+	}
+	if rawValue, ok := raw["sortOrder"]; ok {
+		var value int
+		if err := json.Unmarshal(rawValue, &value); err != nil {
+			return invalidAlarmField("sortOrder")
+		}
+		input.SortOrder = &value
+	}
 	result, err := h.service.UpdateGroup(r.Context(), claims, r.PathValue("projectId"), r.PathValue("id"), service.UpdateAlarmPolicyGroupInput{
-		Name: request.Name, Description: request.Description, IsEnabled: request.IsEnabled, SortOrder: request.SortOrder,
+		Name: input.Name, ParentID: input.ParentID, HasParentID: input.HasParentID, Description: input.Description, IsEnabled: input.IsEnabled, SortOrder: input.SortOrder,
 	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
@@ -371,10 +398,10 @@ func (h *AlarmPolicyHandler) batchSelection(w http.ResponseWriter, r *http.Reque
 }
 
 type selectionRequest struct {
-	Mode             string                       `json:"mode"`
-	PolicyIDs        []string                     `json:"policyIds"`
-	Filters          alarmPolicyFilterJSON        `json:"filters"`
-	ExcludePolicyIDs []string                     `json:"excludePolicyIds"`
+	Mode             string                `json:"mode"`
+	PolicyIDs        []string              `json:"policyIds"`
+	Filters          alarmPolicyFilterJSON `json:"filters"`
+	ExcludePolicyIDs []string              `json:"excludePolicyIds"`
 }
 
 type alarmPolicyFilterJSON struct {
@@ -430,7 +457,7 @@ func decodeCreateAlarmPolicyInput(r *http.Request) (service.CreateAlarmPolicyInp
 		Inputs            []service.AlarmInputRef  `json:"inputs"`
 		DerivedExpression string                   `json:"derivedExpression"`
 		Conditions        []service.AlarmCondition `json:"conditions"`
-		Suppression        map[string]any          `json:"suppression"`
+		Suppression       map[string]any           `json:"suppression"`
 		MessageTemplate   string                   `json:"messageTemplate"`
 		IsEnabled         *bool                    `json:"isEnabled"`
 	}

@@ -27,6 +27,7 @@ type AlarmPolicyGroup struct {
 	ID          string    `json:"id"`
 	ProjectID   string    `json:"projectId"`
 	Name        string    `json:"name"`
+	ParentID    *string   `json:"parentId,omitempty"`
 	Description *string   `json:"description,omitempty"`
 	IsEnabled   bool      `json:"isEnabled"`
 	SortOrder   int       `json:"sortOrder"`
@@ -71,7 +72,7 @@ type AlarmPolicy struct {
 	Inputs            []AlarmInputRef  `json:"inputs"`
 	DerivedExpression string           `json:"derivedExpression"`
 	Conditions        []AlarmCondition `json:"conditions"`
-	Suppression        map[string]any   `json:"suppression"`
+	Suppression       map[string]any   `json:"suppression"`
 	MessageTemplate   string           `json:"messageTemplate"`
 	IsEnabled         bool             `json:"isEnabled"`
 	EffectiveEnabled  bool             `json:"effectiveEnabled"`
@@ -88,8 +89,8 @@ type AlarmPolicyPagination struct {
 }
 
 type AlarmPolicyListResult struct {
-	Policies   []AlarmPolicy          `json:"list"`
-	Pagination AlarmPolicyPagination  `json:"pagination"`
+	Policies   []AlarmPolicy         `json:"list"`
+	Pagination AlarmPolicyPagination `json:"pagination"`
 }
 
 type AlarmPolicyTreeResult struct {
@@ -114,6 +115,7 @@ type AlarmPolicyListFilter struct {
 
 type CreateAlarmPolicyGroupInput struct {
 	Name        string
+	ParentID    *string
 	Description *string
 	IsEnabled   *bool
 	SortOrder   int
@@ -121,6 +123,8 @@ type CreateAlarmPolicyGroupInput struct {
 
 type UpdateAlarmPolicyGroupInput struct {
 	Name        *string
+	ParentID    *string
+	HasParentID bool
 	Description *string
 	IsEnabled   *bool
 	SortOrder   *int
@@ -135,28 +139,28 @@ type CreateAlarmPolicyInput struct {
 	Inputs            []AlarmInputRef
 	DerivedExpression string
 	Conditions        []AlarmCondition
-	Suppression        map[string]any
+	Suppression       map[string]any
 	MessageTemplate   string
 	IsEnabled         *bool
 }
 
 type UpdateAlarmPolicyInput struct {
-	GroupID              *string
-	HasGroupID           bool
-	Name                 *string
-	Description          *string
-	Mode                 *string
-	Targets              []AlarmTargetRef
-	HasTargets           bool
-	Inputs               []AlarmInputRef
-	HasInputs            bool
-	DerivedExpression    *string
-	Conditions           []AlarmCondition
-	HasConditions        bool
-	Suppression           map[string]any
-	HasSuppression       bool
-	MessageTemplate      *string
-	IsEnabled            *bool
+	GroupID           *string
+	HasGroupID        bool
+	Name              *string
+	Description       *string
+	Mode              *string
+	Targets           []AlarmTargetRef
+	HasTargets        bool
+	Inputs            []AlarmInputRef
+	HasInputs         bool
+	DerivedExpression *string
+	Conditions        []AlarmCondition
+	HasConditions     bool
+	Suppression       map[string]any
+	HasSuppression    bool
+	MessageTemplate   *string
+	IsEnabled         *bool
 }
 
 type AlarmPolicyTestInput struct {
@@ -197,7 +201,7 @@ type normalizedAlarmPolicyInput struct {
 	Inputs            []AlarmInputRef
 	DerivedExpression string
 	Conditions        []AlarmCondition
-	Suppression        map[string]any
+	Suppression       map[string]any
 	MessageTemplate   string
 	IsEnabled         bool
 	Contract          map[string]any
@@ -239,8 +243,15 @@ func (s *AlarmPolicyService) CreateGroup(ctx context.Context, claims *auth.Claim
 	if input.IsEnabled != nil {
 		enabled = *input.IsEnabled
 	}
+	parentID, err := normalizeOptionalAlarmPolicyGroupID(input.ParentID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.ensureAlarmPolicyGroupInProject(ctx, projectID, parentID); err != nil {
+		return nil, err
+	}
 	record, err := s.repository.CreateGroup(ctx, repository.CreateAlarmPolicyGroupParams{
-		ProjectID: projectID, UserID: claims.UserID, Name: name, Description: trimOptionalString(input.Description), IsEnabled: enabled, SortOrder: input.SortOrder,
+		ProjectID: projectID, UserID: claims.UserID, Name: name, ParentID: parentID, Description: trimOptionalString(input.Description), IsEnabled: enabled, SortOrder: input.SortOrder,
 	})
 	if err != nil {
 		return nil, err
@@ -260,6 +271,10 @@ func (s *AlarmPolicyService) UpdateGroup(ctx context.Context, claims *auth.Claim
 	if err != nil {
 		return nil, err
 	}
+	records, err := s.repository.ListGroups(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
 	name := current.Name
 	if input.Name != nil {
 		name, err = normalizeNamedField(*input.Name, "name", 100)
@@ -271,6 +286,24 @@ func (s *AlarmPolicyService) UpdateGroup(ctx context.Context, claims *auth.Claim
 	if input.Description != nil {
 		description = trimOptionalString(input.Description)
 	}
+	parentID := cloneOptionalString(current.ParentID)
+	if input.HasParentID {
+		parentID, err = normalizeOptionalAlarmPolicyGroupID(input.ParentID)
+		if err != nil {
+			return nil, err
+		}
+		if parentID != nil {
+			if *parentID == groupID {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "上级报警分组不能指向自身")
+			}
+			if _, ok := findAlarmPolicyGroupRecord(records, *parentID); !ok {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "上级报警分组不存在")
+			}
+			if isDescendantAlarmPolicyGroup(records, groupID, *parentID) {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "上级报警分组不能指向下级分组")
+			}
+		}
+	}
 	enabled := current.IsEnabled
 	if input.IsEnabled != nil {
 		enabled = *input.IsEnabled
@@ -280,7 +313,7 @@ func (s *AlarmPolicyService) UpdateGroup(ctx context.Context, claims *auth.Claim
 		sortOrder = *input.SortOrder
 	}
 	record, err := s.repository.UpdateGroup(ctx, repository.UpdateAlarmPolicyGroupParams{
-		ID: groupID, ProjectID: projectID, UserID: claims.UserID, Name: name, Description: description, IsEnabled: enabled, SortOrder: sortOrder,
+		ID: groupID, ProjectID: projectID, UserID: claims.UserID, Name: name, ParentID: parentID, Description: description, IsEnabled: enabled, SortOrder: sortOrder,
 	})
 	if err != nil {
 		return nil, err
@@ -792,6 +825,30 @@ func validateAlarmPolicyID(id string) error {
 	return nil
 }
 
+func normalizeOptionalAlarmPolicyGroupID(groupID *string) (*string, error) {
+	if groupID == nil {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(*groupID)
+	if trimmed == "" {
+		return nil, nil
+	}
+	if _, err := uuid.Parse(trimmed); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "parentId 格式无效", err)
+	}
+	return &trimmed, nil
+}
+
+func (s *AlarmPolicyService) ensureAlarmPolicyGroupInProject(ctx context.Context, projectID string, groupID *string) error {
+	if groupID == nil {
+		return nil
+	}
+	if _, err := s.repository.GetGroupByProjectAndID(ctx, projectID, *groupID); err != nil {
+		return err
+	}
+	return nil
+}
+
 func validateAlarmPolicyMode(mode string) (string, error) {
 	mode = strings.TrimSpace(mode)
 	if mode == "" {
@@ -1089,7 +1146,36 @@ func toRepositoryAlarmPolicyFilter(filter AlarmPolicyListFilter) repository.Alar
 }
 
 func toAlarmPolicyGroup(record repository.AlarmPolicyGroupRecord) AlarmPolicyGroup {
-	return AlarmPolicyGroup{ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, Description: cloneOptionalString(record.Description), IsEnabled: record.IsEnabled, SortOrder: record.SortOrder, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
+	return AlarmPolicyGroup{ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, ParentID: cloneOptionalString(record.ParentID), Description: cloneOptionalString(record.Description), IsEnabled: record.IsEnabled, SortOrder: record.SortOrder, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
+}
+
+func findAlarmPolicyGroupRecord(records []repository.AlarmPolicyGroupRecord, groupID string) (repository.AlarmPolicyGroupRecord, bool) {
+	for _, record := range records {
+		if record.ID == groupID {
+			return record, true
+		}
+	}
+	return repository.AlarmPolicyGroupRecord{}, false
+}
+
+func isDescendantAlarmPolicyGroup(records []repository.AlarmPolicyGroupRecord, groupID, possibleDescendantID string) bool {
+	currentID := possibleDescendantID
+	visited := map[string]struct{}{}
+	for currentID != "" {
+		if currentID == groupID {
+			return true
+		}
+		if _, exists := visited[currentID]; exists {
+			return false
+		}
+		visited[currentID] = struct{}{}
+		current, ok := findAlarmPolicyGroupRecord(records, currentID)
+		if !ok || current.ParentID == nil {
+			return false
+		}
+		currentID = *current.ParentID
+	}
+	return false
 }
 
 func toAlarmPolicy(record repository.AlarmPolicyRecord) AlarmPolicy {

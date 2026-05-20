@@ -85,8 +85,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&appliedCount); err != nil {
 		t.Fatalf("鏌ヨ schema_migrations 澶辫触: %v", err)
 	}
-	if appliedCount != 18 {
-		t.Fatalf("expected 18 migration records, got %d", appliedCount)
+	if appliedCount != 19 {
+		t.Fatalf("expected 19 migration records, got %d", appliedCount)
 	}
 
 	if err := migrator.DownAll(ctx); err != nil {
@@ -176,6 +176,9 @@ func TestMigrationIndexes(t *testing.T) {
 		"data_compute_runs_unit_created_idx",
 		"data_compute_runs_project_created_idx",
 		"data_alarm_policy_groups_project_sort_idx",
+		"data_alarm_policy_groups_project_parent_idx",
+		"data_alarm_policy_groups_project_root_name_key",
+		"data_alarm_policy_groups_project_parent_name_key",
 		"data_alarm_policies_project_group_idx",
 		"data_alarm_policies_project_updated_idx",
 		"data_alarm_policies_project_enabled_idx",
@@ -246,6 +249,7 @@ func TestAlarmPolicyTablesMigration(t *testing.T) {
 	}
 
 	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policy_groups", "is_enabled", "boolean")
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policy_groups", "parent_id", "uuid")
 	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policies", "group_id", "uuid")
 	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policies", "targets", "jsonb")
 	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policies", "conditions", "jsonb")

@@ -67,6 +67,7 @@ export const AlarmPolicyGroupSchema = z.object({
   id: z.string(),
   projectId: z.string(),
   name: z.string(),
+  parentId: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
   isEnabled: z.boolean(),
   sortOrder: z.number(),
@@ -79,6 +80,7 @@ export type AlarmPolicyGroup = z.infer<typeof AlarmPolicyGroupSchema>;
 export const AlarmPolicyGroupSaveSchema = z
   .object({
     name: z.string().min(1),
+    parentId: z.string().optional().nullable(),
     description: z.string().optional().nullable(),
     isEnabled: z.boolean().optional(),
     sortOrder: z.number().optional(),

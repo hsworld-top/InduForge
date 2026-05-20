@@ -24,7 +24,7 @@
       @rename-policy="openRenamePolicyDialog"
       @move-policy="openMovePolicyDialog"
       @rename-group="openRenameGroupDialog"
-      @move-group-policies="openMoveGroupPoliciesDialog"
+      @move-group="openMoveGroupDialog"
     />
 
     <AlarmEditorShell
@@ -62,6 +62,7 @@
 
     <CreateAlarmGroupDialog
       v-model="createGroupDialogVisible"
+      :groups="alarmStore.groups"
       :submitting="alarmStore.saving"
       @submit="createGroup"
     />
@@ -94,13 +95,12 @@
       @submit="renameGroup"
     />
 
-    <MoveAlarmGroupPoliciesDialog
-      v-model="moveGroupPoliciesDialogVisible"
+    <MoveAlarmGroupDialog
+      v-model="moveGroupDialogVisible"
       :group="contextGroup"
       :groups="alarmStore.groups"
-      :policy-count="contextGroupPolicyIds.length"
       :loading="alarmStore.saving"
-      @submit="moveGroupPolicies"
+      @submit="moveGroup"
     />
   </div>
 </template>
@@ -128,7 +128,7 @@ import AlarmEditorShell, { type AlarmEditorTab } from "./AlarmEditorShell.vue";
 import AlarmPolicyManager from "./AlarmPolicyManager.vue";
 import CreateAlarmGroupDialog from "./CreateAlarmGroupDialog.vue";
 import CreateAlarmPolicyDialog from "./CreateAlarmPolicyDialog.vue";
-import MoveAlarmGroupPoliciesDialog from "./MoveAlarmGroupPoliciesDialog.vue";
+import MoveAlarmGroupDialog from "./MoveAlarmGroupDialog.vue";
 import MoveAlarmPolicyDialog from "./MoveAlarmPolicyDialog.vue";
 import RenameAlarmGroupDialog from "./RenameAlarmGroupDialog.vue";
 import RenameAlarmPolicyDialog from "./RenameAlarmPolicyDialog.vue";
@@ -151,11 +151,10 @@ const bulkConditionDialogVisible = ref(false);
 const renamePolicyDialogVisible = ref(false);
 const movePolicyDialogVisible = ref(false);
 const renameGroupDialogVisible = ref(false);
-const moveGroupPoliciesDialogVisible = ref(false);
+const moveGroupDialogVisible = ref(false);
 const listParams = ref<Record<string, string>>({});
 const contextPolicy = ref<AlarmPolicy | null>(null);
 const contextGroup = ref<AlarmPolicyGroup | null>(null);
-const contextGroupPolicyIds = ref<string[]>([]);
 
 const selectedPolicyId = computed(() => {
   const value = route.params.objectId;
@@ -422,13 +421,9 @@ const openRenameGroupDialog = (group: AlarmPolicyGroup) => {
   renameGroupDialogVisible.value = true;
 };
 
-const openMoveGroupPoliciesDialog = (
-  group: AlarmPolicyGroup,
-  policyIds: string[],
-) => {
+const openMoveGroupDialog = (group: AlarmPolicyGroup) => {
   contextGroup.value = group;
-  contextGroupPolicyIds.value = policyIds;
-  moveGroupPoliciesDialogVisible.value = true;
+  moveGroupDialogVisible.value = true;
 };
 
 const renamePolicy = async (name: string) => {
@@ -470,16 +465,14 @@ const renameGroup = async (name: string) => {
   await reloadList();
 };
 
-const moveGroupPolicies = async (groupId: string | null) => {
-  if (!contextGroup.value || contextGroupPolicyIds.value.length === 0) {
+const moveGroup = async (parentId: string | null) => {
+  if (!contextGroup.value) {
     return;
   }
-  await alarmStore.batchMovePolicies(
-    props.projectId,
-    contextGroupPolicyIds.value,
-    groupId,
-  );
-  moveGroupPoliciesDialogVisible.value = false;
+  await alarmStore.updateGroup(props.projectId, contextGroup.value.id, {
+    parentId,
+  });
+  moveGroupDialogVisible.value = false;
   await reloadList();
 };
 
@@ -534,7 +527,7 @@ onMounted(() => {
 }
 
 .alarm-workspace :deep(.alarm-policy-manager) {
-  flex: 0 0 400px;
+  flex: 0 0 260px;
 }
 
 .alarm-workspace :deep(.alarm-policy-manager.is-collapsed) {
