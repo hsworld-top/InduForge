@@ -102,6 +102,24 @@ func TestNodeRunnerRunReturnsScriptReturnValue(t *testing.T) {
 	}
 }
 
+func TestNodeRunnerRunReturnsScriptErrorMessage(t *testing.T) {
+	runner := NewNodeRunner("", ".")
+	result, err := runner.Run(context.Background(), ExecuteRequest{
+		Script:  "throw new Error('aaa');",
+		Input:   map[string]any{"argv": []any{}},
+		Timeout: 3 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("Run() error = nil, want script error")
+	}
+	if !strings.Contains(err.Error(), "aaa") {
+		t.Fatalf("Run() error = %v, want contain aaa", err)
+	}
+	if !strings.Contains(result.Stderr, "aaa") {
+		t.Fatalf("Stderr = %q, want contain aaa", result.Stderr)
+	}
+}
+
 func TestPythonRunnerRunReturnsMainValue(t *testing.T) {
 	runner := NewPythonRunner("", ".")
 	result, err := runner.Run(context.Background(), ExecuteRequest{
@@ -120,5 +138,26 @@ func TestPythonRunnerRunReturnsMainValue(t *testing.T) {
 	}
 	if result.Output != float64(5) {
 		t.Fatalf("Output = %v, want 5", result.Output)
+	}
+}
+
+func TestPythonRunnerRunReturnsScriptErrorMessage(t *testing.T) {
+	runner := NewPythonRunner("", ".")
+	result, err := runner.Run(context.Background(), ExecuteRequest{
+		Script:  "def main(argv, dp, ctx):\n    raise RuntimeError('aaa')",
+		Input:   map[string]any{"argv": []any{}},
+		Timeout: 3 * time.Second,
+	})
+	if err != nil && strings.Contains(err.Error(), "python 可执行文件不可用") {
+		t.Skip(err)
+	}
+	if err == nil {
+		t.Fatal("Run() error = nil, want script error")
+	}
+	if !strings.Contains(err.Error(), "aaa") {
+		t.Fatalf("Run() error = %v, want contain aaa", err)
+	}
+	if !strings.Contains(result.Stderr, "aaa") {
+		t.Fatalf("Stderr = %q, want contain aaa", result.Stderr)
 	}
 }

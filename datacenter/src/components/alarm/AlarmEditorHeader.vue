@@ -116,9 +116,13 @@ const summaryText = computed(() => {
     return t("alarm.selectPolicyHint");
   }
   if (props.draft.mode === "derived") {
-    return props.draft.derivedExpression || t("alarm.modes.derived");
+    return props.draft.derivedExpression
+      ? `计算：${props.draft.derivedExpression}`
+      : "等待配置计算表达式";
   }
-  return props.draft.targets.map((target) => target.path).join("、") || t("alarm.modes.perTarget");
+  return props.draft.targets.length
+    ? `${props.draft.targets.length} 个目标点共用条件`
+    : "等待选择目标点";
 });
 </script>
 

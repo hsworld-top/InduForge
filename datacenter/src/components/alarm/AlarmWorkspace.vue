@@ -6,6 +6,7 @@
       :total="alarmStore.total"
       :selected-id="selectedPolicyId"
       :selected-count="alarmStore.selectedCount"
+      :dirty-policy-ids="dirtyPolicyIds"
       :loading="alarmStore.loading"
       :error="alarmStore.listError"
       @refresh="reloadList"
@@ -47,6 +48,8 @@
       :contract="alarmStore.contract.data"
       :contract-loading="alarmStore.contract.loading"
       :contract-error="alarmStore.contract.error"
+      :coverages="coverageByTargetId"
+      :coverage-loading="alarmStore.coverage.loading"
       @update="updateActiveDraft"
       @save="saveActiveDraft"
       @toggle="toggleEnabled"
@@ -137,6 +140,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import type {
   AlarmCondition,
   AlarmPolicy,
+  AlarmPolicyCoverage,
   AlarmPolicyGroup,
   AlarmPolicyGroupSave,
   AlarmPolicyTrialPayload,
@@ -186,6 +190,7 @@ const targetPickerVisible = ref(false);
 const listParams = ref<Record<string, string>>({});
 const contextPolicy = ref<AlarmPolicy | null>(null);
 const contextGroup = ref<AlarmPolicyGroup | null>(null);
+const coverageByTargetId = ref<Record<string, AlarmPolicyCoverage>>({});
 
 const selectedPolicyId = computed(() => {
   if (route.params.module !== "alarm") {
@@ -210,8 +215,23 @@ const activeDraft = computed(() => {
   return drafts.value[selectedPolicyId.value] || null;
 });
 
+const activeTargetSignature = computed(() => {
+  const draft = activeDraft.value;
+  if (!draft || draft.mode !== "per_target") {
+    return "";
+  }
+  return draft.targets
+    .map((target) => `${target.datapointId || ""}:${target.path || ""}`)
+    .join("|");
+});
+
 const hasDirtyTabs = computed(() =>
   Object.values(drafts.value).some((draft) => draft.dirty),
+);
+const dirtyPolicyIds = computed(() =>
+  Object.values(drafts.value)
+    .filter((draft) => draft.dirty)
+    .map((draft) => String(draft.id || "")),
 );
 
 const activeTab = computed<WorkspaceTab>(() => {
@@ -406,6 +426,62 @@ const appendTargetDatapoint = (datapoint: Datapoint) => {
   });
 };
 
+const coverageKey = (target: { datapointId?: string; path?: string }) =>
+  String(target.datapointId || target.path || "");
+
+const hasCoverageConflicts = (draft: AlarmPolicyDraft) =>
+  draft.mode === "per_target" &&
+  draft.targets.some(
+    (target) =>
+      (coverageByTargetId.value[coverageKey(target)]?.policies.length || 0) >
+      0,
+  );
+
+const confirmCoverageConflicts = async (draft: AlarmPolicyDraft) => {
+  if (!hasCoverageConflicts(draft)) {
+    return true;
+  }
+  return ElMessageBox.confirm(
+    "部分目标点已被其他策略引用，保存后这些策略仍会同时生效。若要替代原策略，需要手动从原策略中移除目标点或停用原策略。",
+    "目标点已被其他策略引用",
+    {
+      confirmButtonText: "继续保存",
+      cancelButtonText: "取消",
+      type: "warning",
+      closeOnClickModal: false,
+    },
+  )
+    .then(() => true)
+    .catch(() => false);
+};
+
+const refreshTargetCoverages = async (policyId: string, draft: AlarmPolicyDraft) => {
+  if (!policyId || draft.mode !== "per_target") {
+    coverageByTargetId.value = {};
+    return {};
+  }
+  const next: Record<string, AlarmPolicyCoverage> = {};
+  for (const target of draft.targets) {
+    const key = coverageKey(target);
+    if (!key) {
+      continue;
+    }
+    try {
+      next[key] = await alarmStore.fetchCoverage(props.projectId, {
+        datapointId: target.datapointId,
+        path: target.path,
+        excludePolicyId: policyId,
+      });
+    } catch {
+      // 覆盖关系只用于编辑提醒，失败时不阻塞策略编辑。
+    }
+  }
+  if (selectedPolicyId.value === policyId) {
+    coverageByTargetId.value = next;
+  }
+  return next;
+};
+
 const updateActiveDraft = (patch: Partial<AlarmPolicyDraft>) => {
   const policyId = selectedPolicyId.value;
   const draft = policyId ? drafts.value[policyId] : null;
@@ -469,6 +545,10 @@ const savePolicyDraft = async (policyId: string) => {
     return false;
   }
   if (!validateDraft(draft, draft.isEnabled)) {
+    return false;
+  }
+  await refreshTargetCoverages(policyId, draft);
+  if (!(await confirmCoverageConflicts(draft))) {
     return false;
   }
   const policy = await alarmStore.savePolicy(
@@ -774,6 +854,19 @@ watch(
     if (tab === "contract" && policyId) {
       void refreshContract();
     }
+  },
+  { immediate: true },
+);
+
+watch(
+  [selectedPolicyId, activeTargetSignature],
+  async ([policyId]) => {
+    const draft = activeDraft.value;
+    if (!policyId || !draft || draft.mode !== "per_target") {
+      coverageByTargetId.value = {};
+      return;
+    }
+    await refreshTargetCoverages(policyId, draft);
   },
   { immediate: true },
 );

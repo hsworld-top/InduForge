@@ -115,7 +115,7 @@ export const useDataCatalogStore = defineStore("dataCatalog", () => {
             return { ok: false, reason: "unsupported", message: "该数据点缺少查询 ID，无法测试取值" };
           }
           const raw = await dataAPI.executeQuery(sourceId, {});
-          const rows = (raw as Record<string, unknown>)?.rows;
+          const rows = (raw as unknown as Record<string, unknown>)?.rows;
           let value: unknown = raw;
           if (Array.isArray(rows) && rows.length > 0) {
             const firstRow = rows[0] as Record<string, unknown>;
@@ -130,7 +130,7 @@ export const useDataCatalogStore = defineStore("dataCatalog", () => {
             return { ok: false, reason: "unsupported", message: "该数据点缺少标签 ID，无法测试取值" };
           }
           const raw = await dataAPI.getMqttTagValue(projectId, sourceId);
-          const r = raw as Record<string, unknown>;
+          const r = raw as unknown as Record<string, unknown>;
           const value = r?.value;
           const at = typeof r?.timestamp === "string"
             ? dayjs(r.timestamp).format("YYYY-MM-DD HH:mm:ss")

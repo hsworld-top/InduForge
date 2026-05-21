@@ -123,6 +123,14 @@ func (h *MqttHandler) ListMessages(w http.ResponseWriter, r *http.Request) error
 		return normalizeRepresentativeHandlerError(err)
 	}
 
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), messages)
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{
+		"list": messages,
+		"pagination": map[string]int{
+			"page":       1,
+			"pageSize":   limit,
+			"total":      len(messages),
+			"totalPages": 1,
+		},
+	})
 	return nil
 }

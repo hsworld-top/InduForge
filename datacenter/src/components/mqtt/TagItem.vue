@@ -59,20 +59,25 @@
 
         <!-- 操作按钮 -->
         <div class="action-buttons">
-          <el-button type="text" size="small" @click="$emit('view', tag)">
-            查看
-          </el-button>
-          <el-button type="text" size="small" @click="$emit('edit', tag)">
-            编辑
-          </el-button>
-          <el-button
-            type="text"
-            size="small"
-            class="text-red-500"
-            @click="$emit('delete', tag)"
-          >
-            删除
-          </el-button>
+          <el-tooltip content="查看" placement="top">
+            <button type="button" class="tag-action-btn" @click="$emit('view', tag)">
+              <IconTablerEye />
+            </button>
+          </el-tooltip>
+          <el-tooltip content="编辑" placement="top">
+            <button type="button" class="tag-action-btn" @click="$emit('edit', tag)">
+              <IconTablerEdit />
+            </button>
+          </el-tooltip>
+          <el-tooltip content="删除" placement="top">
+            <button
+              type="button"
+              class="tag-action-btn is-danger"
+              @click="$emit('delete', tag)"
+            >
+              <IconTablerTrash />
+            </button>
+          </el-tooltip>
         </div>
       </div>
     </div>
@@ -80,6 +85,10 @@
 </template>
 
 <script setup lang="ts">
+import IconTablerEdit from "~icons/tabler/edit";
+import IconTablerEye from "~icons/tabler/eye";
+import IconTablerTrash from "~icons/tabler/trash";
+
 defineProps({
   tag: {
     type: Object,
@@ -126,16 +135,17 @@ const getParseTypeLabel = (type) => {
 
 <style scoped>
 .tag-item {
-  background: #fff;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
+  position: relative;
+  background: var(--dc-surface-raised, #fff);
+  border: 1px solid var(--dc-border, #e4e7ed);
+  border-radius: var(--dc-radius-sm, 4px);
   padding: 10px 12px;
   transition: all 0.3s;
 }
 
 .tag-item:hover {
-  border-color: #409eff;
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.1);
+  border-color: color-mix(in oklch, var(--dc-primary, #409eff) 34%, var(--dc-border, #e4e7ed));
+  box-shadow: var(--dc-shadow-surface, 0 2px 8px rgba(64, 158, 255, 0.1));
 }
 
 .tag-item-content {
@@ -161,12 +171,12 @@ const getParseTypeLabel = (type) => {
   font-family: monospace;
   font-weight: 600;
   font-size: 13px;
-  color: #303133;
+  color: var(--dc-text, #303133);
 }
 
 .tag-name {
   font-size: 12px;
-  color: #606266;
+  color: var(--dc-text-secondary, #606266);
 }
 
 .tag-rule {
@@ -205,6 +215,33 @@ const getParseTypeLabel = (type) => {
 
 .tag-item:hover .action-buttons {
   opacity: 1;
+}
+
+.tag-action-btn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--dc-radius-sm, 4px);
+  background: transparent;
+  color: var(--dc-text-muted, #6b7280);
+}
+
+.tag-action-btn:hover {
+  border-color: var(--dc-border, #e4e7ed);
+  background: var(--dc-surface-subtle, #f8fafc);
+  color: var(--dc-primary, #409eff);
+}
+
+.tag-action-btn.is-danger:hover {
+  color: #b91c1c;
+}
+
+.tag-action-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* 启用状态指示器 */

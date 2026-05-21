@@ -85,11 +85,6 @@
           @query-dblclick="handleQueryDblClick"
           @query-contextmenu="handleQueryContextMenu"
           @query-deleted="handleQueryDeleted"
-          @mqtt-subscription-dblclick="handleMqttSubscriptionDblClick"
-          @mqtt-subscription-view="handleMqttSubscriptionView"
-          @mqtt-subscription-manage="handleMqttSubscriptionManage"
-          @mqtt-subscription-edit="handleMqttSubscriptionEdit"
-          @mqtt-subscription-delete="handleMqttSubscriptionDelete"
           @datapoint-open="handleOpenDataPointList"
           @calcunit-open="handleOpenCalcUnitList"
           @alarmunit-open="handleOpenAlarmUnitList"
@@ -239,67 +234,6 @@
                     @save="handleQuerySave"
                   />
                 </div>
-
-                <!-- MQTT订阅列表 -->
-                <div
-                  v-else-if="tab.type === 'mqtt-subscriptions'"
-                  class="flex-1 flex flex-col overflow-hidden"
-                >
-                  <MqttSubscriptionList
-                    :ref="(el) => setSubscriptionListRef(tab.id, el)"
-                    :connection-id="tab.connectionId"
-                    :project-id="projectId"
-                    @view-messages="
-                      (subscription) =>
-                        openMqttMessageViewer(tab.connection, subscription)
-                    "
-                    @manage-tags="
-                      (subscription) =>
-                        openMqttTagManager(tab.connection, subscription)
-                    "
-                    @subscription-deleted="
-                      (subscription) =>
-                        handleMqttSubscriptionDeleted(
-                          tab.connection,
-                          subscription,
-                        )
-                    "
-                  />
-                </div>
-
-                <!-- MQTT消息查看器 -->
-                <div
-                  v-else-if="tab.type === 'mqtt-messages'"
-                  class="flex-1 flex flex-col overflow-hidden"
-                >
-                  <MqttMessageViewer
-                    :ref="(el) => setMessageViewerRef(tab.id, el)"
-                    :subscription="tab.subscription"
-                    :project-id="projectId"
-                    :connection-id="tab.connectionId"
-                  />
-                </div>
-
-                <!-- MQTT Tag管理 -->
-                <div
-                  v-else-if="tab.type === 'mqtt-tags'"
-                  class="flex-1 flex overflow-hidden"
-                >
-                  <div class="w-1/2 border-r min-w-0">
-                    <MqttTagList
-                      :project-id="projectId"
-                      :subscription-id="tab.subscriptionId"
-                      :preview-session-id="previewSessionId"
-                    />
-                  </div>
-                  <div class="w-1/2 min-w-0">
-                    <MqttTagMonitor
-                      :project-id="projectId"
-                      :subscription-id="tab.subscriptionId"
-                      :preview-session-id="previewSessionId"
-                    />
-                  </div>
-                </div>
               </el-tab-pane>
             </el-tabs>
           </template>
@@ -426,10 +360,6 @@ import PostgresTableList from "@/components/database/postgres/PostgresTableList.
 import PostgresQueryEditor from "@/components/database/postgres/PostgresQueryEditor.vue";
 import SqlServerTableList from "@/components/database/sqlserver/SqlServerTableList.vue";
 import SqlServerQueryEditor from "@/components/database/sqlserver/SqlServerQueryEditor.vue";
-import MqttSubscriptionList from "@/components/mqtt/MqttSubscriptionList.vue";
-import MqttMessageViewer from "@/components/mqtt/MqttMessageViewer.vue";
-import MqttTagList from "@/components/mqtt/MqttTagList.vue";
-import MqttTagMonitor from "@/components/mqtt/MqttTagMonitor.vue";
 import AccessSourceWorkspace from "@/components/access-source/AccessSourceWorkspace.vue";
 import AccessSourceWorkbench from "@/components/access-source/AccessSourceWorkbench.vue";
 import DataPointList from "@/components/datapoint/DataPointList.vue";
@@ -442,9 +372,7 @@ import DataCenterShell from "@/components/layout/DataCenterShell.vue";
 import { useConnection } from "@/composables/useConnection";
 import { useConfirm } from "@/composables/useConfirm";
 import { onBeforeRouteLeave } from "vue-router";
-import { usePreviewSession } from "@/composables/usePreviewSession";
 import { usePreviewSessionStore } from "@/stores/preview-session.store";
-import { useMqttSocket } from "@/composables/useMqttSocket";
 import {
   datacenterModules,
   type DatacenterModuleId,
@@ -523,11 +451,6 @@ const project = computed(() => {
 // 提供给子组件使用
 const projectId = computed(() => project.value?.id);
 provide("projectId", projectId);
-const { sessionId: previewSessionId, ensureSession: ensurePreviewSession } =
-  usePreviewSession(projectId, {
-    autoStart: false,
-  });
-
 // 预览会话 store（用于 NavRail 徽标条件出现）
 const previewSessionStore = usePreviewSessionStore();
 const previewSessionActive = computed(() => previewSessionStore.active);
@@ -550,41 +473,14 @@ const {
   selectConnection,
 } = useConnection(projectId);
 
-// 使用 MQTT Socket
-const { subscribeMessages } = useMqttSocket(projectId, previewSessionId);
-
 // 统一标签页管理
 const tabs = ref([]);
 const activeTabId = ref("");
 const tabsRef = ref(null);
-const mqttMessageViewerRefs = ref(new Map()); // 存储每个消息查看器的引用
-const mqttSubscriptionListRefs = ref(new Map()); // 存储每个订阅列表的引用
 const dataPointListRefs = ref(new Map()); // 存储数据点列表引用
 let tabCounter = 0;
 
 const resolveTabLabel = (tab) => resolveDatacenterTabLabel(tab, t);
-
-/**
- * 设置消息查看器引用
- */
-const setMessageViewerRef = (tabId, el) => {
-  if (el) {
-    mqttMessageViewerRefs.value.set(tabId, el);
-  } else {
-    mqttMessageViewerRefs.value.delete(tabId);
-  }
-};
-
-/**
- * 设置订阅列表引用
- */
-const setSubscriptionListRef = (tabId, el) => {
-  if (el) {
-    mqttSubscriptionListRefs.value.set(tabId, el);
-  } else {
-    mqttSubscriptionListRefs.value.delete(tabId);
-  }
-};
 
 /**
  * 设置数据点列表引用
@@ -651,37 +547,6 @@ const openTableListTab = (connection) => {
     icon: IconTablerTable,
     closable: true,
     connection: connection,
-  };
-
-  tabs.value.push(newTab);
-  activeTabId.value = tabId;
-};
-
-/**
- * 打开MQTT订阅列表
- */
-const openMqttSubscriptionList = (connection) => {
-  const tabId = `mqtt-subscriptions-${connection.id}`;
-  const existingTab = tabs.value.find((t) => t.id === tabId);
-
-  if (existingTab) {
-    activeTabId.value = tabId;
-    return;
-  }
-
-  const newTab = {
-    id: tabId,
-    type: "mqtt-subscriptions",
-    labelKey: "tabs.subscriptionList",
-    labelPrefix: connection.name,
-    label: resolveTabLabel({
-      labelKey: "tabs.subscriptionList",
-      labelPrefix: connection.name,
-    }),
-    icon: IconTablerTable,
-    closable: true,
-    connection: connection,
-    connectionId: connection.id,
   };
 
   tabs.value.push(newTab);
@@ -775,137 +640,6 @@ const handleOpenAlarmUnitList = () => {
 };
 
 /**
- * 打开MQTT消息查看器
- */
-const openMqttMessageViewer = async (connection, subscription) => {
-  const ensuredSessionId = await ensurePreviewSession();
-  if (!ensuredSessionId) {
-    ElMessage({
-      type: "error",
-      message: "预览会话不可用，请先确认 data_service 的 preview 路由已启用",
-      offset: 60,
-      duration: 5000,
-      showClose: true,
-    });
-    return;
-  }
-
-  const tabId = `mqtt-messages-${subscription.id}`;
-  const existingTab = tabs.value.find((t) => t.id === tabId);
-
-  if (existingTab) {
-    activeTabId.value = tabId;
-    return;
-  }
-
-  const newTab = {
-    id: tabId,
-    type: "mqtt-messages",
-    label: `${connection.name} - ${subscription.name}`,
-    icon: IconTablerTable,
-    closable: true,
-    connection: connection,
-    connectionId: connection.id,
-    subscription: subscription,
-  };
-
-  tabs.value.push(newTab);
-  activeTabId.value = tabId;
-
-  // 订阅实时消息
-  const unsubscribe = subscribeMessages(subscription.id, (data) => {
-    console.log("[DataCenterNew] Received MQTT message for tab:", tabId, data);
-
-    // 找到对应的消息查看器并添加消息
-    const viewerRef = mqttMessageViewerRefs.value.get(tabId);
-    if (viewerRef) {
-      console.log("[DataCenterNew] Found viewer for tab:", tabId);
-      viewerRef.addMessage(data.message);
-      // 设置连接状态为已连接
-      viewerRef.setConnected(true);
-      console.log("[DataCenterNew] Set connected status for tab:", tabId);
-    } else {
-      console.log("[DataCenterNew] No viewer found for tab:", tabId, {
-        availableRefs: Array.from(mqttMessageViewerRefs.value.keys()),
-      });
-      // 如果找不到引用，延迟重试
-      setTimeout(() => {
-        const retryViewerRef = mqttMessageViewerRefs.value.get(tabId);
-        if (retryViewerRef) {
-          console.log("[DataCenterNew] Retry: Found viewer for tab:", tabId);
-          retryViewerRef.addMessage(data.message);
-          retryViewerRef.setConnected(true);
-        }
-      }, 500);
-    }
-  });
-
-  // 延迟设置初始连接状态，确保组件已挂载
-  setTimeout(() => {
-    const viewerRef = mqttMessageViewerRefs.value.get(tabId);
-    if (viewerRef) {
-      viewerRef.setConnected(true);
-      console.log(
-        "[DataCenterNew] Initial connected status set for tab:",
-        tabId,
-      );
-    } else {
-      console.log("[DataCenterNew] Initial: No viewer found for tab:", tabId, {
-        availableRefs: Array.from(mqttMessageViewerRefs.value.keys()),
-      });
-    }
-  }, 1500);
-
-  // 当标签页关闭时取消订阅
-  newTab.unsubscribe = unsubscribe;
-};
-
-/**
- * 打开MQTT Tag管理器
- */
-const openMqttTagManager = async (connection, subscription) => {
-  const ensuredSessionId = await ensurePreviewSession();
-  if (!ensuredSessionId) {
-    ElMessage({
-      type: "error",
-      message: "预览会话不可用，请先确认 data_service 的 preview 路由已启用",
-      offset: 60,
-      duration: 5000,
-      showClose: true,
-    });
-    return;
-  }
-
-  const tabId = `mqtt-tags-${subscription.id}`;
-  const existingTab = tabs.value.find((t) => t.id === tabId);
-
-  if (existingTab) {
-    activeTabId.value = tabId;
-    return;
-  }
-
-  const newTab = {
-    id: tabId,
-    type: "mqtt-tags",
-    labelKey: "tabs.variableManager",
-    labelPrefix: `${connection.name} - ${subscription.name}`,
-    label: resolveTabLabel({
-      labelKey: "tabs.variableManager",
-      labelPrefix: `${connection.name} - ${subscription.name}`,
-    }),
-    icon: IconTablerTable,
-    closable: true,
-    connection: connection,
-    connectionId: connection.id,
-    subscription: subscription,
-    subscriptionId: subscription.id,
-  };
-
-  tabs.value.push(newTab);
-  activeTabId.value = tabId;
-};
-
-/**
  * 创建新查询标签页
  */
 const createNewQuery = (connection) => {
@@ -991,15 +725,6 @@ const handleCloseTab = (tabId) => {
   if (index === -1) return;
 
   const tab = tabs.value[index];
-
-  // 如果是MQTT消息查看器，取消订阅并清理引用
-  if (tab.type === "mqtt-messages") {
-    if (tab.unsubscribe) {
-      tab.unsubscribe();
-    }
-    // 清理消息查看器引用
-    mqttMessageViewerRefs.value.delete(tab.id);
-  }
 
   tabs.value.splice(index, 1);
 
@@ -1169,8 +894,6 @@ onBeforeUnmount(() => {
   if (cleanupWheelScroll) {
     cleanupWheelScroll();
   }
-  // 清理所有消息查看器引用
-  mqttMessageViewerRefs.value.clear();
   // 移除 beforeunload 监听
   window.removeEventListener("beforeunload", handleBeforeUnload);
 });
@@ -1258,60 +981,6 @@ const handleConnectionDblClick = async (connection) => {
         if (loadPromises.length > 0) {
           await Promise.all(loadPromises);
         }
-      }
-    } else if (connection.type === "mqtt" && connection.mqttConfig) {
-      // MQTT 连接处理
-      const currentState = connectionListRef.value?.getConnectionState(
-        connection.id,
-      );
-      const isCurrentlyExpanded = currentState?.expanded || false;
-
-      // 如果已经展开，则折叠
-      if (isCurrentlyExpanded) {
-        if (connectionListRef.value) {
-          currentState.expanded = false;
-        }
-        return;
-      }
-
-      // 如果未展开，尝试启动连接并打开订阅列表
-      try {
-        // 启动 MQTT 连接
-        await dataAPI.startMqttConnection(projectId.value, connection.id);
-        await updateConnectionStatus(connection.id, "connected");
-
-        ElMessage({
-          type: "success",
-          message: t("query.mqttStarted"),
-          offset: 60,
-          duration: 2000,
-        });
-
-        // 展开连接
-        if (connectionListRef.value) {
-          const state = connectionListRef.value.getConnectionState(
-            connection.id,
-          );
-          state.expanded = true;
-
-          if (state.mqttSubscriptions.length === 0) {
-            await connectionListRef.value.loadMqttSubscriptions(connection.id);
-          }
-        }
-
-        // 打开订阅列表标签页
-        openMqttSubscriptionList(connection);
-      } catch (startError) {
-        await updateConnectionStatus(connection.id, "error");
-        ElMessage({
-          type: "error",
-          message: t("query.mqttStartFailed", {
-            message: getApiErrorMessage(startError, "MQTT 启动失败"),
-          }),
-          offset: 60,
-          duration: 5000,
-          showClose: true,
-        });
       }
     }
   } catch (error) {
@@ -1463,6 +1132,7 @@ const handleConnectionSubmit = async (data) => {
 };
 
 const protocolCreateHandlers = {
+  mqtt: dataAPI.createMqttConnection,
   kafka: dataAPI.createKafkaConfig,
   http: dataAPI.createHttpConfig,
   websocket: dataAPI.createWebSocketConfig,
@@ -1624,100 +1294,6 @@ const handleQueryContextMenu = (event, connection, query) => {
   queryContextMenuQuery.value = query;
   queryContextMenuPosition.value = { x: event.clientX, y: event.clientY };
   showQueryContextMenu.value = true;
-};
-
-/**
- * 双击 MQTT 订阅
- */
-const handleMqttSubscriptionDblClick = async (connection, subscription) => {
-  await openMqttTagManager(connection, subscription);
-};
-
-/**
- * 订阅右键菜单 - 查看消息
- */
-const handleMqttSubscriptionView = async (connection, subscription) => {
-  await openMqttMessageViewer(connection, subscription);
-};
-
-/**
- * 订阅右键菜单 - 管理变量
- */
-const handleMqttSubscriptionManage = async (connection, subscription) => {
-  await openMqttTagManager(connection, subscription);
-};
-
-/**
- * 订阅右键菜单 - 编辑订阅
- */
-const handleMqttSubscriptionEdit = async (connection, subscription) => {
-  openMqttSubscriptionList(connection);
-  await nextTick();
-  const tabId = `mqtt-subscriptions-${connection.id}`;
-  const listRef = mqttSubscriptionListRefs.value.get(tabId);
-  if (listRef && typeof listRef.openEditDialog === "function") {
-    listRef.openEditDialog(subscription);
-    return;
-  }
-  setTimeout(() => {
-    const retryRef = mqttSubscriptionListRefs.value.get(tabId);
-    if (retryRef && typeof retryRef.openEditDialog === "function") {
-      retryRef.openEditDialog(subscription);
-    }
-  }, 200);
-};
-
-/**
- * 订阅右键菜单 - 删除订阅
- */
-const handleMqttSubscriptionDelete = async (connection, subscription) => {
-  try {
-    await ElMessageBox.confirm(
-      t("subscription.deleteConfirm", { name: subscription.name }),
-      t("subscription.deleteConfirmTitle"),
-      {
-        confirmButtonText: t("actions.delete"),
-        cancelButtonText: t("actions.cancel"),
-        type: "warning",
-      },
-    );
-
-    await dataAPI.deleteMqttSubscription(projectId.value, subscription.id);
-    ElMessage.success(t("subscription.deleted"));
-
-    if (connectionListRef.value) {
-      await connectionListRef.value.loadMqttSubscriptions(connection.id);
-    }
-    handleMqttSubscriptionDeleted(connection, subscription);
-  } catch (error) {
-    if (error !== "cancel") {
-      ElMessage.error(
-        t("subscription.deleteFailed", {
-          message: getApiErrorMessage(error, "删除订阅失败"),
-        }),
-      );
-    }
-  }
-};
-
-/**
- * 订阅删除后清理相关标签页
- */
-const handleMqttSubscriptionDeleted = (connection, subscription) => {
-  const subscriptionId = subscription.id;
-  const messageTabId = `mqtt-messages-${subscriptionId}`;
-  const tagTabId = `mqtt-tags-${subscriptionId}`;
-
-  tabs.value = tabs.value.filter(
-    (tab) => tab.id !== messageTabId && tab.id !== tagTabId,
-  );
-
-  if (activeTabId.value === messageTabId || activeTabId.value === tagTabId) {
-    const fallbackTab = tabs.value.find(
-      (tab) => tab.id === `mqtt-subscriptions-${connection.id}` || tab.closable,
-    );
-    activeTabId.value = fallbackTab ? fallbackTab.id : "";
-  }
 };
 
 /**

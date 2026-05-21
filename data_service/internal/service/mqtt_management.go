@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/google/uuid"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -253,24 +255,108 @@ func (s *MqttService) DeleteMqttConnection(ctx context.Context, projectID, conne
 	return s.connections.Delete(ctx, projectID, connectionID)
 }
 
-// TestConnectionConfig 承接 MQTT 连接测试，当前以配置校验为主。
-func (s *MqttService) TestConnectionConfig(_ context.Context, input CreateMqttConnectionInput) error {
+// TestConnectionConfig 使用临时 MQTT 客户端验证 Broker 连接。
+// 输入来自前端未保存表单，不落库；输出仅表示本次短连接是否成功。
+func (s *MqttService) TestConnectionConfig(ctx context.Context, input CreateMqttConnectionInput) error {
 	if _, err := normalizeConnectionName(input.Name); err != nil && strings.TrimSpace(input.Name) != "" {
 		return err
 	}
-	if _, err := normalizeMqttBrokerURL(input.BrokerURL); err != nil {
+	brokerURL, err := normalizeMqttBrokerURL(input.BrokerURL)
+	if err != nil {
 		return err
 	}
-	if _, err := normalizeMqttProtocol(input.Protocol); err != nil {
+	protocol, err := normalizeMqttProtocol(input.Protocol)
+	if err != nil {
 		return err
 	}
-	if _, err := normalizeMqttPort(input.Port); err != nil {
+	port, err := normalizeMqttPort(input.Port)
+	if err != nil {
 		return err
 	}
 	if _, err := normalizeMqttQOS(input.QOS); err != nil {
 		return err
 	}
+	keepalive, err := normalizeNonNegativeInt(input.Keepalive, 60, "keepalive 不能小于 0")
+	if err != nil {
+		return err
+	}
+	connectTimeoutMS, err := normalizeNonNegativeInt(input.ConnectTimeoutMS, 5000, "connectTimeout 不能小于 0")
+	if err != nil {
+		return err
+	}
+	if connectTimeoutMS <= 0 {
+		connectTimeoutMS = 5000
+	}
+
+	options := mqtt.NewClientOptions()
+	options.AddBroker(buildMqttTestBrokerAddress(protocol, brokerURL, port))
+	options.SetClientID(buildMqttTestClientID(input.ClientID))
+	options.SetCleanSession(input.CleanSession == nil || *input.CleanSession)
+	options.SetConnectTimeout(time.Duration(connectTimeoutMS) * time.Millisecond)
+	if keepalive > 0 {
+		options.SetKeepAlive(time.Duration(keepalive) * time.Second)
+	}
+	if username := normalizeOptionalText(input.Username); username != nil {
+		options.SetUsername(*username)
+	}
+	if password := normalizeOptionalText(input.Password); password != nil {
+		options.SetPassword(*password)
+	}
+
+	client := mqtt.NewClient(options)
+	token := client.Connect()
+	if !waitMqttToken(ctx, token, time.Duration(connectTimeoutMS)*time.Millisecond) {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "MQTT 连接超时")
+	}
+	if err := token.Error(); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "MQTT 连接失败", err)
+	}
+	client.Disconnect(250)
 	return nil
+}
+
+func buildMqttTestBrokerAddress(protocol, brokerURL string, port int) string {
+	broker := strings.TrimSpace(brokerURL)
+	if strings.Contains(broker, "://") {
+		return broker
+	}
+	scheme := strings.TrimSpace(strings.ToLower(protocol))
+	if scheme == "" {
+		scheme = "mqtt"
+	}
+	if scheme == "mqtt" {
+		scheme = "tcp"
+	} else if scheme == "mqtts" {
+		scheme = "ssl"
+	}
+	if port > 0 {
+		return fmt.Sprintf("%s://%s:%s", scheme, broker, strconv.Itoa(port))
+	}
+	return fmt.Sprintf("%s://%s", scheme, broker)
+}
+
+func buildMqttTestClientID(configured *string) string {
+	if configured != nil && strings.TrimSpace(*configured) != "" {
+		return strings.TrimSpace(*configured)
+	}
+	return fmt.Sprintf("indu-forge-test-%d", time.Now().UnixNano())
+}
+
+func waitMqttToken(ctx context.Context, token mqtt.Token, timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		token.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(timeout):
+		return false
+	case <-done:
+		return true
+	}
 }
 
 // StopConnection 停止指定 MQTT 连接。

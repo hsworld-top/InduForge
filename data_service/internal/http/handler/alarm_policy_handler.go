@@ -174,6 +174,27 @@ func (h *AlarmPolicyHandler) Tree(w http.ResponseWriter, r *http.Request) error 
 	return nil
 }
 
+func (h *AlarmPolicyHandler) Coverage(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	query := r.URL.Query()
+	result, err := h.service.Coverage(
+		r.Context(),
+		claims,
+		r.PathValue("projectId"),
+		query.Get("datapointId"),
+		query.Get("path"),
+		query.Get("excludePolicyId"),
+	)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 func (h *AlarmPolicyHandler) Create(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {

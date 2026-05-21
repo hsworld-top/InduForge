@@ -34,10 +34,11 @@ export default defineConfig(({ mode }) => {
           secure: false,
         },
         '/socket.io': {
-          target: env.VITE_API_URL,
+          target: env.VITE_DATA_SERVICE_URL,
           changeOrigin: true,
           secure: false,
           ws: true,
+          rewriteWsOrigin: true,
         },
         // 前端子应用代理到各自 dev server，保持同源访问以共享 LocalStorage
         '/datacenter': {

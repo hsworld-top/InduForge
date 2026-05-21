@@ -134,6 +134,11 @@ export function createMqttSocketSharedRegistry(options = {}) {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: Infinity,
+      query: {
+        token,
+        projectId,
+        previewSessionId,
+      },
       auth: {
         token,
         projectId,

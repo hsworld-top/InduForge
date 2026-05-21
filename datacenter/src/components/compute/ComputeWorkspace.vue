@@ -4,6 +4,7 @@
       :units="computeStore.list"
       :folders="computeStore.folders"
       :selected-unit-id="selectedUnitId"
+      :dirty-unit-ids="dirtyUnitIds"
       :loading="computeStore.loading || computeStore.foldersLoading"
       :list-error="computeStore.listError"
       :folders-error="computeStore.foldersError"
@@ -157,6 +158,11 @@ const activeDraft = computed(() => {
 
 const hasDirtyTabs = computed(() =>
   Object.values(drafts.value).some((draft) => draft.dirty),
+);
+const dirtyUnitIds = computed(() =>
+  Object.values(drafts.value)
+    .filter((draft) => draft.dirty)
+    .map((draft) => draft.id),
 );
 
 async function loadWorkspace() {

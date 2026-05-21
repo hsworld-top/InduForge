@@ -1184,6 +1184,41 @@ const handleProtocolPreviewTest = async () => {
   }
 };
 
+const handleMqttConnectionTest = async () => {
+  testing.value = true;
+  const startAt = performance.now();
+  try {
+    const payload = buildConnectionPayload();
+    await dataAPI.testMqttConnection(props.projectId, {
+      name: payload.name,
+      ...payload.config,
+    });
+
+    const durationMs = Math.round(performance.now() - startAt);
+    lastTestSignature.value = configSignature.value;
+    testResult.value = {
+      status: "success",
+      title: "测试通过",
+      message: `MQTT Broker 连接验证通过，耗时 ${durationMs}ms。`,
+      detail: "",
+      durationMs,
+    };
+    ElMessage.success(t("query.connectionTestSuccess"));
+  } catch (error) {
+    const durationMs = Math.round(performance.now() - startAt);
+    testResult.value = {
+      status: "error",
+      title: "测试失败",
+      message: "MQTT Broker 连接未通过验证，请检查地址、端口或认证配置。",
+      detail: getApiErrorMessage(error, "MQTT 连接测试失败"),
+      durationMs,
+    };
+    ElMessage.error(getApiErrorMessage(error, "MQTT 连接测试失败"));
+  } finally {
+    testing.value = false;
+  }
+};
+
 const handleTest = async () => {
   const valid = await validateCurrentForm();
   if (!valid) {
@@ -1193,6 +1228,11 @@ const handleTest = async () => {
 
   if (!props.projectId) {
     ElMessage.warning("缺少工程上下文，无法测试连接");
+    return;
+  }
+
+  if (connectionType.value === "mqtt") {
+    await handleMqttConnectionTest();
     return;
   }
 

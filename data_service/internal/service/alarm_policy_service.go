@@ -101,6 +101,23 @@ type AlarmPolicyTreeResult struct {
 	TotalPolicyCount   int                `json:"totalPolicyCount"`
 }
 
+type AlarmPolicyCoverageItem struct {
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	Mode             string `json:"mode"`
+	TargetCount      int    `json:"targetCount"`
+	IsSingleTarget   bool   `json:"isSingleTarget"`
+	IsEnabled        bool   `json:"isEnabled"`
+	EffectiveEnabled bool   `json:"effectiveEnabled"`
+	GroupName        string `json:"groupName,omitempty"`
+}
+
+type AlarmPolicyCoverageResult struct {
+	DatapointID string                    `json:"datapointId,omitempty"`
+	Path        string                    `json:"path,omitempty"`
+	Policies    []AlarmPolicyCoverageItem `json:"policies"`
+}
+
 type AlarmPolicyListFilter struct {
 	Search        string
 	GroupID       *string
@@ -391,6 +408,47 @@ func (s *AlarmPolicyService) Tree(ctx context.Context, claims *auth.Claims, proj
 	return &AlarmPolicyTreeResult{Groups: groups, RootPolicies: rootPolicies, Policies: policies, MatchedPolicyCount: len(policies), TotalPolicyCount: len(policies)}, nil
 }
 
+func (s *AlarmPolicyService) Coverage(ctx context.Context, claims *auth.Claims, projectID, datapointID, path, excludePolicyID string) (*AlarmPolicyCoverageResult, error) {
+	if err := s.validateReadAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	datapointID = strings.TrimSpace(datapointID)
+	path = strings.TrimSpace(path)
+	excludePolicyID = strings.TrimSpace(excludePolicyID)
+	if datapointID == "" && path == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "datapointId 或 path 至少需要一个")
+	}
+	if excludePolicyID != "" {
+		if err := validateAlarmPolicyID(excludePolicyID); err != nil {
+			return nil, err
+		}
+	}
+	records, err := s.repository.ListPoliciesForTree(ctx, projectID, repository.AlarmPolicyListFilter{})
+	if err != nil {
+		return nil, err
+	}
+	items := make([]AlarmPolicyCoverageItem, 0)
+	for _, record := range records {
+		if record.ID == excludePolicyID {
+			continue
+		}
+		policy := toAlarmPolicy(record)
+		if !policyMatchesCoverageTarget(policy, datapointID, path) {
+			continue
+		}
+		groupName := ""
+		if policy.GroupName != nil {
+			groupName = *policy.GroupName
+		}
+		items = append(items, AlarmPolicyCoverageItem{
+			ID: policy.ID, Name: policy.Name, Mode: policy.Mode, TargetCount: len(policy.Targets),
+			IsSingleTarget: len(policy.Targets) == 1, IsEnabled: policy.IsEnabled,
+			EffectiveEnabled: policy.EffectiveEnabled, GroupName: groupName,
+		})
+	}
+	return &AlarmPolicyCoverageResult{DatapointID: datapointID, Path: path, Policies: items}, nil
+}
+
 func (s *AlarmPolicyService) Get(ctx context.Context, claims *auth.Claims, projectID, policyID string) (*AlarmPolicy, error) {
 	if err := s.validateReadAccess(claims, projectID); err != nil {
 		return nil, err
@@ -546,7 +604,7 @@ func (s *AlarmPolicyService) BatchApplyConditions(ctx context.Context, claims *a
 	if err := s.validateWriteAccess(claims, projectID); err != nil {
 		return err
 	}
-	if err := validateAlarmConditions(conditions, false, true); err != nil {
+	if err := validateAlarmConditions(conditions, mapFromRuleTypes("cel"), true); err != nil {
 		return err
 	}
 	ids, err := s.resolveSelectionIDs(ctx, projectID, selection)
@@ -618,7 +676,7 @@ func (s *AlarmPolicyService) normalizeCreateInput(ctx context.Context, projectID
 			return normalizedAlarmPolicyInput{}, err
 		}
 	}
-	if err := validateAlarmConditions(input.Conditions, policyRequiresNumericConditions(mode, targets), enabled); err != nil {
+	if err := validateAlarmConditions(input.Conditions, policyAllowedConditionTypes(mode, targets), enabled); err != nil {
 		return normalizedAlarmPolicyInput{}, err
 	}
 	suppression, err := normalizeAlarmSuppression(input.Suppression)
@@ -715,7 +773,7 @@ func (s *AlarmPolicyService) mergeUpdateInput(ctx context.Context, projectID str
 			return normalizedAlarmPolicyInput{}, err
 		}
 	}
-	if err := validateAlarmConditions(result.Conditions, policyRequiresNumericConditions(result.Mode, result.Targets), result.IsEnabled); err != nil {
+	if err := validateAlarmConditions(result.Conditions, policyAllowedConditionTypes(result.Mode, result.Targets), result.IsEnabled); err != nil {
 		return normalizedAlarmPolicyInput{}, err
 	}
 	return result, nil
@@ -894,19 +952,31 @@ func validateAlarmPolicyShape(mode string, targets []AlarmTargetRef, inputs []Al
 	return nil
 }
 
-func policyRequiresNumericConditions(mode string, targets []AlarmTargetRef) bool {
-	return mode == "derived" || allTargetsNumeric(targets)
-}
-
 func validateAlarmPolicyReady(policy AlarmPolicy) error {
 	if err := validateAlarmPolicyShape(policy.Mode, policy.Targets, policy.Inputs, policy.DerivedExpression); err != nil {
 		return err
 	}
-	return validateAlarmConditions(policy.Conditions, policyRequiresNumericConditions(policy.Mode, policy.Targets), true)
+	return validateAlarmConditions(policy.Conditions, policyAllowedConditionTypes(policy.Mode, policy.Targets), true)
 }
 
-func validateAlarmConditions(conditions []AlarmCondition, numericOnly bool, requireEnabled bool) error {
+func policyMatchesCoverageTarget(policy AlarmPolicy, datapointID, path string) bool {
+	if policy.Mode != "per_target" {
+		return false
+	}
+	for _, target := range policy.Targets {
+		if datapointID != "" && target.DatapointID == datapointID {
+			return true
+		}
+		if path != "" && target.Path == path {
+			return true
+		}
+	}
+	return false
+}
+
+func validateAlarmConditions(conditions []AlarmCondition, allowedTypes map[string]struct{}, requireEnabled bool) error {
 	enabledCount := 0
+	seenThresholds := map[string]struct{}{}
 	for _, condition := range conditions {
 		if !condition.IsEnabled {
 			continue
@@ -918,8 +988,14 @@ func validateAlarmConditions(conditions []AlarmCondition, numericOnly bool, requ
 		if _, ok := allowedAlarmSeverities[condition.Severity]; !ok {
 			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "条件级别不受支持")
 		}
-		if !numericOnly && condition.Type != "cel" {
-			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "非数值目标只能使用自定义条件")
+		if _, ok := allowedTypes[condition.Type]; !ok {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前目标点类型不支持该条件")
+		}
+		if isThresholdConditionType(condition.Type) {
+			if _, exists := seenThresholds[condition.Type]; exists {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "同一策略中高高限、高限、低限、低低限每种最多配置一个")
+			}
+			seenThresholds[condition.Type] = struct{}{}
 		}
 		if err := validateAlarmConditionParams(condition); err != nil {
 			return err
@@ -929,6 +1005,31 @@ func validateAlarmConditions(conditions []AlarmCondition, numericOnly bool, requ
 		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "条件集至少需要一个启用条件")
 	}
 	return nil
+}
+
+func policyAllowedConditionTypes(mode string, targets []AlarmTargetRef) map[string]struct{} {
+	if mode == "derived" || allTargetsKind(targets, isNumericDataType) {
+		return mapFromRuleTypes("HH", "H", "L", "LL", "deviation_high", "deviation_low", "rate_of_change", "cel")
+	}
+	if allTargetsKind(targets, isBooleanDataType) {
+		return mapFromRuleTypes("bool_equal", "cel")
+	}
+	if allTargetsKind(targets, isStringDataType) {
+		return mapFromRuleTypes("string_equal", "string_not_equal", "string_contains", "string_regex", "cel")
+	}
+	return mapFromRuleTypes("cel")
+}
+
+func mapFromRuleTypes(values ...string) map[string]struct{} {
+	result := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		result[value] = struct{}{}
+	}
+	return result
+}
+
+func isThresholdConditionType(conditionType string) bool {
+	return conditionType == "HH" || conditionType == "H" || conditionType == "L" || conditionType == "LL"
 }
 
 func validateAlarmConditionParams(condition AlarmCondition) error {
@@ -1335,15 +1436,46 @@ func mergeAlarmConditionsByType(current []AlarmCondition, incoming []AlarmCondit
 }
 
 func allTargetsNumeric(targets []AlarmTargetRef) bool {
+	return allTargetsKind(targets, isNumericDataType)
+}
+
+func allTargetsKind(targets []AlarmTargetRef, match func(string) bool) bool {
 	if len(targets) == 0 {
 		return true
 	}
 	for _, target := range targets {
-		if target.DataType != "number" && target.DataType != "integer" {
+		if !match(target.DataType) {
 			return false
 		}
 	}
 	return true
+}
+
+func isNumericDataType(dataType string) bool {
+	switch strings.ToLower(strings.TrimSpace(dataType)) {
+	case "number", "integer", "int", "float", "double", "decimal":
+		return true
+	default:
+		return false
+	}
+}
+
+func isBooleanDataType(dataType string) bool {
+	switch strings.ToLower(strings.TrimSpace(dataType)) {
+	case "boolean", "bool":
+		return true
+	default:
+		return false
+	}
+}
+
+func isStringDataType(dataType string) bool {
+	switch strings.ToLower(strings.TrimSpace(dataType)) {
+	case "string", "text":
+		return true
+	default:
+		return false
+	}
 }
 
 func cloneOptionalBool(value *bool) *bool {

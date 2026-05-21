@@ -11,6 +11,7 @@ import {
   deleteAlarmPolicyGroup,
   getAlarmPolicy,
   getAlarmPolicyContract,
+  getAlarmPolicyCoverage,
   getAlarmPolicyGroups,
   getAlarmPolicyTree,
   getAlarmPolicies,
@@ -26,6 +27,7 @@ import type {
   AlarmDraftValidation,
   AlarmPolicy,
   AlarmPolicyContract,
+  AlarmPolicyCoverage,
   AlarmPolicyGroup,
   AlarmPolicyGroupSave,
   AlarmPolicySave,
@@ -47,6 +49,13 @@ type TrialState = {
 type ContractState = {
   policyId: string;
   data: AlarmPolicyContract | null;
+  loading: boolean;
+  error: string;
+};
+
+type CoverageState = {
+  key: string;
+  data: AlarmPolicyCoverage | null;
   loading: boolean;
   error: string;
 };
@@ -93,6 +102,12 @@ export const useAlarmStore = defineStore("alarm", () => {
   const validation = ref<AlarmDraftValidation | null>(null);
   const validationLoading = ref(false);
   const validationError = ref("");
+  const coverage = ref<CoverageState>({
+    key: "",
+    data: null,
+    loading: false,
+    error: "",
+  });
 
   const hasEditing = computed(() => editing.value !== null);
   const selectedCount = computed(() => {
@@ -487,6 +502,31 @@ export const useAlarmStore = defineStore("alarm", () => {
     }
   }
 
+  async function fetchCoverage(
+    projectId: string,
+    params: {
+      datapointId?: string;
+      path?: string;
+      excludePolicyId?: string;
+    },
+  ) {
+    const key = JSON.stringify(params);
+    coverage.value = { key, data: null, loading: true, error: "" };
+    try {
+      const data = await getAlarmPolicyCoverage(projectId, params);
+      coverage.value = { key, data, loading: false, error: "" };
+      return data;
+    } catch (error) {
+      coverage.value = {
+        key,
+        data: null,
+        loading: false,
+        error: getApiErrorMessage(error, "报警策略覆盖关系不可用"),
+      };
+      throw error;
+    }
+  }
+
   return {
     groups,
     tree,
@@ -508,6 +548,7 @@ export const useAlarmStore = defineStore("alarm", () => {
     validation,
     validationLoading,
     validationError,
+    coverage,
     hasEditing,
     selectedPolicyIds,
     fetchGroups,
@@ -541,5 +582,6 @@ export const useAlarmStore = defineStore("alarm", () => {
     clearTrial,
     fetchContract,
     validateDraft,
+    fetchCoverage,
   };
 });

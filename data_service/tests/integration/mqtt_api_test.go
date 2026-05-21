@@ -258,6 +258,18 @@ type mqttMessagePayload struct {
 	ReceivedAt     time.Time `json:"receivedAt"`
 }
 
+type mqttListResponse[T any] struct {
+	List       []T                `json:"list"`
+	Pagination mqttPaginationData `json:"pagination"`
+}
+
+type mqttPaginationData struct {
+	Page       int `json:"page"`
+	PageSize   int `json:"pageSize"`
+	Total      int `json:"total"`
+	TotalPages int `json:"totalPages"`
+}
+
 func mustCreateMqttConnection(t *testing.T, baseURL, token, projectID string, payload map[string]any) mqttConnectionPayload {
 	t.Helper()
 
@@ -314,11 +326,17 @@ func mustListMqttMessages(t *testing.T, baseURL, token, projectID, subscriptionI
 	url := baseURL + "/api/v1/data/projects/" + projectID + "/mqtt/subscriptions/" + subscriptionID + "/messages?limit=" + strconv.Itoa(limit)
 
 	responseEnvelope := doJSONRequest(t, http.MethodGet, url, token, nil)
-	var result []mqttMessagePayload
+	var result mqttListResponse[mqttMessagePayload]
 	if err := json.Unmarshal(responseEnvelope.Data, &result); err != nil {
 		t.Fatalf("decode mqtt messages response failed: %v", err)
 	}
-	return result
+	if result.Pagination.Page != 1 {
+		t.Fatalf("expected message page 1, got %d", result.Pagination.Page)
+	}
+	if result.Pagination.PageSize != limit {
+		t.Fatalf("expected message pageSize %d, got %d", limit, result.Pagination.PageSize)
+	}
+	return result.List
 }
 
 func insertTestMqttSubscription(t *testing.T, ctx context.Context, fixture *testDatabase, projectID, connectionID, userID string) string {

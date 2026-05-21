@@ -1,23 +1,24 @@
 <template>
-  <div class="mqtt-tag-monitor h-full flex flex-col">
-    <div class="flex items-center justify-between p-3 border-b bg-gray-50">
-      <div class="flex items-center gap-2">
-        <span class="text-sm font-semibold">Tag实时监控</span>
-        <el-tag v-if="enabledTags.length > 0" size="small" type="info">
-          {{ enabledTags.length }} 个启用变量
-        </el-tag>
-        <el-tag
+  <div class="mqtt-tag-monitor">
+    <div class="mqtt-tag-monitor__toolbar">
+      <div class="mqtt-tag-monitor__title">
+        <span>变量实时监控</span>
+        <WorkbenchStatusPill
+          :label="socketConnected ? '实时通道已连接' : '实时通道未连接'"
+          :tone="socketConnected ? 'success' : 'neutral'"
+        />
+        <WorkbenchStatusPill
+          v-if="enabledTags.length > 0"
+          :label="`${enabledTags.length} 个启用变量`"
+          tone="info"
+        />
+        <WorkbenchStatusPill
           v-if="tags.length > enabledTags.length"
-          size="small"
-          type="warning"
-        >
-          {{ tags.length - enabledTags.length }} 个已禁用
-        </el-tag>
-        <el-tag :type="socketConnected ? 'success' : 'danger'" size="small">
-          {{ socketConnected ? "已连接" : "未连接" }}
-        </el-tag>
+          :label="`${tags.length - enabledTags.length} 个已禁用`"
+          tone="warning"
+        />
       </div>
-      <div class="flex items-center gap-2">
+      <div class="mqtt-tag-monitor__actions">
         <div class="view-toggle">
           <el-button
             size="small"
@@ -43,84 +44,67 @@
       </div>
     </div>
 
-    <div class="flex-1 overflow-auto p-3">
+    <div class="mqtt-tag-monitor__body">
       <div
         v-if="enabledTags.length === 0"
-        class="text-center text-gray-400 py-20"
+        class="mqtt-tag-monitor__empty"
       >
-        <IconTablerFile class="text-4xl mb-2 w-10 h-10" />
+        <IconTablerFile />
         <div v-if="tags.length === 0">暂无变量</div>
         <div v-else>暂无启用的变量</div>
-        <div class="text-xs mt-1">
+        <small>
           {{
             tags.length === 0
               ? "请先在左侧创建变量"
               : "请在左侧启用变量以开始监控"
           }}
-        </div>
+        </small>
       </div>
 
       <div
         v-else-if="viewMode === 'card'"
-        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"
+        class="tag-card-grid"
       >
         <div
           v-for="tag in enabledTags"
           :key="tag.id"
-          class="tag-card border-2 rounded-lg p-3 bg-white shadow-sm hover:shadow-md transition-all duration-300"
-          :class="{
-            'border-green-400 bg-green-50':
-              tag.currentValue?.quality === 'good',
-            'border-red-400 bg-red-50': tag.currentValue?.quality === 'bad',
-            'border-yellow-400 bg-yellow-50':
-              tag.currentValue?.quality === 'uncertain',
-            'border-gray-300': !tag.currentValue,
-          }"
+          class="tag-card"
+          :class="`is-${tag.currentValue?.quality || 'unknown'}`"
         >
           <div class="flex items-start justify-between mb-2">
             <div class="flex-1 min-w-0">
-              <div class="text-sm font-semibold text-gray-800 truncate">
+              <div class="tag-card__name">
                 {{ tag.name }}
               </div>
-              <div class="text-xs text-gray-500 font-mono mt-1">
+              <div class="tag-card__code">
                 {{ tag.code }}
               </div>
             </div>
-            <div class="flex items-center gap-1 ml-2">
-              <el-tag
-                :type="getQualityColor(tag.currentValue?.quality)"
-                size="small"
-                effect="dark"
-              >
-                {{ getQualityLabel(tag.currentValue?.quality || "unknown") }}
-              </el-tag>
-            </div>
+            <WorkbenchStatusPill
+              :label="getQualityLabel(tag.currentValue?.quality || 'unknown')"
+              :tone="getQualityTone(tag.currentValue?.quality || 'unknown')"
+            />
           </div>
 
-          <div
-            class="tag-value mt-2 p-3 bg-white rounded-lg border border-gray-200"
-          >
+          <div class="tag-value">
             <div
               v-if="tag.currentValue"
               class="flex items-baseline justify-between"
             >
-              <span class="text-2xl font-bold text-gray-900 truncate">
+              <span class="tag-value__number">
                 {{ formatValue(tag.currentValue.parsedValue, tag.dataType) }}
               </span>
-              <span
-                v-if="tag.unit"
-                class="text-sm text-gray-600 ml-2 font-medium"
-              >
+              <span v-if="tag.unit" class="tag-value__unit">
                 {{ tag.unit }}
               </span>
             </div>
-            <div v-else class="text-gray-400 text-center py-2">
+            <div v-else class="tag-value__waiting">
               <IconTablerLoader class="mr-1 w-4 h-4 animate-spin" />
               等待数据...
             </div>
           </div>
 
-          <div class="mt-2 text-xs text-gray-500 space-y-1">
+          <div class="tag-card__meta">
             <div class="flex justify-between">
               <span>数据类型:</span>
               <span>{{ getDataTypeLabel(tag.dataType) }}</span>
@@ -131,12 +115,7 @@
             </div>
             <div v-if="tag.currentValue" class="flex justify-between">
               <span>数据质量:</span>
-              <el-tag
-                :type="getQualityColor(tag.currentValue.quality)"
-                size="small"
-              >
-                {{ getQualityLabel(tag.currentValue.quality) }}
-              </el-tag>
+              <span>{{ getQualityLabel(tag.currentValue.quality) }}</span>
             </div>
             <div
               v-if="tag.currentValue?.timestamp"
@@ -145,7 +124,7 @@
               <span>更新时间:</span>
               <span>{{ formatTimestamp(tag.currentValue.timestamp) }}</span>
             </div>
-            <div v-if="tag.currentValue?.error" class="mt-2 text-red-500">
+            <div v-if="tag.currentValue?.error" class="tag-card__error">
               <IconTablerAlertTriangle class="w-4 h-4" />
               {{ tag.currentValue.error }}
             </div>
@@ -198,6 +177,7 @@ import { ElMessage } from "element-plus";
 import { getMqttTags } from "@/api/data.api";
 import { useMqttSocket } from "@/composables/useMqttSocket";
 import { useMqttTagSync } from "@/composables/useMqttTagSync";
+import WorkbenchStatusPill from "@/components/workbench/WorkbenchStatusPill.vue";
 import IconTablerRefresh from "~icons/tabler/refresh";
 import IconTablerFile from "~icons/tabler/file";
 import IconTablerLoader from "~icons/tabler/loader";
@@ -242,7 +222,7 @@ const { subscribe: subscribeTagSync, unsubscribe: unsubscribeTagSync } =
 const fetchTags = async () => {
   try {
     const res = await getMqttTags(props.projectId, props.subscriptionId);
-    tags.value = res.data || [];
+    tags.value = res.data?.list || [];
   } catch (error) {
     ElMessage.error(`获取变量列表失败: ${error.message}`);
   }
@@ -314,6 +294,16 @@ const getQualityColor = (quality) => {
     unknown: "info",
   };
   return colors[quality] || "info";
+};
+
+const getQualityTone = (quality) => {
+  const tones = {
+    good: "success",
+    bad: "danger",
+    uncertain: "warning",
+    unknown: "neutral",
+  };
+  return tones[quality] || "neutral";
 };
 
 const handleTagValueUpdate = (data) => {
@@ -424,12 +414,81 @@ defineExpose({
 
 <style scoped>
 .mqtt-tag-monitor {
-  background: linear-gradient(to bottom, #f5f7fa, #e9ecef);
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--dc-surface-raised);
+}
+
+.mqtt-tag-monitor__toolbar {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--dc-border);
+  background: var(--dc-surface-subtle);
+}
+
+.mqtt-tag-monitor__title,
+.mqtt-tag-monitor__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mqtt-tag-monitor__title > span:first-child {
+  color: var(--dc-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.mqtt-tag-monitor__body {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 10px;
 }
 
 .view-toggle {
   display: inline-flex;
   gap: 6px;
+}
+
+.mqtt-tag-monitor__empty {
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: var(--dc-text-muted);
+  text-align: center;
+}
+
+.mqtt-tag-monitor__empty svg {
+  width: 40px;
+  height: 40px;
+  opacity: 0.72;
+}
+
+.mqtt-tag-monitor__empty div {
+  color: var(--dc-text-secondary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.mqtt-tag-monitor__empty small {
+  font-size: 12px;
+}
+
+.tag-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .tag-row-list {
@@ -444,17 +503,17 @@ defineExpose({
   gap: 12px;
   align-items: center;
   padding: 8px 10px;
-  background: #fff;
-  border: 1px solid #e4e7ed;
-  border-radius: 6px;
+  background: var(--dc-surface-raised);
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
   font-size: 12px;
-  color: #374151;
+  color: var(--dc-text-secondary);
 }
 
 .tag-row-header {
-  background: #f9fafb;
+  background: var(--dc-surface-subtle);
   font-weight: 600;
-  color: #6b7280;
+  color: var(--dc-text-muted);
 }
 
 .tag-row .truncate {
@@ -464,7 +523,15 @@ defineExpose({
 }
 
 .tag-card {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 12px;
+  border: 1px solid var(--dc-border);
+  border-left: 4px solid var(--quality-color, var(--dc-border));
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-surface);
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
   position: relative;
   overflow: hidden;
 }
@@ -482,7 +549,7 @@ defineExpose({
 }
 
 .tag-card:hover {
-  transform: translateY(-2px) scale(1.01);
+  border-color: color-mix(in oklch, var(--quality-color, var(--dc-primary)) 45%, var(--dc-border));
 }
 
 .tag-card:hover::before {
@@ -490,62 +557,107 @@ defineExpose({
 }
 
 .tag-value {
-  min-height: 64px;
+  min-height: 68px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-subtle);
 }
 
-.tag-value:hover {
-  background: #f8f9fa;
+.tag-card__name {
+  overflow: hidden;
+  color: var(--dc-text);
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.tag-card.border-green-400 {
-  animation: pulse-green 2s infinite;
+.tag-card__code {
+  margin-top: 3px;
+  color: var(--dc-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
 }
 
-.tag-card.border-red-400 {
-  animation: pulse-red 2s infinite;
+.tag-value__number {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dc-text);
+  font-size: 22px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.tag-card.border-yellow-400 {
-  animation: pulse-yellow 2s infinite;
+.tag-value__unit {
+  margin-left: 8px;
+  color: var(--dc-text-muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
-@keyframes pulse-green {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 8px rgba(52, 211, 153, 0);
-  }
+.tag-value__waiting {
+  color: var(--dc-text-muted);
+  font-size: 12px;
 }
 
-@keyframes pulse-red {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 8px rgba(248, 113, 113, 0);
-  }
+.tag-card__meta {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+  color: var(--dc-text-muted);
+  font-size: 11px;
 }
 
-@keyframes pulse-yellow {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 8px rgba(251, 191, 36, 0);
-  }
+.tag-card__error {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  color: #b91c1c;
+}
+
+.tag-card.is-good {
+  --quality-color: #10b981;
+}
+
+.tag-card.is-bad {
+  --quality-color: #ef4444;
+}
+
+.tag-card.is-uncertain {
+  --quality-color: #f59e0b;
+}
+
+.tag-card.is-unknown {
+  --quality-color: var(--dc-border);
 }
 
 @media (min-width: 1920px) {
-  .grid {
+  .tag-card-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1180px) {
+  .tag-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .mqtt-tag-monitor__toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .tag-card-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

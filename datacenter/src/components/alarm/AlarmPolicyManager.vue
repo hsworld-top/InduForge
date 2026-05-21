@@ -154,6 +154,7 @@
         :node="group"
         :selection="selection"
         :selected-id="selectedId"
+        :dirty-policy-ids="dirtyPolicyIds"
         @select="emit('select', $event)"
         @select-policy="(id, selected) => emit('selectPolicy', id, selected)"
         @select-group="(ids, selected) => emit('selectGroup', ids, selected)"
@@ -183,17 +184,21 @@
           @click.stop
           @change="emit('selectPolicy', policy.id, checked($event))"
         />
-        <IconTablerBell class="alarm-policy-manager__row-icon" />
+        <component
+          :is="policyModeIcon(policy)"
+          class="alarm-policy-manager__row-icon"
+          :class="`is-${policy.mode}`"
+          :title="policyModeText(policy)"
+          :aria-label="policyModeText(policy)"
+        />
         <span class="alarm-policy-manager__row-main">
           <span class="alarm-policy-manager__row-name">{{ policy.name }}</span>
         </span>
         <span
           class="alarm-policy-manager__row-status"
-          :class="policy.effectiveEnabled ? 'is-success' : 'is-muted'"
-          :title="policy.isEnabled ? t('common.enabled') : t('alarm.stopped')"
-          :aria-label="
-            policy.isEnabled ? t('common.enabled') : t('alarm.stopped')
-          "
+          :class="`is-${policyStatusTone(policy)}`"
+          :title="policyStatusText(policy)"
+          :aria-label="policyStatusText(policy)"
         ></span>
       </button>
 
@@ -291,12 +296,13 @@
 import { computed, reactive, ref } from "vue";
 import { Search } from "@element-plus/icons-vue";
 import IconTablerAlertCircle from "~icons/tabler/alert-circle";
-import IconTablerBell from "~icons/tabler/bell";
+import IconTablerCalculator from "~icons/tabler/calculator";
 import IconTablerFolderPlus from "~icons/tabler/folder-plus";
 import IconTablerFolderSymlink from "~icons/tabler/folder-symlink";
 import IconTablerPencil from "~icons/tabler/pencil";
 import IconTablerPlus from "~icons/tabler/plus";
 import IconTablerRefresh from "~icons/tabler/refresh";
+import IconTablerTemplate from "~icons/tabler/template";
 import IconTablerTrash from "~icons/tabler/trash";
 import type {
   AlarmBulkSelection,
@@ -330,6 +336,7 @@ const props = defineProps<{
   selectedId: string;
   selectedCount: number;
   total: number;
+  dirtyPolicyIds?: string[];
   loading: boolean;
   error: string;
 }>();
@@ -407,6 +414,9 @@ const conditionTypeLabel = computed(() => {
 });
 
 const visiblePolicies = computed(() => props.tree.policies);
+const dirtyPolicyIdSet = computed(() =>
+  new Set((props.dirtyPolicyIds || []).map(String)),
+);
 
 const policyTree = computed(() =>
   buildAlarmPolicyGroupTree(props.tree.groups, props.tree.policies),
@@ -440,6 +450,27 @@ const isSelected = (id: string) => {
   }
   return props.selection.policyIds.includes(id);
 };
+
+const isPolicyDirty = (policy: AlarmPolicy) =>
+  dirtyPolicyIdSet.value.has(String(policy.id));
+
+const policyStatusText = (policy: AlarmPolicy) =>
+  isPolicyDirty(policy)
+    ? t("alarm.unsaved")
+    : policy.isEnabled
+      ? t("common.enabled")
+      : t("alarm.stopped");
+
+const policyStatusTone = (policy: AlarmPolicy) =>
+  isPolicyDirty(policy) ? "warning" : policy.effectiveEnabled ? "success" : "muted";
+
+const policyModeText = (policy: AlarmPolicy) =>
+  policy.mode === "derived"
+    ? t("alarm.modes.derived")
+    : t("alarm.modes.perTarget");
+
+const policyModeIcon = (policy: AlarmPolicy) =>
+  policy.mode === "derived" ? IconTablerCalculator : IconTablerTemplate;
 
 const allVisibleSelected = computed(
   () =>
@@ -530,19 +561,19 @@ const emitContextAction = (action: "rename" | "move" | "delete") => {
 }
 
 .alarm-policy-manager__head {
-  min-height: 46px;
+  min-height: 40px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 12px;
+  padding: 5px 10px;
   border-bottom: 1px solid var(--dc-border);
 }
 
 .alarm-policy-manager__head h2 {
   margin: 0;
   color: var(--dc-text);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.3;
 }
@@ -560,7 +591,7 @@ const emitContextAction = (action: "rename" | "move" | "delete") => {
 .alarm-policy-manager__actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex: 0 0 auto;
 }
 
@@ -582,8 +613,8 @@ const emitContextAction = (action: "rename" | "move" | "delete") => {
 
 .alarm-policy-manager__primary,
 .alarm-policy-manager__secondary {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   padding: 0;
 }
 
@@ -789,6 +820,14 @@ const emitContextAction = (action: "rename" | "move" | "delete") => {
   color: var(--dc-primary);
 }
 
+.alarm-policy-manager__row-icon.is-derived {
+  color: var(--dc-warning);
+}
+
+.alarm-policy-manager__row-icon.is-per_target {
+  color: var(--dc-primary);
+}
+
 .alarm-policy-manager__row-name {
   min-width: 0;
   overflow: hidden;
@@ -837,6 +876,10 @@ const emitContextAction = (action: "rename" | "move" | "delete") => {
 
 .alarm-policy-manager__row-status.is-success {
   background: var(--dc-success);
+}
+
+.alarm-policy-manager__row-status.is-warning {
+  background: var(--dc-warning);
 }
 
 .alarm-policy-manager__row-status.is-muted {

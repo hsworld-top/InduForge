@@ -331,8 +331,8 @@ export const datacenterMessages = {
       creating: "创建中",
       nameRequired: "请输入策略名",
       modes: {
-        perTarget: "逐点判断",
-        derived: "计算后判断",
+        perTarget: "统一模板报警",
+        derived: "计算结果报警",
       },
       conditionTypes: {
         HH: "高高限",

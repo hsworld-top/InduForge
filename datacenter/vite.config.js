@@ -45,6 +45,13 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
+        "/socket.io": {
+          target: dataServiceUrl,
+          changeOrigin: true,
+          secure: false,
+          ws: true,
+          rewriteWsOrigin: true,
+        },
         // 其余 /api 仍走原有后端（dev_core）
         "/api": {
           target: env.VITE_API_URL,

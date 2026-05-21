@@ -1,7 +1,7 @@
 <template>
-  <div class="mqtt-tag-list h-full flex flex-col">
-    <div class="p-3 border-b space-y-2">
-      <div class="flex items-center gap-2">
+  <div class="mqtt-tag-list">
+    <div class="mqtt-tag-list__toolbar">
+      <div class="mqtt-tag-list__actions">
         <el-button type="primary" size="small" @click="handleCreateTag">
           <IconTablerPlus class="mr-1 w-4 h-4" />
           新建变量
@@ -19,12 +19,12 @@
           批量导出
         </el-button>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="mqtt-tag-list__filters">
         <el-input
           v-model="searchKeyword"
           placeholder="搜索变量名称或标识符"
           clearable
-          style="width: 220px"
+          size="small"
           @input="handleSearch"
         >
           <template #prefix>
@@ -38,7 +38,7 @@
       </div>
     </div>
 
-    <div class="flex-1 overflow-auto" v-loading="loading">
+    <div class="mqtt-tag-list__body" v-loading="loading">
       <div class="tag-tree">
         <div v-if="ungroupedTags.length > 0" class="group-node">
           <div
@@ -147,11 +147,11 @@
 
       <div
         v-if="tags.length === 0 && !loading"
-        class="empty-state text-center text-gray-400 py-16"
+        class="empty-state"
       >
-        <IconTablerFile class="text-6xl mb-4 w-16 h-16" />
-        <p class="text-lg">暂无变量</p>
-        <p class="text-sm mt-2">点击“新建变量”开始创建</p>
+        <IconTablerFile />
+        <p>暂无变量</p>
+        <small>点击“新建变量”开始创建</small>
       </div>
     </div>
 
@@ -332,7 +332,7 @@ const loadGroups = async () => {
       props.projectId,
       props.subscriptionId,
     );
-    groups.value = response.data?.groups || [];
+    groups.value = response.data?.list || [];
     activeGroups.value = [
       "ungrouped",
       ...groups.value.map((group) => group.id),
@@ -347,7 +347,7 @@ const loadTags = async () => {
   try {
     loading.value = true;
     const response = await getMqttTags(props.projectId, props.subscriptionId);
-    tags.value = response.data || [];
+    tags.value = response.data?.list || [];
     await loadTagDatapoints(tags.value);
   } catch (error) {
     console.error("Failed to load tags:", error);
@@ -583,19 +583,51 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .mqtt-tag-list {
-  background: #fff;
-  padding: 16px;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--dc-surface-raised);
+}
+
+.mqtt-tag-list__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--dc-border);
+  background: var(--dc-surface-subtle);
+}
+
+.mqtt-tag-list__actions,
+.mqtt-tag-list__filters {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.mqtt-tag-list__filters :deep(.el-input) {
+  width: 220px;
+}
+
+.mqtt-tag-list__body {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 10px;
 }
 
 .tag-tree {
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
-  background: #fafafa;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-subtle);
   overflow: hidden;
 }
 
 .group-node {
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid var(--dc-border);
 }
 
 .group-node:last-child {
@@ -608,15 +640,14 @@ onBeforeUnmount(() => {
   padding: 10px 12px;
   cursor: pointer;
   transition: all 0.2s ease;
-  background: white;
-  border-radius: 6px;
+  background: var(--dc-surface-raised);
+  border-radius: var(--dc-radius-sm);
   margin: 2px 6px;
   position: relative;
 }
 
 .group-header:hover {
-  background: #f5f7fa;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  background: var(--dc-primary-soft);
 }
 
 .group-header.expanded {
@@ -653,13 +684,13 @@ onBeforeUnmount(() => {
 .group-name {
   font-size: 13px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--dc-text);
   margin-bottom: 2px;
 }
 
 .group-stats {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--dc-text-muted);
 }
 
 .group-actions {
@@ -680,7 +711,7 @@ onBeforeUnmount(() => {
 }
 
 .group-expand-icon {
-  color: #9ca3af;
+  color: var(--dc-text-muted);
   transition: transform 0.2s ease;
   margin-left: 8px;
 }
@@ -724,17 +755,49 @@ onBeforeUnmount(() => {
 .tag-items :deep(.tag-item) {
   margin: 0;
   border-radius: 4px;
-  background: white;
-  border: 1px solid #e4e7ed;
+  background: var(--dc-surface-raised);
+  border: 1px solid var(--dc-border);
   transition: all 0.2s ease;
 }
 
 .tag-items :deep(.tag-item:hover) {
   border-color: var(--group-color, #3b82f6);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--dc-shadow-surface);
 }
 
-.mqtt-tag-list > div:first-child {
-  margin-bottom: 16px;
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 260px;
+  color: var(--dc-text-muted);
+  text-align: center;
+}
+
+.empty-state svg {
+  width: 42px;
+  height: 42px;
+  margin-bottom: 10px;
+  opacity: 0.72;
+}
+
+.empty-state p {
+  margin: 0;
+  color: var(--dc-text-secondary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.empty-state small {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+@media (max-width: 980px) {
+  .mqtt-tag-list__toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 </style>

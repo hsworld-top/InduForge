@@ -20,25 +20,27 @@
 
     <template v-else>
       <header class="compute-editor__tabs">
-        <button
-          v-for="tab in tabs"
-          :key="tab.id"
-          type="button"
-          class="compute-editor__file-tab"
-          :class="{ 'is-active': tab.id === activeId, 'is-dirty': tab.dirty }"
-          @click="$emit('activate-tab', tab.id)"
+        <el-tabs
+          class="compute-editor__file-tabs"
+          type="card"
+          :model-value="activeId || ''"
+          @tab-change="(name) => $emit('activate-tab', String(name))"
+          @tab-remove="(name) => $emit('close-tab', String(name))"
         >
-          <span>{{ tab.name }}</span>
-          <em v-if="tab.dirty">*</em>
-          <button
-            type="button"
-            class="compute-editor__close"
-            aria-label="关闭标签"
-            @click.stop="$emit('close-tab', tab.id)"
+          <el-tab-pane
+            v-for="tab in tabs"
+            :key="tab.id"
+            :name="tab.id"
+            :closable="true"
           >
-            <IconTablerX />
-          </button>
-        </button>
+            <template #label>
+              <span class="compute-editor__tab-label">
+                <span>{{ tab.name }}</span>
+                <em v-if="tab.dirty">*</em>
+              </span>
+            </template>
+          </el-tab-pane>
+        </el-tabs>
       </header>
 
       <div class="compute-editor__toolbar">
@@ -48,6 +50,7 @@
               :tone="statusTone(activeDraft.status)"
               :text="statusText(activeDraft.status)"
             />
+            <em v-if="activeDraft.dirty">未保存</em>
           </div>
           <input
             v-model="activeDraft.name"
@@ -135,16 +138,20 @@
               >
                 <IconTablerTemplate class="compute-editor__action-icon" />
               </button>
-              <button
-                type="button"
-                class="compute-editor__tool-btn"
-                title="试运行"
-                aria-label="试运行"
-                :disabled="debugRunning || activeDraft.dirty"
-                @click="quickDryRun"
+              <span
+                class="compute-editor__tooltip-wrap"
+                :title="dryRunTooltip"
               >
-                <IconTablerPlayerPlay class="compute-editor__action-icon" />
-              </button>
+                <button
+                  type="button"
+                  class="compute-editor__tool-btn"
+                  aria-label="试运行"
+                  :disabled="debugRunning || activeDraft.dirty"
+                  @click="quickDryRun"
+                >
+                  <IconTablerPlayerPlay class="compute-editor__action-icon" />
+                </button>
+              </span>
               <button
                 type="button"
                 class="compute-editor__syntax-status"
@@ -173,23 +180,6 @@
               <em>{{ langText(activeDraft.lang) }}</em>
             </div>
           </div>
-          <div
-            v-if="activeDraft.datapointVariableRows.length"
-            class="compute-editor__variable-strip"
-          >
-            <span>数据点变量</span>
-            <button
-              v-for="(row, index) in activeDraft.datapointVariableRows"
-              :key="row.uid"
-              type="button"
-              :title="row.path"
-              @click="insertVariableAlias(row.alias)"
-            >
-              {{ row.alias }}
-              <em>{{ row.dataType || "-" }}</em>
-              <i @click.stop="removeDatapointVariable(index)">×</i>
-            </button>
-          </div>
           <MonacoEditor
             ref="monacoEditorRef"
             v-model="activeDraft.code"
@@ -197,6 +187,8 @@
             :language="monacoLanguage"
             height="100%"
             @change="markDirty"
+            @cursor-change="updateCursorInfo"
+            @save="saveAfterSyntaxCheck"
           />
         </section>
 
@@ -255,11 +247,15 @@
 
         <footer class="compute-editor__panel-tabs">
           <div v-if="panelCollapsed" class="compute-editor__panel-summary">
-            <span>参数 {{ parameterCount }}</span>
-            <span>变量 {{ datapointVariableCount }}</span>
-            <span>触发 {{ triggerText }}</span>
-            <span>依赖 {{ dependencyCount }}</span>
-            <span>调试 {{ debugStateText }}</span>
+            <button
+              v-for="item in panelSummaryItems"
+              :key="item.id"
+              type="button"
+              :title="item.label"
+              @click="openPanel(item.id)"
+            >
+              {{ item.label }} {{ item.value }}
+            </button>
           </div>
           <div v-else class="compute-editor__panel-tablist">
             <button
@@ -274,6 +270,10 @@
               <component :is="tab.icon" class="compute-editor__panel-tab-icon" />
               <span>{{ tab.label }}</span>
             </button>
+          </div>
+          <div class="compute-editor__cursor-status">
+            <span>行 {{ cursorInfo.line }}，列 {{ cursorInfo.column }}</span>
+            <span>空格: {{ cursorInfo.spaces }}</span>
           </div>
           <button
             type="button"
@@ -297,8 +297,17 @@
           <template v-if="activePanel === 'inputs'">
             <div class="compute-editor__panel-head">
               <div>
-                <h3>脚本参数</h3>
-                <p>调用方传入的参数，脚本内按 argv[0]、argv[1] 顺序读取。</p>
+                <h3>
+                  <span>脚本参数</span>
+                  <button
+                    type="button"
+                    class="compute-editor__help-dot"
+                    title="调用方传入的参数，脚本内按 argv[0]、argv[1] 顺序读取。"
+                    aria-label="脚本参数说明"
+                  >
+                    ?
+                  </button>
+                </h3>
               </div>
               <button
                 type="button"
@@ -378,6 +387,96 @@
             </div>
           </template>
 
+          <template v-else-if="activePanel === 'variables'">
+            <div class="compute-editor__panel-head">
+              <div>
+                <h3>
+                  <span>数据点变量</span>
+                  <button
+                    type="button"
+                    class="compute-editor__help-dot"
+                    title="插入到脚本中的数据点变量，脚本内可直接按变量名读取。"
+                    aria-label="数据点变量说明"
+                  >
+                    ?
+                  </button>
+                </h3>
+              </div>
+              <button
+                type="button"
+                class="compute-editor__tool-btn"
+                title="插入数据点变量"
+                aria-label="插入数据点变量"
+                @click="openDatapointPicker('variable')"
+              >
+                <IconTablerDatabaseImport class="compute-editor__action-icon" />
+              </button>
+              <button
+                v-if="unusedDatapointVariableCount"
+                type="button"
+                class="compute-editor__tool-btn"
+                title="清理未引用变量"
+                aria-label="清理未引用变量"
+                @click="removeUnusedDatapointVariables"
+              >
+                <IconTablerTrash class="compute-editor__action-icon" />
+              </button>
+            </div>
+            <div
+              v-if="!activeDraft.datapointVariableRows.length"
+              class="compute-editor__empty compute-editor__empty-action"
+            >
+              <strong>还没有数据点变量</strong>
+              <span>从数据点列表选择后，会在这里管理变量名、路径和类型。</span>
+              <div>
+                <button
+                  type="button"
+                  class="compute-editor__compact-primary"
+                  @click="openDatapointPicker('variable')"
+                >
+                  <IconTablerDatabaseImport class="compute-editor__action-icon" />
+                  <span>插入数据点变量</span>
+                </button>
+              </div>
+            </div>
+            <div v-else class="compute-editor__variable-list">
+              <div
+                v-for="(row, index) in activeDraft.datapointVariableRows"
+                :key="row.uid"
+                class="compute-editor__variable-row"
+                :class="{ 'is-unused': !isDatapointVariableReferenced(row.alias) }"
+              >
+                <button
+                  type="button"
+                  class="compute-editor__variable-alias"
+                  :title="`插入变量：${row.alias}`"
+                  @click="insertVariableAlias(row.alias)"
+                >
+                  {{ row.alias }}
+                </button>
+                <span class="compute-editor__variable-path" :title="row.path">
+                  {{ row.path }}
+                </span>
+                <em>{{ row.dataType || "-" }}</em>
+                <span
+                  class="compute-editor__variable-state"
+                  :class="{ 'is-unused': !isDatapointVariableReferenced(row.alias) }"
+                >
+                  {{ isDatapointVariableReferenced(row.alias) ? "已引用" : "未引用" }}
+                </span>
+                <button
+                  type="button"
+                  class="compute-editor__row-icon"
+                  title="删除变量"
+                  aria-label="删除变量"
+                  @click="removeDatapointVariable(index)"
+                >
+                  <IconTablerTrash class="compute-editor__action-icon" />
+                </button>
+              </div>
+            </div>
+          </template>
+
           <template v-else-if="activePanel === 'trigger'">
             <div class="compute-editor__trigger-layout">
               <aside class="compute-editor__trigger-rail">
@@ -396,8 +495,17 @@
               <section class="compute-editor__trigger-config">
                 <div class="compute-editor__panel-head">
                   <div>
-                    <h3>{{ triggerText }}</h3>
-                    <p>{{ triggerSummary }}</p>
+                    <h3>
+                      <span>{{ triggerText }}</span>
+                      <button
+                        type="button"
+                        class="compute-editor__help-dot"
+                        :title="triggerSummary"
+                        aria-label="触发说明"
+                      >
+                        ?
+                      </button>
+                    </h3>
                   </div>
                 </div>
                 <div
@@ -447,8 +555,17 @@
           <template v-else-if="activePanel === 'dependencies'">
             <div class="compute-editor__panel-head">
               <div>
-                <h3>依赖库</h3>
-                <p>当前语言：{{ langText(activeDraft.lang) }}，已选 {{ dependencyCount }} 个。</p>
+                <h3>
+                  <span>依赖库</span>
+                  <button
+                    type="button"
+                    class="compute-editor__help-dot"
+                    :title="`当前语言：${langText(activeDraft.lang)}，已选 ${dependencyCount} 个。`"
+                    aria-label="依赖库说明"
+                  >
+                    ?
+                  </button>
+                </h3>
               </div>
               <button
                 type="button"
@@ -498,40 +615,84 @@
           </template>
 
           <template v-else-if="activePanel === 'debug'">
-            <div class="compute-editor__panel-head">
+            <div class="compute-editor__panel-head compute-editor__debug-panel-head">
               <div>
-                <h3>调试</h3>
-                <p>{{ activeDraft.dirty ? "保存后才能调试。" : "试运行不会写入输出数据点，真实执行会产生副作用。" }}</p>
+                <h3>
+                  <span>调试</span>
+                  <button
+                    type="button"
+                    class="compute-editor__help-dot"
+                    :title="activeDraft.dirty ? '保存后才能试运行。' : '试运行只检查脚本返回值，不会保存结果或写入数据点。'"
+                    aria-label="调试说明"
+                  >
+                    ?
+                  </button>
+                </h3>
               </div>
               <div class="compute-editor__debug-actions">
-                <button
-                  type="button"
-                  class="compute-editor__run-button"
-                  :disabled="debugRunning || activeDraft.dirty"
-                  @click="executeDebug(true)"
+                <span
+                  class="compute-editor__tooltip-wrap"
+                  :title="dryRunTooltip"
                 >
-                  <IconTablerPlayerPlay class="compute-editor__action-icon" />
-                  试运行
-                </button>
-                <button
-                  type="button"
-                  class="compute-editor__run-button is-danger"
-                  :disabled="debugRunning || activeDraft.dirty"
-                  @click="executeDebug(false)"
-                >
-                  真实执行
-                </button>
+                  <button
+                    type="button"
+                    class="compute-editor__run-button compute-editor__debug-run-button"
+                    :disabled="debugRunning || activeDraft.dirty"
+                    @click="executeDebug"
+                  >
+                    <IconTablerPlayerPlay class="compute-editor__action-icon" />
+                    试运行
+                  </button>
+                </span>
               </div>
             </div>
             <div class="compute-editor__debug-layout">
               <div class="compute-editor__debug-inputs">
                 <label class="compute-editor__debug-input">
-                  <span>argv JSON</span>
-                  <textarea v-model="debugArgvText" spellcheck="false" />
+                  <div class="compute-editor__debug-input-head">
+                    <span>调用参数 JSON</span>
+                    <button
+                      type="button"
+                      title="按参数定义重新生成"
+                      @click="resetDebugArgvFromDefinition"
+                    >
+                      按定义重置
+                    </button>
+                  </div>
+                  <textarea
+                    v-model="debugArgvText"
+                    spellcheck="false"
+                  />
+                  <p
+                    v-if="debugArgvHint"
+                    class="compute-editor__debug-hint"
+                    :class="{ 'is-warning': debugArgvHintTone === 'warning' }"
+                  >
+                    {{ debugArgvHint }}
+                  </p>
                 </label>
                 <label class="compute-editor__debug-input">
-                  <span>数据点变量模拟 JSON</span>
-                  <textarea v-model="debugDatapointText" spellcheck="false" />
+                  <div class="compute-editor__debug-input-head">
+                    <span>变量模拟值 JSON</span>
+                    <button
+                      type="button"
+                      title="按数据点变量重新生成"
+                      @click="resetDebugDatapointsFromDefinition"
+                    >
+                      按定义重置
+                    </button>
+                  </div>
+                  <textarea
+                    v-model="debugDatapointText"
+                    spellcheck="false"
+                  />
+                  <p
+                    v-if="debugDatapointHint"
+                    class="compute-editor__debug-hint"
+                    :class="{ 'is-warning': debugDatapointHintTone === 'warning' }"
+                  >
+                    {{ debugDatapointHint }}
+                  </p>
                 </label>
               </div>
               <section class="compute-editor__debug-output">
@@ -557,8 +718,17 @@
           <template v-else-if="activePanel === 'problems'">
             <div class="compute-editor__panel-head">
               <div>
-                <h3>问题</h3>
-                <p>{{ syntaxStatusText }}</p>
+                <h3>
+                  <span>问题</span>
+                  <button
+                    type="button"
+                    class="compute-editor__help-dot"
+                    :title="syntaxStatusText"
+                    aria-label="问题说明"
+                  >
+                    ?
+                  </button>
+                </h3>
               </div>
               <button
                 type="button"
@@ -710,7 +880,7 @@
                     @click.stop="confirmSelectedDatapoint(point)"
                     @keydown.enter.stop.prevent="confirmSelectedDatapoint(point)"
                   >
-                    {{ datapointPickerIntent === "trigger" ? "选择" : "绑定" }}
+                    {{ datapointPickerIntent === "trigger" ? "选择" : "插入" }}
                   </span>
                 </td>
               </tr>
@@ -762,7 +932,7 @@
               @click="confirmSelectedDatapoint()"
               @mousedown.prevent="confirmSelectedDatapoint()"
             >
-              {{ datapointPickerIntent === "trigger" ? "选择" : "绑定并插入" }}
+              {{ datapointPickerIntent === "trigger" ? "选择" : "插入到光标" }}
             </button>
           </div>
         </div>
@@ -809,7 +979,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage } from "element-plus";
 import IconTablerAlertTriangle from "~icons/tabler/alert-triangle";
 import IconTablerChevronUp from "~icons/tabler/chevron-up";
 import IconTablerCircleCheck from "~icons/tabler/circle-check";
@@ -841,7 +1011,6 @@ import type {
 import {
   checkComputeSyntax,
   debugComputeUnit,
-  runComputeUnit,
 } from "@/api/compute.api";
 import { getDatapoints } from "@/api/datapoint.api";
 import { getApiErrorMessage } from "@/utils/request";
@@ -855,6 +1024,12 @@ type MonacoEditorExpose = InstanceType<typeof MonacoEditor> & {
   insertText?: (text: string) => void;
   revealPosition?: (line: number, column?: number) => void;
   setDiagnostics?: (diagnostics: ComputeSyntaxDiagnostic[]) => void;
+};
+
+type EditorCursorInfo = {
+  line: number;
+  column: number;
+  spaces: number;
 };
 
 const props = withDefaults(
@@ -926,9 +1101,15 @@ let syntaxCheckSeq = 0;
 const templateDialogVisible = ref(false);
 const activeTemplateId = ref("argv");
 const activeDebugResultTab = ref("output");
+const cursorInfo = ref<EditorCursorInfo>({
+  line: 1,
+  column: 1,
+  spaces: 2,
+});
 
 const panelTabs = [
   { id: "inputs", label: "参数", icon: IconTablerPlugConnected },
+  { id: "variables", label: "变量", icon: IconTablerDatabaseImport },
   { id: "trigger", label: "触发", icon: IconTablerPlayerPlay },
   { id: "dependencies", label: "依赖", icon: IconTablerGitFork },
   { id: "debug", label: "调试", icon: IconTablerTerminal2 },
@@ -938,7 +1119,6 @@ const panelTabs = [
 const debugResultTabs = [
   { id: "output", label: "返回值" },
   { id: "logs", label: "日志" },
-  { id: "sideEffects", label: "副作用" },
   { id: "error", label: "错误" },
 ];
 
@@ -983,7 +1163,7 @@ const javascriptTemplates: CodeTemplate[] = [
   {
     id: "datapoint",
     name: "读取数据点变量",
-    description: "读取已绑定的数据点变量和 dp 命名空间。",
+    description: "读取已插入的数据点变量和 dp 命名空间。",
     code: "const value = dp.tag1;\nreturn value;\n",
   },
   {
@@ -1022,7 +1202,7 @@ const pythonTemplates: CodeTemplate[] = [
   {
     id: "datapoint",
     name: "读取数据点变量",
-    description: "读取已绑定的数据点变量和 dp 命名空间。",
+    description: "读取已插入的数据点变量和 dp 命名空间。",
     code: "def main(argv, dp, ctx):\n    value = dp.get(\"tag1\")\n    return value\n",
   },
   {
@@ -1082,6 +1262,12 @@ const parameterCount = computed(() => props.activeDraft?.parameterRows.length ||
 const datapointVariableCount = computed(
   () => props.activeDraft?.datapointVariableRows.length || 0,
 );
+const unusedDatapointVariableCount = computed(
+  () =>
+    props.activeDraft?.datapointVariableRows.filter(
+      (row) => !isDatapointVariableReferenced(row.alias),
+    ).length || 0,
+);
 const dependencyCount = computed(() => props.activeDraft?.dependencies.length || 0);
 const triggerText = computed(() => {
   const triggerType = props.activeDraft?.triggerType || "manual";
@@ -1113,6 +1299,22 @@ const debugStateText = computed(() => {
   return "未运行";
 });
 
+const dryRunTooltip = computed(() => {
+  if (props.activeDraft?.dirty) return "请先保存后再试运行";
+  if (debugRunning.value) return "正在试运行";
+  return "试运行";
+});
+
+const panelSummaryItems = computed(() =>
+  panelTabs
+    .filter((tab) => tab.id !== "problems")
+    .map((tab) => ({
+      id: tab.id,
+      label: tab.label,
+      value: panelSummaryValue(tab.id),
+    })),
+);
+
 const debugOutputText = computed(() =>
   formatDebugValue(debugResult.value?.output),
 );
@@ -1121,10 +1323,6 @@ const debugLogsText = computed(() => {
   const logs = debugResult.value?.logs || [];
   return logs.length ? logs.join("\n") : "-";
 });
-
-const debugSideEffectsText = computed(() =>
-  formatDebugValue(debugResult.value?.sideEffects || []),
-);
 
 const debugErrorText = computed(
   () =>
@@ -1136,9 +1334,44 @@ const debugErrorText = computed(
 
 const activeDebugResultText = computed(() => {
   if (activeDebugResultTab.value === "logs") return debugLogsText.value;
-  if (activeDebugResultTab.value === "sideEffects") return debugSideEffectsText.value;
   if (activeDebugResultTab.value === "error") return debugErrorText.value || "-";
   return debugOutputText.value;
+});
+
+const debugArgvParsed = computed(() => parseJsonForHint(debugArgvText.value, []));
+const debugDatapointParsed = computed(() =>
+  parseJsonForHint(debugDatapointText.value, {}),
+);
+
+const debugArgvHintTone = computed(() =>
+  debugArgvHint.value.includes("不一致") ? "warning" : "muted",
+);
+const debugDatapointHintTone = computed(() =>
+  debugDatapointHint.value.includes("不一致") ? "warning" : "muted",
+);
+
+const debugArgvHint = computed(() => {
+  const parsed = debugArgvParsed.value;
+  const expected = props.activeDraft?.parameterRows.length || 0;
+  if (!parsed.valid) return "JSON 格式无效，试运行前需要修正。";
+  if (!Array.isArray(parsed.value)) return "调用参数 JSON 必须是数组。";
+  const actual = parsed.value.length;
+  if (actual === expected) return `本次试运行传入 ${actual} 个参数。`;
+  return `本次试运行参数数量和定义不一致：定义 ${expected} 个，实际 ${actual} 个。`;
+});
+
+const debugDatapointHint = computed(() => {
+  const parsed = debugDatapointParsed.value;
+  const expectedAliases = (props.activeDraft?.datapointVariableRows || [])
+    .map((row) => row.alias.trim())
+    .filter(Boolean);
+  if (!parsed.valid) return "JSON 格式无效，试运行前需要修正。";
+  if (!isPlainRecord(parsed.value)) return "变量模拟值 JSON 必须是对象。";
+  const keys = Object.keys(parsed.value);
+  const missingCount = expectedAliases.filter((alias) => !(alias in parsed.value)).length;
+  const extraCount = keys.filter((key) => !expectedAliases.includes(key)).length;
+  if (!missingCount && !extraCount) return `本次试运行模拟 ${keys.length} 个变量。`;
+  return `本次试运行变量和定义不一致：缺少 ${missingCount} 个，多出 ${extraCount} 个。`;
 });
 
 const syntaxStatusTone = computed(() => {
@@ -1198,8 +1431,8 @@ watch(
     syntaxDiagnostics.value = [];
     syntaxErrorText.value = "";
     monacoEditorRef.value?.setDiagnostics?.([]);
-    debugArgvText.value = buildDefaultDebugArgv();
-    debugDatapointText.value = buildDefaultDebugDatapoints();
+    resetDebugArgvFromDefinition(false);
+    resetDebugDatapointsFromDefinition(false);
     scheduleSyntaxCheck();
   },
 );
@@ -1216,26 +1449,6 @@ watch(
     syntaxStatus.value = "dirty";
     scheduleSyntaxCheck();
   },
-);
-
-watch(
-  () => props.activeDraft?.parameterRows,
-  () => {
-    if (!debugResult.value && !debugError.value) {
-      debugArgvText.value = buildDefaultDebugArgv();
-    }
-  },
-  { deep: true },
-);
-
-watch(
-  () => props.activeDraft?.datapointVariableRows,
-  () => {
-    if (!debugResult.value && !debugError.value) {
-      debugDatapointText.value = buildDefaultDebugDatapoints();
-    }
-  },
-  { deep: true },
 );
 
 function markDirty() {
@@ -1327,6 +1540,31 @@ function togglePanelCollapsed() {
   }
 }
 
+function openPanel(panelId: string) {
+  activePanel.value = panelId;
+  panelCollapsed.value = false;
+  if (panelHeight.value < panelMinHeight) {
+    panelHeight.value = panelDefaultHeight;
+  }
+}
+
+function updateCursorInfo(payload: EditorCursorInfo) {
+  cursorInfo.value = {
+    line: Math.max(1, Number(payload.line) || 1),
+    column: Math.max(1, Number(payload.column) || 1),
+    spaces: Math.max(1, Number(payload.spaces) || 2),
+  };
+}
+
+function panelSummaryValue(panelId: string) {
+  if (panelId === "inputs") return String(parameterCount.value);
+  if (panelId === "variables") return String(datapointVariableCount.value);
+  if (panelId === "trigger") return triggerText.value;
+  if (panelId === "dependencies") return String(dependencyCount.value);
+  if (panelId === "debug") return debugStateText.value;
+  return "";
+}
+
 function togglePanelMaxHeight() {
   if (panelCollapsed.value) {
     panelCollapsed.value = false;
@@ -1384,6 +1622,21 @@ function removeDatapointVariable(index: number) {
   if (!props.activeDraft) return;
   props.activeDraft.datapointVariableRows.splice(index, 1);
   markDirty();
+}
+
+function removeUnusedDatapointVariables() {
+  if (!props.activeDraft) return;
+  const nextRows = props.activeDraft.datapointVariableRows.filter((row) =>
+    isDatapointVariableReferenced(row.alias),
+  );
+  if (nextRows.length === props.activeDraft.datapointVariableRows.length) return;
+  props.activeDraft.datapointVariableRows.splice(
+    0,
+    props.activeDraft.datapointVariableRows.length,
+    ...nextRows,
+  );
+  markDirty();
+  ElMessage.success("已清理未引用变量");
 }
 
 function removeInput(index: number) {
@@ -1484,10 +1737,10 @@ function insertVariableAlias(alias: string) {
   markDirty();
 }
 
-async function executeDebug(dryRun: boolean) {
+async function executeDebug() {
   if (!props.activeDraft) return;
   if (props.activeDraft.dirty) {
-    ElMessage.warning("请先保存后再调试");
+    ElMessage.warning("请先保存后再试运行");
     return;
   }
   if (!(await ensureSyntaxClean())) return;
@@ -1496,37 +1749,24 @@ async function executeDebug(dryRun: boolean) {
     input = parseDebugInput();
   } catch (error) {
     debugError.value =
-      error instanceof Error ? error.message : "调试输入 JSON 格式无效";
+      error instanceof Error ? error.message : "试运行输入 JSON 格式无效";
     return;
-  }
-
-  if (!dryRun) {
-    try {
-      await ElMessageBox.confirm(
-        "真实执行可能写入输出数据点或触发外部副作用。",
-        "确认真实执行",
-        {
-          confirmButtonText: "真实执行",
-          cancelButtonText: "取消",
-          type: "warning",
-        },
-      );
-    } catch {
-      return;
-    }
   }
 
   debugRunning.value = true;
   debugResult.value = null;
   debugError.value = "";
   try {
-    debugResult.value = dryRun
-      ? await debugComputeUnit(props.projectId, props.activeDraft.id, input, true)
-      : await runComputeUnit(props.projectId, props.activeDraft.id, input);
+    debugResult.value = await debugComputeUnit(
+      props.projectId,
+      props.activeDraft.id,
+      input,
+      true,
+    );
     activeDebugResultTab.value = debugErrorText.value ? "error" : "output";
-    ElMessage.success(dryRun ? "试运行完成" : "真实执行完成");
+    ElMessage.success("试运行完成");
   } catch (error) {
-    debugError.value = getApiErrorMessage(error, "调试执行失败");
+    debugError.value = getApiErrorMessage(error, "试运行失败");
     activeDebugResultTab.value = "error";
   } finally {
     debugRunning.value = false;
@@ -1537,7 +1777,7 @@ async function quickDryRun() {
   activePanel.value = "debug";
   panelCollapsed.value = false;
   panelHeight.value = Math.max(panelHeight.value, 360);
-  await executeDebug(true);
+  await executeDebug();
 }
 
 function setTriggerType(type: string) {
@@ -1611,6 +1851,34 @@ function parseDebugInput(): Record<string, unknown> {
   return { argv, datapoints };
 }
 
+function parseJsonForHint(text: string, fallback: unknown) {
+  try {
+    return {
+      valid: true,
+      value: JSON.parse(text || JSON.stringify(fallback)),
+    };
+  } catch {
+    return {
+      valid: false,
+      value: fallback,
+    };
+  }
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function resetDebugArgvFromDefinition(showMessage = true) {
+  debugArgvText.value = buildDefaultDebugArgv();
+  if (showMessage) ElMessage.success("已按参数定义重置");
+}
+
+function resetDebugDatapointsFromDefinition(showMessage = true) {
+  debugDatapointText.value = buildDefaultDebugDatapoints();
+  if (showMessage) ElMessage.success("已按数据点变量重置");
+}
+
 function buildDefaultDebugArgv() {
   const argv = (props.activeDraft?.parameterRows || []).map((row) =>
     defaultValueByType(row.type, row.defaultValue),
@@ -1661,13 +1929,35 @@ function uniqueDatapointAlias(name: string) {
 }
 
 function normalizeVariableName(name: string, lang?: ComputeLang | string) {
-  const allowDollar = lang !== "python";
-  const pattern = allowDollar ? /[^0-9A-Za-z_$]/g : /[^0-9A-Za-z_]/g;
-  const firstPattern = allowDollar ? /^[A-Za-z_$]/ : /^[A-Za-z_]/;
-  const cleaned = name.trim().replace(pattern, "_");
-  const withPrefix = firstPattern.test(cleaned) ? cleaned : `tag_${cleaned}`;
+  const cleaned = Array.from(name.trim())
+    .map((char, index) =>
+      isVariableNameChar(char, index === 0, lang) ? char : "_",
+    )
+    .join("")
+    .replace(/_+/g, "_");
+  const withPrefix = isVariableNameStart(cleaned[0] || "", lang)
+    ? cleaned
+    : `tag_${cleaned}`;
   const normalized = withPrefix || "tag";
   return isValidVariableName(normalized, lang) ? normalized : `tag_${normalized}`;
+}
+
+function isVariableNameStart(char: string, lang?: ComputeLang | string) {
+  if (!char) return false;
+  if (char === "_") return true;
+  if (lang !== "python" && char === "$") return true;
+  return /\p{ID_Start}/u.test(char);
+}
+
+function isVariableNameChar(
+  char: string,
+  isStart: boolean,
+  lang?: ComputeLang | string,
+) {
+  if (isStart) return isVariableNameStart(char, lang);
+  if (char === "_") return true;
+  if (lang !== "python" && char === "$") return true;
+  return /\p{ID_Continue}/u.test(char);
 }
 
 const jsReservedVariableNames = new Set([
@@ -1753,23 +2043,39 @@ const pythonReservedVariableNames = new Set([
 ]);
 
 function isValidVariableName(name: string, lang?: ComputeLang | string) {
+  const chars = Array.from(name);
+  const hasValidChars =
+    chars.length > 0 &&
+    chars.every((char, index) => isVariableNameChar(char, index === 0, lang));
   if (lang === "python") {
     return (
-      /^[A-Za-z_][0-9A-Za-z_]*$/.test(name) &&
+      hasValidChars &&
       !name.startsWith("__") &&
       !pythonReservedVariableNames.has(name)
     );
   }
-  return (
-    /^[A-Za-z_$][0-9A-Za-z_$]*$/.test(name) &&
-    !jsReservedVariableNames.has(name)
-  );
+  return hasValidChars && !jsReservedVariableNames.has(name);
 }
 
 function isDatapointAliasUsed(name: string) {
   return Boolean(
     props.activeDraft?.datapointVariableRows.some((row) => row.alias === name),
   );
+}
+
+function isDatapointVariableReferenced(alias: string) {
+  if (!props.activeDraft) return false;
+  const name = alias.trim();
+  if (!name) return false;
+  const pattern = new RegExp(
+    `(?<![\\p{ID_Continue}$])${escapeRegExp(name)}(?![\\p{ID_Continue}$])`,
+    "u",
+  );
+  return pattern.test(props.activeDraft.code || "");
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function insertActiveTemplate() {
@@ -1850,63 +2156,69 @@ const statusTone = (status?: string) => {
 }
 
 .compute-editor__tabs {
-  height: 38px;
+  height: 40px;
+  min-height: 40px;
   display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  padding: 0 8px;
+  align-items: stretch;
+  padding: 0;
   background: var(--dc-surface-raised);
   overflow-x: auto;
 }
 
-.compute-editor__file-tab {
-  height: 32px;
+.compute-editor__file-tabs {
+  min-width: 0;
+  flex: 1;
+}
+
+.compute-editor__file-tabs :deep(.el-tabs__header) {
+  margin: 0;
+  border-bottom-color: var(--dc-border);
+}
+
+.compute-editor__file-tabs :deep(.el-tabs__item) {
+  min-width: 106px;
   max-width: 220px;
+  padding-right: 34px;
+  position: relative;
+  border-radius: 0;
+}
+
+.compute-editor__file-tabs :deep(.el-tabs__nav) {
+  border-radius: 0;
+}
+
+.compute-editor__file-tabs :deep(.el-tabs__item .is-icon-close) {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  width: 14px;
+  height: 14px;
+  margin-left: 0;
+  transform: translateY(-50%);
+}
+
+.compute-editor__file-tabs :deep(.el-tabs__content) {
+  display: none;
+}
+
+.compute-editor__tab-label {
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 0 6px 0 10px;
-  border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: var(--dc-radius-sm) var(--dc-radius-sm) 0 0;
-  background: transparent;
-  color: var(--dc-text-secondary);
-  font-size: 13px;
-  font-weight: 700;
+  overflow: hidden;
 }
 
-.compute-editor__file-tab.is-active {
-  border-color: var(--dc-border);
-  background: var(--dc-surface);
-  color: var(--dc-primary);
-}
-
-.compute-editor__file-tab span {
+.compute-editor__tab-label span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.compute-editor__file-tab em {
+.compute-editor__tab-label em {
   color: var(--dc-warning);
   font-style: normal;
-}
-
-.compute-editor__close {
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: var(--dc-radius-sm);
-  background: transparent;
-  color: inherit;
-}
-
-.compute-editor__close:hover {
-  background: var(--dc-surface-muted);
 }
 
 .compute-editor__toolbar {
@@ -1940,6 +2252,21 @@ const statusTone = (status?: string) => {
   color: var(--dc-primary);
   font-size: 12px;
   font-weight: 800;
+}
+
+.compute-editor__meta em {
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(217, 119, 6, 0.26);
+  border-radius: 999px;
+  background: rgba(217, 119, 6, 0.08);
+  color: #b45309;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  padding: 0 8px;
+  white-space: nowrap;
 }
 
 .compute-editor__name-input {
@@ -2233,6 +2560,11 @@ const statusTone = (status?: string) => {
   color: var(--dc-text-secondary);
 }
 
+.compute-editor__tooltip-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
 .compute-editor__output-path {
   grid-column: 1 / -1;
   min-width: 0;
@@ -2264,13 +2596,14 @@ const statusTone = (status?: string) => {
 .compute-editor__mapping-row input,
 .compute-editor__mapping-row select,
 .compute-editor__alias-field input {
-  height: 28px;
+  height: 26px;
   min-width: 0;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-sm);
   background: var(--dc-surface);
   color: var(--dc-text);
-  padding: 0 10px;
+  padding: 0 8px;
+  font-size: 12px;
 }
 
 .compute-editor__inspector p,
@@ -2333,6 +2666,7 @@ const statusTone = (status?: string) => {
 }
 
 .compute-editor__panel-tablist {
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2366,11 +2700,29 @@ const statusTone = (status?: string) => {
   height: 15px;
 }
 
+.compute-editor__cursor-status {
+  min-width: 0;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+  color: var(--dc-text-muted);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.compute-editor__cursor-status span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .compute-editor__panel {
   min-height: 0;
   flex: 1;
   margin: 0 6px 6px;
-  padding: 8px;
+  padding: 7px 8px;
   overflow: auto;
   box-shadow: none;
 }
@@ -2384,7 +2736,6 @@ const statusTone = (status?: string) => {
 .compute-editor__panel-toggle {
   width: 28px;
   height: 28px;
-  margin-left: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2404,11 +2755,22 @@ const statusTone = (status?: string) => {
   font-size: 12px;
 }
 
-.compute-editor__panel-summary span {
-  padding: 2px 7px;
+.compute-editor__panel-summary button {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
   border-radius: 999px;
   background: var(--dc-surface);
+  color: var(--dc-text-muted);
+  font-size: 12px;
+  font-weight: 700;
   white-space: nowrap;
+}
+
+.compute-editor__panel-summary button:hover {
+  border-color: rgba(29, 78, 216, 0.24);
+  color: var(--dc-primary);
+  background: var(--dc-primary-soft);
 }
 
 .compute-editor__panel-toggle:hover {
@@ -2437,17 +2799,46 @@ const statusTone = (status?: string) => {
 
 .compute-editor__panel-head {
   justify-content: space-between;
-  margin-bottom: 8px;
+  min-height: 28px;
+  margin-bottom: 6px;
 }
 
 .compute-editor__panel-head > div {
   min-width: 0;
 }
 
-.compute-editor__panel-head p {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.compute-editor__panel-head h3 {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--dc-text);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.compute-editor__help-dot {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--dc-border);
+  border-radius: 999px;
+  background: var(--dc-surface);
+  color: var(--dc-text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: help;
+}
+
+.compute-editor__help-dot:hover {
+  border-color: rgba(29, 78, 216, 0.28);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
 }
 
 .compute-editor__panel-actions {
@@ -2457,7 +2848,7 @@ const statusTone = (status?: string) => {
 }
 
 .compute-editor__mapping-row button {
-  height: 26px;
+  height: 24px;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-sm);
   background: var(--dc-surface);
@@ -2465,27 +2856,27 @@ const statusTone = (status?: string) => {
 }
 
 .compute-editor__empty {
-  padding: 10px;
+  padding: 9px 10px;
   border-radius: var(--dc-radius-sm);
   background: var(--dc-surface-muted);
   color: var(--dc-text-muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .compute-editor__empty-action {
   display: grid;
-  gap: 6px;
-  padding: 12px;
+  gap: 5px;
+  padding: 10px;
 }
 
 .compute-editor__empty-action strong {
   color: var(--dc-text);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .compute-editor__empty-action span {
   color: var(--dc-text-muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .compute-editor__empty-action div {
@@ -2494,11 +2885,11 @@ const statusTone = (status?: string) => {
 }
 
 .compute-editor__empty-action button {
-  height: 28px;
+  height: 26px;
 }
 
 .compute-editor__mapping-row {
-  margin-top: 8px;
+  margin-top: 5px;
 }
 
 .compute-editor__table-wrap {
@@ -2508,21 +2899,21 @@ const statusTone = (status?: string) => {
 
 .compute-editor__mapping-head {
   display: grid;
-  grid-template-columns: 86px minmax(120px, 0.8fr) 108px 44px minmax(110px, 0.8fr) minmax(160px, 1fr) 32px;
-  gap: 6px;
-  min-width: 760px;
-  margin-top: 6px;
-  padding: 0 4px 4px;
+  grid-template-columns: 72px minmax(110px, 0.8fr) 96px 38px minmax(100px, 0.8fr) minmax(140px, 1fr) 28px;
+  gap: 5px;
+  min-width: 680px;
+  margin-top: 3px;
+  padding: 0 4px 3px;
   color: var(--dc-text-muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
 .compute-editor__mapping-row {
   display: grid;
-  grid-template-columns: 86px minmax(120px, 0.8fr) 108px 44px minmax(110px, 0.8fr) minmax(160px, 1fr) 32px;
-  gap: 6px;
-  min-width: 760px;
+  grid-template-columns: 72px minmax(110px, 0.8fr) 96px 38px minmax(100px, 0.8fr) minmax(140px, 1fr) 28px;
+  gap: 5px;
+  min-width: 680px;
   align-items: center;
 }
 
@@ -2532,27 +2923,27 @@ const statusTone = (status?: string) => {
 }
 
 .compute-editor__row-index {
-  height: 28px;
+  height: 26px;
   display: inline-flex;
   align-items: center;
-  padding: 0 8px;
+  padding: 0 7px;
   border-radius: var(--dc-radius-sm);
   background: var(--dc-surface-muted);
   color: var(--dc-text-muted);
   font-family: Consolas, "Courier New", monospace;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
 }
 
 .compute-editor__row-icon {
-  width: 26px;
-  min-width: 26px;
+  width: 24px;
+  min-width: 24px;
   padding: 0;
 }
 
 .compute-editor__switch,
 .compute-editor__checkbox {
-  height: 28px;
+  height: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2560,7 +2951,7 @@ const statusTone = (status?: string) => {
 
 .compute-editor__switch {
   position: relative;
-  width: 34px;
+  width: 30px;
   cursor: pointer;
 }
 
@@ -2572,8 +2963,8 @@ const statusTone = (status?: string) => {
 
 .compute-editor__switch span {
   position: relative;
-  width: 34px;
-  height: 18px;
+  width: 30px;
+  height: 16px;
   border-radius: 999px;
   background: var(--dc-border);
   transition: background 0.16s ease;
@@ -2583,8 +2974,8 @@ const statusTone = (status?: string) => {
   position: absolute;
   top: 3px;
   left: 3px;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 999px;
   background: var(--dc-surface-raised);
   content: "";
@@ -2596,7 +2987,7 @@ const statusTone = (status?: string) => {
 }
 
 .compute-editor__switch.is-on span::after {
-  transform: translateX(16px);
+  transform: translateX(14px);
 }
 
 .compute-editor__segmented {
@@ -2732,6 +3123,83 @@ const statusTone = (status?: string) => {
   color: var(--dc-text-muted);
 }
 
+.compute-editor__variable-list {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.compute-editor__variable-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(140px, 0.8fr) minmax(180px, 1.2fr) 72px 54px 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface);
+}
+
+.compute-editor__variable-row.is-unused {
+  border-color: var(--dc-border);
+  background: var(--dc-surface-muted);
+}
+
+.compute-editor__variable-alias {
+  min-width: 0;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px solid rgba(29, 78, 216, 0.22);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compute-editor__variable-path {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dc-text-secondary);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compute-editor__variable-row em {
+  color: var(--dc-text-muted);
+  font-size: 12px;
+  font-style: normal;
+  text-align: right;
+}
+
+.compute-editor__variable-state {
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.compute-editor__variable-state.is-unused {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--dc-warning);
+}
+
 .compute-editor__dependency-chips {
   display: flex;
   flex-wrap: wrap;
@@ -2827,8 +3295,22 @@ const statusTone = (status?: string) => {
   min-height: 0;
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(340px, 0.92fr) minmax(320px, 1fr);
-  gap: 10px;
+  grid-template-columns: minmax(360px, 0.92fr) minmax(360px, 1fr);
+  align-items: stretch;
+  gap: 12px;
+}
+
+.compute-editor__debug-panel-head {
+  margin-bottom: 8px;
+}
+
+.compute-editor__debug-run-button {
+  height: 28px;
+  min-width: 82px;
+  padding: 0 12px;
+  border-color: transparent;
+  border-radius: var(--dc-radius-sm);
+  box-shadow: none;
 }
 
 .compute-editor__debug-inputs {
@@ -2842,35 +3324,91 @@ const statusTone = (status?: string) => {
 .compute-editor__debug-input {
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 6px;
-}
-
-.compute-editor__debug-input span {
-  color: var(--dc-text-muted);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.compute-editor__debug-input textarea {
-  min-height: 122px;
-  height: 100%;
-  resize: none;
+  grid-template-rows: 34px minmax(0, 1fr) 22px;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-sm);
   background: var(--dc-surface);
+}
+
+.compute-editor__debug-input-head {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px 0 10px;
+  border-bottom: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
+}
+
+.compute-editor__debug-input-head span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compute-editor__debug-input-head button {
+  height: 24px;
+  flex: 0 0 auto;
+  padding: 0 8px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface);
+  color: var(--dc-text-secondary);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.compute-editor__debug-input-head button:hover {
+  border-color: rgba(29, 78, 216, 0.28);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+}
+
+.compute-editor__debug-input textarea {
+  min-height: 126px;
+  height: 100%;
+  resize: none;
+  border: 0;
+  border-radius: 0;
+  background: var(--dc-surface);
   color: var(--dc-text);
-  padding: 10px;
+  padding: 12px 14px;
   font-family: Consolas, "Courier New", monospace;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.55;
+  outline: none;
+}
+
+.compute-editor__debug-hint {
+  min-height: 22px;
+  margin: 0;
+  overflow: hidden;
+  padding: 0 10px;
+  border-top: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-muted);
+  font-size: 11px;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compute-editor__debug-hint.is-warning {
+  color: var(--dc-warning);
 }
 
 .compute-editor__debug-output {
   min-width: 0;
+  min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: 34px minmax(0, 1fr);
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-sm);
   background: var(--dc-surface);
@@ -2880,15 +3418,15 @@ const statusTone = (status?: string) => {
 .compute-editor__debug-result-tabs {
   display: flex;
   align-items: center;
-  gap: 3px;
-  padding: 4px;
+  gap: 2px;
+  padding: 4px 6px;
   border-bottom: 1px solid var(--dc-border);
   background: var(--dc-surface-raised);
 }
 
 .compute-editor__debug-result-tabs button {
-  height: 24px;
-  padding: 0 8px;
+  height: 26px;
+  padding: 0 10px;
   border: 1px solid transparent;
   border-radius: var(--dc-radius-sm);
   background: transparent;
@@ -2901,6 +3439,7 @@ const statusTone = (status?: string) => {
   border-color: var(--dc-border);
   background: var(--dc-surface);
   color: var(--dc-primary);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .compute-editor__debug-result-tabs button.has-error {
@@ -2912,11 +3451,11 @@ const statusTone = (status?: string) => {
   min-width: 0;
   margin: 0;
   overflow: auto;
-  padding: 10px;
+  padding: 14px 16px;
   color: var(--dc-text);
   font-family: Consolas, "Courier New", monospace;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -3200,53 +3739,6 @@ const statusTone = (status?: string) => {
   border-color: var(--dc-primary);
   background: var(--dc-primary);
   color: var(--dc-surface-raised);
-}
-
-.compute-editor__variable-strip {
-  min-height: 34px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-top: 1px solid var(--dc-border);
-  background: var(--dc-surface);
-  overflow-x: auto;
-}
-
-.compute-editor__variable-strip > span {
-  flex: 0 0 auto;
-  color: var(--dc-text-muted);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.compute-editor__variable-strip button {
-  height: 24px;
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0 7px;
-  border: 1px solid rgba(29, 78, 216, 0.24);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-primary-soft);
-  color: var(--dc-primary);
-  font-family: Consolas, "Courier New", monospace;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.compute-editor__variable-strip em {
-  color: var(--dc-text-muted);
-  font-family: inherit;
-  font-size: 11px;
-  font-style: normal;
-}
-
-.compute-editor__variable-strip i {
-  color: var(--dc-danger);
-  cursor: pointer;
-  font-style: normal;
 }
 
 .compute-editor__template-dialog {

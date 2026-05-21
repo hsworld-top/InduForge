@@ -20,6 +20,12 @@ type EditorDiagnostic = {
   source?: string;
 };
 
+type CursorChangePayload = {
+  line: number;
+  column: number;
+  spaces: number;
+};
+
 // 配置 Monaco Editor 的 worker
 // 使用内联 worker 避免 worker 文件加载问题
 if (typeof window !== "undefined" && !window.MonacoEnvironment) {
@@ -72,11 +78,29 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["update:modelValue", "change"]);
+const emit = defineEmits(["update:modelValue", "change", "cursor-change", "save"]);
 
 const editorContainerRef = ref(null);
 let editorInstance = null;
 let isInternalUpdate = false;
+
+const emitCursorChange = () => {
+  if (!editorInstance) return;
+  const position = editorInstance.getPosition();
+  if (!position) return;
+  const tabSize = Number(
+    editorInstance
+      .getModel()
+      ?.getOptions()
+      ?.tabSize ?? 2,
+  );
+  const payload: CursorChangePayload = {
+    line: position.lineNumber,
+    column: position.column,
+    spaces: tabSize,
+  };
+  emit("cursor-change", payload);
+};
 
 // 获取编辑器选项
 const getEditorOptions = () => {
@@ -87,6 +111,16 @@ const getEditorOptions = () => {
     readOnly: props.readOnly,
     automaticLayout: true,
     fontSize: 14,
+    fixedOverflowWidgets: true,
+    hover: {
+      above: false,
+      delay: 180,
+      sticky: true,
+      hidingDelay: 80,
+    },
+    lightbulb: {
+      enabled: monaco.editor.ShowLightbulbIconMode.Off,
+    },
     minimap: {
       enabled: true,
     },
@@ -122,6 +156,14 @@ const initEditor = () => {
     options.readOnly = false;
     editorInstance = monaco.editor.create(editorContainerRef.value, options);
 
+    // 在编辑器聚焦时接管保存快捷键，避免浏览器触发“保存网页”。
+    editorInstance.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
+      () => {
+        emit("save");
+      },
+    );
+
     console.log("Monaco Editor 创建成功", {
       container: editorContainerRef.value,
       containerHeight: editorContainerRef.value.offsetHeight,
@@ -143,12 +185,19 @@ const initEditor = () => {
           isInternalUpdate = false;
         }, 0);
       }
+      emitCursorChange();
+    });
+
+    editorInstance.onDidChangeCursorPosition(() => {
+      emitCursorChange();
     });
 
     // 设置初始值
     if (props.modelValue) {
       editorInstance.setValue(props.modelValue);
     }
+
+    emitCursorChange();
 
     // 确保编辑器可聚焦
     setTimeout(() => {
@@ -277,6 +326,7 @@ watch(
       if (currentValue !== newValue) {
         isInternalUpdate = true;
         editorInstance.setValue(newValue || "");
+        emitCursorChange();
         // 重置标志
         setTimeout(() => {
           isInternalUpdate = false;
@@ -422,5 +472,17 @@ onBeforeUnmount(() => {
 
 .monaco-editor-container :deep(.monaco-editor .margin) {
   background-color: var(--vscode-editor-background, #ffffff);
+}
+
+.monaco-editor-container :deep(.monaco-hover .hover-row.status-bar) {
+  display: none;
+}
+
+.monaco-editor-container :deep(.monaco-hover .hover-row:has(.markdown-hover)) {
+  display: none;
+}
+
+.monaco-editor-container :deep(.monaco-hover) {
+  max-width: min(520px, calc(100vw - 48px));
 }
 </style>

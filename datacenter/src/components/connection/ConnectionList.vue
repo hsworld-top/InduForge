@@ -691,7 +691,7 @@ const loadMqttSubscriptions = async (connectionId) => {
       props.projectId,
       connectionId,
     );
-    state.mqttSubscriptions = response.data || [];
+    state.mqttSubscriptions = response.data?.list || [];
   } catch (error) {
     ElMessage.error(
       t("subscription.loadFailed", {

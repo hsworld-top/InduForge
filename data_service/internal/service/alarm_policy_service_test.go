@@ -23,6 +23,50 @@ func TestEvaluateAlarmPolicyConditions(t *testing.T) {
 	}
 }
 
+func TestEvaluateAlarmPolicyTextCondition(t *testing.T) {
+	policy := AlarmPolicy{
+		Mode: "per_target",
+		Conditions: []AlarmCondition{
+			{ID: "c-text", Type: "string_contains", Name: "文本包含", IsEnabled: true, Severity: "warning", Params: map[string]any{"expected": "error"}},
+		},
+	}
+
+	result, err := evaluateAlarmPolicy(&policy, "device error", nil)
+	if err != nil {
+		t.Fatalf("evaluateAlarmPolicy() error = %v", err)
+	}
+	if !result.Triggered {
+		t.Fatalf("Triggered = false, want true")
+	}
+}
+
+func TestValidateAlarmConditionsRejectsDuplicateThreshold(t *testing.T) {
+	conditions := []AlarmCondition{
+		{ID: "c-h-1", Type: "H", Name: "高限", IsEnabled: true, Severity: "warning", Params: map[string]any{"limit": 80.0}},
+		{ID: "c-h-2", Type: "H", Name: "高限", IsEnabled: true, Severity: "major", Params: map[string]any{"limit": 90.0}},
+	}
+
+	err := validateAlarmConditions(conditions, policyAllowedConditionTypes("per_target", []AlarmTargetRef{
+		{DatapointID: "dp-1", Path: "metrics.temperature", DataType: "number"},
+	}), true)
+	if err == nil {
+		t.Fatal("validateAlarmConditions() error = nil, want duplicate threshold error")
+	}
+}
+
+func TestValidateAlarmConditionsAllowsBooleanCondition(t *testing.T) {
+	conditions := []AlarmCondition{
+		{ID: "c-bool", Type: "bool_equal", Name: "状态判断", IsEnabled: true, Severity: "warning", Params: map[string]any{"expected": true}},
+	}
+
+	err := validateAlarmConditions(conditions, policyAllowedConditionTypes("per_target", []AlarmTargetRef{
+		{DatapointID: "dp-1", Path: "metrics.running", DataType: "boolean"},
+	}), true)
+	if err != nil {
+		t.Fatalf("validateAlarmConditions() error = %v", err)
+	}
+}
+
 func TestBuildAlarmPolicyContract(t *testing.T) {
 	policy := normalizedAlarmPolicyInput{
 		Name: "温度策略",
@@ -42,6 +86,26 @@ func TestBuildAlarmPolicyContract(t *testing.T) {
 	}
 	if contract["effectiveEnabled"] != true {
 		t.Fatalf("effectiveEnabled = %v", contract["effectiveEnabled"])
+	}
+}
+
+func TestPolicyMatchesCoverageTargetOnlyPerTarget(t *testing.T) {
+	policy := AlarmPolicy{
+		Mode: "per_target",
+		Targets: []AlarmTargetRef{
+			{DatapointID: "dp-1", Path: "metrics.temperature", DataType: "number"},
+		},
+	}
+	if !policyMatchesCoverageTarget(policy, "dp-1", "") {
+		t.Fatal("policyMatchesCoverageTarget() = false, want true by datapoint id")
+	}
+	if !policyMatchesCoverageTarget(policy, "", "metrics.temperature") {
+		t.Fatal("policyMatchesCoverageTarget() = false, want true by path")
+	}
+
+	policy.Mode = "derived"
+	if policyMatchesCoverageTarget(policy, "dp-1", "metrics.temperature") {
+		t.Fatal("policyMatchesCoverageTarget() = true, want false for derived mode")
 	}
 }
 

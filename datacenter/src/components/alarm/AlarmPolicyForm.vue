@@ -2,9 +2,39 @@
   <form class="alarm-policy-form" @submit.prevent>
     <section class="alarm-policy-form__section">
       <header>
-        <strong>{{ draft.mode === "derived" ? "输入点" : "目标点" }}</strong>
-        <span>{{ draft.mode === "derived" ? "用于表达式计算" : "同一条件集应用到这些点" }}</span>
+        <div>
+          <strong>{{ draft.mode === "derived" ? "输入点" : "目标点" }}</strong>
+          <button
+            type="button"
+            class="alarm-policy-form__hint"
+            :title="pointSectionTip"
+            :aria-label="draft.mode === 'derived' ? '输入点说明' : '目标点说明'"
+          >
+            ?
+          </button>
+        </div>
+        <span>{{ pointCountText }}</span>
       </header>
+      <div
+        v-if="draft.mode === 'per_target' && coverageSummary.count > 0"
+        class="alarm-policy-form__coverage"
+      >
+        <span>其中 {{ coverageSummary.count }} 个点位已被其他策略引用</span>
+        <button
+          type="button"
+          class="alarm-policy-form__hint"
+          :title="coverageSummary.tip"
+          aria-label="目标点引用说明"
+        >
+          ?
+        </button>
+      </div>
+      <div
+        v-else-if="draft.mode === 'per_target' && coverageLoading"
+        class="alarm-policy-form__coverage is-loading"
+      >
+        正在检查目标点引用
+      </div>
       <AlarmPointPicker
         v-if="draft.mode === 'derived'"
         :project-id="projectId"
@@ -14,38 +44,40 @@
       />
       <div
         v-else-if="draft.targets.length"
-        class="alarm-policy-form__target-list"
+        class="alarm-policy-form__target-chips"
       >
-        <div class="alarm-policy-form__target-labels" aria-hidden="true">
-          <span>点位路径</span>
-          <span>数据类型</span>
-          <span>操作</span>
-        </div>
-        <div
+        <el-tag
           v-for="target in draft.targets"
           :key="target.datapointId"
-          class="alarm-policy-form__target-item"
+          class="alarm-policy-form__target-chip"
+          type="primary"
+          effect="light"
+          closable
+          disable-transitions
+          :title="`${target.name || target.path} · ${target.path} · ${target.dataType || '-'}`"
+          @close="removeTarget(target.datapointId)"
         >
-          <span>
-            <strong>{{ target.name || target.path }}</strong>
-            <code>{{ target.path }}</code>
-          </span>
-          <em>{{ target.dataType || "-" }}</em>
-          <button
-            type="button"
-            @click="removeTarget(target.datapointId)"
+          <strong>{{ target.name || target.path }}</strong>
+          <em
+            v-if="targetCoverageCount(target) > 0"
+            class="alarm-policy-form__target-warning"
+            :title="targetCoverageTip(target)"
           >
-            移除
-          </button>
-        </div>
+            {{ targetCoverageCount(target) }}
+          </em>
+        </el-tag>
       </div>
-      <div v-else class="alarm-policy-form__empty">暂无目标点</div>
+      <div v-else class="alarm-policy-form__empty">
+        暂未选择目标点，请从顶部“数据点变量”选择
+      </div>
     </section>
 
     <section v-if="draft.mode === 'derived'" class="alarm-policy-form__section">
       <header>
         <strong>计算表达式</strong>
-        <span>支持输入点变量与 + - * /</span>
+        <span title="条件集判断的是这个计算表达式的结果">
+          结果用于条件判断
+        </span>
       </header>
       <textarea
         :value="draft.derivedExpression"
@@ -59,6 +91,8 @@
 
     <AlarmConditionMatrix
       :conditions="draft.conditions"
+      :mode="draft.mode"
+      :targets="draft.targets"
       @update="updateField('conditions', $event)"
     />
   </form>
@@ -67,8 +101,10 @@
 <script setup lang="ts">
 import type {
   AlarmInputRef,
+  AlarmPolicyCoverage,
   AlarmTargetRef,
 } from "@/api/schemas/alarm.schema";
+import { computed } from "vue";
 import type { AlarmPolicyDraft } from "@/components/alarm/alarmPolicyModel";
 import AlarmConditionMatrix from "./AlarmConditionMatrix.vue";
 import AlarmPointPicker from "./AlarmPointPicker.vue";
@@ -76,6 +112,8 @@ import AlarmPointPicker from "./AlarmPointPicker.vue";
 const props = defineProps<{
   projectId: string;
   draft: AlarmPolicyDraft;
+  coverages?: Record<string, AlarmPolicyCoverage>;
+  coverageLoading?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -84,6 +122,51 @@ const emit = defineEmits<{
 
 const inputValue = (event: Event) =>
   (event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value;
+
+const pointCountText = computed(() =>
+  props.draft.mode === "derived"
+    ? `${props.draft.inputs.length} 个输入点`
+    : `${props.draft.targets.length} 个点位`,
+);
+
+const pointSectionTip = computed(() =>
+  props.draft.mode === "derived"
+    ? "计算结果报警：这些输入点用于上方计算表达式，条件集判断计算结果。"
+    : "统一模板报警：同一套条件会分别应用到这些目标点。若点位也被其他策略引用，保存后会同时生效。",
+);
+
+const coverageKey = (target: AlarmTargetRef) =>
+  String(target.datapointId || target.path);
+
+const targetCoveragePolicies = (target: AlarmTargetRef) =>
+  props.coverages?.[coverageKey(target)]?.policies || [];
+
+const targetCoverageCount = (target: AlarmTargetRef) =>
+  targetCoveragePolicies(target).length;
+
+const targetCoverageTip = (target: AlarmTargetRef) => {
+  const policies = targetCoveragePolicies(target);
+  if (!policies.length) {
+    return "";
+  }
+  return policies
+    .map((policy) => {
+      const mode =
+        policy.mode === "derived" ? "计算结果报警" : "统一模板报警";
+      const status = policy.effectiveEnabled ? "生效中" : "未生效";
+      return `${target.name || target.path} 已被「${policy.name}」引用（${mode}，${status}），保存后会同时生效`;
+    })
+    .join("\n");
+};
+
+const coverageSummary = computed(() => {
+  const targets = props.draft.mode === "per_target" ? props.draft.targets : [];
+  const covered = targets.filter((target) => targetCoverageCount(target) > 0);
+  return {
+    count: covered.length,
+    tip: covered.map(targetCoverageTip).filter(Boolean).join("\n"),
+  };
+});
 
 const updateField = <K extends keyof AlarmPolicyDraft>(
   field: K,
@@ -130,6 +213,13 @@ const removeTarget = (datapointId: string) => {
   gap: 10px;
 }
 
+.alarm-policy-form__section header > div {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .alarm-policy-form__section strong {
   color: var(--dc-text);
   font-size: 13px;
@@ -138,6 +228,23 @@ const removeTarget = (datapointId: string) => {
 .alarm-policy-form__section header span {
   color: var(--dc-text-muted);
   font-size: 12px;
+}
+
+.alarm-policy-form__hint {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--dc-border);
+  border-radius: 999px;
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-muted);
+  cursor: help;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0;
 }
 
 .alarm-policy-form__grid {
@@ -215,69 +322,74 @@ const removeTarget = (datapointId: string) => {
   font-size: 12px;
 }
 
-.alarm-policy-form__target-list {
-  display: grid;
-  gap: 6px;
+.alarm-policy-form__target-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.alarm-policy-form__target-labels {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+.alarm-policy-form__coverage {
+  min-height: 28px;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  color: var(--dc-text-muted);
-  font-size: 11px;
+  justify-self: start;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: var(--dc-radius-sm);
+  background: rgba(245, 158, 11, 0.08);
+  color: #92400e;
+  font-size: 12px;
   font-weight: 700;
 }
 
-.alarm-policy-form__target-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
+.alarm-policy-form__coverage.is-loading {
+  border-color: var(--dc-border);
   background: var(--dc-surface-muted);
+  color: var(--dc-text-muted);
+  font-weight: 600;
 }
 
-.alarm-policy-form__target-item strong,
-.alarm-policy-form__target-item code {
-  display: block;
+.alarm-policy-form__target-chip :deep(.el-tag__content) {
+  max-width: min(220px, 100%);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.alarm-policy-form__target-item strong {
+.alarm-policy-form__target-chip strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.alarm-policy-form__target-warning {
+  min-width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.16);
+  color: #92400e;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.alarm-policy-form__target-chip.el-tag {
+  --el-tag-bg-color: rgba(64, 158, 255, 0.1);
+  --el-tag-border-color: rgba(64, 158, 255, 0.22);
+  --el-tag-text-color: var(--el-color-primary);
+  height: 30px;
+  border-radius: 4px;
+  padding: 0 8px 0 10px;
   font-size: 13px;
 }
 
-.alarm-policy-form__target-item code {
-  margin-top: 3px;
-  color: var(--dc-text-secondary);
-  font-family: var(--dc-font-mono);
-  font-size: 12px;
-}
-
-.alarm-policy-form__target-item em {
-  color: var(--dc-text-muted);
-  font-size: 12px;
-  font-style: normal;
-}
-
-.alarm-policy-form__target-item button {
-  height: 28px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-raised);
-  color: var(--dc-danger, #b91c1c);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 0 8px;
+.alarm-policy-form__target-chip :deep(.el-tag__close) {
+  margin-left: 7px;
 }
 
 .alarm-policy-form__empty {
@@ -294,12 +406,8 @@ const removeTarget = (datapointId: string) => {
     grid-template-columns: 1fr;
   }
 
-  .alarm-policy-form__target-labels {
-    display: none;
-  }
-
-  .alarm-policy-form__target-item {
-    grid-template-columns: 1fr;
+  .alarm-policy-form__target-chip :deep(.el-tag__content) {
+    max-width: 160px;
   }
 }
 </style>

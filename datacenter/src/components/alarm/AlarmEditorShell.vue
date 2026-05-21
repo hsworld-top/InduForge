@@ -2,25 +2,27 @@
   <section class="alarm-editor-shell">
     <template v-if="fileTabs.length">
       <header class="alarm-editor-shell__file-tabs">
-        <button
-          v-for="tab in fileTabs"
-          :key="tab.id"
-          type="button"
-          class="alarm-editor-shell__file-tab"
-          :class="{ 'is-active': tab.id === activeId, 'is-dirty': tab.dirty }"
-          @click="emit('activateTab', tab.id)"
+        <el-tabs
+          class="alarm-editor-shell__tabs"
+          type="card"
+          :model-value="activeId || ''"
+          @tab-change="(name) => emit('activateTab', String(name))"
+          @tab-remove="(name) => emit('closeTab', String(name))"
         >
-          <span>{{ tab.name }}</span>
-          <em v-if="tab.dirty">*</em>
-          <button
-            type="button"
-            class="alarm-editor-shell__close"
-            aria-label="关闭标签"
-            @click.stop="emit('closeTab', tab.id)"
+          <el-tab-pane
+            v-for="tab in fileTabs"
+            :key="tab.id"
+            :name="tab.id"
+            :closable="true"
           >
-            <IconTablerX />
-          </button>
-        </button>
+            <template #label>
+              <span class="alarm-editor-shell__tab-label">
+                <span>{{ tab.name }}</span>
+                <em v-if="tab.dirty">*</em>
+              </span>
+            </template>
+          </el-tab-pane>
+        </el-tabs>
       </header>
     </template>
 
@@ -48,6 +50,8 @@
       <AlarmPolicyForm
         :project-id="projectId"
         :draft="draft"
+        :coverages="coverages"
+        :coverage-loading="coverageLoading"
         @update="emit('update', $event)"
       />
     </div>
@@ -99,10 +103,10 @@
 <script setup lang="ts">
 import type {
   AlarmPolicyContract,
+  AlarmPolicyCoverage,
   AlarmPolicyTrialPayload,
   AlarmPolicyTrialResult,
 } from "@/api/schemas/alarm.schema";
-import IconTablerX from "~icons/tabler/x";
 import type { AlarmPolicyDraft } from "@/components/alarm/alarmPolicyModel";
 import AlarmContractPanel from "./AlarmContractPanel.vue";
 import AlarmEditorHeader from "./AlarmEditorHeader.vue";
@@ -134,6 +138,8 @@ defineProps<{
   contract: AlarmPolicyContract | null;
   contractLoading: boolean;
   contractError: string;
+  coverages?: Record<string, AlarmPolicyCoverage>;
+  coverageLoading?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -168,63 +174,69 @@ const panelTabs: Array<{ value: AlarmEditorTab; label: string }> = [
 
 .alarm-editor-shell__file-tabs {
   flex: 0 0 auto;
-  height: 38px;
+  height: 40px;
+  min-height: 40px;
   display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  padding: 0 8px;
+  align-items: stretch;
+  padding: 0;
   background: var(--dc-surface-raised);
   overflow-x: auto;
 }
 
-.alarm-editor-shell__file-tab {
-  height: 32px;
+.alarm-editor-shell__tabs {
+  min-width: 0;
+  flex: 1;
+}
+
+.alarm-editor-shell__tabs :deep(.el-tabs__header) {
+  margin: 0;
+  border-bottom-color: var(--dc-border);
+}
+
+.alarm-editor-shell__tabs :deep(.el-tabs__item) {
+  min-width: 106px;
   max-width: 220px;
+  padding-right: 34px;
+  position: relative;
+  border-radius: 0;
+}
+
+.alarm-editor-shell__tabs :deep(.el-tabs__nav) {
+  border-radius: 0;
+}
+
+.alarm-editor-shell__tabs :deep(.el-tabs__item .is-icon-close) {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  width: 14px;
+  height: 14px;
+  margin-left: 0;
+  transform: translateY(-50%);
+}
+
+.alarm-editor-shell__tabs :deep(.el-tabs__content) {
+  display: none;
+}
+
+.alarm-editor-shell__tab-label {
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 0 6px 0 10px;
-  border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: var(--dc-radius-sm) var(--dc-radius-sm) 0 0;
-  background: transparent;
-  color: var(--dc-text-secondary);
-  font-size: 13px;
-  font-weight: 700;
+  overflow: hidden;
 }
 
-.alarm-editor-shell__file-tab.is-active {
-  border-color: var(--dc-border);
-  background: var(--dc-surface);
-  color: var(--dc-primary);
-}
-
-.alarm-editor-shell__file-tab span {
+.alarm-editor-shell__tab-label span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.alarm-editor-shell__file-tab em {
+.alarm-editor-shell__tab-label em {
   color: var(--dc-warning);
   font-style: normal;
-}
-
-.alarm-editor-shell__close {
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: var(--dc-radius-sm);
-  background: transparent;
-  color: inherit;
-}
-
-.alarm-editor-shell__close:hover {
-  background: var(--dc-surface-muted);
 }
 
 .alarm-editor-shell__body {

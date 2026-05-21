@@ -740,7 +740,7 @@ func (s *ComputeService) executeComputeUnit(ctx context.Context, claims *auth.Cl
 		return nil, saveErr
 	}
 
-	if executeErr != nil {
+	if executeErr != nil && !dryRun {
 		if errors.Is(executeErr, enginecompute.ErrTimeout) {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算执行超时", executeErr)
 		}
@@ -750,7 +750,7 @@ func (s *ComputeService) executeComputeUnit(ctx context.Context, claims *auth.Cl
 		_ = s.writeComputeOutputValues(ctx, *unit, executeResult.Output, claims.UserID)
 	}
 
-	return &ComputeRunResult{
+	result := &ComputeRunResult{
 		Status:      status,
 		DurationMS:  int(executeResult.Duration.Milliseconds()),
 		DryRun:      dryRun,
@@ -759,7 +759,11 @@ func (s *ComputeService) executeComputeUnit(ctx context.Context, claims *auth.Cl
 		Logs:        computeRunLogs(executeResult),
 		StartedAt:   startedAt,
 		FinishedAt:  finishedAt,
-	}, nil
+	}
+	if errorMessage != nil {
+		result.ErrorMessage = *errorMessage
+	}
+	return result, nil
 }
 
 func (s *ComputeService) validateDependencies() error {

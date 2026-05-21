@@ -122,20 +122,33 @@ export function createThresholdCondition(
     deviation_high: "高偏差",
     deviation_low: "低偏差",
     rate_of_change: "变化率",
+    bool_equal: "状态判断",
+    string_equal: "文本等于",
+    string_not_equal: "文本不等于",
+    string_contains: "文本包含",
+    string_regex: "正则匹配",
     cel: "自定义",
   };
+  let params: Record<string, unknown> = { limit: 0, hysteresis: 0, durationMs: 0 };
+  if (type === "cel") {
+    params = { expression: "value > 0" };
+  } else if (type === "bool_equal") {
+    params = { expected: true };
+  } else if (type === "string_regex") {
+    params = { pattern: "" };
+  } else if (["string_equal", "string_not_equal", "string_contains"].includes(type)) {
+    params = { expected: "" };
+  } else if (type === "rate_of_change") {
+    params = { limit: 0, windowMs: 60000, direction: "up" };
+  }
+
   return {
     id: crypto.randomUUID(),
     type,
     name: nameMap[type],
     isEnabled: true,
     severity: "warning",
-    params:
-      type === "cel"
-        ? { expression: "value > 0" }
-        : type === "rate_of_change"
-          ? { limit: 0, windowMs: 60000, direction: "up" }
-          : { limit: 0, hysteresis: 0, durationMs: 0 },
+    params,
   };
 }
 

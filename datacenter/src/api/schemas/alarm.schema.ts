@@ -11,6 +11,11 @@ export const AlarmConditionTypeSchema = z.enum([
   "deviation_high",
   "deviation_low",
   "rate_of_change",
+  "bool_equal",
+  "string_equal",
+  "string_not_equal",
+  "string_contains",
+  "string_regex",
   "cel",
 ]);
 
@@ -153,6 +158,29 @@ export const AlarmPolicyTreeSchema = z.object({
 });
 
 export type AlarmPolicyTree = z.infer<typeof AlarmPolicyTreeSchema>;
+
+export const AlarmPolicyCoverageItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  mode: AlarmPolicyModeSchema,
+  targetCount: z.number(),
+  isSingleTarget: z.boolean(),
+  isEnabled: z.boolean(),
+  effectiveEnabled: z.boolean(),
+  groupName: z.string().optional(),
+});
+
+export type AlarmPolicyCoverageItem = z.infer<
+  typeof AlarmPolicyCoverageItemSchema
+>;
+
+export const AlarmPolicyCoverageSchema = z.object({
+  datapointId: z.string().optional(),
+  path: z.string().optional(),
+  policies: z.array(AlarmPolicyCoverageItemSchema).default([]),
+});
+
+export type AlarmPolicyCoverage = z.infer<typeof AlarmPolicyCoverageSchema>;
 
 export const AlarmBulkSelectionSchema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("ids"), policyIds: z.array(z.string()) }),

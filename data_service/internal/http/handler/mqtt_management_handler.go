@@ -212,7 +212,7 @@ func (h *MqttHandler) ListSubscriptions(w http.ResponseWriter, r *http.Request) 
 		totalPages = (total + pageSize - 1) / pageSize
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{
-		"subscriptions": subscriptions,
+		"list": subscriptions,
 		"pagination": map[string]int{
 			"page":       page,
 			"pageSize":   pageSize,
@@ -337,7 +337,15 @@ func (h *MqttHandler) ListTagGroups(w http.ResponseWriter, r *http.Request) erro
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"groups": groups})
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{
+		"list": groups,
+		"pagination": map[string]int{
+			"page":       1,
+			"pageSize":   len(groups),
+			"total":      len(groups),
+			"totalPages": 1,
+		},
+	})
 	return nil
 }
 
@@ -485,7 +493,7 @@ func (h *MqttHandler) ListTagsBySubscription(w http.ResponseWriter, r *http.Requ
 		totalPages = (total + pageSize - 1) / pageSize
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{
-		"tags": tags,
+		"list": tags,
 		"pagination": map[string]int{
 			"page":       page,
 			"pageSize":   pageSize,
@@ -522,7 +530,7 @@ func (h *MqttHandler) ListTagsByProject(w http.ResponseWriter, r *http.Request) 
 		totalPages = (total + pageSize - 1) / pageSize
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{
-		"tags": tags,
+		"list": tags,
 		"pagination": map[string]int{
 			"page":       page,
 			"pageSize":   pageSize,

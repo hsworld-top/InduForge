@@ -50,15 +50,22 @@
           @click.stop
           @change="$emit('selectPolicy', policy.id, checked($event))"
         />
-        <IconTablerBell class="alarm-policy-branch__row-icon" />
+        <component
+          :is="policyModeIcon(policy)"
+          class="alarm-policy-branch__row-icon"
+          :class="`is-${policy.mode}`"
+          :title="policyModeText(policy)"
+          :aria-label="policyModeText(policy)"
+        />
         <span class="alarm-policy-branch__row-main">
           <span class="alarm-policy-branch__row-name">{{ policy.name }}</span>
         </span>
-        <StatusBadge
+        <span
           class="alarm-policy-branch__row-status"
-          :tone="policy.effectiveEnabled ? 'success' : 'muted'"
-          :text="policy.isEnabled ? t('common.enabled') : t('alarm.stopped')"
-        />
+          :class="`is-${policyStatusTone(policy)}`"
+          :title="policyStatusText(policy)"
+          :aria-label="policyStatusText(policy)"
+        ></span>
       </button>
 
       <AlarmPolicyGroupBranch
@@ -67,6 +74,7 @@
         :node="child"
         :selection="selection"
         :selected-id="selectedId"
+        :dirty-policy-ids="dirtyPolicyIds"
         @select="$emit('select', $event)"
         @select-policy="(id, selected) => $emit('selectPolicy', id, selected)"
         @select-group="(ids, selected) => $emit('selectGroup', ids, selected)"
@@ -82,16 +90,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
-import IconTablerBell from "~icons/tabler/bell";
+import { computed, ref } from "vue";
 import IconTablerChevronRight from "~icons/tabler/chevron-right";
+import IconTablerCalculator from "~icons/tabler/calculator";
 import IconTablerFolder from "~icons/tabler/folder";
 import IconTablerFolderOpen from "~icons/tabler/folder-open";
+import IconTablerTemplate from "~icons/tabler/template";
 import type {
   AlarmBulkSelection,
   AlarmPolicy,
 } from "@/api/schemas/alarm.schema";
-import StatusBadge from "@/components/shared/StatusBadge.vue";
 import { t } from "@/i18n/runtime";
 import type { AlarmPolicyGroupNode } from "./alarmPolicyTreeModel";
 
@@ -101,6 +109,7 @@ const props = defineProps<{
   node: AlarmPolicyGroupNode;
   selection: AlarmBulkSelection;
   selectedId: string;
+  dirtyPolicyIds?: string[];
 }>();
 
 defineEmits<{
@@ -112,6 +121,9 @@ defineEmits<{
 }>();
 
 const expanded = ref(true);
+const dirtyPolicyIdSet = computed(() =>
+  new Set((props.dirtyPolicyIds || []).map(String)),
+);
 
 const checked = (event: Event) => (event.target as HTMLInputElement).checked;
 
@@ -125,6 +137,27 @@ const isSelected = (id: string) => {
 const groupAllSelected = (ids: string[]) =>
   ids.length > 0 && ids.every((id) => isSelected(id));
 const groupSomeSelected = (ids: string[]) => ids.some((id) => isSelected(id));
+
+const isPolicyDirty = (policy: AlarmPolicy) =>
+  dirtyPolicyIdSet.value.has(String(policy.id));
+
+const policyStatusText = (policy: AlarmPolicy) =>
+  isPolicyDirty(policy)
+    ? t("alarm.unsaved")
+    : policy.isEnabled
+      ? t("common.enabled")
+      : t("alarm.stopped");
+
+const policyStatusTone = (policy: AlarmPolicy) =>
+  isPolicyDirty(policy) ? "warning" : policy.effectiveEnabled ? "success" : "muted";
+
+const policyModeText = (policy: AlarmPolicy) =>
+  policy.mode === "derived"
+    ? t("alarm.modes.derived")
+    : t("alarm.modes.perTarget");
+
+const policyModeIcon = (policy: AlarmPolicy) =>
+  policy.mode === "derived" ? IconTablerCalculator : IconTablerTemplate;
 </script>
 
 <style scoped>
@@ -176,6 +209,14 @@ const groupSomeSelected = (ids: string[]) => ids.some((id) => isSelected(id));
 .alarm-policy-branch__row-icon {
   width: 16px;
   height: 16px;
+  color: var(--dc-primary);
+}
+
+.alarm-policy-branch__row-icon.is-derived {
+  color: var(--dc-warning);
+}
+
+.alarm-policy-branch__row-icon.is-per_target {
   color: var(--dc-primary);
 }
 
@@ -236,6 +277,22 @@ const groupSomeSelected = (ids: string[]) => ids.some((id) => isSelected(id));
 }
 
 .alarm-policy-branch__row-status {
-  max-width: 76px;
+  width: 8px;
+  height: 8px;
+  justify-self: end;
+  border-radius: 999px;
+  background: var(--dc-text-muted);
+}
+
+.alarm-policy-branch__row-status.is-success {
+  background: var(--dc-success);
+}
+
+.alarm-policy-branch__row-status.is-warning {
+  background: var(--dc-warning);
+}
+
+.alarm-policy-branch__row-status.is-muted {
+  background: var(--dc-text-muted);
 }
 </style>

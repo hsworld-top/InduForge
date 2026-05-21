@@ -65,6 +65,7 @@
         :key="folder.id"
         :node="folder"
         :selected-unit-id="selectedUnitId"
+        :dirty-unit-ids="dirtyUnitIds"
         @select-unit="$emit('selectUnit', $event)"
         @folder-contextmenu="openFolderMenu"
         @unit-contextmenu="openUnitMenu"
@@ -84,9 +85,9 @@
         </span>
         <span
           class="compute-tree__unit-status"
-          :class="`is-${statusTone(unit.status)}`"
-          :title="statusText(unit.status)"
-          :aria-label="statusText(unit.status)"
+          :class="`is-${unitStatusTone(unit)}`"
+          :title="unitStatusText(unit)"
+          :aria-label="unitStatusText(unit)"
         ></span>
       </button>
 
@@ -163,12 +164,14 @@ const props = withDefaults(
     units: ComputeUnit[];
     folders: ComputeFolder[];
     selectedUnitId?: string | null;
+    dirtyUnitIds?: string[];
     loading?: boolean;
     listError?: string;
     foldersError?: string;
   }>(),
   {
     selectedUnitId: null,
+    dirtyUnitIds: () => [],
     loading: false,
     listError: "",
     foldersError: "",
@@ -216,6 +219,7 @@ const filteredTree = computed(() =>
 );
 const filteredFolders = computed(() => filteredTree.value.folders);
 const filteredRootUnits = computed(() => filteredTree.value.units);
+const dirtyUnitIdSet = computed(() => new Set(props.dirtyUnitIds.map(String)));
 
 function openUnitMenu(event: MouseEvent, unit: ComputeUnit) {
   contextMenu.value = {
@@ -290,6 +294,14 @@ const statusTone = (status?: string) => {
   if (status === "disabled") return "muted";
   return "info";
 };
+
+const isUnitDirty = (unit: ComputeUnit) => dirtyUnitIdSet.value.has(String(unit.id));
+
+const unitStatusText = (unit: ComputeUnit) =>
+  isUnitDirty(unit) ? "未保存" : statusText(unit.status);
+
+const unitStatusTone = (unit: ComputeUnit) =>
+  isUnitDirty(unit) ? "warning" : statusTone(unit.status);
 </script>
 
 <style scoped>
@@ -304,19 +316,19 @@ const statusTone = (status?: string) => {
 }
 
 .compute-tree__head {
-  min-height: 46px;
+  min-height: 40px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 12px;
+  padding: 5px 10px;
   border-bottom: 1px solid var(--dc-border);
 }
 
 .compute-tree__head h2 {
   margin: 0;
   color: var(--dc-text);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.3;
 }
@@ -328,7 +340,7 @@ const statusTone = (status?: string) => {
 .compute-tree__actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex: 0 0 auto;
 }
 
@@ -355,8 +367,8 @@ const statusTone = (status?: string) => {
 
 .compute-tree__primary,
 .compute-tree__secondary {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   padding: 0;
 }
 
@@ -489,6 +501,10 @@ const statusTone = (status?: string) => {
 
 .compute-tree__unit-status.is-danger {
   background: var(--dc-danger);
+}
+
+.compute-tree__unit-status.is-warning {
+  background: var(--dc-warning);
 }
 
 .compute-tree__unit-status.is-muted {

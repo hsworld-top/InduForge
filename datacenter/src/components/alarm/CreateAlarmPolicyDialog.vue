@@ -20,13 +20,22 @@
           </option>
         </select>
       </label>
-      <label>
+      <section class="create-alarm-policy__mode is-wide">
         <span>{{ t("alarm.mode") }}</span>
-        <select v-model="draft.mode">
-          <option value="per_target">{{ t("alarm.modes.perTarget") }}</option>
-          <option value="derived">{{ t("alarm.modes.derived") }}</option>
-        </select>
-      </label>
+        <div class="create-alarm-policy__mode-options">
+          <button
+            v-for="item in modeOptions"
+            :key="item.value"
+            type="button"
+            :class="{ 'is-active': draft.mode === item.value }"
+            :title="item.tooltip"
+            @click="draft.mode = item.value"
+          >
+            <strong>{{ item.label }}</strong>
+            <small>{{ item.description }}</small>
+          </button>
+        </div>
+      </section>
       <label class="is-wide">
         <span>{{ t("alarm.description") }}</span>
         <textarea v-model="draft.description" rows="4" :placeholder="t('alarm.descriptionPlaceholder')" />
@@ -50,7 +59,10 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
-import type { AlarmPolicyGroup } from "@/api/schemas/alarm.schema";
+import type {
+  AlarmPolicyGroup,
+  AlarmPolicyMode,
+} from "@/api/schemas/alarm.schema";
 import DcDialog from "@/components/shared/DcDialog.vue";
 import {
   createDefaultAlarmPolicyDraft,
@@ -89,6 +101,26 @@ const groupValue = computed({
     draft.groupId = value || null;
   },
 });
+
+const modeOptions: Array<{
+  value: AlarmPolicyMode;
+  label: string;
+  description: string;
+  tooltip: string;
+}> = [
+  {
+    value: "per_target",
+    label: "统一模板报警",
+    description: "一套条件应用到目标点",
+    tooltip: "一套报警条件会分别应用到每个目标点。多个目标点不会合并计算。",
+  },
+  {
+    value: "derived",
+    label: "计算结果报警",
+    description: "先计算，再对结果报警",
+    tooltip: "选择多个输入点并编写计算表达式，条件集判断的是计算结果。",
+  },
+];
 
 const reset = () => {
   Object.assign(draft, createDefaultAlarmPolicyDraft());
@@ -144,10 +176,71 @@ watch(
   grid-column: 1 / -1;
 }
 
-.create-alarm-policy label > span {
+.create-alarm-policy label > span,
+.create-alarm-policy__mode > span {
   color: var(--dc-text-secondary);
   font-size: 12px;
   font-weight: 700;
+}
+
+.create-alarm-policy__mode {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.create-alarm-policy__mode.is-wide {
+  grid-column: 1 / -1;
+}
+
+.create-alarm-policy__mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.create-alarm-policy__mode-options button {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
+  color: var(--dc-text);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.create-alarm-policy__mode-options button:hover {
+  border-color: rgba(37, 99, 235, 0.32);
+  background: var(--dc-primary-soft);
+}
+
+.create-alarm-policy__mode-options button.is-active {
+  border-color: var(--dc-primary);
+  background: rgba(37, 99, 235, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.08);
+}
+
+.create-alarm-policy__mode-options strong,
+.create-alarm-policy__mode-options small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.create-alarm-policy__mode-options strong {
+  color: var(--dc-text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.create-alarm-policy__mode-options small {
+  color: var(--dc-text-muted);
+  font-size: 12px;
 }
 
 .create-alarm-policy input,
@@ -218,6 +311,10 @@ watch(
 
 @media (max-width: 620px) {
   .create-alarm-policy {
+    grid-template-columns: 1fr;
+  }
+
+  .create-alarm-policy__mode-options {
     grid-template-columns: 1fr;
   }
 }

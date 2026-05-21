@@ -31,9 +31,25 @@ export const createConnection = (projectId, data) => {
   });
 };
 
+export const createMqttConnection = (projectId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/connections`,
+    method: "post",
+    data,
+  });
+};
+
 export const testConnection = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/connections/test`,
+    method: "post",
+    data,
+  });
+};
+
+export const testMqttConnection = (projectId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/connections/test`,
     method: "post",
     data,
   });
@@ -376,6 +392,7 @@ export const createPreviewSession = (projectId) => {
   return request({
     url: `/data/projects/${projectId}/preview/sessions`,
     method: "post",
+    data: {},
   });
 };
 
@@ -407,6 +424,24 @@ export const deletePreviewSession = (sessionId) => {
 // MQTT订阅相关API
 // ===========================================
 
+const normalizeMqttListPayload = (payload, legacyKey = "") => {
+  const data = payload?.data ?? payload ?? {};
+  const list = Array.isArray(data.list)
+    ? data.list
+    : legacyKey && Array.isArray(data[legacyKey])
+      ? data[legacyKey]
+      : Array.isArray(data)
+        ? data
+        : [];
+  const pagination = data.pagination || {
+    page: 1,
+    pageSize: list.length,
+    total: list.length,
+    totalPages: list.length > 0 ? 1 : 0,
+  };
+  return { list, pagination };
+};
+
 /**
  * 获取MQTT订阅列表
  * @param {string} projectId - 工程ID
@@ -416,7 +451,10 @@ export const getMqttSubscriptions = (projectId, connectionId) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/connections/${connectionId}/subscriptions`,
     method: "get",
-  });
+  }).then((response) => ({
+    ...response,
+    data: normalizeMqttListPayload(response, "subscriptions"),
+  }));
 };
 
 /**
@@ -488,11 +526,19 @@ export const toggleMqttSubscription = (projectId, subscriptionId) => {
  * @param {string} projectId - 工程ID
  * @param {string} subscriptionId - 订阅ID
  */
-export const getMqttSubscriptionMessages = (projectId, subscriptionId) => {
+export const getMqttSubscriptionMessages = (
+  projectId,
+  subscriptionId,
+  params = {},
+) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/messages`,
     method: "get",
-  });
+    params,
+  }).then((response) => ({
+    ...response,
+    data: normalizeMqttListPayload(response, "messages"),
+  }));
 };
 
 /**
@@ -534,7 +580,10 @@ export const getMqttTagGroups = (projectId, subscriptionId, params = {}) => {
     url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/tag-groups`,
     method: "get",
     params,
-  });
+  }).then((response) => ({
+    ...response,
+    data: normalizeMqttListPayload(response, "groups"),
+  }));
 };
 
 /**
@@ -613,7 +662,10 @@ export const getMqttTags = (projectId, subscriptionId, params = {}) => {
     url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/tags`,
     method: "get",
     params,
-  });
+  }).then((response) => ({
+    ...response,
+    data: normalizeMqttListPayload(response, "tags"),
+  }));
 };
 
 /**
@@ -626,7 +678,10 @@ export const getProjectMqttTags = (projectId, params = {}) => {
     url: `/data/projects/${projectId}/mqtt/tags`,
     method: "get",
     params,
-  });
+  }).then((response) => ({
+    ...response,
+    data: normalizeMqttListPayload(response, "tags"),
+  }));
 };
 
 /**
@@ -786,7 +841,9 @@ export const debugComputeUnit = (projectId, id, input = {}) => {
 export default {
   getConnections,
   createConnection,
+  createMqttConnection,
   testConnection,
+  testMqttConnection,
   createKafkaConfig,
   createHttpConfig,
   createWebSocketConfig,

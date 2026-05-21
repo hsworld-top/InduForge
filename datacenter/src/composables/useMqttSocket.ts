@@ -12,7 +12,7 @@ import {
 
 const sharedRegistry = createMqttSocketSharedRegistry({
   ioFactory: io,
-  getApiUrl: () => __VITE_DATA_SERVICE_URL__ || "http://localhost:19602",
+  getApiUrl: () => window.location.origin,
   getToken: () => Storage.getToken(),
   notifier: ({ type, message }) => {
     ElMessage({

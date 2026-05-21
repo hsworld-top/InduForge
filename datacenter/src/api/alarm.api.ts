@@ -4,6 +4,7 @@ import {
   AlarmBulkSelectionSchema,
   AlarmDraftValidationSchema,
   AlarmPolicyContractSchema,
+  AlarmPolicyCoverageSchema,
   AlarmPolicyGroupSaveSchema,
   AlarmPolicyGroupSchema,
   AlarmPolicyGroupUpdateSchema,
@@ -17,6 +18,7 @@ import {
   type AlarmDraftValidation,
   type AlarmPolicy,
   type AlarmPolicyContract,
+  type AlarmPolicyCoverage,
   type AlarmPolicyGroup,
   type AlarmPolicyGroupSave,
   type AlarmPolicyGroupUpdate,
@@ -144,6 +146,22 @@ export async function getAlarmPolicy(
     method: "get",
   });
   return AlarmPolicySchema.parse(unwrapData(res));
+}
+
+export async function getAlarmPolicyCoverage(
+  projectId: string,
+  params: {
+    datapointId?: string;
+    path?: string;
+    excludePolicyId?: string;
+  },
+): Promise<AlarmPolicyCoverage> {
+  const res = await request({
+    url: `/data/projects/${projectId}/alarm-policies/coverage`,
+    method: "get",
+    params,
+  });
+  return AlarmPolicyCoverageSchema.parse(unwrapData(res));
 }
 
 export async function createAlarmPolicy(

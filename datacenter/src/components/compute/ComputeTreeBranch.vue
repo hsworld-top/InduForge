@@ -30,11 +30,12 @@
         <span class="compute-tree-branch__unit-main">
           <span class="compute-tree-branch__unit-name">{{ unit.name }}</span>
         </span>
-        <StatusBadge
+        <span
           class="compute-tree-branch__status"
-          :tone="statusTone(unit.status)"
-          :text="statusText(unit.status)"
-        />
+          :class="`is-${unitStatusTone(unit)}`"
+          :title="unitStatusText(unit)"
+          :aria-label="unitStatusText(unit)"
+        ></span>
       </button>
 
       <ComputeTreeBranch
@@ -42,6 +43,7 @@
         :key="child.id"
         :node="child"
         :selected-unit-id="selectedUnitId"
+        :dirty-unit-ids="dirtyUnitIds"
         @select-unit="$emit('selectUnit', $event)"
         @folder-contextmenu="
           (mouseEvent, folder) => $emit('folderContextmenu', mouseEvent, folder)
@@ -60,7 +62,6 @@ import IconTablerChevronRight from "~icons/tabler/chevron-right";
 import IconTablerFileCode from "~icons/tabler/file-code";
 import IconTablerFolder from "~icons/tabler/folder";
 import IconTablerFolderOpen from "~icons/tabler/folder-open";
-import StatusBadge from "@/components/shared/StatusBadge.vue";
 import type { ComputeUnit } from "@/api/schemas/compute.schema";
 import type { ComputeFolderTreeNode } from "./computeTreeModel";
 
@@ -69,6 +70,7 @@ defineOptions({ name: "ComputeTreeBranch" });
 const props = defineProps<{
   node: ComputeFolderTreeNode;
   selectedUnitId?: string | null;
+  dirtyUnitIds?: string[];
 }>();
 
 defineEmits<{
@@ -82,6 +84,7 @@ defineEmits<{
 }>();
 
 const expanded = ref(true);
+const dirtyUnitIdSet = computed(() => new Set((props.dirtyUnitIds || []).map(String)));
 
 const countUnits = (node: ComputeFolderTreeNode): number =>
   node.units.length +
@@ -107,6 +110,14 @@ const statusTone = (status?: string) => {
   if (status === "disabled") return "muted";
   return "info";
 };
+
+const isUnitDirty = (unit: ComputeUnit) => dirtyUnitIdSet.value.has(String(unit.id));
+
+const unitStatusText = (unit: ComputeUnit) =>
+  isUnitDirty(unit) ? "未保存" : statusText(unit.status);
+
+const unitStatusTone = (unit: ComputeUnit) =>
+  isUnitDirty(unit) ? "warning" : statusTone(unit.status);
 </script>
 
 <style scoped>
@@ -214,6 +225,30 @@ const statusTone = (status?: string) => {
 }
 
 .compute-tree-branch__status {
-  max-width: 76px;
+  width: 8px;
+  height: 8px;
+  justify-self: end;
+  border-radius: 999px;
+  background: var(--dc-text-muted);
+}
+
+.compute-tree-branch__status.is-success {
+  background: var(--dc-success);
+}
+
+.compute-tree-branch__status.is-danger {
+  background: var(--dc-danger);
+}
+
+.compute-tree-branch__status.is-warning {
+  background: var(--dc-warning);
+}
+
+.compute-tree-branch__status.is-muted {
+  background: var(--dc-text-muted);
+}
+
+.compute-tree-branch__status.is-info {
+  background: var(--dc-primary);
 }
 </style>

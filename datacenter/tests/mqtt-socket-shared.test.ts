@@ -165,4 +165,9 @@ test("共享注册表会使用传入的数据服务地址建立 socket 连接", 
   assert.equal(captured.length, 1);
   assert.equal(captured[0].url, "http://localhost:19602");
   assert.equal(captured[0].options.path, "/socket.io/");
+  assert.deepEqual(captured[0].options.query, {
+    token: "token-1",
+    projectId: "project-1",
+    previewSessionId: "session-1",
+  });
 });

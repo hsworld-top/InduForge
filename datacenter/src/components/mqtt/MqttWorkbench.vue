@@ -233,6 +233,7 @@ import {
   onMounted,
   ref,
   shallowRef,
+  watch,
 } from "vue";
 import { ElMessage } from "element-plus";
 import IconTablerArrowLeft from "~icons/tabler/arrow-left";
@@ -286,7 +287,10 @@ const { sessionId: previewSessionId, ensureSession } = usePreviewSession(
   projectIdRef,
   { autoStart: false },
 );
-const { subscribeMessages } = useMqttSocket(projectIdRef, previewSessionId);
+const { connected: socketConnected, subscribeMessages } = useMqttSocket(
+  projectIdRef,
+  previewSessionId,
+);
 
 const loading = ref(false);
 const subscriptions = ref<any[]>([]);
@@ -321,8 +325,7 @@ const loadSubscriptions = async () => {
       projectIdText.value,
       props.connection.id,
     );
-    /* 后端返回结构：{ data: { pagination, subscriptions } } */
-    subscriptions.value = response.data?.subscriptions || [];
+    subscriptions.value = response.data?.list || [];
     if (
       subscriptions.value.length > 0 &&
       !subscriptions.value.some(
@@ -394,14 +397,14 @@ const openMessages = async (subscription: any) => {
   if (!messageCleanups.has(tab.id)) {
     const cleanup = subscribeMessages(subscription.id, (data) => {
       const viewer = messageViewerRefs.value.get(tab.id);
-      viewer?.addMessage?.(data.message);
+      viewer?.addMessage?.(data?.message || data);
       viewer?.setConnected?.(true);
     });
     messageCleanups.set(tab.id, cleanup);
   }
 
   await nextTick();
-  messageViewerRefs.value.get(tab.id)?.setConnected?.(true);
+  messageViewerRefs.value.get(tab.id)?.setConnected?.(socketConnected.value);
 };
 
 const openTagManager = async (subscription: any) => {
@@ -445,14 +448,42 @@ const handleSubscriptionDeleted = async (subscription: any) => {
   await loadSubscriptions();
 };
 
+const cleanupMessageSubscriptions = () => {
+  Array.from(messageCleanups.values()).forEach((cleanup) => cleanup?.());
+  messageCleanups.clear();
+};
+
 onMounted(async () => {
   openSubscriptionList();
   await loadSubscriptions();
 });
 
+watch(
+  () => props.connection.id,
+  async () => {
+    cleanupMessageSubscriptions();
+    messageViewerRefs.value.clear();
+    tabs.value = [];
+    activeTabId.value = "";
+    selectedSubscription.value = null;
+    connectionStarted.value = false;
+    openSubscriptionList();
+    await loadSubscriptions();
+  },
+);
+
+watch(
+  socketConnected,
+  (connected) => {
+    messageViewerRefs.value.forEach((viewer) => {
+      viewer?.setConnected?.(connected);
+    });
+  },
+  { immediate: true },
+);
+
 onBeforeUnmount(() => {
-  Array.from(messageCleanups.values()).forEach((cleanup) => cleanup?.());
-  messageCleanups.clear();
+  cleanupMessageSubscriptions();
   messageViewerRefs.value.clear();
 });
 </script>

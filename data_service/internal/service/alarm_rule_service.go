@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +24,11 @@ var allowedAlarmRuleTypes = map[string]struct{}{
 	"deviation_high": {},
 	"deviation_low":  {},
 	"rate_of_change": {},
+	"bool_equal":     {},
+	"string_equal":   {},
+	"string_not_equal": {},
+	"string_contains":  {},
+	"string_regex":     {},
 	"cel":            {},
 }
 
@@ -685,6 +691,22 @@ func validateAlarmCondition(ruleType string, condition map[string]any) error {
 				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "rate_of_change 规则需要数值 condition.windowMs")
 			}
 		}
+	case "bool_equal":
+		if _, ok := condition["expected"].(bool); !ok {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "bool_equal 规则需要布尔 condition.expected")
+		}
+	case "string_equal", "string_not_equal", "string_contains":
+		if strings.TrimSpace(fmt.Sprintf("%v", condition["expected"])) == "" {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "文本匹配规则需要 condition.expected")
+		}
+	case "string_regex":
+		pattern := strings.TrimSpace(fmt.Sprintf("%v", condition["pattern"]))
+		if pattern == "" {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "正则匹配规则需要 condition.pattern")
+		}
+		if _, err := regexp.Compile(pattern); err != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "condition.pattern 正则格式无效", err)
+		}
 	case "cel":
 		if strings.TrimSpace(fmt.Sprintf("%v", condition["expression"])) == "" {
 			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "cel 规则需要 condition.expression")
@@ -705,6 +727,10 @@ func evaluateAlarmRule(ruleType string, condition map[string]any, value any, con
 		return evaluateDeviation(ruleType, condition, value, context)
 	case "rate_of_change":
 		return evaluateRateOfChange(condition, value, context)
+	case "bool_equal":
+		return evaluateBoolEqual(condition, value)
+	case "string_equal", "string_not_equal", "string_contains", "string_regex":
+		return evaluateStringMatch(ruleType, condition, value)
 	case "cel":
 		return evaluateCEL(condition, value, context)
 	default:
@@ -821,6 +847,56 @@ func evaluateRateOfChange(condition map[string]any, value any, context map[strin
 		"windowMs":      windowMs,
 		"direction":     direction,
 		"reason":        reason,
+	}), nil
+}
+
+func evaluateBoolEqual(condition map[string]any, value any) (*AlarmRuleEvaluationResult, error) {
+	expected, ok := condition["expected"].(bool)
+	if !ok {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "bool_equal 规则需要布尔 condition.expected")
+	}
+	actual, ok := value.(bool)
+	if !ok {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "采样值不是布尔值")
+	}
+	return alarmEvaluation(actual == expected, map[string]any{
+		"sampleValue": actual,
+		"expected":    expected,
+		"reason":      "value == expected",
+	}), nil
+}
+
+func evaluateStringMatch(ruleType string, condition map[string]any, value any) (*AlarmRuleEvaluationResult, error) {
+	actual := fmt.Sprintf("%v", value)
+	expected := strings.TrimSpace(fmt.Sprintf("%v", condition["expected"]))
+	triggered := false
+	reason := ""
+	switch ruleType {
+	case "string_equal":
+		triggered = actual == expected
+		reason = "value == expected"
+	case "string_not_equal":
+		triggered = actual != expected
+		reason = "value != expected"
+	case "string_contains":
+		triggered = strings.Contains(actual, expected)
+		reason = "value contains expected"
+	case "string_regex":
+		pattern := strings.TrimSpace(fmt.Sprintf("%v", condition["pattern"]))
+		matched, err := regexp.MatchString(pattern, actual)
+		if err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "condition.pattern 正则格式无效", err)
+		}
+		triggered = matched
+		expected = pattern
+		reason = "value matches pattern"
+	default:
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "ruleType 不受支持")
+	}
+	return alarmEvaluation(triggered, map[string]any{
+		"sampleValue": actual,
+		"expected":    expected,
+		"reason":      reason,
 	}), nil
 }
 
@@ -986,10 +1062,34 @@ func validateAlarmTargetDataType(ruleType, dataType string) error {
 	if ruleType == "cel" {
 		return nil
 	}
-	if dataType == "number" || dataType == "integer" {
+	if isNumericDataType(dataType) && isNumericConditionType(ruleType) {
 		return nil
 	}
-	return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "非 CEL 规则只能绑定数值型数据点")
+	if isBooleanDataType(dataType) && ruleType == "bool_equal" {
+		return nil
+	}
+	if isStringDataType(dataType) && isStringConditionType(ruleType) {
+		return nil
+	}
+	return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点类型不支持该报警条件")
+}
+
+func isNumericConditionType(ruleType string) bool {
+	switch ruleType {
+	case "H", "HH", "L", "LL", "deviation_high", "deviation_low", "rate_of_change":
+		return true
+	default:
+		return false
+	}
+}
+
+func isStringConditionType(ruleType string) bool {
+	switch ruleType {
+	case "string_equal", "string_not_equal", "string_contains", "string_regex":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeAlarmSuppression(input map[string]any) (map[string]any, error) {
