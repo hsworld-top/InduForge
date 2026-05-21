@@ -1,7 +1,7 @@
 # 数据中心 MQTT 接入源工作台设计
 
 > 日期：2026-05-21  
-> 范围：`datacenter/` 新版接入源工作台中的 MQTT 查看消息、变量管理与旧 MQTT 入口清理。  
+> 范围：`datacenter/` 新版接入源工作台中的 MQTT 查看消息、变量管理与旧 MQTT 入口清理；如最佳闭环需要，允许同步调整 `data_service/` 的 MQTT preview、消息和变量接口。  
 > 目标：以新版接入源工作台为唯一 MQTT 操作入口，完成订阅、消息查看、变量管理、实时监控和资源清理闭环。
 
 ## 1. 背景
@@ -9,6 +9,8 @@
 `datacenter` 已有新版接入源工作台，并在 `AccessSourceWorkbench.vue` 中将 `type=mqtt` 路由到 `MqttWorkbenchPanel.vue`。当前仓库还保留旧版 `DataCenterNew.vue` 中的 MQTT tab 逻辑，以及 `components/mqtt/` 下的消息查看、订阅管理、变量管理和监控组件。
 
 本轮不再维护旧入口兼容。旧版实现只作为行为参考：可复用的 API、socket、preview session、弹窗和业务校验继续复用；不符合新版工作台风格或生命周期要求的部分允许修改、调整或重做。完成后旧版 MQTT tab 逻辑应清理，避免两套入口并存。
+
+如果现有 `data_service` 接口无法支撑最优交互，允许直接调整后端接口、服务逻辑、数据结构或迁移。开发阶段不为旧前端形态保留兼容分支，前后端以本设计中的新版 MQTT 工作台为唯一消费方。
 
 ## 2. 成功标准
 
@@ -20,15 +22,15 @@
 - MQTT 变量继续生成 `mqtt.tag` 数据点，数据点列表可以按既有逻辑读取。
 - 关闭消息页签、切换接入源或卸载工作台时，实时消息订阅、变量订阅和 preview session 被清理。
 - UI 与新版 datacenter 工作台家族化风格一致，使用 `--dc-*` 变量、紧凑工具栏、左树中台右详情布局和图标按钮。
+- 如果后端接口被调整，旧前端入口不需要兼容，前端 API 封装与新版后端契约同步更新。
 - `pnpm --dir datacenter build` 通过。
 
 ## 3. 不做范围
 
-- 不新增后端接口。
 - 不做 Kafka、HTTP、WebSocket、Redis 的真实 preview 行为。
 - 不保留旧 `DataCenterNew.vue` 的 MQTT tab 兼容入口。
 - 不引入新的组件库、图标库或全局状态方案。
-- 不重写 MQTT 连接、订阅、Tag、数据点等已有业务接口。
+- 不为旧 MQTT tab、旧响应结构或旧字段命名新增兼容适配层。
 - 不实现运行态 MQTT 消费，仅覆盖开发态工作台 preview。
 - 不把 MQTT 业务 API 封装成跨协议抽象。
 
@@ -48,11 +50,24 @@
 - 在页签关闭、工作台卸载时清理 socket 订阅。
 - 组织消息查看、变量管理和右侧 inspector。
 
-### 4.2 复用与重做边界
+### 4.2 后端适配原则
+
+`data_service` 可以为新版 MQTT 工作台调整以下能力：
+
+- MQTT preview session 与 MQTT 连接启动、停止、心跳的服务边界。
+- 订阅消息历史列表的返回结构、分页字段和排序规则。
+- 实时消息 socket payload 的字段结构。
+- MQTT 变量、变量组、变量当前值接口的字段结构。
+- MQTT Tag 生成 `mqtt.tag` 数据点的同步逻辑。
+- 必要的数据表迁移、repository 查询和 service 校验。
+
+后端接口仍遵循统一规则：路径前缀为 `/api/v1`，JSON 响应字段为 `code`、`msg`、`data`、`reqId`，`code = 0` 是唯一成功码。涉及数据库操作时必须使用参数化查询。若新增错误码，同步更新 `docs/统一错误码枚举表.md`。
+
+### 4.3 复用与重做边界
 
 继续复用：
 
-- `data.api.ts` 中 MQTT 订阅、消息、变量组、变量和当前值接口。
+- `data.api.ts` 中可继续服务新版工作台的 MQTT 订阅、消息、变量组、变量和当前值接口封装。
 - `usePreviewSession` 的 preview session 生命周期。
 - `useMqttSocket` 的共享 socket、消息订阅和 tag 订阅能力。
 - `MqttSubscriptionDialog`、`MqttTagDialog`、`MqttTagGroupDialog` 中已存在的表单校验和提交逻辑。
@@ -198,6 +213,7 @@ MQTT 工作台采用三栏结构：
 ### 静态验证
 
 - 运行 `pnpm --dir datacenter build`。
+- 如果修改 `data_service`，运行最贴近变更面的后端测试或构建命令。
 - 如果新增或调整纯函数、composable、消息格式化逻辑，补充或更新 vitest，并运行对应测试。
 
 ### 手动验收路径
@@ -217,4 +233,3 @@ MQTT 工作台采用三栏结构：
 - `useMqttSocket` 为共享连接，多个面板同时订阅时必须依赖 cleanup 和引用计数。控制方式：实时订阅集中由工作台或监控面板建立，关闭时逐项释放。
 - `usePreviewSession` 卸载时会销毁 session。控制方式：MQTT 工作台作为 session 生命周期边界，不让子组件自行创建独立 session。
 - 删除旧 MQTT tab 逻辑可能影响旧连接树右键入口。控制方式：右键入口统一导向新版工作台，删除只服务旧 tab 的事件链。
-
