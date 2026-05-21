@@ -1855,7 +1855,6 @@ const statusTone = (status?: string) => {
   align-items: flex-end;
   gap: 2px;
   padding: 0 8px;
-  border-bottom: 1px solid var(--dc-border);
   background: var(--dc-surface-raised);
   overflow-x: auto;
 }

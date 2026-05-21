@@ -6,11 +6,40 @@
         <span>{{ draft.mode === "derived" ? "用于表达式计算" : "同一条件集应用到这些点" }}</span>
       </header>
       <AlarmPointPicker
+        v-if="draft.mode === 'derived'"
         :project-id="projectId"
-        :items="draft.mode === 'derived' ? draft.inputs : draft.targets"
-        :with-key="draft.mode === 'derived'"
+        :items="draft.inputs"
+        with-key
         @update="updatePoints"
       />
+      <div
+        v-else-if="draft.targets.length"
+        class="alarm-policy-form__target-list"
+      >
+        <div class="alarm-policy-form__target-labels" aria-hidden="true">
+          <span>点位路径</span>
+          <span>数据类型</span>
+          <span>操作</span>
+        </div>
+        <div
+          v-for="target in draft.targets"
+          :key="target.datapointId"
+          class="alarm-policy-form__target-item"
+        >
+          <span>
+            <strong>{{ target.name || target.path }}</strong>
+            <code>{{ target.path }}</code>
+          </span>
+          <em>{{ target.dataType || "-" }}</em>
+          <button
+            type="button"
+            @click="removeTarget(target.datapointId)"
+          >
+            移除
+          </button>
+        </div>
+      </div>
+      <div v-else class="alarm-policy-form__empty">暂无目标点</div>
     </section>
 
     <section v-if="draft.mode === 'derived'" class="alarm-policy-form__section">
@@ -69,6 +98,13 @@ const updatePoints = (items: Array<AlarmInputRef | AlarmTargetRef>) => {
     return;
   }
   updateField("targets", items as AlarmTargetRef[]);
+};
+
+const removeTarget = (datapointId: string) => {
+  updateField(
+    "targets",
+    props.draft.targets.filter((target) => target.datapointId !== datapointId),
+  );
 };
 </script>
 
@@ -179,8 +215,90 @@ const updatePoints = (items: Array<AlarmInputRef | AlarmTargetRef>) => {
   font-size: 12px;
 }
 
+.alarm-policy-form__target-list {
+  display: grid;
+  gap: 6px;
+}
+
+.alarm-policy-form__target-labels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  color: var(--dc-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.alarm-policy-form__target-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
+}
+
+.alarm-policy-form__target-item strong,
+.alarm-policy-form__target-item code {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alarm-policy-form__target-item strong {
+  font-size: 13px;
+}
+
+.alarm-policy-form__target-item code {
+  margin-top: 3px;
+  color: var(--dc-text-secondary);
+  font-family: var(--dc-font-mono);
+  font-size: 12px;
+}
+
+.alarm-policy-form__target-item em {
+  color: var(--dc-text-muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.alarm-policy-form__target-item button {
+  height: 28px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  color: var(--dc-danger, #b91c1c);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 8px;
+}
+
+.alarm-policy-form__empty {
+  padding: 12px;
+  border: 1px dashed var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-muted);
+  font-size: 13px;
+}
+
 @media (max-width: 720px) {
   .alarm-policy-form__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .alarm-policy-form__target-labels {
+    display: none;
+  }
+
+  .alarm-policy-form__target-item {
     grid-template-columns: 1fr;
   }
 }

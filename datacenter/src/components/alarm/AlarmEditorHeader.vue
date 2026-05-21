@@ -1,65 +1,76 @@
 <template>
   <header v-if="draft" class="alarm-editor-header">
-    <div class="alarm-editor-header__summary">
-      <div>
-        <div class="alarm-editor-header__title">
-          <strong>{{ draft.name || t("alarm.unnamedPolicy") }}</strong>
-          <span
-            class="alarm-editor-header__state"
-            :class="{ 'is-off': !draft.isEnabled }"
-          >
-            {{ draft.isEnabled ? t("alarm.running") : t("alarm.disabledState") }}
-          </span>
-          <em v-if="draft.dirty">{{ t("alarm.unsaved") }}</em>
-        </div>
+    <div class="alarm-editor-header__title-wrap">
+      <div class="alarm-editor-header__meta">
+        <span
+          class="alarm-editor-header__state"
+          :class="{ 'is-off': !draft.isEnabled }"
+        >
+          {{ draft.isEnabled ? t("common.enabled") : t("alarm.stopped") }}
+        </span>
+        <em v-if="draft.dirty">{{ t("alarm.unsaved") }}</em>
+      </div>
+      <strong>{{ draft.name || t("alarm.unnamedPolicy") }}</strong>
+      <div class="alarm-editor-header__subline">
+        <span class="alarm-editor-header__mode">{{ modeText }}</span>
         <code>{{ draft.description || summaryText }}</code>
       </div>
     </div>
 
-    <div class="alarm-editor-header__fields">
-      <label>
-        <span>{{ t("alarm.status") }}</span>
-        <input
-          type="checkbox"
-          :checked="draft.isEnabled"
-          @change="emit('toggle')"
-        />
-      </label>
-      <label>
-        <span>{{ t("alarm.mode") }}</span>
-        <select
-          :value="draft.mode"
-          @change="emit('update', { mode: inputValue($event) as AlarmPolicyMode, dirty: true })"
-        >
-          <option value="per_target">{{ t("alarm.modes.perTarget") }}</option>
-          <option value="derived">{{ t("alarm.modes.derived") }}</option>
-        </select>
-      </label>
-      <label>
-        <span>{{ t("alarm.group") }}</span>
-        <select :value="draft.groupId ?? ''" @change="updateGroup(inputValue($event))">
-          <option value="">{{ t("alarm.root") }}</option>
-          <option v-for="group in groups" :key="group.id" :value="group.id">
-            {{ group.name }}
-          </option>
-        </select>
-      </label>
-    </div>
-
     <div class="alarm-editor-header__actions">
-      <button type="button" @click="emit('checkCurrent')">
-        {{ t("alarm.checkPolicy") }}
-      </button>
-      <button type="button" class="is-primary" :disabled="saving" @click="emit('save')">
-        {{ saving ? t("alarm.saving") : t("actions.save") }}
+      <button
+        v-if="draft.mode === 'per_target'"
+        type="button"
+        class="alarm-editor-header__icon-action"
+        title="数据点变量"
+        aria-label="数据点变量"
+        :disabled="saving"
+        @click="emit('selectTarget')"
+      >
+        <IconTablerDatabaseImport class="alarm-editor-header__action-icon" />
       </button>
       <button
         type="button"
-        class="is-danger"
+        class="alarm-editor-header__icon-action"
+        :title="draft.isEnabled ? t('alarm.stopped') : t('common.enabled')"
+        :aria-label="draft.isEnabled ? t('alarm.stopped') : t('common.enabled')"
+        :disabled="saving"
+        @click="emit('toggle')"
+      >
+        <IconTablerPlayerPause
+          v-if="draft.isEnabled"
+          class="alarm-editor-header__action-icon"
+        />
+        <IconTablerPlayerPlay v-else class="alarm-editor-header__action-icon" />
+      </button>
+      <button
+        type="button"
+        class="alarm-editor-header__icon-action"
+        :title="t('alarm.checkPolicy')"
+        :aria-label="t('alarm.checkPolicy')"
+        @click="emit('checkCurrent')"
+      >
+        <IconTablerShieldCheck class="alarm-editor-header__action-icon" />
+      </button>
+      <button
+        type="button"
+        class="alarm-editor-header__icon-action is-danger"
+        :title="t('actions.delete')"
+        :aria-label="t('actions.delete')"
         :disabled="deleting"
         @click="emit('delete')"
       >
-        {{ t("actions.delete") }}
+        <IconTablerTrash class="alarm-editor-header__action-icon" />
+      </button>
+      <button
+        type="button"
+        class="alarm-editor-header__save"
+        :title="t('actions.save')"
+        :aria-label="t('actions.save')"
+        :disabled="saving || !draft.dirty"
+        @click="emit('save')"
+      >
+        <IconTablerDeviceFloppy class="alarm-editor-header__action-icon" />
       </button>
     </div>
   </header>
@@ -67,16 +78,17 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import type {
-  AlarmPolicyGroup,
-  AlarmPolicyMode,
-} from "@/api/schemas/alarm.schema";
+import IconTablerDatabaseImport from "~icons/tabler/database-import";
+import IconTablerDeviceFloppy from "~icons/tabler/device-floppy";
+import IconTablerPlayerPause from "~icons/tabler/player-pause";
+import IconTablerPlayerPlay from "~icons/tabler/player-play";
+import IconTablerShieldCheck from "~icons/tabler/shield-check";
+import IconTablerTrash from "~icons/tabler/trash";
 import type { AlarmPolicyDraft } from "@/components/alarm/alarmPolicyModel";
 import { t } from "@/i18n/runtime";
 
 const props = defineProps<{
   draft: AlarmPolicyDraft | null;
-  groups: AlarmPolicyGroup[];
   saving: boolean;
   deleting: boolean;
 }>();
@@ -86,8 +98,18 @@ const emit = defineEmits<{
   toggle: [];
   delete: [];
   checkCurrent: [];
+  selectTarget: [];
   update: [patch: Partial<AlarmPolicyDraft>];
 }>();
+
+const modeText = computed(() => {
+  if (!props.draft) {
+    return "";
+  }
+  return props.draft.mode === "derived"
+    ? t("alarm.modes.derived")
+    : t("alarm.modes.perTarget");
+});
 
 const summaryText = computed(() => {
   if (!props.draft) {
@@ -98,62 +120,70 @@ const summaryText = computed(() => {
   }
   return props.draft.targets.map((target) => target.path).join("、") || t("alarm.modes.perTarget");
 });
-
-const inputValue = (event: Event) =>
-  (event.target as HTMLInputElement | HTMLSelectElement).value;
-
-const updateGroup = (value: string) => {
-  emit("update", { groupId: value || null, dirty: true });
-};
 </script>
 
 <style scoped>
 .alarm-editor-header {
-  min-height: 120px;
-  display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(320px, 440px) auto;
-  align-items: start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-raised);
-}
-
-.alarm-editor-header__summary {
-  min-width: 0;
-}
-
-.alarm-editor-header__title {
-  min-width: 0;
+  min-height: 44px;
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--dc-border);
+  background: var(--dc-surface);
+}
+
+.alarm-editor-header__title-wrap {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(150px, 340px) minmax(0, 1fr);
   align-items: center;
   gap: 8px;
 }
 
-.alarm-editor-header__summary strong,
-.alarm-editor-header__summary code {
-  display: block;
+.alarm-editor-header__meta,
+.alarm-editor-header__subline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.alarm-editor-header__title-wrap strong,
+.alarm-editor-header__subline code,
+.alarm-editor-header__subline span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.alarm-editor-header__summary strong {
+.alarm-editor-header__title-wrap strong {
   color: var(--dc-text);
-  font-size: 18px;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.3;
 }
 
-.alarm-editor-header__summary code {
-  margin-top: 4px;
-  color: var(--dc-text-secondary);
+.alarm-editor-header__subline code,
+.alarm-editor-header__subline span {
+  color: var(--dc-text-muted);
+  font-size: 11px;
+}
+
+.alarm-editor-header__subline code {
   font-family: var(--dc-font-mono);
-  font-size: 12px;
 }
 
-.alarm-editor-header__summary em,
+.alarm-editor-header__mode {
+  padding: 2px 6px;
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
+  font-weight: 800;
+}
+
+.alarm-editor-header__meta em,
 .alarm-editor-header__state {
   height: 22px;
   display: inline-flex;
@@ -178,83 +208,48 @@ const updateGroup = (value: string) => {
   color: var(--dc-text-muted);
 }
 
-.alarm-editor-header__summary em {
+.alarm-editor-header__meta em {
   border: 1px solid rgba(217, 119, 6, 0.26);
   background: rgba(217, 119, 6, 0.08);
   color: #b45309;
 }
 
-.alarm-editor-header__fields {
-  display: grid;
-  grid-template-columns: auto minmax(120px, 1fr) minmax(120px, 1fr);
-  gap: 10px;
-}
-
-.alarm-editor-header__fields label {
-  min-width: 0;
-  display: grid;
+.alarm-editor-header__actions {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
 }
 
-.alarm-editor-header__fields label > span {
-  color: var(--dc-text-muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.alarm-editor-header__fields input[type="checkbox"] {
-  width: 34px;
-  height: 34px;
-  margin: 0;
-  accent-color: var(--dc-primary);
-}
-
-.alarm-editor-header__fields select {
-  width: 100%;
-  height: 34px;
-  min-width: 0;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface);
-  color: var(--dc-text);
-  font-family: inherit;
-  font-size: 13px;
-  outline: none;
-  padding: 0 9px;
-}
-
-.alarm-editor-header__actions {
-  display: flex;
+.alarm-editor-header__icon-action,
+.alarm-editor-header__save {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-}
-
-.alarm-editor-header__actions button {
-  height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--dc-border);
+  justify-content: center;
   border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-muted);
-  color: var(--dc-text);
   cursor: pointer;
-  font-family: inherit;
-  font-size: 12px;
   font-weight: 700;
 }
 
-.alarm-editor-header__actions button:hover:not(:disabled) {
+.alarm-editor-header__icon-action {
+  border: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-secondary);
+}
+
+.alarm-editor-header__icon-action:hover:not(:disabled) {
   border-color: rgba(37, 99, 235, 0.26);
   background: var(--dc-primary-soft);
   color: var(--dc-primary);
 }
 
-.alarm-editor-header__actions .is-primary {
-  border-color: var(--dc-primary);
-  background: var(--dc-primary);
-  color: #fff;
+.alarm-editor-header__icon-action.is-danger {
+  color: var(--dc-danger, #b91c1c);
 }
 
-.alarm-editor-header__actions .is-primary:hover:not(:disabled) {
+.alarm-editor-header__save {
+  border-color: var(--dc-primary);
   background: var(--dc-primary);
   color: #fff;
 }
@@ -264,18 +259,15 @@ const updateGroup = (value: string) => {
   opacity: 0.55;
 }
 
-.alarm-editor-header__actions .is-danger {
-  border-color: rgba(220, 38, 38, 0.28);
-  color: var(--dc-danger, #b91c1c);
+.alarm-editor-header__action-icon {
+  width: 16px;
+  height: 16px;
 }
 
 @media (max-width: 1120px) {
   .alarm-editor-header {
-    grid-template-columns: 1fr;
-  }
-
-  .alarm-editor-header__fields {
-    grid-template-columns: auto repeat(2, minmax(0, 1fr));
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 
