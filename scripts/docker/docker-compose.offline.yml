@@ -1,0 +1,121 @@
+name: induforge
+
+services:
+  edge:
+    container_name: induforge-edge
+    image: induforge/edge:latest
+    ports:
+      - "${IF_EDGE_HOST_PORT:-18080}:80"
+    depends_on:
+      - control
+      - data
+    networks:
+      - induforge-prod-net
+    restart: unless-stopped
+
+  control:
+    container_name: induforge-control
+    image: induforge/control:latest
+    env_file:
+      - ../../.env
+    environment:
+      NODE_ENV: production
+      PORT: 19601
+      IF_META_STORE_HOST: meta-store
+      IF_META_STORE_PORT: 5432
+      IF_CACHE_STORE_HOST: cache-store
+      IF_CACHE_STORE_PORT: 6379
+      IF_OBJECT_STORE_ENDPOINT: object-store
+      IF_OBJECT_STORE_PORT: 8333
+    expose:
+      - "19601"
+    depends_on:
+      - meta-store
+      - cache-store
+      - object-store
+    networks:
+      - induforge-prod-net
+    restart: unless-stopped
+
+  data:
+    container_name: induforge-data
+    image: induforge/data:latest
+    env_file:
+      - ../../.env
+    environment:
+      DATA_SERVICE_ADDR: :19602
+      IF_META_STORE_HOST: meta-store
+      IF_META_STORE_PORT: 5432
+      IF_CACHE_STORE_HOST: cache-store
+      IF_CACHE_STORE_PORT: 6379
+    expose:
+      - "19602"
+    depends_on:
+      - meta-store
+      - cache-store
+      - message-hub
+    networks:
+      - induforge-prod-net
+    restart: unless-stopped
+
+  meta-store:
+    container_name: induforge-meta-store
+    image: induforge/meta-store:latest
+    environment:
+      POSTGRES_USER: ${IF_META_STORE_USER:-postgres}
+      POSTGRES_PASSWORD: ${IF_META_STORE_PASSWORD:-postgres}
+      POSTGRES_DB: ${IF_META_STORE_ADMIN_DATABASE:-postgres}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - induforge-meta-store-data:/var/lib/postgresql/data
+    networks:
+      - induforge-prod-net
+    restart: unless-stopped
+
+  cache-store:
+    container_name: induforge-cache-store
+    image: induforge/cache-store:latest
+    environment:
+      IF_CACHE_STORE_PASSWORD: ${IF_CACHE_STORE_PASSWORD:-}
+    volumes:
+      - induforge-cache-store-data:/data
+    networks:
+      - induforge-prod-net
+    restart: unless-stopped
+
+  message-hub:
+    container_name: induforge-message-hub
+    image: induforge/message-hub:latest
+    networks:
+      - induforge-prod-net
+    restart: unless-stopped
+
+  object-store:
+    container_name: induforge-object-store
+    image: induforge/object-store:latest
+    environment:
+      IF_OBJECT_STORE_ACCESS_KEY: ${IF_OBJECT_STORE_ACCESS_KEY:-induforge}
+      IF_OBJECT_STORE_SECRET_KEY: ${IF_OBJECT_STORE_SECRET_KEY:-induforge_dev_secret}
+    volumes:
+      - induforge-object-store-master-data:/data
+      - induforge-object-store-volume-data:/data/volume
+      - induforge-object-store-filer-data:/data/filer
+    networks:
+      - induforge-prod-net
+    restart: unless-stopped
+
+networks:
+  induforge-prod-net:
+    name: induforge-prod-net
+
+volumes:
+  induforge-meta-store-data:
+    name: induforge-meta-store-data
+  induforge-cache-store-data:
+    name: induforge-cache-store-data
+  induforge-object-store-master-data:
+    name: induforge-object-store-master-data
+  induforge-object-store-volume-data:
+    name: induforge-object-store-volume-data
+  induforge-object-store-filer-data:
+    name: induforge-object-store-filer-data

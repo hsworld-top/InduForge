@@ -1,0 +1,102 @@
+name: induforge
+
+services:
+  meta-store:
+    container_name: induforge-meta-store
+    image: timescale/timescaledb:2.26.4-pg16
+    command: ["-c", "shared_preload_libraries=timescaledb"]
+    environment:
+      POSTGRES_USER: ${IF_META_STORE_USER:-postgres}
+      POSTGRES_PASSWORD: ${IF_META_STORE_PASSWORD:-postgres}
+      POSTGRES_DB: ${IF_META_STORE_ADMIN_DATABASE:-postgres}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${IF_META_STORE_PORT:-15432}:5432"
+    volumes:
+      - induforge-meta-store-data:/var/lib/postgresql/data
+    networks:
+      - induforge-dev-net
+    restart: unless-stopped
+
+  cache-store:
+    container_name: induforge-cache-store
+    image: redis:7.2-alpine
+    command:
+      - sh
+      - -c
+      - |
+        if [ -n "$${IF_CACHE_STORE_PASSWORD}" ]; then
+          exec redis-server --appendonly yes --requirepass "$${IF_CACHE_STORE_PASSWORD}"
+        fi
+        exec redis-server --appendonly yes
+    environment:
+      IF_CACHE_STORE_PASSWORD: ${IF_CACHE_STORE_PASSWORD:-}
+    ports:
+      - "${IF_CACHE_STORE_PORT:-16379}:6379"
+    volumes:
+      - induforge-cache-store-data:/data
+    networks:
+      - induforge-dev-net
+    restart: unless-stopped
+
+  message-hub:
+    container_name: induforge-message-hub
+    image: emqx/emqx:5.6.1
+    environment:
+      EMQX_NAME: induforge
+      EMQX_HOST: 127.0.0.1
+    ports:
+      - "${IF_MESSAGE_HUB_MQTT_PORT:-11883}:1883"
+      - "${IF_MESSAGE_HUB_WS_PORT:-18083}:8083"
+      - "${IF_MESSAGE_HUB_DASHBOARD_PORT:-18084}:18083"
+    volumes:
+      - induforge-message-hub-data:/opt/emqx/data
+      - induforge-message-hub-log:/opt/emqx/log
+    networks:
+      - induforge-dev-net
+    restart: unless-stopped
+
+  object-store:
+    container_name: induforge-object-store
+    image: chrislusf/seaweedfs:3.85
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cat > /tmp/induforge-s3.json <<EOF
+        {"identities":[{"name":"induforge-admin","credentials":[{"accessKey":"$${IF_OBJECT_STORE_ACCESS_KEY}","secretKey":"$${IF_OBJECT_STORE_SECRET_KEY}"}],"actions":["Admin","Read","Write","List","Tagging"]}]}
+        EOF
+        exec weed server -ip=object-store -ip.bind=0.0.0.0 -master.port=9333 -master.volumeSizeLimitMB=1024 -volume.port=8080 -dir=/data/volume -filer -filer.port=8888 -s3 -s3.port=8333 -s3.config=/tmp/induforge-s3.json
+    environment:
+      IF_OBJECT_STORE_ACCESS_KEY: ${IF_OBJECT_STORE_ACCESS_KEY:-induforge}
+      IF_OBJECT_STORE_SECRET_KEY: ${IF_OBJECT_STORE_SECRET_KEY:-induforge_dev_secret}
+    ports:
+      - "${IF_OBJECT_STORE_PORT:-25000}:8333"
+      - "${IF_OBJECT_STORE_MASTER_PORT:-19333}:9333"
+      - "${IF_OBJECT_STORE_FILER_PORT:-18888}:8888"
+    volumes:
+      - induforge-object-store-master-data:/data
+      - induforge-object-store-volume-data:/data/volume
+      - induforge-object-store-filer-data:/data/filer
+    networks:
+      - induforge-dev-net
+    restart: unless-stopped
+
+networks:
+  induforge-dev-net:
+    name: induforge-dev-net
+
+volumes:
+  induforge-meta-store-data:
+    name: induforge-meta-store-data
+  induforge-cache-store-data:
+    name: induforge-cache-store-data
+  induforge-message-hub-data:
+    name: induforge-message-hub-data
+  induforge-message-hub-log:
+    name: induforge-message-hub-log
+  induforge-object-store-master-data:
+    name: induforge-object-store-master-data
+  induforge-object-store-volume-data:
+    name: induforge-object-store-volume-data
+  induforge-object-store-filer-data:
+    name: induforge-object-store-filer-data

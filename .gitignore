@@ -6,6 +6,8 @@
 .env.development.local
 .env.test.local
 .env.production.local
+!.env.development.example
+!.env.production.example
 
 # ============================================
 # 依赖与包管理缓存
@@ -47,7 +49,9 @@ scripts/seaweedfs/*.conf
 # ============================================
 # 基础设施本地缓存
 # ============================================
-docker/images/*
+scripts/docker/images/*
+!scripts/docker/images/.gitkeep
+dist/
 
 # ============================================
 # 前端构建产物
