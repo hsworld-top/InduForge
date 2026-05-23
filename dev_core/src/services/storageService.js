@@ -2,6 +2,7 @@ const Minio = require("minio");
 const dayjs = require("dayjs");
 const { logger } = require("../utils/logger");
 const { TIME_FORMAT } = require("../constants/time");
+const { buildObjectStoreConfig } = require("../config/infra");
 
 let storageClient = null;
 const storageStatus = {
@@ -10,61 +11,11 @@ const storageStatus = {
   lastErrorTime: null,
 };
 
-const pickEnvValue = (...values) =>
-  values.find((value) => value !== undefined && value !== null && String(value).trim() !== "");
-
-const parsePort = (value, defaultPort) => {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : defaultPort;
-};
-
-const parseBoolean = (value, defaultValue = false) => {
-  if (typeof value === "boolean") {
-    return value;
-  }
-
-  if (typeof value !== "string") {
-    return defaultValue;
-  }
-
-  const normalized = value.trim().toLowerCase();
-  if (["true", "1", "yes", "on"].includes(normalized)) {
-    return true;
-  }
-  if (["false", "0", "no", "off"].includes(normalized)) {
-    return false;
-  }
-
-  return defaultValue;
-};
-
-const getStorageConfig = () => {
-  const endpoint = pickEnvValue(process.env.SEAWEEDFS_ENDPOINT, "127.0.0.1");
-  const port = parsePort(process.env.SEAWEEDFS_PORT, 25000);
-  const useSSL = parseBoolean(process.env.SEAWEEDFS_USE_SSL, false);
-  const accessKey = pickEnvValue(process.env.SEAWEEDFS_ACCESS_KEY, "");
-  const secretKey = pickEnvValue(process.env.SEAWEEDFS_SECRET_KEY, "");
-  const bucketIfp = pickEnvValue(process.env.SEAWEEDFS_BUCKET_IFP, "ifp-artifacts");
-  const bucketDesign = pickEnvValue(process.env.SEAWEEDFS_BUCKET_DESIGN, "design-assets");
-  const region = pickEnvValue(process.env.SEAWEEDFS_REGION, "us-east-1");
-  const provider = pickEnvValue(process.env.OBJECT_STORAGE_PROVIDER, process.env.STORAGE_PROVIDER, "seaweedfs");
-
-  return {
-    endpoint,
-    port,
-    useSSL,
-    accessKey,
-    secretKey,
-    bucketIfp,
-    bucketDesign,
-    region,
-    provider,
-  };
-};
+const getStorageConfig = buildObjectStoreConfig;
 
 const buildClient = () => {
   const { endpoint, port, useSSL, accessKey, secretKey } = getStorageConfig();
-  // SeaweedFS 提供 S3 兼容接口，这里继续复用 MinIO 客户端。
+  // InduForge 对象存储提供 S3 兼容接口，这里继续复用 MinIO 客户端。
   return new Minio.Client({
     endPoint: endpoint,
     port,

@@ -4,6 +4,7 @@ const dayjs = require("dayjs");
 require("dotenv").config();
 const { logger } = require("../utils/logger");
 const { TIME_FORMAT } = require("../constants/time");
+const { buildMetaStoreConfig } = require("./infra");
 
 const USER_ROLE_VALUES = [
   "SUPER_ADMIN",
@@ -16,17 +17,7 @@ const USER_ROLE_VALUES = [
   "VIEWER",
 ];
 
-const getDatabaseConfig = () => ({
-  host: process.env.DB_HOST || "127.0.0.1",
-  port: Number(process.env.DB_PORT || 5432),
-  user: process.env.DB_USER || "postgres",
-  password: process.env.DB_PASSWORD || "postgres",
-  database: process.env.DB_NAME || "tenant_management",
-  adminDatabase: process.env.DB_ADMIN_NAME || "postgres",
-  connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT || 10000),
-  queryTimeout: Number(process.env.DB_QUERY_TIMEOUT || 30000),
-  sslEnabled: String(process.env.DB_SSL || "false").toLowerCase() === "true",
-});
+const getDatabaseConfig = buildMetaStoreConfig;
 
 const getPgSslConfig = (dbConfig) =>
   dbConfig.sslEnabled

@@ -2,6 +2,7 @@ const Redis = require('ioredis');
 const dayjs = require('dayjs');
 const { logger } = require('./logger');
 const { TIME_FORMAT } = require('../constants/time');
+const { buildCacheStoreConfig } = require('../config/infra');
 
 /**
  * Redis 客户端实例
@@ -17,7 +18,7 @@ let redisStatus = {
   lastError: null,
   lastErrorTime: null,
   retryCount: 0,
-  maxRetries: Number(process.env.REDIS_MAX_RETRIES || 20)
+  maxRetries: buildCacheStoreConfig().maxRetries
 };
 
 /**
@@ -29,11 +30,14 @@ function initRedis() {
     return redisClient;
   }
 
+  const cacheConfig = buildCacheStoreConfig();
+  redisStatus.maxRetries = cacheConfig.maxRetries;
+
   const redisConfig = {
-    host: process.env.REDIS_HOST || '127.0.0.1',
-    port: Number(process.env.REDIS_PORT || 6379),
-    password: process.env.REDIS_PASSWORD || undefined,
-    db: Number(process.env.REDIS_DB || 0),
+    host: cacheConfig.host,
+    port: cacheConfig.port,
+    password: cacheConfig.password || undefined,
+    db: cacheConfig.db,
     // 重连策略：指数退避，最多重试指定次数
     retryStrategy: (times) => {
       redisStatus.retryCount = times;
@@ -53,7 +57,7 @@ function initRedis() {
         }
         
         // 降级模式：每 30 秒重试一次（而不是完全停止）
-        const degradedRetryInterval = Number(process.env.REDIS_DEGRADED_RETRY_INTERVAL || 30000);
+        const degradedRetryInterval = cacheConfig.degradedRetryInterval;
         logger.debug(`Redis degraded mode: retrying in ${degradedRetryInterval}ms`);
         return degradedRetryInterval;
       }

@@ -29,18 +29,29 @@ func TestLoad_RejectsInvalidAddr(t *testing.T) {
 
 func TestLoad_ReadsOptionalDependencyConfig(t *testing.T) {
 	t.Setenv("DATA_SERVICE_ADDR", ":19602")
-	t.Setenv("DATA_SERVICE_DATABASE_URL", "postgres://demo")
-	t.Setenv("DATA_SERVICE_DATABASE_SCHEMA", "tenant_a")
+	t.Setenv("DATA_SERVICE_DATABASE_URL", "")
+	t.Setenv("DATA_SERVICE_DATABASE_SCHEMA", "")
+	t.Setenv("DATA_SERVICE_REDIS_ADDR", "")
+	t.Setenv("DATA_SERVICE_REDIS_PASSWORD", "")
+	t.Setenv("DATA_SERVICE_REDIS_DB", "")
+	t.Setenv("IF_META_STORE_HOST", "meta-store")
+	t.Setenv("IF_META_STORE_PORT", "5432")
+	t.Setenv("IF_META_STORE_USER", "induforge")
+	t.Setenv("IF_META_STORE_PASSWORD", "secret")
+	t.Setenv("IF_META_STORE_DATA_DB", "if_data")
+	t.Setenv("IF_META_STORE_SSL", "false")
+	t.Setenv("IF_META_STORE_DATA_SCHEMA", "tenant_a")
 	t.Setenv("DATA_SERVICE_JWT_SECRET", "secret-123")
-	t.Setenv("DATA_SERVICE_REDIS_ADDR", "127.0.0.1:6379")
-	t.Setenv("DATA_SERVICE_REDIS_PASSWORD", "redis-pass")
-	t.Setenv("DATA_SERVICE_REDIS_DB", "2")
+	t.Setenv("IF_CACHE_STORE_HOST", "cache-store")
+	t.Setenv("IF_CACHE_STORE_PORT", "6379")
+	t.Setenv("IF_CACHE_STORE_PASSWORD", "cache-pass")
+	t.Setenv("IF_CACHE_STORE_DATA_DB", "2")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if cfg.DatabaseURL != "postgres://demo" {
+	if cfg.DatabaseURL != "postgres://induforge:secret@meta-store:5432/if_data?sslmode=disable" {
 		t.Fatalf("expected database url to be loaded, got %q", cfg.DatabaseURL)
 	}
 	if cfg.DatabaseSearchPath != "tenant_a" {
@@ -49,11 +60,11 @@ func TestLoad_ReadsOptionalDependencyConfig(t *testing.T) {
 	if cfg.JWTSecret != "secret-123" {
 		t.Fatalf("expected jwt secret to be loaded, got %q", cfg.JWTSecret)
 	}
-	if cfg.RedisAddr != "127.0.0.1:6379" {
-		t.Fatalf("expected redis addr to be loaded, got %q", cfg.RedisAddr)
+	if cfg.RedisAddr != "cache-store:6379" {
+		t.Fatalf("expected cache addr to be loaded, got %q", cfg.RedisAddr)
 	}
-	if cfg.RedisPassword != "redis-pass" {
-		t.Fatalf("expected redis password to be loaded, got %q", cfg.RedisPassword)
+	if cfg.RedisPassword != "cache-pass" {
+		t.Fatalf("expected cache password to be loaded, got %q", cfg.RedisPassword)
 	}
 	if cfg.RedisDB != 2 {
 		t.Fatalf("expected redis db to be loaded as 2, got %d", cfg.RedisDB)
@@ -61,7 +72,7 @@ func TestLoad_ReadsOptionalDependencyConfig(t *testing.T) {
 }
 
 func TestLoad_RejectsInvalidRedisDB(t *testing.T) {
-	t.Setenv("DATA_SERVICE_REDIS_DB", "bad")
+	t.Setenv("IF_CACHE_STORE_DATA_DB", "bad")
 
 	_, err := Load()
 	if err == nil {
@@ -78,12 +89,17 @@ func TestLoad_ReadsDataServiceConfigFromParentDotEnv(t *testing.T) {
 
 	dotenvPath := filepath.Join(rootDir, ".env")
 	dotenvContent := []byte("DATA_SERVICE_ADDR=:29602\n" +
-		"DATA_SERVICE_DATABASE_URL=postgres://dotenv-demo\n" +
-		"DATA_SERVICE_DATABASE_SCHEMA=dotenv_schema\n" +
+		"IF_META_STORE_HOST=dotenv-meta\n" +
+		"IF_META_STORE_PORT=15432\n" +
+		"IF_META_STORE_USER=dotenv-user\n" +
+		"IF_META_STORE_PASSWORD=dotenv-pass\n" +
+		"IF_META_STORE_DATA_DB=if_data\n" +
+		"IF_META_STORE_DATA_SCHEMA=dotenv_schema\n" +
 		"DATA_SERVICE_JWT_SECRET=dotenv-secret-1234\n" +
-		"DATA_SERVICE_REDIS_ADDR=127.0.0.1:6380\n" +
-		"DATA_SERVICE_REDIS_PASSWORD=dotenv-redis-pass\n" +
-		"DATA_SERVICE_REDIS_DB=3\n")
+		"IF_CACHE_STORE_HOST=dotenv-cache\n" +
+		"IF_CACHE_STORE_PORT=16379\n" +
+		"IF_CACHE_STORE_PASSWORD=dotenv-cache-pass\n" +
+		"IF_CACHE_STORE_DATA_DB=3\n")
 	if err := os.WriteFile(dotenvPath, dotenvContent, 0o644); err != nil {
 		t.Fatalf("write dotenv failed: %v", err)
 	}
@@ -92,10 +108,20 @@ func TestLoad_ReadsDataServiceConfigFromParentDotEnv(t *testing.T) {
 		"DATA_SERVICE_ADDR",
 		"DATA_SERVICE_DATABASE_URL",
 		"DATA_SERVICE_DATABASE_SCHEMA",
-		"DATA_SERVICE_JWT_SECRET",
 		"DATA_SERVICE_REDIS_ADDR",
 		"DATA_SERVICE_REDIS_PASSWORD",
 		"DATA_SERVICE_REDIS_DB",
+		"IF_META_STORE_HOST",
+		"IF_META_STORE_PORT",
+		"IF_META_STORE_USER",
+		"IF_META_STORE_PASSWORD",
+		"IF_META_STORE_DATA_DB",
+		"IF_META_STORE_DATA_SCHEMA",
+		"DATA_SERVICE_JWT_SECRET",
+		"IF_CACHE_STORE_HOST",
+		"IF_CACHE_STORE_PORT",
+		"IF_CACHE_STORE_PASSWORD",
+		"IF_CACHE_STORE_DATA_DB",
 	} {
 		t.Setenv(key, "")
 	}
@@ -118,7 +144,7 @@ func TestLoad_ReadsDataServiceConfigFromParentDotEnv(t *testing.T) {
 	if cfg.Addr != ":29602" {
 		t.Fatalf("expected addr from dotenv, got %q", cfg.Addr)
 	}
-	if cfg.DatabaseURL != "postgres://dotenv-demo" {
+	if cfg.DatabaseURL != "postgres://dotenv-user:dotenv-pass@dotenv-meta:15432/if_data?sslmode=disable" {
 		t.Fatalf("expected database url from dotenv, got %q", cfg.DatabaseURL)
 	}
 	if cfg.DatabaseSearchPath != "dotenv_schema" {
@@ -127,11 +153,11 @@ func TestLoad_ReadsDataServiceConfigFromParentDotEnv(t *testing.T) {
 	if cfg.JWTSecret != "dotenv-secret-1234" {
 		t.Fatalf("expected jwt secret from dotenv, got %q", cfg.JWTSecret)
 	}
-	if cfg.RedisAddr != "127.0.0.1:6380" {
-		t.Fatalf("expected redis addr from dotenv, got %q", cfg.RedisAddr)
+	if cfg.RedisAddr != "dotenv-cache:16379" {
+		t.Fatalf("expected cache addr from dotenv, got %q", cfg.RedisAddr)
 	}
-	if cfg.RedisPassword != "dotenv-redis-pass" {
-		t.Fatalf("expected redis password from dotenv, got %q", cfg.RedisPassword)
+	if cfg.RedisPassword != "dotenv-cache-pass" {
+		t.Fatalf("expected cache password from dotenv, got %q", cfg.RedisPassword)
 	}
 	if cfg.RedisDB != 3 {
 		t.Fatalf("expected redis db from dotenv, got %d", cfg.RedisDB)
@@ -153,7 +179,7 @@ func TestValidateConnectionsDependencies_RejectsMissingDatabaseURL(t *testing.T)
 	if err == nil {
 		t.Fatal("expected missing database url to be rejected")
 	}
-	if got := err.Error(); got != "缺少 DATA_SERVICE_DATABASE_URL，connections 路由不会挂载" {
+	if got := err.Error(); got != "缺少 IF_META_STORE_* 配置，connections 路由不会挂载" {
 		t.Fatalf("unexpected error message: %q", got)
 	}
 }
@@ -163,7 +189,7 @@ func TestValidatePreviewDependencies_RejectsMissingRedisAddr(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected missing redis addr to be rejected")
 	}
-	if got := err.Error(); got != "缺少 DATA_SERVICE_REDIS_ADDR，preview 路由不会挂载" {
+	if got := err.Error(); got != "缺少 IF_CACHE_STORE_* 配置，preview 路由不会挂载" {
 		t.Fatalf("unexpected error message: %q", got)
 	}
 }

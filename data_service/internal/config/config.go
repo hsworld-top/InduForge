@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -37,18 +38,18 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	redisDB, err := parseRedisDB(os.Getenv("DATA_SERVICE_REDIS_DB"))
+	redisDB, err := parseRedisDB(firstEnv("IF_CACHE_STORE_DATA_DB", "DATA_SERVICE_REDIS_DB"))
 	if err != nil {
 		return Config{}, err
 	}
 
 	return Config{
 		Addr:               addr,
-		DatabaseURL:        strings.TrimSpace(os.Getenv("DATA_SERVICE_DATABASE_URL")),
-		DatabaseSearchPath: strings.TrimSpace(os.Getenv("DATA_SERVICE_DATABASE_SCHEMA")),
+		DatabaseURL:        buildDatabaseURL(),
+		DatabaseSearchPath: strings.TrimSpace(firstEnv("IF_META_STORE_DATA_SCHEMA", "DATA_SERVICE_DATABASE_SCHEMA")),
 		JWTSecret:          strings.TrimSpace(os.Getenv("DATA_SERVICE_JWT_SECRET")),
-		RedisAddr:          strings.TrimSpace(os.Getenv("DATA_SERVICE_REDIS_ADDR")),
-		RedisPassword:      strings.TrimSpace(os.Getenv("DATA_SERVICE_REDIS_PASSWORD")),
+		RedisAddr:          buildRedisAddr(),
+		RedisPassword:      strings.TrimSpace(firstEnv("IF_CACHE_STORE_PASSWORD", "DATA_SERVICE_REDIS_PASSWORD")),
 		RedisDB:            redisDB,
 	}, nil
 }
@@ -64,7 +65,7 @@ func validateAddr(addr string) error {
 // ValidateConnectionsDependencies 校验 connections 路由可选依赖。
 func ValidateConnectionsDependencies(cfg Config) error {
 	if strings.TrimSpace(cfg.DatabaseURL) == "" {
-		return fmt.Errorf("缺少 DATA_SERVICE_DATABASE_URL，connections 路由不会挂载")
+		return fmt.Errorf("缺少 IF_META_STORE_* 配置，connections 路由不会挂载")
 	}
 	if err := ValidateJWTSecret(cfg.JWTSecret); err != nil {
 		return err
@@ -87,9 +88,62 @@ func ValidateJWTSecret(secret string) error {
 // ValidatePreviewDependencies 校验 preview 会话路由是否具备运行依赖。
 func ValidatePreviewDependencies(cfg Config) error {
 	if strings.TrimSpace(cfg.RedisAddr) == "" {
-		return fmt.Errorf("缺少 DATA_SERVICE_REDIS_ADDR，preview 路由不会挂载")
+		return fmt.Errorf("缺少 IF_CACHE_STORE_* 配置，preview 路由不会挂载")
 	}
 	return nil
+}
+
+func firstEnv(names ...string) string {
+	for _, name := range names {
+		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func buildDatabaseURL() string {
+	host := firstEnv("IF_META_STORE_HOST")
+	user := firstEnv("IF_META_STORE_USER")
+	password := firstEnv("IF_META_STORE_PASSWORD")
+	database := firstEnv("IF_META_STORE_DATA_DB")
+	if host == "" || user == "" || database == "" {
+		return strings.TrimSpace(os.Getenv("DATA_SERVICE_DATABASE_URL"))
+	}
+
+	port := firstEnv("IF_META_STORE_PORT")
+	if port == "" {
+		port = "5432"
+	}
+
+	sslMode := "disable"
+	if strings.EqualFold(firstEnv("IF_META_STORE_SSL"), "true") {
+		sslMode = "require"
+	}
+
+	dsn := &url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(user, password),
+		Host:   net.JoinHostPort(host, port),
+		Path:   database,
+	}
+	query := dsn.Query()
+	query.Set("sslmode", sslMode)
+	dsn.RawQuery = query.Encode()
+	return dsn.String()
+}
+
+func buildRedisAddr() string {
+	host := firstEnv("IF_CACHE_STORE_HOST")
+	if host == "" {
+		return strings.TrimSpace(os.Getenv("DATA_SERVICE_REDIS_ADDR"))
+	}
+
+	port := firstEnv("IF_CACHE_STORE_PORT")
+	if port == "" {
+		port = "6379"
+	}
+	return net.JoinHostPort(host, port)
 }
 
 func parseRedisDB(raw string) (int, error) {

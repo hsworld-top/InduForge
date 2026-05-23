@@ -11,16 +11,11 @@ const dayjs = require("dayjs");
 const fs = require("fs");
 const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
+const { buildMetaStoreConfig } = require("../src/config/infra");
 
 const dbConfig = {
-  host: process.env.DB_HOST || "127.0.0.1",
-  port: Number(process.env.DB_PORT || 5432),
-  user: process.env.DB_USER || "postgres",
-  password: process.env.DB_PASSWORD || "postgres",
-  database: process.env.DB_NAME || "tenant_management",
-  adminDatabase: process.env.DB_ADMIN_NAME || "postgres",
+  ...buildMetaStoreConfig(),
   connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT || 60000),
-  sslEnabled: String(process.env.DB_SSL || "false").toLowerCase() === "true",
 };
 
 const NON_CRITICAL_SQL_ERROR_CODES = new Set(["42P07", "42710", "23505"]);
