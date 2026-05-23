@@ -1,6 +1,6 @@
 # NodeAgent
 
-NodeAgent 是用于在节点上部署和运行 RuntimeEngine 的 Go 语言实现。它提供了本地 Web 运维界面，支持多种执行方式（进程、Docker、systemd）。
+NodeAgent 是用于在节点上部署和运行 RuntimeEngine 的 Go 语言实现。它提供本地 Web 运维接口，支持多种执行方式（进程、Docker、systemd）。
 
 ## 功能特性
 
@@ -17,16 +17,15 @@ NodeAgent 是用于在节点上部署和运行 RuntimeEngine 的 Go 语言实现
 ### 1. 安装依赖
 
 ```bash
-# 安装 Go 1.21+
+# 安装 Go 1.24+
 # 安装 Docker (可选)
 ```
 
 ### 2. 构建
 
 ```bash
-# 克隆项目
-git clone <repository>
-cd node_agent
+# 从仓库根目录进入模块
+cd runtime/node_agent
 
 # 下载依赖
 go mod tidy
@@ -38,6 +37,8 @@ go build -o node_agent ./cmd/main.go
 ### 3. 配置
 
 配置文件 `config.yaml` 在首次运行时会自动生成在当前目录。如需自定义，可以编辑该文件：
+
+监听端口优先读取进程环境变量或仓库根目录 `.env` 中的 `NODE_AGENT_PORT`。当前统一默认端口是 `18103`。
 
 ```yaml
 agent:
@@ -99,7 +100,7 @@ agent:
 
 NodeAgent 提供了完整的 Web 管理界面，基于 Vue 3 开发，位于独立项目：
 
-**前端项目**: `/workspace/runtime/node_agent_front`
+**前端项目**: `runtime/node_agent_front`
 
 ### 前端功能
 
@@ -113,26 +114,26 @@ NodeAgent 提供了完整的 Web 管理界面，基于 Vue 3 开发，位于独�
 ### 启动前端
 
 ```bash
-cd /workspace/runtime/node_agent_front
+cd runtime/node_agent_front
 pnpm install
 pnpm dev
 ```
 
-前端将在 `http://localhost:3000` 启动，并通过代理访问 NodeAgent API (`http://localhost:8080`)。
+前端默认在 `http://localhost:18604` 启动，并通过根目录 `.env` 的 `NODE_AGENT_PORT` 代理访问 NodeAgent API，默认后端地址是 `http://localhost:18103`。
 
 ## 使用示例
 
 ### 部署项目
 
 ```bash
-curl -X POST http://127.0.0.1:8080/api/v1/projects/demo/deploy \
+curl -X POST http://127.0.0.1:18103/api/v1/projects/demo/deploy \
   -H "Content-Type: application/json" \
   -d '{
     "version": "1.0.0",
     "ifpPackage": "/path/to/demo.ifp",
     "connectionProfile": {
       "name": "demo-profile",
-      "endpoint": "http://localhost:8080",
+      "endpoint": "http://localhost:18103",
       "authType": "token",
       "authData": {"token": "xxx"}
     },
@@ -143,7 +144,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/projects/demo/deploy \
 ### 启动项目
 
 ```bash
-curl -X POST http://127.0.0.1:8080/api/v1/projects/demo/start
+curl -X POST http://127.0.0.1:18103/api/v1/projects/demo/start
 ```
 
 ## 目录结构
@@ -221,13 +222,13 @@ tail -f /var/log/node_agent/runtime/{projectID}.log
 ### 检查健康状态
 
 ```bash
-curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:18103/health
 ```
 
 ### 检查节点状态
 
 ```bash
-curl http://127.0.0.1:8080/api/v1/node/status
+curl http://127.0.0.1:18103/api/v1/node/status
 ```
 
 ## 开发指南

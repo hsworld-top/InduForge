@@ -30,8 +30,8 @@
 
 - `datacenter` 在 Phase 1 只应把 `relational`、`mqtt`、`kafka`、`http`、`websocket`、`redis` 视为正式协议范围。
 - MQTT 是唯一要求走到“配置 + 短时 preview + artifact”完整闭环的样板协议。
-- Kafka 在工作台里只保证配置与 `mock` 样本预览；HTTP/WebSocket/Redis 只保证配置与 artifact 契约，不承诺 Phase 1 独立 preview/runtime 行为。
-- `opcua`、`s7`、`modbus`、`tdengine`、`opcda` 不属于 Phase 1 正式范围。即便后端保留路由占位，前端也不应把这些入口当成正式可用能力依赖。
+- Kafka、HTTP、WebSocket、Redis 在 Phase 1 提供配置、artifact 输出和短时 preview 能力，但 preview 只服务开发态调试，不承担长期采集或节点侧运行。
+- `opcua`、`s7`、`modbus`、`tdengine`、`opcda` 属于后续工业协议配置范围，不应把这些入口当成完整 preview/runtime 能力依赖。
 
 ## 质量关注点
 

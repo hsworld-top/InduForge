@@ -22,7 +22,7 @@ const { registerVersionedRoutes } = require('./routes/register');
  * 获取应用配置
  */
 const getAppConfig = () => {
-  const PORT = Number(process.env.PORT || 19601);
+  const PORT = Number(process.env.PORT || 18101);
   const NODE_ENV = process.env.NODE_ENV || 'development';
   const ENABLE_SWAGGER = String(process.env.ENABLE_SWAGGER || 'true') === 'true';
 

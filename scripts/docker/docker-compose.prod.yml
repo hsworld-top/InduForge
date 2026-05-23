@@ -20,21 +20,22 @@ services:
     container_name: induforge-control
     image: induforge/control:latest
     build:
-      context: ../../dev_core
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: dev_core/Dockerfile
     env_file:
       - ../../.env
     environment:
       NODE_ENV: production
-      PORT: 19601
+      PORT: 18101
+      DB_AUTO_SCHEMA_SYNC: "false"
       IF_META_STORE_HOST: meta-store
-      IF_META_STORE_PORT: 5432
+      IF_META_STORE_PORT: 18432
       IF_CACHE_STORE_HOST: cache-store
-      IF_CACHE_STORE_PORT: 6379
+      IF_CACHE_STORE_PORT: 18379
       IF_OBJECT_STORE_ENDPOINT: object-store
-      IF_OBJECT_STORE_PORT: 8333
+      IF_OBJECT_STORE_PORT: 18500
     expose:
-      - "19601"
+      - "18101"
     depends_on:
       - meta-store
       - cache-store
@@ -52,13 +53,15 @@ services:
     env_file:
       - ../../.env
     environment:
-      DATA_SERVICE_ADDR: :19602
+      NODE_ENV: production
+      DB_AUTO_SCHEMA_SYNC: "false"
+      DATA_SERVICE_ADDR: :18102
       IF_META_STORE_HOST: meta-store
-      IF_META_STORE_PORT: 5432
+      IF_META_STORE_PORT: 18432
       IF_CACHE_STORE_HOST: cache-store
-      IF_CACHE_STORE_PORT: 6379
+      IF_CACHE_STORE_PORT: 18379
     expose:
-      - "19602"
+      - "18102"
     depends_on:
       - meta-store
       - cache-store
@@ -70,7 +73,7 @@ services:
   meta-store:
     container_name: induforge-meta-store
     image: timescale/timescaledb:2.26.4-pg16
-    command: ["-c", "shared_preload_libraries=timescaledb"]
+    command: ["-p", "18432", "-c", "shared_preload_libraries=timescaledb"]
     environment:
       POSTGRES_USER: ${IF_META_STORE_USER:-postgres}
       POSTGRES_PASSWORD: ${IF_META_STORE_PASSWORD:-postgres}
@@ -90,9 +93,9 @@ services:
       - -c
       - |
         if [ -n "$${IF_CACHE_STORE_PASSWORD}" ]; then
-          exec redis-server --appendonly yes --requirepass "$${IF_CACHE_STORE_PASSWORD}"
+          exec redis-server --port 18379 --appendonly yes --requirepass "$${IF_CACHE_STORE_PASSWORD}"
         fi
-        exec redis-server --appendonly yes
+        exec redis-server --port 18379 --appendonly yes
     environment:
       IF_CACHE_STORE_PASSWORD: ${IF_CACHE_STORE_PASSWORD:-}
     volumes:
@@ -107,6 +110,9 @@ services:
     environment:
       EMQX_NAME: induforge
       EMQX_HOST: message-hub
+      EMQX_LISTENERS__TCP__DEFAULT__BIND: "0.0.0.0:18883"
+      EMQX_LISTENERS__WS__DEFAULT__BIND: "0.0.0.0:18083"
+      EMQX_DASHBOARD__LISTENERS__HTTP__BIND: "0.0.0.0:18084"
     volumes:
       - induforge-message-hub-data:/opt/emqx/data
       - induforge-message-hub-log:/opt/emqx/log
@@ -123,7 +129,7 @@ services:
         cat > /tmp/induforge-s3.json <<EOF
         {"identities":[{"name":"induforge-admin","credentials":[{"accessKey":"$${IF_OBJECT_STORE_ACCESS_KEY}","secretKey":"$${IF_OBJECT_STORE_SECRET_KEY}"}],"actions":["Admin","Read","Write","List","Tagging"]}]}
         EOF
-        exec weed server -ip=object-store -ip.bind=0.0.0.0 -master.port=9333 -master.volumeSizeLimitMB=1024 -volume.port=8080 -dir=/data/volume -filer -filer.port=8888 -s3 -s3.port=8333 -s3.config=/tmp/induforge-s3.json
+        exec weed server -ip=object-store -ip.bind=0.0.0.0 -master.port=18333 -master.volumeSizeLimitMB=1024 -volume.port=18081 -dir=/data/volume -filer -filer.port=18888 -s3 -s3.port=18500 -s3.config=/tmp/induforge-s3.json
     environment:
       IF_OBJECT_STORE_ACCESS_KEY: ${IF_OBJECT_STORE_ACCESS_KEY:-induforge}
       IF_OBJECT_STORE_SECRET_KEY: ${IF_OBJECT_STORE_SECRET_KEY:-induforge_dev_secret}

@@ -5,7 +5,7 @@ const DEFAULT_TIMEOUT_MS = Number(process.env.DATA_SERVICE_TIMEOUT_MS || 10000);
 const DEFAULT_BASE_URL =
   process.env.DATA_SERVICE_BASE_URL ||
   process.env.VITE_DATA_SERVICE_URL ||
-  "http://127.0.0.1:19602";
+  "http://127.0.0.1:18102";
 
 /**
  * 读取对象中的首个已定义字段，兼容 data_service 当前返回的 PascalCase 字段，

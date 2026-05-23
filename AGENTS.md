@@ -66,10 +66,28 @@
 - 命令优先使用 PowerShell、cmd、模块自带脚本或 Makefile。
 - Unix 命令不可用时，改用 PowerShell。
 - Node 模块统一使用 pnpm。
+- Node 依赖由根目录 pnpm workspace 统一管理，只在仓库根目录执行 `pnpm install`，不要在子项目目录单独安装依赖。
+- Prettier 配置统一维护在根目录；ESLint 配置当前按前端模块保留差异，不跨模块强行合并。
 - Go 模块遵循 Makefile 或 go 命令。
 - 统一使用根目录 `.env`。
 - 端口以根目录 `.env` 为本机实际来源。
-- `.env_example` 与 `README.md` 只维护统一默认端口。
+- 环境模板分为 `.env.development.example` 与 `.env.production.example`。
+- 默认端口以根目录 `.env`、环境模板和 `docs/环境端口规划.md` 为准。
+- 开发环境宿主机端口统一使用 `18xxx` 段；生产/离线环境默认只暴露 edge/Nginx 入口，其他服务走 Docker 内部服务名。
+- Windows + WSL2 开发时，WSL2 只承载 Docker 基础设施；`pnpm install` 和业务项目启动优先在 Windows 侧执行。
+
+## 基础设施与交付
+
+- 开发人员入口是 `scripts/dev/init-linux.sh`。
+- `scripts/dev/init-linux.sh` 只检测 Docker、生成 `.env`、启动开发基础设施容器、创建 `if_core`/`if_data`/`if_dev_data` 并启用开发态时序扩展。
+- 开发初始化脚本不安装 Node 依赖，不启动 `dev_core`、`data_service` 或前端项目。
+- `dev_core` 开发环境通过 `DB_AUTO_SCHEMA_SYNC=true` 在启动时同步 `if_core` 表结构和默认数据。
+- 控制面数据库 bootstrap 文件位于 `dev_core/scripts/bootstrap/`，结构 SQL 位于 `dev_core/scripts/bootstrap/sql/core-schema.sql`。
+- 不再使用 `db:init`、`db:reset` 或 `dev_core/database/` 作为日常入口。
+- 生产/离线环境保持 `DB_AUTO_SCHEMA_SYNC=false`，数据库结构只允许安装阶段通过安装脚本初始化。
+- 测试打包入口是 `scripts/release/build-offline-package-linux.sh`，目标安装入口是 `scripts/offline/install.sh` / `scripts/offline/install.ps1`。
+- 离线镜像缓存目录是 `scripts/docker/images/`；镜像 tar 不提交 Git。
+- 离线包内基础设施镜像使用 `induforge/*` 产品体系命名，避免在交付拓扑中直接暴露底层镜像名。
 
 ## 工程约束
 
@@ -115,7 +133,7 @@ YYYY-MM-DD HH:mm:ss
 - `runtime/`：运行时共享规则入口。
 - `runtime/node_agent/`：节点执行器后端。
 - `runtime/node_agent_front/`：节点本地管理前端。
-- `scripts/`：本地开发与基础设施脚本目录。
+- `scripts/`：本地开发、基础设施、离线打包、安装卸载和模拟数据脚本目录。
 
 ## 文档
 
@@ -130,7 +148,6 @@ YYYY-MM-DD HH:mm:ss
 
 - `scripts/docker/`
 - `scripts/nginx/`
-- `scripts/seaweedfs/`
 
 ## 注释
 

@@ -144,7 +144,7 @@ func TestNewServer_LogsInitializationSummary(t *testing.T) {
 	})
 	t.Cleanup(resetRoutes)
 
-	srv, err := NewServer(config.Config{Addr: ":19602"})
+	srv, err := NewServer(config.Config{Addr: ":18102"})
 	if err != nil {
 		t.Fatalf("new server failed: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestNewServer_LogsInitializationSummary(t *testing.T) {
 	if !strings.Contains(logOutput, "data_service 路由装配完成") {
 		t.Fatalf("expected initialization log, got %q", logOutput)
 	}
-	if !strings.Contains(logOutput, "addr=:19602") {
+	if !strings.Contains(logOutput, "addr=:18102") {
 		t.Fatalf("expected addr in initialization log, got %q", logOutput)
 	}
 	if !strings.Contains(logOutput, "routeSummary=") {

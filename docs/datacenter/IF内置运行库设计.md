@@ -38,8 +38,7 @@
 ```text
 平台开发态
 ├─ IF元数据能力
-│  ├─ if_core       -> 控制面系统库
-│  ├─ if_design     -> 设计资产与设计中心边界
+│  ├─ if_core       -> 控制面与设计中心系统库
 │  ├─ if_data       -> 数据中心系统库
 │  └─ if_dev_data   -> IF关系库 / IF时序库开发沙箱
 │
@@ -239,7 +238,6 @@ IF对象库用于工程资源和运行产物，不等同于外部对象存储接
 
 ```text
 if_core
-if_design
 if_data
 if_dev_data
 postgres
@@ -320,7 +318,9 @@ pg_toast
 
 ## 与 scripts 的当前边界
 
-- `scripts/dev/init-linux.sh` 负责创建开发态基础设施、数据库和默认账号，不启动业务项目。
+- `scripts/dev/init-linux.sh` 负责创建开发态基础设施和 `if_core`、`if_data`、`if_dev_data`，不启动业务项目。
+- `dev_core` 在开发环境启动时根据 `DB_AUTO_SCHEMA_SYNC=true` 同步 `if_core` 表结构和默认租户/管理员数据。
+- 生产和离线环境保持 `DB_AUTO_SCHEMA_SYNC=false`，由安装脚本在安装阶段执行控制面数据库 bootstrap。
 - `scripts/docker/docker-compose.dev.yml` 允许开发环境暴露基础设施端口，便于调试。
 - `scripts/docker/docker-compose.offline.yml` 只使用 `induforge/*` 产品体系镜像名，对外只暴露 edge 入口。
 - `scripts/release/build-offline-package-linux.sh` 负责生成离线包，镜像默认缓存到 `scripts/docker/images/`。

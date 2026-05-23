@@ -244,8 +244,8 @@ const checkDatabaseExists = async () => {
  */
 const autoInitializeDatabase = async () => {
   try {
-    logger.info("🔄 检测到数据库不存在，开始自动创建并同步结构...");
-    const { syncDatabaseSchema } = require("../../scripts/init-database");
+    logger.info("🔄 检测到数据库不存在，开始按开发配置创建并同步结构...");
+    const { syncDatabaseSchema } = require("../../scripts/bootstrap/init-core-database");
     const syncResult = await syncDatabaseSchema({ reset: false, seed: true });
     logger.info("✅ 数据库自动创建并同步完成", syncResult);
     return true;
@@ -258,9 +258,10 @@ const autoInitializeDatabase = async () => {
     console.log("\n🔧 数据库初始化指南:");
     console.log("=".repeat(50));
     console.log("1. 确保 PostgreSQL 服务正在运行");
-    console.log("2. 手动执行数据库初始化脚本:");
+    console.log("2. 开发环境确认 DB_AUTO_SCHEMA_SYNC=true 后重新启动 dev_core:");
     console.log(`   cd ${process.cwd()}`);
-    console.log("   node scripts/init-database.js init");
+    console.log("   pnpm dev");
+    console.log("3. 生产环境请通过安装脚本完成数据库初始化，不允许运行时自动建表");
     console.log("=".repeat(50));
     console.log("");
 
@@ -311,8 +312,8 @@ const testConnection = async () => {
     logger.info(`🔍 检查数据库 '${dbConfig.database}' 是否存在...`);
     const dbExists = await checkDatabaseExists();
 
-    if (!dbExists) {
-      logger.warn(`⚠️ 数据库 '${dbConfig.database}' 不存在，将自动创建并初始化`);
+    if (!dbExists && shouldAutoSyncSchema()) {
+      logger.warn(`⚠️ 数据库 '${dbConfig.database}' 不存在，将按开发配置自动创建并初始化`);
       const initSuccess = await autoInitializeDatabase();
 
       if (!initSuccess) {
@@ -321,6 +322,20 @@ const testConnection = async () => {
       }
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
+    } else if (!dbExists) {
+      logger.error("❌ 数据库不存在且已禁用自动同步，应用将退出", {
+        database: dbConfig.database,
+        autoSync: shouldAutoSyncSchema(),
+      });
+
+      console.log("\n🔧 数据库初始化指南:");
+      console.log("=".repeat(50));
+      console.log("1. 开发环境如需自动建库，请设置 DB_AUTO_SCHEMA_SYNC=true 后重新启动 dev_core");
+      console.log("2. 生产环境请先执行离线安装包安装脚本，由安装阶段创建数据库结构");
+      console.log("=".repeat(50));
+      console.log("");
+
+      process.exit(1);
     } else {
       logger.info(`✅ 数据库 '${dbConfig.database}' 已存在`);
     }
@@ -330,8 +345,8 @@ const testConnection = async () => {
     logger.info("✅ 数据库连接成功");
 
     if (shouldAutoSyncSchema()) {
-      logger.info("🔄 开始数据库结构一致性同步（init.sql）...");
-      const { syncDatabaseSchema } = require("../../scripts/init-database");
+      logger.info("🔄 开始数据库结构一致性同步（core-schema.sql）...");
+      const { syncDatabaseSchema } = require("../../scripts/bootstrap/init-core-database");
       const syncResult = await syncDatabaseSchema({
         reset: false,
         seed: false,
@@ -359,9 +374,9 @@ const testConnection = async () => {
       console.log("\n🔧 数据库初始化指南:");
       console.log("=".repeat(50));
       console.log("1. 确保 PostgreSQL 服务正在运行");
-      console.log("2. 执行数据库初始化脚本:");
+      console.log("2. 确认开发环境已启用 DB_AUTO_SCHEMA_SYNC，或重新启动 dev_core:");
       console.log(`   cd ${process.cwd()}`);
-      console.log("   node scripts/init-database.js init");
+      console.log("   pnpm dev");
       console.log("=".repeat(50));
       console.log("");
 

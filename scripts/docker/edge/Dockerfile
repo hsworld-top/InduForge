@@ -13,9 +13,10 @@ RUN pnpm config set network-concurrency 4
 
 COPY . .
 
-RUN cd dev_ide && pnpm install --frozen-lockfile && pnpm build
-RUN cd datacenter && pnpm install --frozen-lockfile && pnpm build
-RUN cd designer && pnpm install --frozen-lockfile && pnpm build
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter ide build
+RUN pnpm --filter datacenter build
+RUN pnpm --filter designer build
 
 FROM nginx:1.27-alpine
 

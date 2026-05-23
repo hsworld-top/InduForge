@@ -19,6 +19,6 @@ RUN apk add --no-cache ca-certificates
 
 COPY --from=builder /out/data-service ./data-service
 
-EXPOSE 19602
+EXPOSE 18102
 
 CMD ["./data-service"]

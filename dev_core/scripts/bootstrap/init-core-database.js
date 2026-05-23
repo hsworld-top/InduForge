@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 /**
- * 数据库初始化脚本
- * 使用 PostgreSQL 创建业务库，并执行 database/init.sql 完成结构同步。
+ * 控制面数据库 bootstrap 脚本。
+ * 使用 PostgreSQL 创建 if_core，并执行 core-schema.sql 完成结构同步和初始数据补齐。
  */
 
 const { Client } = require("pg");
@@ -10,8 +10,8 @@ const bcrypt = require("bcryptjs");
 const dayjs = require("dayjs");
 const fs = require("fs");
 const path = require("path");
-require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
-const { buildMetaStoreConfig } = require("../src/config/infra");
+require("dotenv").config({ path: path.resolve(__dirname, "../../../.env") });
+const { buildMetaStoreConfig } = require("../../src/config/infra");
 
 const dbConfig = {
   ...buildMetaStoreConfig(),
@@ -389,7 +389,7 @@ async function syncDatabaseSchema(options = {}) {
     client = buildClient(dbConfig.database);
     await client.connect();
 
-    const sqlFilePath = path.join(__dirname, "..", "database", "init.sql");
+    const sqlFilePath = path.join(__dirname, "sql", "core-schema.sql");
     if (!fs.existsSync(sqlFilePath)) {
       throw new Error(`SQL 文件不存在: ${sqlFilePath}`);
     }
@@ -442,32 +442,15 @@ async function executeSqlFile() {
   }
 }
 
-async function resetDatabase() {
-  try {
-    console.log("🔄 正在重置并同步数据库结构...");
-    const result = await syncDatabaseSchema({ reset: true, seed: true });
-    console.log(
-      `✅ 数据库结构同步完成，总语句 ${result.total}，执行 ${result.executed}，跳过 ${result.skipped}`,
-    );
-    console.log("🎉 数据库重置完成！");
-  } catch (error) {
-    console.error("❌ 数据库重置失败:", error);
-    process.exit(1);
-  }
-}
-
 async function main() {
   const command = process.argv[2];
 
-  if (command === "reset") {
-    await resetDatabase();
-  } else if (command === "init" || !command) {
+  if (command === "init" || !command) {
     await executeSqlFile();
   } else {
     console.log("使用方法:");
-    console.log("  node scripts/init-database.js init    # 初始化数据库");
     console.log(
-      "  node scripts/init-database.js reset   # 重置数据库（删除所有表）",
+      "  node scripts/bootstrap/init-core-database.js init    # 初始化控制面数据库",
     );
     process.exit(1);
   }
@@ -482,7 +465,6 @@ if (require.main === module) {
 
 module.exports = {
   executeSqlFile,
-  resetDatabase,
   syncDatabaseSchema,
   splitSqlStatements,
 };

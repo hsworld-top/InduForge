@@ -27,7 +27,9 @@ scripts/docker/images/
 - 本地已有镜像时不重复拉取。
 - 基础镜像缺失时自动拉取。
 - 业务镜像从当前源码构建。
+- 产品体系基础设施镜像从 `scripts/docker/infra/` 构建。
 - 安装包内使用 `induforge/*` 产品体系镜像名。
+- 镜像 tar 会保存回 `scripts/docker/images/`，但不应提交 Git。
 
 ## 输出
 

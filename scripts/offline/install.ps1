@@ -109,10 +109,11 @@ function Wait-MetaStore {
   $user = Get-EnvValue "IF_META_STORE_USER" "postgres"
   $password = Get-EnvValue "IF_META_STORE_PASSWORD" "postgres"
   $adminDb = Get-EnvValue "IF_META_STORE_ADMIN_DATABASE" "postgres"
+  $port = Get-EnvValue "IF_META_STORE_PORT" "18432"
 
   Write-Host "等待元数据能力就绪..."
   for ($i = 0; $i -lt 60; $i++) {
-    docker exec -e "PGPASSWORD=$password" $metaContainer psql -U $user -d $adminDb -tAc "SELECT 1" *> $null
+    docker exec -e "PGPASSWORD=$password" $metaContainer psql -p $port -U $user -d $adminDb -tAc "SELECT 1" *> $null
     if ($LASTEXITCODE -eq 0) {
       return
     }
@@ -128,15 +129,16 @@ function New-DatabaseIfNeeded {
   $user = Get-EnvValue "IF_META_STORE_USER" "postgres"
   $password = Get-EnvValue "IF_META_STORE_PASSWORD" "postgres"
   $adminDb = Get-EnvValue "IF_META_STORE_ADMIN_DATABASE" "postgres"
+  $port = Get-EnvValue "IF_META_STORE_PORT" "18432"
   $quoted = ConvertTo-SqlIdentifier $Database
 
-  $exists = docker exec -e "PGPASSWORD=$password" $metaContainer psql -U $user -d $adminDb -tAc "SELECT 1 FROM pg_database WHERE datname = '$Database';"
+  $exists = docker exec -e "PGPASSWORD=$password" $metaContainer psql -p $port -U $user -d $adminDb -tAc "SELECT 1 FROM pg_database WHERE datname = '$Database';"
   if (($exists -join "").Trim() -eq "1") {
     Write-Host "数据库已存在: $Database"
     return
   }
 
-  docker exec -e "PGPASSWORD=$password" $metaContainer psql -U $user -d $adminDb -c "CREATE DATABASE $quoted;"
+  docker exec -e "PGPASSWORD=$password" $metaContainer psql -p $port -U $user -d $adminDb -c "CREATE DATABASE $quoted;"
   Write-Host "数据库已创建: $Database"
 }
 
@@ -145,9 +147,10 @@ function Enable-TimeSeriesExtension {
 
   $user = Get-EnvValue "IF_META_STORE_USER" "postgres"
   $password = Get-EnvValue "IF_META_STORE_PASSWORD" "postgres"
+  $port = Get-EnvValue "IF_META_STORE_PORT" "18432"
   $extensionName = "time" + "scaledb"
 
-  docker exec -e "PGPASSWORD=$password" $metaContainer psql -U $user -d $Database -c "CREATE EXTENSION IF NOT EXISTS $extensionName;"
+  docker exec -e "PGPASSWORD=$password" $metaContainer psql -p $port -U $user -d $Database -c "CREATE EXTENSION IF NOT EXISTS $extensionName;"
   Write-Host "时序扩展已启用: $Database"
 }
 
@@ -155,19 +158,17 @@ function Initialize-ControlSchema {
   # 控制面镜像内已经包含 dev_core 的数据库初始化脚本和生产依赖。
   # 这里在数据库可用后显式执行一次，确保正式安装后核心表和默认管理员数据存在。
   Write-Host "初始化控制面数据库结构..."
-  docker exec $controlContainer node scripts/init-database.js init
+  docker exec $controlContainer node scripts/bootstrap/init-core-database.js init
 }
 
 function Invoke-InfraInit {
   Wait-MetaStore
 
   $coreDb = Get-EnvValue "IF_META_STORE_CORE_DB" "if_core"
-  $designDb = Get-EnvValue "IF_META_STORE_DESIGN_DB" "if_design"
   $dataDb = Get-EnvValue "IF_META_STORE_DATA_DB" "if_data"
   $devDataDb = Get-EnvValue "IF_META_STORE_DEV_DATA_DB" "if_dev_data"
 
   New-DatabaseIfNeeded $coreDb
-  New-DatabaseIfNeeded $designDb
   New-DatabaseIfNeeded $dataDb
   New-DatabaseIfNeeded $devDataDb
   Enable-TimeSeriesExtension $devDataDb

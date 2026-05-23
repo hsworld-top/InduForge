@@ -37,9 +37,9 @@ pnpm install
 pnpm dev
 ```
 
-服务将在 `http://localhost:3000` 启动。
+服务默认读取仓库根目录 `.env`，通过 `VITE_NODE_AGENT_FRONT_PORT` 决定前端端口，当前统一默认访问地址是 `http://localhost:18604`。
 
-开发服务器会自动代理 API 请求到 `http://localhost:8080`（NodeAgent 后端）。
+开发服务器会自动代理 API 请求到 `NODE_AGENT_PORT` 指定的 NodeAgent 后端，当前统一默认值是 `18103`。
 
 ## 构建部署
 
@@ -141,7 +141,7 @@ src/
 
 ## 注意事项
 
-1. 开发时需要同时运行 NodeAgent 后端（端口 8080）
+1. 开发时需要同时运行 NodeAgent 后端（默认端口 `18103`）
 2. 构建后的静态文件可以部署到任何静态文件服务器
 3. 生产环境建议配置反向代理，将 API 请求转发到 NodeAgent
 

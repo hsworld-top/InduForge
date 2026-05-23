@@ -20,15 +20,16 @@ services:
       - ../../.env
     environment:
       NODE_ENV: production
-      PORT: 19601
+      PORT: 18101
+      DB_AUTO_SCHEMA_SYNC: "false"
       IF_META_STORE_HOST: meta-store
-      IF_META_STORE_PORT: 5432
+      IF_META_STORE_PORT: 18432
       IF_CACHE_STORE_HOST: cache-store
-      IF_CACHE_STORE_PORT: 6379
+      IF_CACHE_STORE_PORT: 18379
       IF_OBJECT_STORE_ENDPOINT: object-store
-      IF_OBJECT_STORE_PORT: 8333
+      IF_OBJECT_STORE_PORT: 18500
     expose:
-      - "19601"
+      - "18101"
     depends_on:
       - meta-store
       - cache-store
@@ -43,13 +44,15 @@ services:
     env_file:
       - ../../.env
     environment:
-      DATA_SERVICE_ADDR: :19602
+      NODE_ENV: production
+      DB_AUTO_SCHEMA_SYNC: "false"
+      DATA_SERVICE_ADDR: :18102
       IF_META_STORE_HOST: meta-store
-      IF_META_STORE_PORT: 5432
+      IF_META_STORE_PORT: 18432
       IF_CACHE_STORE_HOST: cache-store
-      IF_CACHE_STORE_PORT: 6379
+      IF_CACHE_STORE_PORT: 18379
     expose:
-      - "19602"
+      - "18102"
     depends_on:
       - meta-store
       - cache-store
@@ -86,6 +89,12 @@ services:
   message-hub:
     container_name: induforge-message-hub
     image: induforge/message-hub:latest
+    environment:
+      EMQX_NAME: induforge
+      EMQX_HOST: message-hub
+      EMQX_LISTENERS__TCP__DEFAULT__BIND: "0.0.0.0:18883"
+      EMQX_LISTENERS__WS__DEFAULT__BIND: "0.0.0.0:18083"
+      EMQX_DASHBOARD__LISTENERS__HTTP__BIND: "0.0.0.0:18084"
     networks:
       - induforge-prod-net
     restart: unless-stopped
@@ -96,6 +105,9 @@ services:
     environment:
       IF_OBJECT_STORE_ACCESS_KEY: ${IF_OBJECT_STORE_ACCESS_KEY:-induforge}
       IF_OBJECT_STORE_SECRET_KEY: ${IF_OBJECT_STORE_SECRET_KEY:-induforge_dev_secret}
+      IF_OBJECT_STORE_MASTER_PORT: 18333
+      IF_OBJECT_STORE_FILER_PORT: 18888
+      IF_OBJECT_STORE_VOLUME_PORT: 18081
     volumes:
       - induforge-object-store-master-data:/data
       - induforge-object-store-volume-data:/data/volume

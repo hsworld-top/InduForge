@@ -110,15 +110,16 @@ start_services() {
 }
 
 wait_for_meta_store() {
-  local user password admin_db
+  local user password admin_db port
   user="$(read_env IF_META_STORE_USER postgres)"
   password="$(read_env IF_META_STORE_PASSWORD postgres)"
   admin_db="$(read_env IF_META_STORE_ADMIN_DATABASE postgres)"
+  port="$(read_env IF_META_STORE_PORT 18432)"
 
   echo "等待元数据能力就绪..."
   for _ in $(seq 1 60); do
     if docker exec -e PGPASSWORD="$password" "$META_CONTAINER" \
-      psql -U "$user" -d "$admin_db" -tAc "SELECT 1" >/dev/null 2>&1; then
+      psql -p "$port" -U "$user" -d "$admin_db" -tAc "SELECT 1" >/dev/null 2>&1; then
       return
     fi
     sleep 2
@@ -130,15 +131,16 @@ wait_for_meta_store() {
 
 create_database_if_needed() {
   local database="$1"
-  local user password admin_db exists quoted
+  local user password admin_db port exists quoted
 
   user="$(read_env IF_META_STORE_USER postgres)"
   password="$(read_env IF_META_STORE_PASSWORD postgres)"
   admin_db="$(read_env IF_META_STORE_ADMIN_DATABASE postgres)"
+  port="$(read_env IF_META_STORE_PORT 18432)"
   quoted="$(quote_sql_ident "$database")"
 
   exists="$(docker exec -e PGPASSWORD="$password" "$META_CONTAINER" \
-    psql -U "$user" -d "$admin_db" -tAc "SELECT 1 FROM pg_database WHERE datname = '$database';" | tr -d '[:space:]')"
+    psql -p "$port" -U "$user" -d "$admin_db" -tAc "SELECT 1 FROM pg_database WHERE datname = '$database';" | tr -d '[:space:]')"
 
   if [ "$exists" = "1" ]; then
     echo "数据库已存在: $database"
@@ -146,21 +148,22 @@ create_database_if_needed() {
   fi
 
   docker exec -e PGPASSWORD="$password" "$META_CONTAINER" \
-    psql -U "$user" -d "$admin_db" -c "CREATE DATABASE $quoted;"
+    psql -p "$port" -U "$user" -d "$admin_db" -c "CREATE DATABASE $quoted;"
   echo "数据库已创建: $database"
 }
 
 enable_timeseries_extension() {
   local database="$1"
-  local user password
+  local user password port
   local extension_name
 
   user="$(read_env IF_META_STORE_USER postgres)"
   password="$(read_env IF_META_STORE_PASSWORD postgres)"
+  port="$(read_env IF_META_STORE_PORT 18432)"
   extension_name="time""scaledb"
 
   docker exec -e PGPASSWORD="$password" "$META_CONTAINER" \
-    psql -U "$user" -d "$database" -c "CREATE EXTENSION IF NOT EXISTS $extension_name;"
+    psql -p "$port" -U "$user" -d "$database" -c "CREATE EXTENSION IF NOT EXISTS $extension_name;"
   echo "时序扩展已启用: $database"
 }
 
@@ -168,21 +171,19 @@ init_control_schema() {
   # 控制面镜像内已经包含 dev_core 的数据库初始化脚本和生产依赖。
   # 这里在数据库可用后显式执行一次，确保正式安装后核心表和默认管理员数据存在。
   echo "初始化控制面数据库结构..."
-  docker exec "$CONTROL_CONTAINER" node scripts/init-database.js init
+  docker exec "$CONTROL_CONTAINER" node scripts/bootstrap/init-core-database.js init
 }
 
 init_infra() {
-  local core_db design_db data_db dev_data_db
+  local core_db data_db dev_data_db
 
   wait_for_meta_store
 
   core_db="$(read_env IF_META_STORE_CORE_DB if_core)"
-  design_db="$(read_env IF_META_STORE_DESIGN_DB if_design)"
   data_db="$(read_env IF_META_STORE_DATA_DB if_data)"
   dev_data_db="$(read_env IF_META_STORE_DEV_DATA_DB if_dev_data)"
 
   create_database_if_needed "$core_db"
-  create_database_if_needed "$design_db"
   create_database_if_needed "$data_db"
   create_database_if_needed "$dev_data_db"
   enable_timeseries_extension "$dev_data_db"

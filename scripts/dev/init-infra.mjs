@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { Client } = require("../../dev_core/node_modules/pg");
+const { Client } = require("pg");
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -89,7 +89,7 @@ loadDotEnv(envPath);
 // 开发环境通常连接宿主机映射端口，生产环境在容器网络内连接内部 host。
 const metaStoreConfig = {
   host: env("IF_META_STORE_HOST", "127.0.0.1"),
-  port: Number(env("IF_META_STORE_PORT", "15432")),
+  port: Number(env("IF_META_STORE_PORT", "18432")),
   user: env("IF_META_STORE_USER", "postgres"),
   password: env("IF_META_STORE_PASSWORD", "postgres"),
   database: env("IF_META_STORE_ADMIN_DATABASE", "postgres"),
@@ -97,10 +97,9 @@ const metaStoreConfig = {
 };
 
 // 平台当前按能力域拆分数据库。
-// filter(Boolean) 允许临时关闭某个库名，但默认模板会完整创建四个库。
+// filter(Boolean) 允许临时关闭某个库名，但默认模板会创建 if_core、if_data、if_dev_data。
 const requiredDatabases = [
   env("IF_META_STORE_CORE_DB", "if_core"),
-  env("IF_META_STORE_DESIGN_DB", "if_design"),
   env("IF_META_STORE_DATA_DB", "if_data"),
   env("IF_META_STORE_DEV_DATA_DB", "if_dev_data"),
 ].filter(Boolean);
@@ -161,9 +160,9 @@ async function initMetaStore() {
 async function main() {
   console.log(checkOnly ? "检查 InduForge 基础设施..." : "初始化 InduForge 基础设施...");
   await initMetaStore();
-  await tcpCheck(env("IF_CACHE_STORE_HOST", "127.0.0.1"), env("IF_CACHE_STORE_PORT", "16379"), "缓存存储");
-  await tcpCheck(env("IF_MESSAGE_HUB_HOST", "127.0.0.1"), env("IF_MESSAGE_HUB_MQTT_PORT", "11883"), "消息中心");
-  await tcpCheck(env("IF_OBJECT_STORE_ENDPOINT", "127.0.0.1"), env("IF_OBJECT_STORE_PORT", "25000"), "对象存储");
+  await tcpCheck(env("IF_CACHE_STORE_HOST", "127.0.0.1"), env("IF_CACHE_STORE_PORT", "18379"), "缓存存储");
+  await tcpCheck(env("IF_MESSAGE_HUB_HOST", "127.0.0.1"), env("IF_MESSAGE_HUB_MQTT_PORT", "18883"), "消息中心");
+  await tcpCheck(env("IF_OBJECT_STORE_ENDPOINT", "127.0.0.1"), env("IF_OBJECT_STORE_PORT", "18500"), "对象存储");
 }
 
 // 顶层兜底异常处理。

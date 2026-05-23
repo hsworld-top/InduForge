@@ -32,7 +32,7 @@ InduForge 是一个面向工业互联网场景的多模块单仓低代码平台�
 │  - 部署运维   │  - MQTT/数据点│  - 数据绑定   │  - 发布部署   │  - 协议与预览 │
 │              │              │              │              │              │
 │  Vue 3       │  Vue 3       │  Vue 3       │  Node.js     │  Go          │
-│ Port: 18601  │ Port: 18602  │ Port: 18603  │ Port: 19601  │ Port: 19602  │
+│ Port: 18601  │ Port: 18602  │ Port: 18603  │ Port: 18101  │ Port: 18102  │
 └──────────────┴──────────────┴──────────────┴──────────────┴──────────────┘
 ```
 
@@ -52,7 +52,7 @@ InduForge 是一个面向工业互联网场景的多模块单仓低代码平台�
 - **运行时**: Node.js 18+
 - **框架**: Express
 - **ORM**: Sequelize
-- **数据库**: MySQL / PostgreSQL / SQL Server
+- **平台元数据**: PostgreSQL/TimescaleDB（开发环境由 Docker 提供）
 - **认证**: JWT
 - **国际化**: i18next
 
@@ -61,6 +61,7 @@ InduForge 是一个面向工业互联网场景的多模块单仓低代码平台�
 - **节点执行器**: Go (`runtime/node_agent`)
 - **本地运维前端**: Vue 3 + Vite (`runtime/node_agent_front`)
 - **对象存储**: SeaweedFS S3 兼容接口
+- **缓存与消息**: Redis、EMQX MQTT（开发环境由 Docker 提供）
 
 ## 当前模块现状
 
@@ -71,7 +72,7 @@ InduForge 是一个面向工业互联网场景的多模块单仓低代码平台�
 - `designer/`：低代码页面设计器，当前是前端模块里最重的编辑器工程。
 - `runtime/node_agent/`：节点执行器后端，独立部署在节点侧。
 - `runtime/node_agent_front/`：节点本地管理前端。
-- `scripts/`：本地开发与基础设施辅助脚本，当前包含 `docker/`、`nginx/`、`seaweedfs/`。
+- `scripts/`：本地开发、基础设施、离线打包、安装卸载和模拟数据脚本。
 
 ## 默认端口总览
 
@@ -81,9 +82,9 @@ InduForge 是一个面向工业互联网场景的多模块单仓低代码平台�
 | `datacenter` | 数据中心前端 | `VITE_DATACENTER_PORT` | `18602` | `http://localhost:18602` |
 | `designer` | 设计器前端 | `VITE_DESIGNER_PORT` | `18603` | `http://localhost:18603` |
 | `runtime/node_agent_front` | 节点本地管理前端 | `VITE_NODE_AGENT_FRONT_PORT` | `18604` | `http://localhost:18604` |
-| `dev_core` | 平台控制面后端 | `PORT` | `19601` | `http://localhost:19601` |
-| `data_service` | 数据域服务 | `DATA_SERVICE_ADDR` / `VITE_DATA_SERVICE_URL` | `19602` | `http://localhost:19602` |
-| `runtime/node_agent` | 节点执行器后端 | `NODE_AGENT_PORT` | `17601` | `http://localhost:17601` |
+| `dev_core` | 平台控制面后端 | `PORT` | `18101` | `http://localhost:18101` |
+| `data_service` | 数据域服务 | `DATA_SERVICE_ADDR` / `VITE_DATA_SERVICE_URL` | `18102` | `http://localhost:18102` |
+| `runtime/node_agent` | 节点执行器后端 | `NODE_AGENT_PORT` | `18103` | `http://localhost:18103` |
 
 ## 快速开始
 
@@ -92,36 +93,25 @@ InduForge 是一个面向工业互联网场景的多模块单仓低代码平台�
 - Node.js >= 18.0.0
 - pnpm >= 8.0.0
 - Go >= 1.25.0（用于 `data_service` 与 `runtime/node_agent`）
-- MySQL >= 5.7 或 PostgreSQL >= 12
+- Docker 与 Docker Compose（用于开发基础设施和离线交付验证）
 
 ### Windows 开发说明
 
 - 当前开发环境默认以 Windows + PowerShell 为主，下面示例优先使用 PowerShell 写法。
 - 若需要同时启动多个模块，建议为每个模块单独打开一个 PowerShell 窗口。
-- `scripts/seaweedfs/` 下提供了本地 SeaweedFS 启停脚本，可按需单独启动。
-- 默认端口以根 `.env` 和 `.env_example` 为准；如果本地仍沿用旧端口，需要同步更新根 `.env`。
+- Windows + WSL2 开发时，WSL2 只承载 Docker 基础设施；`pnpm install` 和业务项目启动建议在 Windows 侧执行。
+- 默认端口以根 `.env`、`.env.development.example`、`.env.production.example` 和 [环境端口规划](./docs/环境端口规划.md) 为准。
 
 ### 安装依赖
 
 ```powershell
-# 在仓库根目录依次安装 Node 模块依赖
-Set-Location .\dev_core
+# 只在仓库根目录执行一次
 pnpm install
-
-Set-Location ..\dev_ide
-pnpm install
-
-Set-Location ..\datacenter
-pnpm install
-
-Set-Location ..\designer
-pnpm install
-
-Set-Location ..\runtime\node_agent_front
-pnpm install
-
-Set-Location ..\..
 ```
+
+Node 依赖由根目录 pnpm workspace 统一管理，只维护根目录 `node_modules/` 和根目录 `pnpm-lock.yaml`。不要在 `dev_core/`、`dev_ide/`、`datacenter/`、`designer/`、`runtime/node_agent_front/` 下单独执行 `pnpm install`。
+
+Prettier 配置统一放在根目录 `.prettierrc.json`。ESLint 暂时保留在各前端模块内，因为 `designer` 使用 Antfu 配置，`dev_ide`、`datacenter` 使用较轻的 Vue/ESLint 配置，当前不强行合并规则。
 
 ```powershell
 # 初始化 Go 模块依赖
@@ -134,40 +124,41 @@ go mod download
 Set-Location ..\..
 ```
 
-### 初始化数据库
+### 初始化基础设施
 
-```powershell
-Set-Location .\dev_core
-# 编辑根目录 .env 后再执行初始化
-pnpm run db:init
+开发基础设施由 Linux/WSL2 侧 Docker 承载：
+
+```bash
+./scripts/dev/init-linux.sh
 ```
+
+`dev_core` 启动时会根据根目录 `.env` 中的 `DB_AUTO_SCHEMA_SYNC=true` 自动同步 `if_core` 表结构和初始数据。
+
+该脚本只启动基础设施容器，创建 `if_core`、`if_data`、`if_dev_data`，并为开发态数据域库启用时序扩展；不会安装 Node 依赖，也不会启动 `dev_core`、`data_service` 或前端项目。
+
+控制面和设计中心长期共用 `dev_core` 与 `if_core`，不再创建或预留 `if_design`。控制面数据库 bootstrap 资产位于 `dev_core/scripts/bootstrap/`，开发人员不需要手动执行 `db:init` 或 `db:reset`。
 
 ### 启动开发服务器
 
 ```powershell
 # 1. 启动平台控制面后端
-Set-Location .\dev_core
-pnpm dev
+pnpm dev:core
 
 # 2. 启动数据域服务（新终端，可选）
 Set-Location .\data_service
 go run .\cmd
 
 # 3. 启动 IDE（新终端）
-Set-Location .\dev_ide
-pnpm dev
+pnpm dev:ide
 
 # 4. 启动数据中心（新终端）
-Set-Location .\datacenter
-pnpm dev
+pnpm dev:datacenter
 
 # 5. 启动设计中心（新终端）
-Set-Location .\designer
-pnpm dev
+pnpm dev:designer
 
 # 6. 启动节点本地管理前端（新终端，可选）
-Set-Location .\runtime\node_agent_front
-pnpm dev
+pnpm dev:agent-front
 ```
 
 访问地址：
@@ -175,9 +166,9 @@ pnpm dev
 - 数据中心: http://localhost:18602
 - 设计中心: http://localhost:18603
 - 节点本地管理前端: http://localhost:18604
-- 平台控制面后端: http://localhost:19601
-- 数据域服务: http://localhost:19602
-- 节点执行器后端: http://localhost:17601
+- 平台控制面后端: http://localhost:18101
+- 数据域服务: http://localhost:18102
+- 节点执行器后端: http://localhost:18103
 
 ### 默认账号
 
@@ -190,8 +181,7 @@ pnpm dev
 InduForge/
 ├── dev_core/           # 后端 API 服务
 │   ├── src/            # 源代码
-│   ├── database/       # 数据库脚本
-│   └── config/         # 配置文件
+│   └── scripts/        # 控制面数据库 bootstrap 等内部脚本
 ├── data_service/       # 平台侧与开发态数据域服务（Go）
 │   ├── cmd/            # 启动入口
 │   ├── internal/       # 内部领域实现
@@ -210,24 +200,31 @@ InduForge/
 │   ├── node_agent/     # 节点执行器后端（Go）
 │   └── node_agent_front/ # 节点本地管理前端
 ├── scripts/            # 辅助脚本与基础设施配置
-│   ├── docker/         # 本地容器相关脚本
+│   ├── dev/            # 开发环境初始化入口
+│   ├── docker/         # Compose、产品体系镜像和镜像缓存
 │   ├── nginx/          # Nginx 配置
-│   └── seaweedfs/      # SeaweedFS 启停脚本
+│   ├── offline/        # 离线安装包安装/卸载入口
+│   ├── release/        # 离线安装包构建入口
+│   └── test/           # 模拟数据和协议联调脚本
 └── docs/               # 项目文档
 ```
 
 ## 文档导航
 
 ### 📚 核心文档
-- [DSL 设计规范](./docs/dsl-design.md) - 低代码 DSL 完整规范
 - [数据库设计](./docs/database-design.md) - 数据库表结构说明
-- [迁移计划](./docs/migration-plan.md) - 从 KingPortal 迁移指南
+- [环境端口规划](./docs/环境端口规划.md) - 开发、生产和离线交付端口约定
+- [产品定义](./docs/产品定义.md)
+- [高层设计](./docs/高层设计.md)
+- [详细设计](./docs/详细设计.md)
+- [测试与质量策略](./docs/测试与质量策略.md)
 
 ### 🎨 设计中心文档
 - [设计中心概述](./docs/designer/README.md)
-- [数据绑定系统](./docs/designer/data-binding.md)
-- [Canvas 渲染引擎](./docs/designer/canvas-engine.md)
 - [组件开发指南](./docs/designer/component-development.md)
+- [层级约定](./docs/designer/layer-order-convention.md)
+- [放置与堆叠](./docs/designer/placement-and-stacking.md)
+- [尺寸约定](./docs/designer/size-convention.md)
 
 ### 📊 数据中心文档
 - [数据中心概述](./docs/datacenter/README.md)
@@ -242,7 +239,13 @@ InduForge/
 ### 🔧 后端文档
 - [后端 API 文档](./docs/backend/README.md)
 - [认证与授权](./docs/backend/auth.md)
-- [数据库初始化](./docs/backend/database-init.md)
+
+### 📦 脚本与交付
+- [scripts 目录说明](./scripts/README.md)
+- [开发环境初始化](./scripts/dev/README.md)
+- [Docker 脚本目录](./scripts/docker/README.md)
+- [测试打包说明](./scripts/release/README.md)
+- [离线交付包说明](./scripts/offline/README.md)
 
 ## 开发指南
 
@@ -303,7 +306,7 @@ Set-Location ..\..
 
 ### 端口迁移提醒
 
-如果你的本地环境还在使用历史端口，需要同步更新根目录 `.env`。仓库文档、模板和源码中的默认端口已经统一切换到 `176xx / 186xx / 196xx` 新号段。
+如果你的本地环境还在使用历史端口，需要同步更新根目录 `.env`。开发环境宿主机端口已经统一切换到 `18xxx` 段；生产和离线环境默认只暴露 `IF_EDGE_HOST_PORT`，其他服务通过 Docker 内部网络访问。
 
 ### 后端部署
 
@@ -320,7 +323,7 @@ pm2 start src/index.js --name induforge-api
 ## 常见问题
 
 ### 1. 数据库连接失败
-检查 `.env` 文件中的数据库配置是否正确。
+先执行 `./scripts/dev/init-linux.sh` 确认开发基础设施容器已经启动，再检查根目录 `.env` 中的 `IF_META_STORE_*` 配置。开发环境 `dev_core` 启动时会自动同步 `if_core` 表结构。
 
 ### 2. 端口被占用
 修改各模块的 `vite.config.js` 或 `.env` 文件中的端口配置。
@@ -329,7 +332,7 @@ pm2 start src/index.js --name induforge-api
 确保 Nginx 配置了正确的 CORS 头，或在开发环境使用代理。
 
 ### 4. Windows 下脚本无法直接执行
-优先使用 PowerShell 执行命令；基础设施脚本统一放在 `scripts/`，例如 `scripts/seaweedfs/start.bat`。
+优先使用 PowerShell 执行业务项目命令；Docker 基础设施建议在 WSL2 内执行 `./scripts/dev/init-linux.sh`。
 
 ## 贡献指南
 
@@ -343,7 +346,7 @@ pm2 start src/index.js --name induforge-api
 
 ## 许可证
 
-ISC
+本项目为 hsworld-top 的个人专有闭源项目，不适用 ISC、MIT、Apache 等开源许可证。未经授权禁止复制、分发、发布、出售或商业使用。详见 [LICENSE](./LICENSE)。
 
 ## 联系方式
 
@@ -352,4 +355,4 @@ ISC
 ---
 
 **版本**: 2.0.0  
-**最后更新**: 2026-04-20
+**最后更新**: 2026-05-24

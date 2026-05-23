@@ -4,7 +4,7 @@ const net = require("node:net");
 
 const config = {
   // MQTT 服务器地址，支持 mqtt://host:port，也可以用命令行 --broker 覆盖。
-  broker: "mqtt://127.0.0.1:1883",
+  broker: "mqtt://127.0.0.1:18883",
   topic: "induforge/mock-data",
   intervalMs: 1000,
   clientIdPrefix: "induforge-mock-data",
@@ -14,11 +14,11 @@ const config = {
 
 const usage = `
 Usage:
-  node scripts/test/mqtt-publish-test.js [--broker mqtt://127.0.0.1:1883] [--topic induforge/mock-data] [--interval 1000]
+  node scripts/test/mqtt-publish-test.js [--broker mqtt://127.0.0.1:18883] [--topic induforge/mock-data] [--interval 1000]
 
 Examples:
   node scripts/test/mqtt-publish-test.js
-  node scripts/test/mqtt-publish-test.js --broker mqtt://127.0.0.1:1883 --topic induforge/mock-data --interval 500
+  node scripts/test/mqtt-publish-test.js --broker mqtt://127.0.0.1:18883 --topic induforge/mock-data --interval 500
 `;
 
 function parseArgs(argv) {

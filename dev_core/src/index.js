@@ -16,7 +16,7 @@ const nodeService = require("./services/nodeService");
 // 环境变量配置
 const config = {
   NODE_ENV: process.env.NODE_ENV || "development",
-  PORT: Number(process.env.PORT || 19601),
+  PORT: Number(process.env.PORT || 18101),
   ENABLE_SWAGGER: String(process.env.ENABLE_SWAGGER || "true") === "true",
   CORS_ORIGINS:
     process.env.CORS_ORIGINS ||
@@ -108,8 +108,7 @@ const initializeServices = async () => {
   await testConnection();
   logger.info("Database connection established");
 
-  // 注意：数据库表结构通过 scripts/init-database.js 脚本创建
-  // 不使用 sequelize.sync() 来避免与手工创建的表结构冲突
+  // 注意：数据库表结构通过 scripts/bootstrap/init-core-database.js 同步。
 
   // 2. 初始化 Redis 连接（非阻塞，失败不影响启动）
   try {

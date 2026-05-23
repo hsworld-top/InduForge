@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "lint:check": "pnpm exec eslint src scripts env.d.ts eslint.config.mjs vitest.config.js vite.config.js postcss.config.js tailwind.config.js --max-warnings 99999",
     "lint": "pnpm exec eslint src scripts env.d.ts eslint.config.mjs vitest.config.js vite.config.js postcss.config.js tailwind.config.js --max-warnings 99999 --fix",
-    "format": "prettier --write \"src/**/*.{js,ts,vue,css}\" \"scripts/**/*.mjs\" \"*.{json,mjs,js,ts}\" .prettierrc.json",
+    "format": "prettier --write \"src/**/*.{js,ts,vue,css}\" \"scripts/**/*.mjs\" \"*.{json,mjs,js,ts}\"",
     "test": "pnpm exec vitest --run",
     "test:watch": "pnpm exec vitest"
   },

@@ -12,12 +12,13 @@ Linux 开发环境初始化：
 
 该脚本会：
 
-- 检查 Docker、Node、pnpm。
+- 检查 Docker。
 - 如果根目录没有 `.env`，从 `.env.development.example` 生成。
 - 启动开发基础设施容器。
-- 创建平台数据库。
-- 启用开发态时序扩展。
-- 初始化控制面数据库表和默认账号。
+- 创建 `if_core`、`if_data`、`if_dev_data`。
+- 为 `if_dev_data` 启用开发态时序扩展。
+
+默认不会安装 Node 依赖，也不会启动业务项目。Node 依赖由根目录 pnpm workspace 统一管理，只在仓库根目录执行 `pnpm install`。`dev_core` 在 `DB_AUTO_SCHEMA_SYNC=true` 时会在自身启动阶段同步 `if_core` 表结构和默认租户/管理员数据。这样可以避免 Windows + WSL2 共用工作区时，由 Linux 侧生成的 `node_modules` 影响 Windows 开发。
 
 该脚本不会启动业务项目。开发人员需要自行启动：
 
@@ -58,6 +59,18 @@ scripts/docker/
   infra/                       # 产品体系基础设施镜像 wrapper
   images/                      # 本地镜像缓存，不建议提交 Git
 ```
+
+`scripts/docker/images/` 只保留目录和 `.gitkeep`，镜像 tar 体积较大，不提交 Git。测试构建脚本会优先加载该目录下已有 tar，缺失时再拉取或构建。
+
+## 控制面数据库 bootstrap
+
+```text
+dev_core/scripts/bootstrap/
+  init-core-database.js        # 安装阶段和开发启动时复用的控制面数据库 bootstrap
+  sql/core-schema.sql          # if_core 表结构
+```
+
+开发人员不需要手动执行 `db:init` 或 `db:reset`。生产和离线环境保持 `DB_AUTO_SCHEMA_SYNC=false`，由安装脚本在容器内执行 bootstrap。
 
 ## 离线包目录
 

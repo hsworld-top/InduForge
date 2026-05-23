@@ -8,12 +8,12 @@ EOF
 exec weed server \
   -ip=object-store \
   -ip.bind=0.0.0.0 \
-  -master.port=9333 \
+  -master.port=${IF_OBJECT_STORE_MASTER_PORT:-18333} \
   -master.volumeSizeLimitMB=1024 \
-  -volume.port=8080 \
+  -volume.port=${IF_OBJECT_STORE_VOLUME_PORT:-18081} \
   -dir=/data/volume \
   -filer \
-  -filer.port=8888 \
+  -filer.port=${IF_OBJECT_STORE_FILER_PORT:-18888} \
   -s3 \
-  -s3.port=8333 \
+  -s3.port=${IF_OBJECT_STORE_PORT:-18500} \
   -s3.config=/tmp/induforge-s3.json

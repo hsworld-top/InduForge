@@ -110,7 +110,7 @@ save_cached_image() {
 
 build_business_images() {
   echo "构建控制面镜像..."
-  docker build -t induforge/control:latest -f "$REPO_ROOT/dev_core/Dockerfile" "$REPO_ROOT/dev_core"
+  docker build -t induforge/control:latest -f "$REPO_ROOT/dev_core/Dockerfile" "$REPO_ROOT"
 
   echo "构建数据服务镜像..."
   docker build -t induforge/data:latest -f "$REPO_ROOT/data_service/Dockerfile" "$REPO_ROOT/data_service"

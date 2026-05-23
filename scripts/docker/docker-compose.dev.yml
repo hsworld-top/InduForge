@@ -11,7 +11,7 @@ services:
       POSTGRES_DB: ${IF_META_STORE_ADMIN_DATABASE:-postgres}
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
-      - "${IF_META_STORE_PORT:-15432}:5432"
+      - "${IF_META_STORE_PORT:-18432}:5432"
     volumes:
       - induforge-meta-store-data:/var/lib/postgresql/data
     networks:
@@ -32,7 +32,7 @@ services:
     environment:
       IF_CACHE_STORE_PASSWORD: ${IF_CACHE_STORE_PASSWORD:-}
     ports:
-      - "${IF_CACHE_STORE_PORT:-16379}:6379"
+      - "${IF_CACHE_STORE_PORT:-18379}:6379"
     volumes:
       - induforge-cache-store-data:/data
     networks:
@@ -46,7 +46,7 @@ services:
       EMQX_NAME: induforge
       EMQX_HOST: 127.0.0.1
     ports:
-      - "${IF_MESSAGE_HUB_MQTT_PORT:-11883}:1883"
+      - "${IF_MESSAGE_HUB_MQTT_PORT:-18883}:1883"
       - "${IF_MESSAGE_HUB_WS_PORT:-18083}:8083"
       - "${IF_MESSAGE_HUB_DASHBOARD_PORT:-18084}:18083"
     volumes:
@@ -70,8 +70,8 @@ services:
       IF_OBJECT_STORE_ACCESS_KEY: ${IF_OBJECT_STORE_ACCESS_KEY:-induforge}
       IF_OBJECT_STORE_SECRET_KEY: ${IF_OBJECT_STORE_SECRET_KEY:-induforge_dev_secret}
     ports:
-      - "${IF_OBJECT_STORE_PORT:-25000}:8333"
-      - "${IF_OBJECT_STORE_MASTER_PORT:-19333}:9333"
+      - "${IF_OBJECT_STORE_PORT:-18500}:8333"
+      - "${IF_OBJECT_STORE_MASTER_PORT:-18333}:9333"
       - "${IF_OBJECT_STORE_FILER_PORT:-18888}:8888"
     volumes:
       - induforge-object-store-master-data:/data

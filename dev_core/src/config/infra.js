@@ -18,7 +18,7 @@ const toBoolean = (value, fallback = false) => {
 
 const buildMetaStoreConfig = () => ({
   host: pickEnvValue(process.env.IF_META_STORE_HOST, process.env.DB_HOST, "127.0.0.1"),
-  port: toNumber(pickEnvValue(process.env.IF_META_STORE_PORT, process.env.DB_PORT), 5432),
+  port: toNumber(pickEnvValue(process.env.IF_META_STORE_PORT, process.env.DB_PORT), 18432),
   user: pickEnvValue(process.env.IF_META_STORE_USER, process.env.DB_USER, "postgres"),
   password: pickEnvValue(process.env.IF_META_STORE_PASSWORD, process.env.DB_PASSWORD, "postgres"),
   database: pickEnvValue(process.env.IF_META_STORE_CORE_DB, process.env.DB_NAME, "if_core"),
@@ -34,7 +34,7 @@ const buildMetaStoreConfig = () => ({
 
 const buildCacheStoreConfig = () => ({
   host: pickEnvValue(process.env.IF_CACHE_STORE_HOST, process.env.REDIS_HOST, "127.0.0.1"),
-  port: toNumber(pickEnvValue(process.env.IF_CACHE_STORE_PORT, process.env.REDIS_PORT), 6379),
+  port: toNumber(pickEnvValue(process.env.IF_CACHE_STORE_PORT, process.env.REDIS_PORT), 18379),
   password: pickEnvValue(process.env.IF_CACHE_STORE_PASSWORD, process.env.REDIS_PASSWORD, ""),
   db: toNumber(pickEnvValue(process.env.IF_CACHE_STORE_CORE_DB, process.env.REDIS_DB), 0),
   maxRetries: toNumber(pickEnvValue(process.env.IF_CACHE_STORE_MAX_RETRIES, process.env.REDIS_MAX_RETRIES), 20),
@@ -53,7 +53,7 @@ const buildObjectStoreConfig = () => ({
     process.env.SEAWEEDFS_ENDPOINT,
     "127.0.0.1",
   ),
-  port: toNumber(pickEnvValue(process.env.IF_OBJECT_STORE_PORT, process.env.SEAWEEDFS_PORT), 25000),
+  port: toNumber(pickEnvValue(process.env.IF_OBJECT_STORE_PORT, process.env.SEAWEEDFS_PORT), 18500),
   useSSL: toBoolean(
     pickEnvValue(process.env.IF_OBJECT_STORE_USE_SSL, process.env.SEAWEEDFS_USE_SSL),
     false,

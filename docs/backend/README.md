@@ -39,7 +39,7 @@
 - [详细设计](../详细设计.md)
 - [测试与质量策略](../测试与质量策略.md)
 - [数据库设计](../database-design.md)
+- [环境端口规划](../环境端口规划.md)
 - [发布部署 API](./publish-deploy-api.md)
-- [数据库初始化](./database-init.md)
 - [认证与权限](./auth.md)
 - [WebSocket 说明](./websocket.md)

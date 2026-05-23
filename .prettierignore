@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+
+dev_ide/dist/
+datacenter/dist/
+designer/dist/
+runtime/node_agent_front/dist/
+
+scripts/docker/images/
+dev_core/artifacts/
+designer/testing/evidence/
+designer/testing/tmp/

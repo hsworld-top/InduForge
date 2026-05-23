@@ -12,6 +12,7 @@
 
 - [产品定义](./产品定义.md)
 - [数据库设计](./database-design.md)
+- [环境端口规划](./环境端口规划.md)
 - [高层设计](./高层设计.md)
 - [详细设计](./详细设计.md)
 - [测试与质量策略](./测试与质量策略.md)
@@ -43,6 +44,14 @@
 - [Datacenter 数据点设计](./datacenter/datapoint-design.md)
 - [Datacenter Compute/Alarm 设计](./datacenter/compute-alarm-design.md)
 - [NodeAgent 初始化流程](./node_agent/初始化流程.md)
+
+### 开发、基础设施与交付
+
+- [scripts 目录说明](../scripts/README.md)
+- [开发环境初始化](../scripts/dev/README.md)
+- [Docker 脚本目录](../scripts/docker/README.md)
+- [测试打包说明](../scripts/release/README.md)
+- [离线交付包说明](../scripts/offline/README.md)
 
 ## 3. 过程文档入口
 

@@ -1,0 +1,6 @@
+packages:
+  - dev_core
+  - dev_ide
+  - datacenter
+  - designer
+  - runtime/node_agent_front

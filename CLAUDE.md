@@ -4,29 +4,17 @@
 先查清楚，再下结论。
 追求简洁、准确、可验证的工程结果。
 
-## 沟通
+## 通用规则
 
-- 全程中文。
-- 句子短，少废话。
-- 不用 AI 客服腔。
-- 不套英语句式。
-- 输出前删除无用内容。
-- 需求不清时，先说明疑点，再问。
-- 有多种方案时，说明取舍，优先简单方案。
-
-## 编码原则
-
-- 最小代码解决当前问题。
-- 不写额外功能。
-- 不做 speculative 设计。
-- 不为单次使用写抽象。
-- 不做没要求的配置化。
-- 不写不必要的兼容逻辑。
-- 不顺手重构。
-- 不顺手优化相邻代码。
-- 不改无关格式。
-- 只清理自己改动造成的未使用代码。
-- 每一处改动都必须对应当前需求。
+- **默认语言**：所有交流默认使用简体中文。
+- **谋定而后动**：复杂任务需先与用户讨论方案并列出计划，确认后方可编码；极简修复可直接处理。
+- **职责边界**：业务逻辑默认由用户自行测试与验收。对于 TypeScript 类型检查、基本语法错误，Agent 必须主动执行相应检查命令并自行修复，绝不交付带有基础编译错误的代码。
+- **注释规范**：核心逻辑必须加中文注释，说明为什么这样做、输入输出是什么、异常如何处理。简单 UI 绑定、样式微调和自解释代码不强制添加注释。
+- **极简第一**：用最少代码解决问题。不加超出要求的特性，不写前瞻性抽象。
+- **外科手术式修改**：只修改必须改动的代码，清理自己产生的死代码；不顺手重构或格式化无关代码。
+- **最优方案优先**：开发阶段拒绝过度兼容。不要自行编写冗余向后兼容分支；如需删除旧接口、旧结构或旧逻辑，应先说明影响并取得确认。
+- **目标驱动**：将任务转化为可验证目标。代码修改完成后，先自行跑通静态检查、编译或最贴近变更面的测试。
+- **保护用户改动**：仓库可能存在未提交改动。不要回滚、覆盖或格式化非本次任务相关文件；遇到冲突先确认。
 
 ## 执行方式
 
@@ -78,10 +66,28 @@
 - 命令优先使用 PowerShell、cmd、模块自带脚本或 Makefile。
 - Unix 命令不可用时，改用 PowerShell。
 - Node 模块统一使用 pnpm。
+- Node 依赖由根目录 pnpm workspace 统一管理，只在仓库根目录执行 `pnpm install`，不要在子项目目录单独安装依赖。
+- Prettier 配置统一维护在根目录；ESLint 配置当前按前端模块保留差异，不跨模块强行合并。
 - Go 模块遵循 Makefile 或 go 命令。
 - 统一使用根目录 `.env`。
 - 端口以根目录 `.env` 为本机实际来源。
-- `.env_example` 与 `README.md` 只维护统一默认端口。
+- 环境模板分为 `.env.development.example` 与 `.env.production.example`。
+- 默认端口以根目录 `.env`、环境模板和 `docs/环境端口规划.md` 为准。
+- 开发环境宿主机端口统一使用 `18xxx` 段；生产/离线环境默认只暴露 edge/Nginx 入口，其他服务走 Docker 内部服务名。
+- Windows + WSL2 开发时，WSL2 只承载 Docker 基础设施；`pnpm install` 和业务项目启动优先在 Windows 侧执行。
+
+## 基础设施与交付
+
+- 开发人员入口是 `scripts/dev/init-linux.sh`。
+- `scripts/dev/init-linux.sh` 只检测 Docker、生成 `.env`、启动开发基础设施容器、创建 `if_core`/`if_data`/`if_dev_data` 并启用开发态时序扩展。
+- 开发初始化脚本不安装 Node 依赖，不启动 `dev_core`、`data_service` 或前端项目。
+- `dev_core` 开发环境通过 `DB_AUTO_SCHEMA_SYNC=true` 在启动时同步 `if_core` 表结构和默认数据。
+- 控制面数据库 bootstrap 文件位于 `dev_core/scripts/bootstrap/`，结构 SQL 位于 `dev_core/scripts/bootstrap/sql/core-schema.sql`。
+- 不再使用 `db:init`、`db:reset` 或 `dev_core/database/` 作为日常入口。
+- 生产/离线环境保持 `DB_AUTO_SCHEMA_SYNC=false`，数据库结构只允许安装阶段通过安装脚本初始化。
+- 测试打包入口是 `scripts/release/build-offline-package-linux.sh`，目标安装入口是 `scripts/offline/install.sh` / `scripts/offline/install.ps1`。
+- 离线镜像缓存目录是 `scripts/docker/images/`；镜像 tar 不提交 Git。
+- 离线包内基础设施镜像使用 `induforge/*` 产品体系命名，避免在交付拓扑中直接暴露底层镜像名。
 
 ## 工程约束
 
@@ -96,8 +102,13 @@
 - 新增错误码前先复用现有规则。
 - 确需新增错误码时，同步更新 `docs/统一错误码枚举表.md`
 - 数据库操作必须使用参数化查询。
-- commit message 使用中文。
-- 推荐格式：`type(scope): 中文描述`
+
+## Git 与验证
+
+- **提交信息**：Commit Message 使用中文，推荐 `type(scope): subject` 格式，例如 `fix(widget): 修复历史消息渲染`。
+- **不提交产物**：不提交临时文件、调试输出、无关构建产物和本地环境文件。
+- **交付说明**：交付时说明修改范围、已执行验证、未验证风险，以及建议用户手动验收的成功/失败路径。
+
 
 ## 时间
 
@@ -122,7 +133,7 @@ YYYY-MM-DD HH:mm:ss
 - `runtime/`：运行时共享规则入口。
 - `runtime/node_agent/`：节点执行器后端。
 - `runtime/node_agent_front/`：节点本地管理前端。
-- `scripts/`：本地开发与基础设施脚本目录。
+- `scripts/`：本地开发、基础设施、离线打包、安装卸载和模拟数据脚本目录。
 
 ## 文档
 
@@ -137,7 +148,6 @@ YYYY-MM-DD HH:mm:ss
 
 - `scripts/docker/`
 - `scripts/nginx/`
-- `scripts/seaweedfs/`
 
 ## 注释
 

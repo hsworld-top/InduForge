@@ -20,7 +20,7 @@
 - 路由统一挂载在 `/api/v1`，仅测试接口允许放在 `/api/v2`。
 - 返回统一使用 `ApiResponse`，业务错误统一使用 `AppError` 与 `ErrorCodes`。
 - 参数校验优先走中间件或服务层，认证与权限校验优先放在路由层。
-- 数据库初始化只能走 `scripts/init-database.js`，禁止 `sequelize.sync()`。
+- 控制面数据库 bootstrap 只能走 `scripts/bootstrap/init-core-database.js`；生产运行时禁止自动同步。
 - 查询注意避免 N+1；Socket.IO 推送优先按房间粒度广播。
 - 日志中禁止输出密码、令牌等敏感字段。
 

@@ -1,0 +1,29 @@
+{
+  "name": "induforge",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.19.0",
+  "scripts": {
+    "dev:core": "pnpm --filter dev_core dev",
+    "dev:ide": "pnpm --filter ide dev",
+    "dev:datacenter": "pnpm --filter datacenter dev",
+    "dev:designer": "pnpm --filter designer dev",
+    "dev:agent-front": "pnpm --filter node_agent_front dev",
+    "build:ide": "pnpm --filter ide build",
+    "build:datacenter": "pnpm --filter datacenter build",
+    "build:designer": "pnpm --filter designer build",
+    "build:agent-front": "pnpm --filter node_agent_front build",
+    "test:core": "pnpm --filter dev_core test",
+    "test:datacenter": "pnpm --filter datacenter test",
+    "test:designer": "pnpm --filter designer test",
+    "lint:ide": "pnpm --filter ide lint",
+    "lint:datacenter": "pnpm --filter datacenter lint",
+    "lint:designer": "pnpm --filter designer lint",
+    "format:ide": "pnpm --filter ide format",
+    "format:datacenter": "pnpm --filter datacenter format",
+    "format:designer": "pnpm --filter designer format",
+    "typecheck:ide": "pnpm --filter ide typecheck",
+    "typecheck:datacenter": "pnpm --filter datacenter typecheck",
+    "typecheck:designer": "pnpm --filter designer typecheck"
+  }
+}

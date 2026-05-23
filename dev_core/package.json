@@ -6,13 +6,12 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "db:init": "node scripts/init-database.js init",
-    "db:reset": "node scripts/init-database.js reset && node scripts/init-database.js init",
     "test": "cross-env NODE_ENV=test ENABLE_DB_SYNC=false ENABLE_SWAGGER=false jest --runInBand"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "private": true,
+  "license": "UNLICENSED",
   "packageManager": "pnpm@10.19.0",
   "dependencies": {
     "archiver": "^7.0.1",

@@ -1305,9 +1305,9 @@ describe("projectRuntimeAccessService", () => {
     });
   });
 
-  test("init.sql 包含同工程一致性复合约束", () => {
+  test("core-schema.sql 包含同工程一致性复合约束", () => {
     const initSql = fs.readFileSync(
-      path.join(__dirname, "../../../database/init.sql"),
+      path.join(__dirname, "../../../scripts/bootstrap/sql/core-schema.sql"),
       "utf8",
     );
 

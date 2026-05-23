@@ -293,7 +293,7 @@ A:
 ## 相关资源
 
 - [后端 API 文档](./README.md)
-- [数据库初始化](./database-init.md)
+- [环境端口规划](../环境端口规划.md)
 - [JWT 官方文档](https://jwt.io/)
 - [bcrypt 文档](https://github.com/kelektiv/node.bcrypt.js)
 

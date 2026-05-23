@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-const defaultAddr = ":19602"
+const defaultAddr = ":18102"
 const minJWTSecretLength = 16
 
 // Config 定义 data_service 的基础运行配置。
@@ -113,7 +113,7 @@ func buildDatabaseURL() string {
 
 	port := firstEnv("IF_META_STORE_PORT")
 	if port == "" {
-		port = "5432"
+		port = "18432"
 	}
 
 	sslMode := "disable"
@@ -141,7 +141,7 @@ func buildRedisAddr() string {
 
 	port := firstEnv("IF_CACHE_STORE_PORT")
 	if port == "" {
-		port = "6379"
+		port = "18379"
 	}
 	return net.JoinHostPort(host, port)
 }

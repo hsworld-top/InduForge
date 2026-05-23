@@ -13,10 +13,11 @@
 # - 启动开发所需基础设施容器。
 # - 创建平台数据库。
 # - 启用开发态时序扩展。
-# - 执行控制面数据库结构和默认账号初始化。
+# - 默认不安装 Node 依赖，也不启动业务项目。
 #
 # 边界：
 # - 不启动 dev_core、data_service、前端项目等业务进程。
+# - 默认不执行 pnpm install，避免 Windows + WSL 共用工作区时产生跨系统依赖问题。
 # - 不删除已有容器和数据卷。
 # - 如需重置环境，请先由开发人员明确执行 docker compose down --volumes。
 
@@ -29,12 +30,47 @@ DEV_ENV_TEMPLATE="$REPO_ROOT/.env.development.example"
 COMPOSE_FILE="$REPO_ROOT/scripts/docker/docker-compose.dev.yml"
 META_CONTAINER="induforge-meta-store"
 
+usage() {
+  cat <<'USAGE'
+用法: ./scripts/dev/init-linux.sh
+
+默认行为：
+  启动 Docker 开发基础设施，创建平台数据库，并启用开发态时序扩展。
+USAGE
+}
+
+parse_args() {
+  for arg in "$@"; do
+    case "$arg" in
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "未知参数: $arg" >&2
+        usage >&2
+        exit 1
+        ;;
+    esac
+  done
+}
+
 require_command() {
   local command_name="$1"
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "缺少命令: $command_name。请先安装或启用对应工具。" >&2
     exit 1
   fi
+}
+
+quote_sql_ident() {
+  local value="$1"
+  if [[ ! "$value" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+    echo "非法数据库标识符: $value" >&2
+    exit 1
+  fi
+
+  printf '"%s"' "$value"
 }
 
 compose_command() {
@@ -109,29 +145,87 @@ start_infra() {
 }
 
 init_databases() {
+  local core_db data_db dev_data_db
+
   echo "初始化平台数据库和时序扩展..."
-  node "$REPO_ROOT/scripts/dev/init-infra.mjs"
+  core_db="$(read_env IF_META_STORE_CORE_DB if_core)"
+  data_db="$(read_env IF_META_STORE_DATA_DB if_data)"
+  dev_data_db="$(read_env IF_META_STORE_DEV_DATA_DB if_dev_data)"
+
+  create_database_if_needed "$core_db"
+  create_database_if_needed "$data_db"
+  create_database_if_needed "$dev_data_db"
+  enable_timeseries_extension "$dev_data_db"
+  check_optional_infra_ports
 }
 
-init_control_schema() {
-  echo "初始化控制面数据库结构和默认账号..."
-  pnpm --dir "$REPO_ROOT/dev_core" install --frozen-lockfile
-  pnpm --dir "$REPO_ROOT/dev_core" db:init
+create_database_if_needed() {
+  local database="$1"
+  local user password admin_db exists quoted
+
+  user="$(read_env IF_META_STORE_USER postgres)"
+  password="$(read_env IF_META_STORE_PASSWORD postgres)"
+  admin_db="$(read_env IF_META_STORE_ADMIN_DATABASE postgres)"
+  quoted="$(quote_sql_ident "$database")"
+
+  exists="$(docker exec -e PGPASSWORD="$password" "$META_CONTAINER" \
+    psql -U "$user" -d "$admin_db" -tAc "SELECT 1 FROM pg_database WHERE datname = '$database';" | tr -d '[:space:]')"
+
+  if [ "$exists" = "1" ]; then
+    echo "✓ 数据库已存在: $database"
+    return
+  fi
+
+  docker exec -e PGPASSWORD="$password" "$META_CONTAINER" \
+    psql -U "$user" -d "$admin_db" -c "CREATE DATABASE $quoted;" >/dev/null
+  echo "✓ 数据库已创建: $database"
+}
+
+enable_timeseries_extension() {
+  local database="$1"
+  local user password extension_name
+
+  user="$(read_env IF_META_STORE_USER postgres)"
+  password="$(read_env IF_META_STORE_PASSWORD postgres)"
+  extension_name="time""scaledb"
+
+  docker exec -e PGPASSWORD="$password" "$META_CONTAINER" \
+    psql -U "$user" -d "$database" -c "CREATE EXTENSION IF NOT EXISTS $extension_name;" >/dev/null
+  echo "✓ ${database} 已启用扩展: $extension_name"
+}
+
+tcp_check() {
+  local host="$1"
+  local port="$2"
+  local label="$3"
+
+  if timeout 3 bash -c "cat < /dev/null > /dev/tcp/$host/$port" >/dev/null 2>&1; then
+    echo "✓ ${label} 可连接 ${host}:${port}"
+    return
+  fi
+
+  echo "! ${label} 不可连接 ${host}:${port}"
+}
+
+check_optional_infra_ports() {
+  tcp_check "$(read_env IF_CACHE_STORE_HOST 127.0.0.1)" "$(read_env IF_CACHE_STORE_PORT 18379)" "缓存能力"
+  tcp_check "$(read_env IF_MESSAGE_HUB_HOST 127.0.0.1)" "$(read_env IF_MESSAGE_HUB_MQTT_PORT 18883)" "消息接入能力"
+  tcp_check "$(read_env IF_OBJECT_STORE_ENDPOINT 127.0.0.1)" "$(read_env IF_OBJECT_STORE_PORT 18500)" "对象存储能力"
 }
 
 main() {
+  parse_args "$@"
+
   require_command docker
-  require_command node
-  require_command pnpm
   docker info >/dev/null
 
   ensure_env_file
   start_infra
   wait_for_meta_store
   init_databases
-  init_control_schema
 
   echo "开发环境基础设施初始化完成。"
+  echo "dev_core 启动时会根据 DB_AUTO_SCHEMA_SYNC 自动同步 if_core 表结构和初始数据。"
   echo "业务项目不会由本脚本启动，请开发人员按模块自行启动 dev_core、data_service 和前端项目。"
 }
 

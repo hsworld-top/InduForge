@@ -1,3 +1,3 @@
 FROM timescale/timescaledb:2.26.4-pg16
 
-CMD ["-c", "shared_preload_libraries=timescaledb"]
+CMD ["-p", "18432", "-c", "shared_preload_libraries=timescaledb"]
