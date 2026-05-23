@@ -60,14 +60,26 @@ type MqttSubscriptionRecord struct {
 	ID               string
 	ProjectID        string
 	ConnectionID     string
+	GroupID          *string
 	Name             string
 	Topic            string
 	QOS              int
 	Description      *string
-	IsEnabled        bool
 	MessageRetention int
+	Order            int
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+}
+
+// MqttSubscriptionGroupRecord 表示 MQTT 订阅分组投影。
+type MqttSubscriptionGroupRecord struct {
+	ID           string
+	ProjectID    string
+	ConnectionID string
+	Name         string
+	ParentID     *string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // MqttTagGroupRecord 表示 MQTT 变量组投影。
@@ -101,7 +113,6 @@ type MqttTagRecord struct {
 	Unit           *string
 	Transform      *string
 	Validation     map[string]any
-	IsEnabled      bool
 	Order          int
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
@@ -137,26 +148,47 @@ type UpdateMqttConnectionParams struct {
 type CreateMqttSubscriptionParams struct {
 	ProjectID        string
 	ConnectionID     string
+	GroupID          *string
 	UserID           string
 	Name             string
 	Topic            string
 	QOS              int
 	Description      *string
-	IsEnabled        bool
 	MessageRetention int
+	Order            int
 }
 
 // UpdateMqttSubscriptionParams 表示更新 MQTT 订阅的仓储参数。
 type UpdateMqttSubscriptionParams struct {
 	ProjectID        string
 	SubscriptionID   string
+	GroupID          *string
+	HasGroupID       bool
 	UserID           string
 	Name             string
 	Topic            string
 	QOS              int
 	Description      *string
-	IsEnabled        bool
 	MessageRetention int
+	Order            int
+}
+
+// CreateMqttSubscriptionGroupParams 表示新建 MQTT 订阅分组的仓储参数。
+type CreateMqttSubscriptionGroupParams struct {
+	ProjectID    string
+	ConnectionID string
+	UserID       string
+	Name         string
+	ParentID     *string
+}
+
+// UpdateMqttSubscriptionGroupParams 表示更新 MQTT 订阅分组的仓储参数。
+type UpdateMqttSubscriptionGroupParams struct {
+	ProjectID string
+	GroupID   string
+	UserID    string
+	Name      string
+	ParentID  *string
 }
 
 // CreateMqttTagGroupParams 表示新建变量组的仓储参数。
@@ -201,7 +233,6 @@ type CreateMqttTagParams struct {
 	Unit           *string
 	Transform      *string
 	Validation     map[string]any
-	IsEnabled      bool
 	Order          int
 }
 
@@ -221,7 +252,6 @@ type UpdateMqttTagParams struct {
 	Unit         *string
 	Transform    *string
 	Validation   map[string]any
-	IsEnabled    bool
 	Order        int
 }
 
@@ -495,10 +525,10 @@ func (r *MqttRepository) ListSubscriptions(ctx context.Context, projectID, conne
 
 	listArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, connection_id, name, topic, qos, description, is_enabled, message_retention, created_at, updated_at
+        SELECT id, project_id, connection_id, group_id, name, topic, qos, description, message_retention, display_order, created_at, updated_at
         FROM data_mqtt_subscriptions
         WHERE `+whereSQL+`
-        ORDER BY created_at DESC
+        ORDER BY display_order ASC, created_at ASC
         LIMIT $`+fmt.Sprint(len(args)+1)+` OFFSET $`+fmt.Sprint(len(args)+2), listArgs...)
 	if err != nil {
 		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 MQTT 订阅失败", err)
@@ -522,7 +552,7 @@ func (r *MqttRepository) ListSubscriptions(ctx context.Context, projectID, conne
 // GetSubscription 读取单个订阅。
 func (r *MqttRepository) GetSubscription(ctx context.Context, projectID, subscriptionID string) (*MqttSubscriptionRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-        SELECT id, project_id, connection_id, name, topic, qos, description, is_enabled, message_retention, created_at, updated_at
+        SELECT id, project_id, connection_id, group_id, name, topic, qos, description, message_retention, display_order, created_at, updated_at
         FROM data_mqtt_subscriptions
         WHERE project_id = $1 AND id = $2
     `, projectID, subscriptionID)
@@ -537,11 +567,11 @@ func (r *MqttRepository) GetSubscription(ctx context.Context, projectID, subscri
 func (r *MqttRepository) CreateSubscription(ctx context.Context, params CreateMqttSubscriptionParams) (*MqttSubscriptionRecord, error) {
 	row := r.pool.QueryRow(ctx, `
         INSERT INTO data_mqtt_subscriptions (
-            project_id, connection_id, name, topic, qos, description, is_enabled, message_retention, created_by, updated_by
+            project_id, connection_id, group_id, name, topic, qos, description, message_retention, display_order, created_by, updated_by
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
-        RETURNING id, project_id, connection_id, name, topic, qos, description, is_enabled, message_retention, created_at, updated_at
-    `, params.ProjectID, params.ConnectionID, params.Name, params.Topic, params.QOS, params.Description, params.IsEnabled, params.MessageRetention, params.UserID)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+        RETURNING id, project_id, connection_id, group_id, name, topic, qos, description, message_retention, display_order, created_at, updated_at
+    `, params.ProjectID, params.ConnectionID, params.GroupID, params.Name, params.Topic, params.QOS, params.Description, params.MessageRetention, params.Order, params.UserID)
 	record, err := scanMqttSubscription(row)
 	if err != nil {
 		return nil, translateMqttWriteError("创建 MQTT 订阅失败", err)
@@ -551,19 +581,24 @@ func (r *MqttRepository) CreateSubscription(ctx context.Context, params CreateMq
 
 // UpdateSubscription 更新订阅。
 func (r *MqttRepository) UpdateSubscription(ctx context.Context, params UpdateMqttSubscriptionParams) (*MqttSubscriptionRecord, error) {
+	groupID := params.GroupID
+	if !params.HasGroupID {
+		groupID = nil
+	}
 	row := r.pool.QueryRow(ctx, `
         UPDATE data_mqtt_subscriptions
-        SET name = $3,
-            topic = $4,
-            qos = $5,
-            description = $6,
-            is_enabled = $7,
+        SET group_id = $3,
+            name = $4,
+            topic = $5,
+            qos = $6,
+            description = $7,
             message_retention = $8,
-            updated_by = $9,
+            display_order = $9,
+            updated_by = $10,
             updated_at = now()
         WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, connection_id, name, topic, qos, description, is_enabled, message_retention, created_at, updated_at
-    `, params.ProjectID, params.SubscriptionID, params.Name, params.Topic, params.QOS, params.Description, params.IsEnabled, params.MessageRetention, params.UserID)
+        RETURNING id, project_id, connection_id, group_id, name, topic, qos, description, message_retention, display_order, created_at, updated_at
+    `, params.ProjectID, params.SubscriptionID, groupID, params.Name, params.Topic, params.QOS, params.Description, params.MessageRetention, params.Order, params.UserID)
 	record, err := scanMqttSubscription(row)
 	if err != nil {
 		return nil, translateMqttWriteError("更新 MQTT 订阅失败", err)
@@ -586,21 +621,100 @@ func (r *MqttRepository) DeleteSubscription(ctx context.Context, projectID, subs
 	return nil
 }
 
-// UpdateSubscriptionEnabled 更新订阅启用状态。
-func (r *MqttRepository) UpdateSubscriptionEnabled(ctx context.Context, projectID, subscriptionID, userID string, enabled bool) (*MqttSubscriptionRecord, error) {
-	row := r.pool.QueryRow(ctx, `
-        UPDATE data_mqtt_subscriptions
-        SET is_enabled = $3,
-            updated_by = $4,
-            updated_at = now()
-        WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, connection_id, name, topic, qos, description, is_enabled, message_retention, created_at, updated_at
-    `, projectID, subscriptionID, enabled, userID)
-	record, err := scanMqttSubscription(row)
+// ListSubscriptionGroups 查询连接下的订阅分组。
+func (r *MqttRepository) ListSubscriptionGroups(ctx context.Context, projectID, connectionID string) ([]MqttSubscriptionGroupRecord, error) {
+	where := []string{"project_id = $1"}
+	args := []any{projectID}
+	if strings.TrimSpace(connectionID) != "" {
+		args = append(args, strings.TrimSpace(connectionID))
+		where = append(where, fmt.Sprintf("connection_id = $%d", len(args)))
+	}
+	rows, err := r.pool.Query(ctx, `
+        SELECT id, project_id, connection_id, name, parent_id, created_at, updated_at
+        FROM data_mqtt_subscription_groups
+        WHERE `+strings.Join(where, " AND ")+`
+        ORDER BY created_at ASC
+    `, args...)
 	if err != nil {
-		return nil, translateMqttWriteError("更新 MQTT 订阅状态失败", err)
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 MQTT 订阅分组失败", err)
+	}
+	defer rows.Close()
+
+	result := make([]MqttSubscriptionGroupRecord, 0)
+	for rows.Next() {
+		record, scanErr := scanMqttSubscriptionGroup(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		result = append(result, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 MQTT 订阅分组失败", err)
+	}
+	return result, nil
+}
+
+// GetSubscriptionGroup 读取单个订阅分组。
+func (r *MqttRepository) GetSubscriptionGroup(ctx context.Context, projectID, groupID string) (*MqttSubscriptionGroupRecord, error) {
+	row := r.pool.QueryRow(ctx, `
+        SELECT id, project_id, connection_id, name, parent_id, created_at, updated_at
+        FROM data_mqtt_subscription_groups
+        WHERE project_id = $1 AND id = $2
+    `, projectID, groupID)
+	record, err := scanMqttSubscriptionGroup(row)
+	if err != nil {
+		return nil, err
 	}
 	return &record, nil
+}
+
+// CreateSubscriptionGroup 新建订阅分组。
+func (r *MqttRepository) CreateSubscriptionGroup(ctx context.Context, params CreateMqttSubscriptionGroupParams) (*MqttSubscriptionGroupRecord, error) {
+	row := r.pool.QueryRow(ctx, `
+        INSERT INTO data_mqtt_subscription_groups (
+            project_id, connection_id, name, parent_id, created_by, updated_by
+        )
+        VALUES ($1, $2, $3, $4, $5, $5)
+        RETURNING id, project_id, connection_id, name, parent_id, created_at, updated_at
+    `, params.ProjectID, params.ConnectionID, params.Name, params.ParentID, params.UserID)
+	record, err := scanMqttSubscriptionGroup(row)
+	if err != nil {
+		return nil, translateMqttWriteError("创建 MQTT 订阅分组失败", err)
+	}
+	return &record, nil
+}
+
+// UpdateSubscriptionGroup 更新订阅分组。
+func (r *MqttRepository) UpdateSubscriptionGroup(ctx context.Context, params UpdateMqttSubscriptionGroupParams) (*MqttSubscriptionGroupRecord, error) {
+	row := r.pool.QueryRow(ctx, `
+        UPDATE data_mqtt_subscription_groups
+        SET name = $3,
+            parent_id = $4,
+            updated_by = $5,
+            updated_at = now()
+        WHERE project_id = $1 AND id = $2
+        RETURNING id, project_id, connection_id, name, parent_id, created_at, updated_at
+    `, params.ProjectID, params.GroupID, params.Name, params.ParentID, params.UserID)
+	record, err := scanMqttSubscriptionGroup(row)
+	if err != nil {
+		return nil, translateMqttWriteError("更新 MQTT 订阅分组失败", err)
+	}
+	return &record, nil
+}
+
+// DeleteSubscriptionGroup 删除订阅分组；组内订阅由外键自动回到根。
+func (r *MqttRepository) DeleteSubscriptionGroup(ctx context.Context, projectID, groupID string) error {
+	commandTag, err := r.pool.Exec(ctx, `
+        DELETE FROM data_mqtt_subscription_groups
+        WHERE project_id = $1 AND id = $2
+    `, projectID, groupID)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "删除 MQTT 订阅分组失败", err)
+	}
+	if commandTag.RowsAffected() == 0 {
+		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "MQTT 订阅分组不存在")
+	}
+	return nil
 }
 
 // ListTagGroups 查询订阅下的变量组。
@@ -743,26 +857,22 @@ func (r *MqttRepository) UpdateTagGroupsOrder(ctx context.Context, projectID str
 }
 
 // ListTagsBySubscription 查询订阅下变量。
-func (r *MqttRepository) ListTagsBySubscription(ctx context.Context, projectID, subscriptionID string, page, pageSize int, isEnabled *bool) ([]MqttTagRecord, int, error) {
-	return r.listTags(ctx, projectID, subscriptionID, page, pageSize, isEnabled)
+func (r *MqttRepository) ListTagsBySubscription(ctx context.Context, projectID, subscriptionID string, page, pageSize int) ([]MqttTagRecord, int, error) {
+	return r.listTags(ctx, projectID, subscriptionID, page, pageSize)
 }
 
 // ListTagsByProject 查询项目下变量。
-func (r *MqttRepository) ListTagsByProject(ctx context.Context, projectID string, page, pageSize int, subscriptionID string, isEnabled *bool) ([]MqttTagRecord, int, error) {
-	return r.listTags(ctx, projectID, subscriptionID, page, pageSize, isEnabled)
+func (r *MqttRepository) ListTagsByProject(ctx context.Context, projectID string, page, pageSize int, subscriptionID string) ([]MqttTagRecord, int, error) {
+	return r.listTags(ctx, projectID, subscriptionID, page, pageSize)
 }
 
-func (r *MqttRepository) listTags(ctx context.Context, projectID, subscriptionID string, page, pageSize int, isEnabled *bool) ([]MqttTagRecord, int, error) {
+func (r *MqttRepository) listTags(ctx context.Context, projectID, subscriptionID string, page, pageSize int) ([]MqttTagRecord, int, error) {
 	page, pageSize = normalizePageAndSize(page, pageSize, 50, 200)
 	where := []string{"project_id = $1"}
 	args := []any{projectID}
 	if strings.TrimSpace(subscriptionID) != "" {
 		args = append(args, strings.TrimSpace(subscriptionID))
 		where = append(where, fmt.Sprintf("subscription_id = $%d", len(args)))
-	}
-	if isEnabled != nil {
-		args = append(args, *isEnabled)
-		where = append(where, fmt.Sprintf("is_enabled = $%d", len(args)))
 	}
 	whereSQL := strings.Join(where, " AND ")
 
@@ -774,7 +884,7 @@ func (r *MqttRepository) listTags(ctx context.Context, projectID, subscriptionID
 	queryArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
 	rows, err := r.pool.Query(ctx, `
         SELECT id, project_id, subscription_id, group_id, name, code, description, data_type, parse_type, parse_rule,
-               default_value, unit, transform, validation, is_enabled, display_order, created_at, updated_at
+               default_value, unit, transform, validation, display_order, created_at, updated_at
         FROM data_mqtt_tags
         WHERE `+whereSQL+`
         ORDER BY display_order ASC, created_at ASC
@@ -803,7 +913,7 @@ func (r *MqttRepository) listTags(ctx context.Context, projectID, subscriptionID
 func (r *MqttRepository) GetTag(ctx context.Context, projectID, tagID string) (*MqttTagRecord, error) {
 	row := r.pool.QueryRow(ctx, `
         SELECT id, project_id, subscription_id, group_id, name, code, description, data_type, parse_type, parse_rule,
-               default_value, unit, transform, validation, is_enabled, display_order, created_at, updated_at
+               default_value, unit, transform, validation, display_order, created_at, updated_at
         FROM data_mqtt_tags
         WHERE project_id = $1 AND id = $2
     `, projectID, tagID)
@@ -824,12 +934,12 @@ func (r *MqttRepository) CreateTag(ctx context.Context, params CreateMqttTagPara
 	row := r.pool.QueryRow(ctx, `
         INSERT INTO data_mqtt_tags (
             project_id, subscription_id, group_id, name, code, description, data_type, parse_type, parse_rule,
-            default_value, unit, transform, validation, is_enabled, display_order, created_by, updated_by
+            default_value, unit, transform, validation, display_order, created_by, updated_by
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $16, $16)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $15)
         RETURNING id, project_id, subscription_id, group_id, name, code, description, data_type, parse_type, parse_rule,
-                  default_value, unit, transform, validation, is_enabled, display_order, created_at, updated_at
-    `, params.ProjectID, params.SubscriptionID, params.GroupID, params.Name, params.Code, params.Description, params.DataType, params.ParseType, params.ParseRule, params.DefaultValue, params.Unit, params.Transform, nullableMqttJSON(validationBytes), params.IsEnabled, params.Order, params.UserID)
+                  default_value, unit, transform, validation, display_order, created_at, updated_at
+    `, params.ProjectID, params.SubscriptionID, params.GroupID, params.Name, params.Code, params.Description, params.DataType, params.ParseType, params.ParseRule, params.DefaultValue, params.Unit, params.Transform, nullableMqttJSON(validationBytes), params.Order, params.UserID)
 	record, err := scanMqttTag(row)
 	if err != nil {
 		return nil, translateMqttWriteError("创建 MQTT 变量失败", err)
@@ -857,14 +967,13 @@ func (r *MqttRepository) UpdateTag(ctx context.Context, params UpdateMqttTagPara
             unit = $11,
             transform = $12,
             validation = $13::jsonb,
-            is_enabled = $14,
-            display_order = $15,
-            updated_by = $16,
+            display_order = $14,
+            updated_by = $15,
             updated_at = now()
         WHERE project_id = $1 AND id = $2
         RETURNING id, project_id, subscription_id, group_id, name, code, description, data_type, parse_type, parse_rule,
-                  default_value, unit, transform, validation, is_enabled, display_order, created_at, updated_at
-    `, params.ProjectID, params.TagID, params.GroupID, params.Name, params.Code, params.Description, params.DataType, params.ParseType, params.ParseRule, params.DefaultValue, params.Unit, params.Transform, nullableMqttJSON(validationBytes), params.IsEnabled, params.Order, params.UserID)
+                  default_value, unit, transform, validation, display_order, created_at, updated_at
+    `, params.ProjectID, params.TagID, params.GroupID, params.Name, params.Code, params.Description, params.DataType, params.ParseType, params.ParseRule, params.DefaultValue, params.Unit, params.Transform, nullableMqttJSON(validationBytes), params.Order, params.UserID)
 	record, err := scanMqttTag(row)
 	if err != nil {
 		return nil, translateMqttWriteError("更新 MQTT 变量失败", err)
@@ -885,24 +994,6 @@ func (r *MqttRepository) DeleteTag(ctx context.Context, projectID, tagID string)
 		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "MQTT 变量不存在")
 	}
 	return nil
-}
-
-// UpdateTagEnabled 更新变量启用状态。
-func (r *MqttRepository) UpdateTagEnabled(ctx context.Context, projectID, tagID, userID string, enabled bool) (*MqttTagRecord, error) {
-	row := r.pool.QueryRow(ctx, `
-        UPDATE data_mqtt_tags
-        SET is_enabled = $3,
-            updated_by = $4,
-            updated_at = now()
-        WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, subscription_id, group_id, name, code, description, data_type, parse_type, parse_rule,
-                  default_value, unit, transform, validation, is_enabled, display_order, created_at, updated_at
-    `, projectID, tagID, enabled, userID)
-	record, err := scanMqttTag(row)
-	if err != nil {
-		return nil, translateMqttWriteError("更新 MQTT 变量状态失败", err)
-	}
-	return &record, nil
 }
 
 // UpdateTagsOrder 批量更新变量顺序。
@@ -981,18 +1072,20 @@ func scanMqttConnectionDetail(row scannable) (MqttConnectionDetailRecord, error)
 func scanMqttSubscription(row scannable) (MqttSubscriptionRecord, error) {
 	var (
 		record      MqttSubscriptionRecord
+		groupID     sql.NullString
 		description sql.NullString
 	)
 	if err := row.Scan(
 		&record.ID,
 		&record.ProjectID,
 		&record.ConnectionID,
+		&groupID,
 		&record.Name,
 		&record.Topic,
 		&record.QOS,
 		&description,
-		&record.IsEnabled,
 		&record.MessageRetention,
+		&record.Order,
 		&record.CreatedAt,
 		&record.UpdatedAt,
 	); err != nil {
@@ -1001,7 +1094,31 @@ func scanMqttSubscription(row scannable) (MqttSubscriptionRecord, error) {
 		}
 		return MqttSubscriptionRecord{}, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 MQTT 订阅失败", err)
 	}
+	record.GroupID = nullStringToPtr(groupID)
 	record.Description = nullStringToPtr(description)
+	return record, nil
+}
+
+func scanMqttSubscriptionGroup(row scannable) (MqttSubscriptionGroupRecord, error) {
+	var (
+		record   MqttSubscriptionGroupRecord
+		parentID sql.NullString
+	)
+	if err := row.Scan(
+		&record.ID,
+		&record.ProjectID,
+		&record.ConnectionID,
+		&record.Name,
+		&parentID,
+		&record.CreatedAt,
+		&record.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return MqttSubscriptionGroupRecord{}, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "MQTT 订阅分组不存在")
+		}
+		return MqttSubscriptionGroupRecord{}, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 MQTT 订阅分组失败", err)
+	}
+	record.ParentID = nullStringToPtr(parentID)
 	return record, nil
 }
 
@@ -1058,7 +1175,6 @@ func scanMqttTag(row scannable) (MqttTagRecord, error) {
 		&unit,
 		&transform,
 		&validationBytes,
-		&record.IsEnabled,
 		&record.Order,
 		&record.CreatedAt,
 		&record.UpdatedAt,

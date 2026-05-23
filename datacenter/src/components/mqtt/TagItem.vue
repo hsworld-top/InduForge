@@ -41,23 +41,7 @@
         </div>
       </div>
 
-      <!-- 右侧操作 -->
       <div class="tag-actions">
-        <!-- 启用开关 -->
-        <el-tooltip
-          :content="tag.isEnabled ? '点击禁用' : '点击启用'"
-          placement="top"
-        >
-          <el-switch
-            :model-value="tag.isEnabled"
-            @change="$emit('toggle', tag)"
-            active-color="#10b981"
-            inactive-color="#ef4444"
-            size="default"
-          />
-        </el-tooltip>
-
-        <!-- 操作按钮 -->
         <div class="action-buttons">
           <el-tooltip content="查看" placement="top">
             <button type="button" class="tag-action-btn" @click="$emit('view', tag)">
@@ -96,7 +80,7 @@ defineProps({
   },
 });
 
-defineEmits(["edit", "delete", "toggle", "view"]);
+defineEmits(["edit", "delete", "view"]);
 
 // 数据类型映射
 const getDataTypeLabel = (type) => {
@@ -244,7 +228,6 @@ const getParseTypeLabel = (type) => {
   height: 14px;
 }
 
-/* 启用状态指示器 */
 .tag-item::before {
   content: "";
   position: absolute;

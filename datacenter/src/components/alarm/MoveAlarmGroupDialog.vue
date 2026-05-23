@@ -4,6 +4,8 @@
     title="移动分组"
     width="460px"
     body-max-height="260px"
+    :dirty="isDirty"
+    :close-disabled="loading"
     @close="resetForm"
   >
     <el-form label-position="top" class="alarm-group-move-dialog">
@@ -107,6 +109,12 @@ const canSubmit = computed(
     Boolean(props.group) &&
     parentId.value !== currentParentId.value &&
     !props.loading,
+);
+const isDirty = computed(
+  () =>
+    visible.value &&
+    Boolean(props.group) &&
+    parentId.value !== currentParentId.value,
 );
 
 function resetForm() {

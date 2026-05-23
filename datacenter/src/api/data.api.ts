@@ -135,6 +135,30 @@ export const previewProtocol = (projectId, connectionId, data = {}) => {
   });
 };
 
+export const getRedisKeys = (projectId, connectionId, params = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/redis/keys`,
+    method: "get",
+    params,
+  });
+};
+
+export const getRedisValue = (projectId, connectionId, key) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/redis/value`,
+    method: "get",
+    params: { key },
+  });
+};
+
+export const executeRedisCommand = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/redis/command`,
+    method: "post",
+    data,
+  });
+};
+
 export const getConnectionTables = (projectId, connectionId) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/tables`,
@@ -458,6 +482,65 @@ export const getMqttSubscriptions = (projectId, connectionId) => {
 };
 
 /**
+ * 获取MQTT订阅分组树
+ * @param {string} projectId - 工程ID
+ * @param {string} connectionId - 连接ID
+ */
+export const getMqttSubscriptionGroups = (projectId, connectionId) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/connections/${connectionId}/subscription-groups`,
+    method: "get",
+  }).then((response) => ({
+    ...response,
+    data: normalizeMqttListPayload(response, "groups"),
+  }));
+};
+
+/**
+ * 创建MQTT订阅分组
+ * @param {string} projectId - 工程ID
+ * @param {string} connectionId - 连接ID
+ * @param {object} data - 分组数据
+ */
+export const createMqttSubscriptionGroup = (
+  projectId,
+  connectionId,
+  data,
+) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/connections/${connectionId}/subscription-groups`,
+    method: "post",
+    data,
+  });
+};
+
+/**
+ * 更新MQTT订阅分组
+ * @param {string} projectId - 工程ID
+ * @param {string} groupId - 分组ID
+ * @param {object} data - 更新数据
+ */
+export const updateMqttSubscriptionGroup = (projectId, groupId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/subscription-groups/${groupId}`,
+    method: "put",
+    data,
+  });
+};
+
+/**
+ * 删除MQTT订阅分组
+ * @param {string} projectId - 工程ID
+ * @param {string} groupId - 分组ID
+ */
+export const deleteMqttSubscriptionGroup = (projectId, groupId) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/subscription-groups/${groupId}`,
+    method: "delete",
+  });
+};
+
+/**
  * 获取单个MQTT订阅
  * @param {string} projectId - 工程ID
  * @param {string} subscriptionId - 订阅ID
@@ -506,18 +589,6 @@ export const deleteMqttSubscription = (projectId, subscriptionId) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}`,
     method: "delete",
-  });
-};
-
-/**
- * 切换MQTT订阅启用状态
- * @param {string} projectId - 工程ID
- * @param {string} subscriptionId - 订阅ID
- */
-export const toggleMqttSubscription = (projectId, subscriptionId) => {
-  return request({
-    url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/toggle`,
-    method: "patch",
   });
 };
 
@@ -748,17 +819,6 @@ export const deleteMqttTag = (projectId, tagId) => {
 };
 
 /**
- * 切换Tag启用状态
- * @param {string} tagId - Tag ID
- */
-export const toggleMqttTag = (projectId, tagId) => {
-  return request({
-    url: `/data/projects/${projectId}/mqtt/tags/${tagId}/toggle`,
-    method: "patch",
-  });
-};
-
-/**
  * 更新Tags顺序
  * @param {array} tagIds - Tag ID数组
  */
@@ -848,6 +908,9 @@ export default {
   createHttpConfig,
   createWebSocketConfig,
   createRedisConfig,
+  getRedisKeys,
+  getRedisValue,
+  executeRedisCommand,
   createOpcuaConfig,
   createS7Config,
   createModbusConfig,
@@ -877,11 +940,14 @@ export default {
   deletePreviewSession,
   // MQTT订阅相关
   getMqttSubscriptions,
+  getMqttSubscriptionGroups,
+  createMqttSubscriptionGroup,
+  updateMqttSubscriptionGroup,
+  deleteMqttSubscriptionGroup,
   getMqttSubscription,
   createMqttSubscription,
   updateMqttSubscription,
   deleteMqttSubscription,
-  toggleMqttSubscription,
   getMqttSubscriptionMessages,
   startMqttConnection,
   stopMqttConnection,
@@ -900,7 +966,6 @@ export default {
   createMqttTagsBatch,
   updateMqttTag,
   deleteMqttTag,
-  toggleMqttTag,
   updateMqttTagsOrder,
   getMqttTagValue,
   getMqttTagValues,

@@ -123,6 +123,7 @@ export function createThresholdCondition(
     deviation_low: "低偏差",
     rate_of_change: "变化率",
     bool_equal: "状态判断",
+    bool_transition: "变化报警",
     string_equal: "文本等于",
     string_not_equal: "文本不等于",
     string_contains: "文本包含",
@@ -134,6 +135,8 @@ export function createThresholdCondition(
     params = { expression: "value > 0" };
   } else if (type === "bool_equal") {
     params = { expected: true };
+  } else if (type === "bool_transition") {
+    params = { from: true, to: false };
   } else if (type === "string_regex") {
     params = { pattern: "" };
   } else if (["string_equal", "string_not_equal", "string_contains"].includes(type)) {

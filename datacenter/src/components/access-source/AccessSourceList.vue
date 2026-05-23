@@ -64,14 +64,9 @@ defineEmits<{
 
 /* Phase 2 类型：当前仅提供配置，无运行时工作台 */
 const PHASE2_TYPES = new Set([
-  "opcua",
   "opcda",
   "s7",
-  "modbus",
   "kafka",
-  "http",
-  "websocket",
-  "redis",
   "tdengine",
 ]);
 

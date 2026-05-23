@@ -3,9 +3,9 @@
     v-model="visible"
     class="connection-dialog"
     width="920px"
-    :close-on-click-modal="false"
+    :dirty="isDirty"
     :body-max-height="'none'"
-    @close="handleClose"
+    @close="handleClosed"
   >
     <!-- Step 1：仅 create 模式，选择接入类型 -->
     <template v-if="step === 1">
@@ -548,14 +548,14 @@
       <div class="connection-dialog__footer">
         <div class="connection-dialog__footer-actions">
           <template v-if="step === 1">
-            <el-button @click="handleClose">{{ t("actions.cancel") }}</el-button>
+            <el-button @click="requestClose">{{ t("actions.cancel") }}</el-button>
           </template>
           <template v-else>
             <!-- 返回上一步：仅 create 模式可见 -->
             <el-button v-if="mode === 'create'" @click="goBackToStep1">
               ← 返回上一步
             </el-button>
-            <el-button @click="handleClose">{{ t("actions.cancel") }}</el-button>
+            <el-button @click="requestClose">{{ t("actions.cancel") }}</el-button>
             <el-button @click="handleTest" :loading="testing">
               {{ t("actions.testConnection") }}
             </el-button>
@@ -646,6 +646,7 @@ const protocolFormRef = ref(null);
 const testing = ref(false);
 const submitting = ref(false);
 const lastTestSignature = ref("");
+const initialDialogSignature = ref("");
 const testResult = ref({
   status: "idle",
   title: "尚未测试",
@@ -821,11 +822,19 @@ const formComponent = computed(() => {
 
 const configSignature = computed(() => {
   return JSON.stringify({
+    step: step.value,
     type: connectionType.value,
     dbType: dbType.value,
     data: formData.value,
   });
 });
+
+const isDirty = computed(
+  () =>
+    visible.value &&
+    Boolean(initialDialogSignature.value) &&
+    configSignature.value !== initialDialogSignature.value,
+);
 
 const isTestStale = computed(() => {
   return (
@@ -1056,9 +1065,11 @@ watch(
       dbType.value = "mysql";
       formData.value = getDefaultConfig("mysql");
       resetTestState();
+      initialDialogSignature.value = configSignature.value;
     } else if (isOpen && props.mode === "edit") {
       // edit 模式直接进入 step 2
       step.value = 2;
+      initialDialogSignature.value = configSignature.value;
     }
   },
 );
@@ -1237,16 +1248,7 @@ const handleTest = async () => {
   }
 
   if (!relationalSourceTypes.includes(connectionType.value)) {
-    if (
-      previewProtocolTypes.includes(connectionType.value) &&
-      props.mode === "edit" &&
-      props.connection?.id
-    ) {
-      await handleProtocolPreviewTest();
-      return;
-    }
-
-    if (industrialProtocolTypes.includes(connectionType.value)) {
+    if (["s7", "tdengine"].includes(connectionType.value)) {
       testResult.value = {
         status: "idle",
         title: "节点侧运行配置",
@@ -1259,33 +1261,40 @@ const handleTest = async () => {
       return;
     }
 
-    testResult.value = {
-      status: "idle",
-      title: "保存后预览",
-      message: "该接入类型需要先保存配置，再通过统一协议预览读取真实样本。",
-      detail: "",
-      durationMs: 0,
-    };
-    ElMessage.info("保存接入源后可执行短时真实预览");
-    return;
+    if (connectionType.value === "kafka") {
+      if (props.mode === "edit" && props.connection?.id) {
+        await handleProtocolPreviewTest();
+        return;
+      }
+      testResult.value = {
+        status: "idle",
+        title: "保存后预览",
+        message: "Kafka 需要先保存配置，再通过统一协议预览读取真实样本。",
+        detail: "",
+        durationMs: 0,
+      };
+      ElMessage.info("保存 Kafka 接入源后可执行短时真实预览");
+      return;
+    }
   }
 
   testing.value = true;
   const startAt = performance.now();
   try {
     const payload = buildConnectionPayload();
-    await dataAPI.testConnection(props.projectId, {
+    const response = await dataAPI.testConnection(props.projectId, {
       type: payload.type,
       config: payload.config,
     });
+    const result = response?.data || response || {};
 
     const durationMs = Math.round(performance.now() - startAt);
     lastTestSignature.value = configSignature.value;
     testResult.value = {
       status: "success",
       title: "测试通过",
-      message: `data_service 已完成短时连接验证，耗时 ${durationMs}ms。`,
-      detail: "",
+      message: result.message || `data_service 已完成短时连接验证，耗时 ${durationMs}ms。`,
+      detail: result.detail || "",
       durationMs,
     };
     ElMessage.success(t("query.connectionTestSuccess"));
@@ -1320,13 +1329,18 @@ const handleSubmit = async () => {
       type: payload.type,
       config: payload.config,
     });
+    initialDialogSignature.value = configSignature.value;
   } finally {
     submitting.value = false;
   }
 };
 
-const handleClose = () => {
+const requestClose = () => {
   visible.value = false;
+};
+
+const handleClosed = () => {
+  initialDialogSignature.value = "";
   // 清空表单
   if (formRef.value) {
     formRef.value.clearValidate();

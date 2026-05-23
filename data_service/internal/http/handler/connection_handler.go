@@ -271,6 +271,73 @@ func (h *ConnectionHandler) ExecuteSQL(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
+// ListRedisKeys 返回 Redis 工作台 key 列表。
+func (h *ConnectionHandler) ListRedisKeys(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	limit, err := parseOptionalInt(r.URL.Query().Get("limit"), 200, "limit")
+	if err != nil {
+		return err
+	}
+	result, err := h.service.ListRedisKeys(
+		r.Context(),
+		r.PathValue("projectId"),
+		r.PathValue("connectionId"),
+		r.URL.Query().Get("pattern"),
+		limit,
+	)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// GetRedisValue 返回 Redis 工作台单 key 值。
+func (h *ConnectionHandler) GetRedisValue(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	result, err := h.service.GetRedisValue(
+		r.Context(),
+		r.PathValue("projectId"),
+		r.PathValue("connectionId"),
+		r.URL.Query().Get("key"),
+	)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// ExecuteRedisCommand 执行 Redis 工作台受限只读命令。
+func (h *ConnectionHandler) ExecuteRedisCommand(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	var request struct {
+		Command string   `json:"command"`
+		Args    []string `json:"args"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.ExecuteRedisCommand(
+		r.Context(),
+		r.PathValue("projectId"),
+		r.PathValue("connectionId"),
+		request.Command,
+		request.Args,
+	)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if strings.TrimSpace(value) != "" {

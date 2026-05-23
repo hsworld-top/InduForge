@@ -3,7 +3,6 @@
     v-model="visible"
     :title="t('tableStructure.title', { tableName })"
     width="900px"
-    :close-on-click-modal="false"
     @close="handleClose"
   >
     <div v-loading="loading" class="table-structure-content">

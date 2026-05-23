@@ -10,96 +10,125 @@
           <IconTablerArrowLeft />
           <span>返回接入源</span>
         </button>
-        <span>MQTT Broker</span>
-        <strong>{{ connection.name || "未命名 MQTT 接入源" }}</strong>
-        <small>{{ endpointText }}</small>
-      </div>
-
-      <div class="mqtt-workbench__toolbar">
-        <button type="button" title="订阅管理" @click="openSubscriptionList">
-          <IconTablerListDetails />
-        </button>
-        <button type="button" title="刷新订阅" @click="loadSubscriptions">
-          <IconTablerRefresh />
-        </button>
-        <button
-          type="button"
-          :title="connectionStarted ? '预览连接已启动' : '启动预览连接'"
-          @click="ensureMqttPreview"
-        >
-          <IconTablerPlugConnected />
-        </button>
-      </div>
-
-      <el-input
-        v-model="filterText"
-        class="mqtt-workbench__search"
-        size="small"
-        placeholder="筛选订阅或 Topic"
-        clearable
-      />
-
-      <div class="mqtt-workbench__tree">
-        <section class="mqtt-workbench__tree-section">
+        <div class="mqtt-workbench__source-head">
+          <el-tooltip
+            :content="connection.name || '未命名 MQTT 接入源'"
+            placement="top"
+            :show-after="400"
+          >
+            <strong class="mqtt-workbench__source-name">
+              {{ connection.name || "未命名 MQTT 接入源" }}
+            </strong>
+          </el-tooltip>
           <button
             type="button"
-            class="mqtt-workbench__tree-head"
-            @click="subscriptionsExpanded = !subscriptionsExpanded"
+            class="mqtt-workbench__connect-action"
+            :class="{ 'is-connected': connectionStarted }"
+            :title="connectionStarted ? '断开' : '连接'"
+            @click="toggleMqttPreview"
           >
-            <IconTablerChevronDown v-if="subscriptionsExpanded" />
-            <IconTablerChevronRight v-else />
-            <span>订阅</span>
-            <small>{{ filteredSubscriptions.length }}</small>
+            <span>{{ connectionStarted ? "断开" : "连接" }}</span>
+          </button>
+        </div>
+
+        <div class="mqtt-workbench__source-meta">
+          <div>
+            <span>类型</span>
+            <strong>MQTT Broker</strong>
+          </div>
+          <div>
+            <span>地址</span>
+            <strong :title="endpointText">{{ endpointText }}</strong>
+          </div>
+        </div>
+
+        <div class="mqtt-workbench__source-actions">
+          <el-input
+            v-model="filterText"
+            class="mqtt-workbench__search"
+            size="small"
+            placeholder="筛选订阅或 Topic"
+            clearable
+          />
+          <button
+            type="button"
+            class="mqtt-workbench__source-action is-primary"
+            title="新建订阅"
+            aria-label="新建订阅"
+            @click="openCreateSubscriptionDialog(null)"
+          >
+            <IconTablerPlus />
+          </button>
+          <button
+            type="button"
+            class="mqtt-workbench__source-action"
+            title="新建分组"
+            aria-label="新建分组"
+            @click="openCreateGroupDialog"
+          >
+            <IconTablerFolderPlus />
+          </button>
+          <button
+            type="button"
+            class="mqtt-workbench__source-action"
+            title="刷新订阅"
+            aria-label="刷新订阅"
+            @click="loadWorkbenchTree"
+          >
+            <IconTablerRefresh />
+          </button>
+        </div>
+      </div>
+
+      <div class="mqtt-workbench__tree">
+        <div v-if="loading" class="mqtt-workbench__loading">
+          <IconTablerLoader2 />
+          <span>加载订阅...</span>
+        </div>
+        <template v-else>
+          <MqttSubscriptionTreeBranch
+            v-for="group in filteredGroups"
+            :key="group.id"
+            :node="group"
+            :selected-subscription-id="selectedSubscription?.id"
+            @select-subscription="selectSubscription"
+            @open-tags="openTagManager"
+            @group-contextmenu="openGroupMenu"
+            @subscription-contextmenu="openSubscriptionMenu"
+          />
+
+          <button
+            v-for="subscription in filteredRootSubscriptions"
+            :key="String(subscription.id)"
+            type="button"
+            class="mqtt-workbench__tree-item"
+            :class="{
+              'is-active': selectedSubscription?.id === subscription.id,
+            }"
+            @click="openTagManager(subscription)"
+            @dblclick="openTagManager(subscription)"
+            @keydown.enter="openTagManager(subscription)"
+            @contextmenu.prevent.stop="openSubscriptionMenu($event, subscription)"
+          >
+            <IconTablerRss class="mqtt-workbench__tree-item-icon" />
+            <el-tooltip
+              :content="subscription.name || subscription.topic || subscription.id"
+              placement="top"
+              :show-after="400"
+            >
+              <span class="mqtt-workbench__tree-item-name">
+                {{ subscription.name || subscription.topic }}
+              </span>
+            </el-tooltip>
           </button>
 
-          <div v-if="subscriptionsExpanded" class="mqtt-workbench__tree-body">
-            <div v-if="loading" class="mqtt-workbench__loading">
-              <IconTablerLoader2 />
-              <span>加载订阅...</span>
-            </div>
-            <template v-else>
-              <div
-                v-for="subscription in filteredSubscriptions"
-                :key="subscription.id"
-                role="button"
-                tabindex="0"
-                class="mqtt-workbench__tree-item"
-                :class="{
-                  'is-active': selectedSubscription?.id === subscription.id,
-                }"
-                @click="selectedSubscription = subscription"
-                @dblclick="openTagManager(subscription)"
-                @keydown.enter="openTagManager(subscription)"
-              >
-                <IconTablerRss />
-                <span>{{ subscription.name || subscription.topic }}</span>
-                <small>QoS {{ subscription.qos ?? 0 }}</small>
-                <button
-                  type="button"
-                  class="mqtt-workbench__inline-action"
-                  title="查看消息"
-                  @click.stop="openMessages(subscription)"
-                >
-                  <IconTablerMessages />
-                </button>
-                <button
-                  type="button"
-                  class="mqtt-workbench__inline-action"
-                  title="变量管理"
-                  @click.stop="openTagManager(subscription)"
-                >
-                  <IconTablerTags />
-                </button>
-              </div>
-            </template>
-            <div
-              v-if="!loading && filteredSubscriptions.length === 0"
-              class="mqtt-workbench__empty"
-            >
-              暂无订阅
-            </div>
+          <div
+            v-if="filteredGroups.length === 0 && filteredRootSubscriptions.length === 0"
+            class="mqtt-workbench__empty"
+          >
+            {{ filterText ? "没有匹配的订阅" : "暂无订阅" }}
           </div>
-        </section>
+        </template>
       </div>
     </aside>
 
@@ -116,112 +145,219 @@
           <component :is="tab.icon" />
           <span>{{ tab.title }}</span>
           <IconTablerX
-            v-if="tabs.length > 1"
             class="mqtt-workbench__tab-close"
             @click.stop="closeTab(tab.id)"
           />
         </button>
       </div>
 
-      <div v-if="activeTab" class="mqtt-workbench__content">
-        <MqttSubscriptionList
-          v-if="activeTab.type === 'subscriptions'"
-          ref="subscriptionListRef"
-          :connection-id="connection.id"
-          :project-id="projectIdText"
-          @subscription-select="selectedSubscription = $event"
-          @view-messages="openMessages"
-          @manage-tags="openTagManager"
-          @subscription-deleted="handleSubscriptionDeleted"
-        />
+      <div :key="workbenchContentKey" class="mqtt-workbench__content">
+        <template v-if="activeContentTabs.length > 0">
+          <template v-for="tab in activeContentTabs" :key="tab.id">
+          <MqttMessageViewer
+            v-if="tab.type === 'messages'"
+            :ref="(el) => setMessageViewerRef(tab.id, el)"
+            :subscription="tab.subscription"
+            :project-id="projectIdText"
+            :connection-id="connection.id"
+          />
 
-        <MqttMessageViewer
-          v-else-if="activeTab.type === 'messages'"
-          :ref="(el) => setMessageViewerRef(activeTab.id, el)"
-          :subscription="activeTab.subscription"
-          :project-id="projectIdText"
-          :connection-id="connection.id"
-        />
-
-        <div
-          v-else-if="activeTab.type === 'tags'"
-          class="mqtt-workbench__tag-panel"
-        >
-          <div class="mqtt-workbench__tag-list">
-            <MqttTagList
-              :project-id="projectIdText"
-              :subscription-id="activeTab.subscription.id"
-              :preview-session-id="previewSessionId"
-            />
+          <div
+            v-else-if="tab.type === 'tags'"
+            class="mqtt-workbench__tag-panel"
+            :class="{ 'is-config-only': !connectionStarted }"
+          >
+            <div class="mqtt-workbench__tag-list">
+              <MqttTagList
+                :project-id="projectIdText"
+                :subscription-id="tab.subscription.id"
+                :preview-session-id="connectionStarted ? previewSessionId : ''"
+                @open-monitor="openTagMonitor(tab.subscription)"
+              />
+            </div>
           </div>
-          <div class="mqtt-workbench__tag-monitor">
-            <MqttTagMonitor
-              :project-id="projectIdText"
-              :subscription-id="activeTab.subscription.id"
-              :preview-session-id="previewSessionId"
-            />
-          </div>
+          </template>
+        </template>
+        <div v-else class="mqtt-workbench__placeholder">
+          <IconTablerRss />
+          <strong>选择订阅开始工作</strong>
+          <span>从左侧订阅树进入变量管理；连接后可查看实时消息。</span>
         </div>
       </div>
     </main>
 
-    <aside class="mqtt-workbench__inspector">
-      <section>
-        <div class="mqtt-workbench__panel-title">当前 Broker</div>
-        <dl class="mqtt-workbench__facts">
-          <div>
-            <dt>地址</dt>
-            <dd>{{ endpointText }}</dd>
-          </div>
-          <div>
-            <dt>状态</dt>
-            <dd>{{ connectionStarted ? "预览连接已启动" : "未启动" }}</dd>
-          </div>
-          <div>
-            <dt>订阅</dt>
-            <dd>{{ subscriptions.length }}</dd>
-          </div>
-        </dl>
-      </section>
+    <MqttSubscriptionDialog
+      v-model="subscriptionDialogVisible"
+      :project-id="projectIdText"
+      :connection-id="connection.id"
+      :mode="subscriptionDialogMode"
+      :subscription="editingSubscription"
+      :group-id="subscriptionDialogGroupId"
+      @success="handleSubscriptionSaved"
+    />
 
-      <section>
-        <div class="mqtt-workbench__panel-title">选中订阅</div>
-        <dl class="mqtt-workbench__facts">
-          <div>
-            <dt>名称</dt>
-            <dd>{{ selectedSubscription?.name || "-" }}</dd>
-          </div>
-          <div>
-            <dt>Topic</dt>
-            <dd>{{ selectedSubscription?.topic || "-" }}</dd>
-          </div>
-          <div>
-            <dt>QoS</dt>
-            <dd>{{ selectedSubscription?.qos ?? "-" }}</dd>
-          </div>
-        </dl>
-      </section>
+    <MqttSubscriptionGroupDialog
+      v-model="groupDialogVisible"
+      :mode="groupDialogMode"
+      :groups="subscriptionGroups"
+      :group="contextGroup"
+      :loading="groupSaving"
+      @submit="handleGroupDialogSubmit"
+    />
 
-      <section>
-        <div class="mqtt-workbench__panel-title">快捷动作</div>
-        <button
-          type="button"
-          class="mqtt-workbench__quick-action"
-          :disabled="!selectedSubscription"
-          @click="selectedSubscription && openMessages(selectedSubscription)"
+    <MqttSubscriptionMoveDialog
+      v-model="moveDialogVisible"
+      :target-type="moveTargetType"
+      :subscription="contextSubscription"
+      :group="contextGroup"
+      :groups="subscriptionGroups"
+      :loading="moveSaving"
+      @submit="handleMoveSubmit"
+    />
+
+    <DcDialog
+      v-model="monitorDialogVisible"
+      title="变量预览/监控"
+      width="960px"
+      class="mqtt-workbench__monitor-dialog"
+      @close="monitorSubscription = null"
+    >
+      <div class="mqtt-workbench__monitor-heading">
+        <strong>{{ monitorSubscription?.name || monitorSubscription?.topic }}</strong>
+        <span>{{ monitorSubscription?.topic }}</span>
+      </div>
+      <MqttTagMonitor
+        v-if="monitorDialogVisible && monitorSubscription"
+        :project-id="projectIdText"
+        :subscription-id="monitorSubscription.id"
+        :preview-session-id="previewSessionId"
+      />
+    </DcDialog>
+
+    <DcDialog
+      v-model="detailDialogVisible"
+      title="订阅详情"
+      width="680px"
+      class="mqtt-workbench__detail-dialog"
+      @close="detailSubscription = null"
+    >
+      <template v-if="detailSubscription">
+        <div class="mqtt-workbench__detail-heading">
+          <IconTablerRss />
+          <div>
+            <strong>{{ detailSubscription.name || detailSubscription.topic }}</strong>
+            <span>{{ detailSubscription.topic || "-" }}</span>
+          </div>
+        </div>
+
+        <section class="mqtt-workbench__detail-section">
+          <div class="mqtt-workbench__panel-title">订阅信息</div>
+          <dl class="mqtt-workbench__facts">
+            <div>
+              <dt>名称</dt>
+              <dd>{{ detailSubscription.name || "-" }}</dd>
+            </div>
+            <div>
+              <dt>Topic</dt>
+              <dd>{{ detailSubscription.topic || "-" }}</dd>
+            </div>
+            <div>
+              <dt>路径</dt>
+              <dd>{{ subscriptionPath(detailSubscription) }}</dd>
+            </div>
+            <div>
+              <dt>QoS</dt>
+              <dd>{{ detailSubscription.qos ?? 0 }}</dd>
+            </div>
+            <div>
+              <dt>消息保留数</dt>
+              <dd>{{ detailSubscription.messageRetention ?? 1000 }}</dd>
+            </div>
+            <div>
+              <dt>描述</dt>
+              <dd>{{ detailSubscription.description || "-" }}</dd>
+            </div>
+            <div>
+              <dt>订阅 ID</dt>
+              <dd>{{ detailSubscription.id }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="mqtt-workbench__detail-section">
+          <div class="mqtt-workbench__panel-title">当前 Broker</div>
+          <dl class="mqtt-workbench__facts">
+            <div>
+              <dt>地址</dt>
+              <dd>{{ endpointText }}</dd>
+            </div>
+            <div>
+              <dt>状态</dt>
+              <dd>{{ connectionStarted ? "已连接" : "未连接" }}</dd>
+            </div>
+            <div>
+              <dt>订阅</dt>
+              <dd>{{ subscriptions.length }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <div class="mqtt-workbench__detail-footer">
+          <button type="button" @click="openDetailTagManager">
+            <IconTablerTags />
+            <span>变量管理</span>
+          </button>
+        </div>
+      </template>
+    </DcDialog>
+
+    <Teleport to="body">
+      <div
+        v-if="contextMenu.visible"
+        class="mqtt-workbench__menu-mask"
+        @click="closeContextMenu"
+        @contextmenu.prevent="closeContextMenu"
+      >
+        <div
+          class="mqtt-workbench__context-menu"
+          :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
+          @click.stop
         >
-          查看消息
-        </button>
-        <button
-          type="button"
-          class="mqtt-workbench__quick-action"
-          :disabled="!selectedSubscription"
-          @click="selectedSubscription && openTagManager(selectedSubscription)"
-        >
-          变量管理
-        </button>
-      </section>
-    </aside>
+          <button
+            v-if="contextMenu.type === 'subscription'"
+            type="button"
+            @click="emitContextAction('detail')"
+          >
+            <IconTablerInfoCircle class="mqtt-workbench__menu-icon" />
+            <span>详情</span>
+          </button>
+          <button
+            v-if="contextMenu.type === 'subscription'"
+            type="button"
+            @click="emitContextAction('messages')"
+          >
+            <IconTablerMessages class="mqtt-workbench__menu-icon" />
+            <span>查看消息</span>
+          </button>
+          <button type="button" @click="emitContextAction('rename')">
+            <IconTablerPencil class="mqtt-workbench__menu-icon" />
+            <span>重命名</span>
+          </button>
+          <button type="button" @click="emitContextAction('move')">
+            <IconTablerFolderSymlink class="mqtt-workbench__menu-icon" />
+            <span>移动到分组</span>
+          </button>
+          <button
+            type="button"
+            class="is-danger"
+            @click="emitContextAction('delete')"
+          >
+            <IconTablerTrash class="mqtt-workbench__menu-icon" />
+            <span>删除</span>
+          </button>
+        </div>
+      </div>
+    </Teleport>
   </section>
 </template>
 
@@ -235,26 +371,39 @@ import {
   shallowRef,
   watch,
 } from "vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import IconTablerArrowLeft from "~icons/tabler/arrow-left";
-import IconTablerChevronDown from "~icons/tabler/chevron-down";
-import IconTablerChevronRight from "~icons/tabler/chevron-right";
-import IconTablerListDetails from "~icons/tabler/list-details";
+import IconTablerFolderPlus from "~icons/tabler/folder-plus";
+import IconTablerFolderSymlink from "~icons/tabler/folder-symlink";
+import IconTablerInfoCircle from "~icons/tabler/info-circle";
 import IconTablerLoader2 from "~icons/tabler/loader-2";
 import IconTablerMessages from "~icons/tabler/messages";
-import IconTablerPlugConnected from "~icons/tabler/plug-connected";
+import IconTablerPencil from "~icons/tabler/pencil";
+import IconTablerPlus from "~icons/tabler/plus";
 import IconTablerRefresh from "~icons/tabler/refresh";
 import IconTablerRss from "~icons/tabler/rss";
 import IconTablerTags from "~icons/tabler/tags";
+import IconTablerTrash from "~icons/tabler/trash";
 import IconTablerX from "~icons/tabler/x";
 import dataAPI from "@/api/data.api";
 import { usePreviewSession } from "@/composables/usePreviewSession";
 import { useMqttSocket } from "@/composables/useMqttSocket";
 import { getApiErrorMessage } from "@/utils/request";
-import MqttSubscriptionList from "./MqttSubscriptionList.vue";
+import DcDialog from "@/components/shared/DcDialog.vue";
 import MqttMessageViewer from "./MqttMessageViewer.vue";
+import MqttSubscriptionDialog from "./MqttSubscriptionDialog.vue";
+import MqttSubscriptionGroupDialog from "./MqttSubscriptionGroupDialog.vue";
+import MqttSubscriptionMoveDialog from "./MqttSubscriptionMoveDialog.vue";
+import MqttSubscriptionTreeBranch from "./MqttSubscriptionTreeBranch.vue";
 import MqttTagList from "./MqttTagList.vue";
 import MqttTagMonitor from "./MqttTagMonitor.vue";
+import {
+  buildMqttSubscriptionTree,
+  filterMqttSubscriptionTree,
+  type MqttSubscription,
+  type MqttSubscriptionGroup,
+  type MqttSubscriptionGroupNode,
+} from "./mqttSubscriptionTreeModel";
 
 type MqttConnection = {
   id: string;
@@ -293,39 +442,97 @@ const { connected: socketConnected, subscribeMessages } = useMqttSocket(
 );
 
 const loading = ref(false);
-const subscriptions = ref<any[]>([]);
-const selectedSubscription = ref<any>(null);
-const subscriptionsExpanded = ref(true);
+const subscriptions = ref<MqttSubscription[]>([]);
+const subscriptionGroups = ref<MqttSubscriptionGroup[]>([]);
+const selectedSubscription = ref<MqttSubscription | null>(null);
 const filterText = ref("");
 const connectionStarted = ref(false);
 const tabs = ref<any[]>([]);
 const activeTabId = ref("");
-const subscriptionListRef = ref<any>(null);
 const messageViewerRefs = shallowRef(new Map<string, any>());
 const messageCleanups = new Map<string, () => void>();
+const subscriptionDialogVisible = ref(false);
+const subscriptionDialogMode = ref<"create" | "edit">("create");
+const subscriptionDialogGroupId = ref<string | null>(null);
+const editingSubscription = ref<MqttSubscription | null>(null);
+const groupDialogVisible = ref(false);
+const groupDialogMode = ref<"create" | "rename">("create");
+const groupSaving = ref(false);
+const moveDialogVisible = ref(false);
+const moveTargetType = ref<"subscription" | "group">("subscription");
+const moveSaving = ref(false);
+const monitorDialogVisible = ref(false);
+const monitorSubscription = ref<MqttSubscription | null>(null);
+const detailDialogVisible = ref(false);
+const detailSubscription = ref<MqttSubscription | null>(null);
+const contextSubscription = ref<MqttSubscription | null>(null);
+const contextGroup = ref<MqttSubscriptionGroupNode | null>(null);
+const contextMenu = ref<{
+  visible: boolean;
+  type: "subscription" | "group" | null;
+  x: number;
+  y: number;
+  subscription: MqttSubscription | null;
+  group: MqttSubscriptionGroupNode | null;
+}>({
+  visible: false,
+  type: null,
+  x: 0,
+  y: 0,
+  subscription: null,
+  group: null,
+});
 
 const activeTab = computed(
   () => tabs.value.find((tab) => tab.id === activeTabId.value) || null,
 );
+const hasActiveTab = computed(() =>
+  Boolean(activeTabId.value && tabs.value.some((tab) => tab.id === activeTabId.value)),
+);
+const workbenchContentKey = computed(() => activeTab.value?.id || "empty");
+const activeContentTabs = computed(() =>
+  hasActiveTab.value && activeTab.value ? [activeTab.value] : [],
+);
 
-const filteredSubscriptions = computed(() => {
-  const keyword = filterText.value.trim().toLowerCase();
-  if (!keyword) return subscriptions.value;
-  return subscriptions.value.filter((subscription) => {
-    const name = String(subscription.name || "").toLowerCase();
-    const topic = String(subscription.topic || "").toLowerCase();
-    return name.includes(keyword) || topic.includes(keyword);
-  });
+const subscriptionTree = computed(() =>
+  buildMqttSubscriptionTree(subscriptionGroups.value, subscriptions.value),
+);
+const filteredTree = computed(() =>
+  filterMqttSubscriptionTree(
+    subscriptionTree.value.rootGroups,
+    subscriptionTree.value.rootSubscriptions,
+    filterText.value,
+  ),
+);
+const filteredGroups = computed(() => filteredTree.value.groups);
+const filteredRootSubscriptions = computed(() => filteredTree.value.subscriptions);
+
+const groupNameMap = computed(() => {
+  const map = new Map<string, { name: string; parentId: string | null }>();
+  const visit = (groups: MqttSubscriptionGroup[], parentId: string | null) => {
+    groups.forEach((group) => {
+      const id = String(group.id);
+      const groupParentId =
+        group.parentId === null || group.parentId === undefined || group.parentId === ""
+          ? parentId
+          : String(group.parentId);
+      map.set(id, { name: group.name, parentId: groupParentId });
+      visit(group.children || [], id);
+    });
+  };
+  visit(subscriptionGroups.value, null);
+  return map;
 });
 
-const loadSubscriptions = async () => {
+const loadWorkbenchTree = async () => {
   loading.value = true;
   try {
-    const response = await dataAPI.getMqttSubscriptions(
-      projectIdText.value,
-      props.connection.id,
-    );
-    subscriptions.value = response.data?.list || [];
+    const [subscriptionsResponse, groupsResponse] = await Promise.all([
+      dataAPI.getMqttSubscriptions(projectIdText.value, props.connection.id),
+      dataAPI.getMqttSubscriptionGroups(projectIdText.value, props.connection.id),
+    ]);
+    subscriptions.value = subscriptionsResponse.data?.list || [];
+    subscriptionGroups.value = groupsResponse.data?.list || [];
     if (
       subscriptions.value.length > 0 &&
       !subscriptions.value.some(
@@ -334,13 +541,14 @@ const loadSubscriptions = async () => {
     ) {
       selectedSubscription.value = subscriptions.value[0];
     }
-    await subscriptionListRef.value?.loadSubscriptions?.();
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "加载 MQTT 订阅失败"));
+    ElMessage.error(getApiErrorMessage(error, "加载 MQTT 订阅树失败"));
   } finally {
     loading.value = false;
   }
 };
+
+const loadSubscriptions = loadWorkbenchTree;
 
 const ensureMqttPreview = async () => {
   const session = await ensureSession();
@@ -353,12 +561,42 @@ const ensureMqttPreview = async () => {
   try {
     await dataAPI.startMqttConnection(projectIdText.value, props.connection.id);
     connectionStarted.value = true;
-    ElMessage.success("MQTT 预览连接已启动");
+    ElMessage.success("MQTT 已连接");
     return true;
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "启动 MQTT 预览连接失败"));
+    ElMessage.error(getApiErrorMessage(error, "MQTT 连接失败"));
     return false;
   }
+};
+
+const stopMqttPreview = async () => {
+  if (!connectionStarted.value) return true;
+
+  try {
+    cleanupMessageSubscriptions();
+    messageViewerRefs.value.clear();
+    monitorDialogVisible.value = false;
+    monitorSubscription.value = null;
+    tabs.value = tabs.value.filter((tab) => tab.type !== "messages");
+    if (!tabs.value.some((tab) => tab.id === activeTabId.value)) {
+      activeTabId.value = tabs.value[0]?.id || "";
+    }
+    await dataAPI.stopMqttConnection(projectIdText.value, props.connection.id);
+    connectionStarted.value = false;
+    ElMessage.success("MQTT 已断开");
+    return true;
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, "MQTT 断开失败"));
+    return false;
+  }
+};
+
+const toggleMqttPreview = async () => {
+  if (connectionStarted.value) {
+    await stopMqttPreview();
+    return;
+  }
+  await ensureMqttPreview();
 };
 
 const addTab = (tab: any) => {
@@ -372,19 +610,16 @@ const addTab = (tab: any) => {
   return tab;
 };
 
-const openSubscriptionList = () => {
-  addTab({
-    id: `mqtt-subscriptions-${props.connection.id}`,
-    type: "subscriptions",
-    title: "订阅管理",
-    icon: IconTablerListDetails,
-  });
+const selectSubscription = (subscription: MqttSubscription) => {
+  void openTagManager(subscription);
 };
 
-const openMessages = async (subscription: any) => {
+const openMessages = async (subscription: MqttSubscription) => {
   selectedSubscription.value = subscription;
-  const ready = await ensureMqttPreview();
-  if (!ready) return;
+  if (!connectionStarted.value) {
+    ElMessage.warning("请先连接后再查看实时消息");
+    return;
+  }
 
   const tab = addTab({
     id: `mqtt-messages-${subscription.id}`,
@@ -407,10 +642,8 @@ const openMessages = async (subscription: any) => {
   messageViewerRefs.value.get(tab.id)?.setConnected?.(socketConnected.value);
 };
 
-const openTagManager = async (subscription: any) => {
+const openTagManager = async (subscription: MqttSubscription) => {
   selectedSubscription.value = subscription;
-  const ready = await ensureMqttPreview();
-  if (!ready) return;
 
   addTab({
     id: `mqtt-tags-${subscription.id}`,
@@ -421,6 +654,314 @@ const openTagManager = async (subscription: any) => {
   });
 };
 
+const openTagMonitor = (subscription: MqttSubscription) => {
+  selectedSubscription.value = subscription;
+  if (!connectionStarted.value) {
+    ElMessage.warning("请先连接后再打开变量监控");
+    return;
+  }
+  monitorSubscription.value = subscription;
+  monitorDialogVisible.value = true;
+};
+
+const refreshSelectedAndTabs = (subscription: MqttSubscription) => {
+  if (selectedSubscription.value?.id === subscription.id) {
+    selectedSubscription.value = subscription;
+  }
+  tabs.value = tabs.value.map((tab) =>
+    tab.subscription?.id === subscription.id
+      ? {
+          ...tab,
+          title: `${subscription.name || subscription.topic} / ${
+            tab.type === "messages" ? "消息" : "变量"
+          }`,
+          subscription,
+        }
+      : tab,
+  );
+};
+
+const subscriptionUpdatePayload = (
+  subscription: MqttSubscription,
+  patch: Partial<MqttSubscription> & { hasGroupId?: boolean },
+) => ({
+  name: patch.name ?? subscription.name ?? "",
+  topic: patch.topic ?? subscription.topic ?? "",
+  qos: patch.qos ?? subscription.qos ?? 0,
+  description:
+    patch.description !== undefined
+      ? patch.description || null
+      : subscription.description || null,
+  messageRetention:
+    patch.messageRetention ?? subscription.messageRetention ?? 1000,
+  order: patch.order ?? subscription.order ?? 0,
+  groupId:
+    patch.groupId !== undefined ? patch.groupId || null : subscription.groupId || null,
+  hasGroupId: patch.hasGroupId ?? true,
+});
+
+function openCreateSubscriptionDialog(groupId: string | null) {
+  editingSubscription.value = null;
+  subscriptionDialogMode.value = "create";
+  subscriptionDialogGroupId.value = groupId;
+  subscriptionDialogVisible.value = true;
+}
+
+function openRenameSubscriptionDialog(subscription: MqttSubscription) {
+  editingSubscription.value = subscription;
+  subscriptionDialogMode.value = "edit";
+  subscriptionDialogGroupId.value = subscription.groupId || null;
+  subscriptionDialogVisible.value = true;
+}
+
+function openSubscriptionDetail(subscription: MqttSubscription) {
+  selectedSubscription.value = subscription;
+  detailSubscription.value = subscription;
+  detailDialogVisible.value = true;
+}
+
+function openDetailTagManager() {
+  const subscription = detailSubscription.value;
+  if (!subscription) return;
+  detailDialogVisible.value = false;
+  void openTagManager(subscription);
+}
+
+function subscriptionPath(subscription: MqttSubscription) {
+  const names = [subscription.name || subscription.topic || subscription.id];
+  let groupId = subscription.groupId ? String(subscription.groupId) : "";
+  const visited = new Set<string>();
+
+  while (groupId && !visited.has(groupId)) {
+    visited.add(groupId);
+    const group = groupNameMap.value.get(groupId);
+    if (!group) break;
+    names.unshift(group.name);
+    groupId = group.parentId || "";
+  }
+
+  return ["根目录", ...names].join(" / ");
+}
+
+async function handleSubscriptionSaved(data?: any) {
+  const saved = data?.subscription || data;
+  if (saved?.id) refreshSelectedAndTabs(saved);
+  await loadWorkbenchTree();
+}
+
+function openCreateGroupDialog() {
+  contextGroup.value = null;
+  groupDialogMode.value = "create";
+  groupDialogVisible.value = true;
+}
+
+function openRenameGroupDialog(group: MqttSubscriptionGroupNode) {
+  contextGroup.value = group;
+  groupDialogMode.value = "rename";
+  groupDialogVisible.value = true;
+}
+
+async function handleGroupDialogSubmit(data: {
+  name: string;
+  parentId: string | null;
+}) {
+  groupSaving.value = true;
+  try {
+    if (groupDialogMode.value === "create") {
+      await dataAPI.createMqttSubscriptionGroup(
+        projectIdText.value,
+        props.connection.id,
+        data,
+      );
+      ElMessage.success("分组已创建");
+    } else if (contextGroup.value) {
+      await dataAPI.updateMqttSubscriptionGroup(
+        projectIdText.value,
+        contextGroup.value.id,
+        { name: data.name },
+      );
+      ElMessage.success("分组已重命名");
+    }
+    groupDialogVisible.value = false;
+    await loadWorkbenchTree();
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, "保存分组失败"));
+  } finally {
+    groupSaving.value = false;
+  }
+}
+
+function openMoveSubscriptionDialog(subscription: MqttSubscription) {
+  contextSubscription.value = subscription;
+  contextGroup.value = null;
+  moveTargetType.value = "subscription";
+  moveDialogVisible.value = true;
+}
+
+function openMoveGroupDialog(group: MqttSubscriptionGroupNode) {
+  contextSubscription.value = null;
+  contextGroup.value = group;
+  moveTargetType.value = "group";
+  moveDialogVisible.value = true;
+}
+
+async function handleMoveSubmit(groupId: string | null) {
+  moveSaving.value = true;
+  try {
+    if (moveTargetType.value === "subscription" && contextSubscription.value) {
+      const response = await dataAPI.updateMqttSubscription(
+        projectIdText.value,
+        contextSubscription.value.id,
+        subscriptionUpdatePayload(contextSubscription.value, {
+          groupId,
+          hasGroupId: true,
+        }),
+      );
+      const saved = response.data?.subscription || response.data;
+      if (saved?.id) refreshSelectedAndTabs(saved);
+      ElMessage.success("订阅已移动");
+    } else if (moveTargetType.value === "group" && contextGroup.value) {
+      await dataAPI.updateMqttSubscriptionGroup(
+        projectIdText.value,
+        contextGroup.value.id,
+        { parentId: groupId, hasParentId: true },
+      );
+      ElMessage.success("分组已移动");
+    }
+    moveDialogVisible.value = false;
+    await loadWorkbenchTree();
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, "移动失败"));
+  } finally {
+    moveSaving.value = false;
+  }
+}
+
+async function deleteSubscription(subscription: MqttSubscription) {
+  const ok = await ElMessageBox.confirm(
+    `确认删除订阅「${subscription.name || subscription.topic || subscription.id}」？此操作不可恢复。`,
+    "删除订阅",
+    {
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      type: "warning",
+    },
+  )
+    .then(() => true)
+    .catch(() => false);
+  if (!ok) return;
+
+  try {
+    await dataAPI.deleteMqttSubscription(projectIdText.value, subscription.id);
+    tabs.value = tabs.value.filter((tab) => tab.subscription?.id !== subscription.id);
+    if (!tabs.value.some((tab) => tab.id === activeTabId.value)) {
+      activeTabId.value = tabs.value[0]?.id || "";
+    }
+    if (selectedSubscription.value?.id === subscription.id) {
+      selectedSubscription.value = null;
+    }
+    ElMessage.success("订阅已删除");
+    await loadWorkbenchTree();
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, "删除订阅失败"));
+  }
+}
+
+const countGroupSubscriptions = (group: MqttSubscriptionGroupNode): number =>
+  group.subscriptions.length +
+  group.children.reduce((sum, child) => sum + countGroupSubscriptions(child), 0);
+
+async function deleteGroup(group: MqttSubscriptionGroupNode) {
+  const subscriptionCount = countGroupSubscriptions(group);
+  const ok = await ElMessageBox.confirm(
+    `确认删除分组「${group.name}」？组内 ${subscriptionCount} 个订阅会回到根目录。`,
+    "删除分组",
+    {
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      type: "warning",
+    },
+  )
+    .then(() => true)
+    .catch(() => false);
+  if (!ok) return;
+
+  try {
+    await dataAPI.deleteMqttSubscriptionGroup(projectIdText.value, group.id);
+    ElMessage.success("分组已删除");
+    await loadWorkbenchTree();
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, "删除分组失败"));
+  }
+}
+
+function openSubscriptionMenu(
+  event: MouseEvent,
+  subscription: MqttSubscription,
+) {
+  contextMenu.value = {
+    visible: true,
+    type: "subscription",
+    x: Math.min(event.clientX, window.innerWidth - 180),
+    y: Math.min(event.clientY, window.innerHeight - 156),
+    subscription,
+    group: null,
+  };
+}
+
+function openGroupMenu(event: MouseEvent, group: MqttSubscriptionGroupNode) {
+  contextMenu.value = {
+    visible: true,
+    type: "group",
+    x: Math.min(event.clientX, window.innerWidth - 180),
+    y: Math.min(event.clientY, window.innerHeight - 126),
+    subscription: null,
+    group,
+  };
+}
+
+function closeContextMenu() {
+  contextMenu.value.visible = false;
+}
+
+function emitContextAction(
+  action: "rename" | "move" | "delete" | "messages" | "detail",
+) {
+  const { type, subscription, group } = contextMenu.value;
+  closeContextMenu();
+  if (type === "subscription" && subscription) {
+    if (action === "rename") {
+      openRenameSubscriptionDialog(subscription);
+      return;
+    }
+    if (action === "move") {
+      openMoveSubscriptionDialog(subscription);
+      return;
+    }
+    if (action === "messages") {
+      void openMessages(subscription);
+      return;
+    }
+    if (action === "detail") {
+      openSubscriptionDetail(subscription);
+      return;
+    }
+    void deleteSubscription(subscription);
+    return;
+  }
+  if (type === "group" && group) {
+    if (action === "rename") {
+      openRenameGroupDialog(group);
+      return;
+    }
+    if (action === "move") {
+      openMoveGroupDialog(group);
+      return;
+    }
+    void deleteGroup(group);
+  }
+}
+
 const closeTab = (tabId: string) => {
   messageCleanups.get(tabId)?.();
   messageCleanups.delete(tabId);
@@ -428,10 +969,14 @@ const closeTab = (tabId: string) => {
 
   const index = tabs.value.findIndex((tab) => tab.id === tabId);
   if (index < 0) return;
-  tabs.value.splice(index, 1);
-  if (activeTabId.value === tabId) {
-    activeTabId.value = tabs.value[index - 1]?.id || tabs.value[0]?.id || "";
-  }
+  const nextTabs = tabs.value.filter((tab) => tab.id !== tabId);
+  const nextActiveTabId =
+    activeTabId.value === tabId ||
+    !nextTabs.some((tab) => tab.id === activeTabId.value)
+      ? nextTabs[index - 1]?.id || nextTabs[index]?.id || ""
+      : activeTabId.value;
+  tabs.value = nextTabs;
+  activeTabId.value = nextActiveTabId;
 };
 
 const setMessageViewerRef = (tabId: string, el: any) => {
@@ -442,20 +987,13 @@ const setMessageViewerRef = (tabId: string, el: any) => {
   messageViewerRefs.value.delete(tabId);
 };
 
-const handleSubscriptionDeleted = async (subscription: any) => {
-  closeTab(`mqtt-messages-${subscription.id}`);
-  closeTab(`mqtt-tags-${subscription.id}`);
-  await loadSubscriptions();
-};
-
 const cleanupMessageSubscriptions = () => {
   Array.from(messageCleanups.values()).forEach((cleanup) => cleanup?.());
   messageCleanups.clear();
 };
 
 onMounted(async () => {
-  openSubscriptionList();
-  await loadSubscriptions();
+  await loadWorkbenchTree();
 });
 
 watch(
@@ -463,12 +1001,15 @@ watch(
   async () => {
     cleanupMessageSubscriptions();
     messageViewerRefs.value.clear();
+    monitorDialogVisible.value = false;
+    monitorSubscription.value = null;
+    detailDialogVisible.value = false;
+    detailSubscription.value = null;
     tabs.value = [];
     activeTabId.value = "";
     selectedSubscription.value = null;
     connectionStarted.value = false;
-    openSubscriptionList();
-    await loadSubscriptions();
+    await loadWorkbenchTree();
   },
 );
 
@@ -493,7 +1034,7 @@ onBeforeUnmount(() => {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 260px;
+  grid-template-columns: 260px minmax(0, 1fr);
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-md);
   background: var(--dc-surface-raised);
@@ -501,8 +1042,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-.mqtt-workbench__explorer,
-.mqtt-workbench__inspector {
+.mqtt-workbench__explorer {
   min-height: 0;
   overflow: hidden;
   background: var(--dc-surface-muted);
@@ -514,18 +1054,15 @@ onBeforeUnmount(() => {
   border-right: 1px solid var(--dc-border);
 }
 
-.mqtt-workbench__inspector {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 14px;
-  border-left: 1px solid var(--dc-border);
-  overflow-y: auto;
-}
-
 .mqtt-workbench__source {
-  padding: 14px;
+  padding: 12px;
   border-bottom: 1px solid var(--dc-border);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--dc-surface-raised) 92%, var(--dc-primary) 8%),
+      var(--dc-surface-muted)
+    );
 }
 
 .mqtt-workbench__back {
@@ -552,32 +1089,74 @@ onBeforeUnmount(() => {
   color: var(--dc-primary);
 }
 
-.mqtt-workbench__source span,
-.mqtt-workbench__source small {
+.mqtt-workbench__source-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+}
+
+.mqtt-workbench__source-name {
+  min-width: 0;
   display: block;
+  overflow: hidden;
+  color: var(--dc-text);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 26px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mqtt-workbench__source-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.mqtt-workbench__source-meta div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: color-mix(in oklch, var(--dc-surface-raised) 78%, transparent);
+}
+
+.mqtt-workbench__source-meta span {
   color: var(--dc-text-muted);
   font-size: 11px;
 }
 
-.mqtt-workbench__source strong {
-  display: block;
-  margin: 6px 0 4px;
+.mqtt-workbench__source-meta strong {
+  min-width: 0;
   overflow: hidden;
-  color: var(--dc-text);
-  font-size: 15px;
+  color: var(--dc-text-secondary);
+  font-size: 12px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.mqtt-workbench__toolbar {
+.mqtt-workbench__source-actions {
   display: flex;
+  align-items: center;
   gap: 6px;
-  padding: 10px 12px 6px;
+  margin-top: 12px;
 }
 
-.mqtt-workbench__toolbar button,
-.mqtt-workbench__inline-action {
+.mqtt-workbench__source-actions .mqtt-workbench__search {
+  min-width: 0;
+  flex: 1;
+}
+
+.mqtt-workbench__source-actions button {
+  flex: 0 0 auto;
   width: 28px;
   height: 28px;
   display: inline-flex;
@@ -589,32 +1168,73 @@ onBeforeUnmount(() => {
   color: var(--dc-text-secondary);
 }
 
-.mqtt-workbench__toolbar svg,
-.mqtt-workbench__inline-action svg {
+.mqtt-workbench__source-actions button.is-primary {
+  border-color: var(--dc-primary);
+  background: var(--dc-primary);
+  color: var(--dc-surface-raised);
+}
+
+.mqtt-workbench__source-actions svg {
   width: 15px;
   height: 15px;
 }
 
-.mqtt-workbench__toolbar button:hover,
-.mqtt-workbench__inline-action:hover {
+.mqtt-workbench__source-actions button:hover {
   color: var(--dc-primary);
   border-color: color-mix(in oklch, var(--dc-primary) 28%, var(--dc-border));
 }
 
-.mqtt-workbench__search {
-  padding: 0 12px 10px;
+.mqtt-workbench__source-actions button.is-primary:hover {
+  color: var(--dc-surface-raised);
+  transform: translateY(-1px);
+}
+
+.mqtt-workbench__connect-action {
+  width: auto;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in oklch, var(--dc-primary) 32%, var(--dc-border));
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mqtt-workbench__connect-action::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+}
+
+.mqtt-workbench__connect-action:hover {
+  border-color: color-mix(in oklch, var(--dc-primary) 48%, var(--dc-border));
+}
+
+.mqtt-workbench__connect-action.is-connected {
+  border-color: rgba(220, 38, 38, 0.22);
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
 }
 
 .mqtt-workbench__tree {
   min-height: 0;
   flex: 1;
+  display: grid;
+  align-content: start;
+  gap: 2px;
   overflow-y: auto;
-  padding: 0 8px 12px;
+  padding: 8px 8px 12px;
 }
 
-.mqtt-workbench__tree-head,
-.mqtt-workbench__tree-item,
-.mqtt-workbench__quick-action {
+.mqtt-workbench__tree-item {
   width: 100%;
   display: grid;
   align-items: center;
@@ -624,58 +1244,44 @@ onBeforeUnmount(() => {
   text-align: left;
 }
 
-.mqtt-workbench__tree-head {
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  min-height: 30px;
-  padding: 5px 8px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.mqtt-workbench__tree-head svg,
-.mqtt-workbench__tree-item svg {
+.mqtt-workbench__tree-item-icon {
   width: 15px;
   height: 15px;
-}
-
-.mqtt-workbench__tree-head small,
-.mqtt-workbench__tree-item small {
-  color: var(--dc-text-muted);
-  font-size: 11px;
-}
-
-.mqtt-workbench__tree-body {
-  padding-left: 8px;
+  color: var(--dc-primary);
 }
 
 .mqtt-workbench__tree-item {
-  grid-template-columns: 20px minmax(0, 1fr) auto 30px 30px;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
   gap: 6px;
-  min-height: 32px;
-  padding: 5px 4px 5px 8px;
+  min-height: 30px;
+  padding: 3px 6px;
+  border: 1px solid transparent;
   border-radius: var(--dc-radius-sm);
   font-size: 12px;
 }
 
-.mqtt-workbench__tree-item span {
+.mqtt-workbench__tree-item:hover {
+  border-color: var(--dc-border);
+}
+
+.mqtt-workbench__tree-item-name {
+  display: block;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.mqtt-workbench__tree-item-name {
+  color: var(--dc-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .mqtt-workbench__tree-item:hover,
-.mqtt-workbench__tree-item.is-active,
-.mqtt-workbench__quick-action:hover {
+.mqtt-workbench__tree-item.is-active {
   background: var(--dc-primary-soft);
   color: var(--dc-primary);
-}
-
-.mqtt-workbench__inline-action {
-  opacity: 0;
-}
-
-.mqtt-workbench__tree-item:hover .mqtt-workbench__inline-action {
-  opacity: 1;
 }
 
 .mqtt-workbench__main {
@@ -692,6 +1298,10 @@ onBeforeUnmount(() => {
   overflow-x: auto;
   border-bottom: 1px solid var(--dc-border);
   background: var(--dc-surface-subtle);
+}
+
+.mqtt-workbench__tabbar:empty {
+  display: none;
 }
 
 .mqtt-workbench__tab {
@@ -738,21 +1348,48 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
+.mqtt-workbench__placeholder {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  padding: 24px;
+  color: var(--dc-text-muted);
+  text-align: center;
+}
+
+.mqtt-workbench__placeholder svg {
+  width: 34px;
+  height: 34px;
+  color: var(--dc-primary);
+  opacity: 0.78;
+}
+
+.mqtt-workbench__placeholder strong {
+  color: var(--dc-text);
+  font-size: 14px;
+}
+
+.mqtt-workbench__placeholder span {
+  max-width: 280px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .mqtt-workbench__tag-panel {
   height: 100%;
   min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  display: block;
+}
+
+.mqtt-workbench__tag-panel.is-config-only {
+  display: block;
 }
 
 .mqtt-workbench__tag-list {
-  min-width: 0;
-  min-height: 0;
-  border-right: 1px solid var(--dc-border);
-  overflow: hidden;
-}
-
-.mqtt-workbench__tag-monitor {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -792,18 +1429,103 @@ onBeforeUnmount(() => {
   word-break: break-all;
 }
 
-.mqtt-workbench__quick-action {
-  min-height: 32px;
-  margin-bottom: 6px;
-  padding: 8px;
+.mqtt-workbench__detail-heading {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 10px;
+  border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-subtle);
+}
+
+.mqtt-workbench__detail-heading svg {
+  width: 18px;
+  height: 18px;
+  justify-self: center;
+  color: var(--dc-primary);
+}
+
+.mqtt-workbench__detail-heading div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.mqtt-workbench__detail-heading strong,
+.mqtt-workbench__detail-heading span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mqtt-workbench__detail-heading strong {
+  color: var(--dc-text);
+  font-size: 14px;
+}
+
+.mqtt-workbench__detail-heading span {
+  color: var(--dc-text-muted);
+  font-family: var(--dc-font-mono, monospace);
+  font-size: 12px;
+}
+
+.mqtt-workbench__detail-section {
+  margin-top: 14px;
+}
+
+.mqtt-workbench__monitor-heading {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 0 2px;
+}
+
+.mqtt-workbench__monitor-heading strong,
+.mqtt-workbench__monitor-heading span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mqtt-workbench__monitor-heading strong {
+  color: var(--dc-text);
+  font-size: 14px;
+}
+
+.mqtt-workbench__monitor-heading span {
+  color: var(--dc-text-muted);
+  font-family: var(--dc-font-mono, monospace);
+  font-size: 12px;
+}
+
+.mqtt-workbench__detail-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.mqtt-workbench__detail-footer button {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--dc-primary);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-primary);
+  color: var(--dc-surface-raised);
   font-size: 12px;
   font-weight: 700;
 }
 
-.mqtt-workbench__quick-action:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.mqtt-workbench__detail-footer svg {
+  width: 15px;
+  height: 15px;
 }
 
 .mqtt-workbench__empty,
@@ -823,6 +1545,53 @@ onBeforeUnmount(() => {
   width: 14px;
   height: 14px;
   animation: mqtt-workbench-spin 0.9s linear infinite;
+}
+
+.mqtt-workbench__menu-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+}
+
+.mqtt-workbench__context-menu {
+  position: fixed;
+  min-width: 148px;
+  padding: 4px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-surface);
+}
+
+.mqtt-workbench__context-menu button {
+  width: 100%;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--dc-radius-sm);
+  background: transparent;
+  color: var(--dc-text-secondary);
+  font-size: 13px;
+  text-align: left;
+}
+
+.mqtt-workbench__context-menu button:hover {
+  background: var(--dc-surface-muted);
+  color: var(--dc-primary);
+}
+
+.mqtt-workbench__context-menu button.is-danger:hover {
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
+}
+
+.mqtt-workbench__menu-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
 }
 
 :deep(.mqtt-subscription-list),
@@ -848,10 +1617,6 @@ onBeforeUnmount(() => {
 @media (max-width: 1100px) {
   .mqtt-workbench {
     grid-template-columns: 240px minmax(0, 1fr);
-  }
-
-  .mqtt-workbench__inspector {
-    display: none;
   }
 }
 

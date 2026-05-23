@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -20,6 +21,9 @@ var alarmPolicyModes = map[string]struct{}{
 	"per_target": {},
 	"derived":    {},
 }
+
+const defaultAlarmEscalationIntervalSeconds = 300
+const defaultAlarmRepeatNotificationIntervalSeconds = 60
 
 var alarmInputKeyPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
@@ -118,6 +122,14 @@ type AlarmPolicyCoverageResult struct {
 	Policies    []AlarmPolicyCoverageItem `json:"policies"`
 }
 
+type AlarmProjectSettings struct {
+	ProjectID                         string    `json:"projectId"`
+	EscalationIntervalSeconds         int       `json:"escalationIntervalSeconds"`
+	RepeatNotificationIntervalSeconds int       `json:"repeatNotificationIntervalSeconds"`
+	CreatedAt                         time.Time `json:"createdAt,omitempty"`
+	UpdatedAt                         time.Time `json:"updatedAt,omitempty"`
+}
+
 type AlarmPolicyListFilter struct {
 	Search        string
 	GroupID       *string
@@ -187,6 +199,11 @@ type AlarmPolicyTestInput struct {
 	Context   map[string]any
 }
 
+type UpdateAlarmProjectSettingsInput struct {
+	EscalationIntervalSeconds         int
+	RepeatNotificationIntervalSeconds int
+}
+
 type AlarmPolicyConditionResult struct {
 	Condition   AlarmCondition `json:"condition"`
 	Triggered   bool           `json:"triggered"`
@@ -231,6 +248,42 @@ type AlarmPolicyService struct {
 
 func NewAlarmPolicyService(repo *repository.AlarmPolicyRepository, datapoints *repository.DataPointRepository) *AlarmPolicyService {
 	return &AlarmPolicyService{repository: repo, datapoints: datapoints}
+}
+
+func (s *AlarmPolicyService) GetSettings(ctx context.Context, claims *auth.Claims, projectID string) (*AlarmProjectSettings, error) {
+	if err := s.validateReadAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	record, err := s.repository.GetProjectSettings(ctx, projectID)
+	if err != nil {
+		var appErr *apperrors.AppError
+		if errors.As(err, &appErr) && appErr.Code == apperrors.ErrorCodeNotFound {
+			return defaultAlarmProjectSettings(projectID), nil
+		}
+		return nil, err
+	}
+	settings := toAlarmProjectSettings(*record)
+	return &settings, nil
+}
+
+func (s *AlarmPolicyService) UpdateSettings(ctx context.Context, claims *auth.Claims, projectID string, input UpdateAlarmProjectSettingsInput) (*AlarmProjectSettings, error) {
+	if err := s.validateWriteAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	if input.EscalationIntervalSeconds < 30 {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "报警升级间隔不能小于 30 秒")
+	}
+	if input.RepeatNotificationIntervalSeconds < 10 {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "重复推送间隔不能小于 10 秒")
+	}
+	record, err := s.repository.UpsertProjectSettings(ctx, repository.UpsertAlarmProjectSettingsParams{
+		ProjectID: projectID, UserID: claims.UserID, EscalationIntervalSeconds: input.EscalationIntervalSeconds, RepeatNotificationIntervalSeconds: input.RepeatNotificationIntervalSeconds,
+	})
+	if err != nil {
+		return nil, err
+	}
+	settings := toAlarmProjectSettings(*record)
+	return &settings, nil
 }
 
 func (s *AlarmPolicyService) ListGroups(ctx context.Context, claims *auth.Claims, projectID string) ([]AlarmPolicyGroup, error) {
@@ -476,7 +529,11 @@ func (s *AlarmPolicyService) Create(ctx context.Context, claims *auth.Claims, pr
 	if err != nil {
 		return nil, err
 	}
-	contract := buildAlarmPolicyContract(normalized, "", projectID, groupEnabled)
+	settings, err := s.alarmProjectSettings(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	contract := buildAlarmPolicyContract(normalized, "", projectID, groupEnabled, settings)
 	record, err := s.repository.CreatePolicy(ctx, toCreatePolicyParams(projectID, claims.UserID, normalized, contract))
 	if err != nil {
 		return nil, err
@@ -504,7 +561,11 @@ func (s *AlarmPolicyService) Update(ctx context.Context, claims *auth.Claims, pr
 	if err != nil {
 		return nil, err
 	}
-	contract := buildAlarmPolicyContract(normalized, policyID, projectID, groupEnabled)
+	settings, err := s.alarmProjectSettings(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	contract := buildAlarmPolicyContract(normalized, policyID, projectID, groupEnabled, settings)
 	record, err := s.repository.UpdatePolicy(ctx, toUpdatePolicyParams(policyID, projectID, claims.UserID, normalized, contract))
 	if err != nil {
 		return nil, err
@@ -559,6 +620,11 @@ func (s *AlarmPolicyService) Contract(ctx context.Context, claims *auth.Claims, 
 	contract["enabled"] = policy.IsEnabled
 	contract["effectiveEnabled"] = policy.EffectiveEnabled
 	contract["updatedAt"] = policy.UpdatedAt.Format(time.RFC3339)
+	settings, err := s.alarmProjectSettings(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	contract["escalation"] = buildAlarmEscalationContract(settings)
 	return contract, nil
 }
 
@@ -572,7 +638,11 @@ func (s *AlarmPolicyService) ValidateDraft(ctx context.Context, claims *auth.Cla
 	if err != nil {
 		return nil, err
 	}
-	contract := buildAlarmPolicyContract(normalized, "", projectID, nil)
+	settings, err := s.alarmProjectSettings(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	contract := buildAlarmPolicyContract(normalized, "", projectID, nil, settings)
 	return map[string]any{"valid": true, "errors": []any{}, "contract": contract}, nil
 }
 
@@ -977,6 +1047,7 @@ func policyMatchesCoverageTarget(policy AlarmPolicy, datapointID, path string) b
 func validateAlarmConditions(conditions []AlarmCondition, allowedTypes map[string]struct{}, requireEnabled bool) error {
 	enabledCount := 0
 	seenThresholds := map[string]struct{}{}
+	thresholds := map[string]AlarmCondition{}
 	for _, condition := range conditions {
 		if !condition.IsEnabled {
 			continue
@@ -996,10 +1067,14 @@ func validateAlarmConditions(conditions []AlarmCondition, allowedTypes map[strin
 				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "同一策略中高高限、高限、低限、低低限每种最多配置一个")
 			}
 			seenThresholds[condition.Type] = struct{}{}
+			thresholds[condition.Type] = condition
 		}
 		if err := validateAlarmConditionParams(condition); err != nil {
 			return err
 		}
+	}
+	if err := validateThresholdDeadbands(thresholds); err != nil {
+		return err
 	}
 	if requireEnabled && enabledCount == 0 {
 		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "条件集至少需要一个启用条件")
@@ -1012,7 +1087,7 @@ func policyAllowedConditionTypes(mode string, targets []AlarmTargetRef) map[stri
 		return mapFromRuleTypes("HH", "H", "L", "LL", "deviation_high", "deviation_low", "rate_of_change", "cel")
 	}
 	if allTargetsKind(targets, isBooleanDataType) {
-		return mapFromRuleTypes("bool_equal", "cel")
+		return mapFromRuleTypes("bool_equal", "bool_transition", "cel")
 	}
 	if allTargetsKind(targets, isStringDataType) {
 		return mapFromRuleTypes("string_equal", "string_not_equal", "string_contains", "string_regex", "cel")
@@ -1028,12 +1103,52 @@ func mapFromRuleTypes(values ...string) map[string]struct{} {
 	return result
 }
 
-func isThresholdConditionType(conditionType string) bool {
-	return conditionType == "HH" || conditionType == "H" || conditionType == "L" || conditionType == "LL"
-}
-
 func validateAlarmConditionParams(condition AlarmCondition) error {
 	return validateAlarmCondition(condition.Type, condition.Params)
+}
+
+func validateThresholdDeadbands(thresholds map[string]AlarmCondition) error {
+	order := []string{"LL", "L", "H", "HH"}
+	type thresholdBand struct {
+		conditionType string
+		limit         float64
+		lower         float64
+		upper         float64
+	}
+	bands := make([]thresholdBand, 0, len(thresholds))
+	for _, conditionType := range order {
+		condition, ok := thresholds[conditionType]
+		if !ok {
+			continue
+		}
+		limit, err := anyToFloat64(condition.Params["limit"])
+		if err != nil {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "限值必须是数值")
+		}
+		hysteresis, err := thresholdHysteresis(condition.Params)
+		if err != nil {
+			return err
+		}
+		// 限值报警的死区是围绕报警限形成的带状区域，校验时必须防止相邻报警限带互相覆盖。
+		bands = append(bands, thresholdBand{
+			conditionType: conditionType,
+			limit:         limit,
+			lower:         limit - hysteresis,
+			upper:         limit + hysteresis,
+		})
+	}
+
+	for index := 1; index < len(bands); index++ {
+		previous := bands[index-1]
+		current := bands[index]
+		if current.limit <= previous.limit {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "限值顺序必须满足：低低 < 低 < 高 < 高高")
+		}
+		if previous.upper >= current.lower {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "相邻限值的报警死区不能重叠或相接")
+		}
+	}
+	return nil
 }
 
 func evaluateAlarmPolicy(policy *AlarmPolicy, value any, context map[string]any) (*AlarmPolicyEvaluationResult, error) {
@@ -1048,7 +1163,7 @@ func evaluateAlarmPolicy(policy *AlarmPolicy, value any, context map[string]any)
 		if !condition.IsEnabled {
 			continue
 		}
-		result, err := evaluateAlarmRule(condition.Type, condition.Params, value, context)
+		result, err := evaluateAlarmRule(condition.Type, condition.Params, value, alarmConditionContext(context, condition))
 		if err != nil {
 			return nil, err
 		}
@@ -1071,6 +1186,53 @@ func evaluateAlarmPolicy(policy *AlarmPolicy, value any, context map[string]any)
 		Triggered: len(triggeredConditions) > 0, State: state, TriggeredConditions: triggeredConditions,
 		Diagnostics: diagnostics, ConditionResults: conditionResults,
 	}, nil
+}
+
+func alarmConditionContext(context map[string]any, condition AlarmCondition) map[string]any {
+	result := cloneMap(context)
+	rawStates, ok := contextValue(context, "conditionStates")
+	if !ok {
+		return result
+	}
+	states, ok := anyMap(rawStates)
+	if !ok {
+		return result
+	}
+	if state, ok := conditionStateMap(states, condition.ID); ok {
+		copyAlarmConditionState(result, state)
+		return result
+	}
+	if state, ok := conditionStateMap(states, condition.Type); ok {
+		copyAlarmConditionState(result, state)
+	}
+	return result
+}
+
+func conditionStateMap(states map[string]any, key string) (map[string]any, bool) {
+	value, ok := states[key]
+	if !ok {
+		return nil, false
+	}
+	if typed, ok := value.(bool); ok {
+		return map[string]any{"alarmActive": typed}, true
+	}
+	return anyMap(value)
+}
+
+func anyMap(value any) (map[string]any, bool) {
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	return typed, true
+}
+
+func copyAlarmConditionState(target map[string]any, state map[string]any) {
+	for _, key := range []string{"active", "alarmActive", "wasTriggered", "previousTriggered"} {
+		if value, ok := state[key]; ok {
+			target[key] = value
+		}
+	}
 }
 
 func evaluateDerivedValue(expression string, values map[string]any) (float64, error) {
@@ -1221,7 +1383,7 @@ func isIdentPart(ch byte) bool {
 	return isIdentStart(ch) || (ch >= '0' && ch <= '9')
 }
 
-func buildAlarmPolicyContract(input normalizedAlarmPolicyInput, policyID string, projectID string, groupEnabled *bool) map[string]any {
+func buildAlarmPolicyContract(input normalizedAlarmPolicyInput, policyID string, projectID string, groupEnabled *bool, settings *AlarmProjectSettings) map[string]any {
 	effectiveEnabled := input.IsEnabled
 	if groupEnabled != nil {
 		effectiveEnabled = effectiveEnabled && *groupEnabled
@@ -1240,7 +1402,55 @@ func buildAlarmPolicyContract(input normalizedAlarmPolicyInput, policyID string,
 		"messageTemplate":   input.MessageTemplate,
 		"enabled":           input.IsEnabled,
 		"effectiveEnabled":  effectiveEnabled,
+		"escalation":        buildAlarmEscalationContract(settings),
 		"updatedAt":         "",
+	}
+}
+
+func (s *AlarmPolicyService) alarmProjectSettings(ctx context.Context, projectID string) (*AlarmProjectSettings, error) {
+	record, err := s.repository.GetProjectSettings(ctx, projectID)
+	if err != nil {
+		var appErr *apperrors.AppError
+		if errors.As(err, &appErr) && appErr.Code == apperrors.ErrorCodeNotFound {
+			return defaultAlarmProjectSettings(projectID), nil
+		}
+		return nil, err
+	}
+	settings := toAlarmProjectSettings(*record)
+	return &settings, nil
+}
+
+func defaultAlarmProjectSettings(projectID string) *AlarmProjectSettings {
+	return &AlarmProjectSettings{
+		ProjectID:                         projectID,
+		EscalationIntervalSeconds:         defaultAlarmEscalationIntervalSeconds,
+		RepeatNotificationIntervalSeconds: defaultAlarmRepeatNotificationIntervalSeconds,
+	}
+}
+
+func toAlarmProjectSettings(record repository.AlarmProjectSettingsRecord) AlarmProjectSettings {
+	return AlarmProjectSettings{
+		ProjectID:                         record.ProjectID,
+		EscalationIntervalSeconds:         record.EscalationIntervalSeconds,
+		RepeatNotificationIntervalSeconds: record.RepeatNotificationIntervalSeconds,
+		CreatedAt:                         record.CreatedAt,
+		UpdatedAt:                         record.UpdatedAt,
+	}
+}
+
+func buildAlarmEscalationContract(settings *AlarmProjectSettings) map[string]any {
+	if settings == nil {
+		settings = defaultAlarmProjectSettings("")
+	}
+	return map[string]any{
+		"mode":                      "severity_steps",
+		"intervalSeconds":           settings.EscalationIntervalSeconds,
+		"priorityMode":              "jump_to_severity_default",
+		"steps":                     []map[string]any{{"severity": "info", "priority": 100}, {"severity": "warning", "priority": 300}, {"severity": "major", "priority": 600}, {"severity": "critical", "priority": 900}},
+		"emitOnInitialTrigger":      true,
+		"emitOnSeverityEscalation":  true,
+		"emitOnEveryPriorityChange": false,
+		"repeatNotification":        map[string]any{"enabled": true, "intervalSeconds": settings.RepeatNotificationIntervalSeconds, "emitWhileActive": true},
 	}
 }
 

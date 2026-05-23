@@ -64,6 +64,81 @@ func (h *MqttHandler) GetConnection(w http.ResponseWriter, r *http.Request) erro
 	return nil
 }
 
+// ListSubscriptionGroups 返回 MQTT 订阅分组树。
+func (h *MqttHandler) ListSubscriptionGroups(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	result, err := h.service.ListSubscriptionGroups(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"))
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"list": result})
+	return nil
+}
+
+// CreateSubscriptionGroup 创建 MQTT 订阅分组。
+func (h *MqttHandler) CreateSubscriptionGroup(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Name     string  `json:"name"`
+		ParentID *string `json:"parentId"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.CreateSubscriptionGroup(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.CreateMqttSubscriptionGroupInput{
+		Name:     request.Name,
+		ParentID: request.ParentID,
+	})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// UpdateSubscriptionGroup 更新 MQTT 订阅分组。
+func (h *MqttHandler) UpdateSubscriptionGroup(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Name        *string `json:"name"`
+		ParentID    *string `json:"parentId"`
+		HasParentID bool    `json:"hasParentId"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.UpdateSubscriptionGroup(r.Context(), r.PathValue("projectId"), r.PathValue("groupId"), claims.UserID, service.UpdateMqttSubscriptionGroupInput{
+		Name:        request.Name,
+		ParentID:    request.ParentID,
+		HasParentID: request.HasParentID,
+	})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// DeleteSubscriptionGroup 删除 MQTT 订阅分组。
+func (h *MqttHandler) DeleteSubscriptionGroup(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	if err := h.service.DeleteSubscriptionGroup(r.Context(), r.PathValue("projectId"), r.PathValue("groupId")); err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"deleted": true})
+	return nil
+}
+
 // UpdateConnection 更新 MQTT 连接配置。
 func (h *MqttHandler) UpdateConnection(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
@@ -246,21 +321,23 @@ func (h *MqttHandler) CreateSubscription(w http.ResponseWriter, r *http.Request)
 		Name             string  `json:"name"`
 		Topic            string  `json:"topic"`
 		QOS              int     `json:"qos"`
+		GroupID          *string `json:"groupId"`
 		Description      *string `json:"description"`
-		IsEnabled        bool    `json:"isEnabled"`
 		MessageRetention int     `json:"messageRetention"`
+		Order            int     `json:"order"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
 	}
-	result, err := h.service.CreateSubscription(r.Context(), r.PathValue("projectId"), claims.UserID, repository.CreateMqttSubscriptionParams{
+	result, err := h.service.CreateSubscription(r.Context(), r.PathValue("projectId"), claims.UserID, service.CreateMqttSubscriptionInput{
 		ConnectionID:     r.PathValue("connectionId"),
+		GroupID:          request.GroupID,
 		Name:             request.Name,
 		Topic:            request.Topic,
 		QOS:              request.QOS,
 		Description:      request.Description,
-		IsEnabled:        request.IsEnabled,
 		MessageRetention: request.MessageRetention,
+		Order:            request.Order,
 	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
@@ -279,20 +356,24 @@ func (h *MqttHandler) UpdateSubscription(w http.ResponseWriter, r *http.Request)
 		Name             string  `json:"name"`
 		Topic            string  `json:"topic"`
 		QOS              int     `json:"qos"`
+		GroupID          *string `json:"groupId"`
+		HasGroupID       bool    `json:"hasGroupId"`
 		Description      *string `json:"description"`
-		IsEnabled        bool    `json:"isEnabled"`
 		MessageRetention int     `json:"messageRetention"`
+		Order            int     `json:"order"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
 	}
-	result, err := h.service.UpdateSubscription(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), claims.UserID, repository.UpdateMqttSubscriptionParams{
+	result, err := h.service.UpdateSubscription(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), claims.UserID, service.UpdateMqttSubscriptionInput{
+		GroupID:          request.GroupID,
+		HasGroupID:       request.HasGroupID,
 		Name:             request.Name,
 		Topic:            request.Topic,
 		QOS:              request.QOS,
 		Description:      request.Description,
-		IsEnabled:        request.IsEnabled,
 		MessageRetention: request.MessageRetention,
+		Order:            request.Order,
 	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
@@ -311,20 +392,6 @@ func (h *MqttHandler) DeleteSubscription(w http.ResponseWriter, r *http.Request)
 		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"deleted": true})
-	return nil
-}
-
-// ToggleSubscription 切换订阅启用状态。
-func (h *MqttHandler) ToggleSubscription(w http.ResponseWriter, r *http.Request) error {
-	claims, err := requireClaims(r)
-	if err != nil {
-		return err
-	}
-	result, err := h.service.ToggleSubscription(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), claims.UserID)
-	if err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
 }
 
@@ -480,11 +547,7 @@ func (h *MqttHandler) ListTagsBySubscription(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return err
 	}
-	isEnabled, err := parseOptionalBool(r.URL.Query().Get("isEnabled"))
-	if err != nil {
-		return err
-	}
-	tags, total, err := h.service.ListTagsBySubscription(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), page, pageSize, isEnabled)
+	tags, total, err := h.service.ListTagsBySubscription(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), page, pageSize)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -517,11 +580,7 @@ func (h *MqttHandler) ListTagsByProject(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		return err
 	}
-	isEnabled, err := parseOptionalBool(r.URL.Query().Get("isEnabled"))
-	if err != nil {
-		return err
-	}
-	tags, total, err := h.service.ListTagsByProject(r.Context(), r.PathValue("projectId"), page, pageSize, r.URL.Query().Get("subscriptionId"), isEnabled)
+	tags, total, err := h.service.ListTagsByProject(r.Context(), r.PathValue("projectId"), page, pageSize, r.URL.Query().Get("subscriptionId"))
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -631,20 +690,6 @@ func (h *MqttHandler) DeleteTag(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// ToggleTag 切换变量启用状态。
-func (h *MqttHandler) ToggleTag(w http.ResponseWriter, r *http.Request) error {
-	claims, err := requireClaims(r)
-	if err != nil {
-		return err
-	}
-	result, err := h.service.ToggleTag(r.Context(), r.PathValue("projectId"), r.PathValue("tagId"), claims.UserID)
-	if err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
-	return nil
-}
-
 // UpdateTagsOrder 批量更新变量顺序。
 func (h *MqttHandler) UpdateTagsOrder(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
@@ -740,7 +785,6 @@ func decodeMqttTagUpdatePayload(r *http.Request) (repository.UpdateMqttTagParams
 		Unit:         payload.Unit,
 		Transform:    payload.Transform,
 		Validation:   payload.Validation,
-		IsEnabled:    payload.IsEnabled,
 		Order:        payload.Order,
 	}, nil
 }
@@ -748,7 +792,6 @@ func decodeMqttTagUpdatePayload(r *http.Request) (repository.UpdateMqttTagParams
 func convertMqttTagPayload(raw map[string]any) (repository.CreateMqttTagParams, error) {
 	result := repository.CreateMqttTagParams{
 		Validation: map[string]any{},
-		IsEnabled:  true,
 	}
 	if value, ok := raw["groupId"].(string); ok && strings.TrimSpace(value) != "" {
 		trimmed := strings.TrimSpace(value)
@@ -783,9 +826,6 @@ func convertMqttTagPayload(raw map[string]any) (repository.CreateMqttTagParams, 
 	}
 	if value, ok := raw["validation"].(map[string]any); ok {
 		result.Validation = value
-	}
-	if value, ok := raw["isEnabled"].(bool); ok {
-		result.IsEnabled = value
 	}
 	switch value := raw["order"].(type) {
 	case float64:

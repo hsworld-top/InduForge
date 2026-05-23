@@ -4,6 +4,8 @@
     title="移动到分组"
     width="460px"
     body-max-height="260px"
+    :dirty="isDirty"
+    :close-disabled="loading"
     @close="resetForm"
   >
     <el-form label-position="top" class="compute-move-dialog">
@@ -77,6 +79,12 @@ const currentFolderId = computed(() =>
 );
 const canSubmit = computed(
   () => Boolean(props.unit) && folderId.value !== currentFolderId.value && !props.loading,
+);
+const isDirty = computed(
+  () =>
+    visible.value &&
+    Boolean(props.unit) &&
+    folderId.value !== currentFolderId.value,
 );
 
 const flattenFolders = (

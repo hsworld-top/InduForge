@@ -72,6 +72,13 @@ const sampleText = ref(
       context: {
         source: "manual-trial",
         quality: "good",
+        alarmActive: false,
+        conditionStates: {
+          H: { alarmActive: false },
+          HH: { alarmActive: false },
+          L: { alarmActive: false },
+          LL: { alarmActive: false },
+        },
       },
     },
     null,

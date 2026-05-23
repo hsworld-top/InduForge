@@ -1,8 +1,10 @@
 <template>
   <div class="datacenter-shell">
-    <DataCenterNavRail :modules="modules" :active-module="activeModule" :preview-session-active="previewSessionActive"
-      :preview-session-state="previewSessionState" @update:activeModule="$emit('update:activeModule', $event)"
-      @previewIndicatorClick="$emit('previewIndicatorClick', $event)">
+    <DataCenterNavRail
+      :modules="modules"
+      :active-module="activeModule"
+      @update:activeModule="$emit('update:activeModule', $event)"
+    >
       <template #actions>
         <slot name="actions" :active-module="activeModule" />
       </template>
@@ -26,15 +28,10 @@ import type {
 defineProps<{
   modules: DatacenterModuleMeta[];
   activeModule: DatacenterModuleId;
-  /** 预览会话是否激活，传给 NavRail 控制徽标出现 */
-  previewSessionActive?: boolean;
-  /** 预览会话连接状态 */
-  previewSessionState?: "disconnected" | "connecting" | "connected" | "reconnecting";
 }>();
 
 defineEmits<{
   (event: "update:activeModule", value: DatacenterModuleId): void;
-  (event: "previewIndicatorClick", state: string): void;
 }>();
 
 </script>

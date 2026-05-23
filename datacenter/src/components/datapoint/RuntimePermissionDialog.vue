@@ -1,9 +1,11 @@
 <template>
   <DcDialog
+    ref="dialogRef"
     :model-value="visible"
     :title="`写权限：${datapoint?.name || '-'}`"
     width="520px"
     destroy-on-close
+    :dirty="isDirty"
     @update:model-value="handleVisibleChange"
   >
     <div class="rp-dialog">
@@ -41,7 +43,7 @@
     </div>
 
     <template #footer>
-      <el-button @click="$emit('cancel')">取消</el-button>
+      <el-button @click="requestClose">取消</el-button>
       <el-button type="primary" :loading="saving" @click="handleSubmit">
         保存
       </el-button>
@@ -88,6 +90,27 @@ const emit = defineEmits<{
 const allowRolesInput = ref("");
 const denyRolesInput = ref("");
 const formInherit = ref(true);
+const initialSnapshot = ref("");
+const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null);
+
+function parseRoles(value: string): string[] {
+  return String(value || "")
+    .split(/[\n,，]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+const draftGrant = computed(() =>
+  normalizeRuntimeGrantPayload({
+    allowRoles: parseRoles(allowRolesInput.value),
+    denyRoles: parseRoles(denyRolesInput.value),
+    inherit: formInherit.value,
+  }),
+);
+const draftSnapshot = computed(() => JSON.stringify(draftGrant.value));
+const isDirty = computed(
+  () => props.visible && draftSnapshot.value !== initialSnapshot.value,
+);
 
 // 从数据点解析当前写权限 grant
 function extractWriteGrant(row: DataPointRow | null): RuntimeGrantPayload {
@@ -108,33 +131,24 @@ watch(
     formInherit.value = grant.inherit;
     allowRolesInput.value = grant.allowRoles.join("\n");
     denyRolesInput.value = grant.denyRoles.join("\n");
+    initialSnapshot.value = draftSnapshot.value;
   },
   { immediate: true },
-);
-
-function parseRoles(value: string): string[] {
-  return String(value || "")
-    .split(/[\n,，]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-const draftGrant = computed(() =>
-  normalizeRuntimeGrantPayload({
-    allowRoles: parseRoles(allowRolesInput.value),
-    denyRoles: parseRoles(denyRolesInput.value),
-    inherit: formInherit.value,
-  }),
 );
 
 const grantSummary = computed(() => summarizeRuntimeGrant(draftGrant.value));
 
 function handleSubmit() {
+  initialSnapshot.value = draftSnapshot.value;
   emit("submit", draftGrant.value);
 }
 
 function handleVisibleChange(val: boolean) {
   if (!val) emit("cancel");
+}
+
+function requestClose() {
+  void dialogRef.value?.requestClose();
 }
 </script>
 

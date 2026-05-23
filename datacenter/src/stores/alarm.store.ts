@@ -15,10 +15,12 @@ import {
   getAlarmPolicyGroups,
   getAlarmPolicyTree,
   getAlarmPolicies,
+  getAlarmProjectSettings,
   testAlarmPolicy,
   toggleAlarmPolicy,
   updateAlarmPolicy,
   updateAlarmPolicyGroup,
+  updateAlarmProjectSettings,
   validateAlarmPolicyDraft,
 } from "@/api/alarm.api";
 import type {
@@ -30,6 +32,8 @@ import type {
   AlarmPolicyCoverage,
   AlarmPolicyGroup,
   AlarmPolicyGroupSave,
+  AlarmProjectSettings,
+  AlarmProjectSettingsSave,
   AlarmPolicySave,
   AlarmPolicyTree,
   AlarmPolicyTrialPayload,
@@ -57,6 +61,13 @@ type CoverageState = {
   key: string;
   data: AlarmPolicyCoverage | null;
   loading: boolean;
+  error: string;
+};
+
+type SettingsState = {
+  data: AlarmProjectSettings | null;
+  loading: boolean;
+  saving: boolean;
   error: string;
 };
 
@@ -108,6 +119,12 @@ export const useAlarmStore = defineStore("alarm", () => {
     loading: false,
     error: "",
   });
+  const settings = ref<SettingsState>({
+    data: null,
+    loading: false,
+    saving: false,
+    error: "",
+  });
 
   const hasEditing = computed(() => editing.value !== null);
   const selectedCount = computed(() => {
@@ -151,6 +168,41 @@ export const useAlarmStore = defineStore("alarm", () => {
   async function fetchGroups(projectId: string) {
     groups.value = await getAlarmPolicyGroups(projectId);
     return groups.value;
+  }
+
+  async function fetchSettings(projectId: string) {
+    settings.value = { ...settings.value, loading: true, error: "" };
+    try {
+      const data = await getAlarmProjectSettings(projectId);
+      settings.value = { data, loading: false, saving: false, error: "" };
+      return data;
+    } catch (error) {
+      settings.value = {
+        ...settings.value,
+        loading: false,
+        error: getApiErrorMessage(error, "报警设置不可用"),
+      };
+      throw error;
+    }
+  }
+
+  async function saveSettings(
+    projectId: string,
+    data: AlarmProjectSettingsSave,
+  ) {
+    settings.value = { ...settings.value, saving: true, error: "" };
+    try {
+      const saved = await updateAlarmProjectSettings(projectId, data);
+      settings.value = { data: saved, loading: false, saving: false, error: "" };
+      return saved;
+    } catch (error) {
+      settings.value = {
+        ...settings.value,
+        saving: false,
+        error: getApiErrorMessage(error, "保存报警设置失败"),
+      };
+      throw error;
+    }
   }
 
   async function createGroup(projectId: string, data: AlarmPolicyGroupSave) {
@@ -549,6 +601,9 @@ export const useAlarmStore = defineStore("alarm", () => {
     validationLoading,
     validationError,
     coverage,
+    settings,
+    fetchSettings,
+    saveSettings,
     hasEditing,
     selectedPolicyIds,
     fetchGroups,

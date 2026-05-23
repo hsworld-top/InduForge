@@ -103,7 +103,14 @@ func (r *ProtocolWave2Repository) CreateOpcuaConfig(ctx context.Context, params 
 		Type:      "opcua",
 		Status:    params.Status,
 		Metadata: map[string]any{
-			"endpoint": params.Endpoint,
+			"endpoint":       params.Endpoint,
+			"securityPolicy": params.SecurityPolicy,
+			"securityMode":   params.SecurityMode,
+			"authType":       params.AuthType,
+			"username":       params.Username,
+			"password":       params.Password,
+			"samplingMs":     params.SamplingMS,
+			"options":        cloneWave2Map(params.Options),
 		},
 	})
 	if err != nil {
@@ -154,9 +161,12 @@ func (r *ProtocolWave2Repository) CreateS7Config(ctx context.Context, params Cre
 		Type:      "s7",
 		Status:    params.Status,
 		Metadata: map[string]any{
-			"host": params.Host,
-			"rack": params.Rack,
-			"slot": params.Slot,
+			"host":           params.Host,
+			"port":           params.Port,
+			"rack":           params.Rack,
+			"slot":           params.Slot,
+			"pollIntervalMs": params.PollIntervalMS,
+			"options":        cloneWave2Map(params.Options),
 		},
 	})
 	if err != nil {
@@ -209,7 +219,15 @@ func (r *ProtocolWave2Repository) CreateModbusConfig(ctx context.Context, params
 		Type:      "modbus",
 		Status:    params.Status,
 		Metadata: map[string]any{
-			"mode": params.Mode,
+			"mode":           params.Mode,
+			"host":           params.Host,
+			"port":           params.Port,
+			"serialConfig":   cloneWave2Map(params.SerialConfig),
+			"slaveId":        params.SlaveID,
+			"startAddress":   params.StartAddress,
+			"quantity":       params.Quantity,
+			"pollIntervalMs": params.PollIntervalMS,
+			"options":        cloneWave2Map(params.Options),
 		},
 	})
 	if err != nil {
@@ -261,7 +279,10 @@ func (r *ProtocolWave2Repository) CreateTdengineConfig(ctx context.Context, para
 		Type:      "tdengine",
 		Status:    params.Status,
 		Metadata: map[string]any{
+			"dsn":      params.DSN,
 			"database": params.DatabaseName,
+			"timezone": params.Timezone,
+			"options":  cloneWave2Map(params.Options),
 		},
 	})
 	if err != nil {
@@ -346,6 +367,17 @@ func marshalWave2JSONObject(input map[string]any, emptyAsObject bool) (any, erro
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "wave2 JSON 配置格式无效", err)
 	}
 	return string(payload), nil
+}
+
+func cloneWave2Map(input map[string]any) map[string]any {
+	if input == nil {
+		return map[string]any{}
+	}
+	result := make(map[string]any, len(input))
+	for key, value := range input {
+		result[key] = value
+	}
+	return result
 }
 
 func rollbackWave2TxQuietly(ctx context.Context, tx pgx.Tx) {

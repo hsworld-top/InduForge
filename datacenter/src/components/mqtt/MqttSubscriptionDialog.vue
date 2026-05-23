@@ -1,12 +1,13 @@
 <template>
   <DcDialog
+    ref="dialogRef"
     v-model="visible"
     :title="
       mode === 'create' ? t('subscription.create') : t('subscription.edit')
     "
     width="600px"
-    :close-on-click-modal="false"
-    @close="handleClose"
+    :dirty="isDirty"
+    @close="handleClosed"
   >
     <el-form
       ref="formRef"
@@ -52,14 +53,6 @@
         </el-radio-group>
       </el-form-item>
 
-      <el-form-item :label="t('subscription.enabled')" prop="isEnabled">
-        <el-switch
-          v-model="formData.isEnabled"
-          :active-text="t('common.enabled')"
-          :inactive-text="t('common.disabled')"
-        />
-      </el-form-item>
-
       <el-form-item :label="t('subscription.remark')" prop="description">
         <el-input
           v-model="formData.description"
@@ -74,7 +67,7 @@
 
     <template #footer>
       <div class="flex justify-end space-x-2">
-        <el-button @click="handleClose">{{ t("actions.cancel") }}</el-button>
+        <el-button @click="requestClose">{{ t("actions.cancel") }}</el-button>
         <el-button type="primary" :loading="submitting" @click="handleSubmit">
           {{ mode === "create" ? t("actions.create") : t("actions.save") }}
         </el-button>
@@ -102,6 +95,14 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  projectId: {
+    type: String,
+    default: "",
+  },
+  groupId: {
+    type: [String, null],
+    default: null,
+  },
   subscription: {
     type: Object,
     default: null,
@@ -117,14 +118,16 @@ const emit = defineEmits(["update:modelValue", "success"]);
 
 const formRef = ref(null);
 const submitting = ref(false);
+const initialFormSnapshot = ref("");
+const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null);
 
 // 表单数据
 const formData = ref({
   name: "",
   topic: "",
   qos: 0,
-  isEnabled: true,
   description: "",
+  groupId: null,
 });
 
 // 验证规则
@@ -165,6 +168,11 @@ const visible = computed({
   set: (val) => emit("update:modelValue", val),
 });
 
+const formSnapshot = computed(() => JSON.stringify(formData.value));
+const isDirty = computed(
+  () => visible.value && formSnapshot.value !== initialFormSnapshot.value,
+);
+
 // 获取项目 ID。
 // 正式入口下优先使用宿主 bootstrap 已写入的本地上下文，仅在独立调试态下回退到旧 URL 参数。
 const getProjectId = () => {
@@ -186,18 +194,19 @@ const initFormData = () => {
       name: props.subscription.name || "",
       topic: props.subscription.topic || "",
       qos: props.subscription.qos ?? 0,
-      isEnabled: props.subscription.isEnabled ?? true,
       description: props.subscription.description || "",
+      groupId: props.groupId ?? props.subscription.groupId ?? null,
     };
   } else {
     formData.value = {
       name: "",
       topic: "",
       qos: 0,
-      isEnabled: true,
       description: "",
+      groupId: props.groupId ?? null,
     };
   }
+  initialFormSnapshot.value = formSnapshot.value;
 };
 
 /**
@@ -210,7 +219,7 @@ const handleSubmit = async () => {
     await formRef.value.validate();
     submitting.value = true;
 
-    const projectId = getProjectId();
+    const projectId = props.projectId || getProjectId();
     if (!projectId) {
       ElMessage.error(t("subscription.projectMissing"));
       return;
@@ -220,8 +229,8 @@ const handleSubmit = async () => {
       name: formData.value.name,
       topic: formData.value.topic,
       qos: formData.value.qos,
-      isEnabled: formData.value.isEnabled,
       description: formData.value.description || null,
+      groupId: formData.value.groupId || null,
     };
 
     let response;
@@ -235,7 +244,10 @@ const handleSubmit = async () => {
       response = await dataAPI.updateMqttSubscription(
         projectId,
         props.subscription.id,
-        data,
+        {
+          ...data,
+          hasGroupId: true,
+        },
       );
     }
 
@@ -244,8 +256,9 @@ const handleSubmit = async () => {
         ? t("subscription.createSuccess")
         : t("subscription.updateSuccess"),
     );
+    initialFormSnapshot.value = formSnapshot.value;
     emit("success", response.data);
-    handleClose();
+    requestClose();
   } catch (error) {
     if (error.errors) {
       // 表单验证错误
@@ -268,11 +281,14 @@ const handleSubmit = async () => {
 /**
  * 关闭对话框
  */
-const handleClose = () => {
+const requestClose = () => {
+  void dialogRef.value?.requestClose();
+};
+
+const handleClosed = () => {
   if (formRef.value) {
     formRef.value.resetFields();
   }
-  visible.value = false;
 };
 
 // 监听对话框打开

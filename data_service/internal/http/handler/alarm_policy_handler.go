@@ -21,6 +21,41 @@ func NewAlarmPolicyHandler(alarmPolicyService *service.AlarmPolicyService) *Alar
 	return &AlarmPolicyHandler{service: alarmPolicyService}
 }
 
+func (h *AlarmPolicyHandler) GetSettings(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	result, err := h.service.GetSettings(r.Context(), claims, r.PathValue("projectId"))
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+func (h *AlarmPolicyHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		EscalationIntervalSeconds         int `json:"escalationIntervalSeconds"`
+		RepeatNotificationIntervalSeconds int `json:"repeatNotificationIntervalSeconds"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.UpdateSettings(r.Context(), claims, r.PathValue("projectId"), service.UpdateAlarmProjectSettingsInput{
+		EscalationIntervalSeconds: request.EscalationIntervalSeconds, RepeatNotificationIntervalSeconds: request.RepeatNotificationIntervalSeconds,
+	})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 func (h *AlarmPolicyHandler) ListGroups(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {

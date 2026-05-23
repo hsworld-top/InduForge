@@ -17,12 +17,6 @@
     </nav>
 
     <div class="datacenter-nav-rail__actions" aria-label="数据中心快捷操作">
-      <!-- 预览会话状态徽标：仅 access-source 模块且预览激活时显示 -->
-      <StatusIndicator
-        v-if="activeModule === 'access-source' && previewSessionActive"
-        :state="previewSessionState"
-        @click="$emit('previewIndicatorClick', $event)"
-      />
       <slot name="actions" />
     </div>
   </aside>
@@ -33,7 +27,6 @@ import IconTablerBell from "~icons/tabler/bell";
 import IconTablerCalculator from "~icons/tabler/calculator";
 import IconTablerDatabase from "~icons/tabler/database";
 import IconTablerPlugConnected from "~icons/tabler/plug-connected";
-import StatusIndicator from "@/components/shared/StatusIndicator.vue";
 import type {
   DatacenterModuleId,
   DatacenterModuleMeta,
@@ -42,16 +35,10 @@ import type {
 const props = defineProps<{
   modules: DatacenterModuleMeta[];
   activeModule: DatacenterModuleId;
-  /** 预览会话是否激活（由父组件传入，避免在 NavRail 内直接依赖 store） */
-  previewSessionActive?: boolean;
-  /** 预览会话连接状态 */
-  previewSessionState?: "disconnected" | "connecting" | "connected" | "reconnecting";
 }>();
 
 defineEmits<{
   (event: "update:activeModule", value: DatacenterModuleId): void;
-  /** 用户点击预览徽标时通知父层 */
-  (event: "previewIndicatorClick", state: string): void;
 }>();
 
 // 使用 v2 模块 ID 映射图标

@@ -8,14 +8,9 @@
           :tone="socketConnected ? 'success' : 'neutral'"
         />
         <WorkbenchStatusPill
-          v-if="enabledTags.length > 0"
-          :label="`${enabledTags.length} 个启用变量`"
+          v-if="tags.length > 0"
+          :label="`${tags.length} 个变量`"
           tone="info"
-        />
-        <WorkbenchStatusPill
-          v-if="tags.length > enabledTags.length"
-          :label="`${tags.length - enabledTags.length} 个已禁用`"
-          tone="warning"
         />
       </div>
       <div class="mqtt-tag-monitor__actions">
@@ -46,19 +41,12 @@
 
     <div class="mqtt-tag-monitor__body">
       <div
-        v-if="enabledTags.length === 0"
+        v-if="tags.length === 0"
         class="mqtt-tag-monitor__empty"
       >
         <IconTablerFile />
-        <div v-if="tags.length === 0">暂无变量</div>
-        <div v-else>暂无启用的变量</div>
-        <small>
-          {{
-            tags.length === 0
-              ? "请先在左侧创建变量"
-              : "请在左侧启用变量以开始监控"
-          }}
-        </small>
+        <div>暂无变量</div>
+        <small>请先在变量管理中创建变量</small>
       </div>
 
       <div
@@ -66,7 +54,7 @@
         class="tag-card-grid"
       >
         <div
-          v-for="tag in enabledTags"
+          v-for="tag in tags"
           :key="tag.id"
           class="tag-card"
           :class="`is-${tag.currentValue?.quality || 'unknown'}`"
@@ -140,7 +128,7 @@
           <span>时间戳</span>
           <span>质量</span>
         </div>
-        <div v-for="tag in enabledTags" :key="tag.id" class="tag-row">
+        <div v-for="tag in tags" :key="tag.id" class="tag-row">
           <span class="truncate" :title="tag.name">{{ tag.name }}</span>
           <span>{{ getDataTypeLabel(tag.dataType) }}</span>
           <span class="truncate">
@@ -172,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch, toRef } from "vue";
+import { ref, onMounted, onBeforeUnmount, watch, toRef } from "vue";
 import { ElMessage } from "element-plus";
 import { getMqttTags } from "@/api/data.api";
 import { useMqttSocket } from "@/composables/useMqttSocket";
@@ -202,10 +190,6 @@ const props = defineProps({
 
 const tags = ref([]);
 const viewMode = ref("list");
-
-const enabledTags = computed(() => {
-  return tags.value.filter((tag) => tag.isEnabled);
-});
 
 const {
   connected: socketConnected,
@@ -332,16 +316,6 @@ const handleTagSyncEvent = async (event) => {
     case "deleted":
       tags.value = tags.value.filter((tag) => tag.id !== event.data.tagId);
       break;
-    case "toggled": {
-      const tag = tags.value.find((item) => item.id === event.data.tagId);
-      if (tag) {
-        tag.isEnabled = event.data.isEnabled;
-        if (socketConnected.value) {
-          syncSubscriptions();
-        }
-      }
-      break;
-    }
   }
 };
 
@@ -350,7 +324,7 @@ const syncSubscriptions = () => {
     return;
   }
 
-  const desiredIds = new Set(enabledTags.value.map((tag) => tag.id));
+  const desiredIds = new Set(tags.value.map((tag) => tag.id));
 
   desiredIds.forEach((tagId) => {
     if (!tagSubscriptionCleanups.has(tagId)) {
@@ -384,7 +358,7 @@ onMounted(async () => {
   stopSocketWatch = watch(
     () => [
       socketConnected.value,
-      enabledTags.value.map((tag) => tag.id).join(","),
+      tags.value.map((tag) => tag.id).join(","),
     ],
     () => {
       if (!socketConnected.value) {

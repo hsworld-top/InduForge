@@ -36,15 +36,13 @@
         <template v-if="searchText"> · 筛选 {{ filteredMessages.length }} 条</template>
       </span>
       <span v-if="lastMessageTime">最后消息 {{ formatTimestamp(lastMessageTime) }}</span>
-      <button type="button" class="mqtt-message-viewer__toggle" @click="handleToggleSubscription">
-        {{ subscriptionEnabled ? "禁用订阅" : "启用订阅" }}
-      </button>
+      <span>{{ isConnected ? "实时订阅已启用" : "实时订阅已停止" }}</span>
     </footer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import dayjs from "dayjs";
 import IconTablerRss from "~icons/tabler/rss";
@@ -87,7 +85,6 @@ const autoScroll = ref(true);
 const showTimestamp = ref(true);
 const formatJson = ref(true);
 const isConnected = ref(false);
-const subscriptionEnabled = ref(false);
 const messageListRef = ref<any>(null);
 
 const subscriptionTitle = computed(
@@ -203,38 +200,18 @@ const handleClear = () => {
   messages.value = [];
 };
 
-const handleToggleSubscription = async () => {
-  if (!props.subscription?.id) return;
-
-  try {
-    const response = await dataAPI.toggleMqttSubscription(
-      props.projectId,
-      props.subscription.id,
-    );
-    subscriptionEnabled.value = Boolean(response.data?.isEnabled);
-    ElMessage.success(`订阅已${subscriptionEnabled.value ? "启用" : "禁用"}`);
-  } catch (error) {
-    ElMessage.error("操作失败：" + getApiErrorMessage(error, "操作失败"));
-  }
-};
-
 watch(
   () => props.subscription,
   (subscription) => {
     messages.value = [];
     searchText.value = "";
     isConnected.value = false;
-    subscriptionEnabled.value = Boolean(subscription?.isEnabled);
     if (subscription?.id) {
       loadMessages();
     }
   },
   { immediate: true },
 );
-
-onMounted(() => {
-  subscriptionEnabled.value = Boolean(props.subscription?.isEnabled);
-});
 
 defineExpose({
   addMessage,
@@ -271,19 +248,4 @@ defineExpose({
   font-size: 11px;
 }
 
-.mqtt-message-viewer__toggle {
-  height: 24px;
-  padding: 0 9px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-raised);
-  color: var(--dc-text-secondary);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.mqtt-message-viewer__toggle:hover {
-  border-color: color-mix(in oklch, var(--dc-primary) 28%, var(--dc-border));
-  color: var(--dc-primary);
-}
 </style>

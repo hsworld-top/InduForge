@@ -4,6 +4,8 @@
     title="重命名分组"
     width="420px"
     body-max-height="220px"
+    :dirty="isDirty"
+    :close-disabled="loading"
     @close="resetForm"
   >
     <el-form label-position="top" class="compute-folder-rename-dialog">
@@ -67,6 +69,12 @@ const canSubmit = computed(
     name.value.trim().length > 0 &&
     name.value.trim() !== props.folder?.name &&
     !props.loading,
+);
+const isDirty = computed(
+  () =>
+    visible.value &&
+    Boolean(props.folder) &&
+    name.value.trim() !== (props.folder?.name || ""),
 );
 
 function resetForm() {

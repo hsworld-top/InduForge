@@ -30,6 +30,7 @@
       @rename-group="openRenameGroupDialog"
       @move-group="openMoveGroupDialog"
       @delete-group="deleteGroupFromTree"
+      @open-settings="openSettingsDialog"
     />
 
     <AlarmEditorShell
@@ -130,6 +131,15 @@
       :loading="alarmStore.saving"
       @submit="moveGroup"
     />
+
+    <AlarmProjectSettingsDialog
+      v-model="settingsDialogVisible"
+      :settings="alarmStore.settings.data"
+      :loading="alarmStore.settings.loading"
+      :submitting="alarmStore.settings.saving"
+      :error="alarmStore.settings.error"
+      @submit="saveSettings"
+    />
   </div>
 </template>
 
@@ -157,6 +167,7 @@ import {
 import AlarmBulkConditionDialog from "./AlarmBulkConditionDialog.vue";
 import AlarmEditorShell, { type AlarmEditorTab } from "./AlarmEditorShell.vue";
 import AlarmPolicyManager from "./AlarmPolicyManager.vue";
+import AlarmProjectSettingsDialog from "./AlarmProjectSettingsDialog.vue";
 import CreateAlarmGroupDialog from "./CreateAlarmGroupDialog.vue";
 import CreateAlarmPolicyDialog from "./CreateAlarmPolicyDialog.vue";
 import MoveAlarmGroupDialog from "./MoveAlarmGroupDialog.vue";
@@ -186,6 +197,7 @@ const renamePolicyDialogVisible = ref(false);
 const movePolicyDialogVisible = ref(false);
 const renameGroupDialogVisible = ref(false);
 const moveGroupDialogVisible = ref(false);
+const settingsDialogVisible = ref(false);
 const targetPickerVisible = ref(false);
 const listParams = ref<Record<string, string>>({});
 const contextPolicy = ref<AlarmPolicy | null>(null);
@@ -257,6 +269,28 @@ const cleanParams = (params: Record<string, string>) =>
 
 const reloadList = () =>
   alarmStore.fetchTree(props.projectId, listParams.value);
+
+const openSettingsDialog = async () => {
+  settingsDialogVisible.value = true;
+  try {
+    await alarmStore.fetchSettings(props.projectId);
+  } catch {
+    // 弹窗内会展示错误，这里不打断用户操作。
+  }
+};
+
+const saveSettings = async (payload: {
+  escalationIntervalSeconds: number;
+  repeatNotificationIntervalSeconds: number;
+}) => {
+  try {
+    await alarmStore.saveSettings(props.projectId, payload);
+    settingsDialogVisible.value = false;
+    ElMessage.success("报警设置已保存");
+  } catch {
+    // store 已记录错误，弹窗内展示。
+  }
+};
 
 const filterList = (params: Record<string, string>) => {
   listParams.value = cleanParams(params);

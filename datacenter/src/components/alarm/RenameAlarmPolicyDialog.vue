@@ -4,6 +4,8 @@
     title="重命名报警策略"
     width="420px"
     body-max-height="220px"
+    :dirty="isDirty"
+    :close-disabled="loading"
     @close="resetForm"
   >
     <el-form label-position="top" class="alarm-rename-dialog">
@@ -67,6 +69,12 @@ const canSubmit = computed(
     name.value.trim().length > 0 &&
     name.value.trim() !== props.policy?.name &&
     !props.loading,
+);
+const isDirty = computed(
+  () =>
+    visible.value &&
+    Boolean(props.policy) &&
+    name.value.trim() !== (props.policy?.name || ""),
 );
 
 function resetForm() {

@@ -188,6 +188,9 @@ func mountAlarmPolicyRoutes(mux *http.ServeMux, opts options) {
 	mux.Handle("PATCH /api/v1/data/projects/{projectId}/alarm-policy-groups/{id}/enabled", write(opts.alarmPolicyHandler.ToggleGroupEnabled))
 	mux.Handle("DELETE /api/v1/data/projects/{projectId}/alarm-policy-groups/{id}", write(opts.alarmPolicyHandler.DeleteGroup))
 
+	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-settings", read(opts.alarmPolicyHandler.GetSettings))
+	mux.Handle("PUT /api/v1/data/projects/{projectId}/alarm-settings", write(opts.alarmPolicyHandler.UpdateSettings))
+
 	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-policies", read(opts.alarmPolicyHandler.List))
 	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-policies/tree", read(opts.alarmPolicyHandler.Tree))
 	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-policies/coverage", read(opts.alarmPolicyHandler.Coverage))
@@ -439,6 +442,30 @@ func mountConnectionRoutes(mux *http.ServeMux, opts options) {
 			),
 		),
 	)
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/connections/{connectionId}/redis/keys",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.connectionHandler.ListRedisKeys),
+			),
+		),
+	)
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/connections/{connectionId}/redis/value",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.connectionHandler.GetRedisValue),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/connections/{connectionId}/redis/command",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.connectionHandler.ExecuteRedisCommand),
+			),
+		),
+	)
 }
 
 func mountDataRoutes(mux *http.ServeMux, opts options) {
@@ -667,6 +694,22 @@ func mountMqttRoutes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/mqtt/connections/{connectionId}/subscription-groups",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.mqttHandler.ListSubscriptionGroups),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/mqtt/connections/{connectionId}/subscription-groups",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.mqttHandler.CreateSubscriptionGroup),
+			),
+		),
+	)
+	mux.Handle(
 		"POST /api/v1/data/projects/{projectId}/mqtt/connections/{connectionId}/subscriptions",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:write")(
@@ -699,10 +742,18 @@ func mountMqttRoutes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
-		"PATCH /api/v1/data/projects/{projectId}/mqtt/subscriptions/{subscriptionId}/toggle",
+		"PUT /api/v1/data/projects/{projectId}/mqtt/subscription-groups/{groupId}",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:write")(
-				middleware.ErrorHandler(opts.mqttHandler.ToggleSubscription),
+				middleware.ErrorHandler(opts.mqttHandler.UpdateSubscriptionGroup),
+			),
+		),
+	)
+	mux.Handle(
+		"DELETE /api/v1/data/projects/{projectId}/mqtt/subscription-groups/{groupId}",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.mqttHandler.DeleteSubscriptionGroup),
 			),
 		),
 	)
@@ -711,37 +762,6 @@ func mountMqttRoutes(mux *http.ServeMux, opts options) {
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:read")(
 				middleware.ErrorHandler(opts.mqttHandler.ListMessages),
-			),
-		),
-	)
-}
-
-func mountProjectSnapshotRoutes(mux *http.ServeMux, opts options) {
-	if mux == nil || opts.jwtValidator == nil || opts.projectSnapshotHandler == nil {
-		return
-	}
-
-	mux.Handle(
-		"GET /api/v1/data/projects/{projectId}/snapshot",
-		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:read")(
-				middleware.ErrorHandler(opts.projectSnapshotHandler.Get),
-			),
-		),
-	)
-	mux.Handle(
-		"GET /api/v1/data/projects/{projectId}/artifact",
-		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:read")(
-				middleware.ErrorHandler(opts.projectSnapshotHandler.GetArtifact),
-			),
-		),
-	)
-	mux.Handle(
-		"PUT /api/v1/data/projects/{projectId}/snapshot",
-		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:write")(
-				middleware.ErrorHandler(opts.projectSnapshotHandler.Replace),
 			),
 		),
 	)
@@ -850,14 +870,6 @@ func mountProjectSnapshotRoutes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
-		"PATCH /api/v1/data/projects/{projectId}/mqtt/tags/{tagId}/toggle",
-		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:write")(
-				middleware.ErrorHandler(opts.mqttHandler.ToggleTag),
-			),
-		),
-	)
-	mux.Handle(
 		"PUT /api/v1/data/projects/{projectId}/mqtt/tags/order",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:write")(
@@ -878,6 +890,37 @@ func mountProjectSnapshotRoutes(mux *http.ServeMux, opts options) {
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:read")(
 				middleware.ErrorHandler(opts.mqttHandler.GetTagValues),
+			),
+		),
+	)
+}
+
+func mountProjectSnapshotRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.jwtValidator == nil || opts.projectSnapshotHandler == nil {
+		return
+	}
+
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/snapshot",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.projectSnapshotHandler.Get),
+			),
+		),
+	)
+	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/artifact",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.projectSnapshotHandler.GetArtifact),
+			),
+		),
+	)
+	mux.Handle(
+		"PUT /api/v1/data/projects/{projectId}/snapshot",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.projectSnapshotHandler.Replace),
 			),
 		),
 	)

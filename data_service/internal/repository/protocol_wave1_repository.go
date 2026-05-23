@@ -115,8 +115,11 @@ func (r *ProtocolWave1Repository) CreateKafkaConfig(ctx context.Context, params 
 		Type:      "kafka",
 		Status:    params.Status,
 		Metadata: map[string]any{
-			"brokers": params.Brokers,
-			"topic":   params.Topic,
+			"brokers":       params.Brokers,
+			"topic":         params.Topic,
+			"consumerGroup": params.ConsumerGroup,
+			"startPosition": params.StartPosition,
+			"options":       cloneProtocolMap(params.Options),
 		},
 	})
 	if err != nil {
@@ -195,8 +198,11 @@ func (r *ProtocolWave1Repository) CreateHTTPConfig(ctx context.Context, params C
 		Type:      "http",
 		Status:    params.Status,
 		Metadata: map[string]any{
-			"baseUrl": params.BaseURL,
-			"method":  params.Method,
+			"baseUrl":      params.BaseURL,
+			"method":       params.Method,
+			"headers":      cloneProtocolMap(params.Headers),
+			"timeoutMs":    params.TimeoutMS,
+			"bodyTemplate": cloneProtocolMap(params.BodyTemplate),
 		},
 	})
 	if err != nil {
@@ -244,7 +250,10 @@ func (r *ProtocolWave1Repository) CreateWebSocketConfig(ctx context.Context, par
 		Type:      "websocket",
 		Status:    params.Status,
 		Metadata: map[string]any{
-			"url": params.URL,
+			"url":                 params.URL,
+			"topic":               params.Topic,
+			"headers":             cloneProtocolMap(params.Headers),
+			"heartbeatIntervalMs": params.HeartbeatIntervalMS,
 		},
 	})
 	if err != nil {
@@ -291,8 +300,13 @@ func (r *ProtocolWave1Repository) CreateRedisConfig(ctx context.Context, params 
 		Type:      "redis",
 		Status:    params.Status,
 		Metadata: map[string]any{
-			"address": params.Address,
-			"db":      params.DB,
+			"address":    params.Address,
+			"db":         params.DB,
+			"username":   params.Username,
+			"password":   params.Password,
+			"keyPattern": params.KeyPattern,
+			"mode":       params.Mode,
+			"options":    cloneProtocolMap(params.Options),
 		},
 	})
 	if err != nil {
@@ -382,6 +396,17 @@ func marshalProtocolJSONObject(input map[string]any, emptyAsObject bool) (any, e
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "协议 JSON 配置格式无效", err)
 	}
 	return string(payload), nil
+}
+
+func cloneProtocolMap(input map[string]any) map[string]any {
+	if input == nil {
+		return map[string]any{}
+	}
+	result := make(map[string]any, len(input))
+	for key, value := range input {
+		result[key] = value
+	}
+	return result
 }
 
 func rollbackProtocolTxQuietly(ctx context.Context, tx pgx.Tx) {

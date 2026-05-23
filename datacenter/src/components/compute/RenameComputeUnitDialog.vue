@@ -4,6 +4,8 @@
     title="重命名计算单元"
     width="420px"
     body-max-height="220px"
+    :dirty="isDirty"
+    :close-disabled="loading"
     @close="resetForm"
   >
     <el-form label-position="top" class="compute-rename-dialog">
@@ -67,6 +69,12 @@ const canSubmit = computed(
     name.value.trim().length > 0 &&
     name.value.trim() !== props.unit?.name &&
     !props.loading,
+);
+const isDirty = computed(
+  () =>
+    visible.value &&
+    Boolean(props.unit) &&
+    name.value.trim() !== (props.unit?.name || ""),
 );
 
 function resetForm() {

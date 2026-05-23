@@ -4,6 +4,8 @@
     title="新建报警分组"
     width="460px"
     body-max-height="320px"
+    :dirty="isDirty"
+    :close-disabled="submitting"
     @close="resetForm"
   >
     <el-form label-position="top" class="alarm-group-dialog">
@@ -90,6 +92,11 @@ const form = reactive<AlarmPolicyGroupSave>({
 
 const canSubmit = computed(
   () => form.name.trim().length > 0 && !props.submitting,
+);
+const isDirty = computed(
+  () =>
+    visible.value &&
+    (form.name.trim().length > 0 || Boolean(form.parentId)),
 );
 
 const flattenGroups = (

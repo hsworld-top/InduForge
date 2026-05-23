@@ -55,7 +55,6 @@ type SnapshotMqttSubscriptionRecord struct {
 	Topic            string    `json:"topic"`
 	QOS              int       `json:"qos"`
 	Description      *string   `json:"description"`
-	IsEnabled        bool      `json:"isEnabled"`
 	MessageRetention int       `json:"messageRetention"`
 	CreatedAt        time.Time `json:"createdAt"`
 	UpdatedAt        time.Time `json:"updatedAt"`
@@ -92,7 +91,6 @@ type SnapshotMqttTagRecord struct {
 	Unit           *string        `json:"unit"`
 	Transform      *string        `json:"transform"`
 	Validation     map[string]any `json:"validation"`
-	IsEnabled      bool           `json:"isEnabled"`
 	Order          int            `json:"order"`
 	CreatedAt      time.Time      `json:"createdAt"`
 	UpdatedAt      time.Time      `json:"updatedAt"`
@@ -731,7 +729,7 @@ func (r *ProjectSnapshotRepository) listMqttConfigs(ctx context.Context, project
 
 func (r *ProjectSnapshotRepository) listMqttSubscriptions(ctx context.Context, projectID string) ([]SnapshotMqttSubscriptionRecord, error) {
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, connection_id, name, topic, qos, description, is_enabled, message_retention, created_at, updated_at
+        SELECT id, project_id, connection_id, name, topic, qos, description, message_retention, created_at, updated_at
         FROM data_mqtt_subscriptions
         WHERE project_id = $1
         ORDER BY created_at ASC
@@ -752,7 +750,6 @@ func (r *ProjectSnapshotRepository) listMqttSubscriptions(ctx context.Context, p
 			&record.Topic,
 			&record.QOS,
 			&record.Description,
-			&record.IsEnabled,
 			&record.MessageRetention,
 			&record.CreatedAt,
 			&record.UpdatedAt,
@@ -808,7 +805,7 @@ func (r *ProjectSnapshotRepository) listMqttTagGroups(ctx context.Context, proje
 func (r *ProjectSnapshotRepository) listMqttTags(ctx context.Context, projectID string) ([]SnapshotMqttTagRecord, error) {
 	rows, err := r.pool.Query(ctx, `
         SELECT id, project_id, subscription_id, group_id, name, code, description, data_type, parse_type, parse_rule,
-               default_value, unit, transform, validation, is_enabled, display_order, created_at, updated_at
+               default_value, unit, transform, validation, display_order, created_at, updated_at
         FROM data_mqtt_tags
         WHERE project_id = $1
         ORDER BY display_order ASC, created_at ASC
@@ -837,7 +834,6 @@ func (r *ProjectSnapshotRepository) listMqttTags(ctx context.Context, projectID 
 			&record.Unit,
 			&record.Transform,
 			&validationBytes,
-			&record.IsEnabled,
 			&record.Order,
 			&record.CreatedAt,
 			&record.UpdatedAt,
@@ -942,11 +938,11 @@ func (r *ProjectSnapshotRepository) insertMqttSubscriptions(ctx context.Context,
 		updatedAt := coalesceTime(subscription.UpdatedAt)
 		if _, err := tx.Exec(ctx, `
             INSERT INTO data_mqtt_subscriptions (
-                id, project_id, connection_id, name, topic, qos, description, is_enabled,
+                id, project_id, connection_id, name, topic, qos, description,
                 message_retention, created_by, updated_by, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-        `, subscription.ID, projectID, subscription.ConnectionID, subscription.Name, subscription.Topic, subscription.QOS, subscription.Description, subscription.IsEnabled, subscription.MessageRetention, actorID, actorID, createdAt, updatedAt); err != nil {
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        `, subscription.ID, projectID, subscription.ConnectionID, subscription.Name, subscription.Topic, subscription.QOS, subscription.Description, subscription.MessageRetention, actorID, actorID, createdAt, updatedAt); err != nil {
 			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入快照 MQTT 订阅失败", err)
 		}
 	}
@@ -981,10 +977,10 @@ func (r *ProjectSnapshotRepository) insertMqttTags(ctx context.Context, tx pgx.T
 		if _, err := tx.Exec(ctx, `
             INSERT INTO data_mqtt_tags (
                 id, project_id, subscription_id, group_id, name, code, description, data_type, parse_type, parse_rule,
-                default_value, unit, transform, validation, is_enabled, display_order, created_by, updated_by, created_at, updated_at
+                default_value, unit, transform, validation, display_order, created_by, updated_by, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, $18, $19, $20)
-        `, tag.ID, projectID, tag.SubscriptionID, tag.GroupID, tag.Name, tag.Code, tag.Description, tag.DataType, tag.ParseType, tag.ParseRule, tag.DefaultValue, tag.Unit, tag.Transform, nullableJSONString(validationBytes), tag.IsEnabled, tag.Order, actorID, actorID, createdAt, updatedAt); err != nil {
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, $18, $19)
+        `, tag.ID, projectID, tag.SubscriptionID, tag.GroupID, tag.Name, tag.Code, tag.Description, tag.DataType, tag.ParseType, tag.ParseRule, tag.DefaultValue, tag.Unit, tag.Transform, nullableJSONString(validationBytes), tag.Order, actorID, actorID, createdAt, updatedAt); err != nil {
 			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入快照 MQTT 变量失败", err)
 		}
 	}

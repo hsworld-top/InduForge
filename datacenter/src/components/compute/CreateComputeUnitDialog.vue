@@ -4,6 +4,8 @@
     title="新建计算单元"
     width="520px"
     body-max-height="420px"
+    :dirty="isDirty"
+    :close-disabled="loading"
     @close="resetForm"
   >
     <el-form label-position="top" class="compute-create-dialog">
@@ -110,6 +112,15 @@ const form = reactive<ComputeUnitSave>({
 });
 
 const canSubmit = computed(() => form.name.trim().length > 0 && !props.loading);
+const isDirty = computed(
+  () =>
+    visible.value &&
+    (form.name.trim().length > 0 ||
+      form.description.trim().length > 0 ||
+      form.lang !== "javascript" ||
+      Boolean(form.folderId) ||
+      Boolean(form.code)),
+);
 
 const flattenFolders = (
   folders: ComputeFolder[],

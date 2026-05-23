@@ -4,6 +4,8 @@
     title="移动已选策略"
     width="460px"
     body-max-height="260px"
+    :dirty="isDirty"
+    :close-disabled="loading"
     @close="resetForm"
   >
     <el-form label-position="top" class="alarm-bulk-move-dialog">
@@ -70,6 +72,7 @@ const visible = computed({
 
 const groupId = ref<string | null>(null);
 const canSubmit = computed(() => props.selectedCount > 0 && !props.loading);
+const isDirty = computed(() => visible.value && Boolean(groupId.value));
 
 function resetForm() {
   groupId.value = null;

@@ -89,12 +89,14 @@
       />
     </section>
 
-    <AlarmConditionMatrix
-      :conditions="draft.conditions"
-      :mode="draft.mode"
-      :targets="draft.targets"
-      @update="updateField('conditions', $event)"
-    />
+    <section class="alarm-policy-form__condition-scroll" aria-label="报警配置区域">
+      <AlarmConditionMatrix
+        :conditions="draft.conditions"
+        :mode="draft.mode"
+        :targets="draft.targets"
+        @update="updateField('conditions', $event)"
+      />
+    </section>
   </form>
 </template>
 
@@ -193,17 +195,33 @@ const removeTarget = (datapointId: string) => {
 
 <style scoped>
 .alarm-policy-form {
+  min-height: 0;
+  height: 100%;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;
+  overflow: hidden;
+}
+
+.alarm-policy-form:has(.alarm-policy-form__section + .alarm-policy-form__section) {
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 
 .alarm-policy-form__section {
+  min-height: 0;
   display: grid;
   gap: 10px;
   padding: 14px;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-sm);
   background: var(--dc-surface-raised);
+}
+
+.alarm-policy-form__condition-scroll {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+  scrollbar-gutter: stable;
 }
 
 .alarm-policy-form__section header {

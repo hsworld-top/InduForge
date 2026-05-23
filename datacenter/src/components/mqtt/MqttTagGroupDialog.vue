@@ -1,8 +1,11 @@
 <template>
   <DcDialog
+    ref="dialogRef"
     :model-value="visible"
     :title="dialogTitle"
     width="600px"
+    :dirty="isDirty"
+    :close-disabled="submitting"
     @close="handleClose"
   >
     <el-form ref="formRef" :model="formData" :rules="rules" label-width="100px">
@@ -51,7 +54,7 @@
     </el-form>
 
     <template #footer>
-      <el-button @click="handleClose">取消</el-button>
+      <el-button @click="requestClose">取消</el-button>
       <el-button type="primary" @click="handleSubmit" :loading="submitting">
         {{ mode === "create" ? "创建" : "更新" }}
       </el-button>
@@ -94,6 +97,8 @@ const emit = defineEmits(["close", "success"]);
 // 状态
 const formRef = ref(null);
 const submitting = ref(false);
+const initialSnapshot = ref("");
+const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null);
 const presetColors = [
   "#3b82f6",
   "#10b981",
@@ -124,6 +129,10 @@ const rules = {
 const dialogTitle = computed(() => {
   return props.mode === "create" ? "新建变量组" : "编辑变量组";
 });
+const formSnapshot = computed(() => JSON.stringify(formData.value));
+const isDirty = computed(
+  () => props.visible && formSnapshot.value !== initialSnapshot.value,
+);
 
 /**
  * 选择分组颜色
@@ -181,6 +190,7 @@ watch(
         order: 0,
       };
     }
+    initialSnapshot.value = formSnapshot.value;
   },
   { immediate: true },
 );
@@ -191,6 +201,10 @@ watch(
  */
 const handleClose = () => {
   emit("close");
+};
+
+const requestClose = () => {
+  void dialogRef.value?.requestClose();
 };
 
 /**
@@ -217,6 +231,7 @@ const handleSubmit = async () => {
       await updateMqttTagGroup(props.projectId, props.group.id, formData.value);
     }
 
+    initialSnapshot.value = formSnapshot.value;
     emit("success");
   } catch (error) {
     if (error !== false) {

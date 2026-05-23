@@ -17,19 +17,20 @@ import (
 )
 
 var allowedAlarmRuleTypes = map[string]struct{}{
-	"H":              {},
-	"L":              {},
-	"HH":             {},
-	"LL":             {},
-	"deviation_high": {},
-	"deviation_low":  {},
-	"rate_of_change": {},
-	"bool_equal":     {},
-	"string_equal":   {},
+	"H":                {},
+	"L":                {},
+	"HH":               {},
+	"LL":               {},
+	"deviation_high":   {},
+	"deviation_low":    {},
+	"rate_of_change":   {},
+	"bool_equal":       {},
+	"bool_transition":  {},
+	"string_equal":     {},
 	"string_not_equal": {},
 	"string_contains":  {},
 	"string_regex":     {},
-	"cel":            {},
+	"cel":              {},
 }
 
 var allowedAlarmSeverities = map[string]struct{}{
@@ -686,6 +687,13 @@ func validateAlarmCondition(ruleType string, condition map[string]any) error {
 		if _, err := anyToFloat64(condition["limit"]); err != nil {
 			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "condition.limit 必须是数值")
 		}
+		if isThresholdConditionType(ruleType) {
+			if hysteresis, ok, err := optionalAlarmFloat(condition, "hysteresis"); err != nil {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "condition.hysteresis 必须是数值")
+			} else if ok && hysteresis < 0 {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "condition.hysteresis 不能小于 0")
+			}
+		}
 		if ruleType == "rate_of_change" {
 			if _, err := anyToFloat64(condition["windowMs"]); err != nil {
 				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "rate_of_change 规则需要数值 condition.windowMs")
@@ -694,6 +702,13 @@ func validateAlarmCondition(ruleType string, condition map[string]any) error {
 	case "bool_equal":
 		if _, ok := condition["expected"].(bool); !ok {
 			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "bool_equal 规则需要布尔 condition.expected")
+		}
+	case "bool_transition":
+		if _, ok := condition["from"].(bool); !ok {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "bool_transition 规则需要布尔 condition.from")
+		}
+		if _, ok := condition["to"].(bool); !ok {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "bool_transition 规则需要布尔 condition.to")
 		}
 	case "string_equal", "string_not_equal", "string_contains":
 		if strings.TrimSpace(fmt.Sprintf("%v", condition["expected"])) == "" {
@@ -720,15 +735,17 @@ func validateAlarmCondition(ruleType string, condition map[string]any) error {
 func evaluateAlarmRule(ruleType string, condition map[string]any, value any, context map[string]any) (*AlarmRuleEvaluationResult, error) {
 	switch ruleType {
 	case "H", "HH":
-		return evaluateUpperLimit(ruleType, condition, value)
+		return evaluateUpperLimit(ruleType, condition, value, context)
 	case "L", "LL":
-		return evaluateLowerLimit(ruleType, condition, value)
+		return evaluateLowerLimit(ruleType, condition, value, context)
 	case "deviation_high", "deviation_low":
 		return evaluateDeviation(ruleType, condition, value, context)
 	case "rate_of_change":
 		return evaluateRateOfChange(condition, value, context)
 	case "bool_equal":
 		return evaluateBoolEqual(condition, value)
+	case "bool_transition":
+		return evaluateBoolTransition(condition, value, context)
 	case "string_equal", "string_not_equal", "string_contains", "string_regex":
 		return evaluateStringMatch(ruleType, condition, value)
 	case "cel":
@@ -738,7 +755,7 @@ func evaluateAlarmRule(ruleType string, condition map[string]any, value any, con
 	}
 }
 
-func evaluateUpperLimit(ruleType string, condition map[string]any, value any) (*AlarmRuleEvaluationResult, error) {
+func evaluateUpperLimit(ruleType string, condition map[string]any, value any, context map[string]any) (*AlarmRuleEvaluationResult, error) {
 	number, err := anyToFloat64(value)
 	if err != nil {
 		return nil, err
@@ -747,16 +764,33 @@ func evaluateUpperLimit(ruleType string, condition map[string]any, value any) (*
 	if err != nil {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "condition.limit 必须是数值")
 	}
-	triggered := number >= limit
+	hysteresis, err := thresholdHysteresis(condition)
+	if err != nil {
+		return nil, err
+	}
+	wasTriggered := contextAlarmActive(context)
+	triggerLimit := limit + hysteresis
+	recoverLimit := limit - hysteresis
+	triggered := number >= triggerLimit
+	stateReason := "value >= limit + hysteresis"
+	if wasTriggered {
+		triggered = number > recoverLimit
+		stateReason = "active until value <= limit - hysteresis"
+	}
 	return alarmEvaluation(triggered, map[string]any{
-		"sampleValue": number,
-		"limit":       limit,
-		"ruleType":    ruleType,
-		"reason":      "value >= limit",
+		"sampleValue":  number,
+		"limit":        limit,
+		"hysteresis":   hysteresis,
+		"triggerLimit": triggerLimit,
+		"recoverLimit": recoverLimit,
+		"wasTriggered": wasTriggered,
+		"deadband":     []float64{recoverLimit, triggerLimit},
+		"ruleType":     ruleType,
+		"reason":       stateReason,
 	}), nil
 }
 
-func evaluateLowerLimit(ruleType string, condition map[string]any, value any) (*AlarmRuleEvaluationResult, error) {
+func evaluateLowerLimit(ruleType string, condition map[string]any, value any, context map[string]any) (*AlarmRuleEvaluationResult, error) {
 	number, err := anyToFloat64(value)
 	if err != nil {
 		return nil, err
@@ -765,12 +799,29 @@ func evaluateLowerLimit(ruleType string, condition map[string]any, value any) (*
 	if err != nil {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "condition.limit 必须是数值")
 	}
-	triggered := number <= limit
+	hysteresis, err := thresholdHysteresis(condition)
+	if err != nil {
+		return nil, err
+	}
+	wasTriggered := contextAlarmActive(context)
+	triggerLimit := limit - hysteresis
+	recoverLimit := limit + hysteresis
+	triggered := number <= triggerLimit
+	stateReason := "value <= limit - hysteresis"
+	if wasTriggered {
+		triggered = number < recoverLimit
+		stateReason = "active until value >= limit + hysteresis"
+	}
 	return alarmEvaluation(triggered, map[string]any{
-		"sampleValue": number,
-		"limit":       limit,
-		"ruleType":    ruleType,
-		"reason":      "value <= limit",
+		"sampleValue":  number,
+		"limit":        limit,
+		"hysteresis":   hysteresis,
+		"triggerLimit": triggerLimit,
+		"recoverLimit": recoverLimit,
+		"wasTriggered": wasTriggered,
+		"deadband":     []float64{triggerLimit, recoverLimit},
+		"ruleType":     ruleType,
+		"reason":       stateReason,
 	}), nil
 }
 
@@ -779,7 +830,10 @@ func evaluateDeviation(ruleType string, condition map[string]any, value any, con
 	if err != nil {
 		return nil, err
 	}
-	baseline, ok := contextValue(context, "baselineValue")
+	baseline, ok := condition["baselineValue"]
+	if !ok {
+		baseline, ok = contextValue(context, "baselineValue")
+	}
 	if !ok {
 		return insufficientAlarmInput(map[string]any{"missing": "baselineValue"}), nil
 	}
@@ -863,6 +917,36 @@ func evaluateBoolEqual(condition map[string]any, value any) (*AlarmRuleEvaluatio
 		"sampleValue": actual,
 		"expected":    expected,
 		"reason":      "value == expected",
+	}), nil
+}
+
+func evaluateBoolTransition(condition map[string]any, value any, context map[string]any) (*AlarmRuleEvaluationResult, error) {
+	from, ok := condition["from"].(bool)
+	if !ok {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "bool_transition 规则需要布尔 condition.from")
+	}
+	to, ok := condition["to"].(bool)
+	if !ok {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "bool_transition 规则需要布尔 condition.to")
+	}
+	actual, ok := value.(bool)
+	if !ok {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "采样值不是布尔值")
+	}
+	previous, ok := contextValue(context, "previousValue")
+	if !ok {
+		return insufficientAlarmInput(map[string]any{"missing": "previousValue"}), nil
+	}
+	previousBool, ok := previous.(bool)
+	if !ok {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "previousValue 不是布尔值")
+	}
+	return alarmEvaluation(previousBool == from && actual == to, map[string]any{
+		"sampleValue":   actual,
+		"previousValue": previousBool,
+		"from":          from,
+		"to":            to,
+		"reason":        "previousValue == from && value == to",
 	}), nil
 }
 
@@ -1081,6 +1165,48 @@ func isNumericConditionType(ruleType string) bool {
 	default:
 		return false
 	}
+}
+
+func isThresholdConditionType(conditionType string) bool {
+	return conditionType == "HH" || conditionType == "H" || conditionType == "L" || conditionType == "LL"
+}
+
+func optionalAlarmFloat(condition map[string]any, field string) (float64, bool, error) {
+	value, ok := condition[field]
+	if !ok || value == nil {
+		return 0, false, nil
+	}
+	if text, ok := value.(string); ok && strings.TrimSpace(text) == "" {
+		return 0, false, nil
+	}
+	number, err := anyToFloat64(value)
+	if err != nil {
+		return 0, true, err
+	}
+	return number, true, nil
+}
+
+func thresholdHysteresis(condition map[string]any) (float64, error) {
+	hysteresis, ok, err := optionalAlarmFloat(condition, "hysteresis")
+	if err != nil {
+		return 0, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "condition.hysteresis 必须是数值")
+	}
+	if !ok {
+		return 0, nil
+	}
+	if hysteresis < 0 {
+		return 0, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "condition.hysteresis 不能小于 0")
+	}
+	return hysteresis, nil
+}
+
+func contextAlarmActive(condition map[string]any) bool {
+	for _, key := range []string{"active", "alarmActive", "wasTriggered", "previousTriggered"} {
+		if value, ok := condition[key].(bool); ok {
+			return value
+		}
+	}
+	return false
 }
 
 func isStringConditionType(ruleType string) bool {

@@ -2,10 +2,8 @@
   <DataCenterShell
     v-model:active-module="activeModule"
     :modules="datacenterModules"
-    :preview-session-active="previewSessionActive"
-    :preview-session-state="previewSessionState"
   >
-    <template #actions="{ activeModule: currentModule }">
+    <template #actions>
       <div class="datacenter-side-actions">
         <button
           type="button"
@@ -17,28 +15,6 @@
           <IconTablerShieldCheck class="h-5 w-5" />
           <span>数据契约检查</span>
         </button>
-        <template v-if="currentModule === 'access-source'">
-          <button
-            type="button"
-            class="datacenter-side-action"
-            :title="t('actions.refresh')"
-            :aria-label="t('actions.refresh')"
-            @click="loadConnections"
-          >
-            <IconTablerRefresh class="h-5 w-5" />
-            <span>{{ t("actions.refresh") }}</span>
-          </button>
-          <button
-            type="button"
-            class="datacenter-side-action is-primary"
-            :title="t('actions.createConnection')"
-            :aria-label="t('actions.createConnection')"
-            @click="openCreateConnectionDialog"
-          >
-            <IconTablerPlus class="h-5 w-5" />
-            <span>{{ t("actions.createConnection") }}</span>
-          </button>
-        </template>
       </div>
     </template>
 
@@ -346,7 +322,6 @@ import IconTablerAlertCircle from "~icons/tabler/alert-circle";
 import IconTablerCalculator from "~icons/tabler/calculator";
 import IconTablerBell from "~icons/tabler/bell";
 import IconTablerShieldCheck from "~icons/tabler/shield-check";
-import IconTablerRefresh from "~icons/tabler/refresh";
 import ConnectionList from "@/components/connection/ConnectionList.vue";
 import ConnectionContextMenu from "@/components/connection/ConnectionContextMenu.vue";
 import TableContextMenu from "@/components/connection/TableContextMenu.vue";
@@ -372,7 +347,6 @@ import DataCenterShell from "@/components/layout/DataCenterShell.vue";
 import { useConnection } from "@/composables/useConnection";
 import { useConfirm } from "@/composables/useConfirm";
 import { onBeforeRouteLeave } from "vue-router";
-import { usePreviewSessionStore } from "@/stores/preview-session.store";
 import {
   datacenterModules,
   type DatacenterModuleId,
@@ -451,16 +425,6 @@ const project = computed(() => {
 // 提供给子组件使用
 const projectId = computed(() => project.value?.id);
 provide("projectId", projectId);
-// 预览会话 store（用于 NavRail 徽标条件出现）
-const previewSessionStore = usePreviewSessionStore();
-const previewSessionActive = computed(() => previewSessionStore.active);
-// NavRail 只需要 connected/disconnected 两态；store 暂未暴露 socket state，默认 connected
-const previewSessionState = computed(() =>
-  previewSessionStore.active
-    ? ("connected" as const)
-    : ("disconnected" as const),
-);
-
 // 使用 composable
 const {
   connections,

@@ -64,20 +64,6 @@
             </template>
           </el-table-column>
           <el-table-column prop="qos" label="QoS" width="70" />
-          <el-table-column :label="t('subscription.status')" width="90">
-            <template #default="{ row }">
-              <el-tag
-                size="small"
-                :type="row.isEnabled === false ? 'info' : 'success'"
-              >
-                {{
-                  row.isEnabled === false
-                    ? t("common.disabled")
-                    : t("common.enabled")
-                }}
-              </el-tag>
-            </template>
-          </el-table-column>
           <el-table-column :label="t('subscription.remark')" min-width="120">
             <template #default="{ row }">
               <span class="text-xs text-gray-500 dark:text-gray-400 truncate">
@@ -96,6 +82,7 @@
                     class="action-link"
                     link
                     size="small"
+                    :disabled="!connectionStarted"
                     @click.stop="handleView(row)"
                   >
                     {{ t("actions.viewMessages") }}
@@ -172,6 +159,10 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  connectionStarted: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits([
@@ -229,6 +220,10 @@ const handleSelect = (subscription) => {
  * 查看消息
  */
 const handleView = (subscription) => {
+  if (!props.connectionStarted) {
+    ElMessage.warning("请先连接后再查看实时消息");
+    return;
+  }
   emit("view-messages", subscription);
 };
 
@@ -292,9 +287,16 @@ const handleContextMenu = (event, subscription) => {
 
   const openItem = document.createElement("div");
   openItem.className =
-    "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer";
+    props.connectionStarted
+      ? "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+      : "px-4 py-2 text-sm text-gray-400 dark:text-gray-500 cursor-not-allowed";
   openItem.textContent = t("actions.viewMessages");
   openItem.onclick = () => {
+    if (!props.connectionStarted) {
+      ElMessage.warning("请先连接后再查看实时消息");
+      document.body.removeChild(menu);
+      return;
+    }
     handleView(subscription);
     document.body.removeChild(menu);
   };

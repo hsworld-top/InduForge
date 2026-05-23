@@ -1,9 +1,10 @@
 <template>
   <DcDialog
+    ref="dialogRef"
     :model-value="visible"
     :title="dialogTitle"
     width="800px"
-    :close-on-click-modal="false"
+    :dirty="isDirty"
     @close="handleClose"
   >
     <el-form
@@ -141,18 +142,11 @@
         <el-input-number v-model="formData.order" :min="0" :max="9999" />
       </el-form-item>
 
-      <el-form-item label="启用状态">
-        <el-switch
-          v-model="formData.isEnabled"
-          active-text="启用"
-          inactive-text="禁用"
-        />
-      </el-form-item>
     </el-form>
 
     <template #footer>
       <span class="dialog-footer">
-        <el-button @click="handleClose">
+        <el-button @click="requestClose">
           {{ mode === "view" ? "关闭" : "取消" }}
         </el-button>
         <el-button
@@ -206,6 +200,8 @@ const emit = defineEmits(["close", "success"]);
 
 const formRef = ref(null);
 const submitting = ref(false);
+const initialFormSnapshot = ref("");
+const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null);
 
 const formData = ref({
   name: "",
@@ -220,7 +216,6 @@ const formData = ref({
   transform: "",
   validation: null,
   order: 0,
-  isEnabled: true,
 });
 
 const validationStr = ref("");
@@ -243,6 +238,19 @@ const dialogTitle = computed(() => {
   };
   return titles[props.mode] || "变量";
 });
+
+const formSnapshot = computed(() =>
+  JSON.stringify({
+    formData: formData.value,
+    validationStr: validationStr.value,
+  }),
+);
+const isDirty = computed(
+  () =>
+    props.visible &&
+    props.mode !== "view" &&
+    formSnapshot.value !== initialFormSnapshot.value,
+);
 
 /**
  * 初始化表单数据
@@ -272,10 +280,10 @@ const initForm = () => {
       transform: "",
       validation: null,
       order: 0,
-      isEnabled: true,
     };
     validationStr.value = "";
   }
+  initialFormSnapshot.value = formSnapshot.value;
 };
 
 /**
@@ -367,6 +375,7 @@ const handleSubmit = async () => {
       ElMessage.success("更新成功");
     }
 
+    initialFormSnapshot.value = formSnapshot.value;
     emit("success");
   } catch (error) {
     if (error !== false) {
@@ -383,6 +392,10 @@ const handleSubmit = async () => {
  */
 const handleClose = () => {
   emit("close");
+};
+
+const requestClose = () => {
+  void dialogRef.value?.requestClose();
 };
 
 // 监听visible变化，重新初始化表单

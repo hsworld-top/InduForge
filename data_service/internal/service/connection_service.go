@@ -1,15 +1,22 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 	"github.com/jackc/pgx/v5"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -59,6 +66,8 @@ type Connection struct {
 type ConnectionTestResult struct {
 	Connected bool   `json:"connected"`
 	DBType    string `json:"dbType"`
+	Type      string `json:"type,omitempty"`
+	Detail    string `json:"detail,omitempty"`
 	Message   string `json:"message"`
 }
 
@@ -237,21 +246,49 @@ func (s *ConnectionService) DeleteConnection(ctx context.Context, projectID, con
 	return s.repository.Delete(ctx, projectID, connectionID)
 }
 
-// TestConnection 使用临时连接配置测试外部关系库连接。
+// TestConnection 使用临时连接配置测试外部数据源连通性。
 func (s *ConnectionService) TestConnection(ctx context.Context, projectID string, input CreateConnectionInput) (*ConnectionTestResult, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
 
-	connectionType, _, err := normalizeConnectionType(input.Type)
+	connectionType, err := normalizeConnectionTestType(input.Type)
 	if err != nil {
 		return nil, err
 	}
-	if connectionType != "relational" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前仅支持关系型连接测试")
+	switch connectionType {
+	case "relational":
+		return testRelationalConnection(ctx, input.Config)
+	case "http":
+		return testHTTPConnection(ctx, input.Config)
+	case "websocket":
+		return testWebSocketConnection(ctx, input.Config)
+	case "redis":
+		return testRedisConnection(ctx, input.Config)
+	case "opcua":
+		return testOPCUAConnection(ctx, input.Config)
+	case "modbus":
+		return testModbusConnection(ctx, input.Config)
+	default:
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前接入源类型暂不支持连接测试")
 	}
+}
 
-	runtime, err := connectRelationalRuntime(ctx, input.Config)
+func normalizeConnectionTestType(connectionType string) (string, error) {
+	connectionType = strings.TrimSpace(strings.ToLower(connectionType))
+	switch connectionType {
+	case "relational", "http", "websocket", "redis", "opcua", "modbus":
+		return connectionType, nil
+	default:
+		if displayName, ok := reservedPhase2ConnectionTypes[connectionType]; ok {
+			return "", newPhaseBoundaryProtocolError(displayName)
+		}
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "连接类型不受支持")
+	}
+}
+
+func testRelationalConnection(ctx context.Context, config map[string]any) (*ConnectionTestResult, error) {
+	runtime, err := connectRelationalRuntime(ctx, config)
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +298,7 @@ func (s *ConnectionService) TestConnection(ctx context.Context, projectID string
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "连接测试失败", err)
 	}
 
-	runtimeConfig, parseErr := parseRelationalRuntimeConfig(input.Config)
+	runtimeConfig, parseErr := parseRelationalRuntimeConfig(config)
 	if parseErr != nil {
 		return nil, parseErr
 	}
@@ -269,8 +306,249 @@ func (s *ConnectionService) TestConnection(ctx context.Context, projectID string
 	return &ConnectionTestResult{
 		Connected: true,
 		DBType:    runtimeConfig.DBType,
+		Type:      "relational",
 		Message:   "数据库连接成功",
 	}, nil
+}
+
+// testHTTPConnection 对 HTTP Source 发起一次短请求。
+// 输入为接入源配置，输出为统一连接测试结果；网络、状态码、请求构造异常均转换成业务失败。
+func testHTTPConnection(ctx context.Context, config map[string]any) (*ConnectionTestResult, error) {
+	startedAt := time.Now()
+	baseURL := strings.TrimSpace(toString(config["baseUrl"]))
+	if baseURL == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP 请求地址不能为空")
+	}
+	method := strings.ToUpper(strings.TrimSpace(toString(config["method"])))
+	if method == "" {
+		method = http.MethodGet
+	}
+	if _, ok := allowedHTTPMethods[method]; !ok {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP method 不受支持")
+	}
+
+	var body io.Reader
+	if rawBody, ok := config["bodyTemplate"]; ok && rawBody != nil {
+		payload, err := json.Marshal(rawBody)
+		if err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP 请求体模板格式无效", err)
+		}
+		body = bytes.NewReader(payload)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, baseURL, body)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "创建 HTTP 测试请求失败", err)
+	}
+	for key, value := range mapFromAny(config["headers"]) {
+		if strings.TrimSpace(key) == "" {
+			continue
+		}
+		req.Header.Set(key, toString(value))
+	}
+	if body != nil && req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	timeout := time.Duration(intFromAny(config["timeoutMs"], 5000)) * time.Millisecond
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+	client := &http.Client{Timeout: timeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP 连接测试失败", err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.CopyN(io.Discard, resp.Body, 512)
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("HTTP 连接测试失败，状态码 %d", resp.StatusCode))
+	}
+
+	return &ConnectionTestResult{
+		Connected: true,
+		Type:      "http",
+		Detail:    fmt.Sprintf("HTTP %d，耗时 %dms", resp.StatusCode, time.Since(startedAt).Milliseconds()),
+		Message:   "HTTP 接入源请求成功",
+	}, nil
+}
+
+// testWebSocketConnection 只验证握手链路，不长期读取消息，避免测试连接变成运行态订阅。
+// 输入为 WebSocket 配置，输出为握手结果；握手失败时保留下游状态码辅助定位。
+func testWebSocketConnection(ctx context.Context, config map[string]any) (*ConnectionTestResult, error) {
+	startedAt := time.Now()
+	rawURL := strings.TrimSpace(toString(config["url"]))
+	if rawURL == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "WebSocket 连接地址不能为空")
+	}
+	headers := http.Header{}
+	for key, value := range mapFromAny(config["headers"]) {
+		if strings.TrimSpace(key) == "" {
+			continue
+		}
+		headers.Set(key, toString(value))
+	}
+	timeout := time.Duration(intFromAny(config["timeoutMs"], 5000)) * time.Millisecond
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+	dialer := websocket.Dialer{
+		HandshakeTimeout: timeout,
+		TLSClientConfig:  &tls.Config{MinVersion: tls.VersionTLS12},
+	}
+	conn, resp, err := dialer.DialContext(ctx, rawURL, headers)
+	if err != nil {
+		statusCode := 0
+		if resp != nil {
+			statusCode = resp.StatusCode
+		}
+		message := "WebSocket 握手失败"
+		if statusCode > 0 {
+			message = fmt.Sprintf("%s，状态码 %d", message, statusCode)
+		}
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, message, err)
+	}
+	defer conn.Close()
+
+	return &ConnectionTestResult{
+		Connected: true,
+		Type:      "websocket",
+		Detail:    fmt.Sprintf("握手完成，耗时 %dms", time.Since(startedAt).Milliseconds()),
+		Message:   "WebSocket 接入源握手成功",
+	}, nil
+}
+
+// testRedisConnection 复用短时预览的 Redis client 构造逻辑，执行 PING 验证认证与网络。
+// 输入为 Redis 配置，输出为统一连接测试结果；PING 失败按业务失败返回给前端。
+func testRedisConnection(ctx context.Context, config map[string]any) (*ConnectionTestResult, error) {
+	startedAt := time.Now()
+	client, err := newRedisPreviewClient(config, mapFromAny(config["options"]))
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+
+	if err := client.Ping(ctx).Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Redis 连接测试失败", err)
+	}
+
+	return &ConnectionTestResult{
+		Connected: true,
+		Type:      "redis",
+		Detail:    fmt.Sprintf("PING 成功，耗时 %dms", time.Since(startedAt).Milliseconds()),
+		Message:   "Redis 接入源连接成功",
+	}, nil
+}
+
+// testOPCUAConnection 对 OPC UA endpoint 做 TCP 探测。
+// 输入为 opc.tcp://host:port 配置；输出只表示网络端点可达，不声明已完成 OPC UA 会话协商。
+func testOPCUAConnection(ctx context.Context, config map[string]any) (*ConnectionTestResult, error) {
+	startedAt := time.Now()
+	endpoint := strings.TrimSpace(toString(config["endpoint"]))
+	if endpoint == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "OPC UA endpoint 不能为空")
+	}
+	parsed, err := url.Parse(endpoint)
+	if err != nil || !strings.EqualFold(parsed.Scheme, "opc.tcp") || strings.TrimSpace(parsed.Host) == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "OPC UA endpoint 必须是 opc.tcp://host:port")
+	}
+	address, err := ensureHostPort(parsed.Host, 4840)
+	if err != nil {
+		return nil, err
+	}
+	if err := dialTCP(ctx, address, connectionTestTimeout(config)); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "OPC UA endpoint TCP 探测失败", err)
+	}
+	return &ConnectionTestResult{
+		Connected: true,
+		Type:      "opcua",
+		Detail:    fmt.Sprintf("TCP endpoint 可达，耗时 %dms", time.Since(startedAt).Milliseconds()),
+		Message:   "OPC UA 接入源端点可达",
+	}, nil
+}
+
+// testModbusConnection 按 Modbus 模式执行最小连通性验证。
+// TCP 模式探测 host:port；RTU 模式只校验串口配置完整性，避免服务端误占本机串口。
+func testModbusConnection(ctx context.Context, config map[string]any) (*ConnectionTestResult, error) {
+	startedAt := time.Now()
+	mode := strings.ToLower(strings.TrimSpace(toString(config["mode"])))
+	if mode == "" {
+		mode = "tcp"
+	}
+	if mode == "rtu" {
+		serialConfig := mapFromAny(config["serialConfig"])
+		if strings.TrimSpace(toString(serialConfig["port"])) == "" {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Modbus RTU serialConfig.port 不能为空")
+		}
+		return &ConnectionTestResult{
+			Connected: true,
+			Type:      "modbus",
+			Detail:    "RTU 串口配置已通过字段校验，真实连通由节点侧串口运行器执行",
+			Message:   "Modbus RTU 配置校验通过",
+		}, nil
+	}
+	if mode != "tcp" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Modbus mode 仅支持 tcp/rtu")
+	}
+	host := strings.TrimSpace(firstNonEmptyString(toString(config["host"]), toString(config["ip"])))
+	if host == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Modbus TCP host 不能为空")
+	}
+	port := intFromAny(config["port"], 502)
+	address, err := ensureHostPort(fmt.Sprintf("%s:%d", host, port), 502)
+	if err != nil {
+		return nil, err
+	}
+	if err := dialTCP(ctx, address, connectionTestTimeout(config)); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Modbus TCP 探测失败", err)
+	}
+	return &ConnectionTestResult{
+		Connected: true,
+		Type:      "modbus",
+		Detail:    fmt.Sprintf("TCP 端口可达，耗时 %dms", time.Since(startedAt).Milliseconds()),
+		Message:   "Modbus TCP 接入源端口可达",
+	}, nil
+}
+
+func connectionTestTimeout(config map[string]any) time.Duration {
+	timeout := time.Duration(intFromAny(config["timeoutMs"], 5000)) * time.Millisecond
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+	return timeout
+}
+
+func dialTCP(ctx context.Context, address string, timeout time.Duration) error {
+	dialCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	dialer := net.Dialer{Timeout: timeout}
+	conn, err := dialer.DialContext(dialCtx, "tcp", address)
+	if err != nil {
+		return err
+	}
+	return conn.Close()
+}
+
+func ensureHostPort(address string, defaultPort int) (string, error) {
+	address = strings.TrimSpace(address)
+	if address == "" {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "网络地址不能为空")
+	}
+	if _, _, err := net.SplitHostPort(address); err == nil {
+		return address, nil
+	}
+	if strings.Count(address, ":") > 1 {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "网络地址格式无效")
+	}
+	return net.JoinHostPort(address, fmt.Sprintf("%d", defaultPort)), nil
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // UpdateConnectionStatus 更新连接状态。

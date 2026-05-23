@@ -4,6 +4,8 @@
     :title="t('alarm.createPolicy')"
     width="520px"
     body-max-height="calc(100vh - 220px)"
+    :dirty="isDirty"
+    :close-disabled="submitting"
     @close="handleClose"
   >
     <form class="create-alarm-policy" @submit.prevent="submit">
@@ -101,6 +103,11 @@ const groupValue = computed({
     draft.groupId = value || null;
   },
 });
+const defaultDraftSnapshot = JSON.stringify(createDefaultAlarmPolicyDraft());
+const draftSnapshot = computed(() => JSON.stringify(draft));
+const isDirty = computed(
+  () => visible.value && draftSnapshot.value !== defaultDraftSnapshot,
+);
 
 const modeOptions: Array<{
   value: AlarmPolicyMode;

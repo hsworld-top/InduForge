@@ -4,6 +4,8 @@
     title="新建文件夹"
     width="460px"
     body-max-height="320px"
+    :dirty="isDirty"
+    :close-disabled="loading"
     @close="resetForm"
   >
     <el-form label-position="top" class="compute-folder-dialog">
@@ -89,6 +91,11 @@ const form = reactive<ComputeFolderSave>({
 });
 
 const canSubmit = computed(() => form.name.trim().length > 0 && !props.loading);
+const isDirty = computed(
+  () =>
+    visible.value &&
+    (form.name.trim().length > 0 || Boolean(form.parentId)),
+);
 
 const flattenFolders = (
   folders: ComputeFolder[],

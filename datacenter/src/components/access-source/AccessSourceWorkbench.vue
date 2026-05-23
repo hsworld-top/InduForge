@@ -16,7 +16,9 @@
 import { computed } from "vue";
 import SqlWorkbench from "./workbench/SqlWorkbench.vue";
 import MqttWorkbenchPanel from "./workbench/MqttWorkbenchPanel.vue";
-import ProtocolPreviewPanel from "./workbench/ProtocolPreviewPanel.vue";
+import ProtocolWorkbenchPanel from "./workbench/ProtocolWorkbenchPanel.vue";
+import RedisManagerWorkbench from "./workbench/RedisManagerWorkbench.vue";
+import IndustrialProtocolWorkbench from "./workbench/IndustrialProtocolWorkbench.vue";
 import ReadOnlyConfigPanel from "./workbench/ReadOnlyConfigPanel.vue";
 
 type AccessSourceConnection = {
@@ -47,8 +49,14 @@ const resolvedPanel = computed(() => {
   if (type === "mqtt") {
     return MqttWorkbenchPanel;
   }
-  if (["kafka", "http", "websocket", "redis"].includes(type)) {
-    return ProtocolPreviewPanel;
+  if (type === "redis") {
+    return RedisManagerWorkbench;
+  }
+  if (["opcua", "modbus"].includes(type)) {
+    return IndustrialProtocolWorkbench;
+  }
+  if (["kafka", "http", "websocket"].includes(type)) {
+    return ProtocolWorkbenchPanel;
   }
   if (["opcua", "opcda", "s7", "modbus"].includes(type)) {
     return ReadOnlyConfigPanel;

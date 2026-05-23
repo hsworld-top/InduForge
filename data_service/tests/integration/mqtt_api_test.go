@@ -131,7 +131,6 @@ func TestMqttSubscriptionChineseNameDataPointStaysActive(t *testing.T) {
 		"name":             "撒大苏打",
 		"topic":            "aaaa",
 		"qos":              0,
-		"isEnabled":        true,
 		"messageRetention": 100,
 	})
 
@@ -217,7 +216,6 @@ func TestMqttSubscriptionDataPointValidWithoutMqttConfig(t *testing.T) {
 		"name":             "仅订阅测试",
 		"topic":            "only/subscription",
 		"qos":              0,
-		"isEnabled":        true,
 		"messageRetention": 100,
 	})
 	datapoints := mustListDataPoints(t, server.URL, token, projectID, "type=mqtt.subscription&search=仅订阅测试")
@@ -351,13 +349,12 @@ func insertTestMqttSubscription(t *testing.T, ctx context.Context, fixture *test
 			name,
 			topic,
 			qos,
-			is_enabled,
 			message_retention,
 			created_by,
 			updated_by
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
-	`, subscriptionID, projectID, connectionID, "sub-temp", "factory/line1/temp", 1, true, 100, userID)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+	`, subscriptionID, projectID, connectionID, "sub-temp", "factory/line1/temp", 1, 100, userID)
 	if err != nil {
 		t.Fatalf("insert mqtt subscription failed: %v", err)
 	}

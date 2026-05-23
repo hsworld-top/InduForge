@@ -8,6 +8,8 @@ import {
   AlarmPolicyGroupSaveSchema,
   AlarmPolicyGroupSchema,
   AlarmPolicyGroupUpdateSchema,
+  AlarmProjectSettingsSaveSchema,
+  AlarmProjectSettingsSchema,
   AlarmPolicySaveSchema,
   AlarmPolicySchema,
   AlarmPolicyTreeSchema,
@@ -22,6 +24,8 @@ import {
   type AlarmPolicyGroup,
   type AlarmPolicyGroupSave,
   type AlarmPolicyGroupUpdate,
+  type AlarmProjectSettings,
+  type AlarmProjectSettingsSave,
   type AlarmPolicySave,
   type AlarmPolicyTree,
   type AlarmPolicyTrialPayload,
@@ -61,6 +65,29 @@ export async function getAlarmPolicyGroups(
     method: "get",
   });
   return alarmPolicyGroupListSchema.parse(unwrapData(res));
+}
+
+export async function getAlarmProjectSettings(
+  projectId: string,
+): Promise<AlarmProjectSettings> {
+  const res = await request({
+    url: `/data/projects/${projectId}/alarm-settings`,
+    method: "get",
+  });
+  return AlarmProjectSettingsSchema.parse(unwrapData(res));
+}
+
+export async function updateAlarmProjectSettings(
+  projectId: string,
+  data: AlarmProjectSettingsSave,
+): Promise<AlarmProjectSettings> {
+  const body = AlarmProjectSettingsSaveSchema.parse(data);
+  const res = await request({
+    url: `/data/projects/${projectId}/alarm-settings`,
+    method: "put",
+    data: body,
+  });
+  return AlarmProjectSettingsSchema.parse(unwrapData(res));
 }
 
 export async function createAlarmPolicyGroup(

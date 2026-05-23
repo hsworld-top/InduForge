@@ -18,6 +18,10 @@
           <IconTablerDownload class="mr-1 w-4 h-4" />
           批量导出
         </el-button>
+        <el-button size="small" type="primary" plain @click="$emit('openMonitor')">
+          <IconTablerActivity class="mr-1 w-4 h-4" />
+          变量预览/监控
+        </el-button>
       </div>
       <div class="mqtt-tag-list__filters">
         <el-input
@@ -72,7 +76,6 @@
                 :tag="tag"
                 @edit="handleEditTag"
                 @delete="handleDeleteTag"
-                @toggle="handleToggleTag"
                 @view="handleViewTag"
               />
             </div>
@@ -130,7 +133,6 @@
                 :tag="tag"
                 @edit="handleEditTag"
                 @delete="handleDeleteTag"
-                @toggle="handleToggleTag"
                 @view="handleViewTag"
               />
               <div
@@ -181,17 +183,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed, toRef, watch } from "vue";
+import { ref, onMounted, computed } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
   getMqttTags,
   deleteMqttTag,
-  toggleMqttTag,
   getMqttTagGroups,
   deleteMqttTagGroup,
   getDataPoints,
 } from "@/api/data.api";
-import { useMqttSocket } from "@/composables/useMqttSocket";
 import { useMqttTagSync } from "@/composables/useMqttTagSync";
 import MqttTagDialog from "./MqttTagDialog.vue";
 import MqttTagGroupDialog from "./MqttTagGroupDialog.vue";
@@ -209,6 +209,7 @@ import IconTablerFile from "~icons/tabler/file";
 import IconTablerChevronRight from "~icons/tabler/chevron-right";
 import IconTablerChevronDown from "~icons/tabler/chevron-down";
 import IconTablerDownload from "~icons/tabler/download";
+import IconTablerActivity from "~icons/tabler/activity";
 import { getApiErrorMessage } from "@/utils/request";
 
 const props = defineProps({
@@ -226,6 +227,8 @@ const props = defineProps({
   },
 });
 
+defineEmits(["openMonitor"]);
+
 const loading = ref(false);
 const tags = ref([]);
 const groups = ref([]);
@@ -239,17 +242,6 @@ const currentTag = ref(null);
 const groupDialogVisible = ref(false);
 const groupDialogMode = ref("create");
 const currentGroup = ref(null);
-
-const projectIdRef = toRef(props, "projectId");
-const previewSessionIdRef = toRef(props, "previewSessionId");
-
-const {
-  connected: socketConnected,
-  disconnect,
-  onMessage,
-  subscribeTag,
-} = useMqttSocket(projectIdRef, previewSessionIdRef);
-const tagSubscriptionCleanups = new Map();
 
 const { notify: notifyTagChange } = useMqttTagSync(props.subscriptionId);
 
@@ -476,19 +468,6 @@ const handleDeleteTag = async (tag) => {
   }
 };
 
-const handleToggleTag = async (tag) => {
-  try {
-    const newState = !tag.isEnabled;
-    await toggleMqttTag(props.projectId, tag.id);
-    ElMessage.success(`已${newState ? "启用" : "禁用"}`);
-    await loadTags();
-    notifyTagChange("toggled", { tagId: tag.id, isEnabled: newState });
-  } catch (error) {
-    console.error("Failed to toggle tag:", error);
-    ElMessage.error("操作失败");
-  }
-};
-
 const handleTagDialogSuccess = async () => {
   tagDialogVisible.value = false;
   await loadTags();
@@ -507,77 +486,8 @@ const handleSearch = () => {
   // 搜索逻辑由 computed 自动处理
 };
 
-const handleTagValueUpdate = (data) => {
-  const tag = tags.value.find((item) => item.id === data.tagId);
-  if (!tag) {
-    return;
-  }
-
-  tag.currentValue = {
-    parsedValue: data.value,
-    quality: data.quality,
-    timestamp: data.timestamp,
-    receivedAt: data.receivedAt,
-    error: data.error,
-  };
-};
-
-const syncTagSubscriptions = () => {
-  const desiredTagIds = new Set(
-    tags.value.filter((tag) => tag.isEnabled).map((tag) => tag.id),
-  );
-
-  desiredTagIds.forEach((tagId) => {
-    if (!tagSubscriptionCleanups.has(tagId)) {
-      tagSubscriptionCleanups.set(tagId, subscribeTag(tagId));
-    }
-  });
-
-  Array.from(tagSubscriptionCleanups.entries()).forEach(([tagId, cleanup]) => {
-    if (desiredTagIds.has(tagId)) {
-      return;
-    }
-
-    cleanup?.();
-    tagSubscriptionCleanups.delete(tagId);
-  });
-};
-
-let stopSocketWatch = null;
-let unsubscribeSocketMessage = null;
-
 onMounted(async () => {
   await Promise.all([loadGroups(), loadTags()]);
-
-  unsubscribeSocketMessage = onMessage((data) => {
-    if (data?.tagId) {
-      handleTagValueUpdate(data);
-    }
-  });
-
-  stopSocketWatch = watch(
-    () => [
-      socketConnected.value,
-      tags.value.map((tag) => `${tag.id}:${tag.isEnabled}`).join(","),
-    ],
-    () => {
-      if (!socketConnected.value) {
-        return;
-      }
-      syncTagSubscriptions();
-    },
-    { immediate: true },
-  );
-});
-
-onBeforeUnmount(() => {
-  stopSocketWatch?.();
-  unsubscribeSocketMessage?.();
-  Array.from(tagSubscriptionCleanups.values()).forEach((cleanup) => {
-    cleanup?.();
-  });
-  tagSubscriptionCleanups.clear();
-  disconnect();
 });
 </script>
 

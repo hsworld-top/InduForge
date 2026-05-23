@@ -252,10 +252,21 @@
     </div>
 
     <footer class="alarm-policy-manager__foot">
-      <span>{{ t("alarm.policyCount", { count: total }) }}</span>
-      <span v-if="selectedCount">
-        {{ t("alarm.selectedItemCount", { count: selectedCount }) }}
+      <span class="alarm-policy-manager__foot-text">
+        <span>{{ t("alarm.policyCount", { count: total }) }}</span>
+        <span v-if="selectedCount">
+          {{ t("alarm.selectedItemCount", { count: selectedCount }) }}
+        </span>
       </span>
+      <button
+        type="button"
+        class="alarm-policy-manager__settings"
+        title="报警设置"
+        aria-label="报警设置"
+        @click="emit('openSettings')"
+      >
+        <IconTablerSettings class="alarm-policy-manager__button-icon" />
+      </button>
     </footer>
 
     <Teleport to="body">
@@ -302,6 +313,7 @@ import IconTablerFolderSymlink from "~icons/tabler/folder-symlink";
 import IconTablerPencil from "~icons/tabler/pencil";
 import IconTablerPlus from "~icons/tabler/plus";
 import IconTablerRefresh from "~icons/tabler/refresh";
+import IconTablerSettings from "~icons/tabler/settings";
 import IconTablerTemplate from "~icons/tabler/template";
 import IconTablerTrash from "~icons/tabler/trash";
 import type {
@@ -363,6 +375,7 @@ const emit = defineEmits<{
   renameGroup: [group: AlarmPolicyGroup];
   moveGroup: [group: AlarmPolicyGroup];
   deleteGroup: [group: AlarmPolicyGroupNode];
+  openSettings: [];
 }>();
 
 const filters = reactive({
@@ -896,6 +909,35 @@ const emitContextAction = (action: "rename" | "move" | "delete") => {
   color: var(--dc-text-muted);
   font-size: 12px;
   line-height: 1.4;
+}
+
+.alarm-policy-manager__foot-text {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.alarm-policy-manager__settings {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--dc-radius-sm);
+  background: transparent;
+  color: var(--dc-text-muted);
+  cursor: pointer;
+}
+
+.alarm-policy-manager__settings:hover {
+  border-color: var(--dc-border);
+  background: var(--dc-surface-muted);
+  color: var(--dc-primary);
 }
 
 .alarm-policy-manager__menu-mask {

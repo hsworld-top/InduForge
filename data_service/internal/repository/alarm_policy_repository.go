@@ -52,6 +52,15 @@ type AlarmPolicyRecord struct {
 	UpdatedAt         time.Time
 }
 
+// AlarmProjectSettingsRecord 表示工程级报警设置。
+type AlarmProjectSettingsRecord struct {
+	ProjectID                         string
+	EscalationIntervalSeconds         int
+	RepeatNotificationIntervalSeconds int
+	CreatedAt                         time.Time
+	UpdatedAt                         time.Time
+}
+
 type AlarmPolicyListFilter struct {
 	Search        string
 	GroupID       *string
@@ -120,6 +129,13 @@ type UpdateAlarmPolicyParams struct {
 	Contract          map[string]any
 }
 
+type UpsertAlarmProjectSettingsParams struct {
+	ProjectID                         string
+	UserID                            string
+	EscalationIntervalSeconds         int
+	RepeatNotificationIntervalSeconds int
+}
+
 // AlarmPolicyRepository 封装报警策略的参数化 SQL 访问。
 type AlarmPolicyRepository struct {
 	pool *pgxpool.Pool
@@ -127,6 +143,38 @@ type AlarmPolicyRepository struct {
 
 func NewAlarmPolicyRepository(pool *pgxpool.Pool) *AlarmPolicyRepository {
 	return &AlarmPolicyRepository{pool: pool}
+}
+
+func (r *AlarmPolicyRepository) GetProjectSettings(ctx context.Context, projectID string) (*AlarmProjectSettingsRecord, error) {
+	record, err := scanAlarmProjectSettings(r.pool.QueryRow(ctx, `
+        SELECT project_id, escalation_interval_seconds, repeat_notification_interval_seconds, created_at, updated_at
+        FROM data_alarm_project_settings
+        WHERE project_id = $1
+    `, projectID))
+	if err != nil {
+		return nil, err
+	}
+	return &record, nil
+}
+
+func (r *AlarmPolicyRepository) UpsertProjectSettings(ctx context.Context, params UpsertAlarmProjectSettingsParams) (*AlarmProjectSettingsRecord, error) {
+	record, err := scanAlarmProjectSettings(r.pool.QueryRow(ctx, `
+        INSERT INTO data_alarm_project_settings (
+            project_id, escalation_interval_seconds, repeat_notification_interval_seconds, created_by, updated_by
+        )
+        VALUES ($1, $2, $3, $4, $4)
+        ON CONFLICT (project_id)
+        DO UPDATE SET
+            escalation_interval_seconds = EXCLUDED.escalation_interval_seconds,
+            repeat_notification_interval_seconds = EXCLUDED.repeat_notification_interval_seconds,
+            updated_by = EXCLUDED.updated_by,
+            updated_at = now()
+        RETURNING project_id, escalation_interval_seconds, repeat_notification_interval_seconds, created_at, updated_at
+    `, params.ProjectID, params.EscalationIntervalSeconds, params.RepeatNotificationIntervalSeconds, params.UserID))
+	if err != nil {
+		return nil, translateAlarmProjectSettingsWriteError("保存报警设置失败", err)
+	}
+	return &record, nil
 }
 
 func (r *AlarmPolicyRepository) ListGroups(ctx context.Context, projectID string) ([]AlarmPolicyGroupRecord, error) {
@@ -459,6 +507,17 @@ func (r *AlarmPolicyRepository) ListPolicyIDsByFilter(ctx context.Context, proje
 	return ids, nil
 }
 
+func scanAlarmProjectSettings(row pgx.Row) (AlarmProjectSettingsRecord, error) {
+	var record AlarmProjectSettingsRecord
+	if err := row.Scan(&record.ProjectID, &record.EscalationIntervalSeconds, &record.RepeatNotificationIntervalSeconds, &record.CreatedAt, &record.UpdatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return AlarmProjectSettingsRecord{}, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "报警设置不存在")
+		}
+		return AlarmProjectSettingsRecord{}, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取报警设置失败", err)
+	}
+	return record, nil
+}
+
 func scanAlarmPolicyGroup(row pgx.Row) (AlarmPolicyGroupRecord, error) {
 	var record AlarmPolicyGroupRecord
 	var parentID sql.NullString
@@ -646,6 +705,14 @@ func unmarshalAlarmJSONArray(payload []byte) ([]map[string]any, error) {
 		result = []map[string]any{}
 	}
 	return result, nil
+}
+
+func translateAlarmProjectSettingsWriteError(message string, err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23514" {
+		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "报警间隔设置不符合约束", err)
+	}
+	return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, message, err)
 }
 
 func translateAlarmPolicyGroupWriteError(message string, err error) error {

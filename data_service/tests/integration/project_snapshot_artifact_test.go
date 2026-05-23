@@ -235,13 +235,12 @@ func insertTestMqttTag(t *testing.T, ctx context.Context, fixture *testDatabase,
 			parse_type,
 			parse_rule,
 			validation,
-			is_enabled,
 			display_order,
 			created_by,
 			updated_by
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, '{}'::jsonb, $10, $11, $12, $12)
-	`, tagID, projectID, subscriptionID, groupID, "tag-main", "tag_main", "number", "jsonpath", "$.value", true, 1, userID)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, '{}'::jsonb, $10, $11, $11)
+	`, tagID, projectID, subscriptionID, groupID, "tag-main", "tag_main", "number", "jsonpath", "$.value", 1, userID)
 	if err != nil {
 		t.Fatalf("insert mqtt tag failed: %v", err)
 	}

@@ -12,6 +12,7 @@ export const AlarmConditionTypeSchema = z.enum([
   "deviation_low",
   "rate_of_change",
   "bool_equal",
+  "bool_transition",
   "string_equal",
   "string_not_equal",
   "string_contains",
@@ -181,6 +182,27 @@ export const AlarmPolicyCoverageSchema = z.object({
 });
 
 export type AlarmPolicyCoverage = z.infer<typeof AlarmPolicyCoverageSchema>;
+
+export const AlarmProjectSettingsSchema = z.object({
+  projectId: z.string(),
+  escalationIntervalSeconds: z.number().int().min(30),
+  repeatNotificationIntervalSeconds: z.number().int().min(10),
+  createdAt: TimeFieldSchema.optional(),
+  updatedAt: TimeFieldSchema.optional(),
+});
+
+export type AlarmProjectSettings = z.infer<typeof AlarmProjectSettingsSchema>;
+
+export const AlarmProjectSettingsSaveSchema = z
+  .object({
+    escalationIntervalSeconds: z.number().int().min(30),
+    repeatNotificationIntervalSeconds: z.number().int().min(10),
+  })
+  .strict();
+
+export type AlarmProjectSettingsSave = z.infer<
+  typeof AlarmProjectSettingsSaveSchema
+>;
 
 export const AlarmBulkSelectionSchema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("ids"), policyIds: z.array(z.string()) }),

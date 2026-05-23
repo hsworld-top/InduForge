@@ -1,11 +1,13 @@
 <template>
   <DcDialog
+    ref="dialogRef"
     :model-value="visible"
     :title="dialogTitle"
     width="520px"
     class="dp-tag-dialog"
     destroy-on-close
     :show-close="false"
+    :dirty="isDirty"
     @update:model-value="handleVisibleChange"
   >
     <template #header>
@@ -15,7 +17,7 @@
           type="button"
           class="dp-tag-dialog__close"
           aria-label="关闭标签管理"
-          @click="$emit('cancel')"
+          @click="requestClose"
         >
           <Close />
         </button>
@@ -72,7 +74,7 @@
 
     <template #footer>
       <div class="dp-tag-dialog__footer">
-        <el-button @click="$emit('cancel')">取消</el-button>
+        <el-button @click="requestClose">取消</el-button>
         <el-button type="primary" :loading="saving" @click="handleSubmit">
           保存
         </el-button>
@@ -115,8 +117,19 @@ const emit = defineEmits<{
 
 const tagDraft = ref<string[]>([]);
 const tagCreateInput = ref("");
+const initialSnapshot = ref("");
+const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null);
 
 const isBatch = computed(() => !props.datapoint && (props.batchRows?.length ?? 0) > 0);
+const draftSnapshot = computed(() =>
+  JSON.stringify({
+    tags: [...tagDraft.value].sort(),
+    createInput: tagCreateInput.value,
+  }),
+);
+const isDirty = computed(
+  () => props.visible && draftSnapshot.value !== initialSnapshot.value,
+);
 
 const dialogTitle = computed(() =>
   isBatch.value
@@ -135,6 +148,7 @@ watch(
       tagDraft.value = [];
     }
     tagCreateInput.value = "";
+    initialSnapshot.value = draftSnapshot.value;
   },
   { immediate: true },
 );
@@ -166,11 +180,16 @@ function appendTag() {
 }
 
 function handleSubmit() {
+  initialSnapshot.value = draftSnapshot.value;
   emit("submit", [...tagDraft.value], isBatch.value ? "batch" : "single");
 }
 
 function handleVisibleChange(val: boolean) {
   if (!val) emit("cancel");
+}
+
+function requestClose() {
+  void dialogRef.value?.requestClose();
 }
 </script>
 

@@ -1,0 +1,8 @@
+DROP INDEX IF EXISTS data_mqtt_subscriptions_project_connection_group_idx;
+ALTER TABLE data_mqtt_subscriptions DROP CONSTRAINT IF EXISTS data_mqtt_subscriptions_group_fkey;
+ALTER TABLE data_mqtt_subscriptions DROP COLUMN IF EXISTS display_order;
+ALTER TABLE data_mqtt_subscriptions DROP COLUMN IF EXISTS group_id;
+DROP INDEX IF EXISTS data_mqtt_subscription_groups_project_connection_parent_idx;
+DROP INDEX IF EXISTS data_mqtt_subscription_groups_parent_name_key;
+DROP INDEX IF EXISTS data_mqtt_subscription_groups_root_name_key;
+DROP TABLE IF EXISTS data_mqtt_subscription_groups;
