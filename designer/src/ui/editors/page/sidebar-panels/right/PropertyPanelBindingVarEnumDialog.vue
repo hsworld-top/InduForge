@@ -3,46 +3,46 @@
   统一变量选择器只展示工程变量；页面变量由脚本/详细配置右侧页面上下文提供。
 -->
 <script setup lang="ts">
-import { useI18n } from "vue-i18n";
-import IconEpFolder from "~icons/ep/folder";
+import { useI18n } from 'vue-i18n'
+import IconEpFolder from '~icons/ep/folder'
 
 interface BindingEnumTreeNodeLike {
-  id?: string | number;
-  label?: string;
+  id?: string | number
+  label?: string
 }
 
-type BindingEnumRowClassName = string | string[] | Record<string, boolean> | undefined;
+type BindingEnumRowClassName = string | string[] | Record<string, boolean> | undefined
 
 defineProps<{
-  bindingProjectGroupTree?: BindingEnumTreeNodeLike[];
-  bindingProjectVariableRows?: unknown[];
-  filterBindingSidebarNode: (data: BindingEnumTreeNodeLike, node: unknown) => boolean;
-  bindingEnumProjectRowClass: (...args: unknown[]) => BindingEnumRowClassName;
-  canConfirmInsert?: boolean;
-}>();
+  bindingProjectGroupTree?: BindingEnumTreeNodeLike[]
+  bindingProjectVariableRows?: unknown[]
+  filterBindingSidebarNode: (data: BindingEnumTreeNodeLike, node: unknown) => boolean
+  bindingEnumProjectRowClass: (...args: unknown[]) => BindingEnumRowClassName
+  canConfirmInsert?: boolean
+}>()
 
 const emit = defineEmits<{
-  (event: "projectGroupSelect", data: BindingEnumTreeNodeLike): void;
-  (event: "projectRowClick", row: unknown): void;
-  (event: "projectRowDblclick", row: unknown): void;
-  (event: "confirmInsert"): void;
-  (event: "cancel"): void;
-}>();
+  (event: 'projectGroupSelect', data: BindingEnumTreeNodeLike): void
+  (event: 'projectRowClick', row: unknown): void
+  (event: 'projectRowDblclick', row: unknown): void
+  (event: 'confirmInsert'): void
+  (event: 'cancel'): void
+}>()
 
-const visible = defineModel<boolean>({ default: false });
-const bindingProjectVarSearch = defineModel<string>("bindingProjectVarSearch", { default: "" });
-const { t } = useI18n();
+const visible = defineModel<boolean>({ default: false })
+const bindingProjectVarSearch = defineModel<string>('bindingProjectVarSearch', { default: '' })
+const { t } = useI18n()
 
 function handleProjectGroupSelect(data: BindingEnumTreeNodeLike) {
-  emit("projectGroupSelect", data);
+  emit('projectGroupSelect', data)
 }
 
 function handleProjectRowClick(row: unknown) {
-  emit("projectRowClick", row);
+  emit('projectRowClick', row)
 }
 
 function handleProjectRowDblclick(row: unknown) {
-  emit("projectRowDblclick", row);
+  emit('projectRowDblclick', row)
 }
 </script>
 
@@ -57,10 +57,10 @@ function handleProjectRowDblclick(row: unknown) {
     :close-on-click-modal="false"
     :lock-scroll="false"
   >
-    <div class="enum-caption">{{ t("propertyPanel.bindingVarEnum.projectVars") }}</div>
+    <div class="enum-caption">{{ t('propertyPanel.bindingVarEnum.projectVars') }}</div>
     <div class="enum-layout">
       <div class="enum-left">
-        <div class="sidebar-title">{{ t("propertyPanel.bindingVarEnum.groups") }}</div>
+        <div class="sidebar-title">{{ t('propertyPanel.bindingVarEnum.groups') }}</div>
         <el-tree
           :data="bindingProjectGroupTree"
           node-key="id"
@@ -95,17 +95,29 @@ function handleProjectRowDblclick(row: unknown) {
           @row-click="handleProjectRowClick"
           @row-dblclick="handleProjectRowDblclick"
         >
-          <el-table-column prop="name" :label="t('propertyPanel.bindingVarEnum.name')" min-width="150" />
+          <el-table-column
+            prop="name"
+            :label="t('propertyPanel.bindingVarEnum.name')"
+            min-width="150"
+          />
           <el-table-column prop="type" :label="t('propertyPanel.bindingVarEnum.type')" width="90" />
-          <el-table-column prop="description" :label="t('propertyPanel.bindingVarEnum.description')" min-width="140" />
-          <el-table-column prop="sourceLabel" :label="t('propertyPanel.bindingVarEnum.source')" min-width="150" />
+          <el-table-column
+            prop="description"
+            :label="t('propertyPanel.bindingVarEnum.description')"
+            min-width="140"
+          />
+          <el-table-column
+            prop="sourceLabel"
+            :label="t('propertyPanel.bindingVarEnum.source')"
+            min-width="150"
+          />
         </el-table>
       </div>
     </div>
     <template #footer>
-      <el-button @click="emit('cancel')">{{ t("propertyPanel.bindingVarEnum.cancel") }}</el-button>
+      <el-button @click="emit('cancel')">{{ t('propertyPanel.bindingVarEnum.cancel') }}</el-button>
       <el-button type="primary" :disabled="!canConfirmInsert" @click="emit('confirmInsert')">
-        {{ t("propertyPanel.bindingVarEnum.insert") }}
+        {{ t('propertyPanel.bindingVarEnum.insert') }}
       </el-button>
     </template>
   </el-dialog>

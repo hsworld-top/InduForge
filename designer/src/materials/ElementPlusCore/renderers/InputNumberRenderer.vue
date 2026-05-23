@@ -1,32 +1,32 @@
 <script setup lang="ts">
 const props = defineProps<{
-  resolvedProps?: Record<string, unknown>;
-}>();
+  resolvedProps?: Record<string, unknown>
+}>()
 
 const emit = defineEmits<{
-  (event: "update:modelValue", value: number): void;
-}>();
+  (event: 'update:modelValue', value: number): void
+}>()
 
 function normalizeNumber(value: unknown, fallback: number): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
 }
 
 function clampValue(value: number): number {
-  const min = normalizeNumber(props.resolvedProps?.min, Number.NEGATIVE_INFINITY);
-  const max = normalizeNumber(props.resolvedProps?.max, Number.POSITIVE_INFINITY);
-  return Math.min(max, Math.max(min, value));
+  const min = normalizeNumber(props.resolvedProps?.min, Number.NEGATIVE_INFINITY)
+  const max = normalizeNumber(props.resolvedProps?.max, Number.POSITIVE_INFINITY)
+  return Math.min(max, Math.max(min, value))
 }
 
 function handleModelValueUpdate(value: unknown): void {
-  emit("update:modelValue", clampValue(normalizeNumber(value, 0)));
+  emit('update:modelValue', clampValue(normalizeNumber(value, 0)))
 }
 
 function handleChange(delta: number): void {
-  if (props.resolvedProps?.disabled === true) return;
-  const current = normalizeNumber(props.resolvedProps?.modelValue, 0);
-  const step = normalizeNumber(props.resolvedProps?.step, 1);
-  emit("update:modelValue", clampValue(current + delta * step));
+  if (props.resolvedProps?.disabled === true) return
+  const current = normalizeNumber(props.resolvedProps?.modelValue, 0)
+  const step = normalizeNumber(props.resolvedProps?.step, 1)
+  emit('update:modelValue', clampValue(current + delta * step))
 }
 </script>
 

@@ -18,14 +18,14 @@
 <script setup lang="ts">
 withDefaults(
   defineProps<{
-    active?: boolean;
-    disabled?: boolean;
+    active?: boolean
+    disabled?: boolean
   }>(),
   {
     active: false,
     disabled: false,
   },
-);
+)
 </script>
 
 <style scoped>

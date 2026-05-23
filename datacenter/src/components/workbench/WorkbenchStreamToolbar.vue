@@ -81,11 +81,7 @@
       </el-tooltip>
 
       <el-tooltip content="清空消息" placement="top">
-        <button
-          type="button"
-          class="workbench-stream-toolbar__icon-btn"
-          @click="$emit('clear')"
-        >
+        <button type="button" class="workbench-stream-toolbar__icon-btn" @click="$emit('clear')">
           <IconTablerTrash />
         </button>
       </el-tooltip>
@@ -94,45 +90,45 @@
 </template>
 
 <script setup lang="ts">
-import WorkbenchStatusPill from "./WorkbenchStatusPill.vue";
-import IconTablerArrowBarToUp from "~icons/tabler/arrow-bar-to-up";
-import IconTablerClock from "~icons/tabler/clock";
-import IconTablerBraces from "~icons/tabler/braces";
-import IconTablerRefresh from "~icons/tabler/refresh";
-import IconTablerSearch from "~icons/tabler/search";
-import IconTablerTrash from "~icons/tabler/trash";
+import WorkbenchStatusPill from './WorkbenchStatusPill.vue'
+import IconTablerArrowBarToUp from '~icons/tabler/arrow-bar-to-up'
+import IconTablerClock from '~icons/tabler/clock'
+import IconTablerBraces from '~icons/tabler/braces'
+import IconTablerRefresh from '~icons/tabler/refresh'
+import IconTablerSearch from '~icons/tabler/search'
+import IconTablerTrash from '~icons/tabler/trash'
 
 withDefaults(
   defineProps<{
-    title: string;
-    subtitle?: string;
-    icon?: any;
-    statusLabel: string;
-    statusTone?: "neutral" | "success" | "warning" | "danger" | "info";
-    search: string;
-    limit: number;
-    loading?: boolean;
-    formatJson: boolean;
-    autoScroll: boolean;
-    showTimestamp: boolean;
+    title: string
+    subtitle?: string
+    icon?: any
+    statusLabel: string
+    statusTone?: 'neutral' | 'success' | 'warning' | 'danger' | 'info'
+    search: string
+    limit: number
+    loading?: boolean
+    formatJson: boolean
+    autoScroll: boolean
+    showTimestamp: boolean
   }>(),
   {
-    subtitle: "",
+    subtitle: '',
     icon: null,
-    statusTone: "neutral",
+    statusTone: 'neutral',
     loading: false,
   },
-);
+)
 
 defineEmits<{
-  (event: "update:search", value: string): void;
-  (event: "update:limit", value: number): void;
-  (event: "update:formatJson", value: boolean): void;
-  (event: "update:autoScroll", value: boolean): void;
-  (event: "update:showTimestamp", value: boolean): void;
-  (event: "refresh"): void;
-  (event: "clear"): void;
-}>();
+  (event: 'update:search', value: string): void
+  (event: 'update:limit', value: number): void
+  (event: 'update:formatJson', value: boolean): void
+  (event: 'update:autoScroll', value: boolean): void
+  (event: 'update:showTimestamp', value: boolean): void
+  (event: 'refresh'): void
+  (event: 'clear'): void
+}>()
 </script>
 
 <style scoped>

@@ -1,27 +1,15 @@
 <template>
   <div class="alarm-point-picker">
-    <DataPointPicker
-      v-model="selectedId"
-      :project-id="projectId"
-      @select="appendDatapoint"
-    />
+    <DataPointPicker v-model="selectedId" :project-id="projectId" @select="appendDatapoint" />
 
-    <div
-      v-if="items.length"
-      class="alarm-point-picker__items"
-      :class="{ 'has-key': withKey }"
-    >
+    <div v-if="items.length" class="alarm-point-picker__items" :class="{ 'has-key': withKey }">
       <div class="alarm-point-picker__labels" aria-hidden="true">
         <span>点位路径</span>
         <span v-if="withKey">变量名</span>
         <span>数据类型</span>
         <span>操作</span>
       </div>
-      <div
-        v-for="item in items"
-        :key="item.datapointId"
-        class="alarm-point-picker__item"
-      >
+      <div v-for="item in items" :key="item.datapointId" class="alarm-point-picker__item">
         <span>
           <strong>{{ item.name || item.path }}</strong>
           <code>{{ item.path }}</code>
@@ -33,80 +21,79 @@
           placeholder="变量名"
           @input="updateKey(item.datapointId, inputValue($event))"
         />
-        <em>{{ item.dataType || "-" }}</em>
+        <em>{{ item.dataType || '-' }}</em>
         <button type="button" @click="removeItem(item.datapointId)">移除</button>
       </div>
     </div>
     <div v-else class="alarm-point-picker__empty">
-      {{ withKey ? "请选择计算输入点" : "请选择目标点" }}
+      {{ withKey ? '请选择计算输入点' : '请选择目标点' }}
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
-import type {
-  AlarmInputRef,
-  AlarmTargetRef,
-} from "@/api/schemas/alarm.schema";
-import type { Datapoint } from "@/api/schemas/datapoint.schema";
-import DataPointPicker from "./DataPointPicker.vue";
+import { ref } from 'vue'
+import type { AlarmInputRef, AlarmTargetRef } from '@/api/schemas/alarm.schema'
+import type { Datapoint } from '@/api/schemas/datapoint.schema'
+import DataPointPicker from './DataPointPicker.vue'
 
 const props = withDefaults(
   defineProps<{
-    projectId: string;
-    items: Array<AlarmInputRef | AlarmTargetRef>;
-    withKey?: boolean;
+    projectId: string
+    items: Array<AlarmInputRef | AlarmTargetRef>
+    withKey?: boolean
   }>(),
   {
     withKey: false,
   },
-);
+)
 
 const emit = defineEmits<{
-  update: [items: Array<AlarmInputRef | AlarmTargetRef>];
-}>();
+  update: [items: Array<AlarmInputRef | AlarmTargetRef>]
+}>()
 
-const selectedId = ref("");
+const selectedId = ref('')
 
-const inputValue = (event: Event) => (event.target as HTMLInputElement).value;
+const inputValue = (event: Event) => (event.target as HTMLInputElement).value
 
 const makeKey = (datapoint: Datapoint) => {
-  const source = datapoint.name || datapoint.path.split("/").filter(Boolean).at(-1) || "v";
-  const key = source.replace(/[^A-Za-z0-9_]/g, "_").replace(/^[^A-Za-z_]+/, "");
-  return key || `v${props.items.length + 1}`;
-};
+  const source = datapoint.name || datapoint.path.split('/').filter(Boolean).at(-1) || 'v'
+  const key = source.replace(/[^A-Za-z0-9_]/g, '_').replace(/^[^A-Za-z_]+/, '')
+  return key || `v${props.items.length + 1}`
+}
 
 const appendDatapoint = (datapoint: Datapoint) => {
   if (props.items.some((item) => item.datapointId === datapoint.id)) {
-    return;
+    return
   }
   const base = {
     datapointId: datapoint.id,
     path: datapoint.path,
     name: datapoint.name,
     dataType: datapoint.dataType,
-  };
-  const next = props.withKey ? { ...base, key: makeKey(datapoint) } : base;
-  emit("update", [...props.items, next]);
-  selectedId.value = "";
-};
+  }
+  const next = props.withKey ? { ...base, key: makeKey(datapoint) } : base
+  emit('update', [...props.items, next])
+  selectedId.value = ''
+}
 
 const removeItem = (datapointId: string) => {
-  emit("update", props.items.filter((item) => item.datapointId !== datapointId));
-};
+  emit(
+    'update',
+    props.items.filter((item) => item.datapointId !== datapointId),
+  )
+}
 
-const inputKey = (item: AlarmInputRef | AlarmTargetRef) =>
-  "key" in item ? item.key : "";
+const inputKey = (item: AlarmInputRef | AlarmTargetRef) => ('key' in item ? item.key : '')
 
 const updateKey = (datapointId: string, key: string) => {
   emit(
-    "update",
+    'update',
     props.items.map((item) =>
-      item.datapointId === datapointId && "key" in item ? { ...item, key } : item,
+      item.datapointId === datapointId && 'key' in item ? { ...item, key } : item,
     ),
-  );
-};
+  )
+}
 </script>
 
 <style scoped>

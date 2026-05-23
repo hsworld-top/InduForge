@@ -4,86 +4,86 @@
  * 提供颜色面板、手动输入、预设色与最近使用能力
  */
 
-import { computed, onMounted, ref, watch } from "vue";
-import IconCircleClose from "~icons/ep/circle-close";
-import { ElMessage } from "@/ui/shell/el-message-compat";
+import { computed, onMounted, ref, watch } from 'vue'
+import IconCircleClose from '~icons/ep/circle-close'
+import { ElMessage } from '@/ui/shell/el-message-compat'
 
 interface FriendlyColorPickerProps {
-  modelValue?: string;
-  showAlpha?: boolean;
-  disabled?: boolean;
-  clearable?: boolean;
-  placeholder?: string;
-  predefine?: string[];
-  showRecent?: boolean;
-  layout?: "inline" | "block";
+  modelValue?: string
+  showAlpha?: boolean
+  disabled?: boolean
+  clearable?: boolean
+  placeholder?: string
+  predefine?: string[]
+  showRecent?: boolean
+  layout?: 'inline' | 'block'
 }
 
 const props = withDefaults(defineProps<FriendlyColorPickerProps>(), {
-  modelValue: "",
+  modelValue: '',
   showAlpha: true,
   disabled: false,
   clearable: true,
-  placeholder: "请输入颜色值",
+  placeholder: '请输入颜色值',
   predefine: () => [],
   showRecent: true,
-  layout: "inline",
-});
+  layout: 'inline',
+})
 const emit = defineEmits<{
-  (event: "update:modelValue", value: string): void;
-  (event: "change", value: string): void;
-}>();
-const RECENT_COLORS_STORAGE_KEY = "designer:recent-colors";
-const MAX_RECENT_COLORS = 5;
-const HEX_COLOR_RE = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
-const HEX_COLOR_BODY_RE = /^(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
-const FUNCTION_COLOR_RE = /^(?:rgb|rgba|hsl|hsla|var)\(/i;
+  (event: 'update:modelValue', value: string): void
+  (event: 'change', value: string): void
+}>()
+const RECENT_COLORS_STORAGE_KEY = 'designer:recent-colors'
+const MAX_RECENT_COLORS = 5
+const HEX_COLOR_RE = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
+const HEX_COLOR_BODY_RE = /^(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
+const FUNCTION_COLOR_RE = /^(?:rgb|rgba|hsl|hsla|var)\(/i
 const DEFAULT_PREDEFINE_COLORS = [
-  "#ffffff",
-  "#f5f7fa",
-  "#e4e7ed",
-  "#dcdfe6",
-  "#c0c4cc",
-  "#909399",
-  "#606266",
-  "#303133",
-  "#000000",
-  "#409eff",
-  "#67c23a",
-  "#e6a23c",
-  "#f56c6c",
-  "#909399",
-  "rgba(64, 158, 255, 0.2)",
-  "rgba(0, 0, 0, 0.35)",
-];
+  '#ffffff',
+  '#f5f7fa',
+  '#e4e7ed',
+  '#dcdfe6',
+  '#c0c4cc',
+  '#909399',
+  '#606266',
+  '#303133',
+  '#000000',
+  '#409eff',
+  '#67c23a',
+  '#e6a23c',
+  '#f56c6c',
+  '#909399',
+  'rgba(64, 158, 255, 0.2)',
+  'rgba(0, 0, 0, 0.35)',
+]
 
-const inputDraft = ref("");
-const recentColors = ref<string[]>([]);
+const inputDraft = ref('')
+const recentColors = ref<string[]>([])
 
 const predefineColors = computed(() => {
-  if (props.predefine.length) return props.predefine;
-  return DEFAULT_PREDEFINE_COLORS;
-});
+  if (props.predefine.length) return props.predefine
+  return DEFAULT_PREDEFINE_COLORS
+})
 
 /** 展示用最近颜色，最多 5 个 */
-const displayRecentColors = computed(() => recentColors.value.slice(0, MAX_RECENT_COLORS));
+const displayRecentColors = computed(() => recentColors.value.slice(0, MAX_RECENT_COLORS))
 
 /**
  * 读取最近颜色列表
  */
 function loadRecentColors() {
   try {
-    const raw = localStorage.getItem(RECENT_COLORS_STORAGE_KEY);
+    const raw = localStorage.getItem(RECENT_COLORS_STORAGE_KEY)
     if (!raw) {
-      recentColors.value = [];
-      return;
+      recentColors.value = []
+      return
     }
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw)
     recentColors.value = Array.isArray(parsed)
-      ? parsed.filter((item): item is string => typeof item === "string")
-      : [];
+      ? parsed.filter((item): item is string => typeof item === 'string')
+      : []
   } catch {
-    recentColors.value = [];
+    recentColors.value = []
   }
 }
 
@@ -92,7 +92,7 @@ function loadRecentColors() {
  */
 function persistRecentColors() {
   try {
-    localStorage.setItem(RECENT_COLORS_STORAGE_KEY, JSON.stringify(recentColors.value));
+    localStorage.setItem(RECENT_COLORS_STORAGE_KEY, JSON.stringify(recentColors.value))
   } catch {
     // 本地存储不可用时忽略，不影响颜色选择核心能力
   }
@@ -104,18 +104,18 @@ function persistRecentColors() {
  * @returns {string}
  */
 function normalizeColorValue(value: string): string {
-  const text = String(value || "").trim();
-  if (!text) return "";
+  const text = String(value || '').trim()
+  if (!text) return ''
   if (HEX_COLOR_RE.test(text)) {
-    return text;
+    return text
   }
   if (HEX_COLOR_BODY_RE.test(text)) {
-    return `#${text}`;
+    return `#${text}`
   }
   if (FUNCTION_COLOR_RE.test(text)) {
-    return text;
+    return text
   }
-  return "";
+  return ''
 }
 
 /**
@@ -123,13 +123,13 @@ function normalizeColorValue(value: string): string {
  * @param {string} color - 颜色值
  */
 function pushRecentColor(color: string) {
-  const normalized = normalizeColorValue(color);
-  if (!normalized) return;
+  const normalized = normalizeColorValue(color)
+  if (!normalized) return
   recentColors.value = [
     normalized,
     ...recentColors.value.filter((item) => item !== normalized),
-  ].slice(0, MAX_RECENT_COLORS);
-  persistRecentColors();
+  ].slice(0, MAX_RECENT_COLORS)
+  persistRecentColors()
 }
 
 /**
@@ -137,8 +137,8 @@ function pushRecentColor(color: string) {
  * @param {string} color - 颜色值
  */
 function emitColor(color: string) {
-  emit("update:modelValue", color);
-  emit("change", color);
+  emit('update:modelValue', color)
+  emit('change', color)
 }
 
 /**
@@ -146,37 +146,37 @@ function emitColor(color: string) {
  * @param {string} color - 颜色值
  */
 function handlePickerChange(color: string) {
-  const normalized = normalizeColorValue(color);
-  emitColor(normalized);
-  inputDraft.value = normalized;
-  pushRecentColor(normalized);
+  const normalized = normalizeColorValue(color)
+  emitColor(normalized)
+  inputDraft.value = normalized
+  pushRecentColor(normalized)
 }
 
 /**
  * 手动输入提交
  */
 function commitInputDraft() {
-  const normalized = normalizeColorValue(inputDraft.value);
+  const normalized = normalizeColorValue(inputDraft.value)
   if (!inputDraft.value) {
-    emitColor("");
-    return;
+    emitColor('')
+    return
   }
   if (!normalized) {
-    ElMessage.warning("颜色格式无效，请输入 HEX/RGBA/HSL");
-    inputDraft.value = props.modelValue || "";
-    return;
+    ElMessage.warning('颜色格式无效，请输入 HEX/RGBA/HSL')
+    inputDraft.value = props.modelValue || ''
+    return
   }
-  emitColor(normalized);
-  inputDraft.value = normalized;
-  pushRecentColor(normalized);
+  emitColor(normalized)
+  inputDraft.value = normalized
+  pushRecentColor(normalized)
 }
 
 /**
  * 清空颜色
  */
 function clearColor() {
-  inputDraft.value = "";
-  emitColor("");
+  inputDraft.value = ''
+  emitColor('')
 }
 
 /**
@@ -184,25 +184,25 @@ function clearColor() {
  * @param {string} color - 颜色值
  */
 function selectRecentColor(color: string) {
-  if (props.disabled) return;
-  const normalized = normalizeColorValue(color);
-  if (!normalized) return;
-  inputDraft.value = normalized;
-  emitColor(normalized);
-  pushRecentColor(normalized);
+  if (props.disabled) return
+  const normalized = normalizeColorValue(color)
+  if (!normalized) return
+  inputDraft.value = normalized
+  emitColor(normalized)
+  pushRecentColor(normalized)
 }
 
 watch(
   () => props.modelValue,
   (value: string) => {
-    inputDraft.value = value || "";
+    inputDraft.value = value || ''
   },
   { immediate: true },
-);
+)
 
 onMounted(() => {
-  loadRecentColors();
-});
+  loadRecentColors()
+})
 </script>
 
 <template>

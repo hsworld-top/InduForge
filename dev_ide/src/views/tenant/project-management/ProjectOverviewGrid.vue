@@ -1,7 +1,15 @@
 <template>
   <section class="project-overview-grid">
-    <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-      <el-skeleton v-for="index in 4" :key="index" animated class="rounded-xl border border-gray-100 p-4">
+    <div
+      v-if="loading"
+      class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4"
+    >
+      <el-skeleton
+        v-for="index in 4"
+        :key="index"
+        animated
+        class="rounded-xl border border-gray-100 p-4"
+      >
         <template #template>
           <el-skeleton-item variant="h3" class="!w-2/3 !h-5" />
           <el-skeleton-item variant="text" class="!w-full !h-3 mt-3" />
@@ -18,7 +26,10 @@
       </el-skeleton>
     </div>
 
-    <el-empty v-else-if="visibleProjects.length === 0 && groupCards.length === 0" :description="resolvedEmptyDescription" />
+    <el-empty
+      v-else-if="visibleProjects.length === 0 && groupCards.length === 0"
+      :description="resolvedEmptyDescription"
+    />
 
     <div v-else class="project-overview-grid__list">
       <!-- 分组文件夹卡片（混排在网格头部） -->
@@ -48,11 +59,7 @@
             </button>
           </el-tooltip>
           <el-tooltip :content="t('projectManagement.editGroup')" placement="top">
-            <button
-              type="button"
-              class="folder-icon-btn"
-              @click.stop="emit('group-edit', group)"
-            >
+            <button type="button" class="folder-icon-btn" @click.stop="emit('group-edit', group)">
               <el-icon :size="16"><Edit /></el-icon>
             </button>
           </el-tooltip>
@@ -77,9 +84,16 @@
               type="button"
               class="folder-preview-remove-btn"
               :title="t('projectManagement.removeProjectFromGroup')"
-              @click.stop="emit('group-remove-project', { groupId: group.id, projectId: project.id })"
+              @click.stop="
+                emit('group-remove-project', { groupId: group.id, projectId: project.id })
+              "
             >
-              <svg class="folder-preview-remove-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg
+                class="folder-preview-remove-icon"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
@@ -140,19 +154,27 @@
         </p>
 
         <div class="project-overview-grid__runtime-row">
-          <span class="project-overview-grid__status-label">{{ t('projectManagement.runtimeMode') }}</span>
-          <span class="project-overview-grid__mode-value">{{ resolveRuntimeModeText(project) }}</span>
+          <span class="project-overview-grid__status-label">{{
+            t('projectManagement.runtimeMode')
+          }}</span>
+          <span class="project-overview-grid__mode-value">{{
+            resolveRuntimeModeText(project)
+          }}</span>
         </div>
 
         <div class="project-overview-grid__deploy-panel">
           <div class="project-overview-grid__deploy-header">
-            <span class="project-overview-grid__status-label">{{ t('projectManagement.deployStatus') }}</span>
+            <span class="project-overview-grid__status-label">{{
+              t('projectManagement.deployStatus')
+            }}</span>
             <el-tag size="small" :type="resolveRuntimeTag(project.runtimeSummary.runtimeStatus)">
               {{ resolveRuntimeText(project.runtimeSummary.runtimeStatus) }}
             </el-tag>
           </div>
           <div class="project-overview-grid__node-list">
-            <span class="project-overview-grid__node-label">{{ t('projectManagement.deployNodes') }}</span>
+            <span class="project-overview-grid__node-label">{{
+              t('projectManagement.deployNodes')
+            }}</span>
             <span
               v-if="resolveRuntimeNodes(project).length === 0"
               class="project-overview-grid__node-placeholder"
@@ -189,16 +211,18 @@
           </el-tag>
         </div>
 
-        <div
-          class="project-overview-grid__footer"
-        >
+        <div class="project-overview-grid__footer">
           <span class="project-overview-grid__time">
             {{ resolveDisplayTime(project) }}
           </span>
 
           <div class="project-overview-grid__actions" @click.stop>
             <slot name="actions" :project="project">
-              <el-tooltip v-if="showMemberAction" :content="t('projectManagement.memberAndPermission')" placement="top">
+              <el-tooltip
+                v-if="showMemberAction"
+                :content="t('projectManagement.memberAndPermission')"
+                placement="top"
+              >
                 <el-button
                   size="small"
                   text
@@ -210,7 +234,11 @@
                 </el-button>
               </el-tooltip>
 
-              <el-tooltip v-if="showDeployAction" :content="t('projectManagement.publishAndDeploy')" placement="top">
+              <el-tooltip
+                v-if="showDeployAction"
+                :content="t('projectManagement.publishAndDeploy')"
+                placement="top"
+              >
                 <el-button
                   size="small"
                   text
@@ -222,7 +250,11 @@
                 </el-button>
               </el-tooltip>
 
-              <el-tooltip v-if="showExportAction" :content="t('projectManagement.exportProject')" placement="top">
+              <el-tooltip
+                v-if="showExportAction"
+                :content="t('projectManagement.exportProject')"
+                placement="top"
+              >
                 <el-button
                   size="small"
                   text
@@ -234,7 +266,11 @@
                 </el-button>
               </el-tooltip>
 
-              <el-tooltip v-if="showDeleteAction" :content="t('projectManagement.delete')" placement="top">
+              <el-tooltip
+                v-if="showDeleteAction"
+                :content="t('projectManagement.delete')"
+                placement="top"
+              >
                 <el-button
                   size="small"
                   text
@@ -256,7 +292,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import dayjs from 'dayjs'
-import { Delete, Edit, FolderOpened, Plus, Upload, UploadFilled, User } from '@element-plus/icons-vue'
+import {
+  Delete,
+  Edit,
+  FolderOpened,
+  Plus,
+  Upload,
+  UploadFilled,
+  User,
+} from '@element-plus/icons-vue'
 import type { TagProps } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import type {
@@ -380,7 +424,9 @@ const resolveVisibilityText = (project: ProjectOverviewItem) =>
     : t('projectManagement.visibilityPrivate')
 
 const normalizeRuntimeMode = (value: unknown): 'DEV' | 'RELEASE' | '' => {
-  const normalized = String(value || '').trim().toUpperCase()
+  const normalized = String(value || '')
+    .trim()
+    .toUpperCase()
   if (normalized === 'DEV' || normalized === 'DEVELOPMENT') {
     return 'DEV'
   }
@@ -404,9 +450,7 @@ const resolveRuntimeModeText = (project: ProjectOverviewItem) => {
   if (hasRuntimeModeCount(modeCounts, 'RELEASE')) {
     modes.push(t('projectManagement.modeDisplayRelease'))
   }
-  ;[
-    project.runtimeSummary?.runtimeMode,
-  ].forEach((candidate) => {
+  ;[project.runtimeSummary?.runtimeMode].forEach((candidate) => {
     const mode = normalizeRuntimeMode(candidate)
     if (mode === 'DEV' && !modes.includes(t('projectManagement.modeDisplayDev'))) {
       modes.push(t('projectManagement.modeDisplayDev'))
@@ -430,8 +474,7 @@ const resolveRuntimeNodes = (project: ProjectOverviewItem): ProjectOverviewRunti
 }
 
 const canToggleProjectVisibility = (project: ProjectOverviewItem) =>
-  props.canToggleVisibility
-  && String(project.createdBy || '') === String(props.currentUserId || '')
+  props.canToggleVisibility && String(project.createdBy || '') === String(props.currentUserId || '')
 
 const handleVisibilityToggle = (project: ProjectOverviewItem) => {
   if (!canToggleProjectVisibility(project)) {
@@ -442,7 +485,10 @@ const handleVisibilityToggle = (project: ProjectOverviewItem) => {
 
 const resolveDisplayTime = (project: ProjectOverviewItem) => {
   const candidate =
-    project.lastDeployedAt || project.updatedAt || project.createdAt || project.runtimeSummary.lastDeployedAt
+    project.lastDeployedAt ||
+    project.updatedAt ||
+    project.createdAt ||
+    project.runtimeSummary.lastDeployedAt
   if (!candidate) {
     return '--'
   }
@@ -770,14 +816,30 @@ html.dark .project-overview-grid__footer,
 }
 
 /* ─── stagger 入场动画 ─── */
-.project-overview-grid__card:nth-child(1) { animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 40ms both; }
-.project-overview-grid__card:nth-child(2) { animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 80ms both; }
-.project-overview-grid__card:nth-child(3) { animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 120ms both; }
-.project-overview-grid__card:nth-child(4) { animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 160ms both; }
-.project-overview-grid__card:nth-child(5) { animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 200ms both; }
-.project-overview-grid__card:nth-child(6) { animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 240ms both; }
-.project-overview-grid__card:nth-child(7) { animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 280ms both; }
-.project-overview-grid__card:nth-child(8) { animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 320ms both; }
+.project-overview-grid__card:nth-child(1) {
+  animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 40ms both;
+}
+.project-overview-grid__card:nth-child(2) {
+  animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 80ms both;
+}
+.project-overview-grid__card:nth-child(3) {
+  animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 120ms both;
+}
+.project-overview-grid__card:nth-child(4) {
+  animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 160ms both;
+}
+.project-overview-grid__card:nth-child(5) {
+  animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 200ms both;
+}
+.project-overview-grid__card:nth-child(6) {
+  animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 240ms both;
+}
+.project-overview-grid__card:nth-child(7) {
+  animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 280ms both;
+}
+.project-overview-grid__card:nth-child(8) {
+  animation: ck-fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 320ms both;
+}
 
 @media (max-width: 720px) {
   .project-overview-grid__list {

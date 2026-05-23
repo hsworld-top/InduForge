@@ -3,7 +3,7 @@
   包装 EventPanel，提供事件/脚本配置入口
 -->
 <script setup lang="ts">
-import EventPanel from "./EventPanel.vue";
+import EventPanel from './EventPanel.vue'
 </script>
 
 <template>

@@ -17,7 +17,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed } from 'vue'
 import {
   Bell,
   Box,
@@ -29,46 +29,46 @@ import {
   FolderOpened,
   Search,
   Warning,
-} from "@element-plus/icons-vue";
+} from '@element-plus/icons-vue'
 
 type EmptyIconName =
-  | "box"
-  | "search"
-  | "datapoint"
-  | "access-source"
-  | "compute"
-  | "alarm"
-  | "folder"
-  | "files"
-  | "warning"
-  | "collection";
+  | 'box'
+  | 'search'
+  | 'datapoint'
+  | 'access-source'
+  | 'compute'
+  | 'alarm'
+  | 'folder'
+  | 'files'
+  | 'warning'
+  | 'collection'
 
 const props = withDefaults(
   defineProps<{
-    title: string;
-    description?: string;
-    iconName?: EmptyIconName;
+    title: string
+    description?: string
+    iconName?: EmptyIconName
   }>(),
   {
-    description: "",
-    iconName: "box",
+    description: '',
+    iconName: 'box',
   },
-);
+)
 
 const iconMap = {
   box: Box,
   search: Search,
   datapoint: DataLine,
-  "access-source": Connection,
+  'access-source': Connection,
   compute: Cpu,
   alarm: Bell,
   folder: FolderOpened,
   files: Files,
   warning: Warning,
   collection: Collection,
-};
+}
 
-const iconComponent = computed(() => iconMap[props.iconName] || Box);
+const iconComponent = computed(() => iconMap[props.iconName] || Box)
 </script>
 
 <style scoped>

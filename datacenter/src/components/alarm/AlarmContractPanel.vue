@@ -7,49 +7,45 @@
       </div>
       <div class="alarm-contract-panel__actions">
         <button type="button" :disabled="loading" @click="emit('refresh')">
-          {{ loading ? "刷新中" : "刷新" }}
+          {{ loading ? '刷新中' : '刷新' }}
         </button>
-        <button type="button" :disabled="!contractText" @click="copyContract">
-          复制
-        </button>
+        <button type="button" :disabled="!contractText" @click="copyContract">复制</button>
       </div>
     </div>
 
     <p v-if="error" class="alarm-contract-panel__error">{{ error }}</p>
-    <pre v-else>{{ contractText || "暂无契约数据" }}</pre>
+    <pre v-else>{{ contractText || '暂无契约数据' }}</pre>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import { ElMessage } from "element-plus";
-import type { AlarmPolicyContract } from "@/api/schemas/alarm.schema";
+import { computed } from 'vue'
+import { ElMessage } from 'element-plus'
+import type { AlarmPolicyContract } from '@/api/schemas/alarm.schema'
 
 const props = defineProps<{
-  contract: AlarmPolicyContract | null;
-  loading: boolean;
-  error: string;
-}>();
+  contract: AlarmPolicyContract | null
+  loading: boolean
+  error: string
+}>()
 
 const emit = defineEmits<{
-  refresh: [];
-}>();
+  refresh: []
+}>()
 
-const contractText = computed(() =>
-  props.contract ? JSON.stringify(props.contract, null, 2) : "",
-);
+const contractText = computed(() => (props.contract ? JSON.stringify(props.contract, null, 2) : ''))
 
 const copyContract = async () => {
   if (!contractText.value) {
-    return;
+    return
   }
   try {
-    await navigator.clipboard.writeText(contractText.value);
-    ElMessage.success("契约 JSON 已复制");
+    await navigator.clipboard.writeText(contractText.value)
+    ElMessage.success('契约 JSON 已复制')
   } catch {
-    ElMessage.error("复制失败，请手动复制");
+    ElMessage.error('复制失败，请手动复制')
   }
-};
+}
 </script>
 
 <style scoped>

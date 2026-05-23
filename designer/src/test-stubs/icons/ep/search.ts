@@ -1,4 +1,4 @@
 export default {
-  name: "IconEpSearch",
+  name: 'IconEpSearch',
   template: `<span class="icon-ep-search" />`,
-};
+}

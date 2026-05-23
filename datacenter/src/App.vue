@@ -10,8 +10,8 @@
           <div class="loading-dot"></div>
         </div>
         <div class="loading-content">
-          <div class="loading-title">{{ t("app.loadingTitle") }}</div>
-          <div class="loading-subtitle">{{ t("app.loadingSubtitle") }}</div>
+          <div class="loading-title">{{ t('app.loadingTitle') }}</div>
+          <div class="loading-subtitle">{{ t('app.loadingSubtitle') }}</div>
         </div>
       </div>
     </div>
@@ -19,29 +19,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from "vue";
-import { useRouter } from "vue-router";
-import { elementPlusLocale, t } from "./i18n/runtime";
+import { ref, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
+import { elementPlusLocale, t } from './i18n/runtime'
 
-const loading = ref(true);
-let loadingStartAt = Date.now();
-const minLoadingMs = 500;
-const router = useRouter();
-const elementLocale = elementPlusLocale;
+const loading = ref(true)
+const loadingStartAt = Date.now()
+const minLoadingMs = 500
+const router = useRouter()
+const elementLocale = elementPlusLocale
 
 const stopLoading = async () => {
-  const elapsed = Date.now() - loadingStartAt;
-  const waitMs = Math.max(0, minLoadingMs - elapsed);
+  const elapsed = Date.now() - loadingStartAt
+  const waitMs = Math.max(0, minLoadingMs - elapsed)
   if (waitMs > 0) {
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    await new Promise((resolve) => setTimeout(resolve, waitMs))
   }
-  await nextTick();
-  loading.value = false;
-};
+  await nextTick()
+  loading.value = false
+}
 
-router.isReady().then(() => stopLoading()).catch(() => {
-  loading.value = false;
-});
+router
+  .isReady()
+  .then(() => stopLoading())
+  .catch(() => {
+    loading.value = false
+  })
 </script>
 
 <style>

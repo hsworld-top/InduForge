@@ -1,41 +1,39 @@
 <script setup lang="ts">
-import type { PageInspectorFormState, PageRole, RouteMode } from "./page-inspector-types";
-import { computed } from "vue";
-import { useI18n } from "vue-i18n";
+import type { PageInspectorFormState, PageRole, RouteMode } from './page-inspector-types'
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
-  form: PageInspectorFormState;
-  isSystemPage: boolean;
-}>();
+  form: PageInspectorFormState
+  isSystemPage: boolean
+}>()
 
 defineEmits<{
-  routeModeChange: [value: RouteMode];
-  routePathBlur: [];
-  routeSlugBlur: [];
-}>();
+  routeModeChange: [value: RouteMode]
+  routePathBlur: []
+  routeSlugBlur: []
+}>()
 
-const { t } = useI18n();
+const { t } = useI18n()
 
 const roleLabel = computed(() => {
-  const role = props.form.role as PageRole;
-  return t(`pageInspector.roles.${role}`);
-});
+  const role = props.form.role as PageRole
+  return t(`pageInspector.roles.${role}`)
+})
 
 const routeModeOptions = computed(() => [
-  { label: t("pageInspector.routeModes.auto"), value: "auto" },
-  { label: t("pageInspector.routeModes.manual"), value: "manual" },
-]);
+  { label: t('pageInspector.routeModes.auto'), value: 'auto' },
+  { label: t('pageInspector.routeModes.manual'), value: 'manual' },
+])
 
-const routePathDisabled = computed(
-  () => props.isSystemPage || props.form.routeMode === "auto",
-);
+const routePathDisabled = computed(() => props.isSystemPage || props.form.routeMode === 'auto')
 </script>
 
 <template>
   <div class="page-section-fields">
     <div class="page-prop-item">
       <div class="page-prop-label">
-        <span>{{ t("pageInspector.labels.role") }}</span>
+        <span>{{ t('pageInspector.labels.role') }}</span>
         <el-tooltip :content="t('pageInspector.tooltips.roleReadonly')" placement="top">
           <span class="label-tip">?</span>
         </el-tooltip>
@@ -47,7 +45,7 @@ const routePathDisabled = computed(
 
     <div class="page-prop-item">
       <div class="page-prop-label">
-        <span>{{ t("pageInspector.labels.routeMode") }}</span>
+        <span>{{ t('pageInspector.labels.routeMode') }}</span>
         <el-tooltip
           v-if="isSystemPage"
           :content="t('pageInspector.tooltips.routeModeReadonly')"
@@ -74,7 +72,7 @@ const routePathDisabled = computed(
     </div>
 
     <div class="page-prop-item">
-      <div class="page-prop-label">{{ t("pageInspector.labels.routePath") }}</div>
+      <div class="page-prop-label">{{ t('pageInspector.labels.routePath') }}</div>
       <div class="page-prop-editor">
         <el-input
           data-testid="route-path-input"
@@ -88,7 +86,7 @@ const routePathDisabled = computed(
     </div>
 
     <div class="page-prop-item">
-      <div class="page-prop-label">{{ t("pageInspector.labels.routeSlug") }}</div>
+      <div class="page-prop-label">{{ t('pageInspector.labels.routeSlug') }}</div>
       <div class="page-prop-editor">
         <el-input
           v-model="form.routeSlug"
@@ -101,7 +99,7 @@ const routePathDisabled = computed(
     </div>
 
     <div class="page-prop-item">
-      <div class="page-prop-label">{{ t("pageInspector.labels.parentRoutePath") }}</div>
+      <div class="page-prop-label">{{ t('pageInspector.labels.parentRoutePath') }}</div>
       <div class="page-prop-editor">
         <el-input :model-value="form.parentRoutePath || '/'" size="small" disabled />
       </div>

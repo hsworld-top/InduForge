@@ -1,4 +1,4 @@
 export default {
-  name: "IconEpMoreFilled",
+  name: 'IconEpMoreFilled',
   template: `<span class="icon-ep-more-filled" />`,
-};
+}

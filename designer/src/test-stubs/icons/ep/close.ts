@@ -1,4 +1,4 @@
 export default {
-  name: "IconEpClose",
+  name: 'IconEpClose',
   template: `<span class="icon-ep-close" />`,
-};
+}

@@ -7,14 +7,14 @@
  * @module ui/Canvas/composables/use-node-props
  */
 
-import type { ExpressionContextDeps, UseNodePropsDeps } from "./types";
-import type { ExpressionContext } from "@/data/types";
-import { computed } from "vue";
-import { getPropsFilter } from "@/editor-core/descriptors/registry";
-import { evaluate, evaluateTemplate } from "@/data/ExpressionEngine";
-import { buildVarValuesFromDefinitions } from "@/editor-core/utils/variable-utils";
-import { getPreviewRuntime } from "@/ui/editors/page/preview/previewRuntime";
-import { translatePropsWithI18n } from "@/editor-core/i18n/project-i18n";
+import type { ExpressionContextDeps, UseNodePropsDeps } from './types'
+import type { ExpressionContext } from '@/data/types'
+import { computed } from 'vue'
+import { getPropsFilter } from '@/editor-core/descriptors/registry'
+import { evaluate, evaluateTemplate } from '@/data/ExpressionEngine'
+import { buildVarValuesFromDefinitions } from '@/editor-core/utils/variable-utils'
+import { getPreviewRuntime } from '@/ui/editors/page/preview/previewRuntime'
+import { translatePropsWithI18n } from '@/editor-core/i18n/project-i18n'
 
 /**
  * 构建表达式上下文
@@ -26,23 +26,23 @@ export function buildExpressionContext(
   propsValue: Record<string, unknown> = {},
   deps: ExpressionContextDeps,
 ): ExpressionContext & { $props: Record<string, unknown>; state: Record<string, unknown> } {
-  const { doc, currentPage, projectVariables } = deps;
-  const pageId = currentPage.value?.id;
-  const pageDefs = pageId ? doc.value?.vars?.pages?.[pageId] || {} : {};
-  const globalDefs = projectVariables.value || {};
+  const { doc, currentPage, projectVariables } = deps
+  const pageId = currentPage.value?.id
+  const pageDefs = pageId ? doc.value?.vars?.pages?.[pageId] || {} : {}
+  const globalDefs = projectVariables.value || {}
   const runtimeGlobals = (getPreviewRuntime() as { globals?: Record<string, unknown> } | null)
-    ?.globals;
+    ?.globals
   const globalValues =
-    runtimeGlobals && typeof runtimeGlobals === "object"
+    runtimeGlobals && typeof runtimeGlobals === 'object'
       ? runtimeGlobals
-      : (buildVarValuesFromDefinitions(globalDefs) as Record<string, unknown>);
+      : (buildVarValuesFromDefinitions(globalDefs) as Record<string, unknown>)
   return {
     $dp: {},
     $vars: buildVarValuesFromDefinitions(pageDefs) as Record<string, unknown>,
     $global: globalValues,
     $props: propsValue,
     state: globalValues,
-  };
+  }
 }
 
 /**
@@ -57,10 +57,10 @@ export function resolveExpressionValue(
   context: ExpressionContext,
   fallback: unknown,
 ): unknown {
-  if (typeof expr !== "string" || !expr.trim()) return fallback;
-  const text = expr.trim();
-  const value = text.includes("{{") ? evaluateTemplate(text, context) : evaluate(text, context);
-  return value === undefined ? fallback : value;
+  if (typeof expr !== 'string' || !expr.trim()) return fallback
+  const text = expr.trim()
+  const value = text.includes('{{') ? evaluateTemplate(text, context) : evaluate(text, context)
+  return value === undefined ? fallback : value
 }
 
 /**
@@ -75,23 +75,23 @@ function resolveExprBindings(
   propsValue: Record<string, unknown>,
   deps: ExpressionContextDeps,
 ): Record<string, unknown> {
-  if (!bindings || typeof bindings !== "object") return {};
-  const context = buildExpressionContext(propsValue, deps);
-  const resolved: Record<string, unknown> = {};
+  if (!bindings || typeof bindings !== 'object') return {}
+  const context = buildExpressionContext(propsValue, deps)
+  const resolved: Record<string, unknown> = {}
   Object.entries(bindings).forEach(([key, binding]) => {
-    if (!binding || typeof binding !== "object") return;
+    if (!binding || typeof binding !== 'object') return
     const exprBinding = binding as {
-      kind?: string;
-      expr?: string;
-      fallback?: unknown;
-    };
-    if (exprBinding.kind !== "expr" || typeof exprBinding.expr !== "string") return;
-    const value = resolveExpressionValue(exprBinding.expr, context, exprBinding.fallback);
-    if (value !== undefined) {
-      resolved[key] = value;
+      kind?: string
+      expr?: string
+      fallback?: unknown
     }
-  });
-  return resolved;
+    if (exprBinding.kind !== 'expr' || typeof exprBinding.expr !== 'string') return
+    const value = resolveExpressionValue(exprBinding.expr, context, exprBinding.fallback)
+    if (value !== undefined) {
+      resolved[key] = value
+    }
+  })
+  return resolved
 }
 
 /**
@@ -115,94 +115,94 @@ export function useNodeProps(deps: UseNodePropsDeps) {
     projectRuntimeLocale,
     docVersion,
     readonly,
-  } = deps;
+  } = deps
 
   // 表达式绑定依赖
-  const exprDeps: ExpressionContextDeps = { doc, currentPage, projectVariables };
+  const exprDeps: ExpressionContextDeps = { doc, currentPage, projectVariables }
 
   /**
    * 解析后的节点属性（应用表达式绑定）
    */
   const resolvedNodeProps = computed(() => {
-    void docVersion.value;
-    if (!node.value) return {};
-    const baseProps = node.value.props || {};
-    const bindingValues = resolveExprBindings(node.value.bindings, baseProps, exprDeps);
+    void docVersion.value
+    if (!node.value) return {}
+    const baseProps = node.value.props || {}
+    const bindingValues = resolveExprBindings(node.value.bindings, baseProps, exprDeps)
     const withBindings =
-      Object.keys(bindingValues).length === 0 ? baseProps : { ...baseProps, ...bindingValues };
+      Object.keys(bindingValues).length === 0 ? baseProps : { ...baseProps, ...bindingValues }
     return translatePropsWithI18n(
       withBindings,
       node.value,
       projectI18n.value,
       projectRuntimeLocale.value,
-    );
-  });
+    )
+  })
 
   /**
    * 解析后的 props（包含 ElCol/ElLayoutRow 特化逻辑）
    * 注意：Tabs modelValue 处理已移到 useNodeContent 中，避免循环依赖
    */
   const resolvedProps = computed(() => {
-    void docVersion.value;
-    if (!node.value) return {};
+    void docVersion.value
+    if (!node.value) return {}
     // 直接操作 resolvedNodeProps，不再调用 filterRenderProps（已清空为浅拷贝）
-    const nextProps = { ...(resolvedNodeProps.value || {}) };
-    if (node.value.type === "ElCol") {
-      const parentNode = doc.value?.getParent?.(node.value.id);
-      const rawColumns = Number(parentNode?.props?.columns);
+    const nextProps = { ...(resolvedNodeProps.value || {}) }
+    if (node.value.type === 'ElCol') {
+      const parentNode = doc.value?.getParent?.(node.value.id)
+      const rawColumns = Number(parentNode?.props?.columns)
       if (
-        parentNode?.type === "ElLayoutRow" &&
+        parentNode?.type === 'ElLayoutRow' &&
         Number.isFinite(rawColumns) &&
-        !Object.hasOwn(nextProps, "span")
+        !Object.hasOwn(nextProps, 'span')
       ) {
-        const columns = Math.max(1, Math.min(24, rawColumns));
+        const columns = Math.max(1, Math.min(24, rawColumns))
         const colIds = (parentNode.children || []).filter((childId) => {
-          const childNode = doc.value?.getNode?.(childId);
-          return childNode?.type === "ElCol";
-        });
-        const colIndex = Math.max(0, colIds.indexOf(node.value.id));
+          const childNode = doc.value?.getNode?.(childId)
+          return childNode?.type === 'ElCol'
+        })
+        const colIndex = Math.max(0, colIds.indexOf(node.value.id))
         const offsets = colIds.map((colId) => {
-          const colNode = doc.value?.getNode?.(colId);
-          const offset = Number(colNode?.props?.offset) || 0;
-          return Math.max(0, Math.min(24, offset));
-        });
+          const colNode = doc.value?.getNode?.(colId)
+          const offset = Number(colNode?.props?.offset) || 0
+          return Math.max(0, Math.min(24, offset))
+        })
         // 按剩余格数等分列宽，避免只压缩右侧区域
-        const totalOffset = offsets.reduce((sum, value) => sum + value, 0);
-        const remainingUnits = Math.max(columns, 24 - totalOffset);
-        const base = Math.floor(remainingUnits / columns);
-        const rem = remainingUnits - base * columns;
-        const span = base + (colIndex < rem ? 1 : 0);
-        nextProps.span = Math.max(1, span);
+        const totalOffset = offsets.reduce((sum, value) => sum + value, 0)
+        const remainingUnits = Math.max(columns, 24 - totalOffset)
+        const base = Math.floor(remainingUnits / columns)
+        const rem = remainingUnits - base * columns
+        const span = base + (colIndex < rem ? 1 : 0)
+        nextProps.span = Math.max(1, span)
       }
     }
-    if (readonly.value && node.value.type === "ElLayoutRow") {
-      nextProps.gutter = 0;
+    if (readonly.value && node.value.type === 'ElLayoutRow') {
+      nextProps.gutter = 0
     }
-    return nextProps;
-  });
+    return nextProps
+  })
 
   /**
    * 过滤后的 props（应用 descriptor.propsFilter）
    * 注意：必须基于 resolvedProps 计算，以包含布局派生值（ElCol span、ElLayoutRow gutter 等）
    */
   const filteredProps = computed(() => {
-    if (!node.value) return {};
+    if (!node.value) return {}
     // 优先从 descriptor 读取 propsFilter（新架构组件）
     // 基于 resolvedProps 而非 resolvedNodeProps，确保布局派生值被包含
-    const descriptorFiltered = getPropsFilter(node.value.type, resolvedProps.value || {});
+    const descriptorFiltered = getPropsFilter(node.value.type, resolvedProps.value || {})
     // 如果 descriptor 返回了过滤后的对象，使用它
     if (descriptorFiltered) {
-      return descriptorFiltered;
+      return descriptorFiltered
     }
     // fallback: 未注册 propsFilter 的组件直接返回 resolvedProps（包含布局派生值）
-    return resolvedProps.value || {};
-  });
+    return resolvedProps.value || {}
+  })
 
   return {
     resolvedNodeProps,
     resolvedProps,
     filteredProps,
-  };
+  }
 }
 
-export default { useNodeProps };
+export default { useNodeProps }

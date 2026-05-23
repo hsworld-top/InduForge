@@ -1,10 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createMemoryHistory, createRouter } from "vue-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import {
   applyRuntimeRouteEffects,
   createDesignerRoutes,
   registerDesignerBeforeEachGuard,
-} from "./index";
+} from './index'
 import {
   buildIdeRestoreUrl,
   createBootstrapRequest,
@@ -12,525 +12,538 @@ import {
   resolveDesignerEntrypointPlan,
   shouldRedirectTopLevelToIde,
   shouldUseDebugMode,
-} from "../runtime/host-bootstrap";
-import { Storage } from "@/utils/storage";
-import { getEditorUiStore } from "@/stores/editor-ui-store";
-import { i18n } from "@/i18n";
+} from '../runtime/host-bootstrap'
+import { Storage } from '@/utils/storage'
+import { getEditorUiStore } from '@/stores/editor-ui-store'
+import { i18n } from '@/i18n'
 
-describe("designer 入口规划", () => {
+describe('designer 入口规划', () => {
   afterEach(() => {
-    localStorage.clear();
-    vi.unstubAllEnvs();
-  });
+    localStorage.clear()
+    vi.unstubAllEnvs()
+  })
 
-  it("正式入口顶层访问会带 handoffId 回跳 IDE", () => {
-    const plan = resolveDesignerEntrypointPlan("http://designer.example/designer/?handoffId=handoff-1", {
+  it('正式入口顶层访问会带 handoffId 回跳 IDE', () => {
+    const plan = resolveDesignerEntrypointPlan(
+      'http://designer.example/designer/?handoffId=handoff-1',
+      {
+        isTopLevelWindow: true,
+        ideOrigin: 'http://ide.example',
+      },
+    )
+
+    expect(plan.isDebugRoute).toBe(false)
+    expect(plan.shouldRedirectToIde).toBe(true)
+    expect(plan.shouldWaitForBootstrap).toBe(false)
+    expect(plan.ideRedirectUrl).toBe('http://ide.example/?handoffId=handoff-1')
+  })
+
+  it('正式入口顶层访问在已有本地会话且未携带 handoffId 时不应强制回跳 IDE', () => {
+    Storage.setToken('cached-token')
+    Storage.setProjectId('cached-project')
+
+    const plan = resolveDesignerEntrypointPlan('http://designer.example/designer/', {
       isTopLevelWindow: true,
-      ideOrigin: "http://ide.example",
-    });
+      ideOrigin: 'http://ide.example',
+    })
 
-    expect(plan.isDebugRoute).toBe(false);
-    expect(plan.shouldRedirectToIde).toBe(true);
-    expect(plan.shouldWaitForBootstrap).toBe(false);
-    expect(plan.ideRedirectUrl).toBe("http://ide.example/?handoffId=handoff-1");
-  });
+    expect(plan.shouldRedirectToIde).toBe(false)
+    expect(plan.shouldWaitForBootstrap).toBe(false)
+    expect(plan.ideRedirectUrl).toBeNull()
+  })
 
-  it("正式入口顶层访问在已有本地会话且未携带 handoffId 时不应强制回跳 IDE", () => {
-    Storage.setToken("cached-token");
-    Storage.setProjectId("cached-project");
-
-    const plan = resolveDesignerEntrypointPlan("http://designer.example/designer/", {
-      isTopLevelWindow: true,
-      ideOrigin: "http://ide.example",
-    });
-
-    expect(plan.shouldRedirectToIde).toBe(false);
-    expect(plan.shouldWaitForBootstrap).toBe(false);
-    expect(plan.ideRedirectUrl).toBeNull();
-  });
-
-  it("正式入口顶层访问即使已有本地会话，只要携带新的 handoffId 仍应回跳 IDE 恢复指定工程", () => {
-    Storage.setToken("cached-token");
-    Storage.setProjectId("cached-project");
+  it('正式入口顶层访问即使已有本地会话，只要携带新的 handoffId 仍应回跳 IDE 恢复指定工程', () => {
+    Storage.setToken('cached-token')
+    Storage.setProjectId('cached-project')
     localStorage.setItem(
-      "embedded_app_handoff:handoff-cached",
+      'embedded_app_handoff:handoff-cached',
       JSON.stringify({
-        handoffId: "handoff-cached",
-        appType: "designer",
-        projectId: "handoff-project",
-        tenantId: "handoff-tenant",
+        handoffId: 'handoff-cached',
+        appType: 'designer',
+        projectId: 'handoff-project',
+        tenantId: 'handoff-tenant',
         issuedAt: Date.now(),
         expiresAt: Date.now() + 60_000,
       }),
-    );
+    )
 
-    const plan = resolveDesignerEntrypointPlan("http://designer.example/designer/?handoffId=handoff-cached", {
-      isTopLevelWindow: true,
-      ideOrigin: "http://ide.example",
-    });
-
-    expect(plan.shouldRedirectToIde).toBe(false);
-    expect(plan.shouldWaitForBootstrap).toBe(false);
-    expect(plan.ideRedirectUrl).toBeNull();
-  });
-
-  it("/designer/debug 保留独立调试模式，不会回跳 IDE", () => {
-    const plan = resolveDesignerEntrypointPlan("http://designer.example/designer/debug?handoffId=handoff-1", {
-      isTopLevelWindow: true,
-      ideOrigin: "http://ide.example",
-    });
-
-    expect(plan.isDebugRoute).toBe(true);
-    expect(plan.shouldRedirectToIde).toBe(false);
-    expect(plan.shouldWaitForBootstrap).toBe(false);
-    expect(plan.ideRedirectUrl).toBeNull();
-  });
-
-  it("runtime helper 会把正式入口、debug 例外与 handoff 恢复地址统一起来", () => {
-    expect(shouldUseDebugMode("/designer/debug")).toBe(true);
-    expect(shouldUseDebugMode("/designer/")).toBe(false);
-    expect(shouldRedirectTopLevelToIde("/designer/", true)).toBe(true);
-    expect(shouldRedirectTopLevelToIde("/designer/debug", true)).toBe(false);
-    expect(shouldRedirectTopLevelToIde("/designer/", false)).toBe(false);
-    expect(buildIdeRestoreUrl("handoff-restore", "http://ide.example")).toBe(
-      "http://ide.example/?handoffId=handoff-restore",
-    );
-
-    expect(createBootstrapRequest("http://designer.example/designer/?handoffId=handoff-9")).toMatchObject({
-      type: "APP_BOOTSTRAP_REQUEST",
-      payload: {
-        appType: "designer",
-        handoffId: "handoff-9",
-        pathname: "/designer/",
-        search: "?handoffId=handoff-9",
+    const plan = resolveDesignerEntrypointPlan(
+      'http://designer.example/designer/?handoffId=handoff-cached',
+      {
+        isTopLevelWindow: true,
+        ideOrigin: 'http://ide.example',
       },
-    });
-  });
+    )
 
-  it("开发态默认按 IDE 端口推导回跳 origin", () => {
+    expect(plan.shouldRedirectToIde).toBe(false)
+    expect(plan.shouldWaitForBootstrap).toBe(false)
+    expect(plan.ideRedirectUrl).toBeNull()
+  })
+
+  it('/designer/debug 保留独立调试模式，不会回跳 IDE', () => {
+    const plan = resolveDesignerEntrypointPlan(
+      'http://designer.example/designer/debug?handoffId=handoff-1',
+      {
+        isTopLevelWindow: true,
+        ideOrigin: 'http://ide.example',
+      },
+    )
+
+    expect(plan.isDebugRoute).toBe(true)
+    expect(plan.shouldRedirectToIde).toBe(false)
+    expect(plan.shouldWaitForBootstrap).toBe(false)
+    expect(plan.ideRedirectUrl).toBeNull()
+  })
+
+  it('runtime helper 会把正式入口、debug 例外与 handoff 恢复地址统一起来', () => {
+    expect(shouldUseDebugMode('/designer/debug')).toBe(true)
+    expect(shouldUseDebugMode('/designer/')).toBe(false)
+    expect(shouldRedirectTopLevelToIde('/designer/', true)).toBe(true)
+    expect(shouldRedirectTopLevelToIde('/designer/debug', true)).toBe(false)
+    expect(shouldRedirectTopLevelToIde('/designer/', false)).toBe(false)
+    expect(buildIdeRestoreUrl('handoff-restore', 'http://ide.example')).toBe(
+      'http://ide.example/?handoffId=handoff-restore',
+    )
+
+    expect(
+      createBootstrapRequest('http://designer.example/designer/?handoffId=handoff-9'),
+    ).toMatchObject({
+      type: 'APP_BOOTSTRAP_REQUEST',
+      payload: {
+        appType: 'designer',
+        handoffId: 'handoff-9',
+        pathname: '/designer/',
+        search: '?handoffId=handoff-9',
+      },
+    })
+  })
+
+  it('开发态默认按 IDE 端口推导回跳 origin', () => {
     expect(
       resolveDesignerIdeOriginFromRuntime({
-        currentUrl: "http://127.0.0.1:18603/designer/",
+        currentUrl: 'http://127.0.0.1:18603/designer/',
         isDev: true,
-        devHost: "127.0.0.1",
-        idePort: "18601",
+        devHost: '127.0.0.1',
+        idePort: '18601',
       }),
-    ).toBe("http://127.0.0.1:18601");
-  });
-});
+    ).toBe('http://127.0.0.1:18601')
+  })
+})
 
-describe("runtime route effects", () => {
+describe('runtime route effects', () => {
   afterEach(() => {
-    localStorage.clear();
-    document.documentElement.className = "";
-    document.documentElement.removeAttribute("data-theme");
-    const editorUi = getEditorUiStore();
-    editorUi.initFromRuntime({ theme: "light", locale: "zh" });
-    i18n.global.locale.value = "zh";
-  });
+    localStorage.clear()
+    document.documentElement.className = ''
+    document.documentElement.removeAttribute('data-theme')
+    const editorUi = getEditorUiStore()
+    editorUi.initFromRuntime({ theme: 'light', locale: 'zh' })
+    i18n.global.locale.value = 'zh'
+  })
 
-  it("设计态路由不会从本地缓存恢复主题语言，而是保留当前 editorUi 状态", () => {
-    Storage.setTheme("dark");
-    Storage.setLanguage("en");
+  it('设计态路由不会从本地缓存恢复主题语言，而是保留当前 editorUi 状态', () => {
+    Storage.setTheme('dark')
+    Storage.setLanguage('en')
 
-    const editorUi = getEditorUiStore();
-    editorUi.initFromRuntime({ theme: "dark", locale: "en" });
+    const editorUi = getEditorUiStore()
+    editorUi.initFromRuntime({ theme: 'dark', locale: 'en' })
 
-    applyRuntimeRouteEffects("/", "http://designer.example/designer/", { editorUi });
+    applyRuntimeRouteEffects('/', 'http://designer.example/designer/', { editorUi })
 
-    expect(editorUi.theme.value).toBe("dark");
-    expect(editorUi.locale.value).toBe("en");
-    expect(i18n.global.locale.value).toBe("en");
-    expect(document.documentElement.classList.contains("dark")).toBe(true);
-    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
-  });
-});
+    expect(editorUi.theme.value).toBe('dark')
+    expect(editorUi.locale.value).toBe('en')
+    expect(i18n.global.locale.value).toBe('en')
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+  })
+})
 
-describe("router beforeEach bootstrap", () => {
+describe('router beforeEach bootstrap', () => {
   beforeEach(() => {
-    localStorage.clear();
-    window.history.replaceState({}, "", "/designer/");
-  });
+    localStorage.clear()
+    window.history.replaceState({}, '', '/designer/')
+  })
 
   afterEach(() => {
-    localStorage.clear();
-    vi.restoreAllMocks();
-    vi.unstubAllEnvs();
-  });
+    localStorage.clear()
+    vi.restoreAllMocks()
+    vi.unstubAllEnvs()
+  })
 
-  it("正式入口会先等待宿主 bootstrap，再继续鉴权与项目恢复", async () => {
+  it('正式入口会先等待宿主 bootstrap，再继续鉴权与项目恢复', async () => {
     const waitForBootstrap = vi.fn(async () => {
-      Storage.setToken("bootstrap-token");
-      Storage.setProjectId("bootstrap-project");
-      Storage.setTenantId("tenant-1");
-      return true;
-    });
+      Storage.setToken('bootstrap-token')
+      Storage.setProjectId('bootstrap-project')
+      Storage.setTenantId('tenant-1')
+      return true
+    })
     const testRouter = createRouter({
-      history: createMemoryHistory("/designer/"),
+      history: createMemoryHistory('/designer/'),
       routes: [
         {
-          path: "/",
-          name: "Designer",
-          component: { template: "<div>designer</div>" },
-          meta: { title: "设计器", requiresAuth: true },
+          path: '/',
+          name: 'Designer',
+          component: { template: '<div>designer</div>' },
+          meta: { title: '设计器', requiresAuth: true },
         },
         {
-          path: "/debug",
-          name: "DesignerDebug",
-          component: { template: "<div>debug</div>" },
-          meta: { title: "设计器调试", requiresAuth: false },
+          path: '/debug',
+          name: 'DesignerDebug',
+          component: { template: '<div>debug</div>' },
+          meta: { title: '设计器调试', requiresAuth: false },
         },
       ],
-    });
+    })
     const removeGuard = registerDesignerBeforeEachGuard(testRouter, {
       waitForBootstrap,
       navigateToUrl: vi.fn(),
-      getIdeOrigin: () => "http://ide.example",
-      getCurrentUrl: () => "http://designer.example/designer/",
+      getIdeOrigin: () => 'http://ide.example',
+      getCurrentUrl: () => 'http://designer.example/designer/',
       isTopLevelWindow: () => false,
-    });
+    })
 
-    await testRouter.push("/");
+    await testRouter.push('/')
 
-    expect(waitForBootstrap).toHaveBeenCalledTimes(1);
+    expect(waitForBootstrap).toHaveBeenCalledTimes(1)
     expect(testRouter.currentRoute.value.meta.project).toEqual({
-      id: "bootstrap-project",
-      tenantId: "tenant-1",
-    });
+      id: 'bootstrap-project',
+      tenantId: 'tenant-1',
+    })
 
-    removeGuard();
-  });
+    removeGuard()
+  })
 
-  it("正式入口等待 bootstrap 失败后不会卡住，而是回到现有登录兜底", async () => {
-    const waitForBootstrap = vi.fn(async () => false);
-    const navigateToUrl = vi.fn();
+  it('正式入口等待 bootstrap 失败后不会卡住，而是回到现有登录兜底', async () => {
+    const waitForBootstrap = vi.fn(async () => false)
+    const navigateToUrl = vi.fn()
     const testRouter = createRouter({
-      history: createMemoryHistory("/designer/"),
+      history: createMemoryHistory('/designer/'),
       routes: [
         {
-          path: "/",
-          name: "Designer",
-          component: { template: "<div>designer</div>" },
-          meta: { title: "设计器", requiresAuth: true },
+          path: '/',
+          name: 'Designer',
+          component: { template: '<div>designer</div>' },
+          meta: { title: '设计器', requiresAuth: true },
         },
       ],
-    });
+    })
     const removeGuard = registerDesignerBeforeEachGuard(testRouter, {
       waitForBootstrap,
       navigateToUrl,
-      getIdeOrigin: () => "http://ide.example",
-      getCurrentUrl: () => "http://designer.example/designer/?handoffId=handoff-timeout",
+      getIdeOrigin: () => 'http://ide.example',
+      getCurrentUrl: () => 'http://designer.example/designer/?handoffId=handoff-timeout',
       isTopLevelWindow: () => false,
-    });
+    })
 
-    await testRouter.push("/");
+    await testRouter.push('/')
 
-    expect(waitForBootstrap).toHaveBeenCalledTimes(1);
+    expect(waitForBootstrap).toHaveBeenCalledTimes(1)
     expect(navigateToUrl).toHaveBeenCalledWith(
-      "http://ide.example/login?redirect=http%3A%2F%2Fdesigner.example%2Fdesigner%2F%3FhandoffId%3Dhandoff-timeout",
-    );
+      'http://ide.example/login?redirect=http%3A%2F%2Fdesigner.example%2Fdesigner%2F%3FhandoffId%3Dhandoff-timeout',
+    )
 
-    removeGuard();
-  });
+    removeGuard()
+  })
 
-  it("嵌入正式入口在没有 handoffId 且已存在 token 时，可继续复用本地工程会话", async () => {
-    Storage.setToken("cached-token");
-    Storage.setProjectId("cached-project");
-    Storage.setTenantId("tenant-cached");
+  it('嵌入正式入口在没有 handoffId 且已存在 token 时，可继续复用本地工程会话', async () => {
+    Storage.setToken('cached-token')
+    Storage.setProjectId('cached-project')
+    Storage.setTenantId('tenant-cached')
 
-    const waitForBootstrap = vi.fn(async () => true);
-    const navigateToUrl = vi.fn();
+    const waitForBootstrap = vi.fn(async () => true)
+    const navigateToUrl = vi.fn()
     const testRouter = createRouter({
-      history: createMemoryHistory("/designer/"),
+      history: createMemoryHistory('/designer/'),
       routes: [
         {
-          path: "/",
-          name: "Designer",
-          component: { template: "<div>designer</div>" },
-          meta: { title: "设计器", requiresAuth: true },
+          path: '/',
+          name: 'Designer',
+          component: { template: '<div>designer</div>' },
+          meta: { title: '设计器', requiresAuth: true },
         },
       ],
-    });
+    })
     const removeGuard = registerDesignerBeforeEachGuard(testRouter, {
       waitForBootstrap,
       navigateToUrl,
-      getIdeOrigin: () => "http://ide.example",
-      getCurrentUrl: () => "http://designer.example/designer/",
+      getIdeOrigin: () => 'http://ide.example',
+      getCurrentUrl: () => 'http://designer.example/designer/',
       isTopLevelWindow: () => false,
-    });
+    })
 
-    await testRouter.push("/");
+    await testRouter.push('/')
 
-    expect(waitForBootstrap).not.toHaveBeenCalled();
-    expect(navigateToUrl).not.toHaveBeenCalled();
+    expect(waitForBootstrap).not.toHaveBeenCalled()
+    expect(navigateToUrl).not.toHaveBeenCalled()
     expect(testRouter.currentRoute.value.meta.project).toEqual({
-      id: "cached-project",
-      tenantId: "tenant-cached",
-    });
+      id: 'cached-project',
+      tenantId: 'tenant-cached',
+    })
 
-    removeGuard();
-  });
+    removeGuard()
+  })
 
-  it("正式入口顶层访问在存在有效 handoff 记录时会直接恢复指定工程，不再回跳 IDE", async () => {
-    Storage.setToken("cached-token");
-    Storage.setProjectId("cached-project");
-    Storage.setTenantId("tenant-cached");
+  it('正式入口顶层访问在存在有效 handoff 记录时会直接恢复指定工程，不再回跳 IDE', async () => {
+    Storage.setToken('cached-token')
+    Storage.setProjectId('cached-project')
+    Storage.setTenantId('tenant-cached')
     localStorage.setItem(
-      "embedded_app_handoff:handoff-top",
+      'embedded_app_handoff:handoff-top',
       JSON.stringify({
-        handoffId: "handoff-top",
-        appType: "designer",
-        projectId: "handoff-project",
-        tenantId: "handoff-tenant",
+        handoffId: 'handoff-top',
+        appType: 'designer',
+        projectId: 'handoff-project',
+        tenantId: 'handoff-tenant',
         issuedAt: Date.now(),
         expiresAt: Date.now() + 60_000,
       }),
-    );
+    )
 
-    const waitForBootstrap = vi.fn(async () => true);
-    const navigateToUrl = vi.fn();
+    const waitForBootstrap = vi.fn(async () => true)
+    const navigateToUrl = vi.fn()
     const testRouter = createRouter({
-      history: createMemoryHistory("/designer/"),
+      history: createMemoryHistory('/designer/'),
       routes: [
         {
-          path: "/",
-          name: "Designer",
-          component: { template: "<div>designer</div>" },
-          meta: { title: "设计器", requiresAuth: true },
+          path: '/',
+          name: 'Designer',
+          component: { template: '<div>designer</div>' },
+          meta: { title: '设计器', requiresAuth: true },
         },
       ],
-    });
+    })
     const removeGuard = registerDesignerBeforeEachGuard(testRouter, {
       waitForBootstrap,
       navigateToUrl,
-      getIdeOrigin: () => "http://ide.example",
-      getCurrentUrl: () => "http://designer.example/designer/?handoffId=handoff-top",
+      getIdeOrigin: () => 'http://ide.example',
+      getCurrentUrl: () => 'http://designer.example/designer/?handoffId=handoff-top',
       isTopLevelWindow: () => true,
-    });
+    })
 
-    await testRouter.push("/");
+    await testRouter.push('/')
 
-    expect(waitForBootstrap).not.toHaveBeenCalled();
-    expect(navigateToUrl).not.toHaveBeenCalled();
+    expect(waitForBootstrap).not.toHaveBeenCalled()
+    expect(navigateToUrl).not.toHaveBeenCalled()
     expect(testRouter.currentRoute.value.meta.project).toEqual({
-      id: "handoff-project",
-      tenantId: "handoff-tenant",
-    });
-    expect(Storage.getProjectId()).toBe("handoff-project");
-    expect(Storage.getTenantId()).toBe("handoff-tenant");
+      id: 'handoff-project',
+      tenantId: 'handoff-tenant',
+    })
+    expect(Storage.getProjectId()).toBe('handoff-project')
+    expect(Storage.getTenantId()).toBe('handoff-tenant')
 
-    removeGuard();
-  });
+    removeGuard()
+  })
 
-  it("正式入口顶层访问在未注入 getIdeOrigin 时仍会回跳到配置的 IDE origin", async () => {
-    vi.stubEnv("VITE_IDE_ORIGIN", "http://ide.example");
+  it('正式入口顶层访问在未注入 getIdeOrigin 时仍会回跳到配置的 IDE origin', async () => {
+    vi.stubEnv('VITE_IDE_ORIGIN', 'http://ide.example')
 
-    const waitForBootstrap = vi.fn(async () => true);
-    const navigateToUrl = vi.fn();
+    const waitForBootstrap = vi.fn(async () => true)
+    const navigateToUrl = vi.fn()
     const testRouter = createRouter({
-      history: createMemoryHistory("/designer/"),
+      history: createMemoryHistory('/designer/'),
       routes: [
         {
-          path: "/",
-          name: "Designer",
-          component: { template: "<div>designer</div>" },
-          meta: { title: "设计器", requiresAuth: true },
+          path: '/',
+          name: 'Designer',
+          component: { template: '<div>designer</div>' },
+          meta: { title: '设计器', requiresAuth: true },
         },
       ],
-    });
+    })
     const removeGuard = registerDesignerBeforeEachGuard(testRouter, {
       waitForBootstrap,
       navigateToUrl,
-      getCurrentUrl: () => "http://designer.example/designer/?handoffId=handoff-runtime",
+      getCurrentUrl: () => 'http://designer.example/designer/?handoffId=handoff-runtime',
       isTopLevelWindow: () => true,
-    });
+    })
 
-    await testRouter.push("/");
+    await testRouter.push('/')
 
-    expect(waitForBootstrap).not.toHaveBeenCalled();
-    expect(navigateToUrl).toHaveBeenCalledWith("http://ide.example/?handoffId=handoff-runtime");
+    expect(waitForBootstrap).not.toHaveBeenCalled()
+    expect(navigateToUrl).toHaveBeenCalledWith('http://ide.example/?handoffId=handoff-runtime')
 
-    removeGuard();
-  });
+    removeGuard()
+  })
 
-  it("debug 路由不会等待 bootstrap，允许独立进入", async () => {
-    const waitForBootstrap = vi.fn(async () => true);
-    const navigateToUrl = vi.fn();
+  it('debug 路由不会等待 bootstrap，允许独立进入', async () => {
+    const waitForBootstrap = vi.fn(async () => true)
+    const navigateToUrl = vi.fn()
     const testRouter = createRouter({
-      history: createMemoryHistory("/designer/"),
+      history: createMemoryHistory('/designer/'),
       routes: [
         {
-          path: "/debug",
-          name: "DesignerDebug",
-          component: { template: "<div>debug</div>" },
-          meta: { title: "设计器调试", requiresAuth: false },
+          path: '/debug',
+          name: 'DesignerDebug',
+          component: { template: '<div>debug</div>' },
+          meta: { title: '设计器调试', requiresAuth: false },
         },
       ],
-    });
+    })
     const removeGuard = registerDesignerBeforeEachGuard(testRouter, {
       waitForBootstrap,
       navigateToUrl,
       resolveDefaultDebugProject: vi.fn(async () => ({
-        id: "project-test",
-        tenantId: "tenant-test",
+        id: 'project-test',
+        tenantId: 'tenant-test',
       })),
-      getIdeOrigin: () => "http://ide.example",
-      getCurrentUrl: () => "http://designer.example/designer/debug?handoffId=handoff-2",
+      getIdeOrigin: () => 'http://ide.example',
+      getCurrentUrl: () => 'http://designer.example/designer/debug?handoffId=handoff-2',
       isTopLevelWindow: () => true,
-    });
+    })
 
-    await testRouter.push("/debug");
+    await testRouter.push('/debug')
 
-    expect(waitForBootstrap).not.toHaveBeenCalled();
-    expect(navigateToUrl).not.toHaveBeenCalled();
-    expect(testRouter.currentRoute.value.name).toBe("DesignerDebug");
+    expect(waitForBootstrap).not.toHaveBeenCalled()
+    expect(navigateToUrl).not.toHaveBeenCalled()
+    expect(testRouter.currentRoute.value.name).toBe('DesignerDebug')
     expect(testRouter.currentRoute.value.meta.project).toEqual({
-      id: "project-test",
-      tenantId: "tenant-test",
-    });
-    expect(Storage.getProjectId()).toBe("project-test");
-    expect(Storage.getTenantId()).toBe("tenant-test");
+      id: 'project-test',
+      tenantId: 'tenant-test',
+    })
+    expect(Storage.getProjectId()).toBe('project-test')
+    expect(Storage.getTenantId()).toBe('tenant-test')
 
-    removeGuard();
-  });
+    removeGuard()
+  })
 
-  it("嵌入正式入口即使已有缓存会话，只要携带新的 handoffId 也必须等待 bootstrap 覆盖旧工程", async () => {
-    Storage.setToken("cached-token");
-    Storage.setProjectId("cached-project");
-    Storage.setTenantId("tenant-cached");
+  it('嵌入正式入口即使已有缓存会话，只要携带新的 handoffId 也必须等待 bootstrap 覆盖旧工程', async () => {
+    Storage.setToken('cached-token')
+    Storage.setProjectId('cached-project')
+    Storage.setTenantId('tenant-cached')
 
     const waitForBootstrap = vi.fn(async () => {
-      Storage.setToken("bootstrap-token");
-      Storage.setProjectId("bootstrap-project");
-      Storage.setTenantId("tenant-bootstrap");
-      return true;
-    });
-    const navigateToUrl = vi.fn();
+      Storage.setToken('bootstrap-token')
+      Storage.setProjectId('bootstrap-project')
+      Storage.setTenantId('tenant-bootstrap')
+      return true
+    })
+    const navigateToUrl = vi.fn()
     const testRouter = createRouter({
-      history: createMemoryHistory("/designer/"),
+      history: createMemoryHistory('/designer/'),
       routes: [
         {
-          path: "/",
-          name: "Designer",
-          component: { template: "<div>designer</div>" },
-          meta: { title: "设计器", requiresAuth: true },
+          path: '/',
+          name: 'Designer',
+          component: { template: '<div>designer</div>' },
+          meta: { title: '设计器', requiresAuth: true },
         },
       ],
-    });
+    })
     const removeGuard = registerDesignerBeforeEachGuard(testRouter, {
       waitForBootstrap,
       navigateToUrl,
-      getIdeOrigin: () => "http://ide.example",
-      getCurrentUrl: () => "http://designer.example/designer/?handoffId=handoff-cache",
+      getIdeOrigin: () => 'http://ide.example',
+      getCurrentUrl: () => 'http://designer.example/designer/?handoffId=handoff-cache',
       isTopLevelWindow: () => false,
-    });
+    })
 
-    await testRouter.push("/");
+    await testRouter.push('/')
 
-    expect(waitForBootstrap).toHaveBeenCalledTimes(1);
-    expect(navigateToUrl).not.toHaveBeenCalled();
+    expect(waitForBootstrap).toHaveBeenCalledTimes(1)
+    expect(navigateToUrl).not.toHaveBeenCalled()
     expect(testRouter.currentRoute.value.meta.project).toEqual({
-      id: "bootstrap-project",
-      tenantId: "tenant-bootstrap",
-    });
+      id: 'bootstrap-project',
+      tenantId: 'tenant-bootstrap',
+    })
 
-    removeGuard();
-  });
+    removeGuard()
+  })
 
-  it("嵌入正式入口携带新的 handoffId 且 bootstrap 失败时，不能回退到旧工程，而应回到 IDE 恢复", async () => {
-    Storage.setToken("cached-token");
-    Storage.setProjectId("cached-project");
-    Storage.setTenantId("tenant-cached");
+  it('嵌入正式入口携带新的 handoffId 且 bootstrap 失败时，不能回退到旧工程，而应回到 IDE 恢复', async () => {
+    Storage.setToken('cached-token')
+    Storage.setProjectId('cached-project')
+    Storage.setTenantId('tenant-cached')
 
-    const waitForBootstrap = vi.fn(async () => false);
-    const navigateToUrl = vi.fn();
+    const waitForBootstrap = vi.fn(async () => false)
+    const navigateToUrl = vi.fn()
     const testRouter = createRouter({
-      history: createMemoryHistory("/designer/"),
+      history: createMemoryHistory('/designer/'),
       routes: [
         {
-          path: "/",
-          name: "Designer",
-          component: { template: "<div>designer</div>" },
-          meta: { title: "设计器", requiresAuth: true },
+          path: '/',
+          name: 'Designer',
+          component: { template: '<div>designer</div>' },
+          meta: { title: '设计器', requiresAuth: true },
         },
       ],
-    });
+    })
     const removeGuard = registerDesignerBeforeEachGuard(testRouter, {
       waitForBootstrap,
       navigateToUrl,
-      getIdeOrigin: () => "http://ide.example",
-      getCurrentUrl: () => "http://designer.example/designer/?handoffId=handoff-timeout-with-cache",
+      getIdeOrigin: () => 'http://ide.example',
+      getCurrentUrl: () => 'http://designer.example/designer/?handoffId=handoff-timeout-with-cache',
       isTopLevelWindow: () => false,
-    });
+    })
 
-    await testRouter.push("/");
+    await testRouter.push('/')
 
-    expect(waitForBootstrap).toHaveBeenCalledTimes(1);
-    expect(Storage.getProjectId()).toBeNull();
-    expect(Storage.getTenantId()).toBeNull();
-    expect(navigateToUrl).toHaveBeenCalledWith("http://ide.example/?handoffId=handoff-timeout-with-cache");
+    expect(waitForBootstrap).toHaveBeenCalledTimes(1)
+    expect(Storage.getProjectId()).toBeNull()
+    expect(Storage.getTenantId()).toBeNull()
+    expect(navigateToUrl).toHaveBeenCalledWith(
+      'http://ide.example/?handoffId=handoff-timeout-with-cache',
+    )
 
-    removeGuard();
-  });
+    removeGuard()
+  })
 
-  it("程序化导航到 debug 时会按目标路由判定入口模式，不受旧 href 干扰", async () => {
-    const waitForBootstrap = vi.fn(async () => true);
-    const navigateToUrl = vi.fn();
+  it('程序化导航到 debug 时会按目标路由判定入口模式，不受旧 href 干扰', async () => {
+    const waitForBootstrap = vi.fn(async () => true)
+    const navigateToUrl = vi.fn()
     const testRouter = createRouter({
-      history: createMemoryHistory("/designer/"),
+      history: createMemoryHistory('/designer/'),
       routes: [
         {
-          path: "/",
-          name: "Designer",
-          component: { template: "<div>designer</div>" },
-          meta: { title: "设计器", requiresAuth: true },
+          path: '/',
+          name: 'Designer',
+          component: { template: '<div>designer</div>' },
+          meta: { title: '设计器', requiresAuth: true },
         },
         {
-          path: "/debug",
-          name: "DesignerDebug",
-          component: { template: "<div>debug</div>" },
-          meta: { title: "设计器调试", requiresAuth: false },
+          path: '/debug',
+          name: 'DesignerDebug',
+          component: { template: '<div>debug</div>' },
+          meta: { title: '设计器调试', requiresAuth: false },
         },
       ],
-    });
+    })
     const removeGuard = registerDesignerBeforeEachGuard(testRouter, {
       waitForBootstrap,
       navigateToUrl,
-      getIdeOrigin: () => "http://ide.example",
-      getCurrentUrl: () => "http://designer.example/designer/?handoffId=handoff-stale",
+      getIdeOrigin: () => 'http://ide.example',
+      getCurrentUrl: () => 'http://designer.example/designer/?handoffId=handoff-stale',
       isTopLevelWindow: () => true,
-    });
+    })
 
-    await testRouter.push("/debug");
+    await testRouter.push('/debug')
 
-    expect(waitForBootstrap).not.toHaveBeenCalled();
-    expect(navigateToUrl).not.toHaveBeenCalled();
-    expect(testRouter.currentRoute.value.name).toBe("DesignerDebug");
+    expect(waitForBootstrap).not.toHaveBeenCalled()
+    expect(navigateToUrl).not.toHaveBeenCalled()
+    expect(testRouter.currentRoute.value.name).toBe('DesignerDebug')
 
-    removeGuard();
-  });
+    removeGuard()
+  })
 
-  it("生产态不会注册 debug 路由，也不会把 /designer/debug 当成调试入口", () => {
+  it('生产态不会注册 debug 路由，也不会把 /designer/debug 当成调试入口', () => {
     expect(createDesignerRoutes(false)).toEqual([
       {
-        path: "/",
-        name: "Designer",
+        path: '/',
+        name: 'Designer',
         component: expect.any(Function),
         meta: {
-          title: "设计器",
+          title: '设计器',
           requiresAuth: true,
         },
       },
       {
-        path: "/preview",
-        name: "Preview",
+        path: '/preview',
+        name: 'Preview',
         component: expect.any(Function),
         meta: {
-          title: "预览",
+          title: '预览',
           requiresAuth: true,
         },
       },
-    ]);
-    expect(shouldUseDebugMode("/designer/debug", false)).toBe(false);
-  });
-});
+    ])
+    expect(shouldUseDebugMode('/designer/debug', false)).toBe(false)
+  })
+})

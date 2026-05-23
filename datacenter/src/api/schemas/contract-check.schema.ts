@@ -1,16 +1,10 @@
-import { z } from "zod";
-import { IdSchema, TimeFieldSchema } from "./common.schema";
+import { z } from 'zod'
+import { IdSchema, TimeFieldSchema } from './common.schema'
 
 // 契约检查状态
-export const ContractCheckStatusSchema = z.enum([
-  "pending",
-  "running",
-  "passed",
-  "failed",
-  "error",
-]);
+export const ContractCheckStatusSchema = z.enum(['pending', 'running', 'passed', 'failed', 'error'])
 
-export type ContractCheckStatus = z.infer<typeof ContractCheckStatusSchema>;
+export type ContractCheckStatus = z.infer<typeof ContractCheckStatusSchema>
 
 // 单条检查项结果
 export const ContractCheckItemSchema = z
@@ -21,9 +15,9 @@ export const ContractCheckItemSchema = z
     message: z.string().optional().nullable(),
     detail: z.unknown().optional(),
   })
-  .passthrough();
+  .passthrough()
 
-export type ContractCheckItem = z.infer<typeof ContractCheckItemSchema>;
+export type ContractCheckItem = z.infer<typeof ContractCheckItemSchema>
 
 // 一次契约检查结果
 export const ContractCheckResultSchema = z
@@ -36,6 +30,6 @@ export const ContractCheckResultSchema = z
     createdAt: TimeFieldSchema,
     finishedAt: TimeFieldSchema,
   })
-  .passthrough();
+  .passthrough()
 
-export type ContractCheckResult = z.infer<typeof ContractCheckResultSchema>;
+export type ContractCheckResult = z.infer<typeof ContractCheckResultSchema>

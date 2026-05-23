@@ -3,8 +3,8 @@
   面板内容仍在画布中维护，这里只处理面板项结构、默认展开和基础行为。
 -->
 <script setup lang="ts">
-import { ElMessage } from "element-plus";
-import { computed, ref, watch } from "vue";
+import { ElMessage } from 'element-plus'
+import { computed, ref, watch } from 'vue'
 import {
   buildCollapseChildKeyPatches,
   canRemoveCollapseItem,
@@ -15,175 +15,183 @@ import {
   type CollapseChildKeyPatch,
   type CollapseChildLike,
   type CollapsePanelItem,
-} from "./collapse-panel-utils";
-import ListItemsEditor from "./ListItemsEditor.vue";
+} from './collapse-panel-utils'
+import ListItemsEditor from './ListItemsEditor.vue'
 
 const props = defineProps<{
-  nodeProps: Record<string, unknown>;
-  childNodes: CollapseChildLike[];
-}>();
+  nodeProps: Record<string, unknown>
+  childNodes: CollapseChildLike[]
+}>()
 
 const emit = defineEmits<{
-  (event: "propsChange", patch: Record<string, unknown>): void;
-  (event: "childPatches", patches: CollapseChildKeyPatch[]): void;
-}>();
+  (event: 'propsChange', patch: Record<string, unknown>): void
+  (event: 'childPatches', patches: CollapseChildKeyPatch[]): void
+}>()
 
-const selectedKey = ref("");
-const itemsDialogVisible = ref(false);
+const selectedKey = ref('')
+const itemsDialogVisible = ref(false)
 
-const items = computed<CollapsePanelItem[]>(() => normalizeCollapseItems(props.nodeProps?.items));
-const accordion = computed<boolean>(() => Boolean(props.nodeProps?.accordion));
+const items = computed<CollapsePanelItem[]>(() => normalizeCollapseItems(props.nodeProps?.items))
+const accordion = computed<boolean>(() => Boolean(props.nodeProps?.accordion))
 const normalizedModelValue = computed(() =>
   normalizeCollapseModelValue(props.nodeProps?.modelValue, items.value, accordion.value),
-);
+)
 const selectedItem = computed<CollapsePanelItem | null>(
   () => items.value.find((item) => item.name === selectedKey.value) || items.value[0] || null,
-);
+)
 const activeSingleValue = computed<string>(() => {
-  const value = normalizedModelValue.value;
-  return Array.isArray(value) ? String(value[0] || "") : String(value || "");
-});
+  const value = normalizedModelValue.value
+  return Array.isArray(value) ? String(value[0] || '') : String(value || '')
+})
 const activeMultiValue = computed<string[]>(() => {
-  const value = normalizedModelValue.value;
-  return Array.isArray(value) ? value : value ? [String(value)] : [];
-});
+  const value = normalizedModelValue.value
+  return Array.isArray(value) ? value : value ? [String(value)] : []
+})
 const itemOptions = computed(() =>
   items.value.map((item) => ({
     label: item.title || item.name,
     value: item.name,
   })),
-);
+)
 
 watch(
   items,
   (nextItems) => {
     if (nextItems.length === 0) {
-      selectedKey.value = "";
-      return;
+      selectedKey.value = ''
+      return
     }
     if (!nextItems.some((item) => item.name === selectedKey.value)) {
-      selectedKey.value = nextItems[0]!.name;
+      selectedKey.value = nextItems[0]!.name
     }
   },
   { immediate: true },
-);
+)
 
 function emitProps(nextProps: Record<string, unknown>) {
-  emit("propsChange", nextProps);
+  emit('propsChange', nextProps)
 }
 
 function emitItems(nextItems: CollapsePanelItem[], extraProps: Record<string, unknown> = {}) {
   emitProps({
     ...extraProps,
     items: normalizeCollapseItems(nextItems),
-  });
+  })
 }
 
 function handleAccordionChange(value: boolean) {
   emitProps({
     accordion: value,
     modelValue: normalizeCollapseModelValue(props.nodeProps?.modelValue, items.value, value),
-  });
+  })
 }
 
 function handleSingleActiveChange(value: string) {
-  emitProps({ modelValue: normalizeCollapseModelValue(value, items.value, true) });
+  emitProps({ modelValue: normalizeCollapseModelValue(value, items.value, true) })
 }
 
 function handleMultiActiveChange(value: string[]) {
-  emitProps({ modelValue: normalizeCollapseModelValue(value, items.value, false) });
+  emitProps({ modelValue: normalizeCollapseModelValue(value, items.value, false) })
 }
 
 function handleAddItem() {
-  const nextItem = createCollapseItem(items.value);
-  selectedKey.value = nextItem.name;
+  const nextItem = createCollapseItem(items.value)
+  selectedKey.value = nextItem.name
   emitItems([...items.value, nextItem], {
-    modelValue: normalizeCollapseModelValue(props.nodeProps?.modelValue, [...items.value, nextItem], accordion.value),
-  });
+    modelValue: normalizeCollapseModelValue(
+      props.nodeProps?.modelValue,
+      [...items.value, nextItem],
+      accordion.value,
+    ),
+  })
 }
 
 function handleDuplicateItem(key: string) {
-  const source = items.value.find((item) => item.name === key);
-  if (!source) return;
-  const baseItem = createCollapseItem(items.value, `${source.title || source.name} 副本`);
+  const source = items.value.find((item) => item.name === key)
+  if (!source) return
+  const baseItem = createCollapseItem(items.value, `${source.title || source.name} 副本`)
   const nextItem = {
     ...source,
     name: baseItem.name,
     title: baseItem.title,
-  };
-  selectedKey.value = nextItem.name;
-  emitItems([...items.value, nextItem]);
+  }
+  selectedKey.value = nextItem.name
+  emitItems([...items.value, nextItem])
 }
 
 function handleRemoveItem(key: string) {
-  const removeCheck = canRemoveCollapseItem(key, props.childNodes || []);
+  const removeCheck = canRemoveCollapseItem(key, props.childNodes || [])
   if (!removeCheck.ok) {
-    ElMessage.warning({ message: "该面板项中已有画布内容，请先在画布中移动或删除内容" } as never);
-    return;
+    ElMessage.warning({ message: '该面板项中已有画布内容，请先在画布中移动或删除内容' } as never)
+    return
   }
   if (items.value.length <= 1) {
-    ElMessage.warning({ message: "至少保留一个面板项" } as never);
-    return;
+    ElMessage.warning({ message: '至少保留一个面板项' } as never)
+    return
   }
-  const nextItems = items.value.filter((item) => item.name !== key);
+  const nextItems = items.value.filter((item) => item.name !== key)
   const nextModelValue = normalizeCollapseModelValue(
     props.nodeProps?.modelValue,
     nextItems,
     accordion.value,
-  );
-  selectedKey.value = nextItems[0]?.name || "";
-  emitItems(nextItems, { modelValue: nextModelValue });
+  )
+  selectedKey.value = nextItems[0]?.name || ''
+  emitItems(nextItems, { modelValue: nextModelValue })
 }
 
 function handleMoveItem(key: string, direction: -1 | 1) {
-  const index = items.value.findIndex((item) => item.name === key);
-  const nextIndex = index + direction;
-  if (index < 0 || nextIndex < 0 || nextIndex >= items.value.length) return;
-  const nextItems = [...items.value];
-  const [item] = nextItems.splice(index, 1);
-  if (!item) return;
-  nextItems.splice(nextIndex, 0, item);
-  emitItems(nextItems);
+  const index = items.value.findIndex((item) => item.name === key)
+  const nextIndex = index + direction
+  if (index < 0 || nextIndex < 0 || nextIndex >= items.value.length) return
+  const nextItems = [...items.value]
+  const [item] = nextItems.splice(index, 1)
+  if (!item) return
+  nextItems.splice(nextIndex, 0, item)
+  emitItems(nextItems)
 }
 
 function updateSelectedItem(patch: Partial<CollapsePanelItem>) {
-  const current = selectedItem.value;
-  if (!current) return;
+  const current = selectedItem.value
+  if (!current) return
   const nextItems = items.value.map((item) =>
     item.name === current.name ? { ...item, ...patch } : item,
-  );
-  emitItems(nextItems);
+  )
+  emitItems(nextItems)
 }
 
 function handleNameChange(value: string) {
-  const current = selectedItem.value;
-  if (!current) return;
-  const result = renameCollapseItem(items.value, current.name, value);
+  const current = selectedItem.value
+  if (!current) return
+  const result = renameCollapseItem(items.value, current.name, value)
   if (!result.ok) {
     const messageMap: Record<string, string> = {
-      emptyName: "唯一标识不能为空",
-      duplicateName: "唯一标识不能重复",
-      missingItem: "当前面板项不存在",
-    };
-    ElMessage.warning({ message: messageMap[result.reason] || "标识更新失败" } as never);
-    return;
+      emptyName: '唯一标识不能为空',
+      duplicateName: '唯一标识不能重复',
+      missingItem: '当前面板项不存在',
+    }
+    ElMessage.warning({ message: messageMap[result.reason] || '标识更新失败' } as never)
+    return
   }
   const nextModelValue = normalizeCollapseModelValue(
     activeMultiValue.value.map((item) => (item === result.oldName ? result.newName : item)),
     result.items,
     accordion.value,
-  );
-  const patches = buildCollapseChildKeyPatches(props.childNodes || [], result.oldName, result.newName);
-  selectedKey.value = result.newName;
-  emit("childPatches", patches);
-  emitItems(result.items, { modelValue: nextModelValue });
+  )
+  const patches = buildCollapseChildKeyPatches(
+    props.childNodes || [],
+    result.oldName,
+    result.newName,
+  )
+  selectedKey.value = result.newName
+  emit('childPatches', patches)
+  emitItems(result.items, { modelValue: nextModelValue })
 }
 
 function openItemsDialog() {
   if (!selectedKey.value && items.value[0]) {
-    selectedKey.value = items.value[0].name;
+    selectedKey.value = items.value[0].name
   }
-  itemsDialogVisible.value = true;
+  itemsDialogVisible.value = true
 }
 </script>
 
@@ -227,7 +235,9 @@ function openItemsDialog() {
             collapse-tags
             collapse-tags-tooltip
             placeholder="不默认展开"
-            @update:model-value="(val: any) => handleMultiActiveChange(Array.isArray(val) ? val : [])"
+            @update:model-value="
+              (val: any) => handleMultiActiveChange(Array.isArray(val) ? val : [])
+            "
           >
             <el-option
               v-for="item in itemOptions"
@@ -307,7 +317,9 @@ function openItemsDialog() {
                 :rows="2"
                 size="small"
                 placeholder="面板没有画布内容时显示"
-                @update:model-value="(val: any) => updateSelectedItem({ content: String(val || '') })"
+                @update:model-value="
+                  (val: any) => updateSelectedItem({ content: String(val || '') })
+                "
               />
             </div>
           </template>

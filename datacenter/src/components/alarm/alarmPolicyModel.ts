@@ -6,39 +6,39 @@ import type {
   AlarmPolicyMode,
   AlarmPolicySave,
   AlarmTargetRef,
-} from "@/api/schemas/alarm.schema";
+} from '@/api/schemas/alarm.schema'
 
 export type AlarmPolicyDraft = {
-  id?: string;
-  groupId: string | null;
-  name: string;
-  description: string;
-  mode: AlarmPolicyMode;
-  targets: AlarmTargetRef[];
-  inputs: AlarmInputRef[];
-  derivedExpression: string;
-  conditions: AlarmCondition[];
-  suppression: Record<string, unknown>;
-  messageTemplate: string;
-  isEnabled: boolean;
-  dirty: boolean;
-};
+  id?: string
+  groupId: string | null
+  name: string
+  description: string
+  mode: AlarmPolicyMode
+  targets: AlarmTargetRef[]
+  inputs: AlarmInputRef[]
+  derivedExpression: string
+  conditions: AlarmCondition[]
+  suppression: Record<string, unknown>
+  messageTemplate: string
+  isEnabled: boolean
+  dirty: boolean
+}
 
 export function createDefaultAlarmPolicyDraft(): AlarmPolicyDraft {
   return {
     groupId: null,
-    name: "",
-    description: "",
-    mode: "per_target",
+    name: '',
+    description: '',
+    mode: 'per_target',
     targets: [],
     inputs: [],
-    derivedExpression: "",
+    derivedExpression: '',
     conditions: [],
     suppression: { enabled: false },
-    messageTemplate: "",
+    messageTemplate: '',
     isEnabled: true,
     dirty: false,
-  };
+  }
 }
 
 export function toAlarmPolicyDraft(policy: AlarmPolicy): AlarmPolicyDraft {
@@ -46,7 +46,7 @@ export function toAlarmPolicyDraft(policy: AlarmPolicy): AlarmPolicyDraft {
     id: policy.id,
     groupId: policy.groupId ?? null,
     name: policy.name,
-    description: policy.description ?? "",
+    description: policy.description ?? '',
     mode: policy.mode,
     targets: policy.targets.map((target) => ({ ...target })),
     inputs: policy.inputs.map((input) => ({ ...input })),
@@ -56,12 +56,10 @@ export function toAlarmPolicyDraft(policy: AlarmPolicy): AlarmPolicyDraft {
     messageTemplate: policy.messageTemplate,
     isEnabled: policy.isEnabled,
     dirty: false,
-  };
+  }
 }
 
-export function draftToAlarmPolicySavePayload(
-  draft: AlarmPolicyDraft,
-): AlarmPolicySave {
+export function draftToAlarmPolicySavePayload(draft: AlarmPolicyDraft): AlarmPolicySave {
   return {
     groupId: draft.groupId,
     name: draft.name.trim(),
@@ -74,17 +72,15 @@ export function draftToAlarmPolicySavePayload(
     suppression: { ...draft.suppression },
     messageTemplate: draft.messageTemplate.trim(),
     isEnabled: draft.isEnabled,
-  };
+  }
 }
 
 export function makeIdSelection(policyIds: string[] = []): AlarmBulkSelection {
-  return { mode: "ids", policyIds };
+  return { mode: 'ids', policyIds }
 }
 
-export function makeFilteredSelection(
-  filters: Record<string, unknown>,
-): AlarmBulkSelection {
-  return { mode: "filtered", filters, excludePolicyIds: [] };
+export function makeFilteredSelection(filters: Record<string, unknown>): AlarmBulkSelection {
+  return { mode: 'filtered', filters, excludePolicyIds: [] }
 }
 
 export function togglePolicyInSelection(
@@ -92,57 +88,55 @@ export function togglePolicyInSelection(
   policyId: string,
   selected: boolean,
 ): AlarmBulkSelection {
-  if (selection.mode === "filtered") {
-    const excluded = new Set(selection.excludePolicyIds);
+  if (selection.mode === 'filtered') {
+    const excluded = new Set(selection.excludePolicyIds)
     if (selected) {
-      excluded.delete(policyId);
+      excluded.delete(policyId)
     } else {
-      excluded.add(policyId);
+      excluded.add(policyId)
     }
-    return { ...selection, excludePolicyIds: [...excluded] };
+    return { ...selection, excludePolicyIds: [...excluded] }
   }
 
-  const ids = new Set(selection.policyIds);
+  const ids = new Set(selection.policyIds)
   if (selected) {
-    ids.add(policyId);
+    ids.add(policyId)
   } else {
-    ids.delete(policyId);
+    ids.delete(policyId)
   }
-  return { mode: "ids", policyIds: [...ids] };
+  return { mode: 'ids', policyIds: [...ids] }
 }
 
-export function createThresholdCondition(
-  type: AlarmCondition["type"] = "H",
-): AlarmCondition {
-  const nameMap: Record<AlarmCondition["type"], string> = {
-    HH: "高高限",
-    H: "高限",
-    L: "低限",
-    LL: "低低限",
-    deviation_high: "高偏差",
-    deviation_low: "低偏差",
-    rate_of_change: "变化率",
-    bool_equal: "状态判断",
-    bool_transition: "变化报警",
-    string_equal: "文本等于",
-    string_not_equal: "文本不等于",
-    string_contains: "文本包含",
-    string_regex: "正则匹配",
-    cel: "自定义",
-  };
-  let params: Record<string, unknown> = { limit: 0, hysteresis: 0, durationMs: 0 };
-  if (type === "cel") {
-    params = { expression: "value > 0" };
-  } else if (type === "bool_equal") {
-    params = { expected: true };
-  } else if (type === "bool_transition") {
-    params = { from: true, to: false };
-  } else if (type === "string_regex") {
-    params = { pattern: "" };
-  } else if (["string_equal", "string_not_equal", "string_contains"].includes(type)) {
-    params = { expected: "" };
-  } else if (type === "rate_of_change") {
-    params = { limit: 0, windowMs: 60000, direction: "up" };
+export function createThresholdCondition(type: AlarmCondition['type'] = 'H'): AlarmCondition {
+  const nameMap: Record<AlarmCondition['type'], string> = {
+    HH: '高高限',
+    H: '高限',
+    L: '低限',
+    LL: '低低限',
+    deviation_high: '高偏差',
+    deviation_low: '低偏差',
+    rate_of_change: '变化率',
+    bool_equal: '状态判断',
+    bool_transition: '变化报警',
+    string_equal: '文本等于',
+    string_not_equal: '文本不等于',
+    string_contains: '文本包含',
+    string_regex: '正则匹配',
+    cel: '自定义',
+  }
+  let params: Record<string, unknown> = { limit: 0, hysteresis: 0, durationMs: 0 }
+  if (type === 'cel') {
+    params = { expression: 'value > 0' }
+  } else if (type === 'bool_equal') {
+    params = { expected: true }
+  } else if (type === 'bool_transition') {
+    params = { from: true, to: false }
+  } else if (type === 'string_regex') {
+    params = { pattern: '' }
+  } else if (['string_equal', 'string_not_equal', 'string_contains'].includes(type)) {
+    params = { expected: '' }
+  } else if (type === 'rate_of_change') {
+    params = { limit: 0, windowMs: 60000, direction: 'up' }
   }
 
   return {
@@ -150,14 +144,14 @@ export function createThresholdCondition(
     type,
     name: nameMap[type],
     isEnabled: true,
-    severity: "warning",
+    severity: 'warning',
     params,
-  };
+  }
 }
 
 function cloneConditions(conditions: AlarmCondition[]): AlarmCondition[] {
   return conditions.map((condition) => ({
     ...condition,
     params: { ...condition.params },
-  }));
+  }))
 }

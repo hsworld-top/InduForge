@@ -1,4 +1,4 @@
 export default {
-  name: "IconEpFolder",
+  name: 'IconEpFolder',
   template: `<span class="icon-ep-folder" />`,
-};
+}

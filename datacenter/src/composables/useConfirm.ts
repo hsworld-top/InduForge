@@ -1,4 +1,4 @@
-import { ElMessageBox } from "element-plus";
+import { ElMessageBox } from 'element-plus'
 
 // 危险动作二次确认，封装 ElMessageBox.confirm
 
@@ -10,29 +10,29 @@ export function useConfirm() {
   async function confirm(
     message: string,
     options: {
-      title?: string;
-      confirmText?: string;
-      cancelText?: string;
-      type?: "warning" | "error" | "info";
+      title?: string
+      confirmText?: string
+      cancelText?: string
+      type?: 'warning' | 'error' | 'info'
     } = {},
   ): Promise<boolean> {
     const {
-      title = "确认操作",
-      confirmText = "确定",
-      cancelText = "取消",
-      type = "warning",
-    } = options;
+      title = '确认操作',
+      confirmText = '确定',
+      cancelText = '取消',
+      type = 'warning',
+    } = options
 
     try {
       await ElMessageBox.confirm(message, title, {
         confirmButtonText: confirmText,
         cancelButtonText: cancelText,
         type,
-      });
-      return true;
+      })
+      return true
     } catch {
       // 用户点了取消，静默返回 false
-      return false;
+      return false
     }
   }
 
@@ -44,9 +44,9 @@ export function useConfirm() {
     action: () => Promise<void> | void,
     options?: Parameters<typeof confirm>[1],
   ): Promise<void> {
-    const ok = await confirm(message, options);
+    const ok = await confirm(message, options)
     if (ok) {
-      await action();
+      await action()
     }
   }
 
@@ -57,38 +57,40 @@ export function useConfirm() {
    *   'keep'     - 用户选择保留为草稿
    *   'cancel'   - 用户取消（不离开当前页面）
    */
-  async function confirmDraftAction(options: {
-    title?: string;
-    message?: string;
-  } = {}): Promise<"discard" | "keep" | "cancel"> {
+  async function confirmDraftAction(
+    options: {
+      title?: string
+      message?: string
+    } = {},
+  ): Promise<'discard' | 'keep' | 'cancel'> {
     const {
-      title = "有未保存的修改",
-      message = "当前有未保存的修改，是否丢弃、保留为草稿还是继续编辑？",
-    } = options;
+      title = '有未保存的修改',
+      message = '当前有未保存的修改，是否丢弃、保留为草稿还是继续编辑？',
+    } = options
 
     try {
       // 借助 ElMessageBox 的 distinguishCancelAndClose 区分"丢弃"与"关闭"
       // confirmButtonText = 丢弃，cancelButtonText = 保留为草稿
       // 用户点叉或 Escape 触发 close，视为取消
       await ElMessageBox.confirm(message, title, {
-        confirmButtonText: "丢弃草稿",
-        cancelButtonText: "保留为草稿",
+        confirmButtonText: '丢弃草稿',
+        cancelButtonText: '保留为草稿',
         distinguishCancelAndClose: true,
-        type: "warning",
+        type: 'warning',
         closeOnClickModal: false,
         // 关闭按钮会 reject('close')，cancel 按钮会 reject('cancel')
-      });
+      })
       // 用户点了"丢弃草稿"
-      return "discard";
+      return 'discard'
     } catch (action) {
-      if (action === "cancel") {
+      if (action === 'cancel') {
         // 用户点了"保留为草稿"
-        return "keep";
+        return 'keep'
       }
       // 用户点叉、Escape 或其他关闭方式，视为取消导航
-      return "cancel";
+      return 'cancel'
     }
   }
 
-  return { confirm, confirmAndRun, confirmDraftAction };
+  return { confirm, confirmAndRun, confirmDraftAction }
 }

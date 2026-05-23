@@ -1,145 +1,144 @@
 // @ts-nocheck
 /* global __DATACENTER_DEBUG_ROUTE_ENABLED__ */
 
-import { Storage } from "../utils/storage";
+import { Storage } from '../utils/storage'
 
-export const DATACENTER_APP = "datacenter";
-export const APP_BOOTSTRAP_REQUEST = "APP_BOOTSTRAP_REQUEST";
-export const APP_BOOTSTRAP_RESPONSE = "APP_BOOTSTRAP_RESPONSE";
-export const AUTH_REFRESHED = "AUTH_REFRESHED";
-export const AUTH_EXPIRED = "AUTH_EXPIRED";
-export const APP_BOOTSTRAP_TIMEOUT_MS = 3000;
+export const DATACENTER_APP = 'datacenter'
+export const APP_BOOTSTRAP_REQUEST = 'APP_BOOTSTRAP_REQUEST'
+export const APP_BOOTSTRAP_RESPONSE = 'APP_BOOTSTRAP_RESPONSE'
+export const AUTH_REFRESHED = 'AUTH_REFRESHED'
+export const AUTH_EXPIRED = 'AUTH_EXPIRED'
+export const APP_BOOTSTRAP_TIMEOUT_MS = 3000
 
-const DEBUG_BASE_PATH = "/datacenter/debug";
-const HANDOFF_STORAGE_PREFIX = "embedded_app_handoff:";
+const DEBUG_BASE_PATH = '/datacenter/debug'
+const HANDOFF_STORAGE_PREFIX = 'embedded_app_handoff:'
 const DEFAULT_DEBUG_ROUTE_ENABLED =
-  typeof __DATACENTER_DEBUG_ROUTE_ENABLED__ !== "undefined"
+  typeof __DATACENTER_DEBUG_ROUTE_ENABLED__ !== 'undefined'
     ? __DATACENTER_DEBUG_ROUTE_ENABLED__
-    : true;
+    : true
 
-let currentSession = null;
+let currentSession = null
 
 const asNonEmptyString = (value) =>
-  typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 
-const getTimerApi = () => globalThis.window ?? globalThis;
+const getTimerApi = () => globalThis.window ?? globalThis
 
-const resolveWindowLike = () => globalThis.window ?? null;
+const resolveWindowLike = () => globalThis.window ?? null
 
-const resolveDocumentLike = () => globalThis.document ?? null;
+const resolveDocumentLike = () => globalThis.document ?? null
 
 const resolveCurrentUrl = (url) => {
-  const candidate =
-    asNonEmptyString(url) ?? resolveWindowLike()?.location?.href;
+  const candidate = asNonEmptyString(url) ?? resolveWindowLike()?.location?.href
   if (!candidate) {
-    throw new Error("缺少当前 URL，无法初始化宿主 bootstrap");
+    throw new Error('缺少当前 URL，无法初始化宿主 bootstrap')
   }
-  return new URL(candidate);
-};
+  return new URL(candidate)
+}
 
 const resolveHandoffValue = (handoff) => {
-  if (typeof handoff === "string") {
-    return asNonEmptyString(handoff);
+  if (typeof handoff === 'string') {
+    return asNonEmptyString(handoff)
   }
 
-  if (!handoff || typeof handoff !== "object") {
-    return null;
+  if (!handoff || typeof handoff !== 'object') {
+    return null
   }
 
-  return asNonEmptyString(handoff.handoff);
-};
+  return asNonEmptyString(handoff.handoff)
+}
 
 const readTopLevelHandoffRecord = (handoff) => {
-  const handoffValue = resolveHandoffValue(handoff);
+  const handoffValue = resolveHandoffValue(handoff)
   if (!handoffValue) {
-    return null;
+    return null
   }
 
   try {
     const rawValue = resolveWindowLike()?.localStorage?.getItem(
       `${HANDOFF_STORAGE_PREFIX}${handoffValue}`,
-    );
+    )
     if (!rawValue) {
-      return null;
+      return null
     }
 
-    const record = JSON.parse(rawValue);
-    if (!record || typeof record !== "object") {
-      return null;
+    const record = JSON.parse(rawValue)
+    if (!record || typeof record !== 'object') {
+      return null
     }
 
     if (
       record.handoffId !== handoffValue ||
       record.appType !== DATACENTER_APP ||
-      typeof record.expiresAt !== "number" ||
+      typeof record.expiresAt !== 'number' ||
       record.expiresAt <= Date.now()
     ) {
-      return null;
+      return null
     }
 
-    return record;
+    return record
   } catch (error) {
-    console.warn("读取 datacenter handoff 票据失败:", error);
-    return null;
+    console.warn('读取 datacenter handoff 票据失败:', error)
+    return null
   }
-};
+}
 
 export const restoreTopLevelHandoffRecord = (handoff) => {
-  const record = readTopLevelHandoffRecord(handoff);
+  const record = readTopLevelHandoffRecord(handoff)
   if (!record) {
-    return false;
+    return false
   }
 
-  const nextProjectId = asNonEmptyString(record.projectId);
-  const nextTenantId = asNonEmptyString(record.tenantId);
-  const nextTheme = asNonEmptyString(record.theme);
-  const nextLocale = asNonEmptyString(record.locale);
+  const nextProjectId = asNonEmptyString(record.projectId)
+  const nextTenantId = asNonEmptyString(record.tenantId)
+  const nextTheme = asNonEmptyString(record.theme)
+  const nextLocale = asNonEmptyString(record.locale)
 
   if (!nextProjectId) {
-    return false;
+    return false
   }
 
-  Storage.setProjectId(nextProjectId);
+  Storage.setProjectId(nextProjectId)
   if (nextTenantId) {
-    Storage.setTenantId(nextTenantId);
+    Storage.setTenantId(nextTenantId)
   }
   if (nextTheme) {
-    Storage.setTheme(nextTheme);
-    applyThemeToDocument(nextTheme);
+    Storage.setTheme(nextTheme)
+    applyThemeToDocument(nextTheme)
   }
   if (nextLocale) {
-    Storage.setLanguage(nextLocale);
+    Storage.setLanguage(nextLocale)
   }
 
-  return true;
-};
+  return true
+}
 
 const resolveMessagePayload = (value) => {
-  if (!value || typeof value !== "object") {
-    return {};
+  if (!value || typeof value !== 'object') {
+    return {}
   }
 
-  if (value.payload && typeof value.payload === "object") {
-    return value.payload;
+  if (value.payload && typeof value.payload === 'object') {
+    return value.payload
   }
 
-  return value;
-};
+  return value
+}
 
 function createBootstrapGate(shouldWaitForBootstrap) {
   if (!shouldWaitForBootstrap) {
     return {
       promise: Promise.resolve(true),
       settle: () => {},
-    };
+    }
   }
 
-  let settled = false;
-  let resolvePromise = (_value) => {};
-  const timerApi = getTimerApi();
+  let settled = false
+  let resolvePromise = (_value) => {}
+  const timerApi = getTimerApi()
   const promise = new Promise((resolve) => {
-    resolvePromise = resolve;
-  });
+    resolvePromise = resolve
+  })
 
   /**
    * iframe 正式入口只允许等待有限时间。
@@ -148,77 +147,71 @@ function createBootstrapGate(shouldWaitForBootstrap) {
    */
   const settle = (value) => {
     if (settled) {
-      return;
+      return
     }
 
-    settled = true;
-    timerApi.clearTimeout(timeoutId);
-    resolvePromise(value);
-  };
+    settled = true
+    timerApi.clearTimeout(timeoutId)
+    resolvePromise(value)
+  }
 
   const timeoutId = timerApi.setTimeout(() => {
-    settle(false);
-  }, APP_BOOTSTRAP_TIMEOUT_MS);
+    settle(false)
+  }, APP_BOOTSTRAP_TIMEOUT_MS)
 
   return {
     promise,
     settle,
-  };
+  }
 }
 
 function createBootstrapRequestId() {
   return `datacenter_bootstrap_${Date.now().toString(36)}_${Math.random()
     .toString(36)
-    .slice(2, 10)}`;
+    .slice(2, 10)}`
 }
 
-function resolveTrustedHostOrigin(referrer = "") {
-  const referrerValue = asNonEmptyString(referrer);
+function resolveTrustedHostOrigin(referrer = '') {
+  const referrerValue = asNonEmptyString(referrer)
   if (!referrerValue) {
-    return null;
+    return null
   }
 
   try {
-    return new URL(referrerValue).origin;
+    return new URL(referrerValue).origin
   } catch {
-    return null;
+    return null
   }
 }
 
 function resolveOriginCandidate(value, baseUrl) {
-  const candidate = asNonEmptyString(value);
+  const candidate = asNonEmptyString(value)
   if (!candidate) {
-    return null;
+    return null
   }
 
   try {
-    return new URL(candidate, baseUrl).origin;
+    return new URL(candidate, baseUrl).origin
   } catch {
-    return null;
+    return null
   }
 }
 
 function normalizeDebugRouteEnabled(debugRouteEnabled) {
-  if (typeof debugRouteEnabled === "string") {
-    return debugRouteEnabled !== "false";
+  if (typeof debugRouteEnabled === 'string') {
+    return debugRouteEnabled !== 'false'
   }
 
-  return Boolean(debugRouteEnabled);
+  return Boolean(debugRouteEnabled)
 }
 
-export function shouldUseDebugMode(
-  pathname,
-  debugRouteEnabled = DEFAULT_DEBUG_ROUTE_ENABLED,
-) {
+export function shouldUseDebugMode(pathname, debugRouteEnabled = DEFAULT_DEBUG_ROUTE_ENABLED) {
   if (!normalizeDebugRouteEnabled(debugRouteEnabled)) {
-    return false;
+    return false
   }
 
-  const normalizedPath = pathname || "";
-  return (
-    normalizedPath === DEBUG_BASE_PATH ||
-    normalizedPath.startsWith(`${DEBUG_BASE_PATH}/`)
-  );
+  const normalizedPath = pathname || ''
+  return normalizedPath === DEBUG_BASE_PATH || normalizedPath.startsWith(`${DEBUG_BASE_PATH}/`)
 }
 
 /**
@@ -236,10 +229,10 @@ export function hasReusableTopLevelSession({
    * 否则 test 与 test1 会落到同一个旧 projectId。
    */
   if (asNonEmptyString(handoff)) {
-    return false;
+    return false
   }
 
-  return Boolean(asNonEmptyString(token) && asNonEmptyString(projectId));
+  return Boolean(asNonEmptyString(token) && asNonEmptyString(projectId))
 }
 
 export function shouldRedirectTopLevelToIde(
@@ -247,31 +240,29 @@ export function shouldRedirectTopLevelToIde(
   isTopLevel,
   hasReusableSession = hasReusableTopLevelSession(),
 ) {
-  return isTopLevel && !shouldUseDebugMode(pathname) && !hasReusableSession;
+  return isTopLevel && !shouldUseDebugMode(pathname) && !hasReusableSession
 }
 
 export function buildIdeRestoreUrl(handoff, ideOrigin) {
-  const targetUrl = new URL("/", ideOrigin);
-  const handoffValue = resolveHandoffValue(handoff);
+  const targetUrl = new URL('/', ideOrigin)
+  const handoffValue = resolveHandoffValue(handoff)
   if (handoffValue) {
-    targetUrl.searchParams.set("handoff", handoffValue);
+    targetUrl.searchParams.set('handoff', handoffValue)
   }
-  return targetUrl.toString();
+  return targetUrl.toString()
 }
 
 export function buildIdeLoginUrl(currentUrl, ideOrigin) {
-  const targetUrl = new URL("/login", ideOrigin);
-  targetUrl.searchParams.set("redirect", currentUrl);
-  return targetUrl.toString();
+  const targetUrl = new URL('/login', ideOrigin)
+  targetUrl.searchParams.set('redirect', currentUrl)
+  return targetUrl.toString()
 }
 
 export function createBootstrapRequest({ handoff, requestId, url } = {}) {
-  const resolvedUrl = resolveCurrentUrl(url);
+  const resolvedUrl = resolveCurrentUrl(url)
   const handoffValue =
-    resolveHandoffValue(handoff) ??
-    asNonEmptyString(resolvedUrl.searchParams.get("handoff"));
-  const requestIdValue =
-    asNonEmptyString(requestId) ?? createBootstrapRequestId();
+    resolveHandoffValue(handoff) ?? asNonEmptyString(resolvedUrl.searchParams.get('handoff'))
+  const requestIdValue = asNonEmptyString(requestId) ?? createBootstrapRequestId()
 
   return {
     type: APP_BOOTSTRAP_REQUEST,
@@ -280,134 +271,117 @@ export function createBootstrapRequest({ handoff, requestId, url } = {}) {
     handoff: handoffValue,
     requestedPath: resolvedUrl.pathname,
     requestedQuery: resolvedUrl.search,
-  };
+  }
 }
 
 export function applyThemeToDocument(theme) {
-  if (!["light", "dark"].includes(theme)) {
-    return;
+  if (!['light', 'dark'].includes(theme)) {
+    return
   }
 
-  resolveDocumentLike()?.documentElement?.classList?.toggle(
-    "dark",
-    theme === "dark",
-  );
+  resolveDocumentLike()?.documentElement?.classList?.toggle('dark', theme === 'dark')
 }
 
 export function applyBootstrapPayload(payload = {}) {
-  const nextToken =
-    asNonEmptyString(payload.token) ?? asNonEmptyString(payload.accessToken);
-  const nextRefreshToken = asNonEmptyString(payload.refreshToken);
-  const nextTenantId = asNonEmptyString(payload.tenantId);
-  const nextProjectId =
-    asNonEmptyString(payload.projectId) ?? asNonEmptyString(payload.pid);
-  const nextTheme = asNonEmptyString(payload.theme);
-  const nextLocale = asNonEmptyString(payload.locale);
+  const nextToken = asNonEmptyString(payload.token) ?? asNonEmptyString(payload.accessToken)
+  const nextRefreshToken = asNonEmptyString(payload.refreshToken)
+  const nextTenantId = asNonEmptyString(payload.tenantId)
+  const nextProjectId = asNonEmptyString(payload.projectId) ?? asNonEmptyString(payload.pid)
+  const nextTheme = asNonEmptyString(payload.theme)
+  const nextLocale = asNonEmptyString(payload.locale)
 
   if (nextToken) {
-    Storage.setToken(nextToken);
+    Storage.setToken(nextToken)
   }
 
   if (nextRefreshToken) {
-    Storage.setRefreshToken(nextRefreshToken);
+    Storage.setRefreshToken(nextRefreshToken)
   }
 
   if (nextTenantId) {
-    Storage.setTenantId(nextTenantId);
+    Storage.setTenantId(nextTenantId)
   }
 
   if (nextProjectId) {
-    Storage.setProjectId(nextProjectId);
+    Storage.setProjectId(nextProjectId)
   }
 
   if (nextTheme) {
-    Storage.setTheme(nextTheme);
-    applyThemeToDocument(nextTheme);
+    Storage.setTheme(nextTheme)
+    applyThemeToDocument(nextTheme)
   }
 
   if (nextLocale) {
-    Storage.setLanguage(nextLocale);
+    Storage.setLanguage(nextLocale)
   }
 }
 
 export function applyAuthRefreshedPayload(payload = {}) {
-  const nextToken =
-    asNonEmptyString(payload.token) ?? asNonEmptyString(payload.accessToken);
-  const nextRefreshToken = asNonEmptyString(payload.refreshToken);
+  const nextToken = asNonEmptyString(payload.token) ?? asNonEmptyString(payload.accessToken)
+  const nextRefreshToken = asNonEmptyString(payload.refreshToken)
 
   if (!nextToken) {
-    return;
+    return
   }
 
-  Storage.setToken(nextToken);
+  Storage.setToken(nextToken)
   if (nextRefreshToken) {
-    Storage.setRefreshToken(nextRefreshToken);
+    Storage.setRefreshToken(nextRefreshToken)
   }
 }
 
 export function resolveIdeOriginFromRuntime(options = {}) {
-  const currentUrl = options.currentUrl ?? resolveWindowLike()?.location?.href;
+  const currentUrl = options.currentUrl ?? resolveWindowLike()?.location?.href
   const configuredIdeOrigin = resolveOriginCandidate(
     options.configuredIdeOrigin ?? import.meta.env?.VITE_IDE_ORIGIN,
     currentUrl,
-  );
+  )
   if (configuredIdeOrigin) {
-    return configuredIdeOrigin;
+    return configuredIdeOrigin
   }
 
   const referrerOrigin = resolveTrustedHostOrigin(
-    options.referrer ?? resolveDocumentLike()?.referrer ?? "",
-  );
+    options.referrer ?? resolveDocumentLike()?.referrer ?? '',
+  )
   if (referrerOrigin) {
-    return referrerOrigin;
+    return referrerOrigin
   }
 
-  const currentLocation = currentUrl
-    ? new URL(currentUrl)
-    : resolveWindowLike()?.location;
-  const currentProtocol =
-    currentLocation?.protocol === "https:" ? "https:" : "http:";
-  const currentHost = currentLocation?.hostname || "localhost";
-  const currentOrigin = currentLocation?.origin || "";
+  const currentLocation = currentUrl ? new URL(currentUrl) : resolveWindowLike()?.location
+  const currentProtocol = currentLocation?.protocol === 'https:' ? 'https:' : 'http:'
+  const currentHost = currentLocation?.hostname || 'localhost'
+  const currentOrigin = currentLocation?.origin || ''
 
   if (options.isDev ?? import.meta.env?.DEV) {
     const devHost =
       asNonEmptyString(options.devHost) ??
       asNonEmptyString(import.meta.env?.VITE_DEV_HOST) ??
-      currentHost;
-    const idePort = String(
-      options.idePort ?? import.meta.env?.VITE_IDE_PORT ?? "18601",
-    ).trim();
+      currentHost
+    const idePort = String(options.idePort ?? import.meta.env?.VITE_IDE_PORT ?? '18601').trim()
 
     if (devHost && idePort) {
-      return `${currentProtocol}//${devHost}:${idePort}`;
+      return `${currentProtocol}//${devHost}:${idePort}`
     }
   }
 
-  return currentOrigin;
+  return currentOrigin
 }
 
-export function resolveHostMessageTarget({
-  parentWindow,
-  referrer,
-  selfWindow,
-} = {}) {
-  const currentWindow = selfWindow ?? resolveWindowLike();
-  const currentParentWindow = parentWindow ?? currentWindow?.parent ?? null;
+export function resolveHostMessageTarget({ parentWindow, referrer, selfWindow } = {}) {
+  const currentWindow = selfWindow ?? resolveWindowLike()
+  const currentParentWindow = parentWindow ?? currentWindow?.parent ?? null
 
   if (!currentParentWindow || currentParentWindow === currentWindow) {
     return {
       origin: null,
       source: null,
-    };
+    }
   }
 
   return {
-    origin: resolveTrustedHostOrigin(
-      referrer ?? resolveDocumentLike()?.referrer ?? "",
-    ),
+    origin: resolveTrustedHostOrigin(referrer ?? resolveDocumentLike()?.referrer ?? ''),
     source: currentParentWindow,
-  };
+  }
 }
 
 export function initializeHostBootstrap({
@@ -418,49 +392,48 @@ export function initializeHostBootstrap({
   referrer,
   selfWindow,
 } = {}) {
-  const resolvedUrl = resolveCurrentUrl(currentUrl);
-  const handoff = asNonEmptyString(resolvedUrl.searchParams.get("handoff"));
+  const resolvedUrl = resolveCurrentUrl(currentUrl)
+  const handoff = asNonEmptyString(resolvedUrl.searchParams.get('handoff'))
   const topLevelWindow =
-    isTopLevelWindow ??
-    resolveWindowLike()?.parent === (selfWindow ?? resolveWindowLike());
+    isTopLevelWindow ?? resolveWindowLike()?.parent === (selfWindow ?? resolveWindowLike())
   const restoredTopLevelHandoff =
-    topLevelWindow && Boolean(handoff) && restoreTopLevelHandoffRecord(handoff);
-  const trustedReferrer = referrer ?? resolveDocumentLike()?.referrer ?? "";
+    topLevelWindow && Boolean(handoff) && restoreTopLevelHandoffRecord(handoff)
+  const trustedReferrer = referrer ?? resolveDocumentLike()?.referrer ?? ''
   const shouldRedirectToIde = shouldRedirectTopLevelToIde(
     resolvedUrl.pathname,
     topLevelWindow,
     hasReusableTopLevelSession({
       handoff: restoredTopLevelHandoff ? null : handoff,
     }),
-  );
-  const shouldForceBootstrapByHandoff = Boolean(handoff) && !topLevelWindow;
+  )
+  const shouldForceBootstrapByHandoff = Boolean(handoff) && !topLevelWindow
   const shouldWaitForBootstrap =
     !shouldUseDebugMode(resolvedUrl.pathname) &&
     !shouldRedirectToIde &&
-    (shouldForceBootstrapByHandoff || !Storage.getToken());
-  const trustedOrigin = resolveTrustedHostOrigin(trustedReferrer);
+    (shouldForceBootstrapByHandoff || !Storage.getToken())
+  const trustedOrigin = resolveTrustedHostOrigin(trustedReferrer)
   const target = resolveHostMessageTarget({
     parentWindow,
     referrer: trustedReferrer,
     selfWindow,
-  });
-  const gate = createBootstrapGate(shouldWaitForBootstrap);
+  })
+  const gate = createBootstrapGate(shouldWaitForBootstrap)
   const requestMessage = shouldWaitForBootstrap
     ? createBootstrapRequest({
-        handoff: resolvedUrl.searchParams.get("handoff"),
+        handoff: resolvedUrl.searchParams.get('handoff'),
         url: resolvedUrl.toString(),
       })
-    : null;
+    : null
   const restoreUrl = shouldRedirectToIde
     ? buildIdeRestoreUrl(
-        resolvedUrl.searchParams.get("handoff"),
+        resolvedUrl.searchParams.get('handoff'),
         ideOrigin ??
           resolveIdeOriginFromRuntime({
             currentUrl: resolvedUrl.toString(),
             referrer: trustedReferrer,
           }),
       )
-    : null;
+    : null
 
   currentSession = {
     gate,
@@ -474,133 +447,116 @@ export function initializeHostBootstrap({
     },
     requestMessage,
     target,
-  };
+  }
 
-  if (
-    shouldWaitForBootstrap &&
-    (!target.origin || !target.source || !requestMessage)
-  ) {
-    gate.settle(false);
+  if (shouldWaitForBootstrap && (!target.origin || !target.source || !requestMessage)) {
+    gate.settle(false)
   }
 
   if (shouldRedirectToIde || shouldUseDebugMode(resolvedUrl.pathname)) {
-    gate.settle(true);
+    gate.settle(true)
   }
 
-  return currentSession.plan;
+  return currentSession.plan
 }
 
 export function waitForHostBootstrap() {
-  return currentSession?.gate.promise ?? Promise.resolve(true);
+  return currentSession?.gate.promise ?? Promise.resolve(true)
 }
 
 export function getTrustedHostOriginSet() {
-  const origin = currentSession?.target?.origin ?? null;
-  return origin ? new Set([origin]) : new Set();
+  const origin = currentSession?.target?.origin ?? null
+  return origin ? new Set([origin]) : new Set()
 }
 
 export function getTrustedHostSources() {
-  const source = currentSession?.target?.source ?? null;
-  return source ? [source] : [];
+  const source = currentSession?.target?.source ?? null
+  return source ? [source] : []
 }
 
-export function isTrustedHostOrigin(
-  origin,
-  trustedOrigins = getTrustedHostOriginSet(),
-) {
+export function isTrustedHostOrigin(origin, trustedOrigins = getTrustedHostOriginSet()) {
   if (!origin) {
-    return false;
+    return false
   }
 
   for (const trustedOrigin of trustedOrigins) {
     if (trustedOrigin === origin) {
-      return true;
+      return true
     }
   }
 
-  return false;
+  return false
 }
 
-export function isTrustedHostSource(
-  source,
-  trustedSources = getTrustedHostSources(),
-) {
+export function isTrustedHostSource(source, trustedSources = getTrustedHostSources()) {
   if (!source) {
-    return false;
+    return false
   }
 
   for (const trustedSource of trustedSources) {
     if (trustedSource === source) {
-      return true;
+      return true
     }
   }
 
-  return false;
+  return false
 }
 
 export function isTrustedHostMessage(
   event,
-  {
-    trustedOrigins = getTrustedHostOriginSet(),
-    trustedSources = getTrustedHostSources(),
-  } = {},
+  { trustedOrigins = getTrustedHostOriginSet(), trustedSources = getTrustedHostSources() } = {},
 ) {
   return (
     isTrustedHostOrigin(event?.origin, trustedOrigins) &&
     isTrustedHostSource(event?.source, trustedSources)
-  );
+  )
 }
 
 export function postMessageToHost(message) {
-  const target = currentSession?.target ?? resolveHostMessageTarget();
+  const target = currentSession?.target ?? resolveHostMessageTarget()
   if (!target?.source?.postMessage || !target.origin) {
-    return false;
+    return false
   }
 
-  target.source.postMessage(message, target.origin);
-  return true;
+  target.source.postMessage(message, target.origin)
+  return true
 }
 
 export function postAppBootstrapRequest() {
   if (!currentSession?.requestMessage) {
-    return false;
+    return false
   }
 
-  return postMessageToHost(currentSession.requestMessage);
+  return postMessageToHost(currentSession.requestMessage)
 }
 
 export function handleBootstrapResponseMessage(data) {
   if (data?.type !== APP_BOOTSTRAP_RESPONSE) {
-    return false;
+    return false
   }
 
-  const payload = resolveMessagePayload(data);
-  const responseRequestId =
-    asNonEmptyString(data.requestId) ?? asNonEmptyString(payload.requestId);
-  const expectedRequestId = currentSession?.requestMessage?.requestId ?? null;
+  const payload = resolveMessagePayload(data)
+  const responseRequestId = asNonEmptyString(data.requestId) ?? asNonEmptyString(payload.requestId)
+  const expectedRequestId = currentSession?.requestMessage?.requestId ?? null
 
-  if (
-    responseRequestId &&
-    expectedRequestId &&
-    responseRequestId !== expectedRequestId
-  ) {
-    return false;
+  if (responseRequestId && expectedRequestId && responseRequestId !== expectedRequestId) {
+    return false
   }
 
-  applyBootstrapPayload(payload);
-  currentSession?.gate.settle(true);
-  return true;
+  applyBootstrapPayload(payload)
+  currentSession?.gate.settle(true)
+  return true
 }
 
 export function handleAuthRefreshedMessage(data) {
   if (data?.type !== AUTH_REFRESHED) {
-    return false;
+    return false
   }
 
-  applyAuthRefreshedPayload(resolveMessagePayload(data));
-  return true;
+  applyAuthRefreshedPayload(resolveMessagePayload(data))
+  return true
 }
 
 export function resetHostBootstrapSessionForTests() {
-  currentSession = null;
+  currentSession = null
 }

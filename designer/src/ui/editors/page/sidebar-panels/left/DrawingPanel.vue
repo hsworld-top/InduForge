@@ -3,33 +3,33 @@
   提供线、矩形、圆形、多边形、管道、文字等绘图工具选择，含符号库
 -->
 <script setup lang="ts">
-import SymbolLibraryPanel from "./SymbolLibraryPanel.vue";
+import SymbolLibraryPanel from './SymbolLibraryPanel.vue'
 
-type DrawingToolType = "line" | "rect" | "ellipse" | "polygon" | "pipe" | "text" | "";
+type DrawingToolType = 'line' | 'rect' | 'ellipse' | 'polygon' | 'pipe' | 'text' | ''
 
 withDefaults(defineProps<{ modelValue?: DrawingToolType }>(), {
-  modelValue: "",
-});
+  modelValue: '',
+})
 
 const emit = defineEmits<{
-  (event: "update:modelValue", value: DrawingToolType): void;
-}>();
+  (event: 'update:modelValue', value: DrawingToolType): void
+}>()
 
-const drawingTools: Array<{ key: Exclude<DrawingToolType, "">; label: string }> = [
-  { key: "line", label: "线" },
-  { key: "rect", label: "矩形" },
-  { key: "ellipse", label: "圆形" },
-  { key: "polygon", label: "多边形" },
-  { key: "pipe", label: "管道" },
-  { key: "text", label: "文字" },
-];
+const drawingTools: Array<{ key: Exclude<DrawingToolType, ''>; label: string }> = [
+  { key: 'line', label: '线' },
+  { key: 'rect', label: '矩形' },
+  { key: 'ellipse', label: '圆形' },
+  { key: 'polygon', label: '多边形' },
+  { key: 'pipe', label: '管道' },
+  { key: 'text', label: '文字' },
+]
 
 /**
  * 切换绘图工具
  * @param {string} tool - 工具类型
  */
-function handleSelect(tool: Exclude<DrawingToolType, "">) {
-  emit("update:modelValue", tool);
+function handleSelect(tool: Exclude<DrawingToolType, ''>) {
+  emit('update:modelValue', tool)
 }
 </script>
 

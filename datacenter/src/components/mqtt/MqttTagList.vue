@@ -98,16 +98,10 @@
             </div>
             <div class="group-info">
               <div class="group-name">{{ group.name }}</div>
-              <div class="group-stats">
-                {{ getGroupTagCount(group.id) }} 个变量
-              </div>
+              <div class="group-stats">{{ getGroupTagCount(group.id) }} 个变量</div>
             </div>
             <div class="group-actions">
-              <el-button
-                type="text"
-                size="small"
-                @click.stop="handleEditGroup(group)"
-              >
+              <el-button type="text" size="small" @click.stop="handleEditGroup(group)">
                 <IconTablerEdit class="w-4 h-4" />
               </el-button>
               <el-button
@@ -135,10 +129,7 @@
                 @delete="handleDeleteTag"
                 @view="handleViewTag"
               />
-              <div
-                v-if="getGroupTags(group.id).length === 0"
-                class="empty-group"
-              >
+              <div v-if="getGroupTags(group.id).length === 0" class="empty-group">
                 <IconTablerFolderOpened class="empty-icon w-6 h-6" />
                 <p class="empty-text">该分组暂无变量</p>
               </div>
@@ -147,10 +138,7 @@
         </div>
       </div>
 
-      <div
-        v-if="tags.length === 0 && !loading"
-        class="empty-state"
-      >
+      <div v-if="tags.length === 0 && !loading" class="empty-state">
         <IconTablerFile />
         <p>暂无变量</p>
         <small>点击“新建变量”开始创建</small>
@@ -183,34 +171,34 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ref, onMounted, computed } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getMqttTags,
   deleteMqttTag,
   getMqttTagGroups,
   deleteMqttTagGroup,
   getDataPoints,
-} from "@/api/data.api";
-import { useMqttTagSync } from "@/composables/useMqttTagSync";
-import MqttTagDialog from "./MqttTagDialog.vue";
-import MqttTagGroupDialog from "./MqttTagGroupDialog.vue";
-import TagItem from "./TagItem.vue";
-import IconTablerPlus from "~icons/tabler/plus";
-import IconTablerFolderAdd from "~icons/tabler/folder-plus";
-import IconTablerDocumentAdd from "~icons/tabler/file-plus";
-import IconTablerRefresh from "~icons/tabler/refresh";
-import IconTablerSearch from "~icons/tabler/search";
-import IconTablerFolderOpened from "~icons/tabler/folder-open";
-import IconTablerFolder from "~icons/tabler/folder";
-import IconTablerEdit from "~icons/tabler/edit";
-import IconTablerTrash from "~icons/tabler/trash";
-import IconTablerFile from "~icons/tabler/file";
-import IconTablerChevronRight from "~icons/tabler/chevron-right";
-import IconTablerChevronDown from "~icons/tabler/chevron-down";
-import IconTablerDownload from "~icons/tabler/download";
-import IconTablerActivity from "~icons/tabler/activity";
-import { getApiErrorMessage } from "@/utils/request";
+} from '@/api/data.api'
+import { useMqttTagSync } from '@/composables/useMqttTagSync'
+import MqttTagDialog from './MqttTagDialog.vue'
+import MqttTagGroupDialog from './MqttTagGroupDialog.vue'
+import TagItem from './TagItem.vue'
+import IconTablerPlus from '~icons/tabler/plus'
+import IconTablerFolderAdd from '~icons/tabler/folder-plus'
+import IconTablerDocumentAdd from '~icons/tabler/file-plus'
+import IconTablerRefresh from '~icons/tabler/refresh'
+import IconTablerSearch from '~icons/tabler/search'
+import IconTablerFolderOpened from '~icons/tabler/folder-open'
+import IconTablerFolder from '~icons/tabler/folder'
+import IconTablerEdit from '~icons/tabler/edit'
+import IconTablerTrash from '~icons/tabler/trash'
+import IconTablerFile from '~icons/tabler/file'
+import IconTablerChevronRight from '~icons/tabler/chevron-right'
+import IconTablerChevronDown from '~icons/tabler/chevron-down'
+import IconTablerDownload from '~icons/tabler/download'
+import IconTablerActivity from '~icons/tabler/activity'
+import { getApiErrorMessage } from '@/utils/request'
 
 const props = defineProps({
   projectId: {
@@ -223,272 +211,260 @@ const props = defineProps({
   },
   previewSessionId: {
     type: String,
-    default: "",
+    default: '',
   },
-});
+})
 
-defineEmits(["openMonitor"]);
+defineEmits(['openMonitor'])
 
-const loading = ref(false);
-const tags = ref([]);
-const groups = ref([]);
-const searchKeyword = ref("");
-const activeGroups = ref(["ungrouped"]);
+const loading = ref(false)
+const tags = ref([])
+const groups = ref([])
+const searchKeyword = ref('')
+const activeGroups = ref(['ungrouped'])
 
-const tagDialogVisible = ref(false);
-const tagDialogMode = ref("create");
-const currentTag = ref(null);
+const tagDialogVisible = ref(false)
+const tagDialogMode = ref('create')
+const currentTag = ref(null)
 
-const groupDialogVisible = ref(false);
-const groupDialogMode = ref("create");
-const currentGroup = ref(null);
+const groupDialogVisible = ref(false)
+const groupDialogMode = ref('create')
+const currentGroup = ref(null)
 
-const { notify: notifyTagChange } = useMqttTagSync(props.subscriptionId);
+const { notify: notifyTagChange } = useMqttTagSync(props.subscriptionId)
 
 const sortedGroups = computed(() => {
-  return [...groups.value].sort((a, b) => a.order - b.order);
-});
+  return [...groups.value].sort((a, b) => a.order - b.order)
+})
 
 const filteredTags = computed(() => {
   if (!searchKeyword.value) {
-    return tags.value;
+    return tags.value
   }
-  const keyword = searchKeyword.value.toLowerCase();
+  const keyword = searchKeyword.value.toLowerCase()
   return tags.value.filter(
-    (tag) =>
-      tag.name.toLowerCase().includes(keyword) ||
-      tag.code.toLowerCase().includes(keyword),
-  );
-});
+    (tag) => tag.name.toLowerCase().includes(keyword) || tag.code.toLowerCase().includes(keyword),
+  )
+})
 
 const ungroupedTags = computed(() => {
-  return filteredTags.value.filter((tag) => !tag.groupId);
-});
+  return filteredTags.value.filter((tag) => !tag.groupId)
+})
 
 const getGroupTags = (groupId) => {
-  return filteredTags.value.filter((tag) => tag.groupId === groupId);
-};
+  return filteredTags.value.filter((tag) => tag.groupId === groupId)
+}
 
 const getGroupTagCount = (groupId) => {
-  return tags.value.filter((tag) => tag.groupId === groupId).length;
-};
+  return tags.value.filter((tag) => tag.groupId === groupId).length
+}
 
 const getGroupStyle = (group) => {
-  const baseColor = group?.color || "#3b82f6";
+  const baseColor = group?.color || '#3b82f6'
   return {
-    "--group-color": baseColor,
-    "--group-bg-color": buildGroupBackgroundColor(baseColor),
-  };
-};
+    '--group-color': baseColor,
+    '--group-bg-color': buildGroupBackgroundColor(baseColor),
+  }
+}
 
 const buildGroupBackgroundColor = (color) => {
-  const normalized = String(color || "").trim();
+  const normalized = String(color || '').trim()
   if (!normalized) {
-    return "#f0f9ff";
+    return '#f0f9ff'
   }
 
-  const hexMatch = normalized.match(/^#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?$/);
+  const hexMatch = normalized.match(/^#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?$/)
   if (hexMatch) {
-    const hex = hexMatch[1];
-    const r = parseInt(hex.slice(0, 2), 16);
-    const g = parseInt(hex.slice(2, 4), 16);
-    const b = parseInt(hex.slice(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, 0.12)`;
+    const hex = hexMatch[1]
+    const r = parseInt(hex.slice(0, 2), 16)
+    const g = parseInt(hex.slice(2, 4), 16)
+    const b = parseInt(hex.slice(4, 6), 16)
+    return `rgba(${r}, ${g}, ${b}, 0.12)`
   }
 
-  const rgbMatch = normalized.match(
-    /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i,
-  );
+  const rgbMatch = normalized.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i)
   if (rgbMatch) {
-    const r = Number(rgbMatch[1]);
-    const g = Number(rgbMatch[2]);
-    const b = Number(rgbMatch[3]);
-    return `rgba(${r}, ${g}, ${b}, 0.12)`;
+    const r = Number(rgbMatch[1])
+    const g = Number(rgbMatch[2])
+    const b = Number(rgbMatch[3])
+    return `rgba(${r}, ${g}, ${b}, 0.12)`
   }
 
-  return "#f0f9ff";
-};
+  return '#f0f9ff'
+}
 
 const toggleGroup = (groupId) => {
-  const index = activeGroups.value.indexOf(groupId);
+  const index = activeGroups.value.indexOf(groupId)
   if (index > -1) {
-    activeGroups.value.splice(index, 1);
+    activeGroups.value.splice(index, 1)
   } else {
-    activeGroups.value.push(groupId);
+    activeGroups.value.push(groupId)
   }
-};
+}
 
 const loadGroups = async () => {
   try {
-    const response = await getMqttTagGroups(
-      props.projectId,
-      props.subscriptionId,
-    );
-    groups.value = response.data?.list || [];
-    activeGroups.value = [
-      "ungrouped",
-      ...groups.value.map((group) => group.id),
-    ];
+    const response = await getMqttTagGroups(props.projectId, props.subscriptionId)
+    groups.value = response.data?.list || []
+    activeGroups.value = ['ungrouped', ...groups.value.map((group) => group.id)]
   } catch (error) {
-    console.error("Failed to load tag groups:", error);
-    ElMessage.error(getApiErrorMessage(error, "加载变量组失败"));
+    console.error('Failed to load tag groups:', error)
+    ElMessage.error(getApiErrorMessage(error, '加载变量组失败'))
   }
-};
+}
 
 const loadTags = async () => {
   try {
-    loading.value = true;
-    const response = await getMqttTags(props.projectId, props.subscriptionId);
-    tags.value = response.data?.list || [];
-    await loadTagDatapoints(tags.value);
+    loading.value = true
+    const response = await getMqttTags(props.projectId, props.subscriptionId)
+    tags.value = response.data?.list || []
+    await loadTagDatapoints(tags.value)
   } catch (error) {
-    console.error("Failed to load tags:", error);
-    ElMessage.error(getApiErrorMessage(error, "加载变量失败"));
+    console.error('Failed to load tags:', error)
+    ElMessage.error(getApiErrorMessage(error, '加载变量失败'))
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 
 const loadTagDatapoints = async (tagList) => {
-  const ids = (tagList || []).map((tag) => tag.id).filter(Boolean);
+  const ids = (tagList || []).map((tag) => tag.id).filter(Boolean)
   if (ids.length === 0) {
     tags.value.forEach((tag) => {
-      tag.datapointPath = "";
-      tag.datapointStatus = "";
-    });
-    return;
+      tag.datapointPath = ''
+      tag.datapointStatus = ''
+    })
+    return
   }
 
   try {
     const response = await getDataPoints(props.projectId, {
-      type: "mqtt.tag",
-      sourceIds: ids.join(","),
+      type: 'mqtt.tag',
+      sourceIds: ids.join(','),
       page: 1,
       pageSize: 200,
-    });
-    const list = response.data?.datapoints || [];
-    const map = new Map(list.map((item) => [item.sourceId, item]));
+    })
+    const list = response.data?.datapoints || []
+    const map = new Map(list.map((item) => [item.sourceId, item]))
     tags.value.forEach((tag) => {
-      const datapoint = map.get(tag.id);
-      tag.datapointPath = datapoint?.path || "";
-      tag.datapointStatus = datapoint?.status || "";
-    });
+      const datapoint = map.get(tag.id)
+      tag.datapointPath = datapoint?.path || ''
+      tag.datapointStatus = datapoint?.status || ''
+    })
   } catch (error) {
-    console.error("Failed to load datapoints:", error);
+    console.error('Failed to load datapoints:', error)
   }
-};
+}
 
 const handleRefresh = async () => {
-  await Promise.all([loadGroups(), loadTags()]);
-  ElMessage.success("刷新成功");
-};
+  await Promise.all([loadGroups(), loadTags()])
+  ElMessage.success('刷新成功')
+}
 
 const handleBatchExport = () => {
-  ElMessage.info("批量导出功能待实现");
-};
+  ElMessage.info('批量导出功能待实现')
+}
 
 const handleCreateGroup = () => {
-  currentGroup.value = null;
-  groupDialogMode.value = "create";
-  groupDialogVisible.value = true;
-};
+  currentGroup.value = null
+  groupDialogMode.value = 'create'
+  groupDialogVisible.value = true
+}
 
 const handleEditGroup = (group) => {
-  currentGroup.value = { ...group };
-  groupDialogMode.value = "edit";
-  groupDialogVisible.value = true;
-};
+  currentGroup.value = { ...group }
+  groupDialogMode.value = 'edit'
+  groupDialogVisible.value = true
+}
 
 const handleDeleteGroup = async (group) => {
   try {
     await ElMessageBox.confirm(
       `确定要删除分组“${group.name}”吗？该分组下的变量将移至未分组。`,
-      "删除确认",
+      '删除确认',
       {
-        type: "warning",
-        confirmButtonText: "删除",
-        cancelButtonText: "取消",
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
       },
-    );
+    )
 
-    await deleteMqttTagGroup(props.projectId, group.id);
-    ElMessage.success("删除成功");
-    await handleRefresh();
+    await deleteMqttTagGroup(props.projectId, group.id)
+    ElMessage.success('删除成功')
+    await handleRefresh()
   } catch (error) {
-    if (error !== "cancel") {
-      console.error("Failed to delete group:", error);
-      ElMessage.error("删除失败");
+    if (error !== 'cancel') {
+      console.error('Failed to delete group:', error)
+      ElMessage.error('删除失败')
     }
   }
-};
+}
 
 const handleGroupDialogSuccess = async () => {
-  groupDialogVisible.value = false;
-  await loadGroups();
-  ElMessage.success(
-    groupDialogMode.value === "create" ? "创建成功" : "更新成功",
-  );
-};
+  groupDialogVisible.value = false
+  await loadGroups()
+  ElMessage.success(groupDialogMode.value === 'create' ? '创建成功' : '更新成功')
+}
 
 const handleCreateTag = () => {
-  currentTag.value = null;
-  tagDialogMode.value = "create";
-  tagDialogVisible.value = true;
-};
+  currentTag.value = null
+  tagDialogMode.value = 'create'
+  tagDialogVisible.value = true
+}
 
 const handleEditTag = (tag) => {
-  currentTag.value = { ...tag };
-  tagDialogMode.value = "edit";
-  tagDialogVisible.value = true;
-};
+  currentTag.value = { ...tag }
+  tagDialogMode.value = 'edit'
+  tagDialogVisible.value = true
+}
 
 const handleViewTag = (tag) => {
-  currentTag.value = { ...tag };
-  tagDialogMode.value = "view";
-  tagDialogVisible.value = true;
-};
+  currentTag.value = { ...tag }
+  tagDialogMode.value = 'view'
+  tagDialogVisible.value = true
+}
 
 const handleDeleteTag = async (tag) => {
   try {
-    await ElMessageBox.confirm(`确定要删除变量“${tag.name}”吗？`, "删除确认", {
-      type: "warning",
-      confirmButtonText: "删除",
-      cancelButtonText: "取消",
-    });
+    await ElMessageBox.confirm(`确定要删除变量“${tag.name}”吗？`, '删除确认', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    })
 
-    await deleteMqttTag(props.projectId, tag.id);
-    ElMessage.success("删除成功");
-    await loadTags();
-    notifyTagChange("deleted", { tagId: tag.id });
+    await deleteMqttTag(props.projectId, tag.id)
+    ElMessage.success('删除成功')
+    await loadTags()
+    notifyTagChange('deleted', { tagId: tag.id })
   } catch (error) {
-    if (error !== "cancel") {
-      console.error("Failed to delete tag:", error);
-      ElMessage.error("删除失败");
+    if (error !== 'cancel') {
+      console.error('Failed to delete tag:', error)
+      ElMessage.error('删除失败')
     }
   }
-};
+}
 
 const handleTagDialogSuccess = async () => {
-  tagDialogVisible.value = false;
-  await loadTags();
-  const isCreate = tagDialogMode.value === "create";
-  ElMessage.success(isCreate ? "创建成功" : "更新成功");
-  notifyTagChange(isCreate ? "created" : "updated", {
+  tagDialogVisible.value = false
+  await loadTags()
+  const isCreate = tagDialogMode.value === 'create'
+  ElMessage.success(isCreate ? '创建成功' : '更新成功')
+  notifyTagChange(isCreate ? 'created' : 'updated', {
     tagId: currentTag.value?.id,
-  });
-};
+  })
+}
 
 const handleBatchCreate = () => {
-  ElMessage.info("批量导入功能开发中...");
-};
+  ElMessage.info('批量导入功能开发中...')
+}
 
 const handleSearch = () => {
   // 搜索逻辑由 computed 自动处理
-};
+}
 
 onMounted(async () => {
-  await Promise.all([loadGroups(), loadTags()]);
-});
+  await Promise.all([loadGroups(), loadTags()])
+})
 </script>
 
 <style scoped>

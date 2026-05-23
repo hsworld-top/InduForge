@@ -95,5 +95,4 @@ describe('appUrl', () => {
     expect(handoffId).toBeTruthy()
     expect(parsed.searchParams.get('handoff')).toBe(handoffId)
   })
-
 })

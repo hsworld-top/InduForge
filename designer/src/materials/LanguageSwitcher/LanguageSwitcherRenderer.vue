@@ -1,31 +1,31 @@
 <script setup lang="ts">
-import { storeToRefs } from "pinia";
-import { computed } from "vue";
-import { useEditorStore } from "@/stores/editor-store";
+import { storeToRefs } from 'pinia'
+import { computed } from 'vue'
+import { useEditorStore } from '@/stores/editor-store'
 
 const props = defineProps<{
-  resolvedProps?: Record<string, unknown>;
-}>();
+  resolvedProps?: Record<string, unknown>
+}>()
 
-const editorStore = useEditorStore();
-const { projectI18n, projectRuntimeLocale } = storeToRefs(editorStore);
+const editorStore = useEditorStore()
+const { projectI18n, projectRuntimeLocale } = storeToRefs(editorStore)
 
-const mode = computed(() => String(props.resolvedProps?.mode || "select"));
-const display = computed(() => String(props.resolvedProps?.display || "name"));
-const size = computed(() => String(props.resolvedProps?.size || "default"));
-const disabled = computed(() => Boolean(props.resolvedProps?.disabled));
-const locales = computed(() => projectI18n.value.locales.filter((item) => item.enabled));
+const mode = computed(() => String(props.resolvedProps?.mode || 'select'))
+const display = computed(() => String(props.resolvedProps?.display || 'name'))
+const size = computed(() => String(props.resolvedProps?.size || 'default'))
+const disabled = computed(() => Boolean(props.resolvedProps?.disabled))
+const locales = computed(() => projectI18n.value.locales.filter((item) => item.enabled))
 const model = computed({
   get: () => projectRuntimeLocale.value || projectI18n.value.defaultLocale,
   set: (value: string) => {
-    editorStore.setProjectRuntimeLocale(value);
+    editorStore.setProjectRuntimeLocale(value)
   },
-});
+})
 
 function localeLabel(locale: { code: string; name: string }): string {
-  if (display.value === "code") return locale.code;
-  if (display.value === "name-code") return `${locale.name} ${locale.code}`;
-  return locale.name;
+  if (display.value === 'code') return locale.code
+  if (display.value === 'name-code') return `${locale.name} ${locale.code}`
+  return locale.name
 }
 </script>
 
@@ -37,7 +37,11 @@ function localeLabel(locale: { code: string; name: string }): string {
       :size="size as never"
       :disabled="disabled"
     >
-      <el-radio-button v-for="localeItem in locales" :key="localeItem.code" :label="localeItem.code">
+      <el-radio-button
+        v-for="localeItem in locales"
+        :key="localeItem.code"
+        :label="localeItem.code"
+      >
         {{ localeLabel(localeItem) }}
       </el-radio-button>
     </el-radio-group>

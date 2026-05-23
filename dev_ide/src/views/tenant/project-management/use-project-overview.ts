@@ -440,7 +440,8 @@ export const useProjectOverviewState = (options: UseProjectOverviewOptions = {})
     )
     const total = toNonNegativeInteger(pagination.total, 0)
     const totalPages =
-      toNonNegativeInteger(pagination.totalPages, 0) || (total > 0 ? Math.ceil(total / rawLimit) : 0)
+      toNonNegativeInteger(pagination.totalPages, 0) ||
+      (total > 0 ? Math.ceil(total / rawLimit) : 0)
     const page = totalPages > 0 ? Math.min(rawPage, totalPages) : DEFAULT_PAGE
 
     Object.assign(state.pagination, {

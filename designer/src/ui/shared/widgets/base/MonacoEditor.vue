@@ -4,174 +4,172 @@
   用于：脚本编辑、样式编辑、表达式编辑等
 -->
 <script setup lang="ts">
-import * as monaco from "monaco-editor";
-import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-import CssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
-import HtmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
-import JsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
-import TsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
+import * as monaco from 'monaco-editor'
+import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
+import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
+import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
+import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
+import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 /**
  * Monaco 编辑器组件
  * 封装 monaco-editor，支持 v-model、主题切换、自定义补全、错误标记
  */
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useI18n } from "vue-i18n";
-import "monaco-editor/min/vs/editor/editor.main.css";
-import "monaco-editor/esm/vs/basic-languages/css/css.contribution";
-import "monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution";
-import "monaco-editor/esm/vs/basic-languages/html/html.contribution";
-import "monaco-editor/esm/vs/language/css/monaco.contribution";
-import "monaco-editor/esm/vs/language/html/monaco.contribution";
-import "monaco-editor/esm/vs/language/json/monaco.contribution";
-import "monaco-editor/esm/vs/language/typescript/monaco.contribution";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import 'monaco-editor/min/vs/editor/editor.main.css'
+import 'monaco-editor/esm/vs/basic-languages/css/css.contribution'
+import 'monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution'
+import 'monaco-editor/esm/vs/basic-languages/html/html.contribution'
+import 'monaco-editor/esm/vs/language/css/monaco.contribution'
+import 'monaco-editor/esm/vs/language/html/monaco.contribution'
+import 'monaco-editor/esm/vs/language/json/monaco.contribution'
+import 'monaco-editor/esm/vs/language/typescript/monaco.contribution'
 
 interface MonacoCompletionItemLike {
-  label?: string;
-  insertText?: string;
-  prefix?: string | string[];
-  kind?: string | number;
-  detail?: string;
-  documentation?: string;
+  label?: string
+  insertText?: string
+  prefix?: string | string[]
+  kind?: string | number
+  detail?: string
+  documentation?: string
 }
 
 interface MonacoEditorProps {
-  modelValue?: string | undefined;
-  language?: string | undefined;
-  theme?: string | undefined;
-  height?: string | undefined;
-  options?: Record<string, unknown> | undefined;
-  completions?: unknown[] | undefined;
+  modelValue?: string | undefined
+  language?: string | undefined
+  theme?: string | undefined
+  height?: string | undefined
+  options?: Record<string, unknown> | undefined
+  completions?: unknown[] | undefined
 }
 
 const props = withDefaults(defineProps<MonacoEditorProps>(), {
-  modelValue: "",
-  language: "css",
-  theme: "vs",
-  height: "300px",
+  modelValue: '',
+  language: 'css',
+  theme: 'vs',
+  height: '300px',
   options: () => ({}),
   completions: () => [],
-});
+})
 
 const emit = defineEmits<{
-  (event: "update:modelValue", value: string): void;
-  (event: "change", value: string): void;
-  (event: "markers", markers: unknown[]): void;
-}>();
+  (event: 'update:modelValue', value: string): void
+  (event: 'change', value: string): void
+  (event: 'markers', markers: unknown[]): void
+}>()
 
-const { t } = useI18n();
-const monacoCompatLanguages = monaco.languages as typeof monaco.languages & Record<string, any>;
+const { t } = useI18n()
+const monacoCompatLanguages = monaco.languages as typeof monaco.languages & Record<string, any>
 
-const editorContainerRef = ref<HTMLElement | null>(null);
-const editorSurfaceRef = ref<HTMLElement | null>(null);
-const contextMenuRef = ref<HTMLElement | null>(null);
-const fallbackValue = ref<string>(props.modelValue || "");
-const editorReady = ref(false);
-let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
-let isInternalUpdate = false;
-let jsFormatterRegistered = false;
-let initRetryFrame: number | null = null;
-let initRetryCount = 0;
-const MAX_INIT_RETRY_COUNT = 60;
+const editorContainerRef = ref<HTMLElement | null>(null)
+const editorSurfaceRef = ref<HTMLElement | null>(null)
+const contextMenuRef = ref<HTMLElement | null>(null)
+const fallbackValue = ref<string>(props.modelValue || '')
+const editorReady = ref(false)
+let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null
+let isInternalUpdate = false
+let jsFormatterRegistered = false
+let initRetryFrame: number | null = null
+let initRetryCount = 0
+const MAX_INIT_RETRY_COUNT = 60
 function normalizeCompletionItems(items?: unknown[] | null): MonacoCompletionItemLike[] {
-  if (!Array.isArray(items)) return [];
+  if (!Array.isArray(items)) return []
   return items.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-    const record = item as Record<string, unknown>;
-    const normalized: MonacoCompletionItemLike = {};
-    if (typeof record.label === "string") normalized.label = record.label;
-    if (typeof record.insertText === "string") normalized.insertText = record.insertText;
-    if (typeof record.prefix === "string" || Array.isArray(record.prefix)) {
-      normalized.prefix = record.prefix as string | string[];
+    if (!item || typeof item !== 'object') return []
+    const record = item as Record<string, unknown>
+    const normalized: MonacoCompletionItemLike = {}
+    if (typeof record.label === 'string') normalized.label = record.label
+    if (typeof record.insertText === 'string') normalized.insertText = record.insertText
+    if (typeof record.prefix === 'string' || Array.isArray(record.prefix)) {
+      normalized.prefix = record.prefix as string | string[]
     }
-    if (typeof record.kind === "string" || typeof record.kind === "number")
-      normalized.kind = record.kind;
-    if (typeof record.detail === "string") normalized.detail = record.detail;
-    if (typeof record.documentation === "string") normalized.documentation = record.documentation;
-    return normalized.label || normalized.insertText ? [normalized] : [];
-  });
+    if (typeof record.kind === 'string' || typeof record.kind === 'number')
+      normalized.kind = record.kind
+    if (typeof record.detail === 'string') normalized.detail = record.detail
+    if (typeof record.documentation === 'string') normalized.documentation = record.documentation
+    return normalized.label || normalized.insertText ? [normalized] : []
+  })
 }
 
-const completionItems = ref<MonacoCompletionItemLike[]>(
-  normalizeCompletionItems(props.completions),
-);
-let completionProvider: monaco.IDisposable | null = null;
-let markerTooltipEl: HTMLDivElement | null = null;
+const completionItems = ref<MonacoCompletionItemLike[]>(normalizeCompletionItems(props.completions))
+let completionProvider: monaco.IDisposable | null = null
+let markerTooltipEl: HTMLDivElement | null = null
 let latestMarkers: Array<{
-  startLineNumber: number;
-  endLineNumber: number;
-  startColumn: number;
-  endColumn: number;
-  severity: number;
-  message: string;
-}> = [];
-let extraLibDisposable: monaco.IDisposable | null = null;
+  startLineNumber: number
+  endLineNumber: number
+  startColumn: number
+  endColumn: number
+  severity: number
+  message: string
+}> = []
+let extraLibDisposable: monaco.IDisposable | null = null
 const contextMenuState = ref({
   visible: false,
   left: 0,
   top: 0,
-});
+})
 interface PrettierModuleLike {
-  format: (code: string, options?: unknown) => Promise<string>;
-  plugins: unknown[];
+  format: (code: string, options?: unknown) => Promise<string>
+  plugins: unknown[]
 }
 
-type MonacoMarkerLike = monaco.editor.IMarkerData;
-type MonacoPositionLike = monaco.Position;
-type MonacoTextModelLike = monaco.editor.ITextModel;
-type MonacoLanguageCompletionItemKind = keyof typeof monaco.languages.CompletionItemKind;
+type MonacoMarkerLike = monaco.editor.IMarkerData
+type MonacoPositionLike = monaco.Position
+type MonacoTextModelLike = monaco.editor.ITextModel
+type MonacoLanguageCompletionItemKind = keyof typeof monaco.languages.CompletionItemKind
 type MonacoCompletionItemKindValue =
-  (typeof monaco.languages.CompletionItemKind)[MonacoLanguageCompletionItemKind];
-type MonacoTextEdit = monaco.languages.TextEdit;
+  (typeof monaco.languages.CompletionItemKind)[MonacoLanguageCompletionItemKind]
+type MonacoTextEdit = monaco.languages.TextEdit
 
-const TRAILING_WHITESPACE_RE = /\s+$/;
-const COMMENT_LINE_RE = /^\s*\/[/*]/;
-const BLOCK_END_RE = /[;,{[(]$/;
-const ARROW_END_RE = /=>\s*$/;
-const FUNCTION_END_RE = /\)\s*$/;
-const CODE_LINE_RE = /[\w)\]"'`]+$/;
-const ANON_FUNCTION_RE = /^\s*function\s*\(/;
-const WRAPPED_FN_RE = /^const __fn\s*=\s*/;
-const WRAPPED_FN_SUFFIX_RE = /;\s*$/;
+const TRAILING_WHITESPACE_RE = /\s+$/
+const COMMENT_LINE_RE = /^\s*\/[/*]/
+const BLOCK_END_RE = /[;,{[(]$/
+const ARROW_END_RE = /=>\s*$/
+const FUNCTION_END_RE = /\)\s*$/
+const CODE_LINE_RE = /[\w)\]"'`]+$/
+const ANON_FUNCTION_RE = /^\s*function\s*\(/
+const WRAPPED_FN_RE = /^const __fn\s*=\s*/
+const WRAPPED_FN_SUFFIX_RE = /;\s*$/
 const FLOW_CONTROL_KEYWORDS = [
-  "if",
-  "for",
-  "while",
-  "switch",
-  "catch",
-  "function",
-  "class",
-  "else",
-  "try",
-];
+  'if',
+  'for',
+  'while',
+  'switch',
+  'catch',
+  'function',
+  'class',
+  'else',
+  'try',
+]
 
-let prettierReady: Promise<PrettierModuleLike | null> | null = null;
+let prettierReady: Promise<PrettierModuleLike | null> | null = null
 
 /** 执行编辑器内置动作（如格式化、格式化文档） */
 async function runEditorAction(id: string) {
-  const action = editorInstance?.getAction(id);
-  if (!action) return false;
+  const action = editorInstance?.getAction(id)
+  if (!action) return false
   try {
-    await action.run();
-    return true;
+    await action.run()
+    return true
   } catch {
-    return false;
+    return false
   }
 }
 
 async function runFormatCommand(): Promise<void> {
-  const ok = await runEditorAction("editor.action.formatDocument");
-  if (!ok) void applyFormatEdits();
+  const ok = await runEditorAction('editor.action.formatDocument')
+  if (!ok) void applyFormatEdits()
 }
 
 function hideEditorContextMenu(): void {
-  contextMenuState.value.visible = false;
+  contextMenuState.value.visible = false
 }
 
 function showEditorContextMenu(clientX: number, clientY: number): void {
-  const menuWidth = 212;
-  const menuHeight = 286;
-  const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
-  const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+  const menuWidth = 212
+  const menuHeight = 286
+  const viewportWidth = document.documentElement.clientWidth || window.innerWidth
+  const viewportHeight = document.documentElement.clientHeight || window.innerHeight
   contextMenuState.value = {
     visible: true,
     left: Math.min(Math.max(8, clientX), Math.max(8, viewportWidth - menuWidth - 8)),
@@ -179,11 +177,11 @@ function showEditorContextMenu(clientX: number, clientY: number): void {
       clientY + menuHeight + 8 > viewportHeight
         ? Math.max(8, clientY - menuHeight)
         : Math.max(8, clientY),
-  };
+  }
   requestAnimationFrame(() => {
-    const menu = contextMenuRef.value;
-    if (!menu || !contextMenuState.value.visible) return;
-    const rect = menu.getBoundingClientRect();
+    const menu = contextMenuRef.value
+    if (!menu || !contextMenuState.value.visible) return
+    const rect = menu.getBoundingClientRect()
     contextMenuState.value = {
       ...contextMenuState.value,
       left: Math.min(
@@ -197,225 +195,223 @@ function showEditorContextMenu(clientX: number, clientY: number): void {
               Math.max(8, contextMenuState.value.top),
               Math.max(8, viewportHeight - rect.height - 8),
             ),
-    };
-  });
+    }
+  })
 }
 
 function getSelectedText(): string {
-  const model = editorInstance?.getModel();
-  const selection = editorInstance?.getSelection();
-  if (!model || !selection || selection.isEmpty()) return "";
-  return model.getValueInRange(selection);
+  const model = editorInstance?.getModel()
+  const selection = editorInstance?.getSelection()
+  if (!model || !selection || selection.isEmpty()) return ''
+  return model.getValueInRange(selection)
 }
 
 function deleteSelection(): boolean {
-  const selection = editorInstance?.getSelection();
-  if (!editorInstance || !selection || selection.isEmpty()) return false;
-  editorInstance.pushUndoStop();
-  editorInstance.executeEdits("clipboard", [
-    { range: selection, text: "", forceMoveMarkers: true },
-  ]);
-  editorInstance.pushUndoStop();
-  return true;
+  const selection = editorInstance?.getSelection()
+  if (!editorInstance || !selection || selection.isEmpty()) return false
+  editorInstance.pushUndoStop()
+  editorInstance.executeEdits('clipboard', [{ range: selection, text: '', forceMoveMarkers: true }])
+  editorInstance.pushUndoStop()
+  return true
 }
 
 async function writeClipboardText(text: string): Promise<boolean> {
-  if (!text) return false;
+  if (!text) return false
   try {
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.style.position = "fixed";
-    textarea.style.left = "-9999px";
-    textarea.style.top = "-9999px";
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-    const ok = document.execCommand("copy");
-    textarea.remove();
-    if (ok) return true;
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.left = '-9999px'
+    textarea.style.top = '-9999px'
+    document.body.appendChild(textarea)
+    textarea.focus()
+    textarea.select()
+    const ok = document.execCommand('copy')
+    textarea.remove()
+    if (ok) return true
   } catch {
     // execCommand 在少数浏览器环境可能失败，继续尝试 Clipboard API。
   }
   try {
     if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
+      await navigator.clipboard.writeText(text)
+      return true
     }
   } catch {
     // 浏览器拒绝 Clipboard API 时视为复制失败。
   }
-  return false;
+  return false
 }
 
 async function runClipboardAction(actionId: string): Promise<boolean> {
-  editorInstance?.focus();
-  const selectedText = getSelectedText();
-  const isCut = actionId.includes("Cut");
+  editorInstance?.focus()
+  const selectedText = getSelectedText()
+  const isCut = actionId.includes('Cut')
   if (selectedText && (await writeClipboardText(selectedText))) {
-    if (isCut) deleteSelection();
-    editorInstance?.focus();
-    return true;
+    if (isCut) deleteSelection()
+    editorInstance?.focus()
+    return true
   }
   if (await runEditorAction(actionId)) {
-    editorInstance?.focus();
-    return true;
+    editorInstance?.focus()
+    return true
   }
-  return false;
+  return false
 }
 
 async function runPasteAction(): Promise<boolean> {
-  editorInstance?.focus();
+  editorInstance?.focus()
   try {
-    const text = await navigator.clipboard?.readText?.();
+    const text = await navigator.clipboard?.readText?.()
     if (text) {
-      insertTextAtSelection(text);
-      return true;
+      insertTextAtSelection(text)
+      return true
     }
   } catch {
     // 右键按钮粘贴需要浏览器授权；若被拒绝，仍保持编辑器焦点，便于用户使用 Ctrl+V。
   }
-  editorInstance?.focus();
-  return false;
+  editorInstance?.focus()
+  return false
 }
 
 function insertTextAtSelection(text: string): void {
-  if (!editorInstance || !text) return;
-  const selection = editorInstance.getSelection();
-  const position = editorInstance.getPosition();
-  if (!position) return;
+  if (!editorInstance || !text) return
+  const selection = editorInstance.getSelection()
+  const position = editorInstance.getPosition()
+  if (!position) return
   const range =
     selection ||
-    new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column);
-  editorInstance.pushUndoStop();
-  editorInstance.executeEdits("insert", [{ range, text, forceMoveMarkers: true }]);
-  editorInstance.pushUndoStop();
-  editorInstance.focus();
+    new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column)
+  editorInstance.pushUndoStop()
+  editorInstance.executeEdits('insert', [{ range, text, forceMoveMarkers: true }])
+  editorInstance.pushUndoStop()
+  editorInstance.focus()
 }
 
 const editorContextMenuItems = [
   {
-    key: "definition",
-    labelKey: "monacoEditor.contextMenu.definition",
-    shortcut: "Ctrl+F12",
-    action: () => runEditorAction("editor.action.revealDefinition"),
+    key: 'definition',
+    labelKey: 'monacoEditor.contextMenu.definition',
+    shortcut: 'Ctrl+F12',
+    action: () => runEditorAction('editor.action.revealDefinition'),
   },
   {
-    key: "references",
-    labelKey: "monacoEditor.contextMenu.references",
-    shortcut: "Shift+F12",
-    action: () => runEditorAction("editor.action.goToReferences"),
+    key: 'references',
+    labelKey: 'monacoEditor.contextMenu.references',
+    shortcut: 'Shift+F12',
+    action: () => runEditorAction('editor.action.goToReferences'),
   },
   {
-    key: "symbol",
-    labelKey: "monacoEditor.contextMenu.symbol",
-    shortcut: "Ctrl+Shift+O",
-    action: () => runEditorAction("editor.action.quickOutline"),
+    key: 'symbol',
+    labelKey: 'monacoEditor.contextMenu.symbol',
+    shortcut: 'Ctrl+Shift+O',
+    action: () => runEditorAction('editor.action.quickOutline'),
   },
   {
-    key: "peek",
-    labelKey: "monacoEditor.contextMenu.peekDefinition",
-    shortcut: "",
-    action: () => runEditorAction("editor.action.peekDefinition"),
+    key: 'peek',
+    labelKey: 'monacoEditor.contextMenu.peekDefinition',
+    shortcut: '',
+    action: () => runEditorAction('editor.action.peekDefinition'),
   },
   {
-    key: "rename",
-    labelKey: "monacoEditor.contextMenu.rename",
-    shortcut: "F2",
+    key: 'rename',
+    labelKey: 'monacoEditor.contextMenu.rename',
+    shortcut: 'F2',
     separatorBefore: true,
-    action: () => runEditorAction("editor.action.rename"),
+    action: () => runEditorAction('editor.action.rename'),
   },
   {
-    key: "changeAll",
-    labelKey: "monacoEditor.contextMenu.changeAll",
-    shortcut: "Ctrl+F2",
-    action: () => runEditorAction("editor.action.changeAll"),
+    key: 'changeAll',
+    labelKey: 'monacoEditor.contextMenu.changeAll',
+    shortcut: 'Ctrl+F2',
+    action: () => runEditorAction('editor.action.changeAll'),
   },
   {
-    key: "format",
-    labelKey: "monacoEditor.contextMenu.format",
-    shortcut: "Shift+Alt+F",
+    key: 'format',
+    labelKey: 'monacoEditor.contextMenu.format',
+    shortcut: 'Shift+Alt+F',
     action: () => runFormatCommand(),
   },
   {
-    key: "cut",
-    labelKey: "monacoEditor.contextMenu.cut",
-    shortcut: "",
+    key: 'cut',
+    labelKey: 'monacoEditor.contextMenu.cut',
+    shortcut: '',
     separatorBefore: true,
-    action: () => runClipboardAction("editor.action.clipboardCutAction"),
+    action: () => runClipboardAction('editor.action.clipboardCutAction'),
   },
   {
-    key: "copy",
-    labelKey: "monacoEditor.contextMenu.copy",
-    shortcut: "",
-    action: () => runClipboardAction("editor.action.clipboardCopyAction"),
+    key: 'copy',
+    labelKey: 'monacoEditor.contextMenu.copy',
+    shortcut: '',
+    action: () => runClipboardAction('editor.action.clipboardCopyAction'),
   },
   {
-    key: "paste",
-    labelKey: "monacoEditor.contextMenu.paste",
-    shortcut: "",
+    key: 'paste',
+    labelKey: 'monacoEditor.contextMenu.paste',
+    shortcut: '',
     action: () => runPasteAction(),
   },
-];
+]
 
 async function handleEditorContextMenuAction(item: (typeof editorContextMenuItems)[number]) {
-  hideEditorContextMenu();
-  await item.action();
+  hideEditorContextMenu()
+  await item.action()
 }
 
 const mediaQuery =
-  typeof window !== "undefined" && window.matchMedia
-    ? window.matchMedia("(prefers-color-scheme: dark)")
-    : null;
-const cleanupFns: Array<() => void> = [];
+  typeof window !== 'undefined' && window.matchMedia
+    ? window.matchMedia('(prefers-color-scheme: dark)')
+    : null
+const cleanupFns: Array<() => void> = []
 
 /** 将主题名映射为 Monaco 主题 */
 function normalizeTheme(theme?: string | null): string {
-  if (theme === "dark") return "vs-dark";
-  if (theme === "light") return "vs";
-  return theme || "vs";
+  if (theme === 'dark') return 'vs-dark'
+  if (theme === 'light') return 'vs'
+  return theme || 'vs'
 }
 
 /** 根据 document.documentElement 或系统偏好检测明暗主题 */
 function detectTheme(): string {
-  if (typeof document !== "undefined") {
-    const html = document.documentElement;
-    const body = document.body;
+  if (typeof document !== 'undefined') {
+    const html = document.documentElement
+    const body = document.body
     const isDark = (el: HTMLElement | null) =>
-      !!el && (el.classList?.contains("dark") || el.dataset?.theme === "dark");
-    if (isDark(html) || isDark(body)) return "vs-dark";
+      !!el && (el.classList?.contains('dark') || el.dataset?.theme === 'dark')
+    if (isDark(html) || isDark(body)) return 'vs-dark'
   }
-  if (mediaQuery) return mediaQuery.matches ? "vs-dark" : "vs";
-  return "vs";
+  if (mediaQuery) return mediaQuery.matches ? 'vs-dark' : 'vs'
+  return 'vs'
 }
 
 function registerMonacoEnvironment() {
   if (
-    typeof globalThis === "undefined" ||
+    typeof globalThis === 'undefined' ||
     (globalThis.MonacoEnvironment && globalThis.MonacoEnvironment.getWorker)
   ) {
-    return;
+    return
   }
 
   globalThis.MonacoEnvironment = {
     getWorker(_moduleId: string, label: string) {
-      if (label === "css" || label === "scss" || label === "less") {
-        return new CssWorker();
+      if (label === 'css' || label === 'scss' || label === 'less') {
+        return new CssWorker()
       }
-      if (label === "html" || label === "handlebars" || label === "razor") {
-        return new HtmlWorker();
+      if (label === 'html' || label === 'handlebars' || label === 'razor') {
+        return new HtmlWorker()
       }
-      if (label === "json") {
-        return new JsonWorker();
+      if (label === 'json') {
+        return new JsonWorker()
       }
-      if (label === "javascript" || label === "typescript") {
-        return new TsWorker();
+      if (label === 'javascript' || label === 'typescript') {
+        return new TsWorker()
       }
-      return new EditorWorker();
+      return new EditorWorker()
     },
-  };
+  }
 }
 
-registerMonacoEnvironment();
+registerMonacoEnvironment()
 
 function baseOptions(): monaco.editor.IStandaloneEditorConstructionOptions {
   return {
@@ -426,213 +422,213 @@ function baseOptions(): monaco.editor.IStandaloneEditorConstructionOptions {
     fontSize: 14,
     minimap: { enabled: false },
     scrollBeyondLastLine: false,
-    wordWrap: "on",
+    wordWrap: 'on',
     formatOnPaste: true,
     formatOnType: true,
     folding: true,
     glyphMargin: true,
-    lineNumbers: "on",
+    lineNumbers: 'on',
     tabSize: 2,
     suggestOnTriggerCharacters: true,
     quickSuggestions: { other: true, comments: true, strings: true },
     quickSuggestionsDelay: 50,
-    wordBasedSuggestions: "allDocuments",
+    wordBasedSuggestions: 'allDocuments',
     inlineSuggest: { enabled: true },
-    acceptSuggestionOnEnter: "on",
+    acceptSuggestionOnEnter: 'on',
     acceptSuggestionOnCommitCharacter: true,
-    tabCompletion: "on",
-    snippetSuggestions: "inline",
-    suggestSelection: "first",
+    tabCompletion: 'on',
+    snippetSuggestions: 'inline',
+    suggestSelection: 'first',
     contextmenu: false,
     parameterHints: { enabled: true },
     lightbulb: { enabled: monaco.editor.ShowLightbulbIconMode.On },
-    autoClosingBrackets: "always",
-    autoClosingQuotes: "always",
+    autoClosingBrackets: 'always',
+    autoClosingQuotes: 'always',
     hover: { enabled: true, delay: 300 },
     ...(props.options || {}),
-  };
+  }
 }
 
 function applyTheme(theme?: string | null) {
-  monaco.editor.setTheme(normalizeTheme(theme || detectTheme()));
+  monaco.editor.setTheme(normalizeTheme(theme || detectTheme()))
 }
 
 function ensureMarkerTooltip() {
-  if (markerTooltipEl || !editorContainerRef.value) return;
-  const el = document.createElement("div");
-  el.style.position = "absolute";
-  el.style.zIndex = "10";
-  el.style.display = "none";
-  el.style.maxWidth = "320px";
-  el.style.padding = "6px 8px";
-  el.style.fontSize = "12px";
-  el.style.lineHeight = "1.4";
-  el.style.color = "#303133";
-  el.style.background = "#fff";
-  el.style.border = "1px solid #e4e7ed";
-  el.style.borderRadius = "4px";
-  el.style.boxShadow = "0 2px 8px rgba(0,0,0,0.12)";
-  el.style.pointerEvents = "none";
-  el.style.whiteSpace = "pre-wrap";
-  editorContainerRef.value.appendChild(el);
-  markerTooltipEl = el;
+  if (markerTooltipEl || !editorContainerRef.value) return
+  const el = document.createElement('div')
+  el.style.position = 'absolute'
+  el.style.zIndex = '10'
+  el.style.display = 'none'
+  el.style.maxWidth = '320px'
+  el.style.padding = '6px 8px'
+  el.style.fontSize = '12px'
+  el.style.lineHeight = '1.4'
+  el.style.color = '#303133'
+  el.style.background = '#fff'
+  el.style.border = '1px solid #e4e7ed'
+  el.style.borderRadius = '4px'
+  el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.12)'
+  el.style.pointerEvents = 'none'
+  el.style.whiteSpace = 'pre-wrap'
+  editorContainerRef.value.appendChild(el)
+  markerTooltipEl = el
 }
 
 function hideMarkerTooltip() {
   if (markerTooltipEl) {
-    markerTooltipEl.style.display = "none";
-    markerTooltipEl.textContent = "";
+    markerTooltipEl.style.display = 'none'
+    markerTooltipEl.textContent = ''
   }
 }
 
 function markerContainsPosition(marker: MonacoMarkerLike, position: MonacoPositionLike | null) {
-  if (!marker || !position) return false;
-  if (position.lineNumber < marker.startLineNumber) return false;
-  if (position.lineNumber > marker.endLineNumber) return false;
+  if (!marker || !position) return false
+  if (position.lineNumber < marker.startLineNumber) return false
+  if (position.lineNumber > marker.endLineNumber) return false
   if (position.lineNumber === marker.startLineNumber && position.column < marker.startColumn) {
-    return false;
+    return false
   }
   if (position.lineNumber === marker.endLineNumber && position.column > marker.endColumn) {
-    return false;
+    return false
   }
-  return true;
+  return true
 }
 
 function pickMarkerAtPosition(position: MonacoPositionLike | null) {
-  if (!position) return null;
-  const markers = latestMarkers || [];
-  const matches = markers.filter((marker) => markerContainsPosition(marker, position));
-  if (!matches.length) return null;
-  return matches.sort((a, b) => b.severity - a.severity)[0];
+  if (!position) return null
+  const markers = latestMarkers || []
+  const matches = markers.filter((marker) => markerContainsPosition(marker, position))
+  if (!matches.length) return null
+  return matches.sort((a, b) => b.severity - a.severity)[0]
 }
 
 function showMarkerTooltip(position: MonacoPositionLike | null) {
   if (!editorInstance || !position) {
-    hideMarkerTooltip();
-    return;
+    hideMarkerTooltip()
+    return
   }
-  const marker = pickMarkerAtPosition(position);
+  const marker = pickMarkerAtPosition(position)
   if (!marker) {
-    hideMarkerTooltip();
-    return;
+    hideMarkerTooltip()
+    return
   }
-  const coords = editorInstance.getScrolledVisiblePosition(position);
+  const coords = editorInstance.getScrolledVisiblePosition(position)
   if (!coords) {
-    hideMarkerTooltip();
-    return;
+    hideMarkerTooltip()
+    return
   }
-  ensureMarkerTooltip();
-  if (!markerTooltipEl) return;
-  markerTooltipEl.textContent = marker.message || "";
-  markerTooltipEl.style.left = `${coords.left + 8}px`;
-  markerTooltipEl.style.top = `${coords.top + coords.height + 6}px`;
-  markerTooltipEl.style.display = "block";
+  ensureMarkerTooltip()
+  if (!markerTooltipEl) return
+  markerTooltipEl.textContent = marker.message || ''
+  markerTooltipEl.style.left = `${coords.left + 8}px`
+  markerTooltipEl.style.top = `${coords.top + coords.height + 6}px`
+  markerTooltipEl.style.display = 'block'
 }
 
 function resolveCompletionKind(kind?: string | number): MonacoCompletionItemKindValue {
-  if (typeof kind === "number") return kind;
+  if (typeof kind === 'number') return kind
   if (
-    typeof kind === "string" &&
+    typeof kind === 'string' &&
     monaco.languages.CompletionItemKind[kind as MonacoLanguageCompletionItemKind]
   ) {
-    return monaco.languages.CompletionItemKind[kind as MonacoLanguageCompletionItemKind];
+    return monaco.languages.CompletionItemKind[kind as MonacoLanguageCompletionItemKind]
   }
-  return monaco.languages.CompletionItemKind.Text;
+  return monaco.languages.CompletionItemKind.Text
 }
 
 function resolveCompletionItems(model: MonacoTextModelLike, position: MonacoPositionLike) {
-  const word = model.getWordUntilPosition(position);
+  const word = model.getWordUntilPosition(position)
   const range = new monaco.Range(
     position.lineNumber,
     word.startColumn,
     position.lineNumber,
     word.endColumn,
-  );
-  const lineText = model.getLineContent(position.lineNumber);
-  const prefixText = lineText.slice(0, Math.max(0, word.startColumn - 1));
+  )
+  const lineText = model.getLineContent(position.lineNumber)
+  const prefixText = lineText.slice(0, Math.max(0, word.startColumn - 1))
 
   return (completionItems.value || [])
     .filter((item) => {
-      if (!item?.prefix) return true;
-      const prefixes = Array.isArray(item.prefix) ? item.prefix : [item.prefix];
-      return prefixes.some((prefix) => prefixText.endsWith(prefix));
+      if (!item?.prefix) return true
+      const prefixes = Array.isArray(item.prefix) ? item.prefix : [item.prefix]
+      return prefixes.some((prefix) => prefixText.endsWith(prefix))
     })
     .map((item) => ({
-      label: item.label ?? item.insertText ?? "",
+      label: item.label ?? item.insertText ?? '',
       kind: resolveCompletionKind(item.kind),
-      insertText: item.insertText ?? item.label ?? "",
+      insertText: item.insertText ?? item.label ?? '',
       range,
       ...(item.detail ? { detail: item.detail } : {}),
       ...(item.documentation ? { documentation: item.documentation } : {}),
     }))
-    .filter((item) => item.label && item.insertText);
+    .filter((item) => item.label && item.insertText)
 }
 
 function isCaseLine(text: string) {
-  const trimmed = text.trimStart();
+  const trimmed = text.trimStart()
   return (
-    trimmed.startsWith("case ") ||
-    trimmed.startsWith("default ") ||
-    trimmed === "case" ||
-    trimmed === "default"
-  );
+    trimmed.startsWith('case ') ||
+    trimmed.startsWith('default ') ||
+    trimmed === 'case' ||
+    trimmed === 'default'
+  )
 }
 
 function isFlowControlLine(text: string) {
-  const trimmed = text.trimStart();
+  const trimmed = text.trimStart()
   return FLOW_CONTROL_KEYWORDS.some(
     (keyword) => trimmed === keyword || trimmed.startsWith(`${keyword} `),
-  );
+  )
 }
 
 function registerCompletionProvider() {
   if (completionProvider) {
-    completionProvider.dispose();
-    completionProvider = null;
+    completionProvider.dispose()
+    completionProvider = null
   }
-  if (!completionItems.value || completionItems.value.length === 0) return;
+  if (!completionItems.value || completionItems.value.length === 0) return
   completionProvider = monaco.languages.registerCompletionItemProvider(props.language, {
-    triggerCharacters: [".", "$"],
+    triggerCharacters: ['.', '$'],
     provideCompletionItems(model: MonacoTextModelLike, position: MonacoPositionLike) {
-      return { suggestions: resolveCompletionItems(model, position) };
+      return { suggestions: resolveCompletionItems(model, position) }
     },
-  });
+  })
 }
 
 function buildSemicolonEdits(model: MonacoTextModelLike): MonacoTextEdit[] {
-  const edits: MonacoTextEdit[] = [];
-  const lineCount = model.getLineCount();
+  const edits: MonacoTextEdit[] = []
+  const lineCount = model.getLineCount()
   for (let lineNumber = 1; lineNumber <= lineCount; lineNumber += 1) {
-    const line = model.getLineContent(lineNumber);
-    if (!line || !line.trim()) continue;
-    const trimmed = line.replace(TRAILING_WHITESPACE_RE, "");
-    if (!trimmed) continue;
-    if (COMMENT_LINE_RE.test(trimmed)) continue;
-    if (BLOCK_END_RE.test(trimmed)) continue;
-    if (ARROW_END_RE.test(trimmed)) continue;
-    if (trimmed.endsWith(":")) continue;
+    const line = model.getLineContent(lineNumber)
+    if (!line || !line.trim()) continue
+    const trimmed = line.replace(TRAILING_WHITESPACE_RE, '')
+    if (!trimmed) continue
+    if (COMMENT_LINE_RE.test(trimmed)) continue
+    if (BLOCK_END_RE.test(trimmed)) continue
+    if (ARROW_END_RE.test(trimmed)) continue
+    if (trimmed.endsWith(':')) continue
     if (isFlowControlLine(trimmed) && FUNCTION_END_RE.test(trimmed)) {
-      continue;
+      continue
     }
-    if (isCaseLine(trimmed)) continue;
-    if (!CODE_LINE_RE.test(trimmed)) continue;
+    if (isCaseLine(trimmed)) continue
+    if (!CODE_LINE_RE.test(trimmed)) continue
 
-    const commentIndex = trimmed.indexOf("//");
-    const insertColumn = commentIndex >= 0 ? commentIndex + 1 : trimmed.length + 1;
+    const commentIndex = trimmed.indexOf('//')
+    const insertColumn = commentIndex >= 0 ? commentIndex + 1 : trimmed.length + 1
     edits.push({
       range: new monaco.Range(lineNumber, insertColumn, lineNumber, insertColumn),
-      text: ";",
-    });
+      text: ';',
+    })
   }
-  return edits;
+  return edits
 }
 
 async function loadPrettier(): Promise<PrettierModuleLike | null> {
-  if (prettierReady) return prettierReady;
+  if (prettierReady) return prettierReady
   prettierReady = Promise.all([
-    import("prettier/standalone"),
-    import("prettier/parser-babel"),
-    import("prettier/plugins/estree"),
+    import('prettier/standalone'),
+    import('prettier/parser-babel'),
+    import('prettier/plugins/estree'),
   ])
     .then(
       ([prettier, parserBabel, estree]) =>
@@ -641,253 +637,249 @@ async function loadPrettier(): Promise<PrettierModuleLike | null> {
           plugins: [parserBabel.default || parserBabel, estree.default || estree],
         }) as PrettierModuleLike,
     )
-    .catch(() => null);
-  return prettierReady;
+    .catch(() => null)
+  return prettierReady
 }
 
 async function formatWithPrettier(code: string, language: string): Promise<string | null> {
-  const prettier = await loadPrettier();
-  if (!prettier) return null;
-  const parser = language === "typescript" ? "babel-ts" : "babel";
-  const trimmed = String(code || "");
-  const isAnonFunction = ANON_FUNCTION_RE.test(trimmed);
-  const wrapPrefix = "const __fn = ";
-  const wrapSuffix = ";";
-  const formatTarget = isAnonFunction ? `${wrapPrefix}${trimmed}${wrapSuffix}` : trimmed;
+  const prettier = await loadPrettier()
+  if (!prettier) return null
+  const parser = language === 'typescript' ? 'babel-ts' : 'babel'
+  const trimmed = String(code || '')
+  const isAnonFunction = ANON_FUNCTION_RE.test(trimmed)
+  const wrapPrefix = 'const __fn = '
+  const wrapSuffix = ';'
+  const formatTarget = isAnonFunction ? `${wrapPrefix}${trimmed}${wrapSuffix}` : trimmed
   try {
     const formatted = await prettier.format(formatTarget, {
       parser,
       plugins: prettier.plugins,
       semi: true,
       singleQuote: true,
-      trailingComma: "all",
+      trailingComma: 'all',
       printWidth: 100,
       tabWidth: 2,
-    });
-    if (!formatted) return null;
+    })
+    if (!formatted) return null
     if (isAnonFunction) {
-      const stripped = formatted.replace(WRAPPED_FN_RE, "").replace(WRAPPED_FN_SUFFIX_RE, "");
-      return stripped;
+      const stripped = formatted.replace(WRAPPED_FN_RE, '').replace(WRAPPED_FN_SUFFIX_RE, '')
+      return stripped
     }
-    return formatted;
+    return formatted
   } catch {
-    return null;
+    return null
   }
 }
 
 function ensureJsFormatter() {
-  if (jsFormatterRegistered) return;
-  jsFormatterRegistered = true;
+  if (jsFormatterRegistered) return
+  jsFormatterRegistered = true
   const provider: monaco.languages.DocumentFormattingEditProvider = {
     async provideDocumentFormattingEdits(model: MonacoTextModelLike): Promise<MonacoTextEdit[]> {
-      const languageId = model.getLanguageId?.() || props.language;
-      const code = model.getValue();
-      const formatted = await formatWithPrettier(code, languageId);
+      const languageId = model.getLanguageId?.() || props.language
+      const code = model.getValue()
+      const formatted = await formatWithPrettier(code, languageId)
       if (formatted && formatted !== code) {
         return [
           {
             range: model.getFullModelRange(),
             text: formatted,
           },
-        ];
+        ]
       }
-      return buildSemicolonEdits(model);
+      return buildSemicolonEdits(model)
     },
-  };
-  monaco.languages.registerDocumentFormattingEditProvider("javascript", provider);
-  monaco.languages.registerDocumentFormattingEditProvider("typescript", provider);
+  }
+  monaco.languages.registerDocumentFormattingEditProvider('javascript', provider)
+  monaco.languages.registerDocumentFormattingEditProvider('typescript', provider)
 }
 
 async function applyFormatEdits(): Promise<boolean> {
-  if (!editorInstance) return false;
-  const model = editorInstance.getModel();
-  if (!model) return false;
-  const languageId = model.getLanguageId?.() || props.language;
-  if (languageId !== "javascript" && languageId !== "typescript") return false;
-  const code = model.getValue();
-  const formatted = await formatWithPrettier(code, languageId);
+  if (!editorInstance) return false
+  const model = editorInstance.getModel()
+  if (!model) return false
+  const languageId = model.getLanguageId?.() || props.language
+  if (languageId !== 'javascript' && languageId !== 'typescript') return false
+  const code = model.getValue()
+  const formatted = await formatWithPrettier(code, languageId)
   if (formatted && formatted !== code) {
-    editorInstance.pushUndoStop();
-    editorInstance.executeEdits("format", [{ range: model.getFullModelRange(), text: formatted }]);
-    editorInstance.pushUndoStop();
-    return true;
+    editorInstance.pushUndoStop()
+    editorInstance.executeEdits('format', [{ range: model.getFullModelRange(), text: formatted }])
+    editorInstance.pushUndoStop()
+    return true
   }
-  const edits = buildSemicolonEdits(model);
-  if (!edits.length) return true;
-  editorInstance.pushUndoStop();
-  editorInstance.executeEdits("format", edits);
-  editorInstance.pushUndoStop();
-  return true;
+  const edits = buildSemicolonEdits(model)
+  if (!edits.length) return true
+  editorInstance.pushUndoStop()
+  editorInstance.executeEdits('format', edits)
+  editorInstance.pushUndoStop()
+  return true
 }
 
 function getJavaScriptDefaults() {
-  const languages = monacoCompatLanguages as Record<string, any>;
-  return (
-    languages.javascriptDefaults ||
-    languages.typescript?.javascriptDefaults ||
-    null
-  );
+  const languages = monacoCompatLanguages as Record<string, any>
+  return languages.javascriptDefaults || languages.typescript?.javascriptDefaults || null
 }
 
 function initEditor() {
-  if (!editorSurfaceRef.value) return;
+  if (!editorSurfaceRef.value) return
   if (editorInstance) {
-    editorInstance.dispose();
-    editorReady.value = false;
+    editorInstance.dispose()
+    editorReady.value = false
   }
 
-  if (props.language === "css") {
-    const cssDefaults = monacoCompatLanguages.cssDefaults;
+  if (props.language === 'css') {
+    const cssDefaults = monacoCompatLanguages.cssDefaults
     if (cssDefaults?.setOptions) {
       cssDefaults.setOptions({
         validate: true,
         lint: {
-          important: "warning",
-          duplicateProperties: "warning",
-          emptyRules: "warning",
-          unknownProperties: "error",
+          important: 'warning',
+          duplicateProperties: 'warning',
+          emptyRules: 'warning',
+          unknownProperties: 'error',
         },
-      });
+      })
     }
   }
-  if (props.language === "javascript" || props.language === "typescript") {
-    const ignoreDiagnostics = [1003, 1108, 1308, 1375, 1378, 1379, 2391, 80007, 80008];
+  if (props.language === 'javascript' || props.language === 'typescript') {
+    const ignoreDiagnostics = [1003, 1108, 1308, 1375, 1378, 1379, 2391, 80007, 80008]
     const compilerOptions = {
       allowJs: true,
       allowNonTsExtensions: true,
       target: 99,
       module: 99,
-      lib: ["es2022", "dom"],
+      lib: ['es2022', 'dom'],
       moduleResolution: 2,
       allowSyntheticDefaultImports: true,
       esModuleInterop: true,
       noEmit: true,
       checkJs: true,
-    };
-    const javascriptDefaults = getJavaScriptDefaults();
-    javascriptDefaults?.setCompilerOptions?.(compilerOptions);
+    }
+    const javascriptDefaults = getJavaScriptDefaults()
+    javascriptDefaults?.setCompilerOptions?.(compilerOptions)
     javascriptDefaults?.setDiagnosticsOptions?.({
       noSemanticValidation: false,
       noSyntaxValidation: false,
       onlyVisible: false,
       diagnosticCodesToIgnore: ignoreDiagnostics,
-    });
-    javascriptDefaults?.setEagerModelSync?.(true);
+    })
+    javascriptDefaults?.setEagerModelSync?.(true)
     if (extraLibDisposable) {
-      extraLibDisposable.dispose();
-      extraLibDisposable = null;
+      extraLibDisposable.dispose()
+      extraLibDisposable = null
     }
     if (javascriptDefaults?.addExtraLib) {
       extraLibDisposable = javascriptDefaults.addExtraLib(
-        "declare const $global: Record<string, any>;\n" +
-          "declare const $vars: Record<string, any>;\n" +
-          "declare const customScripts: Record<string, (...args: any[]) => any>;\n" +
-          "declare const components: Record<string, any>;\n" +
-          "declare const $event: any;\n",
-        "ts:global-scripts.d.ts",
-      );
+        'declare const $global: Record<string, any>;\n' +
+          'declare const $vars: Record<string, any>;\n' +
+          'declare const customScripts: Record<string, (...args: any[]) => any>;\n' +
+          'declare const components: Record<string, any>;\n' +
+          'declare const $event: any;\n',
+        'ts:global-scripts.d.ts',
+      )
     }
-    ensureJsFormatter();
+    ensureJsFormatter()
   }
 
-  const editorSurface = editorSurfaceRef.value;
-  editorInstance = monaco.editor.create(editorSurface, baseOptions());
-  editorReady.value = true;
-  applyTheme(props.theme);
-  registerCompletionProvider();
+  const editorSurface = editorSurfaceRef.value
+  editorInstance = monaco.editor.create(editorSurface, baseOptions())
+  editorReady.value = true
+  applyTheme(props.theme)
+  registerCompletionProvider()
   editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
-    void runClipboardAction("editor.action.clipboardCopyAction");
-  });
+    void runClipboardAction('editor.action.clipboardCopyAction')
+  })
   editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, () => {
-    void runClipboardAction("editor.action.clipboardCutAction");
-  });
+    void runClipboardAction('editor.action.clipboardCutAction')
+  })
   editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
-    void runPasteAction();
-  });
+    void runPasteAction()
+  })
   editorInstance.addAction({
-    id: "format-document",
-    label: t("monacoEditor.contextMenu.format"),
+    id: 'format-document',
+    label: t('monacoEditor.contextMenu.format'),
     keybindings: [monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF],
     run: () => runFormatCommand(),
-  });
+  })
   editorInstance.onKeyDown((event) => {
     if (event.shiftKey && event.altKey && event.keyCode === monaco.KeyCode.KeyF) {
-      event.preventDefault();
-      event.stopPropagation();
-      runFormatCommand();
+      event.preventDefault()
+      event.stopPropagation()
+      runFormatCommand()
     }
-  });
+  })
   const markerListener = monaco.editor.onDidChangeMarkers((uris) => {
-    const model = editorInstance?.getModel();
-    if (!model) return;
-    const match = uris.some((uri) => uri.toString() === model.uri.toString());
-    if (!match) return;
+    const model = editorInstance?.getModel()
+    if (!model) return
+    const match = uris.some((uri) => uri.toString() === model.uri.toString())
+    if (!match) return
     const markers = monaco.editor.getModelMarkers({ resource: model.uri }).map((marker) => ({
       ...marker,
-      message: marker.message || "",
-    }));
-    latestMarkers = markers;
-    emit("markers", markers);
-  });
-  cleanupFns.push(() => markerListener.dispose());
+      message: marker.message || '',
+    }))
+    latestMarkers = markers
+    emit('markers', markers)
+  })
+  cleanupFns.push(() => markerListener.dispose())
   requestAnimationFrame(() => {
-    const model = editorInstance?.getModel();
-    if (!model) return;
+    const model = editorInstance?.getModel()
+    if (!model) return
     const markers = monaco.editor.getModelMarkers({ resource: model.uri }).map((marker) => ({
       ...marker,
-      message: marker.message || "",
-    }));
-    latestMarkers = markers;
-    emit("markers", markers);
-  });
+      message: marker.message || '',
+    }))
+    latestMarkers = markers
+    emit('markers', markers)
+  })
 
   editorInstance.onDidChangeModelContent(() => {
-    if (isInternalUpdate) return;
-    const instance = editorInstance;
-    if (!instance) return;
-    const val = instance.getValue();
-    isInternalUpdate = true;
-    emit("update:modelValue", val);
-    emit("change", val);
-    requestAnimationFrame(() => (isInternalUpdate = false));
-  });
+    if (isInternalUpdate) return
+    const instance = editorInstance
+    if (!instance) return
+    const val = instance.getValue()
+    isInternalUpdate = true
+    emit('update:modelValue', val)
+    emit('change', val)
+    requestAnimationFrame(() => (isInternalUpdate = false))
+  })
 
   const mouseMoveListener = editorInstance.onMouseMove((event) => {
     if (!event?.target?.position) {
-      hideMarkerTooltip();
-      return;
+      hideMarkerTooltip()
+      return
     }
-    showMarkerTooltip(event.target.position);
-  });
-  const mouseLeaveListener = editorInstance.onMouseLeave(() => hideMarkerTooltip());
-  const scrollListener = editorInstance.onDidScrollChange(() => hideMarkerTooltip());
+    showMarkerTooltip(event.target.position)
+  })
+  const mouseLeaveListener = editorInstance.onMouseLeave(() => hideMarkerTooltip())
+  const scrollListener = editorInstance.onDidScrollChange(() => hideMarkerTooltip())
   const contextMenuListener = editorInstance.onContextMenu((event) => {
-    const browserEvent = event.event.browserEvent as MouseEvent | undefined;
-    if (!browserEvent) return;
-    browserEvent.preventDefault();
-    browserEvent.stopPropagation();
-    showEditorContextMenu(browserEvent.clientX, browserEvent.clientY);
-  });
-  const keyDownListener = editorInstance.onKeyDown(() => hideEditorContextMenu());
-  const mouseDownListener = editorInstance.onMouseDown(() => hideEditorContextMenu());
-  const documentMouseDownListener = () => hideEditorContextMenu();
-  const windowResizeListener = () => hideEditorContextMenu();
-  document.addEventListener("mousedown", documentMouseDownListener);
-  window.addEventListener("resize", windowResizeListener);
-  cleanupFns.push(() => mouseMoveListener.dispose());
-  cleanupFns.push(() => mouseLeaveListener.dispose());
-  cleanupFns.push(() => scrollListener.dispose());
-  cleanupFns.push(() => contextMenuListener.dispose());
-  cleanupFns.push(() => keyDownListener.dispose());
-  cleanupFns.push(() => mouseDownListener.dispose());
-  cleanupFns.push(() => document.removeEventListener("mousedown", documentMouseDownListener));
-  cleanupFns.push(() => window.removeEventListener("resize", windowResizeListener));
+    const browserEvent = event.event.browserEvent as MouseEvent | undefined
+    if (!browserEvent) return
+    browserEvent.preventDefault()
+    browserEvent.stopPropagation()
+    showEditorContextMenu(browserEvent.clientX, browserEvent.clientY)
+  })
+  const keyDownListener = editorInstance.onKeyDown(() => hideEditorContextMenu())
+  const mouseDownListener = editorInstance.onMouseDown(() => hideEditorContextMenu())
+  const documentMouseDownListener = () => hideEditorContextMenu()
+  const windowResizeListener = () => hideEditorContextMenu()
+  document.addEventListener('mousedown', documentMouseDownListener)
+  window.addEventListener('resize', windowResizeListener)
+  cleanupFns.push(() => mouseMoveListener.dispose())
+  cleanupFns.push(() => mouseLeaveListener.dispose())
+  cleanupFns.push(() => scrollListener.dispose())
+  cleanupFns.push(() => contextMenuListener.dispose())
+  cleanupFns.push(() => keyDownListener.dispose())
+  cleanupFns.push(() => mouseDownListener.dispose())
+  cleanupFns.push(() => document.removeEventListener('mousedown', documentMouseDownListener))
+  cleanupFns.push(() => window.removeEventListener('resize', windowResizeListener))
 }
 
 function cancelInitRetry() {
-  if (initRetryFrame === null) return;
-  window.cancelAnimationFrame(initRetryFrame);
-  initRetryFrame = null;
+  if (initRetryFrame === null) return
+  window.cancelAnimationFrame(initRetryFrame)
+  initRetryFrame = null
 }
 
 /**
@@ -895,157 +887,152 @@ function cancelInitRetry() {
  * 用帧重试等待挂载面稳定，避免只初始化一次后留下空白编辑器。
  */
 function scheduleEditorInit() {
-  if (editorInstance || initRetryFrame !== null) return;
+  if (editorInstance || initRetryFrame !== null) return
   initRetryFrame = window.requestAnimationFrame(() => {
-    initRetryFrame = null;
-    const surface = editorSurfaceRef.value;
-    const rect = surface?.getBoundingClientRect();
-    const isReady =
-      !!surface &&
-      surface.isConnected &&
-      !!rect &&
-      rect.width > 0 &&
-      rect.height > 0;
+    initRetryFrame = null
+    const surface = editorSurfaceRef.value
+    const rect = surface?.getBoundingClientRect()
+    const isReady = !!surface && surface.isConnected && !!rect && rect.width > 0 && rect.height > 0
     if (!isReady) {
       if (initRetryCount < MAX_INIT_RETRY_COUNT) {
-        initRetryCount += 1;
-        scheduleEditorInit();
+        initRetryCount += 1
+        scheduleEditorInit()
       }
-      return;
+      return
     }
     try {
-      initEditor();
-      initRetryCount = 0;
+      initEditor()
+      initRetryCount = 0
     } catch (error) {
-      console.error("[Designer] Monaco editor init failed:", error);
+      console.error('[Designer] Monaco editor init failed:', error)
       if (initRetryCount < MAX_INIT_RETRY_COUNT) {
-        initRetryCount += 1;
-        scheduleEditorInit();
+        initRetryCount += 1
+        scheduleEditorInit()
       }
     }
-  });
+  })
 }
 
 watch(
   () => props.modelValue,
   (val) => {
-    if (val !== fallbackValue.value) fallbackValue.value = val || "";
-    if (!editorInstance) return;
-    if (val === editorInstance.getValue()) return;
-    isInternalUpdate = true;
-    editorInstance.setValue(val || "");
-    requestAnimationFrame(() => (isInternalUpdate = false));
+    if (val !== fallbackValue.value) fallbackValue.value = val || ''
+    if (!editorInstance) return
+    if (val === editorInstance.getValue()) return
+    isInternalUpdate = true
+    editorInstance.setValue(val || '')
+    requestAnimationFrame(() => (isInternalUpdate = false))
   },
-);
+)
 
 function handleFallbackInput(event: Event) {
-  const value = (event.target as HTMLTextAreaElement | null)?.value || "";
-  fallbackValue.value = value;
-  emit("update:modelValue", value);
-  emit("change", value);
+  const value = (event.target as HTMLTextAreaElement | null)?.value || ''
+  fallbackValue.value = value
+  emit('update:modelValue', value)
+  emit('change', value)
 }
 
 watch(
   () => props.language,
   (lang) => {
-    const model = editorInstance?.getModel();
+    const model = editorInstance?.getModel()
     if (model) {
-      monaco.editor.setModelLanguage(model, lang || props.language || "css");
+      monaco.editor.setModelLanguage(model, lang || props.language || 'css')
     }
   },
-);
+)
 
 watch(
   () => props.theme,
   (theme) => {
-    applyTheme(theme);
+    applyTheme(theme)
   },
-);
+)
 
 watch(
   () => props.completions,
   (items) => {
-    completionItems.value = normalizeCompletionItems(items);
-    registerCompletionProvider();
+    completionItems.value = normalizeCompletionItems(items)
+    registerCompletionProvider()
   },
   { deep: true },
-);
+)
 
 watch(
   () => props.language,
   () => {
-    registerCompletionProvider();
+    registerCompletionProvider()
   },
-);
+)
 
 function setupThemeListeners() {
   if (mediaQuery) {
-    const handler = (event: MediaQueryListEvent) => applyTheme(event.matches ? "vs-dark" : "vs");
-    mediaQuery.addEventListener("change", handler);
-    cleanupFns.push(() => mediaQuery.removeEventListener("change", handler));
+    const handler = (event: MediaQueryListEvent) => applyTheme(event.matches ? 'vs-dark' : 'vs')
+    mediaQuery.addEventListener('change', handler)
+    cleanupFns.push(() => mediaQuery.removeEventListener('change', handler))
   }
 
-  if (typeof document !== "undefined") {
-    const observer = new MutationObserver(() => applyTheme());
+  if (typeof document !== 'undefined') {
+    const observer = new MutationObserver(() => applyTheme())
     const targetOptions = {
       attributes: true,
-      attributeFilter: ["class", "data-theme"],
-    };
-    observer.observe(document.documentElement, targetOptions);
-    if (document.body) observer.observe(document.body, targetOptions);
-    cleanupFns.push(() => observer.disconnect());
+      attributeFilter: ['class', 'data-theme'],
+    }
+    observer.observe(document.documentElement, targetOptions)
+    if (document.body) observer.observe(document.body, targetOptions)
+    cleanupFns.push(() => observer.disconnect())
   }
 }
 
 onMounted(() => {
   nextTick(() => {
-    scheduleEditorInit();
-    setupThemeListeners();
-  });
-});
+    scheduleEditorInit()
+    setupThemeListeners()
+  })
+})
 
 onBeforeUnmount(() => {
-  cancelInitRetry();
+  cancelInitRetry()
   if (editorInstance) {
-    editorInstance.dispose();
-    editorInstance = null;
+    editorInstance.dispose()
+    editorInstance = null
   }
-  editorReady.value = false;
+  editorReady.value = false
   if (completionProvider) {
-    completionProvider.dispose();
-    completionProvider = null;
+    completionProvider.dispose()
+    completionProvider = null
   }
   if (markerTooltipEl) {
-    markerTooltipEl.remove();
-    markerTooltipEl = null;
+    markerTooltipEl.remove()
+    markerTooltipEl = null
   }
-  cleanupFns.forEach((fn) => fn());
-});
+  cleanupFns.forEach((fn) => fn())
+})
 
 defineExpose({
   focus: () => editorInstance?.focus(),
   format: async () => {
-    if (!editorInstance) return false;
-    if (await runEditorAction("editor.action.formatDocument")) return true;
-    if (await runEditorAction("editor.action.formatSelection")) return true;
+    if (!editorInstance) return false
+    if (await runEditorAction('editor.action.formatDocument')) return true
+    if (await runEditorAction('editor.action.formatSelection')) return true
     try {
-      editorInstance.trigger("format", "editor.action.formatDocument", undefined);
-      return true;
+      editorInstance.trigger('format', 'editor.action.formatDocument', undefined)
+      return true
     } catch {
-      return applyFormatEdits();
+      return applyFormatEdits()
     }
   },
-  getValue: () => editorInstance?.getValue() ?? "",
+  getValue: () => editorInstance?.getValue() ?? '',
   setValue: (value: string) => {
-    if (!editorInstance) return;
-    isInternalUpdate = true;
-    editorInstance.setValue(value || "");
-    requestAnimationFrame(() => (isInternalUpdate = false));
+    if (!editorInstance) return
+    isInternalUpdate = true
+    editorInstance.setValue(value || '')
+    requestAnimationFrame(() => (isInternalUpdate = false))
   },
   insertText: (text: string) => {
-    insertTextAtSelection(text);
+    insertTextAtSelection(text)
   },
-});
+})
 </script>
 
 <template>
@@ -1114,8 +1101,7 @@ defineExpose({
   resize: none;
   background: #fff;
   color: #1f2937;
-  font-family:
-    "Cascadia Code", "Fira Code", Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, 'Liberation Mono', 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.6;
   tab-size: 2;

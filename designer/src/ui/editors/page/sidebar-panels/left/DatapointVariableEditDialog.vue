@@ -2,48 +2,52 @@
   数据点面板：新增/编辑变量表单（含 Monaco 初始值）
 -->
 <script setup lang="ts">
-import { useI18n } from "vue-i18n";
-import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
+import { useI18n } from 'vue-i18n'
+import MonacoEditor from '@/ui/shared/widgets/base/monaco-editor-async'
 
 interface DatapointGroupOptionLike {
-  id: string;
-  name: string;
+  id: string
+  name: string
 }
 
 defineProps<{
-  editMode?: boolean;
-  types: string[];
-  groupOptions?: DatapointGroupOptionLike[];
-  rootGroupId: string;
-  isEditorType?: boolean;
-  isTextType?: boolean;
-  editorLanguage?: string;
-}>();
+  editMode?: boolean
+  types: string[]
+  groupOptions?: DatapointGroupOptionLike[]
+  rootGroupId: string
+  isEditorType?: boolean
+  isTextType?: boolean
+  editorLanguage?: string
+}>()
 const emit = defineEmits<{
-  (event: "confirm"): void;
-  (event: "typeChange"): void;
-  (event: "editValueMarkers", payload: unknown): void;
-}>();
-const visible = defineModel<boolean>({ default: false });
-const editName = defineModel<string>("editName", { default: "" });
-const editGroupId = defineModel<string>("editGroupId", { default: "" });
-const editType = defineModel<string>("editType", { default: "string" });
-const editValue = defineModel<any>("editValue", { default: "" });
-const editDescription = defineModel<string>("editDescription", { default: "" });
-const mapped = defineModel<boolean>("mapped", { default: false });
-const mappedField = defineModel<string>("mappedField", { default: "" });
-const mappedSourceLabel = defineModel<string>("mappedSourceLabel", { default: "" });
-const { t } = useI18n();
+  (event: 'confirm'): void
+  (event: 'typeChange'): void
+  (event: 'editValueMarkers', payload: unknown): void
+}>()
+const visible = defineModel<boolean>({ default: false })
+const editName = defineModel<string>('editName', { default: '' })
+const editGroupId = defineModel<string>('editGroupId', { default: '' })
+const editType = defineModel<string>('editType', { default: 'string' })
+const editValue = defineModel<any>('editValue', { default: '' })
+const editDescription = defineModel<string>('editDescription', { default: '' })
+const mapped = defineModel<boolean>('mapped', { default: false })
+const mappedField = defineModel<string>('mappedField', { default: '' })
+const mappedSourceLabel = defineModel<string>('mappedSourceLabel', { default: '' })
+const { t } = useI18n()
 
 function handleMarkers(payload: unknown) {
-  emit("editValueMarkers", payload);
+  emit('editValueMarkers', payload)
 }
 </script>
 
 <template>
   <el-dialog
     v-model="visible"
-    :title="editMode ? t('datapointPanel.variableDialog.editTitle') : t('datapointPanel.variableDialog.createTitle')"
+    :title="
+      editMode
+        ? t('datapointPanel.variableDialog.editTitle')
+        : t('datapointPanel.variableDialog.createTitle')
+    "
     width="520px"
     :close-on-click-modal="false"
     :lock-scroll="false"
@@ -53,7 +57,10 @@ function handleMarkers(payload: unknown) {
         <el-input v-model="editName" />
       </el-form-item>
       <el-form-item :label="t('datapointPanel.variableDialog.group')">
-        <el-select v-model="editGroupId" :placeholder="t('datapointPanel.variableDialog.selectGroup')">
+        <el-select
+          v-model="editGroupId"
+          :placeholder="t('datapointPanel.variableDialog.selectGroup')"
+        >
           <el-option :label="t('datapointPanel.variableDialog.root')" :value="rootGroupId" />
           <el-option
             v-for="group in groupOptions"
@@ -107,8 +114,12 @@ function handleMarkers(payload: unknown) {
       </template>
     </el-form>
     <template #footer>
-      <el-button @click="visible = false">{{ t("datapointPanel.variableDialog.cancel") }}</el-button>
-      <el-button type="primary" @click="emit('confirm')">{{ t("datapointPanel.variableDialog.confirm") }}</el-button>
+      <el-button @click="visible = false">{{
+        t('datapointPanel.variableDialog.cancel')
+      }}</el-button>
+      <el-button type="primary" @click="emit('confirm')">{{
+        t('datapointPanel.variableDialog.confirm')
+      }}</el-button>
     </template>
   </el-dialog>
 </template>

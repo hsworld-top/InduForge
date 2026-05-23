@@ -4,12 +4,12 @@
  * 使用 node-sql-parser 处理不同 SQL 方言
  */
 
-import { Parser } from "node-sql-parser";
+import { Parser } from 'node-sql-parser'
 
 // 创建不同方言的解析器
-const mysqlParser = new Parser();
-const postgresParser = new Parser();
-const mssqlParser = new Parser();
+const mysqlParser = new Parser()
+const postgresParser = new Parser()
+const mssqlParser = new Parser()
 
 /**
  * 解析 SQL 语句
@@ -17,23 +17,23 @@ const mssqlParser = new Parser();
  * @param {string} dialect - SQL 方言 ('mysql' | 'postgresql' | 'transactsql')
  * @returns {Object} 解析结果
  */
-export function parseSql(sql, dialect = "mysql") {
+export function parseSql(sql, dialect = 'mysql') {
   try {
-    const parser = getParser(dialect);
-    const ast = parser.astify(sql, { database: dialect });
+    const parser = getParser(dialect)
+    const ast = parser.astify(sql, { database: dialect })
     return {
       success: true,
       ast,
       type: Array.isArray(ast) ? ast[0]?.type : ast?.type,
       tables: extractTables(ast),
       columns: extractColumns(ast),
-    };
+    }
   } catch (error) {
     return {
       success: false,
       error: error.message,
       position: error.location,
-    };
+    }
   }
 }
 
@@ -43,23 +43,23 @@ export function parseSql(sql, dialect = "mysql") {
  * @param {string} dialect - SQL 方言
  * @returns {Object} 验证结果
  */
-export function validateSql(sql, dialect = "mysql") {
-  const result = parseSql(sql, dialect);
+export function validateSql(sql, dialect = 'mysql') {
+  const result = parseSql(sql, dialect)
 
   if (!result.success) {
     return {
       valid: false,
       errors: [result.error],
       position: result.position,
-    };
+    }
   }
 
   // 检查危险操作
-  const warnings = [];
-  const dangerousTypes = ["drop", "truncate", "delete", "update"];
+  const warnings = []
+  const dangerousTypes = ['drop', 'truncate', 'delete', 'update']
 
   if (dangerousTypes.includes(result.type?.toLowerCase())) {
-    warnings.push(`警告：SQL 包含可能危险的操作 ${result.type.toUpperCase()}`);
+    warnings.push(`警告：SQL 包含可能危险的操作 ${result.type.toUpperCase()}`)
   }
 
   return {
@@ -68,7 +68,7 @@ export function validateSql(sql, dialect = "mysql") {
     warnings,
     type: result.type,
     tables: result.tables,
-  };
+  }
 }
 
 /**
@@ -78,15 +78,15 @@ export function validateSql(sql, dialect = "mysql") {
  */
 export function extractParameters(sql) {
   // 匹配 ? 占位符
-  const matches = sql.match(/\?/g);
-  const count = matches ? matches.length : 0;
+  const matches = sql.match(/\?/g)
+  const count = matches ? matches.length : 0
 
   return Array.from({ length: count }, (_, index) => ({
     index,
     name: `param${index + 1}`,
-    value: "",
-    type: "string",
-  }));
+    value: '',
+    type: 'string',
+  }))
 }
 
 /**
@@ -95,34 +95,34 @@ export function extractParameters(sql) {
  * @returns {Array} 表名列表
  */
 function extractTables(ast) {
-  const tables = new Set();
+  const tables = new Set()
 
   const traverse = (node) => {
-    if (!node) return;
+    if (!node) return
 
-    if (node.type === "select" && node.from) {
+    if (node.type === 'select' && node.from) {
       node.from.forEach((item) => {
         if (item.table) {
-          tables.add(item.table);
+          tables.add(item.table)
         }
-      });
+      })
     }
 
     // 递归遍历
     Object.values(node).forEach((value) => {
-      if (typeof value === "object") {
-        traverse(value);
+      if (typeof value === 'object') {
+        traverse(value)
       }
-    });
-  };
-
-  if (Array.isArray(ast)) {
-    ast.forEach(traverse);
-  } else {
-    traverse(ast);
+    })
   }
 
-  return Array.from(tables);
+  if (Array.isArray(ast)) {
+    ast.forEach(traverse)
+  } else {
+    traverse(ast)
+  }
+
+  return Array.from(tables)
 }
 
 /**
@@ -131,34 +131,34 @@ function extractTables(ast) {
  * @returns {Array} 列名列表
  */
 function extractColumns(ast) {
-  const columns = new Set();
+  const columns = new Set()
 
   const traverse = (node) => {
-    if (!node) return;
+    if (!node) return
 
-    if (node.type === "select" && node.columns) {
+    if (node.type === 'select' && node.columns) {
       node.columns.forEach((col) => {
         if (col.expr && col.expr.column) {
-          columns.add(col.expr.column);
+          columns.add(col.expr.column)
         }
-      });
+      })
     }
 
     // 递归遍历
     Object.values(node).forEach((value) => {
-      if (typeof value === "object") {
-        traverse(value);
+      if (typeof value === 'object') {
+        traverse(value)
       }
-    });
-  };
-
-  if (Array.isArray(ast)) {
-    ast.forEach(traverse);
-  } else {
-    traverse(ast);
+    })
   }
 
-  return Array.from(columns);
+  if (Array.isArray(ast)) {
+    ast.forEach(traverse)
+  } else {
+    traverse(ast)
+  }
+
+  return Array.from(columns)
 }
 
 /**
@@ -168,17 +168,17 @@ function extractColumns(ast) {
  */
 function getParser(dialect) {
   switch (dialect) {
-    case "mysql":
-      return mysqlParser;
-    case "postgresql":
-    case "pgsql":
-      return postgresParser;
-    case "transactsql":
-    case "mssql":
-    case "sqlserver":
-      return mssqlParser;
+    case 'mysql':
+      return mysqlParser
+    case 'postgresql':
+    case 'pgsql':
+      return postgresParser
+    case 'transactsql':
+    case 'mssql':
+    case 'sqlserver':
+      return mssqlParser
     default:
-      return mysqlParser;
+      return mysqlParser
   }
 }
 
@@ -188,14 +188,14 @@ function getParser(dialect) {
  * @param {string} dialect - SQL 方言
  * @returns {string} 格式化后的 SQL
  */
-export function formatSqlWithParser(sql, dialect = "mysql") {
+export function formatSqlWithParser(sql, dialect = 'mysql') {
   try {
-    const parser = getParser(dialect);
-    const ast = parser.astify(sql, { database: dialect });
-    return parser.sqlify(ast, { database: dialect });
+    const parser = getParser(dialect)
+    const ast = parser.astify(sql, { database: dialect })
+    return parser.sqlify(ast, { database: dialect })
   } catch (error) {
-    console.error("SQL 格式化失败:", error);
-    return sql;
+    console.error('SQL 格式化失败:', error)
+    return sql
   }
 }
 
@@ -205,7 +205,7 @@ export function formatSqlWithParser(sql, dialect = "mysql") {
  * @param {string} dialect - SQL 方言
  * @returns {string} SQL 类型
  */
-export function getSqlType(sql, dialect = "mysql") {
-  const result = parseSql(sql, dialect);
-  return result.success ? result.type : "unknown";
+export function getSqlType(sql, dialect = 'mysql') {
+  const result = parseSql(sql, dialect)
+  return result.success ? result.type : 'unknown'
 }

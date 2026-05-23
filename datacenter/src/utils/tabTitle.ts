@@ -8,23 +8,18 @@
  * @returns {string}
  */
 export const resolveDatacenterTabLabel = (tab, translate) => {
-  if (!tab) return "";
+  if (!tab) return ''
 
-  const prefix =
-    typeof tab.labelPrefix === "string" ? tab.labelPrefix.trim() : "";
-  const labelKey = typeof tab.labelKey === "string" ? tab.labelKey : "";
+  const prefix = typeof tab.labelPrefix === 'string' ? tab.labelPrefix.trim() : ''
+  const labelKey = typeof tab.labelKey === 'string' ? tab.labelKey : ''
   const labelParams =
-    tab?.labelParams && typeof tab.labelParams === "object"
-      ? tab.labelParams
-      : undefined;
+    tab?.labelParams && typeof tab.labelParams === 'object' ? tab.labelParams : undefined
   const translated =
-    labelKey && typeof translate === "function"
-      ? translate(labelKey, labelParams)
-      : tab.label || "";
+    labelKey && typeof translate === 'function' ? translate(labelKey, labelParams) : tab.label || ''
 
   if (!translated) {
-    return prefix;
+    return prefix
   }
 
-  return prefix ? `${prefix} - ${translated}` : translated;
-};
+  return prefix ? `${prefix} - ${translated}` : translated
+}

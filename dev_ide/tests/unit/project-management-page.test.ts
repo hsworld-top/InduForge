@@ -206,16 +206,25 @@ vi.mock('@/views/tenant/project-management/ProjectOverviewGrid.vue', () => ({
           ]),
           h('span', project?.name || 'empty-grid'),
           project
-            ? h('button', {
-                'data-testid': 'mock-grid-open',
-                onClick: () => emit('open-project', project),
-              }, 'open-grid')
+            ? h(
+                'button',
+                {
+                  'data-testid': 'mock-grid-open',
+                  onClick: () => emit('open-project', project),
+                },
+                'open-grid',
+              )
             : null,
           project
-            ? h('button', {
-                'data-testid': 'mock-grid-select',
-                onClick: () => emit('selection-change', { projectId: project.id, selected: true }),
-              }, 'select-grid')
+            ? h(
+                'button',
+                {
+                  'data-testid': 'mock-grid-select',
+                  onClick: () =>
+                    emit('selection-change', { projectId: project.id, selected: true }),
+                },
+                'select-grid',
+              )
             : null,
           project ? slots.actions?.({ project }) : null,
         ])
@@ -249,15 +258,30 @@ vi.mock('@/views/tenant/project-management/ProjectOverviewTable.vue', () => ({
         default: true,
       },
     },
-    emits: ['open-project', 'selection-change', 'open-runtime-access', 'deploy', 'export', 'delete'],
+    emits: [
+      'open-project',
+      'selection-change',
+      'open-runtime-access',
+      'deploy',
+      'export',
+      'delete',
+    ],
     setup(props, { emit, slots }) {
       return () => {
         const project = (props.projects as Array<Record<string, unknown>>)[0]
         const groupCards = props.groupCards as Array<Record<string, unknown>>
         return h('section', { 'data-testid': 'mock-overview-table' }, [
           h('span', project?.name || 'empty-table'),
-          h('span', { 'data-testid': 'mock-table-tag-column-state' }, `tag-column:${props.showTagColumn}`),
-          h('span', { 'data-testid': 'mock-table-group-card-state' }, `groups:${groupCards.length}`),
+          h(
+            'span',
+            { 'data-testid': 'mock-table-tag-column-state' },
+            `tag-column:${props.showTagColumn}`,
+          ),
+          h(
+            'span',
+            { 'data-testid': 'mock-table-group-card-state' },
+            `groups:${groupCards.length}`,
+          ),
           h('span', { 'data-testid': 'mock-table-grouped-state' }, `grouped:${props.grouped}`),
           h(
             'span',
@@ -265,10 +289,14 @@ vi.mock('@/views/tenant/project-management/ProjectOverviewTable.vue', () => ({
             `show-grouped-items:${props.showGroupedProjectItems}`,
           ),
           project
-            ? h('button', {
-                'data-testid': 'mock-table-open',
-                onClick: () => emit('open-project', project),
-              }, 'open-table')
+            ? h(
+                'button',
+                {
+                  'data-testid': 'mock-table-open',
+                  onClick: () => emit('open-project', project),
+                },
+                'open-table',
+              )
             : null,
           project ? slots.actions?.({ project }) : null,
         ])
@@ -388,7 +416,8 @@ vi.mock('@/views/tenant/project-management/ProjectGroupProjectPickerDialog.vue',
           return null
         }
         const availableProjects = (props.projects as Array<Record<string, unknown>>).filter(
-          (project) => String((project.group as Record<string, unknown> | null)?.id || '') !== props.groupId,
+          (project) =>
+            String((project.group as Record<string, unknown> | null)?.id || '') !== props.groupId,
         )
 
         return h('section', { 'data-testid': 'mock-group-project-picker' }, [
@@ -408,7 +437,11 @@ vi.mock('@/views/tenant/project-management/ProjectGroupProjectPickerDialog.vue',
                 'button',
                 {
                   'data-testid': 'project-group-picker-batch-item',
-                  onClick: () => emit('select', availableProjects.map((project) => project.id)),
+                  onClick: () =>
+                    emit(
+                      'select',
+                      availableProjects.map((project) => project.id),
+                    ),
                 },
                 'batch-add',
               )
@@ -851,14 +884,20 @@ describe('project-management-page', () => {
       return element
     }) as typeof document.createElement)
 
-    const addButton = container.querySelector('[data-testid="project-add-trigger"]') as HTMLButtonElement
-    const importButton = container.querySelector('[data-testid="project-import-trigger"]') as HTMLButtonElement
+    const addButton = container.querySelector(
+      '[data-testid="project-add-trigger"]',
+    ) as HTMLButtonElement
+    const importButton = container.querySelector(
+      '[data-testid="project-import-trigger"]',
+    ) as HTMLButtonElement
 
     expect(addButton).not.toBeNull()
     expect(importButton).not.toBeNull()
     expect(container.querySelector('[data-testid="project-overview-toolbar"]')).not.toBeNull()
     expect(container.querySelector('[data-testid="overview-sort-field"]')).not.toBeNull()
-    expect(container.querySelector('[data-testid="mock-overview-pagination"]')?.textContent).toContain('显示第 11 到 20 条')
+    expect(
+      container.querySelector('[data-testid="mock-overview-pagination"]')?.textContent,
+    ).toContain('显示第 11 到 20 条')
 
     addButton.click()
     await nextTick()
@@ -875,7 +914,9 @@ describe('project-management-page', () => {
     i18n.global.locale.value = 'en'
 
     const { container } = await mountPage()
-    const addButton = container.querySelector('[data-testid="project-add-trigger"]') as HTMLButtonElement
+    const addButton = container.querySelector(
+      '[data-testid="project-add-trigger"]',
+    ) as HTMLButtonElement
     addButton.click()
     await nextTick()
 
@@ -890,39 +931,59 @@ describe('project-management-page', () => {
 
     expect(container.querySelector('[data-testid="mock-overview-grid"]')).not.toBeNull()
     expect(container.querySelector('[data-testid="mock-group-cards"]')).not.toBeNull()
-    expect(container.querySelectorAll('[data-testid="project-edit-action"]').length).toBeGreaterThan(0)
-    expect(container.querySelectorAll('[data-testid="project-runtime-access-action"]').length).toBeGreaterThan(0)
-    expect(container.querySelectorAll('[data-testid="project-edit-tags-action"]').length).toBeGreaterThan(0)
-    expect(container.querySelectorAll('[data-testid="project-deploy-action"]').length).toBeGreaterThan(0)
-    expect(container.querySelectorAll('[data-testid="project-export-action"]').length).toBeGreaterThan(0)
-    expect(container.querySelectorAll('[data-testid="project-delete-action"]').length).toBeGreaterThan(0)
+    expect(
+      container.querySelectorAll('[data-testid="project-edit-action"]').length,
+    ).toBeGreaterThan(0)
+    expect(
+      container.querySelectorAll('[data-testid="project-runtime-access-action"]').length,
+    ).toBeGreaterThan(0)
+    expect(
+      container.querySelectorAll('[data-testid="project-edit-tags-action"]').length,
+    ).toBeGreaterThan(0)
+    expect(
+      container.querySelectorAll('[data-testid="project-deploy-action"]').length,
+    ).toBeGreaterThan(0)
+    expect(
+      container.querySelectorAll('[data-testid="project-export-action"]').length,
+    ).toBeGreaterThan(0)
+    expect(
+      container.querySelectorAll('[data-testid="project-delete-action"]').length,
+    ).toBeGreaterThan(0)
     expect(container.querySelector('[data-testid="project-ops-action"]')).toBeNull()
 
-    const runtimeAccessButton = container.querySelector('[data-testid="project-runtime-access-action"]') as HTMLButtonElement
+    const runtimeAccessButton = container.querySelector(
+      '[data-testid="project-runtime-access-action"]',
+    ) as HTMLButtonElement
     runtimeAccessButton.click()
     await nextTick()
-    expect(container.querySelector('[data-testid="runtime-access-dialog"]')?.textContent).toContain('示例工程')
+    expect(container.querySelector('[data-testid="runtime-access-dialog"]')?.textContent).toContain(
+      '示例工程',
+    )
 
-    const listViewButton = container.querySelector('[data-testid="overview-view-list"]') as HTMLButtonElement
+    const listViewButton = container.querySelector(
+      '[data-testid="overview-view-list"]',
+    ) as HTMLButtonElement
     listViewButton.click()
     await nextTick()
 
     expect(container.querySelector('[data-testid="mock-overview-table"]')).not.toBeNull()
     expect(container.querySelector('[data-testid="mock-group-cards"]')).toBeNull()
-    expect(container.querySelector('[data-testid="mock-table-tag-column-state"]')?.textContent).toBe(
-      'tag-column:false',
-    )
-    expect(container.querySelector('[data-testid="mock-table-group-card-state"]')?.textContent).toBe(
-      'groups:1',
-    )
+    expect(
+      container.querySelector('[data-testid="mock-table-tag-column-state"]')?.textContent,
+    ).toBe('tag-column:false')
+    expect(
+      container.querySelector('[data-testid="mock-table-group-card-state"]')?.textContent,
+    ).toBe('groups:1')
     expect(container.querySelector('[data-testid="mock-table-grouped-state"]')?.textContent).toBe(
       'grouped:true',
     )
-    expect(container.querySelector('[data-testid="mock-table-grouped-items-state"]')?.textContent).toBe(
-      'show-grouped-items:false',
-    )
+    expect(
+      container.querySelector('[data-testid="mock-table-grouped-items-state"]')?.textContent,
+    ).toBe('show-grouped-items:false')
 
-    const deployButton = container.querySelector('[data-testid="project-deploy-action"]') as HTMLButtonElement
+    const deployButton = container.querySelector(
+      '[data-testid="project-deploy-action"]',
+    ) as HTMLButtonElement
     deployButton.click()
     await flushPromises()
     expect(mockRequestGet).toHaveBeenCalled()
@@ -938,7 +999,9 @@ describe('project-management-page', () => {
     })
 
     const { container } = await mountPage()
-    const selectButton = container.querySelector('[data-testid="mock-grid-select"]') as HTMLButtonElement
+    const selectButton = container.querySelector(
+      '[data-testid="mock-grid-select"]',
+    ) as HTMLButtonElement
     selectButton.click()
     await nextTick()
 
@@ -960,7 +1023,9 @@ describe('project-management-page', () => {
     const { container } = await mountPage()
     const callsAfterMount = mockGetProjects.mock.calls.length
 
-    const pageSizeButton = container.querySelector('[data-testid="mock-page-size-change"]') as HTMLButtonElement
+    const pageSizeButton = container.querySelector(
+      '[data-testid="mock-page-size-change"]',
+    ) as HTMLButtonElement
     pageSizeButton.click()
     await flushPromises()
 
@@ -1057,7 +1122,9 @@ describe('project-management-page', () => {
     tagButton.click()
     await nextTick()
 
-    const tagInput = container.querySelector('[data-testid="project-tag-name-input"]') as HTMLInputElement
+    const tagInput = container.querySelector(
+      '[data-testid="project-tag-name-input"]',
+    ) as HTMLInputElement
     tagInput.value = '新标签'
     tagInput.dispatchEvent(new Event('input'))
     await nextTick()
@@ -1164,12 +1231,14 @@ describe('project-management-page', () => {
       }),
     )
 
-    const listViewButton = container.querySelector('[data-testid="overview-view-list"]') as HTMLButtonElement
+    const listViewButton = container.querySelector(
+      '[data-testid="overview-view-list"]',
+    ) as HTMLButtonElement
     listViewButton.click()
     await nextTick()
-    expect(container.querySelector('[data-testid="mock-table-group-card-state"]')?.textContent).toBe(
-      'groups:0',
-    )
+    expect(
+      container.querySelector('[data-testid="mock-table-group-card-state"]')?.textContent,
+    ).toBe('groups:0')
     expect(container.querySelector('[data-testid="mock-table-grouped-state"]')?.textContent).toBe(
       'grouped:false',
     )
@@ -1277,15 +1346,17 @@ describe('project-management-page', () => {
     await flushPromises()
 
     expect(container.querySelector('[data-testid="mock-group-project-picker"]')).not.toBeNull()
-    expect(container.querySelector('[data-testid="mock-group-project-picker"]')?.textContent).toContain(
-      'projects:1',
-    )
-    expect(container.querySelector('[data-testid="mock-group-project-picker"]')?.textContent).toContain(
-      '候选工程',
-    )
+    expect(
+      container.querySelector('[data-testid="mock-group-project-picker"]')?.textContent,
+    ).toContain('projects:1')
+    expect(
+      container.querySelector('[data-testid="mock-group-project-picker"]')?.textContent,
+    ).toContain('候选工程')
     const pickerQuery = mockGetProjects.mock.calls
       .map((call) => call[0] as Record<string, unknown>)
-      .find((query) => query?.limit === 100 && !Object.prototype.hasOwnProperty.call(query, 'groupId'))
+      .find(
+        (query) => query?.limit === 100 && !Object.prototype.hasOwnProperty.call(query, 'groupId'),
+      )
     expect(pickerQuery).toBeDefined()
 
     const pickerItem = container.querySelector(

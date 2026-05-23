@@ -100,10 +100,11 @@ export class ApiBusinessError extends Error {
 }
 
 export const isApiBusinessError = (error: unknown): error is ApiBusinessError => {
-  return error instanceof ApiBusinessError || (
-    typeof error === 'object' &&
-    error !== null &&
-    (error as { isBusinessError?: unknown }).isBusinessError === true
+  return (
+    error instanceof ApiBusinessError ||
+    (typeof error === 'object' &&
+      error !== null &&
+      (error as { isBusinessError?: unknown }).isBusinessError === true)
   )
 }
 

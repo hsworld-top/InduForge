@@ -7,11 +7,7 @@
           :label="socketConnected ? '实时通道已连接' : '实时通道未连接'"
           :tone="socketConnected ? 'success' : 'neutral'"
         />
-        <WorkbenchStatusPill
-          v-if="tags.length > 0"
-          :label="`${tags.length} 个变量`"
-          tone="info"
-        />
+        <WorkbenchStatusPill v-if="tags.length > 0" :label="`${tags.length} 个变量`" tone="info" />
       </div>
       <div class="mqtt-tag-monitor__actions">
         <div class="view-toggle">
@@ -40,19 +36,13 @@
     </div>
 
     <div class="mqtt-tag-monitor__body">
-      <div
-        v-if="tags.length === 0"
-        class="mqtt-tag-monitor__empty"
-      >
+      <div v-if="tags.length === 0" class="mqtt-tag-monitor__empty">
         <IconTablerFile />
         <div>暂无变量</div>
         <small>请先在变量管理中创建变量</small>
       </div>
 
-      <div
-        v-else-if="viewMode === 'card'"
-        class="tag-card-grid"
-      >
+      <div v-else-if="viewMode === 'card'" class="tag-card-grid">
         <div
           v-for="tag in tags"
           :key="tag.id"
@@ -75,10 +65,7 @@
           </div>
 
           <div class="tag-value">
-            <div
-              v-if="tag.currentValue"
-              class="flex items-baseline justify-between"
-            >
+            <div v-if="tag.currentValue" class="flex items-baseline justify-between">
               <span class="tag-value__number">
                 {{ formatValue(tag.currentValue.parsedValue, tag.dataType) }}
               </span>
@@ -105,10 +92,7 @@
               <span>数据质量:</span>
               <span>{{ getQualityLabel(tag.currentValue.quality) }}</span>
             </div>
-            <div
-              v-if="tag.currentValue?.timestamp"
-              class="flex justify-between"
-            >
+            <div v-if="tag.currentValue?.timestamp" class="flex justify-between">
               <span>更新时间:</span>
               <span>{{ formatTimestamp(tag.currentValue.timestamp) }}</span>
             </div>
@@ -132,25 +116,14 @@
           <span class="truncate" :title="tag.name">{{ tag.name }}</span>
           <span>{{ getDataTypeLabel(tag.dataType) }}</span>
           <span class="truncate">
-            {{
-              tag.currentValue
-                ? formatValue(tag.currentValue.parsedValue, tag.dataType)
-                : "-"
-            }}
+            {{ tag.currentValue ? formatValue(tag.currentValue.parsedValue, tag.dataType) : '-' }}
           </span>
           <span class="truncate">
-            {{
-              tag.currentValue?.timestamp
-                ? formatTimestamp(tag.currentValue.timestamp)
-                : "-"
-            }}
+            {{ tag.currentValue?.timestamp ? formatTimestamp(tag.currentValue.timestamp) : '-' }}
           </span>
           <span>
-            <el-tag
-              :type="getQualityColor(tag.currentValue?.quality || 'unknown')"
-              size="small"
-            >
-              {{ getQualityLabel(tag.currentValue?.quality || "unknown") }}
+            <el-tag :type="getQualityColor(tag.currentValue?.quality || 'unknown')" size="small">
+              {{ getQualityLabel(tag.currentValue?.quality || 'unknown') }}
             </el-tag>
           </span>
         </div>
@@ -160,18 +133,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch, toRef } from "vue";
-import { ElMessage } from "element-plus";
-import { getMqttTags } from "@/api/data.api";
-import { useMqttSocket } from "@/composables/useMqttSocket";
-import { useMqttTagSync } from "@/composables/useMqttTagSync";
-import WorkbenchStatusPill from "@/components/workbench/WorkbenchStatusPill.vue";
-import IconTablerRefresh from "~icons/tabler/refresh";
-import IconTablerFile from "~icons/tabler/file";
-import IconTablerLoader from "~icons/tabler/loader";
-import IconTablerAlertTriangle from "~icons/tabler/alert-triangle";
-import dayjs from "dayjs";
-import { TIME_FORMAT } from "@/constants";
+import { ref, onMounted, onBeforeUnmount, watch, toRef } from 'vue'
+import { ElMessage } from 'element-plus'
+import { getMqttTags } from '@/api/data.api'
+import { useMqttSocket } from '@/composables/useMqttSocket'
+import { useMqttTagSync } from '@/composables/useMqttTagSync'
+import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
+import IconTablerRefresh from '~icons/tabler/refresh'
+import IconTablerFile from '~icons/tabler/file'
+import IconTablerLoader from '~icons/tabler/loader'
+import IconTablerAlertTriangle from '~icons/tabler/alert-triangle'
+import dayjs from 'dayjs'
+import { TIME_FORMAT } from '@/constants'
 
 const props = defineProps({
   projectId: {
@@ -184,116 +157,117 @@ const props = defineProps({
   },
   previewSessionId: {
     type: String,
-    default: "",
+    default: '',
   },
-});
+})
 
-const tags = ref([]);
-const viewMode = ref("list");
+const tags = ref([])
+const viewMode = ref('list')
 
 const {
   connected: socketConnected,
   disconnect,
   onMessage,
   subscribeTag,
-} = useMqttSocket(toRef(props, "projectId"), toRef(props, "previewSessionId"));
+} = useMqttSocket(toRef(props, 'projectId'), toRef(props, 'previewSessionId'))
 
-const tagSubscriptionCleanups = new Map();
+const tagSubscriptionCleanups = new Map()
 
-const { subscribe: subscribeTagSync, unsubscribe: unsubscribeTagSync } =
-  useMqttTagSync(props.subscriptionId);
+const { subscribe: subscribeTagSync, unsubscribe: unsubscribeTagSync } = useMqttTagSync(
+  props.subscriptionId,
+)
 
 const fetchTags = async () => {
   try {
-    const res = await getMqttTags(props.projectId, props.subscriptionId);
-    tags.value = res.data?.list || [];
+    const res = await getMqttTags(props.projectId, props.subscriptionId)
+    tags.value = res.data?.list || []
   } catch (error) {
-    ElMessage.error(`获取变量列表失败: ${error.message}`);
+    ElMessage.error(`获取变量列表失败: ${error.message}`)
   }
-};
+}
 
 const handleRefresh = () => {
-  fetchTags();
-};
+  fetchTags()
+}
 
 const formatValue = (value, dataType) => {
-  if (value === null || value === undefined) return "-";
+  if (value === null || value === undefined) return '-'
 
   try {
-    if (dataType === "object" || dataType === "array") {
-      const parsed = JSON.parse(value);
-      return JSON.stringify(parsed, null, 2);
+    if (dataType === 'object' || dataType === 'array') {
+      const parsed = JSON.parse(value)
+      return JSON.stringify(parsed, null, 2)
     }
-    if (dataType === "number") {
-      const num = parseFloat(value);
-      return Number.isNaN(num) ? value : num.toFixed(2);
+    if (dataType === 'number') {
+      const num = parseFloat(value)
+      return Number.isNaN(num) ? value : num.toFixed(2)
     }
-    return value;
+    return value
   } catch {
-    return value;
+    return value
   }
-};
+}
 
 const formatTimestamp = (timestamp) => {
-  const date = dayjs(timestamp);
-  return date.isValid() ? date.format(TIME_FORMAT) : "-";
-};
+  const date = dayjs(timestamp)
+  return date.isValid() ? date.format(TIME_FORMAT) : '-'
+}
 
 const getDataTypeLabel = (dataType) => {
   const labels = {
-    string: "字符串",
-    number: "数值",
-    boolean: "布尔",
-    object: "对象",
-    array: "数组",
-  };
-  return labels[dataType] || dataType;
-};
+    string: '字符串',
+    number: '数值',
+    boolean: '布尔',
+    object: '对象',
+    array: '数组',
+  }
+  return labels[dataType] || dataType
+}
 
 const getParseTypeLabel = (parseType) => {
   const labels = {
-    jsonpath: "JSONPath",
-    regex: "正则",
-    script: "脚本",
-    fixed: "固定值",
-  };
-  return labels[parseType] || parseType;
-};
+    jsonpath: 'JSONPath',
+    regex: '正则',
+    script: '脚本',
+    fixed: '固定值',
+  }
+  return labels[parseType] || parseType
+}
 
 const getQualityLabel = (quality) => {
   const labels = {
-    good: "良好",
-    bad: "错误",
-    uncertain: "不确定",
-    unknown: "未知",
-  };
-  return labels[quality] || quality;
-};
+    good: '良好',
+    bad: '错误',
+    uncertain: '不确定',
+    unknown: '未知',
+  }
+  return labels[quality] || quality
+}
 
 const getQualityColor = (quality) => {
   const colors = {
-    good: "success",
-    bad: "danger",
-    uncertain: "warning",
-    unknown: "info",
-  };
-  return colors[quality] || "info";
-};
+    good: 'success',
+    bad: 'danger',
+    uncertain: 'warning',
+    unknown: 'info',
+  }
+  return colors[quality] || 'info'
+}
 
 const getQualityTone = (quality) => {
   const tones = {
-    good: "success",
-    bad: "danger",
-    uncertain: "warning",
-    unknown: "neutral",
-  };
-  return tones[quality] || "neutral";
-};
+    good: 'success',
+    bad: 'danger',
+    uncertain: 'warning',
+    unknown: 'neutral',
+  }
+  return tones[quality] || 'neutral'
+}
 
 const handleTagValueUpdate = (data) => {
-  const tag = tags.value.find((item) => item.id === data.tagId);
+  const tag = tags.value.find((item) => item.id === data.tagId)
   if (!tag) {
-    return;
+    return
   }
 
   tag.currentValue = {
@@ -301,89 +275,86 @@ const handleTagValueUpdate = (data) => {
     quality: data.quality,
     timestamp: data.timestamp,
     error: data.error,
-  };
-};
+  }
+}
 
 const handleTagSyncEvent = async (event) => {
-  console.log("[MqttTagMonitor] Received sync event:", event);
+  console.log('[MqttTagMonitor] Received sync event:', event)
 
   switch (event.type) {
-    case "created":
-    case "updated":
-    case "refresh":
-      await fetchTags();
-      break;
-    case "deleted":
-      tags.value = tags.value.filter((tag) => tag.id !== event.data.tagId);
-      break;
+    case 'created':
+    case 'updated':
+    case 'refresh':
+      await fetchTags()
+      break
+    case 'deleted':
+      tags.value = tags.value.filter((tag) => tag.id !== event.data.tagId)
+      break
   }
-};
+}
 
 const syncSubscriptions = () => {
   if (!socketConnected.value) {
-    return;
+    return
   }
 
-  const desiredIds = new Set(tags.value.map((tag) => tag.id));
+  const desiredIds = new Set(tags.value.map((tag) => tag.id))
 
   desiredIds.forEach((tagId) => {
     if (!tagSubscriptionCleanups.has(tagId)) {
-      tagSubscriptionCleanups.set(tagId, subscribeTag(tagId));
+      tagSubscriptionCleanups.set(tagId, subscribeTag(tagId))
     }
-  });
+  })
 
   Array.from(tagSubscriptionCleanups.entries()).forEach(([tagId, cleanup]) => {
     if (desiredIds.has(tagId)) {
-      return;
+      return
     }
-    cleanup?.();
-    tagSubscriptionCleanups.delete(tagId);
-  });
-};
+    cleanup?.()
+    tagSubscriptionCleanups.delete(tagId)
+  })
+}
 
-let stopSocketWatch = null;
-let unsubscribeMessage = null;
+let stopSocketWatch = null
+let unsubscribeMessage = null
 
 onMounted(async () => {
-  await fetchTags();
-  subscribeTagSync(handleTagSyncEvent);
+  await fetchTags()
+  subscribeTagSync(handleTagSyncEvent)
 
   unsubscribeMessage = onMessage((data) => {
-    console.log("[MqttTagMonitor] Received message:", data);
+    console.log('[MqttTagMonitor] Received message:', data)
     if (data?.tagId) {
-      handleTagValueUpdate(data);
+      handleTagValueUpdate(data)
     }
-  });
+  })
 
   stopSocketWatch = watch(
-    () => [
-      socketConnected.value,
-      tags.value.map((tag) => tag.id).join(","),
-    ],
+    () => [socketConnected.value, tags.value.map((tag) => tag.id).join(',')],
     () => {
       if (!socketConnected.value) {
-        return;
+        return
       }
-      syncSubscriptions();
+      syncSubscriptions()
     },
     { immediate: true },
-  );
-});
+  )
+})
 
 onBeforeUnmount(() => {
-  stopSocketWatch?.();
-  unsubscribeMessage?.();
-  unsubscribeTagSync(handleTagSyncEvent);
+  stopSocketWatch?.()
+  unsubscribeMessage?.()
+  unsubscribeTagSync(handleTagSyncEvent)
   Array.from(tagSubscriptionCleanups.values()).forEach((cleanup) => {
-    cleanup?.();
-  });
-  tagSubscriptionCleanups.clear();
-  disconnect();
-});
+    cleanup?.()
+  })
+  tagSubscriptionCleanups.clear()
+  disconnect()
+})
 
 defineExpose({
   refresh: fetchTags,
-});
+})
 </script>
 
 <style scoped>
@@ -511,7 +482,7 @@ defineExpose({
 }
 
 .tag-card::before {
-  content: "";
+  content: '';
   position: absolute;
   top: 0;
   left: 0;

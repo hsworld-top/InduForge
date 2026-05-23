@@ -1,4 +1,4 @@
 export default {
-  name: "IconLucideLockOpen",
+  name: 'IconLucideLockOpen',
   template: `<span class="icon-lucide-lock-open" />`,
-};
+}

@@ -29,7 +29,8 @@
           <div class="flex flex-wrap items-center gap-2.5 mt-2">
             <span
               class="px-2.5 py-0.5 text-[11px] font-bold text-blue-700 bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 rounded-full"
-            >{{ getRoleLabel(profile.role) }}</span>
+              >{{ getRoleLabel(profile.role) }}</span
+            >
             <span
               class="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1.5"
             >
@@ -114,7 +115,8 @@
           >
             <span
               class="text-xs font-medium text-gray-500 dark:text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors"
-            >{{ t('profile.email') }}</span>
+              >{{ t('profile.email') }}</span
+            >
             <div class="flex items-center gap-2">
               <template v-if="isEditingEmail">
                 <div ref="emailRowRef" class="w-[220px]" @click.stop>
@@ -187,11 +189,7 @@
             </el-select>
           </el-form-item>
           <el-form-item :label="t('profile.theme')" prop="theme">
-            <el-select
-              v-model="preferencesForm.theme"
-              style="width: 100%"
-              class="cockpit-select"
-            >
+            <el-select v-model="preferencesForm.theme" style="width: 100%" class="cockpit-select">
               <el-option
                 v-for="theme in themeOptions"
                 :key="theme.value"
@@ -260,12 +258,7 @@
             </el-form-item>
           </div>
           <div class="pt-2 flex justify-end">
-            <el-button
-              type="default"
-              round
-              :loading="savingPassword"
-              @click="handleChangePassword"
-            >
+            <el-button type="default" round :loading="savingPassword" @click="handleChangePassword">
               {{ t('profile.savePassword') }}
             </el-button>
           </div>

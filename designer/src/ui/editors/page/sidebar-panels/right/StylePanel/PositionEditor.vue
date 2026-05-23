@@ -3,39 +3,39 @@
   编辑 position、left/top/right/bottom
 -->
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed } from 'vue'
 
 interface PositionStyleModel {
-  position?: string;
-  left?: number | string | null;
-  top?: number | string | null;
-  zIndex?: number | string | null;
-  overflow?: string;
+  position?: string
+  left?: number | string | null
+  top?: number | string | null
+  zIndex?: number | string | null
+  overflow?: string
 }
 
 const props = withDefaults(defineProps<{ modelValue?: PositionStyleModel }>(), {
   modelValue: () => ({}),
-});
+})
 
 function parseValue(value: unknown): number | undefined {
-  if (value === undefined || value === null || value === "") return undefined;
-  const num = Number.parseInt(String(value), 10);
-  return Number.isNaN(num) ? undefined : num;
+  if (value === undefined || value === null || value === '') return undefined
+  const num = Number.parseInt(String(value), 10)
+  return Number.isNaN(num) ? undefined : num
 }
 
 function formatDisplayValue(value: unknown): string {
-  if (value === undefined || value === null || value === "") {
-    return "-";
+  if (value === undefined || value === null || value === '') {
+    return '-'
   }
-  return String(value);
+  return String(value)
 }
 
-const position = computed(() => props.modelValue.position || "relative");
-const showCoordinates = computed(() => ["absolute", "fixed"].includes(position.value));
-const left = computed(() => parseValue(props.modelValue.left));
-const top = computed(() => parseValue(props.modelValue.top));
-const zIndex = computed(() => parseValue(props.modelValue.zIndex) || 0);
-const overflow = computed(() => props.modelValue.overflow || "visible");
+const position = computed(() => props.modelValue.position || 'relative')
+const showCoordinates = computed(() => ['absolute', 'fixed'].includes(position.value))
+const left = computed(() => parseValue(props.modelValue.left))
+const top = computed(() => parseValue(props.modelValue.top))
+const zIndex = computed(() => parseValue(props.modelValue.zIndex) || 0)
+const overflow = computed(() => props.modelValue.overflow || 'visible')
 </script>
 
 <template>

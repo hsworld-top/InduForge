@@ -1,4 +1,4 @@
 export default {
-  name: "IconLucideCopy",
+  name: 'IconLucideCopy',
   template: `<span class="icon-lucide-copy" />`,
-};
+}

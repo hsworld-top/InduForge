@@ -12,79 +12,79 @@ import type {
   AxiosRequestConfig,
   AxiosResponse,
   InternalAxiosRequestConfig,
-} from "axios";
-import axios from "axios";
-import { ElMessage } from "element-plus";
-import { STORAGE_KEYS } from "@/constants";
-import { postMessageToHost } from "@/runtime/host-bootstrap";
-import { Storage } from "@/utils/storage";
+} from 'axios'
+import axios from 'axios'
+import { ElMessage } from 'element-plus'
+import { STORAGE_KEYS } from '@/constants'
+import { postMessageToHost } from '@/runtime/host-bootstrap'
+import { Storage } from '@/utils/storage'
 
-const DEFAULT_BUSINESS_ERROR_CODE = 30000;
-const DIGITS_ONLY_RE = /^\d+$/;
+const DEFAULT_BUSINESS_ERROR_CODE = 30000
+const DIGITS_ONLY_RE = /^\d+$/
 
 type ErrorResponseData = {
-  code?: number | string;
-  msg?: string;
-  reqId?: string;
-  errors?: Record<string, string[]>;
-  data?: unknown;
-  [key: string]: unknown;
-};
+  code?: number | string
+  msg?: string
+  reqId?: string
+  errors?: Record<string, string[]>
+  data?: unknown
+  [key: string]: unknown
+}
 
 export interface ApiResponsePayload<T = unknown> {
-  code: number;
-  msg: string;
-  data?: T;
-  reqId?: string;
+  code: number
+  msg: string
+  data?: T
+  reqId?: string
 }
 
 export interface ApiErrorMeta {
-  code?: number | undefined;
-  msg: string;
-  reqId?: string | undefined;
-  status?: number | undefined;
-  data?: unknown;
+  code?: number | undefined
+  msg: string
+  reqId?: string | undefined
+  status?: number | undefined
+  data?: unknown
 }
 
 export interface UnwrappedHttpClient {
-  get: <T = unknown>(url: string, config?: AxiosRequestConfig) => Promise<T>;
-  post: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<T>;
-  put: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<T>;
-  patch: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<T>;
-  delete: <T = unknown>(url: string, config?: AxiosRequestConfig) => Promise<T>;
-  interceptors: AxiosInstance["interceptors"];
-  defaults: AxiosInstance["defaults"];
+  get: <T = unknown>(url: string, config?: AxiosRequestConfig) => Promise<T>
+  post: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<T>
+  put: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<T>
+  patch: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<T>
+  delete: <T = unknown>(url: string, config?: AxiosRequestConfig) => Promise<T>
+  interceptors: AxiosInstance['interceptors']
+  defaults: AxiosInstance['defaults']
 }
 
 interface QueueItem {
-  resolve: (token: string | null) => void;
-  reject: (err: unknown) => void;
+  resolve: (token: string | null) => void
+  reject: (err: unknown) => void
 }
 
 /** Element Plus 的 ElMessage 选项类型在部分 TS 配置下过窄，此处收窄为运行时实际用法 */
 function notifyRequestError(message: string): void {
-  (ElMessage as unknown as (opts: { type: "error"; message: string }) => void)({
-    type: "error",
+  ;(ElMessage as unknown as (opts: { type: 'error'; message: string }) => void)({
+    type: 'error',
     message,
-  });
+  })
 }
 
 function hasOwn(target: Record<string, unknown>, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(target, key);
+  return Object.prototype.hasOwnProperty.call(target, key)
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
 }
 
 function toNumericCode(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
   }
-  if (typeof value === "string" && DIGITS_ONLY_RE.test(value.trim())) {
-    return Number.parseInt(value.trim(), 10);
+  if (typeof value === 'string' && DIGITS_ONLY_RE.test(value.trim())) {
+    return Number.parseInt(value.trim(), 10)
   }
-  return undefined;
+  return undefined
 }
 
 /**
@@ -95,86 +95,87 @@ function toNumericCode(value: unknown): number | undefined {
 function isApiResponsePayload(
   value: unknown,
 ): value is Partial<ApiResponsePayload<unknown>> & Record<string, unknown> {
-  if (!value || typeof value !== "object") {
-    return false;
+  if (!value || typeof value !== 'object') {
+    return false
   }
 
-  const payload = value as Record<string, unknown>;
-  const code = toNumericCode(payload.code);
+  const payload = value as Record<string, unknown>
+  const code = toNumericCode(payload.code)
   if (code === undefined) {
-    return false;
+    return false
   }
 
-  const hasStringMsg = typeof payload.msg === "string";
+  const hasStringMsg = typeof payload.msg === 'string'
   const hasEnvelopeMarker =
-    hasOwn(payload, "msg") || hasOwn(payload, "data") || hasOwn(payload, "reqId");
+    hasOwn(payload, 'msg') || hasOwn(payload, 'data') || hasOwn(payload, 'reqId')
 
-  return hasStringMsg || hasEnvelopeMarker;
+  return hasStringMsg || hasEnvelopeMarker
 }
 
 function normalizeApiResponsePayload<T = unknown>(value: unknown): ApiResponsePayload<T> | null {
   if (!isApiResponsePayload(value)) {
-    return null;
+    return null
   }
 
-  const normalizedCode = toNumericCode(value.code) ?? DEFAULT_BUSINESS_ERROR_CODE;
-  const normalizedMsg = typeof value.msg === "string" ? value.msg : "";
-  const normalizedReqId = typeof value.reqId === "string" ? value.reqId : undefined;
+  const normalizedCode = toNumericCode(value.code) ?? DEFAULT_BUSINESS_ERROR_CODE
+  const normalizedMsg = typeof value.msg === 'string' ? value.msg : ''
+  const normalizedReqId = typeof value.reqId === 'string' ? value.reqId : undefined
 
   return {
     code: normalizedCode,
     msg: normalizedMsg,
     data: value.data as T,
     ...(normalizedReqId ? { reqId: normalizedReqId } : {}),
-  };
+  }
 }
 
 export class ApiBusinessError extends Error {
-  code: number;
-  reqId: string | undefined;
-  data: unknown;
-  status: number | undefined;
-  isBusinessError = true;
+  code: number
+  reqId: string | undefined
+  data: unknown
+  status: number | undefined
+  isBusinessError = true
 
   constructor(payload: ApiResponsePayload<unknown>, status?: number) {
-    super(payload.msg || "请求失败");
-    this.name = "ApiBusinessError";
-    this.code = payload.code;
-    this.reqId = payload.reqId;
-    this.data = payload.data;
-    this.status = status;
+    super(payload.msg || '请求失败')
+    this.name = 'ApiBusinessError'
+    this.code = payload.code
+    this.reqId = payload.reqId
+    this.data = payload.data
+    this.status = status
   }
 }
 
 export const isApiBusinessError = (error: unknown): error is ApiBusinessError => {
-  return error instanceof ApiBusinessError || (
-    typeof error === "object" &&
-    error !== null &&
-    (error as { isBusinessError?: unknown }).isBusinessError === true
-  );
-};
+  return (
+    error instanceof ApiBusinessError ||
+    (typeof error === 'object' &&
+      error !== null &&
+      (error as { isBusinessError?: unknown }).isBusinessError === true)
+  )
+}
 
 const pickAxiosErrorData = (error: unknown): ErrorResponseData | undefined => {
-  if (!error || typeof error !== "object" || !("response" in error)) {
-    return undefined;
+  if (!error || typeof error !== 'object' || !('response' in error)) {
+    return undefined
   }
-  return (error as { response?: { data?: ErrorResponseData } }).response?.data;
-};
+  return (error as { response?: { data?: ErrorResponseData } }).response?.data
+}
 
 const pickAxiosStatus = (error: unknown): number | undefined => {
-  if (!error || typeof error !== "object" || !("response" in error)) {
-    return undefined;
+  if (!error || typeof error !== 'object' || !('response' in error)) {
+    return undefined
   }
-  const status = (error as { response?: { status?: number } }).response?.status;
-  return typeof status === "number" ? status : undefined;
-};
+  const status = (error as { response?: { status?: number } }).response?.status
+  return typeof status === 'number' ? status : undefined
+}
 
 /**
  * 统一提取 API 错误：
  * - 业务失败（2xx + code!=0）返回业务 code/msg/reqId/data
  * - 技术失败（4xx/5xx）返回 status 与响应 msg（若有）
  */
-export const resolveApiError = (error: unknown, fallback = "请求失败"): ApiErrorMeta => {
+export const resolveApiError = (error: unknown, fallback = '请求失败'): ApiErrorMeta => {
   if (isApiBusinessError(error)) {
     return {
       code: error.code,
@@ -182,15 +183,15 @@ export const resolveApiError = (error: unknown, fallback = "请求失败"): ApiE
       reqId: error.reqId,
       status: error.status,
       data: error.data,
-    };
+    }
   }
 
-  const data = pickAxiosErrorData(error);
-  const status = pickAxiosStatus(error);
-  const responseCode = toNumericCode(data?.code);
-  const responseMsg = typeof data?.msg === "string" ? data.msg : "";
-  const responseReqId = typeof data?.reqId === "string" ? data.reqId : undefined;
-  const nativeMessage = error instanceof Error ? error.message : "";
+  const data = pickAxiosErrorData(error)
+  const status = pickAxiosStatus(error)
+  const responseCode = toNumericCode(data?.code)
+  const responseMsg = typeof data?.msg === 'string' ? data.msg : ''
+  const responseReqId = typeof data?.reqId === 'string' ? data.reqId : undefined
+  const nativeMessage = error instanceof Error ? error.message : ''
 
   return {
     code: responseCode,
@@ -198,229 +199,229 @@ export const resolveApiError = (error: unknown, fallback = "请求失败"): ApiE
     reqId: responseReqId,
     status,
     data: data?.data,
-  };
-};
+  }
+}
 
-export const getApiErrorMessage = (error: unknown, fallback = "请求失败"): string => {
-  return resolveApiError(error, fallback).msg;
-};
+export const getApiErrorMessage = (error: unknown, fallback = '请求失败'): string => {
+  return resolveApiError(error, fallback).msg
+}
 
 export const getApiErrorCode = (error: unknown): number | undefined => {
-  return resolveApiError(error).code;
-};
+  return resolveApiError(error).code
+}
 
 export const getApiErrorReqId = (error: unknown): string | undefined => {
-  return resolveApiError(error).reqId;
-};
+  return resolveApiError(error).reqId
+}
 
 export const getApiErrorData = (error: unknown): unknown => {
-  return resolveApiError(error).data;
-};
+  return resolveApiError(error).data
+}
 
 const requestCore = axios.create({
-  baseURL: "/api/v1",
+  baseURL: '/api/v1',
   timeout: 30000,
   headers: {
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
   },
-});
+})
 
-let isRefreshing = false;
-let failedQueue: QueueItem[] = [];
+let isRefreshing = false
+let failedQueue: QueueItem[] = []
 
 function processQueue(error: unknown, token: string | null = null): void {
   failedQueue.forEach((prom) => {
     if (error) {
-      prom.reject(error);
+      prom.reject(error)
     } else {
-      prom.resolve(token);
+      prom.resolve(token)
     }
-  });
-  failedQueue = [];
+  })
+  failedQueue = []
 }
 
 function refreshAccessToken(refreshToken: string) {
-  return axios.post("/api/v1/auth/refresh", { refreshToken });
+  return axios.post('/api/v1/auth/refresh', { refreshToken })
 }
 
 function extractRefreshTokens(result: AxiosResponse<unknown>): {
-  accessToken: string | undefined;
-  refreshToken: string | undefined;
+  accessToken: string | undefined
+  refreshToken: string | undefined
 } {
-  const normalized = normalizeApiResponsePayload<Record<string, unknown>>(result?.data);
+  const normalized = normalizeApiResponsePayload<Record<string, unknown>>(result?.data)
   if (normalized) {
     if (normalized.code !== 0) {
-      throw new ApiBusinessError(normalized, result.status);
+      throw new ApiBusinessError(normalized, result.status)
     }
-    const payload = asRecord(normalized.data) || {};
+    const payload = asRecord(normalized.data) || {}
     return {
       accessToken:
-        typeof payload.accessToken === "string"
+        typeof payload.accessToken === 'string'
           ? payload.accessToken
-          : typeof payload.token === "string"
+          : typeof payload.token === 'string'
             ? payload.token
             : undefined,
-      refreshToken: typeof payload.refreshToken === "string" ? payload.refreshToken : undefined,
-    };
+      refreshToken: typeof payload.refreshToken === 'string' ? payload.refreshToken : undefined,
+    }
   }
 
   // 兼容兜底：若刷新接口仍返回旧格式，继续尝试 data/body 取 token，避免中断登录态续期。
-  const body = asRecord(result?.data) || {};
-  const payload = asRecord(body.data) || body;
+  const body = asRecord(result?.data) || {}
+  const payload = asRecord(body.data) || body
   return {
     accessToken:
-      typeof payload.accessToken === "string"
+      typeof payload.accessToken === 'string'
         ? payload.accessToken
-        : typeof payload.token === "string"
+        : typeof payload.token === 'string'
           ? payload.token
           : undefined,
-    refreshToken: typeof payload.refreshToken === "string" ? payload.refreshToken : undefined,
-  };
+    refreshToken: typeof payload.refreshToken === 'string' ? payload.refreshToken : undefined,
+  }
 }
 
 function handleLogout(): void {
-  Storage.remove(STORAGE_KEYS.TOKEN);
-  Storage.remove(STORAGE_KEYS.REFRESH_TOKEN);
-  Storage.remove(STORAGE_KEYS.USER_INFO);
-  Storage.remove(STORAGE_KEYS.TENANT_ID);
-  Storage.remove(STORAGE_KEYS.PROJECT_ID);
+  Storage.remove(STORAGE_KEYS.TOKEN)
+  Storage.remove(STORAGE_KEYS.REFRESH_TOKEN)
+  Storage.remove(STORAGE_KEYS.USER_INFO)
+  Storage.remove(STORAGE_KEYS.TENANT_ID)
+  Storage.remove(STORAGE_KEYS.PROJECT_ID)
 
-  postMessageToHost({ type: "AUTH_EXPIRED" });
+  postMessageToHost({ type: 'AUTH_EXPIRED' })
 }
 
 requestCore.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = Storage.getToken();
+    const token = Storage.getToken()
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      config.headers.Authorization = `Bearer ${token}`
     }
-    const tenantId = Storage.getTenantId();
+    const tenantId = Storage.getTenantId()
     if (tenantId) {
-      config.headers["X-Tenant-ID"] = tenantId;
+      config.headers['X-Tenant-ID'] = tenantId
     }
-    return config;
+    return config
   },
   (error) => Promise.reject(error),
-);
+)
 
 requestCore.interceptors.response.use(
   (response) => {
-    const normalizedPayload = normalizeApiResponsePayload(response.data);
+    const normalizedPayload = normalizeApiResponsePayload(response.data)
     if (normalizedPayload) {
       if (normalizedPayload.code !== 0) {
-        return Promise.reject(new ApiBusinessError(normalizedPayload, response.status));
+        return Promise.reject(new ApiBusinessError(normalizedPayload, response.status))
       }
-      return normalizedPayload;
+      return normalizedPayload
     }
-    return response.data;
+    return response.data
   },
   (error: AxiosError<ErrorResponseData>) => {
-    const response = error.response;
-    const config = error.config;
-    const requestUrl = config?.url || "";
+    const response = error.response
+    const config = error.config
+    const requestUrl = config?.url || ''
 
     if (response) {
-      const { status, data } = response;
+      const { status, data } = response
 
       switch (status) {
         case 401: {
-          if (requestUrl.includes("/auth/refresh")) {
-            handleLogout();
-            return Promise.reject(error);
+          if (requestUrl.includes('/auth/refresh')) {
+            handleLogout()
+            return Promise.reject(error)
           }
 
-          const refreshToken = Storage.getRefreshToken();
+          const refreshToken = Storage.getRefreshToken()
           if (!refreshToken) {
-            handleLogout();
-            return Promise.reject(error);
+            handleLogout()
+            return Promise.reject(error)
           }
           if (!config) {
-            handleLogout();
-            return Promise.reject(error);
+            handleLogout()
+            return Promise.reject(error)
           }
 
           if (!isRefreshing) {
-            isRefreshing = true;
+            isRefreshing = true
 
             return refreshAccessToken(refreshToken)
               .then((result) => {
-                const { accessToken, refreshToken: newRefreshToken } = extractRefreshTokens(result);
+                const { accessToken, refreshToken: newRefreshToken } = extractRefreshTokens(result)
                 if (!accessToken) {
-                  throw new Error("刷新令牌响应缺少 accessToken/token 字段");
+                  throw new Error('刷新令牌响应缺少 accessToken/token 字段')
                 }
 
-                Storage.setToken(accessToken);
+                Storage.setToken(accessToken)
                 if (newRefreshToken) {
-                  Storage.setRefreshToken(newRefreshToken);
+                  Storage.setRefreshToken(newRefreshToken)
                 }
 
                 postMessageToHost({
-                  type: "AUTH_REFRESHED",
+                  type: 'AUTH_REFRESHED',
                   payload: {
                     token: accessToken,
                     accessToken,
                     refreshToken: newRefreshToken ?? refreshToken,
                   },
-                });
+                })
 
-                processQueue(null, accessToken);
+                processQueue(null, accessToken)
 
-                config.headers = config.headers || {};
-                config.headers.Authorization = `Bearer ${accessToken}`;
-                return requestCore(config);
+                config.headers = config.headers || {}
+                config.headers.Authorization = `Bearer ${accessToken}`
+                return requestCore(config)
               })
               .catch((refreshError: unknown) => {
-                processQueue(refreshError, null);
-                handleLogout();
-                return Promise.reject(refreshError);
+                processQueue(refreshError, null)
+                handleLogout()
+                return Promise.reject(refreshError)
               })
               .finally(() => {
-                isRefreshing = false;
-              });
+                isRefreshing = false
+              })
           }
 
           return new Promise((resolve, reject) => {
             failedQueue.push({
               resolve: (token) => {
                 if (!token) {
-                  reject(new Error("刷新令牌后未获取到 access token"));
-                  return;
+                  reject(new Error('刷新令牌后未获取到 access token'))
+                  return
                 }
-                config.headers = config.headers || {};
-                config.headers.Authorization = `Bearer ${token}`;
-                resolve(requestCore(config));
+                config.headers = config.headers || {}
+                config.headers.Authorization = `Bearer ${token}`
+                resolve(requestCore(config))
               },
               reject,
-            });
-          });
+            })
+          })
         }
         case 403:
-          notifyRequestError(typeof data?.msg === "string" ? data.msg : "没有权限访问此资源");
-          break;
+          notifyRequestError(typeof data?.msg === 'string' ? data.msg : '没有权限访问此资源')
+          break
         case 404:
-          notifyRequestError(typeof data?.msg === "string" ? data.msg : "请求的资源不存在");
-          break;
+          notifyRequestError(typeof data?.msg === 'string' ? data.msg : '请求的资源不存在')
+          break
         case 422:
           if (data?.errors) {
-            const errorMessages = Object.values(data.errors).flat();
-            notifyRequestError(errorMessages.join("; "));
+            const errorMessages = Object.values(data.errors).flat()
+            notifyRequestError(errorMessages.join('; '))
           } else {
-            notifyRequestError(typeof data?.msg === "string" ? data.msg : "请求参数错误");
+            notifyRequestError(typeof data?.msg === 'string' ? data.msg : '请求参数错误')
           }
-          break;
+          break
         default:
-          if (typeof data?.msg === "string" && data.msg) {
-            notifyRequestError(data.msg);
+          if (typeof data?.msg === 'string' && data.msg) {
+            notifyRequestError(data.msg)
           }
-          break;
+          break
       }
     } else {
-      notifyRequestError("网络连接失败，请检查网络设置");
+      notifyRequestError('网络连接失败，请检查网络设置')
     }
 
-    return Promise.reject(error);
+    return Promise.reject(error)
   },
-);
+)
 
-const request = requestCore as unknown as UnwrappedHttpClient;
-export default request;
+const request = requestCore as unknown as UnwrappedHttpClient
+export default request

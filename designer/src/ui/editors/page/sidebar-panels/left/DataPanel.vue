@@ -3,7 +3,7 @@
   常驻区只保留工程变量管理，数据点映射入口收敛到“快速添加数据点”弹窗。
 -->
 <script setup lang="ts">
-import DatapointPanel from "./DatapointPanel.vue";
+import DatapointPanel from './DatapointPanel.vue'
 </script>
 
 <template>

@@ -2,44 +2,44 @@
   数据点面板：变量树右键菜单 +「移动到」子菜单
 -->
 <script setup lang="ts">
-import { useI18n } from "vue-i18n";
+import { useI18n } from 'vue-i18n'
 
 interface ContextMenuGroupLike {
-  id: string;
-  name: string;
+  id: string
+  name: string
 }
 
 interface ContextMenuNodeLike {
-  type?: "blank" | "variable" | "group";
+  type?: 'blank' | 'variable' | 'group'
 }
 
 defineProps<{
-  contextMenuVisible?: boolean;
-  contextMenuStyle: Record<string, string>;
-  contextMenuNode?: ContextMenuNodeLike | null;
-  showMoveToMenu?: boolean;
-  submenuStyle: Record<string, string>;
-  varClipboard?: unknown;
-  canEditSelection?: boolean;
-  canDeleteSelection?: boolean;
-  availableGroups?: ContextMenuGroupLike[];
-}>();
+  contextMenuVisible?: boolean
+  contextMenuStyle: Record<string, string>
+  contextMenuNode?: ContextMenuNodeLike | null
+  showMoveToMenu?: boolean
+  submenuStyle: Record<string, string>
+  varClipboard?: unknown
+  canEditSelection?: boolean
+  canDeleteSelection?: boolean
+  availableGroups?: ContextMenuGroupLike[]
+}>()
 
 const emit = defineEmits<{
-  (event: "openGroupCreate"): void;
-  (event: "openCreateVar"): void;
-  (event: "openQuickAdd"): void;
-  (event: "paste"): void;
-  (event: "openEdit"): void;
-  (event: "copy"): void;
-  (event: "toggleMoveTo"): void;
-  (event: "removeVar"): void;
-  (event: "openGroupEdit"): void;
-  (event: "removeGroup"): void;
-  (event: "moveTo", groupId: string | null): void;
-}>();
+  (event: 'openGroupCreate'): void
+  (event: 'openCreateVar'): void
+  (event: 'openQuickAdd'): void
+  (event: 'paste'): void
+  (event: 'openEdit'): void
+  (event: 'copy'): void
+  (event: 'toggleMoveTo'): void
+  (event: 'removeVar'): void
+  (event: 'openGroupEdit'): void
+  (event: 'removeGroup'): void
+  (event: 'moveTo', groupId: string | null): void
+}>()
 
-const { t } = useI18n();
+const { t } = useI18n()
 </script>
 
 <template>
@@ -51,15 +51,21 @@ const { t } = useI18n();
     @mousedown.stop
   >
     <template v-if="contextMenuNode?.type === 'blank'">
-      <div class="context-menu-item" @click="emit('openGroupCreate')">{{ t("datapointPanel.contextMenu.newGroup") }}</div>
-      <div class="context-menu-item" @click="emit('openCreateVar')">{{ t("datapointPanel.contextMenu.newVar") }}</div>
-      <div class="context-menu-item" @click="emit('openQuickAdd')">{{ t("datapointPanel.contextMenu.quickAdd") }}</div>
+      <div class="context-menu-item" @click="emit('openGroupCreate')">
+        {{ t('datapointPanel.contextMenu.newGroup') }}
+      </div>
+      <div class="context-menu-item" @click="emit('openCreateVar')">
+        {{ t('datapointPanel.contextMenu.newVar') }}
+      </div>
+      <div class="context-menu-item" @click="emit('openQuickAdd')">
+        {{ t('datapointPanel.contextMenu.quickAdd') }}
+      </div>
       <div
         class="context-menu-item"
         :class="{ 'is-disabled': !varClipboard }"
         @click="emit('paste')"
       >
-        {{ t("datapointPanel.contextMenu.paste") }}
+        {{ t('datapointPanel.contextMenu.paste') }}
       </div>
     </template>
     <template v-if="contextMenuNode?.type === 'variable'">
@@ -68,16 +74,20 @@ const { t } = useI18n();
         :class="{ 'is-disabled': !canEditSelection }"
         @click="emit('openEdit')"
       >
-        {{ t("datapointPanel.contextMenu.editVar") }}
+        {{ t('datapointPanel.contextMenu.editVar') }}
       </div>
-      <div class="context-menu-item" @click="emit('copy')">{{ t("datapointPanel.contextMenu.copy") }}</div>
-      <div class="context-menu-item" @click="emit('toggleMoveTo')">{{ t("datapointPanel.contextMenu.moveTo") }}</div>
+      <div class="context-menu-item" @click="emit('copy')">
+        {{ t('datapointPanel.contextMenu.copy') }}
+      </div>
+      <div class="context-menu-item" @click="emit('toggleMoveTo')">
+        {{ t('datapointPanel.contextMenu.moveTo') }}
+      </div>
       <div
         class="context-menu-item context-menu-item--danger"
         :class="{ 'is-disabled': !canDeleteSelection }"
         @click="emit('removeVar')"
       >
-        {{ t("datapointPanel.contextMenu.delete") }}
+        {{ t('datapointPanel.contextMenu.delete') }}
       </div>
     </template>
     <template v-else-if="contextMenuNode?.type === 'group'">
@@ -86,16 +96,20 @@ const { t } = useI18n();
         :class="{ 'is-disabled': !canEditSelection }"
         @click="emit('openGroupEdit')"
       >
-        {{ t("datapointPanel.contextMenu.editGroup") }}
+        {{ t('datapointPanel.contextMenu.editGroup') }}
       </div>
-      <div class="context-menu-item" @click="emit('openGroupCreate')">{{ t("datapointPanel.contextMenu.newChildGroup") }}</div>
-      <div class="context-menu-item" @click="emit('toggleMoveTo')">{{ t("datapointPanel.contextMenu.moveTo") }}</div>
+      <div class="context-menu-item" @click="emit('openGroupCreate')">
+        {{ t('datapointPanel.contextMenu.newChildGroup') }}
+      </div>
+      <div class="context-menu-item" @click="emit('toggleMoveTo')">
+        {{ t('datapointPanel.contextMenu.moveTo') }}
+      </div>
       <div
         class="context-menu-item context-menu-item--danger"
         :class="{ 'is-disabled': !canDeleteSelection }"
         @click="emit('removeGroup')"
       >
-        {{ t("datapointPanel.contextMenu.deleteGroup") }}
+        {{ t('datapointPanel.contextMenu.deleteGroup') }}
       </div>
     </template>
   </div>
@@ -107,7 +121,9 @@ const { t } = useI18n();
     @click.stop
     @mousedown.stop
   >
-    <div class="context-menu-item" @click="emit('moveTo', null)">{{ t("datapointPanel.root") }}</div>
+    <div class="context-menu-item" @click="emit('moveTo', null)">
+      {{ t('datapointPanel.root') }}
+    </div>
     <div
       v-for="group in availableGroups"
       :key="group.id"

@@ -9,27 +9,24 @@
  * @module editor-core/utils/placement-resolver
  */
 
-import type { ComponentNode } from "@/editor-core/document/types";
-import type { CanvasDocLike } from "@/ui/editors/page/canvas/composables/types";
-import {
-  getChildPositioning,
-  isContainerType,
-} from "@/editor-core/descriptors/registry";
+import type { ComponentNode } from '@/editor-core/document/types'
+import type { CanvasDocLike } from '@/ui/editors/page/canvas/composables/types'
+import { getChildPositioning, isContainerType } from '@/editor-core/descriptors/registry'
 import {
   clampPositionInContainer,
   eventToCanvasPosition,
   type CanvasPoint,
-} from "@/editor-core/utils/placement-utils";
+} from '@/editor-core/utils/placement-utils'
 import {
   DragDropManager,
   type DropTargetResolution,
   type FlowContainerKind,
   type GridCellHint,
-} from "@/ui/editors/page/canvas/interaction/DragDropManager";
-import type { FlexInsertLine } from "@/ui/editors/page/canvas/interaction/DragDropManager";
+} from '@/ui/editors/page/canvas/interaction/DragDropManager'
+import type { FlexInsertLine } from '@/ui/editors/page/canvas/interaction/DragDropManager'
 
 // DragDropManager 单例，用于调用实例方法
-const dragDropManager = new DragDropManager();
+const dragDropManager = new DragDropManager()
 
 // ---------------------------------------------------------------------------
 // Strategy 接口
@@ -45,7 +42,7 @@ const dragDropManager = new DragDropManager();
  */
 export interface PlacementStrategy {
   /** 策略处理的容器类型 */
-  readonly containerKind: FlowContainerKind;
+  readonly containerKind: FlowContainerKind
 
   /**
    * 判断目标容器是否能接受指定类型的子组件
@@ -53,7 +50,7 @@ export interface PlacementStrategy {
    * @param childType 子组件类型
    * @returns 是否可以接受
    */
-  canAcceptChild(parentNode: ComponentNode, childType: string): boolean;
+  canAcceptChild(parentNode: ComponentNode, childType: string): boolean
 
   /**
    * 计算在容器中的插入索引
@@ -68,7 +65,7 @@ export interface PlacementStrategy {
     containerNode: ComponentNode,
     containerElement: HTMLElement,
     zoom: number,
-  ): number;
+  ): number
 
   /**
    * 计算放置的绝对坐标（仅 free 容器需要）
@@ -81,7 +78,7 @@ export interface PlacementStrategy {
     event: DragEvent | MouseEvent,
     containerElement: HTMLElement,
     zoom: number,
-  ): CanvasPoint | null;
+  ): CanvasPoint | null
 }
 
 // ---------------------------------------------------------------------------
@@ -89,14 +86,14 @@ export interface PlacementStrategy {
 // ---------------------------------------------------------------------------
 
 export interface PlacementResolution {
-  parentId: string | null;
-  index: number;
-  dropPosition: CanvasPoint | null;
-  containerType: FlowContainerKind | null;
+  parentId: string | null
+  index: number
+  dropPosition: CanvasPoint | null
+  containerType: FlowContainerKind | null
   /** 插入线提示（flex 容器） */
-  insertLine?: FlexInsertLine | null;
+  insertLine?: FlexInsertLine | null
   /** 网格高亮提示（grid 容器） */
-  gridHint?: GridCellHint | null;
+  gridHint?: GridCellHint | null
 }
 
 // ---------------------------------------------------------------------------
@@ -105,9 +102,9 @@ export interface PlacementResolution {
 
 export interface ResolvePlacementOptions {
   /** 优先根级容器（主要目标） */
-  preferRootLevel?: boolean;
+  preferRootLevel?: boolean
   /** 根级不明确时使用深度优先 fallback */
-  depthFirstFallback?: boolean;
+  depthFirstFallback?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -119,29 +116,29 @@ export interface ResolvePlacementOptions {
  * 优先使用 props 中的 x/y（绝对定位），否则使用自然文档流位置 0
  */
 function getNodeVisualTop(node: ComponentNode): CanvasPoint {
-  const props = node.props as Record<string, unknown> | undefined;
-  if (props && typeof props.y === "number") {
+  const props = node.props as Record<string, unknown> | undefined
+  if (props && typeof props.y === 'number') {
     return {
-      x: typeof props.x === "number" ? props.x : 0,
+      x: typeof props.x === 'number' ? props.x : 0,
       y: props.y as number,
-    };
+    }
   }
-  return { x: 0, y: 0 };
+  return { x: 0, y: 0 }
 }
 
 /**
  * 获取容器的直接子节点数组
  */
 function getContainerChildren(containerNode: ComponentNode): ComponentNode[] {
-  const childIds = containerNode.children || [];
-  return childIds as unknown as ComponentNode[];
+  const childIds = containerNode.children || []
+  return childIds as unknown as ComponentNode[]
 }
 
 /**
  * 检查插入索引是否有效（在 siblings 长度范围内）
  */
 function isValidInsertIndex(index: number, siblings: ComponentNode[]): boolean {
-  return index >= 0 && index <= siblings.length;
+  return index >= 0 && index <= siblings.length
 }
 
 // ---------------------------------------------------------------------------
@@ -169,51 +166,51 @@ export function calculateInsertIndexWithFallback(
   zoom: number,
   originalIndex: number,
 ): number {
-  if (siblings.length === 0) return 0;
+  if (siblings.length === 0) return 0
 
   // D-04: Y-first 排序
   const sorted = [...siblings].sort((a, b) => {
-    const posA = getNodeVisualTop(a);
-    const posB = getNodeVisualTop(b);
-    return posA.y - posB.y || posA.x - posB.x;
-  });
+    const posA = getNodeVisualTop(a)
+    const posB = getNodeVisualTop(b)
+    return posA.y - posB.y || posA.x - posB.x
+  })
 
   // D-06: 最近邻精调 — 以 dropPos 为基准找 Y+X 距离最小的节点
-  let nearestIdx = 0;
-  let nearestDistance = Infinity;
-  const rect = containerElement.getBoundingClientRect();
+  let nearestIdx = 0
+  let nearestDistance = Infinity
+  const rect = containerElement.getBoundingClientRect()
 
   for (let i = 0; i < sorted.length; i++) {
-    const sibling = sorted[i]!;
-    const siblingPos = getNodeVisualTop(sibling);
+    const sibling = sorted[i]!
+    const siblingPos = getNodeVisualTop(sibling)
     // 将节点逻辑坐标转换为视口坐标进行比较
-    const siblingScreenX = rect.left + siblingPos.x * zoom;
-    const siblingScreenY = rect.top + siblingPos.y * zoom;
-    const dropScreenX = rect.left + dropPos.x * zoom;
-    const dropScreenY = rect.top + dropPos.y * zoom;
+    const siblingScreenX = rect.left + siblingPos.x * zoom
+    const siblingScreenY = rect.top + siblingPos.y * zoom
+    const dropScreenX = rect.left + dropPos.x * zoom
+    const dropScreenY = rect.top + dropPos.y * zoom
 
-    const distance = Math.abs(siblingScreenX - dropScreenX) + Math.abs(siblingScreenY - dropScreenY);
+    const distance = Math.abs(siblingScreenX - dropScreenX) + Math.abs(siblingScreenY - dropScreenY)
     if (distance < nearestDistance) {
-      nearestDistance = distance;
-      nearestIdx = i;
+      nearestDistance = distance
+      nearestIdx = i
     }
   }
 
   // D-05: append 兜底 — 验证 nearestIdx 是否指向有效节点
   // 如果 originalIndex 已经指向有效范围但 nearest 计算异常，以 originalIndex 为主
   if (isValidInsertIndex(originalIndex, siblings)) {
-    const distanceFromOriginal = Math.abs(nearestIdx - originalIndex);
+    const distanceFromOriginal = Math.abs(nearestIdx - originalIndex)
     if (distanceFromOriginal <= 1) {
-      return originalIndex;
+      return originalIndex
     }
   }
 
   // nearestIdx 指向的节点可能已被删除，fallback 到 append
   if (!isValidInsertIndex(nearestIdx, siblings)) {
-    return siblings.length; // append
+    return siblings.length // append
   }
 
-  return nearestIdx;
+  return nearestIdx
 }
 
 // ---------------------------------------------------------------------------
@@ -221,23 +218,23 @@ export function calculateInsertIndexWithFallback(
 // ---------------------------------------------------------------------------
 
 abstract class ContainerStrategy implements PlacementStrategy {
-  abstract readonly containerKind: FlowContainerKind;
+  abstract readonly containerKind: FlowContainerKind
 
-  abstract canAcceptChild(parentNode: ComponentNode, childType: string): boolean;
+  abstract canAcceptChild(parentNode: ComponentNode, childType: string): boolean
 
   abstract resolveInsertIndex(
     event: DragEvent | MouseEvent,
     containerNode: ComponentNode,
     containerElement: HTMLElement,
     zoom: number,
-  ): number;
+  ): number
 
   resolveDropPosition?(
     event: DragEvent | MouseEvent,
     containerElement: HTMLElement,
     zoom: number,
   ): CanvasPoint | null {
-    return null; // 默认实现：flow 容器不需要绝对坐标
+    return null // 默认实现：flow 容器不需要绝对坐标
   }
 }
 
@@ -246,13 +243,13 @@ abstract class ContainerStrategy implements PlacementStrategy {
 // ---------------------------------------------------------------------------
 
 class FlexContainerStrategy extends ContainerStrategy {
-  readonly containerKind = "flex" as const;
+  readonly containerKind = 'flex' as const
 
   canAcceptChild(parentNode: ComponentNode, childType: string): boolean {
     // 使用 descriptor registry 判断
-    const { canAcceptChildByDescriptor } = require("@/editor-core/descriptors/registry");
-    const currentChildCount = (parentNode.children || []).length;
-    return canAcceptChildByDescriptor(parentNode.type, childType, currentChildCount);
+    const { canAcceptChildByDescriptor } = require('@/editor-core/descriptors/registry')
+    const currentChildCount = (parentNode.children || []).length
+    return canAcceptChildByDescriptor(parentNode.type, childType, currentChildCount)
   }
 
   resolveInsertIndex(
@@ -261,17 +258,21 @@ class FlexContainerStrategy extends ContainerStrategy {
     containerElement: HTMLElement,
     zoom: number,
   ): number {
-    const direction = this.getContainerDirection(containerElement);
-    const flexResult = dragDropManager.calculateFlexInsertPosition(containerElement, event, direction);
-    return flexResult.index;
+    const direction = this.getContainerDirection(containerElement)
+    const flexResult = dragDropManager.calculateFlexInsertPosition(
+      containerElement,
+      event,
+      direction,
+    )
+    return flexResult.index
   }
 
   /**
    * 获取容器 flex 方向
    */
   private getContainerDirection(containerElement: HTMLElement): string {
-    const computedStyle = window.getComputedStyle(containerElement);
-    return computedStyle.flexDirection || "column";
+    const computedStyle = window.getComputedStyle(containerElement)
+    return computedStyle.flexDirection || 'column'
   }
 }
 
@@ -280,11 +281,11 @@ class FlexContainerStrategy extends ContainerStrategy {
 // ---------------------------------------------------------------------------
 
 class FreeContainerStrategy extends ContainerStrategy {
-  readonly containerKind = "free" as const;
+  readonly containerKind = 'free' as const
 
   canAcceptChild(_parentNode: ComponentNode, _childType: string): boolean {
     // free 容器理论上接受任何子组件（绝对定位无布局约束）
-    return true;
+    return true
   }
 
   resolveInsertIndex(
@@ -294,7 +295,7 @@ class FreeContainerStrategy extends ContainerStrategy {
     _zoom: number,
   ): number {
     // free 容器始终 append 到末尾
-    return (containerNode.children || []).length;
+    return (containerNode.children || []).length
   }
 
   resolveDropPosition(
@@ -302,13 +303,13 @@ class FreeContainerStrategy extends ContainerStrategy {
     containerElement: HTMLElement,
     zoom: number,
   ): CanvasPoint {
-    const rawPos = dragDropManager.calculateFreePosition(containerElement, event);
+    const rawPos = dragDropManager.calculateFreePosition(containerElement, event)
     return clampPositionInContainer(
       { x: rawPos.x, y: rawPos.y },
       containerElement,
       { width: 0, height: 0 },
       zoom,
-    );
+    )
   }
 }
 
@@ -317,12 +318,12 @@ class FreeContainerStrategy extends ContainerStrategy {
 // ---------------------------------------------------------------------------
 
 class GridContainerStrategy extends ContainerStrategy {
-  readonly containerKind = "grid" as const;
+  readonly containerKind = 'grid' as const
 
   canAcceptChild(parentNode: ComponentNode, childType: string): boolean {
-    const { canAcceptChildByDescriptor } = require("@/editor-core/descriptors/registry");
-    const currentChildCount = (parentNode.children || []).length;
-    return canAcceptChildByDescriptor(parentNode.type, childType, currentChildCount);
+    const { canAcceptChildByDescriptor } = require('@/editor-core/descriptors/registry')
+    const currentChildCount = (parentNode.children || []).length
+    return canAcceptChildByDescriptor(parentNode.type, childType, currentChildCount)
   }
 
   resolveInsertIndex(
@@ -332,13 +333,13 @@ class GridContainerStrategy extends ContainerStrategy {
     _zoom: number,
   ): number {
     // Grid 容器按 cell 计算 index = row * colCount + col
-    const gridHint = dragDropManager.calculateGridCell(containerElement, event as DragEvent);
-    const colsStr = window.getComputedStyle(containerElement).gridTemplateColumns || "auto";
-    const cols = parseGridTemplateParts(colsStr);
-    const colCount = cols.length || 3;
-    const row = Math.max(1, gridHint.row || 1);
-    const col = Math.max(1, gridHint.col || 1);
-    return (row - 1) * colCount + (col - 1);
+    const gridHint = dragDropManager.calculateGridCell(containerElement, event as DragEvent)
+    const colsStr = window.getComputedStyle(containerElement).gridTemplateColumns || 'auto'
+    const cols = parseGridTemplateParts(colsStr)
+    const colCount = cols.length || 3
+    const row = Math.max(1, gridHint.row || 1)
+    const col = Math.max(1, gridHint.col || 1)
+    return (row - 1) * colCount + (col - 1)
   }
 }
 
@@ -350,64 +351,64 @@ const strategies: Record<FlowContainerKind, ContainerStrategy> = {
   flex: new FlexContainerStrategy(),
   free: new FreeContainerStrategy(),
   grid: new GridContainerStrategy(),
-};
+}
 
 function getStrategy(kind: FlowContainerKind): PlacementStrategy {
-  return strategies[kind] ?? strategies.free;
+  return strategies[kind] ?? strategies.free
 }
 
 // ---------------------------------------------------------------------------
 // gridTemplateColumns 解析（从 DragDropManager 复制，保持一致）
 // ---------------------------------------------------------------------------
 
-const GRID_REPEAT_HEAD_RE = /^repeat\s*\(\s*/i;
-const GRID_DIGIT_RE = /\d/;
-const GRID_WHITESPACE_RE = /\s/;
-const GRID_TEMPLATE_SPLIT_RE = /\s+/;
+const GRID_REPEAT_HEAD_RE = /^repeat\s*\(\s*/i
+const GRID_DIGIT_RE = /\d/
+const GRID_WHITESPACE_RE = /\s/
+const GRID_TEMPLATE_SPLIT_RE = /\s+/
 
 function parseGridTemplateParts(template: string): string[] {
-  if (!template || template === "none") return [];
+  if (!template || template === 'none') return []
 
-  const trimmed = template.trim();
-  const repeatHead = GRID_REPEAT_HEAD_RE.exec(trimmed);
+  const trimmed = template.trim()
+  const repeatHead = GRID_REPEAT_HEAD_RE.exec(trimmed)
   if (repeatHead?.index === 0) {
-    let i = repeatHead[0].length;
-    let countStr = "";
+    let i = repeatHead[0].length
+    let countStr = ''
     while (i < trimmed.length && GRID_DIGIT_RE.test(trimmed[i]!)) {
-      countStr += trimmed[i]!;
-      i++;
+      countStr += trimmed[i]!
+      i++
     }
     while (i < trimmed.length && GRID_WHITESPACE_RE.test(trimmed[i]!)) {
-      i++;
+      i++
     }
-    if (trimmed[i] !== ",") {
-      return template.split(GRID_TEMPLATE_SPLIT_RE).filter(Boolean);
+    if (trimmed[i] !== ',') {
+      return template.split(GRID_TEMPLATE_SPLIT_RE).filter(Boolean)
     }
-    i++;
+    i++
     while (i < trimmed.length && GRID_WHITESPACE_RE.test(trimmed[i]!)) {
-      i++;
+      i++
     }
-    const valueStart = i;
-    let depth = 0;
+    const valueStart = i
+    let depth = 0
     for (; i < trimmed.length; i++) {
-      const c = trimmed[i]!;
-      if (c === "(") {
-        depth++;
-      } else if (c === ")") {
+      const c = trimmed[i]!
+      if (c === '(') {
+        depth++
+      } else if (c === ')') {
         if (depth === 0) {
-          break;
+          break
         }
-        depth--;
+        depth--
       }
     }
-    const value = trimmed.slice(valueStart, i).trim();
-    const count = Number.parseInt(countStr, 10);
+    const value = trimmed.slice(valueStart, i).trim()
+    const count = Number.parseInt(countStr, 10)
     if (Number.isFinite(count) && count > 0 && value) {
-      return Array.from<string>({ length: count } as ArrayLike<string>).fill(value);
+      return Array.from<string>({ length: count } as ArrayLike<string>).fill(value)
     }
   }
 
-  return template.split(GRID_TEMPLATE_SPLIT_RE).filter(Boolean);
+  return template.split(GRID_TEMPLATE_SPLIT_RE).filter(Boolean)
 }
 
 // ---------------------------------------------------------------------------
@@ -434,66 +435,68 @@ export function findTargetContainer(
   currentPage: { rootNodeId: string | null },
   options: ResolvePlacementOptions = {},
 ): { node: ComponentNode | null; element: HTMLElement | null } {
-  const point = { x: event.clientX, y: event.clientY };
-  const element = document.elementFromPoint(point.x, point.y);
+  const point = { x: event.clientX, y: event.clientY }
+  const element = document.elementFromPoint(point.x, point.y)
 
   if (!element || !canvasRoot.contains(element)) {
     // 鼠标不在画布内 → fallback 到根容器
-    return findRootContainer(doc, currentPage, canvasRoot);
+    return findRootContainer(doc, currentPage, canvasRoot)
   }
 
-  const nodeElement = element.closest("[data-node-id]") as HTMLElement | null;
+  const nodeElement = element.closest('[data-node-id]') as HTMLElement | null
   if (!nodeElement || !canvasRoot.contains(nodeElement)) {
-    return findRootContainer(doc, currentPage, canvasRoot);
+    return findRootContainer(doc, currentPage, canvasRoot)
   }
 
-  const nodeId = nodeElement.getAttribute("data-node-id");
+  const nodeId = nodeElement.getAttribute('data-node-id')
   if (!nodeId) {
-    return findRootContainer(doc, currentPage, canvasRoot);
+    return findRootContainer(doc, currentPage, canvasRoot)
   }
 
   // 从当前元素向上遍历，寻找最近的容器
-  let currentNodeId: string | null = nodeId;
-  let currentNode = doc.getNode(currentNodeId) as ComponentNode | null;
-  let nodeElement_cur: HTMLElement | null = nodeElement;
+  let currentNodeId: string | null = nodeId
+  let currentNode = doc.getNode(currentNodeId) as ComponentNode | null
+  let nodeElement_cur: HTMLElement | null = nodeElement
 
   while (currentNode) {
-    const nodeType = currentNode.type;
-    const container = isContainerType(nodeType);
+    const nodeType = currentNode.type
+    const container = isContainerType(nodeType)
 
     if (container) {
       // D-01: 找到容器，检查是否为根级容器的直接子级
       if (options.preferRootLevel !== false) {
-        const rootId = currentPage.rootNodeId;
+        const rootId = currentPage.rootNodeId
         if (rootId) {
-          const rootNode = doc.getNode(rootId) as ComponentNode | null;
+          const rootNode = doc.getNode(rootId) as ComponentNode | null
           if (rootNode) {
-            const rootChildren = rootNode.children || [];
+            const rootChildren = rootNode.children || []
             // 如果当前容器是根容器的直接子级，优先使用
             if ((rootChildren as string[]).includes(currentNodeId)) {
-              return { node: currentNode, element: nodeElement_cur };
+              return { node: currentNode, element: nodeElement_cur }
             }
           }
         }
       }
 
       // 否则返回当前找到的容器（深度优先 fallback）
-      return { node: currentNode, element: nodeElement_cur };
+      return { node: currentNode, element: nodeElement_cur }
     }
 
     // 向上继续查找父节点
-    const parentId = doc.getParent(currentNodeId) as ComponentNode | null;
+    const parentId = doc.getParent(currentNodeId) as ComponentNode | null
     if (parentId) {
-      currentNodeId = parentId.id;
-      currentNode = doc.getNode(currentNodeId) as ComponentNode | null;
-      nodeElement_cur = document.querySelector(`[data-node-id="${CSS.escape(currentNodeId)}"]`) as HTMLElement | null;
+      currentNodeId = parentId.id
+      currentNode = doc.getNode(currentNodeId) as ComponentNode | null
+      nodeElement_cur = document.querySelector(
+        `[data-node-id="${CSS.escape(currentNodeId)}"]`,
+      ) as HTMLElement | null
     } else {
-      break;
+      break
     }
   }
 
   // 遍历不到容器 → fallback 到根容器
-  return findRootContainer(doc, currentPage, canvasRoot);
+  return findRootContainer(doc, currentPage, canvasRoot)
 }
 
 /**
@@ -504,16 +507,18 @@ function findRootContainer(
   currentPage: { rootNodeId: string | null },
   canvasRoot: HTMLElement,
 ): { node: ComponentNode | null; element: HTMLElement | null } {
-  const rootId = currentPage.rootNodeId;
+  const rootId = currentPage.rootNodeId
   if (!rootId) {
-    return { node: null, element: null };
+    return { node: null, element: null }
   }
-  const rootNode = doc.getNode(rootId) as ComponentNode | null;
+  const rootNode = doc.getNode(rootId) as ComponentNode | null
   if (!rootNode) {
-    return { node: null, element: null };
+    return { node: null, element: null }
   }
-  const rootElement = document.querySelector(`[data-node-id="${CSS.escape(rootId)}"]`) as HTMLElement | null;
-  return { node: rootNode, element: rootElement || canvasRoot };
+  const rootElement = document.querySelector(
+    `[data-node-id="${CSS.escape(rootId)}"]`,
+  ) as HTMLElement | null
+  return { node: rootNode, element: rootElement || canvasRoot }
 }
 
 // ---------------------------------------------------------------------------
@@ -556,7 +561,7 @@ export function resolvePlacement(
       containerType: null,
       insertLine: null,
       gridHint: null,
-    };
+    }
   }
 
   // 1. 容器命中检测（根级优先 + 深度优先 fallback）
@@ -566,7 +571,7 @@ export function resolvePlacement(
     doc,
     currentPage,
     options,
-  );
+  )
 
   if (!containerNode || !containerElement) {
     return {
@@ -576,35 +581,37 @@ export function resolvePlacement(
       containerType: null,
       insertLine: null,
       gridHint: null,
-    };
+    }
   }
 
   // 2. 确定容器类型
-  const nodeType = containerNode.type;
-  const childPositioning = getChildPositioning(nodeType);
-  const isFlow = childPositioning === "flow";
+  const nodeType = containerNode.type
+  const childPositioning = getChildPositioning(nodeType)
+  const isFlow = childPositioning === 'flow'
 
-  let containerKind: FlowContainerKind = "free";
+  let containerKind: FlowContainerKind = 'free'
   if (isFlow) {
     // 判断是 flex 还是 grid
-    if (nodeType === "GridContainer" || nodeType.includes("ColumnLayout")) {
-      containerKind = "grid";
+    if (nodeType === 'GridContainer' || nodeType.includes('ColumnLayout')) {
+      containerKind = 'grid'
     } else {
-      containerKind = "flex";
+      containerKind = 'flex'
     }
   } else {
-    containerKind = "free";
+    containerKind = 'free'
   }
 
   // 3. 选择策略
-  const strategy = getStrategy(containerKind);
+  const strategy = getStrategy(containerKind)
 
   // 4. 计算 insertIndex（Y-first + nearest neighbor + append fallback）
-  const dropPos = eventToCanvasPosition(event, containerElement, zoom);
-  const siblings = (containerNode.children || []).map((id: string) => doc.getNode(id) as ComponentNode).filter(Boolean);
+  const dropPos = eventToCanvasPosition(event, containerElement, zoom)
+  const siblings = (containerNode.children || [])
+    .map((id: string) => doc.getNode(id) as ComponentNode)
+    .filter(Boolean)
 
   // 策略计算原始索引
-  const originalIndex = strategy.resolveInsertIndex(event, containerNode, containerElement, zoom);
+  const originalIndex = strategy.resolveInsertIndex(event, containerNode, containerElement, zoom)
 
   // Y-first + nearest neighbor + append fallback
   const finalIndex = calculateInsertIndexWithFallback(
@@ -613,29 +620,25 @@ export function resolvePlacement(
     containerElement,
     zoom,
     originalIndex,
-  );
+  )
 
   // 5. 计算 dropPosition（仅 free 容器需要）
   const dropPosition = strategy.resolveDropPosition
     ? strategy.resolveDropPosition(event, containerElement, zoom)
-    : null;
+    : null
 
   return {
     parentId: containerNode.id,
     index: finalIndex,
     dropPosition,
     containerType: containerKind,
-    insertLine: containerKind === "flex" ? null : null, // TODO: flex 需要返回 insertLine
-    gridHint: containerKind === "grid" ? null : null, // TODO: grid 需要返回 gridHint
-  };
+    insertLine: containerKind === 'flex' ? null : null, // TODO: flex 需要返回 insertLine
+    gridHint: containerKind === 'grid' ? null : null, // TODO: grid 需要返回 gridHint
+  }
 }
 
 // ---------------------------------------------------------------------------
 // 导出（供外部调用）
 // ---------------------------------------------------------------------------
 
-export {
-  FlexContainerStrategy,
-  FreeContainerStrategy,
-  GridContainerStrategy,
-};
+export { FlexContainerStrategy, FreeContainerStrategy, GridContainerStrategy }

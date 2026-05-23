@@ -6,7 +6,11 @@ type DeleteOptions = {
   force?: boolean
 }
 
-export type ProjectOverviewSortField = 'createdAt' | 'updatedAt' | 'lastDeployedAt' | 'runtimeStatus'
+export type ProjectOverviewSortField =
+  | 'createdAt'
+  | 'updatedAt'
+  | 'lastDeployedAt'
+  | 'runtimeStatus'
 export type ProjectOverviewSortOrder = 'ASC' | 'DESC' | 'asc' | 'desc'
 export type ProjectRuntimeMode = 'DEV' | 'RELEASE'
 export type ProjectDeployStatus =

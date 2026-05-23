@@ -1,14 +1,14 @@
 export interface MarqueeRectLike {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
+  left: number
+  top: number
+  right: number
+  bottom: number
 }
 
 export interface MarqueeNodeLike {
-  id: string;
-  type?: string;
-  children?: string[];
+  id: string
+  type?: string
+  children?: string[]
 }
 
 /**
@@ -18,15 +18,15 @@ export interface MarqueeNodeLike {
  * @returns {boolean}
  */
 export function rectsIntersect(a: MarqueeRectLike, b: MarqueeRectLike): boolean {
-  return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
+  return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom)
 }
 
 interface CollectMarqueeNodeIdsOptions {
-  rootId: string;
-  marqueeRect: MarqueeRectLike;
-  getNode: (id: string) => MarqueeNodeLike | null | undefined;
-  getRect: (id: string) => MarqueeRectLike | null;
-  isContainer: (type: string) => boolean;
+  rootId: string
+  marqueeRect: MarqueeRectLike
+  getNode: (id: string) => MarqueeNodeLike | null | undefined
+  getRect: (id: string) => MarqueeRectLike | null
+  isContainer: (type: string) => boolean
 }
 
 /**
@@ -38,43 +38,42 @@ interface CollectMarqueeNodeIdsOptions {
  * @returns {string[]}
  */
 export function collectMarqueeNodeIds(options: CollectMarqueeNodeIdsOptions): string[] {
-  const { rootId, marqueeRect, getNode, getRect, isContainer } = options;
-  if (!rootId) return [];
+  const { rootId, marqueeRect, getNode, getRect, isContainer } = options
+  if (!rootId) return []
 
   const collectFromParent = (parentId: string): string[] => {
-    const parentNode = getNode(parentId);
-    if (!parentNode) return [];
-    const childIds = parentNode.children || [];
-    const hits: string[] = [];
+    const parentNode = getNode(parentId)
+    if (!parentNode) return []
+    const childIds = parentNode.children || []
+    const hits: string[] = []
 
     for (const childId of childIds) {
-      const childRect = getRect(childId);
+      const childRect = getRect(childId)
       if (!childRect || !rectsIntersect(childRect, marqueeRect)) {
-        continue;
+        continue
       }
-      const childNode = getNode(childId);
-      const childType = String(childNode?.type || "");
+      const childNode = getNode(childId)
+      const childType = String(childNode?.type || '')
       const canDive =
-        Boolean(childNode) && isContainer(childType) && Boolean(childNode?.children?.length);
+        Boolean(childNode) && isContainer(childType) && Boolean(childNode?.children?.length)
       if (canDive) {
-        const nestedHits = collectFromParent(childId);
+        const nestedHits = collectFromParent(childId)
         if (nestedHits.length) {
           nestedHits.forEach((id) => {
             if (!hits.includes(id)) {
-              hits.push(id);
+              hits.push(id)
             }
-          });
-          continue;
+          })
+          continue
         }
       }
       if (!hits.includes(childId)) {
-        hits.push(childId);
+        hits.push(childId)
       }
     }
 
-    return hits;
-  };
+    return hits
+  }
 
-  return collectFromParent(rootId);
+  return collectFromParent(rootId)
 }
-

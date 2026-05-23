@@ -66,8 +66,8 @@
 - 命令优先使用 PowerShell、cmd、模块自带脚本或 Makefile。
 - Unix 命令不可用时，改用 PowerShell。
 - Node 模块统一使用 pnpm。
-- Node 依赖由根目录 pnpm workspace 统一管理，只在仓库根目录执行 `pnpm install`，不要在子项目目录单独安装依赖。
-- Prettier 配置统一维护在根目录；ESLint 配置当前按前端模块保留差异，不跨模块强行合并。
+- Node 依赖由根目录 pnpm workspace 统一管理，只在仓库根目录执行 `pnpm install`，只提交根目录 `pnpm-lock.yaml`，不要在子项目目录单独安装依赖。pnpm 在 workspace 子目录生成的 `node_modules/` 属于安装产物，不代表子项目独立安装。
+- Prettier 配置统一维护在根目录；ESLint 公共全局变量、忽略目录和基础规则统一维护在根目录 `eslint.shared.mjs`。`dev_ide`、`datacenter`、`designer` 都从各自模块的 `eslint.config.*` 引入共享配置。
 - Go 模块遵循 Makefile 或 go 命令。
 - 统一使用根目录 `.env`。
 - 端口以根目录 `.env` 为本机实际来源。

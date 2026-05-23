@@ -2,27 +2,26 @@
  * Collapse 折叠布局组件 Descriptor
  */
 
-import type { ComponentDescriptor } from "./registry";
+import type { ComponentDescriptor } from './registry'
 
 function omitKeys(
   resolvedProps: Record<string, unknown> | undefined,
   keys: string[],
 ): Record<string, unknown> {
-  const next = { ...(resolvedProps ?? {}) };
+  const next = { ...(resolvedProps ?? {}) }
   for (const key of keys) {
-    delete next[key];
+    delete next[key]
   }
-  return next;
+  return next
 }
 
 export const descriptor: ComponentDescriptor = {
-  renderTag: "el-collapse",
+  renderTag: 'el-collapse',
   isContainer: true,
-  childPositioning: "flow",
-  childLayout: "none",
+  childPositioning: 'flow',
+  childLayout: 'none',
   defaultSize: { width: 360, height: 200 },
-  propsFilter: (resolvedProps) => omitKeys(resolvedProps, ["items"]),
-};
+  propsFilter: (resolvedProps) => omitKeys(resolvedProps, ['items']),
+}
 
-export default descriptor;
-
+export default descriptor

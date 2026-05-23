@@ -1,10 +1,5 @@
 <template>
-  <DcDialog
-    v-model="visible"
-    width="860px"
-    class="data-contract-dialog"
-    destroy-on-close
-  >
+  <DcDialog v-model="visible" width="860px" class="data-contract-dialog" destroy-on-close>
     <template #header>
       <div class="contract-dialog__header">
         <div>
@@ -22,7 +17,7 @@
     <section class="contract-dialog__overview">
       <div>
         <span>当前项目</span>
-        <strong>{{ projectId || "未选择项目" }}</strong>
+        <strong>{{ projectId || '未选择项目' }}</strong>
       </div>
       <div>
         <span>检查阶段</span>
@@ -73,31 +68,31 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import DcDialog from "@/components/shared/DcDialog.vue";
+import { computed } from 'vue'
+import DcDialog from '@/components/shared/DcDialog.vue'
 import {
   dataContractCheckItems,
   dataContractCheckStatusText,
   dataContractCheckSummary,
-} from "@/components/contract/dataContractCheck";
+} from '@/components/contract/dataContractCheck'
 
 const props = defineProps<{
-  modelValue: boolean;
-  projectId?: string | number;
-}>();
+  modelValue: boolean
+  projectId?: string | number
+}>()
 
 const emit = defineEmits<{
-  (event: "update:modelValue", value: boolean): void;
-}>();
+  (event: 'update:modelValue', value: boolean): void
+}>()
 
 const visible = computed({
   get: () => props.modelValue,
-  set: (value: boolean) => emit("update:modelValue", value),
-});
+  set: (value: boolean) => emit('update:modelValue', value),
+})
 
 const passedCount = computed(
-  () => dataContractCheckItems.filter((item) => item.status === "passed").length,
-);
+  () => dataContractCheckItems.filter((item) => item.status === 'passed').length,
+)
 </script>
 
 <style scoped>

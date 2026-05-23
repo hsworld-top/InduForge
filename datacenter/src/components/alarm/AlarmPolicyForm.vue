@@ -3,7 +3,7 @@
     <section class="alarm-policy-form__section">
       <header>
         <div>
-          <strong>{{ draft.mode === "derived" ? "输入点" : "目标点" }}</strong>
+          <strong>{{ draft.mode === 'derived' ? '输入点' : '目标点' }}</strong>
           <button
             type="button"
             class="alarm-policy-form__hint"
@@ -42,10 +42,7 @@
         with-key
         @update="updatePoints"
       />
-      <div
-        v-else-if="draft.targets.length"
-        class="alarm-policy-form__target-chips"
-      >
+      <div v-else-if="draft.targets.length" class="alarm-policy-form__target-chips">
         <el-tag
           v-for="target in draft.targets"
           :key="target.datapointId"
@@ -67,17 +64,13 @@
           </em>
         </el-tag>
       </div>
-      <div v-else class="alarm-policy-form__empty">
-        暂未选择目标点，请从顶部“数据点变量”选择
-      </div>
+      <div v-else class="alarm-policy-form__empty">暂未选择目标点，请从顶部“数据点变量”选择</div>
     </section>
 
     <section v-if="draft.mode === 'derived'" class="alarm-policy-form__section">
       <header>
         <strong>计算表达式</strong>
-        <span title="条件集判断的是这个计算表达式的结果">
-          结果用于条件判断
-        </span>
+        <span title="条件集判断的是这个计算表达式的结果"> 结果用于条件判断 </span>
       </header>
       <textarea
         :value="draft.derivedExpression"
@@ -101,96 +94,86 @@
 </template>
 
 <script setup lang="ts">
-import type {
-  AlarmInputRef,
-  AlarmPolicyCoverage,
-  AlarmTargetRef,
-} from "@/api/schemas/alarm.schema";
-import { computed } from "vue";
-import type { AlarmPolicyDraft } from "@/components/alarm/alarmPolicyModel";
-import AlarmConditionMatrix from "./AlarmConditionMatrix.vue";
-import AlarmPointPicker from "./AlarmPointPicker.vue";
+import type { AlarmInputRef, AlarmPolicyCoverage, AlarmTargetRef } from '@/api/schemas/alarm.schema'
+import { computed } from 'vue'
+import type { AlarmPolicyDraft } from '@/components/alarm/alarmPolicyModel'
+import AlarmConditionMatrix from './AlarmConditionMatrix.vue'
+import AlarmPointPicker from './AlarmPointPicker.vue'
 
 const props = defineProps<{
-  projectId: string;
-  draft: AlarmPolicyDraft;
-  coverages?: Record<string, AlarmPolicyCoverage>;
-  coverageLoading?: boolean;
-}>();
+  projectId: string
+  draft: AlarmPolicyDraft
+  coverages?: Record<string, AlarmPolicyCoverage>
+  coverageLoading?: boolean
+}>()
 
 const emit = defineEmits<{
-  update: [patch: Partial<AlarmPolicyDraft>];
-}>();
+  update: [patch: Partial<AlarmPolicyDraft>]
+}>()
 
 const inputValue = (event: Event) =>
-  (event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value;
+  (event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value
 
 const pointCountText = computed(() =>
-  props.draft.mode === "derived"
+  props.draft.mode === 'derived'
     ? `${props.draft.inputs.length} 个输入点`
     : `${props.draft.targets.length} 个点位`,
-);
+)
 
 const pointSectionTip = computed(() =>
-  props.draft.mode === "derived"
-    ? "计算结果报警：这些输入点用于上方计算表达式，条件集判断计算结果。"
-    : "统一模板报警：同一套条件会分别应用到这些目标点。若点位也被其他策略引用，保存后会同时生效。",
-);
+  props.draft.mode === 'derived'
+    ? '计算结果报警：这些输入点用于上方计算表达式，条件集判断计算结果。'
+    : '统一模板报警：同一套条件会分别应用到这些目标点。若点位也被其他策略引用，保存后会同时生效。',
+)
 
-const coverageKey = (target: AlarmTargetRef) =>
-  String(target.datapointId || target.path);
+const coverageKey = (target: AlarmTargetRef) => String(target.datapointId || target.path)
 
 const targetCoveragePolicies = (target: AlarmTargetRef) =>
-  props.coverages?.[coverageKey(target)]?.policies || [];
+  props.coverages?.[coverageKey(target)]?.policies || []
 
-const targetCoverageCount = (target: AlarmTargetRef) =>
-  targetCoveragePolicies(target).length;
+const targetCoverageCount = (target: AlarmTargetRef) => targetCoveragePolicies(target).length
 
 const targetCoverageTip = (target: AlarmTargetRef) => {
-  const policies = targetCoveragePolicies(target);
+  const policies = targetCoveragePolicies(target)
   if (!policies.length) {
-    return "";
+    return ''
   }
   return policies
     .map((policy) => {
-      const mode =
-        policy.mode === "derived" ? "计算结果报警" : "统一模板报警";
-      const status = policy.effectiveEnabled ? "生效中" : "未生效";
-      return `${target.name || target.path} 已被「${policy.name}」引用（${mode}，${status}），保存后会同时生效`;
+      const mode = policy.mode === 'derived' ? '计算结果报警' : '统一模板报警'
+      const status = policy.effectiveEnabled ? '生效中' : '未生效'
+      return `${target.name || target.path} 已被「${policy.name}」引用（${mode}，${status}），保存后会同时生效`
     })
-    .join("\n");
-};
+    .join('\n')
+}
 
 const coverageSummary = computed(() => {
-  const targets = props.draft.mode === "per_target" ? props.draft.targets : [];
-  const covered = targets.filter((target) => targetCoverageCount(target) > 0);
+  const targets = props.draft.mode === 'per_target' ? props.draft.targets : []
+  const covered = targets.filter((target) => targetCoverageCount(target) > 0)
   return {
     count: covered.length,
-    tip: covered.map(targetCoverageTip).filter(Boolean).join("\n"),
-  };
-});
+    tip: covered.map(targetCoverageTip).filter(Boolean).join('\n'),
+  }
+})
 
-const updateField = <K extends keyof AlarmPolicyDraft>(
-  field: K,
-  value: AlarmPolicyDraft[K],
-) => {
-  emit("update", { [field]: value, dirty: true } as Partial<AlarmPolicyDraft>);
-};
+const updateField = <K extends keyof AlarmPolicyDraft>(field: K, value: AlarmPolicyDraft[K]) => {
+  emit('update', { [field]: value, dirty: true } as Partial<AlarmPolicyDraft>)
+}
 
 const updatePoints = (items: Array<AlarmInputRef | AlarmTargetRef>) => {
-  if (props.draft.mode === "derived") {
-    updateField("inputs", items as AlarmInputRef[]);
-    return;
+  if (props.draft.mode === 'derived') {
+    updateField('inputs', items as AlarmInputRef[])
+    return
   }
-  updateField("targets", items as AlarmTargetRef[]);
-};
+  updateField('targets', items as AlarmTargetRef[])
+}
 
 const removeTarget = (datapointId: string) => {
   updateField(
-    "targets",
+    'targets',
     props.draft.targets.filter((target) => target.datapointId !== datapointId),
-  );
-};
+  )
+}
 </script>
 
 <style scoped>
@@ -322,7 +305,7 @@ const removeTarget = (datapointId: string) => {
   padding: 0 9px;
 }
 
-.alarm-policy-form input[type="checkbox"] {
+.alarm-policy-form input[type='checkbox'] {
   width: 15px;
   height: 15px;
   padding: 0;

@@ -1,24 +1,20 @@
 <template>
   <div class="aws-sql">
-    <SqlQueryWorkbench
-      :project-id="projectId"
-      :connection="connection"
-      @back="$emit('back')"
-    />
+    <SqlQueryWorkbench :project-id="projectId" :connection="connection" @back="$emit('back')" />
   </div>
 </template>
 
 <script setup lang="ts">
-import SqlQueryWorkbench from "@/components/database/SqlQueryWorkbench.vue";
+import SqlQueryWorkbench from '@/components/database/SqlQueryWorkbench.vue'
 
 defineProps<{
-  connection: Record<string, any>;
-  projectId: string;
-}>();
+  connection: Record<string, any>
+  projectId: string
+}>()
 
 defineEmits<{
-  (event: "back"): void;
-}>();
+  (event: 'back'): void
+}>()
 </script>
 
 <style scoped>

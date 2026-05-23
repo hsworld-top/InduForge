@@ -9,92 +9,96 @@
  * - 路由切换时显示至少 minLoadingMs 的加载动画，避免闪烁
  * - 从预览页返回设计页时跳过加载（skipNextLoading）
  */
-import zhCn from "element-plus/es/locale/lang/zh-cn";
-import type { Language } from "element-plus/es/locale";
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { useI18n } from "vue-i18n";
-import { useRoute, useRouter } from "vue-router";
-import { resolveAppLocaleForPath, resolveScopedLocaleForPath } from "@/router/runtime-settings";
-import { getEditorUiStore } from "@/stores/editor-ui-store";
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
+import type { Language } from 'element-plus/es/locale'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
+import { resolveAppLocaleForPath, resolveScopedLocaleForPath } from '@/router/runtime-settings'
+import { getEditorUiStore } from '@/stores/editor-ui-store'
 
 /** 是否处于加载中 */
-const loading = ref(true);
+const loading = ref(true)
 /** 本次加载开始时间戳 */
-let loadingStartAt = Date.now();
+let loadingStartAt = Date.now()
 /** 最小加载展示时长（ms），避免加载过快导致闪烁 */
-const minLoadingMs = 500;
-const router = useRouter();
-const route = useRoute();
-const editorUi = getEditorUiStore();
-const { locale } = useI18n();
+const minLoadingMs = 500
+const router = useRouter()
+const route = useRoute()
+const editorUi = getEditorUiStore()
+const { locale } = useI18n()
 /** 当前是否为预览路由 */
 const isPreviewRoute = computed(
-  () => route?.name === "Preview" || String(route?.path || "").includes("/preview"),
-);
+  () => route?.name === 'Preview' || String(route?.path || '').includes('/preview'),
+)
 /** 是否显示加载遮罩（设计页加载时显示，预览页不显示） */
-const showLoading = computed(() => loading.value && !isPreviewRoute.value);
+const showLoading = computed(() => loading.value && !isPreviewRoute.value)
 const elementLocale = computed<Language>(() =>
-  resolveScopedLocaleForPath(route.path, editorUi.elementLocale.value as Language, zhCn as Language),
-);
+  resolveScopedLocaleForPath(
+    route.path,
+    editorUi.elementLocale.value as Language,
+    zhCn as Language,
+  ),
+)
 
 /** 是否跳过下一次加载（从预览返回设计时使用） */
-const skipNextLoading = ref(false);
+const skipNextLoading = ref(false)
 
 /** 开始加载，重置计时 */
 function startLoading() {
   if (skipNextLoading.value) {
-    skipNextLoading.value = false;
-    loading.value = false;
-    return;
+    skipNextLoading.value = false
+    loading.value = false
+    return
   }
-  loadingStartAt = Date.now();
-  loading.value = true;
+  loadingStartAt = Date.now()
+  loading.value = true
 }
 
 /** 结束加载，若未达到最小时长则等待补足 */
 async function stopLoading() {
-  const elapsed = Date.now() - loadingStartAt;
-  const waitMs = Math.max(0, minLoadingMs - elapsed);
+  const elapsed = Date.now() - loadingStartAt
+  const waitMs = Math.max(0, minLoadingMs - elapsed)
   if (waitMs > 0) {
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    await new Promise((resolve) => setTimeout(resolve, waitMs))
   }
-  await nextTick();
-  loading.value = false;
+  await nextTick()
+  loading.value = false
 }
 
 /** 路由进入前：启动加载 */
 const removeBefore = router.beforeEach((to, from, next) => {
-  if (from?.name === "Preview" || String(from?.path || "").includes("/preview")) {
-    skipNextLoading.value = true;
+  if (from?.name === 'Preview' || String(from?.path || '').includes('/preview')) {
+    skipNextLoading.value = true
   }
-  startLoading();
-  next();
-});
+  startLoading()
+  next()
+})
 /** 路由完成后：结束加载 */
 const removeAfter = router.afterEach(() => {
-  stopLoading();
-});
+  stopLoading()
+})
 /** 路由错误时：立即结束加载 */
 const removeError = router.onError(() => {
-  loading.value = false;
-});
+  loading.value = false
+})
 
 /** 应用就绪时结束初始加载 */
-router.isReady().then(() => stopLoading());
+router.isReady().then(() => stopLoading())
 
 watch(
   [() => editorUi.locale.value, () => route.path],
   ([value, path]) => {
-    locale.value = resolveAppLocaleForPath(path, value);
+    locale.value = resolveAppLocaleForPath(path, value)
   },
   { immediate: true },
-);
+)
 
 onBeforeUnmount(() => {
-  removeBefore();
-  removeAfter();
-  removeError?.();
-});
+  removeBefore()
+  removeAfter()
+  removeError?.()
+})
 </script>
 
 <template>
@@ -120,7 +124,7 @@ onBeforeUnmount(() => {
 
 <style>
 #app {
-  font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+  font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;

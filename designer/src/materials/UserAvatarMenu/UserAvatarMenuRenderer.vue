@@ -1,49 +1,49 @@
 <script setup lang="ts">
-import { storeToRefs } from "pinia";
-import { computed } from "vue";
-import { useEditorStore } from "@/stores/editor-store";
+import { storeToRefs } from 'pinia'
+import { computed } from 'vue'
+import { useEditorStore } from '@/stores/editor-store'
 
 interface MenuItem {
-  id: string;
-  label: string;
-  icon?: string;
-  type: "builtin" | "script";
-  builtinAction?: "profile" | "locale" | "theme" | "logout" | string;
-  script?: string;
-  danger?: boolean;
-  hidden?: boolean;
+  id: string
+  label: string
+  icon?: string
+  type: 'builtin' | 'script'
+  builtinAction?: 'profile' | 'locale' | 'theme' | 'logout' | string
+  script?: string
+  danger?: boolean
+  hidden?: boolean
 }
 
 interface RuntimeUserLike {
-  id?: string;
-  username?: string;
-  displayName?: string;
-  email?: string;
-  avatar?: string;
-  avatarUrl?: string;
-  roles?: Array<{ name?: string; code?: string } | string>;
-  status?: string;
+  id?: string
+  username?: string
+  displayName?: string
+  email?: string
+  avatar?: string
+  avatarUrl?: string
+  roles?: Array<{ name?: string; code?: string } | string>
+  status?: string
 }
 
 const fallbackMenuItems: MenuItem[] = [
-  { id: "profile", label: "个人资料", icon: "User", type: "script", script: "" },
-  { id: "locale", label: "语言切换", icon: "Switch", type: "builtin", builtinAction: "locale" },
-  { id: "theme", label: "主题切换", icon: "Moon", type: "builtin", builtinAction: "theme" },
+  { id: 'profile', label: '个人资料', icon: 'User', type: 'script', script: '' },
+  { id: 'locale', label: '语言切换', icon: 'Switch', type: 'builtin', builtinAction: 'locale' },
+  { id: 'theme', label: '主题切换', icon: 'Moon', type: 'builtin', builtinAction: 'theme' },
   {
-    id: "logout",
-    label: "退出登录",
-    icon: "SwitchButton",
-    type: "builtin",
-    builtinAction: "logout",
+    id: 'logout',
+    label: '退出登录',
+    icon: 'SwitchButton',
+    type: 'builtin',
+    builtinAction: 'logout',
     danger: true,
   },
-];
+]
 
 const props = defineProps<{
-  resolvedProps?: Record<string, unknown>;
-}>();
+  resolvedProps?: Record<string, unknown>
+}>()
 
-const editorStore = useEditorStore();
+const editorStore = useEditorStore()
 const {
   runtimeUsers,
   selectedPreviewRuntimeUserId,
@@ -52,151 +52,152 @@ const {
   projectRuntimeTheme,
   entryConfig,
   pages,
-} = storeToRefs(editorStore);
+} = storeToRefs(editorStore)
 
-const showName = computed(() => props.resolvedProps?.showName !== false);
-const showSubtitle = computed(() => props.resolvedProps?.showSubtitle !== false);
+const showName = computed(() => props.resolvedProps?.showName !== false)
+const showSubtitle = computed(() => props.resolvedProps?.showSubtitle !== false)
 const avatarSize = computed(() => {
-  const value = Number(props.resolvedProps?.avatarSize ?? 32);
-  if (!Number.isFinite(value)) return 32;
-  return Math.min(56, Math.max(24, Math.round(value)));
-});
-const variant = computed(() => String(props.resolvedProps?.variant || "standard"));
-const isCompact = computed(() => variant.value === "compact");
-const enabledLocales = computed(() => projectI18n.value.locales.filter((item) => item.enabled));
+  const value = Number(props.resolvedProps?.avatarSize ?? 32)
+  if (!Number.isFinite(value)) return 32
+  return Math.min(56, Math.max(24, Math.round(value)))
+})
+const variant = computed(() => String(props.resolvedProps?.variant || 'standard'))
+const isCompact = computed(() => variant.value === 'compact')
+const enabledLocales = computed(() => projectI18n.value.locales.filter((item) => item.enabled))
 const normalizedMenuItems = computed<MenuItem[]>(() => {
-  const raw = props.resolvedProps?.menuItems;
-  const source = Array.isArray(raw) && raw.length > 0 ? raw : fallbackMenuItems;
-  const items: MenuItem[] = [];
+  const raw = props.resolvedProps?.menuItems
+  const source = Array.isArray(raw) && raw.length > 0 ? raw : fallbackMenuItems
+  const items: MenuItem[] = []
   source.forEach((item, index) => {
-    const normalized = normalizeMenuItem(item, index);
+    const normalized = normalizeMenuItem(item, index)
     if (normalized && normalized.hidden !== true) {
-      items.push(normalized);
+      items.push(normalized)
     }
-  });
-  return items;
-});
+  })
+  return items
+})
 
 const currentUser = computed<RuntimeUserLike>(() => {
-  const selectedId = selectedPreviewRuntimeUserId.value;
-  const users = runtimeUsers.value || [];
-  const matched = selectedId ? users.find((user) => user.id === selectedId) : null;
-  const active = matched || users.find((user) => user.status !== "disabled") || users[0];
+  const selectedId = selectedPreviewRuntimeUserId.value
+  const users = runtimeUsers.value || []
+  const matched = selectedId ? users.find((user) => user.id === selectedId) : null
+  const active = matched || users.find((user) => user.status !== 'disabled') || users[0]
   return (
     active || {
-      id: "builtin-admin",
-      username: "admin",
-      displayName: "管理员",
-      roles: [{ name: "管理员" }],
-      status: "active",
+      id: 'builtin-admin',
+      username: 'admin',
+      displayName: '管理员',
+      roles: [{ name: '管理员' }],
+      status: 'active',
     }
-  );
-});
+  )
+})
 
 const displayName = computed(() => {
-  return currentUser.value.displayName || currentUser.value.username || "管理员";
-});
+  return currentUser.value.displayName || currentUser.value.username || '管理员'
+})
 const subtitle = computed(() => {
-  const roles = currentUser.value.roles || [];
+  const roles = currentUser.value.roles || []
   const roleText = roles
-    .map((role) => (typeof role === "string" ? role : role.name || role.code || ""))
+    .map((role) => (typeof role === 'string' ? role : role.name || role.code || ''))
     .filter(Boolean)
-    .join("、");
-  return roleText || currentUser.value.email || currentUser.value.username || "admin";
-});
-const avatarUrl = computed(() => currentUser.value.avatarUrl || currentUser.value.avatar || "");
-const avatarText = computed(() => displayName.value.trim().slice(0, 1).toUpperCase() || "A");
+    .join('、')
+  return roleText || currentUser.value.email || currentUser.value.username || 'admin'
+})
+const avatarUrl = computed(() => currentUser.value.avatarUrl || currentUser.value.avatar || '')
+const avatarText = computed(() => displayName.value.trim().slice(0, 1).toUpperCase() || 'A')
 
 function normalizeMenuItem(value: unknown, index: number): MenuItem | null {
-  if (!value || typeof value !== "object") return null;
-  const record = value as Record<string, unknown>;
-  const id = String(record.id || record.builtinAction || `item-${index}`).trim();
-  const label = String(record.label || id).trim();
-  if (!id || !label) return null;
-  const type = record.type === "builtin" ? "builtin" : "script";
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  const id = String(record.id || record.builtinAction || `item-${index}`).trim()
+  const label = String(record.label || id).trim()
+  if (!id || !label) return null
+  const type = record.type === 'builtin' ? 'builtin' : 'script'
   return {
     id,
     label,
-    icon: String(record.icon || ""),
+    icon: String(record.icon || ''),
     type,
     builtinAction: String(record.builtinAction || id),
-    script: String(record.script || ""),
+    script: String(record.script || ''),
     danger: Boolean(record.danger),
     hidden: Boolean(record.hidden),
-  };
+  }
 }
 
 function handleCommand(command: string): void {
-  const [kind, value] = command.split(":");
-  if (kind === "locale" && value) {
-    editorStore.setProjectRuntimeLocale(value);
-    return;
+  const [kind, value] = command.split(':')
+  if (kind === 'locale' && value) {
+    editorStore.setProjectRuntimeLocale(value)
+    return
   }
-  if (kind === "theme" && value) {
-    editorStore.setProjectRuntimeTheme(value);
-    return;
+  if (kind === 'theme' && value) {
+    editorStore.setProjectRuntimeTheme(value)
+    return
   }
-  if (kind === "logout") {
-    handleLogout();
-    return;
+  if (kind === 'logout') {
+    handleLogout()
+    return
   }
-  if (kind === "script" && value) {
-    const item = normalizedMenuItems.value.find((menuItem) => menuItem.id === value);
-    void runMenuScript(item);
+  if (kind === 'script' && value) {
+    const item = normalizedMenuItems.value.find((menuItem) => menuItem.id === value)
+    void runMenuScript(item)
   }
 }
 
 function handleLogout(): void {
-  editorStore.setSelectedPreviewRuntimeUserId("");
-  const logoutPageId = String((entryConfig.value as Record<string, unknown>)?.logoutPageId || "");
-  const loginPageId = String((entryConfig.value as Record<string, unknown>)?.loginPageId || "");
+  editorStore.setSelectedPreviewRuntimeUserId('')
+  const logoutPageId = String((entryConfig.value as Record<string, unknown>)?.logoutPageId || '')
+  const loginPageId = String((entryConfig.value as Record<string, unknown>)?.loginPageId || '')
   const targetPageId =
     findExistingPageId(logoutPageId) ||
-    findPageIdByPath("/logout") ||
+    findPageIdByPath('/logout') ||
     findExistingPageId(loginPageId) ||
-    findPageIdByPath("/login");
+    findPageIdByPath('/login')
   if (targetPageId) {
-    void editorStore.setCurrentPage(targetPageId);
+    void editorStore.setCurrentPage(targetPageId)
   }
 }
 
 function findExistingPageId(pageId: string): string {
-  if (!pageId) return "";
-  return pages.value.some((page) => page.id === pageId) ? pageId : "";
+  if (!pageId) return ''
+  return pages.value.some((page) => page.id === pageId) ? pageId : ''
 }
 
 function findPageIdByPath(path: string): string {
-  return pages.value.find((page) => String((page as Record<string, unknown>).path || "") === path)
-    ?.id || "";
+  return (
+    pages.value.find((page) => String((page as Record<string, unknown>).path || '') === path)?.id ||
+    ''
+  )
 }
 
 function itemCommand(item: MenuItem): string {
-  const action = item.builtinAction || item.id;
-  if (item.type === "builtin" && action === "logout") return "logout";
-  return `script:${item.id}`;
+  const action = item.builtinAction || item.id
+  if (item.type === 'builtin' && action === 'logout') return 'logout'
+  return `script:${item.id}`
 }
 
 async function runMenuScript(item: MenuItem | undefined): Promise<void> {
-  const code = String(item?.script || "").trim();
-  if (!code) return;
-  const currentPage = pages.value.find((page) => page.id === editorStore.currentPageId) || null;
+  const code = String(item?.script || '').trim()
+  if (!code) return
+  const currentPage = pages.value.find((page) => page.id === editorStore.currentPageId) || null
   const context = {
-    $event: { type: "user-avatar-menu", item, user: currentUser.value },
+    $event: { type: 'user-avatar-menu', item, user: currentUser.value },
     $user: currentUser.value,
     $store: editorStore,
     pages: pages.value,
     currentPage,
     console,
-  };
+  }
   try {
-    // eslint-disable-next-line no-new-func
     const runner = new Function(
       ...Object.keys(context),
       `"use strict";\nreturn (async function() {\n${code}\n}).call(this);`,
-    );
-    await runner.call(null, ...Object.values(context));
+    )
+    await runner.call(null, ...Object.values(context))
   } catch (error) {
-    console.error("[UserAvatarMenu] menu script error:", error);
+    console.error('[UserAvatarMenu] menu script error:', error)
   }
 }
 </script>

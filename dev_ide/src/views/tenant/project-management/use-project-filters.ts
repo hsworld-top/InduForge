@@ -79,9 +79,8 @@ const normalizeRuntimeModes = (values: unknown): ProjectRuntimeMode[] => {
 const normalizeDeployStatuses = (values: unknown): ProjectDeployStatus[] => {
   const normalized = uniqueStringList(values)
     .map((item) => item.toLowerCase())
-    .filter(
-      (item): item is ProjectDeployStatus =>
-        DEPLOY_STATUS_SET.has(item as ProjectDeployStatus),
+    .filter((item): item is ProjectDeployStatus =>
+      DEPLOY_STATUS_SET.has(item as ProjectDeployStatus),
     )
 
   return [...new Set(normalized)]

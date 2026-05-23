@@ -3,67 +3,67 @@
   配置组件的点击、输入等事件及对应脚本
 -->
 <script setup lang="ts">
-import { storeToRefs } from "pinia";
-import { computed, ref, watch } from "vue";
-import IconEpEditPen from "~icons/ep/edit-pen";
-import IconEpFolder from "~icons/ep/folder";
-import IconEpGrid from "~icons/ep/grid";
-import IconEpList from "~icons/ep/list";
-import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
-import { componentRegistry } from "@/editor-core";
-import { normalizeEventDefinitions } from "@/editor-core/registry/component-events";
+import { storeToRefs } from 'pinia'
+import { computed, ref, watch } from 'vue'
+import IconEpEditPen from '~icons/ep/edit-pen'
+import IconEpFolder from '~icons/ep/folder'
+import IconEpGrid from '~icons/ep/grid'
+import IconEpList from '~icons/ep/list'
+import MonacoEditor from '@/ui/shared/widgets/base/monaco-editor-async'
+import { componentRegistry } from '@/editor-core'
+import { normalizeEventDefinitions } from '@/editor-core/registry/component-events'
 import {
   resolvePageVariableSnippet,
   resolveProjectVariableSnippet,
   resolveProjectVariableSourceLabel,
-} from "@/services/data-variable-mapping";
-import { useEditorStore } from "@/stores/editor-store";
-import { buildComponentMethodCompletions } from "@/ui/shared/helpers/component-methods";
-import { usePanelState } from "../composables/use-panel-state";
-import BindingPanel from "./BindingPanel.vue";
+} from '@/services/data-variable-mapping'
+import { useEditorStore } from '@/stores/editor-store'
+import { buildComponentMethodCompletions } from '@/ui/shared/helpers/component-methods'
+import { usePanelState } from '../composables/use-panel-state'
+import BindingPanel from './BindingPanel.vue'
 
-const editorStore = useEditorStore();
-const { panelState, selectedNode, selectedGraphic } = usePanelState();
+const editorStore = useEditorStore()
+const { panelState, selectedNode, selectedGraphic } = usePanelState()
 const { projectVariables, projectVariableGroups, globalScripts, currentPage, doc, docVersion } =
-  storeToRefs(editorStore);
+  storeToRefs(editorStore)
 
-const scriptCode = ref("");
-const editorVisible = ref(false);
-const editorRef = ref<any>(null);
-const customTreeRef = ref<any>(null);
-const scriptSearch = ref("");
-const componentSearch = ref("");
-const componentTreeRef = ref<any>(null);
-const variableEnumVisible = ref(false);
-const enumProjectTreeRef = ref<any>(null);
-const projectVarSearch = ref("");
-const pageVarSearch = ref("");
-const enumSelectedProjectGroupId = ref<string | null>(null);
-const enumSelectedProjectVar = ref<any>(null);
-const activeEventName = ref("");
-const eventToggleState = ref<Record<string, boolean>>({});
+const scriptCode = ref('')
+const editorVisible = ref(false)
+const editorRef = ref<any>(null)
+const customTreeRef = ref<any>(null)
+const scriptSearch = ref('')
+const componentSearch = ref('')
+const componentTreeRef = ref<any>(null)
+const variableEnumVisible = ref(false)
+const enumProjectTreeRef = ref<any>(null)
+const projectVarSearch = ref('')
+const pageVarSearch = ref('')
+const enumSelectedProjectGroupId = ref<string | null>(null)
+const enumSelectedProjectVar = ref<any>(null)
+const activeEventName = ref('')
+const eventToggleState = ref<Record<string, boolean>>({})
 
 const componentManifest = computed<any>(() => {
-  if (!selectedNode.value) return null;
-  return componentRegistry.get(selectedNode.value.type) || null;
-});
+  if (!selectedNode.value) return null
+  return componentRegistry.get(selectedNode.value.type) || null
+})
 
 const componentLabel = computed<string>(() => {
-  return selectedNode.value?.label || componentManifest.value?.name || "组件";
-});
+  return selectedNode.value?.label || componentManifest.value?.name || '组件'
+})
 
 const eventDefinitions = computed<any[]>(() => {
-  const events = componentManifest.value?.events || [];
-  return normalizeEventDefinitions(events);
-});
+  const events = componentManifest.value?.events || []
+  return normalizeEventDefinitions(events)
+})
 
 const isPageContext = computed<boolean>(() => {
-  if (panelState.value === "page") return true;
-  if (selectedGraphic.value) return true;
-  if (!selectedNode.value) return true;
-  const pageRootId = currentPage.value?.rootNodeId;
-  return Boolean(pageRootId && selectedNode.value.id === pageRootId);
-});
+  if (panelState.value === 'page') return true
+  if (selectedGraphic.value) return true
+  if (!selectedNode.value) return true
+  const pageRootId = currentPage.value?.rootNodeId
+  return Boolean(pageRootId && selectedNode.value.id === pageRootId)
+})
 
 /**
  * 获取事件处理器
@@ -71,10 +71,10 @@ const isPageContext = computed<boolean>(() => {
  * @returns {Object | string | null} 事件处理器
  */
 function getEventHandler(eventName: string): any {
-  if (!selectedNode.value || !eventName) return null;
-  const handlers = selectedNode.value.events?.[eventName];
-  if (!Array.isArray(handlers) || handlers.length === 0) return null;
-  return handlers[0] || null;
+  if (!selectedNode.value || !eventName) return null
+  const handlers = selectedNode.value.events?.[eventName]
+  if (!Array.isArray(handlers) || handlers.length === 0) return null
+  return handlers[0] || null
 }
 
 /**
@@ -83,10 +83,10 @@ function getEventHandler(eventName: string): any {
  * @returns {string} 事件脚本
  */
 function getEventScript(eventName: string): string {
-  const handler = getEventHandler(eventName);
-  if (!handler) return "";
-  if (typeof handler === "string") return handler;
-  return handler?.code || "";
+  const handler = getEventHandler(eventName)
+  if (!handler) return ''
+  if (typeof handler === 'string') return handler
+  return handler?.code || ''
 }
 
 /**
@@ -94,12 +94,12 @@ function getEventScript(eventName: string): string {
  * @returns {void}
  */
 function syncEventToggleState(): void {
-  const nextState: Record<string, boolean> = {};
+  const nextState: Record<string, boolean> = {}
   eventDefinitions.value.forEach((eventItem) => {
-    const handler = getEventHandler(eventItem.name);
-    nextState[eventItem.name] = handler?.enabled !== false;
-  });
-  eventToggleState.value = nextState;
+    const handler = getEventHandler(eventItem.name)
+    nextState[eventItem.name] = handler?.enabled !== false
+  })
+  eventToggleState.value = nextState
 }
 
 /**
@@ -108,8 +108,8 @@ function syncEventToggleState(): void {
  * @returns {boolean} 是否启用
  */
 function getEventEnabled(eventName: string): boolean {
-  if (!eventName) return true;
-  return eventToggleState.value[eventName] !== false;
+  if (!eventName) return true
+  return eventToggleState.value[eventName] !== false
 }
 
 /**
@@ -119,26 +119,26 @@ function getEventEnabled(eventName: string): boolean {
  * @returns {void}
  */
 function handleToggleEvent(eventName: string, enabled: boolean): void {
-  if (!eventName) return;
+  if (!eventName) return
   eventToggleState.value = {
     ...eventToggleState.value,
     [eventName]: enabled !== false,
-  };
-  if (!selectedNode.value) return;
-  const handler = getEventHandler(eventName);
-  if (!handler) return;
-  let nextHandler: Record<string, any>;
-  if (typeof handler === "string") {
-    nextHandler = {};
-    nextHandler.type = "script";
-    nextHandler.code = handler;
-    nextHandler.enabled = enabled !== false;
-  } else {
-    nextHandler = { ...handler, enabled: enabled !== false } as any;
   }
-  const nextEvents: any = { ...(selectedNode.value.events || {}) };
-  nextEvents[eventName] = [nextHandler];
-  editorStore.updateNode(selectedNode.value.id, { events: nextEvents as any });
+  if (!selectedNode.value) return
+  const handler = getEventHandler(eventName)
+  if (!handler) return
+  let nextHandler: Record<string, any>
+  if (typeof handler === 'string') {
+    nextHandler = {}
+    nextHandler.type = 'script'
+    nextHandler.code = handler
+    nextHandler.enabled = enabled !== false
+  } else {
+    nextHandler = { ...handler, enabled: enabled !== false } as any
+  }
+  const nextEvents: any = { ...(selectedNode.value.events || {}) }
+  nextEvents[eventName] = [nextHandler]
+  editorStore.updateNode(selectedNode.value.id, { events: nextEvents as any })
 }
 
 /**
@@ -147,9 +147,9 @@ function handleToggleEvent(eventName: string, enabled: boolean): void {
  * @returns {void}
  */
 function openEditor(eventItem: { name?: string } | null | undefined): void {
-  activeEventName.value = eventItem?.name || "";
-  scriptCode.value = getEventScript(activeEventName.value) || "";
-  editorVisible.value = true;
+  activeEventName.value = eventItem?.name || ''
+  scriptCode.value = getEventScript(activeEventName.value) || ''
+  editorVisible.value = true
 }
 
 /**
@@ -157,23 +157,23 @@ function openEditor(eventItem: { name?: string } | null | undefined): void {
  * @returns {void}
  */
 function saveScript(): void {
-  if (!selectedNode.value || !activeEventName.value) return;
-  const code = scriptCode.value || "";
-  const nextEvents: any = { ...(selectedNode.value.events || {}) };
+  if (!selectedNode.value || !activeEventName.value) return
+  const code = scriptCode.value || ''
+  const nextEvents: any = { ...(selectedNode.value.events || {}) }
   if (!code.trim()) {
-    delete nextEvents[activeEventName.value];
+    delete nextEvents[activeEventName.value]
   } else {
     nextEvents[activeEventName.value] = [
       {
-        type: "script",
+        type: 'script',
         code,
         enabled: getEventEnabled(activeEventName.value),
       },
-    ];
+    ]
   }
-  editorStore.updateNode(selectedNode.value.id, { events: nextEvents as any });
-  void editorStore.saveCurrentPage?.();
-  editorVisible.value = false;
+  editorStore.updateNode(selectedNode.value.id, { events: nextEvents as any })
+  void editorStore.saveCurrentPage?.()
+  editorVisible.value = false
 }
 
 /**
@@ -182,320 +182,319 @@ function saveScript(): void {
  * @returns {string} 标题文本
  */
 function getEventTitle(eventItem: { name?: string } | null | undefined): string {
-  return eventItem?.name || "";
+  return eventItem?.name || ''
 }
 
 watch(
   () => [selectedNode.value?.id, eventDefinitions.value.length],
   () => {
-    syncEventToggleState();
+    syncEventToggleState()
   },
   { immediate: true },
-);
+)
 
 watch(
   () => [selectedNode.value?.id, activeEventName.value],
   () => {
-    if (!activeEventName.value) return;
-    scriptCode.value = getEventScript(activeEventName.value) || "";
+    if (!activeEventName.value) return
+    scriptCode.value = getEventScript(activeEventName.value) || ''
   },
   { immediate: true },
-);
+)
 
-const editorTitle = computed(() => componentLabel.value);
+const editorTitle = computed(() => componentLabel.value)
 
 const editorDescription = computed(() => {
-  const eventItem = eventDefinitions.value.find((item) => item.name === activeEventName.value);
-  const label = eventItem?.label || activeEventName.value || "事件";
-  return `${componentLabel.value}${label}脚本`;
-});
+  const eventItem = eventDefinitions.value.find((item) => item.name === activeEventName.value)
+  const label = eventItem?.label || activeEventName.value || '事件'
+  return `${componentLabel.value}${label}脚本`
+})
 
 const projectGroupTree = computed(() => [
   {
-    id: "all",
-    label: "全部",
-    type: "group",
+    id: 'all',
+    label: '全部',
+    type: 'group',
     children: buildGroupTree(projectVariableGroups.value || []),
   },
-]);
+])
 
 const customScriptTree = computed<any[]>(() => {
-  const groups = (globalScripts.value?.custom?.groups || []) as any[];
-  const items = (globalScripts.value?.custom?.items || []) as any[];
-  const groupMap = new Map<string, any>();
-  const roots: any[] = [];
+  const groups = (globalScripts.value?.custom?.groups || []) as any[]
+  const items = (globalScripts.value?.custom?.items || []) as any[]
+  const groupMap = new Map<string, any>()
+  const roots: any[] = []
 
   groups.forEach((group) => {
     groupMap.set(group.id, {
       id: group.id,
       label: group.name,
-      type: "group",
+      type: 'group',
       children: [],
-    });
-  });
+    })
+  })
 
   groupMap.forEach((node, id) => {
-    const group = groups.find((item) => item.id === id);
+    const group = groups.find((item) => item.id === id)
     if (group?.parentId && groupMap.has(group.parentId)) {
-      groupMap.get(group.parentId).children.push(node);
+      groupMap.get(group.parentId).children.push(node)
     } else {
-      roots.push(node);
+      roots.push(node)
     }
-  });
+  })
 
   items.forEach((item) => {
-    if (!item?.id) return;
+    if (!item?.id) return
     const node = {
       id: item.id,
-      label: item.name || "未命名",
-      type: "item",
-      params: item.params || item.args || "",
-    };
-    if (item.groupId && groupMap.has(item.groupId)) {
-      groupMap.get(item.groupId).children.push(node);
-    } else {
-      roots.push(node);
+      label: item.name || '未命名',
+      type: 'item',
+      params: item.params || item.args || '',
     }
-  });
+    if (item.groupId && groupMap.has(item.groupId)) {
+      groupMap.get(item.groupId).children.push(node)
+    } else {
+      roots.push(node)
+    }
+  })
 
-  return roots;
-});
+  return roots
+})
 
 const pageVars = computed<Record<string, any>>(() => {
-  void docVersion.value;
-  const pageId = currentPage.value?.id;
-  if (!pageId || !doc.value) return {};
-  const vars = doc.value.vars?.pages?.[pageId];
-  return vars && typeof vars === "object" ? vars : {};
-});
+  void docVersion.value
+  const pageId = currentPage.value?.id
+  if (!pageId || !doc.value) return {}
+  const vars = doc.value.vars?.pages?.[pageId]
+  return vars && typeof vars === 'object' ? vars : {}
+})
 
 const projectVariableRows = computed<any[]>(() => {
-  const keyword = String(projectVarSearch.value || "").toLowerCase();
-  const projectVars = (projectVariables.value || {}) as Record<string, any>;
+  const keyword = String(projectVarSearch.value || '').toLowerCase()
+  const projectVars = (projectVariables.value || {}) as Record<string, any>
   const items = Object.entries(projectVars).map(([name, detail]: [string, any]) => ({
     name,
     groupId: detail?.groupId || null,
-    type: detail?.type || "string",
-    description: detail?.description || "",
-    mapped: detail?.source?.type === "dataCenter" || detail?.mapped === true,
+    type: detail?.type || 'string',
+    description: detail?.description || '',
+    mapped: detail?.source?.type === 'dataCenter' || detail?.mapped === true,
     sourceLabel: resolveProjectVariableSourceLabel(detail)
       ? `来自数据点：${resolveProjectVariableSourceLabel(detail)}`
-      : "",
-  }));
+      : '',
+  }))
   return items
     .filter((item) => {
       if (enumSelectedProjectGroupId.value) {
-        return item.groupId === enumSelectedProjectGroupId.value;
+        return item.groupId === enumSelectedProjectGroupId.value
       }
-      return true;
+      return true
     })
     .filter((item) => {
-      if (!keyword) return true;
-      return String(item.name || "")
+      if (!keyword) return true
+      return String(item.name || '')
         .toLowerCase()
-        .includes(keyword);
-    });
-});
+        .includes(keyword)
+    })
+})
 
 const pageVariableRows = computed<any[]>(() => {
-  const keyword = String(pageVarSearch.value || "").toLowerCase();
+  const keyword = String(pageVarSearch.value || '').toLowerCase()
   return Object.entries(pageVars.value || {})
     .map(([name, detail]) => ({
       name,
-      type: detail?.type || "string",
-      description: detail?.description || "",
+      type: detail?.type || 'string',
+      description: detail?.description || '',
     }))
     .filter((item) => {
-      if (!keyword) return true;
-      return String(item.name || "")
+      if (!keyword) return true
+      return String(item.name || '')
         .toLowerCase()
-        .includes(keyword);
-    });
-});
+        .includes(keyword)
+    })
+})
 
 const pageComponentTree = computed<any[]>(() => {
-  void docVersion.value;
-  const rootId = currentPage.value?.rootNodeId;
-  const docModel = doc.value;
-  if (!rootId || !docModel) return [];
+  void docVersion.value
+  const rootId = currentPage.value?.rootNodeId
+  const docModel = doc.value
+  if (!rootId || !docModel) return []
   const buildNode = (nodeId: string): any => {
-    const node = docModel.getNode(nodeId);
-    if (!node) return null;
-    const children = (node.children || []).map((childId) => buildNode(childId)).filter(Boolean);
-    const label = node.label || node.type || "组件";
+    const node = docModel.getNode(nodeId)
+    if (!node) return null
+    const children = (node.children || []).map((childId) => buildNode(childId)).filter(Boolean)
+    const label = node.label || node.type || '组件'
     return {
       id: node.id,
       label,
-      type: children.length ? "group" : "component",
-      componentName: node.label || "",
-      componentType: node.type || "",
+      type: children.length ? 'group' : 'component',
+      componentName: node.label || '',
+      componentType: node.type || '',
       children,
-    };
-  };
-  const root = buildNode(rootId);
-  if (!root) return [];
-  return root.children?.length ? root.children : [root];
-});
+    }
+  }
+  const root = buildNode(rootId)
+  if (!root) return []
+  return root.children?.length ? root.children : [root]
+})
 
 const jsCompletions = computed<any[]>(() => {
   const items: any[] = [
     {
-      label: "console.log",
-      insertText: "console.log()",
-      kind: "Function",
-      detail: "Log output",
+      label: 'console.log',
+      insertText: 'console.log()',
+      kind: 'Function',
+      detail: 'Log output',
     },
     {
-      label: "if",
-      insertText: "if () {\\n  \\n}",
-      kind: "Snippet",
-      detail: "if statement",
+      label: 'if',
+      insertText: 'if () {\\n  \\n}',
+      kind: 'Snippet',
+      detail: 'if statement',
     },
     {
-      label: "for",
-      insertText: "for (let i = 0; i < ; i++) {\\n  \\n}",
-      kind: "Snippet",
+      label: 'for',
+      insertText: 'for (let i = 0; i < ; i++) {\\n  \\n}',
+      kind: 'Snippet',
     },
     {
-      label: "function",
-      insertText: "function name() {\\n  \\n}",
-      kind: "Snippet",
+      label: 'function',
+      insertText: 'function name() {\\n  \\n}',
+      kind: 'Snippet',
     },
-    { label: "const", insertText: "const ", kind: "Keyword" },
-    { label: "let", insertText: "let ", kind: "Keyword" },
-    { label: "return", insertText: "return ", kind: "Keyword" },
-  ];
+    { label: 'const', insertText: 'const ', kind: 'Keyword' },
+    { label: 'let', insertText: 'let ', kind: 'Keyword' },
+    { label: 'return', insertText: 'return ', kind: 'Keyword' },
+  ]
 
   Object.keys(projectVariables.value || {}).forEach((name) => {
     items.push({
       label: name,
       insertText: name,
-      kind: "Variable",
-      detail: "工程变量",
-      prefix: "$global.",
-    });
-  });
-
-  ((globalScripts.value?.custom?.items || []) as any[]).forEach((script) => {
-    if (!script?.name) return;
+      kind: 'Variable',
+      detail: '工程变量',
+      prefix: '$global.',
+    })
+  })
+  ;((globalScripts.value?.custom?.items || []) as any[]).forEach((script) => {
+    if (!script?.name) return
     const params =
-      typeof script.params === "string" && script.params.trim()
+      typeof script.params === 'string' && script.params.trim()
         ? script.params.trim()
-        : typeof script.args === "string"
+        : typeof script.args === 'string'
           ? script.args.trim()
-          : "";
-    const call = params ? `${script.name}(${params})` : `${script.name}()`;
+          : ''
+    const call = params ? `${script.name}(${params})` : `${script.name}()`
     items.push({
       label: script.name,
       insertText: call,
-      kind: "Function",
-      detail: "自定义脚本",
-      prefix: "customScripts.",
-    });
-  });
+      kind: 'Function',
+      detail: '自定义脚本',
+      prefix: 'customScripts.',
+    })
+  })
 
   Object.keys(pageVars.value || {}).forEach((name) => {
     items.push({
       label: name,
       insertText: name,
-      kind: "Variable",
-      detail: "页面变量",
-      prefix: "$vars.",
-    });
-  });
+      kind: 'Variable',
+      detail: '页面变量',
+      prefix: '$vars.',
+    })
+  })
 
-  items.push(...(buildComponentMethodCompletions(pageComponentTree.value) as any[]));
-  return items;
-});
+  items.push(...(buildComponentMethodCompletions(pageComponentTree.value) as any[]))
+  return items
+})
 
 function filterSidebarNode(value: string, data: { label?: string } | null | undefined): boolean {
-  if (!value) return true;
-  return String(data?.label || "")
+  if (!value) return true
+  return String(data?.label || '')
     .toLowerCase()
-    .includes(value.toLowerCase());
+    .includes(value.toLowerCase())
 }
 
 function buildGroupTree(groups: any[] | null | undefined): any[] {
-  const groupMap = new Map<string, any>();
-  const roots: any[] = [];
-  const normalized = Array.isArray(groups) ? groups : [];
+  const groupMap = new Map<string, any>()
+  const roots: any[] = []
+  const normalized = Array.isArray(groups) ? groups : []
   normalized.forEach((group) => {
     groupMap.set(group.id, {
       id: group.id,
       label: group.name,
-      type: "group",
+      type: 'group',
       children: [],
-    });
-  });
+    })
+  })
   groupMap.forEach((node, id) => {
-    const group = normalized.find((item) => item.id === id);
+    const group = normalized.find((item) => item.id === id)
     if (group?.parentId && groupMap.has(group.parentId)) {
-      groupMap.get(group.parentId).children.push(node);
+      groupMap.get(group.parentId).children.push(node)
     } else {
-      roots.push(node);
+      roots.push(node)
     }
-  });
-  return roots;
+  })
+  return roots
 }
 
 watch(scriptSearch, (value) => {
-  customTreeRef.value?.filter?.(value);
-});
+  customTreeRef.value?.filter?.(value)
+})
 
 watch(componentSearch, (value) => {
-  componentTreeRef.value?.filter?.(value);
-});
+  componentTreeRef.value?.filter?.(value)
+})
 
 function handleCustomScriptInsert(data: any): void {
-  if (data?.type === "group") return;
-  const params = data?.params ? data.params : "";
-  const call = params ? `customScripts.${data.label}(${params})` : `customScripts.${data.label}()`;
-  editorRef.value?.insertText?.(call);
+  if (data?.type === 'group') return
+  const params = data?.params ? data.params : ''
+  const call = params ? `customScripts.${data.label}(${params})` : `customScripts.${data.label}()`
+  editorRef.value?.insertText?.(call)
 }
 
 function handleComponentInsert(data: any): void {
-  if (!data?.componentName) return;
-  editorRef.value?.insertText?.(`components.${data.componentName}`);
+  if (!data?.componentName) return
+  editorRef.value?.insertText?.(`components.${data.componentName}`)
 }
 
 function handlePageVariableInsert(row: any): void {
-  if (!row?.name) return;
-  editorRef.value?.insertText?.(resolvePageVariableSnippet(row.name));
+  if (!row?.name) return
+  editorRef.value?.insertText?.(resolvePageVariableSnippet(row.name))
 }
 
 function openVariableEnum(): void {
-  projectVarSearch.value = "";
-  enumSelectedProjectGroupId.value = null;
-  enumSelectedProjectVar.value = null;
-  variableEnumVisible.value = true;
+  projectVarSearch.value = ''
+  enumSelectedProjectGroupId.value = null
+  enumSelectedProjectVar.value = null
+  variableEnumVisible.value = true
 }
 
 function handleProjectGroupSelect(data: any): void {
   if (!data) {
-    enumSelectedProjectGroupId.value = null;
-    return;
+    enumSelectedProjectGroupId.value = null
+    return
   }
-  enumSelectedProjectGroupId.value = data.id === "all" ? null : data.id;
+  enumSelectedProjectGroupId.value = data.id === 'all' ? null : data.id
 }
 
 function handleProjectRowClick(row: any): void {
-  enumSelectedProjectVar.value = row || null;
+  enumSelectedProjectVar.value = row || null
 }
 
 function handleProjectRowDblClick(row: any): void {
-  enumSelectedProjectVar.value = row || null;
-  confirmEnumInsert();
+  enumSelectedProjectVar.value = row || null
+  confirmEnumInsert()
 }
 
 function enumProjectRowClass({ row }: { row: any }): string {
-  if (enumSelectedProjectVar.value?.name === row.name) return "is-selected";
-  return "";
+  if (enumSelectedProjectVar.value?.name === row.name) return 'is-selected'
+  return ''
 }
 
 function confirmEnumInsert(): void {
   if (enumSelectedProjectVar.value?.name) {
-    editorRef.value?.insertText?.(resolveProjectVariableSnippet(enumSelectedProjectVar.value.name));
-    variableEnumVisible.value = false;
+    editorRef.value?.insertText?.(resolveProjectVariableSnippet(enumSelectedProjectVar.value.name))
+    variableEnumVisible.value = false
   }
 }
 </script>

@@ -2,29 +2,25 @@
  * 数据绑定系统 - 统一导出
  */
 
-import type { VarsDefinitions } from "./types.ts";
-import { BindingResolver, createBindingResolver } from "./BindingResolver.ts";
-import { createDataService, DataService } from "./DataService.ts";
-import { createDiagnosticsStore, DiagnosticsStore } from "./DiagnosticsStore.ts";
-import { ExpressionEngine } from "./ExpressionEngine.ts";
-import { createMockDataProvider, MockDataProvider } from "./MockDataProvider.ts";
-import { VarsStore } from "./VarsStore.ts";
+import type { VarsDefinitions } from './types.ts'
+import { BindingResolver, createBindingResolver } from './BindingResolver.ts'
+import { createDataService, DataService } from './DataService.ts'
+import { createDiagnosticsStore, DiagnosticsStore } from './DiagnosticsStore.ts'
+import { ExpressionEngine } from './ExpressionEngine.ts'
+import { createMockDataProvider, MockDataProvider } from './MockDataProvider.ts'
+import { VarsStore } from './VarsStore.ts'
 
-export { BindingResolver, createBindingResolver } from "./BindingResolver.ts";
+export { BindingResolver, createBindingResolver } from './BindingResolver.ts'
 
-export {
-  DatapointRegistry,
-  datapointRegistry,
-  DatapointRegistryEvents,
-} from "./datapoint-registry";
+export { DatapointRegistry, datapointRegistry, DatapointRegistryEvents } from './datapoint-registry'
 
-export { createDataService, DataService } from "./DataService.ts";
+export { createDataService, DataService } from './DataService.ts'
 
-export { createDiagnosticsStore, DiagnosticsStore } from "./DiagnosticsStore.ts";
+export { createDiagnosticsStore, DiagnosticsStore } from './DiagnosticsStore.ts'
 
-export { defaultEngine, evaluate, evaluateTemplate, ExpressionEngine } from "./ExpressionEngine.ts";
+export { defaultEngine, evaluate, evaluateTemplate, ExpressionEngine } from './ExpressionEngine.ts'
 
-export { createMockDataProvider, MockDataProvider } from "./MockDataProvider.ts";
+export { createMockDataProvider, MockDataProvider } from './MockDataProvider.ts'
 
 export {
   abs,
@@ -57,7 +53,7 @@ export {
   transformRegistry,
   trim,
   truncate,
-} from "./transforms.ts";
+} from './transforms.ts'
 
 export {
   createDatapointBinding,
@@ -76,28 +72,28 @@ export {
   type ResolvedBinding,
   type VarsContext,
   type VarsDefinitions,
-} from "./types.ts";
+} from './types.ts'
 
-export { VarsStore } from "./VarsStore.ts";
+export { VarsStore } from './VarsStore.ts'
 
 export function createDataBindingSystem(
   options: {
-    mode?: "edit" | "preview" | "runtime";
-    pageId?: string | null;
-    varsDefinitions?: VarsDefinitions;
-    dataServiceOptions?: Record<string, unknown>;
+    mode?: 'edit' | 'preview' | 'runtime'
+    pageId?: string | null
+    varsDefinitions?: VarsDefinitions
+    dataServiceOptions?: Record<string, unknown>
   } = {},
 ) {
-  const mode = options.mode ?? "edit";
-  const pageId = options.pageId ?? null;
-  const varsDefinitions: VarsDefinitions = options.varsDefinitions ?? { global: {}, pages: {} };
-  const dataServiceOptions = options.dataServiceOptions ?? {};
+  const mode = options.mode ?? 'edit'
+  const pageId = options.pageId ?? null
+  const varsDefinitions: VarsDefinitions = options.varsDefinitions ?? { global: {}, pages: {} }
+  const dataServiceOptions = options.dataServiceOptions ?? {}
 
-  const varsStore = new VarsStore(varsDefinitions);
-  const expressionEngine = new ExpressionEngine();
-  const mockProvider = new MockDataProvider();
-  const diagnosticsStore = new DiagnosticsStore(dataServiceOptions);
-  const dataService = new DataService(dataServiceOptions);
+  const varsStore = new VarsStore(varsDefinitions)
+  const expressionEngine = new ExpressionEngine()
+  const mockProvider = new MockDataProvider()
+  const diagnosticsStore = new DiagnosticsStore(dataServiceOptions)
+  const dataService = new DataService(dataServiceOptions)
 
   const bindingResolver = new BindingResolver(
     {
@@ -108,10 +104,10 @@ export function createDataBindingSystem(
       dataService,
     },
     { mode, pageId },
-  );
+  )
 
   if (pageId) {
-    varsStore.setCurrentPage(pageId);
+    varsStore.setCurrentPage(pageId)
   }
 
   return {
@@ -123,13 +119,13 @@ export function createDataBindingSystem(
     bindingResolver,
 
     destroy() {
-      bindingResolver.destroy();
-      dataService.destroy();
-      diagnosticsStore.destroy();
-      mockProvider.destroy();
-      varsStore.removeAllListeners();
+      bindingResolver.destroy()
+      dataService.destroy()
+      diagnosticsStore.destroy()
+      mockProvider.destroy()
+      varsStore.removeAllListeners()
     },
-  };
+  }
 }
 
 export default {
@@ -144,4 +140,4 @@ export default {
   createDataService,
   createDiagnosticsStore,
   createMockDataProvider,
-};
+}

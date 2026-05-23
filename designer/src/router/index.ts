@@ -6,13 +6,13 @@
  * - `/designer/debug` 独立调试路由，使用固定默认 UI（light + zh）。
  */
 
-import type { NavigationGuardNext, RouteLocationNormalized, Router } from "vue-router";
-import { createRouter, createWebHistory } from "vue-router";
-import { STORAGE_KEYS } from "@/constants";
-import type { EditorUiStore } from "@/stores/editor-ui-store";
-import { getEditorUiStore } from "@/stores/editor-ui-store";
-import { debugProjectApi } from "@/services/debugProjectApi";
-import { isDesignerDebugRouteEnabled } from "@/runtime/debug-route";
+import type { NavigationGuardNext, RouteLocationNormalized, Router } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router'
+import { STORAGE_KEYS } from '@/constants'
+import type { EditorUiStore } from '@/stores/editor-ui-store'
+import { getEditorUiStore } from '@/stores/editor-ui-store'
+import { debugProjectApi } from '@/services/debugProjectApi'
+import { isDesignerDebugRouteEnabled } from '@/runtime/debug-route'
 import {
   buildIdeLoginUrl,
   buildIdeRestoreUrl,
@@ -20,114 +20,114 @@ import {
   resolveDesignerIdeOriginFromRuntime,
   resolveDesignerEntrypointPlan,
   waitForHostBootstrap,
-} from "@/runtime/host-bootstrap";
-import { Storage } from "@/utils/storage";
-import { shouldSyncEditorUiForPath } from "./runtime-settings";
+} from '@/runtime/host-bootstrap'
+import { Storage } from '@/utils/storage'
+import { shouldSyncEditorUiForPath } from './runtime-settings'
 
-declare module "vue-router" {
+declare module 'vue-router' {
   interface RouteMeta {
-    title?: string;
-    requiresAuth?: boolean;
+    title?: string
+    requiresAuth?: boolean
     project?: {
-      id: string | null | undefined;
-      tenantId: string | null | undefined;
-    };
+      id: string | null | undefined
+      tenantId: string | null | undefined
+    }
   }
 }
 
 type DesignerDebugProjectMeta = {
-  id: string | null;
-  tenantId: string | null;
-};
+  id: string | null
+  tenantId: string | null
+}
 
-type ResolveDefaultDebugProject = () => Promise<DesignerDebugProjectMeta | null>;
+type ResolveDefaultDebugProject = () => Promise<DesignerDebugProjectMeta | null>
 
 export function createDesignerRoutes(enableDebugRoute?: boolean) {
   const routes = [
     {
-      path: "/",
-      name: "Designer",
-      component: () => import("@/ui/shell/DesignerView.vue"),
+      path: '/',
+      name: 'Designer',
+      component: () => import('@/ui/shell/DesignerView.vue'),
       meta: {
-        title: "设计器",
+        title: '设计器',
         requiresAuth: true,
       },
     },
-  ];
+  ]
 
   if (isDesignerDebugRouteEnabled(enableDebugRoute)) {
     routes.push({
-      path: "/debug",
-      name: "DesignerDebug",
-      component: () => import("@/ui/shell/DesignerView.vue"),
+      path: '/debug',
+      name: 'DesignerDebug',
+      component: () => import('@/ui/shell/DesignerView.vue'),
       meta: {
-        title: "设计器调试",
+        title: '设计器调试',
         requiresAuth: false,
       },
-    });
+    })
   }
 
   routes.push({
-    path: "/preview",
-    name: "Preview",
-    component: () => import("@/ui/editors/page/preview/PreviewView.vue"),
+    path: '/preview',
+    name: 'Preview',
+    component: () => import('@/ui/editors/page/preview/PreviewView.vue'),
     meta: {
-      title: "预览",
+      title: '预览',
       requiresAuth: true,
     },
-  });
+  })
 
-  return routes;
+  return routes
 }
 
-const routes = createDesignerRoutes();
+const routes = createDesignerRoutes()
 
 const router = createRouter({
-  history: createWebHistory("/designer/"),
+  history: createWebHistory('/designer/'),
   routes,
-});
+})
 
 function clearEditorUiThemeEffects(): void {
-  document.documentElement.classList.remove("dark");
-  document.documentElement.removeAttribute("data-theme");
+  document.documentElement.classList.remove('dark')
+  document.documentElement.removeAttribute('data-theme')
 }
 
 type RuntimeRouteEffectsDependencies = {
-  editorUi: EditorUiStore;
-};
+  editorUi: EditorUiStore
+}
 
 type DesignerBeforeEachGuardDependencies = {
-  getCurrentUrl?: () => string;
-  getIdeOrigin?: () => string;
-  isTopLevelWindow?: () => boolean;
-  navigateToUrl?: (url: string) => void;
-  resolveDefaultDebugProject?: ResolveDefaultDebugProject;
-  waitForBootstrap?: () => Promise<boolean>;
-};
+  getCurrentUrl?: () => string
+  getIdeOrigin?: () => string
+  isTopLevelWindow?: () => boolean
+  navigateToUrl?: (url: string) => void
+  resolveDefaultDebugProject?: ResolveDefaultDebugProject
+  waitForBootstrap?: () => Promise<boolean>
+}
 
 function asNonEmptyString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 }
 
 function asFirstNonEmptyString(value: unknown): string | null {
   if (Array.isArray(value)) {
-    return asFirstNonEmptyString(value[0]);
+    return asFirstNonEmptyString(value[0])
   }
-  return asNonEmptyString(value);
+  return asNonEmptyString(value)
 }
 
 function applyProjectContextFromRouteQuery(targetRoute: RouteLocationNormalized): void {
   const projectId =
-    asFirstNonEmptyString(targetRoute.query.pid) ?? asFirstNonEmptyString(targetRoute.query.id);
-  const tenantId = asFirstNonEmptyString(targetRoute.query.tenant);
+    asFirstNonEmptyString(targetRoute.query.pid) ?? asFirstNonEmptyString(targetRoute.query.id)
+  const tenantId = asFirstNonEmptyString(targetRoute.query.tenant)
 
   // 预览返回设计态时 iframe 内可能只剩 URL 上的工程标识。
   // 先恢复工程上下文，避免正式入口兜底把 iframe 重定向回 IDE，造成 IDE 标签栏递归嵌套。
   if (projectId) {
-    Storage.setProjectId(projectId);
+    Storage.setProjectId(projectId)
   }
   if (tenantId) {
-    Storage.setTenantId(tenantId);
+    Storage.setTenantId(tenantId)
   }
 }
 
@@ -135,39 +135,40 @@ async function resolveDesignerDebugProjectMeta(
   targetUrl: string,
   resolveDefaultDebugProject: ResolveDefaultDebugProject,
 ): Promise<DesignerDebugProjectMeta> {
-  const url = new URL(targetUrl);
-  const projectIdFromUrl = asNonEmptyString(url.searchParams.get("pid")) ?? asNonEmptyString(url.searchParams.get("id"));
-  const tenantIdFromUrl = asNonEmptyString(url.searchParams.get("tenant"));
+  const url = new URL(targetUrl)
+  const projectIdFromUrl =
+    asNonEmptyString(url.searchParams.get('pid')) ?? asNonEmptyString(url.searchParams.get('id'))
+  const tenantIdFromUrl = asNonEmptyString(url.searchParams.get('tenant'))
 
   if (projectIdFromUrl) {
-    Storage.setProjectId(projectIdFromUrl);
+    Storage.setProjectId(projectIdFromUrl)
     if (tenantIdFromUrl) {
-      Storage.setTenantId(tenantIdFromUrl);
+      Storage.setTenantId(tenantIdFromUrl)
     }
 
     return {
       id: projectIdFromUrl,
       tenantId: tenantIdFromUrl ?? Storage.getTenantId(),
-    };
+    }
   }
 
-  const defaultDebugProject = await resolveDefaultDebugProject();
+  const defaultDebugProject = await resolveDefaultDebugProject()
   if (defaultDebugProject?.id) {
-    Storage.setProjectId(defaultDebugProject.id);
+    Storage.setProjectId(defaultDebugProject.id)
     if (defaultDebugProject.tenantId) {
-      Storage.setTenantId(defaultDebugProject.tenantId);
+      Storage.setTenantId(defaultDebugProject.tenantId)
     }
 
     return {
       id: defaultDebugProject.id,
       tenantId: defaultDebugProject.tenantId ?? Storage.getTenantId(),
-    };
+    }
   }
 
   return {
     id: Storage.getProjectId(),
     tenantId: Storage.getTenantId(),
-  };
+  }
 }
 
 export function applyRuntimeRouteEffects(
@@ -176,18 +177,18 @@ export function applyRuntimeRouteEffects(
   { editorUi }: RuntimeRouteEffectsDependencies,
 ): void {
   if (!shouldSyncEditorUiForPath(routePath)) {
-    clearEditorUiThemeEffects();
-    return;
+    clearEditorUiThemeEffects()
+    return
   }
 
   // 设计态路由只把当前 UI 状态重新同步到 DOM，避免路由切换时覆盖宿主已经下发的主题/语言。
-  editorUi.applyThemeToDom();
+  editorUi.applyThemeToDom()
 }
 
 function syncRuntimeSettings(routePath = window.location.pathname): void {
   applyRuntimeRouteEffects(routePath, window.location.href, {
     editorUi: getEditorUiStore(),
-  });
+  })
 }
 
 /**
@@ -200,124 +201,130 @@ function resolveEntrypointUrlForRoute(
   targetRoute: RouteLocationNormalized,
   targetRouter: Router,
 ): string {
-  const current = new URL(currentUrl);
-  const resolvedTargetUrl = new URL(targetRouter.resolve(targetRoute).href, current);
-  const currentHandoffId = current.searchParams.get("handoffId");
+  const current = new URL(currentUrl)
+  const resolvedTargetUrl = new URL(targetRouter.resolve(targetRoute).href, current)
+  const currentHandoffId = current.searchParams.get('handoffId')
 
-  if (currentHandoffId && !resolvedTargetUrl.searchParams.has("handoffId")) {
-    resolvedTargetUrl.searchParams.set("handoffId", currentHandoffId);
+  if (currentHandoffId && !resolvedTargetUrl.searchParams.has('handoffId')) {
+    resolvedTargetUrl.searchParams.set('handoffId', currentHandoffId)
   }
 
-  return resolvedTargetUrl.toString();
+  return resolvedTargetUrl.toString()
 }
 
 export function registerDesignerBeforeEachGuard(
   targetRouter: Router,
   dependencies: DesignerBeforeEachGuardDependencies = {},
 ): () => void {
-  const getCurrentUrl = dependencies.getCurrentUrl ?? (() => window.location.href);
-  const getIdeOrigin = dependencies.getIdeOrigin ?? (() =>
-    resolveDesignerIdeOriginFromRuntime({
-      currentUrl: getCurrentUrl(),
-      referrer: document.referrer,
-    }));
-  const isTopLevelWindow = dependencies.isTopLevelWindow ?? (() => window.parent === window);
-  const navigateToUrl = dependencies.navigateToUrl ?? ((url: string) => window.location.replace(url));
-  const resolveDefaultDebugProject = dependencies.resolveDefaultDebugProject ?? (() =>
-    debugProjectApi.resolveDefaultProjectByName());
-  const waitForBootstrap = dependencies.waitForBootstrap ?? waitForHostBootstrap;
+  const getCurrentUrl = dependencies.getCurrentUrl ?? (() => window.location.href)
+  const getIdeOrigin =
+    dependencies.getIdeOrigin ??
+    (() =>
+      resolveDesignerIdeOriginFromRuntime({
+        currentUrl: getCurrentUrl(),
+        referrer: document.referrer,
+      }))
+  const isTopLevelWindow = dependencies.isTopLevelWindow ?? (() => window.parent === window)
+  const navigateToUrl =
+    dependencies.navigateToUrl ?? ((url: string) => window.location.replace(url))
+  const resolveDefaultDebugProject =
+    dependencies.resolveDefaultDebugProject ?? (() => debugProjectApi.resolveDefaultProjectByName())
+  const waitForBootstrap = dependencies.waitForBootstrap ?? waitForHostBootstrap
 
-  return targetRouter.beforeEach(async (to: RouteLocationNormalized, _from, next: NavigationGuardNext) => {
-    document.title = `${to.meta.title || "设计器"} - InduForge`;
+  return targetRouter.beforeEach(
+    async (to: RouteLocationNormalized, _from, next: NavigationGuardNext) => {
+      document.title = `${to.meta.title || '设计器'} - InduForge`
 
-    const currentUrl = getCurrentUrl();
-    const targetUrl = resolveEntrypointUrlForRoute(currentUrl, to, targetRouter);
-    const entrypointPlan = resolveDesignerEntrypointPlan(targetUrl, {
-      hasProjectId: Boolean(Storage.getProjectId()),
-      hasToken: Boolean(Storage.getToken()),
-      ideOrigin: getIdeOrigin(),
-      isTopLevelWindow: isTopLevelWindow(),
-      referrer: document.referrer,
-    });
+      const currentUrl = getCurrentUrl()
+      const targetUrl = resolveEntrypointUrlForRoute(currentUrl, to, targetRouter)
+      const entrypointPlan = resolveDesignerEntrypointPlan(targetUrl, {
+        hasProjectId: Boolean(Storage.getProjectId()),
+        hasToken: Boolean(Storage.getToken()),
+        ideOrigin: getIdeOrigin(),
+        isTopLevelWindow: isTopLevelWindow(),
+        referrer: document.referrer,
+      })
 
-    if (entrypointPlan.shouldRedirectToIde && entrypointPlan.ideRedirectUrl) {
-      next(false);
-      navigateToUrl(entrypointPlan.ideRedirectUrl);
-      return;
-    }
-
-    if (entrypointPlan.handoffId && isTopLevelWindow() && !entrypointPlan.isDebugRoute) {
-      /**
-       * 纯顶层独立标签页没有宿主 iframe 可回消息，因此这里直接按 handoff 记录
-       * 覆盖本地工程上下文，让“在新标签页打开设计中心”保持在设计器内完成。
-       */
-      restoreEntrypointSessionFromHandoff(entrypointPlan.handoffId);
-    }
-
-    let token = Storage.getToken();
-    let bootstrapSucceeded = true;
-
-    if (entrypointPlan.shouldWaitForBootstrap) {
-      /**
-       * handoff 代表宿主要求切换到新的工程上下文。
-       * 等待前先清掉旧工程标识，避免 bootstrap 超时后仍把上一工程误当成当前入口恢复。
-       */
-      if (entrypointPlan.handoffId) {
-        Storage.remove(STORAGE_KEYS.PROJECT_ID);
-        Storage.remove(STORAGE_KEYS.TENANT_ID);
+      if (entrypointPlan.shouldRedirectToIde && entrypointPlan.ideRedirectUrl) {
+        next(false)
+        navigateToUrl(entrypointPlan.ideRedirectUrl)
+        return
       }
 
-      // bootstrap 失败时不再挂起，后续继续落到现有登录或 IDE 回跳兜底。
-      bootstrapSucceeded = await waitForBootstrap();
-      token = Storage.getToken();
-    }
+      if (entrypointPlan.handoffId && isTopLevelWindow() && !entrypointPlan.isDebugRoute) {
+        /**
+         * 纯顶层独立标签页没有宿主 iframe 可回消息，因此这里直接按 handoff 记录
+         * 覆盖本地工程上下文，让“在新标签页打开设计中心”保持在设计器内完成。
+         */
+        restoreEntrypointSessionFromHandoff(entrypointPlan.handoffId)
+      }
 
-    syncRuntimeSettings(to.path);
+      let token = Storage.getToken()
+      let bootstrapSucceeded = true
 
-    if (entrypointPlan.isDebugRoute) {
-      to.meta.project = await resolveDesignerDebugProjectMeta(targetUrl, resolveDefaultDebugProject);
-    }
+      if (entrypointPlan.shouldWaitForBootstrap) {
+        /**
+         * handoff 代表宿主要求切换到新的工程上下文。
+         * 等待前先清掉旧工程标识，避免 bootstrap 超时后仍把上一工程误当成当前入口恢复。
+         */
+        if (entrypointPlan.handoffId) {
+          Storage.remove(STORAGE_KEYS.PROJECT_ID)
+          Storage.remove(STORAGE_KEYS.TENANT_ID)
+        }
 
-    if (!entrypointPlan.isDebugRoute && (to.name === "Designer" || to.name === "Preview")) {
-      applyProjectContextFromRouteQuery(to);
-    }
+        // bootstrap 失败时不再挂起，后续继续落到现有登录或 IDE 回跳兜底。
+        bootstrapSucceeded = await waitForBootstrap()
+        token = Storage.getToken()
+      }
 
-    if (!token && to.meta.requiresAuth) {
-      next(false);
-      navigateToUrl(
-        buildIdeLoginUrl({
-          currentUrl: targetUrl,
-          ideOrigin: getIdeOrigin(),
-        }),
-      );
-      return;
-    }
+      syncRuntimeSettings(to.path)
 
-    if (!bootstrapSucceeded) {
-      // 无 token 时已在上面的登录分支收敛；保留这里是为了显式表达：
-      // 失败只负责解除等待，不改变既有 token/projectId 分支语义。
-    }
+      if (entrypointPlan.isDebugRoute) {
+        to.meta.project = await resolveDesignerDebugProjectMeta(
+          targetUrl,
+          resolveDefaultDebugProject,
+        )
+      }
 
-    const projectId = Storage.getProjectId();
-    const tenantId = Storage.getTenantId();
+      if (!entrypointPlan.isDebugRoute && (to.name === 'Designer' || to.name === 'Preview')) {
+        applyProjectContextFromRouteQuery(to)
+      }
 
-    if (!projectId && to.name === "Designer") {
-      next(false);
-      navigateToUrl(
-        buildIdeRestoreUrl(entrypointPlan.handoffId, getIdeOrigin()),
-      );
-      return;
-    }
+      if (!token && to.meta.requiresAuth) {
+        next(false)
+        navigateToUrl(
+          buildIdeLoginUrl({
+            currentUrl: targetUrl,
+            ideOrigin: getIdeOrigin(),
+          }),
+        )
+        return
+      }
 
-    to.meta.project = {
-      id: projectId,
-      tenantId,
-    };
+      if (!bootstrapSucceeded) {
+        // 无 token 时已在上面的登录分支收敛；保留这里是为了显式表达：
+        // 失败只负责解除等待，不改变既有 token/projectId 分支语义。
+      }
 
-    next();
-  });
+      const projectId = Storage.getProjectId()
+      const tenantId = Storage.getTenantId()
+
+      if (!projectId && to.name === 'Designer') {
+        next(false)
+        navigateToUrl(buildIdeRestoreUrl(entrypointPlan.handoffId, getIdeOrigin()))
+        return
+      }
+
+      to.meta.project = {
+        id: projectId,
+        tenantId,
+      }
+
+      next()
+    },
+  )
 }
 
-registerDesignerBeforeEachGuard(router);
+registerDesignerBeforeEachGuard(router)
 
-export default router;
+export default router

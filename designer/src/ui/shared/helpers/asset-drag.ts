@@ -3,33 +3,33 @@
  * 统一资源面板与画布落点之间的数据格式，避免多处解析分叉。
  */
 
-export const DESIGNER_ASSET_DRAG_MIME = "application/x-designer-asset";
+export const DESIGNER_ASSET_DRAG_MIME = 'application/x-designer-asset'
 
 export interface DesignerAssetDragPayload {
-  id: string;
-  name?: string;
-  displayName?: string;
-  url?: string;
-  thumbnailUrl?: string;
-  type?: string;
-  mimeType?: string;
-  ext?: string;
-  size?: number;
+  id: string
+  name?: string
+  displayName?: string
+  url?: string
+  thumbnailUrl?: string
+  type?: string
+  mimeType?: string
+  ext?: string
+  size?: number
 }
 
-export type DesignerAssetComponentType = "Image" | "Video" | "DownloadLink";
+export type DesignerAssetComponentType = 'Image' | 'Video' | 'DownloadLink'
 
 interface AssetLike {
-  id?: string;
-  name?: string;
-  displayName?: string;
-  originalName?: string;
-  url?: string;
-  thumbnailUrl?: string;
-  type?: string;
-  mimeType?: string;
-  ext?: string;
-  size?: number | string | null;
+  id?: string
+  name?: string
+  displayName?: string
+  originalName?: string
+  url?: string
+  thumbnailUrl?: string
+  type?: string
+  mimeType?: string
+  ext?: string
+  size?: number | string | null
 }
 
 /**
@@ -37,10 +37,12 @@ interface AssetLike {
  * @param {DesignerAssetDragPayload | null | undefined} asset - 资源对象
  * @returns {string}
  */
-export function resolveAssetDisplayName(asset: DesignerAssetDragPayload | null | undefined): string {
-  const raw = asset?.displayName || asset?.name || "";
-  const value = String(raw || "").trim();
-  return value || "资源文件";
+export function resolveAssetDisplayName(
+  asset: DesignerAssetDragPayload | null | undefined,
+): string {
+  const raw = asset?.displayName || asset?.name || ''
+  const value = String(raw || '').trim()
+  return value || '资源文件'
 }
 
 /**
@@ -48,35 +50,37 @@ export function resolveAssetDisplayName(asset: DesignerAssetDragPayload | null |
  * @param {AssetLike | null | undefined} asset - 资源对象
  * @returns {DesignerAssetDragPayload | null}
  */
-export function buildAssetDragPayload(asset: AssetLike | null | undefined): DesignerAssetDragPayload | null {
-  if (!asset?.id) return null;
-  const numericSize = Number(asset.size ?? 0);
+export function buildAssetDragPayload(
+  asset: AssetLike | null | undefined,
+): DesignerAssetDragPayload | null {
+  if (!asset?.id) return null
+  const numericSize = Number(asset.size ?? 0)
   const payload: Partial<DesignerAssetDragPayload> = {
     id: String(asset.id),
     size: Number.isFinite(numericSize) ? numericSize : 0,
-  };
-  const displayName = asset.displayName || asset.name || asset.originalName || "";
-  const optionalMap: Record<string, string> = {
-    name: asset.name || "",
-    displayName,
-    url: asset.url || "",
-    thumbnailUrl: asset.thumbnailUrl || "",
-    type: asset.type || "",
-    mimeType: asset.mimeType || "",
-    ext: asset.ext || "",
-  };
-  for (const [key, value] of Object.entries(optionalMap)) {
-    const trimmed = String(value || "").trim();
-    if (!trimmed) continue;
-    if (key === "name") payload.name = trimmed;
-    if (key === "displayName") payload.displayName = trimmed;
-    if (key === "url") payload.url = trimmed;
-    if (key === "thumbnailUrl") payload.thumbnailUrl = trimmed;
-    if (key === "type") payload.type = trimmed;
-    if (key === "mimeType") payload.mimeType = trimmed;
-    if (key === "ext") payload.ext = trimmed;
   }
-  return payload as DesignerAssetDragPayload;
+  const displayName = asset.displayName || asset.name || asset.originalName || ''
+  const optionalMap: Record<string, string> = {
+    name: asset.name || '',
+    displayName,
+    url: asset.url || '',
+    thumbnailUrl: asset.thumbnailUrl || '',
+    type: asset.type || '',
+    mimeType: asset.mimeType || '',
+    ext: asset.ext || '',
+  }
+  for (const [key, value] of Object.entries(optionalMap)) {
+    const trimmed = String(value || '').trim()
+    if (!trimmed) continue
+    if (key === 'name') payload.name = trimmed
+    if (key === 'displayName') payload.displayName = trimmed
+    if (key === 'url') payload.url = trimmed
+    if (key === 'thumbnailUrl') payload.thumbnailUrl = trimmed
+    if (key === 'type') payload.type = trimmed
+    if (key === 'mimeType') payload.mimeType = trimmed
+    if (key === 'ext') payload.ext = trimmed
+  }
+  return payload as DesignerAssetDragPayload
 }
 
 /**
@@ -85,7 +89,7 @@ export function buildAssetDragPayload(asset: AssetLike | null | undefined): Desi
  * @returns {string}
  */
 export function serializeAssetDragPayload(payload: DesignerAssetDragPayload): string {
-  return JSON.stringify(payload);
+  return JSON.stringify(payload)
 }
 
 /**
@@ -93,15 +97,17 @@ export function serializeAssetDragPayload(payload: DesignerAssetDragPayload): st
  * @param {string | null | undefined} raw - 原始字符串
  * @returns {DesignerAssetDragPayload | null}
  */
-export function parseAssetDragPayload(raw: string | null | undefined): DesignerAssetDragPayload | null {
-  if (!raw) return null;
+export function parseAssetDragPayload(
+  raw: string | null | undefined,
+): DesignerAssetDragPayload | null {
+  if (!raw) return null
   try {
-    const parsed = JSON.parse(raw) as DesignerAssetDragPayload;
-    if (!parsed || typeof parsed !== "object") return null;
-    if (!parsed.id) return null;
-    return parsed;
+    const parsed = JSON.parse(raw) as DesignerAssetDragPayload
+    if (!parsed || typeof parsed !== 'object') return null
+    if (!parsed.id) return null
+    return parsed
   } catch {
-    return null;
+    return null
   }
 }
 
@@ -115,15 +121,15 @@ export function parseAssetDragPayload(raw: string | null | undefined): DesignerA
 export function resolveAssetComponentType(
   asset: DesignerAssetDragPayload | null | undefined,
 ): DesignerAssetComponentType {
-  const type = String(asset?.type || "").toLowerCase();
-  const mime = String(asset?.mimeType || "").toLowerCase();
-  if (type === "image" || type === "svg" || mime.startsWith("image/")) {
-    return "Image";
+  const type = String(asset?.type || '').toLowerCase()
+  const mime = String(asset?.mimeType || '').toLowerCase()
+  if (type === 'image' || type === 'svg' || mime.startsWith('image/')) {
+    return 'Image'
   }
-  if (type === "video" || mime.startsWith("video/")) {
-    return "Video";
+  if (type === 'video' || mime.startsWith('video/')) {
+    return 'Video'
   }
-  return "DownloadLink";
+  return 'DownloadLink'
 }
 
 /**
@@ -136,31 +142,31 @@ export function buildAssetNodeProps(
   asset: DesignerAssetDragPayload | null | undefined,
   componentType: DesignerAssetComponentType,
 ): Record<string, unknown> {
-  const fileName = resolveAssetDisplayName(asset);
-  const url = String(asset?.url || "").trim();
-  if (componentType === "Image") {
+  const fileName = resolveAssetDisplayName(asset)
+  const url = String(asset?.url || '').trim()
+  if (componentType === 'Image') {
     return {
       src: url,
       alt: fileName,
-      fit: "contain",
-    };
+      fit: 'contain',
+    }
   }
-  if (componentType === "Video") {
+  if (componentType === 'Video') {
     return {
       src: url,
       controls: true,
       autoplay: false,
       loop: false,
       muted: false,
-    };
+    }
   }
   return {
     text: fileName,
     href: url,
-    displayMode: "button",
-    actionMode: "download",
-    triggerMode: "double",
+    displayMode: 'button',
+    actionMode: 'download',
+    triggerMode: 'double',
     downloadFileName: fileName,
-    target: "_blank",
-  };
+    target: '_blank',
+  }
 }

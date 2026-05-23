@@ -172,10 +172,12 @@ const mountDialog = async (): Promise<MountResult> => {
 
   const Root = defineComponent({
     setup() {
-      const capture = (eventName: string) => (...args: unknown[]) => {
-        emitted[eventName] = emitted[eventName] || []
-        emitted[eventName].push(args)
-      }
+      const capture =
+        (eventName: string) =>
+        (...args: unknown[]) => {
+          emitted[eventName] = emitted[eventName] || []
+          emitted[eventName].push(args)
+        }
       return () =>
         h(ProjectGroupProjectPickerDialog, {
           visible: true,

@@ -2,11 +2,11 @@
   页面树顶部搜索框
 -->
 <script setup lang="ts">
-import { useI18n } from "vue-i18n";
-import IconEpSearch from "~icons/ep/search";
+import { useI18n } from 'vue-i18n'
+import IconEpSearch from '~icons/ep/search'
 
-const searchText = defineModel({ type: String, default: "" });
-const { t } = useI18n();
+const searchText = defineModel({ type: String, default: '' })
+const { t } = useI18n()
 </script>
 
 <template>

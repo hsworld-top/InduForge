@@ -18,7 +18,7 @@ Linux 开发环境初始化：
 - 创建 `if_core`、`if_data`、`if_dev_data`。
 - 为 `if_dev_data` 启用开发态时序扩展。
 
-默认不会安装 Node 依赖，也不会启动业务项目。Node 依赖由根目录 pnpm workspace 统一管理，只在仓库根目录执行 `pnpm install`。`dev_core` 在 `DB_AUTO_SCHEMA_SYNC=true` 时会在自身启动阶段同步 `if_core` 表结构和默认租户/管理员数据。这样可以避免 Windows + WSL2 共用工作区时，由 Linux 侧生成的 `node_modules` 影响 Windows 开发。
+默认不会安装 Node 依赖，也不会启动业务项目。Node 依赖由根目录 pnpm workspace 统一管理，只在仓库根目录执行 `pnpm install`，不要在子项目目录单独安装依赖。pnpm 可能会在 workspace 子目录生成 `node_modules/` 链接或提升目录，这属于安装产物；Windows + WSL2 共用工作区时，仍建议在 Windows 侧安装 Node 依赖，避免 Linux 侧生成的二进制依赖影响 Windows 开发。`dev_core` 在 `DB_AUTO_SCHEMA_SYNC=true` 时会在自身启动阶段同步 `if_core` 表结构和默认租户/管理员数据。
 
 该脚本不会启动业务项目。开发人员需要自行启动：
 

@@ -7,42 +7,42 @@
 export const CONNECTION_TYPES = {
   // MySQL
   mysql: {
-    label: "MySQL",
-    category: "database",
-    icon: "Database",
+    label: 'MySQL',
+    category: 'database',
+    icon: 'Database',
     defaultPort: 3306,
-    formComponent: "MysqlConnectionForm",
-    contentComponent: "MysqlContent",
-    sqlDialect: "mysql",
+    formComponent: 'MysqlConnectionForm',
+    contentComponent: 'MysqlContent',
+    sqlDialect: 'mysql',
     features: {
       supportTransactions: true,
       supportStoredProcedures: true,
       supportViews: true,
       supportTriggers: true,
       caseSensitive: false,
-      identifierQuote: "`",
+      identifierQuote: '`',
       stringQuote: "'",
     },
     defaultConfig: {
-      host: "localhost",
+      host: 'localhost',
       port: 3306,
-      database: "",
-      username: "root",
-      password: "",
-      charset: "utf8mb4",
+      database: '',
+      username: 'root',
+      password: '',
+      charset: 'utf8mb4',
       queryTimeout: 30000,
     },
   },
 
   // PostgreSQL
   postgresql: {
-    label: "PostgreSQL",
-    category: "database",
-    icon: "Database",
+    label: 'PostgreSQL',
+    category: 'database',
+    icon: 'Database',
     defaultPort: 5432,
-    formComponent: "PostgresConnectionForm",
-    contentComponent: "PostgresContent",
-    sqlDialect: "pgsql",
+    formComponent: 'PostgresConnectionForm',
+    contentComponent: 'PostgresContent',
+    sqlDialect: 'pgsql',
     features: {
       supportTransactions: true,
       supportStoredProcedures: true,
@@ -54,16 +54,16 @@ export const CONNECTION_TYPES = {
       supportSchemas: true,
     },
     defaultConfig: {
-      host: "localhost",
+      host: 'localhost',
       port: 5432,
-      database: "",
-      username: "postgres",
-      password: "",
-      schema: "public",
-      sslMode: "disable",
-      sslCa: "",
-      sslCert: "",
-      sslKey: "",
+      database: '',
+      username: 'postgres',
+      password: '',
+      schema: 'public',
+      sslMode: 'disable',
+      sslCa: '',
+      sslCert: '',
+      sslKey: '',
       connectionTimeout: 3000,
       queryTimeout: 30000,
       maxConnections: 10,
@@ -72,30 +72,30 @@ export const CONNECTION_TYPES = {
 
   // SQL Server
   sqlserver: {
-    label: "SQL Server",
-    category: "database",
-    icon: "Database",
+    label: 'SQL Server',
+    category: 'database',
+    icon: 'Database',
     defaultPort: 1433,
-    formComponent: "SqlServerConnectionForm",
-    contentComponent: "SqlServerContent",
-    sqlDialect: "mssql",
+    formComponent: 'SqlServerConnectionForm',
+    contentComponent: 'SqlServerContent',
+    sqlDialect: 'mssql',
     features: {
       supportTransactions: true,
       supportStoredProcedures: true,
       supportViews: true,
       supportTriggers: true,
       caseSensitive: false,
-      identifierQuote: "[",
-      identifierQuoteEnd: "]",
+      identifierQuote: '[',
+      identifierQuoteEnd: ']',
       stringQuote: "'",
       supportSchemas: true,
     },
     defaultConfig: {
-      host: "localhost",
+      host: 'localhost',
       port: 1433,
-      database: "",
-      username: "sa",
-      password: "",
+      database: '',
+      username: 'sa',
+      password: '',
       timeout: 60000,
       queryTimeout: 30000,
       encrypt: false,
@@ -105,12 +105,12 @@ export const CONNECTION_TYPES = {
 
   // MQTT
   mqtt: {
-    label: "MQTT",
-    category: "message",
-    icon: "Connection",
+    label: 'MQTT',
+    category: 'message',
+    icon: 'Connection',
     defaultPort: 1883,
-    formComponent: "MqttConnectionForm",
-    contentComponent: "MqttContent",
+    formComponent: 'MqttConnectionForm',
+    contentComponent: 'MqttContent',
     features: {
       supportSubscribe: true,
       supportPublish: true,
@@ -121,12 +121,12 @@ export const CONNECTION_TYPES = {
       supportSSL: true,
     },
     defaultConfig: {
-      brokerUrl: "localhost",
-      protocol: "mqtt",
+      brokerUrl: 'localhost',
+      protocol: 'mqtt',
       port: 1883,
-      clientId: "",
-      username: "",
-      password: "",
+      clientId: '',
+      username: '',
+      password: '',
       keepalive: 60,
       cleanSession: true,
       qos: 0,
@@ -134,7 +134,7 @@ export const CONNECTION_TYPES = {
       connectTimeout: 30000,
     },
   },
-};
+}
 
 /**
  * 获取连接类型配置
@@ -142,7 +142,7 @@ export const CONNECTION_TYPES = {
  * @returns {Object} 连接类型配置
  */
 export function getConnectionTypeConfig(type) {
-  return CONNECTION_TYPES[type] || null;
+  return CONNECTION_TYPES[type] || null
 }
 
 /**
@@ -151,12 +151,12 @@ export function getConnectionTypeConfig(type) {
  */
 export function getDatabaseTypes() {
   return Object.entries(CONNECTION_TYPES)
-    .filter(([_, config]) => config.category === "database")
+    .filter(([_, config]) => config.category === 'database')
     .map(([type, config]) => ({
       value: type,
       label: config.label,
       defaultPort: config.defaultPort,
-    }));
+    }))
 }
 
 /**
@@ -165,6 +165,6 @@ export function getDatabaseTypes() {
  * @returns {Object} 默认配置
  */
 export function getDefaultConfig(type) {
-  const config = getConnectionTypeConfig(type);
-  return config ? { ...config.defaultConfig } : {};
+  const config = getConnectionTypeConfig(type)
+  return config ? { ...config.defaultConfig } : {}
 }

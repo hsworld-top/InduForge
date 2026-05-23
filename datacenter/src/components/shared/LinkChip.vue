@@ -1,10 +1,5 @@
 <template>
-  <button
-    type="button"
-    class="dc-link-chip"
-    :title="label"
-    @click="$emit('click', payload)"
-  >
+  <button type="button" class="dc-link-chip" :title="label" @click="$emit('click', payload)">
     <component :is="moduleIcon" class="dc-link-chip__icon" aria-hidden="true" />
     <span class="dc-link-chip__label">{{ label }}</span>
     <ArrowRight class="dc-link-chip__arrow" aria-hidden="true" />
@@ -12,43 +7,34 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import {
-  ArrowRight,
-  Bell,
-  Connection,
-  Cpu,
-  DataLine,
-} from "@element-plus/icons-vue";
+import { computed } from 'vue'
+import { ArrowRight, Bell, Connection, Cpu, DataLine } from '@element-plus/icons-vue'
 
-type LinkChipModule = "datapoint" | "access-source" | "compute" | "alarm";
+type LinkChipModule = 'datapoint' | 'access-source' | 'compute' | 'alarm'
 
 const props = defineProps<{
-  module: LinkChipModule;
-  objectId: string;
-  label: string;
-}>();
+  module: LinkChipModule
+  objectId: string
+  label: string
+}>()
 
 defineEmits<{
-  (
-    event: "click",
-    payload: { module: LinkChipModule; objectId: string; label: string },
-  ): void;
-}>();
+  (event: 'click', payload: { module: LinkChipModule; objectId: string; label: string }): void
+}>()
 
 const moduleIconMap = {
   datapoint: DataLine,
-  "access-source": Connection,
+  'access-source': Connection,
   compute: Cpu,
   alarm: Bell,
-};
+}
 
-const moduleIcon = computed(() => moduleIconMap[props.module]);
+const moduleIcon = computed(() => moduleIconMap[props.module])
 const payload = computed(() => ({
   module: props.module,
   objectId: props.objectId,
   label: props.label,
-}));
+}))
 </script>
 
 <style scoped>

@@ -1,8 +1,8 @@
-import type { ComponentDescriptor } from "./registry";
-import UserAvatarMenuRenderer from "@/materials/UserAvatarMenu/UserAvatarMenuRenderer.vue";
+import type { ComponentDescriptor } from './registry'
+import UserAvatarMenuRenderer from '@/materials/UserAvatarMenu/UserAvatarMenuRenderer.vue'
 
 export const descriptor: ComponentDescriptor = {
-  renderTag: "div",
+  renderTag: 'div',
   isContainer: false,
   defaultStyle: {},
   acceptChildren: false,
@@ -11,6 +11,6 @@ export const descriptor: ComponentDescriptor = {
   displayContent: () => null,
   customRenderer: UserAvatarMenuRenderer,
   defaultSize: { width: 180, height: 44 },
-};
+}
 
-export default descriptor;
+export default descriptor

@@ -12,7 +12,7 @@
         <!-- 自定义头 -->
         <div class="dpd__header">
           <div class="dpd__header-left">
-            <span class="dpd__name">{{ datapoint?.name || "-" }}</span>
+            <span class="dpd__name">{{ datapoint?.name || '-' }}</span>
             <StatusBadge
               v-if="datapoint?.status"
               :tone="resolveStatusTone(datapoint.status)"
@@ -21,7 +21,10 @@
           </div>
           <div class="dpd__header-right">
             <!-- 钉住按钮 -->
-            <el-tooltip :content="uiPrefs.prefs.pinnedDrawer ? '取消钉住' : '钉住为旁路面板'" placement="bottom">
+            <el-tooltip
+              :content="uiPrefs.prefs.pinnedDrawer ? '取消钉住' : '钉住为旁路面板'"
+              placement="bottom"
+            >
               <button
                 type="button"
                 class="dpd__icon-btn"
@@ -48,7 +51,7 @@
 
         <!-- 路径行 -->
         <div class="dpd__path-row">
-          <span class="dpd__path">{{ datapoint?.path || "-" }}</span>
+          <span class="dpd__path">{{ datapoint?.path || '-' }}</span>
           <el-tooltip content="复制路径" placement="bottom">
             <button
               type="button"
@@ -71,15 +74,15 @@
             </div>
             <div>
               <dt>数据类型</dt>
-              <dd class="dpd__mono">{{ datapoint?.dataType || "-" }}</dd>
+              <dd class="dpd__mono">{{ datapoint?.dataType || '-' }}</dd>
             </div>
             <div>
               <dt>单位</dt>
-              <dd>{{ datapoint?.unit || "-" }}</dd>
+              <dd>{{ datapoint?.unit || '-' }}</dd>
             </div>
             <div>
               <dt>精度</dt>
-              <dd>{{ (datapoint as DataPointExtended)?.precision ?? "-" }}</dd>
+              <dd>{{ (datapoint as DataPointExtended)?.precision ?? '-' }}</dd>
             </div>
             <div class="dpd__grid-full">
               <dt>更新时间</dt>
@@ -135,12 +138,11 @@
           <p v-else class="dpd__muted">无来源信息</p>
 
           <!-- 失效原因（仅 invalid 时显示；无 invalidReason 时给兜底文案） -->
-          <div
-            v-if="datapoint?.status === 'invalid'"
-            class="dpd__invalid-reason"
-          >
+          <div v-if="datapoint?.status === 'invalid'" class="dpd__invalid-reason">
             <span class="dpd__invalid-label">失效原因：</span>
-            {{ (datapoint as DataPointExtended)?.invalidReason || '该数据点已失效，但后端未提供原因' }}
+            {{
+              (datapoint as DataPointExtended)?.invalidReason || '该数据点已失效，但后端未提供原因'
+            }}
           </div>
 
           <!-- 配置 JSON 折叠区 -->
@@ -153,12 +155,18 @@
               <span>来源配置</span>
               <ArrowDown :class="{ 'is-expanded': configExpanded }" class="dpd__collapse-icon" />
             </button>
-            <pre v-if="configExpanded" class="dpd__code">{{ formatSourceConfig((datapoint as DataPointExtended)?.sourceConfig) }}</pre>
+            <pre v-if="configExpanded" class="dpd__code">{{
+              formatSourceConfig((datapoint as DataPointExtended)?.sourceConfig)
+            }}</pre>
           </div>
 
           <!-- 测试取值 -->
           <div class="dpd__test-value-row">
-            <el-tooltip :content="testBtnTooltip" placement="top" :disabled="canTest && !testDisabledByCapability">
+            <el-tooltip
+              :content="testBtnTooltip"
+              placement="top"
+              :disabled="canTest && !testDisabledByCapability"
+            >
               <button
                 type="button"
                 class="dpd__test-btn"
@@ -176,11 +184,12 @@
               <template v-if="testResult.ok">
                 <div class="dpd__test-result-row">
                   <span class="dpd__test-result-label">值：</span>
-                  <pre
-                    v-if="isLongValue(testResult.value)"
-                    class="dpd__test-result-pre"
-                  >{{ formatTestValue(testResult.value) }}</pre>
-                  <span v-else class="dpd__test-result-value dpd__mono">{{ formatTestValue(testResult.value) }}</span>
+                  <pre v-if="isLongValue(testResult.value)" class="dpd__test-result-pre">{{
+                    formatTestValue(testResult.value)
+                  }}</pre>
+                  <span v-else class="dpd__test-result-value dpd__mono">{{
+                    formatTestValue(testResult.value)
+                  }}</span>
                 </div>
                 <div class="dpd__test-result-row">
                   <span class="dpd__test-result-label">时间：</span>
@@ -195,16 +204,9 @@
         </section>
 
         <!-- 区块 4：引用（D2 占位；usages 为空时不显示） -->
-        <section
-          v-if="usages.length > 0"
-          class="dpd__section"
-        >
+        <section v-if="usages.length > 0" class="dpd__section">
           <h4 class="dpd__section-title">引用</h4>
-          <div
-            v-for="group in usageGroups"
-            :key="group.module"
-            class="dpd__usage-group"
-          >
+          <div v-for="group in usageGroups" :key="group.module" class="dpd__usage-group">
             <p class="dpd__usage-group-label">{{ group.label }}</p>
             <div class="dpd__usage-chips">
               <LinkChip
@@ -268,386 +270,388 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
-import { ElMessage } from "element-plus";
-import {
-  ArrowDown,
-  Close,
-  CopyDocument,
-  Paperclip,
-} from "@element-plus/icons-vue";
-import dayjs from "dayjs";
-import { TIME_FORMAT } from "@/constants";
-import { updateDatapoint, updateDatapointRuntimeGrant } from "@/api/datapoint.api";
+import { ref, computed, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import { ArrowDown, Close, CopyDocument, Paperclip } from '@element-plus/icons-vue'
+import dayjs from 'dayjs'
+import { TIME_FORMAT } from '@/constants'
+import { updateDatapoint, updateDatapointRuntimeGrant } from '@/api/datapoint.api'
 import {
   normalizeRuntimeGrantPayload,
   summarizeRuntimeGrant,
-} from "@/utils/runtime-permission-grants";
-import { useUiPrefsStore } from "@/stores/ui-prefs.store";
-import { useDataCatalogStore } from "@/stores/data-catalog.store";
-import type { TestValueResult } from "@/stores/data-catalog.store";
-import DcDrawer from "@/components/shared/DcDrawer.vue";
-import StatusBadge from "@/components/shared/StatusBadge.vue";
-import LinkChip from "@/components/shared/LinkChip.vue";
-import DataPointTagDialog from "./DataPointTagDialog.vue";
-import RuntimePermissionDialog from "./RuntimePermissionDialog.vue";
+} from '@/utils/runtime-permission-grants'
+import { useUiPrefsStore } from '@/stores/ui-prefs.store'
+import { useDataCatalogStore } from '@/stores/data-catalog.store'
+import type { TestValueResult } from '@/stores/data-catalog.store'
+import DcDrawer from '@/components/shared/DcDrawer.vue'
+import StatusBadge from '@/components/shared/StatusBadge.vue'
+import LinkChip from '@/components/shared/LinkChip.vue'
+import DataPointTagDialog from './DataPointTagDialog.vue'
+import RuntimePermissionDialog from './RuntimePermissionDialog.vue'
 
 // 扩展类型：除 schema 核心字段外，允许后端额外字段（passthrough）
 interface DataPointExtended {
-  id: string;
-  path?: string;
-  name?: string;
-  status?: string;
-  sourceType?: string;
-  sourceId?: string | null;
-  dataType?: string;
-  unit?: string | null;
-  precision?: number | string | null;
-  tags?: unknown[];
-  updatedAt?: string;
-  updated_at?: string;
-  createdAt?: string;
-  created_at?: string;
-  runtimePermissions?: Record<string, unknown>;
-  runtimePermissionGrants?: Record<string, unknown>;
-  writePermission?: Record<string, unknown>;
-  runtimeGrant?: Record<string, unknown>;
-  sourceConfig?: Record<string, unknown>;
-  invalidReason?: string | null;
+  id: string
+  path?: string
+  name?: string
+  status?: string
+  sourceType?: string
+  sourceId?: string | null
+  dataType?: string
+  unit?: string | null
+  precision?: number | string | null
+  tags?: unknown[]
+  updatedAt?: string
+  updated_at?: string
+  createdAt?: string
+  created_at?: string
+  runtimePermissions?: Record<string, unknown>
+  runtimePermissionGrants?: Record<string, unknown>
+  writePermission?: Record<string, unknown>
+  runtimeGrant?: Record<string, unknown>
+  sourceConfig?: Record<string, unknown>
+  invalidReason?: string | null
   /** 引用列表（后端未实现时为空数组） */
-  usages?: UsageItem[];
+  usages?: UsageItem[]
 }
 
 interface UsageItem {
-  module: "access-source" | "compute" | "alarm" | "datapoint";
-  objectId: string;
-  label: string;
+  module: 'access-source' | 'compute' | 'alarm' | 'datapoint'
+  objectId: string
+  label: string
 }
 
 // LinkChip 的 module 类型
-type LinkChipModule = "datapoint" | "access-source" | "compute" | "alarm";
+type LinkChipModule = 'datapoint' | 'access-source' | 'compute' | 'alarm'
 
 const props = defineProps<{
   /** 是否显示 */
-  modelValue: boolean;
+  modelValue: boolean
   /** 数据点详情 */
-  datapoint: DataPointExtended | null;
+  datapoint: DataPointExtended | null
   /** 项目 ID */
-  projectId: string;
+  projectId: string
   /** 标签选项（由 DataPointList 传入） */
-  tagOptions?: Array<{ value: string; name: string }>;
-}>();
+  tagOptions?: Array<{ value: string; name: string }>
+}>()
 
 const emit = defineEmits<{
-  "update:modelValue": [value: boolean];
+  'update:modelValue': [value: boolean]
   /** 抽屉关闭 */
-  close: [];
+  close: []
   /** 数据已更新，通知父组件刷新 */
-  updated: [];
+  updated: []
   /** 跳转到另一个模块 */
-  navigate: [payload: { module: LinkChipModule; objectId: string }];
-}>();
+  navigate: [payload: { module: LinkChipModule; objectId: string }]
+}>()
 
-const uiPrefs = useUiPrefsStore();
-const catalog = useDataCatalogStore();
+const uiPrefs = useUiPrefsStore()
+const catalog = useDataCatalogStore()
 
 // 来源配置折叠状态
-const configExpanded = ref(false);
+const configExpanded = ref(false)
 
 // 测试取值状态（drawer 本地，切换数据点时重置）
-const testTesting = ref(false);
-const testResult = ref<TestValueResult | null>(null);
+const testTesting = ref(false)
+const testResult = ref<TestValueResult | null>(null)
 // 因"能力未启用"临时禁用按钮（仅本次会话内）
-const testDisabledByCapability = ref(false);
-const testCapabilityMsg = ref("");
+const testDisabledByCapability = ref(false)
+const testCapabilityMsg = ref('')
 
 /** 支持测试取值的 sourceType 列表 */
-const TEST_SUPPORTED_TYPES = ["db.query", "mqtt.tag", "calc.output"] as const;
+const TEST_SUPPORTED_TYPES = ['db.query', 'mqtt.tag', 'calc.output'] as const
 
 const canTest = computed(() => {
-  const t = props.datapoint?.sourceType;
-  return !!t && (TEST_SUPPORTED_TYPES as readonly string[]).includes(t);
-});
+  const t = props.datapoint?.sourceType
+  return !!t && (TEST_SUPPORTED_TYPES as readonly string[]).includes(t)
+})
 
 const testBtnTooltip = computed(() => {
-  if (testDisabledByCapability.value) return testCapabilityMsg.value;
+  if (testDisabledByCapability.value) return testCapabilityMsg.value
   if (!canTest.value) {
-    const t = props.datapoint?.sourceType;
-    if (t === "alarm.state") return "报警状态不支持测试取值";
-    if (t === "mqtt.subscription") return "MQTT 订阅暂不支持单点测试取值";
-    return "该来源类型暂不支持测试取值";
+    const t = props.datapoint?.sourceType
+    if (t === 'alarm.state') return '报警状态不支持测试取值'
+    if (t === 'mqtt.subscription') return 'MQTT 订阅暂不支持单点测试取值'
+    return '该来源类型暂不支持测试取值'
   }
-  return "";
-});
+  return ''
+})
 
 // 标签 dialog
-const tagDialogVisible = ref(false);
-const tagDialogDatapoint = ref<DataPointExtended | null>(null);
-const tagSaving = ref(false);
+const tagDialogVisible = ref(false)
+const tagDialogDatapoint = ref<DataPointExtended | null>(null)
+const tagSaving = ref(false)
 
 // 权限 dialog
-const permDialogVisible = ref(false);
-const permDialogDatapoint = ref<DataPointExtended | null>(null);
-const permSaving = ref(false);
+const permDialogVisible = ref(false)
+const permDialogDatapoint = ref<DataPointExtended | null>(null)
+const permSaving = ref(false)
 
 const visible = computed({
   get: () => props.modelValue,
   set: (val: boolean) => {
-    emit("update:modelValue", val);
-    if (!val) emit("close");
+    emit('update:modelValue', val)
+    if (!val) emit('close')
   },
-});
+})
 
 // 折叠重置（切换数据点时）
 watch(
   () => props.datapoint?.id,
   () => {
-    configExpanded.value = false;
+    configExpanded.value = false
     // 切换数据点时重置测试取值状态
-    testResult.value = null;
-    testDisabledByCapability.value = false;
-    testCapabilityMsg.value = "";
+    testResult.value = null
+    testDisabledByCapability.value = false
+    testCapabilityMsg.value = ''
   },
-);
+)
 
 // ── 来源配置相关 ──────────────────────────────────────────────────────────
 
 const hasSourceConfig = computed(() => {
-  const cfg = (props.datapoint as DataPointExtended)?.sourceConfig;
-  return !!cfg && Object.keys(cfg).length > 0;
-});
+  const cfg = (props.datapoint as DataPointExtended)?.sourceConfig
+  return !!cfg && Object.keys(cfg).length > 0
+})
 
 function formatSourceConfig(value?: Record<string, unknown>): string {
-  if (!value || Object.keys(value).length === 0) return "{}";
+  if (!value || Object.keys(value).length === 0) return '{}'
   try {
-    return JSON.stringify(value, null, 2);
+    return JSON.stringify(value, null, 2)
   } catch {
-    return "{}";
+    return '{}'
   }
 }
 
 // ── 引用区块 ────────────────────────────────────────────────────────────
 
-const usages = computed<UsageItem[]>(
-  () => (props.datapoint as DataPointExtended)?.usages ?? [],
-);
+const usages = computed<UsageItem[]>(() => (props.datapoint as DataPointExtended)?.usages ?? [])
 
 // 按模块分组
 const MODULE_LABELS: Record<string, string> = {
-  "access-source": "接入源",
-  compute: "计算单元",
-  alarm: "报警规则",
-  datapoint: "数据点",
-};
+  'access-source': '接入源',
+  compute: '计算单元',
+  alarm: '报警规则',
+  datapoint: '数据点',
+}
 
 const usageGroups = computed(() => {
-  const groupMap = new Map<string, { module: LinkChipModule; label: string; items: UsageItem[] }>();
+  const groupMap = new Map<string, { module: LinkChipModule; label: string; items: UsageItem[] }>()
   for (const item of usages.value) {
     if (!groupMap.has(item.module)) {
       groupMap.set(item.module, {
         module: item.module,
         label: MODULE_LABELS[item.module] || item.module,
         items: [],
-      });
+      })
     }
-    groupMap.get(item.module)!.items.push(item);
+    groupMap.get(item.module)!.items.push(item)
   }
-  return Array.from(groupMap.values());
-});
+  return Array.from(groupMap.values())
+})
 
 // ── 权限摘要 ────────────────────────────────────────────────────────────
 
 const writeSummary = computed(() => {
-  const dp = props.datapoint;
-  if (!dp) return "-";
-  const rp = dp.runtimePermissions as { write?: unknown } | undefined;
-  const rpg = dp.runtimePermissionGrants as { write?: unknown } | undefined;
+  const dp = props.datapoint
+  if (!dp) return '-'
+  const rp = dp.runtimePermissions as { write?: unknown } | undefined
+  const rpg = dp.runtimePermissionGrants as { write?: unknown } | undefined
   const grant = normalizeRuntimeGrantPayload(
     rp?.write || rpg?.write || dp.writePermission || dp.runtimeGrant || {},
-  );
-  return summarizeRuntimeGrant(grant);
-});
+  )
+  return summarizeRuntimeGrant(grant)
+})
 
 // ── 格式化工具 ────────────────────────────────────────────────────────────
 
-function resolveStatusTone(status?: string): "success" | "danger" | "warning" | "muted" {
+function resolveStatusTone(status?: string): 'success' | 'danger' | 'warning' | 'muted' {
   switch (status) {
-    case "active": return "success";
-    case "invalid": return "danger";
-    case "error": return "warning";
-    default: return "muted";
+    case 'active':
+      return 'success'
+    case 'invalid':
+      return 'danger'
+    case 'error':
+      return 'warning'
+    default:
+      return 'muted'
   }
 }
 
 function formatStatus(status?: string): string {
   switch (status) {
-    case "active": return "活跃";
-    case "invalid": return "失效";
-    case "error": return "错误";
-    case "inactive": return "停用";
-    default: return "未知";
+    case 'active':
+      return '活跃'
+    case 'invalid':
+      return '失效'
+    case 'error':
+      return '错误'
+    case 'inactive':
+      return '停用'
+    default:
+      return '未知'
   }
 }
 
 const sourceTypeLabels: Record<string, string> = {
-  "db.query": "数据库查询",
-  "mqtt.tag": "MQTT 变量",
-  "mqtt.subscription": "MQTT 订阅",
-  "calc.output": "计算输出",
-  "static.var": "静态变量",
-};
+  'db.query': '数据库查询',
+  'mqtt.tag': 'MQTT 变量',
+  'mqtt.subscription': 'MQTT 订阅',
+  'calc.output': '计算输出',
+  'static.var': '静态变量',
+}
 
 function formatSourceType(sourceType?: string): string {
-  if (!sourceType) return "-";
-  return sourceTypeLabels[sourceType] || sourceType;
+  if (!sourceType) return '-'
+  return sourceTypeLabels[sourceType] || sourceType
 }
 
 function formatTime(value?: string | null): string {
-  if (!value) return "-";
-  return dayjs(value).format(TIME_FORMAT);
+  if (!value) return '-'
+  return dayjs(value).format(TIME_FORMAT)
 }
 
 function getUpdatedAt(dp: DataPointExtended | null): string | undefined {
-  if (!dp) return undefined;
-  return dp.updatedAt || dp.updated_at || dp.createdAt || dp.created_at || undefined;
+  if (!dp) return undefined
+  return dp.updatedAt || dp.updated_at || dp.createdAt || dp.created_at || undefined
 }
 
 function normalizeTags(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  const result: string[] = [];
+  if (!Array.isArray(value)) return []
+  const result: string[] = []
   for (const item of value) {
-    let label = "";
-    if (typeof item === "string") {
-      label = item;
-    } else if (item && typeof item === "object") {
-      const r = item as Record<string, unknown>;
-      label = String(r.label || r.name || r.value || "");
+    let label = ''
+    if (typeof item === 'string') {
+      label = item
+    } else if (item && typeof item === 'object') {
+      const r = item as Record<string, unknown>
+      label = String(r.label || r.name || r.value || '')
     }
-    const n = label.trim();
-    if (n && !result.includes(n)) result.push(n);
+    const n = label.trim()
+    if (n && !result.includes(n)) result.push(n)
   }
-  return result;
+  return result
 }
 
 /** sourceType → LinkChip module 映射 */
 function resolveSourceModule(sourceType?: string): LinkChipModule {
-  if (!sourceType) return "access-source";
-  if (sourceType.startsWith("calc")) return "compute";
-  if (sourceType.startsWith("alarm")) return "alarm";
-  return "access-source";
+  if (!sourceType) return 'access-source'
+  if (sourceType.startsWith('calc')) return 'compute'
+  if (sourceType.startsWith('alarm')) return 'alarm'
+  return 'access-source'
 }
 
 // ── 交互 ──────────────────────────────────────────────────────────────────
 
 function togglePin() {
-  uiPrefs.setPinnedDrawer(!uiPrefs.prefs.pinnedDrawer);
+  uiPrefs.setPinnedDrawer(!uiPrefs.prefs.pinnedDrawer)
 }
 
 function handleClose() {
-  visible.value = false;
+  visible.value = false
 }
 
 async function copyPath() {
-  const path = props.datapoint?.path;
-  if (!path) return;
+  const path = props.datapoint?.path
+  if (!path) return
   try {
-    await navigator.clipboard.writeText(path);
-    ElMessage.success("已复制数据点路径");
+    await navigator.clipboard.writeText(path)
+    ElMessage.success('已复制数据点路径')
   } catch {
-    ElMessage.error("复制失败，请手动复制");
+    ElMessage.error('复制失败，请手动复制')
   }
 }
 
 // ── 标签 dialog ────────────────────────────────────────────────────────────
 
 function openTagDialog() {
-  if (!props.datapoint) return;
-  tagDialogDatapoint.value = props.datapoint;
-  tagDialogVisible.value = true;
+  if (!props.datapoint) return
+  tagDialogDatapoint.value = props.datapoint
+  tagDialogVisible.value = true
 }
 
 async function handleTagSubmit(tags: string[]) {
-  if (!props.datapoint) return;
-  tagSaving.value = true;
+  if (!props.datapoint) return
+  tagSaving.value = true
   try {
-    await updateDatapoint(props.projectId, String(props.datapoint.id), { tags } as never);
-    ElMessage.success("标签已保存");
-    tagDialogVisible.value = false;
-    emit("updated");
+    await updateDatapoint(props.projectId, String(props.datapoint.id), { tags } as never)
+    ElMessage.success('标签已保存')
+    tagDialogVisible.value = false
+    emit('updated')
   } catch {
-    ElMessage.error("保存标签失败");
+    ElMessage.error('保存标签失败')
   } finally {
-    tagSaving.value = false;
+    tagSaving.value = false
   }
 }
 
 // ── 权限 dialog ────────────────────────────────────────────────────────────
 
 function openPermissionDialog() {
-  if (!props.datapoint) return;
-  permDialogDatapoint.value = props.datapoint;
-  permDialogVisible.value = true;
+  if (!props.datapoint) return
+  permDialogDatapoint.value = props.datapoint
+  permDialogVisible.value = true
 }
 
 async function handlePermSubmit(grant: Record<string, unknown>) {
-  if (!props.datapoint) return;
-  permSaving.value = true;
+  if (!props.datapoint) return
+  permSaving.value = true
   try {
-    await updateDatapointRuntimeGrant(props.projectId, String(props.datapoint.id), { write: grant });
-    ElMessage.success("写权限已保存");
-    permDialogVisible.value = false;
-    emit("updated");
+    await updateDatapointRuntimeGrant(props.projectId, String(props.datapoint.id), { write: grant })
+    ElMessage.success('写权限已保存')
+    permDialogVisible.value = false
+    emit('updated')
   } catch {
-    ElMessage.error("保存运行态权限失败");
+    ElMessage.error('保存运行态权限失败')
   } finally {
-    permSaving.value = false;
+    permSaving.value = false
   }
 }
 
 // ── 测试取值 ──────────────────────────────────────────────────────────────
 
 async function handleTestValue() {
-  if (!props.datapoint || testTesting.value) return;
-  testTesting.value = true;
-  testResult.value = null;
-  const dp = props.datapoint as DataPointExtended;
+  if (!props.datapoint || testTesting.value) return
+  testTesting.value = true
+  testResult.value = null
+  const dp = props.datapoint as DataPointExtended
   const result = await catalog.testDatapointValue(props.projectId, {
     id: String(dp.id),
     sourceType: dp.sourceType,
     sourceId: dp.sourceId ?? null,
     sourceConfig: dp.sourceConfig,
-  });
-  testTesting.value = false;
-  testResult.value = result;
+  })
+  testTesting.value = false
+  testResult.value = result
   // 能力未启用：临时禁用按钮
-  if (!result.ok && result.reason === "capability-disabled") {
-    testDisabledByCapability.value = true;
-    testCapabilityMsg.value = result.message;
+  if (!result.ok && result.reason === 'capability-disabled') {
+    testDisabledByCapability.value = true
+    testCapabilityMsg.value = result.message
   }
 }
 
 /** 判断值是否超过两行（简单判定：字符数 > 80 或含换行） */
 function isLongValue(value: unknown): boolean {
-  const s = formatTestValue(value);
-  return s.length > 80 || s.includes("\n");
+  const s = formatTestValue(value)
+  return s.length > 80 || s.includes('\n')
 }
 
 function formatTestValue(value: unknown): string {
-  if (value === null || value === undefined) return "null";
-  if (typeof value === "object") {
+  if (value === null || value === undefined) return 'null'
+  if (typeof value === 'object') {
     try {
-      return JSON.stringify(value, null, 2);
+      return JSON.stringify(value, null, 2)
     } catch {
-      return String(value);
+      return String(value)
     }
   }
-  return String(value);
+  return String(value)
 }
 
 // ── LinkChip 跳转 ──────────────────────────────────────────────────────────
 
 function handleLinkChipClick(payload: { module: LinkChipModule; objectId: string }) {
-  emit("navigate", { module: payload.module, objectId: payload.objectId });
+  emit('navigate', { module: payload.module, objectId: payload.objectId })
 }
 </script>
 
@@ -725,7 +729,10 @@ function handleLinkChipClick(payload: { module: LinkChipModule; objectId: string
   background: transparent;
   color: var(--dc-text-muted);
   cursor: pointer;
-  transition: background 0.18s, color 0.18s, border-color 0.18s;
+  transition:
+    background 0.18s,
+    color 0.18s,
+    border-color 0.18s;
 }
 
 .dpd__icon-btn svg {
@@ -783,7 +790,10 @@ function handleLinkChipClick(payload: { module: LinkChipModule; objectId: string
   font-family: inherit;
   font-size: 12px;
   font-weight: 600;
-  transition: background 0.18s, border-color 0.18s, color 0.18s;
+  transition:
+    background 0.18s,
+    border-color 0.18s,
+    color 0.18s;
 }
 
 .dpd__edit-btn:hover {
@@ -932,7 +942,11 @@ function handleLinkChipClick(payload: { module: LinkChipModule; objectId: string
   font-size: 13px;
   font-weight: 600;
   opacity: 0.55;
-  transition: background 0.18s, border-color 0.18s, color 0.18s, opacity 0.18s;
+  transition:
+    background 0.18s,
+    border-color 0.18s,
+    color 0.18s,
+    opacity 0.18s;
 }
 
 .dpd__test-btn--active {

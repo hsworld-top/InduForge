@@ -598,14 +598,16 @@ export default {
         const errorStatus = error?.response?.status
         const errorCode = getApiErrorCode(error)
         const isCaptchaError = errorCode === AUTH_INVALID_CAPTCHA_CODE
-        const isAuthBusinessError = typeof errorCode === 'number' && errorCode >= 10000 && errorCode < 11000
+        const isAuthBusinessError =
+          typeof errorCode === 'number' && errorCode >= 10000 && errorCode < 11000
 
         if (errorStatus === 429) {
           ElMessage.error(t('auth.tooManyRequests'))
         } else {
-          const fallbackMessage = errorStatus === 401 || isAuthBusinessError
-            ? t('auth.invalidCredentials')
-            : t('auth.retry')
+          const fallbackMessage =
+            errorStatus === 401 || isAuthBusinessError
+              ? t('auth.invalidCredentials')
+              : t('auth.retry')
           ElMessage.error(getApiErrorMessage(error, fallbackMessage))
 
           // 登录失败后需要展示验证码；验证码错误时刷新验证码图片。

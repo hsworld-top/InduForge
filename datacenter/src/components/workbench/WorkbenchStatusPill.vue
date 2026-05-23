@@ -8,13 +8,13 @@
 <script setup lang="ts">
 withDefaults(
   defineProps<{
-    label: string;
-    tone?: "neutral" | "success" | "warning" | "danger" | "info";
+    label: string
+    tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'info'
   }>(),
   {
-    tone: "neutral",
+    tone: 'neutral',
   },
-);
+)
 </script>
 
 <style scoped>

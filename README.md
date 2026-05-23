@@ -109,9 +109,17 @@ InduForge 是一个面向工业互联网场景的多模块单仓低代码平台�
 pnpm install
 ```
 
-Node 依赖由根目录 pnpm workspace 统一管理，只维护根目录 `node_modules/` 和根目录 `pnpm-lock.yaml`。不要在 `dev_core/`、`dev_ide/`、`datacenter/`、`designer/`、`runtime/node_agent_front/` 下单独执行 `pnpm install`。
+Node 依赖由根目录 pnpm workspace 统一管理，只在仓库根目录执行 `pnpm install`，并只提交根目录 `pnpm-lock.yaml`。pnpm 可能会在各 workspace 子目录生成 `node_modules/` 链接或提升目录，这是安装产物，不表示子项目独立安装；不要在 `dev_core/`、`dev_ide/`、`datacenter/`、`designer/`、`runtime/node_agent_front/` 下单独执行 `pnpm install`。
 
-Prettier 配置统一放在根目录 `.prettierrc.json`。ESLint 暂时保留在各前端模块内，因为 `designer` 使用 Antfu 配置，`dev_ide`、`datacenter` 使用较轻的 Vue/ESLint 配置，当前不强行合并规则。
+Prettier 配置统一放在根目录 `.prettierrc.json`。ESLint 公共全局变量、忽略目录和基础规则放在根目录 `eslint.shared.mjs`；`dev_ide`、`datacenter`、`designer` 都从各自模块的 `eslint.config.*` 引入共享配置。
+
+```powershell
+# 统一格式化三个前端工作区
+pnpm format
+
+# 统一执行三个前端工作区的 ESLint 修复
+pnpm lint
+```
 
 ```powershell
 # 初始化 Go 模块依赖

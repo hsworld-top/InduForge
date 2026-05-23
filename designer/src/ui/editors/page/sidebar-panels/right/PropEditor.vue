@@ -4,91 +4,91 @@
  * 根据属性类型渲染对应的 Element Plus 组件
  */
 
-import { ElMessage } from "element-plus";
-import { computed, ref, watch } from "vue";
-import FriendlyColorPicker from "@/ui/shared/widgets/base/FriendlyColorPicker.vue";
-import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
+import { ElMessage } from 'element-plus'
+import { computed, ref, watch } from 'vue'
+import FriendlyColorPicker from '@/ui/shared/widgets/base/FriendlyColorPicker.vue'
+import MonacoEditor from '@/ui/shared/widgets/base/monaco-editor-async'
 
 interface PropEditorOptionLike {
-  label: string;
-  value: string | number;
+  label: string
+  value: string | number
 }
 
 interface PropEditorPropLike {
-  editor?: string;
-  type?: string;
-  language?: string;
-  height?: string;
-  placeholder?: string;
-  min?: number;
-  max?: number;
-  step?: number;
-  options?: PropEditorOptionLike[];
+  editor?: string
+  type?: string
+  language?: string
+  height?: string
+  placeholder?: string
+  min?: number
+  max?: number
+  step?: number
+  options?: PropEditorOptionLike[]
 }
 
-defineOptions({ name: "PropEditor" });
+defineOptions({ name: 'PropEditor' })
 
 const props = defineProps<{
   /** 属性定义 */
-  prop: PropEditorPropLike;
+  prop: PropEditorPropLike
   /** 当前值 */
-  modelValue?: string | number | boolean | Record<string, unknown> | unknown[] | null;
-}>();
+  modelValue?: string | number | boolean | Record<string, unknown> | unknown[] | null
+}>()
 
 const emit = defineEmits<{
-  (event: "update:modelValue", value: unknown): void;
-}>();
+  (event: 'update:modelValue', value: unknown): void
+}>()
 
 const modelProxy = computed({
   get: () => props.modelValue,
   set: (value: unknown) => {
-    emit("update:modelValue", value);
+    emit('update:modelValue', value)
   },
-});
+})
 
 const colorProxy = computed<string>({
-  get: () => (typeof props.modelValue === "string" ? props.modelValue : ""),
+  get: () => (typeof props.modelValue === 'string' ? props.modelValue : ''),
   set: (value: string) => {
-    emit("update:modelValue", value);
+    emit('update:modelValue', value)
   },
-});
+})
 
-const isCodeEditor = computed(() => props.prop?.editor === "code");
-const isIconEditor = computed(() => props.prop?.editor === "icon");
-const isJsonType = computed(() => ["object", "array"].includes(props.prop?.type ?? ""));
-const jsonDraft = ref<string>("");
-const codeDraft = ref<string>("");
-const iconDraft = ref<string>("");
+const isCodeEditor = computed(() => props.prop?.editor === 'code')
+const isIconEditor = computed(() => props.prop?.editor === 'icon')
+const isJsonType = computed(() => ['object', 'array'].includes(props.prop?.type ?? ''))
+const jsonDraft = ref<string>('')
+const codeDraft = ref<string>('')
+const iconDraft = ref<string>('')
 
 const iconOptions = computed(() =>
   (props.prop?.options || []).map((option) => ({
-    label: String(option.label || option.value || ""),
-    value: String(option.value || ""),
+    label: String(option.label || option.value || ''),
+    value: String(option.value || ''),
   })),
-);
+)
 
 const iconProxy = computed<string>({
   get: () => iconDraft.value,
   set: (value: string) => {
-    iconDraft.value = value;
-    const matchedOption = findIconOptionByLabel(value);
-    emit("update:modelValue", matchedOption?.value ?? value);
+    iconDraft.value = value
+    const matchedOption = findIconOptionByLabel(value)
+    emit('update:modelValue', matchedOption?.value ?? value)
   },
-});
+})
 
 /**
  * 同步 JSON 草稿
  */
 function syncJsonDraft() {
-  if (!isJsonType.value || isCodeEditor.value) return;
+  if (!isJsonType.value || isCodeEditor.value) return
   if (props.modelValue === undefined || props.modelValue === null) {
-    jsonDraft.value = "";
-    return;
+    jsonDraft.value = ''
+    return
   }
   try {
-    jsonDraft.value = JSON.stringify(props.modelValue);
+    jsonDraft.value = JSON.stringify(props.modelValue)
   } catch {
-    jsonDraft.value = String(props.modelValue);
+    jsonDraft.value = String(props.modelValue)
   }
 }
 
@@ -96,42 +96,42 @@ function syncJsonDraft() {
  * 同步代码草稿
  */
 function syncCodeDraft() {
-  if (!isCodeEditor.value) return;
+  if (!isCodeEditor.value) return
   if (props.modelValue === undefined || props.modelValue === null) {
-    codeDraft.value = "";
-    return;
+    codeDraft.value = ''
+    return
   }
-  if (typeof props.modelValue === "string") {
-    codeDraft.value = props.modelValue;
-    return;
+  if (typeof props.modelValue === 'string') {
+    codeDraft.value = props.modelValue
+    return
   }
   try {
-    codeDraft.value = JSON.stringify(props.modelValue, null, 2);
+    codeDraft.value = JSON.stringify(props.modelValue, null, 2)
   } catch {
-    codeDraft.value = String(props.modelValue);
+    codeDraft.value = String(props.modelValue)
   }
 }
 
 watch([() => props.modelValue, () => props.prop?.type], syncJsonDraft, {
   immediate: true,
-});
+})
 
 watch([() => props.modelValue, () => props.prop?.editor], syncCodeDraft, {
   immediate: true,
-});
+})
 
 watch([() => props.modelValue, () => props.prop?.options, isIconEditor], syncIconDraft, {
   immediate: true,
   deep: true,
-});
+})
 
 /**
  * 处理代码输入
  * @param {string} value - 新值
  */
 function handleCodeChange(value: string) {
-  codeDraft.value = value;
-  emit("update:modelValue", value);
+  codeDraft.value = value
+  emit('update:modelValue', value)
 }
 
 /**
@@ -139,59 +139,64 @@ function handleCodeChange(value: string) {
  * @param {string} value - 新值
  */
 function handleJsonInput(value: string) {
-  jsonDraft.value = value;
+  jsonDraft.value = value
 }
 
 /**
  * 提交 JSON 草稿
  */
 function commitJsonDraft() {
-  const trimmed = String(jsonDraft.value ?? "").trim();
+  const trimmed = String(jsonDraft.value ?? '').trim()
   if (!trimmed) {
-    emit("update:modelValue", undefined);
-    return;
+    emit('update:modelValue', undefined)
+    return
   }
   try {
-    emit("update:modelValue", JSON.parse(trimmed));
+    emit('update:modelValue', JSON.parse(trimmed))
   } catch {
-    ElMessage.warning("请输入合法的 JSON" as never);
+    ElMessage.warning('请输入合法的 JSON' as never)
   }
 }
 
 function findIconOptionByValue(value: string) {
-  return iconOptions.value.find((option) => option.value === value);
+  return iconOptions.value.find((option) => option.value === value)
 }
 
 function findIconOptionByLabel(label: string) {
-  return iconOptions.value.find((option) => option.label === label);
+  return iconOptions.value.find((option) => option.label === label)
 }
 
 function syncIconDraft() {
-  if (!isIconEditor.value) return;
-  const value = typeof props.modelValue === "string" ? props.modelValue : "";
-  iconDraft.value = findIconOptionByValue(value)?.label ?? value;
+  if (!isIconEditor.value) return
+  const value = typeof props.modelValue === 'string' ? props.modelValue : ''
+  iconDraft.value = findIconOptionByValue(value)?.label ?? value
 }
 
 /**
  * 按当前语言下的图标名称过滤候选项，同时保留手动输入能力。
  */
-function queryIconSuggestions(query: string, callback: (items: Array<{ label: string; value: string }>) => void) {
-  const keyword = String(query || "").trim().toLowerCase();
+function queryIconSuggestions(
+  query: string,
+  callback: (items: Array<{ label: string; value: string }>) => void,
+) {
+  const keyword = String(query || '')
+    .trim()
+    .toLowerCase()
   const matched = iconOptions.value.filter((option) => {
-    if (!keyword) return true;
-    return option.label.toLowerCase().includes(keyword);
-  });
-  callback(matched);
+    if (!keyword) return true
+    return option.label.toLowerCase().includes(keyword)
+  })
+  callback(matched)
 }
 
 function handleIconSelect(item: { label?: string; value?: string }) {
-  iconDraft.value = String(item?.label || item?.value || "");
-  emit("update:modelValue", String(item?.value || ""));
+  iconDraft.value = String(item?.label || item?.value || '')
+  emit('update:modelValue', String(item?.value || ''))
 }
 
 function handleIconClear() {
-  iconDraft.value = "";
-  emit("update:modelValue", "");
+  iconDraft.value = ''
+  emit('update:modelValue', '')
 }
 </script>
 

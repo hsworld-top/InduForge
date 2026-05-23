@@ -10,10 +10,7 @@
         class="mqtt-subscription-tree-branch__chevron"
         :class="{ 'is-open': expanded }"
       />
-      <IconTablerFolderOpen
-        v-if="expanded"
-        class="mqtt-subscription-tree-branch__icon"
-      />
+      <IconTablerFolderOpen v-if="expanded" class="mqtt-subscription-tree-branch__icon" />
       <IconTablerFolder v-else class="mqtt-subscription-tree-branch__icon" />
       <span class="mqtt-subscription-tree-branch__group-name">
         {{ node.name }}
@@ -31,9 +28,7 @@
         @click="$emit('selectSubscription', subscription)"
         @dblclick="$emit('openTags', subscription)"
         @keydown.enter="$emit('openTags', subscription)"
-        @contextmenu.prevent.stop="
-          $emit('subscriptionContextmenu', $event, subscription)
-        "
+        @contextmenu.prevent.stop="$emit('subscriptionContextmenu', $event, subscription)"
       >
         <IconTablerRss class="mqtt-subscription-tree-branch__subscription-icon" />
         <el-tooltip
@@ -54,12 +49,9 @@
         :selected-subscription-id="selectedSubscriptionId"
         @select-subscription="$emit('selectSubscription', $event)"
         @open-tags="$emit('openTags', $event)"
-        @group-contextmenu="
-          (mouseEvent, group) => $emit('groupContextmenu', mouseEvent, group)
-        "
+        @group-contextmenu="(mouseEvent, group) => $emit('groupContextmenu', mouseEvent, group)"
         @subscription-contextmenu="
-          (mouseEvent, subscription) =>
-            $emit('subscriptionContextmenu', mouseEvent, subscription)
+          (mouseEvent, subscription) => $emit('subscriptionContextmenu', mouseEvent, subscription)
         "
       />
     </div>
@@ -67,45 +59,34 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import IconTablerChevronRight from "~icons/tabler/chevron-right";
-import IconTablerFolder from "~icons/tabler/folder";
-import IconTablerFolderOpen from "~icons/tabler/folder-open";
-import IconTablerRss from "~icons/tabler/rss";
-import type {
-  MqttSubscription,
-  MqttSubscriptionGroupNode,
-} from "./mqttSubscriptionTreeModel";
+import { computed, ref } from 'vue'
+import IconTablerChevronRight from '~icons/tabler/chevron-right'
+import IconTablerFolder from '~icons/tabler/folder'
+import IconTablerFolderOpen from '~icons/tabler/folder-open'
+import IconTablerRss from '~icons/tabler/rss'
+import type { MqttSubscription, MqttSubscriptionGroupNode } from './mqttSubscriptionTreeModel'
 
-defineOptions({ name: "MqttSubscriptionTreeBranch" });
+defineOptions({ name: 'MqttSubscriptionTreeBranch' })
 
 const props = defineProps<{
-  node: MqttSubscriptionGroupNode;
-  selectedSubscriptionId?: string | null;
-}>();
+  node: MqttSubscriptionGroupNode
+  selectedSubscriptionId?: string | null
+}>()
 
 defineEmits<{
-  (event: "selectSubscription", subscription: MqttSubscription): void;
-  (event: "openTags", subscription: MqttSubscription): void;
-  (
-    event: "subscriptionContextmenu",
-    mouseEvent: MouseEvent,
-    subscription: MqttSubscription,
-  ): void;
-  (
-    event: "groupContextmenu",
-    mouseEvent: MouseEvent,
-    group: MqttSubscriptionGroupNode,
-  ): void;
-}>();
+  (event: 'selectSubscription', subscription: MqttSubscription): void
+  (event: 'openTags', subscription: MqttSubscription): void
+  (event: 'subscriptionContextmenu', mouseEvent: MouseEvent, subscription: MqttSubscription): void
+  (event: 'groupContextmenu', mouseEvent: MouseEvent, group: MqttSubscriptionGroupNode): void
+}>()
 
-const expanded = ref(true);
+const expanded = ref(true)
 
 const countSubscriptions = (node: MqttSubscriptionGroupNode): number =>
   node.subscriptions.length +
-  node.children.reduce((sum, child) => sum + countSubscriptions(child), 0);
+  node.children.reduce((sum, child) => sum + countSubscriptions(child), 0)
 
-const totalCount = computed(() => countSubscriptions(props.node));
+const totalCount = computed(() => countSubscriptions(props.node))
 </script>
 
 <style scoped>
@@ -206,5 +187,4 @@ const totalCount = computed(() => countSubscriptions(props.node));
   font-size: 13px;
   font-weight: 700;
 }
-
 </style>

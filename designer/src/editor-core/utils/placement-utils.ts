@@ -8,13 +8,13 @@
  */
 
 export interface CanvasPoint {
-  x: number;
-  y: number;
+  x: number
+  y: number
 }
 
 export interface PlacementSize {
-  width: number;
-  height: number;
+  width: number
+  height: number
 }
 
 /**
@@ -29,19 +29,19 @@ export function eventToCanvasPosition(
   containerElement: HTMLElement,
   zoom = 1,
 ): CanvasPoint {
-  if (!containerElement || typeof event.clientX !== "number") {
-    return { x: 0, y: 0 };
+  if (!containerElement || typeof event.clientX !== 'number') {
+    return { x: 0, y: 0 }
   }
-  const rect = containerElement.getBoundingClientRect();
+  const rect = containerElement.getBoundingClientRect()
   // D-12 修复：补偿容器内部滚动偏移
-  const scrollLeft = containerElement.scrollLeft || 0;
-  const scrollTop = containerElement.scrollTop || 0;
-  const x = (event.clientX - rect.left + scrollLeft) / zoom;
-  const y = (event.clientY - rect.top + scrollTop) / zoom;
+  const scrollLeft = containerElement.scrollLeft || 0
+  const scrollTop = containerElement.scrollTop || 0
+  const x = (event.clientX - rect.left + scrollLeft) / zoom
+  const y = (event.clientY - rect.top + scrollTop) / zoom
   return {
     x: Math.max(0, Math.round(x)),
     y: Math.max(0, Math.round(y)),
-  };
+  }
 }
 
 /**
@@ -53,12 +53,12 @@ export function clampPositionInContainer(
   size: PlacementSize,
   zoom = 1,
 ): CanvasPoint {
-  if (!containerElement) return position;
-  const rect = containerElement.getBoundingClientRect();
-  const maxX = Math.max(0, Math.round(rect.width / zoom - (size.width || 0)));
-  const maxY = Math.max(0, Math.round(rect.height / zoom - (size.height || 0)));
+  if (!containerElement) return position
+  const rect = containerElement.getBoundingClientRect()
+  const maxX = Math.max(0, Math.round(rect.width / zoom - (size.width || 0)))
+  const maxY = Math.max(0, Math.round(rect.height / zoom - (size.height || 0)))
   return {
     x: Math.min(Math.max(0, position.x), maxX),
     y: Math.min(Math.max(0, position.y), maxY),
-  };
+  }
 }

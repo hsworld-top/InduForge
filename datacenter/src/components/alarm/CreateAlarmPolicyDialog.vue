@@ -10,20 +10,20 @@
   >
     <form class="create-alarm-policy" @submit.prevent="submit">
       <label>
-        <span>{{ t("alarm.name") }}</span>
+        <span>{{ t('alarm.name') }}</span>
         <input v-model="draft.name" type="text" :placeholder="t('alarm.namePlaceholder')" />
       </label>
       <label>
-        <span>{{ t("alarm.group") }}</span>
+        <span>{{ t('alarm.group') }}</span>
         <select v-model="groupValue">
-          <option value="">{{ t("alarm.root") }}</option>
+          <option value="">{{ t('alarm.root') }}</option>
           <option v-for="group in groups" :key="group.id" :value="group.id">
             {{ group.name }}
           </option>
         </select>
       </label>
       <section class="create-alarm-policy__mode is-wide">
-        <span>{{ t("alarm.mode") }}</span>
+        <span>{{ t('alarm.mode') }}</span>
         <div class="create-alarm-policy__mode-options">
           <button
             v-for="item in modeOptions"
@@ -39,8 +39,12 @@
         </div>
       </section>
       <label class="is-wide">
-        <span>{{ t("alarm.description") }}</span>
-        <textarea v-model="draft.description" rows="4" :placeholder="t('alarm.descriptionPlaceholder')" />
+        <span>{{ t('alarm.description') }}</span>
+        <textarea
+          v-model="draft.description"
+          rows="4"
+          :placeholder="t('alarm.descriptionPlaceholder')"
+        />
       </label>
     </form>
 
@@ -50,9 +54,9 @@
 
     <template #footer>
       <div class="create-alarm-policy__footer">
-        <button type="button" class="is-ghost" @click="close">{{ t("actions.cancel") }}</button>
+        <button type="button" class="is-ghost" @click="close">{{ t('actions.cancel') }}</button>
         <button type="button" :disabled="submitting" @click="submit">
-          {{ submitting ? t("alarm.creating") : t("actions.create") }}
+          {{ submitting ? t('alarm.creating') : t('actions.create') }}
         </button>
       </div>
     </template>
@@ -60,110 +64,105 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
-import type {
-  AlarmPolicyGroup,
-  AlarmPolicyMode,
-} from "@/api/schemas/alarm.schema";
-import DcDialog from "@/components/shared/DcDialog.vue";
+import { computed, reactive, ref, watch } from 'vue'
+import type { AlarmPolicyGroup, AlarmPolicyMode } from '@/api/schemas/alarm.schema'
+import DcDialog from '@/components/shared/DcDialog.vue'
 import {
   createDefaultAlarmPolicyDraft,
   type AlarmPolicyDraft,
-} from "@/components/alarm/alarmPolicyModel";
-import { t } from "@/i18n/runtime";
+} from '@/components/alarm/alarmPolicyModel'
+import { t } from '@/i18n/runtime'
 
 const props = withDefaults(
   defineProps<{
-    modelValue: boolean;
-    groups: AlarmPolicyGroup[];
-    submitting?: boolean;
-    error?: string;
+    modelValue: boolean
+    groups: AlarmPolicyGroup[]
+    submitting?: boolean
+    error?: string
   }>(),
   {
     submitting: false,
-    error: "",
+    error: '',
   },
-);
+)
 
 const emit = defineEmits<{
-  "update:modelValue": [value: boolean];
-  submit: [draft: AlarmPolicyDraft];
-}>();
+  'update:modelValue': [value: boolean]
+  submit: [draft: AlarmPolicyDraft]
+}>()
 
 const visible = computed({
   get: () => props.modelValue,
-  set: (value: boolean) => emit("update:modelValue", value),
-});
+  set: (value: boolean) => emit('update:modelValue', value),
+})
 
-const draft = reactive<AlarmPolicyDraft>(createDefaultAlarmPolicyDraft());
-const localError = ref("");
+const draft = reactive<AlarmPolicyDraft>(createDefaultAlarmPolicyDraft())
+const localError = ref('')
 const groupValue = computed({
-  get: () => draft.groupId ?? "",
+  get: () => draft.groupId ?? '',
   set: (value: string) => {
-    draft.groupId = value || null;
+    draft.groupId = value || null
   },
-});
-const defaultDraftSnapshot = JSON.stringify(createDefaultAlarmPolicyDraft());
-const draftSnapshot = computed(() => JSON.stringify(draft));
-const isDirty = computed(
-  () => visible.value && draftSnapshot.value !== defaultDraftSnapshot,
-);
+})
+const defaultDraftSnapshot = JSON.stringify(createDefaultAlarmPolicyDraft())
+const draftSnapshot = computed(() => JSON.stringify(draft))
+const isDirty = computed(() => visible.value && draftSnapshot.value !== defaultDraftSnapshot)
 
 const modeOptions: Array<{
-  value: AlarmPolicyMode;
-  label: string;
-  description: string;
-  tooltip: string;
+  value: AlarmPolicyMode
+  label: string
+  description: string
+  tooltip: string
 }> = [
   {
-    value: "per_target",
-    label: "统一模板报警",
-    description: "一套条件应用到目标点",
-    tooltip: "一套报警条件会分别应用到每个目标点。多个目标点不会合并计算。",
+    value: 'per_target',
+    label: '统一模板报警',
+    description: '一套条件应用到目标点',
+    tooltip: '一套报警条件会分别应用到每个目标点。多个目标点不会合并计算。',
   },
   {
-    value: "derived",
-    label: "计算结果报警",
-    description: "先计算，再对结果报警",
-    tooltip: "选择多个输入点并编写计算表达式，条件集判断的是计算结果。",
+    value: 'derived',
+    label: '计算结果报警',
+    description: '先计算，再对结果报警',
+    tooltip: '选择多个输入点并编写计算表达式，条件集判断的是计算结果。',
   },
-];
+]
 
 const reset = () => {
-  Object.assign(draft, createDefaultAlarmPolicyDraft());
-  localError.value = "";
-};
+  Object.assign(draft, createDefaultAlarmPolicyDraft())
+  localError.value = ''
+}
 
 const close = () => {
-  visible.value = false;
-};
+  visible.value = false
+}
 
 const handleClose = () => {
-  reset();
-};
+  reset()
+}
 
 const submit = () => {
-  localError.value = "";
+  localError.value = ''
   if (!draft.name.trim()) {
-    localError.value = t("alarm.nameRequired");
-    return;
+    localError.value = t('alarm.nameRequired')
+    return
   }
-  emit("submit", {
+  emit('submit', {
     ...draft,
     name: draft.name.trim(),
     isEnabled: false,
     dirty: true,
-  });
-};
+  })
+}
 
 watch(
   () => props.modelValue,
   (next) => {
     if (next) {
-      reset();
+      reset()
     }
   },
-);
+)
 </script>
 
 <style scoped>

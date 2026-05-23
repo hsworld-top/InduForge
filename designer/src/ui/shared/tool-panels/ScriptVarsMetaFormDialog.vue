@@ -2,37 +2,37 @@
   脚本面板：定时器 / 变量监听 / 自定义脚本 元数据新建或编辑
 -->
 <script setup lang="ts">
-import { useI18n } from "vue-i18n";
+import { useI18n } from 'vue-i18n'
 
 interface ScriptVarsMetaLike {
-  name?: string;
-  interval?: number;
-  description?: string;
-  variable?: string;
-  params?: string;
+  name?: string
+  interval?: number
+  description?: string
+  variable?: string
+  params?: string
 }
 
 defineProps<{
-  title: string;
+  title: string
   /** timers | variableChanges | custom */
-  module: "timers" | "variableChanges" | "custom";
-  projectVariableNames?: string[];
-}>();
+  module: 'timers' | 'variableChanges' | 'custom'
+  projectVariableNames?: string[]
+}>()
 
 const emit = defineEmits<{
-  (event: "confirm"): void;
-}>();
+  (event: 'confirm'): void
+}>()
 
-const visible = defineModel<boolean>({ default: false });
-const meta = defineModel<ScriptVarsMetaLike>("meta", { required: true });
-const { t } = useI18n();
+const visible = defineModel<boolean>({ default: false })
+const meta = defineModel<ScriptVarsMetaLike>('meta', { required: true })
+const { t } = useI18n()
 
 function handleCancel() {
-  visible.value = false;
+  visible.value = false
 }
 
 function handleConfirm() {
-  emit("confirm");
+  emit('confirm')
 }
 </script>
 
@@ -58,7 +58,10 @@ function handleConfirm() {
       </template>
       <template v-else-if="module === 'variableChanges'">
         <el-form-item :label="t('scriptPanel.metaDialog.variable')">
-          <el-select v-model="meta.variable" :placeholder="t('scriptPanel.metaDialog.selectVariable')">
+          <el-select
+            v-model="meta.variable"
+            :placeholder="t('scriptPanel.metaDialog.selectVariable')"
+          >
             <el-option
               v-for="name in projectVariableNames"
               :key="name"
@@ -76,7 +79,10 @@ function handleConfirm() {
           <el-input v-model="meta.name" />
         </el-form-item>
         <el-form-item :label="t('scriptPanel.metaDialog.params')">
-          <el-input v-model="meta.params" :placeholder="t('scriptPanel.metaDialog.paramsPlaceholder')" />
+          <el-input
+            v-model="meta.params"
+            :placeholder="t('scriptPanel.metaDialog.paramsPlaceholder')"
+          />
         </el-form-item>
         <el-form-item :label="t('scriptPanel.metaDialog.description')">
           <el-input v-model="meta.description" />
@@ -84,8 +90,10 @@ function handleConfirm() {
       </template>
     </el-form>
     <template #footer>
-      <el-button @click="handleCancel">{{ t("scriptPanel.metaDialog.cancel") }}</el-button>
-      <el-button type="primary" @click="handleConfirm">{{ t("scriptPanel.metaDialog.confirm") }}</el-button>
+      <el-button @click="handleCancel">{{ t('scriptPanel.metaDialog.cancel') }}</el-button>
+      <el-button type="primary" @click="handleConfirm">{{
+        t('scriptPanel.metaDialog.confirm')
+      }}</el-button>
     </template>
   </el-dialog>
 </template>

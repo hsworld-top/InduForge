@@ -1,96 +1,96 @@
 <script setup lang="ts">
-import type { ProjectI18nLocale, ProjectI18nSettings } from "@/editor-core/document/types";
-import IconLucideCircleHelp from "~icons/lucide/circle-help";
-import IconLucidePlus from "~icons/lucide/plus";
-import { ElMessage } from "element-plus";
-import { storeToRefs } from "pinia";
-import { computed, ref } from "vue";
+import type { ProjectI18nLocale, ProjectI18nSettings } from '@/editor-core/document/types'
+import IconLucideCircleHelp from '~icons/lucide/circle-help'
+import IconLucidePlus from '~icons/lucide/plus'
+import { ElMessage } from 'element-plus'
+import { storeToRefs } from 'pinia'
+import { computed, ref } from 'vue'
 import {
   cloneProjectI18nSettings,
   normalizeProjectI18nSettings,
-} from "@/editor-core/i18n/project-i18n";
-import { useEditorStore } from "@/stores/editor-store";
+} from '@/editor-core/i18n/project-i18n'
+import { useEditorStore } from '@/stores/editor-store'
 
-const editorStore = useEditorStore();
-const { projectI18n } = storeToRefs(editorStore);
+const editorStore = useEditorStore()
+const { projectI18n } = storeToRefs(editorStore)
 
-const newLocaleCode = ref("");
-const newLocaleName = ref("");
-const localeDialogVisible = ref(false);
+const newLocaleCode = ref('')
+const newLocaleName = ref('')
+const localeDialogVisible = ref(false)
 
 const settings = computed({
   get: () => projectI18n.value,
   set: (value) => {
-    editorStore.setProjectI18n(value);
+    editorStore.setProjectI18n(value)
   },
-});
+})
 
-const enabledLocales = computed(() => settings.value.locales.filter((item) => item.enabled));
+const enabledLocales = computed(() => settings.value.locales.filter((item) => item.enabled))
 
 function patchSettings(patch: Partial<ProjectI18nSettings>) {
   settings.value = normalizeProjectI18nSettings({
     ...settings.value,
     ...patch,
-  });
+  })
 }
 
 function handleEnabledChange(value: boolean) {
-  patchSettings({ enabled: value });
+  patchSettings({ enabled: value })
 }
 
 function handleDefaultLocaleChange(value: string) {
-  patchSettings({ defaultLocale: value });
+  patchSettings({ defaultLocale: value })
 }
 
 function addLocale() {
-  const code = newLocaleCode.value.trim();
-  const name = newLocaleName.value.trim() || code;
+  const code = newLocaleCode.value.trim()
+  const name = newLocaleName.value.trim() || code
   if (!code) {
-    ElMessage.warning({ message: "请输入语言编码" } as never);
-    return;
+    ElMessage.warning({ message: '请输入语言编码' } as never)
+    return
   }
   if (settings.value.locales.some((item) => item.code === code)) {
-    ElMessage.warning({ message: "语言编码已存在" } as never);
-    return;
+    ElMessage.warning({ message: '语言编码已存在' } as never)
+    return
   }
-  const next = cloneProjectI18nSettings(settings.value);
-  next.locales.push({ code, name, enabled: true });
-  settings.value = next;
-  newLocaleCode.value = "";
-  newLocaleName.value = "";
-  localeDialogVisible.value = false;
+  const next = cloneProjectI18nSettings(settings.value)
+  next.locales.push({ code, name, enabled: true })
+  settings.value = next
+  newLocaleCode.value = ''
+  newLocaleName.value = ''
+  localeDialogVisible.value = false
 }
 
 function updateLocale(locale: ProjectI18nLocale, patch: Partial<ProjectI18nLocale>) {
-  const next = cloneProjectI18nSettings(settings.value);
+  const next = cloneProjectI18nSettings(settings.value)
   next.locales = next.locales.map((item) =>
     item.code === locale.code ? { ...item, ...patch } : item,
-  );
+  )
   if (!next.locales.some((item) => item.code === next.defaultLocale && item.enabled)) {
-    next.defaultLocale = next.locales.find((item) => item.enabled)?.code || locale.code;
+    next.defaultLocale = next.locales.find((item) => item.enabled)?.code || locale.code
   }
-  settings.value = normalizeProjectI18nSettings(next);
+  settings.value = normalizeProjectI18nSettings(next)
 }
 
 function removeLocale(locale: ProjectI18nLocale) {
   if (locale.code === settings.value.defaultLocale) {
-    ElMessage.warning({ message: "默认语言不能删除" } as never);
-    return;
+    ElMessage.warning({ message: '默认语言不能删除' } as never)
+    return
   }
-  const next = cloneProjectI18nSettings(settings.value);
-  next.locales = next.locales.filter((item) => item.code !== locale.code);
+  const next = cloneProjectI18nSettings(settings.value)
+  next.locales = next.locales.filter((item) => item.code !== locale.code)
   Object.values(next.resources).forEach((resource) => {
-    delete resource.values[locale.code];
-  });
-  settings.value = normalizeProjectI18nSettings(next);
+    delete resource.values[locale.code]
+  })
+  settings.value = normalizeProjectI18nSettings(next)
 }
 
 function openResourceDialog(scan = false) {
   window.dispatchEvent(
-    new CustomEvent("designer:i18n-open-resource", {
+    new CustomEvent('designer:i18n-open-resource', {
       detail: { scan },
     }),
-  );
+  )
 }
 </script>
 
@@ -102,7 +102,10 @@ function openResourceDialog(scan = false) {
           <div>
             <div class="row-title">
               启用页面国际化
-              <el-tooltip content="启用后，访问用户看到的页面文案会按当前语言显示。" placement="top">
+              <el-tooltip
+                content="启用后，访问用户看到的页面文案会按当前语言显示。"
+                placement="top"
+              >
                 <IconLucideCircleHelp class="help-icon" />
               </el-tooltip>
             </div>
@@ -161,7 +164,9 @@ function openResourceDialog(scan = false) {
                 :model-value="localeItem.enabled"
                 size="small"
                 :disabled="localeItem.code === settings.defaultLocale"
-                @update:model-value="(value: boolean) => updateLocale(localeItem, { enabled: value })"
+                @update:model-value="
+                  (value: boolean) => updateLocale(localeItem, { enabled: value })
+                "
               />
               <el-button
                 size="small"
@@ -312,5 +317,4 @@ function openResourceDialog(scan = false) {
   align-items: center;
   gap: 6px;
 }
-
 </style>

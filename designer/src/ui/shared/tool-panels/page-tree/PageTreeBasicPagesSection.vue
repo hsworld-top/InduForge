@@ -2,29 +2,29 @@
   页面树 — 基础页面固定槽位列表
 -->
 <script setup lang="ts">
-import { computed } from "vue";
-import { useI18n } from "vue-i18n";
-import IconEpDocument from "~icons/ep/document";
-import IconEpMoreFilled from "~icons/ep/more-filled";
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import IconEpDocument from '~icons/ep/document'
+import IconEpMoreFilled from '~icons/ep/more-filled'
 
 interface BasicSlotLike {
-  type: string;
-  label: string;
-  page?: { id: string; name?: string | null } | null;
+  type: string
+  label: string
+  page?: { id: string; name?: string | null } | null
 }
 
 const props = defineProps<{
-  basicSlots: BasicSlotLike[];
-  isPageActive: (pageId: string) => boolean;
-  creatingBasicType?: string | null;
-}>();
+  basicSlots: BasicSlotLike[]
+  isPageActive: (pageId: string) => boolean
+  creatingBasicType?: string | null
+}>()
 
-const emit = defineEmits(["slotClick", "slotDblClick", "rowAction"]);
-const { t } = useI18n();
+const emit = defineEmits(['slotClick', 'slotDblClick', 'rowAction'])
+const { t } = useI18n()
 
 const boundBasicPageCount = computed<number>(
   () => props.basicSlots.filter((basicSlot) => basicSlot.page).length,
-);
+)
 
 /**
  * 处理基础页面行尾菜单命令并向父组件透传。
@@ -33,14 +33,14 @@ const boundBasicPageCount = computed<number>(
  * @returns {void}
  */
 function handleRowActionCommand(command: string, basicSlot: BasicSlotLike): void {
-  emit("rowAction", command, basicSlot);
+  emit('rowAction', command, basicSlot)
 }
 
 function getBasicSlotLabel(basicSlot: BasicSlotLike): string {
-  if (basicSlot.type === "home") return t("pageTree.homeLabel");
-  if (basicSlot.type === "login") return t("pageTree.loginLabel");
-  if (basicSlot.type === "logout") return t("pageTree.logoutLabel");
-  return basicSlot.label;
+  if (basicSlot.type === 'home') return t('pageTree.homeLabel')
+  if (basicSlot.type === 'login') return t('pageTree.loginLabel')
+  if (basicSlot.type === 'logout') return t('pageTree.logoutLabel')
+  return basicSlot.label
 }
 
 /**
@@ -50,9 +50,9 @@ function getBasicSlotLabel(basicSlot: BasicSlotLike): string {
  */
 function getBasicSlotMeta(basicSlot: BasicSlotLike): string {
   if (basicSlot.page) {
-    return `${t("pageTree.bound")}：${basicSlot.page.name || basicSlot.page.id}`;
+    return `${t('pageTree.bound')}：${basicSlot.page.name || basicSlot.page.id}`
   }
-  return t("pageTree.createFixedEntryHint");
+  return t('pageTree.createFixedEntryHint')
 }
 
 /**
@@ -61,17 +61,17 @@ function getBasicSlotMeta(basicSlot: BasicSlotLike): string {
  * @returns {string}
  */
 function getCreateActionLabel(basicSlot: BasicSlotLike): string {
-  return t("pageTree.createAction", { label: getBasicSlotLabel(basicSlot) });
+  return t('pageTree.createAction', { label: getBasicSlotLabel(basicSlot) })
 }
 </script>
 
 <template>
   <section class="page-section">
     <div class="page-section__header">
-      <span class="page-section__title">{{ t("pageTree.basicPages") }}</span>
+      <span class="page-section__title">{{ t('pageTree.basicPages') }}</span>
       <div class="page-section__meta">
         <span class="page-section__badge">{{ boundBasicPageCount }}</span>
-        <span class="page-section__hint">{{ t("pageTree.fixedEntry") }}</span>
+        <span class="page-section__hint">{{ t('pageTree.fixedEntry') }}</span>
       </div>
     </div>
     <div v-if="basicSlots.length" class="page-section__body">
@@ -93,7 +93,7 @@ function getCreateActionLabel(basicSlot: BasicSlotLike): string {
           <div class="node-heading">
             <span class="node-label">{{ getBasicSlotLabel(basicSlot) }}</span>
             <span class="node-inline-tag" :class="{ 'is-empty': !basicSlot.page }">
-              {{ basicSlot.page ? t("pageTree.fixedEntry") : t("pageTree.pendingCreate") }}
+              {{ basicSlot.page ? t('pageTree.fixedEntry') : t('pageTree.pendingCreate') }}
             </span>
           </div>
           <span class="node-meta">
@@ -102,7 +102,7 @@ function getCreateActionLabel(basicSlot: BasicSlotLike): string {
         </div>
         <div class="node-side">
           <span class="node-chip" :class="{ 'is-empty': !basicSlot.page }">
-            {{ basicSlot.page ? t("pageTree.bound") : t("pageTree.uncreated") }}
+            {{ basicSlot.page ? t('pageTree.bound') : t('pageTree.uncreated') }}
           </span>
           <el-dropdown
             trigger="click"
@@ -120,20 +120,20 @@ function getCreateActionLabel(basicSlot: BasicSlotLike): string {
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item v-if="basicSlot.page" command="open">
-                  {{ t("pageTree.open") }}
+                  {{ t('pageTree.open') }}
                 </el-dropdown-item>
                 <el-dropdown-item v-else command="create">
                   {{ getCreateActionLabel(basicSlot) }}
                 </el-dropdown-item>
                 <el-dropdown-item v-if="basicSlot.page" command="export">
-                  {{ t("pageTree.exportPage") }}
+                  {{ t('pageTree.exportPage') }}
                 </el-dropdown-item>
                 <el-dropdown-item
                   v-if="basicSlot.page && basicSlot.type !== 'home'"
                   command="delete"
                   divided
                 >
-                  {{ t("pageTree.delete") }}
+                  {{ t('pageTree.delete') }}
                 </el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -141,6 +141,6 @@ function getCreateActionLabel(basicSlot: BasicSlotLike): string {
         </div>
       </div>
     </div>
-    <div v-else class="page-section__empty">{{ t("pageTree.emptyBasicPages") }}</div>
+    <div v-else class="page-section__empty">{{ t('pageTree.emptyBasicPages') }}</div>
   </section>
 </template>

@@ -1,21 +1,21 @@
-export type MarqueeStartSource = "insideCanvas" | "outsideCanvas";
+export type MarqueeStartSource = 'insideCanvas' | 'outsideCanvas'
 
 export interface MarqueeModifiers {
-  ctrl: boolean;
-  meta: boolean;
-  shift: boolean;
+  ctrl: boolean
+  meta: boolean
+  shift: boolean
 }
 
 export interface OutsideMarqueeStartDetail {
-  clientX: number;
-  clientY: number;
-  modifiers: MarqueeModifiers;
+  clientX: number
+  clientY: number
+  modifiers: MarqueeModifiers
 }
 
 /**
  * 工作台灰区触发画布框选的内部事件名。
  */
-export const CANVAS_OUTSIDE_MARQUEE_START_EVENT = "designer:canvas-outside-marquee-start";
+export const CANVAS_OUTSIDE_MARQUEE_START_EVENT = 'designer:canvas-outside-marquee-start'
 
 /**
  * 判断画布内 pointerdown 是否应该启动 marquee。
@@ -27,12 +27,12 @@ export const CANVAS_OUTSIDE_MARQUEE_START_EVENT = "designer:canvas-outside-marqu
  * @returns {boolean}
  */
 export function shouldStartMarqueeFromCanvasPointerDown(params: {
-  hasNodeElement: boolean;
-  isRootNode: boolean;
+  hasNodeElement: boolean
+  isRootNode: boolean
 }): boolean {
-  const { hasNodeElement, isRootNode } = params;
-  if (!hasNodeElement) return true;
-  return isRootNode;
+  const { hasNodeElement, isRootNode } = params
+  if (!hasNodeElement) return true
+  return isRootNode
 }
 
 /**
@@ -42,9 +42,9 @@ export function shouldStartMarqueeFromCanvasPointerDown(params: {
  * @returns {boolean}
  */
 export function shouldClearSelectionOnMarqueeUp(params: {
-  startSource: MarqueeStartSource;
-  moved: boolean;
+  startSource: MarqueeStartSource
+  moved: boolean
 }): boolean {
-  const { startSource, moved } = params;
-  return startSource === "outsideCanvas" && !moved;
+  const { startSource, moved } = params
+  return startSource === 'outsideCanvas' && !moved
 }

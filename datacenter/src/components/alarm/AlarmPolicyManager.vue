@@ -2,7 +2,7 @@
   <aside class="alarm-policy-manager">
     <header class="alarm-policy-manager__head">
       <div class="alarm-policy-manager__title">
-        <h2>{{ t("alarm.policies") }}</h2>
+        <h2>{{ t('alarm.policies') }}</h2>
       </div>
       <div class="alarm-policy-manager__actions">
         <button
@@ -55,10 +55,7 @@
         popper-class="alarm-policy-manager__popover"
       >
         <template #reference>
-          <PillButton
-            class="alarm-policy-manager__filter-pill"
-            :active="filters.enabled !== ''"
-          >
+          <PillButton class="alarm-policy-manager__filter-pill" :active="filters.enabled !== ''">
             {{ enabledLabel }}
           </PillButton>
         </template>
@@ -124,14 +121,10 @@
           :disabled="!visiblePolicies.length"
           @click="selectFiltered"
         >
-          {{ t("alarm.selectMatched") }}
+          {{ t('alarm.selectMatched') }}
         </button>
-        <button
-          v-if="selectedCount"
-          type="button"
-          @click="emit('clearSelection')"
-        >
-          {{ t("alarm.cancelSelection") }}
+        <button v-if="selectedCount" type="button" @click="emit('clearSelection')">
+          {{ t('alarm.cancelSelection') }}
         </button>
       </div>
     </div>
@@ -140,7 +133,7 @@
       <IconTablerAlertCircle class="alarm-policy-manager__state-icon" />
       <span>{{ error }}</span>
       <button type="button" @click="emit('refresh')">
-        {{ t("alarm.retry") }}
+        {{ t('alarm.retry') }}
       </button>
     </div>
     <div v-else-if="loading" class="alarm-policy-manager__loading">
@@ -158,12 +151,8 @@
         @select="emit('select', $event)"
         @select-policy="(id, selected) => emit('selectPolicy', id, selected)"
         @select-group="(ids, selected) => emit('selectGroup', ids, selected)"
-        @policy-contextmenu="
-          (mouseEvent, policy) => openPolicyMenu(mouseEvent, policy)
-        "
-        @group-contextmenu="
-          (mouseEvent, group) => openGroupMenu(mouseEvent, group)
-        "
+        @policy-contextmenu="(mouseEvent, policy) => openPolicyMenu(mouseEvent, policy)"
+        @group-contextmenu="(mouseEvent, group) => openGroupMenu(mouseEvent, group)"
       />
 
       <button
@@ -203,9 +192,7 @@
       </button>
 
       <EmptyState
-        v-if="
-          policyTree.groups.length === 0 && policyTree.rootPolicies.length === 0
-        "
+        v-if="policyTree.groups.length === 0 && policyTree.rootPolicies.length === 0"
         icon-name="alarm"
         :title="t('alarm.emptyPolicies')"
         :description="t('alarm.emptyPoliciesHint')"
@@ -213,33 +200,17 @@
     </div>
 
     <div v-if="selectedCount" class="alarm-policy-manager__bulk">
-      <button
-        type="button"
-        :disabled="!selectedCount"
-        @click="emit('batchEnable')"
-      >
-        {{ t("common.enabled") }}
+      <button type="button" :disabled="!selectedCount" @click="emit('batchEnable')">
+        {{ t('common.enabled') }}
       </button>
-      <button
-        type="button"
-        :disabled="!selectedCount"
-        @click="emit('batchDisable')"
-      >
-        {{ t("alarm.stopped") }}
+      <button type="button" :disabled="!selectedCount" @click="emit('batchDisable')">
+        {{ t('alarm.stopped') }}
       </button>
-      <button
-        type="button"
-        :disabled="!selectedCount"
-        @click="emit('batchConditions')"
-      >
-        {{ t("alarm.conditions") }}
+      <button type="button" :disabled="!selectedCount" @click="emit('batchConditions')">
+        {{ t('alarm.conditions') }}
       </button>
-      <button
-        type="button"
-        :disabled="!selectedCount"
-        @click="emit('batchMoveDialog')"
-      >
-        {{ t("alarm.move") }}
+      <button type="button" :disabled="!selectedCount" @click="emit('batchMoveDialog')">
+        {{ t('alarm.move') }}
       </button>
       <button
         type="button"
@@ -247,15 +218,15 @@
         :disabled="!selectedCount"
         @click="emit('batchDelete')"
       >
-        {{ t("actions.delete") }}
+        {{ t('actions.delete') }}
       </button>
     </div>
 
     <footer class="alarm-policy-manager__foot">
       <span class="alarm-policy-manager__foot-text">
-        <span>{{ t("alarm.policyCount", { count: total }) }}</span>
+        <span>{{ t('alarm.policyCount', { count: total }) }}</span>
         <span v-if="selectedCount">
-          {{ t("alarm.selectedItemCount", { count: selectedCount }) }}
+          {{ t('alarm.selectedItemCount', { count: selectedCount }) }}
         </span>
       </span>
       <button
@@ -283,17 +254,13 @@
         >
           <button type="button" @click="emitContextAction('rename')">
             <IconTablerPencil class="alarm-policy-manager__menu-icon" />
-            <span>{{ t("alarm.rename") }}</span>
+            <span>{{ t('alarm.rename') }}</span>
           </button>
           <button type="button" @click="emitContextAction('move')">
             <IconTablerFolderSymlink class="alarm-policy-manager__menu-icon" />
-            <span>{{ t("alarm.moveToGroup") }}</span>
+            <span>{{ t('alarm.moveToGroup') }}</span>
           </button>
-          <button
-            type="button"
-            class="is-danger"
-            @click="emitContextAction('delete')"
-          >
+          <button type="button" class="is-danger" @click="emitContextAction('delete')">
             <IconTablerTrash class="alarm-policy-manager__menu-icon" />
             <span>删除</span>
           </button>
@@ -304,85 +271,82 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
-import { Search } from "@element-plus/icons-vue";
-import IconTablerAlertCircle from "~icons/tabler/alert-circle";
-import IconTablerCalculator from "~icons/tabler/calculator";
-import IconTablerFolderPlus from "~icons/tabler/folder-plus";
-import IconTablerFolderSymlink from "~icons/tabler/folder-symlink";
-import IconTablerPencil from "~icons/tabler/pencil";
-import IconTablerPlus from "~icons/tabler/plus";
-import IconTablerRefresh from "~icons/tabler/refresh";
-import IconTablerSettings from "~icons/tabler/settings";
-import IconTablerTemplate from "~icons/tabler/template";
-import IconTablerTrash from "~icons/tabler/trash";
+import { computed, reactive, ref } from 'vue'
+import { Search } from '@element-plus/icons-vue'
+import IconTablerAlertCircle from '~icons/tabler/alert-circle'
+import IconTablerCalculator from '~icons/tabler/calculator'
+import IconTablerFolderPlus from '~icons/tabler/folder-plus'
+import IconTablerFolderSymlink from '~icons/tabler/folder-symlink'
+import IconTablerPencil from '~icons/tabler/pencil'
+import IconTablerPlus from '~icons/tabler/plus'
+import IconTablerRefresh from '~icons/tabler/refresh'
+import IconTablerSettings from '~icons/tabler/settings'
+import IconTablerTemplate from '~icons/tabler/template'
+import IconTablerTrash from '~icons/tabler/trash'
 import type {
   AlarmBulkSelection,
   AlarmPolicy,
   AlarmPolicyGroup,
   AlarmPolicyTree,
-} from "@/api/schemas/alarm.schema";
-import EmptyState from "@/components/shared/EmptyState.vue";
-import PillButton from "@/components/shared/PillButton.vue";
-import { t } from "@/i18n/runtime";
-import AlarmPolicyGroupBranch from "./AlarmPolicyGroupBranch.vue";
-import {
-  buildAlarmPolicyGroupTree,
-  type AlarmPolicyGroupNode,
-} from "./alarmPolicyTreeModel";
+} from '@/api/schemas/alarm.schema'
+import EmptyState from '@/components/shared/EmptyState.vue'
+import PillButton from '@/components/shared/PillButton.vue'
+import { t } from '@/i18n/runtime'
+import AlarmPolicyGroupBranch from './AlarmPolicyGroupBranch.vue'
+import { buildAlarmPolicyGroupTree, type AlarmPolicyGroupNode } from './alarmPolicyTreeModel'
 
 type ContextMenuState = {
-  visible: boolean;
-  type: "policy" | "group" | null;
-  x: number;
-  y: number;
-  policy: AlarmPolicy | null;
-  group: AlarmPolicyGroupNode | null;
-};
+  visible: boolean
+  type: 'policy' | 'group' | null
+  x: number
+  y: number
+  policy: AlarmPolicy | null
+  group: AlarmPolicyGroupNode | null
+}
 
-const SearchIcon = Search;
+const SearchIcon = Search
 
 const props = defineProps<{
-  tree: AlarmPolicyTree;
-  selection: AlarmBulkSelection;
-  selectedId: string;
-  selectedCount: number;
-  total: number;
-  dirtyPolicyIds?: string[];
-  loading: boolean;
-  error: string;
-}>();
+  tree: AlarmPolicyTree
+  selection: AlarmBulkSelection
+  selectedId: string
+  selectedCount: number
+  total: number
+  dirtyPolicyIds?: string[]
+  loading: boolean
+  error: string
+}>()
 
 const emit = defineEmits<{
-  refresh: [];
-  create: [];
-  createGroup: [];
-  select: [id: string];
-  filter: [params: Record<string, string>];
-  selectPolicy: [id: string, selected: boolean];
-  selectGroup: [ids: string[], selected: boolean];
-  selectFiltered: [filters: Record<string, string>];
-  clearSelection: [];
-  batchEnable: [];
-  batchDisable: [];
-  batchConditions: [];
-  batchMove: [groupId: string | null];
-  batchMoveDialog: [];
-  batchDelete: [];
-  renamePolicy: [policy: AlarmPolicy];
-  movePolicy: [policy: AlarmPolicy];
-  deletePolicy: [policy: AlarmPolicy];
-  renameGroup: [group: AlarmPolicyGroup];
-  moveGroup: [group: AlarmPolicyGroup];
-  deleteGroup: [group: AlarmPolicyGroupNode];
-  openSettings: [];
-}>();
+  refresh: []
+  create: []
+  createGroup: []
+  select: [id: string]
+  filter: [params: Record<string, string>]
+  selectPolicy: [id: string, selected: boolean]
+  selectGroup: [ids: string[], selected: boolean]
+  selectFiltered: [filters: Record<string, string>]
+  clearSelection: []
+  batchEnable: []
+  batchDisable: []
+  batchConditions: []
+  batchMove: [groupId: string | null]
+  batchMoveDialog: []
+  batchDelete: []
+  renamePolicy: [policy: AlarmPolicy]
+  movePolicy: [policy: AlarmPolicy]
+  deletePolicy: [policy: AlarmPolicy]
+  renameGroup: [group: AlarmPolicyGroup]
+  moveGroup: [group: AlarmPolicyGroup]
+  deleteGroup: [group: AlarmPolicyGroupNode]
+  openSettings: []
+}>()
 
 const filters = reactive({
-  search: "",
-  enabled: "",
-  conditionType: "",
-});
+  search: '',
+  enabled: '',
+  conditionType: '',
+})
 
 const contextMenu = ref<ContextMenuState>({
   visible: false,
@@ -391,174 +355,160 @@ const contextMenu = ref<ContextMenuState>({
   y: 0,
   policy: null,
   group: null,
-});
+})
 
 const enabledOptions = computed(() => [
-  { value: "", label: t("alarm.all") },
-  { value: "true", label: t("common.enabled") },
-  { value: "false", label: t("alarm.stopped") },
-]);
+  { value: '', label: t('alarm.all') },
+  { value: 'true', label: t('common.enabled') },
+  { value: 'false', label: t('alarm.stopped') },
+])
 
 const conditionTypeOptions = computed(() => [
-  { value: "HH", label: t("alarm.conditionTypes.HH") },
-  { value: "H", label: t("alarm.conditionTypes.H") },
-  { value: "L", label: t("alarm.conditionTypes.L") },
-  { value: "LL", label: t("alarm.conditionTypes.LL") },
-  { value: "deviation_high", label: t("alarm.conditionTypes.deviationHigh") },
-  { value: "deviation_low", label: t("alarm.conditionTypes.deviationLow") },
-  { value: "rate_of_change", label: t("alarm.conditionTypes.rateOfChange") },
-  { value: "cel", label: t("alarm.conditionTypes.cel") },
-]);
+  { value: 'HH', label: t('alarm.conditionTypes.HH') },
+  { value: 'H', label: t('alarm.conditionTypes.H') },
+  { value: 'L', label: t('alarm.conditionTypes.L') },
+  { value: 'LL', label: t('alarm.conditionTypes.LL') },
+  { value: 'deviation_high', label: t('alarm.conditionTypes.deviationHigh') },
+  { value: 'deviation_low', label: t('alarm.conditionTypes.deviationLow') },
+  { value: 'rate_of_change', label: t('alarm.conditionTypes.rateOfChange') },
+  { value: 'cel', label: t('alarm.conditionTypes.cel') },
+])
 const conditionFilterOptions = computed(() => [
-  { value: "", label: t("alarm.all") },
+  { value: '', label: t('alarm.all') },
   ...conditionTypeOptions.value,
-]);
+])
 const enabledLabel = computed(() => {
-  const found = enabledOptions.value.find(
-    (item) => item.value === filters.enabled,
-  );
-  return found && filters.enabled ? found.label : t("alarm.status");
-});
+  const found = enabledOptions.value.find((item) => item.value === filters.enabled)
+  return found && filters.enabled ? found.label : t('alarm.status')
+})
 const conditionTypeLabel = computed(() => {
-  const found = conditionFilterOptions.value.find(
-    (item) => item.value === filters.conditionType,
-  );
-  return found && filters.conditionType ? found.label : t("alarm.type");
-});
+  const found = conditionFilterOptions.value.find((item) => item.value === filters.conditionType)
+  return found && filters.conditionType ? found.label : t('alarm.type')
+})
 
-const visiblePolicies = computed(() => props.tree.policies);
-const dirtyPolicyIdSet = computed(() =>
-  new Set((props.dirtyPolicyIds || []).map(String)),
-);
+const visiblePolicies = computed(() => props.tree.policies)
+const dirtyPolicyIdSet = computed(() => new Set((props.dirtyPolicyIds || []).map(String)))
 
-const policyTree = computed(() =>
-  buildAlarmPolicyGroupTree(props.tree.groups, props.tree.policies),
-);
+const policyTree = computed(() => buildAlarmPolicyGroupTree(props.tree.groups, props.tree.policies))
 
-const checked = (event: Event) => (event.target as HTMLInputElement).checked;
+const checked = (event: Event) => (event.target as HTMLInputElement).checked
 
 const cleanFilters = () =>
-  Object.fromEntries(
-    Object.entries(filters).filter(([, value]) => value.trim() !== ""),
-  );
-const hasFilters = computed(() => Object.keys(cleanFilters()).length > 0);
+  Object.fromEntries(Object.entries(filters).filter(([, value]) => value.trim() !== ''))
+const hasFilters = computed(() => Object.keys(cleanFilters()).length > 0)
 
 const emitFilter = () => {
-  emit("filter", cleanFilters());
-};
+  emit('filter', cleanFilters())
+}
 
 const selectEnabled = (value: string) => {
-  filters.enabled = value;
-  emitFilter();
-};
+  filters.enabled = value
+  emitFilter()
+}
 
 const selectConditionType = (value: string) => {
-  filters.conditionType = value;
-  emitFilter();
-};
+  filters.conditionType = value
+  emitFilter()
+}
 
 const isSelected = (id: string) => {
-  if (props.selection.mode === "filtered") {
-    return !props.selection.excludePolicyIds.includes(id);
+  if (props.selection.mode === 'filtered') {
+    return !props.selection.excludePolicyIds.includes(id)
   }
-  return props.selection.policyIds.includes(id);
-};
+  return props.selection.policyIds.includes(id)
+}
 
-const isPolicyDirty = (policy: AlarmPolicy) =>
-  dirtyPolicyIdSet.value.has(String(policy.id));
+const isPolicyDirty = (policy: AlarmPolicy) => dirtyPolicyIdSet.value.has(String(policy.id))
 
 const policyStatusText = (policy: AlarmPolicy) =>
   isPolicyDirty(policy)
-    ? t("alarm.unsaved")
+    ? t('alarm.unsaved')
     : policy.isEnabled
-      ? t("common.enabled")
-      : t("alarm.stopped");
+      ? t('common.enabled')
+      : t('alarm.stopped')
 
 const policyStatusTone = (policy: AlarmPolicy) =>
-  isPolicyDirty(policy) ? "warning" : policy.effectiveEnabled ? "success" : "muted";
+  isPolicyDirty(policy) ? 'warning' : policy.effectiveEnabled ? 'success' : 'muted'
 
 const policyModeText = (policy: AlarmPolicy) =>
-  policy.mode === "derived"
-    ? t("alarm.modes.derived")
-    : t("alarm.modes.perTarget");
+  policy.mode === 'derived' ? t('alarm.modes.derived') : t('alarm.modes.perTarget')
 
 const policyModeIcon = (policy: AlarmPolicy) =>
-  policy.mode === "derived" ? IconTablerCalculator : IconTablerTemplate;
+  policy.mode === 'derived' ? IconTablerCalculator : IconTablerTemplate
 
 const allVisibleSelected = computed(
   () =>
-    visiblePolicies.value.length > 0 &&
-    visiblePolicies.value.every((item) => isSelected(item.id)),
-);
+    visiblePolicies.value.length > 0 && visiblePolicies.value.every((item) => isSelected(item.id)),
+)
 const someVisibleSelected = computed(() =>
   visiblePolicies.value.some((item) => isSelected(item.id)),
-);
+)
 
 const toggleVisible = (selected: boolean) => {
   emit(
-    "selectGroup",
+    'selectGroup',
     visiblePolicies.value.map((policy) => policy.id),
     selected,
-  );
-};
+  )
+}
 
 const selectFiltered = () => {
-  emit("selectFiltered", cleanFilters());
-};
+  emit('selectFiltered', cleanFilters())
+}
 
 const openPolicyMenu = (event: MouseEvent, policy: AlarmPolicy) => {
   contextMenu.value = {
     visible: true,
-    type: "policy",
+    type: 'policy',
     x: Math.min(event.clientX, window.innerWidth - 180),
     y: Math.min(event.clientY, window.innerHeight - 126),
     policy,
     group: null,
-  };
-};
+  }
+}
 
 const openGroupMenu = (event: MouseEvent, group: AlarmPolicyGroupNode) => {
   contextMenu.value = {
     visible: true,
-    type: "group",
+    type: 'group',
     x: Math.min(event.clientX, window.innerWidth - 180),
     y: Math.min(event.clientY, window.innerHeight - 126),
     policy: null,
     group,
-  };
-};
+  }
+}
 
 const closeContextMenu = () => {
-  contextMenu.value.visible = false;
-};
+  contextMenu.value.visible = false
+}
 
-const emitContextAction = (action: "rename" | "move" | "delete") => {
-  const current = contextMenu.value;
-  closeContextMenu();
-  if (current.type === "policy" && current.policy) {
-    if (action === "rename") {
-      emit("renamePolicy", current.policy);
-      return;
+const emitContextAction = (action: 'rename' | 'move' | 'delete') => {
+  const current = contextMenu.value
+  closeContextMenu()
+  if (current.type === 'policy' && current.policy) {
+    if (action === 'rename') {
+      emit('renamePolicy', current.policy)
+      return
     }
-    if (action === "delete") {
-      emit("deletePolicy", current.policy);
-      return;
+    if (action === 'delete') {
+      emit('deletePolicy', current.policy)
+      return
     }
-    emit("movePolicy", current.policy);
-    return;
+    emit('movePolicy', current.policy)
+    return
   }
-  if (current.type === "group" && current.group) {
-    if (action === "rename") {
-      emit("renameGroup", current.group);
-      return;
+  if (current.type === 'group' && current.group) {
+    if (action === 'rename') {
+      emit('renameGroup', current.group)
+      return
     }
-    if (action === "delete") {
-      emit("deleteGroup", current.group);
-      return;
+    if (action === 'delete') {
+      emit('deleteGroup', current.group)
+      return
     }
-    emit("moveGroup", current.group);
+    emit('moveGroup', current.group)
   }
-};
+}
 </script>
 
 <style scoped>

@@ -1,87 +1,87 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { Storage } from "./storage";
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Storage } from './storage'
 
-const store: Record<string, string> = {};
+const store: Record<string, string> = {}
 
-describe("storage", () => {
+describe('storage', () => {
   afterEach(() => {
-    vi.unstubAllGlobals();
+    vi.unstubAllGlobals()
     Object.keys(store).forEach((k) => {
-      delete store[k];
-    });
-  });
+      delete store[k]
+    })
+  })
 
-  it("get returns default when missing", () => {
-    vi.stubGlobal("localStorage", {
+  it('get returns default when missing', () => {
+    vi.stubGlobal('localStorage', {
       getItem: () => null,
       setItem: vi.fn(),
       removeItem: vi.fn(),
       clear: vi.fn(),
-    });
-    expect(Storage.get("missing", "d")).toBe("d");
-  });
+    })
+    expect(Storage.get('missing', 'd')).toBe('d')
+  })
 
-  it("set and get round-trip JSON", () => {
-    vi.stubGlobal("localStorage", {
+  it('set and get round-trip JSON', () => {
+    vi.stubGlobal('localStorage', {
       getItem: (key: string) => store[key] ?? null,
       setItem: (key: string, value: string) => {
-        store[key] = value;
+        store[key] = value
       },
       removeItem: (key: string) => {
-        delete store[key];
+        delete store[key]
       },
       clear: () => {
         Object.keys(store).forEach((k) => {
-          delete store[k];
-        });
+          delete store[k]
+        })
       },
-    });
-    Storage.set("k", { a: 1 });
-    expect(Storage.get<{ a: number }>("k", null)).toEqual({ a: 1 });
-  });
+    })
+    Storage.set('k', { a: 1 })
+    expect(Storage.get<{ a: number }>('k', null)).toEqual({ a: 1 })
+  })
 
-  it("theme and language helpers round-trip JSON values", () => {
-    vi.stubGlobal("localStorage", {
+  it('theme and language helpers round-trip JSON values', () => {
+    vi.stubGlobal('localStorage', {
       getItem: (key: string) => store[key] ?? null,
       setItem: (key: string, value: string) => {
-        store[key] = value;
+        store[key] = value
       },
       removeItem: (key: string) => {
-        delete store[key];
+        delete store[key]
       },
       clear: () => {
         Object.keys(store).forEach((k) => {
-          delete store[k];
-        });
+          delete store[k]
+        })
       },
-    });
+    })
 
-    Storage.setTheme("dark");
-    Storage.setLanguage("en");
+    Storage.setTheme('dark')
+    Storage.setLanguage('en')
 
-    expect(Storage.getTheme()).toBe("dark");
-    expect(Storage.getLanguage()).toBe("en");
-    expect(store.theme).toBe(JSON.stringify("dark"));
-    expect(store.language).toBe(JSON.stringify("en"));
-  });
+    expect(Storage.getTheme()).toBe('dark')
+    expect(Storage.getLanguage()).toBe('en')
+    expect(store.theme).toBe(JSON.stringify('dark'))
+    expect(store.language).toBe(JSON.stringify('en'))
+  })
 
-  it("theme and language helpers fall back to defaults on invalid values", () => {
-    vi.stubGlobal("localStorage", {
+  it('theme and language helpers fall back to defaults on invalid values', () => {
+    vi.stubGlobal('localStorage', {
       getItem: (key: string) => {
-        if (key === "theme") {
-          return JSON.stringify("solarized");
+        if (key === 'theme') {
+          return JSON.stringify('solarized')
         }
-        if (key === "language") {
-          return JSON.stringify("jp");
+        if (key === 'language') {
+          return JSON.stringify('jp')
         }
-        return null;
+        return null
       },
       setItem: vi.fn(),
       removeItem: vi.fn(),
       clear: vi.fn(),
-    });
+    })
 
-    expect(Storage.getTheme()).toBe("light");
-    expect(Storage.getLanguage()).toBe("zh");
-  });
-});
+    expect(Storage.getTheme()).toBe('light')
+    expect(Storage.getLanguage()).toBe('zh')
+  })
+})

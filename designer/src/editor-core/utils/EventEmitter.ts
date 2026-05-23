@@ -2,48 +2,48 @@
  * EventEmitter - 简单的事件发射器（文档模型变更通知等）
  */
 
-export type EventHandler = (...args: unknown[]) => void;
+export type EventHandler = (...args: unknown[]) => void
 
 export class EventEmitter {
-  private _listeners = new Map<string, Set<EventHandler>>();
+  private _listeners = new Map<string, Set<EventHandler>>()
 
   on(event: string, handler: EventHandler): () => void {
     if (!this._listeners.has(event)) {
-      this._listeners.set(event, new Set());
+      this._listeners.set(event, new Set())
     }
-    const set = this._listeners.get(event);
+    const set = this._listeners.get(event)
     if (set) {
-      set.add(handler);
+      set.add(handler)
     }
-    return () => this.off(event, handler);
+    return () => this.off(event, handler)
   }
 
   once(event: string, handler: EventHandler): () => void {
     const wrapper: EventHandler = (...args: unknown[]) => {
-      this.off(event, wrapper);
-      handler.apply(this, args);
-    };
-    return this.on(event, wrapper);
+      this.off(event, wrapper)
+      handler.apply(this, args)
+    }
+    return this.on(event, wrapper)
   }
 
   off(event: string, handler: EventHandler): void {
-    const handlers = this._listeners.get(event);
+    const handlers = this._listeners.get(event)
     if (handlers) {
-      handlers.delete(handler);
+      handlers.delete(handler)
       if (handlers.size === 0) {
-        this._listeners.delete(event);
+        this._listeners.delete(event)
       }
     }
   }
 
   emit(event: string, ...args: unknown[]): void {
-    const handlers = this._listeners.get(event);
+    const handlers = this._listeners.get(event)
     if (handlers) {
       for (const handler of handlers) {
         try {
-          handler.apply(this, args);
+          handler.apply(this, args)
         } catch (error) {
-          console.error(`EventEmitter: Error in handler for "${event}"`, error);
+          console.error(`EventEmitter: Error in handler for "${event}"`, error)
         }
       }
     }
@@ -51,16 +51,16 @@ export class EventEmitter {
 
   removeAllListeners(event?: string): void {
     if (event !== undefined) {
-      this._listeners.delete(event);
+      this._listeners.delete(event)
     } else {
-      this._listeners.clear();
+      this._listeners.clear()
     }
   }
 
   listenerCount(event: string): number {
-    const handlers = this._listeners.get(event);
-    return handlers ? handlers.size : 0;
+    const handlers = this._listeners.get(event)
+    return handlers ? handlers.size : 0
   }
 }
 
-export default EventEmitter;
+export default EventEmitter

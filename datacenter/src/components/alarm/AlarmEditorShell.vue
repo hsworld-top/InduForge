@@ -9,12 +9,7 @@
           @tab-change="(name) => emit('activateTab', String(name))"
           @tab-remove="(name) => emit('closeTab', String(name))"
         >
-          <el-tab-pane
-            v-for="tab in fileTabs"
-            :key="tab.id"
-            :name="tab.id"
-            :closable="true"
-          >
+          <el-tab-pane v-for="tab in fileTabs" :key="tab.id" :name="tab.id" :closable="true">
             <template #label>
               <span class="alarm-editor-shell__tab-label">
                 <span>{{ tab.name }}</span>
@@ -60,10 +55,7 @@
       <span>从左侧选择一条策略开始编辑</span>
     </div>
 
-    <footer
-      class="alarm-editor-shell__bottom"
-      :class="{ 'is-collapsed': bottomPanelCollapsed }"
-    >
+    <footer class="alarm-editor-shell__bottom" :class="{ 'is-collapsed': bottomPanelCollapsed }">
       <nav class="alarm-editor-shell__panel-tabs">
         <button
           v-for="tab in panelTabs"
@@ -119,106 +111,106 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch } from 'vue'
 import type {
   AlarmPolicyContract,
   AlarmPolicyCoverage,
   AlarmPolicyTrialPayload,
   AlarmPolicyTrialResult,
-} from "@/api/schemas/alarm.schema";
-import type { AlarmPolicyDraft } from "@/components/alarm/alarmPolicyModel";
-import IconTablerChevronUp from "~icons/tabler/chevron-up";
-import AlarmContractPanel from "./AlarmContractPanel.vue";
-import AlarmEditorHeader from "./AlarmEditorHeader.vue";
-import AlarmMessageTemplatePanel from "./AlarmMessageTemplatePanel.vue";
-import AlarmPolicyForm from "./AlarmPolicyForm.vue";
-import AlarmSuppressionPanel from "./AlarmSuppressionPanel.vue";
-import AlarmTestPanel from "./AlarmTestPanel.vue";
+} from '@/api/schemas/alarm.schema'
+import type { AlarmPolicyDraft } from '@/components/alarm/alarmPolicyModel'
+import IconTablerChevronUp from '~icons/tabler/chevron-up'
+import AlarmContractPanel from './AlarmContractPanel.vue'
+import AlarmEditorHeader from './AlarmEditorHeader.vue'
+import AlarmMessageTemplatePanel from './AlarmMessageTemplatePanel.vue'
+import AlarmPolicyForm from './AlarmPolicyForm.vue'
+import AlarmSuppressionPanel from './AlarmSuppressionPanel.vue'
+import AlarmTestPanel from './AlarmTestPanel.vue'
 
-export type AlarmEditorTab = "config" | "test" | "contract";
+export type AlarmEditorTab = 'config' | 'test' | 'contract'
 export type AlarmEditorFileTab = {
-  id: string;
-  name: string;
-  dirty: boolean;
-};
+  id: string
+  name: string
+  dirty: boolean
+}
 
 const props = defineProps<{
-  projectId: string;
-  fileTabs: AlarmEditorFileTab[];
-  activeId: string | null;
-  draft: AlarmPolicyDraft | null;
-  activeTab: AlarmEditorTab;
-  loading: boolean;
-  error: string;
-  saving: boolean;
-  deleting: boolean;
-  trialResult: AlarmPolicyTrialResult | null;
-  trialRunning: boolean;
-  trialError: string;
-  contract: AlarmPolicyContract | null;
-  contractLoading: boolean;
-  contractError: string;
-  coverages?: Record<string, AlarmPolicyCoverage>;
-  coverageLoading?: boolean;
-}>();
+  projectId: string
+  fileTabs: AlarmEditorFileTab[]
+  activeId: string | null
+  draft: AlarmPolicyDraft | null
+  activeTab: AlarmEditorTab
+  loading: boolean
+  error: string
+  saving: boolean
+  deleting: boolean
+  trialResult: AlarmPolicyTrialResult | null
+  trialRunning: boolean
+  trialError: string
+  contract: AlarmPolicyContract | null
+  contractLoading: boolean
+  contractError: string
+  coverages?: Record<string, AlarmPolicyCoverage>
+  coverageLoading?: boolean
+}>()
 
 const emit = defineEmits<{
-  update: [patch: Partial<AlarmPolicyDraft>];
-  save: [];
-  toggle: [];
-  delete: [];
-  activateTab: [id: string];
-  closeTab: [id: string];
-  selectTab: [tab: AlarmEditorTab];
-  runTrial: [payload: AlarmPolicyTrialPayload];
-  refreshContract: [];
-  checkCurrent: [];
-  selectTarget: [];
-}>();
+  update: [patch: Partial<AlarmPolicyDraft>]
+  save: []
+  toggle: []
+  delete: []
+  activateTab: [id: string]
+  closeTab: [id: string]
+  selectTab: [tab: AlarmEditorTab]
+  runTrial: [payload: AlarmPolicyTrialPayload]
+  refreshContract: []
+  checkCurrent: []
+  selectTarget: []
+}>()
 
 const panelTabs: Array<{ value: AlarmEditorTab; label: string }> = [
-  { value: "config", label: "配置" },
-  { value: "test", label: "试算" },
-  { value: "contract", label: "契约" },
-];
+  { value: 'config', label: '配置' },
+  { value: 'test', label: '试算' },
+  { value: 'contract', label: '契约' },
+]
 
-const bottomPanelCollapsed = ref(true);
-const selectedBottomTab = ref<AlarmEditorTab | null>(null);
-const visibleBottomTab = computed(() => selectedBottomTab.value ?? props.activeTab);
+const bottomPanelCollapsed = ref(true)
+const selectedBottomTab = ref<AlarmEditorTab | null>(null)
+const visibleBottomTab = computed(() => selectedBottomTab.value ?? props.activeTab)
 
 watch(
   () => props.activeTab,
   (tab) => {
-    selectedBottomTab.value = tab;
+    selectedBottomTab.value = tab
   },
-);
+)
 
 const bottomSummary = computed(() => {
   if (!props.draft) {
-    return visibleBottomTab.value === "config"
-      ? "抑制策略 / 消息模板"
-      : visibleBottomTab.value === "test"
-        ? "试算样本 / 结果"
-        : "策略契约";
+    return visibleBottomTab.value === 'config'
+      ? '抑制策略 / 消息模板'
+      : visibleBottomTab.value === 'test'
+        ? '试算样本 / 结果'
+        : '策略契约'
   }
-  if (visibleBottomTab.value === "config") {
-    return "抑制策略 / 消息模板";
+  if (visibleBottomTab.value === 'config') {
+    return '抑制策略 / 消息模板'
   }
-  if (visibleBottomTab.value === "test") {
-    return trialRunning ? "试算中" : trialResult ? "已有试算结果" : "未试算";
+  if (visibleBottomTab.value === 'test') {
+    return trialRunning ? '试算中' : trialResult ? '已有试算结果' : '未试算'
   }
-  return contractLoading ? "加载契约中" : contract ? "已加载契约" : "未加载契约";
-});
+  return contractLoading ? '加载契约中' : contract ? '已加载契约' : '未加载契约'
+})
 
 const openBottomPanel = (tab: AlarmEditorTab) => {
-  selectedBottomTab.value = tab;
-  emit("selectTab", tab);
-  bottomPanelCollapsed.value = false;
-};
+  selectedBottomTab.value = tab
+  emit('selectTab', tab)
+  bottomPanelCollapsed.value = false
+}
 
 const toggleBottomPanel = () => {
-  bottomPanelCollapsed.value = !bottomPanelCollapsed.value;
-};
+  bottomPanelCollapsed.value = !bottomPanelCollapsed.value
+}
 </script>
 
 <style scoped>

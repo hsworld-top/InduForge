@@ -7,30 +7,30 @@
  * @module ui/Canvas/composables/use-node-resize
  */
 
-import type { ResizeHandle, UseNodeResizeDeps } from "./types";
-import type { ComponentNode } from "@/editor-core/document/types";
-import { onBeforeUnmount } from "vue";
-import { createSelectableElement, UpdateNodeCommand } from "@/editor-core";
+import type { ResizeHandle, UseNodeResizeDeps } from './types'
+import type { ComponentNode } from '@/editor-core/document/types'
+import { onBeforeUnmount } from 'vue'
+import { createSelectableElement, UpdateNodeCommand } from '@/editor-core'
 import {
   buildContainerSectionSizePatch,
   parseSizeToNumber,
   resolveAbsoluteLayout,
   resolveElContainerMinSize,
   resolveElLayoutMinHeight,
-} from "@/editor-core/utils/layout-utils";
+} from '@/editor-core/utils/layout-utils'
 
 interface ActiveDragHandlers {
-  move: (event: MouseEvent | PointerEvent) => void;
-  up: () => void;
-  userSelect?: string;
-  pointerTarget?: Element | null | undefined;
-  pointerId?: number | undefined;
-  usePointer: boolean;
-  pointerEvents?: string | undefined;
-  pointerElement?: HTMLElement | null | undefined;
+  move: (event: MouseEvent | PointerEvent) => void
+  up: () => void
+  userSelect?: string
+  pointerTarget?: Element | null | undefined
+  pointerId?: number | undefined
+  usePointer: boolean
+  pointerEvents?: string | undefined
+  pointerElement?: HTMLElement | null | undefined
 }
 
-type NodePatch = Partial<ComponentNode> & Record<string, unknown>;
+type NodePatch = Partial<ComponentNode> & Record<string, unknown>
 
 /**
  * 创建节点尺寸调整逻辑
@@ -65,16 +65,16 @@ export function useNodeResize(deps: UseNodeResizeDeps) {
     editorStore,
     isChildResizableByDescriptor,
     getRegionResizeConfig,
-  } = deps;
+  } = deps
 
-  let activeDragHandlers: ActiveDragHandlers | null = null;
+  let activeDragHandlers: ActiveDragHandlers | null = null
 
   /**
    * 清理拖拽事件监听
    * @returns {void}
    */
   const cleanupDragHandlers = () => {
-    if (!activeDragHandlers) return;
+    if (!activeDragHandlers) return
     const {
       move,
       up,
@@ -84,32 +84,32 @@ export function useNodeResize(deps: UseNodeResizeDeps) {
       usePointer,
       pointerEvents,
       pointerElement,
-    } = activeDragHandlers;
+    } = activeDragHandlers
     if (usePointer) {
-      document.removeEventListener("pointermove", move);
-      document.removeEventListener("pointerup", up);
-      document.removeEventListener("pointercancel", up);
+      document.removeEventListener('pointermove', move)
+      document.removeEventListener('pointerup', up)
+      document.removeEventListener('pointercancel', up)
     } else {
-      document.removeEventListener("mousemove", move);
-      document.removeEventListener("mouseup", up);
+      document.removeEventListener('mousemove', move)
+      document.removeEventListener('mouseup', up)
     }
     if (pointerTarget?.releasePointerCapture && pointerId !== undefined) {
       try {
-        pointerTarget.releasePointerCapture(pointerId);
+        pointerTarget.releasePointerCapture(pointerId)
       } catch {
         // 忽略释放失败
       }
     }
     if (pointerElement && pointerEvents !== undefined) {
-      pointerElement.style.pointerEvents = pointerEvents;
+      pointerElement.style.pointerEvents = pointerEvents
     }
-    document.body.style.userSelect = userSelect ?? "";
-    activeDragHandlers = null;
-  };
+    document.body.style.userSelect = userSelect ?? ''
+    activeDragHandlers = null
+  }
 
   onBeforeUnmount(() => {
-    cleanupDragHandlers();
-  });
+    cleanupDragHandlers()
+  })
 
   /**
    * 处理尺寸拖拽开始
@@ -118,140 +118,140 @@ export function useNodeResize(deps: UseNodeResizeDeps) {
    * @returns {void}
    */
   const handleResizePointerDown = (event: PointerEvent, handle: ResizeHandle) => {
-    if (readonly.value) return;
-    if (activeDragHandlers) return;
+    if (readonly.value) return
+    if (activeDragHandlers) return
     if (
       !node.value ||
       isChildInElCol.value ||
-      (!isMovable.value && !isElColInRow.value && node.value.type !== "ElLayoutRow")
+      (!isMovable.value && !isElColInRow.value && node.value.type !== 'ElLayoutRow')
     ) {
-      return;
+      return
     }
-    if (event.pointerType === "mouse" && event.button !== 0) return;
-    const resizeParent = doc.value?.getParent?.(node.value.id);
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    const resizeParent = doc.value?.getParent?.(node.value.id)
     if (resizeParent && !isChildResizableByDescriptor(resizeParent.type)) {
-      return;
+      return
     }
 
-    event.preventDefault();
-    event.stopPropagation();
+    event.preventDefault()
+    event.stopPropagation()
 
     if (selection.value) {
       // 捕获阶段避免破坏 Ctrl/Meta/Shift 多选逻辑，交由 click 阶段统一处理
       if (event.ctrlKey || event.metaKey || event.shiftKey) {
-        return;
+        return
       }
-      const element = createSelectableElement("node", node.value.id);
-      selection.value.select(element);
+      const element = createSelectableElement('node', node.value.id)
+      selection.value.select(element)
     }
 
-    const regionConfig = getRegionResizeConfig(node.value.type);
+    const regionConfig = getRegionResizeConfig(node.value.type)
     if (regionConfig && !regionConfig.handles.includes(handle.key)) {
-      return;
+      return
     }
 
     if (isElColInRow.value) {
-      if (handle.x === 0) return;
-      const parentNode = doc.value?.getParent?.(node.value.id);
-      if (!parentNode) return;
-      const rowChildren = Array.isArray(parentNode.children) ? parentNode.children : [];
+      if (handle.x === 0) return
+      const parentNode = doc.value?.getParent?.(node.value.id)
+      if (!parentNode) return
+      const rowChildren = Array.isArray(parentNode.children) ? parentNode.children : []
       const colIds = rowChildren.filter((childId) => {
-        const childNode = doc.value?.getNode?.(childId);
-        return childNode?.type === "ElCol";
-      });
-      const currentIndex = colIds.indexOf(node.value.id);
-      const leftColId = currentIndex > 0 ? colIds[currentIndex - 1] : "";
-      const leftColNode = leftColId ? doc.value?.getNode?.(leftColId) : null;
-      const baseLeftSpan = Math.max(1, Math.min(24, Number(leftColNode?.props?.span) || 1));
-      const baseSpan = Math.max(1, Math.min(24, Number(node.value.props?.span) || 1));
-      const totalSpan = baseLeftSpan + baseSpan;
-      const rowSelector = `[data-node-id="${parentNode.id}"]`;
-      const rowEl = document.querySelector(rowSelector) || nodeRef.value?.closest?.(rowSelector);
-      const rowRect = rowEl?.getBoundingClientRect?.();
-      if (!rowRect || rowRect.width <= 0) return;
-      const zoomValue = Number(canvasZoom?.value) || 1;
-      const rowWidth = rowRect.width / zoomValue;
-      const startClientX = event.clientX;
-      cleanupDragHandlers();
-      const originalUserSelect = document.body.style.userSelect;
-      document.body.style.userSelect = "none";
+        const childNode = doc.value?.getNode?.(childId)
+        return childNode?.type === 'ElCol'
+      })
+      const currentIndex = colIds.indexOf(node.value.id)
+      const leftColId = currentIndex > 0 ? colIds[currentIndex - 1] : ''
+      const leftColNode = leftColId ? doc.value?.getNode?.(leftColId) : null
+      const baseLeftSpan = Math.max(1, Math.min(24, Number(leftColNode?.props?.span) || 1))
+      const baseSpan = Math.max(1, Math.min(24, Number(node.value.props?.span) || 1))
+      const totalSpan = baseLeftSpan + baseSpan
+      const rowSelector = `[data-node-id="${parentNode.id}"]`
+      const rowEl = document.querySelector(rowSelector) || nodeRef.value?.closest?.(rowSelector)
+      const rowRect = rowEl?.getBoundingClientRect?.()
+      if (!rowRect || rowRect.width <= 0) return
+      const zoomValue = Number(canvasZoom?.value) || 1
+      const rowWidth = rowRect.width / zoomValue
+      const startClientX = event.clientX
+      cleanupDragHandlers()
+      const originalUserSelect = document.body.style.userSelect
+      document.body.style.userSelect = 'none'
 
       if (history.value && !history.value.isInTransaction?.()) {
-        history.value.beginTransaction?.();
+        history.value.beginTransaction?.()
       }
 
-      const usePointer = event.type === "pointerdown";
-      const pointerTarget = event.target instanceof Element ? event.target : nodeRef.value;
-      const pointerElement = nodeRef.value;
-      const originalPointerEvents = pointerElement?.style.pointerEvents;
+      const usePointer = event.type === 'pointerdown'
+      const pointerTarget = event.target instanceof Element ? event.target : nodeRef.value
+      const pointerElement = nodeRef.value
+      const originalPointerEvents = pointerElement?.style.pointerEvents
       if (pointerElement) {
-        pointerElement.style.pointerEvents = "none";
+        pointerElement.style.pointerEvents = 'none'
       }
       if (usePointer && pointerTarget?.setPointerCapture && event.pointerId !== undefined) {
         try {
-          pointerTarget.setPointerCapture(event.pointerId);
+          pointerTarget.setPointerCapture(event.pointerId)
         } catch {
           // 忽略捕获失败
         }
       }
 
       const move = (moveEvent: MouseEvent | PointerEvent) => {
-        if (!node.value) return;
-        const deltaX = (moveEvent.clientX - startClientX) / zoomValue;
-        const rawDelta = (deltaX / rowWidth) * 24;
-        let deltaSpan = rawDelta > 0 ? Math.floor(rawDelta) : Math.ceil(rawDelta);
+        if (!node.value) return
+        const deltaX = (moveEvent.clientX - startClientX) / zoomValue
+        const rawDelta = (deltaX / rowWidth) * 24
+        let deltaSpan = rawDelta > 0 ? Math.floor(rawDelta) : Math.ceil(rawDelta)
         if (handle.x === -1) {
-          deltaSpan = -deltaSpan;
+          deltaSpan = -deltaSpan
         }
         if (handle.x === -1 && leftColNode) {
-          const nextSpan = Math.max(1, Math.min(totalSpan - 1, baseSpan + deltaSpan));
-          const nextLeft = Math.max(1, totalSpan - nextSpan);
-          if (nextSpan === baseSpan && nextLeft === baseLeftSpan) return;
+          const nextSpan = Math.max(1, Math.min(totalSpan - 1, baseSpan + deltaSpan))
+          const nextLeft = Math.max(1, totalSpan - nextSpan)
+          if (nextSpan === baseSpan && nextLeft === baseLeftSpan) return
           if (history.value?.isInTransaction?.()) {
             history.value.executeInTransaction?.(
               new UpdateNodeCommand(leftColNode.id, {
                 props: { ...(leftColNode.props || {}), span: nextLeft },
               }),
-            );
+            )
             history.value.executeInTransaction?.(
               new UpdateNodeCommand(node.value.id, {
                 props: { ...(node.value.props || {}), span: nextSpan },
               }),
-            );
+            )
           } else if (history.value?.execute) {
             history.value.execute(
               new UpdateNodeCommand(leftColNode.id, {
                 props: { ...(leftColNode.props || {}), span: nextLeft },
               }),
-            );
+            )
             history.value.execute(
               new UpdateNodeCommand(node.value.id, {
                 props: { ...(node.value.props || {}), span: nextSpan },
               }),
-            );
+            )
           } else if (doc.value?._updateNode) {
             doc.value._updateNode(leftColNode.id, {
               props: { ...(leftColNode.props || {}), span: nextLeft },
-            });
+            })
             doc.value._updateNode(node.value.id, {
               props: { ...(node.value.props || {}), span: nextSpan },
-            });
+            })
           }
-          return;
+          return
         }
-        const nextSpan = Math.max(1, Math.min(24, baseSpan + deltaSpan));
-        if (nextSpan === Number(node.value.props?.span || baseSpan)) return;
+        const nextSpan = Math.max(1, Math.min(24, baseSpan + deltaSpan))
+        if (nextSpan === Number(node.value.props?.span || baseSpan)) return
         editorStore.updateNode(node.value.id, {
           props: { ...(node.value.props || {}), span: nextSpan },
-        });
-      };
+        })
+      }
 
       const up = () => {
         if (history.value?.isInTransaction?.()) {
-          history.value.commitTransaction?.("调整栅格");
+          history.value.commitTransaction?.('调整栅格')
         }
-        cleanupDragHandlers();
-      };
+        cleanupDragHandlers()
+      }
 
       activeDragHandlers = {
         move,
@@ -262,38 +262,38 @@ export function useNodeResize(deps: UseNodeResizeDeps) {
         usePointer,
         pointerEvents: originalPointerEvents,
         pointerElement,
-      };
+      }
 
       if (usePointer) {
-        document.addEventListener("pointermove", move);
-        document.addEventListener("pointerup", up, { once: true });
-        document.addEventListener("pointercancel", up, { once: true });
+        document.addEventListener('pointermove', move)
+        document.addEventListener('pointerup', up, { once: true })
+        document.addEventListener('pointercancel', up, { once: true })
       } else {
-        document.addEventListener("mousemove", move);
-        document.addEventListener("mouseup", up, { once: true });
+        document.addEventListener('mousemove', move)
+        document.addEventListener('mouseup', up, { once: true })
       }
-      return;
+      return
     }
 
-    if (node.value.type === "ElLayoutRow" && handle.x === 0 && handle.y !== 0) {
-      const parentNode = doc.value?.getParent?.(node.value.id);
-      if (parentNode?.type === "ElLayout") {
-        const rowChildren = Array.isArray(parentNode.children) ? parentNode.children : [];
+    if (node.value.type === 'ElLayoutRow' && handle.x === 0 && handle.y !== 0) {
+      const parentNode = doc.value?.getParent?.(node.value.id)
+      if (parentNode?.type === 'ElLayout') {
+        const rowChildren = Array.isArray(parentNode.children) ? parentNode.children : []
         const rowIds = rowChildren.filter((childId) => {
-          const childNode = doc.value?.getNode?.(childId);
-          return childNode?.type === "ElLayoutRow";
-        });
-        const currentIndex = rowIds.indexOf(node.value.id);
-        const targetIndex = handle.y === -1 ? currentIndex - 1 : currentIndex + 1;
-        const targetRowId = targetIndex >= 0 ? rowIds[targetIndex] : "";
-        const targetRowNode = targetRowId ? doc.value?.getNode?.(targetRowId) : null;
-        const currentEl = nodeRef.value;
+          const childNode = doc.value?.getNode?.(childId)
+          return childNode?.type === 'ElLayoutRow'
+        })
+        const currentIndex = rowIds.indexOf(node.value.id)
+        const targetIndex = handle.y === -1 ? currentIndex - 1 : currentIndex + 1
+        const targetRowId = targetIndex >= 0 ? rowIds[targetIndex] : ''
+        const targetRowNode = targetRowId ? doc.value?.getNode?.(targetRowId) : null
+        const currentEl = nodeRef.value
         const targetEl = targetRowId
           ? document.querySelector(`[data-node-id="${targetRowId}"]`)
-          : null;
-        const zoomValue = Number(canvasZoom?.value) || 1;
-        const currentRect = currentEl?.getBoundingClientRect?.();
-        const targetRect = targetEl?.getBoundingClientRect?.();
+          : null
+        const zoomValue = Number(canvasZoom?.value) || 1
+        const currentRect = currentEl?.getBoundingClientRect?.()
+        const targetRect = targetEl?.getBoundingClientRect?.()
         if (
           targetRowNode &&
           currentRect &&
@@ -301,49 +301,49 @@ export function useNodeResize(deps: UseNodeResizeDeps) {
           currentRect.height > 0 &&
           targetRect.height > 0
         ) {
-          const baseCurrentHeight = currentRect.height / zoomValue;
-          const baseTargetHeight = targetRect.height / zoomValue;
-          const startClientY = event.clientY;
-          cleanupDragHandlers();
-          const originalUserSelect = document.body.style.userSelect;
-          document.body.style.userSelect = "none";
+          const baseCurrentHeight = currentRect.height / zoomValue
+          const baseTargetHeight = targetRect.height / zoomValue
+          const startClientY = event.clientY
+          cleanupDragHandlers()
+          const originalUserSelect = document.body.style.userSelect
+          document.body.style.userSelect = 'none'
 
           if (history.value && !history.value.isInTransaction?.()) {
-            history.value.beginTransaction?.();
+            history.value.beginTransaction?.()
           }
 
-          const usePointer = event.type === "pointerdown";
-          const pointerTarget = event.target instanceof Element ? event.target : nodeRef.value;
+          const usePointer = event.type === 'pointerdown'
+          const pointerTarget = event.target instanceof Element ? event.target : nodeRef.value
           if (usePointer && pointerTarget?.setPointerCapture && event.pointerId !== undefined) {
             try {
-              pointerTarget.setPointerCapture(event.pointerId);
+              pointerTarget.setPointerCapture(event.pointerId)
             } catch {
               // 忽略捕获失败
             }
           }
 
-          const minSize = 1;
+          const minSize = 1
           const move = (moveEvent: MouseEvent | PointerEvent) => {
-            if (!node.value || !targetRowNode) return;
-            const deltaY = (moveEvent.clientY - startClientY) / zoomValue;
+            if (!node.value || !targetRowNode) return
+            const deltaY = (moveEvent.clientY - startClientY) / zoomValue
             let nextCurrentHeight =
-              handle.y === -1 ? baseCurrentHeight - deltaY : baseCurrentHeight + deltaY;
+              handle.y === -1 ? baseCurrentHeight - deltaY : baseCurrentHeight + deltaY
             let nextTargetHeight =
-              handle.y === -1 ? baseTargetHeight + deltaY : baseTargetHeight - deltaY;
+              handle.y === -1 ? baseTargetHeight + deltaY : baseTargetHeight - deltaY
 
             if (nextTargetHeight < minSize) {
-              nextTargetHeight = minSize;
+              nextTargetHeight = minSize
               nextCurrentHeight = Math.max(
                 minSize,
                 baseCurrentHeight + (baseTargetHeight - nextTargetHeight),
-              );
+              )
             }
             if (nextCurrentHeight < minSize) {
-              nextCurrentHeight = minSize;
+              nextCurrentHeight = minSize
               nextTargetHeight = Math.max(
                 minSize,
                 baseTargetHeight + (baseCurrentHeight - nextCurrentHeight),
-              );
+              )
             }
 
             const currentPatch: NodePatch = {
@@ -351,36 +351,36 @@ export function useNodeResize(deps: UseNodeResizeDeps) {
                 ...(node.value.style || {}),
                 height: `${Math.round(nextCurrentHeight)}px`,
               },
-            };
+            }
             const targetPatch: NodePatch = {
               style: {
                 ...(targetRowNode.style || {}),
                 height: `${Math.round(nextTargetHeight)}px`,
               },
-            };
+            }
 
             if (history.value?.isInTransaction?.()) {
               history.value.executeInTransaction?.(
                 new UpdateNodeCommand(node.value.id, currentPatch),
-              );
+              )
               history.value.executeInTransaction?.(
                 new UpdateNodeCommand(targetRowNode.id, targetPatch),
-              );
+              )
             } else if (history.value?.execute) {
-              history.value.execute(new UpdateNodeCommand(node.value.id, currentPatch));
-              history.value.execute(new UpdateNodeCommand(targetRowNode.id, targetPatch));
+              history.value.execute(new UpdateNodeCommand(node.value.id, currentPatch))
+              history.value.execute(new UpdateNodeCommand(targetRowNode.id, targetPatch))
             } else if (doc.value?._updateNode) {
-              doc.value._updateNode(node.value.id, currentPatch);
-              doc.value._updateNode(targetRowNode.id, targetPatch);
+              doc.value._updateNode(node.value.id, currentPatch)
+              doc.value._updateNode(targetRowNode.id, targetPatch)
             }
-          };
+          }
 
           const up = () => {
             if (history.value?.isInTransaction?.()) {
-              history.value.commitTransaction?.("调整布局行高度");
+              history.value.commitTransaction?.('调整布局行高度')
             }
-            cleanupDragHandlers();
-          };
+            cleanupDragHandlers()
+          }
 
           activeDragHandlers = {
             move,
@@ -389,30 +389,30 @@ export function useNodeResize(deps: UseNodeResizeDeps) {
             pointerTarget,
             pointerId: event.pointerId,
             usePointer,
-          };
+          }
 
           if (usePointer) {
-            document.addEventListener("pointermove", move);
-            document.addEventListener("pointerup", up, { once: true });
-            document.addEventListener("pointercancel", up, { once: true });
+            document.addEventListener('pointermove', move)
+            document.addEventListener('pointerup', up, { once: true })
+            document.addEventListener('pointercancel', up, { once: true })
           } else {
-            document.addEventListener("mousemove", move);
-            document.addEventListener("mouseup", up, { once: true });
+            document.addEventListener('mousemove', move)
+            document.addEventListener('mouseup', up, { once: true })
           }
-          return;
+          return
         }
       }
     }
 
-    const zoomValue = Number(canvasZoom?.value) || 1;
-    const baseLayout = resolveAbsoluteLayout(node.value, nodeRef.value || null);
-    const rect = nodeRef.value?.getBoundingClientRect?.();
-    const rectWidth = rect ? rect.width / zoomValue : undefined;
-    const rectHeight = rect ? rect.height / zoomValue : undefined;
-    const baseWidth = baseLayout.w || rectWidth || 120;
-    const baseHeight = baseLayout.h || rectHeight || 40;
+    const zoomValue = Number(canvasZoom?.value) || 1
+    const baseLayout = resolveAbsoluteLayout(node.value, nodeRef.value || null)
+    const rect = nodeRef.value?.getBoundingClientRect?.()
+    const rectWidth = rect ? rect.width / zoomValue : undefined
+    const rectHeight = rect ? rect.height / zoomValue : undefined
+    const baseWidth = baseLayout.w || rectWidth || 120
+    const baseHeight = baseLayout.h || rectHeight || 40
     const baseSectionSizes =
-      node.value.type === "ElContainer"
+      node.value.type === 'ElContainer'
         ? {
             headerHeight:
               parseSizeToNumber(node.value.props?.headerHeight as string | number) ?? 60,
@@ -420,249 +420,245 @@ export function useNodeResize(deps: UseNodeResizeDeps) {
               parseSizeToNumber(node.value.props?.footerHeight as string | number) ?? 60,
             asideWidth: parseSizeToNumber(node.value.props?.asideWidth as string | number) ?? 200,
           }
-        : null;
-    const startClientX = event.clientX;
-    const startClientY = event.clientY;
-    const minSize = ["ElLayout", "ElLayoutRow", "ElCol"].includes(node.value?.type) ? 1 : 40;
+        : null
+    const startClientX = event.clientX
+    const startClientY = event.clientY
+    const minSize = ['ElLayout', 'ElLayoutRow', 'ElCol'].includes(node.value?.type) ? 1 : 40
     const containerMinSize = resolveElContainerMinSize(
       node.value,
       doc.value as { getNode: (id: string) => ComponentNode | null } | null | undefined,
-    );
+    )
     const childMinSize = (() => {
       if (
         !nodeRef.value ||
         !node.value?.children?.length ||
-        ["ElLayout", "ElLayoutRow", "ElCol"].includes(node.value?.type)
+        ['ElLayout', 'ElLayoutRow', 'ElCol'].includes(node.value?.type)
       ) {
-        return null;
+        return null
       }
-      const parentRect = nodeRef.value.getBoundingClientRect?.();
-      if (!parentRect) return null;
-      let minLeft = Number.POSITIVE_INFINITY;
-      let minTop = Number.POSITIVE_INFINITY;
-      let maxRight = Number.NEGATIVE_INFINITY;
-      let maxBottom = Number.NEGATIVE_INFINITY;
+      const parentRect = nodeRef.value.getBoundingClientRect?.()
+      if (!parentRect) return null
+      let minLeft = Number.POSITIVE_INFINITY
+      let minTop = Number.POSITIVE_INFINITY
+      let maxRight = Number.NEGATIVE_INFINITY
+      let maxBottom = Number.NEGATIVE_INFINITY
       for (const childId of node.value.children) {
-        const childEl = nodeRef.value.querySelector?.(`[data-node-id="${childId}"]`);
-        if (!childEl) continue;
-        const childRect = childEl.getBoundingClientRect?.();
-        if (!childRect) continue;
-        minLeft = Math.min(minLeft, childRect.left);
-        minTop = Math.min(minTop, childRect.top);
-        maxRight = Math.max(maxRight, childRect.right);
-        maxBottom = Math.max(maxBottom, childRect.bottom);
+        const childEl = nodeRef.value.querySelector?.(`[data-node-id="${childId}"]`)
+        if (!childEl) continue
+        const childRect = childEl.getBoundingClientRect?.()
+        if (!childRect) continue
+        minLeft = Math.min(minLeft, childRect.left)
+        minTop = Math.min(minTop, childRect.top)
+        maxRight = Math.max(maxRight, childRect.right)
+        maxBottom = Math.max(maxBottom, childRect.bottom)
       }
       if (minLeft === Number.POSITIVE_INFINITY || minTop === Number.POSITIVE_INFINITY) {
-        return null;
+        return null
       }
       return {
         width: Math.max(0, Math.round((maxRight - minLeft) / zoomValue)),
         height: Math.max(0, Math.round((maxBottom - minTop) / zoomValue)),
-      };
-    })();
+      }
+    })()
 
-    const parentNode = doc.value?.getParent?.(node.value.id);
+    const parentNode = doc.value?.getParent?.(node.value.id)
     const shouldUpdateAbsolute =
-      parentNode?.type === "FreeContainer" ||
-      node.value.positioning === "absolute" ||
-      node.value.layoutItem?.free?.mode === "abs" ||
-      node.value.absolutePos;
+      parentNode?.type === 'FreeContainer' ||
+      node.value.positioning === 'absolute' ||
+      node.value.layoutItem?.free?.mode === 'abs' ||
+      node.value.absolutePos
 
-    cleanupDragHandlers();
-    const originalUserSelect = document.body.style.userSelect;
-    document.body.style.userSelect = "none";
+    cleanupDragHandlers()
+    const originalUserSelect = document.body.style.userSelect
+    document.body.style.userSelect = 'none'
 
     if (history.value && !history.value.isInTransaction?.()) {
-      history.value.beginTransaction?.();
+      history.value.beginTransaction?.()
     }
 
-    const usePointer = event.type === "pointerdown";
-    const pointerTarget = event.target instanceof Element ? event.target : nodeRef.value;
-    const pointerElement = nodeRef.value;
-    const originalPointerEvents = pointerElement?.style.pointerEvents;
+    const usePointer = event.type === 'pointerdown'
+    const pointerTarget = event.target instanceof Element ? event.target : nodeRef.value
+    const pointerElement = nodeRef.value
+    const originalPointerEvents = pointerElement?.style.pointerEvents
     if (pointerElement) {
-      pointerElement.style.pointerEvents = "none";
+      pointerElement.style.pointerEvents = 'none'
     }
     if (usePointer && pointerTarget?.setPointerCapture && event.pointerId !== undefined) {
       try {
-        pointerTarget.setPointerCapture(event.pointerId);
+        pointerTarget.setPointerCapture(event.pointerId)
       } catch {
         // 忽略捕获失败
       }
     }
 
     const move = (moveEvent: MouseEvent | PointerEvent) => {
-      if (!node.value) return;
-      const deltaX = (moveEvent.clientX - startClientX) / zoomValue;
-      const deltaY = (moveEvent.clientY - startClientY) / zoomValue;
+      if (!node.value) return
+      const deltaX = (moveEvent.clientX - startClientX) / zoomValue
+      const deltaY = (moveEvent.clientY - startClientY) / zoomValue
 
       if (regionConfig) {
-        const currentSize = regionConfig.axis === "x" ? baseWidth : baseHeight;
-        const rawDelta = regionConfig.axis === "x" ? deltaX : deltaY;
-        const delta = regionConfig.invert ? -rawDelta : rawDelta;
-        let nextSize = currentSize + delta;
+        const currentSize = regionConfig.axis === 'x' ? baseWidth : baseHeight
+        const rawDelta = regionConfig.axis === 'x' ? deltaX : deltaY
+        const delta = regionConfig.invert ? -rawDelta : rawDelta
+        let nextSize = currentSize + delta
         const containerNode =
-          parentNode?.type === "ElContainer"
+          parentNode?.type === 'ElContainer'
             ? parentNode
             : parentNode?.id
               ? doc.value?.getParent?.(parentNode.id)
-              : null;
+              : null
         if (containerNode) {
-          const containerEl = document.querySelector(`[data-node-id="${containerNode.id}"]`);
-          const containerRect = containerEl?.getBoundingClientRect?.();
-          const minBodySize = minSize;
+          const containerEl = document.querySelector(`[data-node-id="${containerNode.id}"]`)
+          const containerRect = containerEl?.getBoundingClientRect?.()
+          const minBodySize = minSize
           if (containerRect) {
-            if (node.value.type === "ElAside") {
-              const maxWidth = Math.max(minBodySize, Math.round(containerRect.width - minBodySize));
-              nextSize = Math.min(nextSize, maxWidth);
-            } else if (node.value.type === "ElHeader") {
-              const footerHeight = Number.parseFloat(
-                String(containerNode.props?.footerHeight ?? 0),
-              );
+            if (node.value.type === 'ElAside') {
+              const maxWidth = Math.max(minBodySize, Math.round(containerRect.width - minBodySize))
+              nextSize = Math.min(nextSize, maxWidth)
+            } else if (node.value.type === 'ElHeader') {
+              const footerHeight = Number.parseFloat(String(containerNode.props?.footerHeight ?? 0))
               const maxHeight = Math.max(
                 minBodySize,
                 Math.round(containerRect.height - footerHeight - minBodySize),
-              );
-              nextSize = Math.min(nextSize, maxHeight);
-            } else if (node.value.type === "ElFooter") {
-              const headerHeight = Number.parseFloat(
-                String(containerNode.props?.headerHeight ?? 0),
-              );
+              )
+              nextSize = Math.min(nextSize, maxHeight)
+            } else if (node.value.type === 'ElFooter') {
+              const headerHeight = Number.parseFloat(String(containerNode.props?.headerHeight ?? 0))
               const maxHeight = Math.max(
                 minBodySize,
                 Math.round(containerRect.height - headerHeight - minBodySize),
-              );
-              nextSize = Math.min(nextSize, maxHeight);
+              )
+              nextSize = Math.min(nextSize, maxHeight)
             }
           }
         }
-        if (nextSize < minSize) nextSize = minSize;
-        nextSize = Math.round(nextSize);
+        if (nextSize < minSize) nextSize = minSize
+        nextSize = Math.round(nextSize)
         const nextProps = {
           ...(node.value.props || {}),
           [regionConfig.prop]: `${nextSize}px`,
-        };
-        const parentContainer = parentNode?.type === "ElContainer" ? parentNode : null;
+        }
+        const parentContainer = parentNode?.type === 'ElContainer' ? parentNode : null
         const parentPatch =
-          parentContainer && regionConfig.prop === "height"
-            ? node.value.type === "ElHeader"
+          parentContainer && regionConfig.prop === 'height'
+            ? node.value.type === 'ElHeader'
               ? { headerHeight: `${nextSize}px` }
-              : node.value.type === "ElFooter"
+              : node.value.type === 'ElFooter'
                 ? { footerHeight: `${nextSize}px` }
                 : null
-            : parentContainer && regionConfig.prop === "width"
+            : parentContainer && regionConfig.prop === 'width'
               ? { asideWidth: `${nextSize}px` }
-              : null;
+              : null
 
         if (nodeRef.value) {
-          if (regionConfig.axis === "x") {
-            nodeRef.value.style.width = `${nextSize}px`;
+          if (regionConfig.axis === 'x') {
+            nodeRef.value.style.width = `${nextSize}px`
           } else {
-            nodeRef.value.style.height = `${nextSize}px`;
+            nodeRef.value.style.height = `${nextSize}px`
           }
         }
 
-        const patch: NodePatch = { props: nextProps };
+        const patch: NodePatch = { props: nextProps }
         if (history.value?.isInTransaction?.()) {
-          history.value.executeInTransaction?.(new UpdateNodeCommand(node.value.id, patch));
+          history.value.executeInTransaction?.(new UpdateNodeCommand(node.value.id, patch))
           if (parentContainer && parentPatch) {
             history.value.executeInTransaction?.(
               new UpdateNodeCommand(parentContainer.id, {
                 props: { ...(parentContainer.props || {}), ...parentPatch },
               }),
-            );
+            )
           }
-          return;
+          return
         }
         if (history.value?.execute) {
-          history.value.execute(new UpdateNodeCommand(node.value.id, patch));
+          history.value.execute(new UpdateNodeCommand(node.value.id, patch))
           if (parentContainer && parentPatch) {
             history.value.execute(
               new UpdateNodeCommand(parentContainer.id, {
                 props: { ...(parentContainer.props || {}), ...parentPatch },
               }),
-            );
+            )
           }
-          return;
+          return
         }
         if (doc.value?._updateNode) {
-          doc.value._updateNode(node.value.id, patch);
+          doc.value._updateNode(node.value.id, patch)
         }
-        return;
+        return
       }
 
-      let nextWidth = baseWidth;
-      let nextHeight = baseHeight;
-      let nextX = baseLayout.x;
-      let nextY = baseLayout.y;
+      let nextWidth = baseWidth
+      let nextHeight = baseHeight
+      let nextX = baseLayout.x
+      let nextY = baseLayout.y
       if (handle.x === 1) {
-        nextWidth = baseWidth + deltaX;
+        nextWidth = baseWidth + deltaX
       } else if (handle.x === -1) {
-        nextWidth = baseWidth - deltaX;
-        nextX = baseLayout.x + deltaX;
+        nextWidth = baseWidth - deltaX
+        nextX = baseLayout.x + deltaX
       }
 
       if (handle.y === 1) {
-        nextHeight = baseHeight + deltaY;
+        nextHeight = baseHeight + deltaY
       } else if (handle.y === -1) {
-        nextHeight = baseHeight - deltaY;
-        nextY = baseLayout.y + deltaY;
+        nextHeight = baseHeight - deltaY
+        nextY = baseLayout.y + deltaY
       }
 
       if (handle.x === -1 && nextWidth < minSize) {
-        nextX = baseLayout.x + (baseWidth - minSize);
-        nextWidth = minSize;
+        nextX = baseLayout.x + (baseWidth - minSize)
+        nextWidth = minSize
       }
       if (handle.x === 1 && nextWidth < minSize) {
-        nextWidth = minSize;
+        nextWidth = minSize
       }
       if (handle.y === -1 && nextHeight < minSize) {
-        nextY = baseLayout.y + (baseHeight - minSize);
-        nextHeight = minSize;
+        nextY = baseLayout.y + (baseHeight - minSize)
+        nextHeight = minSize
       }
       if (handle.y === 1 && nextHeight < minSize) {
-        nextHeight = minSize;
+        nextHeight = minSize
       }
 
       if (containerMinSize) {
         if (nextWidth < containerMinSize.width) {
-          nextWidth = containerMinSize.width;
+          nextWidth = containerMinSize.width
         }
         if (nextHeight < containerMinSize.height) {
-          nextHeight = containerMinSize.height;
+          nextHeight = containerMinSize.height
         }
       }
       if (childMinSize) {
         if (handle.x === -1 && nextWidth < childMinSize.width) {
-          nextX = baseLayout.x + (baseWidth - childMinSize.width);
-          nextWidth = childMinSize.width;
+          nextX = baseLayout.x + (baseWidth - childMinSize.width)
+          nextWidth = childMinSize.width
         } else if (handle.x === 1 && nextWidth < childMinSize.width) {
-          nextWidth = childMinSize.width;
+          nextWidth = childMinSize.width
         }
         if (handle.y === -1 && nextHeight < childMinSize.height) {
-          nextY = baseLayout.y + (baseHeight - childMinSize.height);
-          nextHeight = childMinSize.height;
+          nextY = baseLayout.y + (baseHeight - childMinSize.height)
+          nextHeight = childMinSize.height
         } else if (handle.y === 1 && nextHeight < childMinSize.height) {
-          nextHeight = childMinSize.height;
+          nextHeight = childMinSize.height
         }
       }
-      if (node.value.type === "ElLayout") {
-        const layoutMinHeight = resolveElLayoutMinHeight(node.value);
+      if (node.value.type === 'ElLayout') {
+        const layoutMinHeight = resolveElLayoutMinHeight(node.value)
         if (layoutMinHeight > 0 && nextHeight < layoutMinHeight) {
           if (handle.y === -1) {
-            nextY = baseLayout.y + (baseHeight - layoutMinHeight);
+            nextY = baseLayout.y + (baseHeight - layoutMinHeight)
           }
-          nextHeight = layoutMinHeight;
+          nextHeight = layoutMinHeight
         }
       }
 
-      nextWidth = Math.round(nextWidth);
-      nextHeight = Math.round(nextHeight);
-      nextX = Math.round(nextX);
-      nextY = Math.round(nextY);
+      nextWidth = Math.round(nextWidth)
+      nextHeight = Math.round(nextHeight)
+      nextX = Math.round(nextX)
+      nextY = Math.round(nextY)
 
       const sectionPatch =
-        node.value.type === "ElContainer" && baseSectionSizes
+        node.value.type === 'ElContainer' && baseSectionSizes
           ? buildContainerSectionSizePatch(
               node.value,
               baseWidth,
@@ -671,17 +667,17 @@ export function useNodeResize(deps: UseNodeResizeDeps) {
               nextHeight,
               baseSectionSizes,
             )
-          : null;
+          : null
 
-      const nextStyle = { ...(node.value.style || {}) };
-      if (node.value.type === "ElLayoutRow") {
-        nextStyle.height = `${nextHeight}px`;
+      const nextStyle = { ...(node.value.style || {}) }
+      if (node.value.type === 'ElLayoutRow') {
+        nextStyle.height = `${nextHeight}px`
         if (handle.x !== 0) {
-          nextStyle.width = `${nextWidth}px`;
+          nextStyle.width = `${nextWidth}px`
         }
       } else {
-        nextStyle.width = `${nextWidth}px`;
-        nextStyle.height = `${nextHeight}px`;
+        nextStyle.width = `${nextWidth}px`
+        nextStyle.height = `${nextHeight}px`
       }
 
       let patch: NodePatch = sectionPatch
@@ -689,7 +685,7 @@ export function useNodeResize(deps: UseNodeResizeDeps) {
             style: nextStyle,
             props: { ...(node.value.props || {}), ...sectionPatch },
           }
-        : { style: nextStyle };
+        : { style: nextStyle }
 
       if (shouldUpdateAbsolute) {
         const nextAbs = {
@@ -698,81 +694,81 @@ export function useNodeResize(deps: UseNodeResizeDeps) {
           w: nextWidth,
           h: nextHeight,
           z: baseLayout.z,
-        };
+        }
 
         if (nodeRef.value) {
-          nodeRef.value.style.position = "absolute";
-          nodeRef.value.style.left = `${nextAbs.x}px`;
-          nodeRef.value.style.top = `${nextAbs.y}px`;
-          nodeRef.value.style.width = `${nextAbs.w}px`;
-          nodeRef.value.style.height = `${nextAbs.h}px`;
-          nodeRef.value.style.zIndex = `${nextAbs.z}`;
+          nodeRef.value.style.position = 'absolute'
+          nodeRef.value.style.left = `${nextAbs.x}px`
+          nodeRef.value.style.top = `${nextAbs.y}px`
+          nodeRef.value.style.width = `${nextAbs.w}px`
+          nodeRef.value.style.height = `${nextAbs.h}px`
+          nodeRef.value.style.zIndex = `${nextAbs.z}`
         }
 
         const nextLayoutItem = {
           ...(node.value.layoutItem || {}),
           free: {
-            mode: "abs" as const,
+            mode: 'abs' as const,
             abs: { ...nextAbs },
           },
-        };
+        }
 
         patch = {
           ...patch,
-          positioning: "absolute",
+          positioning: 'absolute',
           absolutePos: nextAbs,
           layoutItem: nextLayoutItem,
-        };
-      } else if (nodeRef.value) {
-        if (node.value.type !== "ElLayoutRow" || handle.x !== 0) {
-          nodeRef.value.style.width = `${nextWidth}px`;
         }
-        nodeRef.value.style.height = `${nextHeight}px`;
+      } else if (nodeRef.value) {
+        if (node.value.type !== 'ElLayoutRow' || handle.x !== 0) {
+          nodeRef.value.style.width = `${nextWidth}px`
+        }
+        nodeRef.value.style.height = `${nextHeight}px`
       }
 
       if (history.value?.isInTransaction?.()) {
-        history.value.executeInTransaction?.(new UpdateNodeCommand(node.value.id, patch));
-        if (typeof window !== "undefined") {
+        history.value.executeInTransaction?.(new UpdateNodeCommand(node.value.id, patch))
+        if (typeof window !== 'undefined') {
           window.dispatchEvent(
-            new CustomEvent("designer:node-transform", {
+            new CustomEvent('designer:node-transform', {
               detail: { x: nextX, y: nextY },
             }),
-          );
+          )
         }
-        return;
+        return
       }
       if (history.value?.execute) {
-        history.value.execute(new UpdateNodeCommand(node.value.id, patch));
-        if (typeof window !== "undefined") {
+        history.value.execute(new UpdateNodeCommand(node.value.id, patch))
+        if (typeof window !== 'undefined') {
           window.dispatchEvent(
-            new CustomEvent("designer:node-transform", {
+            new CustomEvent('designer:node-transform', {
               detail: { x: nextX, y: nextY },
             }),
-          );
+          )
         }
-        return;
+        return
       }
       if (doc.value?._updateNode) {
-        doc.value._updateNode(node.value.id, patch);
-        if (typeof window !== "undefined") {
+        doc.value._updateNode(node.value.id, patch)
+        if (typeof window !== 'undefined') {
           window.dispatchEvent(
-            new CustomEvent("designer:node-transform", {
+            new CustomEvent('designer:node-transform', {
               detail: { x: nextX, y: nextY },
             }),
-          );
+          )
         }
       }
-    };
+    }
 
     const up = () => {
-      cleanupDragHandlers();
+      cleanupDragHandlers()
       if (history.value?.isInTransaction?.()) {
-        history.value.commitTransaction?.("调整尺寸");
+        history.value.commitTransaction?.('调整尺寸')
       }
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("designer:node-transform-end"));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('designer:node-transform-end'))
       }
-    };
+    }
 
     activeDragHandlers = {
       move,
@@ -783,19 +779,19 @@ export function useNodeResize(deps: UseNodeResizeDeps) {
       usePointer,
       pointerEvents: originalPointerEvents,
       pointerElement,
-    };
+    }
 
     if (usePointer) {
-      document.addEventListener("pointermove", move);
-      document.addEventListener("pointerup", up);
-      document.addEventListener("pointercancel", up);
+      document.addEventListener('pointermove', move)
+      document.addEventListener('pointerup', up)
+      document.addEventListener('pointercancel', up)
     } else {
-      document.addEventListener("mousemove", move);
-      document.addEventListener("mouseup", up);
+      document.addEventListener('mousemove', move)
+      document.addEventListener('mouseup', up)
     }
-  };
+  }
 
   return {
     handleResizePointerDown,
-  };
+  }
 }

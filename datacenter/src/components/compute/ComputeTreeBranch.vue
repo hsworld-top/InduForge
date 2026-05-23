@@ -45,79 +45,69 @@
         :selected-unit-id="selectedUnitId"
         :dirty-unit-ids="dirtyUnitIds"
         @select-unit="$emit('selectUnit', $event)"
-        @folder-contextmenu="
-          (mouseEvent, folder) => $emit('folderContextmenu', mouseEvent, folder)
-        "
-        @unit-contextmenu="
-          (mouseEvent, unit) => $emit('unitContextmenu', mouseEvent, unit)
-        "
+        @folder-contextmenu="(mouseEvent, folder) => $emit('folderContextmenu', mouseEvent, folder)"
+        @unit-contextmenu="(mouseEvent, unit) => $emit('unitContextmenu', mouseEvent, unit)"
       />
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import IconTablerChevronRight from "~icons/tabler/chevron-right";
-import IconTablerFileCode from "~icons/tabler/file-code";
-import IconTablerFolder from "~icons/tabler/folder";
-import IconTablerFolderOpen from "~icons/tabler/folder-open";
-import type { ComputeUnit } from "@/api/schemas/compute.schema";
-import type { ComputeFolderTreeNode } from "./computeTreeModel";
+import { computed, ref } from 'vue'
+import IconTablerChevronRight from '~icons/tabler/chevron-right'
+import IconTablerFileCode from '~icons/tabler/file-code'
+import IconTablerFolder from '~icons/tabler/folder'
+import IconTablerFolderOpen from '~icons/tabler/folder-open'
+import type { ComputeUnit } from '@/api/schemas/compute.schema'
+import type { ComputeFolderTreeNode } from './computeTreeModel'
 
-defineOptions({ name: "ComputeTreeBranch" });
+defineOptions({ name: 'ComputeTreeBranch' })
 
 const props = defineProps<{
-  node: ComputeFolderTreeNode;
-  selectedUnitId?: string | null;
-  dirtyUnitIds?: string[];
-}>();
+  node: ComputeFolderTreeNode
+  selectedUnitId?: string | null
+  dirtyUnitIds?: string[]
+}>()
 
 defineEmits<{
-  (event: "selectUnit", id: string): void;
-  (event: "unitContextmenu", mouseEvent: MouseEvent, unit: ComputeUnit): void;
-  (
-    event: "folderContextmenu",
-    mouseEvent: MouseEvent,
-    folder: ComputeFolderTreeNode,
-  ): void;
-}>();
+  (event: 'selectUnit', id: string): void
+  (event: 'unitContextmenu', mouseEvent: MouseEvent, unit: ComputeUnit): void
+  (event: 'folderContextmenu', mouseEvent: MouseEvent, folder: ComputeFolderTreeNode): void
+}>()
 
-const expanded = ref(true);
-const dirtyUnitIdSet = computed(() => new Set((props.dirtyUnitIds || []).map(String)));
+const expanded = ref(true)
+const dirtyUnitIdSet = computed(() => new Set((props.dirtyUnitIds || []).map(String)))
 
 const countUnits = (node: ComputeFolderTreeNode): number =>
-  node.units.length +
-  node.children.reduce((sum, child) => sum + countUnits(child), 0);
+  node.units.length + node.children.reduce((sum, child) => sum + countUnits(child), 0)
 
-const totalCount = computed(() => countUnits(props.node));
+const totalCount = computed(() => countUnits(props.node))
 
 const statusText = (status?: string) => {
   const map: Record<string, string> = {
-    enabled: "启用",
-    idle: "空闲",
-    running: "运行中",
-    error: "异常",
-    disabled: "停用",
-  };
-  return map[status || ""] || "未知";
-};
+    enabled: '启用',
+    idle: '空闲',
+    running: '运行中',
+    error: '异常',
+    disabled: '停用',
+  }
+  return map[status || ''] || '未知'
+}
 
 const statusTone = (status?: string) => {
-  if (status === "running" || status === "enabled" || status === "idle")
-    return "success";
-  if (status === "error") return "danger";
-  if (status === "disabled") return "muted";
-  return "info";
-};
+  if (status === 'running' || status === 'enabled' || status === 'idle') return 'success'
+  if (status === 'error') return 'danger'
+  if (status === 'disabled') return 'muted'
+  return 'info'
+}
 
-const isUnitDirty = (unit: ComputeUnit) => dirtyUnitIdSet.value.has(String(unit.id));
+const isUnitDirty = (unit: ComputeUnit) => dirtyUnitIdSet.value.has(String(unit.id))
 
 const unitStatusText = (unit: ComputeUnit) =>
-  isUnitDirty(unit) ? "未保存" : statusText(unit.status);
+  isUnitDirty(unit) ? '未保存' : statusText(unit.status)
 
 const unitStatusTone = (unit: ComputeUnit) =>
-  isUnitDirty(unit) ? "warning" : statusTone(unit.status);
+  isUnitDirty(unit) ? 'warning' : statusTone(unit.status)
 </script>
 
 <style scoped>

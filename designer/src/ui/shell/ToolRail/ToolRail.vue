@@ -3,32 +3,32 @@
   左右侧垂直工具按钮栏，用于切换页面树、组件、数据等面板
 -->
 <script setup lang="ts">
-import type { ToolRailItem } from "../tool-rail-types";
-import { computed } from "vue";
+import type { ToolRailItem } from '../tool-rail-types'
+import { computed } from 'vue'
 
 const props = withDefaults(
   defineProps<{
-    side?: "left" | "right";
-    items?: ToolRailItem[];
-    activeKey?: string;
+    side?: 'left' | 'right'
+    items?: ToolRailItem[]
+    activeKey?: string
   }>(),
   {
-    side: "left",
+    side: 'left',
     items: () => [],
-    activeKey: "",
+    activeKey: '',
   },
-);
+)
 
 const emit = defineEmits<{
-  select: [key: string];
-}>();
+  select: [key: string]
+}>()
 
-const topItems = computed(() => props.items.filter((item) => item.placement !== "bottom"));
+const topItems = computed(() => props.items.filter((item) => item.placement !== 'bottom'))
 
-const bottomItems = computed(() => props.items.filter((item) => item.placement === "bottom"));
+const bottomItems = computed(() => props.items.filter((item) => item.placement === 'bottom'))
 
 function handleSelect(key: string) {
-  emit("select", key);
+  emit('select', key)
 }
 </script>
 

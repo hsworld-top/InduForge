@@ -2,15 +2,12 @@
   <header v-if="draft" class="alarm-editor-header">
     <div class="alarm-editor-header__title-wrap">
       <div class="alarm-editor-header__meta">
-        <span
-          class="alarm-editor-header__state"
-          :class="{ 'is-off': !draft.isEnabled }"
-        >
-          {{ draft.isEnabled ? t("common.enabled") : t("alarm.stopped") }}
+        <span class="alarm-editor-header__state" :class="{ 'is-off': !draft.isEnabled }">
+          {{ draft.isEnabled ? t('common.enabled') : t('alarm.stopped') }}
         </span>
-        <em v-if="draft.dirty">{{ t("alarm.unsaved") }}</em>
+        <em v-if="draft.dirty">{{ t('alarm.unsaved') }}</em>
       </div>
-      <strong>{{ draft.name || t("alarm.unnamedPolicy") }}</strong>
+      <strong>{{ draft.name || t('alarm.unnamedPolicy') }}</strong>
       <div class="alarm-editor-header__subline">
         <span class="alarm-editor-header__mode">{{ modeText }}</span>
         <code>{{ draft.description || summaryText }}</code>
@@ -37,10 +34,7 @@
         :disabled="saving"
         @click="emit('toggle')"
       >
-        <IconTablerPlayerPause
-          v-if="draft.isEnabled"
-          class="alarm-editor-header__action-icon"
-        />
+        <IconTablerPlayerPause v-if="draft.isEnabled" class="alarm-editor-header__action-icon" />
         <IconTablerPlayerPlay v-else class="alarm-editor-header__action-icon" />
       </button>
       <button
@@ -77,53 +71,51 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import IconTablerDatabaseImport from "~icons/tabler/database-import";
-import IconTablerDeviceFloppy from "~icons/tabler/device-floppy";
-import IconTablerPlayerPause from "~icons/tabler/player-pause";
-import IconTablerPlayerPlay from "~icons/tabler/player-play";
-import IconTablerShieldCheck from "~icons/tabler/shield-check";
-import IconTablerTrash from "~icons/tabler/trash";
-import type { AlarmPolicyDraft } from "@/components/alarm/alarmPolicyModel";
-import { t } from "@/i18n/runtime";
+import { computed } from 'vue'
+import IconTablerDatabaseImport from '~icons/tabler/database-import'
+import IconTablerDeviceFloppy from '~icons/tabler/device-floppy'
+import IconTablerPlayerPause from '~icons/tabler/player-pause'
+import IconTablerPlayerPlay from '~icons/tabler/player-play'
+import IconTablerShieldCheck from '~icons/tabler/shield-check'
+import IconTablerTrash from '~icons/tabler/trash'
+import type { AlarmPolicyDraft } from '@/components/alarm/alarmPolicyModel'
+import { t } from '@/i18n/runtime'
 
 const props = defineProps<{
-  draft: AlarmPolicyDraft | null;
-  saving: boolean;
-  deleting: boolean;
-}>();
+  draft: AlarmPolicyDraft | null
+  saving: boolean
+  deleting: boolean
+}>()
 
 const emit = defineEmits<{
-  save: [];
-  toggle: [];
-  delete: [];
-  checkCurrent: [];
-  selectTarget: [];
-  update: [patch: Partial<AlarmPolicyDraft>];
-}>();
+  save: []
+  toggle: []
+  delete: []
+  checkCurrent: []
+  selectTarget: []
+  update: [patch: Partial<AlarmPolicyDraft>]
+}>()
 
 const modeText = computed(() => {
   if (!props.draft) {
-    return "";
+    return ''
   }
-  return props.draft.mode === "derived"
-    ? t("alarm.modes.derived")
-    : t("alarm.modes.perTarget");
-});
+  return props.draft.mode === 'derived' ? t('alarm.modes.derived') : t('alarm.modes.perTarget')
+})
 
 const summaryText = computed(() => {
   if (!props.draft) {
-    return t("alarm.selectPolicyHint");
+    return t('alarm.selectPolicyHint')
   }
-  if (props.draft.mode === "derived") {
+  if (props.draft.mode === 'derived') {
     return props.draft.derivedExpression
       ? `计算：${props.draft.derivedExpression}`
-      : "等待配置计算表达式";
+      : '等待配置计算表达式'
   }
   return props.draft.targets.length
     ? `${props.draft.targets.length} 个目标点共用条件`
-    : "等待选择目标点";
-});
+    : '等待选择目标点'
+})
 </script>
 
 <style scoped>

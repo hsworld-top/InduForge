@@ -30,12 +30,7 @@
     <template #footer>
       <div class="alarm-move-dialog__footer">
         <el-button @click="visible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="loading"
-          :disabled="!canSubmit"
-          @click="submit"
-        >
+        <el-button type="primary" :loading="loading" :disabled="!canSubmit" @click="submit">
           移动
         </el-button>
       </div>
@@ -44,69 +39,63 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import type { AlarmPolicy, AlarmPolicyGroup } from "@/api/schemas/alarm.schema";
-import DcDialog from "@/components/shared/DcDialog.vue";
+import { computed, ref, watch } from 'vue'
+import type { AlarmPolicy, AlarmPolicyGroup } from '@/api/schemas/alarm.schema'
+import DcDialog from '@/components/shared/DcDialog.vue'
 
 const props = withDefaults(
   defineProps<{
-    modelValue: boolean;
-    policy: AlarmPolicy | null;
-    groups: AlarmPolicyGroup[];
-    loading?: boolean;
+    modelValue: boolean
+    policy: AlarmPolicy | null
+    groups: AlarmPolicyGroup[]
+    loading?: boolean
   }>(),
   {
     loading: false,
   },
-);
+)
 
 const emit = defineEmits<{
-  (event: "update:modelValue", value: boolean): void;
-  (event: "submit", groupId: string | null): void;
-}>();
+  (event: 'update:modelValue', value: boolean): void
+  (event: 'submit', groupId: string | null): void
+}>()
 
 const visible = computed({
   get: () => props.modelValue,
-  set: (value: boolean) => emit("update:modelValue", value),
-});
+  set: (value: boolean) => emit('update:modelValue', value),
+})
 
-const groupId = ref<string | null>(null);
-const currentGroupId = computed(() => props.policy?.groupId || null);
+const groupId = ref<string | null>(null)
+const currentGroupId = computed(() => props.policy?.groupId || null)
 const canSubmit = computed(
-  () =>
-    Boolean(props.policy) &&
-    groupId.value !== currentGroupId.value &&
-    !props.loading,
-);
+  () => Boolean(props.policy) && groupId.value !== currentGroupId.value && !props.loading,
+)
 const isDirty = computed(
-  () =>
-    visible.value &&
-    Boolean(props.policy) &&
-    groupId.value !== currentGroupId.value,
-);
+  () => visible.value && Boolean(props.policy) && groupId.value !== currentGroupId.value,
+)
 
 function resetForm() {
-  groupId.value = currentGroupId.value;
+  groupId.value = currentGroupId.value
 }
 
 function submit() {
-  if (!canSubmit.value) return;
-  emit("submit", groupId.value || null);
+  if (!canSubmit.value) return
+  emit('submit', groupId.value || null)
 }
 
 watch(
   () => props.modelValue,
   (open) => {
-    if (open) resetForm();
+    if (open) resetForm()
   },
-);
+)
 
 watch(
   () => props.policy?.id,
   () => {
-    if (props.modelValue) resetForm();
+    if (props.modelValue) resetForm()
   },
-);
+)
 </script>
 
 <style scoped>

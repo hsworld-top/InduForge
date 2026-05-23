@@ -2,47 +2,47 @@
   属性面板「基本」区块：名称、描述、类型、ID、只读位置
 -->
 <script setup lang="ts">
-import { unref } from "vue";
-import { useI18n } from "vue-i18n";
-import { formatStyleValue } from "./property-panel-utils";
+import { unref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { formatStyleValue } from './property-panel-utils'
 
 interface BasicSectionStyleLike {
-  left?: string | number | null;
-  top?: string | number | null;
+  left?: string | number | null
+  top?: string | number | null
 }
 
 defineProps<{
-  elementType: string;
-  elementId: string;
-  currentStyle: BasicSectionStyleLike;
-}>();
+  elementType: string
+  elementId: string
+  currentStyle: BasicSectionStyleLike
+}>()
 
 const emit = defineEmits<{
-  (event: "labelCommit"): void;
-  (event: "descriptionCommit"): void;
-}>();
-const { t } = useI18n();
+  (event: 'labelCommit'): void
+  (event: 'descriptionCommit'): void
+}>()
+const { t } = useI18n()
 
-const label = defineModel<string>("label", { default: "" });
-const description = defineModel<string>("description", { default: "" });
+const label = defineModel<string>('label', { default: '' })
+const description = defineModel<string>('description', { default: '' })
 
 function onLabelUpdate(v: string | null | undefined) {
-  label.value = v ?? "";
+  label.value = v ?? ''
 }
 
 function onDescriptionUpdate(v: string | null | undefined) {
-  description.value = v ?? "";
+  description.value = v ?? ''
 }
 </script>
 
 <template>
   <div class="prop-section">
     <div class="prop-section-header is-static">
-      <span class="prop-section-title">{{ t("propertyPanel.basic.title") }}</span>
+      <span class="prop-section-title">{{ t('propertyPanel.basic.title') }}</span>
     </div>
     <div class="prop-section-body">
       <div class="prop-item">
-        <div class="prop-label">{{ t("propertyPanel.basic.name") }}</div>
+        <div class="prop-label">{{ t('propertyPanel.basic.name') }}</div>
         <el-input
           :model-value="unref(label)"
           size="small"
@@ -52,7 +52,7 @@ function onDescriptionUpdate(v: string | null | undefined) {
         />
       </div>
       <div class="prop-item">
-        <div class="prop-label">{{ t("propertyPanel.basic.description") }}</div>
+        <div class="prop-label">{{ t('propertyPanel.basic.description') }}</div>
         <el-input
           :model-value="unref(description)"
           size="small"
@@ -62,15 +62,15 @@ function onDescriptionUpdate(v: string | null | undefined) {
         />
       </div>
       <div class="prop-item">
-        <div class="prop-label">{{ t("propertyPanel.basic.type") }}</div>
+        <div class="prop-label">{{ t('propertyPanel.basic.type') }}</div>
         <el-input :model-value="elementType" size="small" disabled />
       </div>
       <div class="prop-item">
-        <div class="prop-label">{{ t("propertyPanel.basic.id") }}</div>
+        <div class="prop-label">{{ t('propertyPanel.basic.id') }}</div>
         <el-input :model-value="elementId" size="small" disabled />
       </div>
       <div class="prop-item">
-        <div class="prop-label">{{ t("propertyPanel.basic.position") }}</div>
+        <div class="prop-label">{{ t('propertyPanel.basic.position') }}</div>
         <div class="axis-inline-group">
           <div class="axis-inline-item">
             <span class="axis-inline-tag">X</span>

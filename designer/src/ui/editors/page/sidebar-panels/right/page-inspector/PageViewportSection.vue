@@ -1,40 +1,40 @@
 <script setup lang="ts">
-import type { PageInspectorFormState, ViewportPreset } from "./page-inspector-types";
-import { computed } from "vue";
-import { useI18n } from "vue-i18n";
+import type { PageInspectorFormState, ViewportPreset } from './page-inspector-types'
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 defineProps<{
-  form: PageInspectorFormState;
-  canEditConstraintOptions: boolean;
-}>();
+  form: PageInspectorFormState
+  canEditConstraintOptions: boolean
+}>()
 
 defineEmits<{
-  updateConfig: [];
-  presetChange: [value: ViewportPreset];
-}>();
+  updateConfig: []
+  presetChange: [value: ViewportPreset]
+}>()
 
-const { t } = useI18n();
+const { t } = useI18n()
 
 const presetOptions = computed(() => [
-  { label: t("pageInspector.viewportPresets.bigscreen"), value: "bigscreen" },
-  { label: t("pageInspector.viewportPresets.pc"), value: "pc" },
-  { label: t("pageInspector.viewportPresets.tablet"), value: "tablet" },
-  { label: t("pageInspector.viewportPresets.phoneLandscape"), value: "phoneLandscape" },
-  { label: t("pageInspector.viewportPresets.phonePortrait"), value: "phonePortrait" },
-  { label: t("pageInspector.viewportPresets.custom"), value: "custom" },
-]);
+  { label: t('pageInspector.viewportPresets.bigscreen'), value: 'bigscreen' },
+  { label: t('pageInspector.viewportPresets.pc'), value: 'pc' },
+  { label: t('pageInspector.viewportPresets.tablet'), value: 'tablet' },
+  { label: t('pageInspector.viewportPresets.phoneLandscape'), value: 'phoneLandscape' },
+  { label: t('pageInspector.viewportPresets.phonePortrait'), value: 'phonePortrait' },
+  { label: t('pageInspector.viewportPresets.custom'), value: 'custom' },
+])
 
 const overflowOptions = computed(() => [
-  { label: t("pageInspector.overflowModes.auto"), value: "auto" },
-  { label: t("pageInspector.overflowModes.hidden"), value: "hidden" },
-  { label: t("pageInspector.overflowModes.scroll"), value: "scroll" },
-]);
+  { label: t('pageInspector.overflowModes.auto'), value: 'auto' },
+  { label: t('pageInspector.overflowModes.hidden'), value: 'hidden' },
+  { label: t('pageInspector.overflowModes.scroll'), value: 'scroll' },
+])
 </script>
 
 <template>
   <div class="page-section-fields">
     <div class="page-prop-item">
-      <div class="page-prop-label">{{ t("pageInspector.labels.viewportPreset") }}</div>
+      <div class="page-prop-label">{{ t('pageInspector.labels.viewportPreset') }}</div>
       <div class="page-prop-editor">
         <el-select
           v-model="form.viewportPreset"
@@ -52,28 +52,38 @@ const overflowOptions = computed(() => [
     </div>
 
     <div class="page-prop-item">
-      <div class="page-prop-label">{{ t("pageInspector.labels.canvasWidth") }}</div>
+      <div class="page-prop-label">{{ t('pageInspector.labels.canvasWidth') }}</div>
       <div class="page-prop-editor">
-        <el-input-number v-model="form.width" size="small" :min="1" @change="$emit('updateConfig')" />
+        <el-input-number
+          v-model="form.width"
+          size="small"
+          :min="1"
+          @change="$emit('updateConfig')"
+        />
       </div>
     </div>
 
     <div class="page-prop-item">
-      <div class="page-prop-label">{{ t("pageInspector.labels.canvasHeight") }}</div>
+      <div class="page-prop-label">{{ t('pageInspector.labels.canvasHeight') }}</div>
       <div class="page-prop-editor">
-        <el-input-number v-model="form.height" size="small" :min="1" @change="$emit('updateConfig')" />
+        <el-input-number
+          v-model="form.height"
+          size="small"
+          :min="1"
+          @change="$emit('updateConfig')"
+        />
       </div>
     </div>
 
     <div class="page-prop-item page-prop-item--switch">
-      <div class="page-prop-label">{{ t("pageInspector.labels.autoFit") }}</div>
+      <div class="page-prop-label">{{ t('pageInspector.labels.autoFit') }}</div>
       <div class="page-prop-editor page-prop-editor-switch">
         <el-switch v-model="form.autoFit" @change="$emit('updateConfig')" />
       </div>
     </div>
 
     <div class="page-prop-item page-prop-item--switch">
-      <div class="page-prop-label">{{ t("pageInspector.labels.lockAspectRatio") }}</div>
+      <div class="page-prop-label">{{ t('pageInspector.labels.lockAspectRatio') }}</div>
       <div class="page-prop-editor page-prop-editor-switch">
         <el-switch
           v-model="form.lockAspectRatio"
@@ -84,7 +94,7 @@ const overflowOptions = computed(() => [
     </div>
 
     <div class="page-prop-item">
-      <div class="page-prop-label">{{ t("pageInspector.labels.minWidth") }}</div>
+      <div class="page-prop-label">{{ t('pageInspector.labels.minWidth') }}</div>
       <div class="page-prop-editor">
         <el-input-number
           v-model="form.minWidth"
@@ -97,7 +107,7 @@ const overflowOptions = computed(() => [
     </div>
 
     <div class="page-prop-item">
-      <div class="page-prop-label">{{ t("pageInspector.labels.minHeight") }}</div>
+      <div class="page-prop-label">{{ t('pageInspector.labels.minHeight') }}</div>
       <div class="page-prop-editor">
         <el-input-number
           v-model="form.minHeight"
@@ -110,7 +120,7 @@ const overflowOptions = computed(() => [
     </div>
 
     <div class="page-prop-item">
-      <div class="page-prop-label">{{ t("pageInspector.labels.overflowMode") }}</div>
+      <div class="page-prop-label">{{ t('pageInspector.labels.overflowMode') }}</div>
       <div class="page-prop-editor">
         <el-select v-model="form.overflowMode" size="small" @change="$emit('updateConfig')">
           <el-option

@@ -5,102 +5,102 @@
  * 选择器 CSS 需要具备更高优先级，因此注入前统一补充 !important。
  */
 
-const KEYFRAME_SELECTOR_RE = /^(from|to|\d+(?:\.\d+)?%)$/i;
-const DOM_TOKEN_RE = /[^a-zA-Z0-9_-]+/g;
+const KEYFRAME_SELECTOR_RE = /^(from|to|\d+(?:\.\d+)?%)$/i
+const DOM_TOKEN_RE = /[^a-zA-Z0-9_-]+/g
 
 function normalizeDomToken(value: string, fallback: string): string {
-  const text = String(value || "")
+  const text = String(value || '')
     .trim()
-    .replace(DOM_TOKEN_RE, "-")
-    .replace(/^-+|-+$/g, "");
-  return text || fallback;
+    .replace(DOM_TOKEN_RE, '-')
+    .replace(/^-+|-+$/g, '')
+  return text || fallback
 }
 
 export function buildDesignerPageDomId(pageId: string): string {
-  return `page-${normalizeDomToken(pageId, "current")}`;
+  return `page-${normalizeDomToken(pageId, 'current')}`
 }
 
 export function buildDesignerNodeDomId(nodeId: string): string {
-  return `dom-${normalizeDomToken(nodeId, "node")}`;
+  return `dom-${normalizeDomToken(nodeId, 'node')}`
 }
 
 export function replaceStyleConfigPlaceholders(
   css: string,
   options: { pageId?: string | null; nodeId?: string | null } = {},
 ): string {
-  let text = String(css || "");
+  let text = String(css || '')
   if (options.pageId) {
-    text = text.replace(/#pageId\b/g, `#${buildDesignerPageDomId(options.pageId)}`);
+    text = text.replace(/#pageId\b/g, `#${buildDesignerPageDomId(options.pageId)}`)
   }
   if (options.nodeId) {
-    text = text.replace(/#domId\b/g, `#${buildDesignerNodeDomId(options.nodeId)}`);
+    text = text.replace(/#domId\b/g, `#${buildDesignerNodeDomId(options.nodeId)}`)
   }
-  return text;
+  return text
 }
 
 function splitDeclarations(body: string): string[] {
-  const declarations: string[] = [];
-  let buffer = "";
-  let quote: '"' | "'" | "" = "";
-  let parenDepth = 0;
+  const declarations: string[] = []
+  let buffer = ''
+  let quote: '"' | "'" | '' = ''
+  let parenDepth = 0
 
   for (const char of body) {
     if (quote) {
-      buffer += char;
-      if (char === quote) quote = "";
-      continue;
+      buffer += char
+      if (char === quote) quote = ''
+      continue
     }
     if (char === '"' || char === "'") {
-      quote = char;
-      buffer += char;
-      continue;
+      quote = char
+      buffer += char
+      continue
     }
-    if (char === "(") {
-      parenDepth += 1;
-      buffer += char;
-      continue;
+    if (char === '(') {
+      parenDepth += 1
+      buffer += char
+      continue
     }
-    if (char === ")") {
-      parenDepth = Math.max(0, parenDepth - 1);
-      buffer += char;
-      continue;
+    if (char === ')') {
+      parenDepth = Math.max(0, parenDepth - 1)
+      buffer += char
+      continue
     }
-    if (char === ";" && parenDepth === 0) {
-      declarations.push(buffer);
-      buffer = "";
-      continue;
+    if (char === ';' && parenDepth === 0) {
+      declarations.push(buffer)
+      buffer = ''
+      continue
     }
-    buffer += char;
+    buffer += char
   }
 
   if (buffer.trim()) {
-    declarations.push(buffer);
+    declarations.push(buffer)
   }
 
-  return declarations;
+  return declarations
 }
 
 function elevateDeclaration(declaration: string): string {
-  const text = declaration.trim();
-  if (!text || !text.includes(":")) return text;
-  if (/!\s*important\s*$/i.test(text)) return text;
-  return `${text} !important`;
+  const text = declaration.trim()
+  if (!text || !text.includes(':')) return text
+  if (/!\s*important\s*$/i.test(text)) return text
+  return `${text} !important`
 }
 
 function elevateBlock(selector: string, body: string): string {
-  const trimmedSelector = selector.trim();
-  if (!trimmedSelector || trimmedSelector.startsWith("@")) {
-    return `${selector}{${body}}`;
+  const trimmedSelector = selector.trim()
+  if (!trimmedSelector || trimmedSelector.startsWith('@')) {
+    return `${selector}{${body}}`
   }
   if (KEYFRAME_SELECTOR_RE.test(trimmedSelector)) {
-    return `${selector}{${body}}`;
+    return `${selector}{${body}}`
   }
 
-  const declarations = splitDeclarations(body).map(elevateDeclaration).filter(Boolean);
+  const declarations = splitDeclarations(body).map(elevateDeclaration).filter(Boolean)
   if (declarations.length === 0) {
-    return `${selector}{${body}}`;
+    return `${selector}{${body}}`
   }
-  return `${selector}{${declarations.join("; ")}}`;
+  return `${selector}{${declarations.join('; ')}}`
 }
 
 /**
@@ -110,9 +110,9 @@ function elevateBlock(selector: string, body: string): string {
  * 不处理 @keyframes/@font-face 等声明块，避免破坏动画和字体描述符。
  */
 export function elevateStyleConfigPriority(css: string): string {
-  const text = String(css || "").trim();
-  if (!text || !text.includes("{")) return text;
+  const text = String(css || '').trim()
+  if (!text || !text.includes('{')) return text
   return text.replace(/([^{}]+)\{([^{}]*)\}/g, (_match, selector: string, body: string) =>
     elevateBlock(selector, body),
-  );
+  )
 }

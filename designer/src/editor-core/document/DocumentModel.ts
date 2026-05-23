@@ -19,38 +19,38 @@ import type {
   ProjectSchema,
   SymbolDef,
   UITarget,
-} from "./types.ts";
-import { EventEmitter } from "../utils/EventEmitter";
-import { createEmptySchema } from "./types.ts";
+} from './types.ts'
+import { EventEmitter } from '../utils/EventEmitter'
+import { createEmptySchema } from './types.ts'
 
 /**
  * 文档模型类
  * 管理工程 Schema 的规范化存储
  */
 export class DocumentModel extends EventEmitter {
-  _schema: ProjectSchema;
-  _parentIndex: Map<string, string>;
-  _typeIndex: Map<string, Set<string>>;
-  _bindingIndex: Map<string, Set<string>>;
-  _graphicPageIndex: Map<string, string>;
+  _schema: ProjectSchema
+  _parentIndex: Map<string, string>
+  _typeIndex: Map<string, Set<string>>
+  _bindingIndex: Map<string, Set<string>>
+  _graphicPageIndex: Map<string, string>
 
   /**
    * 创建文档模型
    * @param {ProjectSchema} [schema] - 初始 Schema
    */
   constructor(schema?: ProjectSchema) {
-    super();
+    super()
 
-    this._schema = schema ?? createEmptySchema();
+    this._schema = schema ?? createEmptySchema()
 
-    this._ensureSchemaStructure();
+    this._ensureSchemaStructure()
 
-    this._parentIndex = new Map();
-    this._typeIndex = new Map();
-    this._bindingIndex = new Map();
-    this._graphicPageIndex = new Map();
+    this._parentIndex = new Map()
+    this._typeIndex = new Map()
+    this._bindingIndex = new Map()
+    this._graphicPageIndex = new Map()
 
-    this._rebuildIndexes();
+    this._rebuildIndexes()
   }
 
   // ==================== 属性访问器 ====================
@@ -60,7 +60,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {import('./types.ts').ProjectMeta}
    */
   get project() {
-    return this._schema.project;
+    return this._schema.project
   }
 
   /**
@@ -68,7 +68,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {import('./types.ts').SecurityDecl}
    */
   get securityDecl() {
-    return this._schema.securityDecl;
+    return this._schema.securityDecl
   }
 
   /**
@@ -76,7 +76,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {import('./types.ts').EntryConfig}
    */
   get entry() {
-    return this._schema.entry;
+    return this._schema.entry
   }
 
   /**
@@ -84,7 +84,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {Record<string, import('./types.ts').DataProvider>}
    */
   get dataProviders() {
-    return this._schema.dataProviders;
+    return this._schema.dataProviders
   }
 
   /**
@@ -92,7 +92,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {import('./types.ts').VarsConfig}
    */
   get vars() {
-    return this._schema.vars;
+    return this._schema.vars
   }
 
   /**
@@ -100,7 +100,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {Record<string, import('./types.ts').AssetRef>}
    */
   get assetsById() {
-    return this._schema.assetsById;
+    return this._schema.assetsById
   }
 
   /**
@@ -108,7 +108,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {Record<string, PageNode>}
    */
   get pagesById() {
-    return this._schema.pagesById;
+    return this._schema.pagesById
   }
 
   /**
@@ -116,7 +116,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {Record<string, ComponentNode>}
    */
   get nodesById() {
-    return this._schema.nodesById;
+    return this._schema.nodesById
   }
 
   /**
@@ -124,7 +124,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {Record<string, GraphicNode>}
    */
   get graphicsById() {
-    return this._schema.graphicsById;
+    return this._schema.graphicsById
   }
 
   /**
@@ -132,7 +132,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {Record<string, SymbolDef>}
    */
   get symbolsById() {
-    return this._schema.symbolsById;
+    return this._schema.symbolsById
   }
 
   /**
@@ -140,7 +140,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {ProjectSchema}
    */
   get schema() {
-    return this._schema;
+    return this._schema
   }
 
   /**
@@ -148,14 +148,14 @@ export class DocumentModel extends EventEmitter {
    * @param {Partial<import('./types.ts').EntryConfig>} patch - 更新内容
    */
   _updateEntry(patch: Partial<EntryConfig>) {
-    const oldValue = { ...this._schema.entry };
-    this._schema.entry = { ...this._schema.entry, ...patch };
+    const oldValue = { ...this._schema.entry }
+    this._schema.entry = { ...this._schema.entry, ...patch }
     this._emitChange({
-      type: "update",
-      target: "entry",
+      type: 'update',
+      target: 'entry',
       oldValue,
       newValue: this._schema.entry,
-    });
+    })
   }
 
   // ==================== 页面操作 ====================
@@ -166,7 +166,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {PageNode | null}
    */
   getPage(id: string): PageNode | null {
-    return this._schema.pagesById[id] || null;
+    return this._schema.pagesById[id] || null
   }
 
   /**
@@ -174,7 +174,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {PageNode[]}
    */
   getAllPages(): PageNode[] {
-    return Object.values(this._schema.pagesById);
+    return Object.values(this._schema.pagesById)
   }
 
   /**
@@ -183,7 +183,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {PageNode[]}
    */
   getPagesByPath(path: string): PageNode[] {
-    return this.getAllPages().filter((page) => page.path === path);
+    return this.getAllPages().filter((page) => page.path === path)
   }
 
   /**
@@ -192,7 +192,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {PageNode[]}
    */
   getPagesByTarget(target: UITarget): PageNode[] {
-    return this.getAllPages().filter((page) => page.target === target);
+    return this.getAllPages().filter((page) => page.target === target)
   }
 
   // ==================== 组件节点操作 ====================
@@ -203,7 +203,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {ComponentNode | null}
    */
   getNode(id: string): ComponentNode | null {
-    return this._schema.nodesById[id] || null;
+    return this._schema.nodesById[id] || null
   }
 
   /**
@@ -212,9 +212,9 @@ export class DocumentModel extends EventEmitter {
    * @returns {ComponentNode | null}
    */
   getParent(nodeId: string): ComponentNode | null {
-    const parentId = this._parentIndex.get(nodeId);
-    if (!parentId) return null;
-    return this.getNode(parentId);
+    const parentId = this._parentIndex.get(nodeId)
+    if (!parentId) return null
+    return this.getNode(parentId)
   }
 
   /**
@@ -224,24 +224,24 @@ export class DocumentModel extends EventEmitter {
    */
   getNodePageId(nodeId: string): string | null {
     // 向上查找根节点
-    let currentId = nodeId;
-    const visited = new Set();
+    let currentId = nodeId
+    const visited = new Set()
 
     while (currentId && !visited.has(currentId)) {
-      visited.add(currentId);
-      const parentId = this._parentIndex.get(currentId);
+      visited.add(currentId)
+      const parentId = this._parentIndex.get(currentId)
       if (!parentId) {
         // 当前节点是根节点，查找它属于哪个页面
         for (const page of Object.values(this._schema.pagesById)) {
           if (page.rootNodeId === currentId) {
-            return page.id;
+            return page.id
           }
         }
-        return null;
+        return null
       }
-      currentId = parentId;
+      currentId = parentId
     }
-    return null;
+    return null
   }
 
   /**
@@ -250,9 +250,9 @@ export class DocumentModel extends EventEmitter {
    * @returns {ComponentNode[]}
    */
   getChildren(nodeId: string): ComponentNode[] {
-    const node = this.getNode(nodeId);
-    if (!node || !node.children) return [];
-    return node.children.map((childId) => this.getNode(childId)).filter((child) => child !== null);
+    const node = this.getNode(nodeId)
+    if (!node || !node.children) return []
+    return node.children.map((childId) => this.getNode(childId)).filter((child) => child !== null)
   }
 
   /**
@@ -261,20 +261,20 @@ export class DocumentModel extends EventEmitter {
    * @returns {ComponentNode[]}
    */
   getAncestors(nodeId: string): ComponentNode[] {
-    const ancestors: ComponentNode[] = [];
-    let currentId = this._parentIndex.get(nodeId);
-    const visited = new Set();
+    const ancestors: ComponentNode[] = []
+    let currentId = this._parentIndex.get(nodeId)
+    const visited = new Set()
 
     while (currentId && !visited.has(currentId)) {
-      visited.add(currentId);
-      const node = this.getNode(currentId);
+      visited.add(currentId)
+      const node = this.getNode(currentId)
       if (node) {
-        ancestors.push(node);
+        ancestors.push(node)
       }
-      currentId = this._parentIndex.get(currentId);
+      currentId = this._parentIndex.get(currentId)
     }
 
-    return ancestors;
+    return ancestors
   }
 
   /**
@@ -283,29 +283,29 @@ export class DocumentModel extends EventEmitter {
    * @returns {ComponentNode[]}
    */
   getDescendants(nodeId: string): ComponentNode[] {
-    const descendants: ComponentNode[] = [];
-    const node = this.getNode(nodeId);
-    if (!node) return descendants;
+    const descendants: ComponentNode[] = []
+    const node = this.getNode(nodeId)
+    if (!node) return descendants
 
-    const stack = [...(node.children || [])];
-    const visited = new Set();
+    const stack = [...(node.children || [])]
+    const visited = new Set()
 
     while (stack.length > 0) {
-      const childId = stack.pop();
-      if (childId === undefined) continue;
-      if (visited.has(childId)) continue;
-      visited.add(childId);
+      const childId = stack.pop()
+      if (childId === undefined) continue
+      if (visited.has(childId)) continue
+      visited.add(childId)
 
-      const child = this.getNode(childId);
+      const child = this.getNode(childId)
       if (child) {
-        descendants.push(child);
+        descendants.push(child)
         if (child.children) {
-          stack.push(...child.children);
+          stack.push(...child.children)
         }
       }
     }
 
-    return descendants;
+    return descendants
   }
 
   /**
@@ -314,11 +314,11 @@ export class DocumentModel extends EventEmitter {
    * @returns {ComponentNode[]}
    */
   findNodesByType(type: string): ComponentNode[] {
-    const nodeIds = this._typeIndex.get(type);
-    if (!nodeIds) return [];
+    const nodeIds = this._typeIndex.get(type)
+    if (!nodeIds) return []
     return Array.from(nodeIds)
       .map((id) => this.getNode(id))
-      .filter((node) => node !== null);
+      .filter((node) => node !== null)
   }
 
   /**
@@ -327,11 +327,11 @@ export class DocumentModel extends EventEmitter {
    * @returns {ComponentNode[]}
    */
   findNodesByBinding(datapointPath: string): ComponentNode[] {
-    const elementIds = this._bindingIndex.get(datapointPath);
-    if (!elementIds) return [];
+    const elementIds = this._bindingIndex.get(datapointPath)
+    if (!elementIds) return []
     return Array.from(elementIds)
       .map((id) => this.getNode(id))
-      .filter((node) => node !== null);
+      .filter((node) => node !== null)
   }
 
   // ==================== Canvas 图形操作 ====================
@@ -342,7 +342,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {GraphicNode | null}
    */
   getGraphic(id: string): GraphicNode | null {
-    return this._schema.graphicsById[id] || null;
+    return this._schema.graphicsById[id] || null
   }
 
   /**
@@ -351,7 +351,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {string | null}
    */
   getGraphicPageId(graphicId: string): string | null {
-    return this._graphicPageIndex.get(graphicId) || null;
+    return this._graphicPageIndex.get(graphicId) || null
   }
 
   /**
@@ -360,12 +360,12 @@ export class DocumentModel extends EventEmitter {
    * @returns {GraphicNode[]}
    */
   getGraphicsByPage(pageId: string): GraphicNode[] {
-    const page = this.getPage(pageId);
-    if (!page || !page.graphicsIds) return [];
+    const page = this.getPage(pageId)
+    if (!page || !page.graphicsIds) return []
     return page.graphicsIds
       .map((id) => this.getGraphic(id))
       .filter((graphic) => graphic !== null)
-      .sort((a, b) => (a.z || 0) - (b.z || 0));
+      .sort((a, b) => (a.z || 0) - (b.z || 0))
   }
 
   /**
@@ -374,7 +374,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {GraphicNode[]}
    */
   getGraphicsByType(type: GraphicType): GraphicNode[] {
-    return Object.values(this._schema.graphicsById).filter((graphic) => graphic.type === type);
+    return Object.values(this._schema.graphicsById).filter((graphic) => graphic.type === type)
   }
 
   /**
@@ -383,11 +383,11 @@ export class DocumentModel extends EventEmitter {
    * @returns {GraphicNode[]}
    */
   findGraphicsByBinding(datapointPath: string): GraphicNode[] {
-    const elementIds = this._bindingIndex.get(datapointPath);
-    if (!elementIds) return [];
+    const elementIds = this._bindingIndex.get(datapointPath)
+    if (!elementIds) return []
     return Array.from(elementIds)
       .map((id) => this.getGraphic(id))
-      .filter((graphic) => graphic !== null);
+      .filter((graphic) => graphic !== null)
   }
 
   // ==================== 符号库操作 ====================
@@ -398,7 +398,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {SymbolDef | null}
    */
   getSymbol(id: string): SymbolDef | null {
-    return this._schema.symbolsById[id] || null;
+    return this._schema.symbolsById[id] || null
   }
 
   /**
@@ -406,7 +406,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {SymbolDef[]}
    */
   getAllSymbols(): SymbolDef[] {
-    return Object.values(this._schema.symbolsById);
+    return Object.values(this._schema.symbolsById)
   }
 
   /**
@@ -415,7 +415,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {SymbolDef[]}
    */
   getSymbolsByCategory(category: string): SymbolDef[] {
-    return this.getAllSymbols().filter((symbol) => symbol.category === category);
+    return this.getAllSymbols().filter((symbol) => symbol.category === category)
   }
 
   // ==================== 混合查询 ====================
@@ -426,7 +426,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {ComponentNode | GraphicNode | null}
    */
   getElement(id: string): ComponentNode | GraphicNode | null {
-    return this.getNode(id) || this.getGraphic(id);
+    return this.getNode(id) || this.getGraphic(id)
   }
 
   /**
@@ -435,11 +435,11 @@ export class DocumentModel extends EventEmitter {
    * @returns {(ComponentNode | GraphicNode)[]}
    */
   findElementsByBinding(datapointPath: string): (ComponentNode | GraphicNode)[] {
-    const elementIds = this._bindingIndex.get(datapointPath);
-    if (!elementIds) return [];
+    const elementIds = this._bindingIndex.get(datapointPath)
+    if (!elementIds) return []
     return Array.from(elementIds)
       .map((id) => this.getElement(id))
-      .filter((element) => element !== null);
+      .filter((element) => element !== null)
   }
 
   // ==================== 内部变更操作（由 Command 调用）====================
@@ -449,22 +449,22 @@ export class DocumentModel extends EventEmitter {
    * @param {PageNode} page - 页面节点
    */
   _insertPage(page: PageNode) {
-    this._schema.pagesById[page.id] = page;
+    this._schema.pagesById[page.id] = page
 
     // 如果页面有图形，更新索引
     if (page.graphicsIds) {
       for (const graphicId of page.graphicsIds) {
-        this._graphicPageIndex.set(graphicId, page.id);
+        this._graphicPageIndex.set(graphicId, page.id)
       }
     }
 
     // 触发变更事件
     this._emitChange({
-      type: "insert",
-      target: "page",
+      type: 'insert',
+      target: 'page',
       id: page.id,
       newValue: page,
-    });
+    })
   }
 
   /**
@@ -473,27 +473,27 @@ export class DocumentModel extends EventEmitter {
    * @returns {PageNode | null} 被删除的页面
    */
   _removePage(pageId: string): PageNode | null {
-    const page = this._schema.pagesById[pageId];
-    if (!page) return null;
+    const page = this._schema.pagesById[pageId]
+    if (!page) return null
 
     // 清理图形索引
     if (page.graphicsIds) {
       for (const graphicId of page.graphicsIds) {
-        this._graphicPageIndex.delete(graphicId);
+        this._graphicPageIndex.delete(graphicId)
       }
     }
 
-    delete this._schema.pagesById[pageId];
+    delete this._schema.pagesById[pageId]
 
     // 触发变更事件
     this._emitChange({
-      type: "remove",
-      target: "page",
+      type: 'remove',
+      target: 'page',
       id: pageId,
       oldValue: page,
-    });
+    })
 
-    return page;
+    return page
   }
 
   /**
@@ -502,35 +502,35 @@ export class DocumentModel extends EventEmitter {
    * @param {Partial<PageNode>} patch - 更新内容
    */
   _updatePage(pageId: string, patch: Partial<PageNode>) {
-    const page = this._schema.pagesById[pageId];
-    if (!page) return;
+    const page = this._schema.pagesById[pageId]
+    if (!page) return
 
-    const oldValue = { ...page };
+    const oldValue = { ...page }
 
     // 更新图形索引
     if (patch.graphicsIds) {
       // 清除旧索引
       if (page.graphicsIds) {
         for (const graphicId of page.graphicsIds) {
-          this._graphicPageIndex.delete(graphicId);
+          this._graphicPageIndex.delete(graphicId)
         }
       }
       // 建立新索引
       for (const graphicId of patch.graphicsIds) {
-        this._graphicPageIndex.set(graphicId, pageId);
+        this._graphicPageIndex.set(graphicId, pageId)
       }
     }
 
-    Object.assign(page, patch);
+    Object.assign(page, patch)
 
     // 触发变更事件
     this._emitChange({
-      type: "update",
-      target: "page",
+      type: 'update',
+      target: 'page',
       id: pageId,
       oldValue,
       newValue: page,
-    });
+    })
   }
 
   /**
@@ -541,46 +541,46 @@ export class DocumentModel extends EventEmitter {
    */
   _insertNode(parentId: string, index: number, node: ComponentNode) {
     // 添加到 nodesById
-    this._schema.nodesById[node.id] = node;
+    this._schema.nodesById[node.id] = node
 
     // 更新父节点的 children
-    const parent = this.getNode(parentId);
+    const parent = this.getNode(parentId)
     if (parent) {
-      const currentChildren = Array.isArray(parent.children) ? parent.children : [];
-      const insertIndex = Math.min(Math.max(0, index), currentChildren.length);
+      const currentChildren = Array.isArray(parent.children) ? parent.children : []
+      const insertIndex = Math.min(Math.max(0, index), currentChildren.length)
       parent.children = [
         ...currentChildren.slice(0, insertIndex),
         node.id,
         ...currentChildren.slice(insertIndex),
-      ];
+      ]
     }
 
     // 更新索引
-    this._parentIndex.set(node.id, parentId);
-    this._addToTypeIndex(node);
-    this._addToBindingIndex(node);
+    this._parentIndex.set(node.id, parentId)
+    this._addToTypeIndex(node)
+    this._addToBindingIndex(node)
 
     // 递归添加子节点索引
     if (node.children) {
       for (const childId of node.children) {
-        const child = this._schema.nodesById[childId];
+        const child = this._schema.nodesById[childId]
         if (child) {
-          this._parentIndex.set(childId, node.id);
-          this._addToTypeIndex(child);
-          this._addToBindingIndex(child);
+          this._parentIndex.set(childId, node.id)
+          this._addToTypeIndex(child)
+          this._addToBindingIndex(child)
         }
       }
     }
 
     // 触发变更事件
     this._emitChange({
-      type: "insert",
-      target: "node",
+      type: 'insert',
+      target: 'node',
       id: node.id,
       parentId,
       index,
       newValue: node,
-    });
+    })
   }
 
   /**
@@ -589,17 +589,20 @@ export class DocumentModel extends EventEmitter {
    * @returns {ComponentNode | null} 被删除的节点
    */
   _removeNode(nodeId: string): ComponentNode | null {
-    const node = this._schema.nodesById[nodeId];
-    if (!node) return null;
+    const node = this._schema.nodesById[nodeId]
+    if (!node) return null
 
     // 获取父节点并从 children 中移除
-    const parentId = this._parentIndex.get(nodeId);
+    const parentId = this._parentIndex.get(nodeId)
     if (parentId) {
-      const parent = this.getNode(parentId);
+      const parent = this.getNode(parentId)
       if (parent && parent.children) {
-        const index = parent.children.indexOf(nodeId);
+        const index = parent.children.indexOf(nodeId)
         if (index !== -1) {
-          parent.children = [...parent.children.slice(0, index), ...parent.children.slice(index + 1)];
+          parent.children = [
+            ...parent.children.slice(0, index),
+            ...parent.children.slice(index + 1),
+          ]
         }
       }
     }
@@ -607,28 +610,28 @@ export class DocumentModel extends EventEmitter {
     // 递归删除子节点
     if (node.children) {
       for (const childId of [...node.children]) {
-        this._removeNode(childId);
+        this._removeNode(childId)
       }
     }
 
     // 清理索引
-    this._parentIndex.delete(nodeId);
-    this._removeFromTypeIndex(node);
-    this._removeFromBindingIndex(node);
+    this._parentIndex.delete(nodeId)
+    this._removeFromTypeIndex(node)
+    this._removeFromBindingIndex(node)
 
     // 从 nodesById 中删除
-    delete this._schema.nodesById[nodeId];
+    delete this._schema.nodesById[nodeId]
 
     // 触发变更事件
     this._emitChange({
-      type: "remove",
-      target: "node",
+      type: 'remove',
+      target: 'node',
       id: nodeId,
       parentId,
       oldValue: node,
-    });
+    })
 
-    return node;
+    return node
   }
 
   /**
@@ -637,40 +640,40 @@ export class DocumentModel extends EventEmitter {
    * @param {Partial<ComponentNode>} patch - 更新内容
    */
   _updateNode(nodeId: string, patch: Partial<ComponentNode>) {
-    const node = this._schema.nodesById[nodeId];
-    if (!node) return;
+    const node = this._schema.nodesById[nodeId]
+    if (!node) return
 
-    const oldValue = { ...node };
+    const oldValue = { ...node }
 
     // 如果更新了 bindings，需要更新绑定索引
     if (patch.bindings) {
-      this._removeFromBindingIndex(node);
+      this._removeFromBindingIndex(node)
     }
 
     // 如果更新了 type，需要更新类型索引
     if (patch.type && patch.type !== node.type) {
-      this._removeFromTypeIndex(node);
+      this._removeFromTypeIndex(node)
     }
 
     // 应用更新
-    Object.assign(node, patch);
+    Object.assign(node, patch)
 
     // 重建索引
     if (patch.bindings) {
-      this._addToBindingIndex(node);
+      this._addToBindingIndex(node)
     }
     if (patch.type) {
-      this._addToTypeIndex(node);
+      this._addToTypeIndex(node)
     }
 
     // 触发变更事件
     this._emitChange({
-      type: "update",
-      target: "node",
+      type: 'update',
+      target: 'node',
       id: nodeId,
       oldValue,
       newValue: node,
-    });
+    })
   }
 
   /**
@@ -680,55 +683,55 @@ export class DocumentModel extends EventEmitter {
    * @param {number} newIndex - 新位置索引
    */
   _moveNode(nodeId: string, newParentId: string, newIndex: number) {
-    const node = this.getNode(nodeId);
-    if (!node) return;
+    const node = this.getNode(nodeId)
+    if (!node) return
 
-    const oldParentId = this._parentIndex.get(nodeId);
-    let oldParentChildrenAfterRemoval: string[] | null = null;
+    const oldParentId = this._parentIndex.get(nodeId)
+    let oldParentChildrenAfterRemoval: string[] | null = null
 
     // 从旧父节点移除
     if (oldParentId) {
-      const oldParent = this.getNode(oldParentId);
+      const oldParent = this.getNode(oldParentId)
       if (oldParent && oldParent.children) {
-        const index = oldParent.children.indexOf(nodeId);
+        const index = oldParent.children.indexOf(nodeId)
         if (index !== -1) {
           oldParentChildrenAfterRemoval = [
             ...oldParent.children.slice(0, index),
             ...oldParent.children.slice(index + 1),
-          ];
-          oldParent.children = oldParentChildrenAfterRemoval;
+          ]
+          oldParent.children = oldParentChildrenAfterRemoval
         }
       }
     }
 
     // 添加到新父节点
-    const newParent = this.getNode(newParentId);
+    const newParent = this.getNode(newParentId)
     if (newParent) {
       const baseChildren =
         oldParentId === newParentId && oldParentChildrenAfterRemoval
           ? oldParentChildrenAfterRemoval
           : Array.isArray(newParent.children)
             ? newParent.children
-            : [];
-      const insertIndex = Math.min(Math.max(0, newIndex), baseChildren.length);
+            : []
+      const insertIndex = Math.min(Math.max(0, newIndex), baseChildren.length)
       newParent.children = [
         ...baseChildren.slice(0, insertIndex),
         nodeId,
         ...baseChildren.slice(insertIndex),
-      ];
+      ]
     }
 
     // 更新父索引
-    this._parentIndex.set(nodeId, newParentId);
+    this._parentIndex.set(nodeId, newParentId)
 
     // 触发变更事件
     this._emitChange({
-      type: "move",
-      target: "node",
+      type: 'move',
+      target: 'node',
       id: nodeId,
       oldValue: { parentId: oldParentId },
       newValue: { parentId: newParentId, index: newIndex },
-    });
+    })
   }
 
   /**
@@ -738,29 +741,29 @@ export class DocumentModel extends EventEmitter {
    */
   _insertGraphic(pageId: string, graphic: GraphicNode) {
     // 添加到 graphicsById
-    this._schema.graphicsById[graphic.id] = graphic;
+    this._schema.graphicsById[graphic.id] = graphic
 
     // 更新页面的 graphicsIds
-    const page = this.getPage(pageId);
+    const page = this.getPage(pageId)
     if (page) {
       if (!page.graphicsIds) {
-        page.graphicsIds = [];
+        page.graphicsIds = []
       }
-      page.graphicsIds.push(graphic.id);
+      page.graphicsIds.push(graphic.id)
     }
 
     // 更新索引
-    this._graphicPageIndex.set(graphic.id, pageId);
-    this._addToBindingIndex(graphic);
+    this._graphicPageIndex.set(graphic.id, pageId)
+    this._addToBindingIndex(graphic)
 
     // 触发变更事件
     this._emitChange({
-      type: "insert",
-      target: "graphic",
+      type: 'insert',
+      target: 'graphic',
       id: graphic.id,
       parentId: pageId,
       newValue: graphic,
-    });
+    })
   }
 
   /**
@@ -769,38 +772,38 @@ export class DocumentModel extends EventEmitter {
    * @returns {GraphicNode | null} 被删除的图形
    */
   _removeGraphic(graphicId: string): GraphicNode | null {
-    const graphic = this._schema.graphicsById[graphicId];
-    if (!graphic) return null;
+    const graphic = this._schema.graphicsById[graphicId]
+    if (!graphic) return null
 
     // 获取所属页面
-    const pageId = this._graphicPageIndex.get(graphicId);
+    const pageId = this._graphicPageIndex.get(graphicId)
     if (pageId) {
-      const page = this.getPage(pageId);
+      const page = this.getPage(pageId)
       if (page && page.graphicsIds) {
-        const index = page.graphicsIds.indexOf(graphicId);
+        const index = page.graphicsIds.indexOf(graphicId)
         if (index !== -1) {
-          page.graphicsIds.splice(index, 1);
+          page.graphicsIds.splice(index, 1)
         }
       }
     }
 
     // 清理索引
-    this._graphicPageIndex.delete(graphicId);
-    this._removeFromBindingIndex(graphic);
+    this._graphicPageIndex.delete(graphicId)
+    this._removeFromBindingIndex(graphic)
 
     // 从 graphicsById 中删除
-    delete this._schema.graphicsById[graphicId];
+    delete this._schema.graphicsById[graphicId]
 
     // 触发变更事件
     this._emitChange({
-      type: "remove",
-      target: "graphic",
+      type: 'remove',
+      target: 'graphic',
       id: graphicId,
       parentId: pageId,
       oldValue: graphic,
-    });
+    })
 
-    return graphic;
+    return graphic
   }
 
   /**
@@ -809,32 +812,32 @@ export class DocumentModel extends EventEmitter {
    * @param {Partial<GraphicNode>} patch - 更新内容
    */
   _updateGraphic(graphicId: string, patch: Partial<GraphicNode>) {
-    const graphic = this._schema.graphicsById[graphicId];
-    if (!graphic) return;
+    const graphic = this._schema.graphicsById[graphicId]
+    if (!graphic) return
 
-    const oldValue = { ...graphic };
+    const oldValue = { ...graphic }
 
     // 如果更新了 bindings，需要更新绑定索引
     if (patch.bindings) {
-      this._removeFromBindingIndex(graphic);
+      this._removeFromBindingIndex(graphic)
     }
 
     // 应用更新
-    Object.assign(graphic, patch);
+    Object.assign(graphic, patch)
 
     // 重建绑定索引
     if (patch.bindings) {
-      this._addToBindingIndex(graphic);
+      this._addToBindingIndex(graphic)
     }
 
     // 触发变更事件
     this._emitChange({
-      type: "update",
-      target: "graphic",
+      type: 'update',
+      target: 'graphic',
       id: graphicId,
       oldValue,
       newValue: graphic,
-    });
+    })
   }
 
   /**
@@ -842,15 +845,15 @@ export class DocumentModel extends EventEmitter {
    * @param {SymbolDef} symbol - 符号定义
    */
   _insertSymbol(symbol: SymbolDef) {
-    this._schema.symbolsById[symbol.id] = symbol;
+    this._schema.symbolsById[symbol.id] = symbol
 
     // 触发变更事件
     this._emitChange({
-      type: "insert",
-      target: "symbol",
+      type: 'insert',
+      target: 'symbol',
       id: symbol.id,
       newValue: symbol,
-    });
+    })
   }
 
   /**
@@ -859,20 +862,20 @@ export class DocumentModel extends EventEmitter {
    * @returns {SymbolDef | null} 被删除的符号
    */
   _removeSymbol(symbolId: string): SymbolDef | null {
-    const symbol = this._schema.symbolsById[symbolId];
-    if (!symbol) return null;
+    const symbol = this._schema.symbolsById[symbolId]
+    if (!symbol) return null
 
-    delete this._schema.symbolsById[symbolId];
+    delete this._schema.symbolsById[symbolId]
 
     // 触发变更事件
     this._emitChange({
-      type: "remove",
-      target: "symbol",
+      type: 'remove',
+      target: 'symbol',
       id: symbolId,
       oldValue: symbol,
-    });
+    })
 
-    return symbol;
+    return symbol
   }
 
   // ==================== 索引维护 ====================
@@ -882,14 +885,14 @@ export class DocumentModel extends EventEmitter {
    * @private
    */
   _ensureSchemaStructure(): void {
-    const schema = this._schema;
-    if (!schema.pagesById) schema.pagesById = {};
-    if (!schema.nodesById) schema.nodesById = {};
-    if (!schema.graphicsById) schema.graphicsById = {};
-    if (!schema.symbolsById) schema.symbolsById = {};
-    if (!schema.assetsById) schema.assetsById = {};
-    if (!schema.dataProviders) schema.dataProviders = {};
-    if (!schema.vars) schema.vars = { global: {}, pages: {} };
+    const schema = this._schema
+    if (!schema.pagesById) schema.pagesById = {}
+    if (!schema.nodesById) schema.nodesById = {}
+    if (!schema.graphicsById) schema.graphicsById = {}
+    if (!schema.symbolsById) schema.symbolsById = {}
+    if (!schema.assetsById) schema.assetsById = {}
+    if (!schema.dataProviders) schema.dataProviders = {}
+    if (!schema.vars) schema.vars = { global: {}, pages: {} }
   }
 
   /**
@@ -897,20 +900,20 @@ export class DocumentModel extends EventEmitter {
    * @private
    */
   _rebuildIndexes(): void {
-    this._parentIndex.clear();
-    this._typeIndex.clear();
-    this._bindingIndex.clear();
-    this._graphicPageIndex.clear();
+    this._parentIndex.clear()
+    this._typeIndex.clear()
+    this._bindingIndex.clear()
+    this._graphicPageIndex.clear()
 
     // 构建节点索引
     for (const node of Object.values(this._schema.nodesById)) {
-      this._addToTypeIndex(node);
-      this._addToBindingIndex(node);
+      this._addToTypeIndex(node)
+      this._addToBindingIndex(node)
 
       // 构建父子关系索引
       if (node.children) {
         for (const childId of node.children) {
-          this._parentIndex.set(childId, node.id);
+          this._parentIndex.set(childId, node.id)
         }
       }
     }
@@ -919,14 +922,14 @@ export class DocumentModel extends EventEmitter {
     for (const page of Object.values(this._schema.pagesById)) {
       if (page.graphicsIds) {
         for (const graphicId of page.graphicsIds) {
-          this._graphicPageIndex.set(graphicId, page.id);
+          this._graphicPageIndex.set(graphicId, page.id)
         }
       }
     }
 
     // 构建图形绑定索引
     for (const graphic of Object.values(this._schema.graphicsById)) {
-      this._addToBindingIndex(graphic);
+      this._addToBindingIndex(graphic)
     }
   }
 
@@ -937,9 +940,9 @@ export class DocumentModel extends EventEmitter {
    */
   _addToTypeIndex(node: ComponentNode): void {
     if (!this._typeIndex.has(node.type)) {
-      this._typeIndex.set(node.type, new Set());
+      this._typeIndex.set(node.type, new Set())
     }
-    this._typeIndex.get(node.type)!.add(node.id);
+    this._typeIndex.get(node.type)!.add(node.id)
   }
 
   /**
@@ -948,11 +951,11 @@ export class DocumentModel extends EventEmitter {
    * @private
    */
   _removeFromTypeIndex(node: ComponentNode): void {
-    const typeSet = this._typeIndex.get(node.type);
+    const typeSet = this._typeIndex.get(node.type)
     if (typeSet) {
-      typeSet.delete(node.id);
+      typeSet.delete(node.id)
       if (typeSet.size === 0) {
-        this._typeIndex.delete(node.type);
+        this._typeIndex.delete(node.type)
       }
     }
   }
@@ -963,14 +966,14 @@ export class DocumentModel extends EventEmitter {
    * @private
    */
   _addToBindingIndex(element: ComponentNode | GraphicNode): void {
-    if (!element.bindings) return;
+    if (!element.bindings) return
 
     for (const binding of Object.values(element.bindings)) {
-      if (binding && binding.kind === "datapoint" && binding.path) {
+      if (binding && binding.kind === 'datapoint' && binding.path) {
         if (!this._bindingIndex.has(binding.path)) {
-          this._bindingIndex.set(binding.path, new Set());
+          this._bindingIndex.set(binding.path, new Set())
         }
-        this._bindingIndex.get(binding.path)!.add(element.id);
+        this._bindingIndex.get(binding.path)!.add(element.id)
       }
     }
   }
@@ -981,15 +984,15 @@ export class DocumentModel extends EventEmitter {
    * @private
    */
   _removeFromBindingIndex(element: ComponentNode | GraphicNode): void {
-    if (!element.bindings) return;
+    if (!element.bindings) return
 
     for (const binding of Object.values(element.bindings)) {
-      if (binding && binding.kind === "datapoint" && binding.path) {
-        const bindingSet = this._bindingIndex.get(binding.path);
+      if (binding && binding.kind === 'datapoint' && binding.path) {
+        const bindingSet = this._bindingIndex.get(binding.path)
         if (bindingSet) {
-          bindingSet.delete(element.id);
+          bindingSet.delete(element.id)
           if (bindingSet.size === 0) {
-            this._bindingIndex.delete(binding.path);
+            this._bindingIndex.delete(binding.path)
           }
         }
       }
@@ -1002,7 +1005,7 @@ export class DocumentModel extends EventEmitter {
    * @private
    */
   _emitChange(change: Change) {
-    this.emit("change", [change]);
+    this.emit('change', [change])
   }
 
   // ==================== 序列化 ====================
@@ -1012,7 +1015,7 @@ export class DocumentModel extends EventEmitter {
    * @returns {string}
    */
   toJSON(): string {
-    return JSON.stringify(this._schema, null, 2);
+    return JSON.stringify(this._schema, null, 2)
   }
 
   /**
@@ -1021,8 +1024,8 @@ export class DocumentModel extends EventEmitter {
    * @returns {DocumentModel}
    */
   static fromJSON(json: string): DocumentModel {
-    const schema = JSON.parse(json) as ProjectSchema;
-    return new DocumentModel(schema);
+    const schema = JSON.parse(json) as ProjectSchema
+    return new DocumentModel(schema)
   }
 
   /**
@@ -1030,9 +1033,9 @@ export class DocumentModel extends EventEmitter {
    * @returns {DocumentModel}
    */
   clone(): DocumentModel {
-    const schemaClone = JSON.parse(JSON.stringify(this._schema));
-    return new DocumentModel(schemaClone);
+    const schemaClone = JSON.parse(JSON.stringify(this._schema))
+    return new DocumentModel(schemaClone)
   }
 }
 
-export default DocumentModel;
+export default DocumentModel

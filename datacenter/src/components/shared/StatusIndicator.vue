@@ -12,46 +12,42 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed } from 'vue'
 
-type PreviewState =
-  | "disconnected"
-  | "connecting"
-  | "connected"
-  | "reconnecting";
+type PreviewState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting'
 
 const props = defineProps<{
-  state?: PreviewState;
-  status?: string;
-}>();
+  state?: PreviewState
+  status?: string
+}>()
 
 defineEmits<{
-  (event: "click", state: PreviewState): void;
-}>();
+  (event: 'click', state: PreviewState): void
+}>()
 
 const legacyStatusMap: Record<string, PreviewState> = {
-  connected: "connected",
-  disconnected: "disconnected",
-  error: "disconnected",
-  unknown: "disconnected",
-};
+  connected: 'connected',
+  disconnected: 'disconnected',
+  error: 'disconnected',
+  unknown: 'disconnected',
+}
 
 const stateLabelMap: Record<PreviewState, string> = {
-  disconnected: "预览已断开",
-  connecting: "预览连接中",
-  connected: "预览已连接",
-  reconnecting: "预览重连中",
-};
+  disconnected: '预览已断开',
+  connecting: '预览连接中',
+  connected: '预览已连接',
+  reconnecting: '预览重连中',
+}
 
 const resolvedState = computed<PreviewState>(() => {
   if (props.state) {
-    return props.state;
+    return props.state
   }
 
-  return legacyStatusMap[props.status || ""] || "disconnected";
-});
+  return legacyStatusMap[props.status || ''] || 'disconnected'
+})
 
-const label = computed(() => stateLabelMap[resolvedState.value]);
+const label = computed(() => stateLabelMap[resolvedState.value])
 </script>
 
 <style scoped>

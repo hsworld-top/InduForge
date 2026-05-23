@@ -1,16 +1,10 @@
-import { z } from "zod";
-import { IdSchema, TimeFieldSchema, RuntimeGrantSchema } from "./common.schema";
+import { z } from 'zod'
+import { IdSchema, TimeFieldSchema, RuntimeGrantSchema } from './common.schema'
 
 // 数据点状态枚举
-export const DatapointStatusSchema = z.enum([
-  "active",
-  "inactive",
-  "invalid",
-  "error",
-  "unknown",
-]);
+export const DatapointStatusSchema = z.enum(['active', 'inactive', 'invalid', 'error', 'unknown'])
 
-export type DatapointStatus = z.infer<typeof DatapointStatusSchema>;
+export type DatapointStatus = z.infer<typeof DatapointStatusSchema>
 
 // 单个数据点
 export const DatapointSchema = z
@@ -29,9 +23,9 @@ export const DatapointSchema = z
     createdAt: TimeFieldSchema,
     updatedAt: TimeFieldSchema,
   })
-  .passthrough();
+  .passthrough()
 
-export type Datapoint = z.infer<typeof DatapointSchema>;
+export type Datapoint = z.infer<typeof DatapointSchema>
 
 // 数据点更新参数
 export const DatapointUpdateSchema = z
@@ -41,6 +35,6 @@ export const DatapointUpdateSchema = z
     unit: z.string().optional().nullable(),
     dataType: z.string().optional(),
   })
-  .passthrough();
+  .passthrough()
 
-export type DatapointUpdate = z.infer<typeof DatapointUpdateSchema>;
+export type DatapointUpdate = z.infer<typeof DatapointUpdateSchema>

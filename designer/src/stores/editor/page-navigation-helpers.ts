@@ -3,7 +3,7 @@
  */
 
 export interface PageIdEntry {
-  id: string;
+  id: string
 }
 
 /**
@@ -13,9 +13,9 @@ export function resolveLandingPageId(
   pageList: PageIdEntry[],
   entryConfig: { homePageId?: string } | null | undefined,
 ): string | null {
-  if (!pageList.length) return null;
-  const homePageId = entryConfig?.homePageId;
+  if (!pageList.length) return null
+  const homePageId = entryConfig?.homePageId
   const target =
-    homePageId && pageList.some((p) => p.id === homePageId) ? homePageId : pageList[0]?.id;
-  return target ? String(target) : null;
+    homePageId && pageList.some((p) => p.id === homePageId) ? homePageId : pageList[0]?.id
+  return target ? String(target) : null
 }

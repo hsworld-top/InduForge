@@ -3,117 +3,113 @@
   根据 hint 显示：Flex 插入线、Grid 单元格高亮、Free 十字线
 -->
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed } from 'vue'
 
 /**
  * Ghost 拖影位置接口
  */
 interface GhostPosition {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 interface DropIndicatorVisualHint {
-  orientation?: "horizontal" | "vertical";
-  offset?: number;
+  orientation?: 'horizontal' | 'vertical'
+  offset?: number
   highlightRect?: {
-    left: number;
-    top: number;
-    width: number;
-    height: number;
-  };
-  x?: number;
-  y?: number;
+    left: number
+    top: number
+    width: number
+    height: number
+  }
+  x?: number
+  y?: number
 }
 
 interface DropIndicatorHint {
-  insertRule?: "before_after" | "grid_cell" | "absolute_position";
-  visualHint?: DropIndicatorVisualHint | null;
+  insertRule?: 'before_after' | 'grid_cell' | 'absolute_position'
+  visualHint?: DropIndicatorVisualHint | null
 }
 
 const props = defineProps<{
   /**
    * 拖拽决策对象
    */
-  hint?: DropIndicatorHint | null;
+  hint?: DropIndicatorHint | null
   /**
    * Ghost 拖影位置与尺寸（跟随鼠标的半透明组件轮廓）
    */
-  ghost?: GhostPosition | null;
-}>();
+  ghost?: GhostPosition | null
+}>()
 
 /**
  * Ghost 拖影样式（D-07: 透明度 0.5，跟随鼠标）
  */
 const ghostStyle = computed(() => {
-  if (!props.ghost) return {};
+  if (!props.ghost) return {}
   return {
     left: `${props.ghost.x}px`,
     top: `${props.ghost.y}px`,
     width: `${props.ghost.width}px`,
     height: `${props.ghost.height}px`,
-  };
-});
+  }
+})
 
 /**
  * 插入线样式（Flex 容器）
  */
 const insertLineStyle = computed(() => {
-  if (!props.hint?.visualHint) return {};
+  if (!props.hint?.visualHint) return {}
 
-  const { orientation, offset } = props.hint.visualHint;
+  const { orientation, offset } = props.hint.visualHint
 
-  if (orientation === "horizontal") {
+  if (orientation === 'horizontal') {
     return {
       top: `${offset}px`,
-    };
+    }
   } else {
     return {
       left: `${offset}px`,
-    };
+    }
   }
-});
+})
 
 /**
  * 单元格高亮样式（Grid 容器）
  */
 const gridCellStyle = computed(() => {
-  if (!props.hint?.visualHint?.highlightRect) return {};
+  if (!props.hint?.visualHint?.highlightRect) return {}
 
-  const { left, top, width, height } = props.hint.visualHint.highlightRect;
+  const { left, top, width, height } = props.hint.visualHint.highlightRect
 
   return {
     left: `${left}px`,
     top: `${top}px`,
     width: `${width}px`,
     height: `${height}px`,
-  };
-});
+  }
+})
 
 /**
  * 十字线样式（Free 容器）
  */
 const crosshairStyle = computed(() => {
-  if (!props.hint?.visualHint) return {};
+  if (!props.hint?.visualHint) return {}
 
-  const { x, y } = props.hint.visualHint;
+  const { x, y } = props.hint.visualHint
 
   return {
     left: `${x}px`,
     top: `${y}px`,
-  };
-});
+  }
+})
 </script>
 
 <template>
   <!-- Ghost 拖影（D-07: 跟随鼠标的半透明轮廓） -->
-  <div
-    v-if="ghost"
-    class="ghost-drag-shadow"
-    :style="ghostStyle"
-  />
+  <div v-if="ghost" class="ghost-drag-shadow" :style="ghostStyle" />
 
   <!-- Flex 容器：插入线 -->
   <div

@@ -24,7 +24,7 @@ Linux 开发人员执行：
 
 Windows + WSL2 开发时，建议只在 WSL2 执行本脚本；`pnpm install` 和业务项目启动在 Windows 侧执行。
 
-Node 依赖由根目录 pnpm workspace 统一管理。只在仓库根目录执行一次 `pnpm install`，不要在各业务子目录单独安装依赖。
+Node 依赖由根目录 pnpm workspace 统一管理。只在仓库根目录执行一次 `pnpm install`，只提交根目录 `pnpm-lock.yaml`，不要在各业务子目录单独安装依赖。pnpm 在 workspace 子目录生成的 `node_modules/` 链接或提升目录属于安装产物。
 
 脚本只处理基础设施。控制面和设计中心长期共用 `if_core`，不会创建 `if_design`。控制面结构 SQL 位于 `dev_core/scripts/bootstrap/sql/core-schema.sql`，由 `dev_core` 启动或离线安装脚本内部调用。
 

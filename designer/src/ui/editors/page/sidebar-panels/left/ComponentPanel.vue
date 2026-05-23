@@ -3,195 +3,185 @@
   当前版本仅保留：6 个布局容器 + Button
 -->
 <script setup lang="ts">
-import { storeToRefs } from "pinia";
-import { computed, h, ref } from "vue";
-import { useI18n } from "vue-i18n";
-import { componentRegistry } from "@/editor-core";
-import { useEditorStore } from "@/stores/editor-store";
-import { endDrag, startDrag } from "@/ui/editors/page/canvas/composables/use-drag-state";
+import { storeToRefs } from 'pinia'
+import { computed, h, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { componentRegistry } from '@/editor-core'
+import { useEditorStore } from '@/stores/editor-store'
+import { endDrag, startDrag } from '@/ui/editors/page/canvas/composables/use-drag-state'
 
 interface ComponentItemLike {
-  type: string;
-  name: string;
+  type: string
+  name: string
 }
 
-type PreviewComponentMapLike = Record<string, () => ReturnType<typeof h>>;
+type PreviewComponentMapLike = Record<string, () => ReturnType<typeof h>>
 
-const keyword = ref("");
-const activeSections = ref(["layout", "ui", "system"]);
-const { t, locale } = useI18n();
-const editorStore = useEditorStore();
-const { projectI18n } = storeToRefs(editorStore);
+const keyword = ref('')
+const activeSections = ref(['layout', 'ui', 'system'])
+const { t, locale } = useI18n()
+const editorStore = useEditorStore()
+const { projectI18n } = storeToRefs(editorStore)
 
 const layoutTypeOrder = [
-  "HorizontalLayout",
-  "VerticalLayout",
-  "Collapse",
-  "Tabs",
-  "FormLayout",
-  "ElContainer",
-];
+  'HorizontalLayout',
+  'VerticalLayout',
+  'Collapse',
+  'Tabs',
+  'FormLayout',
+  'ElContainer',
+]
 
 const allowedTypesByCategory: Record<string, string[]> = {
   layout: layoutTypeOrder,
   uiPc: [
-    "Button",
-    "Input",
-    "InputNumber",
-    "Select",
-    "Radio",
-    "Checkbox",
-    "Switch",
-    "Table",
-    "Pagination",
+    'Button',
+    'Input',
+    'InputNumber',
+    'Select',
+    'Radio',
+    'Checkbox',
+    'Switch',
+    'Table',
+    'Pagination',
   ],
-};
+}
 
 function filterItemsByCategory(category: string): ComponentItemLike[] {
-  void locale.value;
-  const keywordValue = keyword.value.trim().toLowerCase();
-  const allowedTypes = allowedTypesByCategory[category] ?? [];
-  const items = componentRegistry.getByCategory(category) as ComponentItemLike[];
+  void locale.value
+  const keywordValue = keyword.value.trim().toLowerCase()
+  const allowedTypes = allowedTypesByCategory[category] ?? []
+  const items = componentRegistry.getByCategory(category) as ComponentItemLike[]
   const filtered = items.filter((item) => {
-    if (!allowedTypes.includes(item.type)) return false;
-    if (!keywordValue) return true;
+    if (!allowedTypes.includes(item.type)) return false
+    if (!keywordValue) return true
     return (
       item.type.toLowerCase().includes(keywordValue) ||
       item.name.toLowerCase().includes(keywordValue)
-    );
-  });
+    )
+  })
 
-  if (category !== "layout") return filtered;
-  return filtered.sort((a, b) => layoutTypeOrder.indexOf(a.type) - layoutTypeOrder.indexOf(b.type));
+  if (category !== 'layout') return filtered
+  return filtered.sort((a, b) => layoutTypeOrder.indexOf(a.type) - layoutTypeOrder.indexOf(b.type))
 }
 
 function filterSystemItems(): ComponentItemLike[] {
-  void locale.value;
-  const keywordValue = keyword.value.trim().toLowerCase();
-  const types = [
-    "UserAvatarMenu",
-    ...(projectI18n.value.enabled ? ["LanguageSwitcher"] : []),
-  ];
+  void locale.value
+  const keywordValue = keyword.value.trim().toLowerCase()
+  const types = ['UserAvatarMenu', ...(projectI18n.value.enabled ? ['LanguageSwitcher'] : [])]
   return types
     .map((type) => componentRegistry.get(type) as ComponentItemLike | undefined)
     .filter((item): item is ComponentItemLike => Boolean(item))
     .filter((item) => {
-      if (!keywordValue) return true;
+      if (!keywordValue) return true
       return (
         item.type.toLowerCase().includes(keywordValue) ||
         item.name.toLowerCase().includes(keywordValue)
-      );
-    });
+      )
+    })
 }
 
-const layoutItems = computed<ComponentItemLike[]>(() => filterItemsByCategory("layout"));
-const uiItems = computed<ComponentItemLike[]>(() => filterItemsByCategory("uiPc"));
-const systemItems = computed<ComponentItemLike[]>(filterSystemItems);
-const showSystemSection = computed(() => systemItems.value.length > 0 || !keyword.value.trim());
+const layoutItems = computed<ComponentItemLike[]>(() => filterItemsByCategory('layout'))
+const uiItems = computed<ComponentItemLike[]>(() => filterItemsByCategory('uiPc'))
+const systemItems = computed<ComponentItemLike[]>(filterSystemItems)
+const showSystemSection = computed(() => systemItems.value.length > 0 || !keyword.value.trim())
 
 function getPreviewComponent(type: string): { render: () => ReturnType<typeof h> } {
   const previewMap: PreviewComponentMapLike = {
     Button: () =>
-      h("div", { class: "preview-button" }, [
-        h("span", { class: "preview-button-line" }),
-      ]),
-    Input: () =>
-      h("div", { class: "preview-input" }, [
-        h("span", { class: "preview-input-line" }),
-      ]),
+      h('div', { class: 'preview-button' }, [h('span', { class: 'preview-button-line' })]),
+    Input: () => h('div', { class: 'preview-input' }, [h('span', { class: 'preview-input-line' })]),
     InputNumber: () =>
-      h("div", { class: "preview-input-number" }, [
-        h("span", { class: "preview-input-number-line" }),
-        h("span", { class: "preview-input-number-step" }),
+      h('div', { class: 'preview-input-number' }, [
+        h('span', { class: 'preview-input-number-line' }),
+        h('span', { class: 'preview-input-number-step' }),
       ]),
     Select: () =>
-      h("div", { class: "preview-select" }, [
-        h("span", { class: "preview-select-line" }),
-        h("span", { class: "preview-select-arrow" }),
+      h('div', { class: 'preview-select' }, [
+        h('span', { class: 'preview-select-line' }),
+        h('span', { class: 'preview-select-arrow' }),
       ]),
     Radio: () =>
-      h("div", { class: "preview-choice" }, [
-        h("span", { class: "preview-radio-dot" }),
-        h("span", { class: "preview-choice-line" }),
+      h('div', { class: 'preview-choice' }, [
+        h('span', { class: 'preview-radio-dot' }),
+        h('span', { class: 'preview-choice-line' }),
       ]),
     Checkbox: () =>
-      h("div", { class: "preview-choice" }, [
-        h("span", { class: "preview-checkbox-box" }),
-        h("span", { class: "preview-choice-line" }),
+      h('div', { class: 'preview-choice' }, [
+        h('span', { class: 'preview-checkbox-box' }),
+        h('span', { class: 'preview-choice-line' }),
       ]),
     Switch: () =>
-      h("div", { class: "preview-switch" }, [
-        h("span", { class: "preview-switch-dot" }),
-      ]),
+      h('div', { class: 'preview-switch' }, [h('span', { class: 'preview-switch-dot' })]),
     Table: () =>
-      h("div", { class: "preview-table" }, [
-        h("span", { class: "preview-table-row is-head" }),
-        h("span", { class: "preview-table-row" }),
-        h("span", { class: "preview-table-row" }),
+      h('div', { class: 'preview-table' }, [
+        h('span', { class: 'preview-table-row is-head' }),
+        h('span', { class: 'preview-table-row' }),
+        h('span', { class: 'preview-table-row' }),
       ]),
     Pagination: () =>
-      h("div", { class: "preview-pagination" }, [
-        h("span"),
-        h("span", { class: "is-active" }),
-        h("span"),
+      h('div', { class: 'preview-pagination' }, [
+        h('span'),
+        h('span', { class: 'is-active' }),
+        h('span'),
       ]),
     LanguageSwitcher: () =>
-      h("div", { class: "preview-language-switcher" }, [
-        h("span", { class: "preview-language-content" }, [
-          h("span", { class: "preview-language-line" }),
-          h("span", { class: "preview-language-arrow" }),
+      h('div', { class: 'preview-language-switcher' }, [
+        h('span', { class: 'preview-language-content' }, [
+          h('span', { class: 'preview-language-line' }),
+          h('span', { class: 'preview-language-arrow' }),
         ]),
       ]),
     UserAvatarMenu: () =>
-      h("div", { class: "preview-user-avatar" }, [
-        h("span", { class: "preview-user-avatar-circle" }),
-        h("span", { class: "preview-user-avatar-lines" }, [
-          h("span", { class: "preview-user-avatar-line" }),
-          h("span", { class: "preview-user-avatar-subline" }),
+      h('div', { class: 'preview-user-avatar' }, [
+        h('span', { class: 'preview-user-avatar-circle' }),
+        h('span', { class: 'preview-user-avatar-lines' }, [
+          h('span', { class: 'preview-user-avatar-line' }),
+          h('span', { class: 'preview-user-avatar-subline' }),
         ]),
-        h("span", { class: "preview-user-avatar-arrow" }),
+        h('span', { class: 'preview-user-avatar-arrow' }),
       ]),
     HorizontalLayout: () =>
-      h("div", { class: "preview-flex" }, [
-        h("div", { class: "preview-block" }),
-        h("div", { class: "preview-block" }),
-        h("div", { class: "preview-block" }),
+      h('div', { class: 'preview-flex' }, [
+        h('div', { class: 'preview-block' }),
+        h('div', { class: 'preview-block' }),
+        h('div', { class: 'preview-block' }),
       ]),
     VerticalLayout: () =>
-      h("div", { class: "preview-flex preview-flex-column" }, [
-        h("div", { class: "preview-block" }),
-        h("div", { class: "preview-block" }),
-        h("div", { class: "preview-block" }),
+      h('div', { class: 'preview-flex preview-flex-column' }, [
+        h('div', { class: 'preview-block' }),
+        h('div', { class: 'preview-block' }),
+        h('div', { class: 'preview-block' }),
       ]),
     FormLayout: () =>
-      h("div", { class: "preview-form" }, [
-        h("div", { class: "preview-form-item" }),
-        h("div", { class: "preview-form-item" }),
-        h("div", { class: "preview-form-item" }),
+      h('div', { class: 'preview-form' }, [
+        h('div', { class: 'preview-form-item' }),
+        h('div', { class: 'preview-form-item' }),
+        h('div', { class: 'preview-form-item' }),
       ]),
     ElContainer: () =>
-      h("div", { class: "preview-el-container" }, [
-        h("div", { class: "preview-el-header" }),
-        h("div", { class: "preview-el-body" }, [
-          h("div", { class: "preview-el-aside" }),
-          h("div", { class: "preview-el-main" }),
+      h('div', { class: 'preview-el-container' }, [
+        h('div', { class: 'preview-el-header' }),
+        h('div', { class: 'preview-el-body' }, [
+          h('div', { class: 'preview-el-aside' }),
+          h('div', { class: 'preview-el-main' }),
         ]),
-        h("div", { class: "preview-el-footer" }),
+        h('div', { class: 'preview-el-footer' }),
       ]),
     Tabs: () =>
-      h("div", { class: "preview-tabs" }, [
-        h("div", { class: "preview-tabs-header" }),
-        h("div", { class: "preview-tabs-body" }),
+      h('div', { class: 'preview-tabs' }, [
+        h('div', { class: 'preview-tabs-header' }),
+        h('div', { class: 'preview-tabs-body' }),
       ]),
     Collapse: () =>
-      h("div", { class: "preview-collapse" }, [
-        h("div", { class: "preview-collapse-header" }),
-        h("div", { class: "preview-collapse-body" }),
+      h('div', { class: 'preview-collapse' }, [
+        h('div', { class: 'preview-collapse-header' }),
+        h('div', { class: 'preview-collapse-body' }),
       ]),
-  };
+  }
 
-  const render = previewMap[type] ?? (() => h("div", { class: "preview-unknown" }, type));
-  return { render };
+  const render = previewMap[type] ?? (() => h('div', { class: 'preview-unknown' }, type))
+  return { render }
 }
 
 function getPreviewIcon(type: string): string {
@@ -229,47 +219,47 @@ function getPreviewIcon(type: string): string {
     Tabs: '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;box-sizing:border-box;"><div style="height:9px;background:#3b6cff;"></div><div style="height:18px;margin:5px;border:1px solid #3b6cff;border-radius:2px;"></div></div>',
     Collapse:
       '<div style="width:60px;height:40px;border:1px solid #3b6cff;border-radius:4px;box-sizing:border-box;"><div style="height:9px;background:#3b6cff;"></div><div style="height:16px;margin:5px;border:1px solid #3b6cff;border-radius:2px;"></div></div>',
-  };
+  }
   return (
     iconMap[type] ||
     '<div style="width:60px;height:40px;border:1px dashed #c0c4cc;border-radius:4px;box-sizing:border-box;"></div>'
-  );
+  )
 }
 
 function handleDragStart(item: ComponentItemLike, event: DragEvent): void {
-  startDrag(item.type);
-  if (!event.dataTransfer) return;
+  startDrag(item.type)
+  if (!event.dataTransfer) return
 
-  const payload = JSON.stringify({ type: item.type });
-  event.dataTransfer.effectAllowed = "copy";
-  event.dataTransfer.setData("application/x-designer-component", payload);
-  event.dataTransfer.setData("text/plain", item.type);
+  const payload = JSON.stringify({ type: item.type })
+  event.dataTransfer.effectAllowed = 'copy'
+  event.dataTransfer.setData('application/x-designer-component', payload)
+  event.dataTransfer.setData('text/plain', item.type)
 
-  const dragPreview = document.createElement("div");
+  const dragPreview = document.createElement('div')
   dragPreview.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px;background:#fff;border:1px solid #409eff;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.15);">
       <div>${getPreviewIcon(item.type)}</div>
       <div style="font-size:12px;color:#303133;">${item.name}</div>
     </div>
-  `;
-  dragPreview.style.position = "absolute";
-  dragPreview.style.top = "-1000px";
-  dragPreview.style.left = "-1000px";
-  dragPreview.style.pointerEvents = "none";
-  document.body.appendChild(dragPreview);
-  event.dataTransfer.setDragImage(dragPreview, 60, 30);
+  `
+  dragPreview.style.position = 'absolute'
+  dragPreview.style.top = '-1000px'
+  dragPreview.style.left = '-1000px'
+  dragPreview.style.pointerEvents = 'none'
+  document.body.appendChild(dragPreview)
+  event.dataTransfer.setDragImage(dragPreview, 60, 30)
   setTimeout(() => {
-    if (dragPreview.parentNode) dragPreview.parentNode.removeChild(dragPreview);
-  }, 0);
+    if (dragPreview.parentNode) dragPreview.parentNode.removeChild(dragPreview)
+  }, 0)
 }
 
 function handlePointerStart(item: ComponentItemLike, event: MouseEvent): void {
-  if (event.button !== 0) return;
-  startDrag(item.type);
+  if (event.button !== 0) return
+  startDrag(item.type)
 }
 
 function handleDragEnd(): void {
-  endDrag();
+  endDrag()
 }
 </script>
 
@@ -285,7 +275,7 @@ function handleDragEnd(): void {
       <el-collapse v-model="activeSections" class="component-collapse">
         <el-collapse-item name="layout">
           <template #title>
-            <span class="component-section-title">{{ t("componentPanel.layout") }}</span>
+            <span class="component-section-title">{{ t('componentPanel.layout') }}</span>
           </template>
           <div v-if="layoutItems.length" class="component-grid">
             <div
@@ -303,12 +293,12 @@ function handleDragEnd(): void {
               <div class="card-name">{{ item.name }}</div>
             </div>
           </div>
-          <div v-else class="empty-tip">{{ t("componentPanel.emptyLayout") }}</div>
+          <div v-else class="empty-tip">{{ t('componentPanel.emptyLayout') }}</div>
         </el-collapse-item>
 
         <el-collapse-item v-if="showSystemSection" name="system">
           <template #title>
-            <span class="component-section-title">{{ t("componentPanel.system") }}</span>
+            <span class="component-section-title">{{ t('componentPanel.system') }}</span>
           </template>
           <div v-if="systemItems.length" class="component-grid">
             <div
@@ -326,12 +316,12 @@ function handleDragEnd(): void {
               <div class="card-name">{{ item.name }}</div>
             </div>
           </div>
-          <div v-else class="empty-tip">{{ t("componentPanel.emptySystem") }}</div>
+          <div v-else class="empty-tip">{{ t('componentPanel.emptySystem') }}</div>
         </el-collapse-item>
 
         <el-collapse-item name="ui">
           <template #title>
-            <span class="component-section-title">{{ t("componentPanel.ui") }}</span>
+            <span class="component-section-title">{{ t('componentPanel.ui') }}</span>
           </template>
           <div v-if="uiItems.length" class="component-grid">
             <div
@@ -349,7 +339,7 @@ function handleDragEnd(): void {
               <div class="card-name">{{ item.name }}</div>
             </div>
           </div>
-          <div v-else class="empty-tip">{{ t("componentPanel.emptyUi") }}</div>
+          <div v-else class="empty-tip">{{ t('componentPanel.emptyUi') }}</div>
         </el-collapse-item>
       </el-collapse>
     </div>
@@ -591,7 +581,7 @@ function handleDragEnd(): void {
 }
 
 .preview-switch::before {
-  content: "";
+  content: '';
   width: 32px;
   height: 16px;
   border-radius: 12px;

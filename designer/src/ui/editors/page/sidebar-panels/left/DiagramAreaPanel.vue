@@ -3,9 +3,9 @@
   2D 流程图等可拖拽到画布的图表组件入口
 -->
 <script setup lang="ts">
-import IconEpBox from "~icons/ep/box";
-import IconEpGrid from "~icons/ep/grid";
-import { endDrag, startDrag } from "@/ui/editors/page/canvas/composables/use-drag-state";
+import IconEpBox from '~icons/ep/box'
+import IconEpGrid from '~icons/ep/grid'
+import { endDrag, startDrag } from '@/ui/editors/page/canvas/composables/use-drag-state'
 
 /**
  * 处理拖拽开始
@@ -13,12 +13,12 @@ import { endDrag, startDrag } from "@/ui/editors/page/canvas/composables/use-dra
  * @param {DragEvent} event - 拖拽事件
  */
 function handleDragStart(type: string, event: DragEvent) {
-  startDrag(type);
-  if (!event.dataTransfer) return;
-  const payload = JSON.stringify({ type });
-  event.dataTransfer.effectAllowed = "copy";
-  event.dataTransfer.setData("application/x-designer-component", payload);
-  event.dataTransfer.setData("text/plain", type);
+  startDrag(type)
+  if (!event.dataTransfer) return
+  const payload = JSON.stringify({ type })
+  event.dataTransfer.effectAllowed = 'copy'
+  event.dataTransfer.setData('application/x-designer-component', payload)
+  event.dataTransfer.setData('text/plain', type)
 }
 
 /**
@@ -27,15 +27,15 @@ function handleDragStart(type: string, event: DragEvent) {
  * @param {MouseEvent} event - 鼠标事件
  */
 function handlePointerStart(type: string, event: MouseEvent) {
-  if (event.button !== 0) return;
-  startDrag(type);
+  if (event.button !== 0) return
+  startDrag(type)
 }
 
 /**
  * 处理拖拽结束
  */
 function handleDragEnd(): void {
-  endDrag();
+  endDrag()
 }
 </script>
 

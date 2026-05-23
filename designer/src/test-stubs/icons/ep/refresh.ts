@@ -1,4 +1,4 @@
 export default {
-  name: "IconEpRefresh",
+  name: 'IconEpRefresh',
   template: `<span class="icon-ep-refresh" />`,
-};
+}

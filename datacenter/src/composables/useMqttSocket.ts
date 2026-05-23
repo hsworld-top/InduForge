@@ -1,14 +1,11 @@
 // @ts-nocheck
 /* global __VITE_DATA_SERVICE_URL__ */
 
-import { ref, watch, unref, onBeforeUnmount } from "vue";
-import { io } from "socket.io-client";
-import { ElMessage } from "element-plus";
-import { Storage } from "@/utils/storage";
-import {
-  buildMqttSocketSharedKey,
-  createMqttSocketSharedRegistry,
-} from "./mqtt-socket-shared";
+import { ref, watch, unref, onBeforeUnmount } from 'vue'
+import { io } from 'socket.io-client'
+import { ElMessage } from 'element-plus'
+import { Storage } from '@/utils/storage'
+import { buildMqttSocketSharedKey, createMqttSocketSharedRegistry } from './mqtt-socket-shared'
 
 const sharedRegistry = createMqttSocketSharedRegistry({
   ioFactory: io,
@@ -20,14 +17,14 @@ const sharedRegistry = createMqttSocketSharedRegistry({
       message,
       duration: 2000,
       offset: 60,
-    });
+    })
   },
   logger: console,
-});
+})
 
-let nextHandlerId = 1;
-let nextSubscriptionHandleId = 1;
-let nextTagHandleId = 1;
+let nextHandlerId = 1
+let nextSubscriptionHandleId = 1
+let nextTagHandleId = 1
 
 /**
  * MQTT Socket.IO Composable
@@ -40,278 +37,258 @@ let nextTagHandleId = 1;
  * @param {import("vue").MaybeRefOrGetter<string | null | undefined>} previewSessionIdSource
  */
 export function useMqttSocket(projectIdSource, previewSessionIdSource = null) {
-  const socket = ref(null);
-  const connected = ref(false);
+  const socket = ref(null)
+  const connected = ref(false)
 
-  const localMessageHandlers = new Map();
-  const localSubscriptionHandles = new Map();
-  const localTagHandles = new Map();
+  const localMessageHandlers = new Map()
+  const localSubscriptionHandles = new Map()
+  const localTagHandles = new Map()
 
-  let currentConnectionKey = "";
-  let stopStateWatcher = null;
+  let currentConnectionKey = ''
+  let stopStateWatcher = null
 
   const readSource = (source) => {
-    if (typeof source === "function") {
-      return source();
+    if (typeof source === 'function') {
+      return source()
     }
-    return unref(source);
-  };
+    return unref(source)
+  }
 
-  const readProjectId = () => readSource(projectIdSource) || "";
-  const readPreviewSessionId = () => readSource(previewSessionIdSource) || "";
-  const readToken = () => String(Storage.getToken() || "").trim();
+  const readProjectId = () => readSource(projectIdSource) || ''
+  const readPreviewSessionId = () => readSource(previewSessionIdSource) || ''
+  const readToken = () => String(Storage.getToken() || '').trim()
 
   const resolveDesiredConnectionKey = () => {
-    const token = readToken();
-    const projectId = String(readProjectId() || "").trim();
-    const previewSessionId = String(readPreviewSessionId() || "").trim();
+    const token = readToken()
+    const projectId = String(readProjectId() || '').trim()
+    const previewSessionId = String(readPreviewSessionId() || '').trim()
 
     if (!token || !projectId || !previewSessionId) {
-      return "";
+      return ''
     }
 
     return buildMqttSocketSharedKey({
       token,
       projectId,
       previewSessionId,
-    });
-  };
+    })
+  }
 
   const bindSharedState = () => {
-    if (typeof stopStateWatcher === "function") {
-      stopStateWatcher();
-      stopStateWatcher = null;
+    if (typeof stopStateWatcher === 'function') {
+      stopStateWatcher()
+      stopStateWatcher = null
     }
 
     if (!currentConnectionKey) {
-      socket.value = null;
-      connected.value = false;
-      return;
+      socket.value = null
+      connected.value = false
+      return
     }
 
     stopStateWatcher = sharedRegistry.watchState(
       currentConnectionKey,
       ({ socket: sharedSocket, connected: sharedConnected }) => {
-        socket.value = sharedSocket ?? null;
-        connected.value = Boolean(sharedConnected);
+        socket.value = sharedSocket ?? null
+        connected.value = Boolean(sharedConnected)
       },
-    );
-  };
+    )
+  }
 
   const attachLocalResources = (connectionKey) => {
     if (!connectionKey) {
-      return;
+      return
     }
 
     localMessageHandlers.forEach((handler, handlerId) => {
-      sharedRegistry.addMessageHandler(connectionKey, handlerId, handler);
-    });
+      sharedRegistry.addMessageHandler(connectionKey, handlerId, handler)
+    })
 
     localSubscriptionHandles.forEach((subscriptionId) => {
-      sharedRegistry.subscribeSubscription(connectionKey, subscriptionId);
-    });
+      sharedRegistry.subscribeSubscription(connectionKey, subscriptionId)
+    })
 
     localTagHandles.forEach((tagId) => {
-      sharedRegistry.subscribeTag(connectionKey, tagId);
-    });
-  };
+      sharedRegistry.subscribeTag(connectionKey, tagId)
+    })
+  }
 
   const detachLocalResources = (connectionKey) => {
     if (!connectionKey) {
-      return;
+      return
     }
 
     localMessageHandlers.forEach((_, handlerId) => {
-      sharedRegistry.removeMessageHandler(connectionKey, handlerId);
-    });
+      sharedRegistry.removeMessageHandler(connectionKey, handlerId)
+    })
 
     localSubscriptionHandles.forEach((subscriptionId) => {
-      sharedRegistry.unsubscribeSubscription(connectionKey, subscriptionId);
-    });
+      sharedRegistry.unsubscribeSubscription(connectionKey, subscriptionId)
+    })
 
     localTagHandles.forEach((tagId) => {
-      sharedRegistry.unsubscribeTag(connectionKey, tagId);
-    });
-  };
+      sharedRegistry.unsubscribeTag(connectionKey, tagId)
+    })
+  }
 
   const releaseCurrentConnection = () => {
     if (!currentConnectionKey) {
-      socket.value = null;
-      connected.value = false;
-      return;
+      socket.value = null
+      connected.value = false
+      return
     }
 
-    detachLocalResources(currentConnectionKey);
-    if (typeof stopStateWatcher === "function") {
-      stopStateWatcher();
-      stopStateWatcher = null;
+    detachLocalResources(currentConnectionKey)
+    if (typeof stopStateWatcher === 'function') {
+      stopStateWatcher()
+      stopStateWatcher = null
     }
-    sharedRegistry.release(currentConnectionKey);
+    sharedRegistry.release(currentConnectionKey)
 
-    currentConnectionKey = "";
-    socket.value = null;
-    connected.value = false;
-  };
+    currentConnectionKey = ''
+    socket.value = null
+    connected.value = false
+  }
 
   const connect = () => {
-    const desiredConnectionKey = resolveDesiredConnectionKey();
+    const desiredConnectionKey = resolveDesiredConnectionKey()
     if (!desiredConnectionKey) {
-      releaseCurrentConnection();
-      return null;
+      releaseCurrentConnection()
+      return null
     }
 
     if (desiredConnectionKey === currentConnectionKey) {
-      bindSharedState();
-      return socket.value;
+      bindSharedState()
+      return socket.value
     }
 
     const result = sharedRegistry.acquire({
       projectId: readProjectId(),
       previewSessionId: readPreviewSessionId(),
-    });
+    })
 
     if (!result) {
-      releaseCurrentConnection();
-      return null;
+      releaseCurrentConnection()
+      return null
     }
 
     if (result.key === currentConnectionKey) {
-      bindSharedState();
-      return result.entry.socket;
+      bindSharedState()
+      return result.entry.socket
     }
 
     if (currentConnectionKey) {
-      detachLocalResources(currentConnectionKey);
-      if (typeof stopStateWatcher === "function") {
-        stopStateWatcher();
-        stopStateWatcher = null;
+      detachLocalResources(currentConnectionKey)
+      if (typeof stopStateWatcher === 'function') {
+        stopStateWatcher()
+        stopStateWatcher = null
       }
-      sharedRegistry.release(currentConnectionKey);
+      sharedRegistry.release(currentConnectionKey)
     }
 
-    currentConnectionKey = result.key;
-    bindSharedState();
-    attachLocalResources(currentConnectionKey);
-    return result.entry.socket;
-  };
+    currentConnectionKey = result.key
+    bindSharedState()
+    attachLocalResources(currentConnectionKey)
+    return result.entry.socket
+  }
 
   const disconnect = () => {
-    releaseCurrentConnection();
-  };
+    releaseCurrentConnection()
+  }
 
   const onMessage = (handler) => {
-    if (typeof handler !== "function") {
-      return () => {};
+    if (typeof handler !== 'function') {
+      return () => {}
     }
 
-    const handlerId = `global-${nextHandlerId++}`;
-    localMessageHandlers.set(handlerId, handler);
+    const handlerId = `global-${nextHandlerId++}`
+    localMessageHandlers.set(handlerId, handler)
     if (currentConnectionKey) {
-      sharedRegistry.addMessageHandler(
-        currentConnectionKey,
-        handlerId,
-        handler,
-      );
+      sharedRegistry.addMessageHandler(currentConnectionKey, handlerId, handler)
     }
 
     return () => {
       if (currentConnectionKey) {
-        sharedRegistry.removeMessageHandler(currentConnectionKey, handlerId);
+        sharedRegistry.removeMessageHandler(currentConnectionKey, handlerId)
       }
-      localMessageHandlers.delete(handlerId);
-    };
-  };
+      localMessageHandlers.delete(handlerId)
+    }
+  }
 
   const subscribeMessages = (subscriptionId, handler) => {
-    const normalizedSubscriptionId = String(subscriptionId || "").trim();
+    const normalizedSubscriptionId = String(subscriptionId || '').trim()
     if (!normalizedSubscriptionId) {
-      return () => {};
+      return () => {}
     }
 
-    const handlerId = `subscription-${nextHandlerId++}`;
-    const subscriptionHandleId = `sub-${nextSubscriptionHandleId++}`;
+    const handlerId = `subscription-${nextHandlerId++}`
+    const subscriptionHandleId = `sub-${nextSubscriptionHandleId++}`
     const wrappedHandler = (data) => {
-      if (
-        typeof handler === "function" &&
-        data?.subscriptionId === normalizedSubscriptionId
-      ) {
-        handler(data);
+      if (typeof handler === 'function' && data?.subscriptionId === normalizedSubscriptionId) {
+        handler(data)
       }
-    };
+    }
 
-    localMessageHandlers.set(handlerId, wrappedHandler);
-    localSubscriptionHandles.set(
-      subscriptionHandleId,
-      normalizedSubscriptionId,
-    );
+    localMessageHandlers.set(handlerId, wrappedHandler)
+    localSubscriptionHandles.set(subscriptionHandleId, normalizedSubscriptionId)
 
     if (currentConnectionKey) {
-      sharedRegistry.addMessageHandler(
-        currentConnectionKey,
-        handlerId,
-        wrappedHandler,
-      );
-      sharedRegistry.subscribeSubscription(
-        currentConnectionKey,
-        normalizedSubscriptionId,
-      );
+      sharedRegistry.addMessageHandler(currentConnectionKey, handlerId, wrappedHandler)
+      sharedRegistry.subscribeSubscription(currentConnectionKey, normalizedSubscriptionId)
     }
 
     return () => {
       if (currentConnectionKey) {
-        sharedRegistry.removeMessageHandler(currentConnectionKey, handlerId);
-        sharedRegistry.unsubscribeSubscription(
-          currentConnectionKey,
-          normalizedSubscriptionId,
-        );
+        sharedRegistry.removeMessageHandler(currentConnectionKey, handlerId)
+        sharedRegistry.unsubscribeSubscription(currentConnectionKey, normalizedSubscriptionId)
       }
 
-      localMessageHandlers.delete(handlerId);
-      localSubscriptionHandles.delete(subscriptionHandleId);
-    };
-  };
+      localMessageHandlers.delete(handlerId)
+      localSubscriptionHandles.delete(subscriptionHandleId)
+    }
+  }
 
   const subscribeTag = (tagId) => {
-    const normalizedTagId = String(tagId || "").trim();
+    const normalizedTagId = String(tagId || '').trim()
     if (!normalizedTagId) {
-      return () => {};
+      return () => {}
     }
 
-    const tagHandleId = `tag-${nextTagHandleId++}`;
-    localTagHandles.set(tagHandleId, normalizedTagId);
+    const tagHandleId = `tag-${nextTagHandleId++}`
+    localTagHandles.set(tagHandleId, normalizedTagId)
 
     if (currentConnectionKey) {
-      sharedRegistry.subscribeTag(currentConnectionKey, normalizedTagId);
+      sharedRegistry.subscribeTag(currentConnectionKey, normalizedTagId)
     }
 
     return () => {
       if (currentConnectionKey) {
-        sharedRegistry.unsubscribeTag(currentConnectionKey, normalizedTagId);
+        sharedRegistry.unsubscribeTag(currentConnectionKey, normalizedTagId)
       }
-      localTagHandles.delete(tagHandleId);
-    };
-  };
+      localTagHandles.delete(tagHandleId)
+    }
+  }
 
   const emit = (event, data) => {
     if (!currentConnectionKey) {
-      console.warn("[MqttSocket] Not connected, cannot emit:", event);
-      return false;
+      console.warn('[MqttSocket] Not connected, cannot emit:', event)
+      return false
     }
 
-    return sharedRegistry.emit(currentConnectionKey, event, data);
-  };
+    return sharedRegistry.emit(currentConnectionKey, event, data)
+  }
 
   watch(
     () => [readProjectId(), readPreviewSessionId(), Storage.getToken()],
     () => {
-      connect();
+      connect()
     },
     { immediate: true },
-  );
+  )
 
   onBeforeUnmount(() => {
-    disconnect();
-  });
+    disconnect()
+  })
 
   return {
     socket,
@@ -322,5 +299,5 @@ export function useMqttSocket(projectIdSource, previewSessionIdSource = null) {
     subscribeTag,
     onMessage,
     emit,
-  };
+  }
 }

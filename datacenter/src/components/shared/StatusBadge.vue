@@ -6,22 +6,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed } from 'vue'
 
-type StatusBadgeTone = "success" | "warning" | "danger" | "info" | "muted";
+type StatusBadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'muted'
 
 const props = withDefaults(
   defineProps<{
-    tone?: StatusBadgeTone;
-    text: string;
+    tone?: StatusBadgeTone
+    text: string
   }>(),
   {
-    tone: "muted",
+    tone: 'muted',
   },
-);
+)
 
-const resolvedTone = computed<StatusBadgeTone>(() => props.tone || "muted");
-const displayText = computed(() => props.text || "-");
+const resolvedTone = computed<StatusBadgeTone>(() => props.tone || 'muted')
+const displayText = computed(() => props.text || '-')
 </script>
 
 <style scoped>

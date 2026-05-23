@@ -6,12 +6,7 @@
     </header>
 
     <div class="alarm-message-template-panel__tokens">
-      <button
-        v-for="token in tokens"
-        :key="token"
-        type="button"
-        @click="appendToken(token)"
-      >
+      <button v-for="token in tokens" :key="token" type="button" @click="appendToken(token)">
         {{ token }}
       </button>
     </div>
@@ -26,27 +21,27 @@
 </template>
 
 <script setup lang="ts">
-import type { AlarmPolicyDraft } from "@/components/alarm/alarmPolicyModel";
+import type { AlarmPolicyDraft } from '@/components/alarm/alarmPolicyModel'
 
 const props = defineProps<{
-  draft: AlarmPolicyDraft;
-}>();
+  draft: AlarmPolicyDraft
+}>()
 
 const emit = defineEmits<{
-  update: [patch: Partial<AlarmPolicyDraft>];
-}>();
+  update: [patch: Partial<AlarmPolicyDraft>]
+}>()
 
-const tokens = ["{{targetPath}}", "{{conditionType}}", "{{severity}}", "{{value}}"];
+const tokens = ['{{targetPath}}', '{{conditionType}}', '{{severity}}', '{{value}}']
 
-const inputValue = (event: Event) => (event.target as HTMLTextAreaElement).value;
+const inputValue = (event: Event) => (event.target as HTMLTextAreaElement).value
 
 const updateMessage = (messageTemplate: string) => {
-  emit("update", { messageTemplate, dirty: true });
-};
+  emit('update', { messageTemplate, dirty: true })
+}
 
 const appendToken = (token: string) => {
-  updateMessage(`${props.draft.messageTemplate}${token}`);
-};
+  updateMessage(`${props.draft.messageTemplate}${token}`)
+}
 </script>
 
 <style scoped>

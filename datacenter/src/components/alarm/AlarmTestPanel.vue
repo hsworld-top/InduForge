@@ -7,7 +7,7 @@
           <span>JSON Payload</span>
         </div>
         <button type="button" :disabled="running" @click="runTrial">
-          {{ running ? "试算中" : "运行试算" }}
+          {{ running ? '试算中' : '运行试算' }}
         </button>
       </div>
 
@@ -26,17 +26,17 @@
       <div class="alarm-test-panel__metrics">
         <div>
           <span>state</span>
-          <strong>{{ result?.state || "-" }}</strong>
+          <strong>{{ result?.state || '-' }}</strong>
         </div>
         <div>
           <span>triggered</span>
-          <strong>{{ result ? String(result.triggered) : "-" }}</strong>
+          <strong>{{ result ? String(result.triggered) : '-' }}</strong>
         </div>
       </div>
 
       <div class="alarm-test-panel__block">
         <span>message</span>
-        <strong>{{ result?.message || "无输出" }}</strong>
+        <strong>{{ result?.message || '无输出' }}</strong>
       </div>
 
       <div class="alarm-test-panel__block">
@@ -48,30 +48,27 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import type {
-  AlarmPolicyTrialPayload,
-  AlarmPolicyTrialResult,
-} from "@/api/schemas/alarm.schema";
+import { computed, ref } from 'vue'
+import type { AlarmPolicyTrialPayload, AlarmPolicyTrialResult } from '@/api/schemas/alarm.schema'
 
 const props = defineProps<{
-  result: AlarmPolicyTrialResult | null;
-  running: boolean;
-  error: string;
-}>();
+  result: AlarmPolicyTrialResult | null
+  running: boolean
+  error: string
+}>()
 
 const emit = defineEmits<{
-  run: [payload: AlarmPolicyTrialPayload];
-}>();
+  run: [payload: AlarmPolicyTrialPayload]
+}>()
 
 const sampleText = ref(
   JSON.stringify(
     {
       value: 86.5,
-      timestamp: "2026-05-20 10:00:00",
+      timestamp: '2026-05-20 10:00:00',
       context: {
-        source: "manual-trial",
-        quality: "good",
+        source: 'manual-trial',
+        quality: 'good',
         alarmActive: false,
         conditionStates: {
           H: { alarmActive: false },
@@ -84,28 +81,27 @@ const sampleText = ref(
     null,
     2,
   ),
-);
-const parseError = ref("");
+)
+const parseError = ref('')
 
 const diagnosticsText = computed(() => {
-  const diagnostics = props.result?.diagnostics ?? {};
-  return JSON.stringify(diagnostics, null, 2);
-});
+  const diagnostics = props.result?.diagnostics ?? {}
+  return JSON.stringify(diagnostics, null, 2)
+})
 
 const runTrial = () => {
-  parseError.value = "";
+  parseError.value = ''
   try {
-    const payload = JSON.parse(sampleText.value) as unknown;
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-      parseError.value = "JSON 样本必须是对象";
-      return;
+    const payload = JSON.parse(sampleText.value) as unknown
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      parseError.value = 'JSON 样本必须是对象'
+      return
     }
-    emit("run", payload as AlarmPolicyTrialPayload);
+    emit('run', payload as AlarmPolicyTrialPayload)
   } catch (error) {
-    parseError.value =
-      error instanceof Error ? `JSON 解析失败：${error.message}` : "JSON 解析失败";
+    parseError.value = error instanceof Error ? `JSON 解析失败：${error.message}` : 'JSON 解析失败'
   }
-};
+}
 </script>
 
 <style scoped>

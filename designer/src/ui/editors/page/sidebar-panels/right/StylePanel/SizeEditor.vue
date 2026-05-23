@@ -3,46 +3,46 @@
   编辑 width/height，支持 px/%/auto 单位
 -->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch } from 'vue'
 
 interface SizeStyleModel {
-  [key: string]: unknown;
-  width?: string;
-  height?: string;
+  [key: string]: unknown
+  width?: string
+  height?: string
 }
 
 const props = withDefaults(
   defineProps<{
-    modelValue?: SizeStyleModel;
-    minWidth?: number | undefined;
-    minHeight?: number | undefined;
+    modelValue?: SizeStyleModel
+    minWidth?: number | undefined
+    minHeight?: number | undefined
   }>(),
   {
     modelValue: () => ({}),
   },
-);
+)
 
 const emit = defineEmits<{
-  (event: "update:modelValue", value: SizeStyleModel): void;
-}>();
+  (event: 'update:modelValue', value: SizeStyleModel): void
+}>()
 
-const SIZE_VALUE_RE = /^([\d.]+)(px|%)?$/;
+const SIZE_VALUE_RE = /^([\d.]+)(px|%)?$/
 
 /**
  * 解析尺寸值和单位
  * @param {string | number | undefined} value - 尺寸值
  * @returns {{ value: string, unit: string }}
  */
-function parseSize(value: unknown): { value: string; unit: "auto" | "px" | "%" } {
-  if (!value || value === "auto") {
-    return { value: "", unit: "auto" };
+function parseSize(value: unknown): { value: string; unit: 'auto' | 'px' | '%' } {
+  if (!value || value === 'auto') {
+    return { value: '', unit: 'auto' }
   }
-  const str = String(value);
-  const match = str.match(SIZE_VALUE_RE);
+  const str = String(value)
+  const match = str.match(SIZE_VALUE_RE)
   if (match) {
-    return { value: match[1] ?? "", unit: (match[2] || "px") as "px" | "%" };
+    return { value: match[1] ?? '', unit: (match[2] || 'px') as 'px' | '%' }
   }
-  return { value: "", unit: "auto" };
+  return { value: '', unit: 'auto' }
 }
 
 /**
@@ -52,11 +52,11 @@ function parseSize(value: unknown): { value: string; unit: "auto" | "px" | "%" }
  * @returns {string}
  */
 function clampSizeValue(value: string, minValue: number | undefined): string {
-  if (minValue === undefined || minValue === null) return value;
-  if (value === "" || value === undefined || value === null) return value;
-  const num = Number.parseFloat(value);
-  if (!Number.isFinite(num)) return value;
-  return String(Math.max(num, minValue));
+  if (minValue === undefined || minValue === null) return value
+  if (value === '' || value === undefined || value === null) return value
+  const num = Number.parseFloat(value)
+  if (!Number.isFinite(num)) return value
+  return String(Math.max(num, minValue))
 }
 
 /**
@@ -65,8 +65,8 @@ function clampSizeValue(value: string, minValue: number | undefined): string {
  * @returns {string}
  */
 function resolveDefaultValue(minValue: number | undefined): string {
-  if (Number.isFinite(minValue)) return String(minValue);
-  return "100";
+  if (Number.isFinite(minValue)) return String(minValue)
+  return '100'
 }
 
 /**
@@ -79,81 +79,81 @@ function resolveDefaultValue(minValue: number | undefined): string {
  */
 function buildSizeValue(
   rawValue: string,
-  unit: "auto" | "px" | "%",
+  unit: 'auto' | 'px' | '%',
   minValue: number | undefined,
   useDefault: boolean,
 ): string {
-  const text = String(rawValue ?? "").trim();
+  const text = String(rawValue ?? '').trim()
   if (!text) {
-    if (!useDefault) return "auto";
-    const defaultValue = resolveDefaultValue(minValue);
-    const nextValue = unit === "px" ? clampSizeValue(defaultValue, minValue) : defaultValue;
-    return `${nextValue}${unit}`;
+    if (!useDefault) return 'auto'
+    const defaultValue = resolveDefaultValue(minValue)
+    const nextValue = unit === 'px' ? clampSizeValue(defaultValue, minValue) : defaultValue
+    return `${nextValue}${unit}`
   }
-  let nextValue = text;
-  if (unit === "px") {
-    nextValue = clampSizeValue(text, minValue);
+  let nextValue = text
+  if (unit === 'px') {
+    nextValue = clampSizeValue(text, minValue)
   }
-  return `${nextValue}${unit}`;
+  return `${nextValue}${unit}`
 }
 
-const widthUnit = computed<"auto" | "px" | "%">(() => parseSize(props.modelValue.width).unit);
-const heightUnit = computed<"auto" | "px" | "%">(() => parseSize(props.modelValue.height).unit);
+const widthUnit = computed<'auto' | 'px' | '%'>(() => parseSize(props.modelValue.width).unit)
+const heightUnit = computed<'auto' | 'px' | '%'>(() => parseSize(props.modelValue.height).unit)
 
-const widthInput = ref("");
-const heightInput = ref("");
+const widthInput = ref('')
+const heightInput = ref('')
 
 watch(
   () => props.modelValue.width,
   (val: unknown) => {
-    widthInput.value = parseSize(val).value;
+    widthInput.value = parseSize(val).value
   },
   { immediate: true },
-);
+)
 
 watch(
   () => props.modelValue.height,
   (val: unknown) => {
-    heightInput.value = parseSize(val).value;
+    heightInput.value = parseSize(val).value
   },
   { immediate: true },
-);
+)
 
 function handleWidthInput(value: string) {
-  widthInput.value = value;
+  widthInput.value = value
 }
 
 function handleHeightInput(value: string) {
-  heightInput.value = value;
+  heightInput.value = value
 }
 
 function handleWidthChange() {
-  const unit = widthUnit.value === "auto" ? "px" : widthUnit.value;
-  const newWidth = buildSizeValue(widthInput.value, unit, props.minWidth, false);
-  emit("update:modelValue", { ...props.modelValue, width: newWidth });
+  const unit = widthUnit.value === 'auto' ? 'px' : widthUnit.value
+  const newWidth = buildSizeValue(widthInput.value, unit, props.minWidth, false)
+  emit('update:modelValue', { ...props.modelValue, width: newWidth })
 }
 
-function handleWidthUnitChange(unit: "auto" | "px" | "%") {
-  if (unit === "auto") {
-    emit("update:modelValue", { ...props.modelValue, width: "auto" });
+function handleWidthUnitChange(unit: 'auto' | 'px' | '%') {
+  if (unit === 'auto') {
+    emit('update:modelValue', { ...props.modelValue, width: 'auto' })
   } else {
-    const newWidth = buildSizeValue(widthInput.value, unit, props.minWidth, true);
-    emit("update:modelValue", { ...props.modelValue, width: newWidth });
+    const newWidth = buildSizeValue(widthInput.value, unit, props.minWidth, true)
+    emit('update:modelValue', { ...props.modelValue, width: newWidth })
   }
 }
 
 function handleHeightChange() {
-  const unit = heightUnit.value === "auto" ? "px" : heightUnit.value;
-  const newHeight = buildSizeValue(heightInput.value, unit, props.minHeight, false);
-  emit("update:modelValue", { ...props.modelValue, height: newHeight });
+  const unit = heightUnit.value === 'auto' ? 'px' : heightUnit.value
+  const newHeight = buildSizeValue(heightInput.value, unit, props.minHeight, false)
+  emit('update:modelValue', { ...props.modelValue, height: newHeight })
 }
 
-function handleHeightUnitChange(unit: "auto" | "px" | "%") {
-  if (unit === "auto") {
-    emit("update:modelValue", { ...props.modelValue, height: "auto" });
+function handleHeightUnitChange(unit: 'auto' | 'px' | '%') {
+  if (unit === 'auto') {
+    emit('update:modelValue', { ...props.modelValue, height: 'auto' })
   } else {
-    const newHeight = buildSizeValue(heightInput.value, unit, props.minHeight, true);
-    emit("update:modelValue", { ...props.modelValue, height: newHeight });
+    const newHeight = buildSizeValue(heightInput.value, unit, props.minHeight, true)
+    emit('update:modelValue', { ...props.modelValue, height: newHeight })
   }
 }
 </script>

@@ -36,29 +36,29 @@
         <template v-if="searchText"> · 筛选 {{ filteredMessages.length }} 条</template>
       </span>
       <span v-if="lastMessageTime">最后消息 {{ formatTimestamp(lastMessageTime) }}</span>
-      <span>{{ isConnected ? "实时订阅已启用" : "实时订阅已停止" }}</span>
+      <span>{{ isConnected ? '实时订阅已启用' : '实时订阅已停止' }}</span>
     </footer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
-import { ElMessage } from "element-plus";
-import dayjs from "dayjs";
-import IconTablerRss from "~icons/tabler/rss";
-import dataAPI from "@/api/data.api";
-import { TIME_FORMAT } from "@/constants";
-import { getApiErrorMessage } from "@/utils/request";
-import WorkbenchStreamMessageList from "@/components/workbench/WorkbenchStreamMessageList.vue";
-import WorkbenchStreamToolbar from "@/components/workbench/WorkbenchStreamToolbar.vue";
+import { computed, nextTick, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import dayjs from 'dayjs'
+import IconTablerRss from '~icons/tabler/rss'
+import dataAPI from '@/api/data.api'
+import { TIME_FORMAT } from '@/constants'
+import { getApiErrorMessage } from '@/utils/request'
+import WorkbenchStreamMessageList from '@/components/workbench/WorkbenchStreamMessageList.vue'
+import WorkbenchStreamToolbar from '@/components/workbench/WorkbenchStreamToolbar.vue'
 
 type MqttMessage = {
-  id?: string | number;
-  topic?: string;
-  payload?: unknown;
-  qos?: number;
-  timestamp?: string | number | Date;
-};
+  id?: string | number
+  topic?: string
+  payload?: unknown
+  qos?: number
+  timestamp?: string | number | Date
+}
 
 const props = defineProps({
   subscription: {
@@ -73,151 +73,149 @@ const props = defineProps({
     type: String,
     required: true,
   },
-});
+})
 
-const emit = defineEmits(["message-select"]);
+const emit = defineEmits(['message-select'])
 
-const loading = ref(false);
-const messages = ref<MqttMessage[]>([]);
-const searchText = ref("");
-const displayLimit = ref(100);
-const autoScroll = ref(true);
-const showTimestamp = ref(true);
-const formatJson = ref(true);
-const isConnected = ref(false);
-const messageListRef = ref<any>(null);
+const loading = ref(false)
+const messages = ref<MqttMessage[]>([])
+const searchText = ref('')
+const displayLimit = ref(100)
+const autoScroll = ref(true)
+const showTimestamp = ref(true)
+const formatJson = ref(true)
+const isConnected = ref(false)
+const messageListRef = ref<any>(null)
 
 const subscriptionTitle = computed(
-  () => props.subscription?.name || props.subscription?.topic || "消息查看器",
-);
+  () => props.subscription?.name || props.subscription?.topic || '消息查看器',
+)
 
 const filteredMessages = computed(() => {
-  const keyword = searchText.value.trim().toLowerCase();
-  let result = messages.value;
+  const keyword = searchText.value.trim().toLowerCase()
+  let result = messages.value
 
   if (keyword) {
     result = result.filter((message) => {
-      const topic = String(message.topic || "").toLowerCase();
+      const topic = String(message.topic || '').toLowerCase()
       const payload =
-        typeof message.payload === "string"
+        typeof message.payload === 'string'
           ? message.payload
-          : JSON.stringify(message.payload ?? "");
-      return topic.includes(keyword) || payload.toLowerCase().includes(keyword);
-    });
+          : JSON.stringify(message.payload ?? '')
+      return topic.includes(keyword) || payload.toLowerCase().includes(keyword)
+    })
   }
 
-  return displayLimit.value > 0 ? result.slice(0, displayLimit.value) : result;
-});
+  return displayLimit.value > 0 ? result.slice(0, displayLimit.value) : result
+})
 
-const lastMessageTime = computed(() => messages.value[0]?.timestamp || null);
+const lastMessageTime = computed(() => messages.value[0]?.timestamp || null)
 
 const formatTimestamp = (timestamp) => {
-  const date = dayjs(timestamp);
-  return date.isValid() ? date.format(TIME_FORMAT) : "-";
-};
+  const date = dayjs(timestamp)
+  return date.isValid() ? date.format(TIME_FORMAT) : '-'
+}
 
 const formatPayload = (payload) => {
-  if (payload === null || payload === undefined) return "";
-  if (typeof payload === "string") {
-    if (!formatJson.value) return payload;
+  if (payload === null || payload === undefined) return ''
+  if (typeof payload === 'string') {
+    if (!formatJson.value) return payload
     try {
-      return JSON.stringify(JSON.parse(payload), null, 2);
+      return JSON.stringify(JSON.parse(payload), null, 2)
     } catch {
-      return payload;
+      return payload
     }
   }
   try {
-    return JSON.stringify(payload, null, formatJson.value ? 2 : 0);
+    return JSON.stringify(payload, null, formatJson.value ? 2 : 0)
   } catch {
-    return String(payload);
+    return String(payload)
   }
-};
+}
 
 const normalizeIncomingMessage = (message) => {
-  const payload = message?.message || message || {};
+  const payload = message?.message || message || {}
   return {
     id: payload.id || `${Date.now()}-${Math.random()}`,
-    topic: payload.topic || props.subscription?.topic || "",
+    topic: payload.topic || props.subscription?.topic || '',
     payload: payload.payload,
     qos: payload.qos ?? 0,
     timestamp: payload.timestamp || payload.receivedAt || Date.now(),
-  };
-};
+  }
+}
 
 /**
  * 历史消息只作为当前订阅的启动快照；实时消息仍由工作台 socket 追加。
  */
 const loadMessages = async () => {
-  if (!props.subscription?.id) return;
+  if (!props.subscription?.id) return
 
-  loading.value = true;
+  loading.value = true
   try {
     const response = await dataAPI.getMqttSubscriptionMessages(
       props.projectId,
       props.subscription.id,
       { limit: displayLimit.value },
-    );
-    messages.value = (response.data?.list || []).map(normalizeIncomingMessage);
-    await messageListRef.value?.scrollToTop?.();
+    )
+    messages.value = (response.data?.list || []).map(normalizeIncomingMessage)
+    await messageListRef.value?.scrollToTop?.()
   } catch (error) {
-    ElMessage.error(
-      "加载消息失败：" + getApiErrorMessage(error, "加载消息失败"),
-    );
+    ElMessage.error('加载消息失败：' + getApiErrorMessage(error, '加载消息失败'))
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 
 const addMessage = async (message) => {
-  messages.value.unshift(normalizeIncomingMessage(message));
+  messages.value.unshift(normalizeIncomingMessage(message))
   if (messages.value.length > 1000) {
-    messages.value = messages.value.slice(0, 1000);
+    messages.value = messages.value.slice(0, 1000)
   }
   if (autoScroll.value) {
-    await nextTick();
-    await messageListRef.value?.scrollToTop?.();
+    await nextTick()
+    await messageListRef.value?.scrollToTop?.()
   }
-};
+}
 
 const setConnected = (connected) => {
-  isConnected.value = Boolean(connected);
-};
+  isConnected.value = Boolean(connected)
+}
 
 const handleSelectMessage = (message) => {
-  emit("message-select", message);
-};
+  emit('message-select', message)
+}
 
 const handleCopyMessage = async (message) => {
   try {
-    await navigator.clipboard.writeText(formatPayload(message.payload));
-    ElMessage.success("已复制 Payload");
+    await navigator.clipboard.writeText(formatPayload(message.payload))
+    ElMessage.success('已复制 Payload')
   } catch {
-    ElMessage.error("复制失败");
+    ElMessage.error('复制失败')
   }
-};
+}
 
 const handleClear = () => {
-  messages.value = [];
-};
+  messages.value = []
+}
 
 watch(
   () => props.subscription,
   (subscription) => {
-    messages.value = [];
-    searchText.value = "";
-    isConnected.value = false;
+    messages.value = []
+    searchText.value = ''
+    isConnected.value = false
     if (subscription?.id) {
-      loadMessages();
+      loadMessages()
     }
   },
   { immediate: true },
-);
+)
 
 defineExpose({
   addMessage,
   setConnected,
   loadMessages,
-});
+})
 </script>
 
 <style scoped>
@@ -247,5 +245,4 @@ defineExpose({
   color: var(--dc-text-muted);
   font-size: 11px;
 }
-
 </style>

@@ -102,13 +102,13 @@
 
   html {
     font-family:
-      "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+      'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
   }
 
   body {
     @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100;
     font-family:
-      "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+      'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
   }
 
   /* 全局滚动条（原生） */

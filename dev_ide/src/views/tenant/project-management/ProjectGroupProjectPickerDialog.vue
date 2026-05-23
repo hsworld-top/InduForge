@@ -61,7 +61,9 @@
     </div>
 
     <div class="project-group-project-picker__summary">
-      <span>{{ t('projectManagement.groupPickerMatchSummary', { count: filteredProjects.length }) }}</span>
+      <span>{{
+        t('projectManagement.groupPickerMatchSummary', { count: filteredProjects.length })
+      }}</span>
       <span>{{ t('projectManagement.selectedCount', { count: selectedProjectIds.length }) }}</span>
     </div>
 
@@ -112,7 +114,13 @@
           :disabled="filteredProjects.length === 0"
           @click="toggleAllFilteredProjects"
         >
-          {{ t(isAllFilteredSelected ? 'projectManagement.clearSelection' : 'projectManagement.groupPickerSelectVisible') }}
+          {{
+            t(
+              isAllFilteredSelected
+                ? 'projectManagement.clearSelection'
+                : 'projectManagement.groupPickerSelectVisible',
+            )
+          }}
         </el-button>
         <div class="project-group-project-picker__footer-actions">
           <el-button @click="dialogVisible = false">{{ t('projectManagement.cancel') }}</el-button>
@@ -122,7 +130,9 @@
             :disabled="selectedProjectIds.length === 0"
             @click="submitSelectedProjects"
           >
-            {{ t('projectManagement.groupPickerAddSelected', { count: selectedProjectIds.length }) }}
+            {{
+              t('projectManagement.groupPickerAddSelected', { count: selectedProjectIds.length })
+            }}
           </el-button>
         </div>
       </div>
@@ -175,12 +185,15 @@ const props = withDefaults(
 const emit = defineEmits<{
   (event: 'update:visible', value: boolean): void
   (event: 'select', projectIds: string[]): void
-  (event: 'query-change', payload: {
-    search: string
-    tagIds: string[]
-    runtimeModes: ProjectRuntimeMode[]
-    deployStatuses: ProjectDeployStatus[]
-  }): void
+  (
+    event: 'query-change',
+    payload: {
+      search: string
+      tagIds: string[]
+      runtimeModes: ProjectRuntimeMode[]
+      deployStatuses: ProjectDeployStatus[]
+    },
+  ): void
 }>()
 
 const { t } = useI18n()
@@ -237,9 +250,7 @@ const normalizeRuntimeModes = (project: ProjectOverviewItem): string[] => {
       ([key, value]) => normalizeRuntimeModeValue(key) === mode && Number(value || 0) > 0,
     ),
   )
-  const fallbackModes = normalizeStringList([
-    project.runtimeSummary?.runtimeMode,
-  ])
+  const fallbackModes = normalizeStringList([project.runtimeSummary?.runtimeMode])
     .map((mode) => normalizeRuntimeModeValue(mode))
     .filter(Boolean)
   return [...new Set([...modes, ...fallbackModes])]
@@ -280,22 +291,26 @@ const filteredProjects = computed(() => {
   const deployStatusSet = new Set(selectedDeployStatuses.value)
 
   return availableProjects.value.filter((project) => {
-    const matchesKeyword = !normalizedKeyword
-      || project.name.toLowerCase().includes(normalizedKeyword)
-      || project.description.toLowerCase().includes(normalizedKeyword)
+    const matchesKeyword =
+      !normalizedKeyword ||
+      project.name.toLowerCase().includes(normalizedKeyword) ||
+      project.description.toLowerCase().includes(normalizedKeyword)
     const matchesTag = tagIdSet.size === 0 || project.tags.some((tag) => tagIdSet.has(tag.id))
     const matchesRuntimeMode =
-      runtimeModeSet.size === 0 || project.runtimeModes.some((mode) => runtimeModeSet.has(mode as ProjectRuntimeMode))
+      runtimeModeSet.size === 0 ||
+      project.runtimeModes.some((mode) => runtimeModeSet.has(mode as ProjectRuntimeMode))
     const matchesDeployStatus =
-      deployStatusSet.size === 0 || project.deployStatuses.some((status) => deployStatusSet.has(status as ProjectDeployStatus))
+      deployStatusSet.size === 0 ||
+      project.deployStatuses.some((status) => deployStatusSet.has(status as ProjectDeployStatus))
 
     return matchesKeyword && matchesTag && matchesRuntimeMode && matchesDeployStatus
   })
 })
 
-const isAllFilteredSelected = computed(() =>
-  filteredProjects.value.length > 0
-  && filteredProjects.value.every((project) => selectedProjectIds.value.includes(project.id)),
+const isAllFilteredSelected = computed(
+  () =>
+    filteredProjects.value.length > 0 &&
+    filteredProjects.value.every((project) => selectedProjectIds.value.includes(project.id)),
 )
 
 const emitQueryChange = () => {
@@ -331,11 +346,9 @@ const submitSelectedProjects = () => {
   emit('select', [...selectedProjectIds.value])
 }
 
-watch(
-  [keyword, selectedTagIds, selectedRuntimeModes, selectedDeployStatuses],
-  emitQueryChange,
-  { deep: true },
-)
+watch([keyword, selectedTagIds, selectedRuntimeModes, selectedDeployStatuses], emitQueryChange, {
+  deep: true,
+})
 
 watch(
   () => props.visible,

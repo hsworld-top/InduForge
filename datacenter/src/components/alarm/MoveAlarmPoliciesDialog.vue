@@ -30,12 +30,7 @@
     <template #footer>
       <div class="alarm-bulk-move-dialog__footer">
         <el-button @click="visible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="loading"
-          :disabled="!canSubmit"
-          @click="submit"
-        >
+        <el-button type="primary" :loading="loading" :disabled="!canSubmit" @click="submit">
           移动
         </el-button>
       </div>
@@ -44,51 +39,51 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import type { AlarmPolicyGroup } from "@/api/schemas/alarm.schema";
-import DcDialog from "@/components/shared/DcDialog.vue";
+import { computed, ref, watch } from 'vue'
+import type { AlarmPolicyGroup } from '@/api/schemas/alarm.schema'
+import DcDialog from '@/components/shared/DcDialog.vue'
 
 const props = withDefaults(
   defineProps<{
-    modelValue: boolean;
-    groups: AlarmPolicyGroup[];
-    selectedCount: number;
-    loading?: boolean;
+    modelValue: boolean
+    groups: AlarmPolicyGroup[]
+    selectedCount: number
+    loading?: boolean
   }>(),
   {
     loading: false,
   },
-);
+)
 
 const emit = defineEmits<{
-  (event: "update:modelValue", value: boolean): void;
-  (event: "submit", groupId: string | null): void;
-}>();
+  (event: 'update:modelValue', value: boolean): void
+  (event: 'submit', groupId: string | null): void
+}>()
 
 const visible = computed({
   get: () => props.modelValue,
-  set: (value: boolean) => emit("update:modelValue", value),
-});
+  set: (value: boolean) => emit('update:modelValue', value),
+})
 
-const groupId = ref<string | null>(null);
-const canSubmit = computed(() => props.selectedCount > 0 && !props.loading);
-const isDirty = computed(() => visible.value && Boolean(groupId.value));
+const groupId = ref<string | null>(null)
+const canSubmit = computed(() => props.selectedCount > 0 && !props.loading)
+const isDirty = computed(() => visible.value && Boolean(groupId.value))
 
 function resetForm() {
-  groupId.value = null;
+  groupId.value = null
 }
 
 function submit() {
-  if (!canSubmit.value) return;
-  emit("submit", groupId.value || null);
+  if (!canSubmit.value) return
+  emit('submit', groupId.value || null)
 }
 
 watch(
   () => props.modelValue,
   (open) => {
-    if (open) resetForm();
+    if (open) resetForm()
   },
-);
+)
 </script>
 
 <style scoped>

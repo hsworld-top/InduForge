@@ -6,7 +6,7 @@
       </button>
       <div class="redis-manager__identity">
         <span>Redis</span>
-        <strong>{{ connection.name || "未命名 Redis" }}</strong>
+        <strong>{{ connection.name || '未命名 Redis' }}</strong>
       </div>
       <WorkbenchStatusPill :label="statusLabel" :tone="statusTone" />
       <div class="redis-manager__topbar-spacer"></div>
@@ -50,7 +50,10 @@
             :key="group.name"
             type="button"
             class="redis-manager__tree-node is-child"
-            @click="pattern = `${group.name}:*`; loadKeys()"
+            @click="
+              pattern = `${group.name}:*`
+              loadKeys()
+            "
           >
             <IconTablerFolder />
             <span>{{ group.name }}</span>
@@ -64,7 +67,7 @@
           <div class="redis-manager__pane-head">
             <div>
               <strong>Key 浏览器</strong>
-              <span>{{ loadingKeys ? "正在扫描..." : `共 ${filteredKeys.length} 个 key` }}</span>
+              <span>{{ loadingKeys ? '正在扫描...' : `共 ${filteredKeys.length} 个 key` }}</span>
             </div>
             <el-input
               v-model="keyword"
@@ -106,9 +109,14 @@
             <div class="redis-manager__pane-head">
               <div>
                 <strong>Value Viewer</strong>
-                <span>{{ selectedValue?.type || "未选择 key" }}</span>
+                <span>{{ selectedValue?.type || '未选择 key' }}</span>
               </div>
-              <el-button size="small" :disabled="!selectedKey" :loading="loadingValue" @click="reloadValue">
+              <el-button
+                size="small"
+                :disabled="!selectedKey"
+                :loading="loadingValue"
+                @click="reloadValue"
+              >
                 读取
               </el-button>
             </div>
@@ -147,205 +155,203 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { ElMessage } from "element-plus";
-import dataAPI from "@/api/data.api";
-import { getApiErrorMessage } from "@/utils/request";
-import WorkbenchStatusPill from "@/components/workbench/WorkbenchStatusPill.vue";
-import IconTablerArrowLeft from "~icons/tabler/arrow-left";
-import IconTablerDatabase from "~icons/tabler/database";
-import IconTablerFolder from "~icons/tabler/folder";
-import IconTablerServer from "~icons/tabler/server";
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import dataAPI from '@/api/data.api'
+import { getApiErrorMessage } from '@/utils/request'
+import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
+import IconTablerArrowLeft from '~icons/tabler/arrow-left'
+import IconTablerDatabase from '~icons/tabler/database'
+import IconTablerFolder from '~icons/tabler/folder'
+import IconTablerServer from '~icons/tabler/server'
 
 type AccessSourceConnection = {
-  id: string;
-  name?: string;
-  type?: string;
-  status?: string;
-  config?: Record<string, any>;
-};
+  id: string
+  name?: string
+  type?: string
+  status?: string
+  config?: Record<string, any>
+}
 
 type RedisKey = {
-  key: string;
-  type: string;
-  ttl: number;
-  size: number;
-};
+  key: string
+  type: string
+  ttl: number
+  size: number
+}
 
 type RedisValue = {
-  key: string;
-  type: string;
-  ttl: number;
-  value: unknown;
-};
+  key: string
+  type: string
+  ttl: number
+  value: unknown
+}
 
 const props = defineProps<{
-  connection: AccessSourceConnection;
-  projectId: string;
-}>();
+  connection: AccessSourceConnection
+  projectId: string
+}>()
 
 defineEmits<{
-  (event: "back"): void;
-}>();
+  (event: 'back'): void
+}>()
 
-const config = computed(() => props.connection.config || {});
-const pattern = ref(String(config.value.keyPattern || "*"));
-const keyword = ref("");
-const keys = ref<RedisKey[]>([]);
-const selectedKey = ref("");
-const selectedValue = ref<RedisValue | null>(null);
-const loadingKeys = ref(false);
-const loadingValue = ref(false);
-const testing = ref(false);
-const runningCommand = ref(false);
-const commandText = ref("PING");
-const commandOutput = ref("等待执行命令");
+const config = computed(() => props.connection.config || {})
+const pattern = ref(String(config.value.keyPattern || '*'))
+const keyword = ref('')
+const keys = ref<RedisKey[]>([])
+const selectedKey = ref('')
+const selectedValue = ref<RedisValue | null>(null)
+const loadingKeys = ref(false)
+const loadingValue = ref(false)
+const testing = ref(false)
+const runningCommand = ref(false)
+const commandText = ref('PING')
+const commandOutput = ref('等待执行命令')
 
-const endpoint = computed(() => String(config.value.address || "未配置地址"));
-const modeLabel = computed(() => String(config.value.mode || "standalone"));
+const endpoint = computed(() => String(config.value.address || '未配置地址'))
+const modeLabel = computed(() => String(config.value.mode || 'standalone'))
 
 const statusLabel = computed(() => {
   const labels: Record<string, string> = {
-    connected: "在线",
-    disconnected: "离线",
-    error: "异常",
-    unknown: "未知",
-  };
-  return labels[props.connection.status || "unknown"] || "未知";
-});
+    connected: '在线',
+    disconnected: '离线',
+    error: '异常',
+    unknown: '未知',
+  }
+  return labels[props.connection.status || 'unknown'] || '未知'
+})
 
 const statusTone = computed(() => {
-  if (props.connection.status === "connected") return "success";
-  if (props.connection.status === "error") return "danger";
-  if (props.connection.status === "disconnected") return "warning";
-  return "neutral";
-});
+  if (props.connection.status === 'connected') return 'success'
+  if (props.connection.status === 'error') return 'danger'
+  if (props.connection.status === 'disconnected') return 'warning'
+  return 'neutral'
+})
 
 const filteredKeys = computed(() => {
-  const text = keyword.value.trim().toLowerCase();
-  if (!text) return keys.value;
-  return keys.value.filter((item) =>
-    `${item.key} ${item.type}`.toLowerCase().includes(text),
-  );
-});
+  const text = keyword.value.trim().toLowerCase()
+  if (!text) return keys.value
+  return keys.value.filter((item) => `${item.key} ${item.type}`.toLowerCase().includes(text))
+})
 
 const keyGroups = computed(() => {
-  const counts = new Map<string, number>();
+  const counts = new Map<string, number>()
   for (const item of keys.value) {
-    const group = item.key.includes(":") ? item.key.split(":")[0] : "(root)";
-    counts.set(group, (counts.get(group) || 0) + 1);
+    const group = item.key.includes(':') ? item.key.split(':')[0] : '(root)'
+    counts.set(group, (counts.get(group) || 0) + 1)
   }
   return Array.from(counts.entries())
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count)
-    .slice(0, 12);
-});
+    .slice(0, 12)
+})
 
 const formattedValue = computed(() => {
-  if (!selectedValue.value) return "从左侧选择一个 key 查看内容";
-  return formatPayload(selectedValue.value.value);
-});
+  if (!selectedValue.value) return '从左侧选择一个 key 查看内容'
+  return formatPayload(selectedValue.value.value)
+})
 
 const loadKeys = async () => {
-  loadingKeys.value = true;
+  loadingKeys.value = true
   try {
     const response = await dataAPI.getRedisKeys(props.projectId, props.connection.id, {
-      pattern: pattern.value || "*",
+      pattern: pattern.value || '*',
       limit: 500,
-    });
-    const payload = response?.data || response || {};
-    keys.value = payload.list || [];
+    })
+    const payload = response?.data || response || {}
+    keys.value = payload.list || []
     if (keys.value.length > 0 && !selectedKey.value) {
-      await selectKey(keys.value[0].key);
+      await selectKey(keys.value[0].key)
     }
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "加载 Redis key 失败"));
+    ElMessage.error(getApiErrorMessage(error, '加载 Redis key 失败'))
   } finally {
-    loadingKeys.value = false;
+    loadingKeys.value = false
   }
-};
+}
 
 const selectKey = async (key: string) => {
-  selectedKey.value = key;
-  await reloadValue();
-};
+  selectedKey.value = key
+  await reloadValue()
+}
 
 const reloadValue = async () => {
-  if (!selectedKey.value) return;
-  loadingValue.value = true;
+  if (!selectedKey.value) return
+  loadingValue.value = true
   try {
     const response = await dataAPI.getRedisValue(
       props.projectId,
       props.connection.id,
       selectedKey.value,
-    );
-    selectedValue.value = (response?.data || response) as RedisValue;
+    )
+    selectedValue.value = (response?.data || response) as RedisValue
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "读取 Redis key 失败"));
+    ElMessage.error(getApiErrorMessage(error, '读取 Redis key 失败'))
   } finally {
-    loadingValue.value = false;
+    loadingValue.value = false
   }
-};
+}
 
 const testConnection = async () => {
-  testing.value = true;
+  testing.value = true
   try {
     const response = await dataAPI.testConnection(props.projectId, {
-      type: "redis",
+      type: 'redis',
       config: config.value,
-    });
-    const result = response?.data || response || {};
-    ElMessage.success(result.message || "Redis 连接测试通过");
+    })
+    const result = response?.data || response || {}
+    ElMessage.success(result.message || 'Redis 连接测试通过')
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "Redis 连接测试失败"));
+    ElMessage.error(getApiErrorMessage(error, 'Redis 连接测试失败'))
   } finally {
-    testing.value = false;
+    testing.value = false
   }
-};
+}
 
 const runCommand = async () => {
-  const parts = commandText.value.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return;
-  runningCommand.value = true;
+  const parts = commandText.value.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return
+  runningCommand.value = true
   try {
     const response = await dataAPI.executeRedisCommand(props.projectId, props.connection.id, {
       command: parts[0],
       args: parts.slice(1),
-    });
-    const payload = response?.data || response || {};
-    commandOutput.value = formatPayload(payload.result);
+    })
+    const payload = response?.data || response || {}
+    commandOutput.value = formatPayload(payload.result)
   } catch (error) {
-    commandOutput.value = getApiErrorMessage(error, "Redis 命令执行失败");
+    commandOutput.value = getApiErrorMessage(error, 'Redis 命令执行失败')
   } finally {
-    runningCommand.value = false;
+    runningCommand.value = false
   }
-};
+}
 
 const formatTTL = (ttl: number) => {
-  if (ttl === -1) return "永久";
-  if (ttl === -2) return "不存在";
-  if (ttl < 0) return "-";
-  return `${ttl}s`;
-};
+  if (ttl === -1) return '永久'
+  if (ttl === -2) return '不存在'
+  if (ttl < 0) return '-'
+  return `${ttl}s`
+}
 
 const formatPayload = (value: unknown) => {
-  if (typeof value === "string") {
+  if (typeof value === 'string') {
     try {
-      return JSON.stringify(JSON.parse(value), null, 2);
+      return JSON.stringify(JSON.parse(value), null, 2)
     } catch {
-      return value;
+      return value
     }
   }
   try {
-    return JSON.stringify(value, null, 2);
+    return JSON.stringify(value, null, 2)
   } catch {
-    return String(value);
+    return String(value)
   }
-};
+}
 
 onMounted(() => {
-  void loadKeys();
-});
+  void loadKeys()
+})
 </script>
 
 <style scoped>

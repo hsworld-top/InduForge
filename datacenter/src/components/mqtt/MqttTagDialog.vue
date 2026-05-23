@@ -15,34 +15,16 @@
       :disabled="mode === 'view'"
     >
       <el-form-item label="变量名称" prop="name">
-        <el-input
-          v-model="formData.name"
-          placeholder="例如: 温度传感器"
-          clearable
-        />
+        <el-input v-model="formData.name" placeholder="例如: 温度传感器" clearable />
       </el-form-item>
 
       <el-form-item label="描述">
-        <el-input
-          v-model="formData.description"
-          type="textarea"
-          :rows="2"
-          placeholder="变量描述"
-        />
+        <el-input v-model="formData.description" type="textarea" :rows="2" placeholder="变量描述" />
       </el-form-item>
 
       <el-form-item label="所属分组">
-        <el-select
-          v-model="formData.groupId"
-          placeholder="选择所属分组（可选）"
-          clearable
-        >
-          <el-option
-            v-for="group in groups"
-            :key="group.id"
-            :label="group.name"
-            :value="group.id"
-          >
+        <el-select v-model="formData.groupId" placeholder="选择所属分组（可选）" clearable>
+          <el-option v-for="group in groups" :key="group.id" :label="group.name" :value="group.id">
             <div class="flex items-center gap-2">
               <el-icon :color="group.color">
                 <Folder />
@@ -97,11 +79,7 @@
       </el-form-item>
 
       <el-form-item label="默认值">
-        <el-input
-          v-model="formData.defaultValue"
-          placeholder="解析失败时使用的默认值"
-          clearable
-        />
+        <el-input v-model="formData.defaultValue" placeholder="解析失败时使用的默认值" clearable />
       </el-form-item>
 
       <el-form-item label="单位">
@@ -120,9 +98,7 @@
           :rows="3"
           placeholder="例如: (v) => v * 10"
         />
-        <span class="text-xs text-gray-500">
-          可选，用于对解析后的值进行进一步处理
-        </span>
+        <span class="text-xs text-gray-500"> 可选，用于对解析后的值进行进一步处理 </span>
       </el-form-item>
 
       <el-form-item label="验证规则">
@@ -133,21 +109,19 @@
           placeholder='例如: {"min": 0, "max": 100}'
         />
         <span class="text-xs text-gray-500">
-          JSON格式，支持 min/max (数值), minLength/maxLength/pattern (字符串),
-          enum (枚举值)
+          JSON格式，支持 min/max (数值), minLength/maxLength/pattern (字符串), enum (枚举值)
         </span>
       </el-form-item>
 
       <el-form-item label="显示顺序">
         <el-input-number v-model="formData.order" :min="0" :max="9999" />
       </el-form-item>
-
     </el-form>
 
     <template #footer>
       <span class="dialog-footer">
         <el-button @click="requestClose">
-          {{ mode === "view" ? "关闭" : "取消" }}
+          {{ mode === 'view' ? '关闭' : '取消' }}
         </el-button>
         <el-button
           v-if="mode !== 'view'"
@@ -163,11 +137,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue";
-import { ElMessage } from "element-plus";
-import DcDialog from "@/components/shared/DcDialog.vue";
-import { createMqttTag, updateMqttTag } from "@/api/data.api";
-import { Folder } from "@element-plus/icons-vue";
+import { ref, computed, watch, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import DcDialog from '@/components/shared/DcDialog.vue'
+import { createMqttTag, updateMqttTag } from '@/api/data.api'
+import { Folder } from '@element-plus/icons-vue'
 
 const props = defineProps({
   visible: {
@@ -192,99 +166,96 @@ const props = defineProps({
   },
   mode: {
     type: String,
-    default: "create", // create | edit | view
+    default: 'create', // create | edit | view
   },
-});
+})
 
-const emit = defineEmits(["close", "success"]);
+const emit = defineEmits(['close', 'success'])
 
-const formRef = ref(null);
-const submitting = ref(false);
-const initialFormSnapshot = ref("");
-const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null);
+const formRef = ref(null)
+const submitting = ref(false)
+const initialFormSnapshot = ref('')
+const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
 
 const formData = ref({
-  name: "",
-  code: "",
-  description: "",
+  name: '',
+  code: '',
+  description: '',
   groupId: null,
-  dataType: "string",
-  parseType: "jsonpath",
-  parseRule: "",
-  defaultValue: "",
-  unit: "",
-  transform: "",
+  dataType: 'string',
+  parseType: 'jsonpath',
+  parseRule: '',
+  defaultValue: '',
+  unit: '',
+  transform: '',
   validation: null,
   order: 0,
-});
+})
 
-const validationStr = ref("");
+const validationStr = ref('')
 
 const rules = {
   name: [
-    { required: true, message: "请输入变量名称", trigger: "blur" },
-    { min: 1, max: 100, message: "长度在 1 到 100 个字符", trigger: "blur" },
+    { required: true, message: '请输入变量名称', trigger: 'blur' },
+    { min: 1, max: 100, message: '长度在 1 到 100 个字符', trigger: 'blur' },
   ],
-  dataType: [{ required: true, message: "请选择数据类型", trigger: "change" }],
-  parseType: [{ required: true, message: "请选择解析类型", trigger: "change" }],
-  parseRule: [{ required: true, message: "请输入解析规则", trigger: "blur" }],
-};
+  dataType: [{ required: true, message: '请选择数据类型', trigger: 'change' }],
+  parseType: [{ required: true, message: '请选择解析类型', trigger: 'change' }],
+  parseRule: [{ required: true, message: '请输入解析规则', trigger: 'blur' }],
+}
 
 const dialogTitle = computed(() => {
   const titles = {
-    create: "新建变量",
-    edit: "编辑变量",
-    view: "查看变量",
-  };
-  return titles[props.mode] || "变量";
-});
+    create: '新建变量',
+    edit: '编辑变量',
+    view: '查看变量',
+  }
+  return titles[props.mode] || '变量'
+})
 
 const formSnapshot = computed(() =>
   JSON.stringify({
     formData: formData.value,
     validationStr: validationStr.value,
   }),
-);
+)
 const isDirty = computed(
-  () =>
-    props.visible &&
-    props.mode !== "view" &&
-    formSnapshot.value !== initialFormSnapshot.value,
-);
+  () => props.visible && props.mode !== 'view' && formSnapshot.value !== initialFormSnapshot.value,
+)
 
 /**
  * 初始化表单数据
  * @returns {void}
  */
 const initForm = () => {
-  if (props.tag && props.mode !== "create") {
+  if (props.tag && props.mode !== 'create') {
     formData.value = {
       ...props.tag,
       validation: props.tag.validation || null,
-    };
+    }
 
     if (props.tag.validation) {
-      validationStr.value = JSON.stringify(props.tag.validation, null, 2);
+      validationStr.value = JSON.stringify(props.tag.validation, null, 2)
     }
   } else {
     formData.value = {
-      name: "",
-      code: "",
-      description: "",
+      name: '',
+      code: '',
+      description: '',
       groupId: null,
-      dataType: "string",
-      parseType: "jsonpath",
-      parseRule: "",
-      defaultValue: "",
-      unit: "",
-      transform: "",
+      dataType: 'string',
+      parseType: 'jsonpath',
+      parseRule: '',
+      defaultValue: '',
+      unit: '',
+      transform: '',
       validation: null,
       order: 0,
-    };
-    validationStr.value = "";
+    }
+    validationStr.value = ''
   }
-  initialFormSnapshot.value = formSnapshot.value;
-};
+  initialFormSnapshot.value = formSnapshot.value
+}
 
 /**
  * 将名称转换为标识符
@@ -292,22 +263,22 @@ const initForm = () => {
  * @returns {string} 标识符
  */
 const normalizeCode = (name) => {
-  const normalized = String(name || "")
+  const normalized = String(name || '')
     .toLowerCase()
-    .replace(/\s+/g, "_")
-    .replace(/[^a-z0-9_]/g, "")
-    .replace(/^_+|_+$/g, "")
-    .replace(/_+/g, "_");
-  return normalized || `tag_${Date.now()}`;
-};
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+    .replace(/^_+|_+$/g, '')
+    .replace(/_+/g, '_')
+  return normalized || `tag_${Date.now()}`
+}
 
 /**
  * 处理解析类型变化
  * @returns {void}
  */
 const handleParseTypeChange = () => {
-  formData.value.parseRule = "";
-};
+  formData.value.parseRule = ''
+}
 
 /**
  * 获取解析规则占位符
@@ -315,12 +286,12 @@ const handleParseTypeChange = () => {
  */
 const getParseRulePlaceholder = () => {
   const placeholders = {
-    jsonpath: "例如: $.data.temperature",
-    regex: "例如: temperature:\\s*(\\d+\\.?\\d*)",
-    fixed: "例如: 25.5",
-  };
-  return placeholders[formData.value.parseType] || "请输入解析规则";
-};
+    jsonpath: '例如: $.data.temperature',
+    regex: '例如: temperature:\\s*(\\d+\\.?\\d*)',
+    fixed: '例如: 25.5',
+  }
+  return placeholders[formData.value.parseType] || '请输入解析规则'
+}
 
 /**
  * 获取解析规则提示
@@ -328,13 +299,13 @@ const getParseRulePlaceholder = () => {
  */
 const getParseRuleHint = () => {
   const hints = {
-    jsonpath: "使用JSONPath表达式从JSON消息中提取值",
-    regex: "使用正则表达式从文本消息中提取值（第一个捕获组）",
-    script: "编写JavaScript函数，接收message参数，返回解析后的值",
-    fixed: "直接使用此值作为变量的固定值",
-  };
-  return hints[formData.value.parseType] || "";
-};
+    jsonpath: '使用JSONPath表达式从JSON消息中提取值',
+    regex: '使用正则表达式从文本消息中提取值（第一个捕获组）',
+    script: '编写JavaScript函数，接收message参数，返回解析后的值',
+    fixed: '直接使用此值作为变量的固定值',
+  }
+  return hints[formData.value.parseType] || ''
+}
 
 // 提交
 /**
@@ -345,72 +316,68 @@ const getParseRuleHint = () => {
 const handleSubmit = async () => {
   try {
     if (!formData.value.code) {
-      formData.value.code = normalizeCode(formData.value.name);
+      formData.value.code = normalizeCode(formData.value.name)
     }
-    await formRef.value.validate();
+    await formRef.value.validate()
 
     // 解析验证规则JSON
     if (validationStr.value) {
       try {
-        formData.value.validation = JSON.parse(validationStr.value);
+        formData.value.validation = JSON.parse(validationStr.value)
       } catch {
-        ElMessage.error("验证规则JSON格式不正确");
-        return;
+        ElMessage.error('验证规则JSON格式不正确')
+        return
       }
     } else {
-      formData.value.validation = null;
+      formData.value.validation = null
     }
 
-    submitting.value = true;
+    submitting.value = true
 
-    if (props.mode === "create") {
-      await createMqttTag(
-        props.projectId,
-        props.subscriptionId,
-        formData.value,
-      );
-      ElMessage.success("创建成功");
+    if (props.mode === 'create') {
+      await createMqttTag(props.projectId, props.subscriptionId, formData.value)
+      ElMessage.success('创建成功')
     } else {
-      await updateMqttTag(props.projectId, props.tag.id, formData.value);
-      ElMessage.success("更新成功");
+      await updateMqttTag(props.projectId, props.tag.id, formData.value)
+      ElMessage.success('更新成功')
     }
 
-    initialFormSnapshot.value = formSnapshot.value;
-    emit("success");
+    initialFormSnapshot.value = formSnapshot.value
+    emit('success')
   } catch (error) {
     if (error !== false) {
-      ElMessage.error("操作失败: " + error.message);
+      ElMessage.error('操作失败: ' + error.message)
     }
   } finally {
-    submitting.value = false;
+    submitting.value = false
   }
-};
+}
 
 /**
  * 关闭对话框
  * @returns {void}
  */
 const handleClose = () => {
-  emit("close");
-};
+  emit('close')
+}
 
 const requestClose = () => {
-  void dialogRef.value?.requestClose();
-};
+  void dialogRef.value?.requestClose()
+}
 
 // 监听visible变化，重新初始化表单
 watch(
   () => props.visible,
   (val) => {
     if (val) {
-      initForm();
+      initForm()
     }
   },
-);
+)
 
 onMounted(() => {
-  initForm();
-});
+  initForm()
+})
 </script>
 
 <style scoped>

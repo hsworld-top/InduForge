@@ -2,28 +2,28 @@
  * 页面切换 / 加载时的 schema 解析（从 editor-store 拆出）
  */
 
-import type { EditorPageDraftsMap } from "../editor-store.contracts";
-import type { PageContentApi, ResolveProjectSchemaFn } from "./page-load-save-actions";
-import type { DocumentModel } from "@/editor-core/document/DocumentModel.ts";
-import type { EntryConfig, ProjectSchema } from "@/editor-core/document/types";
-import { fetchResolvedProjectSchemaForPage } from "./page-load-save-actions";
+import type { EditorPageDraftsMap } from '../editor-store.contracts'
+import type { PageContentApi, ResolveProjectSchemaFn } from './page-load-save-actions'
+import type { DocumentModel } from '@/editor-core/document/DocumentModel.ts'
+import type { EntryConfig, ProjectSchema } from '@/editor-core/document/types'
+import { fetchResolvedProjectSchemaForPage } from './page-load-save-actions'
 
 /** 将当前文档上的 entry 合并进刚解析出的 schema（切换页时保留内存中的入口状态） */
 export function mergeExistingEntryIntoPageSchema(
   schema: ProjectSchema,
   existingEntry: EntryConfig | undefined | null,
 ): void {
-  if (!existingEntry || typeof existingEntry !== "object") return;
-  schema.entry = { ...schema.entry, ...existingEntry };
+  if (!existingEntry || typeof existingEntry !== 'object') return
+  schema.entry = { ...schema.entry, ...existingEntry }
 }
 
 export interface ResolvePageSchemaOnLoadArgs {
-  projectId: string;
-  pageId: string;
-  pageDrafts: EditorPageDraftsMap;
-  doc: DocumentModel | null;
-  projectApi: PageContentApi;
-  resolveProjectSchema: ResolveProjectSchemaFn;
+  projectId: string
+  pageId: string
+  pageDrafts: EditorPageDraftsMap
+  doc: DocumentModel | null
+  projectApi: PageContentApi
+  resolveProjectSchema: ResolveProjectSchemaFn
 }
 
 /**
@@ -32,18 +32,18 @@ export interface ResolvePageSchemaOnLoadArgs {
 export async function resolvePageSchemaOnLoad(
   args: ResolvePageSchemaOnLoadArgs,
 ): Promise<ProjectSchema> {
-  const draft = args.pageDrafts[args.pageId];
-  let nextSchema: ProjectSchema;
+  const draft = args.pageDrafts[args.pageId]
+  let nextSchema: ProjectSchema
   if (draft) {
-    nextSchema = args.resolveProjectSchema(draft, args.projectId, args.pageId);
+    nextSchema = args.resolveProjectSchema(draft, args.projectId, args.pageId)
   } else {
     nextSchema = await fetchResolvedProjectSchemaForPage(
       args.projectApi,
       args.projectId,
       args.pageId,
       args.resolveProjectSchema,
-    );
+    )
   }
-  mergeExistingEntryIntoPageSchema(nextSchema, args.doc?.entry ?? null);
-  return nextSchema;
+  mergeExistingEntryIntoPageSchema(nextSchema, args.doc?.entry ?? null)
+  return nextSchema
 }

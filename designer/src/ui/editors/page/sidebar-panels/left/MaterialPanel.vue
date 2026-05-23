@@ -3,55 +3,55 @@
   根据编辑模式切换：页面模式（组件/绘图区/资源 Tab）、Canvas 模式（绘图工具）
 -->
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { useI18n } from "vue-i18n";
-import IconEpBack from "~icons/ep/back";
-import CanvasToolsPanel from "./CanvasToolsPanel.vue";
-import ComponentPanel from "./ComponentPanel.vue";
-import DiagramAreaPanel from "./DiagramAreaPanel.vue";
-import ResourcePanel from "./ResourcePanel.vue";
+import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import IconEpBack from '~icons/ep/back'
+import CanvasToolsPanel from './CanvasToolsPanel.vue'
+import ComponentPanel from './ComponentPanel.vue'
+import DiagramAreaPanel from './DiagramAreaPanel.vue'
+import ResourcePanel from './ResourcePanel.vue'
 
-type MaterialEditMode = "page" | "canvas";
-type MaterialToolType = "select" | "line" | "rect" | "circle" | "text" | "image" | "pipe" | "path";
+type MaterialEditMode = 'page' | 'canvas'
+type MaterialToolType = 'select' | 'line' | 'rect' | 'circle' | 'text' | 'image' | 'pipe' | 'path'
 
 const props = withDefaults(
   defineProps<{
     /**
      * 编辑模式：page - 页面编辑，canvas - Canvas 绘图
      */
-    editMode?: MaterialEditMode;
+    editMode?: MaterialEditMode
     /**
      * 当前激活的工具
      */
-    activeTool?: MaterialToolType | "";
+    activeTool?: MaterialToolType | ''
   }>(),
   {
-    editMode: "page",
-    activeTool: "",
+    editMode: 'page',
+    activeTool: '',
   },
-);
+)
 
 const emit = defineEmits<{
-  (event: "update:editMode", value: MaterialEditMode): void;
-  (event: "update:activeTool", value: MaterialToolType | ""): void;
-}>();
-const { t } = useI18n();
+  (event: 'update:editMode', value: MaterialEditMode): void
+  (event: 'update:activeTool', value: MaterialToolType | ''): void
+}>()
+const { t } = useI18n()
 
-const activeTab = ref("components");
+const activeTab = ref('components')
 
 /**
  * Canvas 工具栏 v-model 代理，避免直接修改 props
  */
 const activeToolModel = computed({
-  get: () => (props.activeTool || "select") as MaterialToolType,
-  set: (value: MaterialToolType | "") => emit("update:activeTool", value),
-});
+  get: () => (props.activeTool || 'select') as MaterialToolType,
+  set: (value: MaterialToolType | '') => emit('update:activeTool', value),
+})
 
 /**
  * 退出 Canvas 模式
  */
 function exitCanvasMode() {
-  emit("update:editMode", "page");
+  emit('update:editMode', 'page')
 }
 </script>
 
@@ -76,10 +76,10 @@ function exitCanvasMode() {
     <template v-else-if="editMode === 'canvas'">
       <div class="canvas-tools-panel">
         <div class="panel-header">
-          <h3 class="text-sm font-medium">{{ t("materialPanel.canvasTools") }}</h3>
+          <h3 class="text-sm font-medium">{{ t('materialPanel.canvasTools') }}</h3>
           <el-button size="small" text @click="exitCanvasMode">
             <IconEpBack />
-            {{ t("materialPanel.backToPageEditor") }}
+            {{ t('materialPanel.backToPageEditor') }}
           </el-button>
         </div>
         <CanvasToolsPanel v-model="activeToolModel" />

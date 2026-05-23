@@ -21,10 +21,7 @@
 
     <el-table-column :label="t('projectManagement.projectName')" min-width="160">
       <template #default="{ row }">
-        <div
-          v-if="isGroupRow(row)"
-          class="project-overview-table__group-header"
-        >
+        <div v-if="isGroupRow(row)" class="project-overview-table__group-header">
           <div class="project-overview-table__group-main">
             <span class="project-overview-table__group-icon">
               <el-icon><FolderOpened /></el-icon>
@@ -66,13 +63,25 @@
       </template>
     </el-table-column>
 
-    <el-table-column v-if="showCreatorColumn" :label="t('projectManagement.createdBy')" width="140" show-overflow-tooltip>
+    <el-table-column
+      v-if="showCreatorColumn"
+      :label="t('projectManagement.createdBy')"
+      width="140"
+      show-overflow-tooltip
+    >
       <template #default="{ row }">
-        <span v-if="isItemRow(row)">{{ row.project.createdByName || row.project.createdBy || '--' }}</span>
+        <span v-if="isItemRow(row)">{{
+          row.project.createdByName || row.project.createdBy || '--'
+        }}</span>
       </template>
     </el-table-column>
 
-    <el-table-column v-if="showRuntimeModeColumn" :label="t('projectManagement.runtimeMode')" width="110" align="center">
+    <el-table-column
+      v-if="showRuntimeModeColumn"
+      :label="t('projectManagement.runtimeMode')"
+      width="110"
+      align="center"
+    >
       <template #default="{ row }">
         <el-tag v-if="isItemRow(row)" size="small" type="info" effect="plain">
           {{ resolveRuntimeModeText(row.project) }}
@@ -80,9 +89,18 @@
       </template>
     </el-table-column>
 
-    <el-table-column v-if="showRuntimeStatusColumn" :label="t('projectManagement.deployStatus')" width="120" align="center">
+    <el-table-column
+      v-if="showRuntimeStatusColumn"
+      :label="t('projectManagement.deployStatus')"
+      width="120"
+      align="center"
+    >
       <template #default="{ row }">
-        <el-tag v-if="isItemRow(row)" size="small" :type="resolveRuntimeTag(row.project.runtimeSummary.runtimeStatus)">
+        <el-tag
+          v-if="isItemRow(row)"
+          size="small"
+          :type="resolveRuntimeTag(row.project.runtimeSummary.runtimeStatus)"
+        >
           {{ resolveRuntimeText(row.project.runtimeSummary.runtimeStatus) }}
         </el-tag>
       </template>
@@ -101,7 +119,11 @@
       </template>
     </el-table-column>
 
-    <el-table-column v-if="showUpdatedAtColumn" :label="t('projectManagement.sortFieldUpdatedAt')" width="170">
+    <el-table-column
+      v-if="showUpdatedAtColumn"
+      :label="t('projectManagement.sortFieldUpdatedAt')"
+      width="170"
+    >
       <template #default="{ row }">
         <span v-if="isItemRow(row)">{{ resolveDisplayTime(row.project.updatedAt) }}</span>
       </template>
@@ -115,13 +137,13 @@
       fixed="right"
     >
       <template #default="{ row }">
-        <div
-          v-if="isItemRow(row)"
-          class="project-overview-table__project-actions"
-          @click.stop
-        >
+        <div v-if="isItemRow(row)" class="project-overview-table__project-actions" @click.stop>
           <slot name="actions" :project="row.project">
-            <el-tooltip v-if="showMemberAction" :content="t('projectManagement.memberAndPermission')" placement="top">
+            <el-tooltip
+              v-if="showMemberAction"
+              :content="t('projectManagement.memberAndPermission')"
+              placement="top"
+            >
               <el-button
                 size="small"
                 text
@@ -133,7 +155,11 @@
               </el-button>
             </el-tooltip>
 
-            <el-tooltip v-if="showDeployAction" :content="t('projectManagement.publishAndDeploy')" placement="top">
+            <el-tooltip
+              v-if="showDeployAction"
+              :content="t('projectManagement.publishAndDeploy')"
+              placement="top"
+            >
               <el-button
                 size="small"
                 text
@@ -145,7 +171,11 @@
               </el-button>
             </el-tooltip>
 
-            <el-tooltip v-if="showExportAction" :content="t('projectManagement.exportProject')" placement="top">
+            <el-tooltip
+              v-if="showExportAction"
+              :content="t('projectManagement.exportProject')"
+              placement="top"
+            >
               <el-button
                 size="small"
                 text
@@ -157,7 +187,11 @@
               </el-button>
             </el-tooltip>
 
-            <el-tooltip v-if="showDeleteAction" :content="t('projectManagement.delete')" placement="top">
+            <el-tooltip
+              v-if="showDeleteAction"
+              :content="t('projectManagement.delete')"
+              placement="top"
+            >
               <el-button
                 size="small"
                 text
@@ -176,17 +210,35 @@
           @click.stop
         >
           <el-tooltip :content="t('projectManagement.addProjectToGroup')" placement="top">
-            <el-button size="small" text circle class="project-overview-table__group-action" @click="emit('group-add-project', row)">
+            <el-button
+              size="small"
+              text
+              circle
+              class="project-overview-table__group-action"
+              @click="emit('group-add-project', row)"
+            >
               <el-icon :size="16"><Plus /></el-icon>
             </el-button>
           </el-tooltip>
           <el-tooltip :content="t('projectManagement.editGroup')" placement="top">
-            <el-button size="small" text circle class="project-overview-table__group-action" @click="emit('group-edit', row)">
+            <el-button
+              size="small"
+              text
+              circle
+              class="project-overview-table__group-action"
+              @click="emit('group-edit', row)"
+            >
               <el-icon :size="16"><Edit /></el-icon>
             </el-button>
           </el-tooltip>
           <el-tooltip :content="t('projectManagement.deleteGroup')" placement="top">
-            <el-button size="small" text circle class="project-overview-table__group-action project-overview-table__group-action--danger" @click="emit('group-delete', row)">
+            <el-button
+              size="small"
+              text
+              circle
+              class="project-overview-table__group-action project-overview-table__group-action--danger"
+              @click="emit('group-delete', row)"
+            >
               <el-icon :size="16"><Delete /></el-icon>
             </el-button>
           </el-tooltip>
@@ -199,7 +251,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import dayjs from 'dayjs'
-import { Delete, Edit, FolderOpened, Plus, Upload, UploadFilled, User } from '@element-plus/icons-vue'
+import {
+  Delete,
+  Edit,
+  FolderOpened,
+  Plus,
+  Upload,
+  UploadFilled,
+  User,
+} from '@element-plus/icons-vue'
 import type { TableColumnCtx, TagProps } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import type { ProjectGroupCardViewModel, ProjectOverviewItem } from './project-overview.types'
@@ -305,7 +365,10 @@ const tableRows = computed<ProjectOverviewTableRow[]>(() => {
   if (!props.showGroupedProjectItems) {
     const result: ProjectOverviewTableRow[] = []
     const knownGroupIds = new Set<string>()
-    const fallbackGroups = new Map<string, { groupName: string; count: number; explicitCount?: number }>()
+    const fallbackGroups = new Map<
+      string,
+      { groupName: string; count: number; explicitCount?: number }
+    >()
     const ungroupedProjects: ProjectOverviewItem[] = []
 
     props.groupCards.forEach((group) => {
@@ -446,7 +509,9 @@ const resolveRuntimeText = (status: string) => {
 }
 
 const normalizeRuntimeMode = (value: unknown): 'DEV' | 'RELEASE' | '' => {
-  const normalized = String(value || '').trim().toUpperCase()
+  const normalized = String(value || '')
+    .trim()
+    .toUpperCase()
   if (normalized === 'DEV') {
     return 'DEV'
   }

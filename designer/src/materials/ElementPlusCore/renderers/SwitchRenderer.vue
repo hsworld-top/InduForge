@@ -1,19 +1,19 @@
 <script setup lang="ts">
 const props = defineProps<{
-  resolvedProps?: Record<string, unknown>;
-}>();
+  resolvedProps?: Record<string, unknown>
+}>()
 
 const emit = defineEmits<{
-  (event: "update:modelValue", value: boolean): void;
-}>();
+  (event: 'update:modelValue', value: boolean): void
+}>()
 
 function handleModelValueUpdate(value: unknown): void {
-  emit("update:modelValue", Boolean(value));
+  emit('update:modelValue', Boolean(value))
 }
 
 function handleToggle(): void {
-  if (props.resolvedProps?.disabled === true) return;
-  emit("update:modelValue", !Boolean(props.resolvedProps?.modelValue));
+  if (props.resolvedProps?.disabled === true) return
+  emit('update:modelValue', !props.resolvedProps?.modelValue)
 }
 </script>
 
@@ -23,12 +23,7 @@ function handleToggle(): void {
     class="core-switch"
     @update:model-value="handleModelValueUpdate"
   />
-  <button
-    class="core-switch__hit"
-    type="button"
-    aria-label="切换开关"
-    @click.stop="handleToggle"
-  />
+  <button class="core-switch__hit" type="button" aria-label="切换开关" @click.stop="handleToggle" />
 </template>
 
 <style scoped>

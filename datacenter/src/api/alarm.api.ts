@@ -1,5 +1,5 @@
-import request from "@/utils/request";
-import { listResponseSchema } from "./schemas/common.schema";
+import request from '@/utils/request'
+import { listResponseSchema } from './schemas/common.schema'
 import {
   AlarmBulkSelectionSchema,
   AlarmDraftValidationSchema,
@@ -31,76 +31,67 @@ import {
   type AlarmPolicyTrialPayload,
   type AlarmPolicyTrialResult,
   type AlarmPolicyUpdate,
-} from "./schemas/alarm.schema";
+} from './schemas/alarm.schema'
 
-const alarmPolicyListSchema = listResponseSchema(AlarmPolicySchema);
-const alarmPolicyGroupListSchema = AlarmPolicyGroupSchema.array();
+const alarmPolicyListSchema = listResponseSchema(AlarmPolicySchema)
+const alarmPolicyGroupListSchema = AlarmPolicyGroupSchema.array()
 
 type AlarmPolicyListResp = {
-  list: AlarmPolicy[];
+  list: AlarmPolicy[]
   pagination?: {
-    page?: number;
-    pageSize?: number;
-    total?: number;
-  };
-};
-
-const unwrapData = (value: unknown) => {
-  if (
-    value &&
-    typeof value === "object" &&
-    "code" in value &&
-    "data" in value
-  ) {
-    return (value as { data?: unknown }).data;
+    page?: number
+    pageSize?: number
+    total?: number
   }
-  return value;
-};
-
-export async function getAlarmPolicyGroups(
-  projectId: string,
-): Promise<AlarmPolicyGroup[]> {
-  const res = await request({
-    url: `/data/projects/${projectId}/alarm-policy-groups`,
-    method: "get",
-  });
-  return alarmPolicyGroupListSchema.parse(unwrapData(res));
 }
 
-export async function getAlarmProjectSettings(
-  projectId: string,
-): Promise<AlarmProjectSettings> {
+const unwrapData = (value: unknown) => {
+  if (value && typeof value === 'object' && 'code' in value && 'data' in value) {
+    return (value as { data?: unknown }).data
+  }
+  return value
+}
+
+export async function getAlarmPolicyGroups(projectId: string): Promise<AlarmPolicyGroup[]> {
+  const res = await request({
+    url: `/data/projects/${projectId}/alarm-policy-groups`,
+    method: 'get',
+  })
+  return alarmPolicyGroupListSchema.parse(unwrapData(res))
+}
+
+export async function getAlarmProjectSettings(projectId: string): Promise<AlarmProjectSettings> {
   const res = await request({
     url: `/data/projects/${projectId}/alarm-settings`,
-    method: "get",
-  });
-  return AlarmProjectSettingsSchema.parse(unwrapData(res));
+    method: 'get',
+  })
+  return AlarmProjectSettingsSchema.parse(unwrapData(res))
 }
 
 export async function updateAlarmProjectSettings(
   projectId: string,
   data: AlarmProjectSettingsSave,
 ): Promise<AlarmProjectSettings> {
-  const body = AlarmProjectSettingsSaveSchema.parse(data);
+  const body = AlarmProjectSettingsSaveSchema.parse(data)
   const res = await request({
     url: `/data/projects/${projectId}/alarm-settings`,
-    method: "put",
+    method: 'put',
     data: body,
-  });
-  return AlarmProjectSettingsSchema.parse(unwrapData(res));
+  })
+  return AlarmProjectSettingsSchema.parse(unwrapData(res))
 }
 
 export async function createAlarmPolicyGroup(
   projectId: string,
   data: AlarmPolicyGroupSave,
 ): Promise<AlarmPolicyGroup> {
-  const body = AlarmPolicyGroupSaveSchema.parse(data);
+  const body = AlarmPolicyGroupSaveSchema.parse(data)
   const res = await request({
     url: `/data/projects/${projectId}/alarm-policy-groups`,
-    method: "post",
+    method: 'post',
     data: body,
-  });
-  return AlarmPolicyGroupSchema.parse(unwrapData(res));
+  })
+  return AlarmPolicyGroupSchema.parse(unwrapData(res))
 }
 
 export async function updateAlarmPolicyGroup(
@@ -108,13 +99,13 @@ export async function updateAlarmPolicyGroup(
   groupId: string,
   data: AlarmPolicyGroupUpdate,
 ): Promise<AlarmPolicyGroup> {
-  const body = AlarmPolicyGroupUpdateSchema.parse(data);
+  const body = AlarmPolicyGroupUpdateSchema.parse(data)
   const res = await request({
     url: `/data/projects/${projectId}/alarm-policy-groups/${groupId}`,
-    method: "put",
+    method: 'put',
     data: body,
-  });
-  return AlarmPolicyGroupSchema.parse(unwrapData(res));
+  })
+  return AlarmPolicyGroupSchema.parse(unwrapData(res))
 }
 
 export async function toggleAlarmPolicyGroup(
@@ -124,20 +115,17 @@ export async function toggleAlarmPolicyGroup(
 ): Promise<AlarmPolicyGroup> {
   const res = await request({
     url: `/data/projects/${projectId}/alarm-policy-groups/${groupId}/enabled`,
-    method: "patch",
+    method: 'patch',
     data: { isEnabled },
-  });
-  return AlarmPolicyGroupSchema.parse(unwrapData(res));
+  })
+  return AlarmPolicyGroupSchema.parse(unwrapData(res))
 }
 
-export async function deleteAlarmPolicyGroup(
-  projectId: string,
-  groupId: string,
-): Promise<void> {
+export async function deleteAlarmPolicyGroup(projectId: string, groupId: string): Promise<void> {
   await request({
     url: `/data/projects/${projectId}/alarm-policy-groups/${groupId}`,
-    method: "delete",
-  });
+    method: 'delete',
+  })
 }
 
 export async function getAlarmPolicyTree(
@@ -146,10 +134,10 @@ export async function getAlarmPolicyTree(
 ): Promise<AlarmPolicyTree> {
   const res = await request({
     url: `/data/projects/${projectId}/alarm-policies/tree`,
-    method: "get",
+    method: 'get',
     params,
-  });
-  return AlarmPolicyTreeSchema.parse(unwrapData(res));
+  })
+  return AlarmPolicyTreeSchema.parse(unwrapData(res))
 }
 
 export async function getAlarmPolicies(
@@ -158,50 +146,47 @@ export async function getAlarmPolicies(
 ): Promise<AlarmPolicyListResp> {
   const res = await request({
     url: `/data/projects/${projectId}/alarm-policies`,
-    method: "get",
+    method: 'get',
     params,
-  });
-  return alarmPolicyListSchema.parse(unwrapData(res));
+  })
+  return alarmPolicyListSchema.parse(unwrapData(res))
 }
 
-export async function getAlarmPolicy(
-  projectId: string,
-  policyId: string,
-): Promise<AlarmPolicy> {
+export async function getAlarmPolicy(projectId: string, policyId: string): Promise<AlarmPolicy> {
   const res = await request({
     url: `/data/projects/${projectId}/alarm-policies/${policyId}`,
-    method: "get",
-  });
-  return AlarmPolicySchema.parse(unwrapData(res));
+    method: 'get',
+  })
+  return AlarmPolicySchema.parse(unwrapData(res))
 }
 
 export async function getAlarmPolicyCoverage(
   projectId: string,
   params: {
-    datapointId?: string;
-    path?: string;
-    excludePolicyId?: string;
+    datapointId?: string
+    path?: string
+    excludePolicyId?: string
   },
 ): Promise<AlarmPolicyCoverage> {
   const res = await request({
     url: `/data/projects/${projectId}/alarm-policies/coverage`,
-    method: "get",
+    method: 'get',
     params,
-  });
-  return AlarmPolicyCoverageSchema.parse(unwrapData(res));
+  })
+  return AlarmPolicyCoverageSchema.parse(unwrapData(res))
 }
 
 export async function createAlarmPolicy(
   projectId: string,
   data: AlarmPolicySave,
 ): Promise<AlarmPolicy> {
-  const body = AlarmPolicySaveSchema.parse(data);
+  const body = AlarmPolicySaveSchema.parse(data)
   const res = await request({
     url: `/data/projects/${projectId}/alarm-policies`,
-    method: "post",
+    method: 'post',
     data: body,
-  });
-  return AlarmPolicySchema.parse(unwrapData(res));
+  })
+  return AlarmPolicySchema.parse(unwrapData(res))
 }
 
 export async function updateAlarmPolicy(
@@ -209,13 +194,13 @@ export async function updateAlarmPolicy(
   policyId: string,
   data: AlarmPolicyUpdate,
 ): Promise<AlarmPolicy> {
-  const body = AlarmPolicyUpdateSchema.parse(data);
+  const body = AlarmPolicyUpdateSchema.parse(data)
   const res = await request({
     url: `/data/projects/${projectId}/alarm-policies/${policyId}`,
-    method: "put",
+    method: 'put',
     data: body,
-  });
-  return AlarmPolicySchema.parse(unwrapData(res));
+  })
+  return AlarmPolicySchema.parse(unwrapData(res))
 }
 
 export async function toggleAlarmPolicy(
@@ -225,20 +210,17 @@ export async function toggleAlarmPolicy(
 ): Promise<AlarmPolicy> {
   const res = await request({
     url: `/data/projects/${projectId}/alarm-policies/${policyId}/enabled`,
-    method: "patch",
+    method: 'patch',
     data: { isEnabled },
-  });
-  return AlarmPolicySchema.parse(unwrapData(res));
+  })
+  return AlarmPolicySchema.parse(unwrapData(res))
 }
 
-export async function deleteAlarmPolicy(
-  projectId: string,
-  policyId: string,
-): Promise<void> {
+export async function deleteAlarmPolicy(projectId: string, policyId: string): Promise<void> {
   await request({
     url: `/data/projects/${projectId}/alarm-policies/${policyId}`,
-    method: "delete",
-  });
+    method: 'delete',
+  })
 }
 
 export async function testAlarmPolicy(
@@ -246,13 +228,13 @@ export async function testAlarmPolicy(
   policyId: string,
   payload: AlarmPolicyTrialPayload = { context: {} },
 ): Promise<AlarmPolicyTrialResult> {
-  const body = AlarmPolicyTrialPayloadSchema.parse(payload);
+  const body = AlarmPolicyTrialPayloadSchema.parse(payload)
   const res = await request({
     url: `/data/projects/${projectId}/alarm-policies/${policyId}/test`,
-    method: "post",
+    method: 'post',
     data: body,
-  });
-  return AlarmPolicyTrialResultSchema.parse(unwrapData(res));
+  })
+  return AlarmPolicyTrialResultSchema.parse(unwrapData(res))
 }
 
 export async function getAlarmPolicyContract(
@@ -261,22 +243,22 @@ export async function getAlarmPolicyContract(
 ): Promise<AlarmPolicyContract> {
   const res = await request({
     url: `/data/projects/${projectId}/alarm-policies/${policyId}/contract`,
-    method: "get",
-  });
-  return AlarmPolicyContractSchema.parse(unwrapData(res));
+    method: 'get',
+  })
+  return AlarmPolicyContractSchema.parse(unwrapData(res))
 }
 
 export async function validateAlarmPolicyDraft(
   projectId: string,
   data: AlarmPolicySave,
 ): Promise<AlarmDraftValidation> {
-  const body = AlarmPolicySaveSchema.parse(data);
+  const body = AlarmPolicySaveSchema.parse(data)
   const res = await request({
     url: `/data/projects/${projectId}/alarm-policies/validate-draft`,
-    method: "post",
+    method: 'post',
     data: body,
-  });
-  return AlarmDraftValidationSchema.parse(unwrapData(res));
+  })
+  return AlarmDraftValidationSchema.parse(unwrapData(res))
 }
 
 export async function batchEnableAlarmPolicies(
@@ -285,9 +267,9 @@ export async function batchEnableAlarmPolicies(
 ): Promise<void> {
   await request({
     url: `/data/projects/${projectId}/alarm-policies/batch-enable`,
-    method: "post",
+    method: 'post',
     data: { selection: AlarmBulkSelectionSchema.parse(selection) },
-  });
+  })
 }
 
 export async function batchDisableAlarmPolicies(
@@ -296,9 +278,9 @@ export async function batchDisableAlarmPolicies(
 ): Promise<void> {
   await request({
     url: `/data/projects/${projectId}/alarm-policies/batch-disable`,
-    method: "post",
+    method: 'post',
     data: { selection: AlarmBulkSelectionSchema.parse(selection) },
-  });
+  })
 }
 
 export async function batchMoveAlarmPolicies(
@@ -308,19 +290,19 @@ export async function batchMoveAlarmPolicies(
 ): Promise<void> {
   await request({
     url: `/data/projects/${projectId}/alarm-policies/batch-move`,
-    method: "post",
+    method: 'post',
     data: { selection: AlarmBulkSelectionSchema.parse(selection), groupId },
-  });
+  })
 }
 
 export async function batchApplyAlarmConditions(
   projectId: string,
   selection: AlarmBulkSelection,
-  conditions: AlarmPolicy["conditions"],
+  conditions: AlarmPolicy['conditions'],
 ): Promise<void> {
   await request({
     url: `/data/projects/${projectId}/alarm-policies/batch-apply-conditions`,
-    method: "post",
+    method: 'post',
     data: { selection: AlarmBulkSelectionSchema.parse(selection), conditions },
-  });
+  })
 }

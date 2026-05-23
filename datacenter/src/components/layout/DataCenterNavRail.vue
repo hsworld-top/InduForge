@@ -23,31 +23,28 @@
 </template>
 
 <script setup lang="ts">
-import IconTablerBell from "~icons/tabler/bell";
-import IconTablerCalculator from "~icons/tabler/calculator";
-import IconTablerDatabase from "~icons/tabler/database";
-import IconTablerPlugConnected from "~icons/tabler/plug-connected";
-import type {
-  DatacenterModuleId,
-  DatacenterModuleMeta,
-} from "@/config/datacenterModules";
+import IconTablerBell from '~icons/tabler/bell'
+import IconTablerCalculator from '~icons/tabler/calculator'
+import IconTablerDatabase from '~icons/tabler/database'
+import IconTablerPlugConnected from '~icons/tabler/plug-connected'
+import type { DatacenterModuleId, DatacenterModuleMeta } from '@/config/datacenterModules'
 
 const props = defineProps<{
-  modules: DatacenterModuleMeta[];
-  activeModule: DatacenterModuleId;
-}>();
+  modules: DatacenterModuleMeta[]
+  activeModule: DatacenterModuleId
+}>()
 
 defineEmits<{
-  (event: "update:activeModule", value: DatacenterModuleId): void;
-}>();
+  (event: 'update:activeModule', value: DatacenterModuleId): void
+}>()
 
 // 使用 v2 模块 ID 映射图标
 const moduleIcons: Record<string, unknown> = {
   datapoint: IconTablerDatabase,
-  "access-source": IconTablerPlugConnected,
+  'access-source': IconTablerPlugConnected,
   compute: IconTablerCalculator,
   alarm: IconTablerBell,
-};
+}
 </script>
 
 <style scoped>

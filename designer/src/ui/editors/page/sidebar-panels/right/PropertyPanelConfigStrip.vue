@@ -2,38 +2,38 @@
   属性面板：尺寸编辑 + 详细/样式配置入口
 -->
 <script setup lang="ts">
-import { useI18n } from "vue-i18n";
-import IconEpDocument from "~icons/ep/document";
-import IconEpEditPen from "~icons/ep/edit-pen";
-import SizeEditor from "./StylePanel/SizeEditor.vue";
+import { useI18n } from 'vue-i18n'
+import IconEpDocument from '~icons/ep/document'
+import IconEpEditPen from '~icons/ep/edit-pen'
+import SizeEditor from './StylePanel/SizeEditor.vue'
 
 interface ConfigStripStyleLike {
-  width?: string;
-  height?: string;
-  [key: string]: unknown;
+  width?: string
+  height?: string
+  [key: string]: unknown
 }
 
 interface ConfigStripContainerMinSize {
-  width?: number;
-  height?: number;
+  width?: number
+  height?: number
 }
 
 defineProps<{
-  showSizeEditor?: boolean;
-  currentStyle: ConfigStripStyleLike;
-  containerMinSize?: ConfigStripContainerMinSize | null;
-  hasDetailConfig?: boolean;
-  hasStyleConfig?: boolean;
-}>();
+  showSizeEditor?: boolean
+  currentStyle: ConfigStripStyleLike
+  containerMinSize?: ConfigStripContainerMinSize | null
+  hasDetailConfig?: boolean
+  hasStyleConfig?: boolean
+}>()
 
 const emit = defineEmits<{
-  (event: "update:currentStyle", value: ConfigStripStyleLike): void;
-  (event: "open-config", tab: "detail" | "style"): void;
-}>();
-const { t } = useI18n();
+  (event: 'update:currentStyle', value: ConfigStripStyleLike): void
+  (event: 'open-config', tab: 'detail' | 'style'): void
+}>()
+const { t } = useI18n()
 
 function onStyleUpdate(val: ConfigStripStyleLike) {
-  emit("update:currentStyle", val);
+  emit('update:currentStyle', val)
 }
 </script>
 
@@ -49,7 +49,7 @@ function onStyleUpdate(val: ConfigStripStyleLike) {
     </div>
     <div class="panel-section">
       <div class="config-entry-header">
-        <span class="panel-section-title">{{ t("propertyPanel.configStrip.title") }}</span>
+        <span class="panel-section-title">{{ t('propertyPanel.configStrip.title') }}</span>
       </div>
       <div class="config-entry-bar">
         <button
@@ -59,7 +59,7 @@ function onStyleUpdate(val: ConfigStripStyleLike) {
           @click="emit('open-config', 'detail')"
         >
           <IconEpDocument class="config-entry-icon" />
-          <span>{{ t("propertyPanel.configStrip.detail") }}</span>
+          <span>{{ t('propertyPanel.configStrip.detail') }}</span>
         </button>
         <button
           class="config-entry"
@@ -68,7 +68,7 @@ function onStyleUpdate(val: ConfigStripStyleLike) {
           @click="emit('open-config', 'style')"
         >
           <IconEpEditPen class="config-entry-icon" />
-          <span>{{ t("propertyPanel.configStrip.style") }}</span>
+          <span>{{ t('propertyPanel.configStrip.style') }}</span>
         </button>
       </div>
     </div>

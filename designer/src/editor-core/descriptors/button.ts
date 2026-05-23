@@ -2,12 +2,12 @@
  * Button 按钮组件 Descriptor
  */
 
-import type { ComponentDescriptor } from "./registry";
-import { normalizeButtonRenderProps } from "./button-props";
+import type { ComponentDescriptor } from './registry'
+import { normalizeButtonRenderProps } from './button-props'
 
 export const descriptor: ComponentDescriptor = {
   /** 渲染为 Element Plus el-button */
-  renderTag: "el-button",
+  renderTag: 'el-button',
 
   /** 非容器 */
   isContainer: false,
@@ -25,13 +25,13 @@ export const descriptor: ComponentDescriptor = {
   childResizable: true,
 
   /** 显示内容生成函数 */
-  displayContent: (node, resolvedProps) => String(resolvedProps?.text ?? node?.label ?? "按钮"),
+  displayContent: (node, resolvedProps) => String(resolvedProps?.text ?? node?.label ?? '按钮'),
 
   /** 过滤/转换传给 renderTag 的 props */
   propsFilter: (resolvedProps) => normalizeButtonRenderProps(resolvedProps ?? {}),
 
   /** 默认尺寸 */
   defaultSize: { width: 120, height: 36 },
-};
+}
 
-export default descriptor;
+export default descriptor

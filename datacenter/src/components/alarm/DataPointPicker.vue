@@ -18,18 +18,14 @@
         <strong>{{ selected.name || selected.path }}</strong>
         <code>{{ selected.path }}</code>
       </span>
-      <em>{{ selected.dataType || "-" }}</em>
+      <em>{{ selected.dataType || '-' }}</em>
     </div>
 
     <div v-if="error" class="data-point-picker__state is-error">
       {{ error }}
     </div>
-    <div v-else-if="loading" class="data-point-picker__state">
-      正在读取数据点
-    </div>
-    <div v-else-if="!datapoints.length" class="data-point-picker__state">
-      暂无匹配数据点
-    </div>
+    <div v-else-if="loading" class="data-point-picker__state">正在读取数据点</div>
+    <div v-else-if="!datapoints.length" class="data-point-picker__state">暂无匹配数据点</div>
 
     <div v-else class="data-point-picker__list">
       <button
@@ -44,92 +40,92 @@
           <strong>{{ item.name || item.path }}</strong>
           <code>{{ item.path }}</code>
         </span>
-        <em>{{ item.dataType || "-" }}</em>
+        <em>{{ item.dataType || '-' }}</em>
       </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { Refresh, Search } from "@element-plus/icons-vue";
-import { getDatapoints } from "@/api/datapoint.api";
-import type { Datapoint } from "@/api/schemas/datapoint.schema";
-import { getApiErrorMessage } from "@/utils/request";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Refresh, Search } from '@element-plus/icons-vue'
+import { getDatapoints } from '@/api/datapoint.api'
+import type { Datapoint } from '@/api/schemas/datapoint.schema'
+import { getApiErrorMessage } from '@/utils/request'
 
 const props = defineProps<{
-  projectId: string;
-  modelValue: string;
-}>();
+  projectId: string
+  modelValue: string
+}>()
 
 const emit = defineEmits<{
-  "update:modelValue": [value: string];
-  select: [datapoint: Datapoint];
-}>();
+  'update:modelValue': [value: string]
+  select: [datapoint: Datapoint]
+}>()
 
-const keyword = ref("");
-const datapoints = ref<Datapoint[]>([]);
-const loading = ref(false);
-const error = ref("");
-const debounceTimer = ref<number | null>(null);
+const keyword = ref('')
+const datapoints = ref<Datapoint[]>([])
+const loading = ref(false)
+const error = ref('')
+const debounceTimer = ref<number | null>(null)
 
 const selected = computed(
   () => datapoints.value.find((item) => item.id === props.modelValue) ?? null,
-);
+)
 
 const loadDatapoints = async () => {
   if (!props.projectId) {
-    datapoints.value = [];
-    return;
+    datapoints.value = []
+    return
   }
-  loading.value = true;
-  error.value = "";
+  loading.value = true
+  error.value = ''
   try {
     const res = await getDatapoints(props.projectId, {
       page: 1,
       pageSize: 30,
       q: keyword.value.trim(),
       search: keyword.value.trim(),
-    });
-    datapoints.value = res.list;
+    })
+    datapoints.value = res.list
   } catch (err) {
-    datapoints.value = [];
-    error.value = getApiErrorMessage(err, "数据点列表不可用");
+    datapoints.value = []
+    error.value = getApiErrorMessage(err, '数据点列表不可用')
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 
 const selectDatapoint = (datapoint: Datapoint) => {
-  emit("update:modelValue", datapoint.id);
-  emit("select", datapoint);
-};
+  emit('update:modelValue', datapoint.id)
+  emit('select', datapoint)
+}
 
 watch(keyword, () => {
   if (debounceTimer.value) {
-    window.clearTimeout(debounceTimer.value);
+    window.clearTimeout(debounceTimer.value)
   }
   debounceTimer.value = window.setTimeout(() => {
-    void loadDatapoints();
-  }, 300);
-});
+    void loadDatapoints()
+  }, 300)
+})
 
 watch(
   () => props.projectId,
   () => {
-    void loadDatapoints();
+    void loadDatapoints()
   },
-);
+)
 
 onMounted(() => {
-  void loadDatapoints();
-});
+  void loadDatapoints()
+})
 
 onBeforeUnmount(() => {
   if (debounceTimer.value) {
-    window.clearTimeout(debounceTimer.value);
+    window.clearTimeout(debounceTimer.value)
   }
-});
+})
 </script>
 
 <style scoped>

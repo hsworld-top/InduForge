@@ -3,131 +3,131 @@
   管理页面/全局变量，支持增删、导入导出
 -->
 <script setup lang="ts">
-import type { ChangeTarget, VarsConfig } from "@/editor-core/document/types";
-import { ElMessage, ElMessageBox } from "element-plus";
-import { storeToRefs } from "pinia";
-import { computed, ref, watch } from "vue";
-import * as XLSX from "xlsx";
-import IconEpDelete from "~icons/ep/delete";
-import IconEpDownload from "~icons/ep/download";
-import IconEpEditPen from "~icons/ep/edit-pen";
-import IconEpPlus from "~icons/ep/plus";
-import IconEpUpload from "~icons/ep/upload";
-import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
-import { useEditorStore } from "@/stores/editor-store";
+import type { ChangeTarget, VarsConfig } from '@/editor-core/document/types'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { storeToRefs } from 'pinia'
+import { computed, ref, watch } from 'vue'
+import * as XLSX from 'xlsx'
+import IconEpDelete from '~icons/ep/delete'
+import IconEpDownload from '~icons/ep/download'
+import IconEpEditPen from '~icons/ep/edit-pen'
+import IconEpPlus from '~icons/ep/plus'
+import IconEpUpload from '~icons/ep/upload'
+import MonacoEditor from '@/ui/shared/widgets/base/monaco-editor-async'
+import { useEditorStore } from '@/stores/editor-store'
 
-const editorStore = useEditorStore();
-const { doc, docVersion, currentPageId, pages } = storeToRefs(editorStore);
-const SANITIZE_FILE_NAME_INVALID_RE = /[\\/:*?"<>|]+/g;
-const SANITIZE_FILE_NAME_SPACE_RE = /\s+/g;
+const editorStore = useEditorStore()
+const { doc, docVersion, currentPageId, pages } = storeToRefs(editorStore)
+const SANITIZE_FILE_NAME_INVALID_RE = /[\\/:*?"<>|]+/g
+const SANITIZE_FILE_NAME_SPACE_RE = /\s+/g
 
 interface PageVarSourceLike {
-  type?: string;
+  type?: string
 }
 
 interface PageVarDefinitionLike {
-  type?: string;
-  default?: unknown;
-  description?: string;
-  access?: string;
-  source?: PageVarSourceLike;
-  mapped?: boolean;
-  groupId?: string | null;
+  type?: string
+  default?: unknown
+  description?: string
+  access?: string
+  source?: PageVarSourceLike
+  mapped?: boolean
+  groupId?: string | null
 }
 
 interface PageVarListItemLike {
-  name: string;
-  type: string;
-  default: unknown;
-  description: string;
+  name: string
+  type: string
+  default: unknown
+  description: string
 }
 
 interface PageVarEditorItemLike {
-  name: string;
-  type?: string;
-  default?: unknown;
-  description?: string;
-  access?: string;
+  name: string
+  type?: string
+  default?: unknown
+  description?: string
+  access?: string
 }
 
 interface StructuredParseSuccess {
-  ok: true;
-  parsed: unknown;
+  ok: true
+  parsed: unknown
 }
 
 interface StructuredParseFailure {
-  ok: false;
-  error: string;
+  ok: false
+  error: string
 }
 
-type StructuredParseResult = StructuredParseSuccess | StructuredParseFailure;
+type StructuredParseResult = StructuredParseSuccess | StructuredParseFailure
 interface ImportRowLike {
-  [key: string]: unknown;
+  [key: string]: unknown
 }
 
 interface MonacoEditorExposeLike {
-  format?: () => Promise<boolean> | boolean;
+  format?: () => Promise<boolean> | boolean
 }
 
-const editVisible = ref(false);
-const editMode = ref(false);
-const selectedVarName = ref("");
-const originalName = ref("");
-const formName = ref("");
-const formType = ref("string");
-const formDefaultText = ref("");
-const formDefaultNumber = ref(0);
-const formDefaultBoolean = ref(false);
-const formDefaultDate = ref<string | Date | null>(null);
-const formDescription = ref("");
-const editValueEditorRef = ref<MonacoEditorExposeLike | null>(null);
-const editValueHasErrors = ref(false);
-const importInputRef = ref<HTMLInputElement | null>(null);
-const importType = ref("json");
+const editVisible = ref(false)
+const editMode = ref(false)
+const selectedVarName = ref('')
+const originalName = ref('')
+const formName = ref('')
+const formType = ref('string')
+const formDefaultText = ref('')
+const formDefaultNumber = ref(0)
+const formDefaultBoolean = ref(false)
+const formDefaultDate = ref<string | Date | null>(null)
+const formDescription = ref('')
+const editValueEditorRef = ref<MonacoEditorExposeLike | null>(null)
+const editValueHasErrors = ref(false)
+const importInputRef = ref<HTMLInputElement | null>(null)
+const importType = ref('json')
 
 const typeOptions = [
-  "string",
-  "number",
-  "boolean",
-  "array",
-  "object",
-  "set",
-  "map",
-  "date",
-  "regexp",
-  "function",
-];
+  'string',
+  'number',
+  'boolean',
+  'array',
+  'object',
+  'set',
+  'map',
+  'date',
+  'regexp',
+  'function',
+]
 
 const isEditorType = computed(() =>
-  ["function", "array", "object", "set", "map"].includes(formType.value),
-);
-const isStructuredType = computed(() => ["array", "object", "set", "map"].includes(formType.value));
-const isTextType = computed(() => ["string", "regexp"].includes(formType.value));
-const editorLanguage = computed(() => (isStructuredType.value ? "json" : "javascript"));
+  ['function', 'array', 'object', 'set', 'map'].includes(formType.value),
+)
+const isStructuredType = computed(() => ['array', 'object', 'set', 'map'].includes(formType.value))
+const isTextType = computed(() => ['string', 'regexp'].includes(formType.value))
+const editorLanguage = computed(() => (isStructuredType.value ? 'json' : 'javascript'))
 
 const pageName = computed(() => {
-  const pageId = currentPageId.value;
-  if (!pageId) return "page";
-  const page = pages.value.find((item) => item.id === pageId);
-  return page?.name || "page";
-});
+  const pageId = currentPageId.value
+  if (!pageId) return 'page'
+  const page = pages.value.find((item) => item.id === pageId)
+  return page?.name || 'page'
+})
 
 const pageVars = computed<Record<string, PageVarDefinitionLike>>(() => {
-  void docVersion.value;
-  const pageId = currentPageId.value;
-  if (!pageId || !doc.value) return {};
-  const vars = doc.value.vars?.pages?.[pageId] as Record<string, PageVarDefinitionLike> | undefined;
-  return vars && typeof vars === "object" ? vars : {};
-});
+  void docVersion.value
+  const pageId = currentPageId.value
+  if (!pageId || !doc.value) return {}
+  const vars = doc.value.vars?.pages?.[pageId] as Record<string, PageVarDefinitionLike> | undefined
+  return vars && typeof vars === 'object' ? vars : {}
+})
 
 const varList = computed<PageVarListItemLike[]>(() => {
   return Object.entries(pageVars.value).map(([name, def]) => ({
     name,
-    type: def?.type || "string",
+    type: def?.type || 'string',
     default: def?.default,
-    description: def?.description || "",
-  }));
-});
+    description: def?.description || '',
+  }))
+})
 
 /**
  * 格式化默认值显示
@@ -135,15 +135,15 @@ const varList = computed<PageVarListItemLike[]>(() => {
  * @returns {string} 格式化后的文本
  */
 function formatDefaultValue(item: { default?: unknown }): string {
-  if (item.default === null || item.default === undefined) return "";
-  if (typeof item.default === "object") {
+  if (item.default === null || item.default === undefined) return ''
+  if (typeof item.default === 'object') {
     try {
-      return JSON.stringify(item.default);
+      return JSON.stringify(item.default)
     } catch {
-      return String(item.default);
+      return String(item.default)
     }
   }
-  return String(item.default);
+  return String(item.default)
 }
 
 /**
@@ -151,23 +151,23 @@ function formatDefaultValue(item: { default?: unknown }): string {
  * @param {string} name - 变量名
  */
 function selectRow(name: string): void {
-  selectedVarName.value = name || "";
+  selectedVarName.value = name || ''
 }
 
 /**
  * 打开新增弹窗
  */
 function openCreateDialog(): void {
-  editMode.value = false;
-  formName.value = "";
-  originalName.value = "";
-  formType.value = "string";
-  formDefaultText.value = "";
-  formDefaultNumber.value = 0;
-  formDefaultBoolean.value = false;
-  formDefaultDate.value = null;
-  formDescription.value = "";
-  editVisible.value = true;
+  editMode.value = false
+  formName.value = ''
+  originalName.value = ''
+  formType.value = 'string'
+  formDefaultText.value = ''
+  formDefaultNumber.value = 0
+  formDefaultBoolean.value = false
+  formDefaultDate.value = null
+  formDescription.value = ''
+  editVisible.value = true
 }
 
 /**
@@ -175,142 +175,142 @@ function openCreateDialog(): void {
  * @param {{ name: string, type: string, default: any, description: string, access: string }} item - 变量信息
  */
 function openEditDialog(item: PageVarEditorItemLike): void {
-  if (!item) return;
-  editMode.value = true;
-  formName.value = item.name || "";
-  originalName.value = item.name || "";
-  formType.value = item.type || "string";
-  formDescription.value = item.description || "";
-  if (formType.value === "number") {
-    formDefaultNumber.value = Number(item.default) || 0;
-  } else if (formType.value === "boolean") {
-    formDefaultBoolean.value = Boolean(item.default);
-  } else if (formType.value === "date") {
-    formDefaultDate.value = (item.default as string | Date | null | undefined) ?? null;
+  if (!item) return
+  editMode.value = true
+  formName.value = item.name || ''
+  originalName.value = item.name || ''
+  formType.value = item.type || 'string'
+  formDescription.value = item.description || ''
+  if (formType.value === 'number') {
+    formDefaultNumber.value = Number(item.default) || 0
+  } else if (formType.value === 'boolean') {
+    formDefaultBoolean.value = Boolean(item.default)
+  } else if (formType.value === 'date') {
+    formDefaultDate.value = (item.default as string | Date | null | undefined) ?? null
   } else {
     formDefaultText.value =
-      item.default === undefined || item.default === null ? "" : String(item.default);
+      item.default === undefined || item.default === null ? '' : String(item.default)
   }
-  editVisible.value = true;
+  editVisible.value = true
 }
 
 /**
  * 重置初始值输入
  */
 function resetDefaultValue(): void {
-  formDefaultText.value = "";
-  formDefaultNumber.value = 0;
-  formDefaultBoolean.value = false;
-  formDefaultDate.value = null;
-  editValueHasErrors.value = false;
+  formDefaultText.value = ''
+  formDefaultNumber.value = 0
+  formDefaultBoolean.value = false
+  formDefaultDate.value = null
+  editValueHasErrors.value = false
 }
 
 function parseStructuredJson(value: unknown, type: string): StructuredParseResult {
-  if (!isStructuredType.value) return { ok: true, parsed: value };
-  if (typeof value !== "string") return { ok: true, parsed: value };
+  if (!isStructuredType.value) return { ok: true, parsed: value }
+  if (typeof value !== 'string') return { ok: true, parsed: value }
   try {
-    const parsed = JSON.parse(value);
-    if (type === "array" && !Array.isArray(parsed)) {
-      return { ok: false, error: "数组类型需要 JSON 数组" };
+    const parsed = JSON.parse(value)
+    if (type === 'array' && !Array.isArray(parsed)) {
+      return { ok: false, error: '数组类型需要 JSON 数组' }
     }
-    if (type === "object") {
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        return { ok: false, error: "对象类型需要 JSON 对象" };
+    if (type === 'object') {
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return { ok: false, error: '对象类型需要 JSON 对象' }
       }
     }
-    if (type === "set") {
-      if (Array.isArray(parsed)) return { ok: true, parsed };
-      if (parsed && typeof parsed === "object") {
-        return { ok: true, parsed: Object.values(parsed) };
+    if (type === 'set') {
+      if (Array.isArray(parsed)) return { ok: true, parsed }
+      if (parsed && typeof parsed === 'object') {
+        return { ok: true, parsed: Object.values(parsed) }
       }
-      return { ok: false, error: "Set 需要 JSON 数组或对象" };
+      return { ok: false, error: 'Set 需要 JSON 数组或对象' }
     }
-    if (type === "map") {
-      if (Array.isArray(parsed)) return { ok: true, parsed };
-      if (parsed && typeof parsed === "object") {
-        return { ok: true, parsed: Object.entries(parsed) };
+    if (type === 'map') {
+      if (Array.isArray(parsed)) return { ok: true, parsed }
+      if (parsed && typeof parsed === 'object') {
+        return { ok: true, parsed: Object.entries(parsed) }
       }
-      return { ok: false, error: "Map 需要 JSON 数组或对象" };
+      return { ok: false, error: 'Map 需要 JSON 数组或对象' }
     }
-    return { ok: true, parsed };
+    return { ok: true, parsed }
   } catch {
-    return { ok: false, error: "JSON 格式不正确" };
+    return { ok: false, error: 'JSON 格式不正确' }
   }
 }
 
 function validateStructuredValue(): boolean {
-  if (!isStructuredType.value) return true;
-  const result = parseStructuredJson(formDefaultText.value, formType.value);
+  if (!isStructuredType.value) return true
+  const result = parseStructuredJson(formDefaultText.value, formType.value)
   if (!result.ok) {
-    ElMessage.error((result.error || "校验失败") as never);
-    return false;
+    ElMessage.error((result.error || '校验失败') as never)
+    return false
   }
-  return true;
+  return true
 }
 
 function handleEditValueMarkers(markers: unknown[]): void {
   if (!isEditorType.value) {
-    editValueHasErrors.value = false;
-    return;
+    editValueHasErrors.value = false
+    return
   }
   editValueHasErrors.value = (markers || []).some(
     (marker) => (marker as { severity?: number }).severity === 8,
-  );
+  )
 }
 
 /**
  * 保存变量
  */
 function saveVar(): void {
-  const name = formName.value.trim();
+  const name = formName.value.trim()
   if (!name) {
-    ElMessage.warning("名称不能为空" as never);
-    return;
+    ElMessage.warning('名称不能为空' as never)
+    return
   }
-  if (!currentPageId.value || !doc.value) return;
+  if (!currentPageId.value || !doc.value) return
 
   if (!editMode.value && pageVars.value[name]) {
-    ElMessage.warning("变量名已存在" as never);
-    return;
+    ElMessage.warning('变量名已存在' as never)
+    return
   }
   if (editMode.value && originalName.value && name !== originalName.value && pageVars.value[name]) {
-    ElMessage.warning("变量名已存在" as never);
-    return;
+    ElMessage.warning('变量名已存在' as never)
+    return
   }
   if (editValueHasErrors.value) {
-    ElMessage.error("初始值存在语法错误，请先修正" as never);
-    return;
+    ElMessage.error('初始值存在语法错误，请先修正' as never)
+    return
   }
   if (isStructuredType.value && !validateStructuredValue()) {
-    return;
+    return
   }
 
-  const nextVars = { ...pageVars.value };
-  const structured = parseStructuredJson(formDefaultText.value, formType.value);
+  const nextVars = { ...pageVars.value }
+  const structured = parseStructuredJson(formDefaultText.value, formType.value)
   const value =
-    formType.value === "number"
+    formType.value === 'number'
       ? Number(formDefaultNumber.value)
-      : formType.value === "boolean"
+      : formType.value === 'boolean'
         ? Boolean(formDefaultBoolean.value)
-        : formType.value === "date"
+        : formType.value === 'date'
           ? formDefaultDate.value
           : structured.ok
             ? structured.parsed
-            : formDefaultText.value;
+            : formDefaultText.value
   if (editMode.value && originalName.value && name !== originalName.value) {
-    delete nextVars[originalName.value];
+    delete nextVars[originalName.value]
   }
-  const existing = editMode.value ? pageVars.value[originalName.value] : null;
+  const existing = editMode.value ? pageVars.value[originalName.value] : null
   nextVars[name] = {
-    ...(existing && typeof existing === "object" ? existing : {}),
+    ...(existing && typeof existing === 'object' ? existing : {}),
     type: formType.value,
     default: value,
     description: formDescription.value,
-  };
+  }
 
-  commitPageVars(nextVars);
-  selectedVarName.value = name;
-  editVisible.value = false;
+  commitPageVars(nextVars)
+  selectedVarName.value = name
+  editVisible.value = false
 }
 
 /**
@@ -318,22 +318,22 @@ function saveVar(): void {
  */
 function handleDelete(): void {
   if (!selectedVarName.value) {
-    ElMessage.info("请选择需要删除的变量" as never);
-    return;
+    ElMessage.info('请选择需要删除的变量' as never)
+    return
   }
-  ElMessageBox.confirm(`确认删除变量 "${selectedVarName.value}" 吗？`, "删除确认", {
-    confirmButtonText: "删除",
-    cancelButtonText: "取消",
-    type: "warning",
+  ElMessageBox.confirm(`确认删除变量 "${selectedVarName.value}" 吗？`, '删除确认', {
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+    type: 'warning',
   })
     .then(() => {
-      if (!currentPageId.value || !doc.value) return;
-      const nextVars = { ...pageVars.value };
-      delete nextVars[selectedVarName.value];
-      commitPageVars(nextVars);
-      selectedVarName.value = "";
+      if (!currentPageId.value || !doc.value) return
+      const nextVars = { ...pageVars.value }
+      delete nextVars[selectedVarName.value]
+      commitPageVars(nextVars)
+      selectedVarName.value = ''
     })
-    .catch(() => {});
+    .catch(() => {})
 }
 
 /**
@@ -341,188 +341,188 @@ function handleDelete(): void {
  * @param {Record<string, any>} vars - 变量定义
  */
 function commitPageVars(vars: Record<string, PageVarDefinitionLike>): void {
-  if (!doc.value || !currentPageId.value) return;
-  const oldValue = doc.value.schema.vars as VarsConfig;
+  if (!doc.value || !currentPageId.value) return
+  const oldValue = doc.value.schema.vars as VarsConfig
   const nextVars = {
     ...oldValue,
     pages: {
       ...(oldValue?.pages || {}),
       [currentPageId.value]: vars as Record<string, unknown>,
     },
-  } as VarsConfig;
-  doc.value.schema.vars = nextVars;
+  } as VarsConfig
+  doc.value.schema.vars = nextVars
   doc.value._emitChange?.({
-    type: "update",
-    target: "page" as ChangeTarget,
+    type: 'update',
+    target: 'page' as ChangeTarget,
     oldValue,
     newValue: nextVars,
-  } as never);
+  } as never)
 }
 
 const importAccept = computed(() => {
-  if (importType.value === "csv") return ".csv";
-  if (importType.value === "xlsx") return ".xlsx,.xls";
-  return ".json";
-});
+  if (importType.value === 'csv') return '.csv'
+  if (importType.value === 'xlsx') return '.xlsx,.xls'
+  return '.json'
+})
 
 function downloadBlob(content: BlobPart, name: string, type: string): void {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  link.click();
-  URL.revokeObjectURL(url);
+  const blob = new Blob([content], { type })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 function sanitizeFileName(name: unknown): string {
-  return String(name || "page")
+  return String(name || 'page')
     .trim()
-    .replace(SANITIZE_FILE_NAME_INVALID_RE, "-")
-    .replace(SANITIZE_FILE_NAME_SPACE_RE, "-");
+    .replace(SANITIZE_FILE_NAME_INVALID_RE, '-')
+    .replace(SANITIZE_FILE_NAME_SPACE_RE, '-')
 }
 
 function getExportBaseName(): string {
-  return `${sanitizeFileName(pageName.value)}-variable`;
+  return `${sanitizeFileName(pageName.value)}-variable`
 }
 
 function buildExportRows(): PageVarListItemLike[] {
   return Object.entries(pageVars.value).map(([name, detail]) => ({
     name,
-    type: detail?.type || "string",
+    type: detail?.type || 'string',
     default: formatDefaultValue({ default: detail?.default }),
-    description: detail?.description || "",
-  }));
+    description: detail?.description || '',
+  }))
 }
 
 function normalizeRowKey(row: ImportRowLike, key: string): unknown {
-  const lowerKey = key.toLowerCase();
-  const hit = Object.keys(row).find((k) => k.toLowerCase() === lowerKey);
-  return hit ? row[hit] : "";
+  const lowerKey = key.toLowerCase()
+  const hit = Object.keys(row).find((k) => k.toLowerCase() === lowerKey)
+  return hit ? row[hit] : ''
 }
 
 function mergeImportedRows(rows: ImportRowLike[]): void {
-  const nextVars = { ...pageVars.value };
-  let added = 0;
-  let skipped = 0;
+  const nextVars = { ...pageVars.value }
+  let added = 0
+  let skipped = 0
 
   rows.forEach((row) => {
-    const name = String(normalizeRowKey(row, "name") || "").trim();
-    if (!name) return;
+    const name = String(normalizeRowKey(row, 'name') || '').trim()
+    if (!name) return
     if (nextVars[name]) {
-      skipped += 1;
-      return;
+      skipped += 1
+      return
     }
-    const type = String(normalizeRowKey(row, "type") || "string").trim();
-    const defaultRaw = normalizeRowKey(row, "default");
-    const description = String(normalizeRowKey(row, "description") || "");
+    const type = String(normalizeRowKey(row, 'type') || 'string').trim()
+    const defaultRaw = normalizeRowKey(row, 'default')
+    const description = String(normalizeRowKey(row, 'description') || '')
     const value =
-      type === "number"
+      type === 'number'
         ? Number(defaultRaw)
-        : type === "boolean"
-          ? Boolean(defaultRaw === true || String(defaultRaw).toLowerCase() === "true")
-          : type === "date"
+        : type === 'boolean'
+          ? Boolean(defaultRaw === true || String(defaultRaw).toLowerCase() === 'true')
+          : type === 'date'
             ? defaultRaw || null
-            : defaultRaw;
+            : defaultRaw
     nextVars[name] = {
       type,
       default: value,
       description,
-    };
-    added += 1;
-  });
+    }
+    added += 1
+  })
 
-  commitPageVars(nextVars);
-  ElMessage.success(`导入完成，新增 ${added} 项，跳过 ${skipped} 项` as never);
+  commitPageVars(nextVars)
+  ElMessage.success(`导入完成，新增 ${added} 项，跳过 ${skipped} 项` as never)
 }
 
 function handleExport(format: string): void {
-  const rows = buildExportRows();
-  const baseName = getExportBaseName();
-  if (format === "json") {
+  const rows = buildExportRows()
+  const baseName = getExportBaseName()
+  if (format === 'json') {
     const payload = {
-      pageId: currentPageId.value || "",
+      pageId: currentPageId.value || '',
       vars: pageVars.value || {},
-    };
-    downloadBlob(JSON.stringify(payload, null, 2), `${baseName}.json`, "application/json");
-    return;
+    }
+    downloadBlob(JSON.stringify(payload, null, 2), `${baseName}.json`, 'application/json')
+    return
   }
 
-  const worksheet = XLSX.utils.json_to_sheet(rows);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "variables");
-  if (format === "csv") {
-    const csv = XLSX.utils.sheet_to_csv(worksheet);
-    downloadBlob(csv, `${baseName}.csv`, "text/csv");
-    return;
+  const worksheet = XLSX.utils.json_to_sheet(rows)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'variables')
+  if (format === 'csv') {
+    const csv = XLSX.utils.sheet_to_csv(worksheet)
+    downloadBlob(csv, `${baseName}.csv`, 'text/csv')
+    return
   }
-  const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+  const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
   downloadBlob(
     buffer,
     `${baseName}.xlsx`,
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  );
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
 }
 
 function handleImport(format: string): void {
-  importType.value = format;
+  importType.value = format
   if (importInputRef.value) {
-    importInputRef.value.value = "";
-    importInputRef.value.click();
+    importInputRef.value.value = ''
+    importInputRef.value.click()
   }
 }
 
 async function handleFileChange(event: Event): Promise<void> {
-  const file = (event.target as HTMLInputElement | null)?.files?.[0];
-  if (!file) return;
-  if (importType.value === "json") {
-    const text = await file.text();
+  const file = (event.target as HTMLInputElement | null)?.files?.[0]
+  if (!file) return
+  if (importType.value === 'json') {
+    const text = await file.text()
     try {
-      const data = JSON.parse(text);
-      if (data && typeof data === "object" && data.vars) {
-        const vars = data.vars as Record<string, PageVarDefinitionLike>;
+      const data = JSON.parse(text)
+      if (data && typeof data === 'object' && data.vars) {
+        const vars = data.vars as Record<string, PageVarDefinitionLike>
         mergeImportedRows(
           Object.entries(vars).map(([name, detail]) => ({
             name,
-            type: detail?.type || "string",
+            type: detail?.type || 'string',
             default: detail?.default,
-            description: detail?.description || "",
+            description: detail?.description || '',
           })),
-        );
-        return;
+        )
+        return
       }
       if (Array.isArray(data)) {
-        mergeImportedRows(data as ImportRowLike[]);
-        return;
+        mergeImportedRows(data as ImportRowLike[])
+        return
       }
-      ElMessage.error("JSON 格式不支持" as never);
+      ElMessage.error('JSON 格式不支持' as never)
     } catch {
-      ElMessage.error("JSON 解析失败" as never);
+      ElMessage.error('JSON 解析失败' as never)
     }
-    return;
+    return
   }
 
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: "array" });
-  const sheetName = workbook.SheetNames[0];
+  const buffer = await file.arrayBuffer()
+  const workbook = XLSX.read(buffer, { type: 'array' })
+  const sheetName = workbook.SheetNames[0]
   if (!sheetName) {
-    ElMessage.error("文件中没有数据表" as never);
-    return;
+    ElMessage.error('文件中没有数据表' as never)
+    return
   }
-  const sheet = workbook.Sheets[sheetName];
+  const sheet = workbook.Sheets[sheetName]
   if (!sheet) {
-    ElMessage.error("文件中没有数据表" as never);
-    return;
+    ElMessage.error('文件中没有数据表' as never)
+    return
   }
   const rows = XLSX.utils.sheet_to_json(sheet, {
-    defval: "",
-  }) as ImportRowLike[];
-  mergeImportedRows(rows);
+    defval: '',
+  }) as ImportRowLike[]
+  mergeImportedRows(rows)
 }
 
 watch(currentPageId, () => {
-  selectedVarName.value = "";
-});
+  selectedVarName.value = ''
+})
 </script>
 
 <template>

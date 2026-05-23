@@ -191,7 +191,8 @@ describe('request interceptor', () => {
   })
 
   it('错误提取函数应读取 code/msg/reqId', async () => {
-    const { getApiErrorCode, getApiErrorMessage, getApiErrorReqId } = await import('@/utils/request')
+    const { getApiErrorCode, getApiErrorMessage, getApiErrorReqId } =
+      await import('@/utils/request')
     const error = {
       response: {
         status: 400,

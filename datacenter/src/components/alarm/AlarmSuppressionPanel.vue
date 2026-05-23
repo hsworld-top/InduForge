@@ -2,7 +2,7 @@
   <section class="alarm-suppression-panel">
     <header>
       <strong>抑制策略</strong>
-      <span>{{ enabled ? "已启用" : "未启用" }}</span>
+      <span>{{ enabled ? '已启用' : '未启用' }}</span>
     </header>
 
     <div class="alarm-suppression-panel__grid">
@@ -39,51 +39,51 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import type { AlarmPolicyDraft } from "@/components/alarm/alarmPolicyModel";
+import { computed } from 'vue'
+import type { AlarmPolicyDraft } from '@/components/alarm/alarmPolicyModel'
 
-type AlarmSuppression = Record<string, unknown>;
+type AlarmSuppression = Record<string, unknown>
 
 const props = defineProps<{
-  draft: AlarmPolicyDraft;
-}>();
+  draft: AlarmPolicyDraft
+}>()
 
 const emit = defineEmits<{
-  update: [patch: Partial<AlarmPolicyDraft>];
-}>();
+  update: [patch: Partial<AlarmPolicyDraft>]
+}>()
 
-const enabled = computed(() => props.draft.suppression.enabled === true);
+const enabled = computed(() => props.draft.suppression.enabled === true)
 
-const inputValue = (event: Event) => (event.target as HTMLInputElement).value;
-const checkboxValue = (event: Event) => (event.target as HTMLInputElement).checked;
+const inputValue = (event: Event) => (event.target as HTMLInputElement).value
+const checkboxValue = (event: Event) => (event.target as HTMLInputElement).checked
 
 const updateSuppression = (suppression: AlarmSuppression) => {
-  emit("update", { suppression, dirty: true });
-};
+  emit('update', { suppression, dirty: true })
+}
 
 const update = (field: string, value: unknown) => {
-  updateSuppression({ ...props.draft.suppression, [field]: value });
-};
+  updateSuppression({ ...props.draft.suppression, [field]: value })
+}
 
 const updateOptionalNumber = (field: string, value: string) => {
-  const next = { ...props.draft.suppression };
-  if (value === "") {
-    delete next[field];
+  const next = { ...props.draft.suppression }
+  if (value === '') {
+    delete next[field]
   } else {
-    next[field] = Number(value);
+    next[field] = Number(value)
   }
-  updateSuppression(next);
-};
+  updateSuppression(next)
+}
 
 const numberText = (field: string) => {
-  const value = props.draft.suppression[field];
-  return typeof value === "number" && Number.isFinite(value) ? String(value) : "";
-};
+  const value = props.draft.suppression[field]
+  return typeof value === 'number' && Number.isFinite(value) ? String(value) : ''
+}
 
 const stringValue = (field: string) => {
-  const value = props.draft.suppression[field];
-  return typeof value === "string" ? value : "";
-};
+  const value = props.draft.suppression[field]
+  return typeof value === 'string' ? value : ''
+}
 </script>
 
 <style scoped>
@@ -143,8 +143,8 @@ const stringValue = (field: string) => {
   height: 14px;
 }
 
-.alarm-suppression-panel input[type="text"],
-.alarm-suppression-panel input[type="number"] {
+.alarm-suppression-panel input[type='text'],
+.alarm-suppression-panel input[type='number'] {
   width: 100%;
   height: 34px;
   border: 1px solid var(--dc-border);

@@ -81,16 +81,13 @@
           <!-- 概览数字：总数 / 在线 / 异常，靠右展示 -->
           <div class="access-source-workspace__overview">
             <span class="access-source-workspace__overview-text">
-              共 {{ overviewTotal }} · 在线 {{ overviewOnline }}<template v-if="overviewError > 0"> · 异常 {{ overviewError }}</template>
+              共 {{ overviewTotal }} · 在线 {{ overviewOnline
+              }}<template v-if="overviewError > 0"> · 异常 {{ overviewError }}</template>
             </span>
           </div>
 
           <!-- 新增连接 -->
-          <button
-            type="button"
-            class="access-source-workspace__primary"
-            @click="$emit('create')"
-          >
+          <button type="button" class="access-source-workspace__primary" @click="$emit('create')">
             <IconTablerPlus class="access-source-workspace__action-icon" />
             <span>新增连接</span>
           </button>
@@ -110,301 +107,282 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
-import { Search } from "@element-plus/icons-vue";
-import IconTablerPlus from "~icons/tabler/plus";
-import IconTablerRefresh from "~icons/tabler/refresh";
-import dataAPI from "@/api/data.api";
-import { deleteAccessSource } from "@/api/access-source.api";
-import { useConfirm } from "@/composables/useConfirm";
-import { getApiErrorMessage } from "@/utils/request";
-import AccessSourceList from "./AccessSourceList.vue";
-import PillButton from "@/components/shared/PillButton.vue";
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { Search } from '@element-plus/icons-vue'
+import IconTablerPlus from '~icons/tabler/plus'
+import IconTablerRefresh from '~icons/tabler/refresh'
+import dataAPI from '@/api/data.api'
+import { deleteAccessSource } from '@/api/access-source.api'
+import { useConfirm } from '@/composables/useConfirm'
+import { getApiErrorMessage } from '@/utils/request'
+import AccessSourceList from './AccessSourceList.vue'
+import PillButton from '@/components/shared/PillButton.vue'
 
 /* Search 图标赋值给变量，传给 el-input prefix-icon */
-const SearchIcon = Search;
+const SearchIcon = Search
 
 type AccessSourceConnection = {
-  id: string;
-  name?: string;
-  type?: string;
-  status?: string;
-  datapointCount?: number;
-  dataPointCount?: number;
+  id: string
+  name?: string
+  type?: string
+  status?: string
+  datapointCount?: number
+  dataPointCount?: number
   relationalConfig?: {
-    dbType?: string;
-    host?: string;
-    port?: number | string;
-    database?: string;
-  };
+    dbType?: string
+    host?: string
+    port?: number | string
+    database?: string
+  }
   mqttConfig?: {
-    protocol?: string;
-    brokerUrl?: string;
-    host?: string;
-    port?: number | string;
-    topic?: string;
-    defaultTopic?: string;
-  };
-  config?: Record<string, unknown>;
-};
+    protocol?: string
+    brokerUrl?: string
+    host?: string
+    port?: number | string
+    topic?: string
+    defaultTopic?: string
+  }
+  config?: Record<string, unknown>
+}
 
 const props = defineProps<{
-  connections: AccessSourceConnection[];
-  selectedConnectionId?: string | null;
-  projectId?: string | number | null;
-}>();
+  connections: AccessSourceConnection[]
+  selectedConnectionId?: string | null
+  projectId?: string | number | null
+}>()
 
 const emit = defineEmits<{
-  (event: "create"): void;
-  (event: "refresh"): void;
-  (event: "edit", connection: AccessSourceConnection): void;
-}>();
+  (event: 'create'): void
+  (event: 'refresh'): void
+  (event: 'edit', connection: AccessSourceConnection): void
+}>()
 
 /* ── toolbar 概览计算属性 ── */
-const overviewTotal = computed(() => props.connections.length);
-const overviewOnline = computed(() =>
-  props.connections.filter((c) => c.status === "connected").length,
-);
-const overviewError = computed(() =>
-  props.connections.filter((c) => c.status === "error" || c.status === "degraded")
-    .length,
-);
+const overviewTotal = computed(() => props.connections.length)
+const overviewOnline = computed(
+  () => props.connections.filter((c) => c.status === 'connected').length,
+)
+const overviewError = computed(
+  () => props.connections.filter((c) => c.status === 'error' || c.status === 'degraded').length,
+)
 
-const route = useRoute();
-const router = useRouter();
-const { confirm } = useConfirm();
+const route = useRoute()
+const router = useRouter()
+const { confirm } = useConfirm()
 
 /* ── URL 同步：从 query 读取初始筛选值 ── */
-const filterQ = ref(String(route.query.q || ""));
-const filterType = ref(String(route.query.type || "all"));
-const filterStatus = ref(String(route.query.status || "all"));
+const filterQ = ref(String(route.query.q || ''))
+const filterType = ref(String(route.query.type || 'all'))
+const filterStatus = ref(String(route.query.status || 'all'))
 
 /* 搜索框双向绑定值（防抖前的输入缓存） */
-const searchInputValue = ref(filterQ.value);
+const searchInputValue = ref(filterQ.value)
 
 /* 300ms 防抖 timer */
-let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const handleSearchInput = (val: string) => {
-  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
   searchDebounceTimer = setTimeout(() => {
-    filterQ.value = val.trim();
-    syncQuery();
-  }, 300);
-};
+    filterQ.value = val.trim()
+    syncQuery()
+  }, 300)
+}
 
 const handleSearchClear = () => {
-  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-  filterQ.value = "";
-  searchInputValue.value = "";
-  syncQuery();
-};
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  filterQ.value = ''
+  searchInputValue.value = ''
+  syncQuery()
+}
 
 /* 当前激活的连接 id：优先 URL params，其次 props，最后 null */
 const activeConnectionId = computed<string | null>(() => {
-  const paramId = String(route.params.objectId || "");
-  if (paramId) return paramId;
-  return props.selectedConnectionId || null;
-});
+  const paramId = String(route.params.objectId || '')
+  if (paramId) return paramId
+  return props.selectedConnectionId || null
+})
 
 /* 把当前筛选写入 URL query（仅写入非空字段）*/
 function syncQuery() {
-  const query: Record<string, string> = {};
-  if (filterQ.value) query.q = filterQ.value;
-  if (filterType.value && filterType.value !== "all") query.type = filterType.value;
-  if (filterStatus.value && filterStatus.value !== "all")
-    query.status = filterStatus.value;
-  void router.replace({ query });
+  const query: Record<string, string> = {}
+  if (filterQ.value) query.q = filterQ.value
+  if (filterType.value && filterType.value !== 'all') query.type = filterType.value
+  if (filterStatus.value && filterStatus.value !== 'all') query.status = filterStatus.value
+  void router.replace({ query })
 }
 
 /* ── 类型筛选选项 ── */
 const typeOptions = [
-  { label: "全部", value: "all" },
-  { label: "数据库", value: "database" },
-  { label: "消息/流", value: "stream" },
-  { label: "工业协议", value: "industrial" },
-];
+  { label: '全部', value: 'all' },
+  { label: '数据库', value: 'database' },
+  { label: '消息/流', value: 'stream' },
+  { label: '工业协议', value: 'industrial' },
+]
 
 const typeLabel = computed(() => {
-  const found = typeOptions.find((o) => o.value === filterType.value);
-  return found ? (filterType.value === "all" ? "类型" : found.label) : "类型";
-});
+  const found = typeOptions.find((o) => o.value === filterType.value)
+  return found ? (filterType.value === 'all' ? '类型' : found.label) : '类型'
+})
 
 const selectType = (val: string) => {
-  filterType.value = val;
-  syncQuery();
-};
+  filterType.value = val
+  syncQuery()
+}
 
 /* ── 状态筛选选项 ── */
 const statusOptions = [
-  { label: "全部", value: "all" },
-  { label: "在线", value: "connected" },
-  { label: "离线", value: "disconnected" },
-  { label: "异常", value: "error" },
-  { label: "未知", value: "unknown" },
-];
+  { label: '全部', value: 'all' },
+  { label: '在线', value: 'connected' },
+  { label: '离线', value: 'disconnected' },
+  { label: '异常', value: 'error' },
+  { label: '未知', value: 'unknown' },
+]
 
 const statusLabel = computed(() => {
-  const found = statusOptions.find((o) => o.value === filterStatus.value);
-  return found
-    ? filterStatus.value === "all"
-      ? "状态"
-      : found.label
-    : "状态";
-});
+  const found = statusOptions.find((o) => o.value === filterStatus.value)
+  return found ? (filterStatus.value === 'all' ? '状态' : found.label) : '状态'
+})
 
 const selectStatus = (val: string) => {
-  filterStatus.value = val;
-  syncQuery();
-};
+  filterStatus.value = val
+  syncQuery()
+}
 
 /* ── 分类判断（与旧 resolveCategory 逻辑一致）── */
 const resolveCategory = (connection: AccessSourceConnection) => {
-  const type = connection.type || "";
-  if (
-    ["relational", "mysql", "postgresql", "sqlserver", "tdengine", "redis"].includes(
-      type,
-    )
-  )
-    return "database";
-  if (["mqtt", "kafka", "websocket", "http"].includes(type)) return "stream";
-  if (["opcua", "opcda", "s7", "modbus"].includes(type)) return "industrial";
-  if (type.includes("opc") || type.includes("modbus")) return "industrial";
-  return "all";
-};
+  const type = connection.type || ''
+  if (['relational', 'mysql', 'postgresql', 'sqlserver', 'tdengine', 'redis'].includes(type))
+    return 'database'
+  if (['mqtt', 'kafka', 'websocket', 'http'].includes(type)) return 'stream'
+  if (['opcua', 'opcda', 's7', 'modbus'].includes(type)) return 'industrial'
+  if (type.includes('opc') || type.includes('modbus')) return 'industrial'
+  return 'all'
+}
 
 /* 状态归一：connected→connected, disconnected→disconnected, error/degraded→error, 其他→unknown */
 const resolveStatusKey = (status?: string) => {
-  if (status === "connected") return "connected";
-  if (status === "disconnected") return "disconnected";
-  if (status === "error" || status === "degraded") return "error";
-  return "unknown";
-};
+  if (status === 'connected') return 'connected'
+  if (status === 'disconnected') return 'disconnected'
+  if (status === 'error' || status === 'degraded') return 'error'
+  return 'unknown'
+}
 
 /* ── SQL 数据点数量本地加载（过渡期保留） ── */
 /* @deprecated A1 临时保留，后续随 A2/A3 移到 store */
-const localDatapointCounts = ref<Record<string, number>>({});
+const localDatapointCounts = ref<Record<string, number>>({})
 
 const isSqlConnection = (connection: AccessSourceConnection) => {
-  if (connection.type === "relational") return true;
-  return ["mysql", "postgresql", "sqlserver", "tdengine"].includes(
-    connection.type || "",
-  );
-};
+  if (connection.type === 'relational') return true
+  return ['mysql', 'postgresql', 'sqlserver', 'tdengine'].includes(connection.type || '')
+}
 
 const loadSqlDatapointCounts = async () => {
   if (!props.projectId) {
-    localDatapointCounts.value = {};
-    return;
+    localDatapointCounts.value = {}
+    return
   }
-  const sqlConnections = props.connections.filter(isSqlConnection);
-  const nextCounts: Record<string, number> = {};
+  const sqlConnections = props.connections.filter(isSqlConnection)
+  const nextCounts: Record<string, number> = {}
   await Promise.all(
     sqlConnections.map(async (connection) => {
       try {
         const queryResponse = await dataAPI.getQueries(props.projectId, {
           connectionId: connection.id,
-          queryType: "sql",
+          queryType: 'sql',
           page: 1,
           pageSize: 100,
-        });
-        const queries =
-          queryResponse.data?.queries || queryResponse.data || [];
-        const sourceIds = queries
-          .map((query: { id?: string }) => query.id)
-          .filter(Boolean);
+        })
+        const queries = queryResponse.data?.queries || queryResponse.data || []
+        const sourceIds = queries.map((query: { id?: string }) => query.id).filter(Boolean)
         if (sourceIds.length === 0) {
-          nextCounts[connection.id] = 0;
-          return;
+          nextCounts[connection.id] = 0
+          return
         }
         const pointResponse = await dataAPI.getDataPoints(props.projectId, {
-          type: "db.query",
-          sourceIds: sourceIds.join(","),
+          type: 'db.query',
+          sourceIds: sourceIds.join(','),
           page: 1,
           pageSize: 200,
-        });
-        nextCounts[connection.id] =
-          pointResponse.data?.datapoints?.length || 0;
+        })
+        nextCounts[connection.id] = pointResponse.data?.datapoints?.length || 0
       } catch {
-        const fallback =
-          connection.datapointCount ?? connection.dataPointCount;
-        if (typeof fallback === "number") nextCounts[connection.id] = fallback;
+        const fallback = connection.datapointCount ?? connection.dataPointCount
+        if (typeof fallback === 'number') nextCounts[connection.id] = fallback
       }
     }),
-  );
-  localDatapointCounts.value = nextCounts;
-};
+  )
+  localDatapointCounts.value = nextCounts
+}
 
 watch(
-  () => [props.projectId, props.connections.map((c) => c.id).join(",")],
+  () => [props.projectId, props.connections.map((c) => c.id).join(',')],
   () => {
-    void loadSqlDatapointCounts();
+    void loadSqlDatapointCounts()
   },
   { immediate: true },
-);
+)
 
 /* ── 前端过滤（基于 props.connections）── */
 const filteredConnections = computed(() => {
   let list = props.connections.map((connection) => {
-    const count = localDatapointCounts.value[connection.id];
-    if (typeof count !== "number") return connection;
-    return { ...connection, datapointCount: count, dataPointCount: count };
-  });
+    const count = localDatapointCounts.value[connection.id]
+    if (typeof count !== 'number') return connection
+    return { ...connection, datapointCount: count, dataPointCount: count }
+  })
 
   /* 名称搜索（大小写不敏感前缀模糊匹配）*/
   if (filterQ.value) {
-    const lower = filterQ.value.toLowerCase();
-    list = list.filter((c) => (c.name || "").toLowerCase().includes(lower));
+    const lower = filterQ.value.toLowerCase()
+    list = list.filter((c) => (c.name || '').toLowerCase().includes(lower))
   }
 
   /* 类型筛选 */
-  if (filterType.value !== "all") {
-    list = list.filter((c) => resolveCategory(c) === filterType.value);
+  if (filterType.value !== 'all') {
+    list = list.filter((c) => resolveCategory(c) === filterType.value)
   }
 
   /* 状态筛选 */
-  if (filterStatus.value !== "all") {
-    list = list.filter(
-      (c) => resolveStatusKey(c.status) === filterStatus.value,
-    );
+  if (filterStatus.value !== 'all') {
+    list = list.filter((c) => resolveStatusKey(c.status) === filterStatus.value)
   }
 
-  return list;
-});
+  return list
+})
 
 /* ── 事件处理 ── */
 const handleOpen = (connection: AccessSourceConnection) => {
   /* 直接 router.push 到 v2 workbench 路由，保留筛选 query */
-  const isDebug = route.path.startsWith("/debug/");
-  const base = isDebug ? "/debug" : "";
+  const isDebug = route.path.startsWith('/debug/')
+  const base = isDebug ? '/debug' : ''
   void router.push({
     path: `${base}/access-source/${connection.id}/workbench`,
     query: route.query,
-  });
-};
+  })
+}
 
 const handleEdit = (connection: AccessSourceConnection) => {
-  emit("edit", connection);
-};
+  emit('edit', connection)
+}
 
 /* 删除接入源：二次确认后调用 API，成功后通知父刷新 */
 const handleDeleteConnection = async (connection: AccessSourceConnection) => {
-  if (!props.projectId) return;
+  if (!props.projectId) return
   const ok = await confirm(
     `将删除接入源「${connection.name || connection.id}」。后端引用检查未启用，相关数据点可能受影响。`,
-    { title: "删除接入源", confirmText: "删除", type: "error" },
-  );
-  if (!ok) return;
+    { title: '删除接入源', confirmText: '删除', type: 'error' },
+  )
+  if (!ok) return
   try {
-    await deleteAccessSource(String(props.projectId), connection.id);
-    ElMessage.success("接入源已删除");
-    emit("refresh");
+    await deleteAccessSource(String(props.projectId), connection.id)
+    ElMessage.success('接入源已删除')
+    emit('refresh')
   } catch (err) {
-    ElMessage.error(getApiErrorMessage(err, "删除失败"));
+    ElMessage.error(getApiErrorMessage(err, '删除失败'))
   }
-};
+}
 </script>
 
 <style scoped>
@@ -539,7 +517,9 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
   font-size: 13px;
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.14s ease, color 0.14s ease;
+  transition:
+    background-color 0.14s ease,
+    color 0.14s ease;
 }
 
 .access-source-workspace__pop-item:hover {

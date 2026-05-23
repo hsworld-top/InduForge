@@ -2,107 +2,107 @@
   脚本编辑通用弹窗：只负责编辑体验，不决定脚本保存位置。
 -->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { useI18n } from "vue-i18n";
-import IconEpDocument from "~icons/ep/document";
-import IconEpEditPen from "~icons/ep/edit-pen";
-import IconEpFolder from "~icons/ep/folder";
-import IconEpList from "~icons/ep/list";
-import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
+import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import IconEpDocument from '~icons/ep/document'
+import IconEpEditPen from '~icons/ep/edit-pen'
+import IconEpFolder from '~icons/ep/folder'
+import IconEpList from '~icons/ep/list'
+import MonacoEditor from '@/ui/shared/widgets/base/monaco-editor-async'
 
 interface SidebarNodeLike {
-  id: string;
-  label: string;
-  type: string;
+  id: string
+  label: string
+  type: string
 }
 
 interface PageVariableRowLike {
-  name: string;
-  type?: string;
+  name: string
+  type?: string
 }
 
 export interface ScriptEditorTab {
-  key: string;
-  label: string;
+  key: string
+  label: string
 }
 
 const props = withDefaults(
   defineProps<{
-    dialogTitle: string;
-    metaTitle: string;
-    metaDescription?: string;
-    scope?: "global" | "page";
-    customScriptSidebarTree?: SidebarNodeLike[];
-    pageSidebarTree?: SidebarNodeLike[];
-    pageVariableRows?: PageVariableRowLike[];
-    jsCompletions?: unknown[];
-    filterSidebarNode: (value: string, data: SidebarNodeLike) => boolean;
-    beforeClose?: (...args: unknown[]) => void;
-    tabs?: ScriptEditorTab[];
+    dialogTitle: string
+    metaTitle: string
+    metaDescription?: string
+    scope?: 'global' | 'page'
+    customScriptSidebarTree?: SidebarNodeLike[]
+    pageSidebarTree?: SidebarNodeLike[]
+    pageVariableRows?: PageVariableRowLike[]
+    jsCompletions?: unknown[]
+    filterSidebarNode: (value: string, data: SidebarNodeLike) => boolean
+    beforeClose?: (...args: unknown[]) => void
+    tabs?: ScriptEditorTab[]
   }>(),
   {
-    metaDescription: "",
-    scope: "global",
+    metaDescription: '',
+    scope: 'global',
   },
-);
+)
 
 const emit = defineEmits([
-  "openVariableEnum",
-  "save",
-  "customInsert",
-  "pageInsert",
-  "pageVariableInsert",
-]);
-const visible = defineModel<boolean>({ default: false });
-const code = defineModel<string>("code", { default: "" });
-const scriptSearch = defineModel<string>("scriptSearch", { default: "" });
-const pageSearch = defineModel<string>("pageSearch", { default: "" });
-const pageVariableSearch = defineModel<string>("pageVariableSearch", { default: "" });
-const activeTab = defineModel<string>("activeTab", { default: "" });
+  'openVariableEnum',
+  'save',
+  'customInsert',
+  'pageInsert',
+  'pageVariableInsert',
+])
+const visible = defineModel<boolean>({ default: false })
+const code = defineModel<string>('code', { default: '' })
+const scriptSearch = defineModel<string>('scriptSearch', { default: '' })
+const pageSearch = defineModel<string>('pageSearch', { default: '' })
+const pageVariableSearch = defineModel<string>('pageVariableSearch', { default: '' })
+const activeTab = defineModel<string>('activeTab', { default: '' })
 
 interface TreeFilterLike {
-  filter?: (value: string) => void;
+  filter?: (value: string) => void
 }
 
 interface MonacoExposeLike {
-  insertText?: (text: string) => void;
-  format?: () => void;
+  insertText?: (text: string) => void
+  format?: () => void
 }
 
-const monacoRef = ref<MonacoExposeLike | null>(null);
-const customTreeRef = ref<TreeFilterLike | null>(null);
-const pageTreeRef = ref<TreeFilterLike | null>(null);
-const sidebarTab = ref("customScripts");
-const { t } = useI18n();
+const monacoRef = ref<MonacoExposeLike | null>(null)
+const customTreeRef = ref<TreeFilterLike | null>(null)
+const pageTreeRef = ref<TreeFilterLike | null>(null)
+const sidebarTab = ref('customScripts')
+const { t } = useI18n()
 
 const scopeLabel = computed(() =>
-  props.scope === "page" ? t("scriptPanel.page.scope") : t("scriptPanel.global.scope"),
-);
-const visibleTabs = computed(() => props.tabs || []);
+  props.scope === 'page' ? t('scriptPanel.page.scope') : t('scriptPanel.global.scope'),
+)
+const visibleTabs = computed(() => props.tabs || [])
 
 watch(scriptSearch, (value: string) => {
-  customTreeRef.value?.filter?.(value);
-});
+  customTreeRef.value?.filter?.(value)
+})
 
 watch(pageSearch, (value: string) => {
-  pageTreeRef.value?.filter?.(value);
-});
+  pageTreeRef.value?.filter?.(value)
+})
 
 defineExpose({
   insertText: (text: string) => monacoRef.value?.insertText?.(text),
   format: () => monacoRef.value?.format?.(),
-});
+})
 
 function handleCustomInsert(data: SidebarNodeLike) {
-  emit("customInsert", data);
+  emit('customInsert', data)
 }
 
 function handlePageInsert(data: SidebarNodeLike) {
-  emit("pageInsert", data);
+  emit('pageInsert', data)
 }
 
 function handlePageVariableInsert(row: PageVariableRowLike) {
-  emit("pageVariableInsert", row);
+  emit('pageVariableInsert', row)
 }
 </script>
 
@@ -144,7 +144,12 @@ function handlePageVariableInsert(row: PageVariableRowLike) {
         <el-tabs v-model="sidebarTab" class="sidebar-tabs">
           <el-tab-pane :label="t('scriptPanel.editor.customScripts')" name="customScripts">
             <div class="sidebar-section">
-              <el-input v-model="scriptSearch" size="small" :placeholder="t('scriptPanel.editor.searchScripts')" clearable />
+              <el-input
+                v-model="scriptSearch"
+                size="small"
+                :placeholder="t('scriptPanel.editor.searchScripts')"
+                clearable
+              />
               <div class="sidebar-scroll">
                 <el-tree
                   ref="customTreeRef"
@@ -200,7 +205,12 @@ function handlePageVariableInsert(row: PageVariableRowLike) {
           </el-tab-pane>
           <el-tab-pane :label="t('scriptPanel.editor.pages')" name="pages">
             <div class="sidebar-section">
-              <el-input v-model="pageSearch" size="small" :placeholder="t('scriptPanel.editor.searchPages')" clearable />
+              <el-input
+                v-model="pageSearch"
+                size="small"
+                :placeholder="t('scriptPanel.editor.searchPages')"
+                clearable
+              />
               <div class="sidebar-scroll">
                 <el-tree
                   ref="pageTreeRef"
@@ -234,8 +244,10 @@ function handlePageVariableInsert(row: PageVariableRowLike) {
       </div>
     </div>
     <template #footer>
-      <el-button @click="visible = false">{{ t("scriptPanel.editor.cancel") }}</el-button>
-      <el-button type="primary" @click="emit('save')">{{ t("scriptPanel.editor.saveShortcut") }}</el-button>
+      <el-button @click="visible = false">{{ t('scriptPanel.editor.cancel') }}</el-button>
+      <el-button type="primary" @click="emit('save')">{{
+        t('scriptPanel.editor.saveShortcut')
+      }}</el-button>
     </template>
   </el-dialog>
 </template>

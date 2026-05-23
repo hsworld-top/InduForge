@@ -2,68 +2,71 @@
   脚本面板：系统启动/关闭脚本编辑器兼容包装。
 -->
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { useI18n } from "vue-i18n";
-import ScriptEditorDialog from "./ScriptEditorDialog.vue";
+import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import ScriptEditorDialog from './ScriptEditorDialog.vue'
 
 interface SidebarNodeLike {
-  id: string;
-  label: string;
-  type: string;
+  id: string
+  label: string
+  type: string
 }
 
 interface PageVariableRowLike {
-  name: string;
-  type?: string;
+  name: string
+  type?: string
 }
 
-const props = withDefaults(defineProps<{
-  dialogTitle: string;
-  metaTitle: string;
-  customScriptSidebarTree?: SidebarNodeLike[];
-  pageSidebarTree?: SidebarNodeLike[];
-  pageVariableRows?: PageVariableRowLike[];
-  jsCompletions?: unknown[];
-  filterSidebarNode: (value: string, data: SidebarNodeLike) => boolean;
-  beforeClose?: (...args: unknown[]) => void;
-  tabs?: Array<{ key: string; label: string }>;
-}>(), {
-  customScriptSidebarTree: () => [],
-  pageSidebarTree: () => [],
-  pageVariableRows: () => [],
-  jsCompletions: () => [],
-  tabs: () => [],
-});
+const props = withDefaults(
+  defineProps<{
+    dialogTitle: string
+    metaTitle: string
+    customScriptSidebarTree?: SidebarNodeLike[]
+    pageSidebarTree?: SidebarNodeLike[]
+    pageVariableRows?: PageVariableRowLike[]
+    jsCompletions?: unknown[]
+    filterSidebarNode: (value: string, data: SidebarNodeLike) => boolean
+    beforeClose?: (...args: unknown[]) => void
+    tabs?: Array<{ key: string; label: string }>
+  }>(),
+  {
+    customScriptSidebarTree: () => [],
+    pageSidebarTree: () => [],
+    pageVariableRows: () => [],
+    jsCompletions: () => [],
+    tabs: () => [],
+  },
+)
 
 const emit = defineEmits([
-  "openVariableEnum",
-  "save",
-  "customInsert",
-  "pageInsert",
-  "pageVariableInsert",
-]);
-const visible = defineModel<boolean>({ default: false });
-const systemCode = defineModel<string>("systemCode", { default: "" });
-const scriptSearch = defineModel<string>("scriptSearch", { default: "" });
-const pageSearch = defineModel<string>("pageSearch", { default: "" });
-const pageVariableSearch = defineModel<string>("pageVariableSearch", { default: "" });
-const activeTab = defineModel<string>("activeTab", { default: "" });
+  'openVariableEnum',
+  'save',
+  'customInsert',
+  'pageInsert',
+  'pageVariableInsert',
+])
+const visible = defineModel<boolean>({ default: false })
+const systemCode = defineModel<string>('systemCode', { default: '' })
+const scriptSearch = defineModel<string>('scriptSearch', { default: '' })
+const pageSearch = defineModel<string>('pageSearch', { default: '' })
+const pageVariableSearch = defineModel<string>('pageVariableSearch', { default: '' })
+const activeTab = defineModel<string>('activeTab', { default: '' })
 
-const editorRef = ref<InstanceType<typeof ScriptEditorDialog> | null>(null);
-const { t } = useI18n();
-const metaDescription = computed(() => t("scriptPanel.editor.systemScript"));
+const editorRef = ref<InstanceType<typeof ScriptEditorDialog> | null>(null)
+const { t } = useI18n()
+const metaDescription = computed(() => t('scriptPanel.editor.systemScript'))
 const dialogAttrs = computed(() =>
   props.beforeClose
     ? {
         beforeClose: props.beforeClose,
       }
     : {},
-);
+)
 
 defineExpose({
   insertText: (text: string) => editorRef.value?.insertText?.(text),
   format: () => editorRef.value?.format?.(),
-});
+})
 </script>
 
 <template>

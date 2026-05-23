@@ -13,22 +13,15 @@
       <input
         type="checkbox"
         :checked="groupAllSelected(node.policyIds)"
-        :indeterminate.prop="
-          groupSomeSelected(node.policyIds) && !groupAllSelected(node.policyIds)
-        "
+        :indeterminate.prop="groupSomeSelected(node.policyIds) && !groupAllSelected(node.policyIds)"
         :disabled="!node.policyIds.length"
         @click.stop
         @change="$emit('selectGroup', node.policyIds, checked($event))"
       />
-      <IconTablerFolderOpen
-        v-if="expanded"
-        class="alarm-policy-branch__folder-icon"
-      />
+      <IconTablerFolderOpen v-if="expanded" class="alarm-policy-branch__folder-icon" />
       <IconTablerFolder v-else class="alarm-policy-branch__folder-icon" />
       <span class="alarm-policy-branch__group-name">{{ node.name }}</span>
-      <span class="alarm-policy-branch__count">{{
-        node.policyIds.length
-      }}</span>
+      <span class="alarm-policy-branch__count">{{ node.policyIds.length }}</span>
     </button>
 
     <div v-if="expanded" class="alarm-policy-branch__children">
@@ -78,86 +71,73 @@
         @select="$emit('select', $event)"
         @select-policy="(id, selected) => $emit('selectPolicy', id, selected)"
         @select-group="(ids, selected) => $emit('selectGroup', ids, selected)"
-        @policy-contextmenu="
-          (mouseEvent, policy) => $emit('policyContextmenu', mouseEvent, policy)
-        "
-        @group-contextmenu="
-          (mouseEvent, group) => $emit('groupContextmenu', mouseEvent, group)
-        "
+        @policy-contextmenu="(mouseEvent, policy) => $emit('policyContextmenu', mouseEvent, policy)"
+        @group-contextmenu="(mouseEvent, group) => $emit('groupContextmenu', mouseEvent, group)"
       />
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import IconTablerChevronRight from "~icons/tabler/chevron-right";
-import IconTablerCalculator from "~icons/tabler/calculator";
-import IconTablerFolder from "~icons/tabler/folder";
-import IconTablerFolderOpen from "~icons/tabler/folder-open";
-import IconTablerTemplate from "~icons/tabler/template";
-import type {
-  AlarmBulkSelection,
-  AlarmPolicy,
-} from "@/api/schemas/alarm.schema";
-import { t } from "@/i18n/runtime";
-import type { AlarmPolicyGroupNode } from "./alarmPolicyTreeModel";
+import { computed, ref } from 'vue'
+import IconTablerChevronRight from '~icons/tabler/chevron-right'
+import IconTablerCalculator from '~icons/tabler/calculator'
+import IconTablerFolder from '~icons/tabler/folder'
+import IconTablerFolderOpen from '~icons/tabler/folder-open'
+import IconTablerTemplate from '~icons/tabler/template'
+import type { AlarmBulkSelection, AlarmPolicy } from '@/api/schemas/alarm.schema'
+import { t } from '@/i18n/runtime'
+import type { AlarmPolicyGroupNode } from './alarmPolicyTreeModel'
 
-defineOptions({ name: "AlarmPolicyGroupBranch" });
+defineOptions({ name: 'AlarmPolicyGroupBranch' })
 
 const props = defineProps<{
-  node: AlarmPolicyGroupNode;
-  selection: AlarmBulkSelection;
-  selectedId: string;
-  dirtyPolicyIds?: string[];
-}>();
+  node: AlarmPolicyGroupNode
+  selection: AlarmBulkSelection
+  selectedId: string
+  dirtyPolicyIds?: string[]
+}>()
 
 defineEmits<{
-  select: [id: string];
-  selectPolicy: [id: string, selected: boolean];
-  selectGroup: [ids: string[], selected: boolean];
-  policyContextmenu: [mouseEvent: MouseEvent, policy: AlarmPolicy];
-  groupContextmenu: [mouseEvent: MouseEvent, group: AlarmPolicyGroupNode];
-}>();
+  select: [id: string]
+  selectPolicy: [id: string, selected: boolean]
+  selectGroup: [ids: string[], selected: boolean]
+  policyContextmenu: [mouseEvent: MouseEvent, policy: AlarmPolicy]
+  groupContextmenu: [mouseEvent: MouseEvent, group: AlarmPolicyGroupNode]
+}>()
 
-const expanded = ref(true);
-const dirtyPolicyIdSet = computed(() =>
-  new Set((props.dirtyPolicyIds || []).map(String)),
-);
+const expanded = ref(true)
+const dirtyPolicyIdSet = computed(() => new Set((props.dirtyPolicyIds || []).map(String)))
 
-const checked = (event: Event) => (event.target as HTMLInputElement).checked;
+const checked = (event: Event) => (event.target as HTMLInputElement).checked
 
 const isSelected = (id: string) => {
-  if (props.selection.mode === "filtered") {
-    return !props.selection.excludePolicyIds.includes(id);
+  if (props.selection.mode === 'filtered') {
+    return !props.selection.excludePolicyIds.includes(id)
   }
-  return props.selection.policyIds.includes(id);
-};
+  return props.selection.policyIds.includes(id)
+}
 
-const groupAllSelected = (ids: string[]) =>
-  ids.length > 0 && ids.every((id) => isSelected(id));
-const groupSomeSelected = (ids: string[]) => ids.some((id) => isSelected(id));
+const groupAllSelected = (ids: string[]) => ids.length > 0 && ids.every((id) => isSelected(id))
+const groupSomeSelected = (ids: string[]) => ids.some((id) => isSelected(id))
 
-const isPolicyDirty = (policy: AlarmPolicy) =>
-  dirtyPolicyIdSet.value.has(String(policy.id));
+const isPolicyDirty = (policy: AlarmPolicy) => dirtyPolicyIdSet.value.has(String(policy.id))
 
 const policyStatusText = (policy: AlarmPolicy) =>
   isPolicyDirty(policy)
-    ? t("alarm.unsaved")
+    ? t('alarm.unsaved')
     : policy.isEnabled
-      ? t("common.enabled")
-      : t("alarm.stopped");
+      ? t('common.enabled')
+      : t('alarm.stopped')
 
 const policyStatusTone = (policy: AlarmPolicy) =>
-  isPolicyDirty(policy) ? "warning" : policy.effectiveEnabled ? "success" : "muted";
+  isPolicyDirty(policy) ? 'warning' : policy.effectiveEnabled ? 'success' : 'muted'
 
 const policyModeText = (policy: AlarmPolicy) =>
-  policy.mode === "derived"
-    ? t("alarm.modes.derived")
-    : t("alarm.modes.perTarget");
+  policy.mode === 'derived' ? t('alarm.modes.derived') : t('alarm.modes.perTarget')
 
 const policyModeIcon = (policy: AlarmPolicy) =>
-  policy.mode === "derived" ? IconTablerCalculator : IconTablerTemplate;
+  policy.mode === 'derived' ? IconTablerCalculator : IconTablerTemplate
 </script>
 
 <style scoped>

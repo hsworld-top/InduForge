@@ -26,11 +26,7 @@
       </div>
 
       <div v-if="normalizedGroups.length > 0" class="project-group-manager__list">
-        <div
-          v-for="group in normalizedGroups"
-          :key="group.id"
-          class="project-group-manager__item"
-        >
+        <div v-for="group in normalizedGroups" :key="group.id" class="project-group-manager__item">
           <div class="project-group-manager__item-main">
             <div class="project-group-manager__item-name">{{ group.name }}</div>
             <div class="project-group-manager__item-count">

@@ -2,11 +2,7 @@
   <section class="mqtt-workbench">
     <aside class="mqtt-workbench__explorer">
       <div class="mqtt-workbench__source">
-        <button
-          type="button"
-          class="mqtt-workbench__back"
-          @click="$emit('back')"
-        >
+        <button type="button" class="mqtt-workbench__back" @click="$emit('back')">
           <IconTablerArrowLeft />
           <span>返回接入源</span>
         </button>
@@ -17,7 +13,7 @@
             :show-after="400"
           >
             <strong class="mqtt-workbench__source-name">
-              {{ connection.name || "未命名 MQTT 接入源" }}
+              {{ connection.name || '未命名 MQTT 接入源' }}
             </strong>
           </el-tooltip>
           <button
@@ -27,7 +23,7 @@
             :title="connectionStarted ? '断开' : '连接'"
             @click="toggleMqttPreview"
           >
-            <span>{{ connectionStarted ? "断开" : "连接" }}</span>
+            <span>{{ connectionStarted ? '断开' : '连接' }}</span>
           </button>
         </div>
 
@@ -126,7 +122,7 @@
             v-if="filteredGroups.length === 0 && filteredRootSubscriptions.length === 0"
             class="mqtt-workbench__empty"
           >
-            {{ filterText ? "没有匹配的订阅" : "暂无订阅" }}
+            {{ filterText ? '没有匹配的订阅' : '暂无订阅' }}
           </div>
         </template>
       </div>
@@ -144,38 +140,35 @@
         >
           <component :is="tab.icon" />
           <span>{{ tab.title }}</span>
-          <IconTablerX
-            class="mqtt-workbench__tab-close"
-            @click.stop="closeTab(tab.id)"
-          />
+          <IconTablerX class="mqtt-workbench__tab-close" @click.stop="closeTab(tab.id)" />
         </button>
       </div>
 
       <div :key="workbenchContentKey" class="mqtt-workbench__content">
         <template v-if="activeContentTabs.length > 0">
           <template v-for="tab in activeContentTabs" :key="tab.id">
-          <MqttMessageViewer
-            v-if="tab.type === 'messages'"
-            :ref="(el) => setMessageViewerRef(tab.id, el)"
-            :subscription="tab.subscription"
-            :project-id="projectIdText"
-            :connection-id="connection.id"
-          />
+            <MqttMessageViewer
+              v-if="tab.type === 'messages'"
+              :ref="(el) => setMessageViewerRef(tab.id, el)"
+              :subscription="tab.subscription"
+              :project-id="projectIdText"
+              :connection-id="connection.id"
+            />
 
-          <div
-            v-else-if="tab.type === 'tags'"
-            class="mqtt-workbench__tag-panel"
-            :class="{ 'is-config-only': !connectionStarted }"
-          >
-            <div class="mqtt-workbench__tag-list">
-              <MqttTagList
-                :project-id="projectIdText"
-                :subscription-id="tab.subscription.id"
-                :preview-session-id="connectionStarted ? previewSessionId : ''"
-                @open-monitor="openTagMonitor(tab.subscription)"
-              />
+            <div
+              v-else-if="tab.type === 'tags'"
+              class="mqtt-workbench__tag-panel"
+              :class="{ 'is-config-only': !connectionStarted }"
+            >
+              <div class="mqtt-workbench__tag-list">
+                <MqttTagList
+                  :project-id="projectIdText"
+                  :subscription-id="tab.subscription.id"
+                  :preview-session-id="connectionStarted ? previewSessionId : ''"
+                  @open-monitor="openTagMonitor(tab.subscription)"
+                />
+              </div>
             </div>
-          </div>
           </template>
         </template>
         <div v-else class="mqtt-workbench__placeholder">
@@ -246,7 +239,7 @@
           <IconTablerRss />
           <div>
             <strong>{{ detailSubscription.name || detailSubscription.topic }}</strong>
-            <span>{{ detailSubscription.topic || "-" }}</span>
+            <span>{{ detailSubscription.topic || '-' }}</span>
           </div>
         </div>
 
@@ -255,11 +248,11 @@
           <dl class="mqtt-workbench__facts">
             <div>
               <dt>名称</dt>
-              <dd>{{ detailSubscription.name || "-" }}</dd>
+              <dd>{{ detailSubscription.name || '-' }}</dd>
             </div>
             <div>
               <dt>Topic</dt>
-              <dd>{{ detailSubscription.topic || "-" }}</dd>
+              <dd>{{ detailSubscription.topic || '-' }}</dd>
             </div>
             <div>
               <dt>路径</dt>
@@ -275,7 +268,7 @@
             </div>
             <div>
               <dt>描述</dt>
-              <dd>{{ detailSubscription.description || "-" }}</dd>
+              <dd>{{ detailSubscription.description || '-' }}</dd>
             </div>
             <div>
               <dt>订阅 ID</dt>
@@ -293,7 +286,7 @@
             </div>
             <div>
               <dt>状态</dt>
-              <dd>{{ connectionStarted ? "已连接" : "未连接" }}</dd>
+              <dd>{{ connectionStarted ? '已连接' : '未连接' }}</dd>
             </div>
             <div>
               <dt>订阅</dt>
@@ -347,11 +340,7 @@
             <IconTablerFolderSymlink class="mqtt-workbench__menu-icon" />
             <span>移动到分组</span>
           </button>
-          <button
-            type="button"
-            class="is-danger"
-            @click="emitContextAction('delete')"
-          >
+          <button type="button" class="is-danger" @click="emitContextAction('delete')">
             <IconTablerTrash class="mqtt-workbench__menu-icon" />
             <span>删除</span>
           </button>
@@ -362,118 +351,107 @@
 </template>
 
 <script setup lang="ts">
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  shallowRef,
-  watch,
-} from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
-import IconTablerArrowLeft from "~icons/tabler/arrow-left";
-import IconTablerFolderPlus from "~icons/tabler/folder-plus";
-import IconTablerFolderSymlink from "~icons/tabler/folder-symlink";
-import IconTablerInfoCircle from "~icons/tabler/info-circle";
-import IconTablerLoader2 from "~icons/tabler/loader-2";
-import IconTablerMessages from "~icons/tabler/messages";
-import IconTablerPencil from "~icons/tabler/pencil";
-import IconTablerPlus from "~icons/tabler/plus";
-import IconTablerRefresh from "~icons/tabler/refresh";
-import IconTablerRss from "~icons/tabler/rss";
-import IconTablerTags from "~icons/tabler/tags";
-import IconTablerTrash from "~icons/tabler/trash";
-import IconTablerX from "~icons/tabler/x";
-import dataAPI from "@/api/data.api";
-import { usePreviewSession } from "@/composables/usePreviewSession";
-import { useMqttSocket } from "@/composables/useMqttSocket";
-import { getApiErrorMessage } from "@/utils/request";
-import DcDialog from "@/components/shared/DcDialog.vue";
-import MqttMessageViewer from "./MqttMessageViewer.vue";
-import MqttSubscriptionDialog from "./MqttSubscriptionDialog.vue";
-import MqttSubscriptionGroupDialog from "./MqttSubscriptionGroupDialog.vue";
-import MqttSubscriptionMoveDialog from "./MqttSubscriptionMoveDialog.vue";
-import MqttSubscriptionTreeBranch from "./MqttSubscriptionTreeBranch.vue";
-import MqttTagList from "./MqttTagList.vue";
-import MqttTagMonitor from "./MqttTagMonitor.vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import IconTablerArrowLeft from '~icons/tabler/arrow-left'
+import IconTablerFolderPlus from '~icons/tabler/folder-plus'
+import IconTablerFolderSymlink from '~icons/tabler/folder-symlink'
+import IconTablerInfoCircle from '~icons/tabler/info-circle'
+import IconTablerLoader2 from '~icons/tabler/loader-2'
+import IconTablerMessages from '~icons/tabler/messages'
+import IconTablerPencil from '~icons/tabler/pencil'
+import IconTablerPlus from '~icons/tabler/plus'
+import IconTablerRefresh from '~icons/tabler/refresh'
+import IconTablerRss from '~icons/tabler/rss'
+import IconTablerTags from '~icons/tabler/tags'
+import IconTablerTrash from '~icons/tabler/trash'
+import IconTablerX from '~icons/tabler/x'
+import dataAPI from '@/api/data.api'
+import { usePreviewSession } from '@/composables/usePreviewSession'
+import { useMqttSocket } from '@/composables/useMqttSocket'
+import { getApiErrorMessage } from '@/utils/request'
+import DcDialog from '@/components/shared/DcDialog.vue'
+import MqttMessageViewer from './MqttMessageViewer.vue'
+import MqttSubscriptionDialog from './MqttSubscriptionDialog.vue'
+import MqttSubscriptionGroupDialog from './MqttSubscriptionGroupDialog.vue'
+import MqttSubscriptionMoveDialog from './MqttSubscriptionMoveDialog.vue'
+import MqttSubscriptionTreeBranch from './MqttSubscriptionTreeBranch.vue'
+import MqttTagList from './MqttTagList.vue'
+import MqttTagMonitor from './MqttTagMonitor.vue'
 import {
   buildMqttSubscriptionTree,
   filterMqttSubscriptionTree,
   type MqttSubscription,
   type MqttSubscriptionGroup,
   type MqttSubscriptionGroupNode,
-} from "./mqttSubscriptionTreeModel";
+} from './mqttSubscriptionTreeModel'
 
 type MqttConnection = {
-  id: string;
-  name?: string;
-  mqttConfig?: Record<string, any>;
-  config?: Record<string, any>;
-};
+  id: string
+  name?: string
+  mqttConfig?: Record<string, any>
+  config?: Record<string, any>
+}
 
 const props = defineProps<{
-  projectId: string | number;
-  connection: MqttConnection;
-}>();
+  projectId: string | number
+  connection: MqttConnection
+}>()
 
 defineEmits<{
-  (event: "back"): void;
-}>();
+  (event: 'back'): void
+}>()
 
-const projectIdRef = computed(() => String(props.projectId || ""));
-const projectIdText = computed(() => projectIdRef.value);
-const config = computed(
-  () => props.connection.mqttConfig || props.connection.config || {},
-);
+const projectIdRef = computed(() => String(props.projectId || ''))
+const projectIdText = computed(() => projectIdRef.value)
+const config = computed(() => props.connection.mqttConfig || props.connection.config || {})
 const endpointText = computed(() => {
-  const host = config.value.brokerUrl || config.value.host || "未配置 Broker";
-  const port = config.value.port ? `:${config.value.port}` : "";
-  return `${host}${port}`;
-});
+  const host = config.value.brokerUrl || config.value.host || '未配置 Broker'
+  const port = config.value.port ? `:${config.value.port}` : ''
+  return `${host}${port}`
+})
 
-const { sessionId: previewSessionId, ensureSession } = usePreviewSession(
-  projectIdRef,
-  { autoStart: false },
-);
+const { sessionId: previewSessionId, ensureSession } = usePreviewSession(projectIdRef, {
+  autoStart: false,
+})
 const { connected: socketConnected, subscribeMessages } = useMqttSocket(
   projectIdRef,
   previewSessionId,
-);
+)
 
-const loading = ref(false);
-const subscriptions = ref<MqttSubscription[]>([]);
-const subscriptionGroups = ref<MqttSubscriptionGroup[]>([]);
-const selectedSubscription = ref<MqttSubscription | null>(null);
-const filterText = ref("");
-const connectionStarted = ref(false);
-const tabs = ref<any[]>([]);
-const activeTabId = ref("");
-const messageViewerRefs = shallowRef(new Map<string, any>());
-const messageCleanups = new Map<string, () => void>();
-const subscriptionDialogVisible = ref(false);
-const subscriptionDialogMode = ref<"create" | "edit">("create");
-const subscriptionDialogGroupId = ref<string | null>(null);
-const editingSubscription = ref<MqttSubscription | null>(null);
-const groupDialogVisible = ref(false);
-const groupDialogMode = ref<"create" | "rename">("create");
-const groupSaving = ref(false);
-const moveDialogVisible = ref(false);
-const moveTargetType = ref<"subscription" | "group">("subscription");
-const moveSaving = ref(false);
-const monitorDialogVisible = ref(false);
-const monitorSubscription = ref<MqttSubscription | null>(null);
-const detailDialogVisible = ref(false);
-const detailSubscription = ref<MqttSubscription | null>(null);
-const contextSubscription = ref<MqttSubscription | null>(null);
-const contextGroup = ref<MqttSubscriptionGroupNode | null>(null);
+const loading = ref(false)
+const subscriptions = ref<MqttSubscription[]>([])
+const subscriptionGroups = ref<MqttSubscriptionGroup[]>([])
+const selectedSubscription = ref<MqttSubscription | null>(null)
+const filterText = ref('')
+const connectionStarted = ref(false)
+const tabs = ref<any[]>([])
+const activeTabId = ref('')
+const messageViewerRefs = shallowRef(new Map<string, any>())
+const messageCleanups = new Map<string, () => void>()
+const subscriptionDialogVisible = ref(false)
+const subscriptionDialogMode = ref<'create' | 'edit'>('create')
+const subscriptionDialogGroupId = ref<string | null>(null)
+const editingSubscription = ref<MqttSubscription | null>(null)
+const groupDialogVisible = ref(false)
+const groupDialogMode = ref<'create' | 'rename'>('create')
+const groupSaving = ref(false)
+const moveDialogVisible = ref(false)
+const moveTargetType = ref<'subscription' | 'group'>('subscription')
+const moveSaving = ref(false)
+const monitorDialogVisible = ref(false)
+const monitorSubscription = ref<MqttSubscription | null>(null)
+const detailDialogVisible = ref(false)
+const detailSubscription = ref<MqttSubscription | null>(null)
+const contextSubscription = ref<MqttSubscription | null>(null)
+const contextGroup = ref<MqttSubscriptionGroupNode | null>(null)
 const contextMenu = ref<{
-  visible: boolean;
-  type: "subscription" | "group" | null;
-  x: number;
-  y: number;
-  subscription: MqttSubscription | null;
-  group: MqttSubscriptionGroupNode | null;
+  visible: boolean
+  type: 'subscription' | 'group' | null
+  x: number
+  y: number
+  subscription: MqttSubscription | null
+  group: MqttSubscriptionGroupNode | null
 }>({
   visible: false,
   type: null,
@@ -481,334 +459,319 @@ const contextMenu = ref<{
   y: 0,
   subscription: null,
   group: null,
-});
+})
 
-const activeTab = computed(
-  () => tabs.value.find((tab) => tab.id === activeTabId.value) || null,
-);
+const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId.value) || null)
 const hasActiveTab = computed(() =>
   Boolean(activeTabId.value && tabs.value.some((tab) => tab.id === activeTabId.value)),
-);
-const workbenchContentKey = computed(() => activeTab.value?.id || "empty");
+)
+const workbenchContentKey = computed(() => activeTab.value?.id || 'empty')
 const activeContentTabs = computed(() =>
   hasActiveTab.value && activeTab.value ? [activeTab.value] : [],
-);
+)
 
 const subscriptionTree = computed(() =>
   buildMqttSubscriptionTree(subscriptionGroups.value, subscriptions.value),
-);
+)
 const filteredTree = computed(() =>
   filterMqttSubscriptionTree(
     subscriptionTree.value.rootGroups,
     subscriptionTree.value.rootSubscriptions,
     filterText.value,
   ),
-);
-const filteredGroups = computed(() => filteredTree.value.groups);
-const filteredRootSubscriptions = computed(() => filteredTree.value.subscriptions);
+)
+const filteredGroups = computed(() => filteredTree.value.groups)
+const filteredRootSubscriptions = computed(() => filteredTree.value.subscriptions)
 
 const groupNameMap = computed(() => {
-  const map = new Map<string, { name: string; parentId: string | null }>();
+  const map = new Map<string, { name: string; parentId: string | null }>()
   const visit = (groups: MqttSubscriptionGroup[], parentId: string | null) => {
     groups.forEach((group) => {
-      const id = String(group.id);
+      const id = String(group.id)
       const groupParentId =
-        group.parentId === null || group.parentId === undefined || group.parentId === ""
+        group.parentId === null || group.parentId === undefined || group.parentId === ''
           ? parentId
-          : String(group.parentId);
-      map.set(id, { name: group.name, parentId: groupParentId });
-      visit(group.children || [], id);
-    });
-  };
-  visit(subscriptionGroups.value, null);
-  return map;
-});
+          : String(group.parentId)
+      map.set(id, { name: group.name, parentId: groupParentId })
+      visit(group.children || [], id)
+    })
+  }
+  visit(subscriptionGroups.value, null)
+  return map
+})
 
 const loadWorkbenchTree = async () => {
-  loading.value = true;
+  loading.value = true
   try {
     const [subscriptionsResponse, groupsResponse] = await Promise.all([
       dataAPI.getMqttSubscriptions(projectIdText.value, props.connection.id),
       dataAPI.getMqttSubscriptionGroups(projectIdText.value, props.connection.id),
-    ]);
-    subscriptions.value = subscriptionsResponse.data?.list || [];
-    subscriptionGroups.value = groupsResponse.data?.list || [];
+    ])
+    subscriptions.value = subscriptionsResponse.data?.list || []
+    subscriptionGroups.value = groupsResponse.data?.list || []
     if (
       subscriptions.value.length > 0 &&
       !subscriptions.value.some(
         (subscription) => subscription.id === selectedSubscription.value?.id,
       )
     ) {
-      selectedSubscription.value = subscriptions.value[0];
+      selectedSubscription.value = subscriptions.value[0]
     }
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "加载 MQTT 订阅树失败"));
+    ElMessage.error(getApiErrorMessage(error, '加载 MQTT 订阅树失败'))
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 
-const loadSubscriptions = loadWorkbenchTree;
+const loadSubscriptions = loadWorkbenchTree
 
 const ensureMqttPreview = async () => {
-  const session = await ensureSession();
+  const session = await ensureSession()
   if (!session) {
-    ElMessage.warning("预览会话不可用");
-    return false;
+    ElMessage.warning('预览会话不可用')
+    return false
   }
-  if (connectionStarted.value) return true;
+  if (connectionStarted.value) return true
 
   try {
-    await dataAPI.startMqttConnection(projectIdText.value, props.connection.id);
-    connectionStarted.value = true;
-    ElMessage.success("MQTT 已连接");
-    return true;
+    await dataAPI.startMqttConnection(projectIdText.value, props.connection.id)
+    connectionStarted.value = true
+    ElMessage.success('MQTT 已连接')
+    return true
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "MQTT 连接失败"));
-    return false;
+    ElMessage.error(getApiErrorMessage(error, 'MQTT 连接失败'))
+    return false
   }
-};
+}
 
 const stopMqttPreview = async () => {
-  if (!connectionStarted.value) return true;
+  if (!connectionStarted.value) return true
 
   try {
-    cleanupMessageSubscriptions();
-    messageViewerRefs.value.clear();
-    monitorDialogVisible.value = false;
-    monitorSubscription.value = null;
-    tabs.value = tabs.value.filter((tab) => tab.type !== "messages");
+    cleanupMessageSubscriptions()
+    messageViewerRefs.value.clear()
+    monitorDialogVisible.value = false
+    monitorSubscription.value = null
+    tabs.value = tabs.value.filter((tab) => tab.type !== 'messages')
     if (!tabs.value.some((tab) => tab.id === activeTabId.value)) {
-      activeTabId.value = tabs.value[0]?.id || "";
+      activeTabId.value = tabs.value[0]?.id || ''
     }
-    await dataAPI.stopMqttConnection(projectIdText.value, props.connection.id);
-    connectionStarted.value = false;
-    ElMessage.success("MQTT 已断开");
-    return true;
+    await dataAPI.stopMqttConnection(projectIdText.value, props.connection.id)
+    connectionStarted.value = false
+    ElMessage.success('MQTT 已断开')
+    return true
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "MQTT 断开失败"));
-    return false;
+    ElMessage.error(getApiErrorMessage(error, 'MQTT 断开失败'))
+    return false
   }
-};
+}
 
 const toggleMqttPreview = async () => {
   if (connectionStarted.value) {
-    await stopMqttPreview();
-    return;
+    await stopMqttPreview()
+    return
   }
-  await ensureMqttPreview();
-};
+  await ensureMqttPreview()
+}
 
 const addTab = (tab: any) => {
-  const existing = tabs.value.find((item) => item.id === tab.id);
+  const existing = tabs.value.find((item) => item.id === tab.id)
   if (existing) {
-    activeTabId.value = existing.id;
-    return existing;
+    activeTabId.value = existing.id
+    return existing
   }
-  tabs.value.push(tab);
-  activeTabId.value = tab.id;
-  return tab;
-};
+  tabs.value.push(tab)
+  activeTabId.value = tab.id
+  return tab
+}
 
 const selectSubscription = (subscription: MqttSubscription) => {
-  void openTagManager(subscription);
-};
+  void openTagManager(subscription)
+}
 
 const openMessages = async (subscription: MqttSubscription) => {
-  selectedSubscription.value = subscription;
+  selectedSubscription.value = subscription
   if (!connectionStarted.value) {
-    ElMessage.warning("请先连接后再查看实时消息");
-    return;
+    ElMessage.warning('请先连接后再查看实时消息')
+    return
   }
 
   const tab = addTab({
     id: `mqtt-messages-${subscription.id}`,
-    type: "messages",
+    type: 'messages',
     title: `${subscription.name || subscription.topic} / 消息`,
     icon: IconTablerMessages,
     subscription,
-  });
+  })
 
   if (!messageCleanups.has(tab.id)) {
     const cleanup = subscribeMessages(subscription.id, (data) => {
-      const viewer = messageViewerRefs.value.get(tab.id);
-      viewer?.addMessage?.(data?.message || data);
-      viewer?.setConnected?.(true);
-    });
-    messageCleanups.set(tab.id, cleanup);
+      const viewer = messageViewerRefs.value.get(tab.id)
+      viewer?.addMessage?.(data?.message || data)
+      viewer?.setConnected?.(true)
+    })
+    messageCleanups.set(tab.id, cleanup)
   }
 
-  await nextTick();
-  messageViewerRefs.value.get(tab.id)?.setConnected?.(socketConnected.value);
-};
+  await nextTick()
+  messageViewerRefs.value.get(tab.id)?.setConnected?.(socketConnected.value)
+}
 
 const openTagManager = async (subscription: MqttSubscription) => {
-  selectedSubscription.value = subscription;
+  selectedSubscription.value = subscription
 
   addTab({
     id: `mqtt-tags-${subscription.id}`,
-    type: "tags",
+    type: 'tags',
     title: `${subscription.name || subscription.topic} / 变量`,
     icon: IconTablerTags,
     subscription,
-  });
-};
+  })
+}
 
 const openTagMonitor = (subscription: MqttSubscription) => {
-  selectedSubscription.value = subscription;
+  selectedSubscription.value = subscription
   if (!connectionStarted.value) {
-    ElMessage.warning("请先连接后再打开变量监控");
-    return;
+    ElMessage.warning('请先连接后再打开变量监控')
+    return
   }
-  monitorSubscription.value = subscription;
-  monitorDialogVisible.value = true;
-};
+  monitorSubscription.value = subscription
+  monitorDialogVisible.value = true
+}
 
 const refreshSelectedAndTabs = (subscription: MqttSubscription) => {
   if (selectedSubscription.value?.id === subscription.id) {
-    selectedSubscription.value = subscription;
+    selectedSubscription.value = subscription
   }
   tabs.value = tabs.value.map((tab) =>
     tab.subscription?.id === subscription.id
       ? {
           ...tab,
           title: `${subscription.name || subscription.topic} / ${
-            tab.type === "messages" ? "消息" : "变量"
+            tab.type === 'messages' ? '消息' : '变量'
           }`,
           subscription,
         }
       : tab,
-  );
-};
+  )
+}
 
 const subscriptionUpdatePayload = (
   subscription: MqttSubscription,
   patch: Partial<MqttSubscription> & { hasGroupId?: boolean },
 ) => ({
-  name: patch.name ?? subscription.name ?? "",
-  topic: patch.topic ?? subscription.topic ?? "",
+  name: patch.name ?? subscription.name ?? '',
+  topic: patch.topic ?? subscription.topic ?? '',
   qos: patch.qos ?? subscription.qos ?? 0,
   description:
-    patch.description !== undefined
-      ? patch.description || null
-      : subscription.description || null,
-  messageRetention:
-    patch.messageRetention ?? subscription.messageRetention ?? 1000,
+    patch.description !== undefined ? patch.description || null : subscription.description || null,
+  messageRetention: patch.messageRetention ?? subscription.messageRetention ?? 1000,
   order: patch.order ?? subscription.order ?? 0,
-  groupId:
-    patch.groupId !== undefined ? patch.groupId || null : subscription.groupId || null,
+  groupId: patch.groupId !== undefined ? patch.groupId || null : subscription.groupId || null,
   hasGroupId: patch.hasGroupId ?? true,
-});
+})
 
 function openCreateSubscriptionDialog(groupId: string | null) {
-  editingSubscription.value = null;
-  subscriptionDialogMode.value = "create";
-  subscriptionDialogGroupId.value = groupId;
-  subscriptionDialogVisible.value = true;
+  editingSubscription.value = null
+  subscriptionDialogMode.value = 'create'
+  subscriptionDialogGroupId.value = groupId
+  subscriptionDialogVisible.value = true
 }
 
 function openRenameSubscriptionDialog(subscription: MqttSubscription) {
-  editingSubscription.value = subscription;
-  subscriptionDialogMode.value = "edit";
-  subscriptionDialogGroupId.value = subscription.groupId || null;
-  subscriptionDialogVisible.value = true;
+  editingSubscription.value = subscription
+  subscriptionDialogMode.value = 'edit'
+  subscriptionDialogGroupId.value = subscription.groupId || null
+  subscriptionDialogVisible.value = true
 }
 
 function openSubscriptionDetail(subscription: MqttSubscription) {
-  selectedSubscription.value = subscription;
-  detailSubscription.value = subscription;
-  detailDialogVisible.value = true;
+  selectedSubscription.value = subscription
+  detailSubscription.value = subscription
+  detailDialogVisible.value = true
 }
 
 function openDetailTagManager() {
-  const subscription = detailSubscription.value;
-  if (!subscription) return;
-  detailDialogVisible.value = false;
-  void openTagManager(subscription);
+  const subscription = detailSubscription.value
+  if (!subscription) return
+  detailDialogVisible.value = false
+  void openTagManager(subscription)
 }
 
 function subscriptionPath(subscription: MqttSubscription) {
-  const names = [subscription.name || subscription.topic || subscription.id];
-  let groupId = subscription.groupId ? String(subscription.groupId) : "";
-  const visited = new Set<string>();
+  const names = [subscription.name || subscription.topic || subscription.id]
+  let groupId = subscription.groupId ? String(subscription.groupId) : ''
+  const visited = new Set<string>()
 
   while (groupId && !visited.has(groupId)) {
-    visited.add(groupId);
-    const group = groupNameMap.value.get(groupId);
-    if (!group) break;
-    names.unshift(group.name);
-    groupId = group.parentId || "";
+    visited.add(groupId)
+    const group = groupNameMap.value.get(groupId)
+    if (!group) break
+    names.unshift(group.name)
+    groupId = group.parentId || ''
   }
 
-  return ["根目录", ...names].join(" / ");
+  return ['根目录', ...names].join(' / ')
 }
 
 async function handleSubscriptionSaved(data?: any) {
-  const saved = data?.subscription || data;
-  if (saved?.id) refreshSelectedAndTabs(saved);
-  await loadWorkbenchTree();
+  const saved = data?.subscription || data
+  if (saved?.id) refreshSelectedAndTabs(saved)
+  await loadWorkbenchTree()
 }
 
 function openCreateGroupDialog() {
-  contextGroup.value = null;
-  groupDialogMode.value = "create";
-  groupDialogVisible.value = true;
+  contextGroup.value = null
+  groupDialogMode.value = 'create'
+  groupDialogVisible.value = true
 }
 
 function openRenameGroupDialog(group: MqttSubscriptionGroupNode) {
-  contextGroup.value = group;
-  groupDialogMode.value = "rename";
-  groupDialogVisible.value = true;
+  contextGroup.value = group
+  groupDialogMode.value = 'rename'
+  groupDialogVisible.value = true
 }
 
-async function handleGroupDialogSubmit(data: {
-  name: string;
-  parentId: string | null;
-}) {
-  groupSaving.value = true;
+async function handleGroupDialogSubmit(data: { name: string; parentId: string | null }) {
+  groupSaving.value = true
   try {
-    if (groupDialogMode.value === "create") {
-      await dataAPI.createMqttSubscriptionGroup(
-        projectIdText.value,
-        props.connection.id,
-        data,
-      );
-      ElMessage.success("分组已创建");
+    if (groupDialogMode.value === 'create') {
+      await dataAPI.createMqttSubscriptionGroup(projectIdText.value, props.connection.id, data)
+      ElMessage.success('分组已创建')
     } else if (contextGroup.value) {
-      await dataAPI.updateMqttSubscriptionGroup(
-        projectIdText.value,
-        contextGroup.value.id,
-        { name: data.name },
-      );
-      ElMessage.success("分组已重命名");
+      await dataAPI.updateMqttSubscriptionGroup(projectIdText.value, contextGroup.value.id, {
+        name: data.name,
+      })
+      ElMessage.success('分组已重命名')
     }
-    groupDialogVisible.value = false;
-    await loadWorkbenchTree();
+    groupDialogVisible.value = false
+    await loadWorkbenchTree()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "保存分组失败"));
+    ElMessage.error(getApiErrorMessage(error, '保存分组失败'))
   } finally {
-    groupSaving.value = false;
+    groupSaving.value = false
   }
 }
 
 function openMoveSubscriptionDialog(subscription: MqttSubscription) {
-  contextSubscription.value = subscription;
-  contextGroup.value = null;
-  moveTargetType.value = "subscription";
-  moveDialogVisible.value = true;
+  contextSubscription.value = subscription
+  contextGroup.value = null
+  moveTargetType.value = 'subscription'
+  moveDialogVisible.value = true
 }
 
 function openMoveGroupDialog(group: MqttSubscriptionGroupNode) {
-  contextSubscription.value = null;
-  contextGroup.value = group;
-  moveTargetType.value = "group";
-  moveDialogVisible.value = true;
+  contextSubscription.value = null
+  contextGroup.value = group
+  moveTargetType.value = 'group'
+  moveDialogVisible.value = true
 }
 
 async function handleMoveSubmit(groupId: string | null) {
-  moveSaving.value = true;
+  moveSaving.value = true
   try {
-    if (moveTargetType.value === "subscription" && contextSubscription.value) {
+    if (moveTargetType.value === 'subscription' && contextSubscription.value) {
       const response = await dataAPI.updateMqttSubscription(
         projectIdText.value,
         contextSubscription.value.id,
@@ -816,217 +779,210 @@ async function handleMoveSubmit(groupId: string | null) {
           groupId,
           hasGroupId: true,
         }),
-      );
-      const saved = response.data?.subscription || response.data;
-      if (saved?.id) refreshSelectedAndTabs(saved);
-      ElMessage.success("订阅已移动");
-    } else if (moveTargetType.value === "group" && contextGroup.value) {
-      await dataAPI.updateMqttSubscriptionGroup(
-        projectIdText.value,
-        contextGroup.value.id,
-        { parentId: groupId, hasParentId: true },
-      );
-      ElMessage.success("分组已移动");
+      )
+      const saved = response.data?.subscription || response.data
+      if (saved?.id) refreshSelectedAndTabs(saved)
+      ElMessage.success('订阅已移动')
+    } else if (moveTargetType.value === 'group' && contextGroup.value) {
+      await dataAPI.updateMqttSubscriptionGroup(projectIdText.value, contextGroup.value.id, {
+        parentId: groupId,
+        hasParentId: true,
+      })
+      ElMessage.success('分组已移动')
     }
-    moveDialogVisible.value = false;
-    await loadWorkbenchTree();
+    moveDialogVisible.value = false
+    await loadWorkbenchTree()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "移动失败"));
+    ElMessage.error(getApiErrorMessage(error, '移动失败'))
   } finally {
-    moveSaving.value = false;
+    moveSaving.value = false
   }
 }
 
 async function deleteSubscription(subscription: MqttSubscription) {
   const ok = await ElMessageBox.confirm(
     `确认删除订阅「${subscription.name || subscription.topic || subscription.id}」？此操作不可恢复。`,
-    "删除订阅",
+    '删除订阅',
     {
-      confirmButtonText: "删除",
-      cancelButtonText: "取消",
-      type: "warning",
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
     },
   )
     .then(() => true)
-    .catch(() => false);
-  if (!ok) return;
+    .catch(() => false)
+  if (!ok) return
 
   try {
-    await dataAPI.deleteMqttSubscription(projectIdText.value, subscription.id);
-    tabs.value = tabs.value.filter((tab) => tab.subscription?.id !== subscription.id);
+    await dataAPI.deleteMqttSubscription(projectIdText.value, subscription.id)
+    tabs.value = tabs.value.filter((tab) => tab.subscription?.id !== subscription.id)
     if (!tabs.value.some((tab) => tab.id === activeTabId.value)) {
-      activeTabId.value = tabs.value[0]?.id || "";
+      activeTabId.value = tabs.value[0]?.id || ''
     }
     if (selectedSubscription.value?.id === subscription.id) {
-      selectedSubscription.value = null;
+      selectedSubscription.value = null
     }
-    ElMessage.success("订阅已删除");
-    await loadWorkbenchTree();
+    ElMessage.success('订阅已删除')
+    await loadWorkbenchTree()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "删除订阅失败"));
+    ElMessage.error(getApiErrorMessage(error, '删除订阅失败'))
   }
 }
 
 const countGroupSubscriptions = (group: MqttSubscriptionGroupNode): number =>
   group.subscriptions.length +
-  group.children.reduce((sum, child) => sum + countGroupSubscriptions(child), 0);
+  group.children.reduce((sum, child) => sum + countGroupSubscriptions(child), 0)
 
 async function deleteGroup(group: MqttSubscriptionGroupNode) {
-  const subscriptionCount = countGroupSubscriptions(group);
+  const subscriptionCount = countGroupSubscriptions(group)
   const ok = await ElMessageBox.confirm(
     `确认删除分组「${group.name}」？组内 ${subscriptionCount} 个订阅会回到根目录。`,
-    "删除分组",
+    '删除分组',
     {
-      confirmButtonText: "删除",
-      cancelButtonText: "取消",
-      type: "warning",
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
     },
   )
     .then(() => true)
-    .catch(() => false);
-  if (!ok) return;
+    .catch(() => false)
+  if (!ok) return
 
   try {
-    await dataAPI.deleteMqttSubscriptionGroup(projectIdText.value, group.id);
-    ElMessage.success("分组已删除");
-    await loadWorkbenchTree();
+    await dataAPI.deleteMqttSubscriptionGroup(projectIdText.value, group.id)
+    ElMessage.success('分组已删除')
+    await loadWorkbenchTree()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "删除分组失败"));
+    ElMessage.error(getApiErrorMessage(error, '删除分组失败'))
   }
 }
 
-function openSubscriptionMenu(
-  event: MouseEvent,
-  subscription: MqttSubscription,
-) {
+function openSubscriptionMenu(event: MouseEvent, subscription: MqttSubscription) {
   contextMenu.value = {
     visible: true,
-    type: "subscription",
+    type: 'subscription',
     x: Math.min(event.clientX, window.innerWidth - 180),
     y: Math.min(event.clientY, window.innerHeight - 156),
     subscription,
     group: null,
-  };
+  }
 }
 
 function openGroupMenu(event: MouseEvent, group: MqttSubscriptionGroupNode) {
   contextMenu.value = {
     visible: true,
-    type: "group",
+    type: 'group',
     x: Math.min(event.clientX, window.innerWidth - 180),
     y: Math.min(event.clientY, window.innerHeight - 126),
     subscription: null,
     group,
-  };
+  }
 }
 
 function closeContextMenu() {
-  contextMenu.value.visible = false;
+  contextMenu.value.visible = false
 }
 
-function emitContextAction(
-  action: "rename" | "move" | "delete" | "messages" | "detail",
-) {
-  const { type, subscription, group } = contextMenu.value;
-  closeContextMenu();
-  if (type === "subscription" && subscription) {
-    if (action === "rename") {
-      openRenameSubscriptionDialog(subscription);
-      return;
+function emitContextAction(action: 'rename' | 'move' | 'delete' | 'messages' | 'detail') {
+  const { type, subscription, group } = contextMenu.value
+  closeContextMenu()
+  if (type === 'subscription' && subscription) {
+    if (action === 'rename') {
+      openRenameSubscriptionDialog(subscription)
+      return
     }
-    if (action === "move") {
-      openMoveSubscriptionDialog(subscription);
-      return;
+    if (action === 'move') {
+      openMoveSubscriptionDialog(subscription)
+      return
     }
-    if (action === "messages") {
-      void openMessages(subscription);
-      return;
+    if (action === 'messages') {
+      void openMessages(subscription)
+      return
     }
-    if (action === "detail") {
-      openSubscriptionDetail(subscription);
-      return;
+    if (action === 'detail') {
+      openSubscriptionDetail(subscription)
+      return
     }
-    void deleteSubscription(subscription);
-    return;
+    void deleteSubscription(subscription)
+    return
   }
-  if (type === "group" && group) {
-    if (action === "rename") {
-      openRenameGroupDialog(group);
-      return;
+  if (type === 'group' && group) {
+    if (action === 'rename') {
+      openRenameGroupDialog(group)
+      return
     }
-    if (action === "move") {
-      openMoveGroupDialog(group);
-      return;
+    if (action === 'move') {
+      openMoveGroupDialog(group)
+      return
     }
-    void deleteGroup(group);
+    void deleteGroup(group)
   }
 }
 
 const closeTab = (tabId: string) => {
-  messageCleanups.get(tabId)?.();
-  messageCleanups.delete(tabId);
-  messageViewerRefs.value.delete(tabId);
+  messageCleanups.get(tabId)?.()
+  messageCleanups.delete(tabId)
+  messageViewerRefs.value.delete(tabId)
 
-  const index = tabs.value.findIndex((tab) => tab.id === tabId);
-  if (index < 0) return;
-  const nextTabs = tabs.value.filter((tab) => tab.id !== tabId);
+  const index = tabs.value.findIndex((tab) => tab.id === tabId)
+  if (index < 0) return
+  const nextTabs = tabs.value.filter((tab) => tab.id !== tabId)
   const nextActiveTabId =
-    activeTabId.value === tabId ||
-    !nextTabs.some((tab) => tab.id === activeTabId.value)
-      ? nextTabs[index - 1]?.id || nextTabs[index]?.id || ""
-      : activeTabId.value;
-  tabs.value = nextTabs;
-  activeTabId.value = nextActiveTabId;
-};
+    activeTabId.value === tabId || !nextTabs.some((tab) => tab.id === activeTabId.value)
+      ? nextTabs[index - 1]?.id || nextTabs[index]?.id || ''
+      : activeTabId.value
+  tabs.value = nextTabs
+  activeTabId.value = nextActiveTabId
+}
 
 const setMessageViewerRef = (tabId: string, el: any) => {
   if (el) {
-    messageViewerRefs.value.set(tabId, el);
-    return;
+    messageViewerRefs.value.set(tabId, el)
+    return
   }
-  messageViewerRefs.value.delete(tabId);
-};
+  messageViewerRefs.value.delete(tabId)
+}
 
 const cleanupMessageSubscriptions = () => {
-  Array.from(messageCleanups.values()).forEach((cleanup) => cleanup?.());
-  messageCleanups.clear();
-};
+  Array.from(messageCleanups.values()).forEach((cleanup) => cleanup?.())
+  messageCleanups.clear()
+}
 
 onMounted(async () => {
-  await loadWorkbenchTree();
-});
+  await loadWorkbenchTree()
+})
 
 watch(
   () => props.connection.id,
   async () => {
-    cleanupMessageSubscriptions();
-    messageViewerRefs.value.clear();
-    monitorDialogVisible.value = false;
-    monitorSubscription.value = null;
-    detailDialogVisible.value = false;
-    detailSubscription.value = null;
-    tabs.value = [];
-    activeTabId.value = "";
-    selectedSubscription.value = null;
-    connectionStarted.value = false;
-    await loadWorkbenchTree();
+    cleanupMessageSubscriptions()
+    messageViewerRefs.value.clear()
+    monitorDialogVisible.value = false
+    monitorSubscription.value = null
+    detailDialogVisible.value = false
+    detailSubscription.value = null
+    tabs.value = []
+    activeTabId.value = ''
+    selectedSubscription.value = null
+    connectionStarted.value = false
+    await loadWorkbenchTree()
   },
-);
+)
 
 watch(
   socketConnected,
   (connected) => {
     messageViewerRefs.value.forEach((viewer) => {
-      viewer?.setConnected?.(connected);
-    });
+      viewer?.setConnected?.(connected)
+    })
   },
   { immediate: true },
-);
+)
 
 onBeforeUnmount(() => {
-  cleanupMessageSubscriptions();
-  messageViewerRefs.value.clear();
-});
+  cleanupMessageSubscriptions()
+  messageViewerRefs.value.clear()
+})
 </script>
 
 <style scoped>
@@ -1057,12 +1013,11 @@ onBeforeUnmount(() => {
 .mqtt-workbench__source {
   padding: 12px;
   border-bottom: 1px solid var(--dc-border);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in oklch, var(--dc-surface-raised) 92%, var(--dc-primary) 8%),
-      var(--dc-surface-muted)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--dc-surface-raised) 92%, var(--dc-primary) 8%),
+    var(--dc-surface-muted)
+  );
 }
 
 .mqtt-workbench__back {
@@ -1211,7 +1166,7 @@ onBeforeUnmount(() => {
   height: 6px;
   border-radius: 999px;
   background: currentColor;
-  content: "";
+  content: '';
 }
 
 .mqtt-workbench__connect-action:hover {

@@ -2,13 +2,13 @@
  * previewRuntime 纯辅助函数：排队键、数据点缓存键、组件调用队列回放。
  */
 
-import type { PreviewComponentRefInfo } from "./preview-runtime.types";
+import type { PreviewComponentRefInfo } from './preview-runtime.types'
 
-const COMPONENT_ALIAS_SUFFIX_RE = /\d+$/;
+const COMPONENT_ALIAS_SUFFIX_RE = /\d+$/
 
 export interface PendingComponentCall {
-  method: string;
-  args: unknown[];
+  method: string
+  args: unknown[]
 }
 
 /**
@@ -18,7 +18,7 @@ export interface PendingComponentCall {
  * @returns {string}
  */
 export function buildPendingKey(pageId: unknown, name: unknown): string {
-  return `${pageId || "global"}::${name}`;
+  return `${pageId || 'global'}::${name}`
 }
 
 /**
@@ -28,7 +28,7 @@ export function buildPendingKey(pageId: unknown, name: unknown): string {
  * @returns {string}
  */
 export function buildDatapointCacheKey(projectId: unknown, path: unknown): string {
-  return `${projectId || ""}::${path || ""}`;
+  return `${projectId || ''}::${path || ''}`
 }
 
 /**
@@ -37,7 +37,7 @@ export function buildDatapointCacheKey(projectId: unknown, path: unknown): strin
  * @returns {string}
  */
 export function getComponentAlias(name: string): string {
-  return String(name).replace(COMPONENT_ALIAS_SUFFIX_RE, "");
+  return String(name).replace(COMPONENT_ALIAS_SUFFIX_RE, '')
 }
 
 /**
@@ -56,12 +56,12 @@ export function queueComponentCall(
   method: string,
   args: unknown[],
 ): void {
-  if (!name) return;
-  const key = buildPendingKey(pageId, name);
+  if (!name) return
+  const key = buildPendingKey(pageId, name)
   if (!pendingCalls.has(key)) {
-    pendingCalls.set(key, []);
+    pendingCalls.set(key, [])
   }
-  pendingCalls.get(key)?.push({ method, args });
+  pendingCalls.get(key)?.push({ method, args })
 }
 
 /**
@@ -78,95 +78,95 @@ export function applyPendingCalls(
   name: unknown,
   refInfo: PreviewComponentRefInfo,
 ): void {
-  if (!name || !refInfo) return;
-  const key = buildPendingKey(pageId, name);
-  const calls = pendingCalls.get(key);
-  if (!calls || calls.length === 0) return;
+  if (!name || !refInfo) return
+  const key = buildPendingKey(pageId, name)
+  const calls = pendingCalls.get(key)
+  if (!calls || calls.length === 0) return
   calls.forEach((call) => {
-    const fn = refInfo[call.method];
-    if (typeof fn === "function") {
-      (fn as (...args: unknown[]) => void)(...(call.args || []));
+    const fn = refInfo[call.method]
+    if (typeof fn === 'function') {
+      ;(fn as (...args: unknown[]) => void)(...(call.args || []))
     }
-  });
-  pendingCalls.delete(key);
+  })
+  pendingCalls.delete(key)
 }
 
 /** 组件脚本转发：stub 方法名与 queueComponentCall 第三参一致 */
 export const COMPONENT_SCRIPT_QUEUE_METHODS = [
-  "SetText",
-  "SetType",
-  "SetEllipsis",
-  "SetTooltip",
-  "SetLoading",
-  "SetDisabled",
-  "Click",
-  "SetSrc",
-  "Preview",
-  "Reload",
-  "InsertItem",
-  "DeleteItem",
-  "ClearAll",
-  "ClearSelection",
-  "AppendRow",
-  "ToggleRowSelection",
-  "ToggleAllSelection",
-  "ToggleRowExpansion",
-  "SetCurrentRow",
-  "ClearSort",
-  "ClearFilter",
-  "Dolayout",
-  "Sort",
-  "SetData",
-  "SetRadioEnable",
-  "SetRadioVisible",
-  "SetCheckState",
-  "SetCheckEnable",
-  "SetCheckVisible",
-  "CheckAll",
-  "UpdateKeyChildren",
-  "SetCheckedNodes",
-  "SetCheckedKeys",
-  "SetChecked",
-  "SetCurrentKey",
-  "SetCurrentNode",
-  "Remove",
-  "Append",
-  "InsertBefore",
-  "InsertAfter",
-  "Open",
-  "Close",
-  "Toggle",
-  "SetActive",
-  "Collapse",
-  "Next",
-  "Prev",
-  "AddTab",
-  "RemoveTab",
-  "MoveToRight",
-  "MoveToLeft",
-  "Increase",
-  "Decrease",
-  "SetItems",
-  "AppendItem",
-  "Play",
-  "Pause",
-  "SetActiveItem",
-  "Load",
-  "PostMessage",
-  "Back",
-  "Forward",
-  "Reset",
-  "SetTitle",
-  "SetTotal",
-  "SetActiveNames",
-  "Filter",
-  "ExpandAll",
-  "CollapseAll",
-  "SetExpandedKeys",
-  "ScrollToTop",
-  "ScrollToRow",
-  "DoLayoutSafe",
-  "SetSelectionByKeys",
-  "SetPage",
-  "SetPageSize",
-] as const;
+  'SetText',
+  'SetType',
+  'SetEllipsis',
+  'SetTooltip',
+  'SetLoading',
+  'SetDisabled',
+  'Click',
+  'SetSrc',
+  'Preview',
+  'Reload',
+  'InsertItem',
+  'DeleteItem',
+  'ClearAll',
+  'ClearSelection',
+  'AppendRow',
+  'ToggleRowSelection',
+  'ToggleAllSelection',
+  'ToggleRowExpansion',
+  'SetCurrentRow',
+  'ClearSort',
+  'ClearFilter',
+  'Dolayout',
+  'Sort',
+  'SetData',
+  'SetRadioEnable',
+  'SetRadioVisible',
+  'SetCheckState',
+  'SetCheckEnable',
+  'SetCheckVisible',
+  'CheckAll',
+  'UpdateKeyChildren',
+  'SetCheckedNodes',
+  'SetCheckedKeys',
+  'SetChecked',
+  'SetCurrentKey',
+  'SetCurrentNode',
+  'Remove',
+  'Append',
+  'InsertBefore',
+  'InsertAfter',
+  'Open',
+  'Close',
+  'Toggle',
+  'SetActive',
+  'Collapse',
+  'Next',
+  'Prev',
+  'AddTab',
+  'RemoveTab',
+  'MoveToRight',
+  'MoveToLeft',
+  'Increase',
+  'Decrease',
+  'SetItems',
+  'AppendItem',
+  'Play',
+  'Pause',
+  'SetActiveItem',
+  'Load',
+  'PostMessage',
+  'Back',
+  'Forward',
+  'Reset',
+  'SetTitle',
+  'SetTotal',
+  'SetActiveNames',
+  'Filter',
+  'ExpandAll',
+  'CollapseAll',
+  'SetExpandedKeys',
+  'ScrollToTop',
+  'ScrollToRow',
+  'DoLayoutSafe',
+  'SetSelectionByKeys',
+  'SetPage',
+  'SetPageSize',
+] as const

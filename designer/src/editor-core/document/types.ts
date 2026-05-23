@@ -10,24 +10,24 @@
 
 // ==================== 基础类型 ====================
 
-const UUID_DASH_REGEX = /-/g;
-const PAGE_PATH_SPACE_REGEX = /\s+/g;
-const PAGE_PATH_FORBIDDEN_REGEX = /[/?#\\]+/g;
+const UUID_DASH_REGEX = /-/g
+const PAGE_PATH_SPACE_REGEX = /\s+/g
+const PAGE_PATH_FORBIDDEN_REGEX = /[/?#\\]+/g
 
 /**
  * 生成唯一 ID
  * @param {string} [prefix] - ID 前缀
  * @returns {string} 唯一 ID
  */
-export function generateId(prefix = ""): string {
-  return prefix + crypto.randomUUID().replace(UUID_DASH_REGEX, "").substring(0, 12);
+export function generateId(prefix = ''): string {
+  return prefix + crypto.randomUUID().replace(UUID_DASH_REGEX, '').substring(0, 12)
 }
 
 /**
  * Schema 版本号
  * @type {number}
  */
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 2
 
 // ==================== 工程元信息 ====================
 
@@ -753,505 +753,505 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * @property {string} [userId] - 用户 ID
  */
 
-export type ChangeType = "insert" | "remove" | "update" | "move";
-export type ChangeTarget = "node" | "graphic" | "page" | "symbol" | "entry";
+export type ChangeType = 'insert' | 'remove' | 'update' | 'move'
+export type ChangeTarget = 'node' | 'graphic' | 'page' | 'symbol' | 'entry'
 export interface Change {
-  type: ChangeType;
-  target: ChangeTarget;
-  id?: string | undefined;
-  parentId?: string | undefined;
-  index?: number | undefined;
-  oldValue?: unknown;
-  newValue?: unknown;
+  type: ChangeType
+  target: ChangeTarget
+  id?: string | undefined
+  parentId?: string | undefined
+  index?: number | undefined
+  oldValue?: unknown
+  newValue?: unknown
 }
 
 export type PatchOp =
-  | { op: "add"; path: string; value: unknown }
-  | { op: "remove"; path: string }
-  | { op: "replace"; path: string; value: unknown };
+  | { op: 'add'; path: string; value: unknown }
+  | { op: 'remove'; path: string }
+  | { op: 'replace'; path: string; value: unknown }
 
 export interface Patch {
-  ops: PatchOp[];
-  timestamp: number;
-  userId?: string;
+  ops: PatchOp[]
+  timestamp: number
+  userId?: string
 }
 
 // ==================== TypeScript 类型（与上文 JSDoc 对齐） ====================
 
-export type UITarget = "pc" | "bigscreen" | "mobile";
-export type SecurityMode = "nodeLocalAuth" | "centralAuth";
-export type DataProviderType = "dataCenter" | "api" | "mock";
-export type DataCapability = "mqtt" | "db" | "calc" | "api";
-export type VarType = "string" | "number" | "boolean" | "object" | "array";
-export type AssetType = "image" | "video" | "audio" | "font" | "json" | "other";
-export type StorageMode = "packaged" | "external" | "inline";
-export type FitMode = "contain" | "cover" | "fill" | "none";
+export type UITarget = 'pc' | 'bigscreen' | 'mobile'
+export type SecurityMode = 'nodeLocalAuth' | 'centralAuth'
+export type DataProviderType = 'dataCenter' | 'api' | 'mock'
+export type DataCapability = 'mqtt' | 'db' | 'calc' | 'api'
+export type VarType = 'string' | 'number' | 'boolean' | 'object' | 'array'
+export type AssetType = 'image' | 'video' | 'audio' | 'font' | 'json' | 'other'
+export type StorageMode = 'packaged' | 'external' | 'inline'
+export type FitMode = 'contain' | 'cover' | 'fill' | 'none'
 export type ActionType =
-  | "navigate"
-  | "login"
-  | "logout"
-  | "setVar"
-  | "callApi"
-  | "writeTag"
-  | "notify"
-  | "openUrl"
-  | "openDialog"
-  | "closeDialog"
-  | "refresh"
-  | "condition"
-  | "loop"
-  | "parallel"
-  | "delay";
+  | 'navigate'
+  | 'login'
+  | 'logout'
+  | 'setVar'
+  | 'callApi'
+  | 'writeTag'
+  | 'notify'
+  | 'openUrl'
+  | 'openDialog'
+  | 'closeDialog'
+  | 'refresh'
+  | 'condition'
+  | 'loop'
+  | 'parallel'
+  | 'delay'
 
 export interface ProjectMeta {
-  projectId: string;
-  name: string;
-  uiTargets: UITarget[];
-  createdAt: number;
-  updatedAt: number;
+  projectId: string
+  name: string
+  uiTargets: UITarget[]
+  createdAt: number
+  updatedAt: number
 }
 
 export interface SecurityDecl {
-  roles: string[];
-  mode: SecurityMode;
+  roles: string[]
+  mode: SecurityMode
 }
 
 export interface EntryConfig {
-  loginPageId?: string;
-  homePageId: string;
+  loginPageId?: string
+  homePageId: string
 }
 
 export interface DataProvider {
-  type: DataProviderType;
-  description?: string;
-  capabilities?: DataCapability[];
+  type: DataProviderType
+  description?: string
+  capabilities?: DataCapability[]
 }
 
 export interface VarDef {
-  type: VarType;
-  default: unknown;
-  description?: string;
+  type: VarType
+  default: unknown
+  description?: string
 }
 
 export interface VarsConfig {
-  global: Record<string, VarDef>;
-  pages: Record<string, Record<string, VarDef>>;
+  global: Record<string, VarDef>
+  pages: Record<string, Record<string, VarDef>>
 }
 
 export interface AssetRef {
-  type: AssetType;
-  uri: string;
-  storageMode: StorageMode;
-  contentHash?: string;
+  type: AssetType
+  uri: string
+  storageMode: StorageMode
+  contentHash?: string
 }
 
 export interface BackgroundConfig {
-  kind: "color" | "image" | "gradient";
-  value: string;
-  size?: "cover" | "contain" | "stretch" | "auto";
-  position?: string;
-  repeat?: "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
+  kind: 'color' | 'image' | 'gradient'
+  value: string
+  size?: 'cover' | 'contain' | 'stretch' | 'auto'
+  position?: string
+  repeat?: 'no-repeat' | 'repeat' | 'repeat-x' | 'repeat-y'
 }
 
 export interface PageMetaConfig {
-  title?: string;
-  description?: string;
+  title?: string
+  description?: string
 }
 
 export interface PageRouteConfig {
-  mode?: "auto" | "manual";
-  path?: string;
-  slug?: string;
+  mode?: 'auto' | 'manual'
+  path?: string
+  slug?: string
 }
 
 export interface PageViewportConfig {
-  preset?: "bigscreen" | "pc" | "tablet" | "phoneLandscape" | "phonePortrait" | "custom";
-  width: number;
-  height: number;
-  autoFit?: boolean;
-  lockAspectRatio?: boolean;
-  minWidth?: number;
-  minHeight?: number;
-  overflowMode?: "auto" | "hidden" | "scroll";
+  preset?: 'bigscreen' | 'pc' | 'tablet' | 'phoneLandscape' | 'phonePortrait' | 'custom'
+  width: number
+  height: number
+  autoFit?: boolean
+  lockAspectRatio?: boolean
+  minWidth?: number
+  minHeight?: number
+  overflowMode?: 'auto' | 'hidden' | 'scroll'
 }
 
 export interface PageRuntimeConfig {
-  openMode?: "replace" | "cover" | "popup";
+  openMode?: 'replace' | 'cover' | 'popup'
   popup?: {
-    width?: number;
-    height?: number;
-    center?: boolean;
-    maskClosable?: boolean;
-  };
+    width?: number
+    height?: number
+    center?: boolean
+    maskClosable?: boolean
+  }
   permission?: {
-    summary?: string;
-  };
-  cacheMode?: "default" | "cache" | "no-cache";
-  preloadMode?: "lazy" | "eager";
+    summary?: string
+  }
+  cacheMode?: 'default' | 'cache' | 'no-cache'
+  preloadMode?: 'lazy' | 'eager'
 }
 
 export interface RuntimeRoleRef {
-  roleId: string;
-  roleCode: string;
-  roleName: string;
+  roleId: string
+  roleCode: string
+  roleName: string
 }
 
 export interface PagePermissionScheme {
-  id: string;
-  name: string;
-  roleRefs: RuntimeRoleRef[];
+  id: string
+  name: string
+  roleRefs: RuntimeRoleRef[]
 }
 
 export interface PageRuntimeAccessConfig {
-  enabled: boolean;
-  allowedRoles: RuntimeRoleRef[];
-  schemes: PagePermissionScheme[];
+  enabled: boolean
+  allowedRoles: RuntimeRoleRef[]
+  schemes: PagePermissionScheme[]
 }
 
 export interface PageConfig {
-  meta?: PageMetaConfig;
-  route?: PageRouteConfig;
-  viewport?: PageViewportConfig;
-  width: number;
-  height: number;
-  fitMode?: FitMode;
-  showGrid?: boolean;
-  enableSnap?: boolean;
-  autoFit?: boolean;
-  background?: BackgroundConfig;
+  meta?: PageMetaConfig
+  route?: PageRouteConfig
+  viewport?: PageViewportConfig
+  width: number
+  height: number
+  fitMode?: FitMode
+  showGrid?: boolean
+  enableSnap?: boolean
+  autoFit?: boolean
+  background?: BackgroundConfig
   /** 页面级 CSS 样式配置，编辑态和预览态都会注入到页面画布中。 */
-  styleConfig?: string;
+  styleConfig?: string
   transition?: {
-    type?: "none" | "fade" | "slide" | "zoom";
-  };
-  runtime?: PageRuntimeConfig;
+    type?: 'none' | 'fade' | 'slide' | 'zoom'
+  }
+  runtime?: PageRuntimeConfig
   /**
    * 以下字段仍保留在编辑态模型中，确保旧页面与旧消费链在迁移期间继续可读。
    */
-  description?: string;
-  lockAspectRatio?: boolean;
-  enableMinSize?: boolean;
-  windowStyle?: "replace" | "cover" | "popup" | "normal";
-  permissionDesc?: string;
-  runtimeAccess?: PageRuntimeAccessConfig;
+  description?: string
+  lockAspectRatio?: boolean
+  enableMinSize?: boolean
+  windowStyle?: 'replace' | 'cover' | 'popup' | 'normal'
+  permissionDesc?: string
+  runtimeAccess?: PageRuntimeAccessConfig
 }
 
 export interface ComponentRuntimeAccessConfig {
-  visibleSchemeId?: string;
-  operableSchemeId?: string;
+  visibleSchemeId?: string
+  operableSchemeId?: string
 }
 
 export interface PermissionConfig {
-  runtimeAccess?: ComponentRuntimeAccessConfig;
+  runtimeAccess?: ComponentRuntimeAccessConfig
 }
 
 export interface Action {
-  type: ActionType;
-  config: Record<string, unknown>;
+  type: ActionType
+  config: Record<string, unknown>
 }
 
 export interface LifecycleConfig {
-  onMounted?: Action[];
-  onUnmounted?: Action[];
-  onActivated?: Action[];
-  onDeactivated?: Action[];
+  onMounted?: Action[]
+  onUnmounted?: Action[]
+  onActivated?: Action[]
+  onDeactivated?: Action[]
 }
 
 export interface PageNode {
-  id: string;
-  name: string;
-  path: string;
-  target: UITarget;
-  logicalId: string;
-  isDefaultTarget: boolean;
-  rootNodeId: string;
-  graphicsIds?: string[];
-  config: PageConfig;
-  lifecycle?: LifecycleConfig;
+  id: string
+  name: string
+  path: string
+  target: UITarget
+  logicalId: string
+  isDefaultTarget: boolean
+  rootNodeId: string
+  graphicsIds?: string[]
+  config: PageConfig
+  lifecycle?: LifecycleConfig
 }
 
 export interface FlexLayoutItem {
-  grow?: number;
-  shrink?: number;
-  basis?: string;
-  alignSelf?: string;
+  grow?: number
+  shrink?: number
+  basis?: string
+  alignSelf?: string
 }
 
 export interface AbsolutePosition {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  z?: number;
+  x: number
+  y: number
+  w: number
+  h: number
+  z?: number
 }
 
 export interface ConstraintsPosition {
-  top?: number;
-  right?: number;
-  bottom?: number;
-  left?: number;
-  width?: number;
-  height?: number;
-  keepAspect?: boolean;
+  top?: number
+  right?: number
+  bottom?: number
+  left?: number
+  width?: number
+  height?: number
+  keepAspect?: boolean
 }
 
 export interface FreeLayoutItem {
-  mode: "abs" | "constraints";
-  abs?: AbsolutePosition;
-  constraints?: ConstraintsPosition;
-  z?: number;
+  mode: 'abs' | 'constraints'
+  abs?: AbsolutePosition
+  constraints?: ConstraintsPosition
+  z?: number
 }
 
 export interface GridLayoutItem {
-  row: number;
-  col: number;
-  rowSpan?: number;
-  colSpan?: number;
+  row: number
+  col: number
+  rowSpan?: number
+  colSpan?: number
 }
 
 export interface LayoutItem {
-  flex?: FlexLayoutItem;
-  free?: FreeLayoutItem;
-  grid?: GridLayoutItem;
+  flex?: FlexLayoutItem
+  free?: FreeLayoutItem
+  grid?: GridLayoutItem
 }
 
 export interface TransformOp {
-  op: string;
-  args?: unknown[];
+  op: string
+  args?: unknown[]
 }
 
 export interface DatapointBinding {
-  kind: "datapoint";
-  provider: string;
-  datapointId: string;
-  path: string;
-  transform?: TransformOp[];
-  fallback?: unknown;
-  designMock?: unknown;
+  kind: 'datapoint'
+  provider: string
+  datapointId: string
+  path: string
+  transform?: TransformOp[]
+  fallback?: unknown
+  designMock?: unknown
 }
 
 export interface VarBinding {
-  kind: "var";
-  scope: "page" | "global";
-  name: string;
-  transform?: TransformOp[];
-  fallback?: unknown;
+  kind: 'var'
+  scope: 'page' | 'global'
+  name: string
+  transform?: TransformOp[]
+  fallback?: unknown
 }
 
 export interface ExprBinding {
-  kind: "expr";
-  expr: string;
-  fallback?: unknown;
+  kind: 'expr'
+  expr: string
+  fallback?: unknown
 }
 
-export type Binding = DatapointBinding | VarBinding | ExprBinding;
+export type Binding = DatapointBinding | VarBinding | ExprBinding
 
 export interface ProjectI18nLocale {
-  code: string;
-  name: string;
-  enabled: boolean;
+  code: string
+  name: string
+  enabled: boolean
 }
 
 export interface ProjectI18nResourceTarget {
-  pageId: string;
-  pageName?: string;
-  nodeId: string;
-  nodeLabel?: string;
-  nodeType?: string;
-  fieldPath: string;
+  pageId: string
+  pageName?: string
+  nodeId: string
+  nodeLabel?: string
+  nodeType?: string
+  fieldPath: string
 }
 
 export interface ProjectI18nResource {
-  key: string;
-  sourceText: string;
-  values: Record<string, string>;
-  target: ProjectI18nResourceTarget;
-  updatedAt?: string;
+  key: string
+  sourceText: string
+  values: Record<string, string>
+  target: ProjectI18nResourceTarget
+  updatedAt?: string
 }
 
 export interface ProjectI18nSettings {
-  enabled: boolean;
-  defaultLocale: string;
-  currentLocale: string;
-  locales: ProjectI18nLocale[];
-  resources: Record<string, ProjectI18nResource>;
+  enabled: boolean
+  defaultLocale: string
+  currentLocale: string
+  locales: ProjectI18nLocale[]
+  resources: Record<string, ProjectI18nResource>
 }
 
 export interface ComponentNodeI18n {
-  props?: Record<string, string>;
+  props?: Record<string, string>
 }
 
 export type GraphicType =
-  | "Canvas.Line"
-  | "Canvas.Rect"
-  | "Canvas.Circle"
-  | "Canvas.Ellipse"
-  | "Canvas.Polygon"
-  | "Canvas.Path"
-  | "Canvas.Pipe"
-  | "Canvas.Text"
-  | "Canvas.Symbol"
-  | "Canvas.Group";
+  | 'Canvas.Line'
+  | 'Canvas.Rect'
+  | 'Canvas.Circle'
+  | 'Canvas.Ellipse'
+  | 'Canvas.Polygon'
+  | 'Canvas.Path'
+  | 'Canvas.Pipe'
+  | 'Canvas.Text'
+  | 'Canvas.Symbol'
+  | 'Canvas.Group'
 
 export interface GraphicProps {
-  x?: number;
-  y?: number;
-  cx?: number;
-  cy?: number;
-  width?: number;
-  height?: number;
-  radius?: number;
-  rx?: number;
-  ry?: number;
-  points?: [number, number][];
-  d?: string;
-  fill?: string;
-  stroke?: string;
-  strokeWidth?: number;
-  text?: string;
-  fontSize?: number;
-  fontWeight?: string;
-  symbolId?: string;
-  scale?: number;
-  rotation?: number;
-  children?: string[];
-  [key: string]: unknown;
+  x?: number
+  y?: number
+  cx?: number
+  cy?: number
+  width?: number
+  height?: number
+  radius?: number
+  rx?: number
+  ry?: number
+  points?: [number, number][]
+  d?: string
+  fill?: string
+  stroke?: string
+  strokeWidth?: number
+  text?: string
+  fontSize?: number
+  fontWeight?: string
+  symbolId?: string
+  scale?: number
+  rotation?: number
+  children?: string[]
+  [key: string]: unknown
 }
 
 export interface PipeProps {
-  points: [number, number][];
-  width: number;
-  strokeColor?: string;
-  fillColor?: string;
-  flowDirection?: "forward" | "backward" | "none";
-  flowSpeed?: number;
-  flowColor?: string;
-  flowDash?: number[];
-  cornerRadius?: number;
-  startCap?: "flat" | "round" | "arrow";
-  endCap?: "flat" | "round" | "arrow";
-  [key: string]: unknown;
+  points: [number, number][]
+  width: number
+  strokeColor?: string
+  fillColor?: string
+  flowDirection?: 'forward' | 'backward' | 'none'
+  flowSpeed?: number
+  flowColor?: string
+  flowDash?: number[]
+  cornerRadius?: number
+  startCap?: 'flat' | 'round' | 'arrow'
+  endCap?: 'flat' | 'round' | 'arrow'
+  [key: string]: unknown
 }
 
 export interface ComponentNode {
-  id: string;
-  type: string;
-  label?: string;
-  props: Record<string, unknown>;
-  style: Record<string, unknown>;
-  styleConfig?: string;
-  detailConfig?: string;
-  layoutItem: LayoutItem | null;
-  positioning?: "absolute" | "flow";
-  absolutePos?: AbsolutePosition;
-  flowLayout?: FlexLayoutItem | GridLayoutItem;
-  bindings: Record<string, Binding>;
-  i18n?: ComponentNodeI18n;
-  permissions: PermissionConfig;
-  events: Record<string, Action[]>;
-  animations?: unknown[];
-  conditions?: Record<string, unknown>;
-  loop?: Record<string, unknown>;
-  slots?: Record<string, string[]>;
-  refId?: string;
-  overrides?: Record<string, Record<string, unknown>>;
-  children: string[];
-  locked?: boolean;
-  hidden?: boolean;
-  visible?: boolean;
+  id: string
+  type: string
+  label?: string
+  props: Record<string, unknown>
+  style: Record<string, unknown>
+  styleConfig?: string
+  detailConfig?: string
+  layoutItem: LayoutItem | null
+  positioning?: 'absolute' | 'flow'
+  absolutePos?: AbsolutePosition
+  flowLayout?: FlexLayoutItem | GridLayoutItem
+  bindings: Record<string, Binding>
+  i18n?: ComponentNodeI18n
+  permissions: PermissionConfig
+  events: Record<string, Action[]>
+  animations?: unknown[]
+  conditions?: Record<string, unknown>
+  loop?: Record<string, unknown>
+  slots?: Record<string, string[]>
+  refId?: string
+  overrides?: Record<string, Record<string, unknown>>
+  children: string[]
+  locked?: boolean
+  hidden?: boolean
+  visible?: boolean
 }
 
 export interface GraphicNode {
-  id: string;
-  type: GraphicType;
-  props: GraphicProps | PipeProps;
-  bindings: Record<string, Binding>;
-  events: Record<string, Action[]>;
-  animations?: unknown[];
-  z: number;
-  locked?: boolean;
-  visible?: boolean;
+  id: string
+  type: GraphicType
+  props: GraphicProps | PipeProps
+  bindings: Record<string, Binding>
+  events: Record<string, Action[]>
+  animations?: unknown[]
+  z: number
+  locked?: boolean
+  visible?: boolean
 }
 
 export interface SymbolDef {
-  id: string;
-  name: string;
-  category: string;
-  graphics: unknown[];
-  anchors: unknown[];
-  defaultSize: { width: number; height: number };
-  isBuiltin?: boolean;
+  id: string
+  name: string
+  category: string
+  graphics: unknown[]
+  anchors: unknown[]
+  defaultSize: { width: number; height: number }
+  isBuiltin?: boolean
 }
 
 export interface DiagramData {
-  diagramId: string;
-  shapes: unknown[];
-  version: number;
-  createdAt?: number;
-  updatedAt?: number;
+  diagramId: string
+  shapes: unknown[]
+  version: number
+  createdAt?: number
+  updatedAt?: number
 }
 
 export interface ProjectSchema {
-  schemaVersion: number;
-  project: ProjectMeta;
-  securityDecl: SecurityDecl;
-  entry: EntryConfig;
-  dataProviders: Record<string, DataProvider>;
-  vars: VarsConfig;
-  assetsById: Record<string, AssetRef>;
-  pagesById: Record<string, PageNode>;
-  nodesById: Record<string, ComponentNode>;
-  graphicsById: Record<string, GraphicNode>;
-  symbolsById: Record<string, SymbolDef>;
-  diagramsById?: Record<string, DiagramData>;
-  i18n?: ProjectI18nSettings;
+  schemaVersion: number
+  project: ProjectMeta
+  securityDecl: SecurityDecl
+  entry: EntryConfig
+  dataProviders: Record<string, DataProvider>
+  vars: VarsConfig
+  assetsById: Record<string, AssetRef>
+  pagesById: Record<string, PageNode>
+  nodesById: Record<string, ComponentNode>
+  graphicsById: Record<string, GraphicNode>
+  symbolsById: Record<string, SymbolDef>
+  diagramsById?: Record<string, DiagramData>
+  i18n?: ProjectI18nSettings
 }
 
-export type SelectableElement = { kind: "node"; id: string } | { kind: "graphic"; id: string };
+export type SelectableElement = { kind: 'node'; id: string } | { kind: 'graphic'; id: string }
 
 export type DrawingTool =
-  | "select"
-  | "marquee"
-  | "pan"
-  | "line"
-  | "rect"
-  | "circle"
-  | "ellipse"
-  | "polygon"
-  | "pipe"
-  | "text";
+  | 'select'
+  | 'marquee'
+  | 'pan'
+  | 'line'
+  | 'rect'
+  | 'circle'
+  | 'ellipse'
+  | 'polygon'
+  | 'pipe'
+  | 'text'
 
 export interface SelectionState {
-  selectedElements: SelectableElement[];
-  hoveredElement: SelectableElement | null;
-  dropTargetId: string | null;
-  anchorElement: SelectableElement | null;
-  activeTool: DrawingTool | null;
+  selectedElements: SelectableElement[]
+  hoveredElement: SelectableElement | null
+  dropTargetId: string | null
+  anchorElement: SelectableElement | null
+  activeTool: DrawingTool | null
 }
 
 export interface PageLockState {
-  pageId: string;
-  locked: boolean;
-  lockedBy?: string | undefined;
-  lockedByName?: string | undefined;
-  lockedAt?: number | undefined;
-  isOwner: boolean;
+  pageId: string
+  locked: boolean
+  lockedBy?: string | undefined
+  lockedByName?: string | undefined
+  lockedAt?: number | undefined
+  isOwner: boolean
 }
 
 export interface EditorReadonlyState {
-  readonly: boolean;
-  reason?: "no_permission" | "page_locked" | "viewer_role" | undefined;
-  lockedByName?: string | undefined;
+  readonly: boolean
+  reason?: 'no_permission' | 'page_locked' | 'viewer_role' | undefined
+  lockedByName?: string | undefined
 }
 
 export type LockResult =
   | { success: true }
   | {
-      success: false;
-      reason: "locked" | "error";
-      lockedByName?: string | undefined;
-      error?: unknown;
-    };
+      success: false
+      reason: 'locked' | 'error'
+      lockedByName?: string | undefined
+      error?: unknown
+    }
 
 // ==================== 工厂函数 ====================
 
@@ -1260,22 +1260,22 @@ export type LockResult =
  * @param meta - 工程元信息
  */
 export function createEmptySchema(meta: Partial<ProjectMeta> = {}): ProjectSchema {
-  const now = Date.now();
+  const now = Date.now()
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     project: {
-      projectId: meta.projectId || generateId("proj_"),
-      name: meta.name || "新工程",
-      uiTargets: meta.uiTargets || ["pc"],
+      projectId: meta.projectId || generateId('proj_'),
+      name: meta.name || '新工程',
+      uiTargets: meta.uiTargets || ['pc'],
       createdAt: meta.createdAt || now,
       updatedAt: meta.updatedAt || now,
     },
     securityDecl: {
-      roles: ["admin", "operator", "viewer"],
-      mode: "nodeLocalAuth",
+      roles: ['admin', 'operator', 'viewer'],
+      mode: 'nodeLocalAuth',
     },
     entry: {
-      homePageId: "",
+      homePageId: '',
     },
     dataProviders: {},
     vars: {
@@ -1287,7 +1287,7 @@ export function createEmptySchema(meta: Partial<ProjectMeta> = {}): ProjectSchem
     nodesById: {},
     graphicsById: {},
     symbolsById: {},
-  };
+  }
 }
 
 /**
@@ -1295,56 +1295,56 @@ export function createEmptySchema(meta: Partial<ProjectMeta> = {}): ProjectSchem
  * @param options - 页面配置
  */
 export function createPageNode(options: Partial<PageNode> = {}): PageNode {
-  const id = options.id || generateId("page_");
-  const rootNodeId = options.rootNodeId || generateId("node_");
-  const defaultPath = buildPagePathFromName(options.name || "新页面");
+  const id = options.id || generateId('page_')
+  const rootNodeId = options.rootNodeId || generateId('node_')
+  const defaultPath = buildPagePathFromName(options.name || '新页面')
   return {
     id,
-    name: options.name || "新页面",
+    name: options.name || '新页面',
     path: options.path || defaultPath,
-    target: options.target || "pc",
-    logicalId: options.logicalId || generateId("logic_"),
+    target: options.target || 'pc',
+    logicalId: options.logicalId || generateId('logic_'),
     isDefaultTarget: options.isDefaultTarget !== false,
     rootNodeId,
     graphicsIds: options.graphicsIds || [],
     config: {
       meta: {
-        title: "",
-        description: "",
+        title: '',
+        description: '',
       },
       route: {
-        mode: "auto",
+        mode: 'auto',
         path: options.path || defaultPath,
-        slug: defaultPath.replace(/^\//, ""),
+        slug: defaultPath.replace(/^\//, ''),
       },
       viewport: {
-        preset: "pc",
+        preset: 'pc',
         width: 1920,
         height: 1080,
         autoFit: true,
         lockAspectRatio: false,
         minWidth: 0,
         minHeight: 0,
-        overflowMode: "auto",
+        overflowMode: 'auto',
       },
       width: 1920,
       height: 1080,
-      fitMode: "contain",
+      fitMode: 'contain',
       showGrid: true,
       enableSnap: true,
       autoFit: true,
       background: {
-        kind: "color",
-        value: "#ffffff",
-        size: "cover",
-        position: "center",
-        repeat: "no-repeat",
+        kind: 'color',
+        value: '#ffffff',
+        size: 'cover',
+        position: 'center',
+        repeat: 'no-repeat',
       },
       transition: {
-        type: "none",
+        type: 'none',
       },
       runtime: {
-        openMode: "cover",
+        openMode: 'cover',
         popup: {
           width: 960,
           height: 540,
@@ -1352,31 +1352,31 @@ export function createPageNode(options: Partial<PageNode> = {}): PageNode {
           maskClosable: true,
         },
         permission: {
-          summary: "0item",
+          summary: '0item',
         },
-        cacheMode: "default",
-        preloadMode: "lazy",
+        cacheMode: 'default',
+        preloadMode: 'lazy',
       },
-      description: "",
+      description: '',
       lockAspectRatio: false,
       enableMinSize: false,
-      windowStyle: "cover",
-      permissionDesc: "0item",
+      windowStyle: 'cover',
+      permissionDesc: '0item',
       ...options.config,
     },
     lifecycle: options.lifecycle || {},
-  };
+  }
 }
 
 /**
  * 根据页面名称生成路由路径
  */
 export function buildPagePathFromName(name: string): string {
-  const normalized = String(name || "")
+  const normalized = String(name || '')
     .trim()
-    .replace(PAGE_PATH_SPACE_REGEX, "-");
-  const sanitized = normalized.replace(PAGE_PATH_FORBIDDEN_REGEX, "-");
-  return `/${sanitized || "page"}`;
+    .replace(PAGE_PATH_SPACE_REGEX, '-')
+  const sanitized = normalized.replace(PAGE_PATH_FORBIDDEN_REGEX, '-')
+  return `/${sanitized || 'page'}`
 }
 
 /**
@@ -1387,13 +1387,13 @@ export function createComponentNode(
   options: Partial<ComponentNode> = {},
 ): ComponentNode {
   return {
-    id: options.id || generateId("node_"),
+    id: options.id || generateId('node_'),
     type,
     label: options.label || type,
     props: options.props || {},
     style: options.style || {},
-    styleConfig: options.styleConfig || "",
-    detailConfig: options.detailConfig || "",
+    styleConfig: options.styleConfig || '',
+    detailConfig: options.detailConfig || '',
     layoutItem: options.layoutItem || null,
     bindings: options.bindings || {},
     permissions: options.permissions || {},
@@ -1403,7 +1403,7 @@ export function createComponentNode(
     children: options.children || [],
     locked: options.locked || false,
     visible: options.visible !== false,
-  };
+  }
 }
 
 /**
@@ -1414,7 +1414,7 @@ export function createGraphicNode(
   options: Partial<GraphicNode> = {},
 ): GraphicNode {
   return {
-    id: options.id || generateId("gfx_"),
+    id: options.id || generateId('gfx_'),
     type,
     props: (options.props ?? {}) as GraphicProps | PipeProps,
     bindings: options.bindings || {},
@@ -1423,14 +1423,14 @@ export function createGraphicNode(
     z: options.z || 0,
     locked: options.locked || false,
     visible: options.visible !== false,
-  };
+  }
 }
 
 /**
  * 创建可选中元素
  */
-export function createSelectableElement(kind: "node" | "graphic", id: string): SelectableElement {
-  return { kind, id };
+export function createSelectableElement(kind: 'node' | 'graphic', id: string): SelectableElement {
+  return { kind, id }
 }
 
 export default {
@@ -1441,4 +1441,4 @@ export default {
   createComponentNode,
   createGraphicNode,
   createSelectableElement,
-};
+}

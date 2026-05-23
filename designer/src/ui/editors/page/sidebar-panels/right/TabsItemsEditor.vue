@@ -3,8 +3,8 @@
   标签内容仍在画布中维护，这里只处理标签页结构和默认激活项。
 -->
 <script setup lang="ts">
-import { ElMessage } from "element-plus";
-import { computed, ref, watch } from "vue";
+import { ElMessage } from 'element-plus'
+import { computed, ref, watch } from 'vue'
 import {
   buildTabsChildKeyPatches,
   canRemoveTabsItem,
@@ -15,154 +15,160 @@ import {
   type TabsChildKeyPatch,
   type TabsChildLike,
   type TabsPanelItem,
-} from "./tabs-panel-utils";
-import ListItemsEditor from "./ListItemsEditor.vue";
+} from './tabs-panel-utils'
+import ListItemsEditor from './ListItemsEditor.vue'
 
 const props = defineProps<{
-  nodeProps: Record<string, unknown>;
-  childNodes: TabsChildLike[];
-}>();
+  nodeProps: Record<string, unknown>
+  childNodes: TabsChildLike[]
+}>()
 
 const emit = defineEmits<{
-  (event: "propsChange", patch: Record<string, unknown>): void;
-  (event: "childPatches", patches: TabsChildKeyPatch[]): void;
-}>();
+  (event: 'propsChange', patch: Record<string, unknown>): void
+  (event: 'childPatches', patches: TabsChildKeyPatch[]): void
+}>()
 
-const selectedKey = ref("");
-const itemsDialogVisible = ref(false);
+const selectedKey = ref('')
+const itemsDialogVisible = ref(false)
 
-const items = computed<TabsPanelItem[]>(() => normalizeTabsItems(props.nodeProps?.tabs));
+const items = computed<TabsPanelItem[]>(() => normalizeTabsItems(props.nodeProps?.tabs))
 const activeValue = computed<string>(() =>
   normalizeTabsModelValue(props.nodeProps?.modelValue ?? props.nodeProps?.activeName, items.value),
-);
+)
 const selectedItem = computed<TabsPanelItem | null>(
   () => items.value.find((item) => item.name === selectedKey.value) || items.value[0] || null,
-);
+)
 const itemOptions = computed(() =>
   items.value.map((item) => ({
     label: item.label || item.name,
     value: item.name,
   })),
-);
+)
 
 watch(
   items,
   (nextItems) => {
     if (nextItems.length === 0) {
-      selectedKey.value = "";
-      return;
+      selectedKey.value = ''
+      return
     }
     if (!nextItems.some((item) => item.name === selectedKey.value)) {
-      selectedKey.value = nextItems[0]!.name;
+      selectedKey.value = nextItems[0]!.name
     }
   },
   { immediate: true },
-);
+)
 
 function emitProps(nextProps: Record<string, unknown>) {
-  emit("propsChange", nextProps);
+  emit('propsChange', nextProps)
 }
 
 function emitItems(nextItems: TabsPanelItem[], extraProps: Record<string, unknown> = {}) {
-  const normalizedItems = normalizeTabsItems(nextItems);
+  const normalizedItems = normalizeTabsItems(nextItems)
   const nextActive = normalizeTabsModelValue(
-    extraProps.modelValue ?? extraProps.activeName ?? props.nodeProps?.modelValue ?? props.nodeProps?.activeName,
+    extraProps.modelValue ??
+      extraProps.activeName ??
+      props.nodeProps?.modelValue ??
+      props.nodeProps?.activeName,
     normalizedItems,
-  );
+  )
   emitProps({
     ...extraProps,
     tabs: normalizedItems,
     activeName: nextActive,
     modelValue: nextActive,
-  });
+  })
 }
 
 function handleActiveChange(value: string) {
-  const nextActive = normalizeTabsModelValue(value, items.value);
-  emitProps({ activeName: nextActive, modelValue: nextActive });
+  const nextActive = normalizeTabsModelValue(value, items.value)
+  emitProps({ activeName: nextActive, modelValue: nextActive })
 }
 
 function handleAddItem() {
-  const nextItem = createTabsItem(items.value);
-  selectedKey.value = nextItem.name;
-  emitItems([...items.value, nextItem], { modelValue: activeValue.value || nextItem.name });
+  const nextItem = createTabsItem(items.value)
+  selectedKey.value = nextItem.name
+  emitItems([...items.value, nextItem], { modelValue: activeValue.value || nextItem.name })
 }
 
 function handleDuplicateItem(key: string) {
-  const source = items.value.find((item) => item.name === key);
-  if (!source) return;
-  const baseItem = createTabsItem(items.value, `${source.label || source.name} 副本`);
+  const source = items.value.find((item) => item.name === key)
+  if (!source) return
+  const baseItem = createTabsItem(items.value, `${source.label || source.name} 副本`)
   const nextItem = {
     ...source,
     name: baseItem.name,
     label: baseItem.label,
-  };
-  selectedKey.value = nextItem.name;
-  emitItems([...items.value, nextItem]);
+  }
+  selectedKey.value = nextItem.name
+  emitItems([...items.value, nextItem])
 }
 
 function handleRemoveItem(key: string) {
-  const removeCheck = canRemoveTabsItem(key, props.childNodes || []);
+  const removeCheck = canRemoveTabsItem(key, props.childNodes || [])
   if (!removeCheck.ok) {
-    ElMessage.warning({ message: "该标签页中已有画布内容，请先在画布中移动或删除内容" } as never);
-    return;
+    ElMessage.warning({ message: '该标签页中已有画布内容，请先在画布中移动或删除内容' } as never)
+    return
   }
   if (items.value.length <= 1) {
-    ElMessage.warning({ message: "至少保留一个标签页" } as never);
-    return;
+    ElMessage.warning({ message: '至少保留一个标签页' } as never)
+    return
   }
-  const nextItems = items.value.filter((item) => item.name !== key);
-  selectedKey.value = nextItems[0]?.name || "";
+  const nextItems = items.value.filter((item) => item.name !== key)
+  selectedKey.value = nextItems[0]?.name || ''
   emitItems(nextItems, {
-    modelValue: normalizeTabsModelValue(props.nodeProps?.modelValue ?? props.nodeProps?.activeName, nextItems),
-  });
+    modelValue: normalizeTabsModelValue(
+      props.nodeProps?.modelValue ?? props.nodeProps?.activeName,
+      nextItems,
+    ),
+  })
 }
 
 function handleMoveItem(key: string, direction: -1 | 1) {
-  const index = items.value.findIndex((item) => item.name === key);
-  const nextIndex = index + direction;
-  if (index < 0 || nextIndex < 0 || nextIndex >= items.value.length) return;
-  const nextItems = [...items.value];
-  const [item] = nextItems.splice(index, 1);
-  if (!item) return;
-  nextItems.splice(nextIndex, 0, item);
-  emitItems(nextItems);
+  const index = items.value.findIndex((item) => item.name === key)
+  const nextIndex = index + direction
+  if (index < 0 || nextIndex < 0 || nextIndex >= items.value.length) return
+  const nextItems = [...items.value]
+  const [item] = nextItems.splice(index, 1)
+  if (!item) return
+  nextItems.splice(nextIndex, 0, item)
+  emitItems(nextItems)
 }
 
 function updateSelectedItem(patch: Partial<TabsPanelItem>) {
-  const current = selectedItem.value;
-  if (!current) return;
+  const current = selectedItem.value
+  if (!current) return
   const nextItems = items.value.map((item) =>
     item.name === current.name ? { ...item, ...patch } : item,
-  );
-  emitItems(nextItems);
+  )
+  emitItems(nextItems)
 }
 
 function handleNameChange(value: string) {
-  const current = selectedItem.value;
-  if (!current) return;
-  const result = renameTabsItem(items.value, current.name, value);
+  const current = selectedItem.value
+  if (!current) return
+  const result = renameTabsItem(items.value, current.name, value)
   if (!result.ok) {
     const messageMap: Record<string, string> = {
-      emptyName: "唯一标识不能为空",
-      duplicateName: "唯一标识不能重复",
-      missingItem: "当前标签页不存在",
-    };
-    ElMessage.warning({ message: messageMap[result.reason] || "标识更新失败" } as never);
-    return;
+      emptyName: '唯一标识不能为空',
+      duplicateName: '唯一标识不能重复',
+      missingItem: '当前标签页不存在',
+    }
+    ElMessage.warning({ message: messageMap[result.reason] || '标识更新失败' } as never)
+    return
   }
-  const patches = buildTabsChildKeyPatches(props.childNodes || [], result.oldName, result.newName);
-  const nextActive = activeValue.value === result.oldName ? result.newName : activeValue.value;
-  selectedKey.value = result.newName;
-  emit("childPatches", patches);
-  emitItems(result.items, { modelValue: nextActive });
+  const patches = buildTabsChildKeyPatches(props.childNodes || [], result.oldName, result.newName)
+  const nextActive = activeValue.value === result.oldName ? result.newName : activeValue.value
+  selectedKey.value = result.newName
+  emit('childPatches', patches)
+  emitItems(result.items, { modelValue: nextActive })
 }
 
 function openItemsDialog() {
   if (!selectedKey.value && items.value[0]) {
-    selectedKey.value = items.value[0].name;
+    selectedKey.value = items.value[0].name
   }
-  itemsDialogVisible.value = true;
+  itemsDialogVisible.value = true
 }
 </script>
 
@@ -260,7 +266,9 @@ function openItemsDialog() {
                 :rows="2"
                 size="small"
                 placeholder="标签页没有画布内容时显示"
-                @update:model-value="(val: any) => updateSelectedItem({ content: String(val || '') })"
+                @update:model-value="
+                  (val: any) => updateSelectedItem({ content: String(val || '') })
+                "
               />
             </div>
           </template>

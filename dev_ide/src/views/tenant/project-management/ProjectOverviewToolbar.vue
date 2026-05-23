@@ -1,7 +1,5 @@
 <template>
-  <section
-    class="project-overview-toolbar"
-  >
+  <section class="project-overview-toolbar">
     <div class="project-overview-toolbar__left" data-testid="overview-toolbar-left">
       <el-input
         v-model="searchModel"
@@ -70,11 +68,7 @@
       />
 
       <!-- 排序字段：pill 按钮 + popover 菜单 -->
-      <el-popover
-        placement="bottom-start"
-        :width="160"
-        trigger="click"
-      >
+      <el-popover placement="bottom-start" :width="160" trigger="click">
         <template #reference>
           <button
             type="button"
@@ -115,7 +109,11 @@
 
     <div class="project-overview-toolbar__right">
       <template v-if="selectedCount > 0">
-        <el-tooltip v-if="canExportProjects" :content="t('projectManagement.batchExport')" placement="top">
+        <el-tooltip
+          v-if="canExportProjects"
+          :content="t('projectManagement.batchExport')"
+          placement="top"
+        >
           <button
             type="button"
             data-testid="project-batch-export-trigger"
@@ -126,7 +124,11 @@
             <el-icon><Upload /></el-icon>
           </button>
         </el-tooltip>
-        <el-tooltip v-if="canDeleteProjects" :content="t('projectManagement.batchDelete')" placement="top">
+        <el-tooltip
+          v-if="canDeleteProjects"
+          :content="t('projectManagement.batchDelete')"
+          placement="top"
+        >
           <button
             type="button"
             data-testid="project-batch-delete-trigger"
@@ -139,7 +141,11 @@
         </el-tooltip>
       </template>
 
-      <el-tooltip v-if="canManageProjects" :content="t('projectManagement.addProject')" placement="top">
+      <el-tooltip
+        v-if="canManageProjects"
+        :content="t('projectManagement.addProject')"
+        placement="top"
+      >
         <button
           type="button"
           data-testid="project-add-trigger"
@@ -161,7 +167,11 @@
           <el-icon><RefreshRight /></el-icon>
         </button>
       </el-tooltip>
-      <el-tooltip v-if="canManageProjects" :content="t('projectManagement.groupManagement')" placement="top">
+      <el-tooltip
+        v-if="canManageProjects"
+        :content="t('projectManagement.groupManagement')"
+        placement="top"
+      >
         <button
           type="button"
           data-testid="project-group-manage-trigger"
@@ -172,7 +182,11 @@
           <el-icon><FolderOpened /></el-icon>
         </button>
       </el-tooltip>
-      <el-tooltip v-if="canManageProjects" :content="t('projectManagement.importProject')" placement="top">
+      <el-tooltip
+        v-if="canManageProjects"
+        :content="t('projectManagement.importProject')"
+        placement="top"
+      >
         <button
           type="button"
           data-testid="project-import-trigger"
@@ -370,17 +384,13 @@ const tagIdsModel = computed<string[]>({
 
 /** 当前排序字段的显示文本 */
 const currentSortFieldLabel = computed(() => {
-  const found = resolvedSortFieldOptions.value.find(
-    (opt) => opt.value === sortByModel.value,
-  )
+  const found = resolvedSortFieldOptions.value.find((opt) => opt.value === sortByModel.value)
   return found ? found.label : sortByModel.value
 })
 
 /** 当前排序方向的显示文本 */
 const currentSortOrderLabel = computed(() => {
-  const found = resolvedSortOrderOptions.value.find(
-    (opt) => opt.value === sortOrderModel.value,
-  )
+  const found = resolvedSortOrderOptions.value.find((opt) => opt.value === sortOrderModel.value)
   return found ? found.label : sortOrderModel.value
 })
 
@@ -655,4 +665,3 @@ html.dark .project-overview-toolbar__pill-btn:hover,
   color: var(--ck-text-primary);
 }
 </style>
-

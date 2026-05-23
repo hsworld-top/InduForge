@@ -5,10 +5,11 @@
 /* datacenter 继承 InduForge 产品工作台视觉语言，变量命名保持模块局部化。 */
 @layer base {
   :root {
-    --dc-font-sans: "Source Han Sans SC", "PingFang SC", "Microsoft YaHei",
-      "Helvetica Neue", Arial, sans-serif;
-    --dc-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-      "Liberation Mono", "Courier New", monospace;
+    --dc-font-sans:
+      'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+    --dc-font-mono:
+      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+      monospace;
     --dc-bg: #f3f5f8;
     --dc-surface: #fbfcfe;
     --dc-surface-raised: #ffffff;
@@ -110,4 +111,3 @@
       box-shadow 0.18s ease;
   }
 }
-

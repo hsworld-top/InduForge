@@ -2,48 +2,48 @@
   属性面板：布局强制属性区块（静态 prop-section）
 -->
 <script setup lang="ts">
-import { useI18n } from "vue-i18n";
-import IconEpLink from "~icons/ep/link";
-import PropEditor from "./PropEditor.vue";
+import { useI18n } from 'vue-i18n'
+import IconEpLink from '~icons/ep/link'
+import PropEditor from './PropEditor.vue'
 
 interface LayoutPropDefLike {
-  name: string;
-  label: string;
-  type?: string;
-  editor?: string;
-  language?: string;
-  height?: string;
-  placeholder?: string;
-  min?: number;
-  max?: number;
-  step?: number;
-  options?: Array<{ label: string; value: string | number }>;
+  name: string
+  label: string
+  type?: string
+  editor?: string
+  language?: string
+  height?: string
+  placeholder?: string
+  min?: number
+  max?: number
+  step?: number
+  options?: Array<{ label: string; value: string | number }>
 }
 
 defineProps<{
-  visibleProps: LayoutPropDefLike[];
-  shouldShowBindButton: (propDef: LayoutPropDefLike) => boolean;
-  hasPropBinding: (name: string) => boolean;
+  visibleProps: LayoutPropDefLike[]
+  shouldShowBindButton: (propDef: LayoutPropDefLike) => boolean
+  hasPropBinding: (name: string) => boolean
   getPropValue: (
     name: string,
-  ) => string | number | boolean | Record<string, unknown> | unknown[] | null | undefined;
-}>();
+  ) => string | number | boolean | Record<string, unknown> | unknown[] | null | undefined
+}>()
 
 const emit = defineEmits<{
-  (event: "bindClick", propDef: LayoutPropDefLike): void;
-  (event: "propChange", name: string, value: unknown): void;
-}>();
-const { t } = useI18n();
+  (event: 'bindClick', propDef: LayoutPropDefLike): void
+  (event: 'propChange', name: string, value: unknown): void
+}>()
+const { t } = useI18n()
 
 function handlePropChange(name: string, value: unknown) {
-  emit("propChange", name, value);
+  emit('propChange', name, value)
 }
 </script>
 
 <template>
   <div class="prop-section prop-section--static">
     <div class="prop-section-header is-static">
-      <span class="prop-section-title">{{ t("propertyPanel.layout.title") }}</span>
+      <span class="prop-section-title">{{ t('propertyPanel.layout.title') }}</span>
     </div>
     <div class="prop-section-body">
       <div

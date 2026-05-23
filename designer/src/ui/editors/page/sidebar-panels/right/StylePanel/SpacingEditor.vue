@@ -3,65 +3,65 @@
   编辑 padding 或 margin（上右下左）
 -->
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed } from 'vue'
 
 interface SpacingStyleModel {
-  [key: string]: number | string | undefined;
+  [key: string]: number | string | undefined
 }
 
 const props = withDefaults(
   defineProps<{
-    title?: string;
-    modelValue?: SpacingStyleModel;
-    prefix: string;
+    title?: string
+    modelValue?: SpacingStyleModel
+    prefix: string
   }>(),
   {
-    title: "间距",
+    title: '间距',
     modelValue: () => ({}),
   },
-);
+)
 
 const emit = defineEmits<{
-  (event: "update:modelValue", value: SpacingStyleModel): void;
-}>();
+  (event: 'update:modelValue', value: SpacingStyleModel): void
+}>()
 
 function parseValue(value: unknown): number {
-  if (!value) return 0;
-  const num = Number.parseInt(String(value), 10);
-  return Number.isNaN(num) ? 0 : num;
+  if (!value) return 0
+  const num = Number.parseInt(String(value), 10)
+  return Number.isNaN(num) ? 0 : num
 }
 
-const top = computed(() => parseValue(props.modelValue[`${props.prefix}Top`]));
-const right = computed(() => parseValue(props.modelValue[`${props.prefix}Right`]));
-const bottom = computed(() => parseValue(props.modelValue[`${props.prefix}Bottom`]));
-const left = computed(() => parseValue(props.modelValue[`${props.prefix}Left`]));
+const top = computed(() => parseValue(props.modelValue[`${props.prefix}Top`]))
+const right = computed(() => parseValue(props.modelValue[`${props.prefix}Right`]))
+const bottom = computed(() => parseValue(props.modelValue[`${props.prefix}Bottom`]))
+const left = computed(() => parseValue(props.modelValue[`${props.prefix}Left`]))
 
 function handleTopChange(value: number) {
-  emit("update:modelValue", {
+  emit('update:modelValue', {
     ...props.modelValue,
     [`${props.prefix}Top`]: value,
-  });
+  })
 }
 
 function handleRightChange(value: number) {
-  emit("update:modelValue", {
+  emit('update:modelValue', {
     ...props.modelValue,
     [`${props.prefix}Right`]: value,
-  });
+  })
 }
 
 function handleBottomChange(value: number) {
-  emit("update:modelValue", {
+  emit('update:modelValue', {
     ...props.modelValue,
     [`${props.prefix}Bottom`]: value,
-  });
+  })
 }
 
 function handleLeftChange(value: number) {
-  emit("update:modelValue", {
+  emit('update:modelValue', {
     ...props.modelValue,
     [`${props.prefix}Left`]: value,
-  });
+  })
 }
 </script>
 

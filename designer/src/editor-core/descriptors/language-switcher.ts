@@ -1,8 +1,8 @@
-import type { ComponentDescriptor } from "./registry";
-import LanguageSwitcherRenderer from "@/materials/LanguageSwitcher/LanguageSwitcherRenderer.vue";
+import type { ComponentDescriptor } from './registry'
+import LanguageSwitcherRenderer from '@/materials/LanguageSwitcher/LanguageSwitcherRenderer.vue'
 
 export const descriptor: ComponentDescriptor = {
-  renderTag: "div",
+  renderTag: 'div',
   isContainer: false,
   defaultStyle: {},
   acceptChildren: false,
@@ -11,6 +11,6 @@ export const descriptor: ComponentDescriptor = {
   displayContent: () => null,
   customRenderer: LanguageSwitcherRenderer,
   defaultSize: { width: 160, height: 34 },
-};
+}
 
-export default descriptor;
+export default descriptor

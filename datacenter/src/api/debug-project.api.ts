@@ -1,12 +1,12 @@
 // @ts-nocheck
-import request from "@/utils/request";
-import { Storage } from "@/utils/storage";
+import request from '@/utils/request'
+import { Storage } from '@/utils/storage'
 
-const DEFAULT_DEBUG_PROJECT_NAME = "test";
-const DEBUG_PROJECT_QUERY_LIMIT = 50;
+const DEFAULT_DEBUG_PROJECT_NAME = 'test'
+const DEBUG_PROJECT_QUERY_LIMIT = 50
 
 const asNonEmptyString = (value) =>
-  typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 
 /**
  * 统一提取 projects 列表。
@@ -19,39 +19,39 @@ const asNonEmptyString = (value) =>
  */
 const extractProjects = (payload) => {
   if (Array.isArray(payload?.data?.projects)) {
-    return payload.data.projects;
+    return payload.data.projects
   }
 
   if (Array.isArray(payload?.data?.list?.projects)) {
-    return payload.data.list.projects;
+    return payload.data.list.projects
   }
 
-  return [];
-};
+  return []
+}
 
 const normalizeProjectList = (payload) => {
-  const projects = extractProjects(payload);
+  const projects = extractProjects(payload)
 
   return projects
     .map((item) => {
-      if (!item || typeof item !== "object") {
-        return null;
+      if (!item || typeof item !== 'object') {
+        return null
       }
 
-      const id = asNonEmptyString(item.id);
-      const name = asNonEmptyString(item.name);
+      const id = asNonEmptyString(item.id)
+      const name = asNonEmptyString(item.name)
       if (!id || !name) {
-        return null;
+        return null
       }
 
       return {
         id,
         name,
         tenantId: asNonEmptyString(item.tenantId),
-      };
+      }
     })
-    .filter(Boolean);
-};
+    .filter(Boolean)
+}
 
 /**
  * `/datacenter/debug` 默认工程解析。
@@ -60,22 +60,18 @@ const normalizeProjectList = (payload) => {
 export const debugProjectAPI = {
   async resolveDefaultProjectByName(projectName = DEFAULT_DEBUG_PROJECT_NAME) {
     if (!Storage.getToken()) {
-      return null;
+      return null
     }
 
-    const response = await request.get("/projects", {
+    const response = await request.get('/projects', {
       params: {
         page: 1,
         limit: DEBUG_PROJECT_QUERY_LIMIT,
         name: projectName,
       },
-    });
-    return (
-      normalizeProjectList(response).find(
-        (item) => item.name === projectName,
-      ) || null
-    );
+    })
+    return normalizeProjectList(response).find((item) => item.name === projectName) || null
   },
-};
+}
 
-export default debugProjectAPI;
+export default debugProjectAPI

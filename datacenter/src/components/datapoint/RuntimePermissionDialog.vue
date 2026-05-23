@@ -44,60 +44,58 @@
 
     <template #footer>
       <el-button @click="requestClose">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="handleSubmit">
-        保存
-      </el-button>
+      <el-button type="primary" :loading="saving" @click="handleSubmit"> 保存 </el-button>
     </template>
   </DcDialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
-import DcDialog from "@/components/shared/DcDialog.vue";
+import { ref, computed, watch } from 'vue'
+import DcDialog from '@/components/shared/DcDialog.vue'
 import {
   normalizeRuntimeGrantPayload,
   summarizeRuntimeGrant,
-} from "@/utils/runtime-permission-grants";
+} from '@/utils/runtime-permission-grants'
 
 interface RuntimeGrantPayload {
-  allowRoles?: string[];
-  denyRoles?: string[];
-  inherit?: boolean;
+  allowRoles?: string[]
+  denyRoles?: string[]
+  inherit?: boolean
 }
 
 interface DataPointRow {
-  id: string;
-  name?: string;
-  runtimePermissions?: Record<string, unknown>;
-  runtimePermissionGrants?: Record<string, unknown>;
-  writePermission?: Record<string, unknown>;
-  runtimeGrant?: RuntimeGrantPayload;
+  id: string
+  name?: string
+  runtimePermissions?: Record<string, unknown>
+  runtimePermissionGrants?: Record<string, unknown>
+  writePermission?: Record<string, unknown>
+  runtimeGrant?: RuntimeGrantPayload
 }
 
 const props = defineProps<{
-  visible: boolean;
-  datapoint: DataPointRow | null;
-  projectId: string;
-  saving?: boolean;
-}>();
+  visible: boolean
+  datapoint: DataPointRow | null
+  projectId: string
+  saving?: boolean
+}>()
 
 const emit = defineEmits<{
   /** 提交权限 payload */
-  submit: [grant: RuntimeGrantPayload];
-  cancel: [];
-}>();
+  submit: [grant: RuntimeGrantPayload]
+  cancel: []
+}>()
 
-const allowRolesInput = ref("");
-const denyRolesInput = ref("");
-const formInherit = ref(true);
-const initialSnapshot = ref("");
-const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null);
+const allowRolesInput = ref('')
+const denyRolesInput = ref('')
+const formInherit = ref(true)
+const initialSnapshot = ref('')
+const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
 
 function parseRoles(value: string): string[] {
-  return String(value || "")
+  return String(value || '')
     .split(/[\n,，]/)
     .map((s) => s.trim())
-    .filter(Boolean);
+    .filter(Boolean)
 }
 
 const draftGrant = computed(() =>
@@ -106,49 +104,47 @@ const draftGrant = computed(() =>
     denyRoles: parseRoles(denyRolesInput.value),
     inherit: formInherit.value,
   }),
-);
-const draftSnapshot = computed(() => JSON.stringify(draftGrant.value));
-const isDirty = computed(
-  () => props.visible && draftSnapshot.value !== initialSnapshot.value,
-);
+)
+const draftSnapshot = computed(() => JSON.stringify(draftGrant.value))
+const isDirty = computed(() => props.visible && draftSnapshot.value !== initialSnapshot.value)
 
 // 从数据点解析当前写权限 grant
 function extractWriteGrant(row: DataPointRow | null): RuntimeGrantPayload {
-  if (!row) return normalizeRuntimeGrantPayload();
-  const rp = row.runtimePermissions as { write?: unknown } | undefined;
-  const rpg = row.runtimePermissionGrants as { write?: unknown } | undefined;
+  if (!row) return normalizeRuntimeGrantPayload()
+  const rp = row.runtimePermissions as { write?: unknown } | undefined
+  const rpg = row.runtimePermissionGrants as { write?: unknown } | undefined
   return normalizeRuntimeGrantPayload(
     rp?.write || rpg?.write || row.writePermission || row.runtimeGrant || {},
-  );
+  )
 }
 
 // 初始化表单
 watch(
   () => [props.visible, props.datapoint],
   () => {
-    if (!props.visible) return;
-    const grant = extractWriteGrant(props.datapoint);
-    formInherit.value = grant.inherit;
-    allowRolesInput.value = grant.allowRoles.join("\n");
-    denyRolesInput.value = grant.denyRoles.join("\n");
-    initialSnapshot.value = draftSnapshot.value;
+    if (!props.visible) return
+    const grant = extractWriteGrant(props.datapoint)
+    formInherit.value = grant.inherit
+    allowRolesInput.value = grant.allowRoles.join('\n')
+    denyRolesInput.value = grant.denyRoles.join('\n')
+    initialSnapshot.value = draftSnapshot.value
   },
   { immediate: true },
-);
+)
 
-const grantSummary = computed(() => summarizeRuntimeGrant(draftGrant.value));
+const grantSummary = computed(() => summarizeRuntimeGrant(draftGrant.value))
 
 function handleSubmit() {
-  initialSnapshot.value = draftSnapshot.value;
-  emit("submit", draftGrant.value);
+  initialSnapshot.value = draftSnapshot.value
+  emit('submit', draftGrant.value)
 }
 
 function handleVisibleChange(val: boolean) {
-  if (!val) emit("cancel");
+  if (!val) emit('cancel')
 }
 
 function requestClose() {
-  void dialogRef.value?.requestClose();
+  void dialogRef.value?.requestClose()
 }
 </script>
 

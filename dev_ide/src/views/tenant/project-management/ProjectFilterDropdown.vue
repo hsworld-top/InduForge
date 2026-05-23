@@ -31,11 +31,7 @@
               :key="option.value"
               class="project-filter__option"
             >
-              <input
-                v-model="draftFilters.runtimeModes"
-                type="checkbox"
-                :value="option.value"
-              />
+              <input v-model="draftFilters.runtimeModes" type="checkbox" :value="option.value" />
               <span>{{ option.label }}</span>
             </label>
           </div>
@@ -49,11 +45,7 @@
               :key="option.value"
               class="project-filter__option"
             >
-              <input
-                v-model="draftFilters.deployStatuses"
-                type="checkbox"
-                :value="option.value"
-              />
+              <input v-model="draftFilters.deployStatuses" type="checkbox" :value="option.value" />
               <span>{{ option.label }}</span>
             </label>
           </div>
@@ -67,11 +59,7 @@
               :key="option.value"
               class="project-filter__option"
             >
-              <input
-                v-model="draftFilters.visibility"
-                type="checkbox"
-                :value="option.value"
-              />
+              <input v-model="draftFilters.visibility" type="checkbox" :value="option.value" />
               <span>{{ option.label }}</span>
             </label>
           </div>
@@ -94,11 +82,7 @@
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { Filter } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
-import type {
-  ProjectDeployStatus,
-  ProjectRuntimeMode,
-  ProjectVisibility,
-} from '@/api/project.api'
+import type { ProjectDeployStatus, ProjectRuntimeMode, ProjectVisibility } from '@/api/project.api'
 import type { ProjectOverviewCompositeFilters } from './project-overview.types'
 import { normalizeProjectOverviewFilters } from './use-project-filters'
 
@@ -436,7 +420,9 @@ onBeforeUnmount(() => {
 
 .project-filter-enter-active,
 .project-filter-leave-active {
-  transition: opacity 0.16s ease, transform 0.16s ease;
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
 }
 
 .project-filter-enter-from,

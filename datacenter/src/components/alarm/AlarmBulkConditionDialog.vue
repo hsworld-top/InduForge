@@ -14,7 +14,7 @@
       <div class="alarm-bulk-condition__footer">
         <button type="button" class="is-ghost" @click="visible = false">取消</button>
         <button type="button" :disabled="submitting" @click="submit">
-          {{ submitting ? "应用中" : "应用到已选策略" }}
+          {{ submitting ? '应用中' : '应用到已选策略' }}
         </button>
       </div>
     </template>
@@ -22,49 +22,49 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import type { AlarmCondition } from "@/api/schemas/alarm.schema";
-import DcDialog from "@/components/shared/DcDialog.vue";
-import AlarmConditionMatrix from "./AlarmConditionMatrix.vue";
+import { computed, ref } from 'vue'
+import type { AlarmCondition } from '@/api/schemas/alarm.schema'
+import DcDialog from '@/components/shared/DcDialog.vue'
+import AlarmConditionMatrix from './AlarmConditionMatrix.vue'
 
 const props = withDefaults(
   defineProps<{
-    modelValue: boolean;
-    submitting?: boolean;
-    error?: string;
+    modelValue: boolean
+    submitting?: boolean
+    error?: string
   }>(),
   {
     submitting: false,
-    error: "",
+    error: '',
   },
-);
+)
 
 const emit = defineEmits<{
-  "update:modelValue": [value: boolean];
-  submit: [conditions: AlarmCondition[]];
-}>();
+  'update:modelValue': [value: boolean]
+  submit: [conditions: AlarmCondition[]]
+}>()
 
 const visible = computed({
   get: () => props.modelValue,
-  set: (value: boolean) => emit("update:modelValue", value),
-});
+  set: (value: boolean) => emit('update:modelValue', value),
+})
 
-const conditions = ref<AlarmCondition[]>([]);
-const localError = ref("");
+const conditions = ref<AlarmCondition[]>([])
+const localError = ref('')
 
 const reset = () => {
-  conditions.value = [];
-  localError.value = "";
-};
+  conditions.value = []
+  localError.value = ''
+}
 
 const submit = () => {
-  localError.value = "";
+  localError.value = ''
   if (!conditions.value.length) {
-    localError.value = "请至少配置一个条件";
-    return;
+    localError.value = '请至少配置一个条件'
+    return
   }
-  emit("submit", conditions.value);
-};
+  emit('submit', conditions.value)
+}
 </script>
 
 <style scoped>

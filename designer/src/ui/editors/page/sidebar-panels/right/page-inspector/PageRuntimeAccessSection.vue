@@ -1,67 +1,67 @@
 <script setup lang="ts">
-import type { PageInspectorFormState } from "./page-inspector-types";
-import type { RuntimeRoleRecord } from "@/stores/editor/project-runtime-role-actions";
-import { computed, ref } from "vue";
-import { useI18n } from "vue-i18n";
-import PagePermissionSchemesSection from "./PagePermissionSchemesSection.vue";
+import type { PageInspectorFormState } from './page-inspector-types'
+import type { RuntimeRoleRecord } from '@/stores/editor/project-runtime-role-actions'
+import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import PagePermissionSchemesSection from './PagePermissionSchemesSection.vue'
 
 const props = defineProps<{
-  form: PageInspectorFormState;
-  runtimeRoles: RuntimeRoleRecord[];
-}>();
+  form: PageInspectorFormState
+  runtimeRoles: RuntimeRoleRecord[]
+}>()
 
 const emit = defineEmits<{
-  updateConfig: [];
-}>();
+  updateConfig: []
+}>()
 
-const { t } = useI18n();
-const schemeDialogVisible = ref(false);
+const { t } = useI18n()
+const schemeDialogVisible = ref(false)
 
 const roleOptions = computed(() =>
   props.runtimeRoles
-    .filter((role) => role.status !== "disabled")
+    .filter((role) => role.status !== 'disabled')
     .map((role) => ({
       label: role.name || role.code || role.id,
       value: role.id,
     })),
-);
+)
 
-const schemeCount = computed(() => (props.form.runtimePermissionSchemes || []).length);
+const schemeCount = computed(() => (props.form.runtimePermissionSchemes || []).length)
 
 function openSchemeDialog(): void {
-  if (!props.form.runtimeAccessEnabled) return;
-  schemeDialogVisible.value = true;
+  if (!props.form.runtimeAccessEnabled) return
+  schemeDialogVisible.value = true
 }
 
 const selectedRoleIds = computed<string[]>({
   get() {
-    return (props.form.runtimeAccessAllowedRoles || []).map((role) => role.roleId);
+    return (props.form.runtimeAccessAllowedRoles || []).map((role) => role.roleId)
   },
   set(roleIds) {
-    const selected = new Set(roleIds);
+    const selected = new Set(roleIds)
     props.form.runtimeAccessAllowedRoles = props.runtimeRoles
       .filter((role) => selected.has(role.id))
       .map((role) => ({
         roleId: role.id,
         roleCode: role.code,
         roleName: role.name,
-      }));
-    emit("updateConfig");
+      }))
+    emit('updateConfig')
   },
-});
+})
 </script>
 
 <template>
   <div class="page-section-fields">
     <div class="page-prop-item page-prop-item--switch">
-      <div class="page-prop-label">{{ t("pageInspector.runtimeAccess.enabled") }}</div>
+      <div class="page-prop-label">{{ t('pageInspector.runtimeAccess.enabled') }}</div>
       <div class="page-prop-editor page-prop-editor-switch">
         <el-switch v-model="form.runtimeAccessEnabled" @change="$emit('updateConfig')" />
       </div>
     </div>
 
     <div class="page-prop-item">
-      <div class="page-prop-label">{{ t("pageInspector.runtimeAccess.allowedRoles") }}</div>
+      <div class="page-prop-label">{{ t('pageInspector.runtimeAccess.allowedRoles') }}</div>
       <div class="page-prop-editor">
         <el-select
           v-model="selectedRoleIds"
@@ -84,17 +84,13 @@ const selectedRoleIds = computed<string[]>({
     </div>
 
     <div class="page-prop-item">
-      <div class="page-prop-label">{{ t("pageInspector.runtimeAccess.permissionSchemes") }}</div>
+      <div class="page-prop-label">{{ t('pageInspector.runtimeAccess.permissionSchemes') }}</div>
       <div class="page-prop-editor permission-scheme-entry">
         <span class="permission-scheme-entry__count">
-          {{ t("pageInspector.runtimeAccess.schemeCount", { count: schemeCount }) }}
+          {{ t('pageInspector.runtimeAccess.schemeCount', { count: schemeCount }) }}
         </span>
-        <el-button
-          size="small"
-          :disabled="!form.runtimeAccessEnabled"
-          @click="openSchemeDialog"
-        >
-          {{ t("pageInspector.runtimeAccess.configureSchemes") }}
+        <el-button size="small" :disabled="!form.runtimeAccessEnabled" @click="openSchemeDialog">
+          {{ t('pageInspector.runtimeAccess.configureSchemes') }}
         </el-button>
       </div>
     </div>

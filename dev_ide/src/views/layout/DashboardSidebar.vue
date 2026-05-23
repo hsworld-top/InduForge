@@ -22,11 +22,7 @@
       :class="isDark ? 'border-gray-800' : 'border-gray-100'"
     >
       <div class="flex items-center overflow-hidden">
-        <img
-          :src="tenantLogoUrl"
-          :alt="tenantName"
-          class="h-7 w-auto mr-2 shrink-0"
-        />
+        <img :src="tenantLogoUrl" :alt="tenantName" class="h-7 w-auto mr-2 shrink-0" />
         <h1 class="text-base font-semibold text-gray-800 dark:text-white truncate">
           {{ tenantName }}
         </h1>

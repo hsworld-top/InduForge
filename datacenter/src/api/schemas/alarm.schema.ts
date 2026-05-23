@@ -1,62 +1,53 @@
-import { z } from "zod";
-import { TimeFieldSchema } from "./common.schema";
+import { z } from 'zod'
+import { TimeFieldSchema } from './common.schema'
 
-const ObjectRecordSchema = z.record(z.string(), z.unknown());
+const ObjectRecordSchema = z.record(z.string(), z.unknown())
 
 export const AlarmConditionTypeSchema = z.enum([
-  "HH",
-  "H",
-  "L",
-  "LL",
-  "deviation_high",
-  "deviation_low",
-  "rate_of_change",
-  "bool_equal",
-  "bool_transition",
-  "string_equal",
-  "string_not_equal",
-  "string_contains",
-  "string_regex",
-  "cel",
-]);
+  'HH',
+  'H',
+  'L',
+  'LL',
+  'deviation_high',
+  'deviation_low',
+  'rate_of_change',
+  'bool_equal',
+  'bool_transition',
+  'string_equal',
+  'string_not_equal',
+  'string_contains',
+  'string_regex',
+  'cel',
+])
 
-export type AlarmConditionType = z.infer<typeof AlarmConditionTypeSchema>;
+export type AlarmConditionType = z.infer<typeof AlarmConditionTypeSchema>
 
-export const AlarmPolicyModeSchema = z.enum(["per_target", "derived"]);
+export const AlarmPolicyModeSchema = z.enum(['per_target', 'derived'])
 
-export type AlarmPolicyMode = z.infer<typeof AlarmPolicyModeSchema>;
+export type AlarmPolicyMode = z.infer<typeof AlarmPolicyModeSchema>
 
-export const AlarmSeveritySchema = z.enum([
-  "info",
-  "warning",
-  "major",
-  "critical",
-]);
+export const AlarmSeveritySchema = z.enum(['info', 'warning', 'major', 'critical'])
 
-export type AlarmSeverity = z.infer<typeof AlarmSeveritySchema>;
+export type AlarmSeverity = z.infer<typeof AlarmSeveritySchema>
 
-export const AlarmTrialStateSchema = z.enum([
-  "triggered",
-  "not_triggered",
-  "insufficient_input",
-]);
+export const AlarmTrialStateSchema = z.enum(['triggered', 'not_triggered', 'insufficient_input'])
 
-export type AlarmTrialState = z.infer<typeof AlarmTrialStateSchema>;
+export type AlarmTrialState = z.infer<typeof AlarmTrialStateSchema>
 
 export const AlarmTargetRefSchema = z.object({
   datapointId: z.string(),
   path: z.string(),
   name: z.string().optional(),
   dataType: z.string(),
-});
+})
 
-export type AlarmTargetRef = z.infer<typeof AlarmTargetRefSchema>;
+export type AlarmTargetRef = z.infer<typeof AlarmTargetRefSchema>
 
 export const AlarmInputRefSchema = AlarmTargetRefSchema.extend({
   key: z.string(),
-});
+})
 
-export type AlarmInputRef = z.infer<typeof AlarmInputRefSchema>;
+export type AlarmInputRef = z.infer<typeof AlarmInputRefSchema>
 
 export const AlarmConditionSchema = z.object({
   id: z.string(),
@@ -65,9 +56,9 @@ export const AlarmConditionSchema = z.object({
   isEnabled: z.boolean(),
   severity: AlarmSeveritySchema,
   params: ObjectRecordSchema.default({}),
-});
+})
 
-export type AlarmCondition = z.infer<typeof AlarmConditionSchema>;
+export type AlarmCondition = z.infer<typeof AlarmConditionSchema>
 
 export const AlarmPolicyGroupSchema = z.object({
   id: z.string(),
@@ -79,9 +70,9 @@ export const AlarmPolicyGroupSchema = z.object({
   sortOrder: z.number(),
   createdAt: TimeFieldSchema,
   updatedAt: TimeFieldSchema,
-});
+})
 
-export type AlarmPolicyGroup = z.infer<typeof AlarmPolicyGroupSchema>;
+export type AlarmPolicyGroup = z.infer<typeof AlarmPolicyGroupSchema>
 
 export const AlarmPolicyGroupSaveSchema = z
   .object({
@@ -91,16 +82,13 @@ export const AlarmPolicyGroupSaveSchema = z
     isEnabled: z.boolean().optional(),
     sortOrder: z.number().optional(),
   })
-  .strict();
+  .strict()
 
-export type AlarmPolicyGroupSave = z.infer<typeof AlarmPolicyGroupSaveSchema>;
+export type AlarmPolicyGroupSave = z.infer<typeof AlarmPolicyGroupSaveSchema>
 
-export const AlarmPolicyGroupUpdateSchema =
-  AlarmPolicyGroupSaveSchema.partial().strict();
+export const AlarmPolicyGroupUpdateSchema = AlarmPolicyGroupSaveSchema.partial().strict()
 
-export type AlarmPolicyGroupUpdate = z.infer<
-  typeof AlarmPolicyGroupUpdateSchema
->;
+export type AlarmPolicyGroupUpdate = z.infer<typeof AlarmPolicyGroupUpdateSchema>
 
 export const AlarmPolicySchema = z
   .object({
@@ -124,9 +112,9 @@ export const AlarmPolicySchema = z
     createdAt: TimeFieldSchema,
     updatedAt: TimeFieldSchema,
   })
-  .passthrough();
+  .passthrough()
 
-export type AlarmPolicy = z.infer<typeof AlarmPolicySchema>;
+export type AlarmPolicy = z.infer<typeof AlarmPolicySchema>
 
 export const AlarmPolicySaveSchema = z
   .object({
@@ -139,16 +127,16 @@ export const AlarmPolicySaveSchema = z
     derivedExpression: z.string(),
     conditions: z.array(AlarmConditionSchema),
     suppression: ObjectRecordSchema.default({}),
-    messageTemplate: z.string().default(""),
+    messageTemplate: z.string().default(''),
     isEnabled: z.boolean().default(true),
   })
-  .strict();
+  .strict()
 
-export type AlarmPolicySave = z.infer<typeof AlarmPolicySaveSchema>;
+export type AlarmPolicySave = z.infer<typeof AlarmPolicySaveSchema>
 
-export const AlarmPolicyUpdateSchema = AlarmPolicySaveSchema.partial().strict();
+export const AlarmPolicyUpdateSchema = AlarmPolicySaveSchema.partial().strict()
 
-export type AlarmPolicyUpdate = z.infer<typeof AlarmPolicyUpdateSchema>;
+export type AlarmPolicyUpdate = z.infer<typeof AlarmPolicyUpdateSchema>
 
 export const AlarmPolicyTreeSchema = z.object({
   groups: z.array(AlarmPolicyGroupSchema),
@@ -156,9 +144,9 @@ export const AlarmPolicyTreeSchema = z.object({
   policies: z.array(AlarmPolicySchema).default([]),
   matchedPolicyCount: z.number(),
   totalPolicyCount: z.number(),
-});
+})
 
-export type AlarmPolicyTree = z.infer<typeof AlarmPolicyTreeSchema>;
+export type AlarmPolicyTree = z.infer<typeof AlarmPolicyTreeSchema>
 
 export const AlarmPolicyCoverageItemSchema = z.object({
   id: z.string(),
@@ -169,19 +157,17 @@ export const AlarmPolicyCoverageItemSchema = z.object({
   isEnabled: z.boolean(),
   effectiveEnabled: z.boolean(),
   groupName: z.string().optional(),
-});
+})
 
-export type AlarmPolicyCoverageItem = z.infer<
-  typeof AlarmPolicyCoverageItemSchema
->;
+export type AlarmPolicyCoverageItem = z.infer<typeof AlarmPolicyCoverageItemSchema>
 
 export const AlarmPolicyCoverageSchema = z.object({
   datapointId: z.string().optional(),
   path: z.string().optional(),
   policies: z.array(AlarmPolicyCoverageItemSchema).default([]),
-});
+})
 
-export type AlarmPolicyCoverage = z.infer<typeof AlarmPolicyCoverageSchema>;
+export type AlarmPolicyCoverage = z.infer<typeof AlarmPolicyCoverageSchema>
 
 export const AlarmProjectSettingsSchema = z.object({
   projectId: z.string(),
@@ -189,31 +175,29 @@ export const AlarmProjectSettingsSchema = z.object({
   repeatNotificationIntervalSeconds: z.number().int().min(10),
   createdAt: TimeFieldSchema.optional(),
   updatedAt: TimeFieldSchema.optional(),
-});
+})
 
-export type AlarmProjectSettings = z.infer<typeof AlarmProjectSettingsSchema>;
+export type AlarmProjectSettings = z.infer<typeof AlarmProjectSettingsSchema>
 
 export const AlarmProjectSettingsSaveSchema = z
   .object({
     escalationIntervalSeconds: z.number().int().min(30),
     repeatNotificationIntervalSeconds: z.number().int().min(10),
   })
-  .strict();
+  .strict()
 
-export type AlarmProjectSettingsSave = z.infer<
-  typeof AlarmProjectSettingsSaveSchema
->;
+export type AlarmProjectSettingsSave = z.infer<typeof AlarmProjectSettingsSaveSchema>
 
-export const AlarmBulkSelectionSchema = z.discriminatedUnion("mode", [
-  z.object({ mode: z.literal("ids"), policyIds: z.array(z.string()) }),
+export const AlarmBulkSelectionSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('ids'), policyIds: z.array(z.string()) }),
   z.object({
-    mode: z.literal("filtered"),
+    mode: z.literal('filtered'),
     filters: ObjectRecordSchema,
     excludePolicyIds: z.array(z.string()).default([]),
   }),
-]);
+])
 
-export type AlarmBulkSelection = z.infer<typeof AlarmBulkSelectionSchema>;
+export type AlarmBulkSelection = z.infer<typeof AlarmBulkSelectionSchema>
 
 export const AlarmPolicyTrialPayloadSchema = z
   .object({
@@ -222,11 +206,9 @@ export const AlarmPolicyTrialPayloadSchema = z
     timestamp: z.string().optional(),
     context: ObjectRecordSchema.default({}),
   })
-  .default({ context: {} });
+  .default({ context: {} })
 
-export type AlarmPolicyTrialPayload = z.input<
-  typeof AlarmPolicyTrialPayloadSchema
->;
+export type AlarmPolicyTrialPayload = z.input<typeof AlarmPolicyTrialPayloadSchema>
 
 export const AlarmPolicyTrialResultSchema = z
   .object({
@@ -237,11 +219,9 @@ export const AlarmPolicyTrialResultSchema = z
     diagnostics: ObjectRecordSchema.default({}),
     conditionResults: z.array(z.record(z.string(), z.unknown())).default([]),
   })
-  .passthrough();
+  .passthrough()
 
-export type AlarmPolicyTrialResult = z.infer<
-  typeof AlarmPolicyTrialResultSchema
->;
+export type AlarmPolicyTrialResult = z.infer<typeof AlarmPolicyTrialResultSchema>
 
 export const AlarmDraftValidationSchema = z
   .object({
@@ -250,10 +230,10 @@ export const AlarmDraftValidationSchema = z
     target: ObjectRecordSchema.optional(),
     contract: ObjectRecordSchema.optional(),
   })
-  .passthrough();
+  .passthrough()
 
-export type AlarmDraftValidation = z.infer<typeof AlarmDraftValidationSchema>;
+export type AlarmDraftValidation = z.infer<typeof AlarmDraftValidationSchema>
 
-export const AlarmPolicyContractSchema = ObjectRecordSchema;
+export const AlarmPolicyContractSchema = ObjectRecordSchema
 
-export type AlarmPolicyContract = z.infer<typeof AlarmPolicyContractSchema>;
+export type AlarmPolicyContract = z.infer<typeof AlarmPolicyContractSchema>

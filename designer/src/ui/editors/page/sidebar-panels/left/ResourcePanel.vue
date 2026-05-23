@@ -3,145 +3,145 @@
   管理工程资源（图片、字体等），支持文件夹、上传、预览、拖拽到画布
 -->
 <script setup lang="ts">
-import type { AssetFolder, AssetItem } from "@/types/api";
-import { ElMessage, ElMessageBox } from "element-plus";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useI18n } from "vue-i18n";
-import IconEpGrid from "~icons/ep/grid";
-import IconEpList from "~icons/ep/list";
-import assetApi from "@/services/assetApi";
-import { useEditorStore } from "@/stores/editor-store";
-import { unwrapApiData } from "@/types/api";
+import type { AssetFolder, AssetItem } from '@/types/api'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import IconEpGrid from '~icons/ep/grid'
+import IconEpList from '~icons/ep/list'
+import assetApi from '@/services/assetApi'
+import { useEditorStore } from '@/stores/editor-store'
+import { unwrapApiData } from '@/types/api'
 import {
   DESIGNER_ASSET_DRAG_MIME,
   buildAssetDragPayload,
   serializeAssetDragPayload,
-} from "@/ui/shared/helpers/asset-drag";
-import { normalizeAssetExt, resolveAssetTypeLabel } from "@/ui/shared/helpers/asset-meta";
+} from '@/ui/shared/helpers/asset-drag'
+import { normalizeAssetExt, resolveAssetTypeLabel } from '@/ui/shared/helpers/asset-meta'
 
 interface TreeFilterableLike {
-  filter?: (value: string) => void;
+  filter?: (value: string) => void
 }
 
 interface ScrollbarLike {
-  wrapRef?: HTMLElement | null;
+  wrapRef?: HTMLElement | null
 }
 
 interface ResourceScrollState {
-  scrollTop: number;
+  scrollTop: number
 }
 
 interface ResourceFolderNode extends AssetFolder {
-  label: string;
-  type: "folder" | "root";
-  children: ResourceFolderNode[];
+  label: string
+  type: 'folder' | 'root'
+  children: ResourceFolderNode[]
 }
 
 interface ResourceAssetView extends AssetItem {
-  displayName: string;
-  ext: string;
-  size: number;
+  displayName: string
+  ext: string
+  size: number
 }
 
 interface ResourceContextMenuState {
-  visible: boolean;
-  x: number;
-  y: number;
-  type: "asset" | "folder";
-  asset: ResourceAssetView | null;
-  folder: ResourceFolderNode | null;
+  visible: boolean
+  x: number
+  y: number
+  type: 'asset' | 'folder'
+  asset: ResourceAssetView | null
+  folder: ResourceFolderNode | null
 }
 
 function showSuccessMessage(message: string): void {
-  ElMessage.success(message as never);
+  ElMessage.success(message as never)
 }
 
 function showErrorMessage(message: string): void {
-  ElMessage.error(message as never);
+  ElMessage.error(message as never)
 }
 
-const editorStore = useEditorStore();
-const projectId = computed(() => editorStore.projectId || "");
-const { t } = useI18n();
+const editorStore = useEditorStore()
+const projectId = computed(() => editorStore.projectId || '')
+const { t } = useI18n()
 
-const folderSearch = ref("");
-const assetSearch = ref("");
-const folderTreeRef = ref<TreeFilterableLike | null>(null);
-const moveTreeRef = ref<TreeFilterableLike | null>(null);
-const assetScrollRef = ref<ScrollbarLike | null>(null);
-const fileInputRef = ref<HTMLInputElement | null>(null);
-const folders = ref<AssetFolder[]>([]);
-const assets = ref<AssetItem[]>([]);
-const selectedFolderId = ref("root");
-const viewMode = ref<"grid" | "list">("grid");
-const ASSET_BATCH_SIZE = 40;
-const visibleAssetLimit = ref(ASSET_BATCH_SIZE);
+const folderSearch = ref('')
+const assetSearch = ref('')
+const folderTreeRef = ref<TreeFilterableLike | null>(null)
+const moveTreeRef = ref<TreeFilterableLike | null>(null)
+const assetScrollRef = ref<ScrollbarLike | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const folders = ref<AssetFolder[]>([])
+const assets = ref<AssetItem[]>([])
+const selectedFolderId = ref('root')
+const viewMode = ref<'grid' | 'list'>('grid')
+const ASSET_BATCH_SIZE = 40
+const visibleAssetLimit = ref(ASSET_BATCH_SIZE)
 
-const previewVisible = ref(false);
-const previewAsset = ref<ResourceAssetView | null>(null);
-const detailVisible = ref(false);
-const detailAsset = ref<ResourceAssetView | null>(null);
+const previewVisible = ref(false)
+const previewAsset = ref<ResourceAssetView | null>(null)
+const detailVisible = ref(false)
+const detailAsset = ref<ResourceAssetView | null>(null)
 
-const moveDialogVisible = ref(false);
-const moveAssetTarget = ref<ResourceAssetView | null>(null);
-const moveTargetFolderId = ref<string | null>(null);
+const moveDialogVisible = ref(false)
+const moveAssetTarget = ref<ResourceAssetView | null>(null)
+const moveTargetFolderId = ref<string | null>(null)
 
 const contextMenu = ref<ResourceContextMenuState>({
   visible: false,
   x: 0,
   y: 0,
-  type: "asset",
+  type: 'asset',
   asset: null,
   folder: null,
-});
+})
 
-const clipboardAsset = ref<ResourceAssetView | null>(null);
-const clipboardMode = ref<"copy" | "cut" | null>(null);
+const clipboardAsset = ref<ResourceAssetView | null>(null)
+const clipboardMode = ref<'copy' | 'cut' | null>(null)
 const selectedFolderLabel = computed(() => {
-  if (selectedFolderId.value === "root") return t("resourcePanel.rootLabel");
-  const found = folders.value.find((item) => item.id === selectedFolderId.value);
-  return found?.name || t("resourcePanel.rootLabel");
-});
+  if (selectedFolderId.value === 'root') return t('resourcePanel.rootLabel')
+  const found = folders.value.find((item) => item.id === selectedFolderId.value)
+  return found?.name || t('resourcePanel.rootLabel')
+})
 
 const contextMenuStyle = computed(() => ({
   left: `${contextMenu.value.x}px`,
   top: `${contextMenu.value.y}px`,
-}));
+}))
 
 async function handleCopyUrl(value: string | undefined): Promise<void> {
-  if (!value) return;
+  if (!value) return
   try {
-    await navigator.clipboard.writeText(value);
-    showSuccessMessage(t("resourcePanel.copiedLink"));
+    await navigator.clipboard.writeText(value)
+    showSuccessMessage(t('resourcePanel.copiedLink'))
   } catch {
-    showErrorMessage(t("resourcePanel.copyFailed"));
+    showErrorMessage(t('resourcePanel.copyFailed'))
   }
 }
 
 function decodeAssetName(value: string): string {
-  if (!value) return "";
+  if (!value) return ''
   try {
-    return decodeURIComponent(value);
+    return decodeURIComponent(value)
   } catch {
     try {
-      return decodeURIComponent(escape(value));
+      return decodeURIComponent(escape(value))
     } catch {
-      return value;
+      return value
     }
   }
 }
 
 function getAssetExt(asset: Partial<AssetItem> & { displayName?: string } = {}): string {
-  const name = asset?.displayName || asset?.name || asset?.originalName || "";
-  const index = name.lastIndexOf(".");
+  const name = asset?.displayName || asset?.name || asset?.originalName || ''
+  const index = name.lastIndexOf('.')
   if (index > -1 && index < name.length - 1) {
-    return normalizeAssetExt(name.slice(index + 1).toLowerCase());
+    return normalizeAssetExt(name.slice(index + 1).toLowerCase())
   }
-  const mime = String(asset?.mimeType || "").toLowerCase();
-  if (mime.includes("/")) {
-    return normalizeAssetExt(mime.split("/").pop() || "");
+  const mime = String(asset?.mimeType || '').toLowerCase()
+  if (mime.includes('/')) {
+    return normalizeAssetExt(mime.split('/').pop() || '')
   }
-  return normalizeAssetExt(asset?.type || "");
+  return normalizeAssetExt(asset?.type || '')
 }
 
 function getAssetTypeLabel(asset: Partial<AssetItem> & { ext?: string } = {}): string {
@@ -149,101 +149,101 @@ function getAssetTypeLabel(asset: Partial<AssetItem> & { ext?: string } = {}): s
     ext: asset.ext,
     type: asset.type,
     mimeType: asset.mimeType,
-  });
+  })
 }
 
 function formatSize(size: number | string | null | undefined): string {
-  if (size === null || size === undefined || size === "") return "-";
-  const value = Number(size);
-  if (Number.isNaN(value)) return "-";
-  if (value === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  let idx = 0;
-  let num = value;
+  if (size === null || size === undefined || size === '') return '-'
+  const value = Number(size)
+  if (Number.isNaN(value)) return '-'
+  if (value === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let idx = 0
+  let num = value
   while (num >= 1024 && idx < units.length - 1) {
-    num /= 1024;
-    idx += 1;
+    num /= 1024
+    idx += 1
   }
-  return `${num.toFixed(num >= 10 ? 0 : 1)} ${units[idx]}`;
+  return `${num.toFixed(num >= 10 ? 0 : 1)} ${units[idx]}`
 }
 
 function isImageAsset(asset: Partial<AssetItem> | null | undefined): boolean {
-  const type = asset?.type || "";
-  const ext = getAssetExt(asset || {});
-  if (type === "image" || type === "svg") return true;
-  return ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext);
+  const type = asset?.type || ''
+  const ext = getAssetExt(asset || {})
+  if (type === 'image' || type === 'svg') return true
+  return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)
 }
 
 function isPdfAsset(asset: Partial<AssetItem> | null | undefined): boolean {
-  const ext = getAssetExt(asset || {});
-  if (ext === "pdf") return true;
-  const mime = String(asset?.mimeType || "").toLowerCase();
-  return mime.includes("pdf");
+  const ext = getAssetExt(asset || {})
+  if (ext === 'pdf') return true
+  const mime = String(asset?.mimeType || '').toLowerCase()
+  return mime.includes('pdf')
 }
 
 function isVideoAsset(asset: Partial<AssetItem> | null | undefined): boolean {
-  const type = String(asset?.type || "").toLowerCase();
-  const ext = getAssetExt(asset || {});
-  const mime = String(asset?.mimeType || "").toLowerCase();
-  if (type === "video") return true;
-  if (mime.startsWith("video/")) return true;
-  return ["mp4", "webm", "ogg", "mov", "avi", "mkv"].includes(ext);
+  const type = String(asset?.type || '').toLowerCase()
+  const ext = getAssetExt(asset || {})
+  const mime = String(asset?.mimeType || '').toLowerCase()
+  if (type === 'video') return true
+  if (mime.startsWith('video/')) return true
+  return ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'].includes(ext)
 }
 
 function isAudioAsset(asset: Partial<AssetItem> | null | undefined): boolean {
-  const type = String(asset?.type || "").toLowerCase();
-  const ext = getAssetExt(asset || {});
-  const mime = String(asset?.mimeType || "").toLowerCase();
-  if (type === "audio") return true;
-  if (mime.startsWith("audio/")) return true;
-  return ["mp3", "wav", "ogg", "flac", "m4a", "aac"].includes(ext);
+  const type = String(asset?.type || '').toLowerCase()
+  const ext = getAssetExt(asset || {})
+  const mime = String(asset?.mimeType || '').toLowerCase()
+  if (type === 'audio') return true
+  if (mime.startsWith('audio/')) return true
+  return ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac'].includes(ext)
 }
 
 function buildFolderTree(items: AssetFolder[] | null | undefined): ResourceFolderNode[] {
-  const list = Array.isArray(items) ? items : [];
+  const list = Array.isArray(items) ? items : []
   const nodes: ResourceFolderNode[] = list.map((item) => ({
     ...item,
-    label: decodeAssetName(item.name || t("resourcePanel.untitledFolder")),
-    type: "folder" as const,
+    label: decodeAssetName(item.name || t('resourcePanel.untitledFolder')),
+    type: 'folder' as const,
     children: [] as ResourceFolderNode[],
-  }));
-  const map = new Map<string, ResourceFolderNode>(nodes.map((item) => [item.id, item]));
+  }))
+  const map = new Map<string, ResourceFolderNode>(nodes.map((item) => [item.id, item]))
   const root: ResourceFolderNode = {
-    id: "root",
-    name: t("resourcePanel.rootLabel"),
-    label: t("resourcePanel.rootLabel"),
-    type: "root" as const,
+    id: 'root',
+    name: t('resourcePanel.rootLabel'),
+    label: t('resourcePanel.rootLabel'),
+    type: 'root' as const,
     children: [],
-  };
+  }
   nodes.forEach((node) => {
-    const parent = node.parentId ? map.get(node.parentId) : undefined;
+    const parent = node.parentId ? map.get(node.parentId) : undefined
     if (parent) {
-      parent.children.push(node);
+      parent.children.push(node)
     } else {
-      root.children.push(node);
+      root.children.push(node)
     }
-  });
-  return [root];
+  })
+  return [root]
 }
 
-const folderTree = computed<ResourceFolderNode[]>(() => buildFolderTree(folders.value));
+const folderTree = computed<ResourceFolderNode[]>(() => buildFolderTree(folders.value))
 
-const filteredFolderTree = computed<ResourceFolderNode[]>(() => folderTree.value);
+const filteredFolderTree = computed<ResourceFolderNode[]>(() => folderTree.value)
 
 function filterFolderNode(value: string, data: ResourceFolderNode | null | undefined): boolean {
-  if (!value) return true;
-  return String(data?.label || "")
+  if (!value) return true
+  return String(data?.label || '')
     .toLowerCase()
-    .includes(String(value).toLowerCase());
+    .includes(String(value).toLowerCase())
 }
 
 watch(folderSearch, () => {
-  folderTreeRef.value?.filter?.(folderSearch.value);
-});
+  folderTreeRef.value?.filter?.(folderSearch.value)
+})
 
 const normalizedAssets = computed<ResourceAssetView[]>(() =>
   (assets.value || []).map((asset) => {
-    const displayName = decodeAssetName(asset.name || asset.originalName || "");
+    const displayName = decodeAssetName(asset.name || asset.originalName || '')
     return {
       ...asset,
       displayName,
@@ -259,79 +259,79 @@ const normalizedAssets = computed<ResourceAssetView[]>(() =>
           asset.metadata?.length ??
           0,
       ),
-    };
+    }
   }),
-);
+)
 
 const filteredAssets = computed<ResourceAssetView[]>(() => {
-  let list = normalizedAssets.value;
-  if (selectedFolderId.value !== "root") {
-    list = list.filter((item) => item.folderId === selectedFolderId.value);
+  let list = normalizedAssets.value
+  if (selectedFolderId.value !== 'root') {
+    list = list.filter((item) => item.folderId === selectedFolderId.value)
   }
   if (assetSearch.value) {
-    const keyword = assetSearch.value.toLowerCase();
-    list = list.filter((item) => item.displayName.toLowerCase().includes(keyword));
+    const keyword = assetSearch.value.toLowerCase()
+    list = list.filter((item) => item.displayName.toLowerCase().includes(keyword))
   }
-  return list;
-});
+  return list
+})
 
 const visibleAssets = computed<ResourceAssetView[]>(() =>
   filteredAssets.value.slice(0, visibleAssetLimit.value),
-);
+)
 
-const hasMoreAssets = computed(() => visibleAssetLimit.value < filteredAssets.value.length);
+const hasMoreAssets = computed(() => visibleAssetLimit.value < filteredAssets.value.length)
 
 function loadNextAssetBatch(): void {
-  if (!hasMoreAssets.value) return;
+  if (!hasMoreAssets.value) return
   visibleAssetLimit.value = Math.min(
     visibleAssetLimit.value + ASSET_BATCH_SIZE,
     filteredAssets.value.length,
-  );
+  )
 }
 
 async function ensureAssetScrollFilled(): Promise<void> {
-  await nextTick();
-  let wrap = assetScrollRef.value?.wrapRef;
+  await nextTick()
+  let wrap = assetScrollRef.value?.wrapRef
   while (wrap && hasMoreAssets.value && wrap.scrollHeight <= wrap.clientHeight + 24) {
-    loadNextAssetBatch();
-    await nextTick();
-    wrap = assetScrollRef.value?.wrapRef;
+    loadNextAssetBatch()
+    await nextTick()
+    wrap = assetScrollRef.value?.wrapRef
   }
 }
 
 function resetAssetLazyLoad(): void {
-  visibleAssetLimit.value = ASSET_BATCH_SIZE;
-  void ensureAssetScrollFilled();
+  visibleAssetLimit.value = ASSET_BATCH_SIZE
+  void ensureAssetScrollFilled()
 }
 
 function handleAssetScroll({ scrollTop }: ResourceScrollState): void {
-  const wrap = assetScrollRef.value?.wrapRef;
-  if (!wrap || !hasMoreAssets.value) return;
-  const distanceToBottom = wrap.scrollHeight - scrollTop - wrap.clientHeight;
+  const wrap = assetScrollRef.value?.wrapRef
+  if (!wrap || !hasMoreAssets.value) return
+  const distanceToBottom = wrap.scrollHeight - scrollTop - wrap.clientHeight
   if (distanceToBottom <= 160) {
-    loadNextAssetBatch();
-    void ensureAssetScrollFilled();
+    loadNextAssetBatch()
+    void ensureAssetScrollFilled()
   }
 }
 
 function handleFolderClick(data: ResourceFolderNode | null | undefined): void {
-  if (!data) return;
-  selectedFolderId.value = data.id;
+  if (!data) return
+  selectedFolderId.value = data.id
 }
 
 function handleFolderContextMenu(
   event: MouseEvent,
   data: ResourceFolderNode | null | undefined,
 ): void {
-  if (!data) return;
+  if (!data) return
   contextMenu.value = {
     visible: true,
     x: event.clientX,
     y: event.clientY,
-    type: "folder",
+    type: 'folder',
     folder: data ?? null,
     asset: null,
-  };
+  }
 }
 
 function openAssetContextMenu(
@@ -342,303 +342,316 @@ function openAssetContextMenu(
     visible: true,
     x: event.clientX,
     y: event.clientY,
-    type: "asset",
+    type: 'asset',
     asset: asset ?? null,
     folder: null,
-  };
+  }
 }
 
 function closeContextMenu(): void {
-  contextMenu.value.visible = false;
+  contextMenu.value.visible = false
 }
 
 function handlePreviewContext(): void {
-  if (contextMenu.value.asset) openPreview(contextMenu.value.asset);
-  closeContextMenu();
+  if (contextMenu.value.asset) openPreview(contextMenu.value.asset)
+  closeContextMenu()
 }
 
 function handleDetailContext(): void {
   if (contextMenu.value.asset) {
-    detailAsset.value = contextMenu.value.asset ?? null;
-    detailVisible.value = true;
+    detailAsset.value = contextMenu.value.asset ?? null
+    detailVisible.value = true
   }
-  closeContextMenu();
+  closeContextMenu()
 }
 
 async function handleCreateFolder(): Promise<void> {
-  closeContextMenu();
-  if (!projectId.value) return;
+  closeContextMenu()
+  if (!projectId.value) return
   const result = await ElMessageBox.prompt(
-    t("resourcePanel.createFolderPrompt"),
-    t("resourcePanel.createFolderTitle"),
+    t('resourcePanel.createFolderPrompt'),
+    t('resourcePanel.createFolderTitle'),
     {
-      confirmButtonText: t("resourcePanel.confirm"),
-      cancelButtonText: t("resourcePanel.cancel"),
-      inputPlaceholder: t("resourcePanel.folderNamePlaceholder"),
+      confirmButtonText: t('resourcePanel.confirm'),
+      cancelButtonText: t('resourcePanel.cancel'),
+      inputPlaceholder: t('resourcePanel.folderNamePlaceholder'),
     },
-  ).catch(() => null);
-  if (!result?.value) return;
+  ).catch(() => null)
+  if (!result?.value) return
   await assetApi.createFolder(projectId.value, {
     name: result.value,
     parentId:
-      contextMenu.value.folder?.id && contextMenu.value.folder?.id !== "root"
+      contextMenu.value.folder?.id && contextMenu.value.folder?.id !== 'root'
         ? contextMenu.value.folder.id
         : null,
-  });
-  await loadFolders();
+  })
+  await loadFolders()
 }
 
 async function handleRenameFolder(): Promise<void> {
-  const folder = contextMenu.value.folder;
-  closeContextMenu();
-  if (!folder || folder.id === "root") return;
+  const folder = contextMenu.value.folder
+  closeContextMenu()
+  if (!folder || folder.id === 'root') return
   const result = await ElMessageBox.prompt(
-    t("resourcePanel.renameFolderPrompt"),
-    t("resourcePanel.renameTitle"),
+    t('resourcePanel.renameFolderPrompt'),
+    t('resourcePanel.renameTitle'),
     {
-      confirmButtonText: t("resourcePanel.confirm"),
-      cancelButtonText: t("resourcePanel.cancel"),
+      confirmButtonText: t('resourcePanel.confirm'),
+      cancelButtonText: t('resourcePanel.cancel'),
       inputValue: folder.label,
     },
-  ).catch(() => null);
-  if (!result?.value) return;
+  ).catch(() => null)
+  if (!result?.value) return
   await assetApi.renameFolder(projectId.value, folder.id, {
     name: result.value,
-  });
-  await loadFolders();
+  })
+  await loadFolders()
 }
 
 async function handleDeleteFolder(): Promise<void> {
-  const folder = contextMenu.value.folder;
-  closeContextMenu();
-  if (!folder || folder.id === "root") return;
-  await ElMessageBox.confirm(t("resourcePanel.deleteFolderConfirm"), t("resourcePanel.deleteTitle"), {
-    type: "warning",
-  }).catch(() => null);
-  await assetApi.deleteFolder(projectId.value, folder.id);
-  await loadFolders();
-  await loadAssets();
+  const folder = contextMenu.value.folder
+  closeContextMenu()
+  if (!folder || folder.id === 'root') return
+  await ElMessageBox.confirm(
+    t('resourcePanel.deleteFolderConfirm'),
+    t('resourcePanel.deleteTitle'),
+    {
+      type: 'warning',
+    },
+  ).catch(() => null)
+  await assetApi.deleteFolder(projectId.value, folder.id)
+  await loadFolders()
+  await loadAssets()
 }
 
 async function handleRenameAsset(): Promise<void> {
-  const asset = contextMenu.value.asset;
-  closeContextMenu();
-  if (!asset) return;
+  const asset = contextMenu.value.asset
+  closeContextMenu()
+  if (!asset) return
   const result = await ElMessageBox.prompt(
-    t("resourcePanel.renameAssetPrompt"),
-    t("resourcePanel.renameTitle"),
+    t('resourcePanel.renameAssetPrompt'),
+    t('resourcePanel.renameTitle'),
     {
-      confirmButtonText: t("resourcePanel.confirm"),
-      cancelButtonText: t("resourcePanel.cancel"),
+      confirmButtonText: t('resourcePanel.confirm'),
+      cancelButtonText: t('resourcePanel.cancel'),
       inputValue: asset.displayName,
     },
-  ).catch(() => null);
-  if (!result?.value) return;
-  await assetApi.updateAsset(projectId.value, asset.id, { name: result.value });
-  await loadAssets();
+  ).catch(() => null)
+  if (!result?.value) return
+  await assetApi.updateAsset(projectId.value, asset.id, { name: result.value })
+  await loadAssets()
 }
 
 async function handleDeleteAsset(): Promise<void> {
-  const asset = contextMenu.value.asset;
-  closeContextMenu();
-  if (!asset) return;
-  await ElMessageBox.confirm(t("resourcePanel.deleteAssetConfirm"), t("resourcePanel.deleteTitle"), {
-    type: "warning",
-  }).catch(() => null);
-  await assetApi.deleteAsset(projectId.value, asset.id);
-  await loadAssets();
+  const asset = contextMenu.value.asset
+  closeContextMenu()
+  if (!asset) return
+  await ElMessageBox.confirm(
+    t('resourcePanel.deleteAssetConfirm'),
+    t('resourcePanel.deleteTitle'),
+    {
+      type: 'warning',
+    },
+  ).catch(() => null)
+  await assetApi.deleteAsset(projectId.value, asset.id)
+  await loadAssets()
 }
 
 function handleCopyAsset(): void {
-  clipboardAsset.value = contextMenu.value.asset ?? null;
-  clipboardMode.value = "copy";
-  closeContextMenu();
+  clipboardAsset.value = contextMenu.value.asset ?? null
+  clipboardMode.value = 'copy'
+  closeContextMenu()
 }
 
 function handleCutAsset(): void {
-  clipboardAsset.value = contextMenu.value.asset ?? null;
-  clipboardMode.value = "cut";
-  closeContextMenu();
+  clipboardAsset.value = contextMenu.value.asset ?? null
+  clipboardMode.value = 'cut'
+  closeContextMenu()
 }
 
 async function handlePasteAsset(): Promise<void> {
-  const targetFolderId = contextMenu.value.folder?.id || selectedFolderId.value;
-  if (!clipboardAsset.value || !projectId.value) return;
-  const folderId = targetFolderId === "root" ? null : targetFolderId;
-  if (clipboardMode.value === "copy") {
+  const targetFolderId = contextMenu.value.folder?.id || selectedFolderId.value
+  if (!clipboardAsset.value || !projectId.value) return
+  const folderId = targetFolderId === 'root' ? null : targetFolderId
+  if (clipboardMode.value === 'copy') {
     await assetApi.copyAsset(projectId.value, clipboardAsset.value.id, {
       folderId,
-    });
-  } else if (clipboardMode.value === "cut") {
+    })
+  } else if (clipboardMode.value === 'cut') {
     await assetApi.updateAsset(projectId.value, clipboardAsset.value.id, {
       folderId,
-    });
-    clipboardAsset.value = null;
-    clipboardMode.value = null;
+    })
+    clipboardAsset.value = null
+    clipboardMode.value = null
   }
-  closeContextMenu();
-  await loadAssets();
+  closeContextMenu()
+  await loadAssets()
 }
 
 function handleMoveAsset(): void {
-  moveTargetFolderId.value = selectedFolderId.value;
-  moveAssetTarget.value = contextMenu.value.asset ?? null;
-  moveDialogVisible.value = true;
-  closeContextMenu();
+  moveTargetFolderId.value = selectedFolderId.value
+  moveAssetTarget.value = contextMenu.value.asset ?? null
+  moveDialogVisible.value = true
+  closeContextMenu()
 }
 
 function handleMoveFolderSelect(data: ResourceFolderNode | null | undefined): void {
-  moveTargetFolderId.value = data?.id ?? null;
+  moveTargetFolderId.value = data?.id ?? null
 }
 
 async function confirmMove(): Promise<void> {
-  const asset = moveAssetTarget.value || clipboardAsset.value;
-  if (!asset) return;
-  const folderId = moveTargetFolderId.value === "root" ? null : moveTargetFolderId.value;
-  await assetApi.updateAsset(projectId.value, asset.id, { folderId });
-  moveDialogVisible.value = false;
-  moveAssetTarget.value = null;
-  await loadAssets();
+  const asset = moveAssetTarget.value || clipboardAsset.value
+  if (!asset) return
+  const folderId = moveTargetFolderId.value === 'root' ? null : moveTargetFolderId.value
+  await assetApi.updateAsset(projectId.value, asset.id, { folderId })
+  moveDialogVisible.value = false
+  moveAssetTarget.value = null
+  await loadAssets()
 }
 
 function openPreview(asset: ResourceAssetView | null | undefined): void {
-  previewAsset.value = asset ?? null;
-  previewVisible.value = true;
+  previewAsset.value = asset ?? null
+  previewVisible.value = true
 }
 
 function triggerFileSelect(): void {
-  fileInputRef.value?.click?.();
+  fileInputRef.value?.click?.()
 }
 
 async function handleFileInputChange(event: Event): Promise<void> {
-  const target = event.target as HTMLInputElement | null;
-  const files = Array.from(target?.files || []);
-  if (target) target.value = "";
-  if (!files.length) return;
-  await uploadFiles(files, selectedFolderId.value === "root" ? null : selectedFolderId.value);
+  const target = event.target as HTMLInputElement | null
+  const files = Array.from(target?.files || [])
+  if (target) target.value = ''
+  if (!files.length) return
+  await uploadFiles(files, selectedFolderId.value === 'root' ? null : selectedFolderId.value)
 }
 
 async function handleUploadDrop(event: DragEvent): Promise<void> {
-  const files = Array.from(event.dataTransfer?.files || []);
-  if (!files.length) return;
-  await uploadFiles(files, selectedFolderId.value === "root" ? null : selectedFolderId.value);
+  const files = Array.from(event.dataTransfer?.files || [])
+  if (!files.length) return
+  await uploadFiles(files, selectedFolderId.value === 'root' ? null : selectedFolderId.value)
 }
 
 function handleDropToFolder(folder: ResourceFolderNode): (event: DragEvent) => Promise<void> {
   return async (event: DragEvent): Promise<void> => {
-    const files = Array.from(event.dataTransfer?.files || []);
+    const files = Array.from(event.dataTransfer?.files || [])
     if (files.length) {
-      await uploadFiles(files, folder.id === "root" ? null : folder.id);
-      return;
+      await uploadFiles(files, folder.id === 'root' ? null : folder.id)
+      return
     }
-    const assetId = event.dataTransfer?.getData("asset-id");
+    const assetId = event.dataTransfer?.getData('asset-id')
     if (assetId) {
       await assetApi.updateAsset(projectId.value, assetId, {
-        folderId: folder.id === "root" ? null : folder.id,
-      });
-      await loadAssets();
+        folderId: folder.id === 'root' ? null : folder.id,
+      })
+      await loadAssets()
     }
-  };
+  }
 }
 
 function handleAssetDragStart(asset: ResourceAssetView | null | undefined, event: DragEvent): void {
-  if (!asset) return;
-  const dataTransfer = event?.dataTransfer;
+  if (!asset) return
+  const dataTransfer = event?.dataTransfer
   if (dataTransfer) {
-    dataTransfer.effectAllowed = "copyMove";
-    dataTransfer.setData("asset-id", asset.id);
-    const dragPayload = buildAssetDragPayload(asset);
+    dataTransfer.effectAllowed = 'copyMove'
+    dataTransfer.setData('asset-id', asset.id)
+    const dragPayload = buildAssetDragPayload(asset)
     if (dragPayload) {
-      dataTransfer.setData(DESIGNER_ASSET_DRAG_MIME, serializeAssetDragPayload(dragPayload));
+      dataTransfer.setData(DESIGNER_ASSET_DRAG_MIME, serializeAssetDragPayload(dragPayload))
     }
   }
 }
 
 async function uploadFiles(files: File[], folderId: string | null): Promise<void> {
-  if (!projectId.value || !files.length) return;
+  if (!projectId.value || !files.length) return
   const duplicated = files.some((file) =>
     normalizedAssets.value.some(
       (asset) => asset.displayName === file.name && (asset.folderId || null) === (folderId || null),
     ),
-  );
-  let conflictStrategy = "rename";
+  )
+  let conflictStrategy = 'rename'
   if (duplicated) {
     const result = await ElMessageBox.confirm(
-      t("resourcePanel.uploadConflictMessage"),
-      t("resourcePanel.uploadConflictTitle"),
+      t('resourcePanel.uploadConflictMessage'),
+      t('resourcePanel.uploadConflictTitle'),
       {
-        confirmButtonText: t("resourcePanel.replace"),
-        cancelButtonText: t("resourcePanel.rename"),
-        type: "warning",
+        confirmButtonText: t('resourcePanel.replace'),
+        cancelButtonText: t('resourcePanel.rename'),
+        type: 'warning',
       },
-    ).catch(() => null);
-    conflictStrategy = result ? "replace" : "rename";
+    ).catch(() => null)
+    conflictStrategy = result ? 'replace' : 'rename'
   }
   await assetApi.uploadAssets(projectId.value, files, folderId ?? undefined, {
     conflictStrategy,
-  });
-  showSuccessMessage(t("resourcePanel.uploadSuccess"));
-  await loadAssets();
+  })
+  showSuccessMessage(t('resourcePanel.uploadSuccess'))
+  await loadAssets()
 }
 
 async function loadFolders(): Promise<void> {
-  if (!projectId.value) return;
-  const response = await assetApi.getFolders(projectId.value);
-  const data = unwrapApiData<{ folders?: AssetFolder[] }>(response);
-  const rawFolders = data?.folders;
-  folders.value = Array.isArray(rawFolders) ? rawFolders : [];
+  if (!projectId.value) return
+  const response = await assetApi.getFolders(projectId.value)
+  const data = unwrapApiData<{ folders?: AssetFolder[] }>(response)
+  const rawFolders = data?.folders
+  folders.value = Array.isArray(rawFolders) ? rawFolders : []
 }
 
 async function loadAssets(): Promise<void> {
-  if (!projectId.value) return;
-  const response = await assetApi.getAssets(projectId.value);
-  const data = unwrapApiData<{ assets?: AssetItem[] }>(response);
-  const rawAssets = data?.assets;
-  assets.value = Array.isArray(rawAssets) ? rawAssets : [];
+  if (!projectId.value) return
+  const response = await assetApi.getAssets(projectId.value)
+  const data = unwrapApiData<{ assets?: AssetItem[] }>(response)
+  const rawAssets = data?.assets
+  assets.value = Array.isArray(rawAssets) ? rawAssets : []
 }
 
 function handleGlobalClick(event: MouseEvent): void {
-  const menu = document.querySelector(".context-menu");
-  const target = event.target;
+  const menu = document.querySelector('.context-menu')
+  const target = event.target
   if (menu && target instanceof Node && !menu.contains(target)) {
-    closeContextMenu();
+    closeContextMenu()
   }
 }
 
 onMounted(() => {
-  document.addEventListener("click", handleGlobalClick);
+  document.addEventListener('click', handleGlobalClick)
   if (projectId.value) {
-    loadFolders();
-    loadAssets();
+    loadFolders()
+    loadAssets()
   }
-});
+})
 
 onBeforeUnmount(() => {
-  document.removeEventListener("click", handleGlobalClick);
-});
+  document.removeEventListener('click', handleGlobalClick)
+})
 
 watch(projectId, (value) => {
   if (value) {
-    loadFolders();
-    loadAssets();
+    loadFolders()
+    loadAssets()
   }
-});
+})
 
-watch([filteredAssets, viewMode], resetAssetLazyLoad, { flush: "post" });
+watch([filteredAssets, viewMode], resetAssetLazyLoad, { flush: 'post' })
 </script>
 
 <template>
   <div class="resource-panel" @contextmenu.prevent>
     <div class="resource-search">
-      <el-input v-model="folderSearch" size="small" :placeholder="t('resourcePanel.searchGroups')" clearable />
+      <el-input
+        v-model="folderSearch"
+        size="small"
+        :placeholder="t('resourcePanel.searchGroups')"
+        clearable
+      />
     </div>
 
     <div class="resource-layout">
       <div class="resource-folders">
         <div class="pane-title">
-          <span>{{ t("resourcePanel.groupTitle") }}</span>
+          <span>{{ t('resourcePanel.groupTitle') }}</span>
           <el-button size="small" text @click="handleCreateFolder">
-            {{ t("resourcePanel.createFolder") }}
+            {{ t('resourcePanel.createFolder') }}
           </el-button>
         </div>
         <el-scrollbar class="folder-scroll">
@@ -702,7 +715,9 @@ watch([filteredAssets, viewMode], resetAssetLazyLoad, { flush: "post" });
               clearable
               class="asset-search"
             />
-            <span class="asset-count">{{ t("resourcePanel.itemCount", { count: filteredAssets.length }) }}</span>
+            <span class="asset-count">{{
+              t('resourcePanel.itemCount', { count: filteredAssets.length })
+            }}</span>
           </div>
         </div>
 
@@ -712,7 +727,7 @@ watch([filteredAssets, viewMode], resetAssetLazyLoad, { flush: "post" });
           @dragover.prevent
           @drop.prevent="handleUploadDrop"
         >
-          {{ t("resourcePanel.uploadHint") }}
+          {{ t('resourcePanel.uploadHint') }}
         </div>
 
         <el-scrollbar ref="assetScrollRef" class="asset-scroll" @scroll="handleAssetScroll">
@@ -748,9 +763,9 @@ watch([filteredAssets, viewMode], resetAssetLazyLoad, { flush: "post" });
 
           <div v-else class="asset-table">
             <div class="asset-table-header">
-              <span class="col-name">{{ t("resourcePanel.name") }}</span>
-              <span class="col-type">{{ t("resourcePanel.format") }}</span>
-              <span class="col-size">{{ t("resourcePanel.size") }}</span>
+              <span class="col-name">{{ t('resourcePanel.name') }}</span>
+              <span class="col-type">{{ t('resourcePanel.format') }}</span>
+              <span class="col-size">{{ t('resourcePanel.size') }}</span>
             </div>
             <div
               v-for="asset in visibleAssets"
@@ -780,24 +795,32 @@ watch([filteredAssets, viewMode], resetAssetLazyLoad, { flush: "post" });
 
     <div v-if="contextMenu.visible" class="context-menu" :style="contextMenuStyle">
       <template v-if="contextMenu.type === 'asset'">
-        <div class="context-item" @click="handlePreviewContext">{{ t("resourcePanel.preview") }}</div>
-        <div class="context-item" @click="handleDetailContext">{{ t("resourcePanel.detail") }}</div>
-        <div class="context-item" @click="handleRenameAsset">{{ t("resourcePanel.rename") }}</div>
-        <div class="context-item" @click="handleMoveAsset">{{ t("resourcePanel.move") }}</div>
-        <div class="context-item" @click="handleCopyAsset">{{ t("resourcePanel.copy") }}</div>
-        <div class="context-item" @click="handleCutAsset">{{ t("resourcePanel.cut") }}</div>
-        <div class="context-item" :class="{ disabled: !clipboardAsset }" @click="handlePasteAsset">
-          {{ t("resourcePanel.paste") }}
+        <div class="context-item" @click="handlePreviewContext">
+          {{ t('resourcePanel.preview') }}
         </div>
-        <div class="context-item danger" @click="handleDeleteAsset">{{ t("resourcePanel.delete") }}</div>
+        <div class="context-item" @click="handleDetailContext">{{ t('resourcePanel.detail') }}</div>
+        <div class="context-item" @click="handleRenameAsset">{{ t('resourcePanel.rename') }}</div>
+        <div class="context-item" @click="handleMoveAsset">{{ t('resourcePanel.move') }}</div>
+        <div class="context-item" @click="handleCopyAsset">{{ t('resourcePanel.copy') }}</div>
+        <div class="context-item" @click="handleCutAsset">{{ t('resourcePanel.cut') }}</div>
+        <div class="context-item" :class="{ disabled: !clipboardAsset }" @click="handlePasteAsset">
+          {{ t('resourcePanel.paste') }}
+        </div>
+        <div class="context-item danger" @click="handleDeleteAsset">
+          {{ t('resourcePanel.delete') }}
+        </div>
       </template>
       <template v-else>
-        <div class="context-item" @click="handleCreateFolder">{{ t("resourcePanel.createFolder") }}</div>
-        <div class="context-item" @click="handleRenameFolder">{{ t("resourcePanel.rename") }}</div>
-        <div class="context-item" :class="{ disabled: !clipboardAsset }" @click="handlePasteAsset">
-          {{ t("resourcePanel.paste") }}
+        <div class="context-item" @click="handleCreateFolder">
+          {{ t('resourcePanel.createFolder') }}
         </div>
-        <div class="context-item danger" @click="handleDeleteFolder">{{ t("resourcePanel.delete") }}</div>
+        <div class="context-item" @click="handleRenameFolder">{{ t('resourcePanel.rename') }}</div>
+        <div class="context-item" :class="{ disabled: !clipboardAsset }" @click="handlePasteAsset">
+          {{ t('resourcePanel.paste') }}
+        </div>
+        <div class="context-item danger" @click="handleDeleteFolder">
+          {{ t('resourcePanel.delete') }}
+        </div>
       </template>
     </div>
 
@@ -853,31 +876,40 @@ watch([filteredAssets, viewMode], resetAssetLazyLoad, { flush: "post" });
     >
       <div v-if="detailAsset" class="detail-body">
         <div class="detail-row">
-          <span>{{ t("resourcePanel.name") }}</span><span>{{ detailAsset.displayName }}</span>
+          <span>{{ t('resourcePanel.name') }}</span
+          ><span>{{ detailAsset.displayName }}</span>
         </div>
         <div class="detail-row">
-          <span>{{ t("resourcePanel.format") }}</span><span>{{ getAssetTypeLabel(detailAsset) }}</span>
+          <span>{{ t('resourcePanel.format') }}</span
+          ><span>{{ getAssetTypeLabel(detailAsset) }}</span>
         </div>
         <div class="detail-row">
-          <span>{{ t("resourcePanel.size") }}</span><span>{{ formatSize(detailAsset.size) }}</span>
+          <span>{{ t('resourcePanel.size') }}</span
+          ><span>{{ formatSize(detailAsset.size) }}</span>
         </div>
         <div class="detail-row">
-          <span>{{ t("resourcePanel.type") }}</span><span>{{ detailAsset.type || "-" }}</span>
+          <span>{{ t('resourcePanel.type') }}</span
+          ><span>{{ detailAsset.type || '-' }}</span>
         </div>
         <div class="detail-row">
-          <span>{{ t("resourcePanel.link") }}</span>
+          <span>{{ t('resourcePanel.link') }}</span>
           <span
             class="detail-link"
             :title="detailAsset.url"
             @click="handleCopyUrl(detailAsset.url)"
           >
-            {{ detailAsset.url || "-" }}
+            {{ detailAsset.url || '-' }}
           </span>
         </div>
       </div>
     </el-dialog>
 
-    <el-dialog v-model="moveDialogVisible" :title="t('resourcePanel.moveTitle')" width="420px" append-to-body>
+    <el-dialog
+      v-model="moveDialogVisible"
+      :title="t('resourcePanel.moveTitle')"
+      width="420px"
+      append-to-body
+    >
       <el-tree
         ref="moveTreeRef"
         class="folder-tree"
@@ -896,8 +928,8 @@ watch([filteredAssets, viewMode], resetAssetLazyLoad, { flush: "post" });
         </template>
       </el-tree>
       <template #footer>
-        <el-button @click="moveDialogVisible = false">{{ t("resourcePanel.cancel") }}</el-button>
-        <el-button type="primary" @click="confirmMove">{{ t("resourcePanel.confirm") }}</el-button>
+        <el-button @click="moveDialogVisible = false">{{ t('resourcePanel.cancel') }}</el-button>
+        <el-button type="primary" @click="confirmMove">{{ t('resourcePanel.confirm') }}</el-button>
       </template>
     </el-dialog>
   </div>

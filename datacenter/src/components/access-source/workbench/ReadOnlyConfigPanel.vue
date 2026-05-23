@@ -11,16 +11,16 @@
 </template>
 
 <script setup lang="ts">
-import EmptyState from "@/components/shared/EmptyState.vue";
+import EmptyState from '@/components/shared/EmptyState.vue'
 
 defineProps<{
-  connection: Record<string, any>;
-  projectId: string;
-}>();
+  connection: Record<string, any>
+  projectId: string
+}>()
 
 defineEmits<{
-  (event: "back"): void;
-}>();
+  (event: 'back'): void
+}>()
 </script>
 
 <style scoped>

@@ -8,10 +8,10 @@
  * @module ui/Canvas/composables/use-node-interaction
  */
 
-import type { RegionResizeConfig, ResizeHandle, UseNodeInteractionDeps } from "./types";
-import type { ComponentNode } from "@/editor-core/document/types";
-import { computed } from "vue";
-import { isContainerType, isRegionType } from "@/editor-core/descriptors/registry";
+import type { RegionResizeConfig, ResizeHandle, UseNodeInteractionDeps } from './types'
+import type { ComponentNode } from '@/editor-core/document/types'
+import { computed } from 'vue'
+import { isContainerType, isRegionType } from '@/editor-core/descriptors/registry'
 
 /**
  * 获取区域 resize 配置
@@ -20,33 +20,33 @@ import { isContainerType, isRegionType } from "@/editor-core/descriptors/registr
  */
 function getRegionResizeConfig(type: string | undefined): RegionResizeConfig | null {
   const configMap: Record<string, RegionResizeConfig> = {
-    ElHeader: { axis: "y", prop: "height", handles: ["s"] },
-    ElAside: { axis: "x", prop: "width", handles: ["e"] },
-  };
-  if (type === "ElFooter") {
-    return {
-      axis: "y",
-      prop: "height",
-      handles: ["n"],
-      invert: true,
-    };
+    ElHeader: { axis: 'y', prop: 'height', handles: ['s'] },
+    ElAside: { axis: 'x', prop: 'width', handles: ['e'] },
   }
-  return type ? configMap[type] || null : null;
+  if (type === 'ElFooter') {
+    return {
+      axis: 'y',
+      prop: 'height',
+      handles: ['n'],
+      invert: true,
+    }
+  }
+  return type ? configMap[type] || null : null
 }
 
 /**
  * resize handles 定义
  */
 const resizeHandles: ResizeHandle[] = [
-  { key: "nw", x: -1, y: -1, cursor: "nwse-resize" },
-  { key: "n", x: 0, y: -1, cursor: "ns-resize" },
-  { key: "ne", x: 1, y: -1, cursor: "nesw-resize" },
-  { key: "e", x: 1, y: 0, cursor: "ew-resize" },
-  { key: "se", x: 1, y: 1, cursor: "nwse-resize" },
-  { key: "s", x: 0, y: 1, cursor: "ns-resize" },
-  { key: "sw", x: -1, y: 1, cursor: "nesw-resize" },
-  { key: "w", x: -1, y: 0, cursor: "ew-resize" },
-];
+  { key: 'nw', x: -1, y: -1, cursor: 'nwse-resize' },
+  { key: 'n', x: 0, y: -1, cursor: 'ns-resize' },
+  { key: 'ne', x: 1, y: -1, cursor: 'nesw-resize' },
+  { key: 'e', x: 1, y: 0, cursor: 'ew-resize' },
+  { key: 'se', x: 1, y: 1, cursor: 'nwse-resize' },
+  { key: 's', x: 0, y: 1, cursor: 'ns-resize' },
+  { key: 'sw', x: -1, y: 1, cursor: 'nesw-resize' },
+  { key: 'w', x: -1, y: 0, cursor: 'ew-resize' },
+]
 
 /**
  * 创建节点交互逻辑
@@ -79,84 +79,84 @@ export function useNodeInteraction(deps: UseNodeInteractionDeps) {
     runPreviewScript,
     handleSelect,
     showContextMenu = null,
-  } = deps;
+  } = deps
 
   /**
    * 判断节点是否在 ElLayoutRow 中
    */
   const isElColInRow = computed(() => {
-    if (!node.value || node.value.type !== "ElCol") return false;
-    const parentNode = doc.value?.getParent?.(node.value.id);
-    return parentNode?.type === "ElLayoutRow";
-  });
+    if (!node.value || node.value.type !== 'ElCol') return false
+    const parentNode = doc.value?.getParent?.(node.value.id)
+    return parentNode?.type === 'ElLayoutRow'
+  })
 
   /**
    * 判断节点是否被放入 ElCol 中
    */
   const isChildInElCol = computed(() => {
-    if (!node.value) return false;
-    const parentNode = doc.value?.getParent?.(node.value.id);
-    return parentNode?.type === "ElCol";
-  });
+    if (!node.value) return false
+    const parentNode = doc.value?.getParent?.(node.value.id)
+    return parentNode?.type === 'ElCol'
+  })
 
   /**
    * 可见的 resize handles
    */
   const visibleResizeHandles = computed(() => {
-    if (isChildInElCol.value) return [];
+    if (isChildInElCol.value) return []
     if (isElColInRow.value) {
-      return resizeHandles.filter((handle) => ["e", "w"].includes(handle.key));
+      return resizeHandles.filter((handle) => ['e', 'w'].includes(handle.key))
     }
-    if (node.value?.type === "ElLayoutRow") {
-      return resizeHandles.filter((handle) => ["n", "s"].includes(handle.key));
+    if (node.value?.type === 'ElLayoutRow') {
+      return resizeHandles.filter((handle) => ['n', 's'].includes(handle.key))
     }
-    const config = getRegionResizeConfig(node.value?.type);
-    if (!config) return resizeHandles;
-    return resizeHandles.filter((handle) => config.handles.includes(handle.key));
-  });
+    const config = getRegionResizeConfig(node.value?.type)
+    if (!config) return resizeHandles
+    return resizeHandles.filter((handle) => config.handles.includes(handle.key))
+  })
 
   /**
    * 是否显示 resize handles（基础检查，不含 selection 检查）
    */
   const showResizeHandlesBase = computed(() => {
-    void selectionVersion.value;
-    if (readonly.value || isRoot.value) return false;
-    if (!node.value || node.value.locked) return false;
-    if (node.value.type === "ElMain") return false;
-    if (isChildInElCol.value) return false;
-    const parentNode = doc.value?.getParent?.(node.value.id);
+    void selectionVersion.value
+    if (readonly.value || isRoot.value) return false
+    if (!node.value || node.value.locked) return false
+    if (node.value.type === 'ElMain') return false
+    if (isChildInElCol.value) return false
+    const parentNode = doc.value?.getParent?.(node.value.id)
     if (
-      parentNode?.type === "ElHeader" ||
-      parentNode?.type === "ElAside" ||
-      parentNode?.type === "ElMain" ||
-      parentNode?.type === "ElFooter"
+      parentNode?.type === 'ElHeader' ||
+      parentNode?.type === 'ElAside' ||
+      parentNode?.type === 'ElMain' ||
+      parentNode?.type === 'ElFooter'
     ) {
-      return false;
+      return false
     }
-    const config = getRegionResizeConfig(node.value?.type);
-    if (config && config.handles.length === 0) return false;
-    const parent = doc.value?.getParent?.(node.value.id);
+    const config = getRegionResizeConfig(node.value?.type)
+    if (config && config.handles.length === 0) return false
+    const parent = doc.value?.getParent?.(node.value.id)
     if (parent && !isChildResizableByDescriptor(parent.type)) {
-      return false;
+      return false
     }
-    return true;
-  });
+    return true
+  })
 
   /**
    * 判断是否为容器
    */
   const isContainer = computed(() => {
-    if (!node.value) return false;
-    return isContainerType(node.value.type);
-  });
+    if (!node.value) return false
+    return isContainerType(node.value.type)
+  })
 
   /**
    * 判断是否为区域容器
    */
   const isRegionContainer = computed(() => {
-    if (!node.value) return false;
-    return isRegionType(node.value.type);
-  });
+    if (!node.value) return false
+    return isRegionType(node.value.type)
+  })
 
   /**
    * 解析点击时的选中目标
@@ -164,22 +164,22 @@ export function useNodeInteraction(deps: UseNodeInteractionDeps) {
    * @returns {import('@/editor-core').ComponentNode | null}
    */
   const resolveClickSelectionTarget = (event?: MouseEvent): ComponentNode | null => {
-    if (!node.value) return null;
-    if (node.value.type === "FreeContainer") {
-      const parentNode = doc.value?.getParent?.(node.value.id);
-      const containerNode = parentNode ? doc.value?.getParent?.(parentNode.id) : null;
-      if (parentNode && isRegionType(parentNode.type) && containerNode?.type === "ElContainer") {
-        if (event?.altKey || containerNode.locked) return node.value;
-        return containerNode;
+    if (!node.value) return null
+    if (node.value.type === 'FreeContainer') {
+      const parentNode = doc.value?.getParent?.(node.value.id)
+      const containerNode = parentNode ? doc.value?.getParent?.(parentNode.id) : null
+      if (parentNode && isRegionType(parentNode.type) && containerNode?.type === 'ElContainer') {
+        if (event?.altKey || containerNode.locked) return node.value
+        return containerNode
       }
     }
-    if (!isRegionContainer.value) return node.value;
-    if (event?.altKey) return node.value;
-    const parentNode = doc.value?.getParent?.(node.value.id);
-    if (!parentNode || parentNode.type !== "ElContainer") return node.value;
-    if (parentNode.locked) return node.value;
-    return parentNode;
-  };
+    if (!isRegionContainer.value) return node.value
+    if (event?.altKey) return node.value
+    const parentNode = doc.value?.getParent?.(node.value.id)
+    if (!parentNode || parentNode.type !== 'ElContainer') return node.value
+    if (parentNode.locked) return node.value
+    return parentNode
+  }
 
   /**
    * 获取布局节点的最外层 ElLayout
@@ -189,22 +189,22 @@ export function useNodeInteraction(deps: UseNodeInteractionDeps) {
   const resolveLayoutRootNode = (
     currentNode: ComponentNode | null | undefined,
   ): ComponentNode | null => {
-    if (!currentNode) return null;
+    if (!currentNode) return null
     if (
-      currentNode.type !== "ElLayout" &&
-      currentNode.type !== "ElLayoutRow" &&
-      currentNode.type !== "ElCol"
+      currentNode.type !== 'ElLayout' &&
+      currentNode.type !== 'ElLayoutRow' &&
+      currentNode.type !== 'ElCol'
     ) {
-      return null;
+      return null
     }
-    if (currentNode.type === "ElLayout") return currentNode;
-    let parentNode = doc.value?.getParent?.(currentNode.id);
+    if (currentNode.type === 'ElLayout') return currentNode
+    let parentNode = doc.value?.getParent?.(currentNode.id)
     while (parentNode) {
-      if (parentNode.type === "ElLayout") return parentNode;
-      parentNode = doc.value?.getParent?.(parentNode.id);
+      if (parentNode.type === 'ElLayout') return parentNode
+      parentNode = doc.value?.getParent?.(parentNode.id)
     }
-    return null;
-  };
+    return null
+  }
 
   /**
    * 获取布局节点所在的 ElLayoutRow
@@ -214,15 +214,15 @@ export function useNodeInteraction(deps: UseNodeInteractionDeps) {
   const resolveAncestorLayoutRow = (
     currentNode: ComponentNode | null | undefined,
   ): ComponentNode | null => {
-    if (!currentNode || !doc.value) return null;
-    if (currentNode.type === "ElLayoutRow") return currentNode;
-    let parentNode = doc.value.getParent?.(currentNode.id);
+    if (!currentNode || !doc.value) return null
+    if (currentNode.type === 'ElLayoutRow') return currentNode
+    let parentNode = doc.value.getParent?.(currentNode.id)
     while (parentNode) {
-      if (parentNode.type === "ElLayoutRow") return parentNode;
-      parentNode = doc.value.getParent?.(parentNode.id);
+      if (parentNode.type === 'ElLayoutRow') return parentNode
+      parentNode = doc.value.getParent?.(parentNode.id)
     }
-    return null;
-  };
+    return null
+  }
 
   /**
    * 判断是否点击在容器边框区域
@@ -230,30 +230,30 @@ export function useNodeInteraction(deps: UseNodeInteractionDeps) {
    * @returns {boolean}
    */
   const isClickOnContainerBorder = (event: MouseEvent): boolean => {
-    if (!node.value || !isContainer.value) return false;
-    const element = nodeRef.value;
-    if (!element || !event || typeof event.clientX !== "number") return false;
-    const rect = element.getBoundingClientRect?.();
-    if (!rect) return false;
-    const x = event.clientX;
-    const y = event.clientY;
+    if (!node.value || !isContainer.value) return false
+    const element = nodeRef.value
+    if (!element || !event || typeof event.clientX !== 'number') return false
+    const rect = element.getBoundingClientRect?.()
+    if (!rect) return false
+    const x = event.clientX
+    const y = event.clientY
     if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-      return false;
+      return false
     }
-    const isLayoutNode = node.value.type === "ElLayoutRow" || node.value.type === "ElCol";
-    const edge = node.value.type === "ElCol" ? 16 : isLayoutNode ? 10 : 6;
+    const isLayoutNode = node.value.type === 'ElLayoutRow' || node.value.type === 'ElCol'
+    const edge = node.value.type === 'ElCol' ? 16 : isLayoutNode ? 10 : 6
     const nearEdge =
       x - rect.left <= edge ||
       rect.right - x <= edge ||
       y - rect.top <= edge ||
-      rect.bottom - y <= edge;
-    if (!nearEdge) return false;
-    if (isLayoutNode) return true;
-    const eventTarget = event.target instanceof Element ? event.target : null;
-    const hitNodeEl = eventTarget?.closest?.("[data-node-id]");
-    if (!hitNodeEl) return true;
-    return hitNodeEl.getAttribute("data-node-id") === node.value.id;
-  };
+      rect.bottom - y <= edge
+    if (!nearEdge) return false
+    if (isLayoutNode) return true
+    const eventTarget = event.target instanceof Element ? event.target : null
+    const hitNodeEl = eventTarget?.closest?.('[data-node-id]')
+    if (!hitNodeEl) return true
+    return hitNodeEl.getAttribute('data-node-id') === node.value.id
+  }
 
   /**
    * 处理点击事件
@@ -261,163 +261,163 @@ export function useNodeInteraction(deps: UseNodeInteractionDeps) {
    */
   const handleClick = (event: MouseEvent) => {
     if (readonly.value) {
-      void runPreviewScript("click", event);
-      return;
+      void runPreviewScript('click', event)
+      return
     }
-    if (!node.value || !selection.value) return;
-    if (node.value?.type === "Tabs") {
-      const eventTarget = event.target instanceof Element ? event.target : null;
-      const hitNodeEl = eventTarget?.closest?.("[data-node-id]");
-      const hitNodeId = hitNodeEl?.getAttribute?.("data-node-id");
+    if (!node.value || !selection.value) return
+    if (node.value?.type === 'Tabs') {
+      const eventTarget = event.target instanceof Element ? event.target : null
+      const hitNodeEl = eventTarget?.closest?.('[data-node-id]')
+      const hitNodeId = hitNodeEl?.getAttribute?.('data-node-id')
       if (hitNodeId && hitNodeId !== node.value.id) {
-        return;
+        return
       }
     }
-    const isLayoutContainerNode = node.value.type === "ElLayoutRow" || node.value.type === "ElCol";
-    const hasSelectionModifier = event.shiftKey || event.altKey || event.metaKey || event.ctrlKey;
-    const isBorderClick = isClickOnContainerBorder(event);
-    if (node.value.type === "ElCol" && !hasSelectionModifier) {
-      const rowNode = doc.value?.getParent?.(node.value.id);
-      const isColSelected = selection.value.isSelected?.(node.value.id);
-      if (rowNode?.type === "ElLayoutRow" && !rowNode.locked && isColSelected) {
-        const rowElement = createSelectableElement("node", rowNode.id);
-        selection.value.select(rowElement);
-        return;
+    const isLayoutContainerNode = node.value.type === 'ElLayoutRow' || node.value.type === 'ElCol'
+    const hasSelectionModifier = event.shiftKey || event.altKey || event.metaKey || event.ctrlKey
+    const isBorderClick = isClickOnContainerBorder(event)
+    if (node.value.type === 'ElCol' && !hasSelectionModifier) {
+      const rowNode = doc.value?.getParent?.(node.value.id)
+      const isColSelected = selection.value.isSelected?.(node.value.id)
+      if (rowNode?.type === 'ElLayoutRow' && !rowNode.locked && isColSelected) {
+        const rowElement = createSelectableElement('node', rowNode.id)
+        selection.value.select(rowElement)
+        return
       }
     }
     if (isBorderClick) {
-      handleSelect(event);
-      return;
+      handleSelect(event)
+      return
     }
     if (event.metaKey || event.ctrlKey) {
-      let parentNode = doc.value?.getParent?.(node.value?.id);
+      let parentNode = doc.value?.getParent?.(node.value?.id)
       while (parentNode) {
-        if (parentNode.type === "ElLayout") {
+        if (parentNode.type === 'ElLayout') {
           // Ctrl/Meta 多选优先针对当前节点切换，不再强制退化为 ElLayout 根单选
-          const element = createSelectableElement("node", node.value.id);
-          selection.value.toggleSelect?.(element);
-          return;
+          const element = createSelectableElement('node', node.value.id)
+          selection.value.toggleSelect?.(element)
+          return
         }
-        parentNode = doc.value?.getParent?.(parentNode.id);
+        parentNode = doc.value?.getParent?.(parentNode.id)
       }
     }
-    let targetNode = resolveClickSelectionTarget(event);
-    let forceRowSelection = false;
-    const layoutRoot = resolveLayoutRootNode(node.value);
+    let targetNode = resolveClickSelectionTarget(event)
+    let forceRowSelection = false
+    const layoutRoot = resolveLayoutRootNode(node.value)
     if (!isLayoutContainerNode) {
       if (event.metaKey || event.ctrlKey) {
         if (layoutRoot && layoutRoot.id !== node.value?.id) {
-          targetNode = layoutRoot;
-          forceRowSelection = true;
+          targetNode = layoutRoot
+          forceRowSelection = true
         }
       } else if (layoutRoot && layoutRoot.id !== node.value?.id) {
-        targetNode = layoutRoot;
+        targetNode = layoutRoot
       }
     }
-    if (!targetNode) return;
-    const element = createSelectableElement("node", targetNode.id);
+    if (!targetNode) return
+    const element = createSelectableElement('node', targetNode.id)
     if (event.shiftKey) {
-      selection.value.selectRange?.(element);
-      return;
+      selection.value.selectRange?.(element)
+      return
     }
     if (forceRowSelection && (event.metaKey || event.ctrlKey)) {
-      selection.value.select(element);
-      return;
+      selection.value.select(element)
+      return
     }
     if (!forceRowSelection && (event.metaKey || event.ctrlKey)) {
-      selection.value.toggleSelect?.(element);
-      return;
+      selection.value.toggleSelect?.(element)
+      return
     }
-    selection.value.select(element);
-  };
+    selection.value.select(element)
+  }
 
   /**
    * 处理双击事件
    * @param {MouseEvent} event - 鼠标事件
    */
   const handleDoubleClick = (event: MouseEvent) => {
-    if (readonly.value) return;
-    if (!node.value || !selection.value) return;
+    if (readonly.value) return
+    if (!node.value || !selection.value) return
     if (event && (event.ctrlKey || event.metaKey)) {
-      const rowNode = resolveAncestorLayoutRow(node.value);
+      const rowNode = resolveAncestorLayoutRow(node.value)
       if (rowNode && !rowNode.locked) {
-        const element = createSelectableElement("node", rowNode.id);
-        selection.value.select(element);
-        return;
+        const element = createSelectableElement('node', rowNode.id)
+        selection.value.select(element)
+        return
       }
     }
-    if (node.value.type !== "ElCol") {
-      const parentNode = doc.value?.getParent?.(node.value.id);
-      if (parentNode?.type === "ElCol") {
-        if (parentNode.locked) return;
-        const element = createSelectableElement("node", parentNode.id);
-        selection.value.select(element);
-        return;
+    if (node.value.type !== 'ElCol') {
+      const parentNode = doc.value?.getParent?.(node.value.id)
+      if (parentNode?.type === 'ElCol') {
+        if (parentNode.locked) return
+        const element = createSelectableElement('node', parentNode.id)
+        selection.value.select(element)
+        return
       }
     }
-    if (node.value.type === "ElCol") {
-      const rowNode = doc.value?.getParent?.(node.value.id);
-      if (rowNode?.type === "ElLayoutRow" && selection.value.isSelected?.(rowNode.id)) {
-        return;
+    if (node.value.type === 'ElCol') {
+      const rowNode = doc.value?.getParent?.(node.value.id)
+      if (rowNode?.type === 'ElLayoutRow' && selection.value.isSelected?.(rowNode.id)) {
+        return
       }
-      const layoutRoot = resolveLayoutRootNode(node.value);
+      const layoutRoot = resolveLayoutRootNode(node.value)
       if (layoutRoot) {
-        const element = createSelectableElement("node", node.value.id);
-        selection.value.select(element);
-        return;
+        const element = createSelectableElement('node', node.value.id)
+        selection.value.select(element)
+        return
       }
     }
-    if (!isRegionContainer.value) return;
-    const parentNode = doc.value?.getParent?.(node.value.id);
-    if (!parentNode || parentNode.type !== "ElContainer") return;
-    if (parentNode.locked) return;
-    const element = createSelectableElement("node", parentNode.id);
-    selection.value.select(element);
-  };
+    if (!isRegionContainer.value) return
+    const parentNode = doc.value?.getParent?.(node.value.id)
+    if (!parentNode || parentNode.type !== 'ElContainer') return
+    if (parentNode.locked) return
+    const element = createSelectableElement('node', parentNode.id)
+    selection.value.select(element)
+  }
 
   /**
    * 处理右键菜单事件
    * @param {MouseEvent} event - 鼠标事件
    */
   const handleContextMenu = (event: MouseEvent) => {
-    if (readonly.value) return;
+    if (readonly.value) return
     // 阻止浏览器默认右键菜单
-    event.preventDefault();
-    event.stopPropagation();
+    event.preventDefault()
+    event.stopPropagation()
 
     // 如果当前节点未被选中，先选中它
-    if (!node.value || !selection.value) return;
+    if (!node.value || !selection.value) return
 
-    const currentNode = resolveClickSelectionTarget(event) || node.value;
-    const currentNodeId = currentNode.id;
-    const selectedElements = selection.value.getSelectedElements?.() || [];
-    const isSelected = selectedElements.some((el) => el.id === currentNodeId && el.kind === "node");
+    const currentNode = resolveClickSelectionTarget(event) || node.value
+    const currentNodeId = currentNode.id
+    const selectedElements = selection.value.getSelectedElements?.() || []
+    const isSelected = selectedElements.some((el) => el.id === currentNodeId && el.kind === 'node')
 
     if (!isSelected) {
       // 若已选中外层容器且当前节点是其子孙，保持外层选中
-      const primary = selection.value.getPrimaryElement?.();
-      let keepSelection = false;
-      if (primary?.kind === "node" && doc.value) {
-        let parent = doc.value.getParent?.(currentNode.id);
+      const primary = selection.value.getPrimaryElement?.()
+      let keepSelection = false
+      if (primary?.kind === 'node' && doc.value) {
+        let parent = doc.value.getParent?.(currentNode.id)
         while (parent) {
           if (parent.id === primary.id) {
-            keepSelection = true;
-            break;
+            keepSelection = true
+            break
           }
-          parent = doc.value.getParent?.(parent.id);
+          parent = doc.value.getParent?.(parent.id)
         }
       }
       if (!keepSelection) {
-        const element = createSelectableElement("node", currentNode.id);
-        selection.value.select(element);
+        const element = createSelectableElement('node', currentNode.id)
+        selection.value.select(element)
       }
     }
 
     // 显示右键菜单
     if (showContextMenu) {
-      showContextMenu(event);
+      showContextMenu(event)
     }
-  };
+  }
 
   return {
     handleClick,
@@ -435,7 +435,7 @@ export function useNodeInteraction(deps: UseNodeInteractionDeps) {
     resolveLayoutRootNode,
     resolveAncestorLayoutRow,
     isClickOnContainerBorder,
-  };
+  }
 }
 
-export default { useNodeInteraction };
+export default { useNodeInteraction }

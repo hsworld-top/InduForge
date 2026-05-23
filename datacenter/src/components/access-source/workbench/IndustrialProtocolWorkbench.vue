@@ -6,13 +6,11 @@
       </button>
       <div class="industrial-workbench__title">
         <span>{{ protocolLabel }}</span>
-        <strong>{{ connection.name || "未命名工业接入源" }}</strong>
+        <strong>{{ connection.name || '未命名工业接入源' }}</strong>
       </div>
       <WorkbenchStatusPill :label="statusLabel" :tone="statusTone" />
       <div class="industrial-workbench__spacer"></div>
-      <el-button size="small" :loading="testing" @click="runConnectionTest">
-        测试连接
-      </el-button>
+      <el-button size="small" :loading="testing" @click="runConnectionTest"> 测试连接 </el-button>
     </header>
 
     <div class="industrial-workbench__body">
@@ -98,152 +96,150 @@
 </template>
 
 <script setup lang="ts">
-import dayjs from "dayjs";
-import { computed, ref } from "vue";
-import { ElMessage } from "element-plus";
-import dataAPI from "@/api/data.api";
-import { getApiErrorMessage } from "@/utils/request";
-import WorkbenchStatusPill from "@/components/workbench/WorkbenchStatusPill.vue";
-import IconTablerActivityHeartbeat from "~icons/tabler/activity-heartbeat";
-import IconTablerArrowLeft from "~icons/tabler/arrow-left";
+import dayjs from 'dayjs'
+import { computed, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import dataAPI from '@/api/data.api'
+import { getApiErrorMessage } from '@/utils/request'
+import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
+import IconTablerActivityHeartbeat from '~icons/tabler/activity-heartbeat'
+import IconTablerArrowLeft from '~icons/tabler/arrow-left'
 
 type AccessSourceConnection = {
-  id: string;
-  name?: string;
-  type?: string;
-  status?: string;
-  config?: Record<string, any>;
-};
+  id: string
+  name?: string
+  type?: string
+  status?: string
+  config?: Record<string, any>
+}
 
 const props = defineProps<{
-  connection: AccessSourceConnection;
-  projectId: string;
-}>();
+  connection: AccessSourceConnection
+  projectId: string
+}>()
 
 defineEmits<{
-  (event: "back"): void;
-}>();
+  (event: 'back'): void
+}>()
 
-const testing = ref(false);
-const testState = ref<"idle" | "success" | "error">("idle");
-const testTitle = ref("尚未测试");
-const testDetail = ref("点击测试连接执行开发态短时验证");
-const logs = ref<string[]>([]);
+const testing = ref(false)
+const testState = ref<'idle' | 'success' | 'error'>('idle')
+const testTitle = ref('尚未测试')
+const testDetail = ref('点击测试连接执行开发态短时验证')
+const logs = ref<string[]>([])
 
-const config = computed(() => props.connection.config || {});
-const protocolLabel = computed(() =>
-  props.connection.type === "opcua" ? "OPC UA" : "Modbus",
-);
+const config = computed(() => props.connection.config || {})
+const protocolLabel = computed(() => (props.connection.type === 'opcua' ? 'OPC UA' : 'Modbus'))
 
 const statusLabel = computed(() => {
   const labels: Record<string, string> = {
-    connected: "在线",
-    disconnected: "离线",
-    error: "异常",
-    unknown: "未知",
-  };
-  return labels[props.connection.status || "unknown"] || "未知";
-});
+    connected: '在线',
+    disconnected: '离线',
+    error: '异常',
+    unknown: '未知',
+  }
+  return labels[props.connection.status || 'unknown'] || '未知'
+})
 
 const statusTone = computed(() => {
-  if (props.connection.status === "connected") return "success";
-  if (props.connection.status === "error") return "danger";
-  if (props.connection.status === "disconnected") return "warning";
-  return "neutral";
-});
+  if (props.connection.status === 'connected') return 'success'
+  if (props.connection.status === 'error') return 'danger'
+  if (props.connection.status === 'disconnected') return 'warning'
+  return 'neutral'
+})
 
 const endpointText = computed(() => {
-  if (props.connection.type === "opcua") {
-    return String(config.value.endpoint || "未配置 endpoint");
+  if (props.connection.type === 'opcua') {
+    return String(config.value.endpoint || '未配置 endpoint')
   }
-  if (String(config.value.mode || "tcp") === "rtu") {
-    return `RTU ${formatObject(config.value.serialConfig)}`;
+  if (String(config.value.mode || 'tcp') === 'rtu') {
+    return `RTU ${formatObject(config.value.serialConfig)}`
   }
-  return [config.value.host, config.value.port].filter(Boolean).join(":") || "未配置 host";
-});
+  return [config.value.host, config.value.port].filter(Boolean).join(':') || '未配置 host'
+})
 
 const configRows = computed(() => {
-  const c = config.value;
-  if (props.connection.type === "opcua") {
+  const c = config.value
+  if (props.connection.type === 'opcua') {
     return [
-      { label: "Endpoint", value: String(c.endpoint || "未配置") },
-      { label: "安全策略", value: String(c.securityPolicy || "None") },
-      { label: "安全模式", value: String(c.securityMode || "None") },
-      { label: "认证", value: String(c.authType || "anonymous") },
-      { label: "采样", value: `${c.samplingMs || 1000}ms` },
-    ];
+      { label: 'Endpoint', value: String(c.endpoint || '未配置') },
+      { label: '安全策略', value: String(c.securityPolicy || 'None') },
+      { label: '安全模式', value: String(c.securityMode || 'None') },
+      { label: '认证', value: String(c.authType || 'anonymous') },
+      { label: '采样', value: `${c.samplingMs || 1000}ms` },
+    ]
   }
   return [
-    { label: "模式", value: String(c.mode || "tcp").toUpperCase() },
-    { label: "地址", value: endpointText.value },
-    { label: "站号", value: String(c.slaveId ?? 1) },
-    { label: "起始", value: String(c.startAddress ?? 0) },
-    { label: "数量", value: String(c.quantity ?? 1) },
-    { label: "周期", value: `${c.pollIntervalMs || 1000}ms` },
-  ];
-});
+    { label: '模式', value: String(c.mode || 'tcp').toUpperCase() },
+    { label: '地址', value: endpointText.value },
+    { label: '站号', value: String(c.slaveId ?? 1) },
+    { label: '起始', value: String(c.startAddress ?? 0) },
+    { label: '数量', value: String(c.quantity ?? 1) },
+    { label: '周期', value: `${c.pollIntervalMs || 1000}ms` },
+  ]
+})
 
 const opcNodes = computed(() => {
-  const ns = config.value.options?.namespace || "ns=2";
+  const ns = config.value.options?.namespace || 'ns=2'
   return [
-    { name: "Root", nodeId: "i=84", dataType: "Object" },
-    { name: "Objects", nodeId: "i=85", dataType: "Folder" },
-    { name: "SampleValue", nodeId: `${ns};s=SampleValue`, dataType: "Variant" },
-    { name: "DeviceStatus", nodeId: `${ns};s=DeviceStatus`, dataType: "Boolean" },
-  ];
-});
+    { name: 'Root', nodeId: 'i=84', dataType: 'Object' },
+    { name: 'Objects', nodeId: 'i=85', dataType: 'Folder' },
+    { name: 'SampleValue', nodeId: `${ns};s=SampleValue`, dataType: 'Variant' },
+    { name: 'DeviceStatus', nodeId: `${ns};s=DeviceStatus`, dataType: 'Boolean' },
+  ]
+})
 
 const modbusRows = computed(() => {
-  const start = Number(config.value.startAddress ?? 0);
-  const quantity = Number(config.value.quantity ?? 1);
-  const functionCode = config.value.options?.functionCode || 3;
+  const start = Number(config.value.startAddress ?? 0)
+  const quantity = Number(config.value.quantity ?? 1)
+  const functionCode = config.value.options?.functionCode || 3
   return Array.from({ length: Math.min(quantity, 16) }, (_, index) => ({
     address: start + index,
     functionCode: `FC${functionCode}`,
     quantity: 1,
-    note: index === 0 ? "配置起始寄存器" : "连续寄存器",
-  }));
-});
+    note: index === 0 ? '配置起始寄存器' : '连续寄存器',
+  }))
+})
 
 const logText = computed(() =>
-  logs.value.length ? logs.value.join("\n") : "等待测试连接或节点侧采集事件",
-);
+  logs.value.length ? logs.value.join('\n') : '等待测试连接或节点侧采集事件',
+)
 
-const formatLogTime = () => dayjs().format("YYYY-MM-DD HH:mm:ss");
+const formatLogTime = () => dayjs().format('YYYY-MM-DD HH:mm:ss')
 
 const runConnectionTest = async () => {
-  testing.value = true;
-  const startedAt = performance.now();
+  testing.value = true
+  const startedAt = performance.now()
   try {
     const response = await dataAPI.testConnection(props.projectId, {
       type: props.connection.type,
       config: config.value,
-    });
-    const result = response?.data || response || {};
-    const duration = Math.round(performance.now() - startedAt);
-    testState.value = "success";
-    testTitle.value = result.message || "测试通过";
-    testDetail.value = result.detail || `耗时 ${duration}ms`;
-    logs.value.unshift(`[OK] ${formatLogTime()} ${testTitle.value} ${testDetail.value}`);
-    ElMessage.success(testTitle.value);
+    })
+    const result = response?.data || response || {}
+    const duration = Math.round(performance.now() - startedAt)
+    testState.value = 'success'
+    testTitle.value = result.message || '测试通过'
+    testDetail.value = result.detail || `耗时 ${duration}ms`
+    logs.value.unshift(`[OK] ${formatLogTime()} ${testTitle.value} ${testDetail.value}`)
+    ElMessage.success(testTitle.value)
   } catch (error) {
-    const message = getApiErrorMessage(error, "连接测试失败");
-    testState.value = "error";
-    testTitle.value = "测试失败";
-    testDetail.value = message;
-    logs.value.unshift(`[ERR] ${formatLogTime()} ${message}`);
-    ElMessage.error(message);
+    const message = getApiErrorMessage(error, '连接测试失败')
+    testState.value = 'error'
+    testTitle.value = '测试失败'
+    testDetail.value = message
+    logs.value.unshift(`[ERR] ${formatLogTime()} ${message}`)
+    ElMessage.error(message)
   } finally {
-    testing.value = false;
+    testing.value = false
   }
-};
+}
 
 const formatObject = (value: unknown) => {
-  if (!value || typeof value !== "object") return "未配置";
+  if (!value || typeof value !== 'object') return '未配置'
   return Object.entries(value as Record<string, unknown>)
     .map(([key, val]) => `${key}=${val}`)
-    .join(", ");
-};
+    .join(', ')
+}
 </script>
 
 <style scoped>

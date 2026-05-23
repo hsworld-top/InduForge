@@ -95,9 +95,7 @@
         v-if="filteredRootUnits.length === 0 && filteredFolders.length === 0"
         icon-name="compute"
         :title="keyword ? '没有匹配的计算单元' : '暂无计算单元'"
-        :description="
-          keyword ? '换个关键词再试。' : '新建计算单元后会显示在列表中。'
-        "
+        :description="keyword ? '换个关键词再试。' : '新建计算单元后会显示在列表中。'"
       />
     </div>
 
@@ -123,11 +121,7 @@
             <IconTablerFolderSymlink class="compute-tree__menu-icon" />
             <span>移动到分组</span>
           </button>
-          <button
-            type="button"
-            class="is-danger"
-            @click="emitContextAction('delete')"
-          >
+          <button type="button" class="is-danger" @click="emitContextAction('delete')">
             <IconTablerTrash class="compute-tree__menu-icon" />
             <span>删除</span>
           </button>
@@ -138,67 +132,67 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { Search } from "@element-plus/icons-vue";
-import IconTablerAlertCircle from "~icons/tabler/alert-circle";
-import IconTablerFileCode from "~icons/tabler/file-code";
-import IconTablerFolderPlus from "~icons/tabler/folder-plus";
-import IconTablerFolderSymlink from "~icons/tabler/folder-symlink";
-import IconTablerPencil from "~icons/tabler/pencil";
-import IconTablerPlus from "~icons/tabler/plus";
-import IconTablerRefresh from "~icons/tabler/refresh";
-import IconTablerTrash from "~icons/tabler/trash";
-import type { ComputeFolder, ComputeUnit } from "@/api/schemas/compute.schema";
-import EmptyState from "@/components/shared/EmptyState.vue";
-import ComputeTreeBranch from "./ComputeTreeBranch.vue";
+import { computed, ref } from 'vue'
+import { Search } from '@element-plus/icons-vue'
+import IconTablerAlertCircle from '~icons/tabler/alert-circle'
+import IconTablerFileCode from '~icons/tabler/file-code'
+import IconTablerFolderPlus from '~icons/tabler/folder-plus'
+import IconTablerFolderSymlink from '~icons/tabler/folder-symlink'
+import IconTablerPencil from '~icons/tabler/pencil'
+import IconTablerPlus from '~icons/tabler/plus'
+import IconTablerRefresh from '~icons/tabler/refresh'
+import IconTablerTrash from '~icons/tabler/trash'
+import type { ComputeFolder, ComputeUnit } from '@/api/schemas/compute.schema'
+import EmptyState from '@/components/shared/EmptyState.vue'
+import ComputeTreeBranch from './ComputeTreeBranch.vue'
 import {
   buildComputeFolderTree,
   filterComputeTree,
   type ComputeFolderTreeNode,
-} from "./computeTreeModel";
+} from './computeTreeModel'
 
-const SearchIcon = Search;
+const SearchIcon = Search
 
 const props = withDefaults(
   defineProps<{
-    units: ComputeUnit[];
-    folders: ComputeFolder[];
-    selectedUnitId?: string | null;
-    dirtyUnitIds?: string[];
-    loading?: boolean;
-    listError?: string;
-    foldersError?: string;
+    units: ComputeUnit[]
+    folders: ComputeFolder[]
+    selectedUnitId?: string | null
+    dirtyUnitIds?: string[]
+    loading?: boolean
+    listError?: string
+    foldersError?: string
   }>(),
   {
     selectedUnitId: null,
     dirtyUnitIds: () => [],
     loading: false,
-    listError: "",
-    foldersError: "",
+    listError: '',
+    foldersError: '',
   },
-);
+)
 
 const emit = defineEmits<{
-  (event: "selectUnit", id: string): void;
-  (event: "createUnit"): void;
-  (event: "createFolder"): void;
-  (event: "refresh"): void;
-  (event: "renameUnit", unit: ComputeUnit): void;
-  (event: "moveUnit", unit: ComputeUnit): void;
-  (event: "deleteUnit", unit: ComputeUnit): void;
-  (event: "renameFolder", folder: ComputeFolderTreeNode): void;
-  (event: "moveFolder", folder: ComputeFolderTreeNode): void;
-  (event: "deleteFolder", folder: ComputeFolderTreeNode): void;
-}>();
+  (event: 'selectUnit', id: string): void
+  (event: 'createUnit'): void
+  (event: 'createFolder'): void
+  (event: 'refresh'): void
+  (event: 'renameUnit', unit: ComputeUnit): void
+  (event: 'moveUnit', unit: ComputeUnit): void
+  (event: 'deleteUnit', unit: ComputeUnit): void
+  (event: 'renameFolder', folder: ComputeFolderTreeNode): void
+  (event: 'moveFolder', folder: ComputeFolderTreeNode): void
+  (event: 'deleteFolder', folder: ComputeFolderTreeNode): void
+}>()
 
-const keyword = ref("");
+const keyword = ref('')
 const contextMenu = ref<{
-  visible: boolean;
-  type: "unit" | "folder" | null;
-  x: number;
-  y: number;
-  unit: ComputeUnit | null;
-  folder: ComputeFolderTreeNode | null;
+  visible: boolean
+  type: 'unit' | 'folder' | null
+  x: number
+  y: number
+  unit: ComputeUnit | null
+  folder: ComputeFolderTreeNode | null
 }>({
   visible: false,
   type: null,
@@ -206,102 +200,97 @@ const contextMenu = ref<{
   y: 0,
   unit: null,
   folder: null,
-});
+})
 
-const total = computed(() => props.units.length);
-const tree = computed(() => buildComputeFolderTree(props.folders, props.units));
+const total = computed(() => props.units.length)
+const tree = computed(() => buildComputeFolderTree(props.folders, props.units))
 const filteredTree = computed(() =>
-  filterComputeTree(
-    tree.value.rootFolders,
-    tree.value.rootUnits,
-    keyword.value,
-  ),
-);
-const filteredFolders = computed(() => filteredTree.value.folders);
-const filteredRootUnits = computed(() => filteredTree.value.units);
-const dirtyUnitIdSet = computed(() => new Set(props.dirtyUnitIds.map(String)));
+  filterComputeTree(tree.value.rootFolders, tree.value.rootUnits, keyword.value),
+)
+const filteredFolders = computed(() => filteredTree.value.folders)
+const filteredRootUnits = computed(() => filteredTree.value.units)
+const dirtyUnitIdSet = computed(() => new Set(props.dirtyUnitIds.map(String)))
 
 function openUnitMenu(event: MouseEvent, unit: ComputeUnit) {
   contextMenu.value = {
     visible: true,
-    type: "unit",
+    type: 'unit',
     x: Math.min(event.clientX, window.innerWidth - 180),
     y: Math.min(event.clientY, window.innerHeight - 126),
     unit,
     folder: null,
-  };
+  }
 }
 
 function openFolderMenu(event: MouseEvent, folder: ComputeFolderTreeNode) {
   contextMenu.value = {
     visible: true,
-    type: "folder",
+    type: 'folder',
     x: Math.min(event.clientX, window.innerWidth - 180),
     y: Math.min(event.clientY, window.innerHeight - 126),
     unit: null,
     folder,
-  };
+  }
 }
 
 function closeContextMenu() {
-  contextMenu.value.visible = false;
+  contextMenu.value.visible = false
 }
 
-function emitContextAction(action: "rename" | "move" | "delete") {
-  const { type, unit, folder } = contextMenu.value;
-  closeContextMenu();
-  if (type === "unit" && unit) {
-    if (action === "rename") {
-      emit("renameUnit", unit);
-      return;
+function emitContextAction(action: 'rename' | 'move' | 'delete') {
+  const { type, unit, folder } = contextMenu.value
+  closeContextMenu()
+  if (type === 'unit' && unit) {
+    if (action === 'rename') {
+      emit('renameUnit', unit)
+      return
     }
-    if (action === "delete") {
-      emit("deleteUnit", unit);
-      return;
+    if (action === 'delete') {
+      emit('deleteUnit', unit)
+      return
     }
-    emit("moveUnit", unit);
-    return;
+    emit('moveUnit', unit)
+    return
   }
-  if (type === "folder" && folder) {
-    if (action === "rename") {
-      emit("renameFolder", folder);
-      return;
+  if (type === 'folder' && folder) {
+    if (action === 'rename') {
+      emit('renameFolder', folder)
+      return
     }
-    if (action === "delete") {
-      emit("deleteFolder", folder);
-      return;
+    if (action === 'delete') {
+      emit('deleteFolder', folder)
+      return
     }
-    emit("moveFolder", folder);
-    return;
+    emit('moveFolder', folder)
+    return
   }
 }
 
 const statusText = (status?: string) => {
   const map: Record<string, string> = {
-    enabled: "启用",
-    idle: "空闲",
-    running: "运行中",
-    error: "异常",
-    disabled: "停用",
-  };
-  return map[status || ""] || "未知";
-};
+    enabled: '启用',
+    idle: '空闲',
+    running: '运行中',
+    error: '异常',
+    disabled: '停用',
+  }
+  return map[status || ''] || '未知'
+}
 
 const statusTone = (status?: string) => {
-  if (status === "running" || status === "enabled" || status === "idle")
-    return "success";
-  if (status === "error") return "danger";
-  if (status === "disabled") return "muted";
-  return "info";
-};
+  if (status === 'running' || status === 'enabled' || status === 'idle') return 'success'
+  if (status === 'error') return 'danger'
+  if (status === 'disabled') return 'muted'
+  return 'info'
+}
 
-const isUnitDirty = (unit: ComputeUnit) => dirtyUnitIdSet.value.has(String(unit.id));
+const isUnitDirty = (unit: ComputeUnit) => dirtyUnitIdSet.value.has(String(unit.id))
 
 const unitStatusText = (unit: ComputeUnit) =>
-  isUnitDirty(unit) ? "未保存" : statusText(unit.status);
+  isUnitDirty(unit) ? '未保存' : statusText(unit.status)
 
 const unitStatusTone = (unit: ComputeUnit) =>
-  isUnitDirty(unit) ? "warning" : statusTone(unit.status);
+  isUnitDirty(unit) ? 'warning' : statusTone(unit.status)
 </script>
 
 <style scoped>

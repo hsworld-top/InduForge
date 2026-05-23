@@ -30,12 +30,7 @@
     <template #footer>
       <div class="compute-move-dialog__footer">
         <el-button @click="visible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="loading"
-          :disabled="!canSubmit"
-          @click="submit"
-        >
+        <el-button type="primary" :loading="loading" :disabled="!canSubmit" @click="submit">
           移动
         </el-button>
       </div>
@@ -44,82 +39,74 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import type {
-  ComputeFolder,
-  ComputeUnit,
-} from "@/api/schemas/compute.schema";
-import DcDialog from "@/components/shared/DcDialog.vue";
+import { computed, ref, watch } from 'vue'
+import type { ComputeFolder, ComputeUnit } from '@/api/schemas/compute.schema'
+import DcDialog from '@/components/shared/DcDialog.vue'
 
 const props = withDefaults(
   defineProps<{
-    modelValue: boolean;
-    unit: ComputeUnit | null;
-    folders: ComputeFolder[];
-    loading?: boolean;
+    modelValue: boolean
+    unit: ComputeUnit | null
+    folders: ComputeFolder[]
+    loading?: boolean
   }>(),
   {
     loading: false,
   },
-);
+)
 
 const emit = defineEmits<{
-  (event: "update:modelValue", value: boolean): void;
-  (event: "submit", folderId: string | null): void;
-}>();
+  (event: 'update:modelValue', value: boolean): void
+  (event: 'submit', folderId: string | null): void
+}>()
 
 const visible = computed({
   get: () => props.modelValue,
-  set: (value: boolean) => emit("update:modelValue", value),
-});
+  set: (value: boolean) => emit('update:modelValue', value),
+})
 
-const folderId = ref<string | null>(null);
-const currentFolderId = computed(() =>
-  props.unit?.folderId ? String(props.unit.folderId) : null,
-);
+const folderId = ref<string | null>(null)
+const currentFolderId = computed(() => (props.unit?.folderId ? String(props.unit.folderId) : null))
 const canSubmit = computed(
   () => Boolean(props.unit) && folderId.value !== currentFolderId.value && !props.loading,
-);
+)
 const isDirty = computed(
-  () =>
-    visible.value &&
-    Boolean(props.unit) &&
-    folderId.value !== currentFolderId.value,
-);
+  () => visible.value && Boolean(props.unit) && folderId.value !== currentFolderId.value,
+)
 
 const flattenFolders = (
   folders: ComputeFolder[],
   depth = 0,
 ): Array<{ id: string; label: string }> =>
   folders.flatMap((folder) => [
-    { id: String(folder.id), label: `${"　".repeat(depth)}${folder.name}` },
+    { id: String(folder.id), label: `${'　'.repeat(depth)}${folder.name}` },
     ...flattenFolders(folder.children || [], depth + 1),
-  ]);
+  ])
 
-const folderOptions = computed(() => flattenFolders(props.folders));
+const folderOptions = computed(() => flattenFolders(props.folders))
 
 function resetForm() {
-  folderId.value = currentFolderId.value;
+  folderId.value = currentFolderId.value
 }
 
 function submit() {
-  if (!canSubmit.value) return;
-  emit("submit", folderId.value || null);
+  if (!canSubmit.value) return
+  emit('submit', folderId.value || null)
 }
 
 watch(
   () => props.modelValue,
   (open) => {
-    if (open) resetForm();
+    if (open) resetForm()
   },
-);
+)
 
 watch(
   () => props.unit?.id,
   () => {
-    if (props.modelValue) resetForm();
+    if (props.modelValue) resetForm()
   },
-);
+)
 </script>
 
 <style scoped>

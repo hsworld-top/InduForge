@@ -1,73 +1,69 @@
-import type {
-  ComputeUnitDetail,
-  ComputeUnitSave,
-} from "@/api/schemas/compute.schema";
+import type { ComputeUnitDetail, ComputeUnitSave } from '@/api/schemas/compute.schema'
 
 export interface ComputeEditorTab {
-  id: string;
-  name: string;
-  dirty: boolean;
+  id: string
+  name: string
+  dirty: boolean
 }
 
 export interface ComputeParameterRow {
-  uid: string;
-  name: string;
-  type: string;
-  required: boolean;
-  defaultValue: string;
-  description: string;
+  uid: string
+  name: string
+  type: string
+  required: boolean
+  defaultValue: string
+  description: string
 }
 
 export interface ComputeDatapointVariableRow {
-  uid: string;
-  alias: string;
-  path: string;
-  datapointId?: string;
-  dataType?: string;
+  uid: string
+  alias: string
+  path: string
+  datapointId?: string
+  dataType?: string
 }
 
 export interface ComputeDependencyDraft {
-  id: string;
+  id: string
 }
 
 export interface ComputeDraft {
-  id: string;
-  name: string;
-  folderId: string | null;
-  lang: string;
-  status: string;
-  code: string;
-  triggerType: string;
-  triggerConfig: Record<string, unknown>;
-  inputBindings: Record<string, unknown>;
-  outputBindings: Record<string, unknown>;
-  timeoutMs: number;
-  isEnabled: boolean;
-  dependencies: ComputeDependencyDraft[];
-  parameterRows: ComputeParameterRow[];
-  datapointVariableRows: ComputeDatapointVariableRow[];
-  dirty: boolean;
+  id: string
+  name: string
+  folderId: string | null
+  lang: string
+  status: string
+  code: string
+  triggerType: string
+  triggerConfig: Record<string, unknown>
+  inputBindings: Record<string, unknown>
+  outputBindings: Record<string, unknown>
+  timeoutMs: number
+  isEnabled: boolean
+  dependencies: ComputeDependencyDraft[]
+  parameterRows: ComputeParameterRow[]
+  datapointVariableRows: ComputeDatapointVariableRow[]
+  dirty: boolean
 }
 
 const defaultCode = (lang?: string) => {
-  if (lang === "python") {
-    return "def main(argv, dp, ctx):\n    return argv[0] if len(argv) > 0 else None\n";
+  if (lang === 'python') {
+    return 'def main(argv, dp, ctx):\n    return argv[0] if len(argv) > 0 else None\n'
   }
-  return "return argv[0] ?? null;\n";
-};
+  return 'return argv[0] ?? null;\n'
+}
 
 export function toComputeDraft(unit: ComputeUnitDetail): ComputeDraft {
-  const inputBindings = asRecord(unit.inputBindings);
+  const inputBindings = asRecord(unit.inputBindings)
   return {
     id: String(unit.id),
-    name: unit.name || "未命名计算单元",
+    name: unit.name || '未命名计算单元',
     folderId: unit.folderId ? String(unit.folderId) : null,
-    lang: String(unit.lang || unit.language || "javascript"),
-    status: String(unit.status || (unit.isEnabled === false ? "disabled" : "enabled")),
+    lang: String(unit.lang || unit.language || 'javascript'),
+    status: String(unit.status || (unit.isEnabled === false ? 'disabled' : 'enabled')),
     code:
-      String(unit.code || unit.scriptCode || "") ||
-      defaultCode(String(unit.lang || unit.language)),
-    triggerType: String(unit.triggerType || "manual"),
+      String(unit.code || unit.scriptCode || '') || defaultCode(String(unit.lang || unit.language)),
+    triggerType: String(unit.triggerType || 'manual'),
     triggerConfig: asRecord(unit.triggerConfig),
     inputBindings,
     outputBindings: asRecord(unit.outputBindings),
@@ -77,7 +73,7 @@ export function toComputeDraft(unit: ComputeUnitDetail): ComputeDraft {
     parameterRows: toParameterRows(inputBindings),
     datapointVariableRows: toDatapointVariableRows(inputBindings),
     dirty: false,
-  };
+  }
 }
 
 export function draftToSavePayload(draft: ComputeDraft): Partial<ComputeUnitSave> {
@@ -93,81 +89,79 @@ export function draftToSavePayload(draft: ComputeDraft): Partial<ComputeUnitSave
     timeoutMs: draft.timeoutMs,
     isEnabled: draft.isEnabled,
     dependencies: draft.dependencies.map((item) => ({ id: item.id })),
-  };
+  }
 }
 
 function outputBindingsToSave(bindings: Record<string, unknown>): Record<string, unknown> {
-  const outputBindings = asRecord(bindings);
-  const outputs = outputBindings.outputs;
+  const outputBindings = asRecord(bindings)
+  const outputs = outputBindings.outputs
   if (Array.isArray(outputs) && outputs.length > 0) {
-    return outputBindings;
+    return outputBindings
   }
   return {
     ...outputBindings,
-    outputs: [{ name: "result", dataType: "object" }],
-  };
+    outputs: [{ name: 'result', dataType: 'object' }],
+  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    return { ...(value as Record<string, unknown>) };
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return { ...(value as Record<string, unknown>) }
   }
-  return {};
+  return {}
 }
 
 function toDependencyDrafts(value: unknown): ComputeDependencyDraft[] {
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) return []
   return value
     .map((item) => {
-      if (typeof item === "string") return { id: item };
-      if (item && typeof item === "object" && "id" in item) {
-        return { id: String((item as { id: unknown }).id) };
+      if (typeof item === 'string') return { id: item }
+      if (item && typeof item === 'object' && 'id' in item) {
+        return { id: String((item as { id: unknown }).id) }
       }
-      return null;
+      return null
     })
-    .filter((item): item is ComputeDependencyDraft => Boolean(item?.id));
+    .filter((item): item is ComputeDependencyDraft => Boolean(item?.id))
 }
 
 function toParameterRows(bindings: Record<string, unknown>): ComputeParameterRow[] {
-  const rawParameters = bindings.parameters;
-  if (!Array.isArray(rawParameters)) return [];
+  const rawParameters = bindings.parameters
+  if (!Array.isArray(rawParameters)) return []
   const rows: Array<ComputeParameterRow | null> = rawParameters.map((item) => {
-    if (!item || typeof item !== "object") return null;
-    const record = item as Record<string, unknown>;
+    if (!item || typeof item !== 'object') return null
+    const record = item as Record<string, unknown>
     return {
       uid: String(crypto.randomUUID()),
-      name: String(record.name || ""),
-      type: String(record.type || "string"),
+      name: String(record.name || ''),
+      type: String(record.type || 'string'),
       required: record.required !== false,
       defaultValue:
         record.defaultValue === undefined || record.defaultValue === null
-          ? ""
+          ? ''
           : String(record.defaultValue),
-      description: String(record.description || ""),
-    };
-  });
-  return rows.filter((item): item is ComputeParameterRow => Boolean(item?.name));
+      description: String(record.description || ''),
+    }
+  })
+  return rows.filter((item): item is ComputeParameterRow => Boolean(item?.name))
 }
 
-function toDatapointVariableRows(
-  bindings: Record<string, unknown>,
-): ComputeDatapointVariableRow[] {
-  const rawVariables = bindings.datapointVariables;
-  if (!Array.isArray(rawVariables)) return [];
+function toDatapointVariableRows(bindings: Record<string, unknown>): ComputeDatapointVariableRow[] {
+  const rawVariables = bindings.datapointVariables
+  if (!Array.isArray(rawVariables)) return []
   const rows: Array<ComputeDatapointVariableRow | null> = rawVariables.map((item) => {
-    if (!item || typeof item !== "object") return null;
-    const record = item as Record<string, unknown>;
+    if (!item || typeof item !== 'object') return null
+    const record = item as Record<string, unknown>
     return {
       uid: String(crypto.randomUUID()),
-      alias: String(record.alias || ""),
-      path: String(record.path || ""),
+      alias: String(record.alias || ''),
+      path: String(record.path || ''),
       datapointId: record.datapointId ? String(record.datapointId) : undefined,
       dataType: record.dataType ? String(record.dataType) : undefined,
-    };
-  });
-  return rows.filter(
-    (item): item is ComputeDatapointVariableRow => Boolean(item?.alias && item?.path),
-  );
+    }
+  })
+  return rows.filter((item): item is ComputeDatapointVariableRow =>
+    Boolean(item?.alias && item?.path),
+  )
 }
 
 function inputRowsToBindings(
@@ -192,5 +186,5 @@ function inputRowsToBindings(
         datapointId: row.datapointId,
         dataType: row.dataType,
       })),
-  };
+  }
 }

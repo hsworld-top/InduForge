@@ -1,28 +1,29 @@
-import { computed, ref, type ComputedRef, type Ref } from "vue";
-import enLocale from "element-plus/es/locale/lang/en";
-import zhLocale from "element-plus/es/locale/lang/zh-cn";
-import { i18n } from "@/i18n";
+import { computed, ref, type ComputedRef, type Ref } from 'vue'
+import enLocale from 'element-plus/es/locale/lang/en'
+import zhLocale from 'element-plus/es/locale/lang/zh-cn'
+import { i18n } from '@/i18n'
 
-export type EditorTheme = "light" | "dark";
-export type EditorLocale = "zh" | "en";
+export type EditorTheme = 'light' | 'dark'
+export type EditorLocale = 'zh' | 'en'
 
 export interface EditorUiRuntimeInput {
-  theme?: unknown;
-  locale?: unknown;
+  theme?: unknown
+  locale?: unknown
 }
 
-const isEditorTheme = (value: unknown): value is EditorTheme => value === "light" || value === "dark";
+const isEditorTheme = (value: unknown): value is EditorTheme =>
+  value === 'light' || value === 'dark'
 
-const isEditorLocale = (value: unknown): value is EditorLocale => value === "zh" || value === "en";
+const isEditorLocale = (value: unknown): value is EditorLocale => value === 'zh' || value === 'en'
 
 export interface EditorUiStore {
-  theme: Ref<EditorTheme>;
-  locale: Ref<EditorLocale>;
-  elementLocale: ComputedRef<typeof zhLocale | typeof enLocale>;
-  initFromRuntime(input?: EditorUiRuntimeInput): void;
-  setTheme(nextTheme: EditorTheme): void;
-  setLocale(nextLocale: EditorLocale): void;
-  applyThemeToDom(nextTheme?: EditorTheme): void;
+  theme: Ref<EditorTheme>
+  locale: Ref<EditorLocale>
+  elementLocale: ComputedRef<typeof zhLocale | typeof enLocale>
+  initFromRuntime(input?: EditorUiRuntimeInput): void
+  setTheme(nextTheme: EditorTheme): void
+  setLocale(nextLocale: EditorLocale): void
+  applyThemeToDom(nextTheme?: EditorTheme): void
 }
 
 /**
@@ -32,53 +33,53 @@ export interface EditorUiStore {
  * 主题/语言的来源只允许是宿主 bootstrap、宿主 postMessage 或显式运行时入参，
  * 不再从设计器本地缓存恢复，也不再把切换结果写回 localStorage。
  */
-let editorUiStore: EditorUiStore | null = null;
+let editorUiStore: EditorUiStore | null = null
 
 const syncLocaleToI18n = (nextLocale: EditorLocale): void => {
-  i18n.global.locale.value = nextLocale;
-};
+  i18n.global.locale.value = nextLocale
+}
 
 const createEditorUiStoreImpl = (): EditorUiStore => {
-  const theme = ref<EditorTheme>("light");
-  const locale = ref<EditorLocale>("zh");
+  const theme = ref<EditorTheme>('light')
+  const locale = ref<EditorLocale>('zh')
 
   const applyThemeToDom = (nextTheme: EditorTheme = theme.value): void => {
-    if (typeof document === "undefined") {
-      return;
+    if (typeof document === 'undefined') {
+      return
     }
 
-    const { documentElement } = document;
-    documentElement.classList.toggle("dark", nextTheme === "dark");
-    documentElement.setAttribute("data-theme", nextTheme);
-  };
+    const { documentElement } = document
+    documentElement.classList.toggle('dark', nextTheme === 'dark')
+    documentElement.setAttribute('data-theme', nextTheme)
+  }
 
   const initFromRuntime = (input?: EditorUiRuntimeInput): void => {
-    theme.value = isEditorTheme(input?.theme) ? input.theme : "light";
-    locale.value = isEditorLocale(input?.locale) ? input.locale : "zh";
+    theme.value = isEditorTheme(input?.theme) ? input.theme : 'light'
+    locale.value = isEditorLocale(input?.locale) ? input.locale : 'zh'
 
-    applyThemeToDom(theme.value);
-    syncLocaleToI18n(locale.value);
-  };
+    applyThemeToDom(theme.value)
+    syncLocaleToI18n(locale.value)
+  }
 
   const setTheme = (nextTheme: EditorTheme): void => {
     if (!isEditorTheme(nextTheme)) {
-      return;
+      return
     }
 
-    theme.value = nextTheme;
-    applyThemeToDom(nextTheme);
-  };
+    theme.value = nextTheme
+    applyThemeToDom(nextTheme)
+  }
 
   const setLocale = (nextLocale: EditorLocale): void => {
     if (!isEditorLocale(nextLocale)) {
-      return;
+      return
     }
 
-    locale.value = nextLocale;
-    syncLocaleToI18n(nextLocale);
-  };
+    locale.value = nextLocale
+    syncLocaleToI18n(nextLocale)
+  }
 
-  const elementLocale = computed(() => (locale.value === "en" ? enLocale : zhLocale));
+  const elementLocale = computed(() => (locale.value === 'en' ? enLocale : zhLocale))
 
   return {
     theme,
@@ -88,17 +89,17 @@ const createEditorUiStoreImpl = (): EditorUiStore => {
     setTheme,
     setLocale,
     applyThemeToDom,
-  };
-};
+  }
+}
 
 export function createEditorUiStore(): EditorUiStore {
   if (!editorUiStore) {
-    editorUiStore = createEditorUiStoreImpl();
+    editorUiStore = createEditorUiStoreImpl()
   }
 
-  return editorUiStore;
+  return editorUiStore
 }
 
-export const getEditorUiStore = (): EditorUiStore => createEditorUiStore();
+export const getEditorUiStore = (): EditorUiStore => createEditorUiStore()
 
-export const editorUiState = createEditorUiStore();
+export const editorUiState = createEditorUiStore()

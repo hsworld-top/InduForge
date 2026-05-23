@@ -1,34 +1,34 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed } from 'vue'
 
 const props = defineProps<{
-  resolvedProps?: Record<string, unknown>;
-}>();
+  resolvedProps?: Record<string, unknown>
+}>()
 
 const emit = defineEmits<{
-  (event: "update:modelValue", value: number): void;
-  (event: "update:currentPage", value: number): void;
-}>();
+  (event: 'update:modelValue', value: number): void
+  (event: 'update:currentPage', value: number): void
+}>()
 
-const total = computed(() => normalizePositiveNumber(props.resolvedProps?.total, 0));
-const pageSize = computed(() => normalizePositiveNumber(props.resolvedProps?.pageSize, 10));
-const currentPage = computed(() => normalizePositiveNumber(props.resolvedProps?.currentPage, 1));
-const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)));
+const total = computed(() => normalizePositiveNumber(props.resolvedProps?.total, 0))
+const pageSize = computed(() => normalizePositiveNumber(props.resolvedProps?.pageSize, 10))
+const currentPage = computed(() => normalizePositiveNumber(props.resolvedProps?.currentPage, 1))
+const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 const visiblePages = computed(() =>
   Array.from({ length: Math.min(pageCount.value, 5) }, (_, index) => index + 1),
-);
+)
 
 function normalizePositiveNumber(value: unknown, fallback: number): number {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(0, Math.floor(parsed));
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.max(0, Math.floor(parsed))
 }
 
 function updateCurrentPage(page: number): void {
-  const nextPage = Math.min(Math.max(1, page), pageCount.value);
-  if (nextPage === currentPage.value) return;
-  emit("update:currentPage", nextPage);
-  emit("update:modelValue", nextPage);
+  const nextPage = Math.min(Math.max(1, page), pageCount.value)
+  if (nextPage === currentPage.value) return
+  emit('update:currentPage', nextPage)
+  emit('update:modelValue', nextPage)
 }
 </script>
 

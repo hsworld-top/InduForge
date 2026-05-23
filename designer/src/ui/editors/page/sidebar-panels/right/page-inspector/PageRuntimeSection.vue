@@ -1,44 +1,44 @@
 <script setup lang="ts">
-import type { OpenMode, PageInspectorFormState } from "./page-inspector-types";
-import { computed } from "vue";
-import { useI18n } from "vue-i18n";
+import type { OpenMode, PageInspectorFormState } from './page-inspector-types'
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
-  form: PageInspectorFormState;
-  isSystemPage: boolean;
-}>();
+  form: PageInspectorFormState
+  isSystemPage: boolean
+}>()
 
 defineEmits<{
-  updateConfig: [];
-}>();
+  updateConfig: []
+}>()
 
-const { t } = useI18n();
+const { t } = useI18n()
 
 const openModeOptions = computed(() => [
-  { label: t("pageInspector.openModes.popup"), value: "popup" },
-  { label: t("pageInspector.openModes.cover"), value: "cover" },
-  { label: t("pageInspector.openModes.replace"), value: "replace" },
-]);
+  { label: t('pageInspector.openModes.popup'), value: 'popup' },
+  { label: t('pageInspector.openModes.cover'), value: 'cover' },
+  { label: t('pageInspector.openModes.replace'), value: 'replace' },
+])
 
 const cacheOptions = computed(() => [
-  { label: t("pageInspector.cacheModes.default"), value: "default" },
-  { label: t("pageInspector.cacheModes.cache"), value: "cache" },
-  { label: t("pageInspector.cacheModes.noCache"), value: "no-cache" },
-]);
+  { label: t('pageInspector.cacheModes.default'), value: 'default' },
+  { label: t('pageInspector.cacheModes.cache'), value: 'cache' },
+  { label: t('pageInspector.cacheModes.noCache'), value: 'no-cache' },
+])
 
 const preloadOptions = computed(() => [
-  { label: t("pageInspector.preloadModes.lazy"), value: "lazy" },
-  { label: t("pageInspector.preloadModes.eager"), value: "eager" },
-]);
+  { label: t('pageInspector.preloadModes.lazy'), value: 'lazy' },
+  { label: t('pageInspector.preloadModes.eager'), value: 'eager' },
+])
 
-const showPopupOptions = computed(() => props.form.openMode === "popup");
+const showPopupOptions = computed(() => props.form.openMode === 'popup')
 </script>
 
 <template>
   <div class="page-section-fields">
     <div class="page-prop-item">
       <div class="page-prop-label">
-        <span>{{ t("pageInspector.labels.openMode") }}</span>
+        <span>{{ t('pageInspector.labels.openMode') }}</span>
         <el-tooltip
           v-if="isSystemPage"
           :content="t('pageInspector.tooltips.openModeReadonly')"
@@ -66,7 +66,7 @@ const showPopupOptions = computed(() => props.form.openMode === "popup");
 
     <template v-if="showPopupOptions">
       <div class="page-prop-item">
-        <div class="page-prop-label">{{ t("pageInspector.labels.popupWidth") }}</div>
+        <div class="page-prop-label">{{ t('pageInspector.labels.popupWidth') }}</div>
         <div class="page-prop-editor">
           <el-input-number
             v-model="form.popupWidth"
@@ -78,7 +78,7 @@ const showPopupOptions = computed(() => props.form.openMode === "popup");
       </div>
 
       <div class="page-prop-item">
-        <div class="page-prop-label">{{ t("pageInspector.labels.popupHeight") }}</div>
+        <div class="page-prop-label">{{ t('pageInspector.labels.popupHeight') }}</div>
         <div class="page-prop-editor">
           <el-input-number
             v-model="form.popupHeight"
@@ -90,14 +90,14 @@ const showPopupOptions = computed(() => props.form.openMode === "popup");
       </div>
 
       <div class="page-prop-item page-prop-item--switch">
-        <div class="page-prop-label">{{ t("pageInspector.labels.popupCenter") }}</div>
+        <div class="page-prop-label">{{ t('pageInspector.labels.popupCenter') }}</div>
         <div class="page-prop-editor page-prop-editor-switch">
           <el-switch v-model="form.popupCenter" @change="$emit('updateConfig')" />
         </div>
       </div>
 
       <div class="page-prop-item page-prop-item--switch">
-        <div class="page-prop-label">{{ t("pageInspector.labels.popupMaskClosable") }}</div>
+        <div class="page-prop-label">{{ t('pageInspector.labels.popupMaskClosable') }}</div>
         <div class="page-prop-editor page-prop-editor-switch">
           <el-switch v-model="form.popupMaskClosable" @change="$emit('updateConfig')" />
         </div>
@@ -106,7 +106,7 @@ const showPopupOptions = computed(() => props.form.openMode === "popup");
 
     <div class="page-prop-item">
       <div class="page-prop-label">
-        <span>{{ t("pageInspector.labels.cacheMode") }}</span>
+        <span>{{ t('pageInspector.labels.cacheMode') }}</span>
         <el-tooltip :content="t('pageInspector.tooltips.cacheMode')" placement="top">
           <span class="label-tip">?</span>
         </el-tooltip>
@@ -125,7 +125,7 @@ const showPopupOptions = computed(() => props.form.openMode === "popup");
 
     <div class="page-prop-item">
       <div class="page-prop-label">
-        <span>{{ t("pageInspector.labels.preloadMode") }}</span>
+        <span>{{ t('pageInspector.labels.preloadMode') }}</span>
         <el-tooltip :content="t('pageInspector.tooltips.preloadMode')" placement="top">
           <span class="label-tip">?</span>
         </el-tooltip>
@@ -214,5 +214,4 @@ const showPopupOptions = computed(() => props.form.openMode === "popup");
 .page-prop-editor :deep(.el-input) {
   width: 100%;
 }
-
 </style>

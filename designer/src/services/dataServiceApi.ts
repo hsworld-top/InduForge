@@ -5,66 +5,68 @@
  * 正式环境由 nginx 代理承接同一路径，前端不直接跨域访问数据服务。
  */
 
-import request from "@/utils/request";
-import { requireDatapointsPagePayload } from "@/utils/datapoint-payload";
-import { unwrapApiData } from "@/types/api";
+import request from '@/utils/request'
+import { requireDatapointsPagePayload } from '@/utils/datapoint-payload'
+import { unwrapApiData } from '@/types/api'
 
 export interface ListDataPointsParams {
-  page?: number;
-  pageSize?: number;
-  search?: string;
-  status?: string;
-  type?: string;
-  sourceId?: string;
+  page?: number
+  pageSize?: number
+  search?: string
+  status?: string
+  type?: string
+  sourceId?: string
 }
 
 export interface DataPointValuesRequest {
-  datapointIds?: string[];
-  paths?: string[];
+  datapointIds?: string[]
+  paths?: string[]
 }
 
 export interface DataPointValuesResponse {
-  values?: Record<string, unknown>;
+  values?: Record<string, unknown>
 }
 
 export interface NormalizedDataPointsPage {
-  datapoints: unknown[];
-  pagination: Record<string, unknown>;
+  datapoints: unknown[]
+  pagination: Record<string, unknown>
 }
 
 function compactParams(params: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(
-    Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ""),
-  );
+    Object.entries(params).filter(
+      ([, value]) => value !== undefined && value !== null && value !== '',
+    ),
+  )
 }
 
 export const dataServiceApi = {
   getConnections(projectId: string, params: Record<string, unknown> = {}) {
     return request.get(`/data/projects/${projectId}/connections`, {
       params: compactParams(params),
-    });
+    })
   },
 
   createPreviewSession(projectId: string) {
-    return request.post(`/data/projects/${projectId}/preview/sessions`, {});
+    return request.post(`/data/projects/${projectId}/preview/sessions`, {})
   },
 
   heartbeatPreviewSession(sessionId: string) {
-    return request.post(`/data/preview/sessions/${sessionId}/heartbeat`, {});
+    return request.post(`/data/preview/sessions/${sessionId}/heartbeat`, {})
   },
 
   deletePreviewSession(sessionId: string) {
-    return request.delete(`/data/preview/sessions/${sessionId}`);
+    return request.delete(`/data/preview/sessions/${sessionId}`)
   },
 
   getQueries(projectId: string, params: Record<string, unknown> = {}) {
     return request.get(`/data/projects/${projectId}/queries`, {
       params: compactParams(params),
-    });
+    })
   },
 
   getDatapoints(projectId: string, connectionId: string) {
-    return request.get(`/data/projects/${projectId}/connections/${connectionId}/datapoints`);
+    return request.get(`/data/projects/${projectId}/connections/${connectionId}/datapoints`)
   },
 
   async listDataPoints(
@@ -73,20 +75,20 @@ export const dataServiceApi = {
   ): Promise<NormalizedDataPointsPage> {
     const result = await request.get(`/data/projects/${projectId}/datapoints`, {
       params: compactParams({ ...params }),
-    });
-    return requireDatapointsPagePayload(unwrapApiData(result));
+    })
+    return requireDatapointsPagePayload(unwrapApiData(result))
   },
 
   getDataPoints(projectId: string, params: Record<string, unknown> = {}) {
     return request.get(`/data/projects/${projectId}/datapoints`, {
       params: compactParams(params),
-    });
+    })
   },
 
   getDatapointStatus(projectId: string, datapointIds: string[]) {
     return request.post(`/data/projects/${projectId}/datapoints/status`, {
       datapointIds,
-    });
+    })
   },
 
   getDataPointValues(
@@ -96,24 +98,24 @@ export const dataServiceApi = {
     return request.post<DataPointValuesResponse>(
       `/data/projects/${projectId}/datapoints/values`,
       payload,
-    );
+    )
   },
 
   getDatapointValues(projectId: string, datapointIds: string[]) {
     return request.post(`/data/projects/${projectId}/datapoints/values`, {
       datapointIds,
-    });
+    })
   },
 
   writeDatapointValue(projectId: string, datapointId: string, value: unknown) {
-    return request.post(`/data/projects/${projectId}/datapoints/${datapointId}/write`, { value });
+    return request.post(`/data/projects/${projectId}/datapoints/${datapointId}/write`, { value })
   },
 
   executeQuery(queryId: string, parameters: Record<string, unknown> = {}) {
     return request.post(`/data/queries/${queryId}/execute`, {
       parameters,
-    });
+    })
   },
-};
+}
 
-export default dataServiceApi;
+export default dataServiceApi

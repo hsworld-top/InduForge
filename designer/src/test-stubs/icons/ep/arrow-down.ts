@@ -1,4 +1,4 @@
 export default {
-  name: "IconEpArrowDown",
+  name: 'IconEpArrowDown',
   template: `<span class="icon-ep-arrow-down" />`,
-};
+}

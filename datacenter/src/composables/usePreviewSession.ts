@@ -1,23 +1,19 @@
 // @ts-nocheck
-import { ref, watch, onBeforeUnmount, unref } from "vue";
-import dayjs from "dayjs";
-import { TIME_FORMAT } from "@/constants";
-import {
-  createPreviewSession,
-  heartbeatPreviewSession,
-  deletePreviewSession,
-} from "@/api/data.api";
-import { getApiErrorMessage } from "@/utils/request";
-import { usePreviewSessionStore } from "@/stores/preview-session.store";
+import { ref, watch, onBeforeUnmount, unref } from 'vue'
+import dayjs from 'dayjs'
+import { TIME_FORMAT } from '@/constants'
+import { createPreviewSession, heartbeatPreviewSession, deletePreviewSession } from '@/api/data.api'
+import { getApiErrorMessage } from '@/utils/request'
+import { usePreviewSessionStore } from '@/stores/preview-session.store'
 
-const HEARTBEAT_INTERVAL_MS = 30_000;
+const HEARTBEAT_INTERVAL_MS = 30_000
 
 const resolveValue = (value) => {
-  if (typeof value === "function") {
-    return value();
+  if (typeof value === 'function') {
+    return value()
   }
-  return unref(value);
-};
+  return unref(value)
+}
 
 /**
  * 管理 datacenter 的 preview session 生命周期。
@@ -32,119 +28,118 @@ const resolveValue = (value) => {
  * @param {{ autoStart?: boolean }} [options]
  */
 export function usePreviewSession(projectIdSource, options = {}) {
-  const autoStart = options.autoStart !== false;
-  const sessionId = ref("");
-  const loading = ref(false);
-  const error = ref(null);
+  const autoStart = options.autoStart !== false
+  const sessionId = ref('')
+  const loading = ref(false)
+  const error = ref(null)
   // NavRail 徽标依赖 store，session 生命周期内同步状态
-  const previewStore = usePreviewSessionStore();
+  const previewStore = usePreviewSessionStore()
 
-  let heartbeatTimer = null;
-  let createPromise = null;
-  let destroyPromise = null;
-  let sessionGeneration = 0;
-  let unmounted = false;
+  let heartbeatTimer = null
+  let createPromise = null
+  let destroyPromise = null
+  let sessionGeneration = 0
+  let unmounted = false
 
   const clearHeartbeatTimer = () => {
     if (heartbeatTimer) {
-      clearInterval(heartbeatTimer);
-      heartbeatTimer = null;
+      clearInterval(heartbeatTimer)
+      heartbeatTimer = null
     }
-  };
+  }
 
   const stopSession = () => {
-    clearHeartbeatTimer();
-    sessionId.value = "";
-    previewStore.close();
-  };
+    clearHeartbeatTimer()
+    sessionId.value = ''
+    previewStore.close()
+  }
 
-  const readProjectId = () => resolveValue(projectIdSource) || "";
+  const readProjectId = () => resolveValue(projectIdSource) || ''
 
   const sendHeartbeat = async () => {
-    const currentSessionId = sessionId.value;
+    const currentSessionId = sessionId.value
     if (!currentSessionId) {
-      return;
+      return
     }
 
     try {
-      await heartbeatPreviewSession(currentSessionId);
-      error.value = null;
+      await heartbeatPreviewSession(currentSessionId)
+      error.value = null
     } catch (heartbeatError) {
       console.warn(
-        "[PreviewSession] 心跳失败:",
-        getApiErrorMessage(heartbeatError, "预览会话心跳失败"),
-      );
-      error.value = heartbeatError;
+        '[PreviewSession] 心跳失败:',
+        getApiErrorMessage(heartbeatError, '预览会话心跳失败'),
+      )
+      error.value = heartbeatError
     }
-  };
+  }
 
   const startHeartbeat = () => {
-    clearHeartbeatTimer();
+    clearHeartbeatTimer()
 
     if (!sessionId.value) {
-      return;
+      return
     }
 
     heartbeatTimer = setInterval(() => {
-      void sendHeartbeat();
-    }, HEARTBEAT_INTERVAL_MS);
-  };
+      void sendHeartbeat()
+    }, HEARTBEAT_INTERVAL_MS)
+  }
 
   const destroySession = async () => {
-    const currentSessionId = sessionId.value;
-    sessionGeneration += 1;
+    const currentSessionId = sessionId.value
+    sessionGeneration += 1
 
-    clearHeartbeatTimer();
-    sessionId.value = "";
-    previewStore.close();
+    clearHeartbeatTimer()
+    sessionId.value = ''
+    previewStore.close()
 
     if (!currentSessionId) {
-      return;
+      return
     }
 
     if (destroyPromise) {
-      return destroyPromise;
+      return destroyPromise
     }
 
     destroyPromise = deletePreviewSession(currentSessionId)
       .catch((destroyError) => {
-        console.warn("[PreviewSession] 销毁失败:", destroyError);
+        console.warn('[PreviewSession] 销毁失败:', destroyError)
       })
       .finally(() => {
-        destroyPromise = null;
-      });
+        destroyPromise = null
+      })
 
-    return destroyPromise;
-  };
+    return destroyPromise
+  }
 
   const ensureSession = async () => {
-    const currentProjectId = readProjectId();
+    const currentProjectId = readProjectId()
     if (!currentProjectId) {
-      console.warn("[PreviewSession] 缺少 projectId，跳过创建");
-      stopSession();
-      return "";
+      console.warn('[PreviewSession] 缺少 projectId，跳过创建')
+      stopSession()
+      return ''
     }
 
     if (sessionId.value) {
-      return sessionId.value;
+      return sessionId.value
     }
 
     if (createPromise) {
-      return createPromise;
+      return createPromise
     }
 
-    loading.value = true;
-    error.value = null;
-    const requestGeneration = ++sessionGeneration;
+    loading.value = true
+    error.value = null
+    const requestGeneration = ++sessionGeneration
 
     createPromise = createPreviewSession(currentProjectId)
       .then((response) => {
-        const payload = response?.data || {};
-        const nextSessionId =
-          payload.previewSessionId || payload.sessionId || payload.id || "";
+        const payload = response?.data || {}
+        const nextSessionId = payload.previewSessionId || payload.sessionId || payload.id || ''
 
         if (!nextSessionId) {
-          throw new Error("preview session 响应缺少 sessionId");
+          throw new Error('preview session 响应缺少 sessionId')
         }
 
         if (
@@ -153,69 +148,66 @@ export function usePreviewSession(projectIdSource, options = {}) {
           readProjectId() !== currentProjectId
         ) {
           void deletePreviewSession(nextSessionId).catch((destroyError) => {
-            console.warn(
-              "[PreviewSession] 清理迟到 session 失败:",
-              destroyError,
-            );
-          });
-          return "";
+            console.warn('[PreviewSession] 清理迟到 session 失败:', destroyError)
+          })
+          return ''
         }
 
-        sessionId.value = nextSessionId;
+        sessionId.value = nextSessionId
         previewStore.open({
           sessionId: nextSessionId,
           projectId: currentProjectId,
           createdAt: dayjs().format(TIME_FORMAT),
-        });
-        startHeartbeat();
-        return nextSessionId;
+        })
+        startHeartbeat()
+        return nextSessionId
       })
       .catch((createError) => {
         console.error(
-          "[PreviewSession] 创建失败:",
-          getApiErrorMessage(createError, "预览会话创建失败"),
-        );
-        error.value = createError;
-        stopSession();
-        return "";
+          '[PreviewSession] 创建失败:',
+          getApiErrorMessage(createError, '预览会话创建失败'),
+        )
+        error.value = createError
+        stopSession()
+        return ''
       })
       .finally(() => {
-        loading.value = false;
-        createPromise = null;
-      });
+        loading.value = false
+        createPromise = null
+      })
 
-    return createPromise;
-  };
+    return createPromise
+  }
 
   watch(
     () => readProjectId(),
     async (nextProjectId, prevProjectId) => {
       if (unmounted) {
-        return;
+        return
       }
 
       if (!nextProjectId) {
-        await destroySession();
-        return;
+        await destroySession()
+        return
       }
 
       if (prevProjectId && prevProjectId !== nextProjectId) {
-        await destroySession();
+        await destroySession()
       }
 
       if (!autoStart && !sessionId.value) {
-        return;
+        return
       }
 
-      await ensureSession();
+      await ensureSession()
     },
     { immediate: autoStart },
-  );
+  )
 
   onBeforeUnmount(async () => {
-    unmounted = true;
-    await destroySession();
-  });
+    unmounted = true
+    await destroySession()
+  })
 
   return {
     sessionId,
@@ -224,5 +216,5 @@ export function usePreviewSession(projectIdSource, options = {}) {
     ensureSession,
     destroySession,
     refreshSession: sendHeartbeat,
-  };
+  }
 }

@@ -78,18 +78,10 @@
           </button>
 
           <Transition name="datapoint-tag-filter">
-            <div
-              v-if="tagFilterVisible"
-              class="datapoint-tag-filter__panel"
-              @click.stop
-            >
+            <div v-if="tagFilterVisible" class="datapoint-tag-filter__panel" @click.stop>
               <div class="datapoint-tag-filter__search">
                 <Search />
-                <input
-                  v-model="tagFilterKeyword"
-                  type="text"
-                  placeholder="搜索标签"
-                />
+                <input v-model="tagFilterKeyword" type="text" placeholder="搜索标签" />
               </div>
 
               <div class="datapoint-tag-filter__list">
@@ -117,10 +109,7 @@
                 </label>
               </div>
 
-              <p
-                v-if="filteredTagOptions.length === 0"
-                class="datapoint-tag-filter__empty"
-              >
+              <p v-if="filteredTagOptions.length === 0" class="datapoint-tag-filter__empty">
                 暂无标签
               </p>
 
@@ -211,7 +200,7 @@
               <div class="datapoint-list__name-cell">
                 <el-tooltip :content="row.name || '-'" placement="top" :show-after="400">
                   <span class="datapoint-list__name">
-                    {{ row.name || "-" }}
+                    {{ row.name || '-' }}
                   </span>
                 </el-tooltip>
               </div>
@@ -223,7 +212,7 @@
             <template #default="{ row }">
               <div class="datapoint-list__path-cell">
                 <el-tooltip :content="row.path || '-'" placement="top" :show-after="300">
-                  <span class="datapoint-list__path">{{ row.path || "-" }}</span>
+                  <span class="datapoint-list__path">{{ row.path || '-' }}</span>
                 </el-tooltip>
               </div>
             </template>
@@ -248,17 +237,14 @@
           <!-- 类型列 -->
           <el-table-column label="类型" width="100">
             <template #default="{ row }">
-              <span class="datapoint-list__mono">{{ row.dataType || "-" }}</span>
+              <span class="datapoint-list__mono">{{ row.dataType || '-' }}</span>
             </template>
           </el-table-column>
 
           <!-- 状态列：v2 StatusBadge -->
           <el-table-column label="状态" width="96" align="center" header-align="center">
             <template #default="{ row }">
-              <StatusBadge
-                :tone="resolveStatusTone(row.status)"
-                :text="formatStatus(row.status)"
-              />
+              <StatusBadge :tone="resolveStatusTone(row.status)" :text="formatStatus(row.status)" />
             </template>
           </el-table-column>
 
@@ -289,9 +275,7 @@
                   :content="getHiddenTags(row).join('、')"
                   placement="top"
                 >
-                  <span class="datapoint-list__tag-more">
-                    +{{ getHiddenTagCount(row) }}
-                  </span>
+                  <span class="datapoint-list__tag-more"> +{{ getHiddenTagCount(row) }} </span>
                 </el-tooltip>
                 <button
                   v-if="normalizeTags(row.tags).length === 0"
@@ -315,7 +299,13 @@
           </el-table-column>
 
           <!-- 操作列（4 个按钮） -->
-          <el-table-column label="操作" width="200" fixed="right" align="center" header-align="center">
+          <el-table-column
+            label="操作"
+            width="200"
+            fixed="right"
+            align="center"
+            header-align="center"
+          >
             <template #default="{ row }">
               <div class="datapoint-list__row-actions">
                 <!-- 查看详情 -->
@@ -377,15 +367,8 @@
       </div>
 
       <!-- 批量操作条（选中 ≥ 1 时浮现，位于分页栏上方） -->
-      <BulkActionBar
-        :selected-count="selectedRows.length"
-        @clear="selectedRows = []"
-      >
-        <button
-          type="button"
-          class="datapoint-list__bulk-action-btn"
-          @click="openBatchTagDialog"
-        >
+      <BulkActionBar :selected-count="selectedRows.length" @clear="selectedRows = []">
+        <button type="button" class="datapoint-list__bulk-action-btn" @click="openBatchTagDialog">
           打标签
         </button>
         <button
@@ -490,9 +473,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { ElMessage } from "element-plus";
-import { useConfirm } from "@/composables/useConfirm";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import { useConfirm } from '@/composables/useConfirm'
 import {
   ArrowDown,
   ArrowLeft,
@@ -510,363 +493,349 @@ import {
   SortDown,
   SortUp,
   View,
-} from "@element-plus/icons-vue";
-import dayjs from "dayjs";
-import { TIME_FORMAT } from "@/constants";
-import dataAPI from "@/api/data.api";
-import { getApiErrorMessage } from "@/utils/request";
-import PillButton from "@/components/shared/PillButton.vue";
-import StatusBadge from "@/components/shared/StatusBadge.vue";
-import BulkActionBar from "@/components/shared/BulkActionBar.vue";
-import DataPointTagDialog from "./DataPointTagDialog.vue";
-import RuntimePermissionDialog from "./RuntimePermissionDialog.vue";
-import DataPointDetailDrawer from "./DataPointDetailDrawer.vue";
+} from '@element-plus/icons-vue'
+import dayjs from 'dayjs'
+import { TIME_FORMAT } from '@/constants'
+import dataAPI from '@/api/data.api'
+import { getApiErrorMessage } from '@/utils/request'
+import PillButton from '@/components/shared/PillButton.vue'
+import StatusBadge from '@/components/shared/StatusBadge.vue'
+import BulkActionBar from '@/components/shared/BulkActionBar.vue'
+import DataPointTagDialog from './DataPointTagDialog.vue'
+import RuntimePermissionDialog from './RuntimePermissionDialog.vue'
+import DataPointDetailDrawer from './DataPointDetailDrawer.vue'
 
-type DataPointListMode = "embedded" | "management";
-type SortField = "updatedAt" | "name" | "path";
-type SortOrder = "asc" | "desc";
+type DataPointListMode = 'embedded' | 'management'
+type SortField = 'updatedAt' | 'name' | 'path'
+type SortOrder = 'asc' | 'desc'
 
 /** 批量打标签时，条目超过此数量才弹二次确认 */
-const BATCH_TAG_CONFIRM_THRESHOLD = 20;
+const BATCH_TAG_CONFIRM_THRESHOLD = 20
 
 interface DataPointRow {
-  id: string;
-  projectId?: string;
-  path?: string;
-  name?: string;
-  description?: string | null;
-  sourceType?: string;
-  sourceId?: string | null;
-  sourceConfig?: Record<string, unknown>;
-  dataType?: string;
-  runtimePermissions?: Record<string, unknown>;
-  runtimePermissionGrants?: Record<string, unknown>;
-  writePermission?: Record<string, unknown>;
-  tags?: unknown[];
-  status?: string;
-  quality?: string;
-  lastValue?: unknown;
-  updatedAt?: string;
-  updated_at?: string;
-  createdAt?: string;
-  created_at?: string;
+  id: string
+  projectId?: string
+  path?: string
+  name?: string
+  description?: string | null
+  sourceType?: string
+  sourceId?: string | null
+  sourceConfig?: Record<string, unknown>
+  dataType?: string
+  runtimePermissions?: Record<string, unknown>
+  runtimePermissionGrants?: Record<string, unknown>
+  writePermission?: Record<string, unknown>
+  tags?: unknown[]
+  status?: string
+  quality?: string
+  lastValue?: unknown
+  updatedAt?: string
+  updated_at?: string
+  createdAt?: string
+  created_at?: string
   /** 引用数（后端暂未返回，D2 补全） */
-  refCount?: number;
+  refCount?: number
 }
 
 const props = withDefaults(
   defineProps<{
-    projectId: string;
-    sourceType?: string;
-    status?: string;
-    search?: string;
-    showToolbar?: boolean;
-    mode?: DataPointListMode;
+    projectId: string
+    sourceType?: string
+    status?: string
+    search?: string
+    showToolbar?: boolean
+    mode?: DataPointListMode
     /** Workspace 通过 URL query 注入的搜索词 */
-    filterQ?: string;
+    filterQ?: string
     /** Workspace 通过 URL query 注入的状态筛选 */
-    filterStatus?: string;
+    filterStatus?: string
     /** Workspace 通过 URL query 注入的来源类型筛选 */
-    filterSource?: string;
+    filterSource?: string
     /** Workspace 通过 URL query 注入的标签筛选 */
-    filterTags?: string[];
+    filterTags?: string[]
     /** Workspace 通过 URL query 注入的排序字段 */
-    sortField?: string;
+    sortField?: string
     /** Workspace 通过 URL query 注入的排序方向 */
-    sortOrder?: string;
+    sortOrder?: string
     /** Workspace 通过 URL query 注入的页码 */
-    page?: number;
+    page?: number
     /** Workspace 通过 URL path 注入的详情对象 ID，刷新后自动打开抽屉 */
-    detailObjectId?: string;
+    detailObjectId?: string
   }>(),
   {
     sourceType: undefined,
     status: undefined,
     search: undefined,
     showToolbar: true,
-    mode: "embedded",
-    filterQ: "",
-    filterStatus: "",
-    filterSource: "",
+    mode: 'embedded',
+    filterQ: '',
+    filterStatus: '',
+    filterSource: '',
     filterTags: () => [],
-    sortField: "updatedAt",
-    sortOrder: "desc",
+    sortField: 'updatedAt',
+    sortOrder: 'desc',
     page: 1,
-    detailObjectId: "",
+    detailObjectId: '',
   },
-);
+)
 
 const emit = defineEmits<{
-  select: [row: DataPointRow];
+  select: [row: DataPointRow]
   /** 筛选 / 排序 / 搜索变化时通知 Workspace 更新 URL */
-  "update:filter": [params: Record<string, unknown>];
+  'update:filter': [params: Record<string, unknown>]
   /** 打开详情抽屉，通知 Workspace 同步 URL objectId */
-  "open-detail": [row: DataPointRow];
+  'open-detail': [row: DataPointRow]
   /** 关闭详情抽屉，通知 Workspace 清除 URL objectId */
-  "close-detail": [];
+  'close-detail': []
   /** LinkChip 跳转，通知 Workspace 做路由跳转 */
-  navigate: [payload: { module: string; objectId: string }];
-}>();
+  navigate: [payload: { module: string; objectId: string }]
+}>()
 
-const { confirm } = useConfirm();
+const { confirm } = useConfirm()
 
 // ── 本地状态 ──────────────────────────────────────────────────────────────
 
-const loading = ref(false);
-const datapoints = ref<DataPointRow[]>([]);
+const loading = ref(false)
+const datapoints = ref<DataPointRow[]>([])
 
 /* 搜索文本 */
-const searchText = ref(props.filterQ || "");
+const searchText = ref(props.filterQ || '')
 /* 状态筛选（'' = 全部） */
-const statusFilter = ref(props.filterStatus || "");
+const statusFilter = ref(props.filterStatus || '')
 /* 来源类型筛选 */
-const sourceFilter = ref(props.filterSource || "");
+const sourceFilter = ref(props.filterSource || '')
 
 /* 标签筛选 */
-const tagFilterValues = ref<string[]>(props.filterTags || []);
-const tagFilterVisible = ref(false);
-const tagFilterKeyword = ref("");
-const groupByTags = ref(false);
-const tagFilterRootRef = ref<HTMLElement | null>(null);
+const tagFilterValues = ref<string[]>(props.filterTags || [])
+const tagFilterVisible = ref(false)
+const tagFilterKeyword = ref('')
+const groupByTags = ref(false)
+const tagFilterRootRef = ref<HTMLElement | null>(null)
 
 /* 排序 */
 const sortFieldValue = ref<SortField>(
-  (["updatedAt", "name", "path"].includes(props.sortField || "") ? props.sortField : "updatedAt") as SortField,
-);
-const sortOrderValue = ref<SortOrder>(
-  (props.sortOrder === "asc" ? "asc" : "desc") as SortOrder,
-);
+  (['updatedAt', 'name', 'path'].includes(props.sortField || '')
+    ? props.sortField
+    : 'updatedAt') as SortField,
+)
+const sortOrderValue = ref<SortOrder>((props.sortOrder === 'asc' ? 'asc' : 'desc') as SortOrder)
 
 /* 分页 */
 const pagination = ref({
   page: props.page || 1,
   pageSize: 50,
-});
-const debounceTimer = ref<number | null>(null);
+})
+const debounceTimer = ref<number | null>(null)
 
 /* 选中行 */
-const selectedRows = ref<DataPointRow[]>([]);
+const selectedRows = ref<DataPointRow[]>([])
 
 /* 写权限 dialog 状态 */
-const permissionDialogVisible = ref(false);
-const permissionSaving = ref(false);
-const currentPermissionDatapoint = ref<DataPointRow | null>(null);
+const permissionDialogVisible = ref(false)
+const permissionSaving = ref(false)
+const currentPermissionDatapoint = ref<DataPointRow | null>(null)
 
 /* 标签 dialog 状态 */
-const tagDialogVisible = ref(false);
-const tagSaving = ref(false);
-const tagEditMode = ref<"single" | "batch">("single");
-const currentTagDatapoint = ref<DataPointRow | null>(null);
+const tagDialogVisible = ref(false)
+const tagSaving = ref(false)
+const tagEditMode = ref<'single' | 'batch'>('single')
+const currentTagDatapoint = ref<DataPointRow | null>(null)
 
 /* 详情抽屉状态 */
-const detailDrawerVisible = ref(false);
-const detailDatapoint = ref<DataPointRow | null>(null);
+const detailDrawerVisible = ref(false)
+const detailDatapoint = ref<DataPointRow | null>(null)
 
 // ── 静态配置 ─────────────────────────────────────────────────────────────
 
 /** 状态选项（v2 规格：全部/活跃/失效/错误） */
 const statusOptions = [
-  { label: "全部", value: "" },
-  { label: "活跃", value: "active" },
-  { label: "失效", value: "invalid" },
-  { label: "错误", value: "error" },
-];
+  { label: '全部', value: '' },
+  { label: '活跃', value: 'active' },
+  { label: '失效', value: 'invalid' },
+  { label: '错误', value: 'error' },
+]
 
 /** 排序字段选项（v2 规格：更新时间/名称/路径） */
 const sortFieldOptions: Array<{ label: string; value: SortField }> = [
-  { label: "更新时间", value: "updatedAt" },
-  { label: "名称", value: "name" },
-  { label: "路径", value: "path" },
-];
+  { label: '更新时间', value: 'updatedAt' },
+  { label: '名称', value: 'name' },
+  { label: '路径', value: 'path' },
+]
 
-const pageSizeOptions = [20, 50, 100];
+const pageSizeOptions = [20, 50, 100]
 
 /** 来源类型标签映射 */
 const sourceTypeLabels: Record<string, string> = {
-  "db.query": "数据库查询",
-  "mqtt.tag": "MQTT 变量",
-  "mqtt.subscription": "MQTT 订阅",
-  "calc.output": "计算输出",
-  "static.var": "静态变量",
-};
+  'db.query': '数据库查询',
+  'mqtt.tag': 'MQTT 变量',
+  'mqtt.subscription': 'MQTT 订阅',
+  'calc.output': '计算输出',
+  'static.var': '静态变量',
+}
 
 // ── 来源图标映射 ──────────────────────────────────────────────────────────
 
 function getSourceIcon(sourceType?: string) {
-  if (!sourceType) return DataLine;
-  if (sourceType.startsWith("mqtt")) return Connection;
-  if (sourceType.startsWith("db")) return DataLine;
-  if (sourceType.startsWith("calc")) return Cpu;
-  if (sourceType.startsWith("alarm")) return Bell;
-  return DataLine;
+  if (!sourceType) return DataLine
+  if (sourceType.startsWith('mqtt')) return Connection
+  if (sourceType.startsWith('db')) return DataLine
+  if (sourceType.startsWith('calc')) return Cpu
+  if (sourceType.startsWith('alarm')) return Bell
+  return DataLine
 }
 
 // ── 动态来源类型（从当前列表提取，去重） ─────────────────────────────────
 
 const dynamicSourceOptions = computed(() => {
-  const seen = new Set<string>();
+  const seen = new Set<string>()
   datapoints.value.forEach((item) => {
-    if (item.sourceType) seen.add(item.sourceType);
-  });
-  return Array.from(seen).sort().map((v) => ({
-    value: v,
-    label: sourceTypeLabels[v] || v,
-  }));
-});
+    if (item.sourceType) seen.add(item.sourceType)
+  })
+  return Array.from(seen)
+    .sort()
+    .map((v) => ({
+      value: v,
+      label: sourceTypeLabels[v] || v,
+    }))
+})
 
 // ── 标签选项（从当前数据点列表提取） ─────────────────────────────────────
 
 const tagOptions = computed(() => {
-  const tags = new Map<string, number>();
+  const tags = new Map<string, number>()
   datapoints.value.forEach((item) => {
     normalizeTags(item.tags).forEach((tag) => {
-      tags.set(tag, (tags.get(tag) || 0) + 1);
-    });
-  });
+      tags.set(tag, (tags.get(tag) || 0) + 1)
+    })
+  })
   return Array.from(tags.entries())
-    .sort((a, b) => a[0].localeCompare(b[0], "zh-Hans-CN"))
+    .sort((a, b) => a[0].localeCompare(b[0], 'zh-Hans-CN'))
     .map(([value, count]) => ({
       value,
       name: value,
       count,
       label: `${value} (${count})`,
-    }));
-});
+    }))
+})
 
 const filteredTagOptions = computed(() => {
-  const keyword = tagFilterKeyword.value.trim().toLowerCase();
-  if (!keyword) return tagOptions.value;
-  return tagOptions.value.filter((tag) =>
-    tag.name.toLowerCase().includes(keyword),
-  );
-});
+  const keyword = tagFilterKeyword.value.trim().toLowerCase()
+  if (!keyword) return tagOptions.value
+  return tagOptions.value.filter((tag) => tag.name.toLowerCase().includes(keyword))
+})
 
-const selectedTagSet = computed(() => new Set(tagFilterValues.value));
+const selectedTagSet = computed(() => new Set(tagFilterValues.value))
 
 // ── 计算属性：label ───────────────────────────────────────────────────────
 
-const isManagementMode = computed(() => props.mode === "management");
+const isManagementMode = computed(() => props.mode === 'management')
 
 const currentStatusLabel = computed(
-  () =>
-    statusOptions.find((o) => o.value === statusFilter.value)?.label || "全部",
-);
+  () => statusOptions.find((o) => o.value === statusFilter.value)?.label || '全部',
+)
 
 const currentSourceLabel = computed(() => {
-  if (!sourceFilter.value) return "来源";
-  return sourceTypeLabels[sourceFilter.value] || sourceFilter.value;
-});
+  if (!sourceFilter.value) return '来源'
+  return sourceTypeLabels[sourceFilter.value] || sourceFilter.value
+})
 
 const currentSortFieldLabel = computed(
-  () =>
-    sortFieldOptions.find((o) => o.value === sortFieldValue.value)?.label || "更新时间",
-);
+  () => sortFieldOptions.find((o) => o.value === sortFieldValue.value)?.label || '更新时间',
+)
 
-const currentSortOrderLabel = computed(() =>
-  sortOrderValue.value === "desc" ? "降序" : "升序",
-);
+const currentSortOrderLabel = computed(() => (sortOrderValue.value === 'desc' ? '降序' : '升序'))
 
 const tagFilterLabel = computed(() =>
-  tagFilterValues.value.length > 0
-    ? `标签 (${tagFilterValues.value.length})`
-    : "标签",
-);
+  tagFilterValues.value.length > 0 ? `标签 (${tagFilterValues.value.length})` : '标签',
+)
 
 const selectedInvalidRows = computed(() =>
-  selectedRows.value.filter((item) => item.status === "invalid"),
-);
+  selectedRows.value.filter((item) => item.status === 'invalid'),
+)
 
 // ── 数据过滤 / 排序 / 分页（前端层，补充标签 / 分组排序） ────────────────
 
 const visibleDataPoints = computed(() => {
-  let list = datapoints.value;
+  let list = datapoints.value
 
   /* 标签过滤（前端层，后端只按搜索/状态/来源拉数据） */
   if (tagFilterValues.value.length > 0) {
     list = list.filter((item) =>
       tagFilterValues.value.every((tag) => normalizeTags(item.tags).includes(tag)),
-    );
+    )
   }
 
   /* 来源筛选（前端二次过滤；后端已支持时可移除） */
   if (sourceFilter.value) {
-    list = list.filter((item) => item.sourceType === sourceFilter.value);
+    list = list.filter((item) => item.sourceType === sourceFilter.value)
   }
 
   /* 排序 */
   list = [...list].sort((a, b) => {
-    let delta = 0;
-    if (sortFieldValue.value === "updatedAt") {
-      delta =
-        dayjs(getUpdatedAt(a)).valueOf() - dayjs(getUpdatedAt(b)).valueOf();
+    let delta = 0
+    if (sortFieldValue.value === 'updatedAt') {
+      delta = dayjs(getUpdatedAt(a)).valueOf() - dayjs(getUpdatedAt(b)).valueOf()
     } else {
-      delta = String(a[sortFieldValue.value] || "").localeCompare(
-        String(b[sortFieldValue.value] || ""),
-        "zh-Hans-CN",
-      );
+      delta = String(a[sortFieldValue.value] || '').localeCompare(
+        String(b[sortFieldValue.value] || ''),
+        'zh-Hans-CN',
+      )
     }
-    return sortOrderValue.value === "desc" ? -delta : delta;
-  });
+    return sortOrderValue.value === 'desc' ? -delta : delta
+  })
 
   /* 按标签分组 */
   if (groupByTags.value) {
     list = list.sort((a, b) => {
-      const ag = normalizeTags(a.tags)[0] || "未设置";
-      const bg = normalizeTags(b.tags)[0] || "未设置";
-      const gd = ag.localeCompare(bg, "zh-Hans-CN");
-      if (gd !== 0) return gd;
-      return String(a.name || a.path || "").localeCompare(
-        String(b.name || b.path || ""),
-        "zh-Hans-CN",
-      );
-    });
+      const ag = normalizeTags(a.tags)[0] || '未设置'
+      const bg = normalizeTags(b.tags)[0] || '未设置'
+      const gd = ag.localeCompare(bg, 'zh-Hans-CN')
+      if (gd !== 0) return gd
+      return String(a.name || a.path || '').localeCompare(
+        String(b.name || b.path || ''),
+        'zh-Hans-CN',
+      )
+    })
   }
 
-  return list;
-});
+  return list
+})
 
-const totalVisibleCount = computed(() => visibleDataPoints.value.length);
+const totalVisibleCount = computed(() => visibleDataPoints.value.length)
 
 const totalPages = computed(() => {
-  if (!isManagementMode.value || totalVisibleCount.value === 0) return 0;
-  return Math.ceil(totalVisibleCount.value / pagination.value.pageSize);
-});
+  if (!isManagementMode.value || totalVisibleCount.value === 0) return 0
+  return Math.ceil(totalVisibleCount.value / pagination.value.pageSize)
+})
 
 const currentPage = computed(() => {
-  if (totalPages.value === 0) return 1;
-  return Math.min(pagination.value.page, totalPages.value);
-});
+  if (totalPages.value === 0) return 1
+  return Math.min(pagination.value.page, totalPages.value)
+})
 
 const pagedDataPoints = computed(() => {
-  const start = (currentPage.value - 1) * pagination.value.pageSize;
-  return visibleDataPoints.value.slice(start, start + pagination.value.pageSize);
-});
+  const start = (currentPage.value - 1) * pagination.value.pageSize
+  return visibleDataPoints.value.slice(start, start + pagination.value.pageSize)
+})
 
 const displayDataPoints = computed(() =>
   isManagementMode.value ? pagedDataPoints.value : visibleDataPoints.value,
-);
+)
 
 const paginationSummary = computed(() => {
-  if (totalVisibleCount.value === 0) return "共 0 条";
-  const start = (currentPage.value - 1) * pagination.value.pageSize + 1;
-  const end = Math.min(
-    currentPage.value * pagination.value.pageSize,
-    totalVisibleCount.value,
-  );
-  return `${start}-${end} / 共 ${totalVisibleCount.value} 条`;
-});
+  if (totalVisibleCount.value === 0) return '共 0 条'
+  const start = (currentPage.value - 1) * pagination.value.pageSize + 1
+  const end = Math.min(currentPage.value * pagination.value.pageSize, totalVisibleCount.value)
+  return `${start}-${end} / 共 ${totalVisibleCount.value} 条`
+})
 
 const pageIndicator = computed(
   () => `${totalPages.value === 0 ? 0 : currentPage.value} / ${totalPages.value}`,
-);
+)
 
-const canPrevPage = computed(
-  () => totalPages.value > 0 && currentPage.value > 1,
-);
+const canPrevPage = computed(() => totalPages.value > 0 && currentPage.value > 1)
 
-const canNextPage = computed(
-  () => totalPages.value > 0 && currentPage.value < totalPages.value,
-);
+const canNextPage = computed(() => totalPages.value > 0 && currentPage.value < totalPages.value)
 
 // ── 数据加载 ──────────────────────────────────────────────────────────────
 
@@ -874,356 +843,342 @@ const buildQueryParams = () => {
   const params: Record<string, unknown> = {
     page: 1,
     pageSize: 500,
-  };
-  const q = props.search ?? searchText.value;
-  const st = props.status ?? statusFilter.value;
-  const src = props.sourceType ?? sourceFilter.value;
-  if (q) params.search = q;
-  if (st) params.status = st;
-  if (src) params.type = src;
-  return params;
-};
+  }
+  const q = props.search ?? searchText.value
+  const st = props.status ?? statusFilter.value
+  const src = props.sourceType ?? sourceFilter.value
+  if (q) params.search = q
+  if (st) params.status = st
+  if (src) params.type = src
+  return params
+}
 
 const loadDataPoints = async () => {
-  if (!props.projectId) return;
-  loading.value = true;
+  if (!props.projectId) return
+  loading.value = true
   try {
-    const response = await dataAPI.getDataPoints(props.projectId, buildQueryParams());
-    datapoints.value = response.data?.datapoints || [];
-    selectedRows.value = [];
+    const response = await dataAPI.getDataPoints(props.projectId, buildQueryParams())
+    datapoints.value = response.data?.datapoints || []
+    selectedRows.value = []
   } catch (error) {
-    ElMessage.error(
-      "加载数据点失败：" + getApiErrorMessage(error, "加载数据点失败"),
-    );
+    ElMessage.error('加载数据点失败：' + getApiErrorMessage(error, '加载数据点失败'))
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 
 const handleRefresh = async () => {
-  await loadDataPoints();
-  ElMessage.success("数据点已刷新");
-};
+  await loadDataPoints()
+  ElMessage.success('数据点已刷新')
+}
 
 // ── 分页 ──────────────────────────────────────────────────────────────────
 
 const handleSelectionChange = (selection: DataPointRow[]) => {
-  selectedRows.value = selection || [];
-};
+  selectedRows.value = selection || []
+}
 
 const handlePrevPage = () => {
-  if (!canPrevPage.value) return;
-  pagination.value.page = currentPage.value - 1;
-};
+  if (!canPrevPage.value) return
+  pagination.value.page = currentPage.value - 1
+}
 
 const handleNextPage = () => {
-  if (!canNextPage.value) return;
-  pagination.value.page = currentPage.value + 1;
-};
+  if (!canNextPage.value) return
+  pagination.value.page = currentPage.value + 1
+}
 
 const handlePageSizeChange = (pageSize: number) => {
-  pagination.value.pageSize = pageSize;
-  pagination.value.page = 1;
-};
+  pagination.value.pageSize = pageSize
+  pagination.value.page = 1
+}
 
 // ── 排序 ──────────────────────────────────────────────────────────────────
 
 const toggleSortOrder = () => {
-  sortOrderValue.value = sortOrderValue.value === "desc" ? "asc" : "desc";
-  pagination.value.page = 1;
-};
+  sortOrderValue.value = sortOrderValue.value === 'desc' ? 'asc' : 'desc'
+  pagination.value.page = 1
+}
 
 // ── 标签过滤面板 ──────────────────────────────────────────────────────────
 
 const toggleTagFilterPanel = () => {
-  tagFilterVisible.value = !tagFilterVisible.value;
-  if (tagFilterVisible.value) tagFilterKeyword.value = "";
-};
+  tagFilterVisible.value = !tagFilterVisible.value
+  if (tagFilterVisible.value) tagFilterKeyword.value = ''
+}
 
 const toggleTagFilter = (tag: string) => {
-  const next = new Set(tagFilterValues.value);
-  if (next.has(tag)) next.delete(tag);
-  else next.add(tag);
-  tagFilterValues.value = [...next];
-  pagination.value.page = 1;
-};
+  const next = new Set(tagFilterValues.value)
+  if (next.has(tag)) next.delete(tag)
+  else next.add(tag)
+  tagFilterValues.value = [...next]
+  pagination.value.page = 1
+}
 
 const handleDocumentClick = (event: MouseEvent) => {
-  if (!tagFilterVisible.value) return;
-  const target = event.target as Node | null;
-  if (target && tagFilterRootRef.value?.contains(target)) return;
-  tagFilterVisible.value = false;
-};
+  if (!tagFilterVisible.value) return
+  const target = event.target as Node | null
+  if (target && tagFilterRootRef.value?.contains(target)) return
+  tagFilterVisible.value = false
+}
 
 // ── 行操作 ────────────────────────────────────────────────────────────────
 
 const openDetailDrawer = (row: DataPointRow) => {
-  detailDatapoint.value = row;
-  detailDrawerVisible.value = true;
-  emit("select", row);
-  emit("open-detail", row);
-};
+  detailDatapoint.value = row
+  detailDrawerVisible.value = true
+  emit('select', row)
+  emit('open-detail', row)
+}
 
 const handleRowClick = (row: DataPointRow) => {
-  if (!isManagementMode.value) emit("select", row);
-};
+  if (!isManagementMode.value) emit('select', row)
+}
 
 /** 跳转来源：根据 sourceType 切换到对应模块 */
 const handleJumpToSource = (row: DataPointRow) => {
   if (!row.sourceType || !row.sourceId) {
-    ElMessage.info("该数据点暂无来源信息");
-    return;
+    ElMessage.info('该数据点暂无来源信息')
+    return
   }
-  let module = "access-source";
-  if (row.sourceType.startsWith("calc")) module = "compute";
-  else if (row.sourceType.startsWith("alarm")) module = "alarm";
-  emit("navigate", { module, objectId: String(row.sourceId) });
-};
+  let module = 'access-source'
+  if (row.sourceType.startsWith('calc')) module = 'compute'
+  else if (row.sourceType.startsWith('alarm')) module = 'alarm'
+  emit('navigate', { module, objectId: String(row.sourceId) })
+}
 
 const handleDelete = async (datapoint: DataPointRow) => {
   const ok = await confirm(
-    `确认清理失效数据点「${datapoint.name || datapoint.path || "-"}」？此操作不可恢复。`,
-    { title: "清理失效数据点", confirmText: "清理", type: "warning" },
-  );
-  if (!ok) return;
+    `确认清理失效数据点「${datapoint.name || datapoint.path || '-'}」？此操作不可恢复。`,
+    { title: '清理失效数据点', confirmText: '清理', type: 'warning' },
+  )
+  if (!ok) return
   try {
-    await dataAPI.deleteDataPoint(props.projectId, datapoint.id);
-    ElMessage.success("数据点已清理");
-    await loadDataPoints();
+    await dataAPI.deleteDataPoint(props.projectId, datapoint.id)
+    ElMessage.success('数据点已清理')
+    await loadDataPoints()
   } catch (error) {
-    ElMessage.error(
-      "删除数据点失败：" + getApiErrorMessage(error, "删除数据点失败"),
-    );
+    ElMessage.error('删除数据点失败：' + getApiErrorMessage(error, '删除数据点失败'))
   }
-};
+}
 
 const handleBatchDelete = async () => {
-  const invalidCount = selectedInvalidRows.value.length;
-  if (invalidCount === 0) return;
+  const invalidCount = selectedInvalidRows.value.length
+  if (invalidCount === 0) return
   const ok = await confirm(
     `将清理 ${invalidCount} 个失效数据点，此操作不可恢复。非失效行不受影响。`,
-    { title: "批量清理失效项", confirmText: "批量清理", type: "warning" },
-  );
-  if (!ok) return;
+    { title: '批量清理失效项', confirmText: '批量清理', type: 'warning' },
+  )
+  if (!ok) return
   try {
     const response = await dataAPI.deleteDataPointsBatch(
       props.projectId,
       selectedInvalidRows.value.map((item) => item.id),
-    );
-    const deletedCount = response?.data?.deletedCount ?? 0;
-    ElMessage.success(`已清理 ${deletedCount} 个失效数据点`);
-    selectedRows.value = [];
-    await loadDataPoints();
+    )
+    const deletedCount = response?.data?.deletedCount ?? 0
+    ElMessage.success(`已清理 ${deletedCount} 个失效数据点`)
+    selectedRows.value = []
+    await loadDataPoints()
   } catch (error) {
-    ElMessage.error(
-      "批量删除数据点失败：" +
-        getApiErrorMessage(error, "批量删除数据点失败"),
-    );
+    ElMessage.error('批量删除数据点失败：' + getApiErrorMessage(error, '批量删除数据点失败'))
   }
-};
+}
 
 // ── 标签 dialog（保留 D2 前实现） ─────────────────────────────────────────
 
 const openTagDialog = (row: DataPointRow) => {
-  currentTagDatapoint.value = row;
-  tagEditMode.value = "single";
-  tagDialogVisible.value = true;
-};
+  currentTagDatapoint.value = row
+  tagEditMode.value = 'single'
+  tagDialogVisible.value = true
+}
 
 const openBatchTagDialog = async () => {
-  if (selectedRows.value.length === 0) return;
+  if (selectedRows.value.length === 0) return
   // 选中条目超过阈值时给二次确认，避免误操作
   if (selectedRows.value.length >= BATCH_TAG_CONFIRM_THRESHOLD) {
     const ok = await confirm(
       `即将为 ${selectedRows.value.length} 个数据点批量添加标签，确认继续？`,
-      { title: "批量打标签", confirmText: "继续", type: "warning" },
-    );
-    if (!ok) return;
+      { title: '批量打标签', confirmText: '继续', type: 'warning' },
+    )
+    if (!ok) return
   }
-  currentTagDatapoint.value = null;
-  tagEditMode.value = "batch";
-  tagDialogVisible.value = true;
-};
+  currentTagDatapoint.value = null
+  tagEditMode.value = 'batch'
+  tagDialogVisible.value = true
+}
 
 const handleDeleteTagOption = async (tag: string) => {
-  const affectedRows = datapoints.value.filter((row) =>
-    normalizeTags(row.tags).includes(tag),
-  );
-  if (affectedRows.length === 0) return;
+  const affectedRows = datapoints.value.filter((row) => normalizeTags(row.tags).includes(tag))
+  if (affectedRows.length === 0) return
 
   try {
     await ElMessageBox.confirm(
       `确认从 ${affectedRows.length} 个数据点中移除标签「${tag}」？`,
-      "删除标签",
-      { confirmButtonText: "删除", cancelButtonText: "取消", type: "warning" },
-    );
+      '删除标签',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' },
+    )
     await Promise.all(
       affectedRows.map((row) =>
         dataAPI.updateDataPoint(props.projectId, row.id, {
           tags: normalizeTags(row.tags).filter((item) => item !== tag),
         }),
       ),
-    );
-    tagFilterValues.value = tagFilterValues.value.filter((item) => item !== tag);
-    ElMessage.success("标签已删除");
-    await loadDataPoints();
+    )
+    tagFilterValues.value = tagFilterValues.value.filter((item) => item !== tag)
+    ElMessage.success('标签已删除')
+    await loadDataPoints()
   } catch (error) {
-    if (error !== "cancel") {
-      ElMessage.error(
-        "删除标签失败：" + getApiErrorMessage(error, "删除标签失败"),
-      );
+    if (error !== 'cancel') {
+      ElMessage.error('删除标签失败：' + getApiErrorMessage(error, '删除标签失败'))
     }
   }
-};
+}
 
 // ── 标签 dialog 新回调（对接独立组件） ────────────────────────────────────
 
-const handleTagDialogSubmit = async (tags: string[], mode: "single" | "batch") => {
-  tagSaving.value = true;
+const handleTagDialogSubmit = async (tags: string[], mode: 'single' | 'batch') => {
+  tagSaving.value = true
   try {
-    if (mode === "single") {
-      if (!currentTagDatapoint.value?.id) return;
-      await dataAPI.updateDataPoint(props.projectId, currentTagDatapoint.value.id, { tags });
-      ElMessage.success("标签已保存");
+    if (mode === 'single') {
+      if (!currentTagDatapoint.value?.id) return
+      await dataAPI.updateDataPoint(props.projectId, currentTagDatapoint.value.id, { tags })
+      ElMessage.success('标签已保存')
     } else {
       await Promise.all(
         selectedRows.value.map((row) => {
-          const nextTags = Array.from(new Set([...normalizeTags(row.tags), ...tags]));
-          return dataAPI.updateDataPoint(props.projectId, row.id, { tags: nextTags });
+          const nextTags = Array.from(new Set([...normalizeTags(row.tags), ...tags]))
+          return dataAPI.updateDataPoint(props.projectId, row.id, { tags: nextTags })
         }),
-      );
-      ElMessage.success(`已为 ${selectedRows.value.length} 个数据点更新标签`);
+      )
+      ElMessage.success(`已为 ${selectedRows.value.length} 个数据点更新标签`)
     }
-    tagDialogVisible.value = false;
-    await loadDataPoints();
+    tagDialogVisible.value = false
+    await loadDataPoints()
   } catch (error) {
-    ElMessage.error("保存标签失败：" + getApiErrorMessage(error, "保存标签失败"));
+    ElMessage.error('保存标签失败：' + getApiErrorMessage(error, '保存标签失败'))
   } finally {
-    tagSaving.value = false;
+    tagSaving.value = false
   }
-};
+}
 
 // ── 权限 dialog 新回调（对接独立组件） ────────────────────────────────────
 
 const handlePermissionDialogSubmit = async (grant: Record<string, unknown>) => {
-  if (!props.projectId || !currentPermissionDatapoint.value?.id) return;
-  permissionSaving.value = true;
+  if (!props.projectId || !currentPermissionDatapoint.value?.id) return
+  permissionSaving.value = true
   try {
     await dataAPI.updateDatapointRuntimePermissions(
       props.projectId,
       currentPermissionDatapoint.value.id,
       { write: grant },
-    );
-    ElMessage.success("写权限已保存");
-    permissionDialogVisible.value = false;
-    await loadDataPoints();
+    )
+    ElMessage.success('写权限已保存')
+    permissionDialogVisible.value = false
+    await loadDataPoints()
   } catch (error) {
-    ElMessage.error("保存运行态权限失败：" + getApiErrorMessage(error, "保存运行态权限失败"));
+    ElMessage.error('保存运行态权限失败：' + getApiErrorMessage(error, '保存运行态权限失败'))
   } finally {
-    permissionSaving.value = false;
+    permissionSaving.value = false
   }
-};
+}
 
 // ── 抽屉 navigate 回调 ─────────────────────────────────────────────────────
 
 const handleDrawerNavigate = (payload: { module: string; objectId: string }) => {
-  emit("navigate", payload);
-};
+  emit('navigate', payload)
+}
 
 const openPermissionDialog = (row: DataPointRow) => {
-  currentPermissionDatapoint.value = row;
-  permissionDialogVisible.value = true;
-};
+  currentPermissionDatapoint.value = row
+  permissionDialogVisible.value = true
+}
 
 // ── 工具函数 ──────────────────────────────────────────────────────────────
 
 const copyPath = async (path?: string) => {
-  if (!path) return;
+  if (!path) return
   try {
-    await navigator.clipboard.writeText(path);
-    ElMessage.success("已复制数据点路径");
+    await navigator.clipboard.writeText(path)
+    ElMessage.success('已复制数据点路径')
   } catch {
-    ElMessage.error("复制失败，请手动复制");
+    ElMessage.error('复制失败，请手动复制')
   }
-};
+}
 
 const formatTime = (value?: string) => {
-  if (!value) return "-";
-  return dayjs(value).format(TIME_FORMAT);
-};
+  if (!value) return '-'
+  return dayjs(value).format(TIME_FORMAT)
+}
 
 const getUpdatedAt = (row: DataPointRow) =>
-  row.updatedAt || row.updated_at || row.createdAt || row.created_at || "";
+  row.updatedAt || row.updated_at || row.createdAt || row.created_at || ''
 
 /** 状态 badge tone 映射（v2 规格） */
-function resolveStatusTone(
-  status?: string,
-): "success" | "danger" | "warning" | "muted" {
+function resolveStatusTone(status?: string): 'success' | 'danger' | 'warning' | 'muted' {
   switch (status) {
-    case "active":
-      return "success";
-    case "invalid":
-      return "danger";
-    case "error":
-      return "warning";
+    case 'active':
+      return 'success'
+    case 'invalid':
+      return 'danger'
+    case 'error':
+      return 'warning'
     default:
-      return "muted";
+      return 'muted'
   }
 }
 
 const formatStatus = (status?: string) => {
   switch (status) {
-    case "active":
-      return "活跃";
-    case "invalid":
-      return "失效";
-    case "error":
-      return "错误";
-    case "inactive":
-      return "停用";
+    case 'active':
+      return '活跃'
+    case 'invalid':
+      return '失效'
+    case 'error':
+      return '错误'
+    case 'inactive':
+      return '停用'
     default:
-      return "未知";
+      return '未知'
   }
-};
+}
 
 const formatSourceType = (sourceType?: string) => {
-  if (!sourceType) return "-";
-  return sourceTypeLabels[sourceType] || sourceType;
-};
+  if (!sourceType) return '-'
+  return sourceTypeLabels[sourceType] || sourceType
+}
 
 /** 引用数（D2 完整实现；D1 全部显示 `-`） */
 const resolveRefCount = (row: DataPointRow) => {
-  const count = (row as DataPointRow & { refCount?: number }).refCount;
-  if (typeof count === "number" && count > 0) return count;
-  return "-";
-};
+  const count = (row as DataPointRow & { refCount?: number }).refCount
+  if (typeof count === 'number' && count > 0) return count
+  return '-'
+}
 
 const normalizeTags = (value: unknown): string[] => {
-  if (!Array.isArray(value)) return [];
-  const result: string[] = [];
+  if (!Array.isArray(value)) return []
+  const result: string[] = []
   value.forEach((item) => {
-    let label = "";
-    if (typeof item === "string") {
-      label = item;
-    } else if (item && typeof item === "object") {
-      const record = item as Record<string, unknown>;
-      label = String(record.label || record.name || record.value || "");
+    let label = ''
+    if (typeof item === 'string') {
+      label = item
+    } else if (item && typeof item === 'object') {
+      const record = item as Record<string, unknown>
+      label = String(record.label || record.name || record.value || '')
     }
-    const normalized = label.trim();
-    if (normalized && !result.includes(normalized)) result.push(normalized);
-  });
-  return result;
-};
+    const normalized = label.trim()
+    if (normalized && !result.includes(normalized)) result.push(normalized)
+  })
+  return result
+}
 
-
-const getVisibleTags = (row: DataPointRow) => normalizeTags(row.tags).slice(0, 2);
-const getHiddenTags = (row: DataPointRow) => normalizeTags(row.tags).slice(2);
-const getHiddenTagCount = (row: DataPointRow) => getHiddenTags(row).length;
+const getVisibleTags = (row: DataPointRow) => normalizeTags(row.tags).slice(0, 2)
+const getHiddenTags = (row: DataPointRow) => normalizeTags(row.tags).slice(2)
+const getHiddenTagCount = (row: DataPointRow) => getHiddenTags(row).length
 
 // ── URL 同步：向 Workspace 推送变化 ──────────────────────────────────────
 
 function emitFilterUpdate() {
-  emit("update:filter", {
+  emit('update:filter', {
     q: searchText.value,
     status: statusFilter.value,
     source: sourceFilter.value,
@@ -1231,60 +1186,63 @@ function emitFilterUpdate() {
     sort: sortFieldValue.value,
     order: sortOrderValue.value,
     page: pagination.value.page,
-  });
+  })
 }
 
 // ── Watch ─────────────────────────────────────────────────────────────────
 
 /* 搜索、状态、来源：300ms 防抖后重新拉数据 + 同步 URL */
 watch([searchText, statusFilter, sourceFilter], () => {
-  pagination.value.page = 1;
-  if (debounceTimer.value) window.clearTimeout(debounceTimer.value);
+  pagination.value.page = 1
+  if (debounceTimer.value) window.clearTimeout(debounceTimer.value)
   debounceTimer.value = window.setTimeout(() => {
-    void loadDataPoints();
-    emitFilterUpdate();
-  }, 300);
-});
+    void loadDataPoints()
+    emitFilterUpdate()
+  }, 300)
+})
 
 /* 排序变化：重新排序 + 同步 URL */
 watch([sortFieldValue, sortOrderValue], () => {
-  pagination.value.page = 1;
-  emitFilterUpdate();
-});
+  pagination.value.page = 1
+  emitFilterUpdate()
+})
 
 /* 标签 / 分组：前端层，不触发请求，只同步 URL */
 watch([tagFilterValues, groupByTags], () => {
-  pagination.value.page = 1;
-  emitFilterUpdate();
-});
+  pagination.value.page = 1
+  emitFilterUpdate()
+})
 
 /* 页码变化：同步 URL */
-watch(() => pagination.value.page, () => {
-  emitFilterUpdate();
-});
+watch(
+  () => pagination.value.page,
+  () => {
+    emitFilterUpdate()
+  },
+)
 
 /* 翻页越界保护 */
 watch([totalVisibleCount, totalPages], () => {
   if (totalPages.value === 0) {
-    pagination.value.page = 1;
-    return;
+    pagination.value.page = 1
+    return
   }
   if (pagination.value.page > totalPages.value) {
-    pagination.value.page = totalPages.value;
+    pagination.value.page = totalPages.value
   }
-});
+})
 
 /* 外部 props 注入（Workspace URL → 列表）：只在首次挂载前已通过默认值写入 */
 watch(
   () => [props.sourceType, props.status, props.search],
   () => {
-    pagination.value.page = 1;
-    if (debounceTimer.value) window.clearTimeout(debounceTimer.value);
+    pagination.value.page = 1
+    if (debounceTimer.value) window.clearTimeout(debounceTimer.value)
     debounceTimer.value = window.setTimeout(() => {
-      void loadDataPoints();
-    }, 300);
+      void loadDataPoints()
+    }, 300)
   },
-);
+)
 
 /**
  * URL 上有 objectId 时（直接进入 /datapoint/:id 或刷新），
@@ -1297,37 +1255,37 @@ watch(
     if (!id) {
       // URL 上没有 objectId 时关闭抽屉（避免用户后退后抽屉残留）
       if (detailDrawerVisible.value) {
-        detailDrawerVisible.value = false;
-        detailDatapoint.value = null;
+        detailDrawerVisible.value = false
+        detailDatapoint.value = null
       }
-      return;
+      return
     }
-    if (detailDatapoint.value && String(detailDatapoint.value.id) === id) return;
-    const row = list.find((d) => String(d.id) === id);
+    if (detailDatapoint.value && String(detailDatapoint.value.id) === id) return
+    const row = list.find((d) => String(d.id) === id)
     if (row) {
-      detailDatapoint.value = row;
-      detailDrawerVisible.value = true;
+      detailDatapoint.value = row
+      detailDrawerVisible.value = true
     }
   },
   { immediate: true },
-);
+)
 
 // ── 生命周期 ──────────────────────────────────────────────────────────────
 
 onMounted(() => {
-  document.addEventListener("click", handleDocumentClick);
-  void loadDataPoints();
-});
+  document.addEventListener('click', handleDocumentClick)
+  void loadDataPoints()
+})
 
 onBeforeUnmount(() => {
-  document.removeEventListener("click", handleDocumentClick);
-  if (debounceTimer.value) window.clearTimeout(debounceTimer.value);
-});
+  document.removeEventListener('click', handleDocumentClick)
+  if (debounceTimer.value) window.clearTimeout(debounceTimer.value)
+})
 
 defineExpose({
   refresh: loadDataPoints,
   openPermissionDialog,
-});
+})
 </script>
 
 <style scoped>

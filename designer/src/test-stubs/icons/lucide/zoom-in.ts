@@ -1,4 +1,4 @@
 export default {
-  name: "IconLucideZoomIn",
+  name: 'IconLucideZoomIn',
   template: `<span class="icon-lucide-zoom-in" />`,
-};
+}

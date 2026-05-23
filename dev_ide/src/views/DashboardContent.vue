@@ -976,8 +976,7 @@ export default {
 .dashboard-note-composer {
   padding: 10px;
   border-radius: var(--ck-radius-md);
-  background:
-    linear-gradient(135deg, rgba(226, 232, 240, 0.68), rgba(248, 250, 252, 0.9));
+  background: linear-gradient(135deg, rgba(226, 232, 240, 0.68), rgba(248, 250, 252, 0.9));
 }
 
 .dashboard-note-composer-footer,

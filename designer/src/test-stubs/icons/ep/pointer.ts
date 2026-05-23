@@ -1,4 +1,4 @@
 export default {
-  name: "IconEpPointer",
+  name: 'IconEpPointer',
   template: `<span class="icon-ep-pointer" />`,
-};
+}

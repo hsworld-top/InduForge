@@ -1,8 +1,8 @@
 // @ts-nocheck
 const asNonEmptyString = (value) =>
-  typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 
-const DEFAULT_DEBUG_PROJECT_ID = "test-project";
+const DEFAULT_DEBUG_PROJECT_ID = 'test-project'
 
 /**
  * 解析数据中心 debug 路由的工程上下文。
@@ -21,53 +21,52 @@ export async function resolveDatacenterDebugProjectMeta({
   setProjectId,
   setTenantId,
 }) {
-  const url = new URL(targetUrl);
+  const url = new URL(targetUrl)
   const projectIdFromUrl =
-    asNonEmptyString(url.searchParams.get("pid")) ||
-    asNonEmptyString(url.searchParams.get("id"));
-  const tenantIdFromUrl = asNonEmptyString(url.searchParams.get("tenant"));
+    asNonEmptyString(url.searchParams.get('pid')) || asNonEmptyString(url.searchParams.get('id'))
+  const tenantIdFromUrl = asNonEmptyString(url.searchParams.get('tenant'))
 
   if (projectIdFromUrl) {
-    setProjectId(projectIdFromUrl);
+    setProjectId(projectIdFromUrl)
     if (tenantIdFromUrl) {
-      setTenantId(tenantIdFromUrl);
+      setTenantId(tenantIdFromUrl)
     }
 
     return {
       id: projectIdFromUrl,
       tenantId: tenantIdFromUrl || getStoredTenantId(),
-    };
+    }
   }
 
-  let defaultDebugProject = null;
+  let defaultDebugProject = null
   try {
-    defaultDebugProject = await resolveDefaultDebugProject();
+    defaultDebugProject = await resolveDefaultDebugProject()
   } catch (error) {
-    console.warn("解析默认调试工程失败，回退到本地调试工程:", error);
+    console.warn('解析默认调试工程失败，回退到本地调试工程:', error)
   }
 
   if (defaultDebugProject?.id) {
-    setProjectId(defaultDebugProject.id);
+    setProjectId(defaultDebugProject.id)
     if (defaultDebugProject.tenantId) {
-      setTenantId(defaultDebugProject.tenantId);
+      setTenantId(defaultDebugProject.tenantId)
     }
 
     return {
       id: defaultDebugProject.id,
       tenantId: defaultDebugProject.tenantId || getStoredTenantId(),
-    };
+    }
   }
 
-  const storedProjectId = getStoredProjectId();
-  const storedTenantId = getStoredTenantId();
-  const fallbackProjectId = storedProjectId || DEFAULT_DEBUG_PROJECT_ID;
+  const storedProjectId = getStoredProjectId()
+  const storedTenantId = getStoredTenantId()
+  const fallbackProjectId = storedProjectId || DEFAULT_DEBUG_PROJECT_ID
 
   if (!storedProjectId) {
-    setProjectId(fallbackProjectId);
+    setProjectId(fallbackProjectId)
   }
 
   return {
     id: fallbackProjectId,
     tenantId: storedTenantId,
-  };
+  }
 }

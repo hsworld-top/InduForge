@@ -3,9 +3,9 @@
   递归渲染组件树，支持 DOM 组件与 Canvas 图形，处理绑定、事件、拖拽
 -->
 <script setup lang="ts">
-import { ElMessage } from "element-plus";
-import { storeToRefs } from "pinia";
-import { computed, inject, nextTick, ref, watch } from "vue";
+import { ElMessage } from 'element-plus'
+import { storeToRefs } from 'pinia'
+import { computed, inject, nextTick, ref, watch } from 'vue'
 import {
   getCustomRenderer,
   getDisplayContent,
@@ -16,68 +16,68 @@ import {
   isNodeDesignerMovable,
   isTableLikeType,
   usesLegacyFlexDirectionProps,
-} from "@/editor-core/descriptors/registry";
-import { componentRegistry, createSelectableElement } from "@/editor-core";
-import { normalizeEventDefinitions } from "@/editor-core/registry/component-events";
-import { datacenterApi } from "@/services";
-import { useEditorStore } from "@/stores/editor-store";
-import EChart from "./renderers/EChart.vue";
-import { useBuildRefInfo } from "./composables/use-build-ref-info";
+} from '@/editor-core/descriptors/registry'
+import { componentRegistry, createSelectableElement } from '@/editor-core'
+import { normalizeEventDefinitions } from '@/editor-core/registry/component-events'
+import { datacenterApi } from '@/services'
+import { useEditorStore } from '@/stores/editor-store'
+import EChart from './renderers/EChart.vue'
+import { useBuildRefInfo } from './composables/use-build-ref-info'
 import {
   clearDropTarget,
   endDrag,
   startDrag,
   updateDropTarget,
   useDragState,
-} from "./composables/use-drag-state";
-import { useNodeContent } from "./composables/use-node-content";
-import { useNodeDrop } from "./composables/use-node-drop";
-import { useNodeInteraction } from "./composables/use-node-interaction";
-import { useNodePointer } from "./composables/use-node-pointer";
+} from './composables/use-drag-state'
+import { useNodeContent } from './composables/use-node-content'
+import { useNodeDrop } from './composables/use-node-drop'
+import { useNodeInteraction } from './composables/use-node-interaction'
+import { useNodePointer } from './composables/use-node-pointer'
 import {
   buildExpressionContext,
   resolveExpressionValue,
   useNodeProps,
-} from "./composables/use-node-props";
+} from './composables/use-node-props'
 import {
   createApplyMenuDslConfig,
   resolveMenuConfigFromContent,
   useNodeRendererDerivations,
-} from "./composables/use-node-renderer-derivations";
-import { useNodeRendererPreviewRef } from "./composables/use-node-renderer-preview-ref";
-import { useNodeRendererTypeFlags } from "./composables/use-node-renderer-type-flags";
-import { useNodeResize } from "./composables/use-node-resize";
-import { createNodeStyleHelpers } from "./composables/use-node-style";
-import { usePreview } from "./composables/use-preview";
+} from './composables/use-node-renderer-derivations'
+import { useNodeRendererPreviewRef } from './composables/use-node-renderer-preview-ref'
+import { useNodeRendererTypeFlags } from './composables/use-node-renderer-type-flags'
+import { useNodeResize } from './composables/use-node-resize'
+import { createNodeStyleHelpers } from './composables/use-node-style'
+import { usePreview } from './composables/use-preview'
 import {
   canvasSnapEnabledKey,
   canvasZoomKey,
   previewRenderBoundsKey,
   runtimeAccessContextKey,
-} from "./injection-keys";
-import { createDragDropManager } from "./interaction/DragDropManager";
-import { buildDesignerNodeDomId } from "./style-config-css";
+} from './injection-keys'
+import { createDragDropManager } from './interaction/DragDropManager'
+import { buildDesignerNodeDomId } from './style-config-css'
 
 interface NodeRendererProps {
-  nodeId: string;
-  isRoot?: boolean;
-  readonly?: boolean;
+  nodeId: string
+  isRoot?: boolean
+  readonly?: boolean
 }
 
-type NodeLike = Record<string, any>;
-type TabsPaneLike = Record<string, any>;
-type EventListenerMap = Record<string, any>;
-type StyleObjectLike = Record<string, any>;
-type ShowContextMenuLike = any;
+type NodeLike = Record<string, any>
+type TabsPaneLike = Record<string, any>
+type EventListenerMap = Record<string, any>
+type StyleObjectLike = Record<string, any>
+type ShowContextMenuLike = any
 
 const props = withDefaults(defineProps<NodeRendererProps>(), {
   isRoot: false,
   readonly: false,
-});
+})
 
-const STYLE_COMMENT_RE = /\/\*[\s\S]*?\*\//g;
+const STYLE_COMMENT_RE = /\/\*[\s\S]*?\*\//g
 
-const editorStore = useEditorStore();
+const editorStore = useEditorStore()
 const {
   doc,
   selection,
@@ -91,30 +91,30 @@ const {
   globalScripts,
   currentPage,
   error,
-} = storeToRefs(editorStore);
-const showContextMenu = inject<ShowContextMenuLike>("showContextMenu", null);
-const runtimeAccessContext = inject(runtimeAccessContextKey, null);
-const previewRenderBounds = inject(previewRenderBoundsKey, null);
-const nodeStyleHelpers = createNodeStyleHelpers({ doc, currentPage, props } as any) as any;
-const resolveLayoutStyle = nodeStyleHelpers.resolveLayoutStyle;
+} = storeToRefs(editorStore)
+const showContextMenu = inject<ShowContextMenuLike>('showContextMenu', null)
+const runtimeAccessContext = inject(runtimeAccessContextKey, null)
+const previewRenderBounds = inject(previewRenderBoundsKey, null)
+const nodeStyleHelpers = createNodeStyleHelpers({ doc, currentPage, props } as any) as any
+const resolveLayoutStyle = nodeStyleHelpers.resolveLayoutStyle
 
 const node = computed<NodeLike | null>(() => {
-  void docVersion.value;
-  return doc.value?.getNode(props.nodeId) || null;
-});
+  void docVersion.value
+  return doc.value?.getNode(props.nodeId) || null
+})
 
 const detailConfigText = computed(() => {
-  void docVersion.value;
-  return String(node.value?.detailConfig || "").trim();
-});
+  void docVersion.value
+  return String(node.value?.detailConfig || '').trim()
+})
 
-let applyMenuDslConfig: any = () => {};
+let applyMenuDslConfig: any = () => {}
 
 // nodeRef 和 contentRef 需要先声明，因为会被 useNodeInteraction 等 composable 使用
-const nodeRef = ref<any>(null);
-const contentRef = ref<any>(null);
+const nodeRef = ref<any>(null)
+const contentRef = ref<any>(null)
 function setNodeRef(el: any): void {
-  nodeRef.value = el?.$el || el;
+  nodeRef.value = el?.$el || el
 }
 
 /**
@@ -122,22 +122,22 @@ function setNodeRef(el: any): void {
  * @param {MouseEvent} event - 鼠标事件
  */
 function handleSelect(event: any): void {
-  if (!node.value || !selection.value) return;
-  const element = createSelectableElement("node", node.value.id);
+  if (!node.value || !selection.value) return
+  const element = createSelectableElement('node', node.value.id)
   if (event.shiftKey) {
-    selection.value.selectRange(element);
-    return;
+    selection.value.selectRange(element)
+    return
   }
   if (event.metaKey || event.ctrlKey) {
-    selection.value.toggleSelect(element);
-    return;
+    selection.value.toggleSelect(element)
+    return
   }
-  selection.value.select(element);
+  selection.value.select(element)
 }
 
 // 使用 usePreview composable（需要在 useNodeInteraction 之前，因为 runPreviewScript 需要传入）
 // buildRefInfo 由下方 useBuildRefInfo 赋值，此处先声明以便 usePreview 闭包引用
-let buildRefInfo: any = null;
+let buildRefInfo: any = null
 const previewRuntime: any = usePreview({
   node: node as any,
   doc: doc as any,
@@ -152,18 +152,18 @@ const previewRuntime: any = usePreview({
   detailConfigText,
   resolveMenuConfigFromContent: resolveMenuConfigFromContent as any,
   applyMenuDslConfig: (config: any) => applyMenuDslConfig(config),
-} as any);
-const { runPreviewScript, isRunningDetailConfig: isRunningDetailConfigFn } = previewRuntime;
+} as any)
+const { runPreviewScript, isRunningDetailConfig: isRunningDetailConfigFn } = previewRuntime
 
 const isRuntimeOperable = computed(() => {
-  void docVersion.value;
-  if (!node.value || !runtimeAccessContext) return true;
-  return runtimeAccessContext.isNodeOperable(node.value as any);
-});
+  void docVersion.value
+  if (!node.value || !runtimeAccessContext) return true
+  return runtimeAccessContext.isNodeOperable(node.value as any)
+})
 
 function runOperablePreviewScript(eventName: string, payload: any): unknown {
-  if (!isRuntimeOperable.value) return undefined;
-  return runPreviewScript(eventName, payload);
+  if (!isRuntimeOperable.value) return undefined
+  return runPreviewScript(eventName, payload)
 }
 
 // 使用 useNodeInteraction composable
@@ -180,7 +180,7 @@ const nodeInteraction: any = useNodeInteraction({
   runPreviewScript: runOperablePreviewScript as any,
   handleSelect,
   showContextMenu,
-} as any);
+} as any)
 const {
   handleClick,
   handleDoubleClick,
@@ -192,13 +192,13 @@ const {
   isElColInRow: isElColInRowFromComposable,
   isChildInElCol: isChildInElColFromComposable,
   getRegionResizeConfig: getRegionResizeConfigFromComposable,
-} = nodeInteraction;
-const canvasZoom = inject<any>(canvasZoomKey, ref(1));
-const canvasSnapEnabled = inject<any>(canvasSnapEnabledKey, ref(true));
-const dragState = useDragState();
+} = nodeInteraction
+const canvasZoom = inject<any>(canvasZoomKey, ref(1))
+const canvasSnapEnabled = inject<any>(canvasSnapEnabledKey, ref(true))
+const dragState = useDragState()
 function notifyInsertFailure(fallbackMessage?: string): void {
-  const message = error.value || fallbackMessage || "插入失败：当前不可编辑";
-  ElMessage.warning({ message } as any);
+  const message = error.value || fallbackMessage || '插入失败：当前不可编辑'
+  ElMessage.warning({ message } as any)
 }
 
 // 使用 useNodeProps composable（不传 activeTabName，避免循环依赖）
@@ -211,19 +211,19 @@ const nodeProps: any = useNodeProps({
   projectRuntimeLocale: projectRuntimeLocale as any,
   docVersion: docVersion as any,
   readonly: computed(() => props.readonly),
-} as any);
+} as any)
 const {
   resolvedNodeProps,
   resolvedProps: resolvedPropsBase,
   filteredProps: filteredPropsFromComposable,
-} = nodeProps;
+} = nodeProps
 
 // 使用 useNodeContent composable（传入 resolvedNodeProps）
 const nodeContent: any = useNodeContent({
   node: node as any,
   resolvedNodeProps: resolvedNodeProps as any,
   docVersion: docVersion as any,
-} as any);
+} as any)
 const {
   selectOptions,
   radioOptions,
@@ -237,15 +237,15 @@ const {
   tableRenderVersion,
   applyTabsModelValueToProps,
   applyCollapseModelValueToProps,
-} = nodeContent;
-const selectOptionsList = computed<any[]>(() => (selectOptions.value || []) as any[]);
-const radioOptionsList = computed<any[]>(() => (radioOptions.value || []) as any[]);
-const checkboxOptionsList = computed<any[]>(() => (checkboxOptions.value || []) as any[]);
-const dropdownItemsList = computed<any[]>(() => (dropdownItems.value || []) as any[]);
-const tabsListItems = computed<any[]>(() => (tabsList.value || []) as any[]);
+} = nodeContent
+const selectOptionsList = computed<any[]>(() => (selectOptions.value || []) as any[])
+const radioOptionsList = computed<any[]>(() => (radioOptions.value || []) as any[])
+const checkboxOptionsList = computed<any[]>(() => (checkboxOptions.value || []) as any[])
+const dropdownItemsList = computed<any[]>(() => (dropdownItems.value || []) as any[])
+const tabsListItems = computed<any[]>(() => (tabsList.value || []) as any[])
 const collapseItemsListFromContent = computed<any[]>(
   () => (collapseItemsFromContent.value || []) as any[],
-);
+)
 const {
   isSelectType,
   isRadioType,
@@ -266,7 +266,7 @@ const {
     readonly: computed(() => props.readonly),
     isRegionContainer: isRegionContainerFromComposable,
   } as any,
-);
+)
 
 const { buildRefInfo: buildRefInfoImpl, applyPreviewPatch } = useBuildRefInfo({
   node: node as any,
@@ -277,15 +277,15 @@ const { buildRefInfo: buildRefInfoImpl, applyPreviewPatch } = useBuildRefInfo({
   tableRenderVersion,
   docVersion,
   isRunningDetailConfigFn: isRunningDetailConfigFn as any,
-} as any);
-buildRefInfo = buildRefInfoImpl;
+} as any)
+buildRefInfo = buildRefInfoImpl
 
 useNodeRendererPreviewRef({
   readonly: computed(() => props.readonly),
   node: node as any,
   currentPage: currentPage as any,
   buildRefInfo: () => buildRefInfo?.(),
-} as any);
+} as any)
 
 applyMenuDslConfig = createApplyMenuDslConfig({
   node: node as any,
@@ -293,36 +293,36 @@ applyMenuDslConfig = createApplyMenuDslConfig({
   applyPreviewPatch: applyPreviewPatch as any,
   editorStore: editorStore as any,
   normalizeMenuItems: normalizeMenuItems as any,
-} as any);
+} as any)
 
 // 应用 Tabs/Collapse modelValue 处理到 resolvedProps（通过 useNodeContent 的辅助函数）
 const resolvedProps = computed<Record<string, any>>(() => {
-  const base = resolvedPropsBase.value;
+  const base = resolvedPropsBase.value
   if (isTableLikeType(node.value?.type)) {
-    void tableRenderVersion.value;
+    void tableRenderVersion.value
   }
-  const withTabs = applyTabsModelValueToProps(base);
-  return applyCollapseModelValueToProps(withTabs);
-});
+  const withTabs = applyTabsModelValueToProps(base)
+  return applyCollapseModelValueToProps(withTabs)
+})
 
-const dragDropManager: any = createDragDropManager();
+const dragDropManager: any = createDragDropManager()
 
 function resolveFlexDirection(type: any, element: any): string {
-  const descriptorDirection = getFlexDirection(type);
+  const descriptorDirection = getFlexDirection(type)
   if (descriptorDirection) {
-    return descriptorDirection;
+    return descriptorDirection
   }
   if (usesLegacyFlexDirectionProps(type)) {
-    return node.value?.props?.direction || "column";
+    return node.value?.props?.direction || 'column'
   }
-  return dragDropManager.getContainerDirection((element || undefined) as any);
+  return dragDropManager.getContainerDirection((element || undefined) as any)
 }
 
 const isMovable = computed(() => {
-  void docVersion.value;
-  if (!node.value || props.isRoot || node.value.locked) return false;
-  return isNodeDesignerMovable(node.value.type);
-});
+  void docVersion.value
+  if (!node.value || props.isRoot || node.value.locked) return false
+  return isNodeDesignerMovable(node.value.type)
+})
 
 const nodeDrop: any = useNodeDrop({
   node: node as any,
@@ -341,7 +341,7 @@ const nodeDrop: any = useNodeDrop({
   tabsList,
   activeCollapseName,
   collapseItems: collapseItemsListFromContent,
-} as any);
+} as any)
 const {
   handleDragOver,
   handleDrop,
@@ -354,7 +354,7 @@ const {
   isDragOver,
   suppressDropByAlt,
   canAcceptChild,
-} = nodeDrop;
+} = nodeDrop
 const nodeResize: any = useNodeResize({
   node: node as any,
   doc: doc as any,
@@ -369,13 +369,13 @@ const nodeResize: any = useNodeResize({
   editorStore: editorStore as any,
   isChildResizableByDescriptor: isChildResizableByDescriptor as any,
   getRegionResizeConfig: getRegionResizeConfigFromComposable,
-} as any);
-const { handleResizePointerDown } = nodeResize;
+} as any)
+const { handleResizePointerDown } = nodeResize
 const isDropActive = computed<boolean>(() => {
-  if (suppressDropByAlt.value) return false;
-  if (!node.value) return isDragOver.value;
-  return isDragOver.value || dragState.targetContainerId === node.value.id;
-});
+  if (suppressDropByAlt.value) return false
+  if (!node.value) return isDragOver.value
+  return isDragOver.value || dragState.targetContainerId === node.value.id
+})
 
 const {
   menuItems,
@@ -409,75 +409,75 @@ const {
   activeCollapseName,
   collapseItems: collapseItemsListFromContent,
   props,
-} as any);
-const menuItemsList = computed<any[]>(() => (menuItems.value || []) as any[]);
-const tableColumnsList = computed<any[]>(() => (tableColumns.value || []) as any[]);
-const bigTableColumnsList = computed<any[]>(() => (bigTableColumns.value || []) as any[]);
-const timelineItemsList = computed<any[]>(() => (timelineItems.value || []) as any[]);
-const collapseItemsList = computed<any[]>(() => (collapseItems.value || []) as any[]);
-const stepsItemsList = computed<any[]>(() => (stepsItems.value || []) as any[]);
-const carouselItemsList = computed<any[]>(() => (carouselItems.value || []) as any[]);
+} as any)
+const menuItemsList = computed<any[]>(() => (menuItems.value || []) as any[])
+const tableColumnsList = computed<any[]>(() => (tableColumns.value || []) as any[])
+const bigTableColumnsList = computed<any[]>(() => (bigTableColumns.value || []) as any[])
+const timelineItemsList = computed<any[]>(() => (timelineItems.value || []) as any[])
+const collapseItemsList = computed<any[]>(() => (collapseItems.value || []) as any[])
+const stepsItemsList = computed<any[]>(() => (stepsItems.value || []) as any[])
+const carouselItemsList = computed<any[]>(() => (carouselItems.value || []) as any[])
 
 const filteredProps = computed<Record<string, any>>(() => {
-  const base = { ...(filteredPropsFromComposable.value || {}) };
+  const base = { ...(filteredPropsFromComposable.value || {}) }
   if (isTabsType.value || isCollapseType.value) {
-    Object.assign(base, resolvedProps.value || {});
+    Object.assign(base, resolvedProps.value || {})
   }
   if (props.readonly && !isRuntimeOperable.value) {
-    base.disabled = true;
-    base.readonly = true;
+    base.disabled = true
+    base.readonly = true
   }
-  return base;
-});
+  return base
+})
 
-const tabHeaderWidth = ref(0);
+const tabHeaderWidth = ref(0)
 
 /**
  * 同步 Tabs 头部宽度（用于左右布局）
  */
 function syncTabsHeaderWidth(): void {
-  if (!node.value || !isTabsType.value) return;
+  if (!node.value || !isTabsType.value) return
   const tabPosition =
-    resolvedNodeProps.value?.tabPosition || node.value?.props?.tabPosition || "top";
-  if (tabPosition !== "left" && tabPosition !== "right") return;
-  const rootEl = nodeRef.value;
-  if (!rootEl) return;
+    resolvedNodeProps.value?.tabPosition || node.value?.props?.tabPosition || 'top'
+  if (tabPosition !== 'left' && tabPosition !== 'right') return
+  const rootEl = nodeRef.value
+  if (!rootEl) return
   const headerSelector =
-    tabPosition === "left"
-      ? ".el-tabs__header-vertical.is-left"
-      : tabPosition === "right"
-        ? ".el-tabs__header-vertical.is-right"
-        : ".el-tabs__header";
-  const headerEl = rootEl.querySelector?.(headerSelector);
-  if (!headerEl) return;
-  const rect = headerEl.getBoundingClientRect?.();
-  if (!rect) return;
-  const nextWidth = Math.max(0, Math.round(rect.width));
-  if (!nextWidth) return;
+    tabPosition === 'left'
+      ? '.el-tabs__header-vertical.is-left'
+      : tabPosition === 'right'
+        ? '.el-tabs__header-vertical.is-right'
+        : '.el-tabs__header'
+  const headerEl = rootEl.querySelector?.(headerSelector)
+  if (!headerEl) return
+  const rect = headerEl.getBoundingClientRect?.()
+  if (!rect) return
+  const nextWidth = Math.max(0, Math.round(rect.width))
+  if (!nextWidth) return
   if (tabHeaderWidth.value !== nextWidth) {
-    tabHeaderWidth.value = nextWidth;
+    tabHeaderWidth.value = nextWidth
   }
-  rootEl.style.setProperty("--tabs-vertical-width", `${nextWidth}px`);
+  rootEl.style.setProperty('--tabs-vertical-width', `${nextWidth}px`)
 }
 
 watch(
   () => [node.value?.type, resolvedNodeProps.value?.tabPosition, tabsList.value?.length],
   async () => {
-    await nextTick();
-    syncTabsHeaderWidth();
+    await nextTick()
+    syncTabsHeaderWidth()
   },
   { immediate: true },
-);
+)
 
 /**
  * 处理 Tabs 点击事件
  * @param {Object} pane - Tab 面板
  */
 function handleTabsClick(pane: TabsPaneLike): void {
-  if (!pane) return;
-  const name = pane?.props?.name ?? pane?.name ?? pane?.paneName ?? pane?.label ?? "";
+  if (!pane) return
+  const name = pane?.props?.name ?? pane?.name ?? pane?.paneName ?? pane?.label ?? ''
   if (name) {
-    activeTabName.value = String(name);
+    activeTabName.value = String(name)
   }
 }
 
@@ -486,44 +486,39 @@ function handleTabsClick(pane: TabsPaneLike): void {
  * @param {string} name - 激活名称
  */
 function handleTabsChange(name: string | number): void {
-  if (!name) return;
-  activeTabName.value = String(name);
+  if (!name) return
+  activeTabName.value = String(name)
 }
 
 const isHoverSelectEnabled = computed<boolean>(() => {
-  if (!isTabsType.value && !isCollapseType.value) return false;
-  return Boolean(resolvedNodeProps.value?.hoverSelect ?? node.value?.props?.hoverSelect);
-});
+  if (!isTabsType.value && !isCollapseType.value) return false
+  return Boolean(resolvedNodeProps.value?.hoverSelect ?? node.value?.props?.hoverSelect)
+})
 
 function resolveElementFromMouseEvent(event: MouseEvent): Element | null {
-  const target = event.target;
-  return target instanceof Element ? target : null;
+  const target = event.target
+  return target instanceof Element ? target : null
 }
 
 function handleTabsHeaderMouseOver(event: MouseEvent): boolean {
-  if (!isTabsType.value) return false;
-  const target = resolveElementFromMouseEvent(event);
-  const tabEl = target?.closest?.(".el-tabs__item") as HTMLElement | null;
-  if (!tabEl || tabEl.classList.contains("is-disabled")) return false;
-  const rawId = tabEl.getAttribute("id") || "";
-  const rawControls = tabEl.getAttribute("aria-controls") || "";
-  const nameFromId = rawId.startsWith("tab-") ? rawId.slice(4) : "";
-  const nameFromControls = rawControls.startsWith("pane-") ? rawControls.slice(5) : "";
-  const label = (tabEl.textContent || "").trim();
+  if (!isTabsType.value) return false
+  const target = resolveElementFromMouseEvent(event)
+  const tabEl = target?.closest?.('.el-tabs__item') as HTMLElement | null
+  if (!tabEl || tabEl.classList.contains('is-disabled')) return false
+  const rawId = tabEl.getAttribute('id') || ''
+  const rawControls = tabEl.getAttribute('aria-controls') || ''
+  const nameFromId = rawId.startsWith('tab-') ? rawId.slice(4) : ''
+  const nameFromControls = rawControls.startsWith('pane-') ? rawControls.slice(5) : ''
+  const label = (tabEl.textContent || '').trim()
   const matched = tabsListItems.value.find((tab) => {
-    const key = String(tab?.name ?? "").trim();
-    const text = String(tab?.label ?? "").trim();
-    return (
-      key === nameFromId ||
-      key === nameFromControls ||
-      text === label ||
-      key === label
-    );
-  });
-  const name = String(matched?.name ?? nameFromId ?? nameFromControls ?? "").trim();
-  if (!name || name === activeTabName.value) return true;
-  activeTabName.value = name;
-  return true;
+    const key = String(tab?.name ?? '').trim()
+    const text = String(tab?.label ?? '').trim()
+    return key === nameFromId || key === nameFromControls || text === label || key === label
+  })
+  const name = String(matched?.name ?? nameFromId ?? nameFromControls ?? '').trim()
+  if (!name || name === activeTabName.value) return true
+  activeTabName.value = name
+  return true
 }
 
 /**
@@ -531,56 +526,56 @@ function handleTabsHeaderMouseOver(event: MouseEvent): boolean {
  * @param {string} name - Tab 名称
  */
 function resolveTabNameValue(input: any): any {
-  if (input && typeof input === "object") {
-    return input?.props?.name ?? input?.name ?? input?.paneName ?? input?.label ?? "";
+  if (input && typeof input === 'object') {
+    return input?.props?.name ?? input?.name ?? input?.paneName ?? input?.label ?? ''
   }
-  return input ?? "";
+  return input ?? ''
 }
 
 function handleTabsRemove(name: any): void {
-  if (!isTabsType.value) return;
-  const resolvedName = resolveTabNameValue(name);
-  if (!resolvedName) return;
-  const tabs = Array.isArray(node.value?.props?.tabs) ? [...node.value.props.tabs] : [];
-  if (!tabs.length) return;
-  const normalizedName = String(resolvedName);
+  if (!isTabsType.value) return
+  const resolvedName = resolveTabNameValue(name)
+  if (!resolvedName) return
+  const tabs = Array.isArray(node.value?.props?.tabs) ? [...node.value.props.tabs] : []
+  if (!tabs.length) return
+  const normalizedName = String(resolvedName)
   const updateTabsProps = (patch: Record<string, any>): void => {
-    if (!node.value || !patch || typeof patch !== "object") return;
+    if (!node.value || !patch || typeof patch !== 'object') return
     editorStore.updateNode(node.value.id, {
       props: { ...(node.value.props || {}), ...patch },
-    });
-  };
+    })
+  }
   const removeIndex = tabs.findIndex((item) => {
-    const tabName = item?.name ?? item?.label ?? "";
-    return String(tabName) === normalizedName;
-  });
-  let targetIndex = removeIndex;
+    const tabName = item?.name ?? item?.label ?? ''
+    return String(tabName) === normalizedName
+  })
+  let targetIndex = removeIndex
   if (targetIndex < 0) {
-    const numericIndex = Number(normalizedName);
+    const numericIndex = Number(normalizedName)
     if (Number.isFinite(numericIndex)) {
-      const candidate = Math.trunc(numericIndex);
+      const candidate = Math.trunc(numericIndex)
       if (candidate >= 0 && candidate < tabs.length) {
-        targetIndex = candidate;
+        targetIndex = candidate
       }
     }
   }
-  if (targetIndex < 0) return;
-  tabs.splice(targetIndex, 1);
-  updateTabsProps({ tabs });
+  if (targetIndex < 0) return
+  tabs.splice(targetIndex, 1)
+  updateTabsProps({ tabs })
 
-  const childIds = Array.isArray(node.value?.children) ? [...node.value.children] : [];
+  const childIds = Array.isArray(node.value?.children) ? [...node.value.children] : []
   childIds.forEach((childId) => {
-    const childNode = doc.value?.getNode?.(childId);
-    if (!childNode) return;
-    const tabKey = childNode.props?.tabKey ?? "";
+    const childNode = doc.value?.getNode?.(childId)
+    if (!childNode) return
+    const tabKey = childNode.props?.tabKey ?? ''
     if (String(tabKey) === normalizedName) {
-      editorStore.removeNode(childId);
+      editorStore.removeNode(childId)
     }
-  });
+  })
 
-  const nextTab = tabs[targetIndex] || tabs[targetIndex - 1] || tabs[0] || null;
-  const nextName = nextTab?.name ?? nextTab?.label ?? "";
-  updateTabsProps({ activeName: nextName ? String(nextName) : "" });
+  const nextTab = tabs[targetIndex] || tabs[targetIndex - 1] || tabs[0] || null
+  const nextName = nextTab?.name ?? nextTab?.label ?? ''
+  updateTabsProps({ activeName: nextName ? String(nextName) : '' })
 }
 
 /**
@@ -589,118 +584,120 @@ function handleTabsRemove(name: any): void {
  * @param {string} action - edit 动作
  */
 function handleTabsEdit(name: any, action: string): void {
-  if (action !== "remove") return;
-  handleTabsRemove(name);
+  if (action !== 'remove') return
+  handleTabsRemove(name)
 }
 function isActiveTab(tab: any): boolean {
-  if (!tab) return false;
-  const name = tab.name ?? tab.label ?? "";
-  return String(name) === activeTabName.value;
+  if (!tab) return false
+  const name = tab.name ?? tab.label ?? ''
+  return String(name) === activeTabName.value
 }
 
 function resolveCollapseItemKey(item: any): string {
-  if (!item) return "";
-  const raw = item.name ?? item.title ?? item.label ?? "";
-  return String(raw || "").trim();
+  if (!item) return ''
+  const raw = item.name ?? item.title ?? item.label ?? ''
+  return String(raw || '').trim()
 }
 
 function isActiveCollapseItem(item: any): boolean {
-  const key = resolveCollapseItemKey(item);
-  if (!key) return false;
-  return key === String(activeCollapseName.value || "").trim();
+  const key = resolveCollapseItemKey(item)
+  if (!key) return false
+  return key === String(activeCollapseName.value || '').trim()
 }
 
-const activeCollapseDropKey = ref("");
+const activeCollapseDropKey = ref('')
 
 function isCollapsePaneDropActive(item: any): boolean {
-  if (!isDropActive.value) return false;
-  const key = resolveCollapseItemKey(item);
-  if (!key) return false;
-  return activeCollapseDropKey.value ? activeCollapseDropKey.value === key : isActiveCollapseItem(item);
+  if (!isDropActive.value) return false
+  const key = resolveCollapseItemKey(item)
+  if (!key) return false
+  return activeCollapseDropKey.value
+    ? activeCollapseDropKey.value === key
+    : isActiveCollapseItem(item)
 }
 
 function handleCollapsePaneDragOver(event: DragEvent, item: any): void {
-  const key = resolveCollapseItemKey(item);
+  const key = resolveCollapseItemKey(item)
   if (key) {
-    activeCollapseDropKey.value = key;
+    activeCollapseDropKey.value = key
   }
-  handleDragOver(event);
+  handleDragOver(event)
 }
 
 function handleCollapsePaneDragLeave(event: DragEvent, item: any): void {
-  const currentTarget = event.currentTarget instanceof Element ? event.currentTarget : null;
-  const relatedTarget = event.relatedTarget instanceof Node ? event.relatedTarget : null;
-  if (currentTarget && relatedTarget && currentTarget.contains(relatedTarget)) return;
+  const currentTarget = event.currentTarget instanceof Element ? event.currentTarget : null
+  const relatedTarget = event.relatedTarget instanceof Node ? event.relatedTarget : null
+  if (currentTarget && relatedTarget && currentTarget.contains(relatedTarget)) return
 
   if (activeCollapseDropKey.value === resolveCollapseItemKey(item)) {
-    activeCollapseDropKey.value = "";
+    activeCollapseDropKey.value = ''
   }
-  handleDragLeave();
+  handleDragLeave()
 }
 
 function handleCollapsePaneDrop(event: DragEvent, item: any): void {
-  const key = resolveCollapseItemKey(item);
+  const key = resolveCollapseItemKey(item)
   if (key) {
-    activeCollapseDropKey.value = key;
+    activeCollapseDropKey.value = key
   }
-  handleDrop(event);
-  activeCollapseDropKey.value = "";
+  handleDrop(event)
+  activeCollapseDropKey.value = ''
 }
 
 function handleCollapseChange(value: unknown): void {
   if (Array.isArray(value)) {
-    const firstKey = String(value[0] ?? "").trim();
+    const firstKey = String(value[0] ?? '').trim()
     if (firstKey) {
-      activeCollapseName.value = firstKey;
-      return;
+      activeCollapseName.value = firstKey
+      return
     }
   }
-  const normalized = String(value ?? "").trim();
+  const normalized = String(value ?? '').trim()
   if (normalized) {
-    activeCollapseName.value = normalized;
+    activeCollapseName.value = normalized
   }
 }
 
 function handleCollapseHeaderClick(item: any): void {
-  const key = resolveCollapseItemKey(item);
-  if (!key) return;
-  activeCollapseName.value = key;
+  const key = resolveCollapseItemKey(item)
+  if (!key) return
+  activeCollapseName.value = key
 }
 
 function handleCollapseHeaderMouseOver(event: MouseEvent): boolean {
-  if (!isCollapseType.value) return false;
-  const target = resolveElementFromMouseEvent(event);
-  const headerEl = target?.closest?.(".el-collapse-item__header") as HTMLElement | null;
-  if (!headerEl || headerEl.classList.contains("is-disabled")) return false;
-  const rootEl = (nodeRef.value as any)?.$el || nodeRef.value;
+  if (!isCollapseType.value) return false
+  const target = resolveElementFromMouseEvent(event)
+  const headerEl = target?.closest?.('.el-collapse-item__header') as HTMLElement | null
+  if (!headerEl || headerEl.classList.contains('is-disabled')) return false
+  const rootEl = (nodeRef.value as any)?.$el || nodeRef.value
   const headers =
     rootEl instanceof Element
-      ? Array.from(rootEl.querySelectorAll(".el-collapse-item__header"))
-      : [];
-  const index = headers.indexOf(headerEl);
-  const item = index >= 0 ? collapseItemsList.value[index] : null;
-  const key = resolveCollapseItemKey(item);
-  if (!key || key === activeCollapseName.value) return true;
-  activeCollapseName.value = key;
-  return true;
+      ? Array.from(rootEl.querySelectorAll('.el-collapse-item__header'))
+      : []
+  const index = headers.indexOf(headerEl)
+  const item = index >= 0 ? collapseItemsList.value[index] : null
+  const key = resolveCollapseItemKey(item)
+  if (!key || key === activeCollapseName.value) return true
+  activeCollapseName.value = key
+  return true
 }
 
 function handleNodeMouseOver(event: MouseEvent): void {
-  if (!isHoverSelectEnabled.value) return;
-  if (handleTabsHeaderMouseOver(event)) return;
-  handleCollapseHeaderMouseOver(event);
+  if (!isHoverSelectEnabled.value) return
+  if (handleTabsHeaderMouseOver(event)) return
+  handleCollapseHeaderMouseOver(event)
 }
 
-const isContainer = isContainerFromComposable;
+const isContainer = isContainerFromComposable
 
 const isNodeVisible = computed(() => {
-  void docVersion.value;
-  if (!node.value) return false;
-  if (node.value.hidden) return false;
-  if (runtimeAccessContext && !runtimeAccessContext.isNodeVisible(node.value as any)) return false;
-  const visibleConfig = node.value.conditions?.visible;
-  if (typeof visibleConfig === "boolean") return visibleConfig;
-  if (typeof visibleConfig !== "string" || !visibleConfig.trim()) return true;
+  void docVersion.value
+  if (!node.value) return false
+  if (node.value.hidden) return false
+  if (runtimeAccessContext && !runtimeAccessContext.isNodeVisible(node.value as any)) return false
+  const visibleConfig = node.value.conditions?.visible
+  if (typeof visibleConfig === 'boolean') return visibleConfig
+  if (typeof visibleConfig !== 'string' || !visibleConfig.trim()) return true
   const context = buildExpressionContext(
     (resolvedNodeProps.value || {}) as any,
     {
@@ -708,19 +705,19 @@ const isNodeVisible = computed(() => {
       currentPage: currentPage as any,
       projectVariables: projectVariables as any,
     } as any,
-  );
-  const value = resolveExpressionValue(visibleConfig, context, true);
-  return Boolean(value);
-});
+  )
+  const value = resolveExpressionValue(visibleConfig, context, true)
+  return Boolean(value)
+})
 
 const hasChildren = computed(() => {
-  void docVersion.value;
-  if (!node.value || !doc.value) return false;
-  if (typeof (doc.value as any).getChildren === "function") {
-    return (doc.value as any).getChildren(node.value.id).length > 0;
+  void docVersion.value
+  if (!node.value || !doc.value) return false
+  if (typeof (doc.value as any).getChildren === 'function') {
+    return (doc.value as any).getChildren(node.value.id).length > 0
   }
-  return (node.value.children || []).length > 0;
-});
+  return (node.value.children || []).length > 0
+})
 
 const nodePointer = useNodePointer({
   node: node as any,
@@ -751,68 +748,68 @@ const nodePointer = useNodePointer({
   activeCollapseName,
   collapseItems: collapseItemsListFromContent,
   resolveFlexDirection,
-} as any);
-const { handlePointerDown } = nodePointer;
+} as any)
+const { handlePointerDown } = nodePointer
 
-const visibleResizeHandles = visibleResizeHandlesFromComposable;
+const visibleResizeHandles = visibleResizeHandlesFromComposable
 
 // showResizeHandles 需要额外检查 selection，所以保留一个包装 computed
 const showResizeHandles = computed(() => {
   // 依赖 selectionVersion，保证选中变化时可重新计算手柄显示
-  void selectionVersion.value;
-  const base = showResizeHandlesBase.value;
-  if (!base) return false;
-  const currentNodeId = node.value?.id;
-  const currentSelection = selection.value;
-  if (!currentNodeId || !currentSelection) return false;
+  void selectionVersion.value
+  const base = showResizeHandlesBase.value
+  if (!base) return false
+  const currentNodeId = node.value?.id
+  const currentSelection = selection.value
+  if (!currentNodeId || !currentSelection) return false
   // 额外检查：只有选中时才显示（与 nodeClass 保持一致的调用方式）
-  return Boolean(currentSelection.isSelected(currentNodeId));
-});
+  return Boolean(currentSelection.isSelected(currentNodeId))
+})
 
-const isRegionContainer = isRegionContainerFromComposable;
+const isRegionContainer = isRegionContainerFromComposable
 
 const renderTag = computed<any>(() => {
-  if (!node.value) return "div";
-  const type = node.value.type;
+  if (!node.value) return 'div'
+  const type = node.value.type
   // 使用 getRenderTag 统一处理（支持函数类型 renderTag，如 Text 组件）
-  const tag = getRenderTag(type, node.value, resolvedNodeProps.value);
-  if (tag && tag !== "div") return tag;
+  const tag = getRenderTag(type, node.value, resolvedNodeProps.value)
+  if (tag && tag !== 'div') return tag
   // EChart 特殊处理（需要返回 Vue 组件实例，无法在描述符中直接表示）
-  if (type === "EChart") return EChart;
+  if (type === 'EChart') return EChart
   // 降级：未注册 descriptor 的组件返回 div
-  return tag || "div";
-});
+  return tag || 'div'
+})
 
 /** 复杂组件自定义渲染器（由 descriptor.customRenderer 指定） */
 const customRendererComponent = computed<any>(() => {
-  if (!node.value) return null;
-  return getCustomRenderer(node.value.type) ?? null;
-});
+  if (!node.value) return null
+  return getCustomRenderer(node.value.type) ?? null
+})
 
 const outerTag = computed<any>(() => {
-  return useComponentWrapper.value ? renderTag.value : "div";
-});
+  return useComponentWrapper.value ? renderTag.value : 'div'
+})
 
 const displayContent = computed<any>(() => {
-  void docVersion.value;
-  if (!node.value) return null;
-  const resolvedPropsValue = resolvedNodeProps.value || {};
+  void docVersion.value
+  if (!node.value) return null
+  const resolvedPropsValue = resolvedNodeProps.value || {}
 
   // 优先从 descriptor 读取（新架构组件）
-  const descriptorContent = getDisplayContent(node.value.type, node.value, resolvedPropsValue);
+  const descriptorContent = getDisplayContent(node.value.type, node.value, resolvedPropsValue)
   if (descriptorContent !== null) {
-    return descriptorContent;
+    return descriptorContent
   }
 
   // 向后兼容：未注册 displayContent 的组件返回 null（不再有 fallback 硬编码）
-  return null;
-});
+  return null
+})
 
 const layoutStyle = computed<Record<string, any>>(() => {
-  void docVersion.value;
-  if (!node.value) return {};
-  return resolveLayoutStyle(node.value as any, props.isRoot);
-});
+  void docVersion.value
+  if (!node.value) return {}
+  return resolveLayoutStyle(node.value as any, props.isRoot)
+})
 
 // 使用 use-node-style composable 创建 contentStyle
 const contentStyle = nodeStyleHelpers.createContentStyle(
@@ -824,7 +821,7 @@ const contentStyle = nodeStyleHelpers.createContentStyle(
   isMovable,
   layoutStyle,
   props,
-);
+)
 
 // 使用 use-node-style composable 创建 wrapperStyle
 const wrapperStyle = nodeStyleHelpers.createWrapperStyle(
@@ -833,7 +830,7 @@ const wrapperStyle = nodeStyleHelpers.createWrapperStyle(
   layoutStyle,
   isMovable,
   computed(() => isContainer.value),
-);
+)
 
 // 使用 use-node-style composable 创建 wrapperComponentStyle
 const wrapperComponentStyle = nodeStyleHelpers.createWrapperComponentStyle(
@@ -844,208 +841,213 @@ const wrapperComponentStyle = nodeStyleHelpers.createWrapperComponentStyle(
   contentStyle,
   resolvedProps,
   props,
-);
+)
 
 const styleConfigText = computed<string>(() => {
-  void docVersion.value;
-  return String(node.value?.styleConfig || "").trim();
-});
-const hasStyleConfigSelector = computed(() => styleConfigText.value.includes("{"));
+  void docVersion.value
+  return String(node.value?.styleConfig || '').trim()
+})
+const hasStyleConfigSelector = computed(() => styleConfigText.value.includes('{'))
 const nodeDomId = computed<string>(() => {
-  if (!node.value) return "";
-  if (!node.value.id) return "";
-  return buildDesignerNodeDomId(node.value.id);
-});
+  if (!node.value) return ''
+  if (!node.value.id) return ''
+  return buildDesignerNodeDomId(node.value.id)
+})
 const selectorStyleConfig = computed<string>(() =>
-  hasStyleConfigSelector.value ? styleConfigText.value : "",
-);
-nodeStyleHelpers.createStyleElementSync(node as any, selectorStyleConfig as any);
+  hasStyleConfigSelector.value ? styleConfigText.value : '',
+)
+nodeStyleHelpers.createStyleElementSync(node as any, selectorStyleConfig as any)
 const inlineStyleConfig = computed<string>(() => {
-  if (hasStyleConfigSelector.value) return "";
-  return styleConfigText.value ? styleConfigText.value : "";
-});
+  if (hasStyleConfigSelector.value) return ''
+  return styleConfigText.value ? styleConfigText.value : ''
+})
 const inlineStyleConfigObject = computed<StyleObjectLike>(() => {
-  const raw = inlineStyleConfig.value;
-  if (!raw) return {};
-  const stripped = raw.replace(STYLE_COMMENT_RE, "");
+  const raw = inlineStyleConfig.value
+  if (!raw) return {}
+  const stripped = raw.replace(STYLE_COMMENT_RE, '')
   const entries = stripped
-    .split(";")
+    .split(';')
     .map((item) => item.trim())
-    .filter(Boolean);
-  const result: StyleObjectLike = {};
+    .filter(Boolean)
+  const result: StyleObjectLike = {}
   entries.forEach((item) => {
-    const [key, ...rest] = item.split(":");
-    if (!key || rest.length === 0) return;
-    const value = rest.join(":").trim();
-    const prop = key.trim();
-    if (!prop || !value) return;
-    result[prop] = value;
-  });
-  return result;
-});
+    const [key, ...rest] = item.split(':')
+    if (!key || rest.length === 0) return
+    const value = rest.join(':').trim()
+    const prop = key.trim()
+    if (!prop || !value) return
+    result[prop] = value
+  })
+  return result
+})
 const resolvedInlineStyleConfigObject = computed<StyleObjectLike>(() => {
-  return inlineStyleConfigObject.value;
-});
+  return inlineStyleConfigObject.value
+})
 
 /**
  * 外层样式（处理组件包装模式）
  */
 const outerStyle = computed<any>(() => {
   if (useComponentWrapper.value) {
-    const inlineStyle = resolvedInlineStyleConfigObject.value;
+    const inlineStyle = resolvedInlineStyleConfigObject.value
     if (!inlineStyle || Object.keys(inlineStyle).length === 0) {
-      return wrapperComponentStyle.value;
+      return wrapperComponentStyle.value
     }
-    return [wrapperComponentStyle.value, inlineStyle];
+    return [wrapperComponentStyle.value, inlineStyle]
   }
-  return wrapperStyle.value;
-});
+  return wrapperStyle.value
+})
 
 /**
  * 内容样式（非包装组件时附加样式配置）
  */
 const contentStyleWithConfig = computed<any>(() => {
-  if (useComponentWrapper.value) return contentStyle.value;
-  const inlineStyle = resolvedInlineStyleConfigObject.value;
+  if (useComponentWrapper.value) return contentStyle.value
+  const inlineStyle = resolvedInlineStyleConfigObject.value
   if (!inlineStyle || Object.keys(inlineStyle).length === 0) {
-    return contentStyle.value;
+    return contentStyle.value
   }
-  return [contentStyle.value, inlineStyle];
-});
+  return [contentStyle.value, inlineStyle]
+})
 
 const childNodeIds = computed<string[]>(() => {
-  void docVersion.value;
-  if (!node.value || isTabsType.value || isCollapseType.value) return [];
-  const children = Array.isArray(node.value.children) ? node.value.children : [];
+  void docVersion.value
+  if (!node.value || isTabsType.value || isCollapseType.value) return []
+  const children = Array.isArray(node.value.children) ? node.value.children : []
   if (!props.isRoot || !props.readonly || !previewRenderBounds) {
-    return [...children];
+    return [...children]
   }
-  const pageWidth = Number(previewRenderBounds.width.value);
-  const pageHeight = Number(previewRenderBounds.height.value);
-  if (!Number.isFinite(pageWidth) || pageWidth <= 0 || !Number.isFinite(pageHeight) || pageHeight <= 0) {
-    return [...children];
+  const pageWidth = Number(previewRenderBounds.width.value)
+  const pageHeight = Number(previewRenderBounds.height.value)
+  if (
+    !Number.isFinite(pageWidth) ||
+    pageWidth <= 0 ||
+    !Number.isFinite(pageHeight) ||
+    pageHeight <= 0
+  ) {
+    return [...children]
   }
   return children.filter((childId) => {
-    const childNode = doc.value?.getNode?.(childId);
-    if (!childNode) return false;
-    const absolutePos = childNode.absolutePos || childNode.layoutItem?.free?.abs;
-    if (!absolutePos) return true;
-    const x = Number.isFinite(Number(absolutePos.x)) ? Number(absolutePos.x) : 0;
-    const y = Number.isFinite(Number(absolutePos.y)) ? Number(absolutePos.y) : 0;
-    const w = Number.isFinite(Number(absolutePos.w)) ? Number(absolutePos.w) : 0;
-    const h = Number.isFinite(Number(absolutePos.h)) ? Number(absolutePos.h) : 0;
-    return x < pageWidth && y < pageHeight && x + w > 0 && y + h > 0;
-  });
-});
+    const childNode = doc.value?.getNode?.(childId)
+    if (!childNode) return false
+    const absolutePos = childNode.absolutePos || childNode.layoutItem?.free?.abs
+    if (!absolutePos) return true
+    const x = Number.isFinite(Number(absolutePos.x)) ? Number(absolutePos.x) : 0
+    const y = Number.isFinite(Number(absolutePos.y)) ? Number(absolutePos.y) : 0
+    const w = Number.isFinite(Number(absolutePos.w)) ? Number(absolutePos.w) : 0
+    const h = Number.isFinite(Number(absolutePos.h)) ? Number(absolutePos.h) : 0
+    return x < pageWidth && y < pageHeight && x + w > 0 && y + h > 0
+  })
+})
 
 const modelValueTypes = new Set([
-  "Input",
-  "InputNumber",
-  "Select",
-  "Switch",
-  "Radio",
-  "Checkbox",
-  "Cascader",
-  "Transfer",
-  "Slider",
-  "Rate",
-  "ColorPicker",
-]);
-const supportsModelValue = computed<boolean>(() => modelValueTypes.has(node.value?.type));
+  'Input',
+  'InputNumber',
+  'Select',
+  'Switch',
+  'Radio',
+  'Checkbox',
+  'Cascader',
+  'Transfer',
+  'Slider',
+  'Rate',
+  'ColorPicker',
+])
+const supportsModelValue = computed<boolean>(() => modelValueTypes.has(node.value?.type))
 
 /**
  * 更新组件的 modelValue
  * @param {any} value - 新值
  */
 function handleModelValueUpdate(value: any): void {
-  if (!node.value) return;
-  if (props.readonly && !isRuntimeOperable.value) return;
+  if (!node.value) return
+  if (props.readonly && !isRuntimeOperable.value) return
   if (props.readonly) {
-    applyPreviewPatch({ props: { modelValue: value } });
-    return;
+    applyPreviewPatch({ props: { modelValue: value } })
+    return
   }
   editorStore.updateNode(node.value.id, {
     props: { ...(node.value.props || {}), modelValue: value },
-  });
+  })
 }
 
 function handlePropValueUpdate(propName: string, value: any): void {
-  if (!node.value || !propName) return;
-  if (props.readonly && !isRuntimeOperable.value) return;
+  if (!node.value || !propName) return
+  if (props.readonly && !isRuntimeOperable.value) return
   if (props.readonly) {
-    applyPreviewPatch({ props: { [propName]: value } });
-    return;
+    applyPreviewPatch({ props: { [propName]: value } })
+    return
   }
   editorStore.updateNode(node.value.id, {
     props: { ...(node.value.props || {}), [propName]: value },
-  });
+  })
 }
 
 const componentEventListeners = computed<EventListenerMap>(() => {
-  if (!node.value) return {};
-  const listeners: EventListenerMap = {};
+  if (!node.value) return {}
+  const listeners: EventListenerMap = {}
   if (supportsModelValue.value) {
-    listeners["update:modelValue"] = handleModelValueUpdate;
-    listeners["update:model-value"] = handleModelValueUpdate;
+    listeners['update:modelValue'] = handleModelValueUpdate
+    listeners['update:model-value'] = handleModelValueUpdate
   }
-  if (node.value.type === "Pagination") {
-    listeners["update:currentPage"] = (value: any) => handlePropValueUpdate("currentPage", value);
-    listeners["update:current-page"] = (value: any) => handlePropValueUpdate("currentPage", value);
+  if (node.value.type === 'Pagination') {
+    listeners['update:currentPage'] = (value: any) => handlePropValueUpdate('currentPage', value)
+    listeners['update:current-page'] = (value: any) => handlePropValueUpdate('currentPage', value)
   }
-  if (!props.readonly) return listeners;
-  const manifest = componentRegistry.get(node.value.type);
-  const definitions = normalizeEventDefinitions(manifest?.events || []);
+  if (!props.readonly) return listeners
+  const manifest = componentRegistry.get(node.value.type)
+  const definitions = normalizeEventDefinitions(manifest?.events || [])
   definitions.forEach((eventItem) => {
-    if (!eventItem?.name || eventItem.name === "click") return;
+    if (!eventItem?.name || eventItem.name === 'click') return
     listeners[eventItem.name] = (...args: any[]) => {
-      const payload = args.length > 1 ? args : args[0];
-      void runOperablePreviewScript(eventItem.name, payload);
-    };
-  });
-  return listeners;
-});
+      const payload = args.length > 1 ? args : args[0]
+      void runOperablePreviewScript(eventItem.name, payload)
+    }
+  })
+  return listeners
+})
 
 /**
  * 编辑态组件事件监听
  */
 const designEventListeners = computed<EventListenerMap>(() => {
-  if (props.readonly || !node.value) return {};
+  if (props.readonly || !node.value) return {}
   if (isTabsType.value) {
     return {
-      "tab-click": handleTabsClick,
-      "tab-change": handleTabsChange,
-      "update:modelValue": handleTabsChange,
-      "tab-remove": handleTabsRemove,
+      'tab-click': handleTabsClick,
+      'tab-change': handleTabsChange,
+      'update:modelValue': handleTabsChange,
+      'tab-remove': handleTabsRemove,
       edit: handleTabsEdit,
-    };
+    }
   }
   if (isCollapseType.value) {
     return {
       change: handleCollapseChange,
-      "update:modelValue": handleCollapseChange,
-    };
+      'update:modelValue': handleCollapseChange,
+    }
   }
-  return {};
-});
+  return {}
+})
 
 /**
  * 合并事件监听
  */
 const mergedEventListeners = computed<EventListenerMap>(() => {
-  return { ...componentEventListeners.value, ...designEventListeners.value };
-});
+  return { ...componentEventListeners.value, ...designEventListeners.value }
+})
 
 /**
  * 处理拖拽离开
  */
 function handleDragLeave(): void {
-  if (props.readonly) return;
-  isDragOver.value = false;
-  showInsertLine.value = false;
-  insertLineStyle.value = null;
-  genericInsertLineBox.value = null;
-  rowInsertInfo.value = null;
-  layoutInsertInfo.value = null;
+  if (props.readonly) return
+  isDragOver.value = false
+  showInsertLine.value = false
+  insertLineStyle.value = null
+  genericInsertLineBox.value = null
+  rowInsertInfo.value = null
+  layoutInsertInfo.value = null
 }
 </script>
 
@@ -1193,7 +1195,9 @@ function handleDragLeave(): void {
               </div>
             </template>
             <span
-              v-if="getTabChildIds(tab).length === 0 && typeof tab.content === 'string' && tab.content"
+              v-if="
+                getTabChildIds(tab).length === 0 && typeof tab.content === 'string' && tab.content
+              "
               class="tabs-pane-placeholder"
             >
               {{ tab.content }}
@@ -1209,13 +1213,13 @@ function handleDragLeave(): void {
       </template>
       <template v-if="isCollapseType">
         <el-collapse-item
-            v-for="item in collapseItemsList"
-            :key="item.name ?? item.title"
-            :name="item.name"
-            :title="item.title"
-            :disabled="Boolean(item.disabled)"
-            @click="handleCollapseHeaderClick(item)"
-          >
+          v-for="item in collapseItemsList"
+          :key="item.name ?? item.title"
+          :name="item.name"
+          :title="item.title"
+          :disabled="Boolean(item.disabled)"
+          @click="handleCollapseHeaderClick(item)"
+        >
           <div
             class="collapse-pane-body"
             :class="{
@@ -1299,7 +1303,7 @@ function handleDragLeave(): void {
       >
         <div class="empty-container-hint" :class="{ 'is-region-hint': isRegionContainer }">
           <span v-if="isDropActive">释放以添加组件</span>
-          <span v-else>{{ isRegionContainer ? regionHintText : "拖拽组件到此处" }}</span>
+          <span v-else>{{ isRegionContainer ? regionHintText : '拖拽组件到此处' }}</span>
         </div>
       </template>
       <!-- 插入线指示器 -->
@@ -1345,7 +1349,7 @@ function handleDragLeave(): void {
         :class="{ 'is-region-hint': isRegionContainer }"
       >
         <span v-if="isDropActive">释放以添加组件</span>
-        <span v-else>{{ isRegionContainer ? regionHintText : "拖拽组件到此处" }}</span>
+        <span v-else>{{ isRegionContainer ? regionHintText : '拖拽组件到此处' }}</span>
       </div>
       <!-- 插入线指示器 -->
       <teleport v-if="showInsertLine && insertLineStyle && insertLineBox" to="body">
@@ -1421,21 +1425,21 @@ function handleDragLeave(): void {
   min-height: 40px;
 }
 
-.designer-node[data-node-type="Button"] :deep(.el-button) {
+.designer-node[data-node-type='Button'] :deep(.el-button) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   vertical-align: middle;
 }
 
-.designer-node[data-node-type="Button"] :deep(.el-button .el-icon) {
+.designer-node[data-node-type='Button'] :deep(.el-button .el-icon) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
 }
 
-.designer-node[data-node-type="Button"] :deep(.el-button .el-icon svg) {
+.designer-node[data-node-type='Button'] :deep(.el-button .el-icon svg) {
   display: block;
 }
 
@@ -1561,15 +1565,15 @@ function handleDragLeave(): void {
   max-width: 100%;
 }
 
-.tabs-pane-body > .designer-node.is-container[data-node-type="HorizontalLayout"],
-.tabs-pane-body > .designer-node.is-container[data-node-type="VerticalLayout"] {
+.tabs-pane-body > .designer-node.is-container[data-node-type='HorizontalLayout'],
+.tabs-pane-body > .designer-node.is-container[data-node-type='VerticalLayout'] {
   align-self: stretch;
 }
 
-.tabs-pane-body > .designer-node.is-container[data-node-type="HorizontalLayout"],
-.tabs-pane-body > .designer-node.is-container[data-node-type="VerticalLayout"],
-.collapse-pane-body > .designer-node.is-container[data-node-type="HorizontalLayout"],
-.collapse-pane-body > .designer-node.is-container[data-node-type="VerticalLayout"] {
+.tabs-pane-body > .designer-node.is-container[data-node-type='HorizontalLayout'],
+.tabs-pane-body > .designer-node.is-container[data-node-type='VerticalLayout'],
+.collapse-pane-body > .designer-node.is-container[data-node-type='HorizontalLayout'],
+.collapse-pane-body > .designer-node.is-container[data-node-type='VerticalLayout'] {
   min-height: 0;
 }
 
@@ -1593,7 +1597,7 @@ function handleDragLeave(): void {
   overflow: visible;
 }
 
-.designer-node[data-node-type="Collapse"] :deep(.el-collapse-item__content) {
+.designer-node[data-node-type='Collapse'] :deep(.el-collapse-item__content) {
   padding-bottom: 0;
 }
 
@@ -1670,7 +1674,7 @@ function handleDragLeave(): void {
 }
 
 .designer-node.el-col.is-selected::after {
-  content: "";
+  content: '';
   position: absolute;
   top: 0;
   bottom: 0;

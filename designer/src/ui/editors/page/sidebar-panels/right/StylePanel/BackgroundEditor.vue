@@ -3,25 +3,25 @@
   编辑背景颜色（含透明度）
 -->
 <script setup lang="ts">
-import { computed } from "vue";
-import FriendlyColorPicker from "@/ui/shared/widgets/base/FriendlyColorPicker.vue";
+import { computed } from 'vue'
+import FriendlyColorPicker from '@/ui/shared/widgets/base/FriendlyColorPicker.vue'
 
 interface BackgroundStyleModel {
-  background?: string;
+  background?: string
 }
 
 const props = withDefaults(defineProps<{ modelValue?: BackgroundStyleModel }>(), {
   modelValue: () => ({}),
-});
+})
 
 const emit = defineEmits<{
-  (event: "update:modelValue", value: BackgroundStyleModel): void;
-}>();
+  (event: 'update:modelValue', value: BackgroundStyleModel): void
+}>()
 
-const backgroundColor = computed(() => props.modelValue.background || "");
+const backgroundColor = computed(() => props.modelValue.background || '')
 
 function handleColorChange(value: string) {
-  emit("update:modelValue", { ...props.modelValue, background: value });
+  emit('update:modelValue', { ...props.modelValue, background: value })
 }
 </script>
 

@@ -23,54 +23,49 @@
 </template>
 
 <script setup lang="ts">
-import AccessSourceCard from "./AccessSourceCard.vue";
-import EmptyState from "@/components/shared/EmptyState.vue";
+import AccessSourceCard from './AccessSourceCard.vue'
+import EmptyState from '@/components/shared/EmptyState.vue'
 
 type AccessSourceConnection = {
-  id: string;
-  name?: string;
-  type?: string;
-  status?: string;
-  datapointCount?: number;
-  dataPointCount?: number;
+  id: string
+  name?: string
+  type?: string
+  status?: string
+  datapointCount?: number
+  dataPointCount?: number
   relationalConfig?: {
-    dbType?: string;
-    host?: string;
-    port?: number | string;
-    database?: string;
-  };
+    dbType?: string
+    host?: string
+    port?: number | string
+    database?: string
+  }
   mqttConfig?: {
-    protocol?: string;
-    brokerUrl?: string;
-    host?: string;
-    port?: number | string;
-    topic?: string;
-    defaultTopic?: string;
-  };
-  config?: Record<string, unknown>;
-};
+    protocol?: string
+    brokerUrl?: string
+    host?: string
+    port?: number | string
+    topic?: string
+    defaultTopic?: string
+  }
+  config?: Record<string, unknown>
+}
 
 defineProps<{
-  connections: AccessSourceConnection[];
-  selectedConnectionId?: string | null;
-}>();
+  connections: AccessSourceConnection[]
+  selectedConnectionId?: string | null
+}>()
 
 defineEmits<{
-  (event: "open", connection: AccessSourceConnection): void;
-  (event: "edit", connection: AccessSourceConnection): void;
-  (event: "delete-connection", connection: AccessSourceConnection): void;
-  (event: "create"): void;
-}>();
+  (event: 'open', connection: AccessSourceConnection): void
+  (event: 'edit', connection: AccessSourceConnection): void
+  (event: 'delete-connection', connection: AccessSourceConnection): void
+  (event: 'create'): void
+}>()
 
 /* Phase 2 类型：当前仅提供配置，无运行时工作台 */
-const PHASE2_TYPES = new Set([
-  "opcda",
-  "s7",
-  "kafka",
-  "tdengine",
-]);
+const PHASE2_TYPES = new Set(['opcda', 's7', 'kafka', 'tdengine'])
 
-const isPhase2Type = (type?: string) => PHASE2_TYPES.has(type || "");
+const isPhase2Type = (type?: string) => PHASE2_TYPES.has(type || '')
 </script>
 
 <style scoped>

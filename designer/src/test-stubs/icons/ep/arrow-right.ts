@@ -1,4 +1,4 @@
 export default {
-  name: "IconEpArrowRight",
+  name: 'IconEpArrowRight',
   template: `<span class="icon-ep-arrow-right" />`,
-};
+}

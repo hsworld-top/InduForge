@@ -2,13 +2,13 @@
   画布插入位置指示线（teleport 到 body，避免被画布 overflow 裁剪）
 -->
 <script setup lang="ts">
-import type { CanvasInsertLineBox, CanvasInsertLineStyle } from "./canvas-internal.types";
+import type { CanvasInsertLineBox, CanvasInsertLineStyle } from './canvas-internal.types'
 
 defineProps<{
-  show: boolean;
-  lineStyle: CanvasInsertLineStyle | null;
-  lineBox: CanvasInsertLineBox | null;
-}>();
+  show: boolean
+  lineStyle: CanvasInsertLineStyle | null
+  lineBox: CanvasInsertLineBox | null
+}>()
 </script>
 
 <template>

@@ -3,55 +3,55 @@
   左右侧可停靠/浮动的面板，含标题、操作槽、固定/关闭按钮
 -->
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
-import IconLucidePin from "~icons/lucide/pin";
-import IconLucidePinOff from "~icons/lucide/pin-off";
-import IconLucideX from "~icons/lucide/x";
+import { computed, onBeforeUnmount, ref } from 'vue'
+import IconLucidePin from '~icons/lucide/pin'
+import IconLucidePinOff from '~icons/lucide/pin-off'
+import IconLucideX from '~icons/lucide/x'
 
 const props = withDefaults(
   defineProps<{
-    side?: "left" | "right";
-    title?: string;
-    floating?: boolean;
-    width?: number;
-    minWidth?: number;
-    maxWidth?: number;
-    resizable?: boolean;
+    side?: 'left' | 'right'
+    title?: string
+    floating?: boolean
+    width?: number
+    minWidth?: number
+    maxWidth?: number
+    resizable?: boolean
   }>(),
   {
-    side: "left",
-    title: "",
+    side: 'left',
+    title: '',
     floating: false,
     width: 272,
     minWidth: 220,
     maxWidth: 520,
     resizable: true,
   },
-);
+)
 
 const emit = defineEmits<{
-  close: [];
-  toggleFloating: [];
-  resize: [width: number];
-}>();
+  close: []
+  toggleFloating: []
+  resize: [width: number]
+}>()
 
-const resizing = ref(false);
+const resizing = ref(false)
 const panelStyle = computed<Record<string, string>>(() => ({
   width: `${props.width}px`,
-}));
-const showResizeHandle = computed(() => props.resizable);
+}))
+const showResizeHandle = computed(() => props.resizable)
 
-let pointerMoveHandler: ((event: PointerEvent) => void) | null = null;
-let pointerUpHandler: ((event: PointerEvent) => void) | null = null;
-let startX = 0;
-let startWidth = 0;
+let pointerMoveHandler: ((event: PointerEvent) => void) | null = null
+let pointerUpHandler: ((event: PointerEvent) => void) | null = null
+let startX = 0
+let startWidth = 0
 
 function handleClose() {
-  emit("close");
+  emit('close')
 }
 
 function handleToggle() {
-  emit("toggleFloating");
+  emit('toggleFloating')
 }
 
 /**
@@ -60,24 +60,24 @@ function handleToggle() {
  * @returns {number}
  */
 function clampWidth(width: number): number {
-  return Math.min(props.maxWidth, Math.max(props.minWidth, Math.round(width)));
+  return Math.min(props.maxWidth, Math.max(props.minWidth, Math.round(width)))
 }
 
 /**
  * 结束拖拽并清理全局事件。
  */
 function stopResize() {
-  if (!resizing.value) return;
-  resizing.value = false;
-  document.body.classList.remove("dock-panel-resizing");
+  if (!resizing.value) return
+  resizing.value = false
+  document.body.classList.remove('dock-panel-resizing')
   if (pointerMoveHandler) {
-    window.removeEventListener("pointermove", pointerMoveHandler);
-    pointerMoveHandler = null;
+    window.removeEventListener('pointermove', pointerMoveHandler)
+    pointerMoveHandler = null
   }
   if (pointerUpHandler) {
-    window.removeEventListener("pointerup", pointerUpHandler);
-    window.removeEventListener("pointercancel", pointerUpHandler);
-    pointerUpHandler = null;
+    window.removeEventListener('pointerup', pointerUpHandler)
+    window.removeEventListener('pointercancel', pointerUpHandler)
+    pointerUpHandler = null
   }
 }
 
@@ -86,32 +86,32 @@ function stopResize() {
  * @param {PointerEvent} event - 指针事件
  */
 function handleResizePointerDown(event: PointerEvent) {
-  if (!showResizeHandle.value) return;
-  if (event.button !== 0) return;
-  event.preventDefault();
-  startX = event.clientX;
-  startWidth = props.width;
-  resizing.value = true;
-  document.body.classList.add("dock-panel-resizing");
+  if (!showResizeHandle.value) return
+  if (event.button !== 0) return
+  event.preventDefault()
+  startX = event.clientX
+  startWidth = props.width
+  resizing.value = true
+  document.body.classList.add('dock-panel-resizing')
 
   pointerMoveHandler = (moveEvent: PointerEvent) => {
-    const delta = moveEvent.clientX - startX;
-    const nextWidth = props.side === "left" ? startWidth + delta : startWidth - delta;
-    emit("resize", clampWidth(nextWidth));
-  };
+    const delta = moveEvent.clientX - startX
+    const nextWidth = props.side === 'left' ? startWidth + delta : startWidth - delta
+    emit('resize', clampWidth(nextWidth))
+  }
 
   pointerUpHandler = () => {
-    stopResize();
-  };
+    stopResize()
+  }
 
-  window.addEventListener("pointermove", pointerMoveHandler);
-  window.addEventListener("pointerup", pointerUpHandler);
-  window.addEventListener("pointercancel", pointerUpHandler);
+  window.addEventListener('pointermove', pointerMoveHandler)
+  window.addEventListener('pointerup', pointerUpHandler)
+  window.addEventListener('pointercancel', pointerUpHandler)
 }
 
 onBeforeUnmount(() => {
-  stopResize();
-});
+  stopResize()
+})
 </script>
 
 <template>

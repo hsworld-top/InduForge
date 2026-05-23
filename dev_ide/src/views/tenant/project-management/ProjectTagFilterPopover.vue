@@ -13,26 +13,14 @@
     </button>
 
     <Transition name="project-tag-filter">
-      <div
-        v-if="visible && !disabled"
-        class="project-tag-filter__panel"
-        @click.stop
-      >
+      <div v-if="visible && !disabled" class="project-tag-filter__panel" @click.stop>
         <div v-if="searchable" class="project-tag-filter__search">
           <el-icon><Search /></el-icon>
-          <input
-            v-model="keyword"
-            type="text"
-            :placeholder="resolvedPlaceholder"
-          />
+          <input v-model="keyword" type="text" :placeholder="resolvedPlaceholder" />
         </div>
 
         <div class="project-tag-filter__list">
-          <label
-            v-for="tag in filteredOptions"
-            :key="tag.id"
-            class="project-tag-filter__item"
-          >
+          <label v-for="tag in filteredOptions" :key="tag.id" class="project-tag-filter__item">
             <input
               type="checkbox"
               :checked="selectedIdSet.has(tag.id)"
@@ -51,10 +39,7 @@
           </label>
         </div>
 
-        <p
-          v-if="filteredOptions.length === 0"
-          class="project-tag-filter__empty"
-        >
+        <p v-if="filteredOptions.length === 0" class="project-tag-filter__empty">
           {{ t('projectManagement.noTagOptions') }}
         </p>
 
@@ -353,7 +338,9 @@ onBeforeUnmount(() => {
 
 .project-tag-filter-enter-active,
 .project-tag-filter-leave-active {
-  transition: opacity 0.16s ease, transform 0.16s ease;
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
 }
 
 .project-tag-filter-enter-from,

@@ -2,73 +2,73 @@
  * 面板状态计算 Composable
  */
 
-import type { ComponentNode, GraphicNode } from "@/editor-core/document/types";
-import { storeToRefs } from "pinia";
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { useEditorStore } from "@/stores/editor-store";
+import type { ComponentNode, GraphicNode } from '@/editor-core/document/types'
+import { storeToRefs } from 'pinia'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useEditorStore } from '@/stores/editor-store'
 
-export type PanelState = "page" | "element" | "multi";
+export type PanelState = 'page' | 'element' | 'multi'
 
 export interface SelectableRef {
-  id: string;
-  kind: string;
+  id: string
+  kind: string
 }
 
 export function computePanelState(count: number): PanelState {
-  if (count === 0) return "page";
-  if (count === 1) return "element";
-  return "multi";
+  if (count === 0) return 'page'
+  if (count === 1) return 'element'
+  return 'multi'
 }
 
 function normalizeType(type: string | undefined): string | undefined {
-  if (!type) return type;
-  if (type === "Elayout" || type === "EILayout") return "ElLayout";
-  if (type === "ElayoutRow" || type === "EILayoutRow") return "ElLayoutRow";
-  if (type === "Elcol" || type === "EICol") return "ElCol";
-  if (type.startsWith("EI")) return `El${type.slice(2)}`;
-  return type;
+  if (!type) return type
+  if (type === 'Elayout' || type === 'EILayout') return 'ElLayout'
+  if (type === 'ElayoutRow' || type === 'EILayoutRow') return 'ElLayoutRow'
+  if (type === 'Elcol' || type === 'EICol') return 'ElCol'
+  if (type.startsWith('EI')) return `El${type.slice(2)}`
+  return type
 }
 
 export function usePanelState() {
-  const editorStore = useEditorStore();
-  const { doc, selection, docVersion, currentPage } = storeToRefs(editorStore);
+  const editorStore = useEditorStore()
+  const { doc, selection, docVersion, currentPage } = storeToRefs(editorStore)
 
-  const selectedCount = ref(0);
-  const selectedElements = ref<SelectableRef[]>([]);
-  const primaryElement = ref<SelectableRef | null>(null);
-  const selectedNode = ref<ComponentNode | null>(null);
-  const selectedGraphic = ref<GraphicNode | null>(null);
+  const selectedCount = ref(0)
+  const selectedElements = ref<SelectableRef[]>([])
+  const primaryElement = ref<SelectableRef | null>(null)
+  const selectedNode = ref<ComponentNode | null>(null)
+  const selectedGraphic = ref<GraphicNode | null>(null)
 
-  let unsubscribeSelection: (() => void) | null = null;
+  let unsubscribeSelection: (() => void) | null = null
 
   const syncSelection = (payload?: {
-    elements?: SelectableRef[];
-    primary?: SelectableRef | null;
+    elements?: SelectableRef[]
+    primary?: SelectableRef | null
   }) => {
     if (!selection.value) {
-      selectedCount.value = 0;
-      selectedElements.value = [];
-      primaryElement.value = null;
-      selectedNode.value = null;
-      selectedGraphic.value = null;
-      return;
+      selectedCount.value = 0
+      selectedElements.value = []
+      primaryElement.value = null
+      selectedNode.value = null
+      selectedGraphic.value = null
+      return
     }
 
-    const elements = selection.value.getSelectedElements?.() || [];
-    selectedCount.value = elements.length;
-    selectedElements.value = elements;
+    const elements = selection.value.getSelectedElements?.() || []
+    selectedCount.value = elements.length
+    selectedElements.value = elements
 
-    const primary = payload?.primary || selection.value.getPrimaryElement?.();
-    primaryElement.value = primary || null;
+    const primary = payload?.primary || selection.value.getPrimaryElement?.()
+    primaryElement.value = primary || null
 
     if (primary && doc.value) {
-      if (primary.kind === "node") {
-        const node = doc.value.getNode?.(primary.id) || null;
+      if (primary.kind === 'node') {
+        const node = doc.value.getNode?.(primary.id) || null
         if (node?.type) {
-          const normalizedType = normalizeType(node.type);
+          const normalizedType = normalizeType(node.type)
           if (normalizedType && normalizedType !== node.type) {
-            editorStore.updateNode(node.id, { type: normalizedType });
-            node.type = normalizedType;
+            editorStore.updateNode(node.id, { type: normalizedType })
+            node.type = normalizedType
           }
         }
         selectedNode.value = node
@@ -79,74 +79,74 @@ export function usePanelState() {
               style: { ...(node.style || {}) },
               children: Array.isArray(node.children) ? [...node.children] : node.children,
             } as ComponentNode)
-          : null;
-        selectedGraphic.value = null;
-      } else if (primary.kind === "graphic") {
-        const graphic = doc.value.getGraphic?.(primary.id) || null;
-        selectedNode.value = null;
+          : null
+        selectedGraphic.value = null
+      } else if (primary.kind === 'graphic') {
+        const graphic = doc.value.getGraphic?.(primary.id) || null
+        selectedNode.value = null
         selectedGraphic.value = graphic
           ? ({
               ...graphic,
               props: { ...(graphic.props || {}) },
             } as GraphicNode)
-          : null;
+          : null
       } else {
-        selectedNode.value = null;
-        selectedGraphic.value = null;
+        selectedNode.value = null
+        selectedGraphic.value = null
       }
     } else {
-      selectedNode.value = null;
-      selectedGraphic.value = null;
+      selectedNode.value = null
+      selectedGraphic.value = null
     }
-  };
+  }
 
-  syncSelection();
+  syncSelection()
 
   const subscribeSelection = (model: { on?: (e: string, fn: () => void) => () => void } | null) => {
-    if (!model) return;
-    unsubscribeSelection = model.on?.("change", () => syncSelection()) ?? null;
-    syncSelection();
-  };
+    if (!model) return
+    unsubscribeSelection = model.on?.('change', () => syncSelection()) ?? null
+    syncSelection()
+  }
 
   watch(
     () => selection.value,
     (model) => {
       if (unsubscribeSelection) {
-        unsubscribeSelection();
-        unsubscribeSelection = null;
+        unsubscribeSelection()
+        unsubscribeSelection = null
       }
       if (model) {
-        subscribeSelection(model);
+        subscribeSelection(model)
       } else {
-        syncSelection();
+        syncSelection()
       }
     },
     { immediate: true },
-  );
+  )
 
   watch(
     () => docVersion.value,
     () => {
-      syncSelection();
+      syncSelection()
     },
-  );
+  )
 
   onBeforeUnmount(() => {
     if (unsubscribeSelection) {
-      unsubscribeSelection();
-      unsubscribeSelection = null;
+      unsubscribeSelection()
+      unsubscribeSelection = null
     }
-  });
+  })
 
   const panelState = computed((): PanelState => {
     if (selectedCount.value === 1 && selectedNode.value) {
-      const page = currentPage.value;
+      const page = currentPage.value
       if (page && selectedNode.value.id === page.rootNodeId) {
-        return "page";
+        return 'page'
       }
     }
-    return computePanelState(selectedCount.value);
-  });
+    return computePanelState(selectedCount.value)
+  })
 
   return {
     panelState,
@@ -155,7 +155,7 @@ export function usePanelState() {
     primaryElement,
     selectedNode,
     selectedGraphic,
-  };
+  }
 }
 
-export default usePanelState;
+export default usePanelState

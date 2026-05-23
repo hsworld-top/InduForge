@@ -21,10 +21,7 @@
     </template>
 
     <!-- 主体内容，限高防溢出 -->
-    <div
-      class="dc-dialog__body"
-      :style="{ '--dc-dialog-body-max': bodyMaxHeight }"
-    >
+    <div class="dc-dialog__body" :style="{ '--dc-dialog-body-max': bodyMaxHeight }">
       <slot />
     </div>
 
@@ -36,172 +33,168 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { ElMessageBox } from "element-plus";
+import { computed, ref, watch } from 'vue'
+import { ElMessageBox } from 'element-plus'
 
 // 阻止 $attrs 自动透传到根元素，改由 v-bind="$attrs" 显式传给 el-dialog
-defineOptions({ inheritAttrs: false });
+defineOptions({ inheritAttrs: false })
 
 const props = withDefaults(
   defineProps<{
-    modelValue: boolean;
-    title?: string;
-    width?: string | number;
-    closeOnClickModal?: boolean;
-    confirmOnDirtyClose?: boolean;
-    dirty?: boolean;
-    closeDisabled?: boolean;
-    dirtyCloseMessage?: string;
-    appendToBody?: boolean;
-    lockScroll?: boolean;
-    bodyMaxHeight?: string;
+    modelValue: boolean
+    title?: string
+    width?: string | number
+    closeOnClickModal?: boolean
+    confirmOnDirtyClose?: boolean
+    dirty?: boolean
+    closeDisabled?: boolean
+    dirtyCloseMessage?: string
+    appendToBody?: boolean
+    lockScroll?: boolean
+    bodyMaxHeight?: string
   }>(),
   {
-    width: "720px",
+    width: '720px',
     closeOnClickModal: true,
     confirmOnDirtyClose: true,
     dirty: false,
     closeDisabled: false,
-    dirtyCloseMessage: "当前有未保存内容，确认关闭吗？",
+    dirtyCloseMessage: '当前有未保存内容，确认关闭吗？',
     appendToBody: true,
     lockScroll: true,
-    bodyMaxHeight: "calc(100vh - 200px)",
+    bodyMaxHeight: 'calc(100vh - 200px)',
   },
-);
+)
 
 const emit = defineEmits<{
-  "update:modelValue": [value: boolean];
-  close: [];
-}>();
+  'update:modelValue': [value: boolean]
+  close: []
+}>()
 
-const closeConfirmed = ref(false);
-const closeConfirming = ref(false);
-const internalVisible = ref(props.modelValue);
-const dirtyWhileOpen = ref(false);
+const closeConfirmed = ref(false)
+const closeConfirming = ref(false)
+const internalVisible = ref(props.modelValue)
+const dirtyWhileOpen = ref(false)
 
-const needsDirtyConfirm = () => props.dirty || dirtyWhileOpen.value;
+const needsDirtyConfirm = () => props.dirty || dirtyWhileOpen.value
 
 const confirmDirtyClose = async () => {
   if (!props.confirmOnDirtyClose || !needsDirtyConfirm()) {
-    return true;
+    return true
   }
 
-  return ElMessageBox.confirm(
-    props.dirtyCloseMessage,
-    "关闭确认",
-    {
-      confirmButtonText: "关闭",
-      cancelButtonText: "继续编辑",
-      type: "warning",
-    },
-  )
+  return ElMessageBox.confirm(props.dirtyCloseMessage, '关闭确认', {
+    confirmButtonText: '关闭',
+    cancelButtonText: '继续编辑',
+    type: 'warning',
+  })
     .then(() => true)
-    .catch(() => false);
-};
+    .catch(() => false)
+}
 
 const completeClose = (done?: () => void) => {
-  closeConfirmed.value = true;
-  dirtyWhileOpen.value = false;
+  closeConfirmed.value = true
+  dirtyWhileOpen.value = false
 
   if (done) {
-    done();
+    done()
   }
-  emit("update:modelValue", false);
-};
+  emit('update:modelValue', false)
+}
 
 const requestClose = async (done?: () => void) => {
-  if (props.closeDisabled || closeConfirming.value) return;
+  if (props.closeDisabled || closeConfirming.value) return
 
-  closeConfirming.value = true;
-  const confirmed = await confirmDirtyClose();
-  closeConfirming.value = false;
-  if (!confirmed) return;
+  closeConfirming.value = true
+  const confirmed = await confirmDirtyClose()
+  closeConfirming.value = false
+  if (!confirmed) return
 
-  completeClose(done);
-};
+  completeClose(done)
+}
 
 const visible = computed({
   get: () => internalVisible.value,
   set: (val: boolean) => {
     if (val) {
-      internalVisible.value = true;
-      emit("update:modelValue", true);
-      return;
+      internalVisible.value = true
+      emit('update:modelValue', true)
+      return
     }
 
     if (closeConfirmed.value) {
-      internalVisible.value = false;
-      emit("update:modelValue", false);
-      return;
+      internalVisible.value = false
+      emit('update:modelValue', false)
+      return
     }
 
-    void requestClose();
+    void requestClose()
   },
-});
+})
 
 const handleBeforeClose = (done: () => void) => {
   if (closeConfirmed.value) {
-    done();
-    return;
+    done()
+    return
   }
 
-  void requestClose(done);
-};
+  void requestClose(done)
+}
 
 watch(
   () => props.dirty,
   (dirty) => {
     if (internalVisible.value && dirty) {
-      dirtyWhileOpen.value = true;
+      dirtyWhileOpen.value = true
     }
   },
-);
+)
 
 watch(
   () => props.modelValue,
   (value, oldValue) => {
     if (value) {
-      internalVisible.value = true;
-      closeConfirmed.value = false;
-      dirtyWhileOpen.value = props.dirty;
-      return;
+      internalVisible.value = true
+      closeConfirmed.value = false
+      dirtyWhileOpen.value = props.dirty
+      return
     }
 
-    if (!oldValue && !internalVisible.value) return;
+    if (!oldValue && !internalVisible.value) return
 
     if (closeConfirmed.value) {
-      internalVisible.value = false;
-      dirtyWhileOpen.value = false;
-      return;
+      internalVisible.value = false
+      dirtyWhileOpen.value = false
+      return
     }
 
     if (props.closeDisabled) {
-      emit("update:modelValue", true);
-      internalVisible.value = true;
-      return;
+      emit('update:modelValue', true)
+      internalVisible.value = true
+      return
     }
 
     if (props.confirmOnDirtyClose && needsDirtyConfirm()) {
-      emit("update:modelValue", true);
-      internalVisible.value = true;
-      void requestClose();
-      return;
+      emit('update:modelValue', true)
+      internalVisible.value = true
+      void requestClose()
+      return
     }
 
-    internalVisible.value = false;
-    dirtyWhileOpen.value = false;
+    internalVisible.value = false
+    dirtyWhileOpen.value = false
   },
   { immediate: true },
-);
+)
 
 const handleClosed = () => {
-  closeConfirmed.value = false;
-  closeConfirming.value = false;
-  dirtyWhileOpen.value = false;
-  emit("close");
-};
+  closeConfirmed.value = false
+  closeConfirming.value = false
+  dirtyWhileOpen.value = false
+  emit('close')
+}
 
-defineExpose({ requestClose });
+defineExpose({ requestClose })
 </script>
 
 <style scoped>

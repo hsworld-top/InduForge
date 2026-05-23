@@ -2,16 +2,12 @@
   <section class="sql-workbench">
     <aside class="sql-workbench__explorer">
       <div class="sql-workbench__source">
-        <button
-          type="button"
-          class="sql-workbench__back"
-          @click="$emit('back')"
-        >
+        <button type="button" class="sql-workbench__back" @click="$emit('back')">
           <IconTablerArrowLeft />
           <span>返回接入源</span>
         </button>
         <span>{{ dbTypeLabel }}</span>
-        <strong>{{ connection.name || "未命名接入源" }}</strong>
+        <strong>{{ connection.name || '未命名接入源' }}</strong>
         <small>{{ databaseLabel }}</small>
       </div>
 
@@ -67,11 +63,11 @@
                   }"
                 >
                   {{
-                    queryDataPointBySourceId[query.id]?.status === "invalid"
-                      ? "数据点失效"
+                    queryDataPointBySourceId[query.id]?.status === 'invalid'
+                      ? '数据点失效'
                       : queryDataPointBySourceId[query.id]
-                        ? "数据点"
-                        : "未同步"
+                        ? '数据点'
+                        : '未同步'
                   }}
                 </small>
               </button>
@@ -127,10 +123,7 @@
                 </button>
               </div>
             </template>
-            <div
-              v-if="!tablesLoading && filteredTables.length === 0"
-              class="sql-workbench__empty"
-            >
+            <div v-if="!tablesLoading && filteredTables.length === 0" class="sql-workbench__empty">
               暂无表
             </div>
           </div>
@@ -168,14 +161,8 @@
               <span v-if="activeTab.table">/ {{ activeTab.table }}</span>
             </div>
             <div class="sql-workbench__actions">
-              <el-button size="small" @click="formatActiveSql">
-                格式化
-              </el-button>
-              <el-button
-                size="small"
-                :loading="activeTab.saving"
-                @click="saveActiveQuery"
-              >
+              <el-button size="small" @click="formatActiveSql"> 格式化 </el-button>
+              <el-button size="small" :loading="activeTab.saving" @click="saveActiveQuery">
                 保存
               </el-button>
               <el-button
@@ -201,20 +188,10 @@
             />
           </div>
 
-          <div
-            v-if="activeTab.parameters.length > 0"
-            class="sql-workbench__params"
-          >
-            <div
-              v-for="(parameter, index) in activeTab.parameters"
-              :key="parameter.name"
-            >
+          <div v-if="activeTab.parameters.length > 0" class="sql-workbench__params">
+            <div v-for="(parameter, index) in activeTab.parameters" :key="parameter.name">
               <span>?{{ index + 1 }}</span>
-              <el-input
-                v-model="parameter.value"
-                size="small"
-                :placeholder="`参数 ${index + 1}`"
-              />
+              <el-input v-model="parameter.value" size="small" :placeholder="`参数 ${index + 1}`" />
             </div>
           </div>
 
@@ -222,9 +199,7 @@
             <div class="sql-workbench__result-head">
               <strong>结果</strong>
               <span v-if="activeTab.result">
-                {{ activeTab.result.rowCount }} 行，{{
-                  activeTab.result.executionTime
-                }}ms
+                {{ activeTab.result.rowCount }} 行，{{ activeTab.result.executionTime }}ms
               </span>
               <span v-else>尚未执行</span>
             </div>
@@ -258,52 +233,32 @@
               <strong>{{ activeTab.table }}</strong>
               <span>表结构</span>
             </div>
-            <el-button
-              size="small"
-              @click="openTableData({ name: activeTab.table })"
-            >
+            <el-button size="small" @click="openTableData({ name: activeTab.table })">
               查询数据
             </el-button>
           </div>
-          <el-tabs
-            v-model="activeTab.structureTab"
-            class="sql-workbench__meta-tabs"
-          >
+          <el-tabs v-model="activeTab.structureTab" class="sql-workbench__meta-tabs">
             <el-tab-pane label="字段" name="columns">
-              <el-table
-                :data="activeTab.structure.columns"
-                size="small"
-                border
-                height="100%"
-              >
+              <el-table :data="activeTab.structure.columns" size="small" border height="100%">
                 <el-table-column prop="name" label="字段" min-width="160" />
                 <el-table-column prop="type" label="类型" width="140" />
                 <el-table-column label="可空" width="80" align="center">
                   <template #default="{ row }">
-                    {{ row.nullable ? "是" : "否" }}
+                    {{ row.nullable ? '是' : '否' }}
                   </template>
                 </el-table-column>
-                <el-table-column
-                  prop="defaultValue"
-                  label="默认值"
-                  width="140"
-                />
+                <el-table-column prop="defaultValue" label="默认值" width="140" />
                 <el-table-column prop="comment" label="备注" min-width="180" />
               </el-table>
             </el-tab-pane>
             <el-tab-pane label="索引" name="indexes">
-              <el-table
-                :data="activeTab.structure.indexes"
-                size="small"
-                border
-                height="100%"
-              >
+              <el-table :data="activeTab.structure.indexes" size="small" border height="100%">
                 <el-table-column prop="name" label="索引" min-width="180" />
                 <el-table-column prop="type" label="类型" width="120" />
                 <el-table-column prop="method" label="方法" width="120" />
                 <el-table-column label="字段" min-width="220">
                   <template #default="{ row }">
-                    {{ (row.columns || []).join(", ") || "-" }}
+                    {{ (row.columns || []).join(', ') || '-' }}
                   </template>
                 </el-table-column>
               </el-table>
@@ -333,7 +288,7 @@
           </div>
           <div>
             <dt>表</dt>
-            <dd>{{ selectedTableName || activeTab?.table || "-" }}</dd>
+            <dd>{{ selectedTableName || activeTab?.table || '-' }}</dd>
           </div>
         </dl>
       </section>
@@ -352,16 +307,12 @@
 
       <section v-else-if="activeTab?.type === 'query'">
         <div class="sql-workbench__panel-title">自动数据点</div>
-        <div class="sql-workbench__empty">
-          保存查询后会自动生成 db.query 数据点。
-        </div>
+        <div class="sql-workbench__empty">保存查询后会自动生成 db.query 数据点。</div>
       </section>
 
       <section>
         <div class="sql-workbench__panel-title">执行历史</div>
-        <div v-if="executionHistory.length === 0" class="sql-workbench__empty">
-          暂无执行记录
-        </div>
+        <div v-if="executionHistory.length === 0" class="sql-workbench__empty">暂无执行记录</div>
         <template v-else>
           <button
             v-for="record in executionHistory"
@@ -371,9 +322,7 @@
             @click="openHistory(record)"
           >
             <span>{{ record.title }}</span>
-            <small
-              >{{ record.rowCount }} 行 / {{ record.executionTime }}ms</small
-            >
+            <small>{{ record.rowCount }} 行 / {{ record.executionTime }}ms</small>
           </button>
         </template>
       </section>
@@ -394,474 +343,458 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
-import { format as formatSql } from "sql-formatter";
-import IconTablerArrowLeft from "~icons/tabler/arrow-left";
-import IconTablerChevronDown from "~icons/tabler/chevron-down";
-import IconTablerChevronRight from "~icons/tabler/chevron-right";
-import IconTablerColumns from "~icons/tabler/columns";
-import IconTablerDatabase from "~icons/tabler/database";
-import IconTablerFileSearch from "~icons/tabler/file-search";
-import IconTablerFileText from "~icons/tabler/file-text";
-import IconTablerLoader2 from "~icons/tabler/loader-2";
-import IconTablerPlayerPlay from "~icons/tabler/player-play";
-import IconTablerPlus from "~icons/tabler/plus";
-import IconTablerRefresh from "~icons/tabler/refresh";
-import IconTablerTable from "~icons/tabler/table";
-import IconTablerX from "~icons/tabler/x";
-import MonacoEditor from "@/components/MonacoEditor.vue";
-import dataAPI from "@/api/data.api";
-import { getApiErrorMessage } from "@/utils/request";
+import { computed, onMounted, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { format as formatSql } from 'sql-formatter'
+import IconTablerArrowLeft from '~icons/tabler/arrow-left'
+import IconTablerChevronDown from '~icons/tabler/chevron-down'
+import IconTablerChevronRight from '~icons/tabler/chevron-right'
+import IconTablerColumns from '~icons/tabler/columns'
+import IconTablerDatabase from '~icons/tabler/database'
+import IconTablerFileSearch from '~icons/tabler/file-search'
+import IconTablerFileText from '~icons/tabler/file-text'
+import IconTablerLoader2 from '~icons/tabler/loader-2'
+import IconTablerPlayerPlay from '~icons/tabler/player-play'
+import IconTablerPlus from '~icons/tabler/plus'
+import IconTablerRefresh from '~icons/tabler/refresh'
+import IconTablerTable from '~icons/tabler/table'
+import IconTablerX from '~icons/tabler/x'
+import MonacoEditor from '@/components/MonacoEditor.vue'
+import dataAPI from '@/api/data.api'
+import { getApiErrorMessage } from '@/utils/request'
 
 type SqlConnection = {
-  id: string;
-  name?: string;
-  type?: string;
-  relationalConfig?: Record<string, any>;
-  config?: Record<string, any>;
-};
+  id: string
+  name?: string
+  type?: string
+  relationalConfig?: Record<string, any>
+  config?: Record<string, any>
+}
 
 const props = defineProps<{
-  projectId: string | number;
-  connection: SqlConnection;
-}>();
+  projectId: string | number
+  connection: SqlConnection
+}>()
 
 defineEmits<{
-  (event: "back"): void;
-}>();
+  (event: 'back'): void
+}>()
 
-const tables = ref<any[]>([]);
-const queries = ref<any[]>([]);
-const queryDataPoints = ref<any[]>([]);
-const tabs = ref<any[]>([]);
-const activeTabId = ref("");
-const filterText = ref("");
-const selectedTableName = ref("");
-const tablesLoading = ref(false);
-const queriesLoading = ref(false);
-const tablesExpanded = ref(true);
-const queriesExpanded = ref(true);
-const executionHistory = ref<any[]>([]);
-let tabCounter = 0;
+const tables = ref<any[]>([])
+const queries = ref<any[]>([])
+const queryDataPoints = ref<any[]>([])
+const tabs = ref<any[]>([])
+const activeTabId = ref('')
+const filterText = ref('')
+const selectedTableName = ref('')
+const tablesLoading = ref(false)
+const queriesLoading = ref(false)
+const tablesExpanded = ref(true)
+const queriesExpanded = ref(true)
+const executionHistory = ref<any[]>([])
+let tabCounter = 0
 
-const dbConfig = computed(
-  () => props.connection.relationalConfig || props.connection.config || {},
-);
+const dbConfig = computed(() => props.connection.relationalConfig || props.connection.config || {})
 const dbType = computed(() => {
-  if (props.connection.type === "relational") {
-    return dbConfig.value.dbType || "mysql";
+  if (props.connection.type === 'relational') {
+    return dbConfig.value.dbType || 'mysql'
   }
-  return props.connection.type || dbConfig.value.dbType || "mysql";
-});
+  return props.connection.type || dbConfig.value.dbType || 'mysql'
+})
 const dbTypeLabel = computed(() => {
   const labels: Record<string, string> = {
-    mysql: "MySQL",
-    postgresql: "PostgreSQL",
-    sqlserver: "SQL Server",
-    tdengine: "TDengine",
-  };
-  return labels[dbType.value] || dbType.value;
-});
-const databaseLabel = computed(
-  () => dbConfig.value.database || dbConfig.value.schema || "已配置库",
-);
+    mysql: 'MySQL',
+    postgresql: 'PostgreSQL',
+    sqlserver: 'SQL Server',
+    tdengine: 'TDengine',
+  }
+  return labels[dbType.value] || dbType.value
+})
+const databaseLabel = computed(() => dbConfig.value.database || dbConfig.value.schema || '已配置库')
 const editorLanguage = computed(() => {
-  if (dbType.value === "postgresql") return "pgsql";
-  if (dbType.value === "sqlserver") return "sql";
-  return "mysql";
-});
+  if (dbType.value === 'postgresql') return 'pgsql'
+  if (dbType.value === 'sqlserver') return 'sql'
+  return 'mysql'
+})
 const formatterLanguage = computed(() => {
-  if (dbType.value === "postgresql") return "postgresql";
-  if (dbType.value === "sqlserver") return "transactsql";
-  return "mysql";
-});
-const isDark = computed(() =>
-  document.documentElement.classList.contains("dark"),
-);
-const activeTab = computed(
-  () => tabs.value.find((tab) => tab.id === activeTabId.value) || null,
-);
+  if (dbType.value === 'postgresql') return 'postgresql'
+  if (dbType.value === 'sqlserver') return 'transactsql'
+  return 'mysql'
+})
+const isDark = computed(() => document.documentElement.classList.contains('dark'))
+const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId.value) || null)
 
 const queryDataPointBySourceId = computed(() =>
   queryDataPoints.value.reduce(
     (records, point) => {
-      if (point.sourceId) records[point.sourceId] = point;
-      return records;
+      if (point.sourceId) records[point.sourceId] = point
+      return records
     },
     {} as Record<string, any>,
   ),
-);
+)
 
 const activeQueryDataPoint = computed(() => {
-  const tab = activeTab.value;
-  if (!tab?.queryId) return null;
-  return queryDataPointBySourceId.value[tab.queryId] || null;
-});
+  const tab = activeTab.value
+  if (!tab?.queryId) return null
+  return queryDataPointBySourceId.value[tab.queryId] || null
+})
 
 const editorOptions = {
   minimap: { enabled: false },
   fontSize: 13,
   lineHeight: 20,
-  wordWrap: "on",
+  wordWrap: 'on',
   formatOnPaste: true,
   suggestOnTriggerCharacters: true,
   quickSuggestions: { other: true, comments: false, strings: false },
-};
+}
 
 const filteredTables = computed(() => {
-  const keyword = filterText.value.trim().toLowerCase();
-  if (!keyword) return tables.value;
+  const keyword = filterText.value.trim().toLowerCase()
+  if (!keyword) return tables.value
   return tables.value.filter((table) =>
-    String(table.name || "")
+    String(table.name || '')
       .toLowerCase()
       .includes(keyword),
-  );
-});
+  )
+})
 
 const filteredQueries = computed(() => {
-  const keyword = filterText.value.trim().toLowerCase();
-  if (!keyword) return queries.value;
+  const keyword = filterText.value.trim().toLowerCase()
+  if (!keyword) return queries.value
   return queries.value.filter((query) =>
-    String(query.name || "")
+    String(query.name || '')
       .toLowerCase()
       .includes(keyword),
-  );
-});
+  )
+})
 
 const quoteTable = (tableName: string) => {
-  if (dbType.value === "mysql") return `\`${tableName}\``;
-  if (dbType.value === "sqlserver") return `[${tableName}]`;
-  return `"${tableName}"`;
-};
+  if (dbType.value === 'mysql') return `\`${tableName}\``
+  if (dbType.value === 'sqlserver') return `[${tableName}]`
+  return `"${tableName}"`
+}
 
 const buildSelectSql = (tableName: string) => {
-  if (dbType.value === "sqlserver") {
-    return `SELECT * FROM ${quoteTable(tableName)} ORDER BY (SELECT NULL) OFFSET 0 ROWS FETCH NEXT 100 ROWS ONLY`;
+  if (dbType.value === 'sqlserver') {
+    return `SELECT * FROM ${quoteTable(tableName)} ORDER BY (SELECT NULL) OFFSET 0 ROWS FETCH NEXT 100 ROWS ONLY`
   }
-  return `SELECT * FROM ${quoteTable(tableName)} LIMIT 100`;
-};
+  return `SELECT * FROM ${quoteTable(tableName)} LIMIT 100`
+}
 
 const normalizeRows = (rows: any[], columns: string[]) =>
   (rows || []).map((row) => {
-    if (!Array.isArray(row)) return row;
+    if (!Array.isArray(row)) return row
     return columns.reduce(
       (record, column, index) => {
-        record[column] = row[index];
-        return record;
+        record[column] = row[index]
+        return record
       },
       {} as Record<string, any>,
-    );
-  });
+    )
+  })
 
 const extractParameters = (sql: string, oldParameters: any[] = []) => {
-  const count = (sql.match(/\?/g) || []).length;
+  const count = (sql.match(/\?/g) || []).length
   return Array.from({ length: count }, (_, index) => ({
     name: `param${index + 1}`,
-    value: oldParameters[index]?.value || "",
-  }));
-};
+    value: oldParameters[index]?.value || '',
+  }))
+}
 
 const loadTables = async () => {
-  tablesLoading.value = true;
+  tablesLoading.value = true
   try {
-    const response = await dataAPI.getConnectionTables(
-      props.projectId,
-      props.connection.id,
-    );
-    tables.value = response.data?.tables || [];
+    const response = await dataAPI.getConnectionTables(props.projectId, props.connection.id)
+    tables.value = response.data?.tables || []
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "加载表列表失败"));
+    ElMessage.error(getApiErrorMessage(error, '加载表列表失败'))
   } finally {
-    tablesLoading.value = false;
+    tablesLoading.value = false
   }
-};
+}
 
 const loadQueries = async () => {
-  queriesLoading.value = true;
+  queriesLoading.value = true
   try {
     const response = await dataAPI.getQueries(props.projectId, {
       connectionId: props.connection.id,
-      queryType: "sql",
-    });
-    queries.value = response.data?.queries || response.data || [];
-    await loadQueryDataPoints();
+      queryType: 'sql',
+    })
+    queries.value = response.data?.queries || response.data || []
+    await loadQueryDataPoints()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "加载保存查询失败"));
+    ElMessage.error(getApiErrorMessage(error, '加载保存查询失败'))
   } finally {
-    queriesLoading.value = false;
+    queriesLoading.value = false
   }
-};
+}
 
 const loadQueryDataPoints = async () => {
-  const sourceIds = queries.value.map((query) => query.id).filter(Boolean);
+  const sourceIds = queries.value.map((query) => query.id).filter(Boolean)
   if (sourceIds.length === 0) {
-    queryDataPoints.value = [];
-    return;
+    queryDataPoints.value = []
+    return
   }
   try {
     const response = await dataAPI.getDataPoints(props.projectId, {
-      type: "db.query",
-      sourceIds: sourceIds.join(","),
+      type: 'db.query',
+      sourceIds: sourceIds.join(','),
       page: 1,
       pageSize: 200,
-    });
-    queryDataPoints.value = response.data?.datapoints || [];
+    })
+    queryDataPoints.value = response.data?.datapoints || []
   } catch {
-    queryDataPoints.value = [];
+    queryDataPoints.value = []
   }
-};
+}
 
 const reloadExplorer = async () => {
-  await Promise.all([loadTables(), loadQueries()]);
-};
+  await Promise.all([loadTables(), loadQueries()])
+}
 
 const createQueryTab = (initial: Record<string, any> = {}) => {
-  tabCounter += 1;
-  const id = initial.id || `query-${props.connection.id}-${tabCounter}`;
-  const existing = tabs.value.find((tab) => tab.id === id);
+  tabCounter += 1
+  const id = initial.id || `query-${props.connection.id}-${tabCounter}`
+  const existing = tabs.value.find((tab) => tab.id === id)
   if (existing) {
-    activeTabId.value = existing.id;
-    return existing;
+    activeTabId.value = existing.id
+    return existing
   }
 
   const tab = {
     id,
-    queryId: initial.queryId || "",
-    type: "query",
+    queryId: initial.queryId || '',
+    type: 'query',
     title: initial.title || `查询 ${tabCounter}`,
     icon: IconTablerFileText,
-    table: initial.table || "",
-    sql: initial.sql || "SELECT * FROM ",
-    parameters: extractParameters(initial.sql || "SELECT * FROM "),
+    table: initial.table || '',
+    sql: initial.sql || 'SELECT * FROM ',
+    parameters: extractParameters(initial.sql || 'SELECT * FROM '),
     result: null,
     displayRows: [],
     executing: false,
     saving: false,
     modified: false,
-  };
-  tabs.value.push(tab);
-  activeTabId.value = tab.id;
-  return tab;
-};
+  }
+  tabs.value.push(tab)
+  activeTabId.value = tab.id
+  return tab
+}
 
 const openTableData = async (table: any) => {
-  selectedTableName.value = table.name;
+  selectedTableName.value = table.name
   const tab = createQueryTab({
     title: table.name,
     table: table.name,
     sql: buildSelectSql(table.name),
-  });
-  await executeTab(tab);
-};
+  })
+  await executeTab(tab)
+}
 
 const openSavedQuery = (query: any) => {
   createQueryTab({
     id: `saved-query-${query.id}`,
     queryId: query.id,
     title: query.name,
-    sql: query.config?.sql || "",
-  });
-};
+    sql: query.config?.sql || '',
+  })
+}
 
 const openTableStructure = async (table: any) => {
-  selectedTableName.value = table.name;
-  const id = `structure-${props.connection.id}-${table.name}`;
-  const existing = tabs.value.find((tab) => tab.id === id);
+  selectedTableName.value = table.name
+  const id = `structure-${props.connection.id}-${table.name}`
+  const existing = tabs.value.find((tab) => tab.id === id)
   if (existing) {
-    activeTabId.value = id;
-    return;
+    activeTabId.value = id
+    return
   }
 
   const tab = {
     id,
-    type: "structure",
+    type: 'structure',
     title: `${table.name} / 结构`,
     icon: IconTablerColumns,
     table: table.name,
-    structureTab: "columns",
+    structureTab: 'columns',
     structure: { columns: [], indexes: [], foreignKeys: [] },
     modified: false,
-  };
-  tabs.value.push(tab);
-  activeTabId.value = id;
+  }
+  tabs.value.push(tab)
+  activeTabId.value = id
 
   try {
     const response = await dataAPI.getTableStructure(
       props.projectId,
       props.connection.id,
       table.name,
-    );
+    )
     tab.structure = response.data || {
       columns: [],
       indexes: [],
       foreignKeys: [],
-    };
+    }
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "加载表结构失败"));
+    ElMessage.error(getApiErrorMessage(error, '加载表结构失败'))
   }
-};
+}
 
 const closeTab = (tabId: string) => {
-  const index = tabs.value.findIndex((tab) => tab.id === tabId);
-  if (index < 0) return;
-  tabs.value.splice(index, 1);
+  const index = tabs.value.findIndex((tab) => tab.id === tabId)
+  if (index < 0) return
+  tabs.value.splice(index, 1)
   if (activeTabId.value === tabId) {
-    activeTabId.value = tabs.value[index - 1]?.id || tabs.value[0]?.id || "";
+    activeTabId.value = tabs.value[index - 1]?.id || tabs.value[0]?.id || ''
   }
-};
+}
 
 const handleSqlChange = () => {
-  if (!activeTab.value || activeTab.value.type !== "query") return;
-  activeTab.value.modified = true;
-  activeTab.value.parameters = extractParameters(
-    activeTab.value.sql,
-    activeTab.value.parameters,
-  );
-};
+  if (!activeTab.value || activeTab.value.type !== 'query') return
+  activeTab.value.modified = true
+  activeTab.value.parameters = extractParameters(activeTab.value.sql, activeTab.value.parameters)
+}
 
 const formatActiveSql = () => {
-  if (!activeTab.value?.sql) return;
+  if (!activeTab.value?.sql) return
   try {
     activeTab.value.sql = formatSql(activeTab.value.sql, {
       language: formatterLanguage.value as any,
-    });
-    activeTab.value.modified = true;
+    })
+    activeTab.value.modified = true
   } catch {
-    ElMessage.warning("当前 SQL 暂时无法格式化");
+    ElMessage.warning('当前 SQL 暂时无法格式化')
   }
-};
+}
 
 const executeTab = async (tab: any) => {
   if (!tab?.sql?.trim()) {
-    ElMessage.warning("请先输入 SQL");
-    return;
+    ElMessage.warning('请先输入 SQL')
+    return
   }
-  tab.executing = true;
+  tab.executing = true
   try {
-    const parameters = (tab.parameters || []).map(
-      (parameter) => parameter.value || "",
-    );
+    const parameters = (tab.parameters || []).map((parameter) => parameter.value || '')
     const response = await dataAPI.executeSql(
       props.projectId,
       props.connection.id,
       tab.sql,
       parameters,
-    );
+    )
     const result = {
       columns: response.data?.columns || [],
       rows: response.data?.rows || [],
       rowCount: response.data?.rowCount || response.data?.rows?.length || 0,
       executionTime: response.data?.executionTime || 0,
-    };
-    tab.result = result;
-    tab.displayRows = normalizeRows(result.rows, result.columns);
+    }
+    tab.result = result
+    tab.displayRows = normalizeRows(result.rows, result.columns)
     executionHistory.value.unshift({
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       title: tab.title,
       sql: tab.sql,
       rowCount: result.rowCount,
       executionTime: result.executionTime,
-    });
-    executionHistory.value = executionHistory.value.slice(0, 12);
+    })
+    executionHistory.value = executionHistory.value.slice(0, 12)
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "执行 SQL 失败"));
+    ElMessage.error(getApiErrorMessage(error, '执行 SQL 失败'))
   } finally {
-    tab.executing = false;
+    tab.executing = false
   }
-};
+}
 
 const executeActiveQuery = async () => {
-  await executeTab(activeTab.value);
-};
+  await executeTab(activeTab.value)
+}
 
 const saveActiveQuery = async () => {
-  const tab = activeTab.value;
-  if (!tab || tab.type !== "query") return;
+  const tab = activeTab.value
+  if (!tab || tab.type !== 'query') return
 
   if (tab.queryId) {
-    tab.saving = true;
+    tab.saving = true
     try {
       await dataAPI.updateQuery(tab.queryId, {
         name: tab.title,
         connectionId: props.connection.id,
-        queryType: "sql",
+        queryType: 'sql',
         config: { sql: tab.sql, parameters: [] },
-      });
-      tab.modified = false;
-      await loadQueries();
-      ElMessage.success("查询已保存");
+      })
+      tab.modified = false
+      await loadQueries()
+      ElMessage.success('查询已保存')
     } catch (error) {
-      ElMessage.error(getApiErrorMessage(error, "保存查询失败"));
+      ElMessage.error(getApiErrorMessage(error, '保存查询失败'))
     } finally {
-      tab.saving = false;
+      tab.saving = false
     }
-    return;
+    return
   }
 
   try {
-    const { value } = await ElMessageBox.prompt("请输入查询名称", "保存查询", {
-      confirmButtonText: "保存",
-      cancelButtonText: "取消",
+    const { value } = await ElMessageBox.prompt('请输入查询名称', '保存查询', {
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
       inputPattern: /^.{2,100}$/,
-      inputErrorMessage: "名称长度需要在 2 到 100 个字符之间",
+      inputErrorMessage: '名称长度需要在 2 到 100 个字符之间',
       inputValue: tab.table || tab.title,
-    });
+    })
 
-    tab.saving = true;
+    tab.saving = true
     const response = await dataAPI.createQuery(props.projectId, {
       name: value,
       connectionId: props.connection.id,
-      queryType: "sql",
+      queryType: 'sql',
       config: { sql: tab.sql, parameters: [] },
-    });
-    tab.title = value;
-    tab.queryId = response.data?.id;
-    tab.modified = false;
-    await loadQueries();
-    ElMessage.success("查询已保存");
+    })
+    tab.title = value
+    tab.queryId = response.data?.id
+    tab.modified = false
+    await loadQueries()
+    ElMessage.success('查询已保存')
   } catch (error) {
-    if (error !== "cancel") {
-      ElMessage.error(getApiErrorMessage(error, "保存查询失败"));
+    if (error !== 'cancel') {
+      ElMessage.error(getApiErrorMessage(error, '保存查询失败'))
     }
   } finally {
-    tab.saving = false;
+    tab.saving = false
   }
-};
+}
 
 const openHistory = (record: any) => {
   createQueryTab({
     title: `${record.title} 副本`,
     sql: record.sql,
-  });
-};
+  })
+}
 
 const copyDataPointPath = async (path: string) => {
-  if (!path) return;
+  if (!path) return
   try {
-    await navigator.clipboard.writeText(path);
-    ElMessage.success("数据点路径已复制");
+    await navigator.clipboard.writeText(path)
+    ElMessage.success('数据点路径已复制')
   } catch {
-    ElMessage.warning("复制失败，请手动复制路径");
+    ElMessage.warning('复制失败，请手动复制路径')
   }
-};
+}
 
 watch(
   () => props.connection.id,
   async () => {
-    tabs.value = [];
-    activeTabId.value = "";
-    selectedTableName.value = "";
-    executionHistory.value = [];
-    await reloadExplorer();
-    createQueryTab();
+    tabs.value = []
+    activeTabId.value = ''
+    selectedTableName.value = ''
+    executionHistory.value = []
+    await reloadExplorer()
+    createQueryTab()
   },
-);
+)
 
 onMounted(async () => {
-  await reloadExplorer();
-  createQueryTab();
-});
+  await reloadExplorer()
+  createQueryTab()
+})
 </script>
 
 <style scoped>

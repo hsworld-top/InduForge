@@ -249,12 +249,16 @@ describe('project-overview-toolbar', () => {
 
   test('关键交互会触发 update emits', async () => {
     const { container, emissions } = mountToolbar()
-    const searchInput = container.querySelector('[data-testid="overview-search-input"]') as HTMLInputElement
+    const searchInput = container.querySelector(
+      '[data-testid="overview-search-input"]',
+    ) as HTMLInputElement
     searchInput.value = '工厂中台'
     searchInput.dispatchEvent(new Event('input', { bubbles: true }))
     await nextTick()
 
-    const listButton = container.querySelector('[data-testid="overview-view-list"]') as HTMLButtonElement
+    const listButton = container.querySelector(
+      '[data-testid="overview-view-list"]',
+    ) as HTMLButtonElement
     listButton.click()
     await nextTick()
 
@@ -263,7 +267,9 @@ describe('project-overview-toolbar', () => {
     updatedAtButton.click()
     await nextTick()
 
-    const sortOrderButton = container.querySelector('[data-testid="overview-sort-order"]') as HTMLButtonElement
+    const sortOrderButton = container.querySelector(
+      '[data-testid="overview-sort-order"]',
+    ) as HTMLButtonElement
     sortOrderButton.click()
     await nextTick()
 

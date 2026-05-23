@@ -1,5 +1,5 @@
 // @ts-nocheck
-import request from "@/utils/request";
+import request from '@/utils/request'
 
 // ===========================================
 // 数据连接相关API
@@ -13,10 +13,10 @@ import request from "@/utils/request";
 export const getConnections = (projectId, params = {}) => {
   return request({
     url: `/data/projects/${projectId}/connections`,
-    method: "get",
+    method: 'get',
     params,
-  });
-};
+  })
+}
 
 /**
  * 创建数据连接
@@ -26,158 +26,153 @@ export const getConnections = (projectId, params = {}) => {
 export const createConnection = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/connections`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 export const createMqttConnection = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/connections`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 export const testConnection = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/connections/test`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 export const testMqttConnection = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/connections/test`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 export const createKafkaConfig = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/kafka/configs`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 export const createHttpConfig = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/http/configs`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 export const createWebSocketConfig = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/websocket/configs`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 export const createRedisConfig = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/redis/configs`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 export const createOpcuaConfig = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/opcua/configs`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 export const createS7Config = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/s7/configs`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 export const createModbusConfig = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/modbus/configs`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 export const createTdengineConfig = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/tdengine/configs`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 export const validateOpcdaContract = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/opcda/contracts/validate`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 export const previewProtocol = (projectId, connectionId, data = {}) => {
   return request({
     url: `/data/projects/${projectId}/protocols/${connectionId}/preview`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 export const getRedisKeys = (projectId, connectionId, params = {}) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/redis/keys`,
-    method: "get",
+    method: 'get',
     params,
-  });
-};
+  })
+}
 
 export const getRedisValue = (projectId, connectionId, key) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/redis/value`,
-    method: "get",
+    method: 'get',
     params: { key },
-  });
-};
+  })
+}
 
 export const executeRedisCommand = (projectId, connectionId, data) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/redis/command`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 export const getConnectionTables = (projectId, connectionId) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/tables`,
-    method: "get",
-  });
-};
+    method: 'get',
+  })
+}
 
-export const getTableData = (
-  projectId,
-  connectionId,
-  tableName,
-  params = {},
-) => {
+export const getTableData = (projectId, connectionId, tableName, params = {}) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/tables/${tableName}/data`,
-    method: "get",
+    method: 'get',
     params,
-  });
-};
+  })
+}
 
 /**
  * 获取表结构信息
@@ -188,9 +183,9 @@ export const getTableData = (
 export const getTableStructure = (projectId, connectionId, tableName) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/tables/${tableName}/structure`,
-    method: "get",
-  });
-};
+    method: 'get',
+  })
+}
 
 /**
  * 更新数据连接
@@ -201,10 +196,10 @@ export const getTableStructure = (projectId, connectionId, tableName) => {
 export const updateConnection = (projectId, connectionId, data) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}`,
-    method: "put",
+    method: 'put',
     data,
-  });
-};
+  })
+}
 
 /**
  * 删除数据连接
@@ -214,9 +209,9 @@ export const updateConnection = (projectId, connectionId, data) => {
 export const deleteConnection = (projectId, connectionId) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}`,
-    method: "delete",
-  });
-};
+    method: 'delete',
+  })
+}
 
 /**
  * 更新连接状态
@@ -227,10 +222,10 @@ export const deleteConnection = (projectId, connectionId) => {
 export const updateConnectionStatus = (projectId, connectionId, status) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/status`,
-    method: "patch",
+    method: 'patch',
     data: { status },
-  });
-};
+  })
+}
 
 // ===========================================
 // 数据查询相关API
@@ -244,10 +239,10 @@ export const updateConnectionStatus = (projectId, connectionId, status) => {
 export const getQueries = (projectId, params = {}) => {
   return request({
     url: `/data/projects/${projectId}/queries`,
-    method: "get",
+    method: 'get',
     params,
-  });
-};
+  })
+}
 
 /**
  * 创建数据查询
@@ -257,10 +252,10 @@ export const getQueries = (projectId, params = {}) => {
 export const createQuery = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/queries`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 /**
  * 更新数据查询
@@ -270,10 +265,10 @@ export const createQuery = (projectId, data) => {
 export const updateQuery = (id, data) => {
   return request({
     url: `/data/queries/${id}`,
-    method: "put",
+    method: 'put',
     data,
-  });
-};
+  })
+}
 
 /**
  * 删除数据查询
@@ -282,9 +277,9 @@ export const updateQuery = (id, data) => {
 export const deleteQuery = (id) => {
   return request({
     url: `/data/queries/${id}`,
-    method: "delete",
-  });
-};
+    method: 'delete',
+  })
+}
 
 /**
  * 执行数据查询
@@ -294,10 +289,10 @@ export const deleteQuery = (id) => {
 export const executeQuery = (id, parameters = {}) => {
   return request({
     url: `/data/queries/${id}/execute`,
-    method: "post",
+    method: 'post',
     data: { parameters },
-  });
-};
+  })
+}
 
 /**
  * 直接执行SQL查询
@@ -309,10 +304,10 @@ export const executeQuery = (id, parameters = {}) => {
 export const executeSql = (projectId, connectionId, sql, parameters = []) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/execute-sql`,
-    method: "post",
+    method: 'post',
     data: { sql, parameters },
-  });
-};
+  })
+}
 
 /**
  * 保存数据查询
@@ -322,10 +317,10 @@ export const executeSql = (projectId, connectionId, sql, parameters = []) => {
 export const saveQuery = (id, data) => {
   return request({
     url: `/data/queries/${id}`,
-    method: "put",
+    method: 'put',
     data,
-  });
-};
+  })
+}
 
 // ===========================================
 // 数据点相关API
@@ -339,10 +334,10 @@ export const saveQuery = (id, data) => {
 export const getDataPoints = (projectId, params = {}) => {
   return request({
     url: `/data/projects/${projectId}/datapoints`,
-    method: "get",
+    method: 'get',
     params,
-  });
-};
+  })
+}
 
 /**
  * 更新数据点
@@ -353,10 +348,10 @@ export const getDataPoints = (projectId, params = {}) => {
 export const updateDataPoint = (projectId, datapointId, data) => {
   return request({
     url: `/data/projects/${projectId}/datapoints/${datapointId}`,
-    method: "put",
+    method: 'put',
     data,
-  });
-};
+  })
+}
 
 /**
  * 更新数据点运行态权限
@@ -364,17 +359,13 @@ export const updateDataPoint = (projectId, datapointId, data) => {
  * @param {string} datapointId - 数据点ID
  * @param {object} data - 运行态权限数据
  */
-export const updateDatapointRuntimePermissions = (
-  projectId,
-  datapointId,
-  data,
-) => {
+export const updateDatapointRuntimePermissions = (projectId, datapointId, data) => {
   return request({
     url: `/data/projects/${projectId}/datapoints/${datapointId}/runtime-permissions`,
-    method: "put",
+    method: 'put',
     data,
-  });
-};
+  })
+}
 
 /**
  * 删除数据点
@@ -384,9 +375,9 @@ export const updateDatapointRuntimePermissions = (
 export const deleteDataPoint = (projectId, datapointId) => {
   return request({
     url: `/data/projects/${projectId}/datapoints/${datapointId}`,
-    method: "delete",
-  });
-};
+    method: 'delete',
+  })
+}
 
 /**
  * 批量删除失效数据点
@@ -396,12 +387,12 @@ export const deleteDataPoint = (projectId, datapointId) => {
 export const deleteDataPointsBatch = (projectId, datapointIds) => {
   return request({
     url: `/data/projects/${projectId}/datapoints/delete-batch`,
-    method: "post",
+    method: 'post',
     data: {
       ids: datapointIds,
     },
-  });
-};
+  })
+}
 
 // ===========================================
 // Preview Session 相关API
@@ -415,10 +406,10 @@ export const deleteDataPointsBatch = (projectId, datapointIds) => {
 export const createPreviewSession = (projectId) => {
   return request({
     url: `/data/projects/${projectId}/preview/sessions`,
-    method: "post",
+    method: 'post',
     data: {},
-  });
-};
+  })
+}
 
 /**
  * 续期 preview session
@@ -428,9 +419,9 @@ export const createPreviewSession = (projectId) => {
 export const heartbeatPreviewSession = (sessionId) => {
   return request({
     url: `/data/preview/sessions/${sessionId}/heartbeat`,
-    method: "post",
-  });
-};
+    method: 'post',
+  })
+}
 
 /**
  * 关闭 preview session
@@ -440,31 +431,31 @@ export const heartbeatPreviewSession = (sessionId) => {
 export const deletePreviewSession = (sessionId) => {
   return request({
     url: `/data/preview/sessions/${sessionId}`,
-    method: "delete",
-  });
-};
+    method: 'delete',
+  })
+}
 
 // ===========================================
 // MQTT订阅相关API
 // ===========================================
 
-const normalizeMqttListPayload = (payload, legacyKey = "") => {
-  const data = payload?.data ?? payload ?? {};
+const normalizeMqttListPayload = (payload, legacyKey = '') => {
+  const data = payload?.data ?? payload ?? {}
   const list = Array.isArray(data.list)
     ? data.list
     : legacyKey && Array.isArray(data[legacyKey])
       ? data[legacyKey]
       : Array.isArray(data)
         ? data
-        : [];
+        : []
   const pagination = data.pagination || {
     page: 1,
     pageSize: list.length,
     total: list.length,
     totalPages: list.length > 0 ? 1 : 0,
-  };
-  return { list, pagination };
-};
+  }
+  return { list, pagination }
+}
 
 /**
  * 获取MQTT订阅列表
@@ -474,12 +465,12 @@ const normalizeMqttListPayload = (payload, legacyKey = "") => {
 export const getMqttSubscriptions = (projectId, connectionId) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/connections/${connectionId}/subscriptions`,
-    method: "get",
+    method: 'get',
   }).then((response) => ({
     ...response,
-    data: normalizeMqttListPayload(response, "subscriptions"),
-  }));
-};
+    data: normalizeMqttListPayload(response, 'subscriptions'),
+  }))
+}
 
 /**
  * 获取MQTT订阅分组树
@@ -489,12 +480,12 @@ export const getMqttSubscriptions = (projectId, connectionId) => {
 export const getMqttSubscriptionGroups = (projectId, connectionId) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/connections/${connectionId}/subscription-groups`,
-    method: "get",
+    method: 'get',
   }).then((response) => ({
     ...response,
-    data: normalizeMqttListPayload(response, "groups"),
-  }));
-};
+    data: normalizeMqttListPayload(response, 'groups'),
+  }))
+}
 
 /**
  * 创建MQTT订阅分组
@@ -502,17 +493,13 @@ export const getMqttSubscriptionGroups = (projectId, connectionId) => {
  * @param {string} connectionId - 连接ID
  * @param {object} data - 分组数据
  */
-export const createMqttSubscriptionGroup = (
-  projectId,
-  connectionId,
-  data,
-) => {
+export const createMqttSubscriptionGroup = (projectId, connectionId, data) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/connections/${connectionId}/subscription-groups`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 /**
  * 更新MQTT订阅分组
@@ -523,10 +510,10 @@ export const createMqttSubscriptionGroup = (
 export const updateMqttSubscriptionGroup = (projectId, groupId, data) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/subscription-groups/${groupId}`,
-    method: "put",
+    method: 'put',
     data,
-  });
-};
+  })
+}
 
 /**
  * 删除MQTT订阅分组
@@ -536,9 +523,9 @@ export const updateMqttSubscriptionGroup = (projectId, groupId, data) => {
 export const deleteMqttSubscriptionGroup = (projectId, groupId) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/subscription-groups/${groupId}`,
-    method: "delete",
-  });
-};
+    method: 'delete',
+  })
+}
 
 /**
  * 获取单个MQTT订阅
@@ -548,9 +535,9 @@ export const deleteMqttSubscriptionGroup = (projectId, groupId) => {
 export const getMqttSubscription = (projectId, subscriptionId) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}`,
-    method: "get",
-  });
-};
+    method: 'get',
+  })
+}
 
 /**
  * 创建MQTT订阅
@@ -561,10 +548,10 @@ export const getMqttSubscription = (projectId, subscriptionId) => {
 export const createMqttSubscription = (projectId, connectionId, data) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/connections/${connectionId}/subscriptions`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 /**
  * 更新MQTT订阅
@@ -575,10 +562,10 @@ export const createMqttSubscription = (projectId, connectionId, data) => {
 export const updateMqttSubscription = (projectId, subscriptionId, data) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}`,
-    method: "put",
+    method: 'put',
     data,
-  });
-};
+  })
+}
 
 /**
  * 删除MQTT订阅
@@ -588,29 +575,25 @@ export const updateMqttSubscription = (projectId, subscriptionId, data) => {
 export const deleteMqttSubscription = (projectId, subscriptionId) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}`,
-    method: "delete",
-  });
-};
+    method: 'delete',
+  })
+}
 
 /**
  * 获取MQTT订阅的消息列表
  * @param {string} projectId - 工程ID
  * @param {string} subscriptionId - 订阅ID
  */
-export const getMqttSubscriptionMessages = (
-  projectId,
-  subscriptionId,
-  params = {},
-) => {
+export const getMqttSubscriptionMessages = (projectId, subscriptionId, params = {}) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/messages`,
-    method: "get",
+    method: 'get',
     params,
   }).then((response) => ({
     ...response,
-    data: normalizeMqttListPayload(response, "messages"),
-  }));
-};
+    data: normalizeMqttListPayload(response, 'messages'),
+  }))
+}
 
 /**
  * 启动MQTT连接
@@ -620,9 +603,9 @@ export const getMqttSubscriptionMessages = (
 export const startMqttConnection = (projectId, connectionId) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/connections/${connectionId}/start`,
-    method: "post",
-  });
-};
+    method: 'post',
+  })
+}
 
 /**
  * 停止MQTT连接
@@ -632,9 +615,9 @@ export const startMqttConnection = (projectId, connectionId) => {
 export const stopMqttConnection = (projectId, connectionId) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/connections/${connectionId}/stop`,
-    method: "post",
-  });
-};
+    method: 'post',
+  })
+}
 
 // ===========================================
 // MQTT 变量组相关API
@@ -649,13 +632,13 @@ export const stopMqttConnection = (projectId, connectionId) => {
 export const getMqttTagGroups = (projectId, subscriptionId, params = {}) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/tag-groups`,
-    method: "get",
+    method: 'get',
     params,
   }).then((response) => ({
     ...response,
-    data: normalizeMqttListPayload(response, "groups"),
-  }));
-};
+    data: normalizeMqttListPayload(response, 'groups'),
+  }))
+}
 
 /**
  * 获取单个变量组
@@ -664,9 +647,9 @@ export const getMqttTagGroups = (projectId, subscriptionId, params = {}) => {
 export const getMqttTagGroup = (projectId, groupId) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/tag-groups/${groupId}`,
-    method: "get",
-  });
-};
+    method: 'get',
+  })
+}
 
 /**
  * 创建变量组
@@ -677,10 +660,10 @@ export const getMqttTagGroup = (projectId, groupId) => {
 export const createMqttTagGroup = (projectId, subscriptionId, data) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/tag-groups`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 /**
  * 更新变量组
@@ -690,10 +673,10 @@ export const createMqttTagGroup = (projectId, subscriptionId, data) => {
 export const updateMqttTagGroup = (projectId, groupId, data) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/tag-groups/${groupId}`,
-    method: "put",
+    method: 'put',
     data,
-  });
-};
+  })
+}
 
 /**
  * 删除变量组
@@ -702,9 +685,9 @@ export const updateMqttTagGroup = (projectId, groupId, data) => {
 export const deleteMqttTagGroup = (projectId, groupId) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/tag-groups/${groupId}`,
-    method: "delete",
-  });
-};
+    method: 'delete',
+  })
+}
 
 /**
  * 更新变量组顺序
@@ -713,10 +696,10 @@ export const deleteMqttTagGroup = (projectId, groupId) => {
 export const updateMqttTagGroupsOrder = (projectId, groups) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/tag-groups/order`,
-    method: "put",
+    method: 'put',
     data: { groups },
-  });
-};
+  })
+}
 
 // ===========================================
 // MQTT Tag (变量) 相关API
@@ -731,13 +714,13 @@ export const updateMqttTagGroupsOrder = (projectId, groups) => {
 export const getMqttTags = (projectId, subscriptionId, params = {}) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/tags`,
-    method: "get",
+    method: 'get',
     params,
   }).then((response) => ({
     ...response,
-    data: normalizeMqttListPayload(response, "tags"),
-  }));
-};
+    data: normalizeMqttListPayload(response, 'tags'),
+  }))
+}
 
 /**
  * 获取项目的所有Tag
@@ -747,13 +730,13 @@ export const getMqttTags = (projectId, subscriptionId, params = {}) => {
 export const getProjectMqttTags = (projectId, params = {}) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/tags`,
-    method: "get",
+    method: 'get',
     params,
   }).then((response) => ({
     ...response,
-    data: normalizeMqttListPayload(response, "tags"),
-  }));
-};
+    data: normalizeMqttListPayload(response, 'tags'),
+  }))
+}
 
 /**
  * 获取Tag详情
@@ -762,9 +745,9 @@ export const getProjectMqttTags = (projectId, params = {}) => {
 export const getMqttTag = (projectId, tagId) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/tags/${tagId}`,
-    method: "get",
-  });
-};
+    method: 'get',
+  })
+}
 
 /**
  * 创建Tag
@@ -775,10 +758,10 @@ export const getMqttTag = (projectId, tagId) => {
 export const createMqttTag = (projectId, subscriptionId, data) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/tags`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 /**
  * 批量创建Tag
@@ -789,10 +772,10 @@ export const createMqttTag = (projectId, subscriptionId, data) => {
 export const createMqttTagsBatch = (projectId, subscriptionId, tags) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/tags/batch`,
-    method: "post",
+    method: 'post',
     data: { tags },
-  });
-};
+  })
+}
 
 /**
  * 更新Tag
@@ -802,10 +785,10 @@ export const createMqttTagsBatch = (projectId, subscriptionId, tags) => {
 export const updateMqttTag = (projectId, tagId, data) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/tags/${tagId}`,
-    method: "put",
+    method: 'put',
     data,
-  });
-};
+  })
+}
 
 /**
  * 删除Tag
@@ -814,9 +797,9 @@ export const updateMqttTag = (projectId, tagId, data) => {
 export const deleteMqttTag = (projectId, tagId) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/tags/${tagId}`,
-    method: "delete",
-  });
-};
+    method: 'delete',
+  })
+}
 
 /**
  * 更新Tags顺序
@@ -825,10 +808,10 @@ export const deleteMqttTag = (projectId, tagId) => {
 export const updateMqttTagsOrder = (projectId, tagIds) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/tags/order`,
-    method: "put",
+    method: 'put',
     data: { tagIds },
-  });
-};
+  })
+}
 
 /**
  * 获取Tag的当前值
@@ -837,9 +820,9 @@ export const updateMqttTagsOrder = (projectId, tagIds) => {
 export const getMqttTagValue = (projectId, tagId) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/tags/${tagId}/value`,
-    method: "get",
-  });
-};
+    method: 'get',
+  })
+}
 
 /**
  * 获取多个Tag的当前值
@@ -848,10 +831,10 @@ export const getMqttTagValue = (projectId, tagId) => {
 export const getMqttTagValues = (projectId, tagIds) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/tags/values`,
-    method: "post",
+    method: 'post',
     data: { tagIds },
-  });
-};
+  })
+}
 
 // ===========================================
 // Compute 鐩稿叧 API
@@ -865,10 +848,10 @@ export const getMqttTagValues = (projectId, tagIds) => {
 export const createComputeUnit = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/compute-units`,
-    method: "post",
+    method: 'post',
     data,
-  });
-};
+  })
+}
 
 /**
  * 鎵ц璁＄畻鍗曞厓
@@ -879,10 +862,10 @@ export const createComputeUnit = (projectId, data) => {
 export const runComputeUnit = (projectId, id, input = {}) => {
   return request({
     url: `/data/projects/${projectId}/compute-units/${id}/run`,
-    method: "post",
+    method: 'post',
     data: { input },
-  });
-};
+  })
+}
 
 /**
  * 璋冭瘯璁＄畻鍗曞厓
@@ -893,10 +876,10 @@ export const runComputeUnit = (projectId, id, input = {}) => {
 export const debugComputeUnit = (projectId, id, input = {}) => {
   return request({
     url: `/data/projects/${projectId}/compute-units/${id}/debug`,
-    method: "post",
+    method: 'post',
     data: { input },
-  });
-};
+  })
+}
 
 export default {
   getConnections,
@@ -972,4 +955,4 @@ export default {
   createComputeUnit,
   runComputeUnit,
   debugComputeUnit,
-};
+}

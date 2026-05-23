@@ -23,20 +23,16 @@
           <span class="text-xs text-gray-500">数据点:</span>
           <span
             class="text-xs ml-1 truncate"
-            :class="
-              tag.datapointStatus === 'invalid'
-                ? 'text-gray-400'
-                : 'text-gray-700'
-            "
+            :class="tag.datapointStatus === 'invalid' ? 'text-gray-400' : 'text-gray-700'"
           >
-            {{ tag.datapointPath || "-" }}
+            {{ tag.datapointPath || '-' }}
           </span>
           <el-tag
             v-if="tag.datapointPath"
             size="small"
             :type="tag.datapointStatus === 'invalid' ? 'info' : 'success'"
           >
-            {{ tag.datapointStatus === "invalid" ? "失效" : "活跃" }}
+            {{ tag.datapointStatus === 'invalid' ? '失效' : '活跃' }}
           </el-tag>
         </div>
       </div>
@@ -54,11 +50,7 @@
             </button>
           </el-tooltip>
           <el-tooltip content="删除" placement="top">
-            <button
-              type="button"
-              class="tag-action-btn is-danger"
-              @click="$emit('delete', tag)"
-            >
+            <button type="button" class="tag-action-btn is-danger" @click="$emit('delete', tag)">
               <IconTablerTrash />
             </button>
           </el-tooltip>
@@ -69,52 +61,52 @@
 </template>
 
 <script setup lang="ts">
-import IconTablerEdit from "~icons/tabler/edit";
-import IconTablerEye from "~icons/tabler/eye";
-import IconTablerTrash from "~icons/tabler/trash";
+import IconTablerEdit from '~icons/tabler/edit'
+import IconTablerEye from '~icons/tabler/eye'
+import IconTablerTrash from '~icons/tabler/trash'
 
 defineProps({
   tag: {
     type: Object,
     required: true,
   },
-});
+})
 
-defineEmits(["edit", "delete", "view"]);
+defineEmits(['edit', 'delete', 'view'])
 
 // 数据类型映射
 const getDataTypeLabel = (type) => {
   const map = {
-    string: "字符串",
-    number: "数字",
-    boolean: "布尔",
-    object: "对象",
-    array: "数组",
-  };
-  return map[type] || type;
-};
+    string: '字符串',
+    number: '数字',
+    boolean: '布尔',
+    object: '对象',
+    array: '数组',
+  }
+  return map[type] || type
+}
 
 const getDataTypeColor = (type) => {
   const map = {
-    string: "",
-    number: "success",
-    boolean: "warning",
-    object: "info",
-    array: "info",
-  };
-  return map[type] || "";
-};
+    string: '',
+    number: 'success',
+    boolean: 'warning',
+    object: 'info',
+    array: 'info',
+  }
+  return map[type] || ''
+}
 
 // 解析类型映射
 const getParseTypeLabel = (type) => {
   const map = {
-    jsonpath: "JSONPath",
-    regex: "正则",
-    script: "脚本",
-    fixed: "固定值",
-  };
-  return map[type] || type;
-};
+    jsonpath: 'JSONPath',
+    regex: '正则',
+    script: '脚本',
+    fixed: '固定值',
+  }
+  return map[type] || type
+}
 </script>
 
 <style scoped>
@@ -229,7 +221,7 @@ const getParseTypeLabel = (type) => {
 }
 
 .tag-item::before {
-  content: "";
+  content: '';
   position: absolute;
   left: 0;
   top: 50%;

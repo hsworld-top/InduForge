@@ -19,21 +19,17 @@
 </template>
 
 <script setup lang="ts">
-import DataCenterNavRail from "@/components/layout/DataCenterNavRail.vue";
-import type {
-  DatacenterModuleId,
-  DatacenterModuleMeta,
-} from "@/config/datacenterModules";
+import DataCenterNavRail from '@/components/layout/DataCenterNavRail.vue'
+import type { DatacenterModuleId, DatacenterModuleMeta } from '@/config/datacenterModules'
 
 defineProps<{
-  modules: DatacenterModuleMeta[];
-  activeModule: DatacenterModuleId;
-}>();
+  modules: DatacenterModuleMeta[]
+  activeModule: DatacenterModuleId
+}>()
 
 defineEmits<{
-  (event: "update:activeModule", value: DatacenterModuleId): void;
-}>();
-
+  (event: 'update:activeModule', value: DatacenterModuleId): void
+}>()
 </script>
 
 <style scoped>

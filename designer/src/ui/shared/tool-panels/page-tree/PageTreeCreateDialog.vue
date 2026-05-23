@@ -2,58 +2,58 @@
   页面树：新建页面 / 分组弹窗
 -->
 <script setup lang="ts">
-import { useI18n } from "vue-i18n";
-import IconEpFolder from "~icons/ep/folder";
-import IconEpFolderOpened from "~icons/ep/folder-opened";
-import IconEpPlus from "~icons/ep/plus";
+import { useI18n } from 'vue-i18n'
+import IconEpFolder from '~icons/ep/folder'
+import IconEpFolderOpened from '~icons/ep/folder-opened'
+import IconEpPlus from '~icons/ep/plus'
 
 interface CreateTypeOptionLike {
-  value: string;
-  icon?: unknown;
-  label: string;
-  desc?: string;
+  value: string
+  icon?: unknown
+  label: string
+  desc?: string
 }
 
 interface PageFolderOptionLike {
-  id: string;
-  name: string;
+  id: string
+  name: string
 }
 
 interface CreatePageFormLike {
-  type: string;
-  name: string;
-  parentId: string | null;
+  type: string
+  name: string
+  parentId: string | null
 }
 
 const props = defineProps<{
-  title: string;
-  createTypeOptions: CreateTypeOptionLike[];
-  form: CreatePageFormLike;
-  rules: Record<string, unknown>;
-  folderOptions: PageFolderOptionLike[];
-  creating?: boolean;
-  isFixedBasicType: (type: string) => boolean;
-}>();
+  title: string
+  createTypeOptions: CreateTypeOptionLike[]
+  form: CreatePageFormLike
+  rules: Record<string, unknown>
+  folderOptions: PageFolderOptionLike[]
+  creating?: boolean
+  isFixedBasicType: (type: string) => boolean
+}>()
 
-const emit = defineEmits(["update:form", "confirm"]);
+const emit = defineEmits(['update:form', 'confirm'])
 
-const open = defineModel<boolean>({ default: false });
-const { t } = useI18n();
+const open = defineModel<boolean>({ default: false })
+const { t } = useI18n()
 
 function patchForm(partial: Partial<CreatePageFormLike>) {
-  emit("update:form", { ...props.form, ...partial });
+  emit('update:form', { ...props.form, ...partial })
 }
 
 function selectType(value: string) {
-  patchForm({ type: value });
+  patchForm({ type: value })
 }
 
 function handleNameUpdate(value: string) {
-  patchForm({ name: value });
+  patchForm({ name: value })
 }
 
 function handleParentIdUpdate(value: string | null) {
-  patchForm({ parentId: value });
+  patchForm({ parentId: value })
 }
 </script>
 
@@ -103,7 +103,7 @@ function handleParentIdUpdate(value: string | null) {
           <el-option :label="t('pageTree.root')" :value="null">
             <div class="flex items-center gap-2">
               <IconEpFolderOpened class="text-gray-400" />
-              <span>{{ t("pageTree.root") }}</span>
+              <span>{{ t('pageTree.root') }}</span>
             </div>
           </el-option>
           <el-option
@@ -123,10 +123,10 @@ function handleParentIdUpdate(value: string | null) {
 
     <template #footer>
       <div class="dialog-footer">
-        <el-button @click="open = false">{{ t("pageTree.cancel") }}</el-button>
+        <el-button @click="open = false">{{ t('pageTree.cancel') }}</el-button>
         <el-button type="primary" :loading="creating" @click="emit('confirm')">
           <IconEpPlus class="mr-1" />
-          {{ t("pageTree.create") }}
+          {{ t('pageTree.create') }}
         </el-button>
       </div>
     </template>

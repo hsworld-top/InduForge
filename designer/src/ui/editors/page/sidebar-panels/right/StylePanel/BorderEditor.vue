@@ -3,49 +3,49 @@
   编辑边框宽度、样式、颜色、圆角
 -->
 <script setup lang="ts">
-import { computed } from "vue";
-import FriendlyColorPicker from "@/ui/shared/widgets/base/FriendlyColorPicker.vue";
+import { computed } from 'vue'
+import FriendlyColorPicker from '@/ui/shared/widgets/base/FriendlyColorPicker.vue'
 
 interface BorderStyleModel {
-  borderWidth?: number | string;
-  borderStyle?: string;
-  borderColor?: string;
-  borderRadius?: number | string;
+  borderWidth?: number | string
+  borderStyle?: string
+  borderColor?: string
+  borderRadius?: number | string
 }
 
 const props = withDefaults(defineProps<{ modelValue?: BorderStyleModel }>(), {
   modelValue: () => ({}),
-});
+})
 
 const emit = defineEmits<{
-  (event: "update:modelValue", value: BorderStyleModel): void;
-}>();
+  (event: 'update:modelValue', value: BorderStyleModel): void
+}>()
 
 function parseValue(value: unknown, defaultValue = 0): number {
-  if (!value) return defaultValue;
-  const num = Number.parseInt(String(value), 10);
-  return Number.isNaN(num) ? defaultValue : num;
+  if (!value) return defaultValue
+  const num = Number.parseInt(String(value), 10)
+  return Number.isNaN(num) ? defaultValue : num
 }
 
-const borderWidth = computed(() => parseValue(props.modelValue.borderWidth, 0));
-const borderStyle = computed(() => props.modelValue.borderStyle || "none");
-const borderColor = computed(() => props.modelValue.borderColor || "#000000");
-const borderRadius = computed(() => parseValue(props.modelValue.borderRadius, 0));
+const borderWidth = computed(() => parseValue(props.modelValue.borderWidth, 0))
+const borderStyle = computed(() => props.modelValue.borderStyle || 'none')
+const borderColor = computed(() => props.modelValue.borderColor || '#000000')
+const borderRadius = computed(() => parseValue(props.modelValue.borderRadius, 0))
 
 function handleWidthChange(value: number) {
-  emit("update:modelValue", { ...props.modelValue, borderWidth: value });
+  emit('update:modelValue', { ...props.modelValue, borderWidth: value })
 }
 
 function handleStyleChange(value: string) {
-  emit("update:modelValue", { ...props.modelValue, borderStyle: value });
+  emit('update:modelValue', { ...props.modelValue, borderStyle: value })
 }
 
 function handleColorChange(value: string) {
-  emit("update:modelValue", { ...props.modelValue, borderColor: value });
+  emit('update:modelValue', { ...props.modelValue, borderColor: value })
 }
 
 function handleRadiusChange(value: number) {
-  emit("update:modelValue", { ...props.modelValue, borderRadius: value });
+  emit('update:modelValue', { ...props.modelValue, borderRadius: value })
 }
 </script>
 

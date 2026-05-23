@@ -3,9 +3,9 @@ import type {
   MarqueeModifiers,
   MarqueeStartSource,
   OutsideMarqueeStartDetail,
-} from "./interaction/marquee-interaction";
-import { ElMessage } from "element-plus";
-import { storeToRefs } from "pinia";
+} from './interaction/marquee-interaction'
+import { ElMessage } from 'element-plus'
+import { storeToRefs } from 'pinia'
 /**
  * DesignCanvas - 设计画布组件
  *
@@ -16,53 +16,53 @@ import { storeToRefs } from "pinia";
  * - 支持粘贴到鼠标位置、撤销与重做
  * - 无内容时显示空画布提示
  */
-import { computed, inject, onBeforeUnmount, onMounted, provide, ref } from "vue";
-import IconEpBottom from "~icons/ep/bottom";
-import IconEpDelete from "~icons/ep/delete";
-import IconEpPlus from "~icons/ep/plus";
-import IconEpRefreshLeft from "~icons/ep/refresh-left";
-import IconEpRefreshRight from "~icons/ep/refresh-right";
-import IconEpTop from "~icons/ep/top";
-import IconLucidePin from "~icons/lucide/pin";
-import IconLucidePinOff from "~icons/lucide/pin-off";
+import { computed, inject, onBeforeUnmount, onMounted, provide, ref } from 'vue'
+import IconEpBottom from '~icons/ep/bottom'
+import IconEpDelete from '~icons/ep/delete'
+import IconEpPlus from '~icons/ep/plus'
+import IconEpRefreshLeft from '~icons/ep/refresh-left'
+import IconEpRefreshRight from '~icons/ep/refresh-right'
+import IconEpTop from '~icons/ep/top'
+import IconLucidePin from '~icons/lucide/pin'
+import IconLucidePinOff from '~icons/lucide/pin-off'
 import {
   getDefaultSize,
   isContainerType,
   isLayoutContainerType,
   isRegionType,
-} from "@/editor-core/descriptors/registry";
-import { createSelectableElement } from "@/editor-core/document/types";
-import { resolvePlacement } from "@/editor-core/utils/placement-resolver";
-import { useEditorStore } from "@/stores/editor-store";
+} from '@/editor-core/descriptors/registry'
+import { createSelectableElement } from '@/editor-core/document/types'
+import { resolvePlacement } from '@/editor-core/utils/placement-resolver'
+import { useEditorStore } from '@/stores/editor-store'
 import {
   buildAssetNodeProps,
   DESIGNER_ASSET_DRAG_MIME,
   parseAssetDragPayload,
   resolveAssetComponentType,
-} from "@/ui/shared/helpers/asset-drag";
-import { endDrag, useDragState } from "./composables/use-drag-state";
-import { canvasZoomKey } from "./injection-keys";
-import { createMarqueeClickGuard } from "./interaction/marquee-click-guard";
+} from '@/ui/shared/helpers/asset-drag'
+import { endDrag, useDragState } from './composables/use-drag-state'
+import { canvasZoomKey } from './injection-keys'
+import { createMarqueeClickGuard } from './interaction/marquee-click-guard'
 import {
   CANVAS_OUTSIDE_MARQUEE_START_EVENT,
   shouldClearSelectionOnMarqueeUp,
   shouldStartMarqueeFromCanvasPointerDown,
-} from "./interaction/marquee-interaction";
-import { collectMarqueeNodeIds } from "./interaction/marquee-selection";
-import NodeRenderer from "./NodeRenderer.vue";
+} from './interaction/marquee-interaction'
+import { collectMarqueeNodeIds } from './interaction/marquee-selection'
+import NodeRenderer from './NodeRenderer.vue'
 
 interface MarqueeState {
-  active: boolean;
-  moved: boolean;
-  startX: number;
-  startY: number;
-  currentX: number;
-  currentY: number;
-  modifiers: { ctrl: boolean; meta: boolean; shift: boolean };
-  startSource: MarqueeStartSource;
+  active: boolean
+  moved: boolean
+  startX: number
+  startY: number
+  currentX: number
+  currentY: number
+  modifiers: { ctrl: boolean; meta: boolean; shift: boolean }
+  startSource: MarqueeStartSource
 }
 
-const editorStore = useEditorStore();
+const editorStore = useEditorStore()
 const {
   doc,
   currentPage,
@@ -73,14 +73,14 @@ const {
   error,
   canvasMousePos,
   hoveredNodeType,
-} = storeToRefs(editorStore);
-const canvasZoom = inject(canvasZoomKey, ref(1));
-const dragState = useDragState();
-const marqueeClickGuard = createMarqueeClickGuard();
-const designCanvasRef = ref<HTMLElement | null>(null);
+} = storeToRefs(editorStore)
+const canvasZoom = inject(canvasZoomKey, ref(1))
+const dragState = useDragState()
+const marqueeClickGuard = createMarqueeClickGuard()
+const designCanvasRef = ref<HTMLElement | null>(null)
 
 /** 当前页面根节点 ID */
-const rootNodeId = computed(() => currentPage.value?.rootNodeId || "");
+const rootNodeId = computed(() => currentPage.value?.rootNodeId || '')
 /** 框选状态：是否激活、是否移动、起止坐标、修饰键 */
 const marquee = ref<MarqueeState>({
   active: false,
@@ -90,38 +90,38 @@ const marquee = ref<MarqueeState>({
   currentX: 0,
   currentY: 0,
   modifiers: { ctrl: false, meta: false, shift: false },
-  startSource: "insideCanvas",
-});
+  startSource: 'insideCanvas',
+})
 const marqueeStyle = computed(() => {
-  const left = Math.min(marquee.value.startX, marquee.value.currentX);
-  const top = Math.min(marquee.value.startY, marquee.value.currentY);
-  const width = Math.abs(marquee.value.currentX - marquee.value.startX);
-  const height = Math.abs(marquee.value.currentY - marquee.value.startY);
+  const left = Math.min(marquee.value.startX, marquee.value.currentX)
+  const top = Math.min(marquee.value.startY, marquee.value.currentY)
+  const width = Math.abs(marquee.value.currentX - marquee.value.startX)
+  const height = Math.abs(marquee.value.currentY - marquee.value.startY)
   return {
     left: `${left}px`,
     top: `${top}px`,
     width: `${width}px`,
     height: `${height}px`,
-  };
-});
+  }
+})
 
 const hasContent = computed(() => {
-  void docVersion.value;
-  if (!doc.value || !currentPage.value) return false;
-  const root = doc.value.getNode(currentPage.value.rootNodeId);
-  return (root?.children || []).length > 0;
-});
+  void docVersion.value
+  if (!doc.value || !currentPage.value) return false
+  const root = doc.value.getNode(currentPage.value.rootNodeId)
+  return (root?.children || []).length > 0
+})
 
 /** 强制刷新画布（触发 `docVersion` 变更） */
 function handleForceRefresh(): void {
-  docVersion.value += 1;
+  docVersion.value += 1
 }
 
 /** 重置框选状态 */
 function resetMarquee(): void {
-  marquee.value.active = false;
-  marquee.value.moved = false;
-  marquee.value.startSource = "insideCanvas";
+  marquee.value.active = false
+  marquee.value.moved = false
+  marquee.value.startSource = 'insideCanvas'
 }
 
 /**
@@ -134,36 +134,36 @@ function resetMarquee(): void {
  * }} payload - 框选起点参数
  */
 function startMarquee(payload: {
-  clientX: number;
-  clientY: number;
-  modifiers: MarqueeModifiers;
-  startSource: MarqueeStartSource;
+  clientX: number
+  clientY: number
+  modifiers: MarqueeModifiers
+  startSource: MarqueeStartSource
 }): void {
-  marquee.value.active = true;
-  marquee.value.moved = false;
-  marquee.value.startX = payload.clientX;
-  marquee.value.startY = payload.clientY;
-  marquee.value.currentX = payload.clientX;
-  marquee.value.currentY = payload.clientY;
-  marquee.value.modifiers = payload.modifiers;
-  marquee.value.startSource = payload.startSource;
-  document.addEventListener("pointermove", handleMarqueeMove);
-  document.addEventListener("pointerup", handleMarqueeUp, { once: false });
+  marquee.value.active = true
+  marquee.value.moved = false
+  marquee.value.startX = payload.clientX
+  marquee.value.startY = payload.clientY
+  marquee.value.currentX = payload.clientX
+  marquee.value.currentY = payload.clientY
+  marquee.value.modifiers = payload.modifiers
+  marquee.value.startSource = payload.startSource
+  document.addEventListener('pointermove', handleMarqueeMove)
+  document.addEventListener('pointerup', handleMarqueeUp, { once: false })
 }
 
 /** 获取框选矩形的 left/top/right/bottom/width/height */
 function getMarqueeRect(): {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
-  width: number;
-  height: number;
+  left: number
+  top: number
+  right: number
+  bottom: number
+  width: number
+  height: number
 } {
-  const left = Math.min(marquee.value.startX, marquee.value.currentX);
-  const top = Math.min(marquee.value.startY, marquee.value.currentY);
-  const right = Math.max(marquee.value.startX, marquee.value.currentX);
-  const bottom = Math.max(marquee.value.startY, marquee.value.currentY);
+  const left = Math.min(marquee.value.startX, marquee.value.currentX)
+  const top = Math.min(marquee.value.startY, marquee.value.currentY)
+  const right = Math.max(marquee.value.startX, marquee.value.currentX)
+  const bottom = Math.max(marquee.value.startY, marquee.value.currentY)
   return {
     left,
     top,
@@ -171,15 +171,15 @@ function getMarqueeRect(): {
     bottom,
     width: right - left,
     height: bottom - top,
-  };
+  }
 }
 
 /** 收集框选区域内相交的节点（支持单容器穿透） */
 function collectIntersectedElements(): ReturnType<typeof createSelectableElement>[] {
-  const rect = getMarqueeRect();
-  if (rect.width < 2 && rect.height < 2) return [];
-  const rootId = rootNodeId.value;
-  if (!rootId || !doc.value) return [];
+  const rect = getMarqueeRect()
+  if (rect.width < 2 && rect.height < 2) return []
+  const rootId = rootNodeId.value
+  if (!rootId || !doc.value) return []
   const hitNodeIds = collectMarqueeNodeIds({
     rootId,
     marqueeRect: {
@@ -190,80 +190,80 @@ function collectIntersectedElements(): ReturnType<typeof createSelectableElement
     },
     getNode: (id) => doc.value?.getNode?.(id),
     getRect: (id) => {
-      const el = document.querySelector(`[data-node-id="${id}"]`);
-      if (!el) return null;
-      return el.getBoundingClientRect();
+      const el = document.querySelector(`[data-node-id="${id}"]`)
+      if (!el) return null
+      return el.getBoundingClientRect()
     },
     isContainer: (type) => isContainerType(type),
-  });
+  })
 
-  return hitNodeIds.map((id) => createSelectableElement("node", id));
+  return hitNodeIds.map((id) => createSelectableElement('node', id))
 }
 
 /** 框选过程中更新当前坐标 */
 function handleMarqueeMove(event: PointerEvent): void {
-  if (!marquee.value.active) return;
-  marquee.value.currentX = event.clientX;
-  marquee.value.currentY = event.clientY;
+  if (!marquee.value.active) return
+  marquee.value.currentX = event.clientX
+  marquee.value.currentY = event.clientY
   if (
     Math.abs(marquee.value.currentX - marquee.value.startX) > 3 ||
     Math.abs(marquee.value.currentY - marquee.value.startY) > 3
   ) {
-    marquee.value.moved = true;
+    marquee.value.moved = true
   }
 }
 
 /** 框选结束：应用选中结果或点击选中根节点 */
 function handleMarqueeUp(): void {
-  if (!marquee.value.active) return;
-  const moved = marquee.value.moved;
-  const modifiers = marquee.value.modifiers;
-  const startSource = marquee.value.startSource;
-  const rootId = rootNodeId.value;
-  resetMarquee();
-  document.removeEventListener("pointermove", handleMarqueeMove);
-  document.removeEventListener("pointerup", handleMarqueeUp);
+  if (!marquee.value.active) return
+  const moved = marquee.value.moved
+  const modifiers = marquee.value.modifiers
+  const startSource = marquee.value.startSource
+  const rootId = rootNodeId.value
+  resetMarquee()
+  document.removeEventListener('pointermove', handleMarqueeMove)
+  document.removeEventListener('pointerup', handleMarqueeUp)
 
-  const sel = selection.value;
-  if (!sel) return;
+  const sel = selection.value
+  if (!sel) return
 
   if (moved) {
     // 框选释放后浏览器通常会再派发一次 click，需要吞掉避免覆盖多选结果
-    marqueeClickGuard.markShouldSuppressNextClick();
-    const elements = collectIntersectedElements();
+    marqueeClickGuard.markShouldSuppressNextClick()
+    const elements = collectIntersectedElements()
     if (elements.length) {
       if (modifiers.ctrl || modifiers.meta || modifiers.shift) {
-        elements.forEach((el) => sel.addToSelection(el));
+        elements.forEach((el) => sel.addToSelection(el))
       } else {
-        sel.selectMultiple(elements);
+        sel.selectMultiple(elements)
       }
-      return;
+      return
     }
     if (!(modifiers.ctrl || modifiers.meta || modifiers.shift)) {
-      sel.clearSelection();
+      sel.clearSelection()
     }
-    return;
+    return
   }
 
   if (shouldClearSelectionOnMarqueeUp({ startSource, moved })) {
-    sel.clearSelection();
-    return;
+    sel.clearSelection()
+    return
   }
 
   if (!rootId) {
-    sel.clearSelection();
-    return;
+    sel.clearSelection()
+    return
   }
-  const element = createSelectableElement("node", rootId);
+  const element = createSelectableElement('node', rootId)
   if (modifiers.shift) {
-    sel.selectRange(element);
-    return;
+    sel.selectRange(element)
+    return
   }
   if (modifiers.meta || modifiers.ctrl) {
-    sel.toggleSelect(element);
-    return;
+    sel.toggleSelect(element)
+    return
   }
-  sel.select(element);
+  sel.select(element)
 }
 
 /**
@@ -271,9 +271,9 @@ function handleMarqueeUp(): void {
  * @param {MouseEvent} event - 鼠标事件
  */
 function handleDocumentClickCapture(event: MouseEvent): void {
-  if (!marqueeClickGuard.consumeShouldSuppressNextClick()) return;
-  event.preventDefault();
-  event.stopPropagation();
+  if (!marqueeClickGuard.consumeShouldSuppressNextClick()) return
+  event.preventDefault()
+  event.stopPropagation()
 }
 
 /**
@@ -281,31 +281,31 @@ function handleDocumentClickCapture(event: MouseEvent): void {
  * @param {PointerEvent | MouseEvent} event - 鼠标事件
  */
 function handleCanvasPointerDown(event: PointerEvent): void {
-  marqueeClickGuard.reset();
-  if (!selection.value) return;
-  if (event.pointerType === "mouse" && event.button !== 0) return;
+  marqueeClickGuard.reset()
+  if (!selection.value) return
+  if (event.pointerType === 'mouse' && event.button !== 0) return
   if (event.currentTarget instanceof HTMLElement) {
-    event.currentTarget.focus({ preventScroll: true });
+    event.currentTarget.focus({ preventScroll: true })
   }
   if (!(event.target instanceof Element)) {
-    closeContextMenu();
-    selection.value?.clearSelection();
-    return;
+    closeContextMenu()
+    selection.value?.clearSelection()
+    return
   }
 
-  closeContextMenu();
+  closeContextMenu()
 
-  const nodeElement = event.target.closest(".designer-node");
+  const nodeElement = event.target.closest('.designer-node')
   const shouldStartMarquee = shouldStartMarqueeFromCanvasPointerDown({
     hasNodeElement: Boolean(nodeElement),
-    isRootNode: Boolean(nodeElement?.classList.contains("is-root")),
-  });
+    isRootNode: Boolean(nodeElement?.classList.contains('is-root')),
+  })
   if (!shouldStartMarquee) {
-    return;
+    return
   }
   // 启动框选后阻断事件下发到节点层，避免节点拖拽逻辑抢占同一次 pointer 序列
-  event.preventDefault();
-  event.stopPropagation();
+  event.preventDefault()
+  event.stopPropagation()
   startMarquee({
     clientX: event.clientX,
     clientY: event.clientY,
@@ -314,8 +314,8 @@ function handleCanvasPointerDown(event: PointerEvent): void {
       meta: Boolean(event.metaKey),
       shift: Boolean(event.shiftKey),
     },
-    startSource: "insideCanvas",
-  });
+    startSource: 'insideCanvas',
+  })
 }
 
 /**
@@ -323,19 +323,19 @@ function handleCanvasPointerDown(event: PointerEvent): void {
  * @param {Event} event - 自定义事件
  */
 function handleOutsideMarqueeStart(event: Event): void {
-  marqueeClickGuard.reset();
-  if (!selection.value) return;
-  const customEvent = event as CustomEvent<OutsideMarqueeStartDetail>;
-  const detail = customEvent.detail;
-  if (!detail) return;
-  closeContextMenu();
-  designCanvasRef.value?.focus?.({ preventScroll: true });
+  marqueeClickGuard.reset()
+  if (!selection.value) return
+  const customEvent = event as CustomEvent<OutsideMarqueeStartDetail>
+  const detail = customEvent.detail
+  if (!detail) return
+  closeContextMenu()
+  designCanvasRef.value?.focus?.({ preventScroll: true })
   startMarquee({
     clientX: detail.clientX,
     clientY: detail.clientY,
     modifiers: detail.modifiers,
-    startSource: "outsideCanvas",
-  });
+    startSource: 'outsideCanvas',
+  })
 }
 
 /**
@@ -343,37 +343,37 @@ function handleOutsideMarqueeStart(event: Event): void {
  * @param {PointerEvent} event - 指针事件
  */
 function handleCanvasPointerMove(event: PointerEvent): void {
-  const el = event.currentTarget;
-  if (!el || !(el instanceof Element)) return;
-  const rect = el.getBoundingClientRect();
-  const zoomValue = Number(canvasZoom?.value) || 1;
+  const el = event.currentTarget
+  if (!el || !(el instanceof Element)) return
+  const rect = el.getBoundingClientRect()
+  const zoomValue = Number(canvasZoom?.value) || 1
   canvasMousePos.value = {
     x: (event.clientX - rect.left) / zoomValue,
     y: (event.clientY - rect.top) / zoomValue,
-  };
+  }
   // 检测悬停节点类型（用于底部状态栏显示）
-  const hitEl = document.elementFromPoint(event.clientX, event.clientY);
-  const nodeEl = hitEl?.closest?.("[data-node-type]");
-  hoveredNodeType.value = nodeEl?.getAttribute?.("data-node-type") || "";
+  const hitEl = document.elementFromPoint(event.clientX, event.clientY)
+  const nodeEl = hitEl?.closest?.('[data-node-type]')
+  hoveredNodeType.value = nodeEl?.getAttribute?.('data-node-type') || ''
 }
 
 /**
  * 鼠标离开画布时清空坐标与悬停信息
  */
 function handleCanvasPointerLeave(): void {
-  canvasMousePos.value = null;
-  hoveredNodeType.value = "";
+  canvasMousePos.value = null
+  hoveredNodeType.value = ''
 }
 
 /** 右键菜单显示状态与坐标 */
-const contextMenuVisible = ref(false);
-const contextMenuX = ref(0);
-const contextMenuY = ref(0);
+const contextMenuVisible = ref(false)
+const contextMenuX = ref(0)
+const contextMenuY = ref(0)
 
 const hasSelection = computed(() => {
-  void selectionVersion.value;
-  return (selection.value?.getSelectedElements?.() ?? []).length > 0;
-});
+  void selectionVersion.value
+  return (selection.value?.getSelectedElements?.() ?? []).length > 0
+})
 
 /** 区域布局里拖入普通组件时，提前按区域坐标计算落点，供自动内容区使用。 */
 function resolvePlainRegionDropPosition(
@@ -381,86 +381,86 @@ function resolvePlainRegionDropPosition(
   parentId: string,
   childType: string,
 ): { x: number; y: number } | null {
-  const parentNode = doc.value?.getNode?.(parentId);
+  const parentNode = doc.value?.getNode?.(parentId)
   if (
     !parentNode ||
     !isRegionType(parentNode.type) ||
-    parentNode.type === "ElCol" ||
-    childType === "FreeContainer" ||
+    parentNode.type === 'ElCol' ||
+    childType === 'FreeContainer' ||
     isLayoutContainerType(childType) ||
     isContainerType(childType)
   ) {
-    return null;
+    return null
   }
 
   const targetElement = document.querySelector(
     `[data-node-id="${CSS.escape(parentId)}"]`,
-  ) as HTMLElement | null;
-  if (!targetElement) return null;
+  ) as HTMLElement | null
+  if (!targetElement) return null
 
-  const zoomValue = Number(canvasZoom?.value) || 1;
-  const rect = targetElement.getBoundingClientRect();
-  const defaultSize = getDefaultSize(childType) ?? { width: 120, height: 40 };
-  const rawX = (event.clientX - rect.left) / zoomValue;
-  const rawY = (event.clientY - rect.top) / zoomValue;
-  const maxX = Math.max(0, rect.width / zoomValue - defaultSize.width);
-  const maxY = Math.max(0, rect.height / zoomValue - defaultSize.height);
+  const zoomValue = Number(canvasZoom?.value) || 1
+  const rect = targetElement.getBoundingClientRect()
+  const defaultSize = getDefaultSize(childType) ?? { width: 120, height: 40 }
+  const rawX = (event.clientX - rect.left) / zoomValue
+  const rawY = (event.clientY - rect.top) / zoomValue
+  const maxX = Math.max(0, rect.width / zoomValue - defaultSize.width)
+  const maxY = Math.max(0, rect.height / zoomValue - defaultSize.height)
 
   return {
     x: Math.round(Math.min(Math.max(rawX, 0), maxX)),
     y: Math.round(Math.min(Math.max(rawY, 0), maxY)),
-  };
+  }
 }
 
 const selectedLockTargets = computed(() => {
-  void selectionVersion.value;
-  void docVersion.value;
-  const rootId = currentPage.value?.rootNodeId;
+  void selectionVersion.value
+  void docVersion.value
+  const rootId = currentPage.value?.rootNodeId
   return (selection.value?.getSelectedElements?.() ?? [])
-    .filter((item) => item.kind === "node" && item.id !== rootId)
+    .filter((item) => item.kind === 'node' && item.id !== rootId)
     .map((item) => doc.value?.getNode?.(item.id))
-    .filter((item): item is NonNullable<typeof item> => Boolean(item));
-});
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+})
 
-const canToggleSelectedLock = computed(() => selectedLockTargets.value.length > 0);
+const canToggleSelectedLock = computed(() => selectedLockTargets.value.length > 0)
 
 const selectedNodesAllLocked = computed(() => {
-  const targets = selectedLockTargets.value;
-  return targets.length > 0 && targets.every((item) => Boolean(item.locked));
-});
+  const targets = selectedLockTargets.value
+  return targets.length > 0 && targets.every((item) => Boolean(item.locked))
+})
 
 const isElColSelected = computed(() => {
-  void selectionVersion.value;
-  const primary = selection.value?.getPrimarySelection?.();
-  if (primary?.type === "ElCol") return true;
-  const selectedNodes = selection.value?.getSelectedNodes?.() || [];
-  return selectedNodes.some((node) => node?.type === "ElCol");
-});
+  void selectionVersion.value
+  const primary = selection.value?.getPrimarySelection?.()
+  if (primary?.type === 'ElCol') return true
+  const selectedNodes = selection.value?.getSelectedNodes?.() || []
+  return selectedNodes.some((node) => node?.type === 'ElCol')
+})
 const isElLayoutRowSelected = computed(() => {
-  void selectionVersion.value;
-  const primary = selection.value?.getPrimarySelection?.();
-  if (primary?.type === "ElLayoutRow") return true;
-  const selectedNodes = selection.value?.getSelectedNodes?.() || [];
-  return selectedNodes.some((node) => node?.type === "ElLayoutRow");
-});
+  void selectionVersion.value
+  const primary = selection.value?.getPrimarySelection?.()
+  if (primary?.type === 'ElLayoutRow') return true
+  const selectedNodes = selection.value?.getSelectedNodes?.() || []
+  return selectedNodes.some((node) => node?.type === 'ElLayoutRow')
+})
 
-const canUndo = computed(() => history.value?.canUndo?.() || false);
-const canRedo = computed(() => history.value?.canRedo?.() || false);
+const canUndo = computed(() => history.value?.canUndo?.() || false)
+const canRedo = computed(() => history.value?.canRedo?.() || false)
 
 /**
  * 处理画布空白区域放置组件
  * @param {DragEvent} event - 拖拽事件
  */
 function handleCanvasDrop(event: DragEvent): void {
-  if (!currentPage.value?.rootNodeId) return;
-  const assetPayload = parseAssetDragPayload(event.dataTransfer?.getData(DESIGNER_ASSET_DRAG_MIME));
+  if (!currentPage.value?.rootNodeId) return
+  const assetPayload = parseAssetDragPayload(event.dataTransfer?.getData(DESIGNER_ASSET_DRAG_MIME))
 
   const payload =
-    event.dataTransfer?.getData("application/x-designer-component") ||
-    event.dataTransfer?.getData("application/x-designer-node") ||
-    event.dataTransfer?.getData("text/plain");
-  const fallbackType = dragState.dragType || "";
-  const assetComponentType = assetPayload ? resolveAssetComponentType(assetPayload) : "";
+    event.dataTransfer?.getData('application/x-designer-component') ||
+    event.dataTransfer?.getData('application/x-designer-node') ||
+    event.dataTransfer?.getData('text/plain')
+  const fallbackType = dragState.dragType || ''
+  const assetComponentType = assetPayload ? resolveAssetComponentType(assetPayload) : ''
 
   /**
    * 将资源拖拽 payload 写入新建节点属性。
@@ -471,38 +471,38 @@ function handleCanvasDrop(event: DragEvent): void {
     insertedNode: ReturnType<typeof editorStore.insertNode>,
     insertedType: string,
   ): void => {
-    if (!insertedNode || !assetPayload) return;
+    if (!insertedNode || !assetPayload) return
     const componentType =
-      insertedType === "Image" ? "Image" : insertedType === "Video" ? "Video" : "DownloadLink";
-    const patchProps = buildAssetNodeProps(assetPayload, componentType);
-    if (!patchProps || Object.keys(patchProps).length === 0) return;
+      insertedType === 'Image' ? 'Image' : insertedType === 'Video' ? 'Video' : 'DownloadLink'
+    const patchProps = buildAssetNodeProps(assetPayload, componentType)
+    if (!patchProps || Object.keys(patchProps).length === 0) return
     editorStore.updateNode(insertedNode.id, {
       props: { ...(insertedNode.props || {}), ...patchProps },
-    });
-  };
+    })
+  }
 
-  let componentType = "";
+  let componentType = ''
   if (payload) {
     try {
-      const parsed = JSON.parse(payload);
-      componentType = parsed.type || "";
+      const parsed = JSON.parse(payload)
+      componentType = parsed.type || ''
     } catch {
-      componentType = payload;
+      componentType = payload
     }
   }
 
   if (!componentType) {
-    componentType = fallbackType;
+    componentType = fallbackType
   }
   if (!componentType) {
-    componentType = assetComponentType;
+    componentType = assetComponentType
   }
-  if (!componentType) return;
+  if (!componentType) return
 
-  const canvasEl = event.currentTarget;
-  if (!(canvasEl instanceof HTMLElement)) return;
+  const canvasEl = event.currentTarget
+  if (!(canvasEl instanceof HTMLElement)) return
 
-  const zoomValue = Number(canvasZoom?.value) || 1;
+  const zoomValue = Number(canvasZoom?.value) || 1
 
   // 使用 placementResolver 统一解析放置目标
   const resolution = resolvePlacement(
@@ -511,105 +511,105 @@ function handleCanvasDrop(event: DragEvent): void {
     doc.value!,
     { rootNodeId: currentPage.value.rootNodeId },
     zoomValue,
-  );
+  )
 
-  const { parentId, index, dropPosition, containerType } = resolution;
+  const { parentId, index, dropPosition, containerType } = resolution
 
   // 特殊处理 ElLayout 容器的自动插入行/列逻辑（保留原有规则）
   const insertIntoElLayout = (layoutId: string): boolean => {
-    const layoutNode = doc.value?.getNode?.(layoutId);
-    if (!layoutNode || layoutNode.type !== "ElLayout") return false;
+    const layoutNode = doc.value?.getNode?.(layoutId)
+    if (!layoutNode || layoutNode.type !== 'ElLayout') return false
     const rowCount = (layoutNode.children || []).filter((childId: string) => {
-      const childNode = doc.value?.getNode?.(childId);
-      return childNode?.type === "ElLayoutRow";
-    }).length;
-    const rowNode = editorStore.insertNode("ElLayoutRow", layoutId, rowCount, {
+      const childNode = doc.value?.getNode?.(childId)
+      return childNode?.type === 'ElLayoutRow'
+    }).length
+    const rowNode = editorStore.insertNode('ElLayoutRow', layoutId, rowCount, {
       autoSelectInserted: false,
-    });
-    if (!rowNode) return false;
+    })
+    if (!rowNode) return false
 
-    const latestLayout = doc.value?.getNode?.(layoutId);
-    const nextRows = Math.max(1, rowCount + 1);
-    const prevRows = latestLayout?.props?.rows as number | undefined;
+    const latestLayout = doc.value?.getNode?.(layoutId)
+    const nextRows = Math.max(1, rowCount + 1)
+    const prevRows = latestLayout?.props?.rows as number | undefined
     if ((prevRows || 0) !== nextRows) {
       editorStore.updateNode(layoutId, {
         props: {
           ...(latestLayout?.props || layoutNode.props || {}),
           rows: nextRows,
         },
-      });
+      })
     }
 
     editorStore.updateNode(rowNode.id, {
       props: { ...(rowNode.props || {}), columns: 1 },
-    });
-    const latestRow = doc.value?.getNode?.(rowNode.id);
+    })
+    const latestRow = doc.value?.getNode?.(rowNode.id)
     const colIds = (latestRow?.children || []).filter((childId: string) => {
-      const childNode = doc.value?.getNode?.(childId);
-      return childNode?.type === "ElCol";
-    });
-    let colId = colIds[0];
+      const childNode = doc.value?.getNode?.(childId)
+      return childNode?.type === 'ElCol'
+    })
+    let colId = colIds[0]
     if (!colId) {
-      const colNode = editorStore.insertNode("ElCol", rowNode.id, 0, {
+      const colNode = editorStore.insertNode('ElCol', rowNode.id, 0, {
         autoSelectInserted: false,
-      });
-      if (!colNode) return false;
-      colId = colNode.id;
+      })
+      if (!colNode) return false
+      colId = colNode.id
     }
     const inserted = editorStore.insertNode(componentType, colId, undefined, {
       autoSelectInserted: false,
-    });
-    applyAssetPayloadToInsertedNode(inserted, componentType);
-    return Boolean(inserted);
-  };
+    })
+    applyAssetPayloadToInsertedNode(inserted, componentType)
+    return Boolean(inserted)
+  }
 
-  let didInsert = false;
+  let didInsert = false
 
   // ElLayout 需要特殊处理：自动创建行/列
-  if (containerType === "flex" && parentId) {
-    const parentNode = doc.value?.getNode?.(parentId);
-    if (parentNode?.type === "ElLayout") {
-      didInsert = insertIntoElLayout(parentId);
+  if (containerType === 'flex' && parentId) {
+    const parentNode = doc.value?.getNode?.(parentId)
+    if (parentNode?.type === 'ElLayout') {
+      didInsert = insertIntoElLayout(parentId)
     }
   }
 
   // 标准放置逻辑：使用 placementResolver 返回的 parentId、index、dropPosition
   if (!didInsert && parentId) {
     // 校验 insertIndex 有效性（D-05: append fallback）
-    const parentNode = doc.value?.getNode?.(parentId);
-    const siblings = parentNode?.children || [];
+    const parentNode = doc.value?.getNode?.(parentId)
+    const siblings = parentNode?.children || []
     const validIndex =
-      index < 0 || index > siblings.length || !siblings[index] ? siblings.length : index;
+      index < 0 || index > siblings.length || !siblings[index] ? siblings.length : index
 
     // 构建插入参数
     const insertOptions: {
-      dropPosition?: { x: number; y: number };
-      autoSelectInserted: false;
-    } = { autoSelectInserted: false };
+      dropPosition?: { x: number; y: number }
+      autoSelectInserted: false
+    } = { autoSelectInserted: false }
     if (dropPosition) {
       insertOptions.dropPosition = {
         x: Math.max(0, Math.round(dropPosition.x)),
         y: Math.max(0, Math.round(dropPosition.y)),
-      };
+      }
     } else {
-      const regionDropPosition = resolvePlainRegionDropPosition(event, parentId, componentType);
+      const regionDropPosition = resolvePlainRegionDropPosition(event, parentId, componentType)
       if (regionDropPosition) {
-        insertOptions.dropPosition = regionDropPosition;
+        insertOptions.dropPosition = regionDropPosition
       }
     }
 
-    const inserted = editorStore.insertNode(componentType, parentId, validIndex, insertOptions);
-    applyAssetPayloadToInsertedNode(inserted, componentType);
-    didInsert = Boolean(inserted);
+    const inserted = editorStore.insertNode(componentType, parentId, validIndex, insertOptions)
+    applyAssetPayloadToInsertedNode(inserted, componentType)
+    didInsert = Boolean(inserted)
   }
 
-  endDrag();
+  endDrag()
   if (didInsert) {
-    event.stopPropagation();
-    return;
+    event.stopPropagation()
+    return
   }
-  const message = String(error.value ?? "插入失败：页面未就绪或处于只读状态");
-  ElMessage.warning(message as never);
+  const message = String(error.value ?? '插入失败：页面未就绪或处于只读状态')
+  ElMessage.warning(message as never)
 }
 
 /**
@@ -620,114 +620,114 @@ function handleCanvasDrop(event: DragEvent): void {
 function showContextMenu(event: MouseEvent, forceShow = true): void {
   // 如果菜单已经显示，再次右键则关闭
   if (contextMenuVisible.value) {
-    closeContextMenu();
-    return;
+    closeContextMenu()
+    return
   }
 
   // 只有选中组件时才显示右键菜单
   // forceShow 为 true 时表示组件已由 NodeRenderer 选中
   if (!forceShow && !hasSelection.value) {
-    return;
+    return
   }
 
-  contextMenuX.value = event.clientX;
-  contextMenuY.value = event.clientY;
-  contextMenuVisible.value = true;
+  contextMenuX.value = event.clientX
+  contextMenuY.value = event.clientY
+  contextMenuVisible.value = true
 }
 
 /**
  * 关闭右键菜单
  */
 function closeContextMenu(): void {
-  contextMenuVisible.value = false;
+  contextMenuVisible.value = false
 }
 
-provide("showContextMenu", showContextMenu);
+provide('showContextMenu', showContextMenu)
 /**
  * 处理菜单项点击
  */
 function handleContextMenuClick(): void {
-  closeContextMenu();
+  closeContextMenu()
 }
 
 /**
  * 删除选中节点
  */
 function handleDelete() {
-  editorStore.removeSelectedNodes();
-  closeContextMenu();
+  editorStore.removeSelectedNodes()
+  closeContextMenu()
 }
 
 /**
  * 上移一层
  */
 function handleMoveUp() {
-  editorStore.moveNodeUp();
-  closeContextMenu();
+  editorStore.moveNodeUp()
+  closeContextMenu()
 }
 
 /**
  * 下移一层
  */
 function handleMoveDown() {
-  editorStore.moveNodeDown();
-  closeContextMenu();
+  editorStore.moveNodeDown()
+  closeContextMenu()
 }
 
 /**
  * 置于顶层
  */
 function handleMoveToTop() {
-  editorStore.moveNodeToTop();
-  closeContextMenu();
+  editorStore.moveNodeToTop()
+  closeContextMenu()
 }
 
 /**
  * 置于底层
  */
 function handleMoveToBottom() {
-  editorStore.moveNodeToBottom();
-  closeContextMenu();
+  editorStore.moveNodeToBottom()
+  closeContextMenu()
 }
 
 /**
  * 切换选中节点的位置锁定状态
  */
 function handleToggleSelectedLock() {
-  editorStore.toggleSelectedNodesLock();
-  closeContextMenu();
+  editorStore.toggleSelectedNodesLock()
+  closeContextMenu()
 }
 
 /**
  * 在选中列左侧插入一列
  */
 function handleInsertColLeft() {
-  editorStore.insertElColLeft();
-  closeContextMenu();
+  editorStore.insertElColLeft()
+  closeContextMenu()
 }
 
 /**
  * 在选中列右侧插入一列
  */
 function handleInsertColRight() {
-  editorStore.insertElColRight();
-  closeContextMenu();
+  editorStore.insertElColRight()
+  closeContextMenu()
 }
 
 /**
  * 在选中行上方插入一行
  */
 function handleInsertRowUp() {
-  editorStore.insertElLayoutRowUp();
-  closeContextMenu();
+  editorStore.insertElLayoutRowUp()
+  closeContextMenu()
 }
 
 /**
  * 在选中行下方插入一行
  */
 function handleInsertRowDown() {
-  editorStore.insertElLayoutRowDown();
-  closeContextMenu();
+  editorStore.insertElLayoutRowDown()
+  closeContextMenu()
 }
 
 /**
@@ -735,9 +735,9 @@ function handleInsertRowDown() {
  */
 function handleUndo() {
   if (canUndo.value) {
-    editorStore.undo();
+    editorStore.undo()
   }
-  closeContextMenu();
+  closeContextMenu()
 }
 
 /**
@@ -745,14 +745,14 @@ function handleUndo() {
  */
 function handleRedo() {
   if (canRedo.value) {
-    editorStore.redo();
+    editorStore.redo()
   }
-  closeContextMenu();
+  closeContextMenu()
 }
 
 function handleClickOutside(_event: MouseEvent): void {
   if (contextMenuVisible.value) {
-    closeContextMenu();
+    closeContextMenu()
   }
 }
 
@@ -762,25 +762,25 @@ function handleClickOutside(_event: MouseEvent): void {
  * @returns {boolean} 是否可编辑上下文
  */
 function isEditableInputTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  if (target.isContentEditable) return true;
+  if (!(target instanceof HTMLElement)) return false
+  if (target.isContentEditable) return true
   return Boolean(
     target.closest(
       [
-        "input",
-        "textarea",
-        "select",
+        'input',
+        'textarea',
+        'select',
         '[contenteditable="true"]',
-        ".monaco-editor",
-        ".monaco-editor-container",
-        ".monaco-editor-context-menu",
-        ".el-dialog",
-        ".el-overlay",
-        ".el-select__popper",
-        ".el-picker__popper",
-      ].join(", "),
+        '.monaco-editor',
+        '.monaco-editor-container',
+        '.monaco-editor-context-menu',
+        '.el-dialog',
+        '.el-overlay',
+        '.el-select__popper',
+        '.el-picker__popper',
+      ].join(', '),
     ),
-  );
+  )
 }
 
 /**
@@ -788,158 +788,158 @@ function isEditableInputTarget(target: EventTarget | null): boolean {
  * @param {KeyboardEvent} event - 键盘事件
  */
 function handleGlobalKeyDown(event: KeyboardEvent): void {
-  if (isEditableInputTarget(event.target)) return;
-  if (event.key === "Delete" || event.key === "Backspace") {
-    const selectedElements = selection.value?.getSelectedElements?.() || [];
-    const hasSelectedNode = selectedElements.some((item) => item.kind === "node");
-    if (!hasSelectedNode) return;
-    event.preventDefault();
-    event.stopPropagation();
-    editorStore.removeSelectedNodes();
-    return;
+  if (isEditableInputTarget(event.target)) return
+  if (event.key === 'Delete' || event.key === 'Backspace') {
+    const selectedElements = selection.value?.getSelectedElements?.() || []
+    const hasSelectedNode = selectedElements.some((item) => item.kind === 'node')
+    if (!hasSelectedNode) return
+    event.preventDefault()
+    event.stopPropagation()
+    editorStore.removeSelectedNodes()
+    return
   }
-  if (event.defaultPrevented) return;
-  handleKeyDown(event);
+  if (event.defaultPrevented) return
+  handleKeyDown(event)
 }
 
 onMounted(() => {
-  document.addEventListener("click", handleClickOutside);
-  document.addEventListener("click", handleDocumentClickCapture, true);
+  document.addEventListener('click', handleClickOutside)
+  document.addEventListener('click', handleDocumentClickCapture, true)
   window.addEventListener(
     CANVAS_OUTSIDE_MARQUEE_START_EVENT,
     handleOutsideMarqueeStart as EventListener,
-  );
-  window.addEventListener("designer:force-refresh", handleForceRefresh);
-  window.addEventListener("keydown", handleGlobalKeyDown, true);
-});
+  )
+  window.addEventListener('designer:force-refresh', handleForceRefresh)
+  window.addEventListener('keydown', handleGlobalKeyDown, true)
+})
 
 onBeforeUnmount(() => {
-  document.removeEventListener("click", handleClickOutside);
-  document.removeEventListener("click", handleDocumentClickCapture, true);
+  document.removeEventListener('click', handleClickOutside)
+  document.removeEventListener('click', handleDocumentClickCapture, true)
   window.removeEventListener(
     CANVAS_OUTSIDE_MARQUEE_START_EVENT,
     handleOutsideMarqueeStart as EventListener,
-  );
-  window.removeEventListener("designer:force-refresh", handleForceRefresh);
-  window.removeEventListener("keydown", handleGlobalKeyDown, true);
-  document.removeEventListener("pointermove", handleMarqueeMove);
-  document.removeEventListener("pointerup", handleMarqueeUp);
-});
+  )
+  window.removeEventListener('designer:force-refresh', handleForceRefresh)
+  window.removeEventListener('keydown', handleGlobalKeyDown, true)
+  document.removeEventListener('pointermove', handleMarqueeMove)
+  document.removeEventListener('pointerup', handleMarqueeUp)
+})
 
 /**
  * 处理键盘事件
  * @param {KeyboardEvent} event - 键盘事件
  */
 function handleKeyDown(event: KeyboardEvent): void {
-  if (isEditableInputTarget(event.target)) return;
+  if (isEditableInputTarget(event.target)) return
 
   // 方向键移动选中节点，Shift 微调 1px
-  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
-    event.preventDefault();
-    const step = event.shiftKey ? 1 : 10;
-    const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
-    const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
-    editorStore.moveSelectedByDelta(dx, dy);
-    return;
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+    event.preventDefault()
+    const step = event.shiftKey ? 1 : 10
+    const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0
+    const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0
+    editorStore.moveSelectedByDelta(dx, dy)
+    return
   }
 
   // Delete / Backspace 删除选中节点
-  if (event.key === "Delete" || event.key === "Backspace") {
-    event.preventDefault();
-    editorStore.removeSelectedNodes();
-    return;
+  if (event.key === 'Delete' || event.key === 'Backspace') {
+    event.preventDefault()
+    editorStore.removeSelectedNodes()
+    return
   }
 
   // Ctrl+Z / Cmd+Z 撤销
-  if ((event.ctrlKey || event.metaKey) && event.key === "z" && !event.shiftKey) {
-    event.preventDefault();
-    editorStore.undo();
-    return;
+  if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
+    event.preventDefault()
+    editorStore.undo()
+    return
   }
 
   // Ctrl+Shift+Z / Cmd+Shift+Z 重做
-  if ((event.ctrlKey || event.metaKey) && event.key === "z" && event.shiftKey) {
-    event.preventDefault();
-    editorStore.redo();
-    return;
+  if ((event.ctrlKey || event.metaKey) && event.key === 'z' && event.shiftKey) {
+    event.preventDefault()
+    editorStore.redo()
+    return
   }
 
   // Ctrl+Y / Cmd+Y 重做
-  if ((event.ctrlKey || event.metaKey) && event.key === "y") {
-    event.preventDefault();
-    editorStore.redo();
-    return;
+  if ((event.ctrlKey || event.metaKey) && event.key === 'y') {
+    event.preventDefault()
+    editorStore.redo()
+    return
   }
 
   // Ctrl+] 上移图层
-  if ((event.ctrlKey || event.metaKey) && event.key === "]" && !event.shiftKey) {
-    event.preventDefault();
-    editorStore.moveNodeUp();
-    return;
+  if ((event.ctrlKey || event.metaKey) && event.key === ']' && !event.shiftKey) {
+    event.preventDefault()
+    editorStore.moveNodeUp()
+    return
   }
 
   // Ctrl+[ 下移图层
-  if ((event.ctrlKey || event.metaKey) && event.key === "[" && !event.shiftKey) {
-    event.preventDefault();
-    editorStore.moveNodeDown();
-    return;
+  if ((event.ctrlKey || event.metaKey) && event.key === '[' && !event.shiftKey) {
+    event.preventDefault()
+    editorStore.moveNodeDown()
+    return
   }
 
   // Ctrl+Shift+] 置顶
-  if ((event.ctrlKey || event.metaKey) && event.key === "]" && event.shiftKey) {
-    event.preventDefault();
-    editorStore.moveNodeToTop();
-    return;
+  if ((event.ctrlKey || event.metaKey) && event.key === ']' && event.shiftKey) {
+    event.preventDefault()
+    editorStore.moveNodeToTop()
+    return
   }
 
   // Ctrl+Shift+[ 置底
-  if ((event.ctrlKey || event.metaKey) && event.key === "[" && event.shiftKey) {
-    event.preventDefault();
-    editorStore.moveNodeToBottom();
-    return;
+  if ((event.ctrlKey || event.metaKey) && event.key === '[' && event.shiftKey) {
+    event.preventDefault()
+    editorStore.moveNodeToBottom()
+    return
   }
 
   // Ctrl+H 切换显示/隐藏
-  if ((event.ctrlKey || event.metaKey) && event.key === "h") {
-    event.preventDefault();
-    const primary = selection.value?.getPrimaryElement();
-    if (primary && primary.kind === "node") {
-      editorStore.toggleNodeVisibility(primary.id);
+  if ((event.ctrlKey || event.metaKey) && event.key === 'h') {
+    event.preventDefault()
+    const primary = selection.value?.getPrimaryElement()
+    if (primary && primary.kind === 'node') {
+      editorStore.toggleNodeVisibility(primary.id)
     }
-    return;
+    return
   }
 
   // Ctrl+L 切换锁定/解锁
-  if ((event.ctrlKey || event.metaKey) && event.key === "l") {
-    event.preventDefault();
-    editorStore.toggleSelectedNodesLock();
-    return;
+  if ((event.ctrlKey || event.metaKey) && event.key === 'l') {
+    event.preventDefault()
+    editorStore.toggleSelectedNodesLock()
+    return
   }
 
   // Ctrl+C 复制
-  if ((event.ctrlKey || event.metaKey) && event.key === "c" && !event.shiftKey) {
-    event.preventDefault();
-    editorStore.copyNodes();
-    return;
+  if ((event.ctrlKey || event.metaKey) && event.key === 'c' && !event.shiftKey) {
+    event.preventDefault()
+    editorStore.copyNodes()
+    return
   }
 
   // Ctrl+V 粘贴（粘贴到鼠标位置）
-  if ((event.ctrlKey || event.metaKey) && event.key === "v" && !event.shiftKey) {
-    event.preventDefault();
-    editorStore.pasteNodes(canvasMousePos.value ?? undefined);
-    return;
+  if ((event.ctrlKey || event.metaKey) && event.key === 'v' && !event.shiftKey) {
+    event.preventDefault()
+    editorStore.pasteNodes(canvasMousePos.value ?? undefined)
+    return
   }
 
   // Ctrl+D 复制元素
-  if ((event.ctrlKey || event.metaKey) && event.key === "d") {
-    event.preventDefault();
-    editorStore.duplicateNodes();
-    return;
+  if ((event.ctrlKey || event.metaKey) && event.key === 'd') {
+    event.preventDefault()
+    editorStore.duplicateNodes()
+    return
   }
 
   // Escape 清除选中
-  if (event.key === "Escape") {
-    selection.value?.clearSelection();
+  if (event.key === 'Escape') {
+    selection.value?.clearSelection()
   }
 }
 </script>
@@ -978,7 +978,7 @@ function handleKeyDown(event: KeyboardEvent): void {
         <div v-if="canToggleSelectedLock" class="menu-item" @click="handleToggleSelectedLock">
           <IconLucidePinOff v-if="selectedNodesAllLocked" />
           <IconLucidePin v-else />
-          <span>{{ selectedNodesAllLocked ? "解锁位置" : "锁定位置" }}</span>
+          <span>{{ selectedNodesAllLocked ? '解锁位置' : '锁定位置' }}</span>
           <span class="shortcut">Ctrl+L</span>
         </div>
         <div v-if="hasSelection" class="menu-divider"></div>

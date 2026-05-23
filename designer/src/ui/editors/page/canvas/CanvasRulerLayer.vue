@@ -3,17 +3,17 @@
 -->
 <script setup lang="ts">
 defineProps<{
-  rulerInset: number;
-  rulerXStyle: Record<string, string>;
-  rulerYStyle: Record<string, string>;
-  rulerMarksX: number[];
-  rulerMarksY: number[];
-  pointerXOnRuler: number;
-  pointerYOnRuler: number;
-  zoom: number;
-  translateX: number;
-  translateY: number;
-}>();
+  rulerInset: number
+  rulerXStyle: Record<string, string>
+  rulerYStyle: Record<string, string>
+  rulerMarksX: number[]
+  rulerMarksY: number[]
+  pointerXOnRuler: number
+  pointerYOnRuler: number
+  zoom: number
+  translateX: number
+  translateY: number
+}>()
 </script>
 
 <template>
@@ -117,7 +117,7 @@ defineProps<{
 .ruler-x::after,
 .ruler-y::before,
 .ruler-y::after {
-  content: "";
+  content: '';
   position: absolute;
   pointer-events: none;
 }

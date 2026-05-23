@@ -4,11 +4,11 @@
 
 /** 工程页面列表项（与 Pinia 中 pages 数组元素一致的最小形状） */
 export type PageListEntry = {
-  id: string;
-  name?: string;
-  path?: string;
-  type?: string;
-} & Record<string, unknown>;
+  id: string
+  name?: string
+  path?: string
+  type?: string
+} & Record<string, unknown>
 
 /**
  * 重命名后更新内存中的 pages 列表项
@@ -20,11 +20,11 @@ export function mapPagesAfterRename(
   path: string | undefined,
 ): PageListEntry[] {
   return list.map((page) => {
-    if (page.id !== pageId) return page;
-    const next: PageListEntry = { ...page, name };
+    if (page.id !== pageId) return page
+    const next: PageListEntry = { ...page, name }
     if (path !== undefined) {
-      next.path = path;
+      next.path = path
     }
-    return next;
-  });
+    return next
+  })
 }

@@ -1,4 +1,4 @@
 export default {
-  name: "IconEpList",
+  name: 'IconEpList',
   template: `<span class="icon-ep-list" />`,
-};
+}

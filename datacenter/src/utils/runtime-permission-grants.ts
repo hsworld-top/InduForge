@@ -5,30 +5,30 @@
  */
 
 type RuntimeGrantPayload = {
-  allowRoles?: string[];
-  denyRoles?: string[];
-  inherit?: boolean;
-};
+  allowRoles?: string[]
+  denyRoles?: string[]
+  inherit?: boolean
+}
 
 const normalizeRoleList = (value: string[] | unknown) => {
   if (!Array.isArray(value)) {
-    return [];
+    return []
   }
 
-  const result = [];
-  const seen = new Set();
+  const result = []
+  const seen = new Set()
 
   value.forEach((item) => {
-    const role = String(item ?? "").trim();
+    const role = String(item ?? '').trim()
     if (!role || seen.has(role)) {
-      return;
+      return
     }
-    seen.add(role);
-    result.push(role);
-  });
+    seen.add(role)
+    result.push(role)
+  })
 
-  return result;
-};
+  return result
+}
 
 /**
  * 归一化运行态授权 payload。
@@ -38,15 +38,13 @@ const normalizeRoleList = (value: string[] | unknown) => {
  * @param {object} input - 原始授权输入
  * @returns {{allowRoles: string[], denyRoles: string[], inherit: boolean}}
  */
-export const normalizeRuntimeGrantPayload = (
-  input: RuntimeGrantPayload = {},
-) => {
+export const normalizeRuntimeGrantPayload = (input: RuntimeGrantPayload = {}) => {
   return {
     allowRoles: normalizeRoleList(input?.allowRoles),
     denyRoles: normalizeRoleList(input?.denyRoles),
     inherit: input?.inherit !== false,
-  };
-};
+  }
+}
 
 /**
  * 输出数据点运行态权限摘要。
@@ -55,11 +53,11 @@ export const normalizeRuntimeGrantPayload = (
  * @returns {string}
  */
 export const summarizeRuntimeGrant = (input: RuntimeGrantPayload = {}) => {
-  const value = normalizeRuntimeGrantPayload(input);
-  return `允许 ${value.allowRoles.length} / 拒绝 ${value.denyRoles.length} / ${value.inherit ? "继承" : "不继承"}`;
-};
+  const value = normalizeRuntimeGrantPayload(input)
+  return `允许 ${value.allowRoles.length} / 拒绝 ${value.denyRoles.length} / ${value.inherit ? '继承' : '不继承'}`
+}
 
 export default {
   normalizeRuntimeGrantPayload,
   summarizeRuntimeGrant,
-};
+}

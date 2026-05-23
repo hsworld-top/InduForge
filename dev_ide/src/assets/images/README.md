@@ -5,12 +5,14 @@
 ## 必需图片文件
 
 ### logo.png
+
 - **用途**: 系统Logo，显示在登录页面左侧和页面顶部
 - **建议尺寸**: 200x80px 或更高分辨率
 - **格式**: PNG（支持透明背景）
 - **位置**: `src/assets/images/logo.png`
 
 ### login-bg.jpg
+
 - **用途**: 登录页面背景图片
 - **建议尺寸**: 1920x1080px 或更高分辨率
 - **格式**: JPG/PNG/WebP
@@ -29,7 +31,7 @@
 // 在应用配置中设置图片路径
 const config = {
   logoUrl: '/images/logo.png',
-  loginBackgroundUrl: '/images/login-bg.jpg'
+  loginBackgroundUrl: '/images/login-bg.jpg',
 }
 ```
 

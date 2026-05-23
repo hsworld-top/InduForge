@@ -41,12 +41,7 @@
     <template #footer>
       <div class="alarm-group-dialog__footer">
         <el-button @click="visible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="submitting"
-          :disabled="!canSubmit"
-          @click="submit"
-        >
+        <el-button type="primary" :loading="submitting" :disabled="!canSubmit" @click="submit">
           创建
         </el-button>
       </div>
@@ -55,49 +50,42 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, watch } from "vue";
-import type {
-  AlarmPolicyGroup,
-  AlarmPolicyGroupSave,
-} from "@/api/schemas/alarm.schema";
-import DcDialog from "@/components/shared/DcDialog.vue";
+import { computed, reactive, watch } from 'vue'
+import type { AlarmPolicyGroup, AlarmPolicyGroupSave } from '@/api/schemas/alarm.schema'
+import DcDialog from '@/components/shared/DcDialog.vue'
 
 const props = withDefaults(
   defineProps<{
-    modelValue: boolean;
-    groups: AlarmPolicyGroup[];
-    submitting?: boolean;
-    error?: string;
+    modelValue: boolean
+    groups: AlarmPolicyGroup[]
+    submitting?: boolean
+    error?: string
   }>(),
   {
     submitting: false,
-    error: "",
+    error: '',
   },
-);
+)
 
 const emit = defineEmits<{
-  "update:modelValue": [value: boolean];
-  submit: [payload: AlarmPolicyGroupSave];
-}>();
+  'update:modelValue': [value: boolean]
+  submit: [payload: AlarmPolicyGroupSave]
+}>()
 
 const visible = computed({
   get: () => props.modelValue,
-  set: (value: boolean) => emit("update:modelValue", value),
-});
+  set: (value: boolean) => emit('update:modelValue', value),
+})
 
 const form = reactive<AlarmPolicyGroupSave>({
-  name: "",
+  name: '',
   parentId: null,
-});
+})
 
-const canSubmit = computed(
-  () => form.name.trim().length > 0 && !props.submitting,
-);
+const canSubmit = computed(() => form.name.trim().length > 0 && !props.submitting)
 const isDirty = computed(
-  () =>
-    visible.value &&
-    (form.name.trim().length > 0 || Boolean(form.parentId)),
-);
+  () => visible.value && (form.name.trim().length > 0 || Boolean(form.parentId)),
+)
 
 const flattenGroups = (
   groups: AlarmPolicyGroup[],
@@ -107,31 +95,31 @@ const flattenGroups = (
   groups
     .filter((group) => (group.parentId || null) === parentId)
     .flatMap((group) => [
-      { id: group.id, label: `${"　".repeat(depth)}${group.name}` },
+      { id: group.id, label: `${'　'.repeat(depth)}${group.name}` },
       ...flattenGroups(groups, group.id, depth + 1),
-    ]);
+    ])
 
-const groupOptions = computed(() => flattenGroups(props.groups));
+const groupOptions = computed(() => flattenGroups(props.groups))
 
 function resetForm() {
-  form.name = "";
-  form.parentId = null;
+  form.name = ''
+  form.parentId = null
 }
 
 function submit() {
-  if (!canSubmit.value) return;
-  emit("submit", {
+  if (!canSubmit.value) return
+  emit('submit', {
     name: form.name.trim(),
     parentId: form.parentId || null,
-  });
+  })
 }
 
 watch(
   () => props.modelValue,
   (open) => {
-    if (open) resetForm();
+    if (open) resetForm()
   },
-);
+)
 </script>
 
 <style scoped>

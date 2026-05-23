@@ -1,1 +1,1 @@
-export { default as DockPanel } from "./DockPanel.vue";
+export { default as DockPanel } from './DockPanel.vue'

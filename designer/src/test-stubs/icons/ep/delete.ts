@@ -1,4 +1,4 @@
 export default {
-  name: "IconEpDelete",
+  name: 'IconEpDelete',
   template: `<span class="icon-ep-delete" />`,
-};
+}

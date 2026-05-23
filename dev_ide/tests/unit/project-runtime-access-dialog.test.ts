@@ -70,11 +70,7 @@ const createSlotStub = (name: string) =>
     },
     setup(_, { slots }) {
       return () =>
-        h('div', { class: name }, [
-          slots.prepend?.(),
-          slots.default?.(),
-          slots.footer?.(),
-        ])
+        h('div', { class: name }, [slots.prepend?.(), slots.default?.(), slots.footer?.()])
     },
   })
 

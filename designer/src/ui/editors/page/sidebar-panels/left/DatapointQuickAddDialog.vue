@@ -2,173 +2,173 @@
   数据点面板：从数据中心批量勾选并快速添加变量
 -->
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
-import { useI18n } from "vue-i18n";
+import { computed, nextTick, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 interface QuickAddFieldLike {
-  id?: string;
-  name: string;
-  path?: string;
-  sourceLabel?: string;
-  type?: string;
-  typeLabel?: string;
-  updatedAtLabel?: string;
-  mappedName?: string;
-  statusLabel?: string;
-  statusType?: string;
-  mappingLabel?: string;
-  [key: string]: unknown;
+  id?: string
+  name: string
+  path?: string
+  sourceLabel?: string
+  type?: string
+  typeLabel?: string
+  updatedAtLabel?: string
+  mappedName?: string
+  statusLabel?: string
+  statusType?: string
+  mappingLabel?: string
+  [key: string]: unknown
 }
 
 interface QuickGroupLike {
-  id: string;
-  name: string;
+  id: string
+  name: string
 }
 
 interface QuickSourceOptionLike {
-  id: string;
-  label: string;
+  id: string
+  label: string
 }
 
 const props = defineProps<{
-  quickLoading?: boolean;
-  filteredFields?: QuickAddFieldLike[];
-  quickPageSize?: number;
-  quickTotal?: number;
-  quickPage?: number;
-  selectedCount?: number;
-  selectedMappableCount?: number;
-  selectedKeys?: string[];
-  activeField?: QuickAddFieldLike | null;
-  types?: string[];
-  sourceOptions?: QuickSourceOptionLike[];
-  groupOptions?: QuickGroupLike[];
-  rootGroupId?: string;
-  buildVarName: (name: string) => string;
-  isFieldSelectable?: (row: QuickAddFieldLike) => boolean;
-}>();
+  quickLoading?: boolean
+  filteredFields?: QuickAddFieldLike[]
+  quickPageSize?: number
+  quickTotal?: number
+  quickPage?: number
+  selectedCount?: number
+  selectedMappableCount?: number
+  selectedKeys?: string[]
+  activeField?: QuickAddFieldLike | null
+  types?: string[]
+  sourceOptions?: QuickSourceOptionLike[]
+  groupOptions?: QuickGroupLike[]
+  rootGroupId?: string
+  buildVarName: (name: string) => string
+  isFieldSelectable?: (row: QuickAddFieldLike) => boolean
+}>()
 
 const emit = defineEmits<{
-  (event: "confirm"): void;
-  (event: "refresh"): void;
-  (event: "pageChange", page: number): void;
-  (event: "sizeChange", size: number): void;
-  (event: "selectionChange", selection: unknown[]): void;
-  (event: "statusClick", row: QuickAddFieldLike): void;
-  (event: "singleConfirm"): void;
-  (event: "singleClose"): void;
-  (event: "singleTypeChange", type: string): void;
-}>();
+  (event: 'confirm'): void
+  (event: 'refresh'): void
+  (event: 'pageChange', page: number): void
+  (event: 'sizeChange', size: number): void
+  (event: 'selectionChange', selection: unknown[]): void
+  (event: 'statusClick', row: QuickAddFieldLike): void
+  (event: 'singleConfirm'): void
+  (event: 'singleClose'): void
+  (event: 'singleTypeChange', type: string): void
+}>()
 
-const visible = defineModel<boolean>({ default: false });
-const searchKey = defineModel<string>("searchKey", { default: "" });
-const prefix = defineModel<string>("prefix", { default: "" });
-const suffix = defineModel<string>("suffix", { default: "" });
-const replaceFrom = defineModel<string>("replaceFrom", { default: "" });
-const replaceTo = defineModel<string>("replaceTo", { default: "" });
-const statusFilter = defineModel<string>("statusFilter", { default: "" });
-const typeFilter = defineModel<string>("typeFilter", { default: "" });
-const sourceIdFilter = defineModel<string>("sourceIdFilter", { default: "" });
-const singleName = defineModel<string>("singleName", { default: "" });
-const singleType = defineModel<string>("singleType", { default: "string" });
-const singleGroupId = defineModel<string>("singleGroupId", { default: "" });
-const singleDefaultValue = defineModel<string>("singleDefaultValue", { default: "" });
-const singleDescription = defineModel<string>("singleDescription", { default: "" });
-const tableRef = ref<any>(null);
-const syncingSelection = ref(false);
+const visible = defineModel<boolean>({ default: false })
+const searchKey = defineModel<string>('searchKey', { default: '' })
+const prefix = defineModel<string>('prefix', { default: '' })
+const suffix = defineModel<string>('suffix', { default: '' })
+const replaceFrom = defineModel<string>('replaceFrom', { default: '' })
+const replaceTo = defineModel<string>('replaceTo', { default: '' })
+const statusFilter = defineModel<string>('statusFilter', { default: '' })
+const typeFilter = defineModel<string>('typeFilter', { default: '' })
+const sourceIdFilter = defineModel<string>('sourceIdFilter', { default: '' })
+const singleName = defineModel<string>('singleName', { default: '' })
+const singleType = defineModel<string>('singleType', { default: 'string' })
+const singleGroupId = defineModel<string>('singleGroupId', { default: '' })
+const singleDefaultValue = defineModel<string>('singleDefaultValue', { default: '' })
+const singleDescription = defineModel<string>('singleDescription', { default: '' })
+const tableRef = ref<any>(null)
+const syncingSelection = ref(false)
 
 function resolveFieldSelectable(row: QuickAddFieldLike): boolean {
-  return props.isFieldSelectable?.(row) ?? true;
+  return props.isFieldSelectable?.(row) ?? true
 }
 
 function resolveFieldKey(row: QuickAddFieldLike): string {
-  return String(row.id || row.path || row.name || "");
+  return String(row.id || row.path || row.name || '')
 }
 
-const namingRuleVisible = ref(false);
-const { t } = useI18n();
+const namingRuleVisible = ref(false)
+const { t } = useI18n()
 
 const namingSummary = computed(() => {
-  const parts: string[] = [];
+  const parts: string[] = []
   if (prefix.value) {
-    parts.push(t("datapointPanel.quickAddDialog.prefixSummary", { value: prefix.value }));
+    parts.push(t('datapointPanel.quickAddDialog.prefixSummary', { value: prefix.value }))
   }
   if (suffix.value) {
-    parts.push(t("datapointPanel.quickAddDialog.suffixSummary", { value: suffix.value }));
+    parts.push(t('datapointPanel.quickAddDialog.suffixSummary', { value: suffix.value }))
   }
   if (replaceFrom.value) {
     parts.push(
-      t("datapointPanel.quickAddDialog.replaceSummary", {
+      t('datapointPanel.quickAddDialog.replaceSummary', {
         from: replaceFrom.value,
-        to: replaceTo.value || "",
+        to: replaceTo.value || '',
       }),
-    );
+    )
   }
-  return parts.length ? parts.join("，") : t("datapointPanel.quickAddDialog.defaultNaming");
-});
+  return parts.length ? parts.join('，') : t('datapointPanel.quickAddDialog.defaultNaming')
+})
 
-const confirmDisabled = computed(() => !props.selectedMappableCount);
+const confirmDisabled = computed(() => !props.selectedMappableCount)
 
 function handleSelectionChange(selection: unknown[]) {
-  if (syncingSelection.value) return;
-  emit("selectionChange", selection);
+  if (syncingSelection.value) return
+  emit('selectionChange', selection)
 }
 
 function handleCurrentChange(page: number) {
-  emit("pageChange", page);
+  emit('pageChange', page)
 }
 
 function handleSizeChange(size: number) {
-  emit("sizeChange", size);
+  emit('sizeChange', size)
 }
 
 function isActiveRow(row: QuickAddFieldLike): boolean {
-  const active = props.activeField;
-  if (!active) return false;
-  const rowKey = resolveFieldKey(row);
-  const activeKey = resolveFieldKey(active);
-  return Boolean(rowKey && activeKey && rowKey === activeKey);
+  const active = props.activeField
+  if (!active) return false
+  const rowKey = resolveFieldKey(row)
+  const activeKey = resolveFieldKey(active)
+  return Boolean(rowKey && activeKey && rowKey === activeKey)
 }
 
 function resolveRowClassName({ row }: { row: QuickAddFieldLike }): string {
-  const classes: string[] = [];
-  if (isActiveRow(row)) classes.push("is-active-datapoint");
-  if (!resolveFieldSelectable(row)) classes.push("is-disabled-row");
-  return classes.join(" ");
+  const classes: string[] = []
+  if (isActiveRow(row)) classes.push('is-active-datapoint')
+  if (!resolveFieldSelectable(row)) classes.push('is-disabled-row')
+  return classes.join(' ')
 }
 
 function resolveActionLabel(row: QuickAddFieldLike): string {
-  if (row.mappedName) return t("datapointPanel.quickAddDialog.mappedAction");
-  if (!resolveFieldSelectable(row)) return t("datapointPanel.quickAddDialog.unavailableAction");
-  return t("datapointPanel.quickAddDialog.mapAction");
+  if (row.mappedName) return t('datapointPanel.quickAddDialog.mappedAction')
+  if (!resolveFieldSelectable(row)) return t('datapointPanel.quickAddDialog.unavailableAction')
+  return t('datapointPanel.quickAddDialog.mapAction')
 }
 
 function syncPageSelection(): void {
-  const table = tableRef.value;
-  if (!table) return;
-  const selectedKeys = new Set(props.selectedKeys || []);
-  const rows = props.filteredFields || [];
-  syncingSelection.value = true;
-  table.clearSelection?.();
+  const table = tableRef.value
+  if (!table) return
+  const selectedKeys = new Set(props.selectedKeys || [])
+  const rows = props.filteredFields || []
+  syncingSelection.value = true
+  table.clearSelection?.()
   rows.forEach((row) => {
-    const key = resolveFieldKey(row);
+    const key = resolveFieldKey(row)
     if (key && selectedKeys.has(key) && resolveFieldSelectable(row)) {
-      table.toggleRowSelection?.(row, true);
+      table.toggleRowSelection?.(row, true)
     }
-  });
+  })
   nextTick(() => {
-    syncingSelection.value = false;
-  });
+    syncingSelection.value = false
+  })
 }
 
 watch(
-  [() => visible.value, () => props.filteredFields, () => (props.selectedKeys || []).join("|")],
+  [() => visible.value, () => props.filteredFields, () => (props.selectedKeys || []).join('|')],
   () => {
-    if (!visible.value) return;
-    void nextTick(syncPageSelection);
+    if (!visible.value) return
+    void nextTick(syncPageSelection)
   },
   { immediate: true },
-);
+)
 </script>
 
 <template>
@@ -231,16 +231,16 @@ watch(
       </el-select>
       <div class="quick-stats">
         <span>{{
-          t("datapointPanel.quickAddDialog.totalCount", { count: props.quickTotal || 0 })
+          t('datapointPanel.quickAddDialog.totalCount', { count: props.quickTotal || 0 })
         }}</span>
         <span>{{
-          t("datapointPanel.quickAddDialog.crossPageSelectedCount", {
+          t('datapointPanel.quickAddDialog.crossPageSelectedCount', {
             count: props.selectedCount || 0,
           })
         }}</span>
       </div>
       <el-button size="small" @click="emit('refresh')">
-        {{ t("datapointPanel.quickAddDialog.refresh") }}
+        {{ t('datapointPanel.quickAddDialog.refresh') }}
       </el-button>
     </div>
 
@@ -250,7 +250,7 @@ watch(
         type="button"
         @click="namingRuleVisible = !namingRuleVisible"
       >
-        <span>{{ t("datapointPanel.quickAddDialog.namingRule") }}</span>
+        <span>{{ t('datapointPanel.quickAddDialog.namingRule') }}</span>
         <span class="quick-naming__summary">{{ namingSummary }}</span>
       </button>
       <el-form
@@ -319,8 +319,8 @@ watch(
           <el-table-column :label="t('datapointPanel.quickAddDialog.typeSource')" width="150">
             <template #default="{ row }">
               <div class="meta-cell">
-                <span>{{ row.typeLabel || row.type || "-" }}</span>
-                <span>{{ row.sourceLabel || "-" }}</span>
+                <span>{{ row.typeLabel || row.type || '-' }}</span>
+                <span>{{ row.sourceLabel || '-' }}</span>
               </div>
             </template>
           </el-table-column>
@@ -364,11 +364,11 @@ watch(
       <aside v-if="props.activeField" class="quick-detail">
         <div class="quick-detail__header">
           <div>
-            <strong>{{ t("datapointPanel.quickAddDialog.singleTitle") }}</strong>
+            <strong>{{ t('datapointPanel.quickAddDialog.singleTitle') }}</strong>
             <span>{{ props.activeField.name }}</span>
           </div>
           <el-button size="small" text @click="emit('singleClose')">
-            {{ t("datapointPanel.quickAddDialog.closeDetail") }}
+            {{ t('datapointPanel.quickAddDialog.closeDetail') }}
           </el-button>
         </div>
         <div class="quick-detail__path">{{ props.activeField.path }}</div>
@@ -415,10 +415,10 @@ watch(
         </el-form>
         <div class="quick-detail__actions">
           <el-button size="small" @click="emit('singleClose')">
-            {{ t("datapointPanel.quickAddDialog.cancel") }}
+            {{ t('datapointPanel.quickAddDialog.cancel') }}
           </el-button>
           <el-button size="small" type="primary" @click="emit('singleConfirm')">
-            {{ t("datapointPanel.quickAddDialog.saveSingle") }}
+            {{ t('datapointPanel.quickAddDialog.saveSingle') }}
           </el-button>
         </div>
       </aside>
@@ -440,7 +440,7 @@ watch(
       <div class="quick-footer">
         <span>
           {{
-            t("datapointPanel.quickAddDialog.selectionSummary", {
+            t('datapointPanel.quickAddDialog.selectionSummary', {
               selected: props.selectedCount || 0,
               mappable: props.selectedMappableCount || 0,
             })
@@ -448,10 +448,10 @@ watch(
         </span>
         <div class="quick-footer__actions">
           <el-button @click="visible = false">{{
-            t("datapointPanel.quickAddDialog.cancel")
+            t('datapointPanel.quickAddDialog.cancel')
           }}</el-button>
           <el-button type="primary" :disabled="confirmDisabled" @click="emit('confirm')">
-            {{ t("datapointPanel.quickAddDialog.addSelected") }}
+            {{ t('datapointPanel.quickAddDialog.addSelected') }}
           </el-button>
         </div>
       </div>

@@ -4,18 +4,18 @@
   功能：页面管理、画布编辑、属性面板、预览、保存、导出等
 -->
 <script setup lang="ts">
-import type { Ref } from "vue";
+import type { Ref } from 'vue'
 import type {
   DesignerPageTab,
   DesignerRouteProjectMeta,
   DesignerStorePageRow,
-} from "./designer-view-types";
-import type { ToolRailItem } from "./tool-rail-types";
-import type { DesignerPageTabsStore } from "./use-designer-page-tabs";
-import type { ViewPreset } from "@/constants";
-import type { PageConfig } from "@/editor-core/document/types";
-import type { CreatePageForStoreResult } from "@/stores/editor-store.types";
-import { storeToRefs } from "pinia";
+} from './designer-view-types'
+import type { ToolRailItem } from './tool-rail-types'
+import type { DesignerPageTabsStore } from './use-designer-page-tabs'
+import type { ViewPreset } from '@/constants'
+import type { PageConfig } from '@/editor-core/document/types'
+import type { CreatePageForStoreResult } from '@/stores/editor-store.types'
+import { storeToRefs } from 'pinia'
 import {
   computed,
   defineAsyncComponent,
@@ -25,66 +25,66 @@ import {
   provide,
   ref,
   watch,
-} from "vue";
-import { useI18n } from "vue-i18n";
-import { useRoute, useRouter } from "vue-router";
-import IconEpDocument from "~icons/ep/document";
-import IconEpPlus from "~icons/ep/plus";
-import IconEpUpload from "~icons/ep/upload";
-import IconEpWarning from "~icons/ep/warning";
-import IconLucideBox from "~icons/lucide/box";
-import IconLucideBraces from "~icons/lucide/braces";
-import IconLucideDatabase from "~icons/lucide/database";
-import IconLucideFileCode from "~icons/lucide/file-code";
-import IconLucideFileText from "~icons/lucide/file-text";
-import IconLucideLanguages from "~icons/lucide/languages";
-import IconLucideList from "~icons/lucide/list";
-import IconLucideSettings from "~icons/lucide/settings";
-import IconLucideSlidersHorizontal from "~icons/lucide/sliders-horizontal";
-import { VIEW_PRESETS } from "@/constants";
-import { useEditorStore } from "@/stores/editor-store";
-import { CanvasContainer } from "@/ui/editors/page/canvas";
-import SelectionToolbar from "@/ui/editors/page/canvas/SelectionToolbar.vue";
-import { MaterialPanel, OutlineTree } from "@/ui/editors/page/sidebar-panels/left";
-import { I18nPanel } from "@/ui/shared/tool-panels";
-import I18nResourceDialog from "@/ui/shared/tool-panels/I18nResourceDialog.vue";
-import { DockPanel } from "@/ui/shell/DockPanel";
-import { ToolRail } from "@/ui/shell/ToolRail";
-import { TopToolbar } from "@/ui/shell/TopToolbar";
-import { DESIGNER_DEFAULT_PAGE_CONFIG_DIMS } from "./designer-view-types";
-import { ElMessage } from "./el-message-compat";
-import { useDesignerAutoSave } from "./use-designer-auto-save";
-import { useDesignerPageTabs } from "./use-designer-page-tabs";
+} from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
+import IconEpDocument from '~icons/ep/document'
+import IconEpPlus from '~icons/ep/plus'
+import IconEpUpload from '~icons/ep/upload'
+import IconEpWarning from '~icons/ep/warning'
+import IconLucideBox from '~icons/lucide/box'
+import IconLucideBraces from '~icons/lucide/braces'
+import IconLucideDatabase from '~icons/lucide/database'
+import IconLucideFileCode from '~icons/lucide/file-code'
+import IconLucideFileText from '~icons/lucide/file-text'
+import IconLucideLanguages from '~icons/lucide/languages'
+import IconLucideList from '~icons/lucide/list'
+import IconLucideSettings from '~icons/lucide/settings'
+import IconLucideSlidersHorizontal from '~icons/lucide/sliders-horizontal'
+import { VIEW_PRESETS } from '@/constants'
+import { useEditorStore } from '@/stores/editor-store'
+import { CanvasContainer } from '@/ui/editors/page/canvas'
+import SelectionToolbar from '@/ui/editors/page/canvas/SelectionToolbar.vue'
+import { MaterialPanel, OutlineTree } from '@/ui/editors/page/sidebar-panels/left'
+import { I18nPanel } from '@/ui/shared/tool-panels'
+import I18nResourceDialog from '@/ui/shared/tool-panels/I18nResourceDialog.vue'
+import { DockPanel } from '@/ui/shell/DockPanel'
+import { ToolRail } from '@/ui/shell/ToolRail'
+import { TopToolbar } from '@/ui/shell/TopToolbar'
+import { DESIGNER_DEFAULT_PAGE_CONFIG_DIMS } from './designer-view-types'
+import { ElMessage } from './el-message-compat'
+import { useDesignerAutoSave } from './use-designer-auto-save'
+import { useDesignerPageTabs } from './use-designer-page-tabs'
 
 /** 重型面板异步加载，减轻 DesignerView 首 chunk */
 const DataPanel = defineAsyncComponent(
-  () => import("@/ui/editors/page/sidebar-panels/left/DataPanel.vue"),
-);
+  () => import('@/ui/editors/page/sidebar-panels/left/DataPanel.vue'),
+)
 const AdvancedPanel = defineAsyncComponent(
-  () => import("@/ui/editors/page/sidebar-panels/right/AdvancedPanel.vue"),
-);
+  () => import('@/ui/editors/page/sidebar-panels/right/AdvancedPanel.vue'),
+)
 const PropertyPanel = defineAsyncComponent(
-  () => import("@/ui/editors/page/sidebar-panels/right/PropertyPanel.vue"),
-);
+  () => import('@/ui/editors/page/sidebar-panels/right/PropertyPanel.vue'),
+)
 const PageTree = defineAsyncComponent(
-  () => import("@/ui/shared/tool-panels/page-tree/PageTree.vue"),
-);
+  () => import('@/ui/shared/tool-panels/page-tree/PageTree.vue'),
+)
 const ScriptVarsPanel = defineAsyncComponent(
-  () => import("@/ui/shared/tool-panels/ScriptVarsPanel.vue"),
-);
+  () => import('@/ui/shared/tool-panels/ScriptVarsPanel.vue'),
+)
 const VariablesPanel = defineAsyncComponent(
-  () => import("@/ui/shared/tool-panels/VariablesPanel.vue"),
-);
+  () => import('@/ui/shared/tool-panels/VariablesPanel.vue'),
+)
 
-const route = useRoute();
-const router = useRouter();
-const { t } = useI18n();
+const route = useRoute()
+const router = useRouter()
+const { t } = useI18n()
 
 function mergePageConfig(
-  base: DesignerStorePageRow["config"] | undefined,
+  base: DesignerStorePageRow['config'] | undefined,
   patch: Partial<PageConfig>,
 ): PageConfig {
-  const baseConfig = (base ?? {}) as Partial<PageConfig>;
+  const baseConfig = (base ?? {}) as Partial<PageConfig>
   return {
     ...DESIGNER_DEFAULT_PAGE_CONFIG_DIMS,
     ...baseConfig,
@@ -93,69 +93,69 @@ function mergePageConfig(
       ...(baseConfig.viewport ?? {}),
       ...(patch.viewport ?? {}),
     },
-  } as PageConfig;
+  } as PageConfig
 }
 
 function getCurrentPageConfig(): Partial<PageConfig> {
-  return (currentPageSnapshot.value?.config ?? {}) as Partial<PageConfig>;
+  return (currentPageSnapshot.value?.config ?? {}) as Partial<PageConfig>
 }
 
 interface PreviewRuntimeUserOption {
-  id: string;
-  userId?: string;
-  sourceUserId?: string;
-  platformUserId?: string;
-  createdBy?: string;
-  username: string;
-  displayName?: string;
-  status?: string;
-  isProjectCreator?: boolean;
-  isCreator?: boolean;
-  isInitialCreator?: boolean;
-  isOwner?: boolean;
+  id: string
+  userId?: string
+  sourceUserId?: string
+  platformUserId?: string
+  createdBy?: string
+  username: string
+  displayName?: string
+  status?: string
+  isProjectCreator?: boolean
+  isCreator?: boolean
+  isInitialCreator?: boolean
+  isOwner?: boolean
 }
 
 /** storeToRefs 会把部分 ref 标成可能 undefined，此处收窄为壳层实际用到的形状 */
 interface EditorShellStoreRefs {
-  canUndo: Ref<boolean>;
-  canRedo: Ref<boolean>;
-  isSaving: Ref<boolean>;
+  canUndo: Ref<boolean>
+  canRedo: Ref<boolean>
+  isSaving: Ref<boolean>
   selection: Ref<
     | {
-        getSelectionCount?: () => number;
-        getPrimaryElement: () => { kind: string; id: string } | null;
-        getSelectedElements?: () => Array<{ kind: string; id: string }>;
+        getSelectionCount?: () => number
+        getPrimaryElement: () => { kind: string; id: string } | null
+        getSelectedElements?: () => Array<{ kind: string; id: string }>
       }
     | undefined
-  >;
+  >
   doc: Ref<
     | {
-        nodesById?: Record<string, unknown>;
+        nodesById?: Record<string, unknown>
         getNode?: (id: string) => {
-          absolutePos?: { x: number; y: number };
-          label?: string;
-          locked?: boolean;
-          type?: string;
-          props?: { width?: number; height?: number };
-          style?: { width?: number; height?: number };
-        } | null;
+          absolutePos?: { x: number; y: number }
+          label?: string
+          locked?: boolean
+          type?: string
+          props?: { width?: number; height?: number }
+          style?: { width?: number; height?: number }
+        } | null
       }
     | undefined
-  >;
-  pages: Ref<DesignerStorePageRow[]>;
-  currentPageId: Ref<string>;
-  currentPage: Ref<DesignerStorePageRow | null | undefined>;
-  isLocked: Ref<boolean>;
-  isDirty: Ref<boolean>;
-  readonlyState: Ref<{ readonly?: boolean } | undefined>;
-  pageTabState: Ref<{ tabs?: DesignerPageTab[]; activeId?: string } | undefined>;
-  canvasMousePos: Ref<{ x: number; y: number } | null>;
-  hoveredNodeType: Ref<string>;
-  runtimeUsers: Ref<PreviewRuntimeUserOption[]>;
-  selectedPreviewRuntimeUserId: Ref<string>;
+  >
+  pages: Ref<DesignerStorePageRow[]>
+  currentPageId: Ref<string>
+  currentPage: Ref<DesignerStorePageRow | null | undefined>
+  isLocked: Ref<boolean>
+  isDirty: Ref<boolean>
+  readonlyState: Ref<{ readonly?: boolean } | undefined>
+  pageTabState: Ref<{ tabs?: DesignerPageTab[]; activeId?: string } | undefined>
+  canvasMousePos: Ref<{ x: number; y: number } | null>
+  hoveredNodeType: Ref<string>
+  runtimeUsers: Ref<PreviewRuntimeUserOption[]>
+  selectedPreviewRuntimeUserId: Ref<string>
 }
 
-const editorStore = useEditorStore();
+const editorStore = useEditorStore()
 const {
   canUndo,
   canRedo,
@@ -173,24 +173,24 @@ const {
   hoveredNodeType,
   runtimeUsers,
   selectedPreviewRuntimeUserId,
-} = storeToRefs(editorStore) as unknown as EditorShellStoreRefs;
+} = storeToRefs(editorStore) as unknown as EditorShellStoreRefs
 
-const leftActiveKey = ref("pages");
+const leftActiveKey = ref('pages')
 
-const zoom = ref(1);
-const showRuler = ref(true);
-const viewResetToken = ref(0);
-const activeViewKey = ref("pc");
-const viewPresets: readonly ViewPreset[] = VIEW_PRESETS;
-const AUTO_FIT_PADDING = 48;
-const autoZoomEnabled = ref(true);
-const autoFitFrame = ref(0);
-const canvasHostResizeObserver = ref<ResizeObserver | null>(null);
+const zoom = ref(1)
+const showRuler = ref(true)
+const viewResetToken = ref(0)
+const activeViewKey = ref('pc')
+const viewPresets: readonly ViewPreset[] = VIEW_PRESETS
+const AUTO_FIT_PADDING = 48
+const autoZoomEnabled = ref(true)
+const autoFitFrame = ref(0)
+const canvasHostResizeObserver = ref<ResizeObserver | null>(null)
 
-const drawingTool = ref("");
+const drawingTool = ref('')
 
 function setDrawingTool(value: string) {
-  drawingTool.value = value;
+  drawingTool.value = value
 }
 
 const { pageTabs, activePageTabId, openPageTab, handleClosePageTab } = useDesignerPageTabs({
@@ -199,7 +199,7 @@ const { pageTabs, activePageTabId, openPageTab, handleClosePageTab } = useDesign
   currentPageId,
   isDirty: storeIsDirty,
   leftActiveKey,
-});
+})
 
 const { saveSettings, handleSaveSettingsChange } = useDesignerAutoSave({
   editorStore,
@@ -209,102 +209,102 @@ const { saveSettings, handleSaveSettingsChange } = useDesignerAutoSave({
   isSaving,
   isDirty: storeIsDirty,
   onAutoSaveSuccess: () => {
-    ElMessage.success(t("message.autoSaveSuccess"));
+    ElMessage.success(t('message.autoSaveSuccess'))
   },
-});
+})
 
-provide("openPageTab", openPageTab);
+provide('openPageTab', openPageTab)
 
 /**
  * 当前选中节点数量
  */
 const selectionCount = computed(() => {
-  void editorStore.selectionVersion;
-  return selection.value?.getSelectionCount?.() ?? 0;
-});
+  void editorStore.selectionVersion
+  return selection.value?.getSelectionCount?.() ?? 0
+})
 
 /**
  * 当前页面内的总节点数（排除根节点）
  */
 const totalNodeCount = computed(() => {
-  void editorStore.docVersion;
-  if (!doc.value) return 0;
-  const root = currentPage.value?.rootNodeId;
-  const allIds = Object.keys(doc.value?.nodesById || {});
+  void editorStore.docVersion
+  if (!doc.value) return 0
+  const root = currentPage.value?.rootNodeId
+  const allIds = Object.keys(doc.value?.nodesById || {})
   // 减去根节点本身
-  return root ? Math.max(0, allIds.length - 1) : allIds.length;
-});
+  return root ? Math.max(0, allIds.length - 1) : allIds.length
+})
 
 /**
  * 主选中节点的位置（absolutePos 或 DOM 坐标）
  */
 const selectedNodePos = computed(() => {
-  void editorStore.selectionVersion;
-  void editorStore.docVersion;
-  const primary = selection.value?.getPrimaryElement();
-  if (!primary || primary.kind !== "node") return null;
-  const node = doc.value?.getNode?.(primary.id);
-  if (!node) return null;
+  void editorStore.selectionVersion
+  void editorStore.docVersion
+  const primary = selection.value?.getPrimaryElement()
+  if (!primary || primary.kind !== 'node') return null
+  const node = doc.value?.getNode?.(primary.id)
+  if (!node) return null
   if (node.absolutePos && Number.isFinite(node.absolutePos.x)) {
     return {
       x: Math.round(node.absolutePos.x),
       y: Math.round(node.absolutePos.y),
-    };
+    }
   }
   // flow 定位：从 DOM 读取相对于根节点的坐标
-  const rootId = currentPage.value?.rootNodeId;
-  const rootEl = rootId ? document.querySelector(`[data-node-id="${rootId}"]`) : null;
-  const nodeEl = document.querySelector(`[data-node-id="${primary.id}"]`);
+  const rootId = currentPage.value?.rootNodeId
+  const rootEl = rootId ? document.querySelector(`[data-node-id="${rootId}"]`) : null
+  const nodeEl = document.querySelector(`[data-node-id="${primary.id}"]`)
   if (rootEl && nodeEl) {
-    const rootRect = rootEl.getBoundingClientRect();
-    const nodeRect = nodeEl.getBoundingClientRect();
-    const zoomValue = zoom.value || 1;
+    const rootRect = rootEl.getBoundingClientRect()
+    const nodeRect = nodeEl.getBoundingClientRect()
+    const zoomValue = zoom.value || 1
     return {
       x: Math.round((nodeRect.left - rootRect.left) / zoomValue),
       y: Math.round((nodeRect.top - rootRect.top) / zoomValue),
-    };
+    }
   }
-  return null;
-});
+  return null
+})
 
 /**
  * 主选中节点的显示名称（label 优先，fallback 到 type）
  */
 const selectedNodeName = computed(() => {
-  void editorStore.selectionVersion;
-  void editorStore.docVersion;
-  const primary = selection.value?.getPrimaryElement();
-  if (!primary || primary.kind !== "node") return "";
-  const node = doc.value?.getNode?.(primary.id);
-  if (!node) return "";
-  return node.label || node.type || "";
-});
+  void editorStore.selectionVersion
+  void editorStore.docVersion
+  const primary = selection.value?.getPrimaryElement()
+  if (!primary || primary.kind !== 'node') return ''
+  const node = doc.value?.getNode?.(primary.id)
+  if (!node) return ''
+  return node.label || node.type || ''
+})
 
 /**
  * 主选中节点的尺寸（优先从 props/style 读取，fallback 到 DOM 实际渲染尺寸）
  */
 const selectedNodeSize = computed(() => {
-  void editorStore.selectionVersion;
-  void editorStore.docVersion;
-  const primary = selection.value?.getPrimaryElement();
-  if (!primary || primary.kind !== "node") return null;
-  const node = doc.value?.getNode?.(primary.id);
-  if (!node) return null;
-  const pw = node.props?.width ?? node.style?.width;
-  const ph = node.props?.height ?? node.style?.height;
+  void editorStore.selectionVersion
+  void editorStore.docVersion
+  const primary = selection.value?.getPrimaryElement()
+  if (!primary || primary.kind !== 'node') return null
+  const node = doc.value?.getNode?.(primary.id)
+  if (!node) return null
+  const pw = node.props?.width ?? node.style?.width
+  const ph = node.props?.height ?? node.style?.height
   if (pw != null && ph != null) {
-    return { w: pw, h: ph };
+    return { w: pw, h: ph }
   }
-  const nodeEl = document.querySelector(`[data-node-id="${primary.id}"]`);
+  const nodeEl = document.querySelector(`[data-node-id="${primary.id}"]`)
   if (nodeEl instanceof HTMLElement) {
-    const zoomValue = zoom.value || 1;
+    const zoomValue = zoom.value || 1
     return {
       w: Math.round(nodeEl.offsetWidth / zoomValue),
       h: Math.round(nodeEl.offsetHeight / zoomValue),
-    };
+    }
   }
-  return null;
-});
+  return null
+})
 // ==================== 底部状态栏数据结束 ====================
 
 /**
@@ -312,212 +312,212 @@ const selectedNodeSize = computed(() => {
  */
 const hasPages = computed(() => {
   // 确保页面列表不为空且当前页面确实存在
-  if (editorStore.pages.length === 0) return false;
-  if (!currentPageId.value) return false;
-  return editorStore.pages.some((p: DesignerStorePageRow) => p.id === currentPageId.value);
-});
+  if (editorStore.pages.length === 0) return false
+  if (!currentPageId.value) return false
+  return editorStore.pages.some((p: DesignerStorePageRow) => p.id === currentPageId.value)
+})
 // ==================== 页面标签页系统结束 ====================
-const canUndoEnabled = computed(() => canUndo.value && !readonlyState.value?.readonly);
-const canRedoEnabled = computed(() => canRedo.value && !readonlyState.value?.readonly);
+const canUndoEnabled = computed(() => canUndo.value && !readonlyState.value?.readonly)
+const canRedoEnabled = computed(() => canRedo.value && !readonlyState.value?.readonly)
 
 /**
  * 是否可以移动图层
  */
 const canMoveLayer = computed(() => {
-  if (readonlyState.value?.readonly) return false;
-  const primary = selection.value?.getPrimaryElement();
-  if (!primary || primary.kind !== "node") return false;
+  if (readonlyState.value?.readonly) return false
+  const primary = selection.value?.getPrimaryElement()
+  if (!primary || primary.kind !== 'node') return false
   // 不能移动根节点
-  const rootNodeId = currentPage.value?.rootNodeId;
-  return primary.id !== rootNodeId;
-});
+  const rootNodeId = currentPage.value?.rootNodeId
+  return primary.id !== rootNodeId
+})
 const hasSelection = computed(() => {
-  void editorStore.selectionVersion;
-  return (selection.value?.getSelectionCount?.() || 0) >= 1;
-});
+  void editorStore.selectionVersion
+  return (selection.value?.getSelectionCount?.() || 0) >= 1
+})
 const selectedLockTargets = computed(() => {
-  void editorStore.selectionVersion;
-  void editorStore.docVersion;
-  const rootNodeId = currentPage.value?.rootNodeId;
-  const selected = selection.value?.getSelectedElements?.() || [];
+  void editorStore.selectionVersion
+  void editorStore.docVersion
+  const rootNodeId = currentPage.value?.rootNodeId
+  const selected = selection.value?.getSelectedElements?.() || []
   return selected
-    .filter((item: { kind: string; id: string }) => item.kind === "node" && item.id !== rootNodeId)
+    .filter((item: { kind: string; id: string }) => item.kind === 'node' && item.id !== rootNodeId)
     .map((item: { id: string }) => doc.value?.getNode?.(item.id))
-    .filter((item): item is NonNullable<typeof item> => Boolean(item));
-});
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+})
 const canToggleNodeLock = computed(
   () => !readonlyState.value?.readonly && selectedLockTargets.value.length > 0,
-);
+)
 const selectedNodeLocked = computed(
   () =>
     selectedLockTargets.value.length > 0 &&
     selectedLockTargets.value.every((node) => Boolean(node.locked)),
-);
-const hasClipboard = computed(() => editorStore.hasClipboard);
-const rightActiveKey = ref("props");
-const leftFloating = ref(false);
-const rightFloating = ref(false);
-const DEFAULT_DOCK_PANEL_WIDTH = 320;
-const LEFT_MIN_DOCK_PANEL_WIDTH = 156;
-const RIGHT_MIN_DOCK_PANEL_WIDTH = 240;
-const MAX_DOCK_PANEL_WIDTH = 520;
-const DOCK_PANEL_WIDTH_STORAGE_KEY = "designer:dock-panel-width:v1";
-const leftPanelWidth = ref(DEFAULT_DOCK_PANEL_WIDTH);
-const rightPanelWidth = ref(DEFAULT_DOCK_PANEL_WIDTH);
-const leftPanelRef = ref<{ openCreateDialog?: () => void } | null>(null);
-const canvasHostRef = ref<HTMLElement | null>(null);
+)
+const hasClipboard = computed(() => editorStore.hasClipboard)
+const rightActiveKey = ref('props')
+const leftFloating = ref(false)
+const rightFloating = ref(false)
+const DEFAULT_DOCK_PANEL_WIDTH = 320
+const LEFT_MIN_DOCK_PANEL_WIDTH = 156
+const RIGHT_MIN_DOCK_PANEL_WIDTH = 240
+const MAX_DOCK_PANEL_WIDTH = 520
+const DOCK_PANEL_WIDTH_STORAGE_KEY = 'designer:dock-panel-width:v1'
+const leftPanelWidth = ref(DEFAULT_DOCK_PANEL_WIDTH)
+const rightPanelWidth = ref(DEFAULT_DOCK_PANEL_WIDTH)
+const leftPanelRef = ref<{ openCreateDialog?: () => void } | null>(null)
+const canvasHostRef = ref<HTMLElement | null>(null)
 
 const pageName = computed(() => {
   // 如果没有页面，返回空
-  if (!hasPages.value) return "";
+  if (!hasPages.value) return ''
   // 优先从 pages 列表获取名称（更可靠）
   const pageFromList = editorStore.pages.find(
     (p: DesignerStorePageRow) => p.id === currentPageId.value,
-  );
-  if (pageFromList?.name) return pageFromList.name;
+  )
+  if (pageFromList?.name) return pageFromList.name
   // 其次从 doc 中获取
-  const page = currentPage.value;
-  return page?.name || "";
-});
+  const page = currentPage.value
+  return page?.name || ''
+})
 
-const isDirty = computed(() => storeIsDirty.value);
+const isDirty = computed(() => storeIsDirty.value)
 
 const currentPageSnapshot = computed(() => {
-  const page = pages.value.find((item: DesignerStorePageRow) => item.id === currentPageId.value);
-  return page || currentPage.value || null;
-});
+  const page = pages.value.find((item: DesignerStorePageRow) => item.id === currentPageId.value)
+  return page || currentPage.value || null
+})
 const defaultViewPreset = computed(
   () =>
-    viewPresets.find((preset) => preset.key === "pc") ||
+    viewPresets.find((preset) => preset.key === 'pc') ||
     viewPresets[0] || { width: 1366, height: 768 },
-);
+)
 function normalizeCanvasDimension(value: unknown, fallback: number): number {
-  const next = Number(value);
-  return Number.isFinite(next) && next > 0 ? Math.round(next) : fallback;
+  const next = Number(value)
+  return Number.isFinite(next) && next > 0 ? Math.round(next) : fallback
 }
 const resolvedPageWidth = computed(() =>
   normalizeCanvasDimension(
     getCurrentPageConfig().viewport?.width ?? getCurrentPageConfig().width,
     defaultViewPreset.value.width,
   ),
-);
+)
 const resolvedPageHeight = computed(() =>
   normalizeCanvasDimension(
     getCurrentPageConfig().viewport?.height ?? getCurrentPageConfig().height,
     defaultViewPreset.value.height,
   ),
-);
+)
 const matchedViewPreset = computed(
   () =>
     viewPresets.find(
       (preset) =>
         preset.width === resolvedPageWidth.value && preset.height === resolvedPageHeight.value,
     ) || null,
-);
+)
 const canvasWidth = computed(() =>
   normalizeCanvasDimension(
     getCurrentPageConfig().viewport?.width ?? getCurrentPageConfig().width,
     defaultViewPreset.value.width,
   ),
-);
+)
 const canvasHeight = computed(() =>
   normalizeCanvasDimension(
     getCurrentPageConfig().viewport?.height ?? getCurrentPageConfig().height,
     defaultViewPreset.value.height,
   ),
-);
+)
 const canvasContainerKey = computed(
-  () => `${route.fullPath}:${editorStore.projectId || "project"}:${currentPageId.value || "page"}`,
-);
-const isCustomView = computed(() => !matchedViewPreset.value);
-const showGrid = computed(() => currentPageSnapshot.value?.config?.showGrid ?? true);
-const enableSnap = computed(() => currentPageSnapshot.value?.config?.enableSnap ?? true);
+  () => `${route.fullPath}:${editorStore.projectId || 'project'}:${currentPageId.value || 'page'}`,
+)
+const isCustomView = computed(() => !matchedViewPreset.value)
+const showGrid = computed(() => currentPageSnapshot.value?.config?.showGrid ?? true)
+const enableSnap = computed(() => currentPageSnapshot.value?.config?.enableSnap ?? true)
 
 const leftRailItems = computed<ToolRailItem[]>(() => [
-  { key: "pages", label: t("shell.pages"), icon: IconLucideFileText },
-  { key: "outline", label: t("shell.outline"), icon: IconLucideList },
-  { key: "material", label: t("shell.material"), icon: IconLucideBox },
-  { key: "data", label: t("shell.data"), icon: IconLucideDatabase },
-  { key: "i18n", label: t("shell.i18n"), icon: IconLucideLanguages },
-  { key: "script", label: t("shell.script"), icon: IconLucideFileCode },
-]);
+  { key: 'pages', label: t('shell.pages'), icon: IconLucideFileText },
+  { key: 'outline', label: t('shell.outline'), icon: IconLucideList },
+  { key: 'material', label: t('shell.material'), icon: IconLucideBox },
+  { key: 'data', label: t('shell.data'), icon: IconLucideDatabase },
+  { key: 'i18n', label: t('shell.i18n'), icon: IconLucideLanguages },
+  { key: 'script', label: t('shell.script'), icon: IconLucideFileCode },
+])
 
 const rightRailItems = computed<ToolRailItem[]>(() => [
-  { key: "props", label: t("shell.props"), icon: IconLucideSlidersHorizontal },
-  { key: "advanced", label: t("shell.advanced"), icon: IconLucideSettings },
-  { key: "variables", label: t("shell.variables"), icon: IconLucideBraces },
-]);
+  { key: 'props', label: t('shell.props'), icon: IconLucideSlidersHorizontal },
+  { key: 'advanced', label: t('shell.advanced'), icon: IconLucideSettings },
+  { key: 'variables', label: t('shell.variables'), icon: IconLucideBraces },
+])
 
 const leftPanelComponent = computed(() => {
   switch (leftActiveKey.value) {
-    case "pages":
-      return PageTree;
-    case "outline":
-      return OutlineTree;
-    case "material":
-      return MaterialPanel;
-    case "data":
-      return DataPanel;
-    case "i18n":
-      return I18nPanel;
-    case "script":
-      return ScriptVarsPanel;
+    case 'pages':
+      return PageTree
+    case 'outline':
+      return OutlineTree
+    case 'material':
+      return MaterialPanel
+    case 'data':
+      return DataPanel
+    case 'i18n':
+      return I18nPanel
+    case 'script':
+      return ScriptVarsPanel
     default:
-      return PageTree;
+      return PageTree
   }
-});
+})
 
 const leftPanelTitle = computed(() => {
-  const item = leftRailItems.value.find((entry) => entry.key === leftActiveKey.value);
-  return item?.label || t("shell.panel");
-});
+  const item = leftRailItems.value.find((entry) => entry.key === leftActiveKey.value)
+  return item?.label || t('shell.panel')
+})
 
 const leftPanelProps = computed(() => {
-  if (leftActiveKey.value === "material") {
-    return { drawingTool: drawingTool.value };
+  if (leftActiveKey.value === 'material') {
+    return { drawingTool: drawingTool.value }
   }
-  return {};
-});
+  return {}
+})
 
 const rightPanelComponent = computed(() => {
   switch (rightActiveKey.value) {
-    case "props":
-      return PropertyPanel;
-    case "advanced":
-      return AdvancedPanel;
-    case "variables":
-      return VariablesPanel;
+    case 'props':
+      return PropertyPanel
+    case 'advanced':
+      return AdvancedPanel
+    case 'variables':
+      return VariablesPanel
     default:
-      return PropertyPanel;
+      return PropertyPanel
   }
-});
+})
 
 const rightPanelTitle = computed(() => {
-  const item = rightRailItems.value.find((entry) => entry.key === rightActiveKey.value);
-  return item?.label || t("shell.panel");
-});
+  const item = rightRailItems.value.find((entry) => entry.key === rightActiveKey.value)
+  return item?.label || t('shell.panel')
+})
 
 /**
  * 左侧停靠面板当前占用宽度（关闭或悬浮时不占位）。
  */
 const leftDockWidth = computed(() =>
   leftActiveKey.value && !leftFloating.value ? leftPanelWidth.value : 0,
-);
+)
 
 /**
  * 右侧停靠面板当前占用宽度（关闭或悬浮时不占位）。
  */
 const rightDockWidth = computed(() =>
   rightActiveKey.value && !rightFloating.value ? rightPanelWidth.value : 0,
-);
+)
 
 /**
  * 布局 CSS 变量：用于顶部工具栏中间区与面板宽度同步。
  */
 const layoutStyleVars = computed(() => ({
-  "--designer-left-panel-width": `${leftDockWidth.value}px`,
-  "--designer-right-panel-width": `${rightDockWidth.value}px`,
-}));
+  '--designer-left-panel-width': `${leftDockWidth.value}px`,
+  '--designer-right-panel-width': `${rightDockWidth.value}px`,
+}))
 
 /**
  * 约束面板宽度，避免拖拽过窄或过宽。
@@ -525,9 +525,9 @@ const layoutStyleVars = computed(() => ({
  * @returns {number}
  */
 function clampPanelWidth(width: number, minWidth: number): number {
-  const next = Number(width);
-  if (!Number.isFinite(next)) return DEFAULT_DOCK_PANEL_WIDTH;
-  return Math.min(MAX_DOCK_PANEL_WIDTH, Math.max(minWidth, Math.round(next)));
+  const next = Number(width)
+  if (!Number.isFinite(next)) return DEFAULT_DOCK_PANEL_WIDTH
+  return Math.min(MAX_DOCK_PANEL_WIDTH, Math.max(minWidth, Math.round(next)))
 }
 
 /**
@@ -535,7 +535,7 @@ function clampPanelWidth(width: number, minWidth: number): number {
  * @param {number} width - 目标宽度
  */
 function handleLeftPanelResize(width: number): void {
-  leftPanelWidth.value = clampPanelWidth(width, LEFT_MIN_DOCK_PANEL_WIDTH);
+  leftPanelWidth.value = clampPanelWidth(width, LEFT_MIN_DOCK_PANEL_WIDTH)
 }
 
 /**
@@ -543,24 +543,24 @@ function handleLeftPanelResize(width: number): void {
  * @param {number} width - 目标宽度
  */
 function handleRightPanelResize(width: number): void {
-  rightPanelWidth.value = clampPanelWidth(width, RIGHT_MIN_DOCK_PANEL_WIDTH);
+  rightPanelWidth.value = clampPanelWidth(width, RIGHT_MIN_DOCK_PANEL_WIDTH)
 }
 
 /**
  * 从本地存储恢复左右面板宽度。
  */
 function restoreDockPanelWidths(): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === 'undefined') return
   try {
-    const raw = window.localStorage.getItem(DOCK_PANEL_WIDTH_STORAGE_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw) as { left?: number; right?: number } | null;
-    if (!parsed || typeof parsed !== "object") return;
+    const raw = window.localStorage.getItem(DOCK_PANEL_WIDTH_STORAGE_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw) as { left?: number; right?: number } | null
+    if (!parsed || typeof parsed !== 'object') return
     if (parsed.left !== undefined) {
-      leftPanelWidth.value = clampPanelWidth(parsed.left, LEFT_MIN_DOCK_PANEL_WIDTH);
+      leftPanelWidth.value = clampPanelWidth(parsed.left, LEFT_MIN_DOCK_PANEL_WIDTH)
     }
     if (parsed.right !== undefined) {
-      rightPanelWidth.value = clampPanelWidth(parsed.right, RIGHT_MIN_DOCK_PANEL_WIDTH);
+      rightPanelWidth.value = clampPanelWidth(parsed.right, RIGHT_MIN_DOCK_PANEL_WIDTH)
     }
   } catch {
     // 本地数据异常时忽略，保持默认宽度
@@ -571,7 +571,7 @@ function restoreDockPanelWidths(): void {
  * 持久化左右面板宽度到本地存储。
  */
 function persistDockPanelWidths(): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === 'undefined') return
   try {
     window.localStorage.setItem(
       DOCK_PANEL_WIDTH_STORAGE_KEY,
@@ -579,7 +579,7 @@ function persistDockPanelWidths(): void {
         left: leftPanelWidth.value,
         right: rightPanelWidth.value,
       }),
-    );
+    )
   } catch {
     // 存储失败时静默，不影响编辑器使用
   }
@@ -590,7 +590,7 @@ function persistDockPanelWidths(): void {
  */
 function handleUndo() {
   if (!editorStore.undo()) {
-    ElMessage.info(t("message.noUndo"));
+    ElMessage.info(t('message.noUndo'))
   }
 }
 
@@ -599,7 +599,7 @@ function handleUndo() {
  */
 function handleRedo() {
   if (!editorStore.redo()) {
-    ElMessage.info(t("message.noRedo"));
+    ElMessage.info(t('message.noRedo'))
   }
 }
 
@@ -607,25 +607,25 @@ function handleRedo() {
  * 预览
  */
 function getActivePreviewUsers(): PreviewRuntimeUserOption[] {
-  return runtimeUsers.value.filter((user) => user.status !== "disabled");
+  return runtimeUsers.value.filter((user) => user.status !== 'disabled')
 }
 
 function normalizePreviewMetaId(value: unknown): string {
-  return String(value ?? "").trim();
+  return String(value ?? '').trim()
 }
 
 function getPreviewRuntimeUserStorageKey(projectId: string): string {
-  return `designer.previewRuntimeUser.${projectId}`;
+  return `designer.previewRuntimeUser.${projectId}`
 }
 
 function persistPreviewRuntimeUser(projectId: string, runtimeUserId: string): void {
-  if (!projectId || typeof window === "undefined") return;
+  if (!projectId || typeof window === 'undefined') return
   try {
-    const key = getPreviewRuntimeUserStorageKey(projectId);
+    const key = getPreviewRuntimeUserStorageKey(projectId)
     if (runtimeUserId) {
-      window.localStorage.setItem(key, runtimeUserId);
+      window.localStorage.setItem(key, runtimeUserId)
     } else {
-      window.localStorage.removeItem(key);
+      window.localStorage.removeItem(key)
     }
   } catch {
     // 本地持久化失败不影响预览。
@@ -633,11 +633,11 @@ function persistPreviewRuntimeUser(projectId: string, runtimeUserId: string): vo
 }
 
 function restorePreviewRuntimeUser(projectId: string): void {
-  if (!projectId || typeof window === "undefined") return;
+  if (!projectId || typeof window === 'undefined') return
   try {
-    const stored = window.localStorage.getItem(getPreviewRuntimeUserStorageKey(projectId)) || "";
+    const stored = window.localStorage.getItem(getPreviewRuntimeUserStorageKey(projectId)) || ''
     if (stored) {
-      editorStore.setSelectedPreviewRuntimeUserId(stored);
+      editorStore.setSelectedPreviewRuntimeUserId(stored)
     }
   } catch {
     // 本地持久化读取失败不影响预览。
@@ -653,14 +653,14 @@ function resolveDefaultPreviewRuntimeUserId(
   projectMeta: Record<string, unknown> | undefined,
 ): string {
   const adminUser = users.find(
-    (user) => normalizePreviewMetaId(user.username).toLowerCase() === "admin",
-  );
-  if (adminUser) return adminUser.id;
+    (user) => normalizePreviewMetaId(user.username).toLowerCase() === 'admin',
+  )
+  if (adminUser) return adminUser.id
 
   const creatorMarkedUser = users.find(
     (user) => user.isProjectCreator || user.isCreator || user.isInitialCreator || user.isOwner,
-  );
-  if (creatorMarkedUser) return creatorMarkedUser.id;
+  )
+  if (creatorMarkedUser) return creatorMarkedUser.id
 
   const creatorId = normalizePreviewMetaId(
     projectMeta?.creatorRuntimeUserId ??
@@ -668,69 +668,69 @@ function resolveDefaultPreviewRuntimeUserId(
       projectMeta?.creatorUserId ??
       projectMeta?.createdBy ??
       projectMeta?.ownerId,
-  );
+  )
   if (creatorId) {
     const matchedUser = users.find((user) =>
       [user.id, user.userId, user.sourceUserId, user.platformUserId, user.createdBy]
         .map(normalizePreviewMetaId)
         .includes(creatorId),
-    );
-    if (matchedUser) return matchedUser.id;
+    )
+    if (matchedUser) return matchedUser.id
   }
 
-  return users[0]?.id || "";
+  return users[0]?.id || ''
 }
 
 function ensureDefaultPreviewRuntimeUser(): void {
   const projectMeta = (route.meta as DesignerRouteProjectMeta).project as
-    | (DesignerRouteProjectMeta["project"] & Record<string, unknown>)
-    | undefined;
-  const projectId = projectMeta?.id || editorStore.projectId;
-  if (!projectId) return;
-  const activeUsers = getActivePreviewUsers();
-  if (activeUsers.length === 0) return;
-  const selectedId = selectedPreviewRuntimeUserId.value;
+    | (DesignerRouteProjectMeta['project'] & Record<string, unknown>)
+    | undefined
+  const projectId = projectMeta?.id || editorStore.projectId
+  if (!projectId) return
+  const activeUsers = getActivePreviewUsers()
+  if (activeUsers.length === 0) return
+  const selectedId = selectedPreviewRuntimeUserId.value
   if (selectedId && activeUsers.some((user) => user.id === selectedId)) {
-    return;
+    return
   }
-  const defaultUserId = resolveDefaultPreviewRuntimeUserId(activeUsers, projectMeta);
+  const defaultUserId = resolveDefaultPreviewRuntimeUserId(activeUsers, projectMeta)
   if (defaultUserId) {
-    editorStore.setSelectedPreviewRuntimeUserId(defaultUserId);
-    persistPreviewRuntimeUser(projectId, defaultUserId);
+    editorStore.setSelectedPreviewRuntimeUserId(defaultUserId)
+    persistPreviewRuntimeUser(projectId, defaultUserId)
   }
 }
 
 function handlePreviewUserChange(runtimeUserId: string): void {
-  const projectId = (route.meta as DesignerRouteProjectMeta).project?.id || editorStore.projectId;
-  editorStore.setSelectedPreviewRuntimeUserId(runtimeUserId);
-  persistPreviewRuntimeUser(projectId, runtimeUserId);
+  const projectId = (route.meta as DesignerRouteProjectMeta).project?.id || editorStore.projectId
+  editorStore.setSelectedPreviewRuntimeUserId(runtimeUserId)
+  persistPreviewRuntimeUser(projectId, runtimeUserId)
 }
 
 async function handleRefreshPreviewUsers(): Promise<void> {
-  const projectId = (route.meta as DesignerRouteProjectMeta).project?.id || editorStore.projectId;
-  if (!projectId) return;
+  const projectId = (route.meta as DesignerRouteProjectMeta).project?.id || editorStore.projectId
+  if (!projectId) return
   try {
-    await editorStore.loadProjectRuntimeUsers(projectId);
-    ensureDefaultPreviewRuntimeUser();
+    await editorStore.loadProjectRuntimeUsers(projectId)
+    ensureDefaultPreviewRuntimeUser()
   } catch {
     // 预览身份刷新失败时保持当前缓存，避免打开下拉时打断编辑流程。
   }
 }
 
 async function handlePreview() {
-  await nextTick();
-  editorStore.saveCurrentPageDraft();
-  const projectId = (route.meta as DesignerRouteProjectMeta).project?.id;
+  await nextTick()
+  editorStore.saveCurrentPageDraft()
+  const projectId = (route.meta as DesignerRouteProjectMeta).project?.id
   await router.push({
-    path: "/preview",
+    path: '/preview',
     query: {
       pid: projectId,
-      pageId: currentPageId.value || "",
+      pageId: currentPageId.value || '',
       designWidth: String(canvasWidth.value),
       designHeight: String(canvasHeight.value),
       previewUserId: selectedPreviewRuntimeUserId.value || undefined,
     },
-  });
+  })
 }
 
 /**
@@ -738,34 +738,34 @@ async function handlePreview() {
  */
 async function handleSave() {
   try {
-    await editorStore.saveCurrentPage();
+    await editorStore.saveCurrentPage()
 
     // 保存成功后清除当前标签页的脏状态
-    const tab = pageTabs.value.find((t) => t.id === currentPageId.value);
+    const tab = pageTabs.value.find((t) => t.id === currentPageId.value)
     if (tab) {
-      tab.isDirty = false;
+      tab.isDirty = false
     }
 
-    ElMessage.success(t("message.saveSuccess"));
+    ElMessage.success(t('message.saveSuccess'))
   } catch (err) {
-    const message = err instanceof Error ? err.message : t("message.unknownError");
-    ElMessage.error(t("message.saveFailed", { message }) as string);
+    const message = err instanceof Error ? err.message : t('message.unknownError')
+    ElMessage.error(t('message.saveFailed', { message }) as string)
   }
 }
 
 function handleViewChange(key: string) {
-  if (key === "custom") {
-    activeViewKey.value = "custom";
-    return;
+  if (key === 'custom') {
+    activeViewKey.value = 'custom'
+    return
   }
-  activeViewKey.value = key;
-  const targetView = viewPresets.find((preset) => preset.key === key);
-  if (!targetView || !currentPage.value) return;
-  const currentConfig = (currentPage.value.config ?? {}) as Partial<PageConfig>;
+  activeViewKey.value = key
+  const targetView = viewPresets.find((preset) => preset.key === key)
+  if (!targetView || !currentPage.value) return
+  const currentConfig = (currentPage.value.config ?? {}) as Partial<PageConfig>
   const presetKey = targetView.key as Exclude<
-    NonNullable<PageConfig["viewport"]>["preset"],
+    NonNullable<PageConfig['viewport']>['preset'],
     undefined
-  >;
+  >
   const nextConfig = {
     ...currentConfig,
     width: targetView.width,
@@ -776,51 +776,51 @@ function handleViewChange(key: string) {
       width: targetView.width,
       height: targetView.height,
     },
-  };
-  editorStore.updateCurrentPage({ config: nextConfig });
+  }
+  editorStore.updateCurrentPage({ config: nextConfig })
 }
 
 function handleApplyCustomSize({ width, height }: { width: number; height: number }) {
-  const page = currentPageSnapshot.value;
-  if (!page) return;
-  const pageConfig = (page.config ?? {}) as Partial<PageConfig>;
+  const page = currentPageSnapshot.value
+  if (!page) return
+  const pageConfig = (page.config ?? {}) as Partial<PageConfig>
   const nextConfig = mergePageConfig(page.config, {
     width: Math.round(width),
     height: Math.round(height),
     viewport: {
       ...(pageConfig.viewport ?? {}),
-      preset: "custom",
+      preset: 'custom',
       width: Math.round(width),
       height: Math.round(height),
     },
-  });
-  activeViewKey.value = "custom";
-  editorStore.updateCurrentPage({ config: nextConfig });
+  })
+  activeViewKey.value = 'custom'
+  editorStore.updateCurrentPage({ config: nextConfig })
 }
 
 /**
  * 切换锁定状态
  */
 async function handleToggleLock() {
-  const result = await editorStore.togglePageLock();
-  if (!result) return;
+  const result = await editorStore.togglePageLock()
+  if (!result) return
 
   if (result.success) {
     const message =
-      result.action === "release" ? t("message.pageUnlocked") : t("message.pageLocked");
-    ElMessage.success(message);
-    return;
+      result.action === 'release' ? t('message.pageUnlocked') : t('message.pageLocked')
+    ElMessage.success(message)
+    return
   }
 
-  if (result.reason === "locked") {
+  if (result.reason === 'locked') {
     ElMessage.warning(
-      t("message.pageLockedBy", { user: result.lockedByName || t("message.otherUser") }) as string,
-    );
-    return;
+      t('message.pageLockedBy', { user: result.lockedByName || t('message.otherUser') }) as string,
+    )
+    return
   }
 
-  const err = result.error;
-  ElMessage.error(err instanceof Error ? err.message : String(err ?? t("message.pageLockFailed")));
+  const err = result.error
+  ElMessage.error(err instanceof Error ? err.message : String(err ?? t('message.pageLockFailed')))
 }
 
 /**
@@ -828,54 +828,54 @@ async function handleToggleLock() {
  */
 function handleExport() {
   if (!editorStore.doc || !currentPageId.value) {
-    ElMessage.warning(t("message.noExportablePage"));
-    return;
+    ElMessage.warning(t('message.noExportablePage'))
+    return
   }
-  const payload = editorStore.serializer.exportPage(editorStore.doc, currentPageId.value);
-  const json = JSON.stringify(payload, null, 2);
-  const blob = new Blob([json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const name = `${pageName.value || "page"}.json`;
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  link.click();
-  URL.revokeObjectURL(url);
-  ElMessage.success(t("message.pageExported"));
+  const payload = editorStore.serializer.exportPage(editorStore.doc, currentPageId.value)
+  const json = JSON.stringify(payload, null, 2)
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const name = `${pageName.value || 'page'}.json`
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  link.click()
+  URL.revokeObjectURL(url)
+  ElMessage.success(t('message.pageExported'))
 }
 
 function handleLeftSelect(key: string) {
-  leftActiveKey.value = leftActiveKey.value === key ? "" : key;
+  leftActiveKey.value = leftActiveKey.value === key ? '' : key
 }
 
 function handleRightSelect(key: string) {
-  rightActiveKey.value = rightActiveKey.value === key ? "" : key;
+  rightActiveKey.value = rightActiveKey.value === key ? '' : key
 }
 
 function handleLeftClose() {
-  leftActiveKey.value = "";
+  leftActiveKey.value = ''
 }
 
 function handleRightClose() {
-  rightActiveKey.value = "";
+  rightActiveKey.value = ''
 }
 
 function toggleLeftFloating() {
-  leftFloating.value = !leftFloating.value;
+  leftFloating.value = !leftFloating.value
 }
 
 function toggleRightFloating() {
-  rightFloating.value = !rightFloating.value;
+  rightFloating.value = !rightFloating.value
 }
 
 function handleZoomChange(value: number) {
-  autoZoomEnabled.value = false;
-  zoom.value = value;
+  autoZoomEnabled.value = false
+  zoom.value = value
 }
 
 function clampZoom(value: number): number {
-  const next = Number.isFinite(value) ? value : 1;
-  return Math.min(5, Math.max(0.1, Number(next.toFixed(2))));
+  const next = Number.isFinite(value) ? value : 1
+  return Math.min(5, Math.max(0.1, Number(next.toFixed(2))))
 }
 
 /**
@@ -883,8 +883,8 @@ function clampZoom(value: number): number {
  * @returns {void}
  */
 function handleZoomOut() {
-  autoZoomEnabled.value = false;
-  zoom.value = clampZoom(zoom.value - 0.1);
+  autoZoomEnabled.value = false
+  zoom.value = clampZoom(zoom.value - 0.1)
 }
 
 /**
@@ -892,8 +892,8 @@ function handleZoomOut() {
  * @returns {void}
  */
 function handleZoomIn() {
-  autoZoomEnabled.value = false;
-  zoom.value = clampZoom(zoom.value + 0.1);
+  autoZoomEnabled.value = false
+  zoom.value = clampZoom(zoom.value + 0.1)
 }
 
 /**
@@ -901,9 +901,9 @@ function handleZoomIn() {
  * @returns {void}
  */
 function handleFitCanvas() {
-  autoZoomEnabled.value = false;
-  zoom.value = 1;
-  viewResetToken.value += 1;
+  autoZoomEnabled.value = false
+  zoom.value = 1
+  viewResetToken.value += 1
 }
 
 /**
@@ -912,18 +912,15 @@ function handleFitCanvas() {
  * @returns {number}
  */
 function getRecommendedZoom() {
-  const host = canvasHostRef.value;
+  const host = canvasHostRef.value
   if (!host) {
-    return 1;
+    return 1
   }
-  const rect = host.getBoundingClientRect();
-  const availableWidth = Math.max(1, rect.width - AUTO_FIT_PADDING);
-  const availableHeight = Math.max(1, rect.height - AUTO_FIT_PADDING);
-  const fitZoom = Math.min(
-    availableWidth / canvasWidth.value,
-    availableHeight / canvasHeight.value,
-  );
-  return clampZoom(fitZoom);
+  const rect = host.getBoundingClientRect()
+  const availableWidth = Math.max(1, rect.width - AUTO_FIT_PADDING)
+  const availableHeight = Math.max(1, rect.height - AUTO_FIT_PADDING)
+  const fitZoom = Math.min(availableWidth / canvasWidth.value, availableHeight / canvasHeight.value)
+  return clampZoom(fitZoom)
 }
 
 /**
@@ -931,15 +928,15 @@ function getRecommendedZoom() {
  * @returns {void}
  */
 function applyRecommendedZoom() {
-  const nextZoom = getRecommendedZoom();
+  const nextZoom = getRecommendedZoom()
   if (Math.abs(nextZoom - zoom.value) < 0.001) {
     if (viewResetToken.value === 0) {
-      viewResetToken.value += 1;
+      viewResetToken.value += 1
     }
-    return;
+    return
   }
-  zoom.value = nextZoom;
-  viewResetToken.value += 1;
+  zoom.value = nextZoom
+  viewResetToken.value += 1
 }
 
 /**
@@ -947,16 +944,16 @@ function applyRecommendedZoom() {
  * @returns {void}
  */
 function scheduleAutoFit() {
-  if (!autoZoomEnabled.value) return;
-  if (typeof window === "undefined") return;
+  if (!autoZoomEnabled.value) return
+  if (typeof window === 'undefined') return
   if (autoFitFrame.value) {
-    window.cancelAnimationFrame(autoFitFrame.value);
+    window.cancelAnimationFrame(autoFitFrame.value)
   }
   autoFitFrame.value = window.requestAnimationFrame(() => {
-    autoFitFrame.value = 0;
-    if (!autoZoomEnabled.value) return;
-    applyRecommendedZoom();
-  });
+    autoFitFrame.value = 0
+    if (!autoZoomEnabled.value) return
+    applyRecommendedZoom()
+  })
 }
 
 /**
@@ -964,8 +961,8 @@ function scheduleAutoFit() {
  * @returns {void}
  */
 function handleFitScreen() {
-  autoZoomEnabled.value = true;
-  applyRecommendedZoom();
+  autoZoomEnabled.value = true
+  applyRecommendedZoom()
 }
 
 /**
@@ -973,7 +970,7 @@ function handleFitScreen() {
  * @returns {void}
  */
 function handleToggleRuler() {
-  showRuler.value = !showRuler.value;
+  showRuler.value = !showRuler.value
 }
 
 /**
@@ -981,12 +978,12 @@ function handleToggleRuler() {
  * @returns {void}
  */
 function handleToggleGrid() {
-  const page = currentPageSnapshot.value;
-  if (!page) return;
+  const page = currentPageSnapshot.value
+  if (!page) return
   const nextConfig = mergePageConfig(page.config, {
     showGrid: !showGrid.value,
-  });
-  editorStore.updateCurrentPage({ config: nextConfig });
+  })
+  editorStore.updateCurrentPage({ config: nextConfig })
 }
 
 /**
@@ -994,12 +991,12 @@ function handleToggleGrid() {
  * @returns {void}
  */
 function handleToggleSnap() {
-  const page = currentPageSnapshot.value;
-  if (!page) return;
+  const page = currentPageSnapshot.value
+  if (!page) return
   const nextConfig = mergePageConfig(page.config, {
     enableSnap: !enableSnap.value,
-  });
-  editorStore.updateCurrentPage({ config: nextConfig });
+  })
+  editorStore.updateCurrentPage({ config: nextConfig })
 }
 
 /**
@@ -1007,84 +1004,84 @@ function handleToggleSnap() {
  * @returns {void}
  */
 async function handlePageCreate() {
-  if (leftActiveKey.value !== "pages") {
-    leftActiveKey.value = "pages";
-    leftFloating.value = false;
-    await nextTick();
+  if (leftActiveKey.value !== 'pages') {
+    leftActiveKey.value = 'pages'
+    leftFloating.value = false
+    await nextTick()
   }
-  leftPanelRef.value?.openCreateDialog?.();
+  leftPanelRef.value?.openCreateDialog?.()
 }
 
 function getUniquePageName(name: string | undefined) {
-  const base = (name || t("shell.importPage")).trim() || t("shell.importPage");
+  const base = (name || t('shell.importPage')).trim() || t('shell.importPage')
   const existingNames = editorStore.pages
     .map((page: DesignerStorePageRow) => page.name)
-    .filter(Boolean) as string[];
-  if (!existingNames.includes(base)) return base;
-  let index = 1;
-  let next = `${base}_${index}`;
+    .filter(Boolean) as string[]
+  if (!existingNames.includes(base)) return base
+  let index = 1
+  let next = `${base}_${index}`
   while (existingNames.includes(next)) {
-    index += 1;
-    next = `${base}_${index}`;
+    index += 1
+    next = `${base}_${index}`
   }
-  return next;
+  return next
 }
 
 function handlePageImport() {
   if (!editorStore.doc) {
-    ElMessage.warning(t("message.noImportablePage"));
-    return;
+    ElMessage.warning(t('message.noImportablePage'))
+    return
   }
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = ".json,application/json";
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.json,application/json'
   input.onchange = async (event: Event) => {
-    const target = event.target as HTMLInputElement;
-    const file = target.files?.[0];
-    if (!file) return;
+    const target = event.target as HTMLInputElement
+    const file = target.files?.[0]
+    if (!file) return
     try {
-      const text = await file.text();
-      const payload = JSON.parse(text);
+      const text = await file.text()
+      const payload = JSON.parse(text)
       if (!payload?.page || !payload?.nodesById) {
-        ElMessage.error(t("message.invalidPageData"));
-        return;
+        ElMessage.error(t('message.invalidPageData'))
+        return
       }
-      const serializer = editorStore.serializer;
-      const docModel = editorStore.doc;
+      const serializer = editorStore.serializer
+      const docModel = editorStore.doc
       if (!docModel) {
-        ElMessage.error(t("message.importFailed"));
-        return;
+        ElMessage.error(t('message.importFailed'))
+        return
       }
-      const baseSchema = serializer.exportToSchema(docModel);
-      const tempDoc = serializer.importFromSchema(baseSchema);
+      const baseSchema = serializer.exportToSchema(docModel)
+      const tempDoc = serializer.importFromSchema(baseSchema)
       const tempPageId = serializer.importPage(tempDoc, payload, {
         generateNewIds: true,
-      });
-      const imported = serializer.exportPage(tempDoc, tempPageId);
-      const uniqueName = getUniquePageName(payload.page?.name);
-      imported.page.name = uniqueName;
+      })
+      const imported = serializer.exportPage(tempDoc, tempPageId)
+      const uniqueName = getUniquePageName(payload.page?.name)
+      imported.page.name = uniqueName
 
-      const importedPage = imported.page as { type?: string };
+      const importedPage = imported.page as { type?: string }
       const result: CreatePageForStoreResult = await editorStore.createPage({
         name: uniqueName,
-        type: importedPage.type || "page",
+        type: importedPage.type || 'page',
         parentId: null,
-      });
-      const pageId = result?.id || result?.page?.id;
+      })
+      const pageId = result?.id || result?.page?.id
       if (!pageId) {
-        ElMessage.error(t("message.importFailed"));
-        return;
+        ElMessage.error(t('message.importFailed'))
+        return
       }
-      imported.page.id = pageId;
-      await editorStore.updatePageSchema(pageId, imported);
-      await editorStore.loadPage(pageId);
-      openPageTab(pageId);
-      ElMessage.success(t("message.pageImported"));
+      imported.page.id = pageId
+      await editorStore.updatePageSchema(pageId, imported)
+      await editorStore.loadPage(pageId)
+      openPageTab(pageId)
+      ElMessage.success(t('message.pageImported'))
     } catch {
-      ElMessage.error(t("message.importFailed"));
+      ElMessage.error(t('message.importFailed'))
     }
-  };
-  input.click();
+  }
+  input.click()
 }
 
 /**
@@ -1092,7 +1089,7 @@ function handlePageImport() {
  */
 function handleLayerMoveUp() {
   if (editorStore.moveNodeUp()) {
-    ElMessage.success(t("message.movedUp"));
+    ElMessage.success(t('message.movedUp'))
   }
 }
 
@@ -1101,7 +1098,7 @@ function handleLayerMoveUp() {
  */
 function handleLayerMoveDown() {
   if (editorStore.moveNodeDown()) {
-    ElMessage.success(t("message.movedDown"));
+    ElMessage.success(t('message.movedDown'))
   }
 }
 
@@ -1110,7 +1107,7 @@ function handleLayerMoveDown() {
  */
 function handleLayerMoveToTop() {
   if (editorStore.moveNodeToTop()) {
-    ElMessage.success(t("message.movedToTop"));
+    ElMessage.success(t('message.movedToTop'))
   }
 }
 
@@ -1119,44 +1116,44 @@ function handleLayerMoveToTop() {
  */
 function handleLayerMoveToBottom() {
   if (editorStore.moveNodeToBottom()) {
-    ElMessage.success(t("message.movedToBottom"));
+    ElMessage.success(t('message.movedToBottom'))
   }
 }
 function handleCopy() {
   if (editorStore.copyNodes()) {
-    ElMessage.success(t("message.copied"));
+    ElMessage.success(t('message.copied'))
   }
 }
-const handlePaste = () => editorStore.pasteNodes();
-const handleDeleteSelected = () => editorStore.removeSelectedNodes();
-const handleToggleNodeLock = () => editorStore.toggleSelectedNodesLock();
+const handlePaste = () => editorStore.pasteNodes()
+const handleDeleteSelected = () => editorStore.removeSelectedNodes()
+const handleToggleNodeLock = () => editorStore.toggleSelectedNodesLock()
 
 /**
  * 更多设置：多人协作（占位）
  */
 function handleOpenCollaboration() {
-  ElMessage.info(t("message.collaborationWip"));
+  ElMessage.info(t('message.collaborationWip'))
 }
 
 /**
  * 工具栏：AI 助手（占位）
  */
 function handleOpenAi() {
-  ElMessage.info(t("message.aiAssistantWip"));
+  ElMessage.info(t('message.aiAssistantWip'))
 }
 
 /**
  * 更多设置：刷新画布（占位）
  */
 function handleRefreshCanvas() {
-  ElMessage.info(t("message.refreshCanvasWip"));
+  ElMessage.info(t('message.refreshCanvasWip'))
 }
 
 /**
  * 工具栏：清除当前界面（占位）
  */
 function handleClearCanvas() {
-  ElMessage.info(t("message.clearCanvasWip"));
+  ElMessage.info(t('message.clearCanvasWip'))
 }
 
 watch(
@@ -1168,81 +1165,81 @@ watch(
     () => currentPageSnapshot.value?.config?.height,
   ],
   () => {
-    activeViewKey.value = matchedViewPreset.value?.key || "custom";
-    autoZoomEnabled.value = true;
+    activeViewKey.value = matchedViewPreset.value?.key || 'custom'
+    autoZoomEnabled.value = true
     nextTick(() => {
-      scheduleAutoFit();
-    });
+      scheduleAutoFit()
+    })
   },
   { immediate: true },
-);
+)
 
 watch([leftPanelWidth, rightPanelWidth], () => {
-  persistDockPanelWidths();
-});
+  persistDockPanelWidths()
+})
 
 watch(
   [runtimeUsers, selectedPreviewRuntimeUserId],
   () => {
-    ensureDefaultPreviewRuntimeUser();
+    ensureDefaultPreviewRuntimeUser()
   },
   { immediate: true, deep: true },
-);
+)
 
 /**
  * 加载工程数据
  */
 async function loadProject() {
-  const project = (route.meta as DesignerRouteProjectMeta).project;
-  if (!project?.id) return;
-  const targetPageId = String(route.query.pageId || "");
+  const project = (route.meta as DesignerRouteProjectMeta).project
+  if (!project?.id) return
+  const targetPageId = String(route.query.pageId || '')
   if (editorStore.projectId === project.id && editorStore.doc) {
     if (
       targetPageId &&
       (targetPageId !== currentPageId.value || editorStore.getPageDraft?.(targetPageId))
     ) {
-      await editorStore.loadPage(targetPageId);
+      await editorStore.loadPage(targetPageId)
     }
-    await handleRefreshPreviewUsers();
-    restorePreviewRuntimeUser(project.id);
-    ensureDefaultPreviewRuntimeUser();
-    return;
+    await handleRefreshPreviewUsers()
+    restorePreviewRuntimeUser(project.id)
+    ensureDefaultPreviewRuntimeUser()
+    return
   }
-  const result = await editorStore.loadProject(project.id);
+  const result = await editorStore.loadProject(project.id)
   if (!result.ok) {
-    ElMessage.error(result.error?.message || t("message.loadProjectFailed"));
-    return;
+    ElMessage.error(result.error?.message || t('message.loadProjectFailed'))
+    return
   }
-  restorePreviewRuntimeUser(project.id);
-  ensureDefaultPreviewRuntimeUser();
+  restorePreviewRuntimeUser(project.id)
+  ensureDefaultPreviewRuntimeUser()
   if (targetPageId) {
-    await editorStore.loadPage(targetPageId);
+    await editorStore.loadPage(targetPageId)
   }
 }
 
 onMounted(() => {
-  restoreDockPanelWidths();
-  void loadProject();
+  restoreDockPanelWidths()
+  void loadProject()
   nextTick(() => {
-    scheduleAutoFit();
-    if (canvasHostRef.value && typeof ResizeObserver !== "undefined") {
+    scheduleAutoFit()
+    if (canvasHostRef.value && typeof ResizeObserver !== 'undefined') {
       canvasHostResizeObserver.value = new ResizeObserver(() => {
-        scheduleAutoFit();
-      });
-      canvasHostResizeObserver.value.observe(canvasHostRef.value);
+        scheduleAutoFit()
+      })
+      canvasHostResizeObserver.value.observe(canvasHostRef.value)
     }
-  });
-});
+  })
+})
 
 onBeforeUnmount(() => {
-  if (typeof window !== "undefined" && autoFitFrame.value) {
-    window.cancelAnimationFrame(autoFitFrame.value);
-    autoFitFrame.value = 0;
+  if (typeof window !== 'undefined' && autoFitFrame.value) {
+    window.cancelAnimationFrame(autoFitFrame.value)
+    autoFitFrame.value = 0
   }
-  canvasHostResizeObserver.value?.disconnect?.();
-  canvasHostResizeObserver.value = null;
-  void editorStore.releasePageLock();
-});
+  canvasHostResizeObserver.value?.disconnect?.()
+  canvasHostResizeObserver.value = null
+  void editorStore.releasePageLock()
+})
 </script>
 
 <template>
@@ -1370,11 +1367,11 @@ onBeforeUnmount(() => {
             <div v-else class="empty-canvas-placeholder">
               <div class="empty-content">
                 <IconEpDocument class="empty-icon" />
-                <h3 class="empty-title">{{ t("shell.noPages") }}</h3>
-                <p class="empty-desc">{{ t("shell.createPageHint") }}</p>
+                <h3 class="empty-title">{{ t('shell.noPages') }}</h3>
+                <p class="empty-desc">{{ t('shell.createPageHint') }}</p>
                 <el-button type="primary" @click="handlePageCreate">
                   <IconEpPlus class="mr-1" />
-                  {{ t("shell.newPage") }}
+                  {{ t('shell.newPage') }}
                 </el-button>
               </div>
             </div>
@@ -1470,7 +1467,7 @@ onBeforeUnmount(() => {
               </el-tab-pane>
             </el-tabs>
             <div v-else class="page-tabs-empty">
-              <span>{{ t("shell.noPages") }}</span>
+              <span>{{ t('shell.noPages') }}</span>
               <el-button class="page-tabs-add-btn" text @click="handlePageCreate">
                 <IconEpPlus />
               </el-button>
@@ -1481,11 +1478,11 @@ onBeforeUnmount(() => {
             <span class="status-item status-mouse">
               {{
                 canvasMousePos
-                  ? t("shell.mousePosition", {
+                  ? t('shell.mousePosition', {
                       x: Math.round(canvasMousePos.x),
                       y: Math.round(canvasMousePos.y),
                     })
-                  : t("shell.mousePositionEmpty")
+                  : t('shell.mousePositionEmpty')
               }}
             </span>
             <span class="status-sep">|</span>
@@ -1497,21 +1494,21 @@ onBeforeUnmount(() => {
             </template>
             <template v-if="selectedNodePos">
               <span class="status-item status-mouse">
-                {{ t("shell.nodePosition", { x: selectedNodePos.x, y: selectedNodePos.y }) }}
+                {{ t('shell.nodePosition', { x: selectedNodePos.x, y: selectedNodePos.y }) }}
               </span>
               <span class="status-sep">|</span>
             </template>
             <template v-if="selectedNodeSize">
               <span class="status-item status-mouse">
-                {{ t("shell.nodeSize", { w: selectedNodeSize.w, h: selectedNodeSize.h }) }}
+                {{ t('shell.nodeSize', { w: selectedNodeSize.w, h: selectedNodeSize.h }) }}
               </span>
               <span class="status-sep">|</span>
             </template>
             <span class="status-item">{{
-              t("shell.selectedCount", { count: selectionCount })
+              t('shell.selectedCount', { count: selectionCount })
             }}</span>
             <span class="status-sep">|</span>
-            <span class="status-item">{{ t("shell.totalCount", { count: totalNodeCount }) }}</span>
+            <span class="status-item">{{ t('shell.totalCount', { count: totalNodeCount }) }}</span>
             <template v-if="hoveredNodeType">
               <span class="status-sep">|</span>
               <span class="status-item status-hover">{{ hoveredNodeType }}</span>
@@ -1777,7 +1774,7 @@ onBeforeUnmount(() => {
 }
 
 .status-info-bar .status-mouse {
-  font-family: "SF Mono", "Cascadia Code", "Consolas", monospace;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
   font-size: 10px;
   letter-spacing: 0.03em;
 }

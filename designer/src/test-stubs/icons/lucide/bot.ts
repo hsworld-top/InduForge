@@ -1,4 +1,4 @@
 export default {
-  name: "IconLucideBot",
+  name: 'IconLucideBot',
   template: `<span class="icon-lucide-bot" />`,
-};
+}

@@ -1,48 +1,43 @@
-import request from "@/utils/request";
-import { listResponseSchema } from "./schemas/common.schema";
+import request from '@/utils/request'
+import { listResponseSchema } from './schemas/common.schema'
 import {
   DatapointSchema,
   DatapointUpdateSchema,
   type Datapoint,
   type DatapointUpdate,
-} from "./schemas/datapoint.schema";
+} from './schemas/datapoint.schema'
 
-const datapointListSchema = listResponseSchema(DatapointSchema);
+const datapointListSchema = listResponseSchema(DatapointSchema)
 
 type DatapointListResp = {
-  list: Datapoint[];
+  list: Datapoint[]
   pagination?: {
-    page?: number;
-    pageSize?: number;
-    total?: number;
-  };
-};
+    page?: number
+    pageSize?: number
+    total?: number
+  }
+}
 
 const unwrapData = (value: unknown) => {
-  if (
-    value &&
-    typeof value === "object" &&
-    "code" in value &&
-    "data" in value
-  ) {
-    return (value as { data?: unknown }).data;
+  if (value && typeof value === 'object' && 'code' in value && 'data' in value) {
+    return (value as { data?: unknown }).data
   }
-  return value;
-};
+  return value
+}
 
 function normalizeDatapointListResponse(res: unknown) {
-  const payload = unwrapData(res);
+  const payload = unwrapData(res)
   if (Array.isArray(payload)) {
-    return { list: payload };
+    return { list: payload }
   }
-  if (!payload || typeof payload !== "object") {
-    return { list: [] };
+  if (!payload || typeof payload !== 'object') {
+    return { list: [] }
   }
-  const record = payload as Record<string, unknown>;
+  const record = payload as Record<string, unknown>
   return {
     ...record,
     list: record.list ?? record.datapoints ?? record.items ?? [],
-  };
+  }
 }
 
 /** 获取数据点列表 */
@@ -52,24 +47,21 @@ export async function getDatapoints(
 ): Promise<DatapointListResp> {
   const res = await request({
     url: `/data/projects/${projectId}/datapoints`,
-    method: "get",
+    method: 'get',
     params,
-  });
+  })
   // request 已解包 data 层。旧后端字段为 datapoints，新页面统一使用 list。
-  const normalized = normalizeDatapointListResponse(res);
-  return datapointListSchema.parse(normalized);
+  const normalized = normalizeDatapointListResponse(res)
+  return datapointListSchema.parse(normalized)
 }
 
 /** 获取单个数据点详情 */
-export async function getDatapoint(
-  projectId: string,
-  datapointId: string,
-): Promise<Datapoint> {
+export async function getDatapoint(projectId: string, datapointId: string): Promise<Datapoint> {
   const res = await request({
     url: `/data/projects/${projectId}/datapoints/${datapointId}`,
-    method: "get",
-  });
-  return DatapointSchema.parse(unwrapData(res));
+    method: 'get',
+  })
+  return DatapointSchema.parse(unwrapData(res))
 }
 
 /** 更新数据点 */
@@ -78,13 +70,13 @@ export async function updateDatapoint(
   datapointId: string,
   data: DatapointUpdate,
 ): Promise<Datapoint> {
-  const body = DatapointUpdateSchema.parse(data);
+  const body = DatapointUpdateSchema.parse(data)
   const res = await request({
     url: `/data/projects/${projectId}/datapoints/${datapointId}`,
-    method: "put",
+    method: 'put',
     data: body,
-  });
-  return DatapointSchema.parse(unwrapData(res));
+  })
+  return DatapointSchema.parse(unwrapData(res))
 }
 
 /** 更新数据点运行态权限 */
@@ -95,31 +87,25 @@ export async function updateDatapointRuntimeGrant(
 ): Promise<Datapoint> {
   const res = await request({
     url: `/data/projects/${projectId}/datapoints/${datapointId}/runtime-permissions`,
-    method: "put",
+    method: 'put',
     data,
-  });
-  return DatapointSchema.parse(unwrapData(res));
+  })
+  return DatapointSchema.parse(unwrapData(res))
 }
 
 /** 删除数据点 */
-export async function deleteDatapoint(
-  projectId: string,
-  datapointId: string,
-): Promise<void> {
+export async function deleteDatapoint(projectId: string, datapointId: string): Promise<void> {
   await request({
     url: `/data/projects/${projectId}/datapoints/${datapointId}`,
-    method: "delete",
-  });
+    method: 'delete',
+  })
 }
 
 /** 批量删除数据点 */
-export async function deleteDatapointsBatch(
-  projectId: string,
-  ids: string[],
-): Promise<void> {
+export async function deleteDatapointsBatch(projectId: string, ids: string[]): Promise<void> {
   await request({
     url: `/data/projects/${projectId}/datapoints/delete-batch`,
-    method: "post",
+    method: 'post',
     data: { ids },
-  });
+  })
 }

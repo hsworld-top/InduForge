@@ -39,11 +39,7 @@
             placeholder="请输入标签名称"
             @keyup.enter="appendTag"
           />
-          <button
-            type="button"
-            class="dp-tag-dialog__create-btn"
-            @click="appendTag"
-          >
+          <button type="button" class="dp-tag-dialog__create-btn" @click="appendTag">
             新建标签
           </button>
         </div>
@@ -75,121 +71,117 @@
     <template #footer>
       <div class="dp-tag-dialog__footer">
         <el-button @click="requestClose">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="handleSubmit">
-          保存
-        </el-button>
+        <el-button type="primary" :loading="saving" @click="handleSubmit"> 保存 </el-button>
       </div>
     </template>
   </DcDialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
-import { Close } from "@element-plus/icons-vue";
-import DcDialog from "@/components/shared/DcDialog.vue";
+import { ref, computed, watch } from 'vue'
+import { Close } from '@element-plus/icons-vue'
+import DcDialog from '@/components/shared/DcDialog.vue'
 
 interface DataPointRow {
-  id: string;
-  name?: string;
-  tags?: unknown[];
+  id: string
+  name?: string
+  tags?: unknown[]
 }
 
 const props = defineProps<{
   /** 是否显示 */
-  visible: boolean;
+  visible: boolean
   /** 当前操作的数据点（单条），批量时为 null */
-  datapoint: DataPointRow | null;
+  datapoint: DataPointRow | null
   /** 项目 ID */
-  projectId: string;
+  projectId: string
   /** 已有标签选项（供选择器复用） */
-  tagOptions?: Array<{ value: string; name: string }>;
+  tagOptions?: Array<{ value: string; name: string }>
   /** 批量操作时选中的数据点列表 */
-  batchRows?: DataPointRow[];
+  batchRows?: DataPointRow[]
   /** 外部传入的 saving 状态 */
-  saving?: boolean;
-}>();
+  saving?: boolean
+}>()
 
 const emit = defineEmits<{
   /** 提交标签列表 */
-  submit: [tags: string[], mode: "single" | "batch"];
-  cancel: [];
-}>();
+  submit: [tags: string[], mode: 'single' | 'batch']
+  cancel: []
+}>()
 
-const tagDraft = ref<string[]>([]);
-const tagCreateInput = ref("");
-const initialSnapshot = ref("");
-const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null);
+const tagDraft = ref<string[]>([])
+const tagCreateInput = ref('')
+const initialSnapshot = ref('')
+const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
 
-const isBatch = computed(() => !props.datapoint && (props.batchRows?.length ?? 0) > 0);
+const isBatch = computed(() => !props.datapoint && (props.batchRows?.length ?? 0) > 0)
 const draftSnapshot = computed(() =>
   JSON.stringify({
     tags: [...tagDraft.value].sort(),
     createInput: tagCreateInput.value,
   }),
-);
-const isDirty = computed(
-  () => props.visible && draftSnapshot.value !== initialSnapshot.value,
-);
+)
+const isDirty = computed(() => props.visible && draftSnapshot.value !== initialSnapshot.value)
 
 const dialogTitle = computed(() =>
   isBatch.value
     ? `标签管理（${props.batchRows?.length ?? 0} 项）`
-    : `标签管理：${props.datapoint?.name || "-"}`,
-);
+    : `标签管理：${props.datapoint?.name || '-'}`,
+)
 
 // 初始化 draft
 watch(
   () => [props.visible, props.datapoint],
   () => {
-    if (!props.visible) return;
+    if (!props.visible) return
     if (props.datapoint) {
-      tagDraft.value = normalizeTags(props.datapoint.tags);
+      tagDraft.value = normalizeTags(props.datapoint.tags)
     } else {
-      tagDraft.value = [];
+      tagDraft.value = []
     }
-    tagCreateInput.value = "";
-    initialSnapshot.value = draftSnapshot.value;
+    tagCreateInput.value = ''
+    initialSnapshot.value = draftSnapshot.value
   },
   { immediate: true },
-);
+)
 
 function normalizeTags(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  const result: string[] = [];
+  if (!Array.isArray(value)) return []
+  const result: string[] = []
   for (const item of value) {
-    let label = "";
-    if (typeof item === "string") {
-      label = item;
-    } else if (item && typeof item === "object") {
-      const r = item as Record<string, unknown>;
-      label = String(r.label || r.name || r.value || "");
+    let label = ''
+    if (typeof item === 'string') {
+      label = item
+    } else if (item && typeof item === 'object') {
+      const r = item as Record<string, unknown>
+      label = String(r.label || r.name || r.value || '')
     }
-    const n = label.trim();
-    if (n && !result.includes(n)) result.push(n);
+    const n = label.trim()
+    if (n && !result.includes(n)) result.push(n)
   }
-  return result;
+  return result
 }
 
 function appendTag() {
-  const tag = tagCreateInput.value.trim();
-  if (!tag) return;
+  const tag = tagCreateInput.value.trim()
+  if (!tag) return
   if (!tagDraft.value.includes(tag)) {
-    tagDraft.value = [...tagDraft.value, tag];
+    tagDraft.value = [...tagDraft.value, tag]
   }
-  tagCreateInput.value = "";
+  tagCreateInput.value = ''
 }
 
 function handleSubmit() {
-  initialSnapshot.value = draftSnapshot.value;
-  emit("submit", [...tagDraft.value], isBatch.value ? "batch" : "single");
+  initialSnapshot.value = draftSnapshot.value
+  emit('submit', [...tagDraft.value], isBatch.value ? 'batch' : 'single')
 }
 
 function handleVisibleChange(val: boolean) {
-  if (!val) emit("cancel");
+  if (!val) emit('cancel')
 }
 
 function requestClose() {
-  void dialogRef.value?.requestClose();
+  void dialogRef.value?.requestClose()
 }
 </script>
 

@@ -1,18 +1,18 @@
-import { defineStore } from "pinia";
-import { ref, watch } from "vue";
-import { Storage } from "@/utils/storage";
+import { defineStore } from 'pinia'
+import { ref, watch } from 'vue'
+import { Storage } from '@/utils/storage'
 
-const STORAGE_KEY = "ui_prefs_v2";
+const STORAGE_KEY = 'ui_prefs_v2'
 
 interface UiPrefs {
   // 抽屉宽度（像素）
-  drawerWidth: number;
+  drawerWidth: number
   // 列表每页条数
-  pageSize: number;
+  pageSize: number
   // 侧边栏是否折叠
-  sidebarCollapsed: boolean;
+  sidebarCollapsed: boolean
   // 详情抽屉是否处于钉住（旁路面板）状态
-  pinnedDrawer: boolean;
+  pinnedDrawer: boolean
 }
 
 const DEFAULT_PREFS: UiPrefs = {
@@ -20,44 +20,44 @@ const DEFAULT_PREFS: UiPrefs = {
   pageSize: 20,
   sidebarCollapsed: false,
   pinnedDrawer: false,
-};
-
-function loadFromStorage(): UiPrefs {
-  const stored = Storage.get(STORAGE_KEY, null) as Partial<UiPrefs> | null;
-  if (!stored) return { ...DEFAULT_PREFS };
-  return { ...DEFAULT_PREFS, ...stored };
 }
 
-export const useUiPrefsStore = defineStore("uiPrefs", () => {
-  const prefs = ref<UiPrefs>(loadFromStorage());
+function loadFromStorage(): UiPrefs {
+  const stored = Storage.get(STORAGE_KEY, null) as Partial<UiPrefs> | null
+  if (!stored) return { ...DEFAULT_PREFS }
+  return { ...DEFAULT_PREFS, ...stored }
+}
+
+export const useUiPrefsStore = defineStore('uiPrefs', () => {
+  const prefs = ref<UiPrefs>(loadFromStorage())
 
   // 任何变更同步到 localStorage
   watch(
     prefs,
     (val) => {
-      Storage.set(STORAGE_KEY, val);
+      Storage.set(STORAGE_KEY, val)
     },
     { deep: true },
-  );
+  )
 
   function setDrawerWidth(width: number) {
-    prefs.value.drawerWidth = width;
+    prefs.value.drawerWidth = width
   }
 
   function setPageSize(size: number) {
-    prefs.value.pageSize = size;
+    prefs.value.pageSize = size
   }
 
   function setSidebarCollapsed(collapsed: boolean) {
-    prefs.value.sidebarCollapsed = collapsed;
+    prefs.value.sidebarCollapsed = collapsed
   }
 
   function setPinnedDrawer(pinned: boolean) {
-    prefs.value.pinnedDrawer = pinned;
+    prefs.value.pinnedDrawer = pinned
   }
 
   function reset() {
-    prefs.value = { ...DEFAULT_PREFS };
+    prefs.value = { ...DEFAULT_PREFS }
   }
 
   return {
@@ -67,5 +67,5 @@ export const useUiPrefsStore = defineStore("uiPrefs", () => {
     setSidebarCollapsed,
     setPinnedDrawer,
     reset,
-  };
-});
+  }
+})

@@ -4,39 +4,39 @@
 -->
 <script setup lang="ts">
 interface ListItemLike {
-  name: string;
-  title?: string;
-  label?: string;
-  disabled?: boolean;
+  name: string
+  title?: string
+  label?: string
+  disabled?: boolean
 }
 
 const props = defineProps<{
-  items: ListItemLike[];
-  selectedKey: string;
-  title?: string;
-}>();
+  items: ListItemLike[]
+  selectedKey: string
+  title?: string
+}>()
 
 const emit = defineEmits<{
-  (event: "select", key: string): void;
-  (event: "add"): void;
-  (event: "duplicate", key: string): void;
-  (event: "remove", key: string): void;
-  (event: "move", key: string, direction: -1 | 1): void;
-}>();
+  (event: 'select', key: string): void
+  (event: 'add'): void
+  (event: 'duplicate', key: string): void
+  (event: 'remove', key: string): void
+  (event: 'move', key: string, direction: -1 | 1): void
+}>()
 
 function getItemTitle(item: ListItemLike, index: number): string {
-  return item.title || item.label || item.name || `项目 ${index + 1}`;
+  return item.title || item.label || item.name || `项目 ${index + 1}`
 }
 
 function isSelected(item: ListItemLike): boolean {
-  return item.name === props.selectedKey;
+  return item.name === props.selectedKey
 }
 </script>
 
 <template>
   <div class="list-items-editor">
     <div class="list-items-editor__toolbar">
-      <span class="list-items-editor__title">{{ props.title || "面板项" }}</span>
+      <span class="list-items-editor__title">{{ props.title || '面板项' }}</span>
       <el-button size="small" type="primary" @click="emit('add')">新增</el-button>
     </div>
 
@@ -54,12 +54,7 @@ function isSelected(item: ListItemLike): boolean {
           <span v-if="item.disabled" class="list-items-editor__tag">禁用</span>
         </span>
         <span class="list-items-editor__actions" @click.stop>
-          <el-button
-            size="small"
-            text
-            :disabled="index === 0"
-            @click="emit('move', item.name, -1)"
-          >
+          <el-button size="small" text :disabled="index === 0" @click="emit('move', item.name, -1)">
             上移
           </el-button>
           <el-button

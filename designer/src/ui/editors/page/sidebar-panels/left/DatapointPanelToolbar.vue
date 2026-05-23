@@ -3,76 +3,76 @@
   常态只保留高频入口，低频操作收进更多菜单；选中后显示批量操作条。
 -->
 <script setup lang="ts">
-import { computed } from "vue";
-import { useI18n } from "vue-i18n";
-import IconEpDelete from "~icons/ep/delete";
-import IconEpDownload from "~icons/ep/download";
-import IconEpEditPen from "~icons/ep/edit-pen";
-import IconEpFolder from "~icons/ep/folder";
-import IconEpLink from "~icons/ep/link";
-import IconEpMoreFilled from "~icons/ep/more-filled";
-import IconEpPlus from "~icons/ep/plus";
-import IconEpUpload from "~icons/ep/upload";
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import IconEpDelete from '~icons/ep/delete'
+import IconEpDownload from '~icons/ep/download'
+import IconEpEditPen from '~icons/ep/edit-pen'
+import IconEpFolder from '~icons/ep/folder'
+import IconEpLink from '~icons/ep/link'
+import IconEpMoreFilled from '~icons/ep/more-filled'
+import IconEpPlus from '~icons/ep/plus'
+import IconEpUpload from '~icons/ep/upload'
 
-type VariableExportCommand = "csv" | "xlsx" | "json";
+type VariableExportCommand = 'csv' | 'xlsx' | 'json'
 type ToolbarMoreCommand =
-  | "createGroup"
-  | "importCsv"
-  | "importXlsx"
-  | "importJson"
-  | "exportCsv"
-  | "exportXlsx"
-  | "exportJson";
+  | 'createGroup'
+  | 'importCsv'
+  | 'importXlsx'
+  | 'importJson'
+  | 'exportCsv'
+  | 'exportXlsx'
+  | 'exportJson'
 
 const props = defineProps<{
   /** 是否有选中的节点 */
-  hasSelection?: boolean;
+  hasSelection?: boolean
   /** 选中节点的类型：variable / group / mixed / none */
-  selectionType?: "variable" | "group" | "mixed" | "none";
+  selectionType?: 'variable' | 'group' | 'mixed' | 'none'
   /** 当前选中节点数量 */
-  selectedCount?: number;
+  selectedCount?: number
   /** 是否允许编辑（单选时允许） */
-  canEdit?: boolean;
+  canEdit?: boolean
   /** 是否允许删除 */
-  canDelete?: boolean;
-}>();
+  canDelete?: boolean
+}>()
 
 const emit = defineEmits<{
-  (event: "createVar"): void;
-  (event: "createGroup"): void;
-  (event: "quickAdd"): void;
-  (event: "editSelected"): void;
-  (event: "deleteSelected"): void;
-  (event: "clearSelection"): void;
-  (event: "exportVars", command: VariableExportCommand): void;
-  (event: "importVars", command: VariableExportCommand): void;
-}>();
+  (event: 'createVar'): void
+  (event: 'createGroup'): void
+  (event: 'quickAdd'): void
+  (event: 'editSelected'): void
+  (event: 'deleteSelected'): void
+  (event: 'clearSelection'): void
+  (event: 'exportVars', command: VariableExportCommand): void
+  (event: 'importVars', command: VariableExportCommand): void
+}>()
 
 function handleExport(command: VariableExportCommand) {
-  emit("exportVars", command);
+  emit('exportVars', command)
 }
 
 function handleImport(command: VariableExportCommand) {
-  emit("importVars", command);
+  emit('importVars', command)
 }
 
 function handleMore(command: ToolbarMoreCommand): void {
-  if (command === "createGroup") {
-    emit("createGroup");
-    return;
+  if (command === 'createGroup') {
+    emit('createGroup')
+    return
   }
-  if (command.startsWith("import")) {
-    handleImport(command.replace("import", "").toLowerCase() as VariableExportCommand);
-    return;
+  if (command.startsWith('import')) {
+    handleImport(command.replace('import', '').toLowerCase() as VariableExportCommand)
+    return
   }
-  handleExport(command.replace("export", "").toLowerCase() as VariableExportCommand);
+  handleExport(command.replace('export', '').toLowerCase() as VariableExportCommand)
 }
 
-const { t } = useI18n();
+const { t } = useI18n()
 
 const selectionLabel = computed(() =>
-  t("datapointPanel.toolbar.selectedSummary", { count: props.selectedCount || 0 }),
-);
+  t('datapointPanel.toolbar.selectedSummary', { count: props.selectedCount || 0 }),
+)
 </script>
 
 <template>
@@ -85,11 +85,11 @@ const selectionLabel = computed(() =>
         @click="emit('createVar')"
       >
         <IconEpPlus class="toolbar-icon" />
-        {{ t("datapointPanel.toolbar.createVar") }}
+        {{ t('datapointPanel.toolbar.createVar') }}
       </el-button>
       <el-button class="toolbar-btn toolbar-btn--ghost" size="small" @click="emit('quickAdd')">
         <IconEpLink class="toolbar-icon" />
-        {{ t("datapointPanel.toolbar.quickAdd") }}
+        {{ t('datapointPanel.toolbar.quickAdd') }}
       </el-button>
       <el-dropdown trigger="click" @command="handleMore">
         <el-button class="toolbar-more" size="small" :aria-label="t('datapointPanel.toolbar.more')">
@@ -99,27 +99,27 @@ const selectionLabel = computed(() =>
           <el-dropdown-menu>
             <el-dropdown-item command="createGroup">
               <IconEpFolder class="dropdown-icon" />
-              {{ t("datapointPanel.toolbar.createGroup") }}
+              {{ t('datapointPanel.toolbar.createGroup') }}
             </el-dropdown-item>
             <el-dropdown-item divided command="importJson">
               <IconEpDownload class="dropdown-icon" />
-              {{ t("datapointPanel.toolbar.importJson") }}
+              {{ t('datapointPanel.toolbar.importJson') }}
             </el-dropdown-item>
             <el-dropdown-item command="importCsv">{{
-              t("datapointPanel.toolbar.importCsv")
+              t('datapointPanel.toolbar.importCsv')
             }}</el-dropdown-item>
             <el-dropdown-item command="importXlsx">{{
-              t("datapointPanel.toolbar.importXlsx")
+              t('datapointPanel.toolbar.importXlsx')
             }}</el-dropdown-item>
             <el-dropdown-item divided command="exportJson">
               <IconEpUpload class="dropdown-icon" />
-              {{ t("datapointPanel.toolbar.exportJson") }}
+              {{ t('datapointPanel.toolbar.exportJson') }}
             </el-dropdown-item>
             <el-dropdown-item command="exportCsv">{{
-              t("datapointPanel.toolbar.exportCsv")
+              t('datapointPanel.toolbar.exportCsv')
             }}</el-dropdown-item>
             <el-dropdown-item command="exportXlsx">{{
-              t("datapointPanel.toolbar.exportXlsx")
+              t('datapointPanel.toolbar.exportXlsx')
             }}</el-dropdown-item>
           </el-dropdown-menu>
         </template>
@@ -149,7 +149,7 @@ const selectionLabel = computed(() =>
         </el-button>
       </el-tooltip>
       <el-button class="toolbar-clear" size="small" text @click="emit('clearSelection')">
-        {{ t("datapointPanel.toolbar.clearSelection") }}
+        {{ t('datapointPanel.toolbar.clearSelection') }}
       </el-button>
     </div>
   </div>

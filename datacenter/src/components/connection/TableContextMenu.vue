@@ -4,12 +4,7 @@
 -->
 <template>
   <Teleport to="body">
-    <div
-      v-if="visible"
-      class="fixed inset-0 z-50"
-      @click="handleClose"
-      @contextmenu.prevent
-    >
+    <div v-if="visible" class="fixed inset-0 z-50" @click="handleClose" @contextmenu.prevent>
       <div
         class="absolute bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[160px]"
         :style="{ left: position.x + 'px', top: position.y + 'px' }"
@@ -20,14 +15,14 @@
           @click="handleViewStructure"
         >
           <IconTablerTable class="w-4 h-4 text-blue-500" />
-          <span>{{ t("actions.viewStructure") }}</span>
+          <span>{{ t('actions.viewStructure') }}</span>
         </div>
         <div
           class="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center space-x-2 text-sm"
           @click="handleQueryTable"
         >
           <IconTablerCode class="w-4 h-4 text-green-500" />
-          <span>{{ t("actions.queryTable") }}</span>
+          <span>{{ t('actions.queryTable') }}</span>
         </div>
       </div>
     </div>
@@ -35,9 +30,9 @@
 </template>
 
 <script setup lang="ts">
-import IconTablerTable from "~icons/tabler/table";
-import IconTablerCode from "~icons/tabler/code";
-import { t } from "@/i18n/runtime";
+import IconTablerTable from '~icons/tabler/table'
+import IconTablerCode from '~icons/tabler/code'
+import { t } from '@/i18n/runtime'
 
 const props = defineProps({
   visible: {
@@ -56,23 +51,23 @@ const props = defineProps({
     type: Object,
     default: null,
   },
-});
+})
 
-const emit = defineEmits(["update:visible", "view-structure", "query-table"]);
+const emit = defineEmits(['update:visible', 'view-structure', 'query-table'])
 
 const handleClose = () => {
-  emit("update:visible", false);
-};
+  emit('update:visible', false)
+}
 
 const handleViewStructure = () => {
-  emit("view-structure", props.connection, props.table);
-  handleClose();
-};
+  emit('view-structure', props.connection, props.table)
+  handleClose()
+}
 
 const handleQueryTable = () => {
-  emit("query-table", props.connection, props.table);
-  handleClose();
-};
+  emit('query-table', props.connection, props.table)
+  handleClose()
+}
 </script>
 
 <style scoped>

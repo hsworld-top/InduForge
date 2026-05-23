@@ -1,12 +1,6 @@
 <template>
   <div class="compute-panel">
-    <el-alert
-      type="info"
-      :closable="false"
-      show-icon
-      :title="t('compute.title')"
-      class="mb-4"
-    />
+    <el-alert type="info" :closable="false" show-icon :title="t('compute.title')" class="mb-4" />
 
     <el-form label-width="100px" class="mb-4">
       <el-row :gutter="16">
@@ -28,20 +22,12 @@
       <el-row :gutter="16">
         <el-col :xs="24" :md="12">
           <el-form-item :label="t('compute.timeout')">
-            <el-input-number
-              v-model="form.timeoutMs"
-              :min="100"
-              :max="120000"
-              :step="100"
-            />
+            <el-input-number v-model="form.timeoutMs" :min="100" :max="120000" :step="100" />
           </el-form-item>
         </el-col>
         <el-col :xs="24" :md="12">
           <el-form-item :label="t('compute.unitId')">
-            <el-input
-              v-model="computeUnitId"
-              :placeholder="t('compute.unitIdPlaceholder')"
-            />
+            <el-input v-model="computeUnitId" :placeholder="t('compute.unitIdPlaceholder')" />
           </el-form-item>
         </el-col>
       </el-row>
@@ -66,138 +52,134 @@
 
       <el-form-item>
         <el-button type="primary" :loading="creating" @click="handleCreate">
-          {{ t("actions.createUnit") }}
+          {{ t('actions.createUnit') }}
         </el-button>
-        <el-button :loading="running" @click="handleRun">{{
-          t("actions.run")
-        }}</el-button>
-        <el-button :loading="debugging" @click="handleDebug">{{
-          t("actions.debug")
-        }}</el-button>
+        <el-button :loading="running" @click="handleRun">{{ t('actions.run') }}</el-button>
+        <el-button :loading="debugging" @click="handleDebug">{{ t('actions.debug') }}</el-button>
       </el-form-item>
     </el-form>
 
     <el-card shadow="never">
-      <template #header>{{ t("compute.resultTitle") }}</template>
+      <template #header>{{ t('compute.resultTitle') }}</template>
       <pre class="result-box">{{ outputText }}</pre>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { ElMessage } from "element-plus";
-import dataAPI from "@/api/data.api";
-import { t } from "@/i18n/runtime";
-import { getApiErrorMessage } from "@/utils/request";
+import { computed, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import dataAPI from '@/api/data.api'
+import { t } from '@/i18n/runtime'
+import { getApiErrorMessage } from '@/utils/request'
 
 const props = defineProps({
   projectId: {
     type: String,
-    default: "",
+    default: '',
   },
-});
+})
 
 const form = ref({
-  name: "calc.sum",
-  language: "js",
+  name: 'calc.sum',
+  language: 'js',
   timeoutMs: 3000,
-  scriptCode: "return (argv[0] || 0) + (argv[1] || 0);",
-});
+  scriptCode: 'return (argv[0] || 0) + (argv[1] || 0);',
+})
 
-const computeUnitId = ref("");
-const inputJSON = ref('{"argv":[1,2]}');
-const outputText = ref(t("compute.notExecuted"));
+const computeUnitId = ref('')
+const inputJSON = ref('{"argv":[1,2]}')
+const outputText = ref(t('compute.notExecuted'))
 
-const creating = ref(false);
-const running = ref(false);
-const debugging = ref(false);
+const creating = ref(false)
+const running = ref(false)
+const debugging = ref(false)
 
-const currentProjectId = computed(() => (props.projectId || "").trim());
+const currentProjectId = computed(() => (props.projectId || '').trim())
 
 const parseInput = () => {
   if (!inputJSON.value.trim()) {
-    return {};
+    return {}
   }
   try {
-    return JSON.parse(inputJSON.value);
+    return JSON.parse(inputJSON.value)
   } catch {
-    throw new Error(t("compute.invalidJson"));
+    throw new Error(t('compute.invalidJson'))
   }
-};
+}
 
 const ensureProject = () => {
   if (!currentProjectId.value) {
-    throw new Error(t("compute.missingProjectId"));
+    throw new Error(t('compute.missingProjectId'))
   }
-};
+}
 
 const ensureUnitID = () => {
   if (!computeUnitId.value.trim()) {
-    throw new Error(t("compute.missingUnitId"));
+    throw new Error(t('compute.missingUnitId'))
   }
-};
+}
 
 const handleCreate = async () => {
   try {
-    ensureProject();
-    creating.value = true;
+    ensureProject()
+    creating.value = true
     const response = await dataAPI.createComputeUnit(currentProjectId.value, {
       name: form.value.name,
       language: form.value.language,
       timeoutMs: form.value.timeoutMs,
       scriptCode: form.value.scriptCode,
-      triggerType: "manual",
-    });
-    computeUnitId.value = response.data?.id || "";
-    outputText.value = JSON.stringify(response.data, null, 2);
-    ElMessage.success(t("compute.createSuccess"));
+      triggerType: 'manual',
+    })
+    computeUnitId.value = response.data?.id || ''
+    outputText.value = JSON.stringify(response.data, null, 2)
+    ElMessage.success(t('compute.createSuccess'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, t("compute.createFailed")));
+    ElMessage.error(getApiErrorMessage(error, t('compute.createFailed')))
   } finally {
-    creating.value = false;
+    creating.value = false
   }
-};
+}
 
 const handleRun = async () => {
   try {
-    ensureProject();
-    ensureUnitID();
-    const input = parseInput();
-    running.value = true;
+    ensureProject()
+    ensureUnitID()
+    const input = parseInput()
+    running.value = true
     const response = await dataAPI.runComputeUnit(
       currentProjectId.value,
       computeUnitId.value.trim(),
       input,
-    );
-    outputText.value = JSON.stringify(response.data, null, 2);
-    ElMessage.success(t("compute.runSuccess"));
+    )
+    outputText.value = JSON.stringify(response.data, null, 2)
+    ElMessage.success(t('compute.runSuccess'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, t("compute.runFailed")));
+    ElMessage.error(getApiErrorMessage(error, t('compute.runFailed')))
   } finally {
-    running.value = false;
+    running.value = false
   }
-};
+}
 
 const handleDebug = async () => {
   try {
-    ensureProject();
-    ensureUnitID();
-    const input = parseInput();
-    debugging.value = true;
+    ensureProject()
+    ensureUnitID()
+    const input = parseInput()
+    debugging.value = true
     const response = await dataAPI.debugComputeUnit(
       currentProjectId.value,
       computeUnitId.value.trim(),
       input,
-    );
-    outputText.value = JSON.stringify(response.data, null, 2);
-    ElMessage.success(t("compute.debugSuccess"));
+    )
+    outputText.value = JSON.stringify(response.data, null, 2)
+    ElMessage.success(t('compute.debugSuccess'))
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, t("compute.debugFailed")));
+    ElMessage.error(getApiErrorMessage(error, t('compute.debugFailed')))
   } finally {
-    debugging.value = false;
+    debugging.value = false
   }
-};
+}
 </script>
 
 <style scoped>

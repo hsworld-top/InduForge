@@ -6,16 +6,16 @@ export interface MarqueeClickGuard {
   /**
    * 标记下一次 click 需要被吞掉。
    */
-  markShouldSuppressNextClick: () => void;
+  markShouldSuppressNextClick: () => void
   /**
    * 重置守卫状态。
    */
-  reset: () => void;
+  reset: () => void
   /**
    * 消费一次 click 抑制状态。
    * @returns {boolean} true 表示本次 click 需要被阻止
    */
-  consumeShouldSuppressNextClick: () => boolean;
+  consumeShouldSuppressNextClick: () => boolean
 }
 
 /**
@@ -23,19 +23,19 @@ export interface MarqueeClickGuard {
  * @returns {MarqueeClickGuard}
  */
 export function createMarqueeClickGuard(): MarqueeClickGuard {
-  let shouldSuppressNextClick = false;
+  let shouldSuppressNextClick = false
 
   return {
     markShouldSuppressNextClick() {
-      shouldSuppressNextClick = true;
+      shouldSuppressNextClick = true
     },
     reset() {
-      shouldSuppressNextClick = false;
+      shouldSuppressNextClick = false
     },
     consumeShouldSuppressNextClick() {
-      if (!shouldSuppressNextClick) return false;
-      shouldSuppressNextClick = false;
-      return true;
+      if (!shouldSuppressNextClick) return false
+      shouldSuppressNextClick = false
+      return true
     },
-  };
+  }
 }

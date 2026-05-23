@@ -12,7 +12,7 @@
         @click="handleCreate"
       >
         <IconTablerPlus class="mr-1 w-4 h-4" />
-        {{ t("subscription.create") }}
+        {{ t('subscription.create') }}
       </el-button>
     </div>
 
@@ -21,16 +21,13 @@
       <el-scrollbar>
         <div v-if="loading" class="p-4 text-center text-gray-500">
           <el-icon class="is-loading"><IconTablerLoader /></el-icon>
-          <span class="ml-2">{{ t("subscription.loading") }}</span>
+          <span class="ml-2">{{ t('subscription.loading') }}</span>
         </div>
 
-        <div
-          v-else-if="subscriptions.length === 0"
-          class="p-8 text-center text-gray-400"
-        >
+        <div v-else-if="subscriptions.length === 0" class="p-8 text-center text-gray-400">
           <IconTablerInbox class="mx-auto mb-2 w-12 h-12 opacity-50" />
-          <p>{{ t("subscription.empty") }}</p>
-          <p class="text-sm mt-1">{{ t("subscription.emptyHint") }}</p>
+          <p>{{ t('subscription.empty') }}</p>
+          <p class="text-sm mt-1">{{ t('subscription.emptyHint') }}</p>
         </div>
 
         <el-table
@@ -43,16 +40,12 @@
           class="subscription-table"
           @row-click="handleSelect"
           @row-dblclick="handleManageTags"
-          @row-contextmenu="
-            (row, column, event) => handleContextMenu(event, row)
-          "
+          @row-contextmenu="(row, column, event) => handleContextMenu(event, row)"
         >
           <el-table-column :label="t('subscription.name')" min-width="120">
             <template #default="{ row }">
-              <span
-                class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate"
-              >
-                {{ row.name || "-" }}
+              <span class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                {{ row.name || '-' }}
               </span>
             </template>
           </el-table-column>
@@ -67,17 +60,14 @@
           <el-table-column :label="t('subscription.remark')" min-width="120">
             <template #default="{ row }">
               <span class="text-xs text-gray-500 dark:text-gray-400 truncate">
-                {{ row.description || "-" }}
+                {{ row.description || '-' }}
               </span>
             </template>
           </el-table-column>
           <el-table-column :label="t('subscription.operations')" width="280">
             <template #default="{ row }">
               <div class="action-cell flex items-center gap-2">
-                <el-tooltip
-                  :content="t('actions.viewMessages')"
-                  placement="top"
-                >
+                <el-tooltip :content="t('actions.viewMessages')" placement="top">
                   <el-button
                     class="action-link"
                     link
@@ -85,40 +75,27 @@
                     :disabled="!connectionStarted"
                     @click.stop="handleView(row)"
                   >
-                    {{ t("actions.viewMessages") }}
+                    {{ t('actions.viewMessages') }}
                   </el-button>
                 </el-tooltip>
-                <el-tooltip
-                  :content="t('actions.manageVariables')"
-                  placement="top"
-                >
+                <el-tooltip :content="t('actions.manageVariables')" placement="top">
                   <el-button
                     class="action-link"
                     link
                     size="small"
                     @click.stop="handleManageTags(row)"
                   >
-                    {{ t("actions.manageVariables") }}
+                    {{ t('actions.manageVariables') }}
                   </el-button>
                 </el-tooltip>
                 <el-tooltip :content="t('actions.edit')" placement="top">
-                  <el-button
-                    class="action-link"
-                    link
-                    size="small"
-                    @click.stop="handleEdit(row)"
-                  >
-                    {{ t("actions.edit") }}
+                  <el-button class="action-link" link size="small" @click.stop="handleEdit(row)">
+                    {{ t('actions.edit') }}
                   </el-button>
                 </el-tooltip>
                 <el-tooltip :content="t('actions.delete')" placement="top">
-                  <el-button
-                    class="action-link"
-                    link
-                    size="small"
-                    @click.stop="handleDelete(row)"
-                  >
-                    {{ t("actions.delete") }}
+                  <el-button class="action-link" link size="small" @click.stop="handleDelete(row)">
+                    {{ t('actions.delete') }}
                   </el-button>
                 </el-tooltip>
               </div>
@@ -140,15 +117,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
-import IconTablerPlus from "~icons/tabler/plus";
-import IconTablerLoader from "~icons/tabler/loader";
-import IconTablerInbox from "~icons/tabler/inbox";
-import MqttSubscriptionDialog from "./MqttSubscriptionDialog.vue";
-import dataAPI from "@/api/data.api";
-import { t } from "@/i18n/runtime";
-import { getApiErrorMessage } from "@/utils/request";
+import { ref, onMounted, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import IconTablerPlus from '~icons/tabler/plus'
+import IconTablerLoader from '~icons/tabler/loader'
+import IconTablerInbox from '~icons/tabler/inbox'
+import MqttSubscriptionDialog from './MqttSubscriptionDialog.vue'
+import dataAPI from '@/api/data.api'
+import { t } from '@/i18n/runtime'
+import { getApiErrorMessage } from '@/utils/request'
 
 const props = defineProps({
   connectionId: {
@@ -163,85 +140,82 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
-});
+})
 
 const emit = defineEmits([
-  "view-messages",
-  "subscription-select",
-  "manage-tags",
-  "subscription-deleted",
-]);
+  'view-messages',
+  'subscription-select',
+  'manage-tags',
+  'subscription-deleted',
+])
 
-const loading = ref(false);
-const subscriptions = ref([]);
-const showDialog = ref(false);
-const dialogMode = ref("create");
-const currentSubscription = ref(null);
+const loading = ref(false)
+const subscriptions = ref([])
+const showDialog = ref(false)
+const dialogMode = ref('create')
+const currentSubscription = ref(null)
 
 /**
  * 加载订阅列表
  */
 const loadSubscriptions = async () => {
-  loading.value = true;
+  loading.value = true
   try {
-    const response = await dataAPI.getMqttSubscriptions(
-      props.projectId,
-      props.connectionId,
-    );
-    subscriptions.value = response.data?.list || [];
+    const response = await dataAPI.getMqttSubscriptions(props.projectId, props.connectionId)
+    subscriptions.value = response.data?.list || []
   } catch (error) {
     ElMessage.error(
-      t("subscription.loadFailed", {
-        message: getApiErrorMessage(error, "加载订阅失败"),
+      t('subscription.loadFailed', {
+        message: getApiErrorMessage(error, '加载订阅失败'),
       }),
-    );
+    )
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 
 /**
  * 创建订阅
  */
 const handleCreate = () => {
-  dialogMode.value = "create";
-  currentSubscription.value = null;
-  showDialog.value = true;
-};
+  dialogMode.value = 'create'
+  currentSubscription.value = null
+  showDialog.value = true
+}
 
 /**
  * 选择订阅
  */
 const handleSelect = (subscription) => {
-  emit("subscription-select", subscription);
-};
+  emit('subscription-select', subscription)
+}
 
 /**
  * 查看消息
  */
 const handleView = (subscription) => {
   if (!props.connectionStarted) {
-    ElMessage.warning("请先连接后再查看实时消息");
-    return;
+    ElMessage.warning('请先连接后再查看实时消息')
+    return
   }
-  emit("view-messages", subscription);
-};
+  emit('view-messages', subscription)
+}
 
 /**
  * 管理变量
  */
 const handleManageTags = (subscription) => {
-  emit("manage-tags", subscription);
-};
+  emit('manage-tags', subscription)
+}
 
 /**
  * 编辑订阅
  */
 const handleEdit = (subscription) => {
-  dialogMode.value = "edit";
-  currentSubscription.value = subscription;
-  showDialog.value = true;
-};
+  dialogMode.value = 'edit'
+  currentSubscription.value = subscription
+  showDialog.value = true
+}
 
 /**
  * 删除订阅
@@ -249,135 +223,134 @@ const handleEdit = (subscription) => {
 const handleDelete = async (subscription) => {
   try {
     await ElMessageBox.confirm(
-      t("subscription.deleteConfirm", { name: subscription.name }),
-      t("subscription.deleteConfirmTitle"),
+      t('subscription.deleteConfirm', { name: subscription.name }),
+      t('subscription.deleteConfirmTitle'),
       {
-        confirmButtonText: t("actions.delete"),
-        cancelButtonText: t("actions.cancel"),
-        type: "warning",
+        confirmButtonText: t('actions.delete'),
+        cancelButtonText: t('actions.cancel'),
+        type: 'warning',
       },
-    );
+    )
 
-    await dataAPI.deleteMqttSubscription(props.projectId, subscription.id);
-    ElMessage.success(t("subscription.deleted"));
-    await loadSubscriptions();
-    emit("subscription-deleted", subscription);
+    await dataAPI.deleteMqttSubscription(props.projectId, subscription.id)
+    ElMessage.success(t('subscription.deleted'))
+    await loadSubscriptions()
+    emit('subscription-deleted', subscription)
   } catch (error) {
-    if (error !== "cancel") {
+    if (error !== 'cancel') {
       ElMessage.error(
-        t("subscription.deleteFailed", {
-          message: getApiErrorMessage(error, "删除订阅失败"),
+        t('subscription.deleteFailed', {
+          message: getApiErrorMessage(error, '删除订阅失败'),
         }),
-      );
+      )
     }
   }
-};
+}
 
 /**
  * 右键菜单
  */
 const handleContextMenu = (event, subscription) => {
   if (event?.preventDefault) {
-    event.preventDefault();
+    event.preventDefault()
   }
-  const menu = document.createElement("div");
+  const menu = document.createElement('div')
   menu.className =
-    "fixed bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[140px]";
-  menu.style.cssText = `position: fixed; left: ${event.clientX}px; top: ${event.clientY}px; z-index: 9999;`;
+    'fixed bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[140px]'
+  menu.style.cssText = `position: fixed; left: ${event.clientX}px; top: ${event.clientY}px; z-index: 9999;`
 
-  const openItem = document.createElement("div");
-  openItem.className =
-    props.connectionStarted
-      ? "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
-      : "px-4 py-2 text-sm text-gray-400 dark:text-gray-500 cursor-not-allowed";
-  openItem.textContent = t("actions.viewMessages");
+  const openItem = document.createElement('div')
+  openItem.className = props.connectionStarted
+    ? 'px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
+    : 'px-4 py-2 text-sm text-gray-400 dark:text-gray-500 cursor-not-allowed'
+  openItem.textContent = t('actions.viewMessages')
   openItem.onclick = () => {
     if (!props.connectionStarted) {
-      ElMessage.warning("请先连接后再查看实时消息");
-      document.body.removeChild(menu);
-      return;
+      ElMessage.warning('请先连接后再查看实时消息')
+      document.body.removeChild(menu)
+      return
     }
-    handleView(subscription);
-    document.body.removeChild(menu);
-  };
+    handleView(subscription)
+    document.body.removeChild(menu)
+  }
 
-  const manageItem = document.createElement("div");
+  const manageItem = document.createElement('div')
   manageItem.className =
-    "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer";
-  manageItem.textContent = t("actions.manageVariables");
+    'px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
+  manageItem.textContent = t('actions.manageVariables')
   manageItem.onclick = () => {
-    handleManageTags(subscription);
-    document.body.removeChild(menu);
-  };
+    handleManageTags(subscription)
+    document.body.removeChild(menu)
+  }
 
-  const editItem = document.createElement("div");
+  const editItem = document.createElement('div')
   editItem.className =
-    "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer";
-  editItem.textContent = t("subscription.edit");
+    'px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
+  editItem.textContent = t('subscription.edit')
   editItem.onclick = () => {
-    handleEdit(subscription);
-    document.body.removeChild(menu);
-  };
+    handleEdit(subscription)
+    document.body.removeChild(menu)
+  }
 
-  const deleteItem = document.createElement("div");
+  const deleteItem = document.createElement('div')
   deleteItem.className =
-    "px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 cursor-pointer";
-  deleteItem.textContent = t("actions.delete");
+    'px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 cursor-pointer'
+  deleteItem.textContent = t('actions.delete')
   deleteItem.onclick = async () => {
-    document.body.removeChild(menu);
-    await handleDelete(subscription);
-  };
+    document.body.removeChild(menu)
+    await handleDelete(subscription)
+  }
 
-  menu.appendChild(openItem);
-  menu.appendChild(manageItem);
-  menu.appendChild(editItem);
-  menu.appendChild(deleteItem);
-  document.body.appendChild(menu);
+  menu.appendChild(openItem)
+  menu.appendChild(manageItem)
+  menu.appendChild(editItem)
+  menu.appendChild(deleteItem)
+  document.body.appendChild(menu)
 
   const closeMenu = (e) => {
     if (!menu.contains(e.target)) {
       if (document.body.contains(menu)) {
-        document.body.removeChild(menu);
+        document.body.removeChild(menu)
       }
-      document.removeEventListener("click", closeMenu);
+      document.removeEventListener('click', closeMenu)
     }
-  };
+  }
   setTimeout(() => {
-    document.addEventListener("click", closeMenu);
-  }, 0);
-};
+    document.addEventListener('click', closeMenu)
+  }, 0)
+}
 
 /**
  * 对话框成功回调
  */
 const handleDialogSuccess = () => {
-  loadSubscriptions();
-};
+  loadSubscriptions()
+}
 
 // 监听连接ID变化
 watch(
   () => props.connectionId,
   () => {
     if (props.connectionId) {
-      loadSubscriptions();
+      loadSubscriptions()
     }
   },
   { immediate: true },
-);
+)
 
 // 组件挂载
 onMounted(() => {
-  loadSubscriptions();
-});
+  loadSubscriptions()
+})
 
 // 暴露方法
 defineExpose({
   loadSubscriptions,
   openEditDialog: (subscription) => {
-    if (!subscription) return;
-    handleEdit(subscription);
+    if (!subscription) return
+    handleEdit(subscription)
   },
-});
+})
 </script>
 
 <style scoped>

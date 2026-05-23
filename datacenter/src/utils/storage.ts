@@ -1,7 +1,7 @@
 // @ts-nocheck
-import { STORAGE_KEYS } from "../constants/index";
+import { STORAGE_KEYS } from '../constants/index'
 
-const PROJECT_ID_STORAGE_KEY = STORAGE_KEYS.PROJECT_ID || "project_id";
+const PROJECT_ID_STORAGE_KEY = STORAGE_KEYS.PROJECT_ID || 'project_id'
 
 /**
  * 本地存储工具类
@@ -15,11 +15,11 @@ export class Storage {
    */
   static get(key, defaultValue = null) {
     try {
-      const item = localStorage.getItem(key);
-      return item ? JSON.parse(item) : defaultValue;
+      const item = localStorage.getItem(key)
+      return item ? JSON.parse(item) : defaultValue
     } catch (error) {
-      console.warn(`Storage get error for key "${key}":`, error);
-      return defaultValue;
+      console.warn(`Storage get error for key "${key}":`, error)
+      return defaultValue
     }
   }
 
@@ -30,9 +30,9 @@ export class Storage {
    */
   static set(key, value) {
     try {
-      localStorage.setItem(key, JSON.stringify(value));
+      localStorage.setItem(key, JSON.stringify(value))
     } catch (error) {
-      console.warn(`Storage set error for key "${key}":`, error);
+      console.warn(`Storage set error for key "${key}":`, error)
     }
   }
 
@@ -42,9 +42,9 @@ export class Storage {
    */
   static remove(key) {
     try {
-      localStorage.removeItem(key);
+      localStorage.removeItem(key)
     } catch (error) {
-      console.warn(`Storage remove error for key "${key}":`, error);
+      console.warn(`Storage remove error for key "${key}":`, error)
     }
   }
 
@@ -53,9 +53,9 @@ export class Storage {
    */
   static clear() {
     try {
-      localStorage.clear();
+      localStorage.clear()
     } catch (error) {
-      console.warn("Storage clear error:", error);
+      console.warn('Storage clear error:', error)
     }
   }
 
@@ -64,7 +64,7 @@ export class Storage {
    * @returns {string|null} 令牌
    */
   static getToken() {
-    return localStorage.getItem(STORAGE_KEYS.TOKEN);
+    return localStorage.getItem(STORAGE_KEYS.TOKEN)
   }
 
   /**
@@ -72,7 +72,7 @@ export class Storage {
    * @param {string} token - 令牌
    */
   static setToken(token) {
-    localStorage.setItem(STORAGE_KEYS.TOKEN, token);
+    localStorage.setItem(STORAGE_KEYS.TOKEN, token)
   }
 
   /**
@@ -80,7 +80,7 @@ export class Storage {
    * @returns {string|null} 刷新令牌
    */
   static getRefreshToken() {
-    return localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+    return localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
   }
 
   /**
@@ -88,7 +88,7 @@ export class Storage {
    * @param {string} refreshToken - 刷新令牌
    */
   static setRefreshToken(refreshToken) {
-    localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
+    localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken)
   }
 
   /**
@@ -96,7 +96,7 @@ export class Storage {
    * @returns {object|null} 用户信息
    */
   static getUserInfo() {
-    return this.get(STORAGE_KEYS.USER_INFO);
+    return this.get(STORAGE_KEYS.USER_INFO)
   }
 
   /**
@@ -104,7 +104,7 @@ export class Storage {
    * @param {object} userInfo - 用户信息
    */
   static setUserInfo(userInfo) {
-    this.set(STORAGE_KEYS.USER_INFO, userInfo);
+    this.set(STORAGE_KEYS.USER_INFO, userInfo)
   }
 
   /**
@@ -112,7 +112,7 @@ export class Storage {
    * @returns {string|null} 租户ID
    */
   static getTenantId() {
-    return this.get(STORAGE_KEYS.TENANT_ID);
+    return this.get(STORAGE_KEYS.TENANT_ID)
   }
 
   /**
@@ -120,7 +120,7 @@ export class Storage {
    * @param {string} tenantId - 租户ID
    */
   static setTenantId(tenantId) {
-    this.set(STORAGE_KEYS.TENANT_ID, tenantId);
+    this.set(STORAGE_KEYS.TENANT_ID, tenantId)
   }
 
   /**
@@ -130,7 +130,7 @@ export class Storage {
    * @returns {string|null} 工程 ID
    */
   static getProjectId() {
-    return this.get(PROJECT_ID_STORAGE_KEY);
+    return this.get(PROJECT_ID_STORAGE_KEY)
   }
 
   /**
@@ -138,14 +138,14 @@ export class Storage {
    * @param {string} projectId - 工程 ID
    */
   static setProjectId(projectId) {
-    this.set(PROJECT_ID_STORAGE_KEY, projectId);
+    this.set(PROJECT_ID_STORAGE_KEY, projectId)
   }
 
   /**
    * 删除工程 ID。
    */
   static removeProjectId() {
-    this.remove(PROJECT_ID_STORAGE_KEY);
+    this.remove(PROJECT_ID_STORAGE_KEY)
   }
 
   /**
@@ -153,7 +153,7 @@ export class Storage {
    * @returns {string} 主题
    */
   static getTheme() {
-    return this.get(STORAGE_KEYS.THEME, "light");
+    return this.get(STORAGE_KEYS.THEME, 'light')
   }
 
   /**
@@ -161,7 +161,7 @@ export class Storage {
    * @param {string} theme - 主题
    */
   static setTheme(theme) {
-    this.set(STORAGE_KEYS.THEME, theme);
+    this.set(STORAGE_KEYS.THEME, theme)
   }
 
   /**
@@ -169,7 +169,7 @@ export class Storage {
    * @returns {string|null} 语言
    */
   static getLanguage() {
-    return this.get(STORAGE_KEYS.LANGUAGE);
+    return this.get(STORAGE_KEYS.LANGUAGE)
   }
 
   /**
@@ -177,6 +177,6 @@ export class Storage {
    * @param {string} language - 语言
    */
   static setLanguage(language) {
-    this.set(STORAGE_KEYS.LANGUAGE, language);
+    this.set(STORAGE_KEYS.LANGUAGE, language)
   }
 }

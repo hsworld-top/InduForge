@@ -1,21 +1,15 @@
-import { z } from "zod";
-import { IdSchema, TimeFieldSchema } from "./common.schema";
+import { z } from 'zod'
+import { IdSchema, TimeFieldSchema } from './common.schema'
 
 // 计算单元语言类型
-export const ComputeLangSchema = z.enum(["javascript", "python", "lua"]);
+export const ComputeLangSchema = z.enum(['javascript', 'python', 'lua'])
 
-export type ComputeLang = z.infer<typeof ComputeLangSchema>;
+export type ComputeLang = z.infer<typeof ComputeLangSchema>
 
 // 计算单元状态
-export const ComputeStatusSchema = z.enum([
-  "idle",
-  "running",
-  "error",
-  "disabled",
-  "enabled",
-]);
+export const ComputeStatusSchema = z.enum(['idle', 'running', 'error', 'disabled', 'enabled'])
 
-export type ComputeStatus = z.infer<typeof ComputeStatusSchema>;
+export type ComputeStatus = z.infer<typeof ComputeStatusSchema>
 
 // 计算单元列表项
 export const ComputeUnitSchema = z
@@ -31,9 +25,9 @@ export const ComputeUnitSchema = z
     createdAt: TimeFieldSchema,
     updatedAt: TimeFieldSchema,
   })
-  .passthrough();
+  .passthrough()
 
-export type ComputeUnit = z.infer<typeof ComputeUnitSchema>;
+export type ComputeUnit = z.infer<typeof ComputeUnitSchema>
 
 // 计算单元详情（含代码）
 export const ComputeUnitDetailSchema = ComputeUnitSchema.extend({
@@ -47,9 +41,9 @@ export const ComputeUnitDetailSchema = ComputeUnitSchema.extend({
   timeoutMs: z.number().optional(),
   isEnabled: z.boolean().optional(),
   dependencies: z.array(z.unknown()).optional(),
-});
+})
 
-export type ComputeUnitDetail = z.infer<typeof ComputeUnitDetailSchema>;
+export type ComputeUnitDetail = z.infer<typeof ComputeUnitDetailSchema>
 
 // 计算单元创建/更新参数
 export const ComputeUnitSaveSchema = z
@@ -67,9 +61,9 @@ export const ComputeUnitSaveSchema = z
     isEnabled: z.boolean().optional(),
     dependencies: z.array(z.unknown()).optional(),
   })
-  .passthrough();
+  .passthrough()
 
-export type ComputeUnitSave = z.infer<typeof ComputeUnitSaveSchema>;
+export type ComputeUnitSave = z.infer<typeof ComputeUnitSaveSchema>
 
 // 计算单元文件夹创建/更新参数
 export const ComputeFolderSaveSchema = z
@@ -77,9 +71,9 @@ export const ComputeFolderSaveSchema = z
     name: z.string(),
     parentId: IdSchema.optional().nullable(),
   })
-  .passthrough();
+  .passthrough()
 
-export type ComputeFolderSave = z.infer<typeof ComputeFolderSaveSchema>;
+export type ComputeFolderSave = z.infer<typeof ComputeFolderSaveSchema>
 
 // 计算单元文件夹
 export const ComputeFolderSchema = z
@@ -89,9 +83,9 @@ export const ComputeFolderSchema = z
     parentId: IdSchema.optional().nullable(),
     children: z.array(z.lazy(() => ComputeFolderSchema)).optional(),
   })
-  .passthrough();
+  .passthrough()
 
-export type ComputeFolder = z.infer<typeof ComputeFolderSchema>;
+export type ComputeFolder = z.infer<typeof ComputeFolderSchema>
 
 export const ComputeDependencySchema = z
   .object({
@@ -103,9 +97,9 @@ export const ComputeDependencySchema = z
     status: z.string().optional(),
     importName: z.string().optional(),
   })
-  .passthrough();
+  .passthrough()
 
-export type ComputeDependency = z.infer<typeof ComputeDependencySchema>;
+export type ComputeDependency = z.infer<typeof ComputeDependencySchema>
 
 // 调试运行结果
 export const ComputeRunResultSchema = z
@@ -122,9 +116,9 @@ export const ComputeRunResultSchema = z
     startedAt: TimeFieldSchema.optional(),
     finishedAt: TimeFieldSchema.optional(),
   })
-  .passthrough();
+  .passthrough()
 
-export type ComputeRunResult = z.infer<typeof ComputeRunResultSchema>;
+export type ComputeRunResult = z.infer<typeof ComputeRunResultSchema>
 
 export const ComputeSyntaxDiagnosticSchema = z
   .object({
@@ -136,18 +130,14 @@ export const ComputeSyntaxDiagnosticSchema = z
     endColumn: z.number().optional(),
     source: z.string().optional(),
   })
-  .passthrough();
+  .passthrough()
 
-export type ComputeSyntaxDiagnostic = z.infer<
-  typeof ComputeSyntaxDiagnosticSchema
->;
+export type ComputeSyntaxDiagnostic = z.infer<typeof ComputeSyntaxDiagnosticSchema>
 
 export const ComputeSyntaxCheckResultSchema = z
   .object({
     diagnostics: z.array(ComputeSyntaxDiagnosticSchema).optional(),
   })
-  .passthrough();
+  .passthrough()
 
-export type ComputeSyntaxCheckResult = z.infer<
-  typeof ComputeSyntaxCheckResultSchema
->;
+export type ComputeSyntaxCheckResult = z.infer<typeof ComputeSyntaxCheckResultSchema>

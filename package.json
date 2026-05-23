@@ -3,6 +3,18 @@
   "version": "0.0.0",
   "private": true,
   "packageManager": "pnpm@10.19.0",
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@typescript-eslint/eslint-plugin": "^8.46.2",
+    "@typescript-eslint/parser": "^8.46.2",
+    "@vue/eslint-config-prettier": "^10.1.0",
+    "eslint": "^9.39.1",
+    "eslint-plugin-vue": "^10.5.1",
+    "globals": "^15.15.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "vue-eslint-parser": "^10.0.0"
+  },
   "scripts": {
     "dev:core": "pnpm --filter dev_core dev",
     "dev:ide": "pnpm --filter ide dev",
@@ -19,11 +31,14 @@
     "lint:ide": "pnpm --filter ide lint",
     "lint:datacenter": "pnpm --filter datacenter lint",
     "lint:designer": "pnpm --filter designer lint",
+    "lint": "pnpm lint:ide && pnpm lint:datacenter && pnpm lint:designer",
     "format:ide": "pnpm --filter ide format",
     "format:datacenter": "pnpm --filter datacenter format",
     "format:designer": "pnpm --filter designer format",
+    "format": "pnpm format:ide && pnpm format:datacenter && pnpm format:designer",
     "typecheck:ide": "pnpm --filter ide typecheck",
     "typecheck:datacenter": "pnpm --filter datacenter typecheck",
-    "typecheck:designer": "pnpm --filter designer typecheck"
+    "typecheck:designer": "pnpm --filter designer typecheck",
+    "typecheck": "pnpm typecheck:ide && pnpm typecheck:datacenter && pnpm typecheck:designer"
   }
 }

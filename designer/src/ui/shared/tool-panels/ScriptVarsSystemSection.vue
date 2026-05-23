@@ -2,25 +2,25 @@
   脚本与变量面板 — 系统脚本折叠块
 -->
 <script setup lang="ts">
-import { useI18n } from "vue-i18n";
-import IconEpEditPen from "~icons/ep/edit-pen";
+import { useI18n } from 'vue-i18n'
+import IconEpEditPen from '~icons/ep/edit-pen'
 
 defineProps<{
-  selectedSystemKey: string;
-}>();
+  selectedSystemKey: string
+}>()
 
 const emit = defineEmits<{
-  selectSystem: [key: string];
-  openSystemEditor: [kind: "startup" | "shutdown"];
-}>();
-const { t } = useI18n();
+  selectSystem: [key: string]
+  openSystemEditor: [kind: 'startup' | 'shutdown']
+}>()
+const { t } = useI18n()
 </script>
 
 <template>
   <el-collapse-item name="system">
     <template #title>
       <div class="section-title">
-        <span>{{ t("scriptPanel.sections.system") }}</span>
+        <span>{{ t('scriptPanel.sections.system') }}</span>
         <span class="section-count">2</span>
       </div>
     </template>
@@ -33,9 +33,15 @@ const { t } = useI18n();
         @dblclick="emit('openSystemEditor', 'startup')"
       >
         <el-icon class="node-icon icon-system"><IconEpEditPen /></el-icon>
-        <span class="system-name">{{ t("scriptPanel.sections.startup") }}</span>
+        <span class="system-name">{{ t('scriptPanel.sections.startup') }}</span>
         <el-tooltip :content="t('scriptPanel.actions.edit')" placement="top">
-          <el-button class="row-action" size="small" text circle @click.stop="emit('openSystemEditor', 'startup')">
+          <el-button
+            class="row-action"
+            size="small"
+            text
+            circle
+            @click.stop="emit('openSystemEditor', 'startup')"
+          >
             <IconEpEditPen />
           </el-button>
         </el-tooltip>
@@ -48,9 +54,15 @@ const { t } = useI18n();
         @dblclick="emit('openSystemEditor', 'shutdown')"
       >
         <el-icon class="node-icon icon-system"><IconEpEditPen /></el-icon>
-        <span class="system-name">{{ t("scriptPanel.sections.shutdown") }}</span>
+        <span class="system-name">{{ t('scriptPanel.sections.shutdown') }}</span>
         <el-tooltip :content="t('scriptPanel.actions.edit')" placement="top">
-          <el-button class="row-action" size="small" text circle @click.stop="emit('openSystemEditor', 'shutdown')">
+          <el-button
+            class="row-action"
+            size="small"
+            text
+            circle
+            @click.stop="emit('openSystemEditor', 'shutdown')"
+          >
             <IconEpEditPen />
           </el-button>
         </el-tooltip>

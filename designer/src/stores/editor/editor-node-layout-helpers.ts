@@ -3,17 +3,17 @@
  * 仅依赖最小文档/选中形状，避免把实现细节继续堆回主 store。
  */
 
-import type { ComponentNode, LayoutItem } from "@/editor-core/document/types";
+import type { ComponentNode, LayoutItem } from '@/editor-core/document/types'
 
-const GRID_COLUMN_REPEAT_REGEX = /repeat\((\d+)/i;
-const GRID_COLUMN_SPLIT_REGEX = /\s+/;
+const GRID_COLUMN_REPEAT_REGEX = /repeat\((\d+)/i
+const GRID_COLUMN_SPLIT_REGEX = /\s+/
 
 interface EditorDocLike {
-  getNode: (id: string) => ComponentNode | null;
+  getNode: (id: string) => ComponentNode | null
 }
 
 interface SelectionLike {
-  getPrimaryElement?: () => { kind?: string; id?: string } | null | undefined;
+  getPrimaryElement?: () => { kind?: string; id?: string } | null | undefined
 }
 
 /**
@@ -26,22 +26,22 @@ function collectNodeLabels(
   doc: EditorDocLike | null | undefined,
   rootNodeId: string | null | undefined,
 ): Set<string> {
-  const labels = new Set<string>();
-  if (!doc || !rootNodeId) return labels;
+  const labels = new Set<string>()
+  if (!doc || !rootNodeId) return labels
 
-  const stack = [rootNodeId];
+  const stack = [rootNodeId]
   while (stack.length > 0) {
-    const currentId = stack.pop();
-    if (!currentId) continue;
-    const node = doc.getNode(currentId);
-    if (!node) continue;
-    if (node.label) labels.add(node.label);
+    const currentId = stack.pop()
+    if (!currentId) continue
+    const node = doc.getNode(currentId)
+    if (!node) continue
+    if (node.label) labels.add(node.label)
     if (Array.isArray(node.children)) {
-      stack.push(...node.children);
+      stack.push(...node.children)
     }
   }
 
-  return labels;
+  return labels
 }
 
 /**
@@ -58,21 +58,21 @@ export function isNodeLabelUnique(
   name: string,
   excludeId?: string,
 ): boolean {
-  if (!doc || !rootNodeId) return true;
-  const stack = [rootNodeId];
+  if (!doc || !rootNodeId) return true
+  const stack = [rootNodeId]
   while (stack.length > 0) {
-    const currentId = stack.pop();
-    if (!currentId) continue;
-    const node = doc.getNode(currentId);
-    if (!node) continue;
+    const currentId = stack.pop()
+    if (!currentId) continue
+    const node = doc.getNode(currentId)
+    if (!node) continue
     if (node.label === name && node.id !== excludeId) {
-      return false;
+      return false
     }
     if (Array.isArray(node.children)) {
-      stack.push(...node.children);
+      stack.push(...node.children)
     }
   }
-  return true;
+  return true
 }
 
 /**
@@ -87,17 +87,17 @@ export function buildUniqueNodeLabel(
   rootNodeId: string | null | undefined,
   baseLabel: string,
 ): string {
-  const normalized = baseLabel || "容器";
-  const labels = collectNodeLabels(doc, rootNodeId);
-  if (!labels.has(normalized)) return normalized;
+  const normalized = baseLabel || '容器'
+  const labels = collectNodeLabels(doc, rootNodeId)
+  if (!labels.has(normalized)) return normalized
 
-  let index = 1;
-  let nextLabel = `${normalized}${index}`;
+  let index = 1
+  let nextLabel = `${normalized}${index}`
   while (labels.has(nextLabel)) {
-    index += 1;
-    nextLabel = `${normalized}${index}`;
+    index += 1
+    nextLabel = `${normalized}${index}`
   }
-  return nextLabel;
+  return nextLabel
 }
 
 /**
@@ -110,9 +110,9 @@ export function resolveLayerTargetFromSelection(
   selection: SelectionLike | null | undefined,
   nodeId?: string,
 ): string {
-  if (nodeId) return nodeId;
-  const primary = selection?.getPrimaryElement?.();
-  return primary?.kind === "node" ? String(primary.id || "") : "";
+  if (nodeId) return nodeId
+  const primary = selection?.getPrimaryElement?.()
+  return primary?.kind === 'node' ? String(primary.id || '') : ''
 }
 
 /**
@@ -121,14 +121,14 @@ export function resolveLayerTargetFromSelection(
  * @returns {LayoutItem}
  */
 export function buildFreeLayoutItem(dropInfo: {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+  x: number
+  y: number
+  width: number
+  height: number
 }): LayoutItem {
   return {
     free: {
-      mode: "abs",
+      mode: 'abs',
       abs: {
         x: Math.max(0, Math.round(dropInfo.x)),
         y: Math.max(0, Math.round(dropInfo.y)),
@@ -137,7 +137,7 @@ export function buildFreeLayoutItem(dropInfo: {
         z: 1,
       },
     },
-  };
+  }
 }
 
 /**
@@ -149,9 +149,9 @@ export function buildFlexLayoutItem(): LayoutItem {
     flex: {
       grow: 0,
       shrink: 0,
-      basis: "auto",
+      basis: 'auto',
     },
-  };
+  }
 }
 
 /**
@@ -164,11 +164,11 @@ export function buildGridLayoutItem(
   parentNode: ComponentNode,
   resolveGridCount: (value: unknown) => number,
 ): LayoutItem {
-  const columns = resolveGridCount(parentNode.props?.columns);
-  const colCount = Math.max(1, columns);
-  const index = parentNode.children?.length ?? 0;
-  const row = Math.floor(index / colCount) + 1;
-  const col = (index % colCount) + 1;
+  const columns = resolveGridCount(parentNode.props?.columns)
+  const colCount = Math.max(1, columns)
+  const index = parentNode.children?.length ?? 0
+  const row = Math.floor(index / colCount) + 1
+  const col = (index % colCount) + 1
 
   return {
     grid: {
@@ -177,7 +177,7 @@ export function buildGridLayoutItem(
       rowSpan: 1,
       colSpan: 1,
     },
-  };
+  }
 }
 
 /**
@@ -194,7 +194,7 @@ export function resolveDefaultSize(
     return {
       width: manifest.defaultSize.width || 120,
       height: manifest.defaultSize.height || 32,
-    };
+    }
   }
 
   const sizeMap: Record<string, { width: number; height: number }> = {
@@ -206,9 +206,9 @@ export function resolveDefaultSize(
     FreeContainer: { width: 360, height: 200 },
     ElContainer: { width: 360, height: 240 },
     Button: { width: 120, height: 36 },
-  };
+  }
 
-  return sizeMap[type] || { width: 160, height: 80 };
+  return sizeMap[type] || { width: 160, height: 80 }
 }
 
 /**
@@ -217,21 +217,21 @@ export function resolveDefaultSize(
  * @returns {number}
  */
 export function resolveGridCount(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.max(1, Math.floor(value));
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(1, Math.floor(value))
   }
 
-  if (typeof value === "string") {
-    const repeatMatch = value.match(GRID_COLUMN_REPEAT_REGEX);
+  if (typeof value === 'string') {
+    const repeatMatch = value.match(GRID_COLUMN_REPEAT_REGEX)
     if (repeatMatch) {
-      const count = Number(repeatMatch[1]);
-      if (Number.isFinite(count)) return Math.max(1, Math.floor(count));
+      const count = Number(repeatMatch[1])
+      if (Number.isFinite(count)) return Math.max(1, Math.floor(count))
     }
-    const tokens = value.trim().split(GRID_COLUMN_SPLIT_REGEX).filter(Boolean);
-    if (tokens.length > 0) return tokens.length;
+    const tokens = value.trim().split(GRID_COLUMN_SPLIT_REGEX).filter(Boolean)
+    if (tokens.length > 0) return tokens.length
   }
 
-  return 1;
+  return 1
 }
 
 /**
@@ -245,23 +245,23 @@ export function buildLayoutItem(
   dropInfo: { x: number; y: number; width: number; height: number },
 ): LayoutItem {
   if (!parentNode) {
-    return buildFreeLayoutItem(dropInfo);
+    return buildFreeLayoutItem(dropInfo)
   }
 
   if (
-    parentNode.type === "HorizontalLayout" ||
-    parentNode.type === "VerticalLayout" ||
-    parentNode.type === "Tabs" ||
-    parentNode.type === "Collapse" ||
-    parentNode.type === "FormLayout" ||
-    parentNode.type === "ElContainer" ||
-    parentNode.type === "ElHeader" ||
-    parentNode.type === "ElAside" ||
-    parentNode.type === "ElMain" ||
-    parentNode.type === "ElFooter"
+    parentNode.type === 'HorizontalLayout' ||
+    parentNode.type === 'VerticalLayout' ||
+    parentNode.type === 'Tabs' ||
+    parentNode.type === 'Collapse' ||
+    parentNode.type === 'FormLayout' ||
+    parentNode.type === 'ElContainer' ||
+    parentNode.type === 'ElHeader' ||
+    parentNode.type === 'ElAside' ||
+    parentNode.type === 'ElMain' ||
+    parentNode.type === 'ElFooter'
   ) {
-    return buildFlexLayoutItem();
+    return buildFlexLayoutItem()
   }
 
-  return buildFreeLayoutItem(dropInfo);
+  return buildFreeLayoutItem(dropInfo)
 }

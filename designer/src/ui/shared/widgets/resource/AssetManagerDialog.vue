@@ -3,167 +3,167 @@
   用于属性面板等轻量场景中上传、浏览并选择工程资源。
 -->
 <script setup lang="ts">
-import type { AssetFolder, AssetItem } from "@/types/api";
-import { ElMessage, ElMessageBox } from "element-plus";
-import { computed, ref, watch } from "vue";
-import { useI18n } from "vue-i18n";
-import IconEpUpload from "~icons/ep/upload";
-import assetApi from "@/services/assetApi";
-import { unwrapApiData } from "@/types/api";
-import { normalizeAssetExt, resolveAssetTypeLabel } from "@/ui/shared/helpers/asset-meta";
+import type { AssetFolder, AssetItem } from '@/types/api'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import IconEpUpload from '~icons/ep/upload'
+import assetApi from '@/services/assetApi'
+import { unwrapApiData } from '@/types/api'
+import { normalizeAssetExt, resolveAssetTypeLabel } from '@/ui/shared/helpers/asset-meta'
 
 interface ResourceFolderNode extends AssetFolder {
-  label: string;
-  type: "folder" | "root";
-  children: ResourceFolderNode[];
+  label: string
+  type: 'folder' | 'root'
+  children: ResourceFolderNode[]
 }
 
 interface AssetView extends AssetItem {
-  displayName: string;
-  ext: string;
-  sizeValue: number;
+  displayName: string
+  ext: string
+  sizeValue: number
 }
 
 const props = withDefaults(
   defineProps<{
-    modelValue: boolean;
-    projectId: string;
-    title?: string;
-    accept?: string;
-    imageOnly?: boolean;
-    selectedUrl?: string;
+    modelValue: boolean
+    projectId: string
+    title?: string
+    accept?: string
+    imageOnly?: boolean
+    selectedUrl?: string
   }>(),
   {
-    title: "",
-    accept: "",
+    title: '',
+    accept: '',
     imageOnly: false,
-    selectedUrl: "",
+    selectedUrl: '',
   },
-);
+)
 
 const emit = defineEmits<{
-  (event: "update:modelValue", value: boolean): void;
-  (event: "select", asset: AssetItem): void;
-}>();
+  (event: 'update:modelValue', value: boolean): void
+  (event: 'select', asset: AssetItem): void
+}>()
 
-const { t } = useI18n();
+const { t } = useI18n()
 
-const folderSearch = ref("");
-const assetSearch = ref("");
-const folders = ref<AssetFolder[]>([]);
-const assets = ref<AssetItem[]>([]);
-const selectedFolderId = ref("root");
-const selectedAssetId = ref("");
-const loading = ref(false);
-const uploading = ref(false);
-const fileInputRef = ref<HTMLInputElement | null>(null);
+const folderSearch = ref('')
+const assetSearch = ref('')
+const folders = ref<AssetFolder[]>([])
+const assets = ref<AssetItem[]>([])
+const selectedFolderId = ref('root')
+const selectedAssetId = ref('')
+const loading = ref(false)
+const uploading = ref(false)
+const fileInputRef = ref<HTMLInputElement | null>(null)
 
 const visible = computed({
   get: () => props.modelValue,
-  set: (value: boolean) => emit("update:modelValue", value),
-});
+  set: (value: boolean) => emit('update:modelValue', value),
+})
 
 function showSuccessMessage(message: string): void {
-  ElMessage.success(message as never);
+  ElMessage.success(message as never)
 }
 
 function decodeAssetName(value: string): string {
-  if (!value) return "";
+  if (!value) return ''
   try {
-    return decodeURIComponent(value);
+    return decodeURIComponent(value)
   } catch {
     try {
-      return decodeURIComponent(escape(value));
+      return decodeURIComponent(escape(value))
     } catch {
-      return value;
+      return value
     }
   }
 }
 
 function getAssetExt(asset: Partial<AssetItem> & { displayName?: string } = {}): string {
-  const name = asset.displayName || asset.name || asset.originalName || "";
-  const index = name.lastIndexOf(".");
+  const name = asset.displayName || asset.name || asset.originalName || ''
+  const index = name.lastIndexOf('.')
   if (index > -1 && index < name.length - 1) {
-    return normalizeAssetExt(name.slice(index + 1).toLowerCase());
+    return normalizeAssetExt(name.slice(index + 1).toLowerCase())
   }
-  const mime = String(asset.mimeType || "").toLowerCase();
-  if (mime.includes("/")) return normalizeAssetExt(mime.split("/").pop() || "");
-  return normalizeAssetExt(asset.type || "");
+  const mime = String(asset.mimeType || '').toLowerCase()
+  if (mime.includes('/')) return normalizeAssetExt(mime.split('/').pop() || '')
+  return normalizeAssetExt(asset.type || '')
 }
 
 function isImageAsset(asset: Partial<AssetItem> | null | undefined): boolean {
-  const type = String(asset?.type || "").toLowerCase();
-  const mime = String(asset?.mimeType || "").toLowerCase();
-  const ext = getAssetExt(asset || {});
-  if (type === "image" || type === "svg") return true;
-  if (mime.startsWith("image/")) return true;
-  return ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico"].includes(ext);
+  const type = String(asset?.type || '').toLowerCase()
+  const mime = String(asset?.mimeType || '').toLowerCase()
+  const ext = getAssetExt(asset || {})
+  if (type === 'image' || type === 'svg') return true
+  if (mime.startsWith('image/')) return true
+  return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext)
 }
 
 function resolveAssetUrl(asset: Partial<AssetItem> | null | undefined): string {
-  return String(asset?.url || asset?.src || asset?.path || "");
+  return String(asset?.url || asset?.src || asset?.path || '')
 }
 
 function formatSize(size: number | string | null | undefined): string {
-  if (size === null || size === undefined || size === "") return "-";
-  const value = Number(size);
-  if (Number.isNaN(value)) return "-";
-  if (value === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  let idx = 0;
-  let num = value;
+  if (size === null || size === undefined || size === '') return '-'
+  const value = Number(size)
+  if (Number.isNaN(value)) return '-'
+  if (value === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let idx = 0
+  let num = value
   while (num >= 1024 && idx < units.length - 1) {
-    num /= 1024;
-    idx += 1;
+    num /= 1024
+    idx += 1
   }
-  return `${num.toFixed(num >= 10 ? 0 : 1)} ${units[idx]}`;
+  return `${num.toFixed(num >= 10 ? 0 : 1)} ${units[idx]}`
 }
 
 function buildFolderTree(items: AssetFolder[] | null | undefined): ResourceFolderNode[] {
-  const list = Array.isArray(items) ? items : [];
+  const list = Array.isArray(items) ? items : []
   const nodes: ResourceFolderNode[] = list.map((item) => ({
     ...item,
-    label: decodeAssetName(item.name || t("resourcePanel.untitledFolder")),
-    type: "folder" as const,
+    label: decodeAssetName(item.name || t('resourcePanel.untitledFolder')),
+    type: 'folder' as const,
     children: [],
-  }));
-  const map = new Map<string, ResourceFolderNode>(nodes.map((item) => [item.id, item]));
+  }))
+  const map = new Map<string, ResourceFolderNode>(nodes.map((item) => [item.id, item]))
   const root: ResourceFolderNode = {
-    id: "root",
-    name: t("resourcePanel.rootLabel"),
-    label: t("resourcePanel.rootLabel"),
-    type: "root",
+    id: 'root',
+    name: t('resourcePanel.rootLabel'),
+    label: t('resourcePanel.rootLabel'),
+    type: 'root',
     children: [],
-  };
+  }
   nodes.forEach((node) => {
-    const parent = node.parentId ? map.get(node.parentId) : undefined;
-    if (parent) parent.children.push(node);
-    else root.children.push(node);
-  });
-  return [root];
+    const parent = node.parentId ? map.get(node.parentId) : undefined
+    if (parent) parent.children.push(node)
+    else root.children.push(node)
+  })
+  return [root]
 }
 
-const folderTree = computed<ResourceFolderNode[]>(() => buildFolderTree(folders.value));
+const folderTree = computed<ResourceFolderNode[]>(() => buildFolderTree(folders.value))
 
 function filterFolderTree(nodes: ResourceFolderNode[], keyword: string): ResourceFolderNode[] {
-  const normalized = keyword.trim().toLowerCase();
-  if (!normalized) return nodes;
+  const normalized = keyword.trim().toLowerCase()
+  if (!normalized) return nodes
   return nodes.flatMap((node) => {
-    const children = filterFolderTree(node.children || [], normalized);
+    const children = filterFolderTree(node.children || [], normalized)
     if (node.label.toLowerCase().includes(normalized) || children.length) {
-      return [{ ...node, children }];
+      return [{ ...node, children }]
     }
-    return [];
-  });
+    return []
+  })
 }
 
 const filteredFolderTree = computed<ResourceFolderNode[]>(() =>
   filterFolderTree(folderTree.value, folderSearch.value),
-);
+)
 
 const normalizedAssets = computed<AssetView[]>(() =>
   (assets.value || []).map((asset) => {
-    const displayName = decodeAssetName(asset.name || asset.originalName || "");
+    const displayName = decodeAssetName(asset.name || asset.originalName || '')
     const sizeValue = Number(
       asset.size ??
         asset.fileSize ??
@@ -174,127 +174,127 @@ const normalizedAssets = computed<AssetView[]>(() =>
         asset.metadata?.fileSize ??
         asset.metadata?.length ??
         0,
-    );
+    )
     return {
       ...asset,
       displayName,
       ext: getAssetExt({ ...asset, displayName }),
       sizeValue: Number.isFinite(sizeValue) ? sizeValue : 0,
-    };
+    }
   }),
-);
+)
 
 const filteredAssets = computed<AssetView[]>(() => {
-  let list = normalizedAssets.value;
-  if (props.imageOnly) list = list.filter((item) => isImageAsset(item));
-  if (selectedFolderId.value !== "root") {
-    list = list.filter((item) => item.folderId === selectedFolderId.value);
+  let list = normalizedAssets.value
+  if (props.imageOnly) list = list.filter((item) => isImageAsset(item))
+  if (selectedFolderId.value !== 'root') {
+    list = list.filter((item) => item.folderId === selectedFolderId.value)
   }
-  const keyword = assetSearch.value.trim().toLowerCase();
+  const keyword = assetSearch.value.trim().toLowerCase()
   if (keyword) {
-    list = list.filter((item) => item.displayName.toLowerCase().includes(keyword));
+    list = list.filter((item) => item.displayName.toLowerCase().includes(keyword))
   }
-  return list;
-});
+  return list
+})
 
 const selectedAsset = computed<AssetView | null>(
   () => normalizedAssets.value.find((item) => item.id === selectedAssetId.value) || null,
-);
+)
 
 function handleFolderClick(data: ResourceFolderNode | null | undefined): void {
-  if (!data) return;
-  selectedFolderId.value = data.id;
+  if (!data) return
+  selectedFolderId.value = data.id
 }
 
 function handleAssetSelect(asset: AssetView): void {
-  selectedAssetId.value = asset.id;
+  selectedAssetId.value = asset.id
 }
 
 function confirmSelect(): void {
-  if (!selectedAsset.value) return;
-  emit("select", selectedAsset.value);
-  visible.value = false;
+  if (!selectedAsset.value) return
+  emit('select', selectedAsset.value)
+  visible.value = false
 }
 
 function triggerFileSelect(): void {
-  fileInputRef.value?.click();
+  fileInputRef.value?.click()
 }
 
 async function handleFileInputChange(event: Event): Promise<void> {
-  const target = event.target as HTMLInputElement | null;
-  const files = Array.from(target?.files || []);
-  if (target) target.value = "";
-  if (!files.length) return;
-  await uploadFiles(files);
+  const target = event.target as HTMLInputElement | null
+  const files = Array.from(target?.files || [])
+  if (target) target.value = ''
+  if (!files.length) return
+  await uploadFiles(files)
 }
 
 async function handleUploadDrop(event: DragEvent): Promise<void> {
-  const files = Array.from(event.dataTransfer?.files || []);
-  if (!files.length) return;
-  await uploadFiles(files);
+  const files = Array.from(event.dataTransfer?.files || [])
+  if (!files.length) return
+  await uploadFiles(files)
 }
 
 async function uploadFiles(files: File[]): Promise<void> {
-  if (!props.projectId || !files.length) return;
-  uploading.value = true;
-  const folderId = selectedFolderId.value === "root" ? null : selectedFolderId.value;
+  if (!props.projectId || !files.length) return
+  uploading.value = true
+  const folderId = selectedFolderId.value === 'root' ? null : selectedFolderId.value
   const duplicated = files.some((file) =>
     normalizedAssets.value.some(
       (asset) => asset.displayName === file.name && (asset.folderId || null) === folderId,
     ),
-  );
-  let conflictStrategy = "rename";
+  )
+  let conflictStrategy = 'rename'
   if (duplicated) {
     const result = await ElMessageBox.confirm(
-      t("resourcePanel.uploadConflictMessage"),
-      t("resourcePanel.uploadConflictTitle"),
+      t('resourcePanel.uploadConflictMessage'),
+      t('resourcePanel.uploadConflictTitle'),
       {
-        confirmButtonText: t("resourcePanel.replace"),
-        cancelButtonText: t("resourcePanel.rename"),
-        type: "warning",
+        confirmButtonText: t('resourcePanel.replace'),
+        cancelButtonText: t('resourcePanel.rename'),
+        type: 'warning',
       },
-    ).catch(() => null);
-    conflictStrategy = result ? "replace" : "rename";
+    ).catch(() => null)
+    conflictStrategy = result ? 'replace' : 'rename'
   }
   try {
     const response = await assetApi.uploadAssets(props.projectId, files, folderId || undefined, {
       conflictStrategy,
-    });
-    const data = unwrapApiData<{ assets?: AssetItem[] }>(response);
-    showSuccessMessage(t("resourcePanel.uploadSuccess"));
-    await loadAssets();
-    const uploaded = Array.isArray(data?.assets) ? data.assets[0] : null;
-    if (uploaded?.id) selectedAssetId.value = uploaded.id;
+    })
+    const data = unwrapApiData<{ assets?: AssetItem[] }>(response)
+    showSuccessMessage(t('resourcePanel.uploadSuccess'))
+    await loadAssets()
+    const uploaded = Array.isArray(data?.assets) ? data.assets[0] : null
+    if (uploaded?.id) selectedAssetId.value = uploaded.id
   } finally {
-    uploading.value = false;
+    uploading.value = false
   }
 }
 
 async function loadFolders(): Promise<void> {
-  if (!props.projectId) return;
-  const response = await assetApi.getFolders(props.projectId);
-  const data = unwrapApiData<{ folders?: AssetFolder[] }>(response);
-  folders.value = Array.isArray(data?.folders) ? data.folders : [];
+  if (!props.projectId) return
+  const response = await assetApi.getFolders(props.projectId)
+  const data = unwrapApiData<{ folders?: AssetFolder[] }>(response)
+  folders.value = Array.isArray(data?.folders) ? data.folders : []
 }
 
 async function loadAssets(): Promise<void> {
-  if (!props.projectId) return;
-  const response = await assetApi.getAssets(props.projectId);
-  const data = unwrapApiData<{ assets?: AssetItem[] }>(response);
-  assets.value = Array.isArray(data?.assets) ? data.assets : [];
+  if (!props.projectId) return
+  const response = await assetApi.getAssets(props.projectId)
+  const data = unwrapApiData<{ assets?: AssetItem[] }>(response)
+  assets.value = Array.isArray(data?.assets) ? data.assets : []
   if (!selectedAssetId.value && props.selectedUrl) {
-    const matched = assets.value.find((asset) => resolveAssetUrl(asset) === props.selectedUrl);
-    if (matched?.id) selectedAssetId.value = matched.id;
+    const matched = assets.value.find((asset) => resolveAssetUrl(asset) === props.selectedUrl)
+    if (matched?.id) selectedAssetId.value = matched.id
   }
 }
 
 async function reloadResources(): Promise<void> {
-  if (!visible.value || !props.projectId) return;
-  loading.value = true;
+  if (!visible.value || !props.projectId) return
+  loading.value = true
   try {
-    await Promise.all([loadFolders(), loadAssets()]);
+    await Promise.all([loadFolders(), loadAssets()])
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
 
@@ -302,18 +302,18 @@ watch(
   () => props.modelValue,
   (value) => {
     if (value) {
-      selectedAssetId.value = "";
-      void reloadResources();
+      selectedAssetId.value = ''
+      void reloadResources()
     }
   },
-);
+)
 
 watch(
   () => props.projectId,
   () => {
-    if (visible.value) void reloadResources();
+    if (visible.value) void reloadResources()
   },
-);
+)
 </script>
 
 <template>
@@ -367,7 +367,7 @@ watch(
           />
           <el-button size="small" type="primary" :loading="uploading" @click="triggerFileSelect">
             <el-icon><IconEpUpload /></el-icon>
-            <span>{{ t("resourceManager.upload") }}</span>
+            <span>{{ t('resourceManager.upload') }}</span>
           </el-button>
         </div>
 
@@ -377,7 +377,7 @@ watch(
           @dragover.prevent
           @drop.prevent="handleUploadDrop"
         >
-          {{ t("resourcePanel.uploadHint") }}
+          {{ t('resourcePanel.uploadHint') }}
         </div>
 
         <el-scrollbar class="asset-manager__asset-scroll">
@@ -424,9 +424,9 @@ watch(
     />
 
     <template #footer>
-      <el-button @click="visible = false">{{ t("resourcePanel.cancel") }}</el-button>
+      <el-button @click="visible = false">{{ t('resourcePanel.cancel') }}</el-button>
       <el-button type="primary" :disabled="!selectedAsset" @click="confirmSelect">
-        {{ t("resourceManager.select") }}
+        {{ t('resourceManager.select') }}
       </el-button>
     </template>
   </el-dialog>

@@ -54,7 +54,8 @@
       </label>
 
       <div class="alarm-settings-dialog__hint">
-        报警升级间隔用于等级阶段升级；重复推送间隔用于报警未恢复期间按固定间隔提醒。升级时优先级跳到对应等级的默认值，不会从 1 逐级递增，也不会为每一次数值变化推送事件。
+        报警升级间隔用于等级阶段升级；重复推送间隔用于报警未恢复期间按固定间隔提醒。升级时优先级跳到对应等级的默认值，不会从
+        1 逐级递增，也不会为每一次数值变化推送事件。
       </div>
 
       <div class="alarm-settings-dialog__steps" aria-label="报警升级等级">
@@ -71,11 +72,9 @@
 
     <template #footer>
       <div class="alarm-settings-dialog__footer">
-        <button type="button" class="is-ghost" @click="visible = false">
-          取消
-        </button>
+        <button type="button" class="is-ghost" @click="visible = false">取消</button>
         <button type="button" :disabled="loading || submitting" @click="submit">
-          {{ submitting ? "保存中" : "保存" }}
+          {{ submitting ? '保存中' : '保存' }}
         </button>
       </div>
     </template>
@@ -83,85 +82,78 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
-import type {
-  AlarmProjectSettings,
-  AlarmProjectSettingsSave,
-} from "@/api/schemas/alarm.schema";
-import DcDialog from "@/components/shared/DcDialog.vue";
+import { computed, reactive, ref, watch } from 'vue'
+import type { AlarmProjectSettings, AlarmProjectSettingsSave } from '@/api/schemas/alarm.schema'
+import DcDialog from '@/components/shared/DcDialog.vue'
 
 const props = defineProps<{
-  modelValue: boolean;
-  settings: AlarmProjectSettings | null;
-  loading?: boolean;
-  submitting?: boolean;
-  error?: string;
-}>();
+  modelValue: boolean
+  settings: AlarmProjectSettings | null
+  loading?: boolean
+  submitting?: boolean
+  error?: string
+}>()
 
 const emit = defineEmits<{
-  "update:modelValue": [value: boolean];
-  submit: [payload: AlarmProjectSettingsSave];
-}>();
+  'update:modelValue': [value: boolean]
+  submit: [payload: AlarmProjectSettingsSave]
+}>()
 
 const form = reactive({
   escalationIntervalSeconds: 300,
   repeatNotificationIntervalSeconds: 60,
-});
-const localError = ref("");
-const initialSnapshot = ref("");
+})
+const localError = ref('')
+const initialSnapshot = ref('')
 
 const visible = computed({
   get: () => props.modelValue,
-  set: (value: boolean) => emit("update:modelValue", value),
-});
+  set: (value: boolean) => emit('update:modelValue', value),
+})
 
 const formSnapshot = computed(() =>
   JSON.stringify({
     escalationIntervalSeconds: form.escalationIntervalSeconds,
     repeatNotificationIntervalSeconds: form.repeatNotificationIntervalSeconds,
   }),
-);
-const isDirty = computed(
-  () => visible.value && formSnapshot.value !== initialSnapshot.value,
-);
+)
+const isDirty = computed(() => visible.value && formSnapshot.value !== initialSnapshot.value)
 
 const syncForm = () => {
-  form.escalationIntervalSeconds =
-    props.settings?.escalationIntervalSeconds ?? 300;
-  form.repeatNotificationIntervalSeconds =
-    props.settings?.repeatNotificationIntervalSeconds ?? 60;
-  localError.value = "";
-  initialSnapshot.value = formSnapshot.value;
-};
+  form.escalationIntervalSeconds = props.settings?.escalationIntervalSeconds ?? 300
+  form.repeatNotificationIntervalSeconds = props.settings?.repeatNotificationIntervalSeconds ?? 60
+  localError.value = ''
+  initialSnapshot.value = formSnapshot.value
+}
 
 const reset = () => {
-  syncForm();
-};
+  syncForm()
+}
 
 const submit = () => {
-  localError.value = "";
+  localError.value = ''
   if (!Number.isInteger(form.escalationIntervalSeconds)) {
-    localError.value = "报警升级间隔必须是整数秒";
-    return;
+    localError.value = '报警升级间隔必须是整数秒'
+    return
   }
   if (form.escalationIntervalSeconds < 30) {
-    localError.value = "报警升级间隔不能小于 30 秒";
-    return;
+    localError.value = '报警升级间隔不能小于 30 秒'
+    return
   }
   if (!Number.isInteger(form.repeatNotificationIntervalSeconds)) {
-    localError.value = "重复推送间隔必须是整数秒";
-    return;
+    localError.value = '重复推送间隔必须是整数秒'
+    return
   }
   if (form.repeatNotificationIntervalSeconds < 10) {
-    localError.value = "重复推送间隔不能小于 10 秒";
-    return;
+    localError.value = '重复推送间隔不能小于 10 秒'
+    return
   }
-  emit("submit", {
+  emit('submit', {
     escalationIntervalSeconds: form.escalationIntervalSeconds,
     repeatNotificationIntervalSeconds: form.repeatNotificationIntervalSeconds,
-  });
-  initialSnapshot.value = formSnapshot.value;
-};
+  })
+  initialSnapshot.value = formSnapshot.value
+}
 
 watch(
   () =>
@@ -172,11 +164,11 @@ watch(
     ] as const,
   () => {
     if (props.modelValue) {
-      syncForm();
+      syncForm()
     }
   },
   { immediate: true },
-);
+)
 </script>
 
 <style scoped>

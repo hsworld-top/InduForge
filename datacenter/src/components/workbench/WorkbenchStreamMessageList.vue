@@ -22,7 +22,7 @@
           <header class="workbench-stream-list__item-head">
             <WorkbenchStatusPill :label="`QoS ${message.qos ?? 0}`" tone="info" />
             <span class="workbench-stream-list__topic" :title="message.topic || '-'">
-              {{ message.topic || "-" }}
+              {{ message.topic || '-' }}
             </span>
             <time v-if="showTimestamp">
               {{ formatTimestamp(message.timestamp) }}
@@ -46,81 +46,81 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref } from "vue";
-import dayjs from "dayjs";
-import { TIME_FORMAT } from "@/constants";
-import WorkbenchStatusPill from "./WorkbenchStatusPill.vue";
-import IconTablerCopy from "~icons/tabler/copy";
-import IconTablerInbox from "~icons/tabler/inbox";
-import IconTablerLoader2 from "~icons/tabler/loader-2";
+import { nextTick, ref } from 'vue'
+import dayjs from 'dayjs'
+import { TIME_FORMAT } from '@/constants'
+import WorkbenchStatusPill from './WorkbenchStatusPill.vue'
+import IconTablerCopy from '~icons/tabler/copy'
+import IconTablerInbox from '~icons/tabler/inbox'
+import IconTablerLoader2 from '~icons/tabler/loader-2'
 
 type StreamMessage = {
-  id?: string | number;
-  topic?: string;
-  payload?: unknown;
-  qos?: number;
-  timestamp?: string | number | Date;
-};
+  id?: string | number
+  topic?: string
+  payload?: unknown
+  qos?: number
+  timestamp?: string | number | Date
+}
 
 const props = withDefaults(
   defineProps<{
-    messages: StreamMessage[];
-    loading?: boolean;
-    showTimestamp?: boolean;
-    formatJson?: boolean;
-    emptyText?: string;
-    emptyHint?: string;
+    messages: StreamMessage[]
+    loading?: boolean
+    showTimestamp?: boolean
+    formatJson?: boolean
+    emptyText?: string
+    emptyHint?: string
   }>(),
   {
     loading: false,
     showTimestamp: true,
     formatJson: true,
-    emptyText: "暂无消息",
-    emptyHint: "等待接收实时数据",
+    emptyText: '暂无消息',
+    emptyHint: '等待接收实时数据',
   },
-);
+)
 
 defineEmits<{
-  (event: "select", message: StreamMessage): void;
-  (event: "copy", message: StreamMessage): void;
-}>();
+  (event: 'select', message: StreamMessage): void
+  (event: 'copy', message: StreamMessage): void
+}>()
 
-const rootRef = ref<HTMLElement | null>(null);
-const scrollbarRef = ref<any>(null);
+const rootRef = ref<HTMLElement | null>(null)
+const scrollbarRef = ref<any>(null)
 
 const formatTimestamp = (timestamp?: string | number | Date) => {
-  if (!timestamp) return "-";
-  const date = dayjs(timestamp);
-  return date.isValid() ? date.format(TIME_FORMAT) : "-";
-};
+  if (!timestamp) return '-'
+  const date = dayjs(timestamp)
+  return date.isValid() ? date.format(TIME_FORMAT) : '-'
+}
 
 const formatPayload = (payload: unknown) => {
   if (payload === null || payload === undefined) {
-    return "";
+    return ''
   }
-  if (typeof payload === "string") {
-    if (!props.formatJson) return payload;
+  if (typeof payload === 'string') {
+    if (!props.formatJson) return payload
     try {
-      return JSON.stringify(JSON.parse(payload), null, 2);
+      return JSON.stringify(JSON.parse(payload), null, 2)
     } catch {
-      return payload;
+      return payload
     }
   }
   try {
-    return JSON.stringify(payload, null, props.formatJson ? 2 : 0);
+    return JSON.stringify(payload, null, props.formatJson ? 2 : 0)
   } catch {
-    return String(payload);
+    return String(payload)
   }
-};
+}
 
 const scrollToTop = async () => {
-  await nextTick();
-  scrollbarRef.value?.setScrollTop?.(0);
-};
+  await nextTick()
+  scrollbarRef.value?.setScrollTop?.(0)
+}
 
 defineExpose({
   scrollToTop,
-});
+})
 </script>
 
 <style scoped>

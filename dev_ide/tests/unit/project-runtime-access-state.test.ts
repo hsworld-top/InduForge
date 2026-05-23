@@ -30,12 +30,15 @@ describe('project-runtime-access-state', () => {
     })
 
     expect(
-      buildRuntimeRolePayload({
-        code: 'PROJECT_viewer role',
-        name: '观察员',
-      }, {
-        includeStatus: false,
-      }),
+      buildRuntimeRolePayload(
+        {
+          code: 'PROJECT_viewer role',
+          name: '观察员',
+        },
+        {
+          includeStatus: false,
+        },
+      ),
     ).toEqual({
       code: 'PROJECT_VIEWER_ROLE',
       name: '观察员',

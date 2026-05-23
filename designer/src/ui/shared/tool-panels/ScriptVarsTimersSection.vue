@@ -2,59 +2,59 @@
   脚本面板：定时器折叠块（树 + 拖拽）
 -->
 <script setup lang="ts">
-import { computed } from "vue";
-import { useI18n } from "vue-i18n";
-import IconEpEditPen from "~icons/ep/edit-pen";
-import IconEpFolder from "~icons/ep/folder";
-import IconEpPlus from "~icons/ep/plus";
-import IconEpTimer from "~icons/ep/timer";
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import IconEpEditPen from '~icons/ep/edit-pen'
+import IconEpFolder from '~icons/ep/folder'
+import IconEpPlus from '~icons/ep/plus'
+import IconEpTimer from '~icons/ep/timer'
 
 interface ScriptTreeNodeLike {
-  id: string;
-  label: string;
-  type: string;
+  id: string
+  label: string
+  type: string
 }
 
 const props = defineProps<{
-  tree: ScriptTreeNodeLike[];
-  allowDrop: (draggingNode: unknown, dropNode: unknown, dropType: unknown) => boolean;
-  allowDrag: (draggingNode: unknown) => boolean;
-  isSelected: (data: ScriptTreeNodeLike) => boolean;
-}>();
+  tree: ScriptTreeNodeLike[]
+  allowDrop: (draggingNode: unknown, dropNode: unknown, dropType: unknown) => boolean
+  allowDrag: (draggingNode: unknown) => boolean
+  isSelected: (data: ScriptTreeNodeLike) => boolean
+}>()
 
 const emit = defineEmits([
-  "blankContextmenu",
-  "nodeDblclick",
-  "nodeContextmenu",
-  "nodeDrop",
-  "nodeClick",
-  "createScript",
-]);
-const { t } = useI18n();
+  'blankContextmenu',
+  'nodeDblclick',
+  'nodeContextmenu',
+  'nodeDrop',
+  'nodeClick',
+  'createScript',
+])
+const { t } = useI18n()
 
-const itemCount = computed(() => countItems(props.tree));
+const itemCount = computed(() => countItems(props.tree))
 
 function countItems(nodes: ScriptTreeNodeLike[]): number {
   return nodes.reduce((sum, node: any) => {
-    if (node.type === "item") return sum + 1;
-    return sum + countItems(node.children || []);
-  }, 0);
+    if (node.type === 'item') return sum + 1
+    return sum + countItems(node.children || [])
+  }, 0)
 }
 
 function handleNodeDblclick(data: ScriptTreeNodeLike) {
-  emit("nodeDblclick", data);
+  emit('nodeDblclick', data)
 }
 
 function handleNodeContextmenu(event: MouseEvent, data: ScriptTreeNodeLike) {
-  emit("nodeContextmenu", event, data);
+  emit('nodeContextmenu', event, data)
 }
 
 function handleNodeDrop(draggingNode: unknown, dropNode: unknown, dropType: unknown) {
-  emit("nodeDrop", draggingNode, dropNode, dropType);
+  emit('nodeDrop', draggingNode, dropNode, dropType)
 }
 
 function handleNodeClick(data: ScriptTreeNodeLike, event: MouseEvent) {
-  emit("nodeClick", data, event);
+  emit('nodeClick', data, event)
 }
 </script>
 
@@ -62,10 +62,16 @@ function handleNodeClick(data: ScriptTreeNodeLike, event: MouseEvent) {
   <el-collapse-item name="timers">
     <template #title>
       <div class="section-title">
-        <span>{{ t("scriptPanel.sections.globalTimers") }}</span>
+        <span>{{ t('scriptPanel.sections.globalTimers') }}</span>
         <span class="section-count">{{ itemCount }}</span>
         <el-tooltip :content="t('scriptPanel.actions.create')" placement="top">
-          <el-button class="section-action" size="small" text circle @click.stop="emit('createScript')">
+          <el-button
+            class="section-action"
+            size="small"
+            text
+            circle
+            @click.stop="emit('createScript')"
+          >
             <IconEpPlus />
           </el-button>
         </el-tooltip>
@@ -74,7 +80,7 @@ function handleNodeClick(data: ScriptTreeNodeLike, event: MouseEvent) {
     <div class="scripts-layout">
       <div class="scripts-list is-full" @contextmenu="emit('blankContextmenu', $event)">
         <div v-if="itemCount === 0" class="empty-state">
-          <div class="empty-text">{{ t("scriptPanel.empty.timers") }}</div>
+          <div class="empty-text">{{ t('scriptPanel.empty.timers') }}</div>
         </div>
         <el-tree
           v-else
@@ -105,8 +111,18 @@ function handleNodeClick(data: ScriptTreeNodeLike, event: MouseEvent) {
               <span class="node-label" :class="{ 'is-group': data.type === 'group' }">{{
                 data.label
               }}</span>
-              <el-tooltip v-if="data.type === 'item'" :content="t('scriptPanel.actions.edit')" placement="top">
-                <el-button class="row-action" size="small" text circle @click.stop="handleNodeDblclick(data)">
+              <el-tooltip
+                v-if="data.type === 'item'"
+                :content="t('scriptPanel.actions.edit')"
+                placement="top"
+              >
+                <el-button
+                  class="row-action"
+                  size="small"
+                  text
+                  circle
+                  @click.stop="handleNodeDblclick(data)"
+                >
                   <IconEpEditPen />
                 </el-button>
               </el-tooltip>

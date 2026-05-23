@@ -31,69 +31,69 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 const props = withDefaults(
   defineProps<{
-    modelValue: boolean;
-    width?: number;
-    max?: number;
-    pinned?: boolean;
-    title: string;
+    modelValue: boolean
+    width?: number
+    max?: number
+    pinned?: boolean
+    title: string
   }>(),
   {
     width: 480,
     max: 720,
     pinned: false,
   },
-);
+)
 
 const emit = defineEmits<{
-  (event: "update:modelValue", value: boolean): void;
-  (event: "resize", value: number): void;
-}>();
+  (event: 'update:modelValue', value: boolean): void
+  (event: 'resize', value: number): void
+}>()
 
-const minWidth = 320;
-const drawerWidth = ref(clampWidth(props.width));
+const minWidth = 320
+const drawerWidth = ref(clampWidth(props.width))
 
 const visible = computed({
   get: () => props.modelValue,
-  set: (value: boolean) => emit("update:modelValue", value),
-});
+  set: (value: boolean) => emit('update:modelValue', value),
+})
 
 function clampWidth(value: number) {
-  const maxWidth = Math.max(minWidth, props.max);
-  return Math.min(Math.max(value || props.width, minWidth), maxWidth);
+  const maxWidth = Math.max(minWidth, props.max)
+  return Math.min(Math.max(value || props.width, minWidth), maxWidth)
 }
 
 watch(
   () => [props.width, props.max],
   () => {
-    drawerWidth.value = clampWidth(props.width);
+    drawerWidth.value = clampWidth(props.width)
   },
-);
+)
 
 function handleResize(event: MouseEvent) {
-  const nextWidth = window.innerWidth - event.clientX;
-  drawerWidth.value = clampWidth(nextWidth);
-  emit("resize", drawerWidth.value);
+  const nextWidth = window.innerWidth - event.clientX
+  drawerWidth.value = clampWidth(nextWidth)
+  emit('resize', drawerWidth.value)
 }
 
 function stopResize() {
-  window.removeEventListener("mousemove", handleResize);
-  window.removeEventListener("mouseup", stopResize);
-  document.body.classList.remove("dc-drawer-resizing");
+  window.removeEventListener('mousemove', handleResize)
+  window.removeEventListener('mouseup', stopResize)
+  document.body.classList.remove('dc-drawer-resizing')
 }
 
 function startResize() {
-  window.addEventListener("mousemove", handleResize);
-  window.addEventListener("mouseup", stopResize);
-  document.body.classList.add("dc-drawer-resizing");
+  window.addEventListener('mousemove', handleResize)
+  window.addEventListener('mouseup', stopResize)
+  document.body.classList.add('dc-drawer-resizing')
 }
 
 onBeforeUnmount(() => {
-  stopResize();
-});
+  stopResize()
+})
 </script>
 
 <style scoped>

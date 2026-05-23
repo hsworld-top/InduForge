@@ -3,59 +3,59 @@
   展示当前页面的组件层级结构，支持选中、显隐、锁定、上下移动、删除
 -->
 <script setup lang="ts">
-import { ElMessage } from "element-plus";
-import { storeToRefs } from "pinia";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import IconEpArrowDown from "~icons/ep/arrow-down";
-import IconEpArrowUp from "~icons/ep/arrow-up";
-import IconEpDelete from "~icons/ep/delete";
-import IconEpHide from "~icons/ep/hide";
-import IconEpLock from "~icons/ep/lock";
-import IconEpUnlock from "~icons/ep/unlock";
-import IconEpView from "~icons/ep/view";
-import { useEditorStore } from "@/stores/editor-store";
+import { ElMessage } from 'element-plus'
+import { storeToRefs } from 'pinia'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import IconEpArrowDown from '~icons/ep/arrow-down'
+import IconEpArrowUp from '~icons/ep/arrow-up'
+import IconEpDelete from '~icons/ep/delete'
+import IconEpHide from '~icons/ep/hide'
+import IconEpLock from '~icons/ep/lock'
+import IconEpUnlock from '~icons/ep/unlock'
+import IconEpView from '~icons/ep/view'
+import { useEditorStore } from '@/stores/editor-store'
 
 interface OutlineNodeLike {
-  id: string;
-  label: string;
-  hidden: boolean;
-  locked: boolean;
-  isRoot: boolean;
-  children?: OutlineNodeLike[];
+  id: string
+  label: string
+  hidden: boolean
+  locked: boolean
+  isRoot: boolean
+  children?: OutlineNodeLike[]
 }
 
 interface TreeContextMenuData {
-  data: OutlineNodeLike;
+  data: OutlineNodeLike
 }
 
 function showSuccessMessage(message: string): void {
-  ElMessage.success(message as never);
+  ElMessage.success(message as never)
 }
 
 function showInfoMessage(message: string): void {
-  ElMessage.info(message as never);
+  ElMessage.info(message as never)
 }
 
 function showErrorMessage(message: string): void {
-  ElMessage.error(message as never);
+  ElMessage.error(message as never)
 }
 
-const editorStore = useEditorStore();
-const { doc, currentPageId, selection, docVersion } = storeToRefs(editorStore);
+const editorStore = useEditorStore()
+const { doc, currentPageId, selection, docVersion } = storeToRefs(editorStore)
 
-const selectedNodeId = ref("");
-const treeRef = ref<any>(null);
-const expandedNodeIds = ref<string[]>([]);
-const treeRenderVersion = ref(0);
-const contextMenuVisible = ref(false);
-const contextMenuNode = ref<OutlineNodeLike | null>(null);
-const contextMenuPoint = ref({ x: 0, y: 0 });
-let unsubscribeSelection: (() => void) | null = null;
-let isRestoringTreeExpansion = false;
+const selectedNodeId = ref('')
+const treeRef = ref<any>(null)
+const expandedNodeIds = ref<string[]>([])
+const treeRenderVersion = ref(0)
+const contextMenuVisible = ref(false)
+const contextMenuNode = ref<OutlineNodeLike | null>(null)
+const contextMenuPoint = ref({ x: 0, y: 0 })
+let unsubscribeSelection: (() => void) | null = null
+let isRestoringTreeExpansion = false
 
 const contextMenuVirtualRef = {
   getBoundingClientRect: () => {
-    const { x, y } = contextMenuPoint.value;
+    const { x, y } = contextMenuPoint.value
     return {
       width: 0,
       height: 0,
@@ -63,9 +63,9 @@ const contextMenuVirtualRef = {
       bottom: y,
       left: x,
       right: x,
-    };
+    }
   },
-};
+}
 
 /**
  * 构建组件大纲树（隐藏根节点，直接展示子节点）
@@ -77,14 +77,14 @@ function buildOutlineTree(
   document: { getNode: (id: string) => any },
   rootNodeId: string,
 ): OutlineNodeLike[] {
-  const rootNode = document.getNode(rootNodeId);
-  if (!rootNode) return [];
+  const rootNode = document.getNode(rootNodeId)
+  if (!rootNode) return []
 
   const buildChildren = (node: any): OutlineNodeLike[] =>
     (node.children || [])
       .map((childId: string) => {
-        const child = document.getNode(childId);
-        if (!child) return null;
+        const child = document.getNode(childId)
+        if (!child) return null
         return {
           id: child.id,
           label: child.label || child.type || child.id,
@@ -92,25 +92,25 @@ function buildOutlineTree(
           locked: child.locked || false,
           isRoot: false,
           children: buildChildren(child),
-        };
+        }
       })
-      .filter(Boolean);
+      .filter(Boolean)
 
-  return buildChildren(rootNode);
+  return buildChildren(rootNode)
 }
 
 /**
  * 组件大纲树数据
  */
 const outlineData = computed(() => {
-  void docVersion.value;
-  if (!doc.value || !currentPageId.value) return [];
-  const page = doc.value.getPage(currentPageId.value);
-  if (!page) return [];
-  return buildOutlineTree(doc.value, page.rootNodeId);
-});
+  void docVersion.value
+  if (!doc.value || !currentPageId.value) return []
+  const page = doc.value.getPage(currentPageId.value)
+  if (!page) return []
+  return buildOutlineTree(doc.value, page.rootNodeId)
+})
 
-const expandedNodeIdSet = computed(() => new Set(expandedNodeIds.value));
+const expandedNodeIdSet = computed(() => new Set(expandedNodeIds.value))
 
 /**
  * 收集当前树中仍然存在的节点 ID，节点被删除后用于清理旧展开状态。
@@ -118,17 +118,17 @@ const expandedNodeIdSet = computed(() => new Set(expandedNodeIds.value));
  * @returns {Set<string>} 当前页面存在的节点 ID
  */
 function collectExistingNodeIds(nodes: OutlineNodeLike[]): Set<string> {
-  const ids = new Set<string>();
+  const ids = new Set<string>()
   const visit = (items: OutlineNodeLike[]) => {
     items.forEach((item) => {
-      ids.add(item.id);
+      ids.add(item.id)
       if (item.children?.length) {
-        visit(item.children);
+        visit(item.children)
       }
-    });
-  };
-  visit(nodes);
-  return ids;
+    })
+  }
+  visit(nodes)
+  return ids
 }
 
 /**
@@ -136,22 +136,22 @@ function collectExistingNodeIds(nodes: OutlineNodeLike[]): Set<string> {
  * 因此这里用节点 ID 作为稳定来源回填展开状态。
  */
 async function restoreExpandedNodes(): Promise<void> {
-  const tree = treeRef.value;
+  const tree = treeRef.value
   try {
-    if (!tree) return;
-    await nextTick();
+    if (!tree) return
+    await nextTick()
     expandedNodeIds.value.forEach((nodeId) => {
-      const treeNode = tree.getNode?.(nodeId);
-      if (!treeNode || treeNode.expanded) return;
-      if (typeof treeNode.expand === "function") {
-        treeNode.expand();
+      const treeNode = tree.getNode?.(nodeId)
+      if (!treeNode || treeNode.expanded) return
+      if (typeof treeNode.expand === 'function') {
+        treeNode.expand()
       } else {
-        treeNode.expanded = true;
+        treeNode.expanded = true
       }
-    });
+    })
   } finally {
-    await nextTick();
-    isRestoringTreeExpansion = false;
+    await nextTick()
+    isRestoringTreeExpansion = false
   }
 }
 
@@ -160,8 +160,8 @@ async function restoreExpandedNodes(): Promise<void> {
  * @param {OutlineNodeLike} node - 展开的节点数据
  */
 function handleNodeExpand(node: OutlineNodeLike): void {
-  if (!node?.id || expandedNodeIdSet.value.has(node.id)) return;
-  expandedNodeIds.value = [...expandedNodeIds.value, node.id];
+  if (!node?.id || expandedNodeIdSet.value.has(node.id)) return
+  expandedNodeIds.value = [...expandedNodeIds.value, node.id]
 }
 
 /**
@@ -169,47 +169,47 @@ function handleNodeExpand(node: OutlineNodeLike): void {
  * @param {OutlineNodeLike} node - 折叠的节点数据
  */
 function handleNodeCollapse(node: OutlineNodeLike): void {
-  if (isRestoringTreeExpansion) return;
-  if (!node?.id) return;
-  expandedNodeIds.value = expandedNodeIds.value.filter((id) => id !== node.id);
+  if (isRestoringTreeExpansion) return
+  if (!node?.id) return
+  expandedNodeIds.value = expandedNodeIds.value.filter((id) => id !== node.id)
 }
 
 watch(
   outlineData,
   (nodes) => {
-    const existingIds = collectExistingNodeIds(nodes);
-    expandedNodeIds.value = expandedNodeIds.value.filter((id) => existingIds.has(id));
+    const existingIds = collectExistingNodeIds(nodes)
+    expandedNodeIds.value = expandedNodeIds.value.filter((id) => existingIds.has(id))
     if (expandedNodeIds.value.length) {
-      treeRenderVersion.value += 1;
+      treeRenderVersion.value += 1
     }
-    void restoreExpandedNodes();
+    void restoreExpandedNodes()
   },
-  { flush: "post" },
-);
+  { flush: 'post' },
+)
 
 watch(
   () => docVersion.value,
   () => {
-    isRestoringTreeExpansion = true;
+    isRestoringTreeExpansion = true
   },
-  { flush: "sync" },
-);
+  { flush: 'sync' },
+)
 
 watch(
   () => currentPageId.value,
   () => {
-    expandedNodeIds.value = [];
-    treeRenderVersion.value += 1;
-    isRestoringTreeExpansion = false;
+    expandedNodeIds.value = []
+    treeRenderVersion.value += 1
+    isRestoringTreeExpansion = false
   },
-);
+)
 
 /**
  * 选中节点
  * @param {{ id: string }} node - 点击的节点
  */
 function handleSelectNode(node: OutlineNodeLike): void {
-  selection.value?.select({ kind: "node", id: node.id });
+  selection.value?.select({ kind: 'node', id: node.id })
 }
 
 /**
@@ -219,8 +219,8 @@ function handleSelectNode(node: OutlineNodeLike): void {
 function syncSelection(
   payload: { primary?: { id: string; kind: string } } | null | undefined,
 ): void {
-  const primary = payload?.primary;
-  selectedNodeId.value = primary?.kind === "node" ? primary.id || "" : "";
+  const primary = payload?.primary
+  selectedNodeId.value = primary?.kind === 'node' ? primary.id || '' : ''
 }
 
 /**
@@ -228,44 +228,44 @@ function syncSelection(
  * @param {import('@/editor-core').SelectionModel | null} model - 选中模型
  */
 function subscribeSelection(model: any): void {
-  if (!model) return;
-  unsubscribeSelection = model.on("change", syncSelection);
-  const primary = model.getPrimaryElement();
-  selectedNodeId.value = primary?.kind === "node" ? primary.id || "" : "";
+  if (!model) return
+  unsubscribeSelection = model.on('change', syncSelection)
+  const primary = model.getPrimaryElement()
+  selectedNodeId.value = primary?.kind === 'node' ? primary.id || '' : ''
 }
 
 watch(
   () => selection.value,
   (model) => {
     if (unsubscribeSelection) {
-      unsubscribeSelection();
-      unsubscribeSelection = null;
+      unsubscribeSelection()
+      unsubscribeSelection = null
     }
     if (model) {
-      subscribeSelection(model);
+      subscribeSelection(model)
     }
   },
   { immediate: true },
-);
+)
 
 onBeforeUnmount(() => {
   if (unsubscribeSelection) {
-    unsubscribeSelection();
-    unsubscribeSelection = null;
+    unsubscribeSelection()
+    unsubscribeSelection = null
   }
-  document.removeEventListener("click", handleGlobalClick);
-});
+  document.removeEventListener('click', handleGlobalClick)
+})
 
 /**
  * 全局点击处理,关闭右键菜单
  */
 function handleGlobalClick(): void {
-  contextMenuVisible.value = false;
+  contextMenuVisible.value = false
 }
 
 onMounted(() => {
-  document.addEventListener("click", handleGlobalClick);
-});
+  document.addEventListener('click', handleGlobalClick)
+})
 
 /**
  * 切换显示/隐藏
@@ -273,8 +273,8 @@ onMounted(() => {
  */
 function toggleVisibility(nodeId: string): void {
   if (editorStore.toggleNodeVisibility(nodeId)) {
-    const node = doc.value?.getNode(nodeId);
-    showSuccessMessage(node?.hidden ? "已隐藏" : "已显示");
+    const node = doc.value?.getNode(nodeId)
+    showSuccessMessage(node?.hidden ? '已隐藏' : '已显示')
   }
 }
 
@@ -284,8 +284,8 @@ function toggleVisibility(nodeId: string): void {
  */
 function toggleLock(nodeId: string): void {
   if (editorStore.toggleNodeLock(nodeId)) {
-    const node = doc.value?.getNode(nodeId);
-    showSuccessMessage(node?.locked ? "已锁定" : "已解锁");
+    const node = doc.value?.getNode(nodeId)
+    showSuccessMessage(node?.locked ? '已锁定' : '已解锁')
   }
 }
 
@@ -295,9 +295,9 @@ function toggleLock(nodeId: string): void {
  */
 function moveUp(nodeId: string): void {
   if (editorStore.moveNodeUp(nodeId)) {
-    showSuccessMessage("已上移");
+    showSuccessMessage('已上移')
   } else {
-    showInfoMessage("已在最上层");
+    showInfoMessage('已在最上层')
   }
 }
 
@@ -307,9 +307,9 @@ function moveUp(nodeId: string): void {
  */
 function moveDown(nodeId: string): void {
   if (editorStore.moveNodeDown(nodeId)) {
-    showSuccessMessage("已下移");
+    showSuccessMessage('已下移')
   } else {
-    showInfoMessage("已在最下层");
+    showInfoMessage('已在最下层')
   }
 }
 
@@ -323,70 +323,70 @@ function handleContextMenu(
   event: MouseEvent,
   nodeData: TreeContextMenuData | null | undefined,
 ): void {
-  event.preventDefault();
-  if (!nodeData?.data || nodeData.data.isRoot) return; // 根节点不显示菜单
+  event.preventDefault()
+  if (!nodeData?.data || nodeData.data.isRoot) return // 根节点不显示菜单
 
-  contextMenuNode.value = nodeData.data;
-  contextMenuPoint.value = { x: event.clientX, y: event.clientY };
-  contextMenuVisible.value = true;
+  contextMenuNode.value = nodeData.data
+  contextMenuPoint.value = { x: event.clientX, y: event.clientY }
+  contextMenuVisible.value = true
 }
 
 /**
  * 右键菜单:切换显示/隐藏
  */
 function handleToggleVisibility(): void {
-  if (!contextMenuNode.value) return;
-  toggleVisibility(contextMenuNode.value.id);
-  contextMenuVisible.value = false;
+  if (!contextMenuNode.value) return
+  toggleVisibility(contextMenuNode.value.id)
+  contextMenuVisible.value = false
 }
 
 /**
  * 右键菜单:切换锁定/解锁
  */
 function handleToggleLock(): void {
-  if (!contextMenuNode.value) return;
-  toggleLock(contextMenuNode.value.id);
-  contextMenuVisible.value = false;
+  if (!contextMenuNode.value) return
+  toggleLock(contextMenuNode.value.id)
+  contextMenuVisible.value = false
 }
 
 /**
  * 右键菜单:上移图层
  */
 function handleMoveUp(): void {
-  if (!contextMenuNode.value) return;
-  moveUp(contextMenuNode.value.id);
-  contextMenuVisible.value = false;
+  if (!contextMenuNode.value) return
+  moveUp(contextMenuNode.value.id)
+  contextMenuVisible.value = false
 }
 
 /**
  * 右键菜单:下移图层
  */
 function handleMoveDown(): void {
-  if (!contextMenuNode.value) return;
-  moveDown(contextMenuNode.value.id);
-  contextMenuVisible.value = false;
+  if (!contextMenuNode.value) return
+  moveDown(contextMenuNode.value.id)
+  contextMenuVisible.value = false
 }
 
 /**
  * 右键菜单:置顶
  */
 function handleMoveToTop(): void {
-  if (!contextMenuNode.value) return;
+  if (!contextMenuNode.value) return
   if (editorStore.moveNodeToTop(contextMenuNode.value.id)) {
-    showSuccessMessage("已置顶");
+    showSuccessMessage('已置顶')
   }
-  contextMenuVisible.value = false;
+  contextMenuVisible.value = false
 }
 
 /**
  * 右键菜单:置底
  */
 function handleMoveToBottom(): void {
-  if (!contextMenuNode.value) return;
+  if (!contextMenuNode.value) return
   if (editorStore.moveNodeToBottom(contextMenuNode.value.id)) {
-    showSuccessMessage("已置底");
+    showSuccessMessage('已置底')
   }
-  contextMenuVisible.value = false;
+  contextMenuVisible.value = false
 }
 
 /**
@@ -394,12 +394,12 @@ function handleMoveToBottom(): void {
  * @param {string} nodeId - 节点 ID
  */
 function deleteNode(nodeId: string): void {
-  if (!nodeId) return;
+  if (!nodeId) return
 
   if (editorStore.removeNode(nodeId)) {
-    showSuccessMessage("删除成功");
+    showSuccessMessage('删除成功')
   } else {
-    showErrorMessage("删除失败");
+    showErrorMessage('删除失败')
   }
 }
 
@@ -407,9 +407,9 @@ function deleteNode(nodeId: string): void {
  * 右键菜单:删除
  */
 function handleDelete(): void {
-  if (!contextMenuNode.value) return;
-  deleteNode(contextMenuNode.value.id);
-  contextMenuVisible.value = false;
+  if (!contextMenuNode.value) return
+  deleteNode(contextMenuNode.value.id)
+  contextMenuVisible.value = false
 }
 </script>
 
@@ -480,10 +480,10 @@ function handleDelete(): void {
   >
     <div v-if="contextMenuNode" class="context-menu" @click.stop>
       <el-button size="small" text @click="handleToggleVisibility">
-        {{ contextMenuNode.hidden ? "显示" : "隐藏" }}
+        {{ contextMenuNode.hidden ? '显示' : '隐藏' }}
       </el-button>
       <el-button size="small" text @click="handleToggleLock">
-        {{ contextMenuNode.locked ? "解锁" : "锁定" }}
+        {{ contextMenuNode.locked ? '解锁' : '锁定' }}
       </el-button>
       <el-divider style="margin: 4px 0" />
       <el-button size="small" text @click="handleMoveUp">上移图层</el-button>
@@ -514,7 +514,7 @@ function handleDelete(): void {
 }
 
 .outline-node.is-locked .node-label::after {
-  content: "🔒";
+  content: '🔒';
   margin-left: 4px;
   font-size: 10px;
 }

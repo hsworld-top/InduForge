@@ -66,7 +66,9 @@
           plain
           data-testid="project-group-add-project"
           class="project-group-breadcrumb__action"
-          @click="openGroupProjectPicker({ id: groupContext.groupId, name: groupContext.groupName })"
+          @click="
+            openGroupProjectPicker({ id: groupContext.groupId, name: groupContext.groupName })
+          "
         >
           {{ t('projectManagement.addProjectToGroup') }}
         </el-button>
@@ -87,7 +89,9 @@
           :show-delete-action="canDeleteProjects"
           :can-toggle-visibility="canManageProjects"
           :current-user-id="currentUser?.id || ''"
-          :group-cards="!groupContext.groupId && viewMode === 'card' ? resolvedProjectGroupCards : []"
+          :group-cards="
+            !groupContext.groupId && viewMode === 'card' ? resolvedProjectGroupCards : []
+          "
           :grouped="!groupContext.groupId"
           :show-grouped-project-items="false"
           @open-project="handleOpenProject"
@@ -104,33 +108,99 @@
           @group-remove-project="removeProjectFromGroup"
         >
           <template #actions="{ project }">
-            <el-tooltip v-if="canManageProjects" :content="t('projectManagement.editProject')" placement="top">
-              <el-button data-testid="project-edit-action" size="small" text circle class="project-action-button" @click.stop="editProject(project)">
+            <el-tooltip
+              v-if="canManageProjects"
+              :content="t('projectManagement.editProject')"
+              placement="top"
+            >
+              <el-button
+                data-testid="project-edit-action"
+                size="small"
+                text
+                circle
+                class="project-action-button"
+                @click.stop="editProject(project)"
+              >
                 <el-icon><Edit /></el-icon>
               </el-button>
             </el-tooltip>
-            <el-tooltip v-if="canManageProjects" :content="t('projectManagement.memberAndPermission')" placement="top">
-              <el-button data-testid="project-runtime-access-action" size="small" text circle class="project-action-button" @click.stop="openRuntimeAccessDialog(project)">
+            <el-tooltip
+              v-if="canManageProjects"
+              :content="t('projectManagement.memberAndPermission')"
+              placement="top"
+            >
+              <el-button
+                data-testid="project-runtime-access-action"
+                size="small"
+                text
+                circle
+                class="project-action-button"
+                @click.stop="openRuntimeAccessDialog(project)"
+              >
                 <el-icon><User /></el-icon>
               </el-button>
             </el-tooltip>
-            <el-tooltip v-if="canManageProjects" :content="t('projectManagement.editTags')" placement="top">
-              <el-button data-testid="project-edit-tags-action" size="small" text circle class="project-action-button" @click.stop="openProjectTagDialog(project)">
+            <el-tooltip
+              v-if="canManageProjects"
+              :content="t('projectManagement.editTags')"
+              placement="top"
+            >
+              <el-button
+                data-testid="project-edit-tags-action"
+                size="small"
+                text
+                circle
+                class="project-action-button"
+                @click.stop="openProjectTagDialog(project)"
+              >
                 <el-icon><PriceTag /></el-icon>
               </el-button>
             </el-tooltip>
-            <el-tooltip v-if="canPerformOps" :content="t('projectManagement.publishAndDeploy')" placement="top">
-              <el-button data-testid="project-deploy-action" size="small" text circle class="project-action-button" @click.stop="openDeployDialog(project)">
+            <el-tooltip
+              v-if="canPerformOps"
+              :content="t('projectManagement.publishAndDeploy')"
+              placement="top"
+            >
+              <el-button
+                data-testid="project-deploy-action"
+                size="small"
+                text
+                circle
+                class="project-action-button"
+                @click.stop="openDeployDialog(project)"
+              >
                 <el-icon><UploadFilled /></el-icon>
               </el-button>
             </el-tooltip>
-            <el-tooltip v-if="canExportProjects" :content="t('projectManagement.export')" placement="top">
-              <el-button data-testid="project-export-action" size="small" text circle class="project-action-button" @click.stop="handleExportProject(project)">
+            <el-tooltip
+              v-if="canExportProjects"
+              :content="t('projectManagement.export')"
+              placement="top"
+            >
+              <el-button
+                data-testid="project-export-action"
+                size="small"
+                text
+                circle
+                class="project-action-button"
+                @click.stop="handleExportProject(project)"
+              >
                 <el-icon><Upload /></el-icon>
               </el-button>
             </el-tooltip>
-            <el-tooltip v-if="canDeleteProjects" :content="t('projectManagement.delete')" placement="top">
-              <el-button data-testid="project-delete-action" size="small" text circle class="project-action-button project-action-button--danger" @click.stop="deleteProject(project)">
+            <el-tooltip
+              v-if="canDeleteProjects"
+              :content="t('projectManagement.delete')"
+              placement="top"
+            >
+              <el-button
+                data-testid="project-delete-action"
+                size="small"
+                text
+                circle
+                class="project-action-button project-action-button--danger"
+                @click.stop="deleteProject(project)"
+              >
                 <el-icon><Delete /></el-icon>
               </el-button>
             </el-tooltip>
@@ -159,38 +229,108 @@
           @export="handleExportProject"
           @delete="deleteProject"
           @group-select="handleGroupCardSelect"
-          @group-add-project="(row) => openGroupProjectPicker({ id: row.groupId, name: row.groupName })"
-          @group-edit="(row) => openProjectGroupEditDialog({ id: row.groupId, name: row.groupName })"
+          @group-add-project="
+            (row) => openGroupProjectPicker({ id: row.groupId, name: row.groupName })
+          "
+          @group-edit="
+            (row) => openProjectGroupEditDialog({ id: row.groupId, name: row.groupName })
+          "
           @group-delete="(row) => deleteProjectGroup({ id: row.groupId, name: row.groupName })"
         >
           <template #actions="{ project }">
-            <el-tooltip v-if="canManageProjects" :content="t('projectManagement.editProject')" placement="top">
-              <el-button data-testid="project-edit-action" size="small" text circle class="project-action-button" @click.stop="editProject(project)">
+            <el-tooltip
+              v-if="canManageProjects"
+              :content="t('projectManagement.editProject')"
+              placement="top"
+            >
+              <el-button
+                data-testid="project-edit-action"
+                size="small"
+                text
+                circle
+                class="project-action-button"
+                @click.stop="editProject(project)"
+              >
                 <el-icon><Edit /></el-icon>
               </el-button>
             </el-tooltip>
-            <el-tooltip v-if="canManageProjects" :content="t('projectManagement.memberAndPermission')" placement="top">
-              <el-button data-testid="project-runtime-access-action" size="small" text circle class="project-action-button" @click.stop="openRuntimeAccessDialog(project)">
+            <el-tooltip
+              v-if="canManageProjects"
+              :content="t('projectManagement.memberAndPermission')"
+              placement="top"
+            >
+              <el-button
+                data-testid="project-runtime-access-action"
+                size="small"
+                text
+                circle
+                class="project-action-button"
+                @click.stop="openRuntimeAccessDialog(project)"
+              >
                 <el-icon><User /></el-icon>
               </el-button>
             </el-tooltip>
-            <el-tooltip v-if="canManageProjects" :content="t('projectManagement.editTags')" placement="top">
-              <el-button data-testid="project-edit-tags-action" size="small" text circle class="project-action-button" @click.stop="openProjectTagDialog(project)">
+            <el-tooltip
+              v-if="canManageProjects"
+              :content="t('projectManagement.editTags')"
+              placement="top"
+            >
+              <el-button
+                data-testid="project-edit-tags-action"
+                size="small"
+                text
+                circle
+                class="project-action-button"
+                @click.stop="openProjectTagDialog(project)"
+              >
                 <el-icon><PriceTag /></el-icon>
               </el-button>
             </el-tooltip>
-            <el-tooltip v-if="canPerformOps" :content="t('projectManagement.publishAndDeploy')" placement="top">
-              <el-button data-testid="project-deploy-action" size="small" text circle class="project-action-button" @click.stop="openDeployDialog(project)">
+            <el-tooltip
+              v-if="canPerformOps"
+              :content="t('projectManagement.publishAndDeploy')"
+              placement="top"
+            >
+              <el-button
+                data-testid="project-deploy-action"
+                size="small"
+                text
+                circle
+                class="project-action-button"
+                @click.stop="openDeployDialog(project)"
+              >
                 <el-icon><UploadFilled /></el-icon>
               </el-button>
             </el-tooltip>
-            <el-tooltip v-if="canExportProjects" :content="t('projectManagement.export')" placement="top">
-              <el-button data-testid="project-export-action" size="small" text circle class="project-action-button" @click.stop="handleExportProject(project)">
+            <el-tooltip
+              v-if="canExportProjects"
+              :content="t('projectManagement.export')"
+              placement="top"
+            >
+              <el-button
+                data-testid="project-export-action"
+                size="small"
+                text
+                circle
+                class="project-action-button"
+                @click.stop="handleExportProject(project)"
+              >
                 <el-icon><Upload /></el-icon>
               </el-button>
             </el-tooltip>
-            <el-tooltip v-if="canDeleteProjects" :content="t('projectManagement.delete')" placement="top">
-              <el-button data-testid="project-delete-action" size="small" text circle class="project-action-button project-action-button--danger" @click.stop="deleteProject(project)">
+            <el-tooltip
+              v-if="canDeleteProjects"
+              :content="t('projectManagement.delete')"
+              placement="top"
+            >
+              <el-button
+                data-testid="project-delete-action"
+                size="small"
+                text
+                circle
+                class="project-action-button project-action-button--danger"
+                @click.stop="deleteProject(project)"
+              >
                 <el-icon><Delete /></el-icon>
               </el-button>
             </el-tooltip>
@@ -214,7 +354,6 @@
         />
       </div>
     </div>
-
 
     <!-- 创建工程对话框 -->
     <el-dialog
@@ -358,7 +497,9 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showTagEditDialog = false">{{ t('projectManagement.cancel') }}</el-button>
+        <el-button @click="showTagEditDialog = false">{{
+          t('projectManagement.cancel')
+        }}</el-button>
         <el-button type="primary" :loading="tagEditLoading" @click="handleUpdateProjectTags">
           {{ t('projectManagement.save') }}
         </el-button>
@@ -816,7 +957,9 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showGroupEditDialog = false">{{ t('projectManagement.cancel') }}</el-button>
+        <el-button @click="showGroupEditDialog = false">{{
+          t('projectManagement.cancel')
+        }}</el-button>
         <el-button
           type="primary"
           data-testid="project-group-edit-dialog-save"
@@ -1369,7 +1512,9 @@ export default {
       try {
         await fetchGroupProjectCandidates()
       } catch (error) {
-        return ElMessage.error(getApiErrorMessage(error, t('opsManagement.operationFailedFallback')))
+        return ElMessage.error(
+          getApiErrorMessage(error, t('opsManagement.operationFailedFallback')),
+        )
       }
       groupProjectPickerVisible.value = true
     }
@@ -1378,7 +1523,9 @@ export default {
       groupProjectCandidateFilters.search = String(criteria.search || '').trim()
       groupProjectCandidateFilters.tagIds = normalizeSelectionIds(criteria.tagIds || [])
       groupProjectCandidateFilters.runtimeModes = normalizeSelectionIds(criteria.runtimeModes || [])
-      groupProjectCandidateFilters.deployStatuses = normalizeSelectionIds(criteria.deployStatuses || [])
+      groupProjectCandidateFilters.deployStatuses = normalizeSelectionIds(
+        criteria.deployStatuses || [],
+      )
 
       try {
         await fetchGroupProjectCandidates()
@@ -1388,7 +1535,9 @@ export default {
     }
 
     const addProjectToGroup = async (projectIds) => {
-      const normalizedProjectIds = normalizeSelectionIds(Array.isArray(projectIds) ? projectIds : [projectIds])
+      const normalizedProjectIds = normalizeSelectionIds(
+        Array.isArray(projectIds) ? projectIds : [projectIds],
+      )
       const targetGroupId = String(targetGroupForProjectPicker.value?.id || '').trim()
       if (normalizedProjectIds.length === 0 || !targetGroupId) {
         return
@@ -1399,7 +1548,9 @@ export default {
           await projectAPI.bindProjectGroup(projectId, { groupId: targetGroupId })
         }
       } catch (error) {
-        return ElMessage.error(getApiErrorMessage(error, t('opsManagement.operationFailedFallback')))
+        return ElMessage.error(
+          getApiErrorMessage(error, t('opsManagement.operationFailedFallback')),
+        )
       }
 
       ElMessage.success(
@@ -1421,7 +1572,9 @@ export default {
       try {
         await projectAPI.bindProjectGroup(normalizedProjectId, { groupId: null })
       } catch (error) {
-        return ElMessage.error(getApiErrorMessage(error, t('opsManagement.operationFailedFallback')))
+        return ElMessage.error(
+          getApiErrorMessage(error, t('opsManagement.operationFailedFallback')),
+        )
       }
 
       ElMessage.success(t('projectManagement.groupUnbindSuccess'))
@@ -1446,7 +1599,9 @@ export default {
       try {
         await projectAPI.createProjectGroup({ name: trimmedName })
       } catch (error) {
-        return ElMessage.error(getApiErrorMessage(error, t('opsManagement.operationFailedFallback')))
+        return ElMessage.error(
+          getApiErrorMessage(error, t('opsManagement.operationFailedFallback')),
+        )
       }
 
       ElMessage.success(t('projectManagement.groupCreateSuccess'))
@@ -1478,7 +1633,9 @@ export default {
       try {
         await projectAPI.updateProjectGroup(groupId, { name: trimmedName })
       } catch (error) {
-        return ElMessage.error(getApiErrorMessage(error, t('opsManagement.operationFailedFallback')))
+        return ElMessage.error(
+          getApiErrorMessage(error, t('opsManagement.operationFailedFallback')),
+        )
       } finally {
         groupEditLoading.value = false
       }
@@ -1586,7 +1743,7 @@ export default {
         await fetchProjectGroupCards()
       } catch (error) {
         ElMessage.error(
-            t('projectManagement.createFailed', {
+          t('projectManagement.createFailed', {
             message: getApiErrorMessage(error, t('projectManagement.createFailed')),
           }),
         )
@@ -1648,7 +1805,7 @@ export default {
         fetchProjects()
       } catch (error) {
         ElMessage.error(
-            t('projectManagement.updateDevFailed', {
+          t('projectManagement.updateDevFailed', {
             message: getApiErrorMessage(error, t('projectManagement.updateDevFailed')),
           }),
         )
@@ -1778,7 +1935,7 @@ export default {
         ElMessage.success(t('projectManagement.exportSuccess'))
       } catch (error) {
         ElMessage.error(
-            t('projectManagement.exportFailed', {
+          t('projectManagement.exportFailed', {
             message: getApiErrorMessage(error, t('projectManagement.exportFailed')),
           }),
         )
@@ -1869,8 +2026,8 @@ export default {
           await fetchProjectGroupCards()
         } catch (error) {
           ElMessage.error(
-              t('projectManagement.importFailed', {
-                message: getApiErrorMessage(error, t('projectManagement.importFailed')),
+            t('projectManagement.importFailed', {
+              message: getApiErrorMessage(error, t('projectManagement.importFailed')),
             }),
           )
         }
@@ -2046,8 +2203,8 @@ export default {
       } catch (error) {
         if (error !== 'cancel') {
           ElMessage.error(
-              t('projectManagement.batchDeleteError', {
-                message: getApiErrorMessage(error, t('projectManagement.batchDeleteError')),
+            t('projectManagement.batchDeleteError', {
+              message: getApiErrorMessage(error, t('projectManagement.batchDeleteError')),
             }),
           )
         }
@@ -2132,7 +2289,9 @@ export default {
         tagCreateName.value = ''
         ElMessage.success(t('projectManagement.tagCreateSuccess'))
       } catch (error) {
-        return ElMessage.error(getApiErrorMessage(error, t('opsManagement.operationFailedFallback')))
+        return ElMessage.error(
+          getApiErrorMessage(error, t('opsManagement.operationFailedFallback')),
+        )
       } finally {
         tagCreateLoading.value = false
       }
@@ -2176,7 +2335,9 @@ export default {
           groupProjectCandidateFilters.tagIds,
         ).filter((id) => id !== tagId)
         projectList.value.forEach((project) => removeDeletedTagFromProject(project, tagId))
-        groupProjectCandidates.value.forEach((project) => removeDeletedTagFromProject(project, tagId))
+        groupProjectCandidates.value.forEach((project) =>
+          removeDeletedTagFromProject(project, tagId),
+        )
         if (tagEditProject.value) {
           removeDeletedTagFromProject(tagEditProject.value, tagId)
         }
@@ -2245,7 +2406,9 @@ export default {
         })
       } catch (error) {
         tagEditLoading.value = false
-        return ElMessage.error(getApiErrorMessage(error, t('opsManagement.operationFailedFallback')))
+        return ElMessage.error(
+          getApiErrorMessage(error, t('opsManagement.operationFailedFallback')),
+        )
       }
 
       const tagOptionById = new Map(

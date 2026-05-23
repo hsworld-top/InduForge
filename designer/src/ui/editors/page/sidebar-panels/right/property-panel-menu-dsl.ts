@@ -3,11 +3,11 @@
  * 只负责字符串清洗、DSL 配置提取与菜单项规范化，不处理节点更新副作用。
  */
 
-type LooseRecord = Record<string, unknown>;
-const MENU_DSL_MARKER_RE = /this\s*\.\s*menu\s*\(/;
-const MENU_DSL_SANITIZE_COMMA_RE = /[，﹐､]/g;
-const MENU_DSL_SANITIZE_SEMICOLON_RE = /[；﹔]/g;
-const MENU_DSL_SANITIZE_COLON_RE = /[：﹕]/g;
+type LooseRecord = Record<string, unknown>
+const MENU_DSL_MARKER_RE = /this\s*\.\s*menu\s*\(/
+const MENU_DSL_SANITIZE_COMMA_RE = /[，﹐､]/g
+const MENU_DSL_SANITIZE_SEMICOLON_RE = /[；﹔]/g
+const MENU_DSL_SANITIZE_COLON_RE = /[：﹕]/g
 
 /**
  * 规范化菜单项
@@ -15,21 +15,21 @@ const MENU_DSL_SANITIZE_COLON_RE = /[：﹕]/g;
  * @returns {LooseRecord[]}
  */
 export function normalizeMenuItems(items: unknown): LooseRecord[] {
-  if (!Array.isArray(items)) return [];
+  if (!Array.isArray(items)) return []
   return items
     .map((item): LooseRecord | null => {
-      if (!item) return null;
-      if (typeof item === "string") {
-        return { label: item, index: item };
+      if (!item) return null
+      if (typeof item === 'string') {
+        return { label: item, index: item }
       }
-      if (typeof item !== "object") return null;
-      const record = item as LooseRecord;
-      const label = record.label ?? record.title ?? record.name ?? "";
+      if (typeof item !== 'object') return null
+      const record = item as LooseRecord
+      const label = record.label ?? record.title ?? record.name ?? ''
       const index =
-        record.index ?? record.command ?? record.key ?? (label ? String(label) : undefined);
-      return { ...record, label, index };
+        record.index ?? record.command ?? record.key ?? (label ? String(label) : undefined)
+      return { ...record, label, index }
     })
-    .filter((item): item is LooseRecord => item !== null);
+    .filter((item): item is LooseRecord => item !== null)
 }
 
 /**
@@ -38,51 +38,50 @@ export function normalizeMenuItems(items: unknown): LooseRecord[] {
  * @returns {LooseRecord | null}
  */
 export function extractMenuDslConfig(content: string): LooseRecord | null {
-  const text = String(content || "");
-  if (!text.trim()) return null;
-  const match = MENU_DSL_MARKER_RE.exec(text);
-  if (!match) return null;
-  let index = match.index + match[0].length;
-  while (index < text.length && text[index] !== "{") index += 1;
-  if (index >= text.length) return null;
+  const text = String(content || '')
+  if (!text.trim()) return null
+  const match = MENU_DSL_MARKER_RE.exec(text)
+  if (!match) return null
+  let index = match.index + match[0].length
+  while (index < text.length && text[index] !== '{') index += 1
+  if (index >= text.length) return null
 
-  let depth = 0;
-  let inString = false;
-  let quote = "";
-  const start = index;
+  let depth = 0
+  let inString = false
+  let quote = ''
+  const start = index
   for (; index < text.length; index += 1) {
-    const char = text[index];
+    const char = text[index]
     if (inString) {
-      if (char === "\\" && index + 1 < text.length) {
-        index += 1;
-        continue;
+      if (char === '\\' && index + 1 < text.length) {
+        index += 1
+        continue
       }
       if (char === quote) {
-        inString = false;
-        quote = "";
+        inString = false
+        quote = ''
       }
-      continue;
+      continue
     }
-    if (char === '"' || char === "'" || char === "`") {
-      inString = true;
-      quote = char;
-      continue;
+    if (char === '"' || char === "'" || char === '`') {
+      inString = true
+      quote = char
+      continue
     }
-    if (char === "{") depth += 1;
-    if (char === "}") {
-      depth -= 1;
+    if (char === '{') depth += 1
+    if (char === '}') {
+      depth -= 1
       if (depth === 0) {
-        const body = text.slice(start, index + 1);
+        const body = text.slice(start, index + 1)
         try {
-          // eslint-disable-next-line no-new-func
-          return new Function(`return (${body});`)() as LooseRecord;
+          return new Function(`return (${body});`)() as LooseRecord
         } catch {
-          return null;
+          return null
         }
       }
     }
   }
-  return null;
+  return null
 }
 
 /**
@@ -91,26 +90,25 @@ export function extractMenuDslConfig(content: string): LooseRecord | null {
  * @returns {LooseRecord | null}
  */
 export function captureMenuDslConfig(content: string): LooseRecord | null {
-  const text = String(content || "");
-  if (!text.trim()) return null;
-  let captured: LooseRecord | null = null;
+  const text = String(content || '')
+  if (!text.trim()) return null
+  let captured: LooseRecord | null = null
   try {
-    // eslint-disable-next-line no-new-func
     const runner = new Function(
-      "context",
+      'context',
       `"use strict";\nreturn (function() {\n${text}\n}).call(context);`,
-    );
+    )
     runner({
       menu: (config: unknown) => {
-        if (config && typeof config === "object" && !Array.isArray(config)) {
-          captured = config as LooseRecord;
+        if (config && typeof config === 'object' && !Array.isArray(config)) {
+          captured = config as LooseRecord
         }
       },
-    });
+    })
   } catch {
-    return null;
+    return null
   }
-  return captured;
+  return captured
 }
 
 /**
@@ -119,10 +117,10 @@ export function captureMenuDslConfig(content: string): LooseRecord | null {
  * @returns {string}
  */
 export function sanitizeDslContent(content: string): string {
-  return String(content || "")
-    .replace(MENU_DSL_SANITIZE_COMMA_RE, ",")
-    .replace(MENU_DSL_SANITIZE_SEMICOLON_RE, ";")
-    .replace(MENU_DSL_SANITIZE_COLON_RE, ":");
+  return String(content || '')
+    .replace(MENU_DSL_SANITIZE_COMMA_RE, ',')
+    .replace(MENU_DSL_SANITIZE_SEMICOLON_RE, ';')
+    .replace(MENU_DSL_SANITIZE_COLON_RE, ':')
 }
 
 /**
@@ -132,13 +130,13 @@ export function sanitizeDslContent(content: string): string {
  * @returns {string}
  */
 export function buildMenuDslContent(content: string, methodName: string): string {
-  const text = String(content || "").trim();
-  if (!text) return "";
-  if (MENU_DSL_MARKER_RE.test(text)) return text;
-  if (text.startsWith("{") && text.endsWith("}")) {
-    return `this.${methodName}(${text});`;
+  const text = String(content || '').trim()
+  if (!text) return ''
+  if (MENU_DSL_MARKER_RE.test(text)) return text
+  if (text.startsWith('{') && text.endsWith('}')) {
+    return `this.${methodName}(${text});`
   }
-  return `this.${methodName}({\n${content}\n});`;
+  return `this.${methodName}({\n${content}\n});`
 }
 
 /**
@@ -147,22 +145,20 @@ export function buildMenuDslContent(content: string, methodName: string): string
  * @returns {LooseRecord | null}
  */
 export function resolveMenuConfigFromContent(content: string): LooseRecord | null {
-  const text = sanitizeDslContent(content).trim();
-  if (!text) return null;
-  const direct = extractMenuDslConfig(text) || captureMenuDslConfig(text);
-  if (direct) return direct;
-  if (text.startsWith("{") && text.endsWith("}")) {
+  const text = sanitizeDslContent(content).trim()
+  if (!text) return null
+  const direct = extractMenuDslConfig(text) || captureMenuDslConfig(text)
+  if (direct) return direct
+  if (text.startsWith('{') && text.endsWith('}')) {
     try {
-      // eslint-disable-next-line no-new-func
-      return new Function(`return (${text});`)() as LooseRecord;
+      return new Function(`return (${text});`)() as LooseRecord
     } catch {
-      return null;
+      return null
     }
   }
   try {
-    // eslint-disable-next-line no-new-func
-    return new Function(`return ({${text}});`)() as LooseRecord;
+    return new Function(`return ({${text}});`)() as LooseRecord
   } catch {
-    return null;
+    return null
   }
 }

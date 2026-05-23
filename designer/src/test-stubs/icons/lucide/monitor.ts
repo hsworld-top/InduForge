@@ -1,4 +1,4 @@
 export default {
-  name: "IconLucideMonitor",
+  name: 'IconLucideMonitor',
   template: `<span class="icon-lucide-monitor" />`,
-};
+}

@@ -1,16 +1,10 @@
 <template>
   <div v-if="selectedCount > 0" class="dc-bulk-action-bar" role="status">
-    <span class="dc-bulk-action-bar__count">
-      已选 {{ selectedCount }} 项
-    </span>
+    <span class="dc-bulk-action-bar__count"> 已选 {{ selectedCount }} 项 </span>
     <div class="dc-bulk-action-bar__actions">
       <slot />
     </div>
-    <button
-      type="button"
-      class="dc-bulk-action-bar__clear"
-      @click="$emit('clear')"
-    >
+    <button type="button" class="dc-bulk-action-bar__clear" @click="$emit('clear')">
       清空选择
     </button>
   </div>
@@ -18,12 +12,12 @@
 
 <script setup lang="ts">
 defineProps<{
-  selectedCount: number;
-}>();
+  selectedCount: number
+}>()
 
 defineEmits<{
-  (event: "clear"): void;
-}>();
+  (event: 'clear'): void
+}>()
 </script>
 
 <style scoped>

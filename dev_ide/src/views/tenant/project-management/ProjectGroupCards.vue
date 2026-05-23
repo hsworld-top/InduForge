@@ -25,11 +25,7 @@
         class="project-group-card"
         :class="{ 'is-active': group.id === activeGroupId }"
       >
-        <button
-          type="button"
-          class="project-group-card__select"
-          @click="handleSelectGroup(group)"
-        >
+        <button type="button" class="project-group-card__select" @click="handleSelectGroup(group)">
           <div class="project-group-card__header">
             <span class="project-group-card__title">
               <el-icon><FolderOpened /></el-icon>

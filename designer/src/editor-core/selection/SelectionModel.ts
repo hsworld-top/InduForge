@@ -9,45 +9,45 @@
  * - 提供事件通知
  */
 
-import type { DocumentModel } from "../document/DocumentModel";
+import type { DocumentModel } from '../document/DocumentModel'
 import type {
   ComponentNode,
   DrawingTool,
   GraphicNode,
   SelectableElement,
   SelectionState,
-} from "../document/types.ts";
-import { EventEmitter } from "../utils/EventEmitter";
+} from '../document/types.ts'
+import { EventEmitter } from '../utils/EventEmitter'
 
 /**
  * 选中状态管理类
  */
 export class SelectionModel extends EventEmitter {
-  _doc: DocumentModel | null;
-  _selectedElements: SelectableElement[];
-  _hoveredElement: SelectableElement | null;
-  _dropTargetId: string | null;
-  _anchorElement: SelectableElement | null;
-  _activeTool: DrawingTool | null;
+  _doc: DocumentModel | null
+  _selectedElements: SelectableElement[]
+  _hoveredElement: SelectableElement | null
+  _dropTargetId: string | null
+  _anchorElement: SelectableElement | null
+  _activeTool: DrawingTool | null
 
   /**
    * 创建选中状态管理器
    * @param {DocumentModel} [doc] - 文档模型（可选，用于范围选择等操作）
    */
   constructor(doc?: DocumentModel | null) {
-    super();
+    super()
 
-    this._doc = doc ?? null;
+    this._doc = doc ?? null
 
-    this._selectedElements = [];
+    this._selectedElements = []
 
-    this._hoveredElement = null;
+    this._hoveredElement = null
 
-    this._dropTargetId = null;
+    this._dropTargetId = null
 
-    this._anchorElement = null;
+    this._anchorElement = null
 
-    this._activeTool = "select";
+    this._activeTool = 'select'
   }
 
   // ==================== 状态查询 ====================
@@ -57,7 +57,7 @@ export class SelectionModel extends EventEmitter {
    * @returns {SelectableElement[]}
    */
   getSelectedElements() {
-    return [...this._selectedElements];
+    return [...this._selectedElements]
   }
 
   /**
@@ -65,12 +65,12 @@ export class SelectionModel extends EventEmitter {
    * @returns {ComponentNode[]}
    */
   getSelectedNodes() {
-    const doc = this._doc;
-    if (!doc) return [];
+    const doc = this._doc
+    if (!doc) return []
     return this._selectedElements
-      .filter((e) => e.kind === "node")
+      .filter((e) => e.kind === 'node')
       .map((e) => doc.getNode(e.id))
-      .filter((n) => n !== null);
+      .filter((n) => n !== null)
   }
 
   /**
@@ -78,12 +78,12 @@ export class SelectionModel extends EventEmitter {
    * @returns {GraphicNode[]}
    */
   getSelectedGraphics() {
-    const doc = this._doc;
-    if (!doc) return [];
+    const doc = this._doc
+    if (!doc) return []
     return this._selectedElements
-      .filter((e) => e.kind === "graphic")
+      .filter((e) => e.kind === 'graphic')
       .map((e) => doc.getGraphic(e.id))
-      .filter((g) => g !== null);
+      .filter((g) => g !== null)
   }
 
   /**
@@ -91,7 +91,7 @@ export class SelectionModel extends EventEmitter {
    * @returns {string[]}
    */
   getSelectedNodeIds() {
-    return this._selectedElements.filter((e) => e.kind === "node").map((e) => e.id);
+    return this._selectedElements.filter((e) => e.kind === 'node').map((e) => e.id)
   }
 
   /**
@@ -99,7 +99,7 @@ export class SelectionModel extends EventEmitter {
    * @returns {string[]}
    */
   getSelectedGraphicIds() {
-    return this._selectedElements.filter((e) => e.kind === "graphic").map((e) => e.id);
+    return this._selectedElements.filter((e) => e.kind === 'graphic').map((e) => e.id)
   }
 
   /**
@@ -107,15 +107,15 @@ export class SelectionModel extends EventEmitter {
    * @returns {ComponentNode | GraphicNode | null}
    */
   getPrimarySelection(): ComponentNode | GraphicNode | null {
-    if (this._selectedElements.length === 0) return null;
-    const primary = this._selectedElements.at(-1)!;
-    const doc = this._doc;
-    if (!doc) return null;
+    if (this._selectedElements.length === 0) return null
+    const primary = this._selectedElements.at(-1)!
+    const doc = this._doc
+    if (!doc) return null
 
-    if (primary.kind === "node") {
-      return doc.getNode(primary.id);
+    if (primary.kind === 'node') {
+      return doc.getNode(primary.id)
     }
-    return doc.getGraphic(primary.id);
+    return doc.getGraphic(primary.id)
   }
 
   /**
@@ -123,8 +123,8 @@ export class SelectionModel extends EventEmitter {
    * @returns {SelectableElement | null}
    */
   getPrimaryElement() {
-    if (this._selectedElements.length === 0) return null;
-    return this._selectedElements.at(-1);
+    if (this._selectedElements.length === 0) return null
+    return this._selectedElements.at(-1)
   }
 
   /**
@@ -132,15 +132,15 @@ export class SelectionModel extends EventEmitter {
    * @returns {'nodes' | 'graphics' | 'mixed' | 'none'}
    */
   getSelectionType() {
-    if (this._selectedElements.length === 0) return "none";
+    if (this._selectedElements.length === 0) return 'none'
 
-    const hasNodes = this._selectedElements.some((e) => e.kind === "node");
-    const hasGraphics = this._selectedElements.some((e) => e.kind === "graphic");
+    const hasNodes = this._selectedElements.some((e) => e.kind === 'node')
+    const hasGraphics = this._selectedElements.some((e) => e.kind === 'graphic')
 
-    if (hasNodes && hasGraphics) return "mixed";
-    if (hasNodes) return "nodes";
-    if (hasGraphics) return "graphics";
-    return "none";
+    if (hasNodes && hasGraphics) return 'mixed'
+    if (hasNodes) return 'nodes'
+    if (hasGraphics) return 'graphics'
+    return 'none'
   }
 
   /**
@@ -148,7 +148,7 @@ export class SelectionModel extends EventEmitter {
    * @returns {number}
    */
   getSelectionCount() {
-    return this._selectedElements.length;
+    return this._selectedElements.length
   }
 
   /**
@@ -157,7 +157,7 @@ export class SelectionModel extends EventEmitter {
    * @returns {boolean}
    */
   isSelected(id: string) {
-    return this._selectedElements.some((e) => e.id === id);
+    return this._selectedElements.some((e) => e.id === id)
   }
 
   /**
@@ -165,7 +165,7 @@ export class SelectionModel extends EventEmitter {
    * @returns {boolean}
    */
   hasSelection() {
-    return this._selectedElements.length > 0;
+    return this._selectedElements.length > 0
   }
 
   /**
@@ -173,7 +173,7 @@ export class SelectionModel extends EventEmitter {
    * @returns {SelectableElement | null}
    */
   getHoveredElement() {
-    return this._hoveredElement;
+    return this._hoveredElement
   }
 
   /**
@@ -181,7 +181,7 @@ export class SelectionModel extends EventEmitter {
    * @returns {string | null}
    */
   getDropTargetId() {
-    return this._dropTargetId;
+    return this._dropTargetId
   }
 
   /**
@@ -189,7 +189,7 @@ export class SelectionModel extends EventEmitter {
    * @returns {DrawingTool | null}
    */
   getActiveTool() {
-    return this._activeTool;
+    return this._activeTool
   }
 
   // ==================== 选择操作 ====================
@@ -199,9 +199,9 @@ export class SelectionModel extends EventEmitter {
    * @param {SelectableElement} element - 元素
    */
   select(element: SelectableElement) {
-    this._selectedElements = [element];
-    this._anchorElement = element;
-    this._emitChange();
+    this._selectedElements = [element]
+    this._anchorElement = element
+    this._emitChange()
   }
 
   /**
@@ -209,11 +209,11 @@ export class SelectionModel extends EventEmitter {
    * @param {string} id - 元素 ID
    */
   selectById(id: string) {
-    let kind: SelectableElement["kind"] = "node";
+    let kind: SelectableElement['kind'] = 'node'
     if (this._doc?.getGraphic(id)) {
-      kind = "graphic";
+      kind = 'graphic'
     }
-    this.select({ kind, id });
+    this.select({ kind, id })
   }
 
   /**
@@ -223,18 +223,18 @@ export class SelectionModel extends EventEmitter {
   toggleSelect(element: SelectableElement) {
     const index = this._selectedElements.findIndex(
       (e) => e.kind === element.kind && e.id === element.id,
-    );
+    )
 
     if (index !== -1) {
       // 已选中，取消选中
-      this._selectedElements.splice(index, 1);
+      this._selectedElements.splice(index, 1)
     } else {
       // 未选中，添加到选中
-      this._selectedElements.push(element);
-      this._anchorElement = element;
+      this._selectedElements.push(element)
+      this._anchorElement = element
     }
 
-    this._emitChange();
+    this._emitChange()
   }
 
   /**
@@ -243,9 +243,9 @@ export class SelectionModel extends EventEmitter {
    */
   addToSelection(element: SelectableElement) {
     if (!this.isSelected(element.id)) {
-      this._selectedElements.push(element);
-      this._anchorElement = element;
-      this._emitChange();
+      this._selectedElements.push(element)
+      this._anchorElement = element
+      this._emitChange()
     }
   }
 
@@ -254,10 +254,10 @@ export class SelectionModel extends EventEmitter {
    * @param {string} id - 元素 ID
    */
   removeFromSelection(id: string) {
-    const index = this._selectedElements.findIndex((e) => e.id === id);
+    const index = this._selectedElements.findIndex((e) => e.id === id)
     if (index !== -1) {
-      this._selectedElements.splice(index, 1);
-      this._emitChange();
+      this._selectedElements.splice(index, 1)
+      this._emitChange()
     }
   }
 
@@ -268,23 +268,23 @@ export class SelectionModel extends EventEmitter {
   selectRange(element: SelectableElement) {
     // 简化实现：如果没有锚点，直接选择目标
     if (!this._anchorElement) {
-      this.select(element);
-      return;
+      this.select(element)
+      return
     }
 
     // 如果类型不同，只选择目标
     if (this._anchorElement.kind !== element.kind) {
-      this.select(element);
-      return;
+      this.select(element)
+      return
     }
 
     // TODO: 实现基于文档顺序的范围选择
     // 目前简化为添加到选中
     if (!this.isSelected(element.id)) {
-      this._selectedElements.push(element);
+      this._selectedElements.push(element)
     }
 
-    this._emitChange();
+    this._emitChange()
   }
 
   /**
@@ -293,11 +293,11 @@ export class SelectionModel extends EventEmitter {
    */
   selectNodes(nodeIds: string[]) {
     this._selectedElements = nodeIds.map((id) => ({
-      kind: "node" as const,
+      kind: 'node' as const,
       id,
-    }));
-    this._anchorElement = this._selectedElements.at(-1) ?? null;
-    this._emitChange();
+    }))
+    this._anchorElement = this._selectedElements.at(-1) ?? null
+    this._emitChange()
   }
 
   /**
@@ -306,11 +306,11 @@ export class SelectionModel extends EventEmitter {
    */
   selectGraphics(graphicIds: string[]) {
     this._selectedElements = graphicIds.map((id) => ({
-      kind: "graphic" as const,
+      kind: 'graphic' as const,
       id,
-    }));
-    this._anchorElement = this._selectedElements.at(-1) ?? null;
-    this._emitChange();
+    }))
+    this._anchorElement = this._selectedElements.at(-1) ?? null
+    this._emitChange()
   }
 
   /**
@@ -318,9 +318,9 @@ export class SelectionModel extends EventEmitter {
    * @param {SelectableElement[]} elements - 元素列表
    */
   selectMultiple(elements: SelectableElement[]) {
-    this._selectedElements = [...elements];
-    this._anchorElement = this._selectedElements.at(-1) ?? null;
-    this._emitChange();
+    this._selectedElements = [...elements]
+    this._anchorElement = this._selectedElements.at(-1) ?? null
+    this._emitChange()
   }
 
   /**
@@ -328,57 +328,57 @@ export class SelectionModel extends EventEmitter {
    * @param {string} pageId - 页面 ID
    */
   selectAll(pageId: string) {
-    if (!this._doc) return;
+    if (!this._doc) return
 
-    const page = this._doc.getPage(pageId);
-    if (!page) return;
+    const page = this._doc.getPage(pageId)
+    if (!page) return
 
-    const elements: SelectableElement[] = [];
+    const elements: SelectableElement[] = []
 
     // 获取页面根节点下的所有节点
-    const rootNode = this._doc.getNode(page.rootNodeId);
+    const rootNode = this._doc.getNode(page.rootNodeId)
     if (rootNode && rootNode.children) {
       for (const childId of rootNode.children) {
-        elements.push({ kind: "node", id: childId });
+        elements.push({ kind: 'node', id: childId })
       }
     }
 
     // 获取页面的所有图形
     if (page.graphicsIds) {
       for (const graphicId of page.graphicsIds) {
-        elements.push({ kind: "graphic", id: graphicId });
+        elements.push({ kind: 'graphic', id: graphicId })
       }
     }
 
-    this._selectedElements = elements;
-    this._emitChange();
+    this._selectedElements = elements
+    this._emitChange()
   }
 
   /**
    * 仅保留节点选中（移除图形选中）
    */
   selectOnlyNodes() {
-    this._selectedElements = this._selectedElements.filter((e) => e.kind === "node");
-    this._emitChange();
+    this._selectedElements = this._selectedElements.filter((e) => e.kind === 'node')
+    this._emitChange()
   }
 
   /**
    * 仅保留图形选中（移除节点选中）
    */
   selectOnlyGraphics() {
-    this._selectedElements = this._selectedElements.filter((e) => e.kind === "graphic");
-    this._emitChange();
+    this._selectedElements = this._selectedElements.filter((e) => e.kind === 'graphic')
+    this._emitChange()
   }
 
   /**
    * 清除所有选中
    */
   clearSelection() {
-    if (this._selectedElements.length === 0) return;
+    if (this._selectedElements.length === 0) return
 
-    this._selectedElements = [];
-    this._anchorElement = null;
-    this._emitChange();
+    this._selectedElements = []
+    this._anchorElement = null
+    this._emitChange()
   }
 
   // ==================== Hover 操作 ====================
@@ -389,11 +389,11 @@ export class SelectionModel extends EventEmitter {
    */
   setHover(element: SelectableElement | null) {
     if (this._hoveredElement?.kind === element?.kind && this._hoveredElement?.id === element?.id) {
-      return;
+      return
     }
 
-    this._hoveredElement = element;
-    this.emit("hoverChange", element);
+    this._hoveredElement = element
+    this.emit('hoverChange', element)
   }
 
   /**
@@ -402,22 +402,22 @@ export class SelectionModel extends EventEmitter {
    */
   setHoverById(id: string) {
     if (!id) {
-      this.setHover(null);
-      return;
+      this.setHover(null)
+      return
     }
 
-    let kind: SelectableElement["kind"] = "node";
+    let kind: SelectableElement['kind'] = 'node'
     if (this._doc?.getGraphic(id)) {
-      kind = "graphic";
+      kind = 'graphic'
     }
-    this.setHover({ kind, id });
+    this.setHover({ kind, id })
   }
 
   /**
    * 清除 hover
    */
   clearHover() {
-    this.setHover(null);
+    this.setHover(null)
   }
 
   // ==================== 拖拽目标 ====================
@@ -427,17 +427,17 @@ export class SelectionModel extends EventEmitter {
    * @param {string | null} nodeId - 目标节点 ID
    */
   setDropTarget(nodeId: string | null) {
-    if (this._dropTargetId === nodeId) return;
+    if (this._dropTargetId === nodeId) return
 
-    this._dropTargetId = nodeId;
-    this.emit("dropTargetChange", nodeId);
+    this._dropTargetId = nodeId
+    this.emit('dropTargetChange', nodeId)
   }
 
   /**
    * 清除拖拽目标
    */
   clearDropTarget() {
-    this.setDropTarget(null);
+    this.setDropTarget(null)
   }
 
   // ==================== 绘图工具 ====================
@@ -447,24 +447,24 @@ export class SelectionModel extends EventEmitter {
    * @param {DrawingTool | null} tool - 工具类型
    */
   setActiveTool(tool: DrawingTool | null) {
-    if (this._activeTool === tool) return;
+    if (this._activeTool === tool) return
 
-    const oldTool = this._activeTool;
-    this._activeTool = tool;
+    const oldTool = this._activeTool
+    this._activeTool = tool
 
     // 切换到绘图工具时清除选中
-    if (tool && !["select", "marquee", "pan"].includes(tool)) {
-      this.clearSelection();
+    if (tool && !['select', 'marquee', 'pan'].includes(tool)) {
+      this.clearSelection()
     }
 
-    this.emit("toolChange", { tool, oldTool });
+    this.emit('toolChange', { tool, oldTool })
   }
 
   /**
    * 重置为选择工具
    */
   resetToSelectTool() {
-    this.setActiveTool("select");
+    this.setActiveTool('select')
   }
 
   /**
@@ -472,7 +472,7 @@ export class SelectionModel extends EventEmitter {
    * @returns {boolean}
    */
   isSelectTool() {
-    return this._activeTool === "select" || this._activeTool === "marquee";
+    return this._activeTool === 'select' || this._activeTool === 'marquee'
   }
 
   /**
@@ -480,8 +480,8 @@ export class SelectionModel extends EventEmitter {
    * @returns {boolean}
    */
   isDrawingTool() {
-    const drawingTools = ["line", "rect", "circle", "ellipse", "polygon", "pipe", "text"];
-    return this._activeTool !== null && drawingTools.includes(this._activeTool);
+    const drawingTools = ['line', 'rect', 'circle', 'ellipse', 'polygon', 'pipe', 'text']
+    return this._activeTool !== null && drawingTools.includes(this._activeTool)
   }
 
   // ==================== 便捷方法 ====================
@@ -491,55 +491,55 @@ export class SelectionModel extends EventEmitter {
    * @returns {{x: number, y: number, width: number, height: number} | null}
    */
   getSelectionBounds() {
-    if (!this._doc || this._selectedElements.length === 0) return null;
+    if (!this._doc || this._selectedElements.length === 0) return null
 
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
 
     for (const element of this._selectedElements) {
       let bounds: {
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-      } | null = null;
+        x: number
+        y: number
+        width: number
+        height: number
+      } | null = null
 
-      if (element.kind === "node") {
-        const node = this._doc.getNode(element.id);
+      if (element.kind === 'node') {
+        const node = this._doc.getNode(element.id)
         if (node && node.style) {
-          const st = node.style;
+          const st = node.style
           bounds = {
             x: Number(st.left) || 0,
             y: Number(st.top) || 0,
             width: Number(st.width) || 100,
             height: Number(st.height) || 100,
-          };
+          }
         }
       } else {
-        const graphic = this._doc.getGraphic(element.id);
+        const graphic = this._doc.getGraphic(element.id)
         if (graphic && graphic.props) {
-          bounds = this._getGraphicBounds(graphic);
+          bounds = this._getGraphicBounds(graphic)
         }
       }
 
       if (bounds) {
-        minX = Math.min(minX, bounds.x);
-        minY = Math.min(minY, bounds.y);
-        maxX = Math.max(maxX, bounds.x + bounds.width);
-        maxY = Math.max(maxY, bounds.y + bounds.height);
+        minX = Math.min(minX, bounds.x)
+        minY = Math.min(minY, bounds.y)
+        maxX = Math.max(maxX, bounds.x + bounds.width)
+        maxY = Math.max(maxY, bounds.y + bounds.height)
       }
     }
 
-    if (minX === Infinity) return null;
+    if (minX === Infinity) return null
 
     return {
       x: minX,
       y: minY,
       width: maxX - minX,
       height: maxY - minY,
-    };
+    }
   }
 
   /**
@@ -549,81 +549,81 @@ export class SelectionModel extends EventEmitter {
    * @private
    */
   _getGraphicBounds(graphic: GraphicNode): {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
+    x: number
+    y: number
+    width: number
+    height: number
   } | null {
-    const props = graphic.props as Record<string, unknown>;
+    const props = graphic.props as Record<string, unknown>
 
     switch (graphic.type) {
-      case "Canvas.Rect":
+      case 'Canvas.Rect':
         return {
           x: (props.x as number) || 0,
           y: (props.y as number) || 0,
           width: (props.width as number) || 0,
           height: (props.height as number) || 0,
-        };
+        }
 
-      case "Canvas.Circle": {
-        const radius = (props.radius as number) || 0;
+      case 'Canvas.Circle': {
+        const radius = (props.radius as number) || 0
         return {
           x: ((props.cx as number) || 0) - radius,
           y: ((props.cy as number) || 0) - radius,
           width: radius * 2,
           height: radius * 2,
-        };
+        }
       }
 
-      case "Canvas.Ellipse": {
-        const rx = (props.rx as number) || 0;
-        const ry = (props.ry as number) || 0;
+      case 'Canvas.Ellipse': {
+        const rx = (props.rx as number) || 0
+        const ry = (props.ry as number) || 0
         return {
           x: ((props.cx as number) || 0) - rx,
           y: ((props.cy as number) || 0) - ry,
           width: rx * 2,
           height: ry * 2,
-        };
+        }
       }
 
-      case "Canvas.Line":
-      case "Canvas.Polygon":
-      case "Canvas.Pipe":
+      case 'Canvas.Line':
+      case 'Canvas.Polygon':
+      case 'Canvas.Pipe':
         if (Array.isArray(props.points) && (props.points as [number, number][]).length > 0) {
-          const pts = props.points as [number, number][];
-          const xs = pts.map(([x]) => x);
-          const ys = pts.map(([, y]) => y);
-          const minX = Math.min(...xs);
-          const minY = Math.min(...ys);
-          const maxX = Math.max(...xs);
-          const maxY = Math.max(...ys);
+          const pts = props.points as [number, number][]
+          const xs = pts.map(([x]) => x)
+          const ys = pts.map(([, y]) => y)
+          const minX = Math.min(...xs)
+          const minY = Math.min(...ys)
+          const maxX = Math.max(...xs)
+          const maxY = Math.max(...ys)
           return {
             x: minX,
             y: minY,
             width: maxX - minX,
             height: maxY - minY,
-          };
+          }
         }
-        break;
+        break
 
-      case "Canvas.Text":
+      case 'Canvas.Text':
         return {
           x: (props.x as number) || 0,
           y: (props.y as number) || 0,
           width: 100, // 估算值
           height: ((props.fontSize as number) || 14) * 1.5,
-        };
+        }
 
-      case "Canvas.Symbol":
+      case 'Canvas.Symbol':
         return {
           x: (props.x as number) || 0,
           y: (props.y as number) || 0,
           width: 50 * ((props.scale as number) || 1),
           height: 50 * ((props.scale as number) || 1),
-        };
+        }
     }
 
-    return null;
+    return null
   }
 
   // ==================== 事件 ====================
@@ -633,12 +633,12 @@ export class SelectionModel extends EventEmitter {
    * @private
    */
   _emitChange() {
-    this.emit("change", {
+    this.emit('change', {
       selectedElements: this.getSelectedElements(),
       selectionType: this.getSelectionType(),
       count: this.getSelectionCount(),
       primary: this.getPrimaryElement(),
-    });
+    })
   }
 
   /**
@@ -646,7 +646,7 @@ export class SelectionModel extends EventEmitter {
    * @param {DocumentModel} doc - 文档模型
    */
   setDocument(doc: DocumentModel | null) {
-    this._doc = doc;
+    this._doc = doc
   }
 
   /**
@@ -660,7 +660,7 @@ export class SelectionModel extends EventEmitter {
       dropTargetId: this._dropTargetId,
       anchorElement: this._anchorElement,
       activeTool: this._activeTool,
-    };
+    }
   }
 
   /**
@@ -668,25 +668,25 @@ export class SelectionModel extends EventEmitter {
    * @param {SelectionState} state - 状态快照
    */
   restoreState(state: SelectionState) {
-    this._selectedElements = [...state.selectedElements];
-    this._hoveredElement = state.hoveredElement;
-    this._dropTargetId = state.dropTargetId;
-    this._anchorElement = state.anchorElement;
-    this._activeTool = state.activeTool;
-    this._emitChange();
+    this._selectedElements = [...state.selectedElements]
+    this._hoveredElement = state.hoveredElement
+    this._dropTargetId = state.dropTargetId
+    this._anchorElement = state.anchorElement
+    this._activeTool = state.activeTool
+    this._emitChange()
   }
 
   /**
    * 重置状态
    */
   reset() {
-    this._selectedElements = [];
-    this._hoveredElement = null;
-    this._dropTargetId = null;
-    this._anchorElement = null;
-    this._activeTool = "select";
-    this._emitChange();
+    this._selectedElements = []
+    this._hoveredElement = null
+    this._dropTargetId = null
+    this._anchorElement = null
+    this._activeTool = 'select'
+    this._emitChange()
   }
 }
 
-export default SelectionModel;
+export default SelectionModel

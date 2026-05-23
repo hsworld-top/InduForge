@@ -4,7 +4,7 @@
  * 处理连接状态的显示和更新
  */
 
-import { computed } from "vue";
+import { computed } from 'vue'
 
 /**
  * 获取状态显示信息
@@ -14,32 +14,32 @@ import { computed } from "vue";
 export function getStatusInfo(status) {
   const statusMap = {
     connected: {
-      label: "已连接",
-      color: "green",
-      tagType: "success",
-      dotClass: "bg-green-500",
+      label: '已连接',
+      color: 'green',
+      tagType: 'success',
+      dotClass: 'bg-green-500',
     },
     disconnected: {
-      label: "已断开",
-      color: "gray",
-      tagType: "info",
-      dotClass: "bg-gray-400",
+      label: '已断开',
+      color: 'gray',
+      tagType: 'info',
+      dotClass: 'bg-gray-400',
     },
     error: {
-      label: "连接错误",
-      color: "red",
-      tagType: "danger",
-      dotClass: "bg-red-500",
+      label: '连接错误',
+      color: 'red',
+      tagType: 'danger',
+      dotClass: 'bg-red-500',
     },
     unknown: {
-      label: "未知状态",
-      color: "gray",
-      tagType: "info",
-      dotClass: "bg-gray-400",
+      label: '未知状态',
+      color: 'gray',
+      tagType: 'info',
+      dotClass: 'bg-gray-400',
     },
-  };
+  }
 
-  return statusMap[status] || statusMap.unknown;
+  return statusMap[status] || statusMap.unknown
 }
 
 /**
@@ -47,13 +47,13 @@ export function getStatusInfo(status) {
  */
 export function useConnectionStatus(connection) {
   const statusInfo = computed(() => {
-    return getStatusInfo(connection.value?.status);
-  });
+    return getStatusInfo(connection.value?.status)
+  })
 
-  const statusLabel = computed(() => statusInfo.value.label);
-  const statusColor = computed(() => statusInfo.value.color);
-  const statusTagType = computed(() => statusInfo.value.tagType);
-  const statusDotClass = computed(() => statusInfo.value.dotClass);
+  const statusLabel = computed(() => statusInfo.value.label)
+  const statusColor = computed(() => statusInfo.value.color)
+  const statusTagType = computed(() => statusInfo.value.tagType)
+  const statusDotClass = computed(() => statusInfo.value.dotClass)
 
   return {
     statusInfo,
@@ -61,5 +61,5 @@ export function useConnectionStatus(connection) {
     statusColor,
     statusTagType,
     statusDotClass,
-  };
+  }
 }

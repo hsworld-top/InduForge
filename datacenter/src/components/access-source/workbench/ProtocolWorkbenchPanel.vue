@@ -6,7 +6,7 @@
       </button>
       <div class="protocol-workbench__title">
         <span>{{ protocolLabel }}</span>
-        <strong>{{ connection.name || "未命名接入源" }}</strong>
+        <strong>{{ connection.name || '未命名接入源' }}</strong>
       </div>
       <WorkbenchStatusPill :label="statusLabel" :tone="statusTone" />
       <div class="protocol-workbench__spacer"></div>
@@ -18,9 +18,7 @@
         size="small"
         controls-position="right"
       />
-      <el-button size="small" :loading="testing" @click="runConnectionTest">
-        测试连接
-      </el-button>
+      <el-button size="small" :loading="testing" @click="runConnectionTest"> 测试连接 </el-button>
       <el-button type="primary" size="small" :loading="previewing" @click="runPreview">
         获取样本
       </el-button>
@@ -82,282 +80,280 @@
 </template>
 
 <script setup lang="ts">
-import { computed, markRaw, nextTick, ref } from "vue";
-import { ElMessage } from "element-plus";
-import dataAPI from "@/api/data.api";
-import { getApiErrorMessage } from "@/utils/request";
-import WorkbenchStatusPill from "@/components/workbench/WorkbenchStatusPill.vue";
-import WorkbenchStreamMessageList from "@/components/workbench/WorkbenchStreamMessageList.vue";
-import WorkbenchStreamToolbar from "@/components/workbench/WorkbenchStreamToolbar.vue";
-import IconTablerArrowLeft from "~icons/tabler/arrow-left";
-import IconTablerBraces from "~icons/tabler/braces";
-import IconTablerDatabase from "~icons/tabler/database";
-import IconTablerWebhook from "~icons/tabler/webhook";
-import IconTablerWorldWww from "~icons/tabler/world-www";
+import { computed, markRaw, nextTick, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import dataAPI from '@/api/data.api'
+import { getApiErrorMessage } from '@/utils/request'
+import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
+import WorkbenchStreamMessageList from '@/components/workbench/WorkbenchStreamMessageList.vue'
+import WorkbenchStreamToolbar from '@/components/workbench/WorkbenchStreamToolbar.vue'
+import IconTablerArrowLeft from '~icons/tabler/arrow-left'
+import IconTablerBraces from '~icons/tabler/braces'
+import IconTablerDatabase from '~icons/tabler/database'
+import IconTablerWebhook from '~icons/tabler/webhook'
+import IconTablerWorldWww from '~icons/tabler/world-www'
 
 type AccessSourceConnection = {
-  id: string;
-  name?: string;
-  type?: string;
-  status?: string;
-  config?: Record<string, unknown>;
-};
+  id: string
+  name?: string
+  type?: string
+  status?: string
+  config?: Record<string, unknown>
+}
 
 type StreamMessage = {
-  id: string;
-  topic: string;
-  payload: unknown;
-  qos: number;
-  timestamp: string;
-};
+  id: string
+  topic: string
+  payload: unknown
+  qos: number
+  timestamp: string
+}
 
 const props = defineProps<{
-  connection: AccessSourceConnection;
-  projectId: string;
-}>();
+  connection: AccessSourceConnection
+  projectId: string
+}>()
 
 defineEmits<{
-  (event: "back"): void;
-}>();
+  (event: 'back'): void
+}>()
 
-const previewing = ref(false);
-const testing = ref(false);
-const search = ref("");
-const limit = ref(10);
-const displayLimit = ref(100);
-const formatJson = ref(true);
-const autoScroll = ref(true);
-const showTimestamp = ref(true);
-const samples = ref<StreamMessage[]>([]);
-const diagnostics = ref<Record<string, unknown>>({});
-const lastError = ref("");
-const messageListRef = ref<InstanceType<typeof WorkbenchStreamMessageList> | null>(null);
+const previewing = ref(false)
+const testing = ref(false)
+const search = ref('')
+const limit = ref(10)
+const displayLimit = ref(100)
+const formatJson = ref(true)
+const autoScroll = ref(true)
+const showTimestamp = ref(true)
+const samples = ref<StreamMessage[]>([])
+const diagnostics = ref<Record<string, unknown>>({})
+const lastError = ref('')
+const messageListRef = ref<InstanceType<typeof WorkbenchStreamMessageList> | null>(null)
 
 const protocolLabelMap: Record<string, string> = {
-  kafka: "Kafka",
-  http: "HTTP",
-  websocket: "WebSocket",
-  redis: "Redis",
-};
+  kafka: 'Kafka',
+  http: 'HTTP',
+  websocket: 'WebSocket',
+  redis: 'Redis',
+}
 
-const protocolLabel = computed(
-  () => protocolLabelMap[props.connection.type || ""] || "协议",
-);
+const protocolLabel = computed(() => protocolLabelMap[props.connection.type || ''] || '协议')
 
 const toolbarIcon = computed(() => {
-  if (props.connection.type === "http") return markRaw(IconTablerWorldWww);
-  if (props.connection.type === "websocket") return markRaw(IconTablerWebhook);
-  if (props.connection.type === "redis") return markRaw(IconTablerDatabase);
-  return markRaw(IconTablerBraces);
-});
+  if (props.connection.type === 'http') return markRaw(IconTablerWorldWww)
+  if (props.connection.type === 'websocket') return markRaw(IconTablerWebhook)
+  if (props.connection.type === 'redis') return markRaw(IconTablerDatabase)
+  return markRaw(IconTablerBraces)
+})
 
-const config = computed(() => props.connection.config || {});
+const config = computed(() => props.connection.config || {})
 
 const statusLabel = computed(() => {
   const labels: Record<string, string> = {
-    connected: "在线",
-    disconnected: "离线",
-    error: "异常",
-    unknown: "未知",
-  };
-  return labels[props.connection.status || "unknown"] || "未知";
-});
+    connected: '在线',
+    disconnected: '离线',
+    error: '异常',
+    unknown: '未知',
+  }
+  return labels[props.connection.status || 'unknown'] || '未知'
+})
 
 const statusTone = computed(() => {
-  if (props.connection.status === "connected") return "success";
-  if (props.connection.status === "error") return "danger";
-  if (props.connection.status === "disconnected") return "warning";
-  return "neutral";
-});
+  if (props.connection.status === 'connected') return 'success'
+  if (props.connection.status === 'error') return 'danger'
+  if (props.connection.status === 'disconnected') return 'warning'
+  return 'neutral'
+})
 
 const previewStatusLabel = computed(() => {
-  if (previewing.value) return "预览中";
-  if (lastError.value) return "预览失败";
-  if (samples.value.length > 0) return `样本 ${samples.value.length}`;
-  return "待预览";
-});
+  if (previewing.value) return '预览中'
+  if (lastError.value) return '预览失败'
+  if (samples.value.length > 0) return `样本 ${samples.value.length}`
+  return '待预览'
+})
 
 const previewStatusTone = computed(() => {
-  if (previewing.value) return "info";
-  if (lastError.value) return "danger";
-  if (samples.value.length > 0) return "success";
-  return "neutral";
-});
+  if (previewing.value) return 'info'
+  if (lastError.value) return 'danger'
+  if (samples.value.length > 0) return 'success'
+  return 'neutral'
+})
 
 const endpointText = computed(() => {
-  if (props.connection.type === "http") {
-    return [config.value.method || "GET", config.value.baseUrl].filter(Boolean).join(" ");
+  if (props.connection.type === 'http') {
+    return [config.value.method || 'GET', config.value.baseUrl].filter(Boolean).join(' ')
   }
-  if (props.connection.type === "websocket") {
-    return [config.value.url, config.value.topic].filter(Boolean).join(" / ");
+  if (props.connection.type === 'websocket') {
+    return [config.value.url, config.value.topic].filter(Boolean).join(' / ')
   }
-  if (props.connection.type === "redis") {
-    return [config.value.address, config.value.keyPattern || "*"].filter(Boolean).join(" / ");
+  if (props.connection.type === 'redis') {
+    return [config.value.address, config.value.keyPattern || '*'].filter(Boolean).join(' / ')
   }
-  if (props.connection.type === "kafka") {
-    return [config.value.brokers, config.value.topic].filter(Boolean).join(" / ");
+  if (props.connection.type === 'kafka') {
+    return [config.value.brokers, config.value.topic].filter(Boolean).join(' / ')
   }
-  return "等待配置";
-});
+  return '等待配置'
+})
 
 const configRows = computed(() => {
-  const c = config.value;
-  if (props.connection.type === "http") {
+  const c = config.value
+  if (props.connection.type === 'http') {
     return [
-      { label: "方法", value: String(c.method || "GET") },
-      { label: "URL", value: String(c.baseUrl || "未配置") },
-      { label: "超时", value: `${c.timeoutMs || 5000}ms` },
-      { label: "Header", value: summarizeObject(c.headers) },
-    ];
+      { label: '方法', value: String(c.method || 'GET') },
+      { label: 'URL', value: String(c.baseUrl || '未配置') },
+      { label: '超时', value: `${c.timeoutMs || 5000}ms` },
+      { label: 'Header', value: summarizeObject(c.headers) },
+    ]
   }
-  if (props.connection.type === "websocket") {
+  if (props.connection.type === 'websocket') {
     return [
-      { label: "URL", value: String(c.url || "未配置") },
-      { label: "Topic", value: String(c.topic || "可选") },
-      { label: "心跳", value: `${c.heartbeatIntervalMs || 30000}ms` },
-      { label: "Header", value: summarizeObject(c.headers) },
-    ];
+      { label: 'URL', value: String(c.url || '未配置') },
+      { label: 'Topic', value: String(c.topic || '可选') },
+      { label: '心跳', value: `${c.heartbeatIntervalMs || 30000}ms` },
+      { label: 'Header', value: summarizeObject(c.headers) },
+    ]
   }
-  if (props.connection.type === "redis") {
+  if (props.connection.type === 'redis') {
     return [
-      { label: "模式", value: String(c.mode || "standalone") },
-      { label: "地址", value: String(c.address || "未配置") },
-      { label: "DB", value: String(c.db ?? 0) },
-      { label: "Key", value: String(c.keyPattern || "*") },
-    ];
+      { label: '模式', value: String(c.mode || 'standalone') },
+      { label: '地址', value: String(c.address || '未配置') },
+      { label: 'DB', value: String(c.db ?? 0) },
+      { label: 'Key', value: String(c.keyPattern || '*') },
+    ]
   }
   return [
-    { label: "Broker", value: String(c.brokers || "未配置") },
-    { label: "Topic", value: String(c.topic || "未配置") },
-    { label: "Group", value: String(c.consumerGroup || "未配置") },
-    { label: "Offset", value: String(c.startPosition || "latest") },
-  ];
-});
+    { label: 'Broker', value: String(c.brokers || '未配置') },
+    { label: 'Topic', value: String(c.topic || '未配置') },
+    { label: 'Group', value: String(c.consumerGroup || '未配置') },
+    { label: 'Offset', value: String(c.startPosition || 'latest') },
+  ]
+})
 
 const diagnosticRows = computed(() => {
-  const entries = Object.entries(diagnostics.value || {});
+  const entries = Object.entries(diagnostics.value || {})
   if (lastError.value) {
-    return [{ label: "错误", value: lastError.value }];
+    return [{ label: '错误', value: lastError.value }]
   }
   if (entries.length === 0) {
-    return [{ label: "状态", value: "尚未执行预览" }];
+    return [{ label: '状态', value: '尚未执行预览' }]
   }
   return entries.map(([key, value]) => ({
     label: key,
     value: formatDiagnosticValue(value),
-  }));
-});
+  }))
+})
 
 const filteredMessages = computed(() => {
-  const keyword = search.value.trim().toLowerCase();
-  const list = samples.value.slice(0, displayLimit.value);
-  if (!keyword) return list;
+  const keyword = search.value.trim().toLowerCase()
+  const list = samples.value.slice(0, displayLimit.value)
+  if (!keyword) return list
   return list.filter((message) => {
-    const haystack = `${message.topic} ${formatPayload(message.payload)}`.toLowerCase();
-    return haystack.includes(keyword);
-  });
-});
+    const haystack = `${message.topic} ${formatPayload(message.payload)}`.toLowerCase()
+    return haystack.includes(keyword)
+  })
+})
 
 const runConnectionTest = async () => {
-  testing.value = true;
+  testing.value = true
   try {
     const response = await dataAPI.testConnection(props.projectId, {
       type: props.connection.type,
       config: config.value,
-    });
-    const result = response?.data || response || {};
-    ElMessage.success(result.message || "连接测试通过");
+    })
+    const result = response?.data || response || {}
+    ElMessage.success(result.message || '连接测试通过')
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "连接测试失败"));
+    ElMessage.error(getApiErrorMessage(error, '连接测试失败'))
   } finally {
-    testing.value = false;
+    testing.value = false
   }
-};
+}
 
 const runPreview = async () => {
-  previewing.value = true;
-  lastError.value = "";
+  previewing.value = true
+  lastError.value = ''
   try {
     const response = await dataAPI.previewProtocol(props.projectId, props.connection.id, {
       limit: limit.value,
       timeoutMs: 5000,
       options: previewOptions.value,
-    });
-    const payload = response?.data || response || {};
-    diagnostics.value = payload.diagnostics || {};
-    samples.value = normalizeSamples(payload.samples || [], payload.rawPayload);
+    })
+    const payload = response?.data || response || {}
+    diagnostics.value = payload.diagnostics || {}
+    samples.value = normalizeSamples(payload.samples || [], payload.rawPayload)
     if (autoScroll.value) {
-      await nextTick();
-      await messageListRef.value?.scrollToTop?.();
+      await nextTick()
+      await messageListRef.value?.scrollToTop?.()
     }
-    ElMessage.success(`已获取 ${samples.value.length} 条样本`);
+    ElMessage.success(`已获取 ${samples.value.length} 条样本`)
   } catch (error) {
-    lastError.value = getApiErrorMessage(error, "协议预览失败");
-    diagnostics.value = { error: lastError.value };
-    ElMessage.error(lastError.value);
+    lastError.value = getApiErrorMessage(error, '协议预览失败')
+    diagnostics.value = { error: lastError.value }
+    ElMessage.error(lastError.value)
   } finally {
-    previewing.value = false;
+    previewing.value = false
   }
-};
+}
 
 const previewOptions = computed(() => {
-  if (props.connection.type !== "redis") return {};
-  const options = config.value.options;
-  return options && typeof options === "object" ? options : {};
-});
+  if (props.connection.type !== 'redis') return {}
+  const options = config.value.options
+  return options && typeof options === 'object' ? options : {}
+})
 
 const clearSamples = () => {
-  samples.value = [];
-  diagnostics.value = {};
-  lastError.value = "";
-};
+  samples.value = []
+  diagnostics.value = {}
+  lastError.value = ''
+}
 
 const copyMessage = async (message: StreamMessage) => {
-  await navigator.clipboard.writeText(formatPayload(message.payload));
-  ElMessage.success("Payload 已复制");
-};
+  await navigator.clipboard.writeText(formatPayload(message.payload))
+  ElMessage.success('Payload 已复制')
+}
 
 const normalizeSamples = (rawSamples: unknown[], rawPayload: unknown): StreamMessage[] => {
-  const now = new Date().toISOString();
-  const source = rawSamples.length > 0 ? rawSamples : rawPayload !== undefined ? [rawPayload] : [];
+  const now = new Date().toISOString()
+  const source = rawSamples.length > 0 ? rawSamples : rawPayload !== undefined ? [rawPayload] : []
   return source.map((sample, index) => ({
     id: `${props.connection.id}-${Date.now()}-${index}`,
     topic: resolveSampleTopic(sample, index),
     payload: sample,
     qos: 0,
     timestamp: now,
-  }));
-};
+  }))
+}
 
 const resolveSampleTopic = (sample: unknown, index: number) => {
-  if (sample && typeof sample === "object") {
-    const mapped = sample as Record<string, unknown>;
-    if (typeof mapped.topic === "string") return mapped.topic;
-    if (typeof mapped.key === "string") return mapped.key;
+  if (sample && typeof sample === 'object') {
+    const mapped = sample as Record<string, unknown>
+    if (typeof mapped.topic === 'string') return mapped.topic
+    if (typeof mapped.key === 'string') return mapped.key
   }
-  return `${props.connection.type || "sample"}#${index + 1}`;
-};
+  return `${props.connection.type || 'sample'}#${index + 1}`
+}
 
 const summarizeObject = (value: unknown) => {
-  if (!value || typeof value !== "object") return "{}";
-  const keys = Object.keys(value as Record<string, unknown>);
-  return keys.length ? keys.join(", ") : "{}";
-};
+  if (!value || typeof value !== 'object') return '{}'
+  const keys = Object.keys(value as Record<string, unknown>)
+  return keys.length ? keys.join(', ') : '{}'
+}
 
 const formatDiagnosticValue = (value: unknown) => {
-  if (value === null || value === undefined) return "-";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-};
+  if (value === null || value === undefined) return '-'
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
 
 const formatPayload = (value: unknown) => {
-  if (typeof value === "string") return value;
+  if (typeof value === 'string') return value
   try {
-    return JSON.stringify(value);
+    return JSON.stringify(value)
   } catch {
-    return String(value);
+    return String(value)
   }
-};
+}
 </script>
 
 <style scoped>

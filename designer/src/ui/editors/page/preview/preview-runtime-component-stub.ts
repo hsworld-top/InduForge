@@ -1,53 +1,53 @@
-import type { PendingComponentCall } from "./preview-runtime-helpers";
-import type { PreviewComponentStubApi } from "./preview-runtime.types";
-import { COMPONENT_SCRIPT_QUEUE_METHODS, queueComponentCall } from "./preview-runtime-helpers";
+import type { PendingComponentCall } from './preview-runtime-helpers'
+import type { PreviewComponentStubApi } from './preview-runtime.types'
+import { COMPONENT_SCRIPT_QUEUE_METHODS, queueComponentCall } from './preview-runtime-helpers'
 
 const COMPONENT_SCRIPT_VOID_METHODS = [
-  "GetText",
-  "GetSrc",
-  "GetCommandItem",
-  "GetMenuItem",
-  "GetData",
-  "GetRadioChecked",
-  "GetRadioValue",
-  "GetRadioLabel",
-  "GetRadioEnable",
-  "GetRadioVisible",
-  "GetCheckState",
-  "GetCheckEnable",
-  "GetCheckVisible",
-  "GetCheckedNodes",
-  "GetCheckedKeys",
-  "GetHalfCheckedNodes",
-  "GetHalfCheckedKeys",
-  "GetCurrentKey",
-  "GetCurrentNode",
-  "GetNode",
-  "GetVisible",
-  "GetActive",
-  "GetUrl",
-  "GetPage",
-  "GetPageSize",
-  "GetTotal",
-  "GetActiveNames",
-  "GetExpandedKeys",
-  "GetSelection",
-  "GetSelectionKeys",
-  "GetPageData",
-  "GetValue",
-  "GetDate",
-  "GetImage",
-  "IsEmpty",
-  "GetInputValue",
-] as const;
+  'GetText',
+  'GetSrc',
+  'GetCommandItem',
+  'GetMenuItem',
+  'GetData',
+  'GetRadioChecked',
+  'GetRadioValue',
+  'GetRadioLabel',
+  'GetRadioEnable',
+  'GetRadioVisible',
+  'GetCheckState',
+  'GetCheckEnable',
+  'GetCheckVisible',
+  'GetCheckedNodes',
+  'GetCheckedKeys',
+  'GetHalfCheckedNodes',
+  'GetHalfCheckedKeys',
+  'GetCurrentKey',
+  'GetCurrentNode',
+  'GetNode',
+  'GetVisible',
+  'GetActive',
+  'GetUrl',
+  'GetPage',
+  'GetPageSize',
+  'GetTotal',
+  'GetActiveNames',
+  'GetExpandedKeys',
+  'GetSelection',
+  'GetSelectionKeys',
+  'GetPageData',
+  'GetValue',
+  'GetDate',
+  'GetImage',
+  'IsEmpty',
+  'GetInputValue',
+] as const
 
 const COMPONENT_SCRIPT_NULL_METHODS = [
-  "elContainer",
-  "elMain",
-  "elLayout",
-  "elLayoutRow",
-  "elCol",
-] as const;
+  'elContainer',
+  'elMain',
+  'elLayout',
+  'elLayoutRow',
+  'elCol',
+] as const
 
 /**
  * 构建未注册真实 ref 前的组件桩对象
@@ -61,144 +61,142 @@ export function buildComponentStub(
   pageId: string | null | undefined,
   name: string | null | undefined,
 ): PreviewComponentStubApi {
-  const stub: Record<string, unknown> = {};
+  const stub: Record<string, unknown> = {}
 
-  Object.defineProperty(stub, "Name", {
+  Object.defineProperty(stub, 'Name', {
     get() {
-      return name || "";
+      return name || ''
     },
     enumerable: true,
     configurable: true,
-  });
-  Object.defineProperty(stub, "Comment", {
+  })
+  Object.defineProperty(stub, 'Comment', {
     get() {
-      return "";
+      return ''
     },
     enumerable: true,
     configurable: true,
-  });
+  })
 
-  const location: Record<string, unknown> = {};
-  Object.defineProperty(location, "X", {
+  const location: Record<string, unknown> = {}
+  Object.defineProperty(location, 'X', {
     get() {
-      return 0;
+      return 0
     },
     set(value: unknown) {
-      const next = Number(value);
-      if (!Number.isFinite(next)) return;
-      queueComponentCall(pendingComponentCalls, pageId, name, "setStyle", [{ left: `${next}px` }]);
+      const next = Number(value)
+      if (!Number.isFinite(next)) return
+      queueComponentCall(pendingComponentCalls, pageId, name, 'setStyle', [{ left: `${next}px` }])
     },
     enumerable: true,
     configurable: true,
-  });
-  Object.defineProperty(location, "Y", {
+  })
+  Object.defineProperty(location, 'Y', {
     get() {
-      return 0;
+      return 0
     },
     set(value: unknown) {
-      const next = Number(value);
-      if (!Number.isFinite(next)) return;
-      queueComponentCall(pendingComponentCalls, pageId, name, "setStyle", [{ top: `${next}px` }]);
+      const next = Number(value)
+      if (!Number.isFinite(next)) return
+      queueComponentCall(pendingComponentCalls, pageId, name, 'setStyle', [{ top: `${next}px` }])
     },
     enumerable: true,
     configurable: true,
-  });
-  Object.defineProperty(stub, "Location", {
+  })
+  Object.defineProperty(stub, 'Location', {
     get() {
-      return location;
+      return location
     },
     enumerable: true,
     configurable: true,
-  });
+  })
 
-  const size: Record<string, unknown> = {};
-  Object.defineProperty(size, "Width", {
+  const size: Record<string, unknown> = {}
+  Object.defineProperty(size, 'Width', {
     get() {
-      return 0;
+      return 0
     },
     set(value: unknown) {
-      const next = Number(value);
-      if (!Number.isFinite(next)) return;
-      queueComponentCall(pendingComponentCalls, pageId, name, "setStyle", [{ width: `${next}px` }]);
+      const next = Number(value)
+      if (!Number.isFinite(next)) return
+      queueComponentCall(pendingComponentCalls, pageId, name, 'setStyle', [{ width: `${next}px` }])
     },
     enumerable: true,
     configurable: true,
-  });
-  Object.defineProperty(size, "Height", {
+  })
+  Object.defineProperty(size, 'Height', {
     get() {
-      return 0;
+      return 0
     },
     set(value: unknown) {
-      const next = Number(value);
-      if (!Number.isFinite(next)) return;
-      queueComponentCall(pendingComponentCalls, pageId, name, "setStyle", [
-        { height: `${next}px` },
-      ]);
+      const next = Number(value)
+      if (!Number.isFinite(next)) return
+      queueComponentCall(pendingComponentCalls, pageId, name, 'setStyle', [{ height: `${next}px` }])
     },
     enumerable: true,
     configurable: true,
-  });
-  Object.defineProperty(stub, "Size", {
+  })
+  Object.defineProperty(stub, 'Size', {
     get() {
-      return size;
+      return size
     },
     enumerable: true,
     configurable: true,
-  });
+  })
 
-  Object.defineProperty(stub, "Visible", {
+  Object.defineProperty(stub, 'Visible', {
     get() {
-      return true;
+      return true
     },
     set(_value: unknown) {},
     enumerable: true,
     configurable: true,
-  });
-  Object.defineProperty(stub, "Enable", {
+  })
+  Object.defineProperty(stub, 'Enable', {
     get() {
-      return true;
+      return true
     },
     set(value: unknown) {
-      queueComponentCall(pendingComponentCalls, pageId, name, "setProps", [{ disabled: !value }]);
+      queueComponentCall(pendingComponentCalls, pageId, name, 'setProps', [{ disabled: !value }])
     },
     enumerable: true,
     configurable: true,
-  });
-  Object.defineProperty(stub, "Caption", {
+  })
+  Object.defineProperty(stub, 'Caption', {
     get() {
-      return "";
+      return ''
     },
     set(value: unknown) {
-      queueComponentCall(pendingComponentCalls, pageId, name, "setProps", [
-        { text: String(value ?? "") },
-      ]);
+      queueComponentCall(pendingComponentCalls, pageId, name, 'setProps', [
+        { text: String(value ?? '') },
+      ])
     },
     enumerable: true,
     configurable: true,
-  });
-  Object.defineProperty(stub, "Image", {
+  })
+  Object.defineProperty(stub, 'Image', {
     get() {
-      return "";
+      return ''
     },
     set(value: unknown) {
-      queueComponentCall(pendingComponentCalls, pageId, name, "setProps", [
-        { src: String(value ?? "") },
-      ]);
+      queueComponentCall(pendingComponentCalls, pageId, name, 'setProps', [
+        { src: String(value ?? '') },
+      ])
     },
     enumerable: true,
     configurable: true,
-  });
+  })
 
   for (const method of COMPONENT_SCRIPT_QUEUE_METHODS) {
     stub[method] = (...args: unknown[]) =>
-      queueComponentCall(pendingComponentCalls, pageId, name, method, args);
+      queueComponentCall(pendingComponentCalls, pageId, name, method, args)
   }
   for (const method of COMPONENT_SCRIPT_VOID_METHODS) {
-    stub[method] = () => undefined;
+    stub[method] = () => undefined
   }
   for (const method of COMPONENT_SCRIPT_NULL_METHODS) {
-    stub[method] = () => null;
+    stub[method] = () => null
   }
 
-  return stub as PreviewComponentStubApi;
+  return stub as PreviewComponentStubApi
 }

@@ -1,79 +1,79 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { useI18n } from "vue-i18n";
-import IconLucideBot from "~icons/lucide/bot";
-import IconLucideClipboardPaste from "~icons/lucide/clipboard-paste";
-import IconLucideCopy from "~icons/lucide/copy";
-import IconLucideDownload from "~icons/lucide/download";
-import IconLucideEllipsis from "~icons/lucide/ellipsis";
-import IconLucideLock from "~icons/lucide/lock";
-import IconLucideLockOpen from "~icons/lucide/lock-open";
-import IconLucideMonitor from "~icons/lucide/monitor";
-import IconLucidePlay from "~icons/lucide/play";
-import IconLucidePin from "~icons/lucide/pin";
-import IconLucidePinOff from "~icons/lucide/pin-off";
-import IconLucideRedo2 from "~icons/lucide/redo-2";
-import IconLucideSave from "~icons/lucide/save";
-import IconLucideSettings2 from "~icons/lucide/settings-2";
-import IconLucideTrash from "~icons/lucide/trash";
-import IconLucideTrash2 from "~icons/lucide/trash-2";
-import IconLucideUndo2 from "~icons/lucide/undo-2";
-import IconLucideZoomIn from "~icons/lucide/zoom-in";
-import IconLucideZoomOut from "~icons/lucide/zoom-out";
-import { ElMessage } from "../el-message-compat";
+import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import IconLucideBot from '~icons/lucide/bot'
+import IconLucideClipboardPaste from '~icons/lucide/clipboard-paste'
+import IconLucideCopy from '~icons/lucide/copy'
+import IconLucideDownload from '~icons/lucide/download'
+import IconLucideEllipsis from '~icons/lucide/ellipsis'
+import IconLucideLock from '~icons/lucide/lock'
+import IconLucideLockOpen from '~icons/lucide/lock-open'
+import IconLucideMonitor from '~icons/lucide/monitor'
+import IconLucidePlay from '~icons/lucide/play'
+import IconLucidePin from '~icons/lucide/pin'
+import IconLucidePinOff from '~icons/lucide/pin-off'
+import IconLucideRedo2 from '~icons/lucide/redo-2'
+import IconLucideSave from '~icons/lucide/save'
+import IconLucideSettings2 from '~icons/lucide/settings-2'
+import IconLucideTrash from '~icons/lucide/trash'
+import IconLucideTrash2 from '~icons/lucide/trash-2'
+import IconLucideUndo2 from '~icons/lucide/undo-2'
+import IconLucideZoomIn from '~icons/lucide/zoom-in'
+import IconLucideZoomOut from '~icons/lucide/zoom-out'
+import { ElMessage } from '../el-message-compat'
 
 interface ToolbarSaveSettings {
-  autoSave: boolean;
-  intervalMinutes: number;
+  autoSave: boolean
+  intervalMinutes: number
 }
 
 /** 与 constants 中 ViewPreset 结构一致；单独声明避免 props 默认 [] 与 readonly 字面量联合退化为 never */
 interface ViewPresetProp {
-  key: string;
-  label?: string;
-  width: number;
-  height: number;
+  key: string
+  label?: string
+  width: number
+  height: number
 }
 
 interface RuntimeUserProp {
-  id: string;
-  username: string;
-  displayName?: string;
-  status?: string;
+  id: string
+  username: string
+  displayName?: string
+  status?: string
 }
 
 const props = withDefaults(
   defineProps<{
-    pageName?: string;
-    isLocked?: boolean;
-    isDirty?: boolean;
-    viewPresets?: readonly ViewPresetProp[];
-    activeViewKey?: string;
-    canvasWidth?: number;
-    canvasHeight?: number;
-    isCustomView?: boolean;
-    canUndo?: boolean;
-    canRedo?: boolean;
-    canMoveLayer?: boolean;
-    zoom?: number;
-    showRuler?: boolean;
-    showGrid?: boolean;
-    enableSnap?: boolean;
-    isSaving?: boolean;
-    saveSettings?: ToolbarSaveSettings;
-    hasSelection?: boolean;
-    canToggleNodeLock?: boolean;
-    selectedNodeLocked?: boolean;
-    hasClipboard?: boolean;
-    runtimeUsers?: readonly RuntimeUserProp[];
-    selectedPreviewRuntimeUserId?: string;
+    pageName?: string
+    isLocked?: boolean
+    isDirty?: boolean
+    viewPresets?: readonly ViewPresetProp[]
+    activeViewKey?: string
+    canvasWidth?: number
+    canvasHeight?: number
+    isCustomView?: boolean
+    canUndo?: boolean
+    canRedo?: boolean
+    canMoveLayer?: boolean
+    zoom?: number
+    showRuler?: boolean
+    showGrid?: boolean
+    enableSnap?: boolean
+    isSaving?: boolean
+    saveSettings?: ToolbarSaveSettings
+    hasSelection?: boolean
+    canToggleNodeLock?: boolean
+    selectedNodeLocked?: boolean
+    hasClipboard?: boolean
+    runtimeUsers?: readonly RuntimeUserProp[]
+    selectedPreviewRuntimeUserId?: string
   }>(),
   {
-    pageName: "",
+    pageName: '',
     isLocked: false,
     isDirty: false,
     viewPresets: () => [],
-    activeViewKey: "pc",
+    activeViewKey: 'pc',
     canvasWidth: 1366,
     canvasHeight: 768,
     isCustomView: false,
@@ -91,49 +91,49 @@ const props = withDefaults(
     selectedNodeLocked: false,
     hasClipboard: false,
     runtimeUsers: () => [],
-    selectedPreviewRuntimeUserId: "",
+    selectedPreviewRuntimeUserId: '',
   },
-);
+)
 
-const { t } = useI18n();
+const { t } = useI18n()
 
 const emit = defineEmits<{
-  "update:activeViewKey": [key: string];
-  applyCustomSize: [size: { width: number; height: number }];
-  toggleLock: [];
-  export: [];
-  undo: [];
-  redo: [];
-  preview: [];
-  save: [];
-  openAi: [];
-  moveUp: [];
-  moveDown: [];
-  moveToTop: [];
-  moveToBottom: [];
-  openCollaboration: [];
-  refreshCanvas: [];
-  clearCanvas: [];
-  saveSettingsChange: [settings: ToolbarSaveSettings];
-  zoomIn: [];
-  zoomOut: [];
-  fitCanvas: [];
-  fitScreen: [];
-  toggleRuler: [];
-  toggleGrid: [];
-  toggleSnap: [];
-  copy: [];
-  paste: [];
-  deleteSelected: [];
-  toggleNodeLock: [];
-  previewUserChange: [runtimeUserId: string];
-  refreshPreviewUsers: [];
-}>();
+  'update:activeViewKey': [key: string]
+  applyCustomSize: [size: { width: number; height: number }]
+  toggleLock: []
+  export: []
+  undo: []
+  redo: []
+  preview: []
+  save: []
+  openAi: []
+  moveUp: []
+  moveDown: []
+  moveToTop: []
+  moveToBottom: []
+  openCollaboration: []
+  refreshCanvas: []
+  clearCanvas: []
+  saveSettingsChange: [settings: ToolbarSaveSettings]
+  zoomIn: []
+  zoomOut: []
+  fitCanvas: []
+  fitScreen: []
+  toggleRuler: []
+  toggleGrid: []
+  toggleSnap: []
+  copy: []
+  paste: []
+  deleteSelected: []
+  toggleNodeLock: []
+  previewUserChange: [runtimeUserId: string]
+  refreshPreviewUsers: []
+}>()
 
-const MIN_CANVAS_WIDTH = 120;
-const MAX_CANVAS_WIDTH = 7680;
-const MIN_CANVAS_HEIGHT = 120;
-const MAX_CANVAS_HEIGHT = 4320;
+const MIN_CANVAS_WIDTH = 120
+const MAX_CANVAS_WIDTH = 7680
+const MIN_CANVAS_HEIGHT = 120
+const MAX_CANVAS_HEIGHT = 4320
 
 const viewItems = computed(() =>
   props.viewPresets.map((item) => ({
@@ -142,55 +142,55 @@ const viewItems = computed(() =>
     width: item.width,
     height: item.height,
   })),
-);
+)
 
 const currentCanvasSizeText = computed(
   () => `${Math.round(props.canvasWidth)} x ${Math.round(props.canvasHeight)}`,
-);
+)
 
 const saveStatusText = computed(() => {
-  if (props.isSaving) return t("toolbar.saveStatus.saving");
-  if (props.isDirty) return t("toolbar.saveStatus.dirty");
-  return t("toolbar.saveStatus.saved");
-});
+  if (props.isSaving) return t('toolbar.saveStatus.saving')
+  if (props.isDirty) return t('toolbar.saveStatus.dirty')
+  return t('toolbar.saveStatus.saved')
+})
 
 const saveStatusClass = computed(() => {
-  if (props.isSaving) return "is-saving";
-  if (props.isDirty) return "is-dirty";
-  return "is-saved";
-});
+  if (props.isSaving) return 'is-saving'
+  if (props.isDirty) return 'is-dirty'
+  return 'is-saved'
+})
 
 const saveIntervalOptions = computed(() => [
-  { value: 1, label: t("toolbar.saveIntervalOption", { value: 1 }) as string },
-  { value: 3, label: t("toolbar.saveIntervalOption", { value: 3 }) as string },
-  { value: 5, label: t("toolbar.saveIntervalOption", { value: 5 }) as string },
-  { value: 10, label: t("toolbar.saveIntervalOption", { value: 10 }) as string },
-  { value: 15, label: t("toolbar.saveIntervalOption", { value: 15 }) as string },
-]);
+  { value: 1, label: t('toolbar.saveIntervalOption', { value: 1 }) as string },
+  { value: 3, label: t('toolbar.saveIntervalOption', { value: 3 }) as string },
+  { value: 5, label: t('toolbar.saveIntervalOption', { value: 5 }) as string },
+  { value: 10, label: t('toolbar.saveIntervalOption', { value: 10 }) as string },
+  { value: 15, label: t('toolbar.saveIntervalOption', { value: 15 }) as string },
+])
 
 const previewUserOptions = computed(() =>
   props.runtimeUsers
-    .filter((user) => user.status !== "disabled")
+    .filter((user) => user.status !== 'disabled')
     .map((user) => ({
       value: user.id,
       label: user.username,
-      description: user.displayName && user.displayName !== user.username ? user.displayName : "",
+      description: user.displayName && user.displayName !== user.username ? user.displayName : '',
     })),
-);
+)
 
 const selectedPreviewUser = computed<string>({
-  get: () => props.selectedPreviewRuntimeUserId || "",
-  set: (value) => emit("previewUserChange", value),
-});
+  get: () => props.selectedPreviewRuntimeUserId || '',
+  set: (value) => emit('previewUserChange', value),
+})
 
 const localSaveSettings = ref({
   autoSave: false,
   intervalMinutes: 5,
-});
+})
 const localCustomSize = ref({
   width: props.canvasWidth,
   height: props.canvasHeight,
-});
+})
 
 watch(
   () => props.saveSettings,
@@ -198,10 +198,10 @@ watch(
     localSaveSettings.value = {
       autoSave: Boolean(value?.autoSave),
       intervalMinutes: Number(value?.intervalMinutes) || 5,
-    };
+    }
   },
   { immediate: true, deep: true },
-);
+)
 
 watch(
   () => [props.canvasWidth, props.canvasHeight] as const,
@@ -209,88 +209,88 @@ watch(
     localCustomSize.value = {
       width: Math.round(width),
       height: Math.round(height),
-    };
+    }
   },
   { immediate: true },
-);
+)
 
-const handleViewChange = (key: string) => emit("update:activeViewKey", key);
-const handleToggleLock = () => emit("toggleLock");
-const handleUndo = () => emit("undo");
-const handleRedo = () => emit("redo");
-const handlePreview = () => emit("preview");
+const handleViewChange = (key: string) => emit('update:activeViewKey', key)
+const handleToggleLock = () => emit('toggleLock')
+const handleUndo = () => emit('undo')
+const handleRedo = () => emit('redo')
+const handlePreview = () => emit('preview')
 const handlePreviewDropdownVisibleChange = (visible: boolean) => {
   if (visible) {
-    emit("refreshPreviewUsers");
+    emit('refreshPreviewUsers')
   }
-};
-const handleSave = () => emit("save");
-const handleZoomIn = () => emit("zoomIn");
-const handleZoomOut = () => emit("zoomOut");
-const handleCopy = () => emit("copy");
-const handlePaste = () => emit("paste");
-const handleDeleteSelected = () => emit("deleteSelected");
-const handleToggleNodeLock = () => emit("toggleNodeLock");
+}
+const handleSave = () => emit('save')
+const handleZoomIn = () => emit('zoomIn')
+const handleZoomOut = () => emit('zoomOut')
+const handleCopy = () => emit('copy')
+const handlePaste = () => emit('paste')
+const handleDeleteSelected = () => emit('deleteSelected')
+const handleToggleNodeLock = () => emit('toggleNodeLock')
 
 function handleViewMenuCommand(command: string) {
-  if (command === "resetZoom") {
-    emit("fitScreen");
-    return;
+  if (command === 'resetZoom') {
+    emit('fitScreen')
+    return
   }
-  if (command === "toggleRuler") {
-    emit("toggleRuler");
-    return;
+  if (command === 'toggleRuler') {
+    emit('toggleRuler')
+    return
   }
-  if (command === "toggleGrid") {
-    emit("toggleGrid");
-    return;
+  if (command === 'toggleGrid') {
+    emit('toggleGrid')
+    return
   }
-  if (command === "toggleSnap") {
-    emit("toggleSnap");
+  if (command === 'toggleSnap') {
+    emit('toggleSnap')
   }
 }
 
 function handleApplyCustomSize() {
-  const width = Math.round(Number(localCustomSize.value.width));
-  const height = Math.round(Number(localCustomSize.value.height));
+  const width = Math.round(Number(localCustomSize.value.width))
+  const height = Math.round(Number(localCustomSize.value.height))
   if (!Number.isFinite(width) || width < MIN_CANVAS_WIDTH || width > MAX_CANVAS_WIDTH) {
     ElMessage.warning(
-      t("toolbar.widthRange", { min: MIN_CANVAS_WIDTH, max: MAX_CANVAS_WIDTH }) as string,
-    );
-    return;
+      t('toolbar.widthRange', { min: MIN_CANVAS_WIDTH, max: MAX_CANVAS_WIDTH }) as string,
+    )
+    return
   }
   if (!Number.isFinite(height) || height < MIN_CANVAS_HEIGHT || height > MAX_CANVAS_HEIGHT) {
     ElMessage.warning(
-      t("toolbar.heightRange", { min: MIN_CANVAS_HEIGHT, max: MAX_CANVAS_HEIGHT }) as string,
-    );
-    return;
+      t('toolbar.heightRange', { min: MIN_CANVAS_HEIGHT, max: MAX_CANVAS_HEIGHT }) as string,
+    )
+    return
   }
-  emit("applyCustomSize", { width, height });
+  emit('applyCustomSize', { width, height })
 }
 
 function handleSaveSettingsChange() {
-  emit("saveSettingsChange", { ...localSaveSettings.value });
+  emit('saveSettingsChange', { ...localSaveSettings.value })
 }
 
 function handleMoreCommand(command: string) {
-  if (command === "openAi") {
-    emit("openAi");
-    return;
+  if (command === 'openAi') {
+    emit('openAi')
+    return
   }
-  if (command === "export") {
-    emit("export");
-    return;
+  if (command === 'export') {
+    emit('export')
+    return
   }
-  if (command === "clearCanvas") {
-    emit("clearCanvas");
-    return;
+  if (command === 'clearCanvas') {
+    emit('clearCanvas')
+    return
   }
-  if (command === "collaboration") {
-    emit("openCollaboration");
-    return;
+  if (command === 'collaboration') {
+    emit('openCollaboration')
+    return
   }
-  if (command === "refresh") {
-    emit("refreshCanvas");
+  if (command === 'refresh') {
+    emit('refreshCanvas')
   }
 }
 </script>
@@ -299,11 +299,14 @@ function handleMoreCommand(command: string) {
   <header class="designer-toolbar toolbar-v2">
     <div class="toolbar-section toolbar-left">
       <div class="page-chip">
-        <span class="page-chip__label">{{ t("toolbar.pageChipLabel") }}</span>
-        <span class="page-chip__name">{{ pageName || t("toolbar.untitledPage") }}</span>
+        <span class="page-chip__label">{{ t('toolbar.pageChipLabel') }}</span>
+        <span class="page-chip__name">{{ pageName || t('toolbar.untitledPage') }}</span>
         <span v-if="isDirty" class="page-chip__dirty">●</span>
       </div>
-      <el-tooltip :content="isLocked ? t('toolbar.unlockPage') : t('toolbar.lockPage')" placement="bottom">
+      <el-tooltip
+        :content="isLocked ? t('toolbar.unlockPage') : t('toolbar.lockPage')"
+        placement="bottom"
+      >
         <el-button class="icon-btn" @click="handleToggleLock">
           <IconLucideLock v-if="isLocked" />
           <IconLucideLockOpen v-else />
@@ -324,10 +327,18 @@ function handleMoreCommand(command: string) {
               <IconLucideClipboardPaste />
             </el-button>
           </el-tooltip>
-          <el-tooltip :content="selectedNodeLocked ? t('toolbar.unlockNodePosition') : t('toolbar.lockNodePosition')
-            " placement="bottom">
-            <el-button class="icon-btn" :class="{ 'is-active': selectedNodeLocked }" :disabled="!canToggleNodeLock"
-              @click="handleToggleNodeLock">
+          <el-tooltip
+            :content="
+              selectedNodeLocked ? t('toolbar.unlockNodePosition') : t('toolbar.lockNodePosition')
+            "
+            placement="bottom"
+          >
+            <el-button
+              class="icon-btn"
+              :class="{ 'is-active': selectedNodeLocked }"
+              :disabled="!canToggleNodeLock"
+              @click="handleToggleNodeLock"
+            >
               <IconLucidePinOff v-if="selectedNodeLocked" />
               <IconLucidePin v-else />
             </el-button>
@@ -339,7 +350,12 @@ function handleMoreCommand(command: string) {
           </el-tooltip>
         </div>
         <div class="toolbar-group toolbar-group--canvas toolbar-center-middle">
-          <el-popover trigger="click" placement="bottom" popper-class="designer-size-popper" :width="272">
+          <el-popover
+            trigger="click"
+            placement="bottom"
+            popper-class="designer-size-popper"
+            :width="272"
+          >
             <template #reference>
               <el-button class="view-btn view-btn--selector">
                 <IconLucideMonitor class="view-selector__icon" />
@@ -348,28 +364,47 @@ function handleMoreCommand(command: string) {
             </template>
             <div class="size-panel">
               <div class="size-panel__section">
-                <div class="size-panel__title">{{ t("toolbar.presetSize") }}</div>
+                <div class="size-panel__title">{{ t('toolbar.presetSize') }}</div>
                 <div class="size-preset-list">
-                  <button v-for="item in viewItems" :key="item.key" type="button" class="size-preset-item" :class="{
-                    'is-active': item.key === activeViewKey && !isCustomView,
-                  }" @click="handleViewChange(item.key)">
+                  <button
+                    v-for="item in viewItems"
+                    :key="item.key"
+                    type="button"
+                    class="size-preset-item"
+                    :class="{
+                      'is-active': item.key === activeViewKey && !isCustomView,
+                    }"
+                    @click="handleViewChange(item.key)"
+                  >
                     <span class="size-preset-item__label">{{ item.label }}</span>
                     <span class="size-preset-item__meta">{{ item.width }} x {{ item.height }}</span>
                   </button>
                 </div>
               </div>
               <div class="size-panel__section size-panel__section--custom">
-                <div class="size-panel__title">{{ t("toolbar.customSize") }}</div>
+                <div class="size-panel__title">{{ t('toolbar.customSize') }}</div>
                 <div class="custom-size-grid">
                   <label class="custom-size-field">
-                    <span class="custom-size-field__label">{{ t("toolbar.width") }}</span>
-                    <el-input-number v-model="localCustomSize.width" :min="120" :max="7680" :step="10"
-                      controls-position="right" @change="handleApplyCustomSize" />
+                    <span class="custom-size-field__label">{{ t('toolbar.width') }}</span>
+                    <el-input-number
+                      v-model="localCustomSize.width"
+                      :min="120"
+                      :max="7680"
+                      :step="10"
+                      controls-position="right"
+                      @change="handleApplyCustomSize"
+                    />
                   </label>
                   <label class="custom-size-field">
-                    <span class="custom-size-field__label">{{ t("toolbar.height") }}</span>
-                    <el-input-number v-model="localCustomSize.height" :min="120" :max="4320" :step="10"
-                      controls-position="right" @change="handleApplyCustomSize" />
+                    <span class="custom-size-field__label">{{ t('toolbar.height') }}</span>
+                    <el-input-number
+                      v-model="localCustomSize.height"
+                      :min="120"
+                      :max="4320"
+                      :step="10"
+                      controls-position="right"
+                      @change="handleApplyCustomSize"
+                    />
                   </label>
                 </div>
               </div>
@@ -377,13 +412,19 @@ function handleMoreCommand(command: string) {
           </el-popover>
           <div class="zoom-group">
             <el-tooltip :content="t('toolbar.zoomOut')" placement="bottom">
-              <el-button class="icon-btn icon-btn--subtle zoom-btn zoom-btn--out" @click="handleZoomOut">
+              <el-button
+                class="icon-btn icon-btn--subtle zoom-btn zoom-btn--out"
+                @click="handleZoomOut"
+              >
                 <IconLucideZoomOut />
               </el-button>
             </el-tooltip>
             <span class="zoom-pill">{{ Math.round(zoom * 100) }}%</span>
             <el-tooltip :content="t('toolbar.zoomIn')" placement="bottom">
-              <el-button class="icon-btn icon-btn--subtle zoom-btn zoom-btn--in" @click="handleZoomIn">
+              <el-button
+                class="icon-btn icon-btn--subtle zoom-btn zoom-btn--in"
+                @click="handleZoomIn"
+              >
                 <IconLucideZoomIn />
               </el-button>
             </el-tooltip>
@@ -391,21 +432,21 @@ function handleMoreCommand(command: string) {
           <el-dropdown trigger="click" placement="bottom" @command="handleViewMenuCommand">
             <el-button class="view-btn">
               <IconLucideSettings2 />
-              <span class="view-btn__text">{{ t("toolbar.view") }}</span>
+              <span class="view-btn__text">{{ t('toolbar.view') }}</span>
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="resetZoom">{{
-                  t("toolbar.resetZoom")
+                  t('toolbar.resetZoom')
                 }}</el-dropdown-item>
                 <el-dropdown-item command="toggleRuler">
-                  {{ showRuler ? t("toolbar.hideRuler") : t("toolbar.showRuler") }}
+                  {{ showRuler ? t('toolbar.hideRuler') : t('toolbar.showRuler') }}
                 </el-dropdown-item>
                 <el-dropdown-item command="toggleGrid">
-                  {{ showGrid ? t("toolbar.hideGrid") : t("toolbar.showGrid") }}
+                  {{ showGrid ? t('toolbar.hideGrid') : t('toolbar.showGrid') }}
                 </el-dropdown-item>
                 <el-dropdown-item command="toggleSnap">
-                  {{ enableSnap ? t("toolbar.disableSnap") : t("toolbar.enableSnap") }}
+                  {{ enableSnap ? t('toolbar.disableSnap') : t('toolbar.enableSnap') }}
                 </el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -430,23 +471,40 @@ function handleMoreCommand(command: string) {
     <div class="toolbar-section toolbar-right">
       <div class="toolbar-group toolbar-group--primary">
         <span class="save-status" :class="saveStatusClass">{{ saveStatusText }}</span>
-        <el-dropdown class="preview-action" trigger="click" placement="bottom-end" popper-class="preview-menu-popper"
-          split-button :hide-on-click="false" @click="handlePreview"
-          @visible-change="handlePreviewDropdownVisibleChange">
+        <el-dropdown
+          class="preview-action"
+          trigger="click"
+          placement="bottom-end"
+          popper-class="preview-menu-popper"
+          split-button
+          :hide-on-click="false"
+          @click="handlePreview"
+          @visible-change="handlePreviewDropdownVisibleChange"
+        >
           <span class="split-action__text">
             <IconLucidePlay />
-            <span>{{ t("toolbar.preview") }}</span>
+            <span>{{ t('toolbar.preview') }}</span>
           </span>
           <template #dropdown>
             <div class="preview-settings-panel" @click.stop>
-              <div class="preview-settings-panel__title">{{ t("toolbar.previewIdentity") }}</div>
+              <div class="preview-settings-panel__title">{{ t('toolbar.previewIdentity') }}</div>
               <div class="preview-settings-panel__row">
-                <span class="preview-settings-panel__label">{{ t("toolbar.previewUser") }}</span>
-                <el-select v-model="selectedPreviewUser" class="preview-settings-panel__select" size="small" filterable
-                  popper-class="preview-user-select-popper" :empty-text="t('toolbar.previewUserEmpty')"
-                  placeholder="未选择用户">
-                  <el-option v-for="item in previewUserOptions" :key="item.value"
-                    :label="item.description ? `${item.label} ${item.description}` : item.label" :value="item.value">
+                <span class="preview-settings-panel__label">{{ t('toolbar.previewUser') }}</span>
+                <el-select
+                  v-model="selectedPreviewUser"
+                  class="preview-settings-panel__select"
+                  size="small"
+                  filterable
+                  popper-class="preview-user-select-popper"
+                  :empty-text="t('toolbar.previewUserEmpty')"
+                  placeholder="未选择用户"
+                >
+                  <el-option
+                    v-for="item in previewUserOptions"
+                    :key="item.value"
+                    :label="item.description ? `${item.label} ${item.description}` : item.label"
+                    :value="item.value"
+                  >
                     <div class="preview-user-option">
                       <span class="preview-user-option__name">{{ item.label }}</span>
                       <span v-if="item.description" class="preview-user-option__desc">
@@ -459,25 +517,42 @@ function handleMoreCommand(command: string) {
             </div>
           </template>
         </el-dropdown>
-        <el-dropdown class="save-action" trigger="click" placement="bottom-end" popper-class="save-settings-popper"
-          split-button @click="handleSave">
+        <el-dropdown
+          class="save-action"
+          trigger="click"
+          placement="bottom-end"
+          popper-class="save-settings-popper"
+          split-button
+          @click="handleSave"
+        >
           <span class="split-action__text">
             <IconLucideSave />
-            <span>{{ t("toolbar.save") }}</span>
+            <span>{{ t('toolbar.save') }}</span>
           </span>
           <template #dropdown>
             <div class="save-settings-panel" @click.stop>
-              <div class="save-settings-panel__title">{{ t("toolbar.saveSettings") }}</div>
+              <div class="save-settings-panel__title">{{ t('toolbar.saveSettings') }}</div>
               <div class="save-settings-panel__row save-settings-panel__row--check">
-                <el-checkbox v-model="localSaveSettings.autoSave" @change="handleSaveSettingsChange" />
-                <span class="save-settings-panel__label">{{ t("toolbar.autoSave") }}</span>
+                <el-checkbox
+                  v-model="localSaveSettings.autoSave"
+                  @change="handleSaveSettingsChange"
+                />
+                <span class="save-settings-panel__label">{{ t('toolbar.autoSave') }}</span>
               </div>
               <div class="save-settings-panel__row">
-                <span class="save-settings-panel__label">{{ t("toolbar.saveInterval") }}</span>
-                <el-select v-model="localSaveSettings.intervalMinutes" class="save-settings-panel__select"
-                  :disabled="!localSaveSettings.autoSave" @change="handleSaveSettingsChange">
-                  <el-option v-for="item in saveIntervalOptions" :key="item.value" :label="item.label"
-                    :value="item.value" />
+                <span class="save-settings-panel__label">{{ t('toolbar.saveInterval') }}</span>
+                <el-select
+                  v-model="localSaveSettings.intervalMinutes"
+                  class="save-settings-panel__select"
+                  :disabled="!localSaveSettings.autoSave"
+                  @change="handleSaveSettingsChange"
+                >
+                  <el-option
+                    v-for="item in saveIntervalOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
                 </el-select>
               </div>
             </div>
@@ -491,21 +566,21 @@ function handleMoreCommand(command: string) {
             <el-dropdown-menu>
               <el-dropdown-item command="openAi">
                 <IconLucideBot class="menu-icon" />
-                {{ t("toolbar.aiAssistant") }}
+                {{ t('toolbar.aiAssistant') }}
               </el-dropdown-item>
               <el-dropdown-item command="export" divided>
                 <IconLucideDownload class="menu-icon" />
-                {{ t("toolbar.exportPage") }}
+                {{ t('toolbar.exportPage') }}
               </el-dropdown-item>
               <el-dropdown-item command="clearCanvas">
                 <IconLucideTrash2 class="menu-icon" />
-                {{ t("toolbar.clearCanvas") }}
+                {{ t('toolbar.clearCanvas') }}
               </el-dropdown-item>
               <el-dropdown-item command="collaboration">{{
-                t("toolbar.collaboration")
+                t('toolbar.collaboration')
               }}</el-dropdown-item>
               <el-dropdown-item command="refresh">{{
-                t("toolbar.refreshCanvas")
+                t('toolbar.refreshCanvas')
               }}</el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -538,8 +613,12 @@ function handleMoreCommand(command: string) {
 
 .toolbar-center {
   position: absolute;
-  left: calc(var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
-  right: calc(var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
+  left: calc(
+    var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width)
+  );
+  right: calc(
+    var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width)
+  );
   top: 0;
   bottom: 0;
   display: flex;
@@ -1141,8 +1220,12 @@ function handleMoreCommand(command: string) {
 
 @media (max-width: 1360px) {
   .toolbar-center {
-    left: calc(var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
-    right: calc(var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
+    left: calc(
+      var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width)
+    );
+    right: calc(
+      var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width)
+    );
   }
 
   .toolbar-center-shell {
@@ -1156,8 +1239,12 @@ function handleMoreCommand(command: string) {
   }
 
   .toolbar-center {
-    left: calc(var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
-    right: calc(var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width));
+    left: calc(
+      var(--designer-left-panel-width, var(--designer-panel-width)) + var(--designer-rail-width)
+    );
+    right: calc(
+      var(--designer-right-panel-width, var(--designer-panel-width)) + var(--designer-rail-width)
+    );
   }
 
   .toolbar-center-shell {

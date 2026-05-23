@@ -1,25 +1,25 @@
 <script setup lang="ts">
-import type { PageInspectorFormState } from "./page-inspector-types";
-import { useI18n } from "vue-i18n";
+import type { PageInspectorFormState } from './page-inspector-types'
+import { useI18n } from 'vue-i18n'
 
 defineProps<{
-  form: PageInspectorFormState;
-  isSystemPage: boolean;
-  pageId: string;
-}>();
+  form: PageInspectorFormState
+  isSystemPage: boolean
+  pageId: string
+}>()
 
 defineEmits<{
-  updateName: [];
-  updateConfig: [];
-}>();
+  updateName: []
+  updateConfig: []
+}>()
 
-const { t } = useI18n();
+const { t } = useI18n()
 </script>
 
 <template>
   <div class="page-section-fields">
     <div class="page-prop-item">
-      <div class="page-prop-label">{{ t("pageInspector.labels.name") }}</div>
+      <div class="page-prop-label">{{ t('pageInspector.labels.name') }}</div>
       <div class="page-prop-editor">
         <el-input
           v-model="form.name"
@@ -32,7 +32,7 @@ const { t } = useI18n();
 
     <div class="page-prop-item">
       <div class="page-prop-label">
-        <span>{{ t("pageInspector.labels.title") }}</span>
+        <span>{{ t('pageInspector.labels.title') }}</span>
         <el-tooltip :content="t('pageInspector.tooltips.runtimeTitle')" placement="top">
           <span class="label-tip">?</span>
         </el-tooltip>
@@ -48,7 +48,7 @@ const { t } = useI18n();
     </div>
 
     <div class="page-prop-item">
-      <div class="page-prop-label">{{ t("pageInspector.labels.description") }}</div>
+      <div class="page-prop-label">{{ t('pageInspector.labels.description') }}</div>
       <div class="page-prop-editor">
         <el-input
           v-model="form.description"
@@ -60,7 +60,7 @@ const { t } = useI18n();
     </div>
 
     <div class="page-prop-item">
-      <div class="page-prop-label">{{ t("pageInspector.labels.pageId") }}</div>
+      <div class="page-prop-label">{{ t('pageInspector.labels.pageId') }}</div>
       <div class="page-prop-editor">
         <el-input :model-value="pageId" size="small" readonly />
       </div>

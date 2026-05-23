@@ -1,10 +1,5 @@
 <template>
-  <DcDialog
-    v-model="visible"
-    :title="title"
-    width="860px"
-    body-max-height="620px"
-  >
+  <DcDialog v-model="visible" :title="title" width="860px" body-max-height="620px">
     <div class="datapoint-picker-dialog">
       <div class="datapoint-picker-dialog__toolbar">
         <el-input
@@ -50,11 +45,7 @@
           <option value="error">异常</option>
           <option value="unknown">未知</option>
         </select>
-        <button
-          type="button"
-          class="datapoint-picker-dialog__small"
-          @click="reloadDatapoints"
-        >
+        <button type="button" class="datapoint-picker-dialog__small" @click="reloadDatapoints">
           搜索
         </button>
       </div>
@@ -63,10 +54,7 @@
         <el-skeleton :rows="5" animated />
       </div>
       <div v-else class="datapoint-picker-dialog__table-wrap">
-        <table
-          v-if="options.length"
-          class="datapoint-picker-dialog__table"
-        >
+        <table v-if="options.length" class="datapoint-picker-dialog__table">
           <thead>
             <tr>
               <th>名称</th>
@@ -91,7 +79,7 @@
               <td>
                 <code>{{ point.path }}</code>
               </td>
-              <td>{{ point.dataType || "-" }}</td>
+              <td>{{ point.dataType || '-' }}</td>
               <td>{{ sourceTypeText(point.sourceType) }}</td>
               <td>
                 <span
@@ -115,10 +103,7 @@
             </tr>
           </tbody>
         </table>
-        <div
-          v-if="options.length === 0"
-          class="datapoint-picker-dialog__empty"
-        >
+        <div v-if="options.length === 0" class="datapoint-picker-dialog__empty">
           <strong>没有匹配的数据点</strong>
           <span>换个关键词，或放宽来源、类型、状态筛选。</span>
         </div>
@@ -130,11 +115,7 @@
           <span v-if="selectedDatapoint">已选 {{ selectedDatapoint.name }}</span>
         </div>
         <div class="datapoint-picker-dialog__pager">
-          <button
-            type="button"
-            :disabled="page <= 1 || loading"
-            @click="changePage(page - 1)"
-          >
+          <button type="button" :disabled="page <= 1 || loading" @click="changePage(page - 1)">
             上一页
           </button>
           <span>{{ page }} / {{ totalPages }}</span>
@@ -161,137 +142,132 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { getDatapoints } from "@/api/datapoint.api";
-import type { Datapoint } from "@/api/schemas/datapoint.schema";
-import DcDialog from "@/components/shared/DcDialog.vue";
+import { computed, ref, watch } from 'vue'
+import { getDatapoints } from '@/api/datapoint.api'
+import type { Datapoint } from '@/api/schemas/datapoint.schema'
+import DcDialog from '@/components/shared/DcDialog.vue'
 
 const props = withDefaults(
   defineProps<{
-    modelValue: boolean;
-    projectId: string;
-    title?: string;
-    confirmText?: string;
-    rowActionText?: string;
+    modelValue: boolean
+    projectId: string
+    title?: string
+    confirmText?: string
+    rowActionText?: string
   }>(),
   {
-    title: "数据点变量",
-    confirmText: "选择",
-    rowActionText: "选择",
+    title: '数据点变量',
+    confirmText: '选择',
+    rowActionText: '选择',
   },
-);
+)
 
 const emit = defineEmits<{
-  "update:modelValue": [value: boolean];
-  select: [datapoint: Datapoint];
-}>();
+  'update:modelValue': [value: boolean]
+  select: [datapoint: Datapoint]
+}>()
 
 const visible = computed({
   get: () => props.modelValue,
-  set: (value: boolean) => emit("update:modelValue", value),
-});
+  set: (value: boolean) => emit('update:modelValue', value),
+})
 
-const keyword = ref("");
-const source = ref("");
-const dataType = ref("");
-const status = ref("");
-const page = ref(1);
-const pageSize = 12;
-const total = ref(0);
-const options = ref<Datapoint[]>([]);
-const loading = ref(false);
-const selectedId = ref<string | null>(null);
+const keyword = ref('')
+const source = ref('')
+const dataType = ref('')
+const status = ref('')
+const page = ref(1)
+const pageSize = 12
+const total = ref(0)
+const options = ref<Datapoint[]>([])
+const loading = ref(false)
+const selectedId = ref<string | null>(null)
 
 const selectedDatapoint = computed(() =>
   options.value.find((point) => String(point.id) === selectedId.value),
-);
+)
 
-const totalPages = computed(() =>
-  Math.max(1, Math.ceil(total.value / pageSize)),
-);
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 
 watch(
   () => props.modelValue,
   async (opened) => {
     if (!opened) {
-      return;
+      return
     }
-    selectedId.value = null;
-    await reloadDatapoints();
+    selectedId.value = null
+    await reloadDatapoints()
   },
-);
+)
 
 async function reloadDatapoints() {
-  page.value = 1;
-  await loadDatapoints();
+  page.value = 1
+  await loadDatapoints()
 }
 
 async function loadDatapoints() {
-  if (!props.projectId) return;
-  loading.value = true;
+  if (!props.projectId) return
+  loading.value = true
   try {
     const params: Record<string, unknown> = {
       search: keyword.value,
       page: page.value,
       pageSize,
-    };
+    }
     if (source.value) {
-      params.type = source.value;
-      params.sourceType = source.value;
+      params.type = source.value
+      params.sourceType = source.value
     }
     if (dataType.value) {
-      params.dataType = dataType.value;
+      params.dataType = dataType.value
     }
     if (status.value) {
-      params.status = status.value;
+      params.status = status.value
     }
-    const result = await getDatapoints(props.projectId, params);
-    options.value = result.list;
-    total.value = Number(result.pagination?.total ?? result.list.length);
-    if (
-      selectedId.value &&
-      !result.list.some((point) => String(point.id) === selectedId.value)
-    ) {
-      selectedId.value = null;
+    const result = await getDatapoints(props.projectId, params)
+    options.value = result.list
+    total.value = Number(result.pagination?.total ?? result.list.length)
+    if (selectedId.value && !result.list.some((point) => String(point.id) === selectedId.value)) {
+      selectedId.value = null
     }
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
 
 async function changePage(next: number) {
-  const nextPage = Math.min(Math.max(1, next), totalPages.value);
-  if (nextPage === page.value) return;
-  page.value = nextPage;
-  await loadDatapoints();
+  const nextPage = Math.min(Math.max(1, next), totalPages.value)
+  if (nextPage === page.value) return
+  page.value = nextPage
+  await loadDatapoints()
 }
 
 function confirm(point?: Datapoint) {
-  const target = point || selectedDatapoint.value;
-  if (!target) return;
-  emit("select", target);
-  visible.value = false;
+  const target = point || selectedDatapoint.value
+  if (!target) return
+  emit('select', target)
+  visible.value = false
 }
 
 const datapointStatusText = (value?: string) => {
   const map: Record<string, string> = {
-    active: "正常",
-    inactive: "停用",
-    error: "异常",
-    unknown: "未知",
-  };
-  return map[value || ""] || "未知";
-};
+    active: '正常',
+    inactive: '停用',
+    error: '异常',
+    unknown: '未知',
+  }
+  return map[value || ''] || '未知'
+}
 
 const sourceTypeText = (value?: string) => {
   const map: Record<string, string> = {
-    "mqtt.subscription": "MQTT",
-    "db.query": "数据库",
-    http: "HTTP",
-    manual: "手动",
-  };
-  return map[value || ""] || value || "-";
-};
+    'mqtt.subscription': 'MQTT',
+    'db.query': '数据库',
+    http: 'HTTP',
+    manual: '手动',
+  }
+  return map[value || ''] || value || '-'
+}
 </script>
 
 <style scoped>
@@ -401,7 +377,7 @@ const sourceTypeText = (value?: string) => {
 .datapoint-picker-dialog__table code {
   display: block;
   color: var(--dc-text-muted);
-  font-family: Consolas, "Courier New", monospace;
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 12px;
 }
 

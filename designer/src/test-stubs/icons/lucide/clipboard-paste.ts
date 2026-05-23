@@ -1,4 +1,4 @@
 export default {
-  name: "IconLucideClipboardPaste",
+  name: 'IconLucideClipboardPaste',
   template: `<span class="icon-lucide-clipboard-paste" />`,
-};
+}

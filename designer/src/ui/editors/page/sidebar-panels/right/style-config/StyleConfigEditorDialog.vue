@@ -1,161 +1,161 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
-import MonacoEditor from "@/ui/shared/widgets/base/monaco-editor-async";
-import assetApi from "@/services/assetApi";
-import IconEpFolder from "~icons/ep/folder";
-import IconEpPictureFilled from "~icons/ep/picture-filled";
+import { computed, nextTick, ref, watch } from 'vue'
+import MonacoEditor from '@/ui/shared/widgets/base/monaco-editor-async'
+import assetApi from '@/services/assetApi'
+import IconEpFolder from '~icons/ep/folder'
+import IconEpPictureFilled from '~icons/ep/picture-filled'
 import {
   buildConfigAssetTree,
   filterConfigAssetNode,
   resolveConfigAssetUrl,
   unwrapApiData,
-} from "../property-panel-config-assets";
+} from '../property-panel-config-assets'
 
 interface StyleConfigPreset {
-  id: string;
-  label: string;
-  content: string;
+  id: string
+  label: string
+  content: string
 }
 
 const props = withDefaults(
   defineProps<{
-    modelValue: boolean;
-    content: string;
-    title: string;
-    presets: StyleConfigPreset[];
-    projectId?: string | null;
-    width?: string;
-    selectorLabel: string;
-    selectorTokens: string[];
-    selectorHelp?: string;
-    templateLabel: string;
-    templatePlaceholder: string;
-    filterLabel: string;
-    searchTemplate: string;
-    assetLibrary: string;
-    searchAssets: string;
-    clearText: string;
-    cancelText: string;
-    saveText: string;
+    modelValue: boolean
+    content: string
+    title: string
+    presets: StyleConfigPreset[]
+    projectId?: string | null
+    width?: string
+    selectorLabel: string
+    selectorTokens: string[]
+    selectorHelp?: string
+    templateLabel: string
+    templatePlaceholder: string
+    filterLabel: string
+    searchTemplate: string
+    assetLibrary: string
+    searchAssets: string
+    clearText: string
+    cancelText: string
+    saveText: string
   }>(),
   {
     projectId: null,
-    width: "980px",
-    selectorHelp: "",
+    width: '980px',
+    selectorHelp: '',
   },
-);
+)
 
 const emit = defineEmits<{
-  "update:modelValue": [value: boolean];
-  save: [content: string];
-}>();
+  'update:modelValue': [value: boolean]
+  save: [content: string]
+}>()
 
-const draft = ref("");
-const selectedPresetId = ref("");
-const presetSearch = ref("");
-const assetFolders = ref<any[]>([]);
-const assets = ref<any[]>([]);
-const assetSearch = ref("");
-const assetTreeRef = ref<any>(null);
-const editorRef = ref<{ focus?: () => void; insertText?: (text: string) => void } | null>(null);
+const draft = ref('')
+const selectedPresetId = ref('')
+const presetSearch = ref('')
+const assetFolders = ref<any[]>([])
+const assets = ref<any[]>([])
+const assetSearch = ref('')
+const assetTreeRef = ref<any>(null)
+const editorRef = ref<{ focus?: () => void; insertText?: (text: string) => void } | null>(null)
 
 const dialogVisible = computed({
   get: () => props.modelValue,
-  set: (value: boolean) => emit("update:modelValue", value),
-});
+  set: (value: boolean) => emit('update:modelValue', value),
+})
 
 const normalizedPresets = computed<StyleConfigPreset[]>(() => {
-  const raw = props.presets as unknown;
+  const raw = props.presets as unknown
   const source =
-    raw && typeof raw === "object" && "value" in raw ? (raw as { value?: unknown }).value : raw;
-  if (!Array.isArray(source)) return [];
+    raw && typeof raw === 'object' && 'value' in raw ? (raw as { value?: unknown }).value : raw
+  if (!Array.isArray(source)) return []
   return source
     .map((item) => ({
-      id: String((item as StyleConfigPreset).id || ""),
-      label: String((item as StyleConfigPreset).label || ""),
-      content: String((item as StyleConfigPreset).content || ""),
+      id: String((item as StyleConfigPreset).id || ''),
+      label: String((item as StyleConfigPreset).label || ''),
+      content: String((item as StyleConfigPreset).content || ''),
     }))
-    .filter((item) => item.id && item.label);
-});
+    .filter((item) => item.id && item.label)
+})
 
 const filteredPresets = computed(() => {
-  const keyword = presetSearch.value.trim().toLowerCase();
-  if (!keyword) return normalizedPresets.value;
-  return normalizedPresets.value.filter((item) => item.label.toLowerCase().includes(keyword));
-});
+  const keyword = presetSearch.value.trim().toLowerCase()
+  if (!keyword) return normalizedPresets.value
+  return normalizedPresets.value.filter((item) => item.label.toLowerCase().includes(keyword))
+})
 
-const assetTree = computed(() => buildConfigAssetTree(assetFolders.value, assets.value));
+const assetTree = computed(() => buildConfigAssetTree(assetFolders.value, assets.value))
 
 watch(
   () => props.content,
   (value) => {
     if (!dialogVisible.value) {
-      draft.value = String(value || "");
+      draft.value = String(value || '')
     }
   },
   { immediate: true },
-);
+)
 
 watch(dialogVisible, (visible) => {
-  if (!visible) return;
-  draft.value = String(props.content || "");
-  selectedPresetId.value = "";
-  presetSearch.value = "";
-  assetSearch.value = "";
-  loadAssets();
+  if (!visible) return
+  draft.value = String(props.content || '')
+  selectedPresetId.value = ''
+  presetSearch.value = ''
+  assetSearch.value = ''
+  loadAssets()
   nextTick(() => {
-    window.setTimeout(() => editorRef.value?.focus?.(), 0);
-  });
-});
+    window.setTimeout(() => editorRef.value?.focus?.(), 0)
+  })
+})
 
 watch(assetSearch, () => {
-  assetTreeRef.value?.filter?.(assetSearch.value);
-});
+  assetTreeRef.value?.filter?.(assetSearch.value)
+})
 
 function clearDraft(): void {
-  draft.value = "";
+  draft.value = ''
 }
 
 function saveDraft(): void {
-  emit("save", draft.value);
-  dialogVisible.value = false;
+  emit('save', draft.value)
+  dialogVisible.value = false
 }
 
 function applyPreset(id: string): void {
-  const target = normalizedPresets.value.find((item) => item.id === id);
-  if (!target) return;
-  const current = draft.value.trim();
-  const remark = target.label ? `/* ${target.label} */\n` : "";
-  const nextContent = `${remark}${target.content}`;
-  draft.value = current ? `${current}\n\n${nextContent}` : nextContent;
-  nextTick(() => editorRef.value?.focus?.());
+  const target = normalizedPresets.value.find((item) => item.id === id)
+  if (!target) return
+  const current = draft.value.trim()
+  const remark = target.label ? `/* ${target.label} */\n` : ''
+  const nextContent = `${remark}${target.content}`
+  draft.value = current ? `${current}\n\n${nextContent}` : nextContent
+  nextTick(() => editorRef.value?.focus?.())
 }
 
 function handleAssetNodeDblClick(data: any): void {
-  if (!data || data.type !== "asset") return;
-  const url = resolveConfigAssetUrl(data.raw);
-  if (!url) return;
-  editorRef.value?.insertText?.(`url("${url}")`);
+  if (!data || data.type !== 'asset') return
+  const url = resolveConfigAssetUrl(data.raw)
+  if (!url) return
+  editorRef.value?.insertText?.(`url("${url}")`)
 }
 
 async function loadAssets(): Promise<void> {
   if (!props.projectId) {
-    assetFolders.value = [];
-    assets.value = [];
-    return;
+    assetFolders.value = []
+    assets.value = []
+    return
   }
   try {
     const [folderResponse, assetResponse] = await Promise.all([
       assetApi.getFolders(props.projectId),
       assetApi.getAssets(props.projectId),
-    ]);
-    const folderData = unwrapApiData(folderResponse) as { folders?: unknown } | null;
-    const assetData = unwrapApiData(assetResponse) as { assets?: unknown } | null;
-    assetFolders.value = Array.isArray(folderData?.folders) ? folderData.folders : [];
-    assets.value = Array.isArray(assetData?.assets) ? assetData.assets : [];
+    ])
+    const folderData = unwrapApiData(folderResponse) as { folders?: unknown } | null
+    const assetData = unwrapApiData(assetResponse) as { assets?: unknown } | null
+    assetFolders.value = Array.isArray(folderData?.folders) ? folderData.folders : []
+    assets.value = Array.isArray(assetData?.assets) ? assetData.assets : []
   } catch {
-    assetFolders.value = [];
-    assets.value = [];
+    assetFolders.value = []
+    assets.value = []
   }
 }
 </script>

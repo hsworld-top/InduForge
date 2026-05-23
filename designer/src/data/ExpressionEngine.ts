@@ -3,31 +3,31 @@
  * 解析和执行 {{ }} 语法的表达式
  */
 
-import type { ExpressionContext, ExpressionResult } from "./types.ts";
-import dayjs from "dayjs";
+import type { ExpressionContext, ExpressionResult } from './types.ts'
+import dayjs from 'dayjs'
 
-type AnyFn = (...args: any[]) => any;
+type AnyFn = (...args: any[]) => any
 type CompiledExpressionFn = (
   context: ExpressionContext,
   functions: Record<string, AnyFn>,
-) => unknown;
+) => unknown
 interface ExpressionEngineOptions {
-  strict?: boolean;
+  strict?: boolean
 }
 
-const FORMAT_TOKEN_RE = /%(\.\d+)?[sdf]/g;
-const EXPRESSION_BLOCK_RE = /\{\{.+?\}\}/;
-const TEMPLATE_EXPR_RE = /\{\{(.+?)\}\}/g;
-const DATA_POINT_DEP_RE = /\$dp\[['"]([^'"]+)['"]\]|\$dp\.(\w+)/g;
-const PAGE_VAR_DEP_RE = /\$vars\.(\w+)|\$vars\[['"]([^'"]+)['"]\]/g;
-const GLOBAL_VAR_DEP_RE = /\$global\.(\w+)|\$global\[['"]([^'"]+)['"]\]/g;
+const FORMAT_TOKEN_RE = /%(\.\d+)?[sdf]/g
+const EXPRESSION_BLOCK_RE = /\{\{.+?\}\}/
+const TEMPLATE_EXPR_RE = /\{\{(.+?)\}\}/g
+const DATA_POINT_DEP_RE = /\$dp\[['"]([^'"]+)['"]\]|\$dp\.(\w+)/g
+const PAGE_VAR_DEP_RE = /\$vars\.(\w+)|\$vars\[['"]([^'"]+)['"]\]/g
+const GLOBAL_VAR_DEP_RE = /\$global\.(\w+)|\$global\[['"]([^'"]+)['"]\]/g
 
 function createDynamicFunction(
   ...args: [string, string, string]
 ): (...params: unknown[]) => unknown {
   // 这里是受控动态执行入口，用于表达式编译，不扩散到其他层
-  // eslint-disable-next-line no-new-func
-  return new Function(...args) as (...params: unknown[]) => unknown;
+
+  return new Function(...args) as (...params: unknown[]) => unknown
 }
 
 // ==================== 内置函数 ====================
@@ -42,8 +42,8 @@ const builtinFunctions: Record<string, AnyFn> = {
   ceil: Math.ceil,
   floor: Math.floor,
   round: (value, decimals = 0) => {
-    const factor = 10 ** decimals;
-    return Math.round(value * factor) / factor;
+    const factor = 10 ** decimals
+    return Math.round(value * factor) / factor
   },
   min: Math.min,
   max: Math.max,
@@ -53,47 +53,47 @@ const builtinFunctions: Record<string, AnyFn> = {
 
   // 格式化函数
   format: (value, template) => {
-    if (!template) return String(value);
+    if (!template) return String(value)
     return template.replace(FORMAT_TOKEN_RE, (match: string) => {
-      if (match === "%s") return String(value);
-      if (match === "%d") return String(Math.floor(Number(value)));
-      if (match.startsWith("%.") && match.endsWith("f")) {
-        const decimals = Number.parseInt(match.slice(2, -1), 10);
-        return Number(value).toFixed(decimals);
+      if (match === '%s') return String(value)
+      if (match === '%d') return String(Math.floor(Number(value)))
+      if (match.startsWith('%.') && match.endsWith('f')) {
+        const decimals = Number.parseInt(match.slice(2, -1), 10)
+        return Number(value).toFixed(decimals)
       }
-      return match;
-    });
+      return match
+    })
   },
 
   toFixed: (value, digits = 2) => Number(value).toFixed(digits),
 
   // 日期函数
-  dateFormat: (value, formatStr = "YYYY-MM-DD HH:mm:ss") => {
-    if (!value) return "";
-    const parsed = dayjs(value);
-    return parsed.isValid() ? parsed.format(formatStr) : String(value);
+  dateFormat: (value, formatStr = 'YYYY-MM-DD HH:mm:ss') => {
+    if (!value) return ''
+    const parsed = dayjs(value)
+    return parsed.isValid() ? parsed.format(formatStr) : String(value)
   },
 
   now: () => Date.now(),
 
   // 字符串函数
-  concat: (...args) => args.join(""),
+  concat: (...args) => args.join(''),
   substring: (str, start, end) => String(str).substring(start, end),
   replace: (str, search, replacement) => String(str).replace(search, replacement),
   toLowerCase: (str) => String(str).toLowerCase(),
   toUpperCase: (str) => String(str).toUpperCase(),
   trim: (str) => String(str).trim(),
   length: (value) => {
-    if (Array.isArray(value)) return value.length;
-    if (typeof value === "string") return value.length;
-    return 0;
+    if (Array.isArray(value)) return value.length
+    if (typeof value === 'string') return value.length
+    return 0
   },
 
   // 空值处理
   ifNull: (value: any, replacement: any) => value ?? replacement,
 
   ifEmpty: (value: any, replacement: any) =>
-    value === null || value === undefined || value === "" ? replacement : value,
+    value === null || value === undefined || value === '' ? replacement : value,
 
   // 类型转换
   toNumber: (value: any) => Number(value),
@@ -105,21 +105,21 @@ const builtinFunctions: Record<string, AnyFn> = {
   last: (arr: any) => (Array.isArray(arr) ? arr.at(-1) : arr),
   at: (arr: any, index: any) => (Array.isArray(arr) ? arr[index] : undefined),
   includes: (arr: any, value: any) => (Array.isArray(arr) ? arr.includes(value) : false),
-  join: (arr: any, separator = ", ") => (Array.isArray(arr) ? arr.join(separator) : String(arr)),
+  join: (arr: any, separator = ', ') => (Array.isArray(arr) ? arr.join(separator) : String(arr)),
 
   // 对象函数
-  keys: (obj: any) => (obj && typeof obj === "object" ? Object.keys(obj) : []),
-  values: (obj: any) => (obj && typeof obj === "object" ? Object.values(obj) : []),
-  hasKey: (obj: any, key: any) => (obj && typeof obj === "object" ? key in obj : false),
+  keys: (obj: any) => (obj && typeof obj === 'object' ? Object.keys(obj) : []),
+  values: (obj: any) => (obj && typeof obj === 'object' ? Object.values(obj) : []),
+  hasKey: (obj: any, key: any) => (obj && typeof obj === 'object' ? key in obj : false),
   get: (obj: any, path: any, defaultValue: any) => {
-    if (!obj || typeof obj !== "object") return defaultValue;
-    const keys = String(path).split(".");
-    let current = obj;
+    if (!obj || typeof obj !== 'object') return defaultValue
+    const keys = String(path).split('.')
+    let current = obj
     for (const key of keys) {
-      if (current === null || current === undefined) return defaultValue;
-      current = current[key];
+      if (current === null || current === undefined) return defaultValue
+      current = current[key]
     }
-    return current === undefined ? defaultValue : current;
+    return current === undefined ? defaultValue : current
   },
 
   // 条件函数
@@ -127,16 +127,16 @@ const builtinFunctions: Record<string, AnyFn> = {
 
   // 工业计算函数
   scale: (value: any, inMin: any, inMax: any, outMin: any, outMax: any) => {
-    const ratio = (value - inMin) / (inMax - inMin);
-    return outMin + ratio * (outMax - outMin);
+    const ratio = (value - inMin) / (inMax - inMin)
+    return outMin + ratio * (outMax - outMin)
   },
 
   // 状态映射
   statusText: (value: any, mapping: any) => {
-    if (!mapping || typeof mapping !== "object") return String(value);
-    return mapping[String(value)] ?? String(value);
+    if (!mapping || typeof mapping !== 'object') return String(value)
+    return mapping[String(value)] ?? String(value)
   },
-};
+}
 
 // ==================== 表达式引擎类 ====================
 
@@ -144,20 +144,20 @@ const builtinFunctions: Record<string, AnyFn> = {
  * 表达式引擎
  */
 export class ExpressionEngine {
-  private _strict: boolean;
+  private _strict: boolean
 
-  private _functions: Record<string, AnyFn>;
+  private _functions: Record<string, AnyFn>
 
-  private _cache: Map<string, CompiledExpressionFn>;
+  private _cache: Map<string, CompiledExpressionFn>
 
   /**
    * 创建表达式引擎
    * @param {ExpressionEngineOptions} [options] - 配置选项
    */
   constructor(options: ExpressionEngineOptions = {}) {
-    this._strict = options.strict ?? false;
-    this._functions = { ...builtinFunctions };
-    this._cache = new Map();
+    this._strict = options.strict ?? false
+    this._functions = { ...builtinFunctions }
+    this._cache = new Map()
   }
 
   // ==================== 函数注册 ====================
@@ -168,10 +168,10 @@ export class ExpressionEngine {
    * @param {Function} fn - 函数
    */
   registerFunction(name: string, fn: AnyFn): void {
-    if (typeof fn !== "function") {
-      throw new TypeError(`Function "${name}" must be a function`);
+    if (typeof fn !== 'function') {
+      throw new TypeError(`Function "${name}" must be a function`)
     }
-    this._functions[name] = fn;
+    this._functions[name] = fn
   }
 
   /**
@@ -180,7 +180,7 @@ export class ExpressionEngine {
    */
   registerFunctions(functions: Record<string, AnyFn>): void {
     for (const [name, fn] of Object.entries(functions)) {
-      this.registerFunction(name, fn);
+      this.registerFunction(name, fn)
     }
   }
 
@@ -189,7 +189,7 @@ export class ExpressionEngine {
    * @returns {string[]}
    */
   getFunctionNames(): string[] {
-    return Object.keys(this._functions);
+    return Object.keys(this._functions)
   }
 
   // ==================== 表达式解析 ====================
@@ -200,8 +200,8 @@ export class ExpressionEngine {
    * @returns {boolean}
    */
   hasExpression(str: string): boolean {
-    if (typeof str !== "string") return false;
-    return EXPRESSION_BLOCK_RE.test(str);
+    if (typeof str !== 'string') return false
+    return EXPRESSION_BLOCK_RE.test(str)
   }
 
   /**
@@ -210,17 +210,17 @@ export class ExpressionEngine {
    * @returns {string[]}
    */
   extractDependencies(expr: string): string[] {
-    if (typeof expr !== "string") return [];
+    if (typeof expr !== 'string') return []
 
-    const deps = new Set<string>();
+    const deps = new Set<string>()
 
     // 匹配 $dp['path'] 或 $dp["path"] 或 $dp.path
     for (let match = DATA_POINT_DEP_RE.exec(expr); match; match = DATA_POINT_DEP_RE.exec(expr)) {
-      const path = match[1] || match[2];
-      if (path) deps.add(path);
+      const path = match[1] || match[2]
+      if (path) deps.add(path)
     }
 
-    return Array.from(deps);
+    return Array.from(deps)
   }
 
   /**
@@ -229,15 +229,15 @@ export class ExpressionEngine {
    * @returns {{page: string[], global: string[]}}
    */
   extractVarDependencies(expr: string): { page: string[]; global: string[] } {
-    if (typeof expr !== "string") return { page: [], global: [] };
+    if (typeof expr !== 'string') return { page: [], global: [] }
 
-    const pageVars = new Set<string>();
-    const globalVars = new Set<string>();
+    const pageVars = new Set<string>()
+    const globalVars = new Set<string>()
 
     // 匹配 $vars.name 或 $vars['name']
     for (let match = PAGE_VAR_DEP_RE.exec(expr); match; match = PAGE_VAR_DEP_RE.exec(expr)) {
-      const name = match[1] || match[2];
-      if (name) pageVars.add(name);
+      const name = match[1] || match[2]
+      if (name) pageVars.add(name)
     }
 
     // 匹配 $global.name 或 $global['name']
@@ -246,14 +246,14 @@ export class ExpressionEngine {
       globalMatch;
       globalMatch = GLOBAL_VAR_DEP_RE.exec(expr)
     ) {
-      const name = globalMatch[1] || globalMatch[2];
-      if (name) globalVars.add(name);
+      const name = globalMatch[1] || globalMatch[2]
+      if (name) globalVars.add(name)
     }
 
     return {
       page: Array.from(pageVars),
       global: Array.from(globalVars),
-    };
+    }
   }
 
   // ==================== 表达式求值 ====================
@@ -270,31 +270,31 @@ export class ExpressionEngine {
   ): ExpressionResult & { dependencies?: string[] } {
     try {
       // 去除 {{ }}
-      let cleanExpr = String(expr).trim();
-      if (cleanExpr.startsWith("{{") && cleanExpr.endsWith("}}")) {
-        cleanExpr = cleanExpr.slice(2, -2).trim();
+      let cleanExpr = String(expr).trim()
+      if (cleanExpr.startsWith('{{') && cleanExpr.endsWith('}}')) {
+        cleanExpr = cleanExpr.slice(2, -2).trim()
       }
 
       // 空表达式
       if (!cleanExpr) {
-        return { success: true, value: "" };
+        return { success: true, value: '' }
       }
 
       // 编译并执行
-      const fn = this._compile(cleanExpr);
-      const value = fn(context, this._functions);
+      const fn = this._compile(cleanExpr)
+      const value = fn(context, this._functions)
 
       return {
         success: true,
         value,
         dependencies: this.extractDependencies(cleanExpr),
-      };
+      }
     } catch (error: any) {
       return {
         success: false,
         value: undefined,
         error: error.message,
-      };
+      }
     }
   }
 
@@ -308,41 +308,41 @@ export class ExpressionEngine {
     template: string,
     context: ExpressionContext = {},
   ): ExpressionResult & { dependencies?: string[] } {
-    if (typeof template !== "string") {
-      return { success: true, value: template };
+    if (typeof template !== 'string') {
+      return { success: true, value: template }
     }
 
     // 如果不包含表达式，直接返回
     if (!this.hasExpression(template)) {
-      return { success: true, value: template };
+      return { success: true, value: template }
     }
 
     try {
-      const allDeps: string[] = [];
+      const allDeps: string[] = []
 
       // 替换所有 {{ expr }}
       const result = template.replace(TEMPLATE_EXPR_RE, (match, expr) => {
-        const evalResult = this.evaluate(expr.trim(), context);
+        const evalResult = this.evaluate(expr.trim(), context)
         if (!evalResult.success) {
-          throw new Error(evalResult.error);
+          throw new Error(evalResult.error)
         }
         if (evalResult.dependencies) {
-          allDeps.push(...evalResult.dependencies);
+          allDeps.push(...evalResult.dependencies)
         }
-        return String(evalResult.value ?? "");
-      });
+        return String(evalResult.value ?? '')
+      })
 
       return {
         success: true,
         value: result,
         dependencies: [...new Set(allDeps)],
-      };
+      }
     } catch (error: any) {
       return {
         success: false,
         value: template,
         error: error.message,
-      };
+      }
     }
   }
 
@@ -355,7 +355,7 @@ export class ExpressionEngine {
   _compile(expr: string): CompiledExpressionFn {
     // 检查缓存
     if (this._cache.has(expr)) {
-      return this._cache.get(expr)!;
+      return this._cache.get(expr)!
     }
 
     // 构建函数体
@@ -369,21 +369,21 @@ export class ExpressionEngine {
       // 注入函数到作用域
       ${Object.keys(this._functions)
         .map((name) => `const ${name} = fns.${name};`)
-        .join("\n")}
+        .join('\n')}
       
       return (${expr});
-    `;
+    `
 
     try {
-      const fn = createDynamicFunction("ctx", "funcs", funcBody);
-      const compiled = fn as unknown as CompiledExpressionFn;
+      const fn = createDynamicFunction('ctx', 'funcs', funcBody)
+      const compiled = fn as unknown as CompiledExpressionFn
 
       // 缓存编译结果
-      this._cache.set(expr, compiled);
+      this._cache.set(expr, compiled)
 
-      return compiled;
+      return compiled
     } catch (error: any) {
-      throw new Error(`表达式编译失败: ${error.message}`);
+      throw new Error(`表达式编译失败: ${error.message}`)
     }
   }
 
@@ -391,7 +391,7 @@ export class ExpressionEngine {
    * 清除编译缓存
    */
   clearCache(): void {
-    this._cache.clear();
+    this._cache.clear()
   }
 
   // ==================== 便捷方法 ====================
@@ -403,8 +403,8 @@ export class ExpressionEngine {
    * @returns {*}
    */
   eval(expr: string, context: ExpressionContext = {}): unknown {
-    const result = this.evaluate(expr, context);
-    return result.success ? result.value : undefined;
+    const result = this.evaluate(expr, context)
+    return result.success ? result.value : undefined
   }
 
   /**
@@ -414,8 +414,8 @@ export class ExpressionEngine {
    * @returns {string}
    */
   evalTemplate(template: string, context: ExpressionContext = {}): unknown {
-    const result = this.evaluateTemplate(template, context);
-    return result.success ? result.value : template;
+    const result = this.evaluateTemplate(template, context)
+    return result.success ? result.value : template
   }
 
   /**
@@ -426,8 +426,8 @@ export class ExpressionEngine {
    * @returns {*}
    */
   safeEval(expr: string, context: ExpressionContext = {}, fallback = undefined): unknown {
-    const result = this.evaluate(expr, context);
-    return result.success ? result.value : fallback;
+    const result = this.evaluate(expr, context)
+    return result.success ? result.value : fallback
   }
 
   /**
@@ -440,11 +440,11 @@ export class ExpressionEngine {
     expressions: Record<string, string>,
     context: ExpressionContext = {},
   ): Record<string, unknown> {
-    const results: Record<string, unknown> = {};
+    const results: Record<string, unknown> = {}
     for (const [key, expr] of Object.entries(expressions)) {
-      results[key] = this.eval(expr, context);
+      results[key] = this.eval(expr, context)
     }
-    return results;
+    return results
   }
 
   // ==================== 校验 ====================
@@ -456,16 +456,16 @@ export class ExpressionEngine {
    */
   validate(expr: string): { valid: boolean; error?: string } {
     try {
-      let cleanExpr = String(expr).trim();
-      if (cleanExpr.startsWith("{{") && cleanExpr.endsWith("}}")) {
-        cleanExpr = cleanExpr.slice(2, -2).trim();
+      let cleanExpr = String(expr).trim()
+      if (cleanExpr.startsWith('{{') && cleanExpr.endsWith('}}')) {
+        cleanExpr = cleanExpr.slice(2, -2).trim()
       }
 
       // 尝试编译
-      this._compile(cleanExpr);
-      return { valid: true };
+      this._compile(cleanExpr)
+      return { valid: true }
     } catch (error: any) {
-      return { valid: false, error: error.message };
+      return { valid: false, error: error.message }
     }
   }
 }
@@ -473,7 +473,7 @@ export class ExpressionEngine {
 /**
  * 默认表达式引擎实例
  */
-export const defaultEngine = new ExpressionEngine();
+export const defaultEngine = new ExpressionEngine()
 
 /**
  * 快捷函数：执行表达式
@@ -482,7 +482,7 @@ export const defaultEngine = new ExpressionEngine();
  * @returns {*}
  */
 export function evaluate(expr: string, context: ExpressionContext = {}): unknown {
-  return defaultEngine.eval(expr, context);
+  return defaultEngine.eval(expr, context)
 }
 
 /**
@@ -492,7 +492,7 @@ export function evaluate(expr: string, context: ExpressionContext = {}): unknown
  * @returns {string}
  */
 export function evaluateTemplate(template: string, context: ExpressionContext = {}): unknown {
-  return defaultEngine.evalTemplate(template, context);
+  return defaultEngine.evalTemplate(template, context)
 }
 
-export default ExpressionEngine;
+export default ExpressionEngine

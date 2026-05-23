@@ -46,33 +46,23 @@
       <div class="flex items-center space-x-2">
         <el-button size="small" @click="handleFormat">
           <IconTablerFileCheck class="mr-1 w-4 h-4" />
-          {{ t("actions.formatSql") }}
+          {{ t('actions.formatSql') }}
         </el-button>
-        <el-button
-          type="primary"
-          size="small"
-          @click="handleExecute"
-          :loading="localTab.executing"
-        >
+        <el-button type="primary" size="small" @click="handleExecute" :loading="localTab.executing">
           <IconTablerPlayerPlay class="mr-1 w-4 h-4" />
-          {{ t("actions.run") }}
+          {{ t('actions.run') }}
         </el-button>
-        <el-button
-          size="small"
-          @click="handleSave"
-          :loading="localTab.saving"
-          >{{ t("actions.save") }}</el-button
-        >
+        <el-button size="small" @click="handleSave" :loading="localTab.saving">{{
+          t('actions.save')
+        }}</el-button>
       </div>
     </div>
 
     <!-- 参数化查询提示 -->
     <div class="mb-2 flex items-center justify-between">
-      <div
-        class="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400"
-      >
+      <div class="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
         <IconTablerInfoCircle class="w-4 h-4" />
-        <span>{{ t("queryEditor.parameterHintMysql") }}</span>
+        <span>{{ t('queryEditor.parameterHintMysql') }}</span>
       </div>
     </div>
 
@@ -116,10 +106,10 @@
         <div class="flex items-center space-x-2">
           <IconTablerList class="text-gray-500 w-4 h-4" />
           <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{
-            t("queryEditor.sqlParameters")
+            t('queryEditor.sqlParameters')
           }}</span>
           <el-tag size="small" type="info">{{
-            t("queryEditor.parameterCount", {
+            t('queryEditor.parameterCount', {
               count: localTab.parameters.length,
             })
           }}</el-tag>
@@ -130,18 +120,10 @@
           @click="localTab.parametersExpanded = !localTab.parametersExpanded"
         >
           <component
-            :is="
-              localTab.parametersExpanded
-                ? IconTablerChevronDown
-                : IconTablerChevronRight
-            "
+            :is="localTab.parametersExpanded ? IconTablerChevronDown : IconTablerChevronRight"
             class="mr-1 w-4 h-4"
           />
-          {{
-            localTab.parametersExpanded
-              ? t("actions.collapse")
-              : t("actions.expand")
-          }}
+          {{ localTab.parametersExpanded ? t('actions.collapse') : t('actions.expand') }}
         </el-button>
       </div>
 
@@ -151,16 +133,12 @@
           :key="index"
           class="flex items-center space-x-2"
         >
-          <div
-            class="w-24 text-sm text-gray-600 dark:text-gray-400 flex-shrink-0"
-          >
-            {{ t("queryEditor.parameterIndex", { index: index + 1 }) }}
+          <div class="w-24 text-sm text-gray-600 dark:text-gray-400 flex-shrink-0">
+            {{ t('queryEditor.parameterIndex', { index: index + 1 }) }}
           </div>
           <el-input
             v-model="param.value"
-            :placeholder="
-              t('queryEditor.parameterPlaceholder', { index: index + 1 })
-            "
+            :placeholder="t('queryEditor.parameterPlaceholder', { index: index + 1 })"
             size="small"
             class="flex-1"
           >
@@ -180,19 +158,15 @@
       <div class="flex items-center justify-between mb-2 flex-shrink-0">
         <div class="text-sm text-gray-600 dark:text-gray-400">
           {{
-            t("queryEditor.resultSummary", {
+            t('queryEditor.resultSummary', {
               rowCount: localTab.result.rowCount,
               executionTime: localTab.result.executionTime,
             })
           }}
         </div>
-        <el-button size="small" @click="clearResult">{{
-          t("actions.close")
-        }}</el-button>
+        <el-button size="small" @click="clearResult">{{ t('actions.close') }}</el-button>
       </div>
-      <div
-        class="flex-1 flex flex-col border border-gray-200 dark:border-gray-700 rounded min-h-0"
-      >
+      <div class="flex-1 flex flex-col border border-gray-200 dark:border-gray-700 rounded min-h-0">
         <div class="flex-1 overflow-auto min-h-0">
           <el-table :data="paginatedRows" size="small" border stripe>
             <el-table-column
@@ -210,7 +184,7 @@
         >
           <div class="text-sm text-gray-600 dark:text-gray-400">
             {{
-              t("queryEditor.paginationSummary", {
+              t('queryEditor.paginationSummary', {
                 start: (localTab.resultPage - 1) * localTab.resultPageSize + 1,
                 end: Math.min(
                   localTab.resultPage * localTab.resultPageSize,
@@ -242,154 +216,147 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, inject, onMounted, onUnmounted } from "vue";
-import IconTablerFileCheck from "~icons/tabler/file-check";
-import IconTablerPlayerPlay from "~icons/tabler/player-play";
-import IconTablerList from "~icons/tabler/list";
-import IconTablerChevronDown from "~icons/tabler/chevron-down";
-import IconTablerChevronRight from "~icons/tabler/chevron-right";
-import IconTablerInfoCircle from "~icons/tabler/info-circle";
-import MonacoEditor from "@/components/MonacoEditor.vue";
-import { useMysql } from "@/composables/database/useMysql";
-import { useConnection } from "@/composables/useConnection";
+import { ref, computed, inject, onMounted, onUnmounted } from 'vue'
+import IconTablerFileCheck from '~icons/tabler/file-check'
+import IconTablerPlayerPlay from '~icons/tabler/player-play'
+import IconTablerList from '~icons/tabler/list'
+import IconTablerChevronDown from '~icons/tabler/chevron-down'
+import IconTablerChevronRight from '~icons/tabler/chevron-right'
+import IconTablerInfoCircle from '~icons/tabler/info-circle'
+import MonacoEditor from '@/components/MonacoEditor.vue'
+import { useMysql } from '@/composables/database/useMysql'
+import { useConnection } from '@/composables/useConnection'
 import {
   registerSqlCompletionProvider,
   unregisterSqlCompletionProvider,
-} from "@/utils/sqlCompletion";
-import * as monaco from "monaco-editor";
-import DataPointInlineList from "@/components/datapoint/DataPointInlineList.vue";
-import { t } from "@/i18n/runtime";
+} from '@/utils/sqlCompletion'
+import * as monaco from 'monaco-editor'
+import DataPointInlineList from '@/components/datapoint/DataPointInlineList.vue'
+import { t } from '@/i18n/runtime'
 
 const props = defineProps({
   tab: {
     type: Object,
     required: true,
   },
-});
+})
 
-const emit = defineEmits([
-  "execute",
-  "save",
-  "update:tab",
-  "connection-change",
-]);
+const emit = defineEmits(['execute', 'save', 'update:tab', 'connection-change'])
 
-const projectId = inject("projectId");
-const isDark = computed(() =>
-  document.documentElement.classList.contains("dark"),
-);
+const projectId = inject('projectId')
+const isDark = computed(() => document.documentElement.classList.contains('dark'))
 
 // 直接使用 props.tab，不创建本地副本
-const localTab = computed(() => props.tab);
+const localTab = computed(() => props.tab)
 
 // 当前选中的连接ID
-const currentConnectionId = ref(props.tab.connectionId);
+const currentConnectionId = ref(props.tab.connectionId)
 
 // 获取所有连接
-const { connections, loadConnections } = useConnection(projectId);
+const { connections, loadConnections } = useConnection(projectId)
 
 // 过滤出关系型数据库连接
 const relationalConnections = computed(() => {
-  return connections.value.filter((conn) => conn.type === "relational");
-});
+  return connections.value.filter((conn) => conn.type === 'relational')
+})
 
 const { tables, loadTables, formatSql, extractSqlParameters } = useMysql(
   projectId,
   computed(() => currentConnectionId.value),
-);
+)
 
-const editorRef = ref(null);
+const editorRef = ref(null)
 
 onMounted(async () => {
   // 加载连接列表
-  await loadConnections();
+  await loadConnections()
 
   // 加载表列表
   if (localTab.value.connectionId) {
-    await loadTables();
+    await loadTables()
   }
 
   // 注册 SQL 自动补全
   try {
-    registerSqlCompletionProvider(monaco);
-    console.log("SQL 自动补全已注册");
+    registerSqlCompletionProvider(monaco)
+    console.log('SQL 自动补全已注册')
   } catch (error) {
-    console.error("注册 SQL 自动补全失败:", error);
+    console.error('注册 SQL 自动补全失败:', error)
   }
-});
+})
 
 onUnmounted(() => {
   // 清理自动补全提供器
-  unregisterSqlCompletionProvider();
-});
+  unregisterSqlCompletionProvider()
+})
 
 const paginatedRows = computed(() => {
-  if (!localTab.value.result || !localTab.value.result.rows) return [];
-  const start = (localTab.value.resultPage - 1) * localTab.value.resultPageSize;
-  const end = start + localTab.value.resultPageSize;
-  return localTab.value.result.rows.slice(start, end);
-});
+  if (!localTab.value.result || !localTab.value.result.rows) return []
+  const start = (localTab.value.resultPage - 1) * localTab.value.resultPageSize
+  const end = start + localTab.value.resultPageSize
+  return localTab.value.result.rows.slice(start, end)
+})
 
 const handleConnectionChange = async (connectionId) => {
   // 更新标签页的连接ID
-  props.tab.connectionId = connectionId;
-  props.tab.modified = true;
+  props.tab.connectionId = connectionId
+  props.tab.modified = true
 
   // 重新加载表列表
-  await loadTables();
+  await loadTables()
 
   // 清空当前选中的表
-  props.tab.table = "";
+  props.tab.table = ''
 
   // 通知父组件连接已更改
-  emit("connection-change", connectionId);
-};
+  emit('connection-change', connectionId)
+}
 
 const handleTableChange = (tableName) => {
-  const sql = `SELECT * FROM \`${tableName}\` LIMIT 100`;
-  props.tab.sql = sql;
-  props.tab.modified = true;
-  updateParameters();
-};
+  const sql = `SELECT * FROM \`${tableName}\` LIMIT 100`
+  props.tab.sql = sql
+  props.tab.modified = true
+  updateParameters()
+}
 
 const handleFormat = () => {
-  if (!props.tab.sql.trim()) return;
-  props.tab.sql = formatSql(props.tab.sql);
-};
+  if (!props.tab.sql.trim()) return
+  props.tab.sql = formatSql(props.tab.sql)
+}
 
 const handleExecute = () => {
-  updateParameters();
-  emit("execute", props.tab);
-};
+  updateParameters()
+  emit('execute', props.tab)
+}
 
 const handleSave = () => {
-  emit("save", props.tab);
-};
+  emit('save', props.tab)
+}
 
 const handleSqlChange = (value) => {
-  props.tab.sql = value;
-  props.tab.modified = true;
-  updateParameters();
-};
+  props.tab.sql = value
+  props.tab.modified = true
+  updateParameters()
+}
 
 const updateParameters = () => {
-  const newParams = extractSqlParameters(props.tab.sql);
-  const oldParams = props.tab.parameters || [];
+  const newParams = extractSqlParameters(props.tab.sql)
+  const oldParams = props.tab.parameters || []
 
   // 保留已有参数的值
   const mergedParams = newParams.map((newParam, index) => {
-    const oldParam = oldParams[index];
+    const oldParam = oldParams[index]
     return {
       ...newParam,
-      value: oldParam?.value || newParam.value || "",
-    };
-  });
+      value: oldParam?.value || newParam.value || '',
+    }
+  })
 
-  props.tab.parameters = mergedParams;
-};
+  props.tab.parameters = mergedParams
+}
 
 const clearResult = () => {
-  props.tab.result = null;
-  props.tab.resultPage = 1;
-};
+  props.tab.result = null
+  props.tab.resultPage = 1
+}
 </script>

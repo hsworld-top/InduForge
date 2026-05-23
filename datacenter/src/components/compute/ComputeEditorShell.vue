@@ -27,12 +27,7 @@
           @tab-change="(name) => $emit('activate-tab', String(name))"
           @tab-remove="(name) => $emit('close-tab', String(name))"
         >
-          <el-tab-pane
-            v-for="tab in tabs"
-            :key="tab.id"
-            :name="tab.id"
-            :closable="true"
-          >
+          <el-tab-pane v-for="tab in tabs" :key="tab.id" :name="tab.id" :closable="true">
             <template #label>
               <span class="compute-editor__tab-label">
                 <span>{{ tab.name }}</span>
@@ -138,10 +133,7 @@
               >
                 <IconTablerTemplate class="compute-editor__action-icon" />
               </button>
-              <span
-                class="compute-editor__tooltip-wrap"
-                :title="dryRunTooltip"
-              >
+              <span class="compute-editor__tooltip-wrap" :title="dryRunTooltip">
                 <button
                   type="button"
                   class="compute-editor__tool-btn"
@@ -171,10 +163,7 @@
                   v-else-if="syntaxStatus === 'checking'"
                   class="compute-editor__action-icon"
                 />
-                <IconTablerCircleDashed
-                  v-else
-                  class="compute-editor__action-icon"
-                />
+                <IconTablerCircleDashed v-else class="compute-editor__action-icon" />
                 <span>{{ syntaxStatusText }}</span>
               </button>
               <em>{{ langText(activeDraft.lang) }}</em>
@@ -221,11 +210,7 @@
           </label>
           <label class="compute-editor__field">
             <span>输出名</span>
-            <input
-              v-model="outputName"
-              placeholder="result"
-              @input="updateOutputBindings"
-            />
+            <input v-model="outputName" placeholder="result" @input="updateOutputBindings" />
           </label>
         </section>
       </main>
@@ -289,11 +274,7 @@
           </button>
         </footer>
 
-        <div
-          v-show="!panelCollapsed"
-          class="compute-editor__panel"
-          :class="`is-${activePanel}`"
-        >
+        <div v-show="!panelCollapsed" class="compute-editor__panel" :class="`is-${activePanel}`">
           <template v-if="activePanel === 'inputs'">
             <div class="compute-editor__panel-head">
               <div>
@@ -326,11 +307,7 @@
               <strong>还没有脚本参数</strong>
               <span>脚本参数由调用方传入，脚本内通过 argv[0]、argv[1] 读取。</span>
               <div>
-                <button
-                  type="button"
-                  class="compute-editor__compact-primary"
-                  @click="addInput"
-                >
+                <button type="button" class="compute-editor__compact-primary" @click="addInput">
                   <IconTablerPlus class="compute-editor__action-icon" />
                   <span>添加参数</span>
                 </button>
@@ -364,16 +341,8 @@
                   <input v-model="row.required" type="checkbox" @change="markDirty" />
                   <span></span>
                 </label>
-                <input
-                  v-model="row.defaultValue"
-                  placeholder="-"
-                  @input="markDirty"
-                />
-                <input
-                  v-model="row.description"
-                  placeholder="调用方传参说明"
-                  @input="markDirty"
-                />
+                <input v-model="row.defaultValue" placeholder="-" @input="markDirty" />
+                <input v-model="row.description" placeholder="调用方传参说明" @input="markDirty" />
                 <button
                   type="button"
                   class="compute-editor__row-icon"
@@ -457,12 +426,12 @@
                 <span class="compute-editor__variable-path" :title="row.path">
                   {{ row.path }}
                 </span>
-                <em>{{ row.dataType || "-" }}</em>
+                <em>{{ row.dataType || '-' }}</em>
                 <span
                   class="compute-editor__variable-state"
                   :class="{ 'is-unused': !isDatapointVariableReferenced(row.alias) }"
                 >
-                  {{ isDatapointVariableReferenced(row.alias) ? "已引用" : "未引用" }}
+                  {{ isDatapointVariableReferenced(row.alias) ? '已引用' : '未引用' }}
                 </span>
                 <button
                   type="button"
@@ -608,8 +577,8 @@
                 />
                 <strong>{{ dep.name }}</strong>
                 <code>{{ dep.importName || dep.name }}</code>
-                <span>{{ dep.version || "-" }}</span>
-                <em>{{ dep.description || "内置依赖" }}</em>
+                <span>{{ dep.version || '-' }}</span>
+                <em>{{ dep.description || '内置依赖' }}</em>
               </label>
             </div>
           </template>
@@ -622,7 +591,11 @@
                   <button
                     type="button"
                     class="compute-editor__help-dot"
-                    :title="activeDraft.dirty ? '保存后才能试运行。' : '试运行只检查脚本返回值，不会保存结果或写入数据点。'"
+                    :title="
+                      activeDraft.dirty
+                        ? '保存后才能试运行。'
+                        : '试运行只检查脚本返回值，不会保存结果或写入数据点。'
+                    "
                     aria-label="调试说明"
                   >
                     ?
@@ -630,10 +603,7 @@
                 </h3>
               </div>
               <div class="compute-editor__debug-actions">
-                <span
-                  class="compute-editor__tooltip-wrap"
-                  :title="dryRunTooltip"
-                >
+                <span class="compute-editor__tooltip-wrap" :title="dryRunTooltip">
                   <button
                     type="button"
                     class="compute-editor__run-button compute-editor__debug-run-button"
@@ -659,10 +629,7 @@
                       按定义重置
                     </button>
                   </div>
-                  <textarea
-                    v-model="debugArgvText"
-                    spellcheck="false"
-                  />
+                  <textarea v-model="debugArgvText" spellcheck="false" />
                   <p
                     v-if="debugArgvHint"
                     class="compute-editor__debug-hint"
@@ -682,10 +649,7 @@
                       按定义重置
                     </button>
                   </div>
-                  <textarea
-                    v-model="debugDatapointText"
-                    spellcheck="false"
-                  />
+                  <textarea v-model="debugDatapointText" spellcheck="false" />
                   <p
                     v-if="debugDatapointHint"
                     class="compute-editor__debug-hint"
@@ -747,11 +711,8 @@
             >
               没有语法问题
             </div>
-            <div
-              v-else-if="syntaxStatus === 'failed'"
-              class="compute-editor__empty"
-            >
-              {{ syntaxErrorText || "语法检查失败" }}
+            <div v-else-if="syntaxStatus === 'failed'" class="compute-editor__empty">
+              {{ syntaxErrorText || '语法检查失败' }}
             </div>
             <div v-else class="compute-editor__problem-list">
               <button
@@ -822,11 +783,7 @@
             <option value="error">异常</option>
             <option value="unknown">未知</option>
           </select>
-          <button
-            type="button"
-            class="compute-editor__small"
-            @click="reloadPickerDatapoints"
-          >
+          <button type="button" class="compute-editor__small" @click="reloadPickerDatapoints">
             搜索
           </button>
         </div>
@@ -834,10 +791,7 @@
           <el-skeleton :rows="5" animated />
         </div>
         <div v-else class="compute-editor__picker-table-wrap">
-          <table
-            v-if="datapointPickerOptions.length"
-            class="compute-editor__picker-table"
-          >
+          <table v-if="datapointPickerOptions.length" class="compute-editor__picker-table">
             <thead>
               <tr>
                 <th>名称</th>
@@ -862,7 +816,7 @@
                 <td>
                   <code>{{ point.path }}</code>
                 </td>
-                <td>{{ point.dataType || "-" }}</td>
+                <td>{{ point.dataType || '-' }}</td>
                 <td>{{ sourceTypeText(point.sourceType) }}</td>
                 <td>
                   <span
@@ -880,7 +834,7 @@
                     @click.stop="confirmSelectedDatapoint(point)"
                     @keydown.enter.stop.prevent="confirmSelectedDatapoint(point)"
                   >
-                    {{ datapointPickerIntent === "trigger" ? "选择" : "插入" }}
+                    {{ datapointPickerIntent === 'trigger' ? '选择' : '插入' }}
                   </span>
                 </td>
               </tr>
@@ -917,10 +871,7 @@
             <span>{{ datapointPickerPage }} / {{ datapointPickerTotalPages }}</span>
             <button
               type="button"
-              :disabled="
-                datapointPickerPage >= datapointPickerTotalPages ||
-                datapointPickerLoading
-              "
+              :disabled="datapointPickerPage >= datapointPickerTotalPages || datapointPickerLoading"
               @click="changePickerPage(datapointPickerPage + 1)"
             >
               下一页
@@ -932,7 +883,7 @@
               @click="confirmSelectedDatapoint()"
               @mousedown.prevent="confirmSelectedDatapoint()"
             >
-              {{ datapointPickerIntent === "trigger" ? "选择" : "插入到光标" }}
+              {{ datapointPickerIntent === 'trigger' ? '选择' : '插入到光标' }}
             </button>
           </div>
         </div>
@@ -978,573 +929,552 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { ElMessage } from "element-plus";
-import IconTablerAlertTriangle from "~icons/tabler/alert-triangle";
-import IconTablerChevronUp from "~icons/tabler/chevron-up";
-import IconTablerCircleCheck from "~icons/tabler/circle-check";
-import IconTablerCircleDashed from "~icons/tabler/circle-dashed";
-import IconTablerCode from "~icons/tabler/code";
-import IconTablerDatabaseImport from "~icons/tabler/database-import";
-import IconTablerDeviceFloppy from "~icons/tabler/device-floppy";
-import IconTablerGitFork from "~icons/tabler/git-fork";
-import IconTablerManualGearbox from "~icons/tabler/manual-gearbox";
-import IconTablerPlugConnected from "~icons/tabler/plug-connected";
-import IconTablerLoader2 from "~icons/tabler/loader-2";
-import IconTablerPlayerPause from "~icons/tabler/player-pause";
-import IconTablerPlayerPlay from "~icons/tabler/player-play";
-import IconTablerPlus from "~icons/tabler/plus";
-import IconTablerRefresh from "~icons/tabler/refresh";
-import IconTablerSettings from "~icons/tabler/settings";
-import IconTablerTemplate from "~icons/tabler/template";
-import IconTablerTerminal2 from "~icons/tabler/terminal-2";
-import IconTablerTrash from "~icons/tabler/trash";
-import IconTablerClock from "~icons/tabler/clock";
-import IconTablerX from "~icons/tabler/x";
-import type { Datapoint } from "@/api/schemas/datapoint.schema";
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import IconTablerAlertTriangle from '~icons/tabler/alert-triangle'
+import IconTablerChevronUp from '~icons/tabler/chevron-up'
+import IconTablerCircleCheck from '~icons/tabler/circle-check'
+import IconTablerCircleDashed from '~icons/tabler/circle-dashed'
+import IconTablerCode from '~icons/tabler/code'
+import IconTablerDatabaseImport from '~icons/tabler/database-import'
+import IconTablerDeviceFloppy from '~icons/tabler/device-floppy'
+import IconTablerGitFork from '~icons/tabler/git-fork'
+import IconTablerManualGearbox from '~icons/tabler/manual-gearbox'
+import IconTablerPlugConnected from '~icons/tabler/plug-connected'
+import IconTablerLoader2 from '~icons/tabler/loader-2'
+import IconTablerPlayerPause from '~icons/tabler/player-pause'
+import IconTablerPlayerPlay from '~icons/tabler/player-play'
+import IconTablerPlus from '~icons/tabler/plus'
+import IconTablerRefresh from '~icons/tabler/refresh'
+import IconTablerSettings from '~icons/tabler/settings'
+import IconTablerTemplate from '~icons/tabler/template'
+import IconTablerTerminal2 from '~icons/tabler/terminal-2'
+import IconTablerTrash from '~icons/tabler/trash'
+import IconTablerClock from '~icons/tabler/clock'
+import IconTablerX from '~icons/tabler/x'
+import type { Datapoint } from '@/api/schemas/datapoint.schema'
 import type {
   ComputeDependency,
   ComputeLang,
   ComputeRunResult,
   ComputeSyntaxDiagnostic,
-} from "@/api/schemas/compute.schema";
-import {
-  checkComputeSyntax,
-  debugComputeUnit,
-} from "@/api/compute.api";
-import { getDatapoints } from "@/api/datapoint.api";
-import { getApiErrorMessage } from "@/utils/request";
-import MonacoEditor from "@/components/MonacoEditor.vue";
-import DcDialog from "@/components/shared/DcDialog.vue";
-import EmptyState from "@/components/shared/EmptyState.vue";
-import StatusBadge from "@/components/shared/StatusBadge.vue";
-import type { ComputeDraft, ComputeEditorTab } from "./computeEditorModel";
+} from '@/api/schemas/compute.schema'
+import { checkComputeSyntax, debugComputeUnit } from '@/api/compute.api'
+import { getDatapoints } from '@/api/datapoint.api'
+import { getApiErrorMessage } from '@/utils/request'
+import MonacoEditor from '@/components/MonacoEditor.vue'
+import DcDialog from '@/components/shared/DcDialog.vue'
+import EmptyState from '@/components/shared/EmptyState.vue'
+import StatusBadge from '@/components/shared/StatusBadge.vue'
+import type { ComputeDraft, ComputeEditorTab } from './computeEditorModel'
 
 type MonacoEditorExpose = InstanceType<typeof MonacoEditor> & {
-  insertText?: (text: string) => void;
-  revealPosition?: (line: number, column?: number) => void;
-  setDiagnostics?: (diagnostics: ComputeSyntaxDiagnostic[]) => void;
-};
+  insertText?: (text: string) => void
+  revealPosition?: (line: number, column?: number) => void
+  setDiagnostics?: (diagnostics: ComputeSyntaxDiagnostic[]) => void
+}
 
 type EditorCursorInfo = {
-  line: number;
-  column: number;
-  spaces: number;
-};
+  line: number
+  column: number
+  spaces: number
+}
 
 const props = withDefaults(
   defineProps<{
-    projectId: string;
-    tabs: ComputeEditorTab[];
-    activeId: string | null;
-    activeDraft: ComputeDraft | null;
-    loading?: boolean;
-    saving?: boolean;
-    deleting?: boolean;
-    error?: string;
-    dependencies?: ComputeDependency[];
-    dependenciesLoading?: boolean;
-    dependenciesError?: string;
+    projectId: string
+    tabs: ComputeEditorTab[]
+    activeId: string | null
+    activeDraft: ComputeDraft | null
+    loading?: boolean
+    saving?: boolean
+    deleting?: boolean
+    error?: string
+    dependencies?: ComputeDependency[]
+    dependenciesLoading?: boolean
+    dependenciesError?: string
   }>(),
   {
     loading: false,
     saving: false,
     deleting: false,
-    error: "",
+    error: '',
     dependencies: () => [],
     dependenciesLoading: false,
-    dependenciesError: "",
+    dependenciesError: '',
   },
-);
+)
 
 const emit = defineEmits<{
-  (event: "activate-tab", id: string): void;
-  (event: "close-tab", id: string): void;
-  (event: "save", id: string): void;
-  (event: "toggle-enabled", id: string, enabled: boolean): void;
-  (event: "delete-unit", id: string): void;
-  (event: "mark-dirty", id: string): void;
-  (event: "refresh-dependencies"): void;
-}>();
+  (event: 'activate-tab', id: string): void
+  (event: 'close-tab', id: string): void
+  (event: 'save', id: string): void
+  (event: 'toggle-enabled', id: string, enabled: boolean): void
+  (event: 'delete-unit', id: string): void
+  (event: 'mark-dirty', id: string): void
+  (event: 'refresh-dependencies'): void
+}>()
 
-const panelDefaultHeight = 260;
-const panelMaxHeight = 520;
-const panelMinHeight = 180;
-const activePanel = ref("inputs");
-const panelCollapsed = ref(true);
-const panelHeight = ref(panelDefaultHeight);
-const inspectorOpen = ref(false);
-const monacoEditorRef = ref<MonacoEditorExpose | null>(null);
-const datapointPickerVisible = ref(false);
-const datapointPickerIntent = ref<"variable" | "trigger">("variable");
-const datapointPickerKeyword = ref("");
-const datapointPickerSource = ref("");
-const datapointPickerDataType = ref("");
-const datapointPickerStatus = ref("");
-const datapointPickerPage = ref(1);
-const datapointPickerPageSize = 12;
-const datapointPickerTotal = ref(0);
-const datapointPickerOptions = ref<Datapoint[]>([]);
-const datapointPickerLoading = ref(false);
-const selectedDatapointId = ref<string | null>(null);
-const selectedDatapointAlias = ref("");
-const debugArgvText = ref("[]");
-const debugDatapointText = ref("{}");
-const debugRunning = ref(false);
-const debugResult = ref<ComputeRunResult | null>(null);
-const debugError = ref("");
-const syntaxStatus = ref<"idle" | "checking" | "clean" | "dirty" | "failed">("idle");
-const syntaxDiagnostics = ref<ComputeSyntaxDiagnostic[]>([]);
-const syntaxErrorText = ref("");
-let syntaxCheckTimer: ReturnType<typeof window.setTimeout> | null = null;
-let syntaxCheckSeq = 0;
-const templateDialogVisible = ref(false);
-const activeTemplateId = ref("argv");
-const activeDebugResultTab = ref("output");
+const panelDefaultHeight = 260
+const panelMaxHeight = 520
+const panelMinHeight = 180
+const activePanel = ref('inputs')
+const panelCollapsed = ref(true)
+const panelHeight = ref(panelDefaultHeight)
+const inspectorOpen = ref(false)
+const monacoEditorRef = ref<MonacoEditorExpose | null>(null)
+const datapointPickerVisible = ref(false)
+const datapointPickerIntent = ref<'variable' | 'trigger'>('variable')
+const datapointPickerKeyword = ref('')
+const datapointPickerSource = ref('')
+const datapointPickerDataType = ref('')
+const datapointPickerStatus = ref('')
+const datapointPickerPage = ref(1)
+const datapointPickerPageSize = 12
+const datapointPickerTotal = ref(0)
+const datapointPickerOptions = ref<Datapoint[]>([])
+const datapointPickerLoading = ref(false)
+const selectedDatapointId = ref<string | null>(null)
+const selectedDatapointAlias = ref('')
+const debugArgvText = ref('[]')
+const debugDatapointText = ref('{}')
+const debugRunning = ref(false)
+const debugResult = ref<ComputeRunResult | null>(null)
+const debugError = ref('')
+const syntaxStatus = ref<'idle' | 'checking' | 'clean' | 'dirty' | 'failed'>('idle')
+const syntaxDiagnostics = ref<ComputeSyntaxDiagnostic[]>([])
+const syntaxErrorText = ref('')
+let syntaxCheckTimer: ReturnType<typeof window.setTimeout> | null = null
+let syntaxCheckSeq = 0
+const templateDialogVisible = ref(false)
+const activeTemplateId = ref('argv')
+const activeDebugResultTab = ref('output')
 const cursorInfo = ref<EditorCursorInfo>({
   line: 1,
   column: 1,
   spaces: 2,
-});
+})
 
 const panelTabs = [
-  { id: "inputs", label: "参数", icon: IconTablerPlugConnected },
-  { id: "variables", label: "变量", icon: IconTablerDatabaseImport },
-  { id: "trigger", label: "触发", icon: IconTablerPlayerPlay },
-  { id: "dependencies", label: "依赖", icon: IconTablerGitFork },
-  { id: "debug", label: "调试", icon: IconTablerTerminal2 },
-  { id: "problems", label: "问题", icon: IconTablerAlertTriangle },
-];
+  { id: 'inputs', label: '参数', icon: IconTablerPlugConnected },
+  { id: 'variables', label: '变量', icon: IconTablerDatabaseImport },
+  { id: 'trigger', label: '触发', icon: IconTablerPlayerPlay },
+  { id: 'dependencies', label: '依赖', icon: IconTablerGitFork },
+  { id: 'debug', label: '调试', icon: IconTablerTerminal2 },
+  { id: 'problems', label: '问题', icon: IconTablerAlertTriangle },
+]
 
 const debugResultTabs = [
-  { id: "output", label: "返回值" },
-  { id: "logs", label: "日志" },
-  { id: "error", label: "错误" },
-];
+  { id: 'output', label: '返回值' },
+  { id: 'logs', label: '日志' },
+  { id: 'error', label: '错误' },
+]
 
 const codeTemplates = computed(() => {
-  const lang = props.activeDraft?.lang === "python" ? "python" : "javascript";
-  const templates = lang === "python" ? pythonTemplates : javascriptTemplates;
-  return templates;
-});
+  const lang = props.activeDraft?.lang === 'python' ? 'python' : 'javascript'
+  const templates = lang === 'python' ? pythonTemplates : javascriptTemplates
+  return templates
+})
 
 const triggerTypes = [
-  { id: "manual", label: "手动" },
-  { id: "timer", label: "定时" },
-  { id: "datapoint_change", label: "数据点变化" },
-];
+  { id: 'manual', label: '手动' },
+  { id: 'timer', label: '定时' },
+  { id: 'datapoint_change', label: '数据点变化' },
+]
 
 type CodeTemplate = {
-  id: string;
-  name: string;
-  description: string;
-  code: string;
-};
+  id: string
+  name: string
+  description: string
+  code: string
+}
 
 const javascriptTemplates: CodeTemplate[] = [
   {
-    id: "argv",
-    name: "获取脚本参数",
-    description: "读取调用方传入的 argv 参数。",
-    code: "const firstArg = argv[0];\nconst secondArg = argv[1];\n",
+    id: 'argv',
+    name: '获取脚本参数',
+    description: '读取调用方传入的 argv 参数。',
+    code: 'const firstArg = argv[0];\nconst secondArg = argv[1];\n',
   },
   {
-    id: "function",
-    name: "定义函数",
-    description: "封装一段可复用计算逻辑。",
-    code: "function calculate(value) {\n  return value;\n}\n",
+    id: 'function',
+    name: '定义函数',
+    description: '封装一段可复用计算逻辑。',
+    code: 'function calculate(value) {\n  return value;\n}\n',
   },
   {
-    id: "class",
-    name: "定义类",
-    description: "组织复杂对象或业务模型。",
-    code: "class Model {\n  constructor(value) {\n    this.value = value;\n  }\n}\n",
+    id: 'class',
+    name: '定义类',
+    description: '组织复杂对象或业务模型。',
+    code: 'class Model {\n  constructor(value) {\n    this.value = value;\n  }\n}\n',
   },
   {
-    id: "datapoint",
-    name: "读取数据点变量",
-    description: "读取已插入的数据点变量和 dp 命名空间。",
-    code: "const value = dp.tag1;\nreturn value;\n",
+    id: 'datapoint',
+    name: '读取数据点变量',
+    description: '读取已插入的数据点变量和 dp 命名空间。',
+    code: 'const value = dp.tag1;\nreturn value;\n',
   },
   {
-    id: "output",
-    name: "输出结果",
-    description: "把脚本结果返回给调用方和输出数据点。",
-    code: "return {\n  value: null,\n  updatedAt: new Date().toISOString()\n};\n",
+    id: 'output',
+    name: '输出结果',
+    description: '把脚本结果返回给调用方和输出数据点。',
+    code: 'return {\n  value: null,\n  updatedAt: new Date().toISOString()\n};\n',
   },
   {
-    id: "try-catch",
-    name: "错误处理",
-    description: "捕获异常并返回明确错误。",
-    code: "try {\n  return null;\n} catch (error) {\n  return { error: String(error && error.message ? error.message : error) };\n}\n",
+    id: 'try-catch',
+    name: '错误处理',
+    description: '捕获异常并返回明确错误。',
+    code: 'try {\n  return null;\n} catch (error) {\n  return { error: String(error && error.message ? error.message : error) };\n}\n',
   },
-];
+]
 
 const pythonTemplates: CodeTemplate[] = [
   {
-    id: "argv",
-    name: "获取脚本参数",
-    description: "读取调用方传入的 argv 参数。",
-    code: "def main(argv, dp, ctx):\n    first_arg = argv[0] if len(argv) > 0 else None\n    second_arg = argv[1] if len(argv) > 1 else None\n    return first_arg\n",
+    id: 'argv',
+    name: '获取脚本参数',
+    description: '读取调用方传入的 argv 参数。',
+    code: 'def main(argv, dp, ctx):\n    first_arg = argv[0] if len(argv) > 0 else None\n    second_arg = argv[1] if len(argv) > 1 else None\n    return first_arg\n',
   },
   {
-    id: "function",
-    name: "定义函数",
-    description: "封装一段可复用计算逻辑。",
-    code: "def calculate(value):\n    return value\n\ndef main(argv, dp, ctx):\n    return calculate(argv[0] if len(argv) > 0 else None)\n",
+    id: 'function',
+    name: '定义函数',
+    description: '封装一段可复用计算逻辑。',
+    code: 'def calculate(value):\n    return value\n\ndef main(argv, dp, ctx):\n    return calculate(argv[0] if len(argv) > 0 else None)\n',
   },
   {
-    id: "class",
-    name: "定义类",
-    description: "组织复杂对象或业务模型。",
-    code: "class Model:\n    def __init__(self, value):\n        self.value = value\n",
+    id: 'class',
+    name: '定义类',
+    description: '组织复杂对象或业务模型。',
+    code: 'class Model:\n    def __init__(self, value):\n        self.value = value\n',
   },
   {
-    id: "datapoint",
-    name: "读取数据点变量",
-    description: "读取已插入的数据点变量和 dp 命名空间。",
-    code: "def main(argv, dp, ctx):\n    value = dp.get(\"tag1\")\n    return value\n",
+    id: 'datapoint',
+    name: '读取数据点变量',
+    description: '读取已插入的数据点变量和 dp 命名空间。',
+    code: 'def main(argv, dp, ctx):\n    value = dp.get("tag1")\n    return value\n',
   },
   {
-    id: "output",
-    name: "输出结果",
-    description: "把脚本结果返回给调用方和输出数据点。",
-    code: "def main(argv, dp, ctx):\n    return {\n        \"value\": None\n    }\n",
+    id: 'output',
+    name: '输出结果',
+    description: '把脚本结果返回给调用方和输出数据点。',
+    code: 'def main(argv, dp, ctx):\n    return {\n        "value": None\n    }\n',
   },
   {
-    id: "try-catch",
-    name: "错误处理",
-    description: "捕获异常并返回明确错误。",
-    code: "def main(argv, dp, ctx):\n    try:\n        return None\n    except Exception as error:\n        return {\"error\": str(error)}\n",
+    id: 'try-catch',
+    name: '错误处理',
+    description: '捕获异常并返回明确错误。',
+    code: 'def main(argv, dp, ctx):\n    try:\n        return None\n    except Exception as error:\n        return {"error": str(error)}\n',
   },
-];
+]
 
 const monacoLanguage = computed(() => {
-  if (props.activeDraft?.lang === "python") return "python";
-  return "javascript";
-});
+  if (props.activeDraft?.lang === 'python') return 'python'
+  return 'javascript'
+})
 
 const previewOutputPath = computed(() => {
-  const name = props.activeDraft?.name?.trim() || "unnamed";
-  return `calc.${name.replace(/\s+/g, "_")}.${outputName.value || "result"}`;
-});
+  const name = props.activeDraft?.name?.trim() || 'unnamed'
+  return `calc.${name.replace(/\s+/g, '_')}.${outputName.value || 'result'}`
+})
 
 const outputName = computed({
   get() {
-    const outputs = props.activeDraft?.outputBindings.outputs;
+    const outputs = props.activeDraft?.outputBindings.outputs
     if (Array.isArray(outputs) && outputs[0]) {
-      const first = outputs[0] as Record<string, unknown>;
-      return String(first.name || "result");
+      const first = outputs[0] as Record<string, unknown>
+      return String(first.name || 'result')
     }
-    return "result";
+    return 'result'
   },
   set(value: string) {
-    if (!props.activeDraft) return;
+    if (!props.activeDraft) return
     props.activeDraft.outputBindings = {
       ...props.activeDraft.outputBindings,
-      outputs: [{ name: value || "result", dataType: "object" }],
-    };
+      outputs: [{ name: value || 'result', dataType: 'object' }],
+    }
   },
-});
+})
 
 const filteredDependencies = computed(() => {
-  const runtime = props.activeDraft?.lang === "python" ? "python" : "javascript";
-  return props.dependencies.filter((item) => item.runtime === runtime);
-});
+  const runtime = props.activeDraft?.lang === 'python' ? 'python' : 'javascript'
+  return props.dependencies.filter((item) => item.runtime === runtime)
+})
 
 const activeTemplate = computed(
   () =>
     codeTemplates.value.find((item) => item.id === activeTemplateId.value) ||
     codeTemplates.value[0],
-);
+)
 
-const parameterCount = computed(() => props.activeDraft?.parameterRows.length || 0);
-const datapointVariableCount = computed(
-  () => props.activeDraft?.datapointVariableRows.length || 0,
-);
+const parameterCount = computed(() => props.activeDraft?.parameterRows.length || 0)
+const datapointVariableCount = computed(() => props.activeDraft?.datapointVariableRows.length || 0)
 const unusedDatapointVariableCount = computed(
   () =>
     props.activeDraft?.datapointVariableRows.filter(
       (row) => !isDatapointVariableReferenced(row.alias),
     ).length || 0,
-);
-const dependencyCount = computed(() => props.activeDraft?.dependencies.length || 0);
+)
+const dependencyCount = computed(() => props.activeDraft?.dependencies.length || 0)
 const triggerText = computed(() => {
-  const triggerType = props.activeDraft?.triggerType || "manual";
-  return triggerTypes.find((item) => item.id === triggerType)?.label || "手动";
-});
+  const triggerType = props.activeDraft?.triggerType || 'manual'
+  return triggerTypes.find((item) => item.id === triggerType)?.label || '手动'
+})
 
 const triggerSummary = computed(() => {
-  if (!props.activeDraft) return "未选择计算单元";
-  if (props.activeDraft.triggerType === "timer") {
-    return `每 ${props.activeDraft.triggerConfig.intervalSeconds || 60} 秒执行一次`;
+  if (!props.activeDraft) return '未选择计算单元'
+  if (props.activeDraft.triggerType === 'timer') {
+    return `每 ${props.activeDraft.triggerConfig.intervalSeconds || 60} 秒执行一次`
   }
-  if (props.activeDraft.triggerType === "datapoint_change") {
+  if (props.activeDraft.triggerType === 'datapoint_change') {
     return props.activeDraft.triggerConfig.path
       ? `数据点变化时执行：${props.activeDraft.triggerConfig.path}`
-      : "选择一个数据点作为变化触发源";
+      : '选择一个数据点作为变化触发源'
   }
-  return "由调用方或调试动作主动执行";
-});
+  return '由调用方或调试动作主动执行'
+})
 
 const bottomPanelStyle = computed(() => {
-  if (panelCollapsed.value) return {};
-  return { height: `${panelHeight.value}px` };
-});
+  if (panelCollapsed.value) return {}
+  return { height: `${panelHeight.value}px` }
+})
 
 const debugStateText = computed(() => {
-  if (debugRunning.value) return "运行中";
-  if (debugErrorText.value) return "异常";
-  if (debugResult.value) return "完成";
-  return "未运行";
-});
+  if (debugRunning.value) return '运行中'
+  if (debugErrorText.value) return '异常'
+  if (debugResult.value) return '完成'
+  return '未运行'
+})
 
 const dryRunTooltip = computed(() => {
-  if (props.activeDraft?.dirty) return "请先保存后再试运行";
-  if (debugRunning.value) return "正在试运行";
-  return "试运行";
-});
+  if (props.activeDraft?.dirty) return '请先保存后再试运行'
+  if (debugRunning.value) return '正在试运行'
+  return '试运行'
+})
 
 const panelSummaryItems = computed(() =>
   panelTabs
-    .filter((tab) => tab.id !== "problems")
+    .filter((tab) => tab.id !== 'problems')
     .map((tab) => ({
       id: tab.id,
       label: tab.label,
       value: panelSummaryValue(tab.id),
     })),
-);
+)
 
-const debugOutputText = computed(() =>
-  formatDebugValue(debugResult.value?.output),
-);
+const debugOutputText = computed(() => formatDebugValue(debugResult.value?.output))
 
 const debugLogsText = computed(() => {
-  const logs = debugResult.value?.logs || [];
-  return logs.length ? logs.join("\n") : "-";
-});
+  const logs = debugResult.value?.logs || []
+  return logs.length ? logs.join('\n') : '-'
+})
 
 const debugErrorText = computed(
-  () =>
-    debugError.value ||
-    debugResult.value?.errorMessage ||
-    debugResult.value?.error ||
-    "",
-);
+  () => debugError.value || debugResult.value?.errorMessage || debugResult.value?.error || '',
+)
 
 const activeDebugResultText = computed(() => {
-  if (activeDebugResultTab.value === "logs") return debugLogsText.value;
-  if (activeDebugResultTab.value === "error") return debugErrorText.value || "-";
-  return debugOutputText.value;
-});
+  if (activeDebugResultTab.value === 'logs') return debugLogsText.value
+  if (activeDebugResultTab.value === 'error') return debugErrorText.value || '-'
+  return debugOutputText.value
+})
 
-const debugArgvParsed = computed(() => parseJsonForHint(debugArgvText.value, []));
-const debugDatapointParsed = computed(() =>
-  parseJsonForHint(debugDatapointText.value, {}),
-);
+const debugArgvParsed = computed(() => parseJsonForHint(debugArgvText.value, []))
+const debugDatapointParsed = computed(() => parseJsonForHint(debugDatapointText.value, {}))
 
 const debugArgvHintTone = computed(() =>
-  debugArgvHint.value.includes("不一致") ? "warning" : "muted",
-);
+  debugArgvHint.value.includes('不一致') ? 'warning' : 'muted',
+)
 const debugDatapointHintTone = computed(() =>
-  debugDatapointHint.value.includes("不一致") ? "warning" : "muted",
-);
+  debugDatapointHint.value.includes('不一致') ? 'warning' : 'muted',
+)
 
 const debugArgvHint = computed(() => {
-  const parsed = debugArgvParsed.value;
-  const expected = props.activeDraft?.parameterRows.length || 0;
-  if (!parsed.valid) return "JSON 格式无效，试运行前需要修正。";
-  if (!Array.isArray(parsed.value)) return "调用参数 JSON 必须是数组。";
-  const actual = parsed.value.length;
-  if (actual === expected) return `本次试运行传入 ${actual} 个参数。`;
-  return `本次试运行参数数量和定义不一致：定义 ${expected} 个，实际 ${actual} 个。`;
-});
+  const parsed = debugArgvParsed.value
+  const expected = props.activeDraft?.parameterRows.length || 0
+  if (!parsed.valid) return 'JSON 格式无效，试运行前需要修正。'
+  if (!Array.isArray(parsed.value)) return '调用参数 JSON 必须是数组。'
+  const actual = parsed.value.length
+  if (actual === expected) return `本次试运行传入 ${actual} 个参数。`
+  return `本次试运行参数数量和定义不一致：定义 ${expected} 个，实际 ${actual} 个。`
+})
 
 const debugDatapointHint = computed(() => {
-  const parsed = debugDatapointParsed.value;
+  const parsed = debugDatapointParsed.value
   const expectedAliases = (props.activeDraft?.datapointVariableRows || [])
     .map((row) => row.alias.trim())
-    .filter(Boolean);
-  if (!parsed.valid) return "JSON 格式无效，试运行前需要修正。";
-  if (!isPlainRecord(parsed.value)) return "变量模拟值 JSON 必须是对象。";
-  const keys = Object.keys(parsed.value);
-  const missingCount = expectedAliases.filter((alias) => !(alias in parsed.value)).length;
-  const extraCount = keys.filter((key) => !expectedAliases.includes(key)).length;
-  if (!missingCount && !extraCount) return `本次试运行模拟 ${keys.length} 个变量。`;
-  return `本次试运行变量和定义不一致：缺少 ${missingCount} 个，多出 ${extraCount} 个。`;
-});
+    .filter(Boolean)
+  if (!parsed.valid) return 'JSON 格式无效，试运行前需要修正。'
+  if (!isPlainRecord(parsed.value)) return '变量模拟值 JSON 必须是对象。'
+  const keys = Object.keys(parsed.value)
+  const missingCount = expectedAliases.filter((alias) => !(alias in parsed.value)).length
+  const extraCount = keys.filter((key) => !expectedAliases.includes(key)).length
+  if (!missingCount && !extraCount) return `本次试运行模拟 ${keys.length} 个变量。`
+  return `本次试运行变量和定义不一致：缺少 ${missingCount} 个，多出 ${extraCount} 个。`
+})
 
 const syntaxStatusTone = computed(() => {
-  if (syntaxStatus.value === "clean") return "success";
-  if (syntaxDiagnostics.value.length || syntaxStatus.value === "failed") return "danger";
-  if (syntaxStatus.value === "checking") return "checking";
-  return "muted";
-});
+  if (syntaxStatus.value === 'clean') return 'success'
+  if (syntaxDiagnostics.value.length || syntaxStatus.value === 'failed') return 'danger'
+  if (syntaxStatus.value === 'checking') return 'checking'
+  return 'muted'
+})
 
 const syntaxStatusText = computed(() => {
-  if (syntaxStatus.value === "checking") return "检查中";
-  if (syntaxStatus.value === "failed") return "检查失败";
-  if (syntaxDiagnostics.value.length) return `${syntaxDiagnostics.value.length} 个语法问题`;
-  if (syntaxStatus.value === "clean") return "语法正常";
-  if (syntaxStatus.value === "dirty") return "待检查";
-  return "未检查";
-});
+  if (syntaxStatus.value === 'checking') return '检查中'
+  if (syntaxStatus.value === 'failed') return '检查失败'
+  if (syntaxDiagnostics.value.length) return `${syntaxDiagnostics.value.length} 个语法问题`
+  if (syntaxStatus.value === 'clean') return '语法正常'
+  if (syntaxStatus.value === 'dirty') return '待检查'
+  return '未检查'
+})
 
 const selectedDatapoint = computed(() =>
-  datapointPickerOptions.value.find(
-    (point) => String(point.id) === selectedDatapointId.value,
-  ),
-);
+  datapointPickerOptions.value.find((point) => String(point.id) === selectedDatapointId.value),
+)
 
 const datapointPickerTotalPages = computed(() =>
   Math.max(1, Math.ceil(datapointPickerTotal.value / datapointPickerPageSize)),
-);
+)
 
-watch(
-  selectedDatapoint,
-  (point) => {
-    selectedDatapointAlias.value = point
-      ? uniqueDatapointAlias(point.name || point.path.split(".").pop() || "tag")
-      : "";
-  },
-);
+watch(selectedDatapoint, (point) => {
+  selectedDatapointAlias.value = point
+    ? uniqueDatapointAlias(point.name || point.path.split('.').pop() || 'tag')
+    : ''
+})
 
-watch(
-  codeTemplates,
-  (templates) => {
-    if (!templates.some((item) => item.id === activeTemplateId.value)) {
-      activeTemplateId.value = templates[0]?.id || "argv";
-    }
-  },
-);
+watch(codeTemplates, (templates) => {
+  if (!templates.some((item) => item.id === activeTemplateId.value)) {
+    activeTemplateId.value = templates[0]?.id || 'argv'
+  }
+})
 
 watch(
   () => props.activeId,
   () => {
-    activePanel.value = "inputs";
-    panelCollapsed.value = true;
-    panelHeight.value = panelDefaultHeight;
-    inspectorOpen.value = false;
-    debugResult.value = null;
-    debugError.value = "";
-    syntaxStatus.value = "idle";
-    syntaxDiagnostics.value = [];
-    syntaxErrorText.value = "";
-    monacoEditorRef.value?.setDiagnostics?.([]);
-    resetDebugArgvFromDefinition(false);
-    resetDebugDatapointsFromDefinition(false);
-    scheduleSyntaxCheck();
+    activePanel.value = 'inputs'
+    panelCollapsed.value = true
+    panelHeight.value = panelDefaultHeight
+    inspectorOpen.value = false
+    debugResult.value = null
+    debugError.value = ''
+    syntaxStatus.value = 'idle'
+    syntaxDiagnostics.value = []
+    syntaxErrorText.value = ''
+    monacoEditorRef.value?.setDiagnostics?.([])
+    resetDebugArgvFromDefinition(false)
+    resetDebugDatapointsFromDefinition(false)
+    scheduleSyntaxCheck()
   },
-);
+)
 
 onBeforeUnmount(() => {
-  stopPanelResize();
-  clearSyntaxCheckTimer();
-});
+  stopPanelResize()
+  clearSyntaxCheckTimer()
+})
 
 watch(
   () => [props.activeDraft?.code, props.activeDraft?.lang],
   () => {
-    if (!props.activeDraft) return;
-    syntaxStatus.value = "dirty";
-    scheduleSyntaxCheck();
+    if (!props.activeDraft) return
+    syntaxStatus.value = 'dirty'
+    scheduleSyntaxCheck()
   },
-);
+)
 
 function markDirty() {
   if (props.activeDraft) {
-    emit("mark-dirty", props.activeDraft.id);
+    emit('mark-dirty', props.activeDraft.id)
   }
 }
 
 function clearSyntaxCheckTimer() {
   if (syntaxCheckTimer) {
-    window.clearTimeout(syntaxCheckTimer);
-    syntaxCheckTimer = null;
+    window.clearTimeout(syntaxCheckTimer)
+    syntaxCheckTimer = null
   }
 }
 
 function scheduleSyntaxCheck() {
-  clearSyntaxCheckTimer();
-  if (!props.activeDraft) return;
+  clearSyntaxCheckTimer()
+  if (!props.activeDraft) return
   syntaxCheckTimer = window.setTimeout(() => {
-    void runSyntaxCheck();
-  }, 600);
+    void runSyntaxCheck()
+  }, 600)
 }
 
 async function runSyntaxCheck() {
-  if (!props.activeDraft) return false;
-  clearSyntaxCheckTimer();
-  const seq = ++syntaxCheckSeq;
-  syntaxStatus.value = "checking";
-  syntaxErrorText.value = "";
+  if (!props.activeDraft) return false
+  clearSyntaxCheckTimer()
+  const seq = ++syntaxCheckSeq
+  syntaxStatus.value = 'checking'
+  syntaxErrorText.value = ''
   try {
     const result = await checkComputeSyntax(props.projectId, {
       lang: props.activeDraft.lang,
       code: props.activeDraft.code,
-    });
-    if (seq !== syntaxCheckSeq) return false;
-    syntaxDiagnostics.value = result.diagnostics || [];
-    syntaxStatus.value = syntaxDiagnostics.value.length ? "failed" : "clean";
-    monacoEditorRef.value?.setDiagnostics?.(syntaxDiagnostics.value);
-    return syntaxDiagnostics.value.length === 0;
+    })
+    if (seq !== syntaxCheckSeq) return false
+    syntaxDiagnostics.value = result.diagnostics || []
+    syntaxStatus.value = syntaxDiagnostics.value.length ? 'failed' : 'clean'
+    monacoEditorRef.value?.setDiagnostics?.(syntaxDiagnostics.value)
+    return syntaxDiagnostics.value.length === 0
   } catch (error) {
-    if (seq !== syntaxCheckSeq) return false;
-    syntaxDiagnostics.value = [];
-    monacoEditorRef.value?.setDiagnostics?.([]);
-    syntaxStatus.value = "failed";
-    syntaxErrorText.value = getApiErrorMessage(error, "语法检查失败");
-    return false;
+    if (seq !== syntaxCheckSeq) return false
+    syntaxDiagnostics.value = []
+    monacoEditorRef.value?.setDiagnostics?.([])
+    syntaxStatus.value = 'failed'
+    syntaxErrorText.value = getApiErrorMessage(error, '语法检查失败')
+    return false
   }
 }
 
 async function ensureSyntaxClean() {
-  const ok = await runSyntaxCheck();
+  const ok = await runSyntaxCheck()
   if (!ok) {
-    activePanel.value = "problems";
-    panelCollapsed.value = false;
-    panelHeight.value = Math.max(panelHeight.value, 300);
-    ElMessage.warning(syntaxDiagnostics.value.length ? "请先修复语法问题" : syntaxErrorText.value);
+    activePanel.value = 'problems'
+    panelCollapsed.value = false
+    panelHeight.value = Math.max(panelHeight.value, 300)
+    ElMessage.warning(syntaxDiagnostics.value.length ? '请先修复语法问题' : syntaxErrorText.value)
   }
-  return ok;
+  return ok
 }
 
 function openSyntaxPanel() {
-  activePanel.value = "problems";
-  panelCollapsed.value = false;
-  panelHeight.value = Math.max(panelHeight.value, 300);
+  activePanel.value = 'problems'
+  panelCollapsed.value = false
+  panelHeight.value = Math.max(panelHeight.value, 300)
 }
 
 function revealDiagnostic(item: ComputeSyntaxDiagnostic) {
-  monacoEditorRef.value?.revealPosition?.(item.line, item.column);
+  monacoEditorRef.value?.revealPosition?.(item.line, item.column)
 }
 
 function updateOutputBindings() {
-  markDirty();
+  markDirty()
 }
 
 async function saveAfterSyntaxCheck() {
-  if (!props.activeDraft) return;
-  if (!(await ensureSyntaxClean())) return;
-  emit("save", props.activeDraft.id);
+  if (!props.activeDraft) return
+  if (!(await ensureSyntaxClean())) return
+  emit('save', props.activeDraft.id)
 }
 
 function togglePanelCollapsed() {
-  panelCollapsed.value = !panelCollapsed.value;
+  panelCollapsed.value = !panelCollapsed.value
   if (panelCollapsed.value) {
-    stopPanelResize();
-    return;
+    stopPanelResize()
+    return
   }
   if (!panelCollapsed.value && panelHeight.value < panelMinHeight) {
-    panelHeight.value = panelDefaultHeight;
+    panelHeight.value = panelDefaultHeight
   }
 }
 
 function openPanel(panelId: string) {
-  activePanel.value = panelId;
-  panelCollapsed.value = false;
+  activePanel.value = panelId
+  panelCollapsed.value = false
   if (panelHeight.value < panelMinHeight) {
-    panelHeight.value = panelDefaultHeight;
+    panelHeight.value = panelDefaultHeight
   }
 }
 
@@ -1553,302 +1483,291 @@ function updateCursorInfo(payload: EditorCursorInfo) {
     line: Math.max(1, Number(payload.line) || 1),
     column: Math.max(1, Number(payload.column) || 1),
     spaces: Math.max(1, Number(payload.spaces) || 2),
-  };
+  }
 }
 
 function panelSummaryValue(panelId: string) {
-  if (panelId === "inputs") return String(parameterCount.value);
-  if (panelId === "variables") return String(datapointVariableCount.value);
-  if (panelId === "trigger") return triggerText.value;
-  if (panelId === "dependencies") return String(dependencyCount.value);
-  if (panelId === "debug") return debugStateText.value;
-  return "";
+  if (panelId === 'inputs') return String(parameterCount.value)
+  if (panelId === 'variables') return String(datapointVariableCount.value)
+  if (panelId === 'trigger') return triggerText.value
+  if (panelId === 'dependencies') return String(dependencyCount.value)
+  if (panelId === 'debug') return debugStateText.value
+  return ''
 }
 
 function togglePanelMaxHeight() {
   if (panelCollapsed.value) {
-    panelCollapsed.value = false;
-    panelHeight.value = panelDefaultHeight;
-    return;
+    panelCollapsed.value = false
+    panelHeight.value = panelDefaultHeight
+    return
   }
-  panelHeight.value =
-    panelHeight.value >= panelMaxHeight - 20 ? panelDefaultHeight : panelMaxHeight;
+  panelHeight.value = panelHeight.value >= panelMaxHeight - 20 ? panelDefaultHeight : panelMaxHeight
 }
 
 function startPanelResize(event: PointerEvent) {
-  if (panelCollapsed.value) return;
-  event.preventDefault();
-  window.addEventListener("pointermove", resizePanel);
-  window.addEventListener("pointerup", stopPanelResize, { once: true });
+  if (panelCollapsed.value) return
+  event.preventDefault()
+  window.addEventListener('pointermove', resizePanel)
+  window.addEventListener('pointerup', stopPanelResize, { once: true })
 }
 
 function resizePanel(event: PointerEvent) {
-  const viewportHeight = window.innerHeight || 900;
-  const maxHeight = Math.min(panelMaxHeight, Math.floor(viewportHeight * 0.64));
-  const nextHeight = viewportHeight - event.clientY;
-  panelHeight.value = Math.min(maxHeight, Math.max(panelMinHeight, nextHeight));
+  const viewportHeight = window.innerHeight || 900
+  const maxHeight = Math.min(panelMaxHeight, Math.floor(viewportHeight * 0.64))
+  const nextHeight = viewportHeight - event.clientY
+  panelHeight.value = Math.min(maxHeight, Math.max(panelMinHeight, nextHeight))
 }
 
 function stopPanelResize() {
-  window.removeEventListener("pointermove", resizePanel);
+  window.removeEventListener('pointermove', resizePanel)
 }
 
 function addInput() {
-  if (!props.activeDraft) return;
+  if (!props.activeDraft) return
   props.activeDraft.parameterRows.push({
     uid: crypto.randomUUID(),
     name: `arg${props.activeDraft.parameterRows.length + 1}`,
-    type: "string",
+    type: 'string',
     required: true,
-    defaultValue: "",
-    description: "",
-  });
-  markDirty();
+    defaultValue: '',
+    description: '',
+  })
+  markDirty()
 }
 
 function addDatapointVariable(point: Datapoint, alias: string) {
-  if (!props.activeDraft) return;
+  if (!props.activeDraft) return
   props.activeDraft.datapointVariableRows.push({
     uid: crypto.randomUUID(),
     alias,
     path: point.path,
     datapointId: point.id,
     dataType: point.dataType,
-  });
-  markDirty();
+  })
+  markDirty()
 }
 
 function removeDatapointVariable(index: number) {
-  if (!props.activeDraft) return;
-  props.activeDraft.datapointVariableRows.splice(index, 1);
-  markDirty();
+  if (!props.activeDraft) return
+  props.activeDraft.datapointVariableRows.splice(index, 1)
+  markDirty()
 }
 
 function removeUnusedDatapointVariables() {
-  if (!props.activeDraft) return;
+  if (!props.activeDraft) return
   const nextRows = props.activeDraft.datapointVariableRows.filter((row) =>
     isDatapointVariableReferenced(row.alias),
-  );
-  if (nextRows.length === props.activeDraft.datapointVariableRows.length) return;
+  )
+  if (nextRows.length === props.activeDraft.datapointVariableRows.length) return
   props.activeDraft.datapointVariableRows.splice(
     0,
     props.activeDraft.datapointVariableRows.length,
     ...nextRows,
-  );
-  markDirty();
-  ElMessage.success("已清理未引用变量");
+  )
+  markDirty()
+  ElMessage.success('已清理未引用变量')
 }
 
 function removeInput(index: number) {
-  if (!props.activeDraft) return;
-  props.activeDraft.parameterRows.splice(index, 1);
-  markDirty();
+  if (!props.activeDraft) return
+  props.activeDraft.parameterRows.splice(index, 1)
+  markDirty()
 }
 
-async function openDatapointPicker(intent: "variable" | "trigger") {
-  datapointPickerIntent.value = intent;
-  datapointPickerVisible.value = true;
-  selectedDatapointId.value = null;
-  selectedDatapointAlias.value = "";
-  await reloadPickerDatapoints();
+async function openDatapointPicker(intent: 'variable' | 'trigger') {
+  datapointPickerIntent.value = intent
+  datapointPickerVisible.value = true
+  selectedDatapointId.value = null
+  selectedDatapointAlias.value = ''
+  await reloadPickerDatapoints()
 }
 
 async function reloadPickerDatapoints() {
-  datapointPickerPage.value = 1;
-  await loadPickerDatapoints();
+  datapointPickerPage.value = 1
+  await loadPickerDatapoints()
 }
 
 async function loadPickerDatapoints() {
-  if (!props.projectId) return;
-  datapointPickerLoading.value = true;
+  if (!props.projectId) return
+  datapointPickerLoading.value = true
   try {
     const params: Record<string, unknown> = {
       search: datapointPickerKeyword.value,
       page: datapointPickerPage.value,
       pageSize: datapointPickerPageSize,
-    };
+    }
     if (datapointPickerSource.value) {
-      params.type = datapointPickerSource.value;
-      params.sourceType = datapointPickerSource.value;
+      params.type = datapointPickerSource.value
+      params.sourceType = datapointPickerSource.value
     }
     if (datapointPickerDataType.value) {
-      params.dataType = datapointPickerDataType.value;
+      params.dataType = datapointPickerDataType.value
     }
     if (datapointPickerStatus.value) {
-      params.status = datapointPickerStatus.value;
+      params.status = datapointPickerStatus.value
     }
-    const result = await getDatapoints(props.projectId, params);
-    datapointPickerOptions.value = result.list;
-    datapointPickerTotal.value = Number(
-      result.pagination?.total ?? result.list.length,
-    );
+    const result = await getDatapoints(props.projectId, params)
+    datapointPickerOptions.value = result.list
+    datapointPickerTotal.value = Number(result.pagination?.total ?? result.list.length)
     if (
       selectedDatapointId.value &&
       !result.list.some((point) => String(point.id) === selectedDatapointId.value)
     ) {
-      selectedDatapointId.value = null;
+      selectedDatapointId.value = null
     }
   } finally {
-    datapointPickerLoading.value = false;
+    datapointPickerLoading.value = false
   }
 }
 
 async function changePickerPage(page: number) {
-  const nextPage = Math.min(Math.max(1, page), datapointPickerTotalPages.value);
-  if (nextPage === datapointPickerPage.value) return;
-  datapointPickerPage.value = nextPage;
-  await loadPickerDatapoints();
+  const nextPage = Math.min(Math.max(1, page), datapointPickerTotalPages.value)
+  if (nextPage === datapointPickerPage.value) return
+  datapointPickerPage.value = nextPage
+  await loadPickerDatapoints()
 }
 
 function confirmSelectedDatapoint(point?: Datapoint) {
-  const target = point || selectedDatapoint.value;
-  if (!target) return;
-  if (datapointPickerIntent.value === "trigger") {
+  const target = point || selectedDatapoint.value
+  if (!target) return
+  if (datapointPickerIntent.value === 'trigger') {
     if (props.activeDraft) {
       props.activeDraft.triggerConfig = {
         ...props.activeDraft.triggerConfig,
         path: target.path,
-      };
-      markDirty();
+      }
+      markDirty()
     }
-    datapointPickerVisible.value = false;
-    return;
+    datapointPickerVisible.value = false
+    return
   }
-  const alias = selectedDatapointAlias.value.trim() || uniqueDatapointAlias(target.name);
+  const alias = selectedDatapointAlias.value.trim() || uniqueDatapointAlias(target.name)
   if (!isValidVariableName(alias, props.activeDraft.lang)) {
-    ElMessage.warning("变量名必须是当前脚本语言的合法变量名");
-    return;
+    ElMessage.warning('变量名必须是当前脚本语言的合法变量名')
+    return
   }
   if (isDatapointAliasUsed(alias)) {
-    ElMessage.warning("变量名已存在");
-    return;
+    ElMessage.warning('变量名已存在')
+    return
   }
-  datapointPickerVisible.value = false;
+  datapointPickerVisible.value = false
   try {
-    addDatapointVariable(target, alias);
-    insertVariableAlias(alias);
+    addDatapointVariable(target, alias)
+    insertVariableAlias(alias)
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "插入数据点失败"));
+    ElMessage.error(getApiErrorMessage(error, '插入数据点失败'))
   }
 }
 
 function insertVariableAlias(alias: string) {
-  monacoEditorRef.value?.insertText?.(alias);
-  markDirty();
+  monacoEditorRef.value?.insertText?.(alias)
+  markDirty()
 }
 
 async function executeDebug() {
-  if (!props.activeDraft) return;
+  if (!props.activeDraft) return
   if (props.activeDraft.dirty) {
-    ElMessage.warning("请先保存后再试运行");
-    return;
+    ElMessage.warning('请先保存后再试运行')
+    return
   }
-  if (!(await ensureSyntaxClean())) return;
-  let input: Record<string, unknown>;
+  if (!(await ensureSyntaxClean())) return
+  let input: Record<string, unknown>
   try {
-    input = parseDebugInput();
+    input = parseDebugInput()
   } catch (error) {
-    debugError.value =
-      error instanceof Error ? error.message : "试运行输入 JSON 格式无效";
-    return;
+    debugError.value = error instanceof Error ? error.message : '试运行输入 JSON 格式无效'
+    return
   }
 
-  debugRunning.value = true;
-  debugResult.value = null;
-  debugError.value = "";
+  debugRunning.value = true
+  debugResult.value = null
+  debugError.value = ''
   try {
-    debugResult.value = await debugComputeUnit(
-      props.projectId,
-      props.activeDraft.id,
-      input,
-      true,
-    );
-    activeDebugResultTab.value = debugErrorText.value ? "error" : "output";
-    ElMessage.success("试运行完成");
+    debugResult.value = await debugComputeUnit(props.projectId, props.activeDraft.id, input, true)
+    activeDebugResultTab.value = debugErrorText.value ? 'error' : 'output'
+    ElMessage.success('试运行完成')
   } catch (error) {
-    debugError.value = getApiErrorMessage(error, "试运行失败");
-    activeDebugResultTab.value = "error";
+    debugError.value = getApiErrorMessage(error, '试运行失败')
+    activeDebugResultTab.value = 'error'
   } finally {
-    debugRunning.value = false;
+    debugRunning.value = false
   }
 }
 
 async function quickDryRun() {
-  activePanel.value = "debug";
-  panelCollapsed.value = false;
-  panelHeight.value = Math.max(panelHeight.value, 360);
-  await executeDebug();
+  activePanel.value = 'debug'
+  panelCollapsed.value = false
+  panelHeight.value = Math.max(panelHeight.value, 360)
+  await executeDebug()
 }
 
 function setTriggerType(type: string) {
-  if (!props.activeDraft) return;
-  props.activeDraft.triggerType = type;
-  if (type === "timer") {
+  if (!props.activeDraft) return
+  props.activeDraft.triggerType = type
+  if (type === 'timer') {
     props.activeDraft.triggerConfig = {
       intervalSeconds: props.activeDraft.triggerConfig.intervalSeconds || 60,
-    };
-  } else if (type === "datapoint_change") {
+    }
+  } else if (type === 'datapoint_change') {
     props.activeDraft.triggerConfig = {
-      path: props.activeDraft.triggerConfig.path || "",
-    };
+      path: props.activeDraft.triggerConfig.path || '',
+    }
   } else {
-    props.activeDraft.triggerConfig = {};
+    props.activeDraft.triggerConfig = {}
   }
-  markDirty();
+  markDirty()
 }
 
 function isDependencyChecked(id: string) {
-  return props.activeDraft?.dependencies.some((item) => item.id === id) || false;
+  return props.activeDraft?.dependencies.some((item) => item.id === id) || false
 }
 
 function toggleDependency(id: string) {
-  if (!props.activeDraft) return;
+  if (!props.activeDraft) return
   if (isDependencyChecked(id)) {
-    props.activeDraft.dependencies = props.activeDraft.dependencies.filter(
-      (item) => item.id !== id,
-    );
+    props.activeDraft.dependencies = props.activeDraft.dependencies.filter((item) => item.id !== id)
   } else {
-    props.activeDraft.dependencies.push({ id });
+    props.activeDraft.dependencies.push({ id })
   }
-  markDirty();
+  markDirty()
 }
 
 function dependencyName(id: string) {
-  return props.dependencies.find((item) => item.id === id)?.name || id;
+  return props.dependencies.find((item) => item.id === id)?.name || id
 }
 
 function triggerIcon(id: string) {
-  if (id === "timer") return IconTablerClock;
-  if (id === "datapoint_change") return IconTablerDatabaseImport;
-  return IconTablerManualGearbox;
+  if (id === 'timer') return IconTablerClock
+  if (id === 'datapoint_change') return IconTablerDatabaseImport
+  return IconTablerManualGearbox
 }
 
 function triggerDescription(id: string) {
-  if (id === "timer") return "按固定间隔执行";
-  if (id === "datapoint_change") return "数据点变化时执行";
-  return "调用方主动执行";
+  if (id === 'timer') return '按固定间隔执行'
+  if (id === 'datapoint_change') return '数据点变化时执行'
+  return '调用方主动执行'
 }
 
 function parseDebugInput(): Record<string, unknown> {
-  let argv: unknown;
-  let datapoints: unknown;
+  let argv: unknown
+  let datapoints: unknown
   try {
-    argv = JSON.parse(debugArgvText.value || "[]");
+    argv = JSON.parse(debugArgvText.value || '[]')
   } catch {
-    throw new Error("argv JSON 格式无效");
+    throw new Error('argv JSON 格式无效')
   }
   try {
-    datapoints = JSON.parse(debugDatapointText.value || "{}");
+    datapoints = JSON.parse(debugDatapointText.value || '{}')
   } catch {
-    throw new Error("数据点变量模拟 JSON 格式无效");
+    throw new Error('数据点变量模拟 JSON 格式无效')
   }
   if (!Array.isArray(argv)) {
-    throw new Error("argv JSON 必须是数组");
+    throw new Error('argv JSON 必须是数组')
   }
-  if (!datapoints || typeof datapoints !== "object" || Array.isArray(datapoints)) {
-    throw new Error("数据点变量模拟 JSON 必须是对象");
+  if (!datapoints || typeof datapoints !== 'object' || Array.isArray(datapoints)) {
+    throw new Error('数据点变量模拟 JSON 必须是对象')
   }
-  return { argv, datapoints };
+  return { argv, datapoints }
 }
 
 function parseJsonForHint(text: string, fallback: unknown) {
@@ -1856,288 +1775,270 @@ function parseJsonForHint(text: string, fallback: unknown) {
     return {
       valid: true,
       value: JSON.parse(text || JSON.stringify(fallback)),
-    };
+    }
   } catch {
     return {
       valid: false,
       value: fallback,
-    };
+    }
   }
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
 function resetDebugArgvFromDefinition(showMessage = true) {
-  debugArgvText.value = buildDefaultDebugArgv();
-  if (showMessage) ElMessage.success("已按参数定义重置");
+  debugArgvText.value = buildDefaultDebugArgv()
+  if (showMessage) ElMessage.success('已按参数定义重置')
 }
 
 function resetDebugDatapointsFromDefinition(showMessage = true) {
-  debugDatapointText.value = buildDefaultDebugDatapoints();
-  if (showMessage) ElMessage.success("已按数据点变量重置");
+  debugDatapointText.value = buildDefaultDebugDatapoints()
+  if (showMessage) ElMessage.success('已按数据点变量重置')
 }
 
 function buildDefaultDebugArgv() {
   const argv = (props.activeDraft?.parameterRows || []).map((row) =>
     defaultValueByType(row.type, row.defaultValue),
-  );
-  return JSON.stringify(argv, null, 2);
+  )
+  return JSON.stringify(argv, null, 2)
 }
 
 function buildDefaultDebugDatapoints() {
   const values = Object.fromEntries(
     (props.activeDraft?.datapointVariableRows || [])
       .filter((row) => row.alias.trim())
-      .map((row) => [row.alias.trim(), defaultValueByType(row.dataType || "string", "")]),
-  );
-  return JSON.stringify(values, null, 2);
+      .map((row) => [row.alias.trim(), defaultValueByType(row.dataType || 'string', '')]),
+  )
+  return JSON.stringify(values, null, 2)
 }
 
 function defaultValueByType(type: string, defaultValue: string) {
-  if (defaultValue !== "") {
-    if (type === "number") return Number(defaultValue);
-    if (type === "boolean") return defaultValue === "true";
-    if (type === "object" || type === "array") {
+  if (defaultValue !== '') {
+    if (type === 'number') return Number(defaultValue)
+    if (type === 'boolean') return defaultValue === 'true'
+    if (type === 'object' || type === 'array') {
       try {
-        return JSON.parse(defaultValue);
+        return JSON.parse(defaultValue)
       } catch {
-        return type === "array" ? [] : {};
+        return type === 'array' ? [] : {}
       }
     }
-    return defaultValue;
+    return defaultValue
   }
-  if (type === "number") return 0;
-  if (type === "boolean") return false;
-  if (type === "object") return {};
-  if (type === "array") return [];
-  return "";
+  if (type === 'number') return 0
+  if (type === 'boolean') return false
+  if (type === 'object') return {}
+  if (type === 'array') return []
+  return ''
 }
 
 function uniqueDatapointAlias(name: string) {
-  const base = normalizeVariableName(name, props.activeDraft?.lang);
-  const used = new Set(
-    (props.activeDraft?.datapointVariableRows || []).map((row) => row.alias),
-  );
-  if (!used.has(base)) return base;
-  let index = 2;
+  const base = normalizeVariableName(name, props.activeDraft?.lang)
+  const used = new Set((props.activeDraft?.datapointVariableRows || []).map((row) => row.alias))
+  if (!used.has(base)) return base
+  let index = 2
   while (used.has(`${base}${index}`)) {
-    index += 1;
+    index += 1
   }
-  return `${base}${index}`;
+  return `${base}${index}`
 }
 
 function normalizeVariableName(name: string, lang?: ComputeLang | string) {
   const cleaned = Array.from(name.trim())
-    .map((char, index) =>
-      isVariableNameChar(char, index === 0, lang) ? char : "_",
-    )
-    .join("")
-    .replace(/_+/g, "_");
-  const withPrefix = isVariableNameStart(cleaned[0] || "", lang)
-    ? cleaned
-    : `tag_${cleaned}`;
-  const normalized = withPrefix || "tag";
-  return isValidVariableName(normalized, lang) ? normalized : `tag_${normalized}`;
+    .map((char, index) => (isVariableNameChar(char, index === 0, lang) ? char : '_'))
+    .join('')
+    .replace(/_+/g, '_')
+  const withPrefix = isVariableNameStart(cleaned[0] || '', lang) ? cleaned : `tag_${cleaned}`
+  const normalized = withPrefix || 'tag'
+  return isValidVariableName(normalized, lang) ? normalized : `tag_${normalized}`
 }
 
 function isVariableNameStart(char: string, lang?: ComputeLang | string) {
-  if (!char) return false;
-  if (char === "_") return true;
-  if (lang !== "python" && char === "$") return true;
-  return /\p{ID_Start}/u.test(char);
+  if (!char) return false
+  if (char === '_') return true
+  if (lang !== 'python' && char === '$') return true
+  return /\p{ID_Start}/u.test(char)
 }
 
-function isVariableNameChar(
-  char: string,
-  isStart: boolean,
-  lang?: ComputeLang | string,
-) {
-  if (isStart) return isVariableNameStart(char, lang);
-  if (char === "_") return true;
-  if (lang !== "python" && char === "$") return true;
-  return /\p{ID_Continue}/u.test(char);
+function isVariableNameChar(char: string, isStart: boolean, lang?: ComputeLang | string) {
+  if (isStart) return isVariableNameStart(char, lang)
+  if (char === '_') return true
+  if (lang !== 'python' && char === '$') return true
+  return /\p{ID_Continue}/u.test(char)
 }
 
 const jsReservedVariableNames = new Set([
-  "arguments",
-  "eval",
-  "await",
-  "break",
-  "case",
-  "catch",
-  "class",
-  "const",
-  "continue",
-  "debugger",
-  "default",
-  "delete",
-  "do",
-  "else",
-  "enum",
-  "export",
-  "extends",
-  "false",
-  "finally",
-  "for",
-  "function",
-  "if",
-  "import",
-  "in",
-  "instanceof",
-  "let",
-  "new",
-  "null",
-  "return",
-  "super",
-  "switch",
-  "this",
-  "throw",
-  "true",
-  "try",
-  "typeof",
-  "var",
-  "void",
-  "while",
-  "with",
-  "yield",
-]);
+  'arguments',
+  'eval',
+  'await',
+  'break',
+  'case',
+  'catch',
+  'class',
+  'const',
+  'continue',
+  'debugger',
+  'default',
+  'delete',
+  'do',
+  'else',
+  'enum',
+  'export',
+  'extends',
+  'false',
+  'finally',
+  'for',
+  'function',
+  'if',
+  'import',
+  'in',
+  'instanceof',
+  'let',
+  'new',
+  'null',
+  'return',
+  'super',
+  'switch',
+  'this',
+  'throw',
+  'true',
+  'try',
+  'typeof',
+  'var',
+  'void',
+  'while',
+  'with',
+  'yield',
+])
 
 const pythonReservedVariableNames = new Set([
-  "False",
-  "None",
-  "True",
-  "and",
-  "as",
-  "assert",
-  "async",
-  "await",
-  "break",
-  "class",
-  "continue",
-  "def",
-  "del",
-  "elif",
-  "else",
-  "except",
-  "finally",
-  "for",
-  "from",
-  "global",
-  "if",
-  "import",
-  "in",
-  "is",
-  "lambda",
-  "nonlocal",
-  "not",
-  "or",
-  "pass",
-  "raise",
-  "return",
-  "try",
-  "while",
-  "with",
-  "yield",
-]);
+  'False',
+  'None',
+  'True',
+  'and',
+  'as',
+  'assert',
+  'async',
+  'await',
+  'break',
+  'class',
+  'continue',
+  'def',
+  'del',
+  'elif',
+  'else',
+  'except',
+  'finally',
+  'for',
+  'from',
+  'global',
+  'if',
+  'import',
+  'in',
+  'is',
+  'lambda',
+  'nonlocal',
+  'not',
+  'or',
+  'pass',
+  'raise',
+  'return',
+  'try',
+  'while',
+  'with',
+  'yield',
+])
 
 function isValidVariableName(name: string, lang?: ComputeLang | string) {
-  const chars = Array.from(name);
+  const chars = Array.from(name)
   const hasValidChars =
-    chars.length > 0 &&
-    chars.every((char, index) => isVariableNameChar(char, index === 0, lang));
-  if (lang === "python") {
-    return (
-      hasValidChars &&
-      !name.startsWith("__") &&
-      !pythonReservedVariableNames.has(name)
-    );
+    chars.length > 0 && chars.every((char, index) => isVariableNameChar(char, index === 0, lang))
+  if (lang === 'python') {
+    return hasValidChars && !name.startsWith('__') && !pythonReservedVariableNames.has(name)
   }
-  return hasValidChars && !jsReservedVariableNames.has(name);
+  return hasValidChars && !jsReservedVariableNames.has(name)
 }
 
 function isDatapointAliasUsed(name: string) {
-  return Boolean(
-    props.activeDraft?.datapointVariableRows.some((row) => row.alias === name),
-  );
+  return Boolean(props.activeDraft?.datapointVariableRows.some((row) => row.alias === name))
 }
 
 function isDatapointVariableReferenced(alias: string) {
-  if (!props.activeDraft) return false;
-  const name = alias.trim();
-  if (!name) return false;
+  if (!props.activeDraft) return false
+  const name = alias.trim()
+  if (!name) return false
   const pattern = new RegExp(
     `(?<![\\p{ID_Continue}$])${escapeRegExp(name)}(?![\\p{ID_Continue}$])`,
-    "u",
-  );
-  return pattern.test(props.activeDraft.code || "");
+    'u',
+  )
+  return pattern.test(props.activeDraft.code || '')
 }
 
 function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function insertActiveTemplate() {
-  if (!activeTemplate.value) return;
-  monacoEditorRef.value?.insertText?.(activeTemplate.value.code);
-  templateDialogVisible.value = false;
-  markDirty();
+  if (!activeTemplate.value) return
+  monacoEditorRef.value?.insertText?.(activeTemplate.value.code)
+  templateDialogVisible.value = false
+  markDirty()
 }
 
 function formatDebugValue(value: unknown) {
-  if (value === undefined || value === null) return "-";
-  if (typeof value === "string") return value;
-  return JSON.stringify(value, null, 2);
+  if (value === undefined || value === null) return '-'
+  if (typeof value === 'string') return value
+  return JSON.stringify(value, null, 2)
 }
 
 const langText = (lang?: ComputeLang | string) => {
   const map: Record<string, string> = {
-    js: "JavaScript",
-    javascript: "JavaScript",
-    python: "Python",
-  };
-  return map[lang || ""] || "未知语言";
-};
+    js: 'JavaScript',
+    javascript: 'JavaScript',
+    python: 'Python',
+  }
+  return map[lang || ''] || '未知语言'
+}
 
 const statusText = (status?: string) => {
   const map: Record<string, string> = {
-    enabled: "启用",
-    idle: "空闲",
-    running: "运行中",
-    error: "异常",
-    disabled: "停用",
-  };
-  return map[status || ""] || "未知";
-};
+    enabled: '启用',
+    idle: '空闲',
+    running: '运行中',
+    error: '异常',
+    disabled: '停用',
+  }
+  return map[status || ''] || '未知'
+}
 
 const datapointStatusText = (status?: string) => {
   const map: Record<string, string> = {
-    active: "正常",
-    inactive: "停用",
-    error: "异常",
-    unknown: "未知",
-  };
-  return map[status || ""] || "未知";
-};
+    active: '正常',
+    inactive: '停用',
+    error: '异常',
+    unknown: '未知',
+  }
+  return map[status || ''] || '未知'
+}
 
 const sourceTypeText = (sourceType?: string) => {
   const map: Record<string, string> = {
-    "mqtt.subscription": "MQTT",
-    "db.query": "数据库",
-    http: "HTTP",
-    manual: "手动",
-  };
-  return map[sourceType || ""] || sourceType || "-";
-};
+    'mqtt.subscription': 'MQTT',
+    'db.query': '数据库',
+    http: 'HTTP',
+    manual: '手动',
+  }
+  return map[sourceType || ''] || sourceType || '-'
+}
 
 const statusTone = (status?: string) => {
-  if (status === "running" || status === "enabled" || status === "idle")
-    return "success";
-  if (status === "error") return "danger";
-  if (status === "disabled") return "muted";
-  return "info";
-};
+  if (status === 'running' || status === 'enabled' || status === 'idle') return 'success'
+  if (status === 'error') return 'danger'
+  if (status === 'disabled') return 'muted'
+  return 'info'
+}
 </script>
 
 <style scoped>
@@ -2303,7 +2204,7 @@ const statusTone = (status?: string) => {
 }
 
 .compute-editor__output-inline {
-  font-family: Consolas, "Courier New", monospace;
+  font-family: Consolas, 'Courier New', monospace;
 }
 
 .compute-editor__actions {
@@ -2573,7 +2474,7 @@ const statusTone = (status?: string) => {
   border-radius: var(--dc-radius-sm);
   background: var(--dc-primary-soft);
   color: var(--dc-primary);
-  font-family: Consolas, "Courier New", monospace;
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 11px;
   font-weight: 800;
   text-overflow: ellipsis;
@@ -2708,7 +2609,7 @@ const statusTone = (status?: string) => {
   gap: 10px;
   overflow: hidden;
   color: var(--dc-text-muted);
-  font-family: Consolas, "Courier New", monospace;
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 12px;
   white-space: nowrap;
 }
@@ -2899,7 +2800,9 @@ const statusTone = (status?: string) => {
 
 .compute-editor__mapping-head {
   display: grid;
-  grid-template-columns: 72px minmax(110px, 0.8fr) 96px 38px minmax(100px, 0.8fr) minmax(140px, 1fr) 28px;
+  grid-template-columns:
+    72px minmax(110px, 0.8fr) 96px 38px minmax(100px, 0.8fr) minmax(140px, 1fr)
+    28px;
   gap: 5px;
   min-width: 680px;
   margin-top: 3px;
@@ -2911,7 +2814,9 @@ const statusTone = (status?: string) => {
 
 .compute-editor__mapping-row {
   display: grid;
-  grid-template-columns: 72px minmax(110px, 0.8fr) 96px 38px minmax(100px, 0.8fr) minmax(140px, 1fr) 28px;
+  grid-template-columns:
+    72px minmax(110px, 0.8fr) 96px 38px minmax(100px, 0.8fr) minmax(140px, 1fr)
+    28px;
   gap: 5px;
   min-width: 680px;
   align-items: center;
@@ -2930,7 +2835,7 @@ const statusTone = (status?: string) => {
   border-radius: var(--dc-radius-sm);
   background: var(--dc-surface-muted);
   color: var(--dc-text-muted);
-  font-family: Consolas, "Courier New", monospace;
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 11px;
   font-weight: 800;
 }
@@ -2978,7 +2883,7 @@ const statusTone = (status?: string) => {
   height: 10px;
   border-radius: 999px;
   background: var(--dc-surface-raised);
-  content: "";
+  content: '';
   transition: transform 0.16s ease;
 }
 
@@ -3157,7 +3062,7 @@ const statusTone = (status?: string) => {
   border-radius: var(--dc-radius-sm);
   background: var(--dc-primary-soft);
   color: var(--dc-primary);
-  font-family: Consolas, "Courier New", monospace;
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 12px;
   font-weight: 800;
   text-overflow: ellipsis;
@@ -3168,7 +3073,7 @@ const statusTone = (status?: string) => {
   min-width: 0;
   overflow: hidden;
   color: var(--dc-text-secondary);
-  font-family: Consolas, "Courier New", monospace;
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3279,7 +3184,7 @@ const statusTone = (status?: string) => {
 
 .compute-editor__dependency-row code {
   color: var(--dc-primary);
-  font-family: Consolas, "Courier New", monospace;
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 12px;
 }
 
@@ -3380,7 +3285,7 @@ const statusTone = (status?: string) => {
   background: var(--dc-surface);
   color: var(--dc-text);
   padding: 12px 14px;
-  font-family: Consolas, "Courier New", monospace;
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 12px;
   line-height: 1.55;
   outline: none;
@@ -3453,7 +3358,7 @@ const statusTone = (status?: string) => {
   overflow: auto;
   padding: 14px 16px;
   color: var(--dc-text);
-  font-family: Consolas, "Courier New", monospace;
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 12px;
   line-height: 1.55;
   white-space: pre-wrap;
@@ -3494,7 +3399,7 @@ const statusTone = (status?: string) => {
 
 .compute-editor__problem-row code {
   color: var(--dc-text-muted);
-  font-family: Consolas, "Courier New", monospace;
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 12px;
 }
 
@@ -3617,7 +3522,7 @@ const statusTone = (status?: string) => {
 .compute-editor__picker-table code {
   display: block;
   color: var(--dc-text-muted);
-  font-family: Consolas, "Courier New", monospace;
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 12px;
 }
 
@@ -3809,7 +3714,7 @@ const statusTone = (status?: string) => {
   border-radius: var(--dc-radius-sm);
   background: var(--dc-surface);
   color: var(--dc-text);
-  font-family: Consolas, "Courier New", monospace;
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;

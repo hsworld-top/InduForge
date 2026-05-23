@@ -49,9 +49,7 @@
         <div class="flex-shrink-0 flex items-center space-x-1">
           <StatusIndicator :status="connection.status" />
           <component
-            v-if="
-              connection.type === 'relational' || connection.type === 'mqtt'
-            "
+            v-if="connection.type === 'relational' || connection.type === 'mqtt'"
             :is="isExpanded ? IconTablerChevronDown : IconTablerChevronRight"
             class="expand-icon text-gray-400 w-4 h-4"
           />
@@ -65,13 +63,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import IconTablerDatabase from "~icons/tabler/database";
-import IconTablerCloudDataConnection from "~icons/tabler/cloud-data-connection";
-import IconTablerChevronRight from "~icons/tabler/chevron-right";
-import IconTablerChevronDown from "~icons/tabler/chevron-down";
-import StatusIndicator from "@/components/shared/StatusIndicator.vue";
-import { getConnectionTypeConfig } from "@/config/connectionTypes";
+import { computed } from 'vue'
+import IconTablerDatabase from '~icons/tabler/database'
+import IconTablerCloudDataConnection from '~icons/tabler/cloud-data-connection'
+import IconTablerChevronRight from '~icons/tabler/chevron-right'
+import IconTablerChevronDown from '~icons/tabler/chevron-down'
+import StatusIndicator from '@/components/shared/StatusIndicator.vue'
+import { getConnectionTypeConfig } from '@/config/connectionTypes'
 
 const props = defineProps({
   connection: {
@@ -86,51 +84,45 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
-});
+})
 
-const emit = defineEmits(["click", "dblclick", "contextmenu"]);
+const emit = defineEmits(['click', 'dblclick', 'contextmenu'])
 
 const typeLabel = computed(() => {
-  if (
-    props.connection.type === "relational" &&
-    props.connection.relationalConfig
-  ) {
-    const dbType = props.connection.relationalConfig.dbType;
-    const config = getConnectionTypeConfig(dbType);
-    return config ? config.label : dbType;
-  } else if (props.connection.type === "mqtt") {
-    const config = getConnectionTypeConfig("mqtt");
-    return config ? config.label : "MQTT";
+  if (props.connection.type === 'relational' && props.connection.relationalConfig) {
+    const dbType = props.connection.relationalConfig.dbType
+    const config = getConnectionTypeConfig(dbType)
+    return config ? config.label : dbType
+  } else if (props.connection.type === 'mqtt') {
+    const config = getConnectionTypeConfig('mqtt')
+    return config ? config.label : 'MQTT'
   }
-  return props.connection.type;
-});
+  return props.connection.type
+})
 
 const detailText = computed(() => {
-  if (
-    props.connection.type === "relational" &&
-    props.connection.relationalConfig
-  ) {
-    const config = props.connection.relationalConfig;
-    return `${config.dbType} - ${config.host}:${config.port}`;
+  if (props.connection.type === 'relational' && props.connection.relationalConfig) {
+    const config = props.connection.relationalConfig
+    return `${config.dbType} - ${config.host}:${config.port}`
   }
-  if (props.connection.type === "mqtt" && props.connection.mqttConfig) {
-    const config = props.connection.mqttConfig;
-    return `${config.protocol}://${config.brokerUrl}:${config.port || 1883}`;
+  if (props.connection.type === 'mqtt' && props.connection.mqttConfig) {
+    const config = props.connection.mqttConfig
+    return `${config.protocol}://${config.brokerUrl}:${config.port || 1883}`
   }
-  return "";
-});
+  return ''
+})
 
 const handleClick = () => {
-  emit("click", props.connection);
-};
+  emit('click', props.connection)
+}
 
 const handleDblClick = () => {
-  emit("dblclick", props.connection);
-};
+  emit('dblclick', props.connection)
+}
 
 const handleContextMenu = (event) => {
-  emit("contextmenu", event, props.connection);
-};
+  emit('contextmenu', event, props.connection)
+}
 </script>
 
 <style scoped>

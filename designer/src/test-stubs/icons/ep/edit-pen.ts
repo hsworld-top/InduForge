@@ -1,4 +1,4 @@
 export default {
-  name: "IconEpEditPen",
+  name: 'IconEpEditPen',
   template: `<span class="icon-ep-edit-pen" />`,
-};
+}

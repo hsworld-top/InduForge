@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod'
 
 // 数据中心 v2 统一响应包络与通用模型 schema。
 // 第一版策略：可选字段保守 .optional() / .nullable()，关键字段（id/path/name）必填。
@@ -9,9 +9,9 @@ export const PaginationSchema = z
     pageSize: z.number().int().positive().optional(),
     total: z.number().int().nonnegative().optional(),
   })
-  .passthrough();
+  .passthrough()
 
-export type Pagination = z.infer<typeof PaginationSchema>;
+export type Pagination = z.infer<typeof PaginationSchema>
 
 /**
  * 列表响应通用结构：{ list, pagination }。
@@ -23,7 +23,7 @@ export const listResponseSchema = <T extends z.ZodTypeAny>(itemSchema: T) =>
       list: z.array(itemSchema).default([]),
       pagination: PaginationSchema.optional(),
     })
-    .passthrough();
+    .passthrough()
 
 /**
  * 业务包络。request.ts 已经在拦截器里解包了一次 { code, msg, data, reqId }，
@@ -35,15 +35,15 @@ export const RuntimeGrantSchema = z
     allowRoles: z.array(z.string()).optional(),
     denyRoles: z.array(z.string()).optional(),
   })
-  .passthrough();
+  .passthrough()
 
-export type RuntimeGrant = z.infer<typeof RuntimeGrantSchema>;
+export type RuntimeGrant = z.infer<typeof RuntimeGrantSchema>
 
-export const TimeFieldSchema = z.string().optional().nullable();
+export const TimeFieldSchema = z.string().optional().nullable()
 
 /**
  * 通用 ID 校验：允许字符串与数字混合的项目 / 对象 ID。
  */
-export const IdSchema = z.union([z.string(), z.number()]);
+export const IdSchema = z.union([z.string(), z.number()])
 
-export type IdValue = z.infer<typeof IdSchema>;
+export type IdValue = z.infer<typeof IdSchema>

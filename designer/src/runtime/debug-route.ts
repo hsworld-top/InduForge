@@ -7,40 +7,40 @@
  * - 生产构建不注册 `/debug`，也不再把该路径视为合法调试入口。
  */
 
-const DESIGNER_DEBUG_PATHS = new Set(["/debug", "/designer/debug"]);
-declare const __DESIGNER_DEBUG_ROUTE_ENABLED__: boolean;
+const DESIGNER_DEBUG_PATHS = new Set(['/debug', '/designer/debug'])
+declare const __DESIGNER_DEBUG_ROUTE_ENABLED__: boolean
 
 function getDefaultDebugRouteEnabled(): boolean {
-  return typeof __DESIGNER_DEBUG_ROUTE_ENABLED__ !== "undefined"
+  return typeof __DESIGNER_DEBUG_ROUTE_ENABLED__ !== 'undefined'
     ? __DESIGNER_DEBUG_ROUTE_ENABLED__
-    : true;
+    : true
 }
 
 function normalizePathname(pathname: string): string {
   if (!pathname) {
-    return "/";
+    return '/'
   }
 
-  const trimmed = pathname.trim();
-  if (!trimmed || trimmed === "/") {
-    return "/";
+  const trimmed = pathname.trim()
+  if (!trimmed || trimmed === '/') {
+    return '/'
   }
 
-  return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
+  return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed
 }
 
 function normalizeDebugRouteEnabled(debugRouteEnabled: unknown): boolean {
-  if (typeof debugRouteEnabled === "string") {
-    return debugRouteEnabled !== "false";
+  if (typeof debugRouteEnabled === 'string') {
+    return debugRouteEnabled !== 'false'
   }
 
-  return Boolean(debugRouteEnabled);
+  return Boolean(debugRouteEnabled)
 }
 
 export function isDesignerDebugRouteEnabled(
   debugRouteEnabled = getDefaultDebugRouteEnabled(),
 ): boolean {
-  return normalizeDebugRouteEnabled(debugRouteEnabled);
+  return normalizeDebugRouteEnabled(debugRouteEnabled)
 }
 
 export function isDesignerDebugPath(
@@ -48,10 +48,10 @@ export function isDesignerDebugPath(
   debugRouteEnabled = getDefaultDebugRouteEnabled(),
 ): boolean {
   if (!isDesignerDebugRouteEnabled(debugRouteEnabled)) {
-    return false;
+    return false
   }
 
-  return DESIGNER_DEBUG_PATHS.has(normalizePathname(pathname));
+  return DESIGNER_DEBUG_PATHS.has(normalizePathname(pathname))
 }
 
 /**
@@ -61,5 +61,5 @@ export function shouldUseDebugMode(
   pathname: string,
   debugRouteEnabled = getDefaultDebugRouteEnabled(),
 ): boolean {
-  return isDesignerDebugPath(pathname, debugRouteEnabled);
+  return isDesignerDebugPath(pathname, debugRouteEnabled)
 }

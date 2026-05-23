@@ -2,72 +2,72 @@
  * 页面属性面板分区定义
  */
 
-import { i18n } from "@/i18n";
+import { i18n } from '@/i18n'
 
 export type PageInspectorSectionKey =
-  | "identity"
-  | "route"
-  | "viewport"
-  | "visual"
-  | "runtime"
-  | "runtimeAccess";
+  | 'identity'
+  | 'route'
+  | 'viewport'
+  | 'visual'
+  | 'runtime'
+  | 'runtimeAccess'
 
 export interface PageInspectorSection {
-  key: PageInspectorSectionKey;
-  title: string;
-  fields: string[];
+  key: PageInspectorSectionKey
+  title: string
+  fields: string[]
 }
 
 function buildPageInspectorSections(): PageInspectorSection[] {
   return [
     {
-      key: "identity",
-      title: i18n.global.t("pageInspector.sections.identity"),
-      fields: ["name", "title", "description", "pageId"],
+      key: 'identity',
+      title: i18n.global.t('pageInspector.sections.identity'),
+      fields: ['name', 'title', 'description', 'pageId'],
     },
     {
-      key: "route",
-      title: i18n.global.t("pageInspector.sections.route"),
-      fields: ["role", "routeMode", "routePath", "routeSlug", "parentRoutePath"],
+      key: 'route',
+      title: i18n.global.t('pageInspector.sections.route'),
+      fields: ['role', 'routeMode', 'routePath', 'routeSlug', 'parentRoutePath'],
     },
     {
-      key: "viewport",
-      title: i18n.global.t("pageInspector.sections.viewport"),
+      key: 'viewport',
+      title: i18n.global.t('pageInspector.sections.viewport'),
       fields: [
-        "viewportPreset",
-        "width",
-        "height",
-        "autoFit",
-        "lockAspectRatio",
-        "minWidth",
-        "minHeight",
-        "overflowMode",
+        'viewportPreset',
+        'width',
+        'height',
+        'autoFit',
+        'lockAspectRatio',
+        'minWidth',
+        'minHeight',
+        'overflowMode',
       ],
     },
     {
-      key: "visual",
-      title: i18n.global.t("pageInspector.sections.visual"),
+      key: 'visual',
+      title: i18n.global.t('pageInspector.sections.visual'),
       fields: [
-        "backgroundType",
-        "backgroundValue",
-        "backgroundSize",
-        "backgroundPosition",
-        "backgroundRepeat",
-        "styleConfig",
-        "transitionType",
+        'backgroundType',
+        'backgroundValue',
+        'backgroundSize',
+        'backgroundPosition',
+        'backgroundRepeat',
+        'styleConfig',
+        'transitionType',
       ],
     },
     {
-      key: "runtime",
-      title: i18n.global.t("pageInspector.sections.runtime"),
-      fields: ["openMode", "popup", "cacheMode", "preloadMode"],
+      key: 'runtime',
+      title: i18n.global.t('pageInspector.sections.runtime'),
+      fields: ['openMode', 'popup', 'cacheMode', 'preloadMode'],
     },
     {
-      key: "runtimeAccess",
-      title: i18n.global.t("pageInspector.sections.runtimeAccess"),
-      fields: ["runtimeAccessEnabled", "runtimeAccessAllowedRoles", "runtimePermissionSchemes"],
+      key: 'runtimeAccess',
+      title: i18n.global.t('pageInspector.sections.runtimeAccess'),
+      fields: ['runtimeAccessEnabled', 'runtimeAccessAllowedRoles', 'runtimePermissionSchemes'],
     },
-  ];
+  ]
 }
 
 /**
@@ -78,7 +78,7 @@ export function getPageInspectorSections(): PageInspectorSection[] {
   return buildPageInspectorSections().map((section) => ({
     ...section,
     fields: [...section.fields],
-  }));
+  }))
 }
 
 /**
@@ -87,5 +87,5 @@ export function getPageInspectorSections(): PageInspectorSection[] {
  * @returns {boolean} 是否允许编辑约束项
  */
 export function canEditRuntimeConstraint(autoFit: boolean): boolean {
-  return Boolean(autoFit);
+  return Boolean(autoFit)
 }

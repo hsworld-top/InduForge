@@ -21,19 +21,14 @@
             <span class="text-xs text-gray-500 dark:text-gray-300 truncate">
               {{ row.path }}
             </span>
-            <el-button link size="small" @click="copyPath(row.path)">
-              复制
-            </el-button>
+            <el-button link size="small" @click="copyPath(row.path)"> 复制 </el-button>
           </div>
         </template>
       </el-table-column>
       <el-table-column label="状态" width="90">
         <template #default="{ row }">
-          <el-tag
-            size="small"
-            :type="row.status === 'invalid' ? 'info' : 'success'"
-          >
-            {{ row.status === "invalid" ? "失效" : "活跃" }}
+          <el-tag size="small" :type="row.status === 'invalid' ? 'info' : 'success'">
+            {{ row.status === 'invalid' ? '失效' : '活跃' }}
           </el-tag>
         </template>
       </el-table-column>
@@ -42,10 +37,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { ElMessage } from "element-plus";
-import dataAPI from "@/api/data.api";
-import { getApiErrorMessage } from "@/utils/request";
+import { computed, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import dataAPI from '@/api/data.api'
+import { getApiErrorMessage } from '@/utils/request'
 
 const props = defineProps({
   projectId: {
@@ -54,14 +49,14 @@ const props = defineProps({
   },
   queryId: {
     type: String,
-    default: "",
+    default: '',
   },
-});
+})
 
-const datapoints = ref([]);
-const loading = ref(false);
+const datapoints = ref([])
+const loading = ref(false)
 
-const show = computed(() => Boolean(props.queryId));
+const show = computed(() => Boolean(props.queryId))
 
 /**
  * 加载数据点
@@ -69,48 +64,46 @@ const show = computed(() => Boolean(props.queryId));
  */
 const loadDataPoints = async () => {
   if (!props.queryId) {
-    datapoints.value = [];
-    return;
+    datapoints.value = []
+    return
   }
-  loading.value = true;
+  loading.value = true
   try {
     const response = await dataAPI.getDataPoints(props.projectId, {
-      type: "db.query",
+      type: 'db.query',
       sourceId: props.queryId,
       page: 1,
       pageSize: 200,
-    });
-    datapoints.value = response.data?.datapoints || [];
+    })
+    datapoints.value = response.data?.datapoints || []
   } catch (error) {
-    ElMessage.error(
-      "加载数据点失败：" + getApiErrorMessage(error, "加载数据点失败"),
-    );
+    ElMessage.error('加载数据点失败：' + getApiErrorMessage(error, '加载数据点失败'))
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 
 /**
  * 复制路径
  * @param {string} path - 数据点路径
  */
 const copyPath = async (path) => {
-  if (!path) return;
+  if (!path) return
   try {
-    await navigator.clipboard.writeText(path);
-    ElMessage.success("已复制数据点路径");
+    await navigator.clipboard.writeText(path)
+    ElMessage.success('已复制数据点路径')
   } catch (error) {
-    ElMessage.error("复制失败，请手动复制");
+    ElMessage.error('复制失败，请手动复制')
   }
-};
+}
 
 watch(
   () => props.queryId,
   () => {
-    loadDataPoints();
+    loadDataPoints()
   },
   { immediate: true },
-);
+)
 </script>
 
 <style scoped>

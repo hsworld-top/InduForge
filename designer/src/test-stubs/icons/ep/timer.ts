@@ -1,4 +1,4 @@
 export default {
-  name: "IconEpTimer",
+  name: 'IconEpTimer',
   template: `<span class="icon-ep-timer" />`,
-};
+}

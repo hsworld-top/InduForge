@@ -30,12 +30,7 @@
     <template #footer>
       <div class="alarm-group-move-dialog__footer">
         <el-button @click="visible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="loading"
-          :disabled="!canSubmit"
-          @click="submit"
-        >
+        <el-button type="primary" :loading="loading" :disabled="!canSubmit" @click="submit">
           移动
         </el-button>
       </div>
@@ -44,47 +39,47 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import type { AlarmPolicyGroup } from "@/api/schemas/alarm.schema";
-import DcDialog from "@/components/shared/DcDialog.vue";
+import { computed, ref, watch } from 'vue'
+import type { AlarmPolicyGroup } from '@/api/schemas/alarm.schema'
+import DcDialog from '@/components/shared/DcDialog.vue'
 
 const props = withDefaults(
   defineProps<{
-    modelValue: boolean;
-    group: AlarmPolicyGroup | null;
-    groups: AlarmPolicyGroup[];
-    loading?: boolean;
+    modelValue: boolean
+    group: AlarmPolicyGroup | null
+    groups: AlarmPolicyGroup[]
+    loading?: boolean
   }>(),
   {
     loading: false,
   },
-);
+)
 
 const emit = defineEmits<{
-  "update:modelValue": [value: boolean];
-  submit: [parentId: string | null];
-}>();
+  'update:modelValue': [value: boolean]
+  submit: [parentId: string | null]
+}>()
 
 const visible = computed({
   get: () => props.modelValue,
-  set: (value: boolean) => emit("update:modelValue", value),
-});
+  set: (value: boolean) => emit('update:modelValue', value),
+})
 
-const parentId = ref<string | null>(null);
-const currentParentId = computed(() => props.group?.parentId || null);
+const parentId = ref<string | null>(null)
+const currentParentId = computed(() => props.group?.parentId || null)
 
 const blockedIds = computed(() => {
-  const ids = new Set<string>();
+  const ids = new Set<string>()
   const collect = (groupId?: string | null) => {
-    if (!groupId || ids.has(groupId)) return;
-    ids.add(groupId);
+    if (!groupId || ids.has(groupId)) return
+    ids.add(groupId)
     props.groups
       .filter((group) => (group.parentId || null) === groupId)
-      .forEach((group) => collect(group.id));
-  };
-  collect(props.group?.id);
-  return ids;
-});
+      .forEach((group) => collect(group.id))
+  }
+  collect(props.group?.id)
+  return ids
+})
 
 const flattenGroups = (
   groups: AlarmPolicyGroup[],
@@ -94,51 +89,42 @@ const flattenGroups = (
   groups
     .filter((group) => (group.parentId || null) === parentGroupId)
     .flatMap((group) => {
-      const children = flattenGroups(groups, group.id, depth + 1);
-      if (blockedIds.value.has(group.id)) return children;
-      return [
-        { id: group.id, label: `${"　".repeat(depth)}${group.name}` },
-        ...children,
-      ];
-    });
+      const children = flattenGroups(groups, group.id, depth + 1)
+      if (blockedIds.value.has(group.id)) return children
+      return [{ id: group.id, label: `${'　'.repeat(depth)}${group.name}` }, ...children]
+    })
 
-const groupOptions = computed(() => flattenGroups(props.groups));
+const groupOptions = computed(() => flattenGroups(props.groups))
 
 const canSubmit = computed(
-  () =>
-    Boolean(props.group) &&
-    parentId.value !== currentParentId.value &&
-    !props.loading,
-);
+  () => Boolean(props.group) && parentId.value !== currentParentId.value && !props.loading,
+)
 const isDirty = computed(
-  () =>
-    visible.value &&
-    Boolean(props.group) &&
-    parentId.value !== currentParentId.value,
-);
+  () => visible.value && Boolean(props.group) && parentId.value !== currentParentId.value,
+)
 
 function resetForm() {
-  parentId.value = currentParentId.value;
+  parentId.value = currentParentId.value
 }
 
 function submit() {
-  if (!canSubmit.value) return;
-  emit("submit", parentId.value || null);
+  if (!canSubmit.value) return
+  emit('submit', parentId.value || null)
 }
 
 watch(
   () => props.modelValue,
   (open) => {
-    if (open) resetForm();
+    if (open) resetForm()
   },
-);
+)
 
 watch(
   () => props.group?.id,
   () => {
-    if (props.modelValue) resetForm();
+    if (props.modelValue) resetForm()
   },
-);
+)
 </script>
 
 <style scoped>

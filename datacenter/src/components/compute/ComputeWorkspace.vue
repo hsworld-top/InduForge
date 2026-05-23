@@ -90,58 +90,54 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
-import { ElMessage, ElMessageBox } from "element-plus";
-import type {
-  ComputeUnit,
-  ComputeFolderSave,
-  ComputeUnitSave,
-} from "@/api/schemas/compute.schema";
-import { useComputeStore } from "@/stores/compute.store";
-import { getApiErrorMessage } from "@/utils/request";
-import ComputeEditorShell from "./ComputeEditorShell.vue";
-import ComputeTree from "./ComputeTree.vue";
-import CreateComputeFolderDialog from "./CreateComputeFolderDialog.vue";
-import CreateComputeUnitDialog from "./CreateComputeUnitDialog.vue";
-import MoveComputeUnitDialog from "./MoveComputeUnitDialog.vue";
-import MoveComputeFolderDialog from "./MoveComputeFolderDialog.vue";
-import RenameComputeUnitDialog from "./RenameComputeUnitDialog.vue";
-import RenameComputeFolderDialog from "./RenameComputeFolderDialog.vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import type { ComputeUnit, ComputeFolderSave, ComputeUnitSave } from '@/api/schemas/compute.schema'
+import { useComputeStore } from '@/stores/compute.store'
+import { getApiErrorMessage } from '@/utils/request'
+import ComputeEditorShell from './ComputeEditorShell.vue'
+import ComputeTree from './ComputeTree.vue'
+import CreateComputeFolderDialog from './CreateComputeFolderDialog.vue'
+import CreateComputeUnitDialog from './CreateComputeUnitDialog.vue'
+import MoveComputeUnitDialog from './MoveComputeUnitDialog.vue'
+import MoveComputeFolderDialog from './MoveComputeFolderDialog.vue'
+import RenameComputeUnitDialog from './RenameComputeUnitDialog.vue'
+import RenameComputeFolderDialog from './RenameComputeFolderDialog.vue'
 import {
   draftToSavePayload,
   toComputeDraft,
   type ComputeDraft,
   type ComputeEditorTab,
-} from "./computeEditorModel";
-import type { ComputeFolderTreeNode } from "./computeTreeModel";
+} from './computeEditorModel'
+import type { ComputeFolderTreeNode } from './computeTreeModel'
 
 const props = defineProps<{
-  projectId: string;
-  selectedUnitId?: string | null;
-}>();
+  projectId: string
+  selectedUnitId?: string | null
+}>()
 
-const route = useRoute();
-const router = useRouter();
-const computeStore = useComputeStore();
+const route = useRoute()
+const router = useRouter()
+const computeStore = useComputeStore()
 
-const showCreateUnitDialog = ref(false);
-const showCreateFolderDialog = ref(false);
-const showRenameUnitDialog = ref(false);
-const showMoveUnitDialog = ref(false);
-const showRenameFolderDialog = ref(false);
-const showMoveFolderDialog = ref(false);
-const contextUnit = ref<ComputeUnit | null>(null);
-const contextFolder = ref<ComputeFolderTreeNode | null>(null);
-const drafts = ref<Record<string, ComputeDraft>>({});
-const activeTabId = ref<string | null>(null);
+const showCreateUnitDialog = ref(false)
+const showCreateFolderDialog = ref(false)
+const showRenameUnitDialog = ref(false)
+const showMoveUnitDialog = ref(false)
+const showRenameFolderDialog = ref(false)
+const showMoveFolderDialog = ref(false)
+const contextUnit = ref<ComputeUnit | null>(null)
+const contextFolder = ref<ComputeFolderTreeNode | null>(null)
+const drafts = ref<Record<string, ComputeDraft>>({})
+const activeTabId = ref<string | null>(null)
 
-const selectedUnitId = computed(() => props.selectedUnitId || null);
+const selectedUnitId = computed(() => props.selectedUnitId || null)
 
 const computeBasePath = computed(() => {
-  const prefix = route.path.startsWith("/debug/") ? "/debug" : "";
-  return `${prefix}/compute`;
-});
+  const prefix = route.path.startsWith('/debug/') ? '/debug' : ''
+  return `${prefix}/compute`
+})
 
 const tabs = computed<ComputeEditorTab[]>(() =>
   Object.values(drafts.value).map((draft) => ({
@@ -149,474 +145,436 @@ const tabs = computed<ComputeEditorTab[]>(() =>
     name: draft.name,
     dirty: draft.dirty,
   })),
-);
+)
 
 const activeDraft = computed(() => {
-  if (!activeTabId.value) return null;
-  return drafts.value[activeTabId.value] || null;
-});
+  if (!activeTabId.value) return null
+  return drafts.value[activeTabId.value] || null
+})
 
-const hasDirtyTabs = computed(() =>
-  Object.values(drafts.value).some((draft) => draft.dirty),
-);
+const hasDirtyTabs = computed(() => Object.values(drafts.value).some((draft) => draft.dirty))
 const dirtyUnitIds = computed(() =>
   Object.values(drafts.value)
     .filter((draft) => draft.dirty)
     .map((draft) => draft.id),
-);
+)
 
 async function loadWorkspace() {
-  const projectId = String(props.projectId);
+  const projectId = String(props.projectId)
   const results = await Promise.allSettled([
     computeStore.fetchList(projectId),
     computeStore.fetchFolders(projectId),
-  ]);
-  const failed = results.find((result) => result.status === "rejected");
+  ])
+  const failed = results.find((result) => result.status === 'rejected')
   if (failed) {
-    ElMessage.warning("计算单元部分能力未启用");
+    ElMessage.warning('计算单元部分能力未启用')
   }
 }
 
 function loadDependencies() {
-  computeStore
-    .fetchDependencies(String(props.projectId))
-    .catch(() => undefined);
+  computeStore.fetchDependencies(String(props.projectId)).catch(() => undefined)
 }
 
 function selectUnit(id: string) {
   void router.push({
     path: `${computeBasePath.value}/${id}`,
     query: route.query,
-  });
+  })
 }
 
 async function openSelectedUnit(id: string | null) {
   if (!id) {
-    activeTabId.value = null;
-    computeStore.closeEdit();
-    return;
+    activeTabId.value = null
+    computeStore.closeEdit()
+    return
   }
   if (drafts.value[id]) {
-    activeTabId.value = id;
-    return;
+    activeTabId.value = id
+    return
   }
   try {
-    const unit = await computeStore.openForEdit(String(props.projectId), id);
+    const unit = await computeStore.openForEdit(String(props.projectId), id)
     if (selectedUnitId.value !== id) {
-      return;
+      return
     }
     drafts.value = {
       ...drafts.value,
       [id]: toComputeDraft(unit),
-    };
-    activeTabId.value = id;
+    }
+    activeTabId.value = id
   } catch {
     // 错误文案已写入 store，由编辑区展示。
   }
 }
 
 function activateTab(id: string) {
-  activeTabId.value = id;
-  selectUnit(id);
+  activeTabId.value = id
+  selectUnit(id)
 }
 
 async function closeTab(id: string) {
-  const draft = drafts.value[id];
-  if (!draft) return;
+  const draft = drafts.value[id]
+  if (!draft) return
   if (draft.dirty) {
-    const action = await confirmDirtyClose(draft.name);
-    if (action === "cancel") return;
-    if (action === "save") {
-      const saved = await saveTab(id);
-      if (!saved) return;
+    const action = await confirmDirtyClose(draft.name)
+    if (action === 'cancel') return
+    if (action === 'save') {
+      const saved = await saveTab(id)
+      if (!saved) return
     }
   }
-  const nextDrafts = { ...drafts.value };
-  delete nextDrafts[id];
-  drafts.value = nextDrafts;
+  const nextDrafts = { ...drafts.value }
+  delete nextDrafts[id]
+  drafts.value = nextDrafts
   if (activeTabId.value === id) {
-    const next = Object.keys(nextDrafts)[0] || null;
-    activeTabId.value = next;
+    const next = Object.keys(nextDrafts)[0] || null
+    activeTabId.value = next
     if (next) {
-      selectUnit(next);
+      selectUnit(next)
     } else {
-      void router.push({ path: computeBasePath.value, query: route.query });
+      void router.push({ path: computeBasePath.value, query: route.query })
     }
   }
 }
 
 function markDirty(id: string) {
-  const draft = drafts.value[id];
-  if (!draft) return;
-  draft.dirty = true;
+  const draft = drafts.value[id]
+  if (!draft) return
+  draft.dirty = true
 }
 
 async function saveTab(id: string): Promise<boolean> {
-  const draft = drafts.value[id];
-  if (!draft) return false;
+  const draft = drafts.value[id]
+  if (!draft) return false
   try {
-    const unit = await computeStore.saveUnit(
-      String(props.projectId),
-      id,
-      draftToSavePayload(draft),
-    );
+    const unit = await computeStore.saveUnit(String(props.projectId), id, draftToSavePayload(draft))
     drafts.value = {
       ...drafts.value,
       [id]: toComputeDraft(unit),
-    };
-    ElMessage.success("计算单元已保存");
-    await refreshComputeTree();
-    return true;
+    }
+    ElMessage.success('计算单元已保存')
+    await refreshComputeTree()
+    return true
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "保存计算单元失败"));
-    return false;
+    ElMessage.error(getApiErrorMessage(error, '保存计算单元失败'))
+    return false
   }
 }
 
 function refreshComputeTree() {
-  const projectId = String(props.projectId);
+  const projectId = String(props.projectId)
   return Promise.allSettled([
     computeStore.fetchList(projectId),
     computeStore.fetchFolders(projectId),
-  ]);
+  ])
 }
 
 async function toggleEnabled(id: string, enabled: boolean) {
   try {
-    const unit = await computeStore.setUnitEnabled(
-      String(props.projectId),
-      id,
-      enabled,
-    );
+    const unit = await computeStore.setUnitEnabled(String(props.projectId), id, enabled)
     drafts.value = {
       ...drafts.value,
       [id]: toComputeDraft(unit),
-    };
-    ElMessage.success(enabled ? "计算单元已启用" : "计算单元已停用");
+    }
+    ElMessage.success(enabled ? '计算单元已启用' : '计算单元已停用')
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "更新计算单元状态失败"));
+    ElMessage.error(getApiErrorMessage(error, '更新计算单元状态失败'))
   }
 }
 
 async function deleteUnit(id: string) {
-  const draft = drafts.value[id];
-  await confirmAndDeleteUnit(id, draft?.name);
+  const draft = drafts.value[id]
+  await confirmAndDeleteUnit(id, draft?.name)
 }
 
 async function handleDeleteUnitFromTree(unit: ComputeUnit) {
-  await confirmAndDeleteUnit(String(unit.id), unit.name);
+  await confirmAndDeleteUnit(String(unit.id), unit.name)
 }
 
 async function confirmAndDeleteUnit(id: string, name?: string) {
   const ok = await ElMessageBox.confirm(
     `确认删除计算单元「${name || id}」？此操作不可恢复。`,
-    "删除计算单元",
+    '删除计算单元',
     {
-      confirmButtonText: "删除",
-      cancelButtonText: "取消",
-      type: "warning",
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
     },
   )
     .then(() => true)
-    .catch(() => false);
-  if (!ok) return;
+    .catch(() => false)
+  if (!ok) return
   try {
-    await computeStore.removeUnit(String(props.projectId), id);
-    const nextDrafts = { ...drafts.value };
-    delete nextDrafts[id];
-    drafts.value = nextDrafts;
-    const next = Object.keys(nextDrafts)[0] || null;
-    activeTabId.value = next;
+    await computeStore.removeUnit(String(props.projectId), id)
+    const nextDrafts = { ...drafts.value }
+    delete nextDrafts[id]
+    drafts.value = nextDrafts
+    const next = Object.keys(nextDrafts)[0] || null
+    activeTabId.value = next
     if (next) {
-      selectUnit(next);
+      selectUnit(next)
     } else {
-      void router.push({ path: computeBasePath.value, query: route.query });
+      void router.push({ path: computeBasePath.value, query: route.query })
     }
-    ElMessage.success("计算单元已删除");
+    ElMessage.success('计算单元已删除')
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "删除计算单元失败"));
+    ElMessage.error(getApiErrorMessage(error, '删除计算单元失败'))
   }
 }
 
 async function handleDeleteFolder(folder: ComputeFolderTreeNode) {
-  const childFolderCount = countComputeChildFolders(folder);
-  const unitCount = countComputeFolderUnits(folder);
+  const childFolderCount = countComputeChildFolders(folder)
+  const unitCount = countComputeFolderUnits(folder)
   const detail =
     childFolderCount > 0 || unitCount > 0
       ? `该分组包含 ${childFolderCount} 个子分组、${unitCount} 个计算单元。确认后会一起删除。`
-      : "该分组为空。确认后会删除该分组。";
+      : '该分组为空。确认后会删除该分组。'
   const ok = await ElMessageBox.confirm(
     `确认删除分组「${folder.name}」？${detail}此操作不可恢复。`,
-    "删除分组",
+    '删除分组',
     {
-      confirmButtonText: "删除",
-      cancelButtonText: "取消",
-      type: "warning",
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
     },
   )
     .then(() => true)
-    .catch(() => false);
-  if (!ok) return;
+    .catch(() => false)
+  if (!ok) return
   try {
-    const removedIds = collectComputeFolderUnitIds(folder);
-    await computeStore.removeFolder(String(props.projectId), folder.id);
+    const removedIds = collectComputeFolderUnitIds(folder)
+    await computeStore.removeFolder(String(props.projectId), folder.id)
     if (removedIds.length) {
-      const removed = new Set(removedIds);
-      const nextDrafts = { ...drafts.value };
+      const removed = new Set(removedIds)
+      const nextDrafts = { ...drafts.value }
       for (const id of removed) {
-        delete nextDrafts[id];
+        delete nextDrafts[id]
       }
-      drafts.value = nextDrafts;
+      drafts.value = nextDrafts
       if (activeTabId.value && removed.has(activeTabId.value)) {
-        const next = Object.keys(nextDrafts)[0] || null;
-        activeTabId.value = next;
+        const next = Object.keys(nextDrafts)[0] || null
+        activeTabId.value = next
         if (next) {
-          selectUnit(next);
+          selectUnit(next)
         } else {
-          void router.push({ path: computeBasePath.value, query: route.query });
+          void router.push({ path: computeBasePath.value, query: route.query })
         }
       }
     }
-    ElMessage.success("分组已删除");
+    ElMessage.success('分组已删除')
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "删除分组失败"));
+    ElMessage.error(getApiErrorMessage(error, '删除分组失败'))
   }
 }
 
 function countComputeChildFolders(folder: ComputeFolderTreeNode): number {
-  return folder.children.reduce(
-    (total, child) => total + 1 + countComputeChildFolders(child),
-    0,
-  );
+  return folder.children.reduce((total, child) => total + 1 + countComputeChildFolders(child), 0)
 }
 
 function countComputeFolderUnits(folder: ComputeFolderTreeNode): number {
   return (
     folder.units.length +
-    folder.children.reduce(
-      (total, child) => total + countComputeFolderUnits(child),
-      0,
-    )
-  );
+    folder.children.reduce((total, child) => total + countComputeFolderUnits(child), 0)
+  )
 }
 
 function collectComputeFolderUnitIds(folder: ComputeFolderTreeNode): string[] {
   return [
     ...folder.units.map((unit) => String(unit.id)),
     ...folder.children.flatMap(collectComputeFolderUnitIds),
-  ];
+  ]
 }
 
 async function confirmDirtyClose(name: string) {
   try {
-    await ElMessageBox.confirm(
-      `计算单元「${name}」有未保存修改。`,
-      "关闭标签",
-      {
-        confirmButtonText: "保存",
-        cancelButtonText: "丢弃",
-        distinguishCancelAndClose: true,
-        type: "warning",
-        closeOnClickModal: false,
-      },
-    );
-    return "save" as const;
+    await ElMessageBox.confirm(`计算单元「${name}」有未保存修改。`, '关闭标签', {
+      confirmButtonText: '保存',
+      cancelButtonText: '丢弃',
+      distinguishCancelAndClose: true,
+      type: 'warning',
+      closeOnClickModal: false,
+    })
+    return 'save' as const
   } catch (action) {
-    if (action === "cancel") return "discard" as const;
-    return "cancel" as const;
+    if (action === 'cancel') return 'discard' as const
+    return 'cancel' as const
   }
 }
 
 function handleBeforeUnload(event: BeforeUnloadEvent) {
-  if (!hasDirtyTabs.value) return;
-  event.preventDefault();
-  event.returnValue = "";
+  if (!hasDirtyTabs.value) return
+  event.preventDefault()
+  event.returnValue = ''
 }
 
 onBeforeRouteLeave(async () => {
-  if (!hasDirtyTabs.value) return true;
+  if (!hasDirtyTabs.value) return true
   return ElMessageBox.confirm(
-    "当前存在未保存的计算单元修改，离开后这些修改不会保存。",
-    "离开计算单元",
+    '当前存在未保存的计算单元修改，离开后这些修改不会保存。',
+    '离开计算单元',
     {
-      confirmButtonText: "离开",
-      cancelButtonText: "取消",
-      type: "warning",
+      confirmButtonText: '离开',
+      cancelButtonText: '取消',
+      type: 'warning',
     },
   )
     .then(() => true)
-    .catch(() => false);
-});
+    .catch(() => false)
+})
 
 async function handleCreateUnit(data: ComputeUnitSave) {
   try {
-    const unit = await computeStore.createUnit(String(props.projectId), data);
-    showCreateUnitDialog.value = false;
+    const unit = await computeStore.createUnit(String(props.projectId), data)
+    showCreateUnitDialog.value = false
     drafts.value = {
       ...drafts.value,
       [String(unit.id)]: toComputeDraft(unit),
-    };
-    selectUnit(String(unit.id));
-    ElMessage.success("计算单元已创建");
+    }
+    selectUnit(String(unit.id))
+    ElMessage.success('计算单元已创建')
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "新建计算单元失败"));
+    ElMessage.error(getApiErrorMessage(error, '新建计算单元失败'))
   }
 }
 
 function openRenameUnitDialog(unit: ComputeUnit) {
-  contextUnit.value = unit;
-  showRenameUnitDialog.value = true;
+  contextUnit.value = unit
+  showRenameUnitDialog.value = true
 }
 
 function openMoveUnitDialog(unit: ComputeUnit) {
-  contextUnit.value = unit;
-  showMoveUnitDialog.value = true;
+  contextUnit.value = unit
+  showMoveUnitDialog.value = true
 }
 
 function openRenameFolderDialog(folder: ComputeFolderTreeNode) {
-  contextFolder.value = folder;
-  showRenameFolderDialog.value = true;
+  contextFolder.value = folder
+  showRenameFolderDialog.value = true
 }
 
 function openMoveFolderDialog(folder: ComputeFolderTreeNode) {
-  contextFolder.value = folder;
-  showMoveFolderDialog.value = true;
+  contextFolder.value = folder
+  showMoveFolderDialog.value = true
 }
 
 function patchDraftFromSavedUnit(unit: ComputeUnit) {
-  const id = String(unit.id);
-  const draft = drafts.value[id];
-  if (!draft) return;
-  draft.name = unit.name;
-  draft.folderId = unit.folderId ? String(unit.folderId) : null;
+  const id = String(unit.id)
+  const draft = drafts.value[id]
+  if (!draft) return
+  draft.name = unit.name
+  draft.folderId = unit.folderId ? String(unit.folderId) : null
 }
 
 async function handleRenameUnit(name: string) {
-  const unit = contextUnit.value;
-  if (!unit) return;
+  const unit = contextUnit.value
+  if (!unit) return
   try {
-    const saved = await computeStore.saveUnit(
-      String(props.projectId),
-      String(unit.id),
-      {
-        name,
-      },
-    );
-    patchDraftFromSavedUnit(saved);
-    showRenameUnitDialog.value = false;
-    contextUnit.value = saved;
-    await refreshComputeTree();
-    ElMessage.success("计算单元已重命名");
+    const saved = await computeStore.saveUnit(String(props.projectId), String(unit.id), {
+      name,
+    })
+    patchDraftFromSavedUnit(saved)
+    showRenameUnitDialog.value = false
+    contextUnit.value = saved
+    await refreshComputeTree()
+    ElMessage.success('计算单元已重命名')
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "重命名计算单元失败"));
+    ElMessage.error(getApiErrorMessage(error, '重命名计算单元失败'))
   }
 }
 
 async function handleMoveUnit(folderId: string | null) {
-  const unit = contextUnit.value;
-  if (!unit) return;
+  const unit = contextUnit.value
+  if (!unit) return
   try {
-    const saved = await computeStore.saveUnit(
-      String(props.projectId),
-      String(unit.id),
-      {
-        folderId,
-      },
-    );
-    patchDraftFromSavedUnit(saved);
-    showMoveUnitDialog.value = false;
-    contextUnit.value = saved;
-    await refreshComputeTree();
-    ElMessage.success("计算单元已移动");
+    const saved = await computeStore.saveUnit(String(props.projectId), String(unit.id), {
+      folderId,
+    })
+    patchDraftFromSavedUnit(saved)
+    showMoveUnitDialog.value = false
+    contextUnit.value = saved
+    await refreshComputeTree()
+    ElMessage.success('计算单元已移动')
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "移动计算单元失败"));
+    ElMessage.error(getApiErrorMessage(error, '移动计算单元失败'))
   }
 }
 
 async function handleRenameFolder(name: string) {
-  const folder = contextFolder.value;
-  if (!folder) return;
+  const folder = contextFolder.value
+  if (!folder) return
   try {
-    const saved = await computeStore.saveFolder(
-      String(props.projectId),
-      folder.id,
-      {
-        name,
-      },
-    );
-    showRenameFolderDialog.value = false;
+    const saved = await computeStore.saveFolder(String(props.projectId), folder.id, {
+      name,
+    })
+    showRenameFolderDialog.value = false
     contextFolder.value = {
       ...folder,
       name: saved.name,
       parentId: saved.parentId ? String(saved.parentId) : null,
-    };
-    await refreshComputeTree();
-    ElMessage.success("分组已重命名");
+    }
+    await refreshComputeTree()
+    ElMessage.success('分组已重命名')
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "重命名分组失败"));
+    ElMessage.error(getApiErrorMessage(error, '重命名分组失败'))
   }
 }
 
 async function handleMoveFolder(parentId: string | null) {
-  const folder = contextFolder.value;
-  if (!folder) return;
+  const folder = contextFolder.value
+  if (!folder) return
   try {
-    const saved = await computeStore.saveFolder(
-      String(props.projectId),
-      folder.id,
-      {
-        parentId,
-      },
-    );
-    showMoveFolderDialog.value = false;
+    const saved = await computeStore.saveFolder(String(props.projectId), folder.id, {
+      parentId,
+    })
+    showMoveFolderDialog.value = false
     contextFolder.value = {
       ...folder,
       parentId: saved.parentId ? String(saved.parentId) : null,
-    };
-    await refreshComputeTree();
-    ElMessage.success("分组已移动");
+    }
+    await refreshComputeTree()
+    ElMessage.success('分组已移动')
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "移动分组失败"));
+    ElMessage.error(getApiErrorMessage(error, '移动分组失败'))
   }
 }
 
 async function handleCreateFolder(data: ComputeFolderSave) {
   try {
-    await computeStore.createFolder(String(props.projectId), data);
-    showCreateFolderDialog.value = false;
-    ElMessage.success("文件夹已创建");
+    await computeStore.createFolder(String(props.projectId), data)
+    showCreateFolderDialog.value = false
+    ElMessage.success('文件夹已创建')
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "新建文件夹失败"));
+    ElMessage.error(getApiErrorMessage(error, '新建文件夹失败'))
   }
 }
 
 watch(
   () => props.projectId,
   () => {
-    drafts.value = {};
-    activeTabId.value = null;
-    void loadWorkspace();
-    loadDependencies();
+    drafts.value = {}
+    activeTabId.value = null
+    void loadWorkspace()
+    loadDependencies()
   },
-);
+)
 
 watch(
   selectedUnitId,
   (id) => {
-    void openSelectedUnit(id);
+    void openSelectedUnit(id)
   },
   { immediate: true },
-);
+)
 
 onMounted(() => {
-  void loadWorkspace();
-  loadDependencies();
-  window.addEventListener("beforeunload", handleBeforeUnload);
-});
+  void loadWorkspace()
+  loadDependencies()
+  window.addEventListener('beforeunload', handleBeforeUnload)
+})
 
 onBeforeUnmount(() => {
-  window.removeEventListener("beforeunload", handleBeforeUnload);
-});
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+})
 </script>
 
 <style scoped>
