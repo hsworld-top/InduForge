@@ -1,0 +1,41 @@
+# 统一文本文件入库为 LF，避免 Windows 与 Linux/WSL 混用时产生整文件换行差异。
+* text=auto eol=lf
+
+# Windows 脚本保留 CRLF，便于在 cmd/PowerShell 下直接执行。
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# PowerShell、Shell、源码、配置和文档统一 LF。
+*.ps1 text eol=lf
+*.sh text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.vue text eol=lf
+*.go text eol=lf
+*.sql text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.env text eol=lf
+*.example text eol=lf
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+.gitignore text eol=lf
+
+# 二进制文件不做换行转换。
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.7z binary
+*.exe binary
