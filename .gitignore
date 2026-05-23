@@ -73,6 +73,7 @@ runtime/node_agent/runtime/
 # ============================================
 # 项目过程文档与本地工作区
 # ============================================
+.agents/
 .superpower/
 .superpowers/
 .worktrees/
@@ -82,6 +83,10 @@ runtime/node_agent/runtime/
 # ============================================
 .playwright-cli/
 .playwright-cli/output/
+.playwright-mcp/
+.codex-logs/
+/*.log
+/*.png
 designer/tsc-errors.txt
 dev_core/artifacts/
 designer/designer-next-iteration.plan.md
