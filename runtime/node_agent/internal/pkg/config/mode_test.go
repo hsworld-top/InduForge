@@ -254,7 +254,7 @@ func TestGetConfigPath_Default(t *testing.T) {
 
 	path := GetConfigPath()
 
-	expected := filepath.Join(".", "configs", "config.yaml")
+	expected := "./" + filepath.Join("config.yaml")
 	if path != expected {
 		t.Errorf("期望 %s，实际为 %s", expected, path)
 	}

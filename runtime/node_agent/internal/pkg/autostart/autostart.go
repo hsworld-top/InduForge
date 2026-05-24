@@ -7,15 +7,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 )
 
 // Config 自启动配置
 type Config struct {
-	ExePath    string // 程序路径
-	Name       string // 服务名称
+	ExePath    string   // 程序路径
+	Name       string   // 服务名称
 	Args       []string // 启动参数
-	WorkingDir string // 工作目录
+	WorkingDir string   // 工作目录
 }
 
 // AutoStarter 自启动接口
@@ -61,9 +60,7 @@ func (w *WindowsAutoStart) Enable(cfg Config) error {
 	// 使用 reg add 命令
 	// 注意：reg 命令需要在注册表路径前加引号，如果路径包含空格
 	cmd := exec.Command("reg", "add", key, "/v", cfg.Name, "/t", "REG_SZ", "/d", cmdLine, "/f")
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow: true,
-	}
+	hideCommandWindow(cmd)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
