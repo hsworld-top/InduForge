@@ -1,6 +1,6 @@
 # NodeAgent Front Makefile
 
-.PHONY: install dev build preview clean help
+.PHONY: install dev build preview clean fmt lint help
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -26,18 +26,17 @@ check-deps: ## 检查依赖是否安装
 	@echo "依赖检查完成"
 
 # 安装依赖
-install: check-deps ## 安装依赖
-	@echo "安装依赖..."
-	pnpm install
-	@echo "依赖安装完成"
+install: check-deps ## 提示从仓库根目录安装依赖
+	@echo "Node 依赖由仓库根 pnpm workspace 统一管理。"
+	@echo "请在仓库根目录执行: pnpm install"
 
 # 开发模式
-dev: install ## 启动开发服务器
+dev: check-deps ## 启动开发服务器
 	@echo "启动开发服务器..."
 	pnpm dev
 
 # 构建
-build: install ## 构建生产版本
+build: check-deps ## 构建生产版本
 	@echo "构建生产版本..."
 	pnpm build
 	@echo "构建完成，产物在 $(DIST_DIR)/ 目录"
@@ -57,23 +56,23 @@ clean: ## 清理构建文件
 # 代码格式化
 fmt: ## 格式化代码
 	@echo "格式化代码..."
-	pnpm exec prettier --write "src/**/*.{js,vue,css,scss}"
+	pnpm format
 	@echo "格式化完成"
 
 # 代码检查
-lint: install ## 代码质量检查
+lint: check-deps ## 代码质量检查
 	@echo "代码质量检查..."
-	pnpm exec eslint "src/**/*.{js,vue}"
+	pnpm lint
 	@echo "检查完成"
 
 # 打包分析
-analyze: install ## 分析打包结果
+analyze: check-deps ## 分析打包结果
 	@echo "分析打包结果..."
 	pnpm build --mode analyze
 	@echo "分析完成"
 
 # 类型检查
-type-check: install ## TypeScript 类型检查（如果有）
+type-check: check-deps ## TypeScript 类型检查（如果有）
 	@echo "TypeScript 类型检查..."
 	pnpm exec vue-tsc --noEmit
 	@echo "检查完成"

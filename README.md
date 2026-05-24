@@ -39,6 +39,7 @@ InduForge 是一个面向工业互联网场景的多模块单仓低代码平台�
 ## 技术栈
 
 ### 前端
+
 - **框架**: Vue 3 + Vite
 - **状态管理**: Pinia
 - **UI 组件**: Element Plus
@@ -49,6 +50,7 @@ InduForge 是一个面向工业互联网场景的多模块单仓低代码平台�
 - **动画**: GSAP
 
 ### 后端
+
 - **运行时**: Node.js 18+
 - **框架**: Express
 - **ORM**: Sequelize
@@ -57,6 +59,7 @@ InduForge 是一个面向工业互联网场景的多模块单仓低代码平台�
 - **国际化**: i18next
 
 ### 数据域与运行时
+
 - **数据域服务**: Go (`data_service`)
 - **节点执行器**: Go (`runtime/node_agent`)
 - **本地运维前端**: Vue 3 + Vite (`runtime/node_agent_front`)
@@ -76,15 +79,15 @@ InduForge 是一个面向工业互联网场景的多模块单仓低代码平台�
 
 ## 默认端口总览
 
-| 模块 | 服务类型 | 环境变量 | 默认端口 | 默认访问地址 |
-| --- | --- | --- | --- | --- |
-| `dev_ide` | 平台管理前端 | `VITE_IDE_PORT` | `18601` | `http://localhost:18601` |
-| `datacenter` | 数据中心前端 | `VITE_DATACENTER_PORT` | `18602` | `http://localhost:18602` |
-| `designer` | 设计器前端 | `VITE_DESIGNER_PORT` | `18603` | `http://localhost:18603` |
-| `runtime/node_agent_front` | 节点本地管理前端 | `VITE_NODE_AGENT_FRONT_PORT` | `18604` | `http://localhost:18604` |
-| `dev_core` | 平台控制面后端 | `PORT` | `18101` | `http://localhost:18101` |
-| `data_service` | 数据域服务 | `DATA_SERVICE_ADDR` / `VITE_DATA_SERVICE_URL` | `18102` | `http://localhost:18102` |
-| `runtime/node_agent` | 节点执行器后端 | `NODE_AGENT_PORT` | `18103` | `http://localhost:18103` |
+| 模块                       | 服务类型         | 环境变量                                      | 默认端口 | 默认访问地址             |
+| -------------------------- | ---------------- | --------------------------------------------- | -------- | ------------------------ |
+| `dev_ide`                  | 平台管理前端     | `VITE_IDE_PORT`                               | `18601`  | `http://localhost:18601` |
+| `datacenter`               | 数据中心前端     | `VITE_DATACENTER_PORT`                        | `18602`  | `http://localhost:18602` |
+| `designer`                 | 设计器前端       | `VITE_DESIGNER_PORT`                          | `18603`  | `http://localhost:18603` |
+| `runtime/node_agent_front` | 节点本地管理前端 | `VITE_NODE_AGENT_FRONT_PORT`                  | `18604`  | `http://localhost:18604` |
+| `dev_core`                 | 平台控制面后端   | `PORT`                                        | `18101`  | `http://localhost:18101` |
+| `data_service`             | 数据域服务       | `DATA_SERVICE_ADDR` / `VITE_DATA_SERVICE_URL` | `18102`  | `http://localhost:18102` |
+| `runtime/node_agent`       | 节点执行器后端   | `NODE_AGENT_PORT`                             | `18103`  | `http://localhost:18103` |
 
 ## 快速开始
 
@@ -117,8 +120,11 @@ Prettier 配置统一放在根目录 `.prettierrc.json`。ESLint 公共全局变
 # 统一格式化三个前端工作区
 pnpm format
 
-# 统一执行三个前端工作区的 ESLint 修复
+# 统一执行 JS/Vue 工作区的 ESLint 修复
 pnpm lint
+
+# 统一执行 Go 模块测试
+pnpm go:test
 ```
 
 ```powershell
@@ -170,6 +176,7 @@ pnpm dev:agent-front
 ```
 
 访问地址：
+
 - IDE: http://localhost:18601
 - 数据中心: http://localhost:18602
 - 设计中心: http://localhost:18603
@@ -220,6 +227,7 @@ InduForge/
 ## 文档导航
 
 ### 📚 核心文档
+
 - [数据库设计](./docs/database-design.md) - 数据库表结构说明
 - [环境端口规划](./docs/环境端口规划.md) - 开发、生产和离线交付端口约定
 - [产品定义](./docs/产品定义.md)
@@ -228,6 +236,7 @@ InduForge/
 - [测试与质量策略](./docs/测试与质量策略.md)
 
 ### 🎨 设计中心文档
+
 - [设计中心概述](./docs/designer/README.md)
 - [组件开发指南](./docs/designer/component-development.md)
 - [层级约定](./docs/designer/layer-order-convention.md)
@@ -235,20 +244,24 @@ InduForge/
 - [尺寸约定](./docs/designer/size-convention.md)
 
 ### 📊 数据中心文档
+
 - [数据中心概述](./docs/datacenter/README.md)
 - [数据连接管理](./docs/datacenter/connections.md)
 - [查询管理](./docs/datacenter/queries.md)
 
 ### 🧩 数据域与运行时文档
+
 - [数据域服务概述](./docs/data_service/README.md)
 - [节点执行器概述](./docs/node_agent/README.md)
 - [节点本地管理前端概述](./docs/node_agent_front/README.md)
 
 ### 🔧 后端文档
+
 - [后端 API 文档](./docs/backend/README.md)
 - [认证与授权](./docs/backend/auth.md)
 
 ### 📦 脚本与交付
+
 - [scripts 目录说明](./scripts/README.md)
 - [开发环境初始化](./scripts/dev/README.md)
 - [Docker 脚本目录](./scripts/docker/README.md)
@@ -308,6 +321,7 @@ Set-Location ..\..
 ### Nginx 配置
 
 参考 `scripts/nginx/nginx.conf` 配置文件，主要配置：
+
 - 静态资源路径
 - API 代理
 - 域名和端口
@@ -324,6 +338,7 @@ pnpm start
 ```
 
 建议使用 PM2 进行进程管理：
+
 ```powershell
 pm2 start src/index.js --name induforge-api
 ```
@@ -331,15 +346,19 @@ pm2 start src/index.js --name induforge-api
 ## 常见问题
 
 ### 1. 数据库连接失败
+
 先执行 `./scripts/dev/init-linux.sh` 确认开发基础设施容器已经启动，再检查根目录 `.env` 中的 `IF_META_STORE_*` 配置。开发环境 `dev_core` 启动时会自动同步 `if_core` 表结构。
 
 ### 2. 端口被占用
+
 修改各模块的 `vite.config.js` 或 `.env` 文件中的端口配置。
 
 ### 3. 跨域问题
+
 确保 Nginx 配置了正确的 CORS 头，或在开发环境使用代理。
 
 ### 4. Windows 下脚本无法直接执行
+
 优先使用 PowerShell 执行业务项目命令；Docker 基础设施建议在 WSL2 内执行 `./scripts/dev/init-linux.sh`。
 
 ## 贡献指南
