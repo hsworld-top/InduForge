@@ -50,6 +50,7 @@
 ### 任务 1：校准后端 MQTT 列表响应契约
 
 **文件：**
+
 - 修改：`data_service/internal/http/handler/mqtt_handler.go`
 - 修改：`data_service/internal/http/handler/mqtt_management_handler.go`
 - 修改：`data_service/tests/integration/mqtt_api_test.go`
@@ -207,6 +208,7 @@ git commit -m "feat(data_service): 统一MQTT列表响应结构"
 ### 任务 2：统一前端 MQTT API 读取结构
 
 **文件：**
+
 - 修改：`datacenter/src/api/data.api.ts`
 - 测试：后续由组件构建验证覆盖
 
@@ -215,23 +217,23 @@ git commit -m "feat(data_service): 统一MQTT列表响应结构"
 在 `datacenter/src/api/data.api.ts` 的 MQTT API 区域前加入：
 
 ```ts
-const normalizeMqttListPayload = (payload, legacyKey = "") => {
-  const data = payload?.data ?? payload ?? {};
+const normalizeMqttListPayload = (payload, legacyKey = '') => {
+  const data = payload?.data ?? payload ?? {}
   const list = Array.isArray(data.list)
     ? data.list
     : legacyKey && Array.isArray(data[legacyKey])
       ? data[legacyKey]
       : Array.isArray(data)
         ? data
-        : [];
+        : []
   const pagination = data.pagination || {
     page: 1,
     pageSize: list.length,
     total: list.length,
     totalPages: list.length > 0 ? 1 : 0,
-  };
-  return { list, pagination };
-};
+  }
+  return { list, pagination }
+}
 ```
 
 说明：虽然本轮不保留旧入口兼容，工具中保留 `legacyKey` 是为了让同一个函数能在后端迁移过程中稳定处理本地 mock 或测试返回，不增加 UI 分支。
@@ -244,56 +246,56 @@ const normalizeMqttListPayload = (payload, legacyKey = "") => {
 export const getMqttSubscriptions = (projectId, connectionId) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/connections/${connectionId}/subscriptions`,
-    method: "get",
+    method: 'get',
   }).then((response) => ({
     ...response,
-    data: normalizeMqttListPayload(response, "subscriptions"),
-  }));
-};
+    data: normalizeMqttListPayload(response, 'subscriptions'),
+  }))
+}
 
 export const getMqttSubscriptionMessages = (projectId, subscriptionId, params = {}) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/messages`,
-    method: "get",
+    method: 'get',
     params,
   }).then((response) => ({
     ...response,
     data: normalizeMqttListPayload(response),
-  }));
-};
+  }))
+}
 
 export const getMqttTagGroups = (projectId, subscriptionId, params = {}) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/tag-groups`,
-    method: "get",
+    method: 'get',
     params,
   }).then((response) => ({
     ...response,
-    data: normalizeMqttListPayload(response, "groups"),
-  }));
-};
+    data: normalizeMqttListPayload(response, 'groups'),
+  }))
+}
 
 export const getMqttTags = (projectId, subscriptionId, params = {}) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/tags`,
-    method: "get",
+    method: 'get',
     params,
   }).then((response) => ({
     ...response,
-    data: normalizeMqttListPayload(response, "tags"),
-  }));
-};
+    data: normalizeMqttListPayload(response, 'tags'),
+  }))
+}
 
 export const getProjectMqttTags = (projectId, params = {}) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/tags`,
-    method: "get",
+    method: 'get',
     params,
   }).then((response) => ({
     ...response,
-    data: normalizeMqttListPayload(response, "tags"),
-  }));
-};
+    data: normalizeMqttListPayload(response, 'tags'),
+  }))
+}
 ```
 
 - [ ] **步骤 3：临时构建验证**
@@ -311,6 +313,7 @@ pnpm --dir datacenter build
 ### 任务 3：创建通用工作台消息流组件
 
 **文件：**
+
 - 创建：`datacenter/src/components/workbench/WorkbenchStatusPill.vue`
 - 创建：`datacenter/src/components/workbench/WorkbenchStreamToolbar.vue`
 - 创建：`datacenter/src/components/workbench/WorkbenchStreamMessageList.vue`
@@ -329,14 +332,14 @@ pnpm --dir datacenter build
 <script setup lang="ts">
 withDefaults(
   defineProps<{
-    tone?: "info" | "success" | "warning" | "danger";
-    label?: string;
+    tone?: 'info' | 'success' | 'warning' | 'danger'
+    label?: string
   }>(),
   {
-    tone: "info",
-    label: "",
+    tone: 'info',
+    label: '',
   },
-);
+)
 </script>
 
 <style scoped>
@@ -385,7 +388,7 @@ withDefaults(
     <div class="workbench-stream-toolbar__title">
       <slot name="title" />
       <WorkbenchStatusPill :tone="connected ? 'success' : 'info'">
-        {{ connected ? "已连接" : "未连接" }}
+        {{ connected ? '已连接' : '未连接' }}
       </WorkbenchStatusPill>
     </div>
 
@@ -407,10 +410,20 @@ withDefaults(
         controls-position="right"
         @update:model-value="$emit('update:limit', Number($event || 100))"
       />
-      <button type="button" class="workbench-stream-toolbar__icon" title="刷新" @click="$emit('refresh')">
+      <button
+        type="button"
+        class="workbench-stream-toolbar__icon"
+        title="刷新"
+        @click="$emit('refresh')"
+      >
         <IconTablerRefresh />
       </button>
-      <button type="button" class="workbench-stream-toolbar__icon" title="清空" @click="$emit('clear')">
+      <button
+        type="button"
+        class="workbench-stream-toolbar__icon"
+        title="清空"
+        @click="$emit('clear')"
+      >
         <IconTablerTrash />
       </button>
       <button
@@ -426,24 +439,24 @@ withDefaults(
 </template>
 
 <script setup lang="ts">
-import IconTablerRefresh from "~icons/tabler/refresh";
-import IconTablerTrash from "~icons/tabler/trash";
-import WorkbenchStatusPill from "./WorkbenchStatusPill.vue";
+import IconTablerRefresh from '~icons/tabler/refresh'
+import IconTablerTrash from '~icons/tabler/trash'
+import WorkbenchStatusPill from './WorkbenchStatusPill.vue'
 
 defineProps<{
-  connected: boolean;
-  search: string;
-  limit: number;
-  formatJson: boolean;
-}>();
+  connected: boolean
+  search: string
+  limit: number
+  formatJson: boolean
+}>()
 
 defineEmits<{
-  (event: "update:search", value: string): void;
-  (event: "update:limit", value: number): void;
-  (event: "update:formatJson", value: boolean): void;
-  (event: "refresh"): void;
-  (event: "clear"): void;
-}>();
+  (event: 'update:search', value: string): void
+  (event: 'update:limit', value: number): void
+  (event: 'update:formatJson', value: boolean): void
+  (event: 'refresh'): void
+  (event: 'clear'): void
+}>()
 </script>
 
 <style scoped>
@@ -558,8 +571,8 @@ defineEmits<{
     >
       <div class="workbench-stream-list__meta">
         <WorkbenchStatusPill tone="info">QoS {{ message.qos ?? 0 }}</WorkbenchStatusPill>
-        <span>{{ message.topic || "-" }}</span>
-        <time>{{ message.timeText || "-" }}</time>
+        <span>{{ message.topic || '-' }}</span>
+        <time>{{ message.timeText || '-' }}</time>
         <button type="button" title="复制 Payload" @click.stop="$emit('copy', message)">
           <IconTablerCopy />
         </button>
@@ -570,26 +583,26 @@ defineEmits<{
 </template>
 
 <script setup lang="ts">
-import IconTablerCopy from "~icons/tabler/copy";
-import IconTablerInbox from "~icons/tabler/inbox";
-import IconTablerLoader2 from "~icons/tabler/loader-2";
-import WorkbenchStatusPill from "./WorkbenchStatusPill.vue";
+import IconTablerCopy from '~icons/tabler/copy'
+import IconTablerInbox from '~icons/tabler/inbox'
+import IconTablerLoader2 from '~icons/tabler/loader-2'
+import WorkbenchStatusPill from './WorkbenchStatusPill.vue'
 
 defineProps<{
-  loading: boolean;
+  loading: boolean
   messages: Array<{
-    id: string | number;
-    topic?: string;
-    qos?: number;
-    timeText?: string;
-    payloadText: string;
-  }>;
-}>();
+    id: string | number
+    topic?: string
+    qos?: number
+    timeText?: string
+    payloadText: string
+  }>
+}>()
 
 defineEmits<{
-  (event: "select", message: any): void;
-  (event: "copy", message: any): void;
-}>();
+  (event: 'select', message: any): void
+  (event: 'copy', message: any): void
+}>()
 </script>
 
 <style scoped>
@@ -708,6 +721,7 @@ pnpm --dir datacenter build
 ### 任务 4：改造 MQTT 消息查看器
 
 **文件：**
+
 - 修改：`datacenter/src/components/mqtt/MqttMessageViewer.vue`
 
 - [ ] **步骤 1：替换模板为新版工作台结构**
@@ -727,8 +741,8 @@ pnpm --dir datacenter build
     >
       <template #title>
         <IconTablerRss />
-        <span>{{ subscription?.name || "消息查看器" }}</span>
-        <WorkbenchStatusPill tone="info">{{ subscription?.topic || "-" }}</WorkbenchStatusPill>
+        <span>{{ subscription?.name || '消息查看器' }}</span>
+        <WorkbenchStatusPill tone="info">{{ subscription?.topic || '-' }}</WorkbenchStatusPill>
       </template>
     </WorkbenchStreamToolbar>
 
@@ -754,22 +768,22 @@ pnpm --dir datacenter build
 
 ```ts
 const loadMessages = async () => {
-  if (!props.subscription) return;
+  if (!props.subscription) return
 
-  loading.value = true;
+  loading.value = true
   try {
     const response = await dataAPI.getMqttSubscriptionMessages(
       props.projectId,
       props.subscription.id,
       { limit: displayLimit.value },
-    );
-    messages.value = response.data?.list || [];
+    )
+    messages.value = response.data?.list || []
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "加载消息失败"));
+    ElMessage.error(getApiErrorMessage(error, '加载消息失败'))
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 ```
 
 新增展示消息 computed：
@@ -784,29 +798,29 @@ const displayMessages = computed(() =>
     payloadText: formatPayload(message.payload),
     raw: message,
   })),
-);
+)
 ```
 
 把 `addMessage` 的输入兼容 socket snapshot：
 
 ```ts
 const addMessage = async (message) => {
-  if (!message) return;
+  if (!message) return
 
   messages.value.unshift({
     id: message.id || `${Date.now()}-${Math.random()}`,
     subscriptionId: message.subscriptionId || props.subscription?.id,
     topic: message.topic,
-    payload: message.payload ?? message.value ?? "",
+    payload: message.payload ?? message.value ?? '',
     qos: message.qos || 0,
     timestamp: message.timestamp || message.receivedAt || Date.now(),
     receivedAt: message.receivedAt || message.timestamp || Date.now(),
-  });
+  })
 
   if (messages.value.length > 1000) {
-    messages.value = messages.value.slice(0, 1000);
+    messages.value = messages.value.slice(0, 1000)
   }
-};
+}
 ```
 
 说明：不再用 `subscriptionEnabled` 阻止实时消息写入。查看消息是 preview 行为，订阅是否启用由后端运行时决定；前端只展示当前 socket 已收到的数据。
@@ -858,6 +872,7 @@ pnpm --dir datacenter build
 ### 任务 5：改造 MQTT 变量配置与监控面板
 
 **文件：**
+
 - 修改：`datacenter/src/components/mqtt/MqttTagList.vue`
 - 修改：`datacenter/src/components/mqtt/MqttTagMonitor.vue`
 - 修改：`datacenter/src/components/mqtt/TagItem.vue`
@@ -869,36 +884,30 @@ pnpm --dir datacenter build
 ```ts
 const loadGroups = async () => {
   try {
-    const response = await getMqttTagGroups(
-      props.projectId,
-      props.subscriptionId,
-    );
-    groups.value = response.data?.list || [];
-    activeGroups.value = [
-      "ungrouped",
-      ...groups.value.map((group) => group.id),
-    ];
+    const response = await getMqttTagGroups(props.projectId, props.subscriptionId)
+    groups.value = response.data?.list || []
+    activeGroups.value = ['ungrouped', ...groups.value.map((group) => group.id)]
   } catch (error) {
-    console.error("Failed to load tag groups:", error);
-    ElMessage.error(getApiErrorMessage(error, "加载变量组失败"));
+    console.error('Failed to load tag groups:', error)
+    ElMessage.error(getApiErrorMessage(error, '加载变量组失败'))
   }
-};
+}
 
 const loadTags = async () => {
   try {
-    loading.value = true;
+    loading.value = true
     const response = await getMqttTags(props.projectId, props.subscriptionId, {
       pageSize: 200,
-    });
-    tags.value = response.data?.list || [];
-    await loadTagDatapoints(tags.value);
+    })
+    tags.value = response.data?.list || []
+    await loadTagDatapoints(tags.value)
   } catch (error) {
-    console.error("Failed to load tags:", error);
-    ElMessage.error(getApiErrorMessage(error, "加载变量失败"));
+    console.error('Failed to load tags:', error)
+    ElMessage.error(getApiErrorMessage(error, '加载变量失败'))
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 ```
 
 - [ ] **步骤 2：更新监控面板读取结构**
@@ -910,18 +919,18 @@ const fetchTags = async () => {
   try {
     const res = await getMqttTags(props.projectId, props.subscriptionId, {
       pageSize: 200,
-    });
-    tags.value = res.data?.list || [];
+    })
+    tags.value = res.data?.list || []
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "获取变量列表失败"));
+    ElMessage.error(getApiErrorMessage(error, '获取变量列表失败'))
   }
-};
+}
 ```
 
 同时引入：
 
 ```ts
-import { getApiErrorMessage } from "@/utils/request";
+import { getApiErrorMessage } from '@/utils/request'
 ```
 
 - [ ] **步骤 3：改造变量列表视觉**
@@ -969,14 +978,14 @@ import { getApiErrorMessage } from "@/utils/request";
 在 `MqttTagMonitor.vue` 保留 `onBeforeUnmount` 中的：
 
 ```ts
-stopSocketWatch?.();
-unsubscribeMessage?.();
-unsubscribeTagSync(handleTagSyncEvent);
+stopSocketWatch?.()
+unsubscribeMessage?.()
+unsubscribeTagSync(handleTagSyncEvent)
 Array.from(tagSubscriptionCleanups.values()).forEach((cleanup) => {
-  cleanup?.();
-});
-tagSubscriptionCleanups.clear();
-disconnect();
+  cleanup?.()
+})
+tagSubscriptionCleanups.clear()
+disconnect()
 ```
 
 将根样式调整为：
@@ -1053,6 +1062,7 @@ pnpm --dir datacenter build
 ### 任务 6：收敛 MQTT 工作台容器
 
 **文件：**
+
 - 修改：`datacenter/src/components/mqtt/MqttSubscriptionList.vue`
 - 修改：`datacenter/src/components/mqtt/MqttWorkbench.vue`
 
@@ -1062,23 +1072,20 @@ pnpm --dir datacenter build
 
 ```ts
 const loadSubscriptions = async () => {
-  loading.value = true;
+  loading.value = true
   try {
-    const response = await dataAPI.getMqttSubscriptions(
-      props.projectId,
-      props.connectionId,
-    );
-    subscriptions.value = response.data?.list || [];
+    const response = await dataAPI.getMqttSubscriptions(props.projectId, props.connectionId)
+    subscriptions.value = response.data?.list || []
   } catch (error) {
     ElMessage.error(
-      t("subscription.loadFailed", {
-        message: getApiErrorMessage(error, "加载订阅失败"),
+      t('subscription.loadFailed', {
+        message: getApiErrorMessage(error, '加载订阅失败'),
       }),
-    );
+    )
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 ```
 
 - [ ] **步骤 2：更新工作台订阅树读取结构**
@@ -1087,28 +1094,25 @@ const loadSubscriptions = async () => {
 
 ```ts
 const loadSubscriptions = async () => {
-  loading.value = true;
+  loading.value = true
   try {
-    const response = await dataAPI.getMqttSubscriptions(
-      projectIdText.value,
-      props.connection.id,
-    );
-    subscriptions.value = response.data?.list || [];
+    const response = await dataAPI.getMqttSubscriptions(projectIdText.value, props.connection.id)
+    subscriptions.value = response.data?.list || []
     if (
       subscriptions.value.length > 0 &&
       !subscriptions.value.some(
         (subscription) => subscription.id === selectedSubscription.value?.id,
       )
     ) {
-      selectedSubscription.value = subscriptions.value[0];
+      selectedSubscription.value = subscriptions.value[0]
     }
-    await subscriptionListRef.value?.loadSubscriptions?.();
+    await subscriptionListRef.value?.loadSubscriptions?.()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, "加载 MQTT 订阅失败"));
+    ElMessage.error(getApiErrorMessage(error, '加载 MQTT 订阅失败'))
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 ```
 
 - [ ] **步骤 3：修正消息实时 handler**
@@ -1116,13 +1120,13 @@ const loadSubscriptions = async () => {
 在 `openMessages` 中将：
 
 ```ts
-viewer?.addMessage?.(data.message);
+viewer?.addMessage?.(data.message)
 ```
 
 改为：
 
 ```ts
-viewer?.addMessage?.(data?.message || data);
+viewer?.addMessage?.(data?.message || data)
 ```
 
 说明：`data_service` socket 当前发出的 `mqtt:message` 是订阅快照本身，不包 `message` 字段。
@@ -1135,17 +1139,17 @@ viewer?.addMessage?.(data?.message || data);
 watch(
   () => props.connection.id,
   async () => {
-    Array.from(messageCleanups.values()).forEach((cleanup) => cleanup?.());
-    messageCleanups.clear();
-    messageViewerRefs.value.clear();
-    tabs.value = [];
-    activeTabId.value = "";
-    selectedSubscription.value = null;
-    connectionStarted.value = false;
-    openSubscriptionList();
-    await loadSubscriptions();
+    Array.from(messageCleanups.values()).forEach((cleanup) => cleanup?.())
+    messageCleanups.clear()
+    messageViewerRefs.value.clear()
+    tabs.value = []
+    activeTabId.value = ''
+    selectedSubscription.value = null
+    connectionStarted.value = false
+    openSubscriptionList()
+    await loadSubscriptions()
   },
-);
+)
 ```
 
 并从 `vue` import 增加 `watch`。
@@ -1155,27 +1159,25 @@ watch(
 在模板的 `MqttSubscriptionList` 上增加：
 
 ```vue
-@subscription-select="selectedSubscription = $event"
-@view-messages="openMessages"
-@manage-tags="openTagManager"
-@subscription-deleted="handleSubscriptionDeleted"
+@subscription-select="selectedSubscription = $event" @view-messages="openMessages"
+@manage-tags="openTagManager" @subscription-deleted="handleSubscriptionDeleted"
 ```
 
 保留现有事件，同时在 `MqttSubscriptionList.vue` 的 `handleDialogSuccess` 中 emit 刷新事件：
 
 ```ts
 const emit = defineEmits([
-  "view-messages",
-  "subscription-select",
-  "manage-tags",
-  "subscription-deleted",
-  "subscriptions-changed",
-]);
+  'view-messages',
+  'subscription-select',
+  'manage-tags',
+  'subscription-deleted',
+  'subscriptions-changed',
+])
 
 const handleDialogSuccess = async () => {
-  await loadSubscriptions();
-  emit("subscriptions-changed");
-};
+  await loadSubscriptions()
+  emit('subscriptions-changed')
+}
 ```
 
 在 `MqttWorkbench.vue` 增加：
@@ -1199,6 +1201,7 @@ pnpm --dir datacenter build
 ### 任务 7：删除旧 DataCenterNew MQTT tab 入口
 
 **文件：**
+
 - 修改：`datacenter/src/views/DataCenterNew.vue`
 - 修改：`datacenter/src/components/connection/ConnectionList.vue`
 
@@ -1226,11 +1229,11 @@ pnpm --dir datacenter build
 删除 `DataCenterNew.vue` 中：
 
 ```ts
-import MqttSubscriptionList from "@/components/mqtt/MqttSubscriptionList.vue";
-import MqttMessageViewer from "@/components/mqtt/MqttMessageViewer.vue";
-import MqttTagList from "@/components/mqtt/MqttTagList.vue";
-import MqttTagMonitor from "@/components/mqtt/MqttTagMonitor.vue";
-import { useMqttSocket } from "@/composables/useMqttSocket";
+import MqttSubscriptionList from '@/components/mqtt/MqttSubscriptionList.vue'
+import MqttMessageViewer from '@/components/mqtt/MqttMessageViewer.vue'
+import MqttTagList from '@/components/mqtt/MqttTagList.vue'
+import MqttTagMonitor from '@/components/mqtt/MqttTagMonitor.vue'
+import { useMqttSocket } from '@/composables/useMqttSocket'
 ```
 
 删除：
@@ -1291,14 +1294,14 @@ const handleMqttSubscriptionDeleted = (connection, subscription) => { ... };
 
 ```ts
 const handleMqttSubscriptionDblClick = () => {
-  ElMessage.info("请在 MQTT 接入源工作台中查看消息和变量");
-};
+  ElMessage.info('请在 MQTT 接入源工作台中查看消息和变量')
+}
 ```
 
 若文件未引入 `ElMessage`，添加：
 
 ```ts
-import { ElMessage } from "element-plus";
+import { ElMessage } from 'element-plus'
 ```
 
 - [ ] **步骤 6：全局搜索旧引用**
@@ -1326,6 +1329,7 @@ pnpm --dir datacenter build
 ### 任务 8：补充 socket 引用计数测试与全量验证
 
 **文件：**
+
 - 修改：`datacenter/tests/mqtt-socket-shared.test.ts`
 - 可选修改：`data_service/internal/http/socket/preview_socket_server_test.go`
 
@@ -1336,8 +1340,8 @@ pnpm --dir datacenter build
 测试主体示例：
 
 ```ts
-test("同一订阅引用计数归零后才发送 unsubscribe", () => {
-  const emitted: Array<{ event: string; payload: any }> = [];
+test('同一订阅引用计数归零后才发送 unsubscribe', () => {
+  const emitted: Array<{ event: string; payload: any }> = []
   const registry = createMqttSocketSharedRegistry({
     ioFactory: () => ({
       connected: true,
@@ -1346,24 +1350,24 @@ test("同一订阅引用计数归零后才发送 unsubscribe", () => {
       emit: (event: string, payload: any) => emitted.push({ event, payload }),
       disconnect: () => {},
     }),
-    getToken: () => "token",
-    getApiUrl: () => "http://localhost:19602",
+    getToken: () => 'token',
+    getApiUrl: () => 'http://localhost:19602',
     logger: {},
-  });
+  })
 
   const acquired = registry.acquire({
-    projectId: "project-1",
-    previewSessionId: "session-1",
-  });
-  expect(acquired).toBeTruthy();
-  registry.subscribeSubscription(acquired!.key, "sub-1");
-  registry.subscribeSubscription(acquired!.key, "sub-1");
-  registry.unsubscribeSubscription(acquired!.key, "sub-1");
-  registry.unsubscribeSubscription(acquired!.key, "sub-1");
+    projectId: 'project-1',
+    previewSessionId: 'session-1',
+  })
+  expect(acquired).toBeTruthy()
+  registry.subscribeSubscription(acquired!.key, 'sub-1')
+  registry.subscribeSubscription(acquired!.key, 'sub-1')
+  registry.unsubscribeSubscription(acquired!.key, 'sub-1')
+  registry.unsubscribeSubscription(acquired!.key, 'sub-1')
 
-  expect(emitted.filter((item) => item.event === "mqtt:subscribe")).toHaveLength(1);
-  expect(emitted.filter((item) => item.event === "mqtt:unsubscribe")).toHaveLength(1);
-});
+  expect(emitted.filter((item) => item.event === 'mqtt:subscribe')).toHaveLength(1)
+  expect(emitted.filter((item) => item.event === 'mqtt:unsubscribe')).toHaveLength(1)
+})
 ```
 
 - [ ] **步骤 2：运行前端相关测试**

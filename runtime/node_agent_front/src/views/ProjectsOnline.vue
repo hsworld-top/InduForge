@@ -23,7 +23,10 @@
           </div>
         </el-form-item>
         <el-form-item :label="t('remote.tenantCode')">
-          <el-input v-model="centerForm.tenantCode" :placeholder="locale === 'en-US' ? 'default (optional)' : 'default（可选）'" />
+          <el-input
+            v-model="centerForm.tenantCode"
+            :placeholder="locale === 'en-US' ? 'default (optional)' : 'default（可选）'"
+          />
         </el-form-item>
         <el-form-item :label="locale === 'en-US' ? 'Username' : '用户名'" required>
           <el-input v-model="centerForm.username" />
@@ -43,7 +46,9 @@
       </el-form>
       <el-descriptions v-else :column="1" border>
         <el-descriptions-item :label="t('remote.bindTitle')">
-          <el-tag class="status-tag" v-if="approvalPending" type="warning">{{ t('remote.pendingApproval') }}</el-tag>
+          <el-tag class="status-tag" v-if="approvalPending" type="warning">{{
+            t('remote.pendingApproval')
+          }}</el-tag>
           <el-tag class="status-tag" v-else type="success">{{ t('remote.bound') }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item :label="t('remote.centerStatus')">
@@ -65,8 +70,15 @@
         </el-descriptions-item>
       </el-descriptions>
       <div class="bind-actions">
-        <el-button v-if="showBindForm" type="primary" :loading="binding" @click="bindCenter">{{ t('remote.bindSubmit') }}</el-button>
-        <el-button v-else-if="approvalPending" type="primary" :loading="checkingApproval" @click="checkApproval">
+        <el-button v-if="showBindForm" type="primary" :loading="binding" @click="bindCenter">{{
+          t('remote.bindSubmit')
+        }}</el-button>
+        <el-button
+          v-else-if="approvalPending"
+          type="primary"
+          :loading="checkingApproval"
+          @click="checkApproval"
+        >
           {{ t('remote.refreshApproval') }}
         </el-button>
         <el-button v-if="centerOffline" @click="reconcileCenterBindingState">
@@ -89,11 +101,15 @@
         <el-table-column prop="currentVersion" :label="t('local.version')" width="120" />
         <el-table-column :label="t('local.status')" width="110">
           <template #default="{ row }">
-            <el-tag class="status-tag" :type="getStatusType(row.status)">{{ formatStatus(row.status) }}</el-tag>
+            <el-tag class="status-tag" :type="getStatusType(row.status)">{{
+              formatStatus(row.status)
+            }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column :label="t('local.runtimeStatus')" width="140">
-          <template #default="{ row }">{{ formatStatus(row.runtimeStatus?.state || 'stopped') }}</template>
+          <template #default="{ row }">{{
+            formatStatus(row.runtimeStatus?.state || 'stopped')
+          }}</template>
         </el-table-column>
         <el-table-column :label="t('local.pid')" width="100">
           <template #default="{ row }">{{ row.runtimeStatus?.pid || t('common.na') }}</template>
@@ -104,11 +120,20 @@
         <el-table-column :label="t('local.actions')" min-width="220" fixed="right">
           <template #default="{ row }">
             <el-tag class="status-tag" type="info">{{ t('remote.statusOnly') }}</el-tag>
-            <el-button type="success" size="small" style="margin-left: 8px" @click="viewLogs(row.id)">{{ t('local.logs') }}</el-button>
+            <el-button
+              type="success"
+              size="small"
+              style="margin-left: 8px"
+              @click="viewLogs(row.id)"
+              >{{ t('local.logs') }}</el-button
+            >
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!onlineProjects.length && !nodeStore.loading" :description="t('remote.noManagedProjects')" />
+      <el-empty
+        v-if="!onlineProjects.length && !nodeStore.loading"
+        :description="t('remote.noManagedProjects')"
+      />
     </el-card>
   </div>
 </template>
@@ -168,7 +193,9 @@ const pendingRegistration = reactive({
   registrationToken: '',
 })
 
-const onlineProjects = computed(() => nodeStore.projects.filter((project) => project?.source === 'center'))
+const onlineProjects = computed(() =>
+  nodeStore.projects.filter((project) => project?.source === 'center'),
+)
 const showBindForm = computed(() => !bindingSnapshot.submitted)
 
 const isValidIPv4 = (value) => {
@@ -178,7 +205,11 @@ const isValidIPv4 = (value) => {
 
 const isDuplicateNodeNameError = (message) => {
   const msg = String(message || '').toLowerCase()
-  return msg.includes('must be unique') || msg.includes('duplicate entry') || msg.includes('节点名称已存在')
+  return (
+    msg.includes('must be unique') ||
+    msg.includes('duplicate entry') ||
+    msg.includes('节点名称已存在')
+  )
 }
 
 const buildCenterUrl = () => {
@@ -283,7 +314,8 @@ const loadBootstrapStatus = async () => {
       bindingSnapshot.status = 'approved'
       bindingSnapshot.centerUrl = bootstrap?.centerUrl || bindingSnapshot.centerUrl
       bindingSnapshot.nodeName = bootstrap?.nodeName || bindingSnapshot.nodeName
-      bindingSnapshot.nodeId = bootstrap?.nodeId || pendingRegistration.nodeId || bindingSnapshot.nodeId
+      bindingSnapshot.nodeId =
+        bootstrap?.nodeId || pendingRegistration.nodeId || bindingSnapshot.nodeId
       approvalPending.value = false
       saveSnapshot()
     }

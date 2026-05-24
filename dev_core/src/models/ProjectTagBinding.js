@@ -4,49 +4,49 @@
  */
 module.exports = (sequelize, DataTypes) => {
   const ProjectTagBinding = sequelize.define(
-    "ProjectTagBinding",
+    'ProjectTagBinding',
     {
       id: {
         type: DataTypes.UUID,
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
-        comment: "绑定ID",
+        comment: '绑定ID',
       },
       tenantId: {
         type: DataTypes.UUID,
         allowNull: false,
         references: {
-          model: "tenants",
-          key: "id",
+          model: 'tenants',
+          key: 'id',
         },
-        comment: "所属租户ID",
+        comment: '所属租户ID',
       },
       projectId: {
         type: DataTypes.UUID,
         allowNull: false,
         references: {
-          model: "projects",
-          key: "id",
+          model: 'projects',
+          key: 'id',
         },
-        comment: "工程ID",
+        comment: '工程ID',
       },
       tagId: {
         type: DataTypes.UUID,
         allowNull: false,
         references: {
-          model: "project_tags",
-          key: "id",
+          model: 'project_tags',
+          key: 'id',
         },
-        comment: "标签ID",
+        comment: '标签ID',
       },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,
         references: {
-          model: "users",
-          key: "id",
+          model: 'users',
+          key: 'id',
         },
-        comment: "创建者ID",
+        comment: '创建者ID',
       },
       createdAt: {
         type: DataTypes.DATE,
@@ -58,34 +58,34 @@ module.exports = (sequelize, DataTypes) => {
       },
     },
     {
-      tableName: "project_tag_bindings",
-      comment: "工程标签绑定表",
+      tableName: 'project_tag_bindings',
+      comment: '工程标签绑定表',
       indexes: [
         {
           unique: true,
-          fields: ["projectId", "tagId"],
+          fields: ['projectId', 'tagId'],
         },
         {
-          fields: ["projectId", "tenantId"],
+          fields: ['projectId', 'tenantId'],
         },
         {
-          fields: ["tagId", "tenantId"],
+          fields: ['tagId', 'tenantId'],
         },
         {
-          fields: ["tenantId", "tagId"],
+          fields: ['tenantId', 'tagId'],
         },
         {
-          fields: ["projectId"],
+          fields: ['projectId'],
         },
         {
-          fields: ["tagId"],
+          fields: ['tagId'],
         },
         {
-          fields: ["createdBy"],
+          fields: ['createdBy'],
         },
       ],
     },
-  );
+  )
 
-  return ProjectTagBinding;
-};
+  return ProjectTagBinding
+}

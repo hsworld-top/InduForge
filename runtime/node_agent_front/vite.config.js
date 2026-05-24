@@ -1,25 +1,25 @@
-import { defineConfig, loadEnv } from "vite";
-import vue from "@vitejs/plugin-vue";
-import { resolve } from "path";
-import path from "path";
+import { defineConfig, loadEnv } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import { resolve } from 'path'
+import path from 'path'
 
 export default defineConfig(({ mode }) => {
   // 从项目根目录加载环境变量
-  const env = loadEnv(mode, path.resolve(__dirname, "../.."), "");
-  const backendPort = Number(env.NODE_AGENT_PORT || 17601);
+  const env = loadEnv(mode, path.resolve(__dirname, '../..'), '')
+  const backendPort = Number(env.NODE_AGENT_PORT || 17601)
 
   return {
     plugins: [vue()],
     resolve: {
       alias: {
-        "@": resolve(__dirname, "src"),
+        '@': resolve(__dirname, 'src'),
       },
     },
     server: {
       port: Number(env.VITE_NODE_AGENT_FRONT_PORT || 18604),
       host: true,
       proxy: {
-        "/api": {
+        '/api': {
           target: `http://localhost:${backendPort}`,
           changeOrigin: true,
           secure: false,
@@ -27,8 +27,8 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
-      outDir: "dist",
+      outDir: 'dist',
       sourcemap: true,
     },
-  };
-});
+  }
+})

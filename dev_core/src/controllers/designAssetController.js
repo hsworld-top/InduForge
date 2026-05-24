@@ -1,8 +1,8 @@
-﻿const designAssetService = require("../services/designAssetService");
-const { Project } = require("../models");
-const ApiResponse = require("../utils/response");
-const AppError = require("../utils/AppError");
-const ErrorCodes = require("../constants/errorCodes");
+﻿const designAssetService = require('../services/designAssetService')
+const { Project } = require('../models')
+const ApiResponse = require('../utils/response')
+const AppError = require('../utils/AppError')
+const ErrorCodes = require('../constants/errorCodes')
 
 /**
  * 检查用户是否有权限访问指定工程
@@ -10,199 +10,188 @@ const ErrorCodes = require("../constants/errorCodes");
  * @param {string} projectId - 工程ID
  */
 async function checkProjectAccess(req, projectId) {
-  if (req.user.role === "SYSTEM_ADMIN") {
-    return;
+  if (req.user.role === 'SYSTEM_ADMIN') {
+    return
   }
 
   const project = await Project.findOne({
     where: { id: projectId, tenantId: req.user.tenantId },
-  });
+  })
 
   if (!project) {
     throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
-      message: "无权访问此工程",
-    });
+      message: '无权访问此工程',
+    })
   }
 }
 
 async function getFolders(req, res, next) {
   try {
-    const { projectId } = req.params;
-    await checkProjectAccess(req, projectId);
+    const { projectId } = req.params
+    await checkProjectAccess(req, projectId)
 
-    const folders = await designAssetService.listFolders(projectId);
-    return ApiResponse.success(res, { folders });
+    const folders = await designAssetService.listFolders(projectId)
+    return ApiResponse.success(res, { folders })
   } catch (error) {
-    return next(error);
+    return next(error)
   }
 }
 
 async function createFolder(req, res, next) {
   try {
-    const { projectId } = req.params;
-    await checkProjectAccess(req, projectId);
+    const { projectId } = req.params
+    await checkProjectAccess(req, projectId)
 
-    const { name, parentId } = req.body || {};
-    if (!name || typeof name !== "string") {
+    const { name, parentId } = req.body || {}
+    if (!name || typeof name !== 'string') {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
-        message: "文件夹名称不能为空",
-      });
+        message: '文件夹名称不能为空',
+      })
     }
 
-    const folder = await designAssetService.createFolder(
-      projectId,
-      parentId,
-      name
-    );
-    return ApiResponse.success(res, folder, null, {}, 201);
+    const folder = await designAssetService.createFolder(projectId, parentId, name)
+    return ApiResponse.success(res, folder, null, {}, 201)
   } catch (error) {
-    return next(error);
+    return next(error)
   }
 }
 
 async function renameFolder(req, res, next) {
   try {
-    const { projectId, folderId } = req.params;
-    await checkProjectAccess(req, projectId);
+    const { projectId, folderId } = req.params
+    await checkProjectAccess(req, projectId)
 
-    const { name, parentId } = req.body || {};
-    if ((!name || typeof name !== "string") && typeof parentId === "undefined") {
+    const { name, parentId } = req.body || {}
+    if ((!name || typeof name !== 'string') && typeof parentId === 'undefined') {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
-        message: "文件夹名称不能为空",
-      });
+        message: '文件夹名称不能为空',
+      })
     }
 
     const folder = await designAssetService.updateFolder(projectId, folderId, {
       name,
       parentId,
-    });
+    })
 
-    return ApiResponse.success(res, folder);
+    return ApiResponse.success(res, folder)
   } catch (error) {
-    return next(error);
+    return next(error)
   }
 }
 
 async function deleteFolder(req, res, next) {
   try {
-    const { projectId, folderId } = req.params;
-    await checkProjectAccess(req, projectId);
+    const { projectId, folderId } = req.params
+    await checkProjectAccess(req, projectId)
 
-    await designAssetService.deleteFolder(projectId, folderId);
-    return ApiResponse.success(res, null);
+    await designAssetService.deleteFolder(projectId, folderId)
+    return ApiResponse.success(res, null)
   } catch (error) {
-    return next(error);
+    return next(error)
   }
 }
 
 async function getAssets(req, res, next) {
   try {
-    const { projectId } = req.params;
-    await checkProjectAccess(req, projectId);
+    const { projectId } = req.params
+    await checkProjectAccess(req, projectId)
 
-    const { folderId, keyword, type } = req.query || {};
+    const { folderId, keyword, type } = req.query || {}
     const assets = await designAssetService.listAssets(projectId, {
       folderId,
       keyword,
       type,
-    });
+    })
 
-    return ApiResponse.success(res, { assets });
+    return ApiResponse.success(res, { assets })
   } catch (error) {
-    return next(error);
+    return next(error)
   }
 }
 
 async function uploadAssets(req, res, next) {
   try {
-    const { projectId } = req.params;
-    await checkProjectAccess(req, projectId);
+    const { projectId } = req.params
+    await checkProjectAccess(req, projectId)
 
-    const files = req.files || [];
+    const files = req.files || []
     if (!files.length) {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
-        message: "请上传资源文件",
-      });
+        message: '请上传资源文件',
+      })
     }
 
-    const { folderId, conflictStrategy } = req.body || {};
-    const assets = await designAssetService.createAssets(
-      projectId,
-      folderId,
-      files,
-      req.user.id,
-      { conflictStrategy }
-    );
+    const { folderId, conflictStrategy } = req.body || {}
+    const assets = await designAssetService.createAssets(projectId, folderId, files, req.user.id, {
+      conflictStrategy,
+    })
 
-    return ApiResponse.success(res, { assets }, null, {}, 201);
+    return ApiResponse.success(res, { assets }, null, {}, 201)
   } catch (error) {
-    return next(error);
+    return next(error)
   }
 }
 
 async function deleteAsset(req, res, next) {
   try {
-    const { projectId, assetId } = req.params;
-    await checkProjectAccess(req, projectId);
+    const { projectId, assetId } = req.params
+    await checkProjectAccess(req, projectId)
 
-    await designAssetService.deleteAsset(projectId, assetId);
-    return ApiResponse.success(res, null);
+    await designAssetService.deleteAsset(projectId, assetId)
+    return ApiResponse.success(res, null)
   } catch (error) {
-    return next(error);
+    return next(error)
   }
 }
 
 async function updateAsset(req, res, next) {
   try {
-    const { projectId, assetId } = req.params;
-    await checkProjectAccess(req, projectId);
+    const { projectId, assetId } = req.params
+    await checkProjectAccess(req, projectId)
 
-    const { name, folderId } = req.body || {};
+    const { name, folderId } = req.body || {}
     const asset = await designAssetService.updateAsset(projectId, assetId, {
       name,
       folderId,
-    });
+    })
 
-    return ApiResponse.success(res, asset);
+    return ApiResponse.success(res, asset)
   } catch (error) {
-    return next(error);
+    return next(error)
   }
 }
 
 async function copyAsset(req, res, next) {
   try {
-    const { projectId, assetId } = req.params;
-    await checkProjectAccess(req, projectId);
+    const { projectId, assetId } = req.params
+    await checkProjectAccess(req, projectId)
 
-    const { folderId, name } = req.body || {};
+    const { folderId, name } = req.body || {}
     const asset = await designAssetService.copyAsset(
       projectId,
       assetId,
       folderId,
       name,
-      req.user.id
-    );
+      req.user.id,
+    )
 
-    return ApiResponse.success(res, asset, null, {}, 201);
+    return ApiResponse.success(res, asset, null, {}, 201)
   } catch (error) {
-    return next(error);
+    return next(error)
   }
 }
 
 async function getAssetFile(req, res, next) {
   try {
-    const { projectId, assetId } = req.params;
-    const { asset, stream } = await designAssetService.getAssetFile(
-      projectId,
-      assetId
-    );
+    const { projectId, assetId } = req.params
+    const { asset, stream } = await designAssetService.getAssetFile(projectId, assetId)
 
-    res.setHeader("Content-Type", asset.mimeType || "application/octet-stream");
-    res.setHeader("Cache-Control", "public, max-age=31536000");
-    stream.on("error", (error) => next(error));
-    stream.pipe(res);
+    res.setHeader('Content-Type', asset.mimeType || 'application/octet-stream')
+    res.setHeader('Cache-Control', 'public, max-age=31536000')
+    stream.on('error', (error) => next(error))
+    stream.pipe(res)
   } catch (error) {
-    next(error);
+    next(error)
   }
 }
 
@@ -217,4 +206,4 @@ module.exports = {
   updateAsset,
   copyAsset,
   getAssetFile,
-};
+}

@@ -32,20 +32,20 @@ type Logger interface {
 
 // FileLogger 文件日志实现
 type FileLogger struct {
-	level      LogLevel
-	file       *os.File
-	mu         sync.Mutex
-	levelMap   map[LogLevel]int
-	logDir     string
-	retention  int  // 保留天数
+	level       LogLevel
+	file        *os.File
+	mu          sync.Mutex
+	levelMap    map[LogLevel]int
+	logDir      string
+	retention   int // 保留天数
 	lastCleanup time.Time
 }
 
 // 日志配置
 const (
-	DefaultRetention = 7  // 默认保留7天
-	CleanupInterval  = 24 * time.Hour  // 每天检查一次
-	MaxLogSize       = 10 * 1024 * 1024  // 单个日志文件最大10MB
+	DefaultRetention = 7                // 默认保留7天
+	CleanupInterval  = 24 * time.Hour   // 每天检查一次
+	MaxLogSize       = 10 * 1024 * 1024 // 单个日志文件最大10MB
 )
 
 // NewFileLogger 创建文件日志器
@@ -65,9 +65,9 @@ func NewFileLogger(level LogLevel, logDir string, retentionDays ...int) (*FileLo
 	}
 
 	logger := &FileLogger{
-		level:      level,
-		logDir:     logDir,
-		retention:  retention,
+		level:       level,
+		logDir:      logDir,
+		retention:   retention,
 		lastCleanup: time.Now(),
 		levelMap: map[LogLevel]int{
 			LevelDebug: 0,

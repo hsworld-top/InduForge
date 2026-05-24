@@ -1,4 +1,4 @@
-const { QueryTypes } = require("sequelize");
+const { QueryTypes } = require('sequelize')
 
 /**
  * 统一封装 design_project_settings 的读取与写入。
@@ -9,7 +9,7 @@ const SELECT_PROJECT_SETTINGS_SQL = `
   FROM design_project_settings
   WHERE "projectId" = $1
   LIMIT 1
-`;
+`
 
 const UPSERT_PROJECT_SETTINGS_SQL = `
   INSERT INTO design_project_settings (
@@ -29,14 +29,14 @@ const UPSERT_PROJECT_SETTINGS_SQL = `
     "i18n" = EXCLUDED."i18n",
     "updatedBy" = EXCLUDED."updatedBy",
     "updatedAt" = EXCLUDED."updatedAt"
-`;
+`
 
 async function getProjectSettingsRow(sequelize, projectId) {
   const rows = await sequelize.query(SELECT_PROJECT_SETTINGS_SQL, {
     bind: [projectId],
     type: QueryTypes.SELECT,
-  });
-  return Array.isArray(rows) && rows.length ? rows[0] : null;
+  })
+  return Array.isArray(rows) && rows.length ? rows[0] : null
 }
 
 async function upsertProjectSettings(
@@ -53,7 +53,7 @@ async function upsertProjectSettings(
       updatedBy,
       updatedAt,
     ],
-  });
+  })
 }
 
 module.exports = {
@@ -61,4 +61,4 @@ module.exports = {
   UPSERT_PROJECT_SETTINGS_SQL,
   getProjectSettingsRow,
   upsertProjectSettings,
-};
+}

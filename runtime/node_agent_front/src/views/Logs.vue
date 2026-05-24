@@ -22,7 +22,11 @@
     <!-- 日志控制 -->
     <el-card class="box-card">
       <div class="log-controls">
-        <el-select v-model="logLevel" :placeholder="t('logs.levelPlaceholder')" style="width: 150px;">
+        <el-select
+          v-model="logLevel"
+          :placeholder="t('logs.levelPlaceholder')"
+          style="width: 150px"
+        >
           <el-option :label="t('logs.all')" value="" />
           <el-option label="DEBUG" value="debug" />
           <el-option label="INFO" value="info" />
@@ -33,7 +37,7 @@
         <el-input
           v-model="searchKeyword"
           :placeholder="t('logs.search')"
-          style="width: 300px; margin-left: 10px;"
+          style="width: 300px; margin-left: 10px"
           clearable
         >
           <template #prefix>
@@ -44,7 +48,7 @@
         <el-switch
           v-model="autoRefresh"
           :active-text="t('logs.autoRefresh')"
-          style="margin-left: 10px;"
+          style="margin-left: 10px"
         />
       </div>
     </el-card>
@@ -97,15 +101,13 @@ const filteredLogs = computed(() => {
 
   // 按级别过滤
   if (logLevel.value) {
-    filtered = filtered.filter(log =>
-      log.level?.toLowerCase() === logLevel.value.toLowerCase()
-    )
+    filtered = filtered.filter((log) => log.level?.toLowerCase() === logLevel.value.toLowerCase())
   }
 
   // 按关键词搜索
   if (searchKeyword.value) {
-    filtered = filtered.filter(log =>
-      log.message?.toLowerCase().includes(searchKeyword.value.toLowerCase())
+    filtered = filtered.filter((log) =>
+      log.message?.toLowerCase().includes(searchKeyword.value.toLowerCase()),
     )
   }
 
@@ -134,7 +136,7 @@ const refreshLogs = async () => {
 
 const downloadLogs = () => {
   const content = filteredLogs.value
-    .map(log => `[${log.time}] ${log.level}: ${log.message}`)
+    .map((log) => `[${log.time}] ${log.level}: ${log.message}`)
     .join('\n')
 
   const blob = new Blob([content], { type: 'text/plain' })

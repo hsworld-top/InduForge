@@ -13,6 +13,7 @@
 ### 任务 1：运行态主题状态
 
 **文件：**
+
 - 修改：`designer/src/stores/editor-store.ts`
 - 修改：`designer/src/stores/editor-store.types.ts`
 
@@ -23,6 +24,7 @@
 ### 任务 2：用户头像物料
 
 **文件：**
+
 - 创建：`designer/src/materials/UserAvatarMenu/manifest.ts`
 - 创建：`designer/src/materials/UserAvatarMenu/index.ts`
 - 创建：`designer/src/editor-core/descriptors/user-avatar-menu.ts`
@@ -38,6 +40,7 @@
 ### 任务 3：系统组件面板接入
 
 **文件：**
+
 - 修改：`designer/src/ui/editors/page/sidebar-panels/left/ComponentPanel.vue`
 - 修改：`designer/src/ui/editors/page/sidebar-panels/left/ComponentPanel.system.test.ts`
 
@@ -49,6 +52,7 @@
 ### 任务 4：运行态主题注入
 
 **文件：**
+
 - 修改：`designer/src/ui/editors/page/canvas/CanvasContainer.vue`
 - 修改：`designer/src/ui/editors/page/preview/PreviewView.vue`
 
@@ -58,6 +62,7 @@
 ### 任务 5：属性与交互验证
 
 **文件：**
+
 - 修改/新增测试：相关组件测试。
 
 - [x] 运行 `pnpm --dir designer exec vue-tsc --noEmit --pretty false`。

@@ -31,9 +31,9 @@ type Config struct {
 }
 
 type AgentConfig struct {
-	ID       string           `mapstructure:"id"`
-	Listen   ListenConfig     `mapstructure:"listen"`
-	Executor ExecutorConfig   `mapstructure:"executor"`
+	ID       string         `mapstructure:"id"`
+	Listen   ListenConfig   `mapstructure:"listen"`
+	Executor ExecutorConfig `mapstructure:"executor"`
 }
 
 type ListenConfig struct {
@@ -42,9 +42,9 @@ type ListenConfig struct {
 }
 
 type ExecutorConfig struct {
-	Type    string           `mapstructure:"type"`
-	Process ProcessConfig    `mapstructure:"process"`
-	Docker  DockerConfig     `mapstructure:"docker"`
+	Type    string        `mapstructure:"type"`
+	Process ProcessConfig `mapstructure:"process"`
+	Docker  DockerConfig  `mapstructure:"docker"`
 }
 
 type ProcessConfig struct {
@@ -54,14 +54,14 @@ type ProcessConfig struct {
 }
 
 type DockerConfig struct {
-	Enabled    bool   `mapstructure:"enabled"`
-	Socket     string `mapstructure:"socket"`
-	Network    string `mapstructure:"network"`
+	Enabled     bool   `mapstructure:"enabled"`
+	Socket      string `mapstructure:"socket"`
+	Network     string `mapstructure:"network"`
 	ImagePrefix string `mapstructure:"imagePrefix"`
 }
 
 type LoggingConfig struct {
-	Level string `mapstructure:"level"`
+	Level  string `mapstructure:"level"`
 	Format string `mapstructure:"format"`
 	Output string `mapstructure:"output"`
 	File   string `mapstructure:"file"`

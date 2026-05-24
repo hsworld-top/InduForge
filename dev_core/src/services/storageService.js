@@ -1,20 +1,20 @@
-const Minio = require("minio");
-const dayjs = require("dayjs");
-const { logger } = require("../utils/logger");
-const { TIME_FORMAT } = require("../constants/time");
-const { buildObjectStoreConfig } = require("../config/infra");
+const Minio = require('minio')
+const dayjs = require('dayjs')
+const { logger } = require('../utils/logger')
+const { TIME_FORMAT } = require('../constants/time')
+const { buildObjectStoreConfig } = require('../config/infra')
 
-let storageClient = null;
+let storageClient = null
 const storageStatus = {
   connected: false,
   lastError: null,
   lastErrorTime: null,
-};
+}
 
-const getStorageConfig = buildObjectStoreConfig;
+const getStorageConfig = buildObjectStoreConfig
 
 const buildClient = () => {
-  const { endpoint, port, useSSL, accessKey, secretKey } = getStorageConfig();
+  const { endpoint, port, useSSL, accessKey, secretKey } = getStorageConfig()
   // InduForge 对象存储提供 S3 兼容接口，这里继续复用 MinIO 客户端。
   return new Minio.Client({
     endPoint: endpoint,
@@ -22,16 +22,16 @@ const buildClient = () => {
     useSSL,
     accessKey,
     secretKey,
-  });
-};
+  })
+}
 
 const ensureBucket = async (client, bucket, region, provider) => {
-  const exists = await client.bucketExists(bucket);
+  const exists = await client.bucketExists(bucket)
   if (!exists) {
-    await client.makeBucket(bucket, region);
-    logger.info("对象存储 bucket 已创建", { provider, bucket, region });
+    await client.makeBucket(bucket, region)
+    logger.info('对象存储 bucket 已创建', { provider, bucket, region })
   }
-};
+}
 
 /**
  * 初始化对象存储连接并确保 Bucket 存在
@@ -39,39 +39,39 @@ const ensureBucket = async (client, bucket, region, provider) => {
  */
 const initStorage = async () => {
   if (storageClient) {
-    return storageClient;
+    return storageClient
   }
 
-  const { bucketIfp, bucketDesign, region, provider } = getStorageConfig();
-  const client = buildClient();
+  const { bucketIfp, bucketDesign, region, provider } = getStorageConfig()
+  const client = buildClient()
 
   try {
-    await ensureBucket(client, bucketIfp, region, provider);
-    await ensureBucket(client, bucketDesign, region, provider);
-    storageStatus.connected = true;
-    storageStatus.lastError = null;
-    storageStatus.lastErrorTime = null;
-    storageClient = client;
-    return storageClient;
+    await ensureBucket(client, bucketIfp, region, provider)
+    await ensureBucket(client, bucketDesign, region, provider)
+    storageStatus.connected = true
+    storageStatus.lastError = null
+    storageStatus.lastErrorTime = null
+    storageClient = client
+    return storageClient
   } catch (error) {
-    storageStatus.connected = false;
-    storageStatus.lastError = error.message;
-    storageStatus.lastErrorTime = dayjs().format(TIME_FORMAT);
-    throw error;
+    storageStatus.connected = false
+    storageStatus.lastError = error.message
+    storageStatus.lastErrorTime = dayjs().format(TIME_FORMAT)
+    throw error
   }
-};
+}
 
 const getClient = async () => {
   if (!storageClient) {
-    return initStorage();
+    return initStorage()
   }
-  return storageClient;
-};
+  return storageClient
+}
 
-const getBucketName = (type = "ifp") => {
-  const { bucketIfp, bucketDesign } = getStorageConfig();
-  return type === "design" ? bucketDesign : bucketIfp;
-};
+const getBucketName = (type = 'ifp') => {
+  const { bucketIfp, bucketDesign } = getStorageConfig()
+  return type === 'design' ? bucketDesign : bucketIfp
+}
 
 /**
  * 上传对象到对象存储
@@ -82,10 +82,10 @@ const getBucketName = (type = "ifp") => {
  * @param {Object} meta
  */
 const uploadObject = async (bucketType, objectKey, stream, size, meta = {}) => {
-  const client = await getClient();
-  const bucket = getBucketName(bucketType);
-  return client.putObject(bucket, objectKey, stream, size, meta);
-};
+  const client = await getClient()
+  const bucket = getBucketName(bucketType)
+  return client.putObject(bucket, objectKey, stream, size, meta)
+}
 
 /**
  * 获取对象可读流
@@ -94,10 +94,10 @@ const uploadObject = async (bucketType, objectKey, stream, size, meta = {}) => {
  * @returns {Promise<Readable>}
  */
 const getObjectStream = async (bucketType, objectKey) => {
-  const client = await getClient();
-  const bucket = getBucketName(bucketType);
-  return client.getObject(bucket, objectKey);
-};
+  const client = await getClient()
+  const bucket = getBucketName(bucketType)
+  return client.getObject(bucket, objectKey)
+}
 
 /**
  * 获取对象元信息
@@ -106,10 +106,10 @@ const getObjectStream = async (bucketType, objectKey) => {
  * @returns {Promise<Object>}
  */
 const statObject = async (bucketType, objectKey) => {
-  const client = await getClient();
-  const bucket = getBucketName(bucketType);
-  return client.statObject(bucket, objectKey);
-};
+  const client = await getClient()
+  const bucket = getBucketName(bucketType)
+  return client.statObject(bucket, objectKey)
+}
 
 /**
  * 删除对象
@@ -117,10 +117,10 @@ const statObject = async (bucketType, objectKey) => {
  * @param {string} objectKey
  */
 const removeObject = async (bucketType, objectKey) => {
-  const client = await getClient();
-  const bucket = getBucketName(bucketType);
-  return client.removeObject(bucket, objectKey);
-};
+  const client = await getClient()
+  const bucket = getBucketName(bucketType)
+  return client.removeObject(bucket, objectKey)
+}
 
 /**
  * 复制对象
@@ -129,21 +129,21 @@ const removeObject = async (bucketType, objectKey) => {
  * @param {string} targetKey
  */
 const copyObject = async (bucketType, sourceKey, targetKey) => {
-  const client = await getClient();
-  const bucket = getBucketName(bucketType);
-  const source = `/${bucket}/${sourceKey}`;
-  return client.copyObject(bucket, targetKey, source);
-};
+  const client = await getClient()
+  const bucket = getBucketName(bucketType)
+  const source = `/${bucket}/${sourceKey}`
+  return client.copyObject(bucket, targetKey, source)
+}
 
 const getStorageStatus = () => {
-  const { provider, endpoint, port } = getStorageConfig();
+  const { provider, endpoint, port } = getStorageConfig()
   return {
     ...storageStatus,
     provider,
     endpoint,
     port,
-  };
-};
+  }
+}
 
 module.exports = {
   initStorage,
@@ -155,4 +155,4 @@ module.exports = {
   removeObject,
   copyObject,
   getStorageStatus,
-};
+}

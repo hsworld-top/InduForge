@@ -11,7 +11,7 @@ const ScaleMode = {
   FIT: 'fit',
   FILL: 'fill',
   FIXED: 'fixed',
-};
+}
 
 /**
  * Page theme options
@@ -20,7 +20,7 @@ const ScaleMode = {
 const Theme = {
   DARK: 'dark',
   LIGHT: 'light',
-};
+}
 
 /**
  * Action types for event handlers
@@ -35,7 +35,7 @@ const ActionType = {
   CLOSE_DIALOG: 'closeDialog',
   MESSAGE: 'message',
   SCRIPT: 'script',
-};
+}
 
 /**
  * DataSource types
@@ -46,8 +46,7 @@ const DataSourceType = {
   DATA_CENTER: 'dataCenter',
   HTTP: 'http',
   STATIC: 'static',
-};
-
+}
 
 /**
  * DataSource mode options
@@ -58,7 +57,7 @@ const DataSourceMode = {
   SUBSCRIPTION: 'subscription',
   POLL: 'poll',
   REQUEST: 'request',
-};
+}
 
 /**
  * Page type options
@@ -69,7 +68,7 @@ const PageType = {
   PAGE: 'page',
   FOLDER: 'folder',
   DIALOG: 'dialog',
-};
+}
 
 /**
  * Data tag types
@@ -85,7 +84,7 @@ const DataTagType = {
   DOUBLE: 'double',
   STRING: 'string',
   JSON: 'json',
-};
+}
 
 /**
  * Project member roles
@@ -97,7 +96,7 @@ const ProjectMemberRole = {
   ADMIN: 'ADMIN',
   DEVELOPER: 'DEVELOPER',
   VIEWER: 'VIEWER',
-};
+}
 
 /**
  * Page history change types
@@ -108,7 +107,7 @@ const ChangeType = {
   MANUAL: 'manual',
   AUTO: 'auto',
   PUBLISH: 'publish',
-};
+}
 
 /**
  * Asset types
@@ -120,7 +119,7 @@ const AssetType = {
   VIDEO: 'video',
   MODEL_3D: 'model_3d',
   SVG: 'svg',
-};
+}
 
 module.exports = {
   ScaleMode,
@@ -133,4 +132,4 @@ module.exports = {
   ProjectMemberRole,
   ChangeType,
   AssetType,
-};
+}

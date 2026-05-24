@@ -1,3 +1,3 @@
-const TIME_FORMAT = 'YYYY-MM-DD HH:mm:ss';
+const TIME_FORMAT = 'YYYY-MM-DD HH:mm:ss'
 
-module.exports = { TIME_FORMAT };
+module.exports = { TIME_FORMAT }

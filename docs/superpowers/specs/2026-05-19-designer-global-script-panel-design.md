@@ -73,16 +73,16 @@
 建议输入：
 
 ```ts
-type ScriptScope = "global" | "page";
+type ScriptScope = 'global' | 'page'
 
 type ScriptKind =
-  | "systemStartup"
-  | "systemShutdown"
-  | "timer"
-  | "variableChange"
-  | "custom"
-  | "pageMounted"
-  | "pageUnmounted";
+  | 'systemStartup'
+  | 'systemShutdown'
+  | 'timer'
+  | 'variableChange'
+  | 'custom'
+  | 'pageMounted'
+  | 'pageUnmounted'
 ```
 
 弹窗不直接写 store。父组件处理保存。

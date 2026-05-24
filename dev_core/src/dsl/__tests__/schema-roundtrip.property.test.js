@@ -2,20 +2,14 @@
  * Property-Based Test: Schema Round-Trip
  * **Feature: design-center, Property 12: Schema Round-Trip**
  * **Validates: Requirements 6.6, 6.7**
- * 
- * For any valid Page Schema, serializing to JSON and parsing back 
+ *
+ * For any valid Page Schema, serializing to JSON and parsing back
  * SHALL produce an equivalent schema.
  */
 
-const fc = require('fast-check');
-const { validatePageSchema } = require('../validators');
-const {
-  ScaleMode,
-  Theme,
-  ActionType,
-  DataSourceType,
-  DataSourceMode,
-} = require('../constants');
+const fc = require('fast-check')
+const { validatePageSchema } = require('../validators')
+const { ScaleMode, Theme, ActionType, DataSourceType, DataSourceMode } = require('../constants')
 
 // Arbitrary generators for DSL schema types
 
@@ -29,7 +23,7 @@ const styleArbitrary = fc.record({
   width: fc.integer({ min: 10, max: 1000 }),
   height: fc.integer({ min: 10, max: 1000 }),
   zIndex: fc.integer({ min: 0, max: 100 }),
-});
+})
 
 /**
  * Generate a valid action schema
@@ -37,9 +31,11 @@ const styleArbitrary = fc.record({
 const actionArbitrary = fc.record({
   id: fc.uuid(),
   action: fc.constantFrom(...Object.values(ActionType)),
-  payload: fc.option(fc.dictionary(fc.string({ minLength: 1, maxLength: 20 }), fc.jsonValue()), { nil: undefined }),
+  payload: fc.option(fc.dictionary(fc.string({ minLength: 1, maxLength: 20 }), fc.jsonValue()), {
+    nil: undefined,
+  }),
   condition: fc.option(fc.string({ minLength: 0, maxLength: 50 }), { nil: undefined }),
-});
+})
 
 /**
  * Generate a valid component schema (non-recursive for simplicity)
@@ -52,10 +48,13 @@ const componentArbitrary = fc.record({
   visible: fc.boolean(),
   style: styleArbitrary,
   props: fc.dictionary(fc.string({ minLength: 1, maxLength: 20 }), fc.jsonValue()),
-  bindings: fc.dictionary(fc.string({ minLength: 1, maxLength: 20 }), fc.string({ minLength: 1, maxLength: 100 })),
+  bindings: fc.dictionary(
+    fc.string({ minLength: 1, maxLength: 20 }),
+    fc.string({ minLength: 1, maxLength: 100 }),
+  ),
   events: fc.dictionary(
     fc.constantFrom('onClick', 'onLoad', 'onChange'),
-    fc.array(actionArbitrary, { minLength: 0, maxLength: 2 })
+    fc.array(actionArbitrary, { minLength: 0, maxLength: 2 }),
   ),
   animations: fc.array(
     fc.record({
@@ -63,11 +62,10 @@ const componentArbitrary = fc.record({
       type: fc.constantFrom('shake', 'fade', 'slide'),
       duration: fc.integer({ min: 100, max: 5000 }),
     }),
-    { minLength: 0, maxLength: 2 }
+    { minLength: 0, maxLength: 2 },
   ),
   children: fc.constant([]), // Non-recursive for simplicity
-});
-
+})
 
 /**
  * Generate a valid data source schema
@@ -104,8 +102,8 @@ const dataSourceArbitrary = fc.oneof(
     type: fc.constant(DataSourceType.STATIC),
     mode: fc.constantFrom(DataSourceMode.SUBSCRIPTION, DataSourceMode.REQUEST),
     data: fc.option(fc.jsonValue(), { nil: undefined }),
-  })
-);
+  }),
+)
 
 /**
  * Generate a valid component ACL
@@ -114,22 +112,42 @@ const componentAclArbitrary = fc.record({
   componentId: fc.uuid(),
   visibleFor: fc.array(fc.string({ minLength: 1, maxLength: 20 }), { minLength: 0, maxLength: 5 }),
   editableFor: fc.array(fc.string({ minLength: 1, maxLength: 20 }), { minLength: 0, maxLength: 5 }),
-});
+})
 
 /**
  * Generate a valid permissions schema
  */
 const permissionsArbitrary = fc.record({
   roles: fc.array(fc.string({ minLength: 1, maxLength: 20 }), { minLength: 0, maxLength: 5 }),
-  componentAcl: fc.option(fc.array(componentAclArbitrary, { minLength: 0, maxLength: 3 }), { nil: undefined }),
-});
+  componentAcl: fc.option(fc.array(componentAclArbitrary, { minLength: 0, maxLength: 3 }), {
+    nil: undefined,
+  }),
+})
 
 /**
  * Generate a valid hex color string
  */
-const hexDigit = fc.constantFrom('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f');
-const hexColorArbitrary = fc.tuple(hexDigit, hexDigit, hexDigit, hexDigit, hexDigit, hexDigit)
-  .map(digits => `#${digits.join('')}`);
+const hexDigit = fc.constantFrom(
+  '0',
+  '1',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+  '7',
+  '8',
+  '9',
+  'a',
+  'b',
+  'c',
+  'd',
+  'e',
+  'f',
+)
+const hexColorArbitrary = fc
+  .tuple(hexDigit, hexDigit, hexDigit, hexDigit, hexDigit, hexDigit)
+  .map((digits) => `#${digits.join('')}`)
 
 /**
  * Generate a valid page config
@@ -142,7 +160,7 @@ const pageConfigArbitrary = fc.record({
   backgroundImage: fc.option(fc.constant(null), { nil: undefined }),
   gridSize: fc.option(fc.integer({ min: 1, max: 100 }), { nil: undefined }),
   theme: fc.option(fc.constantFrom(...Object.values(Theme)), { nil: undefined }),
-});
+})
 
 /**
  * Generate a valid page meta
@@ -153,7 +171,7 @@ const pageMetaArbitrary = fc.record({
   screenshot: fc.option(fc.constant(null), { nil: undefined }),
   lockedBy: fc.option(fc.constant(null), { nil: undefined }),
   lockedAt: fc.option(fc.constant(null), { nil: undefined }),
-});
+})
 
 /**
  * Generate a valid page schema
@@ -166,12 +184,12 @@ const pageSchemaArbitrary = fc.record({
   dataSources: fc.array(dataSourceArbitrary, { minLength: 0, maxLength: 3 }),
   components: fc.array(componentArbitrary, { minLength: 0, maxLength: 5 }),
   permissions: permissionsArbitrary,
-});
+})
 
 describe('Schema Round-Trip Property Tests', () => {
   /**
    * Property 12: Schema Round-Trip
-   * For any valid Page Schema, serializing to JSON and parsing back 
+   * For any valid Page Schema, serializing to JSON and parsing back
    * SHALL produce an equivalent schema.
    * Note: JSON serialization normalizes -0 to 0, which is acceptable for DSL purposes.
    */
@@ -179,20 +197,20 @@ describe('Schema Round-Trip Property Tests', () => {
     fc.assert(
       fc.property(pageSchemaArbitrary, (schema) => {
         // Serialize to JSON string
-        const jsonString = JSON.stringify(schema);
-        
+        const jsonString = JSON.stringify(schema)
+
         // Parse back to object
-        const parsed = JSON.parse(jsonString);
-        
+        const parsed = JSON.parse(jsonString)
+
         // Use JSON comparison to handle -0 vs 0 edge case
         // JSON.stringify normalizes -0 to 0, which is semantically equivalent
-        expect(JSON.stringify(parsed)).toEqual(jsonString);
-        
-        return true;
+        expect(JSON.stringify(parsed)).toEqual(jsonString)
+
+        return true
       }),
-      { numRuns: 100 }
-    );
-  });
+      { numRuns: 100 },
+    )
+  })
 
   /**
    * Additional property: Round-trip preserves validation status
@@ -202,22 +220,22 @@ describe('Schema Round-Trip Property Tests', () => {
     fc.assert(
       fc.property(pageSchemaArbitrary, (schema) => {
         // Validate original
-        const originalValidation = validatePageSchema(schema);
-        
+        const originalValidation = validatePageSchema(schema)
+
         // Round-trip
-        const roundTripped = JSON.parse(JSON.stringify(schema));
-        
+        const roundTripped = JSON.parse(JSON.stringify(schema))
+
         // Validate round-tripped
-        const roundTrippedValidation = validatePageSchema(roundTripped);
-        
+        const roundTrippedValidation = validatePageSchema(roundTripped)
+
         // Validation results should match
-        expect(roundTrippedValidation.valid).toBe(originalValidation.valid);
-        
-        return true;
+        expect(roundTrippedValidation.valid).toBe(originalValidation.valid)
+
+        return true
       }),
-      { numRuns: 100 }
-    );
-  });
+      { numRuns: 100 },
+    )
+  })
 
   /**
    * Property: Component schema round-trip
@@ -227,15 +245,15 @@ describe('Schema Round-Trip Property Tests', () => {
   test('Component schema round-trip preserves structure', () => {
     fc.assert(
       fc.property(componentArbitrary, (component) => {
-        const roundTripped = JSON.parse(JSON.stringify(component));
+        const roundTripped = JSON.parse(JSON.stringify(component))
         // Use JSON comparison to handle -0 vs 0 edge case
         // JSON.stringify normalizes -0 to 0, which is semantically equivalent
-        expect(JSON.stringify(roundTripped)).toEqual(JSON.stringify(component));
-        return true;
+        expect(JSON.stringify(roundTripped)).toEqual(JSON.stringify(component))
+        return true
       }),
-      { numRuns: 100 }
-    );
-  });
+      { numRuns: 100 },
+    )
+  })
 
   /**
    * Property: DataSource schema round-trip
@@ -245,13 +263,13 @@ describe('Schema Round-Trip Property Tests', () => {
   test('DataSource schema round-trip preserves structure', () => {
     fc.assert(
       fc.property(dataSourceArbitrary, (dataSource) => {
-        const roundTripped = JSON.parse(JSON.stringify(dataSource));
+        const roundTripped = JSON.parse(JSON.stringify(dataSource))
         // Use JSON comparison to handle -0 vs 0 edge case
         // JSON.stringify normalizes -0 to 0, which is semantically equivalent
-        expect(JSON.stringify(roundTripped)).toEqual(JSON.stringify(dataSource));
-        return true;
+        expect(JSON.stringify(roundTripped)).toEqual(JSON.stringify(dataSource))
+        return true
       }),
-      { numRuns: 100 }
-    );
-  });
-});
+      { numRuns: 100 },
+    )
+  })
+})

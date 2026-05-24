@@ -4,63 +4,63 @@
  */
 module.exports = (sequelize, DataTypes) => {
   const ProjectUserRoleBinding = sequelize.define(
-    "ProjectUserRoleBinding",
+    'ProjectUserRoleBinding',
     {
       id: {
         type: DataTypes.UUID,
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
-        comment: "绑定ID",
+        comment: '绑定ID',
       },
       projectId: {
         type: DataTypes.UUID,
         allowNull: false,
         references: {
-          model: "projects",
-          key: "id",
+          model: 'projects',
+          key: 'id',
         },
-        comment: "所属工程ID",
+        comment: '所属工程ID',
       },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,
         references: {
-          model: "users",
-          key: "id",
+          model: 'users',
+          key: 'id',
         },
-        comment: "创建者ID",
+        comment: '创建者ID',
       },
       runtimeUserId: {
         type: DataTypes.UUID,
         allowNull: false,
         references: {
-          model: "project_runtime_users",
-          key: "id",
+          model: 'project_runtime_users',
+          key: 'id',
         },
-        comment: "运行态用户ID",
+        comment: '运行态用户ID',
       },
       roleId: {
         type: DataTypes.UUID,
         allowNull: false,
         references: {
-          model: "project_roles",
-          key: "id",
+          model: 'project_roles',
+          key: 'id',
         },
-        comment: "角色ID",
+        comment: '角色ID',
       },
       assignedBy: {
         type: DataTypes.UUID,
         allowNull: true,
         references: {
-          model: "users",
-          key: "id",
+          model: 'users',
+          key: 'id',
         },
-        comment: "分配人ID",
+        comment: '分配人ID',
       },
       assignedAt: {
         type: DataTypes.DATE,
         allowNull: true,
-        comment: "分配时间",
+        comment: '分配时间',
       },
       createdAt: {
         type: DataTypes.DATE,
@@ -72,25 +72,25 @@ module.exports = (sequelize, DataTypes) => {
       },
     },
     {
-      tableName: "project_user_role_bindings",
-      comment: "工程运行态用户角色绑定表",
+      tableName: 'project_user_role_bindings',
+      comment: '工程运行态用户角色绑定表',
       indexes: [
         {
           unique: true,
-          fields: ["projectId", "runtimeUserId", "roleId"],
+          fields: ['projectId', 'runtimeUserId', 'roleId'],
         },
         {
-          fields: ["projectId", "runtimeUserId"],
+          fields: ['projectId', 'runtimeUserId'],
         },
         {
-          fields: ["projectId", "roleId"],
+          fields: ['projectId', 'roleId'],
         },
         {
-          fields: ["createdBy"],
+          fields: ['createdBy'],
         },
       ],
     },
-  );
+  )
 
-  return ProjectUserRoleBinding;
-};
+  return ProjectUserRoleBinding
+}

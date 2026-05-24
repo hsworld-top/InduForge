@@ -7,16 +7,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/indu-forge/node_agent/internal/pkg/types"
 	"github.com/indu-forge/node_agent/internal/pkg/logger"
+	"github.com/indu-forge/node_agent/internal/pkg/types"
 )
 
 // HealthChecker 健康检查器
 type HealthChecker struct {
-	config     HealthConfig
-	logger     *logger.SimpleLogger
-	projects   map[string]*ProjectHealth
-	mu         sync.RWMutex
+	config   HealthConfig
+	logger   *logger.SimpleLogger
+	projects map[string]*ProjectHealth
+	mu       sync.RWMutex
 }
 
 // HealthConfig 健康检查配置
@@ -68,8 +68,8 @@ func (h *HealthChecker) CheckRuntime(ctx context.Context, projectID string, endp
 	defer resp.Body.Close()
 
 	result := &types.HealthCheckResult{
-		Status:    "healthy",
-		Checks:    map[string]interface{}{
+		Status: "healthy",
+		Checks: map[string]interface{}{
 			"endpoint":    endpoint,
 			"status_code": resp.StatusCode,
 		},

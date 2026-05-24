@@ -63,6 +63,7 @@
 ## 任务 1：数据库模型升级
 
 **文件：**
+
 - 修改：`data_service/internal/db/migrations/0010_alarm_rules.sql`
 - 创建：`data_service/internal/db/migrations/0017_alarm_rule_final_model.sql`
 - 创建：`data_service/internal/db/migrations/0017_alarm_rule_final_model_down.sql`
@@ -186,6 +187,7 @@ git commit -m "feat(data_service): 升级报警规则数据模型"
 ## 任务 2：后端规则校验、试算和契约
 
 **文件：**
+
 - 修改：`data_service/internal/service/alarm_rule_service.go`
 - 创建：`data_service/internal/service/alarm_rule_service_test.go`
 
@@ -330,6 +332,7 @@ git commit -m "feat(data_service): 完成报警规则校验和试算"
 ## 任务 3：后端仓储、Handler 和路由闭环
 
 **文件：**
+
 - 修改：`data_service/internal/repository/alarm_rule_repository.go`
 - 修改：`data_service/internal/http/handler/alarm_rule_handler.go`
 - 修改：`data_service/internal/http/router/router.go`
@@ -473,6 +476,7 @@ git commit -m "feat(data_service): 补齐报警规则接口闭环"
 ## 任务 4：前端 Schema、API 和模型
 
 **文件：**
+
 - 修改：`datacenter/src/api/schemas/alarm.schema.ts`
 - 修改：`datacenter/src/api/alarm.api.ts`
 - 重写：`datacenter/src/components/alarm/alarmRuleModel.ts`
@@ -484,108 +488,108 @@ git commit -m "feat(data_service): 补齐报警规则接口闭环"
 将 `alarm-rule-model.test.ts` 改为最终模型测试：
 
 ```ts
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from 'vitest'
 import {
   alarmRuleTypeOptions,
   createAlarmDraft,
   draftToAlarmSavePayload,
   toAlarmDraft,
-} from "../src/components/alarm/alarmRuleModel";
+} from '../src/components/alarm/alarmRuleModel'
 
-describe("alarm rule model", () => {
-  test("规则类型覆盖最终枚举", () => {
+describe('alarm rule model', () => {
+  test('规则类型覆盖最终枚举', () => {
     expect(alarmRuleTypeOptions.map((item) => item.value)).toEqual([
-      "H",
-      "L",
-      "HH",
-      "LL",
-      "deviation_high",
-      "deviation_low",
-      "rate_of_change",
-      "cel",
-    ]);
-  });
+      'H',
+      'L',
+      'HH',
+      'LL',
+      'deviation_high',
+      'deviation_low',
+      'rate_of_change',
+      'cel',
+    ])
+  })
 
-  test("新建草稿序列化为最终保存 payload", () => {
-    const draft = createAlarmDraft();
-    draft.name = "温度高报";
-    draft.targetPath = "metrics.temperature";
-    draft.ruleType = "H";
-    draft.condition.limit = 80;
-    draft.severity = "major";
+  test('新建草稿序列化为最终保存 payload', () => {
+    const draft = createAlarmDraft()
+    draft.name = '温度高报'
+    draft.targetPath = 'metrics.temperature'
+    draft.ruleType = 'H'
+    draft.condition.limit = 80
+    draft.severity = 'major'
 
     expect(draftToAlarmSavePayload(draft)).toMatchObject({
-      name: "温度高报",
-      targetPath: "metrics.temperature",
-      ruleType: "H",
+      name: '温度高报',
+      targetPath: 'metrics.temperature',
+      ruleType: 'H',
       condition: { limit: 80 },
-      severity: "major",
-    });
-  });
+      severity: 'major',
+    })
+  })
 
-  test("详情转草稿保留脏状态为 false", () => {
+  test('详情转草稿保留脏状态为 false', () => {
     const draft = toAlarmDraft({
-      id: "rule-1",
-      projectId: "project-1",
-      name: "温度高报",
-      targetDatapointId: "dp-1",
-      targetPath: "metrics.temperature",
-      targetDataType: "number",
-      ruleType: "H",
+      id: 'rule-1',
+      projectId: 'project-1',
+      name: '温度高报',
+      targetDatapointId: 'dp-1',
+      targetPath: 'metrics.temperature',
+      targetDataType: 'number',
+      ruleType: 'H',
       condition: { limit: 80 },
-      severity: "major",
+      severity: 'major',
       isEnabled: true,
       suppression: { enabled: false },
-      messageTemplate: "",
+      messageTemplate: '',
       contract: {},
-      createdAt: "2026-05-20T00:00:00Z",
-      updatedAt: "2026-05-20T00:00:00Z",
-    });
-    expect(draft.dirty).toBe(false);
-  });
-});
+      createdAt: '2026-05-20T00:00:00Z',
+      updatedAt: '2026-05-20T00:00:00Z',
+    })
+    expect(draft.dirty).toBe(false)
+  })
+})
 ```
 
 创建 `alarm-schema.test.ts`：
 
 ```ts
-import { describe, expect, test } from "vitest";
-import { AlarmRuleSchema, AlarmTrialResultSchema } from "../src/api/schemas/alarm.schema";
+import { describe, expect, test } from 'vitest'
+import { AlarmRuleSchema, AlarmTrialResultSchema } from '../src/api/schemas/alarm.schema'
 
-describe("alarm schema", () => {
-  test("解析最终报警规则", () => {
+describe('alarm schema', () => {
+  test('解析最终报警规则', () => {
     const rule = AlarmRuleSchema.parse({
-      id: "rule-1",
-      projectId: "project-1",
-      name: "温度高报",
-      targetDatapointId: "dp-1",
-      targetPath: "metrics.temperature",
-      targetDataType: "number",
-      ruleType: "H",
+      id: 'rule-1',
+      projectId: 'project-1',
+      name: '温度高报',
+      targetDatapointId: 'dp-1',
+      targetPath: 'metrics.temperature',
+      targetDataType: 'number',
+      ruleType: 'H',
       condition: { limit: 80 },
-      severity: "major",
+      severity: 'major',
       isEnabled: true,
       suppression: { enabled: false },
-      messageTemplate: "",
+      messageTemplate: '',
       contract: {},
-      createdAt: "2026-05-20T00:00:00Z",
-      updatedAt: "2026-05-20T00:00:00Z",
-    });
-    expect(rule.ruleType).toBe("H");
-  });
+      createdAt: '2026-05-20T00:00:00Z',
+      updatedAt: '2026-05-20T00:00:00Z',
+    })
+    expect(rule.ruleType).toBe('H')
+  })
 
-  test("解析试算输入不足状态", () => {
+  test('解析试算输入不足状态', () => {
     const result = AlarmTrialResultSchema.parse({
       triggered: false,
-      state: "insufficient_input",
-      severity: "warning",
-      ruleType: "deviation_high",
-      targetPath: "metrics.temperature",
+      state: 'insufficient_input',
+      severity: 'warning',
+      ruleType: 'deviation_high',
+      targetPath: 'metrics.temperature',
       diagnostics: {},
-    });
-    expect(result.state).toBe("insufficient_input");
-  });
-});
+    })
+    expect(result.state).toBe('insufficient_input')
+  })
+})
 ```
 
 - [ ] **步骤 2：运行前端测试验证失败**
@@ -599,18 +603,18 @@ describe("alarm schema", () => {
 
 ```ts
 export const AlarmRuleTypeSchema = z.enum([
-  "H",
-  "L",
-  "HH",
-  "LL",
-  "deviation_high",
-  "deviation_low",
-  "rate_of_change",
-  "cel",
-]);
+  'H',
+  'L',
+  'HH',
+  'LL',
+  'deviation_high',
+  'deviation_low',
+  'rate_of_change',
+  'cel',
+])
 
-export const AlarmSeveritySchema = z.enum(["info", "warning", "major", "critical"]);
-export const AlarmTrialStateSchema = z.enum(["triggered", "not_triggered", "insufficient_input"]);
+export const AlarmSeveritySchema = z.enum(['info', 'warning', 'major', 'critical'])
+export const AlarmTrialStateSchema = z.enum(['triggered', 'not_triggered', 'insufficient_input'])
 ```
 
 `alarm.api.ts` 增加 `toggleAlarmRule`、`testAlarmRule`、`getAlarmRuleContract`、`validateAlarmRuleDraft`。请求路径使用设计文档中的最终路径。
@@ -619,15 +623,15 @@ export const AlarmTrialStateSchema = z.enum(["triggered", "not_triggered", "insu
 
 ```ts
 export const alarmRuleTypeOptions = [
-  { value: "H", label: "H 高限" },
-  { value: "L", label: "L 低限" },
-  { value: "HH", label: "HH 高高限" },
-  { value: "LL", label: "LL 低低限" },
-  { value: "deviation_high", label: "大偏差" },
-  { value: "deviation_low", label: "小偏差" },
-  { value: "rate_of_change", label: "变化率" },
-  { value: "cel", label: "CEL" },
-] as const;
+  { value: 'H', label: 'H 高限' },
+  { value: 'L', label: 'L 低限' },
+  { value: 'HH', label: 'HH 高高限' },
+  { value: 'LL', label: 'LL 低低限' },
+  { value: 'deviation_high', label: '大偏差' },
+  { value: 'deviation_low', label: '小偏差' },
+  { value: 'rate_of_change', label: '变化率' },
+  { value: 'cel', label: 'CEL' },
+] as const
 ```
 
 实现 `createAlarmDraft`、`toAlarmDraft`、`draftToAlarmSavePayload`，不导出旧样例数组。
@@ -647,6 +651,7 @@ git commit -m "feat(datacenter): 定义报警规则前端模型"
 ## 任务 5：前端 Store 与工作区路由状态
 
 **文件：**
+
 - 修改：`datacenter/src/stores/alarm.store.ts`
 - 重写：`datacenter/src/components/alarm/AlarmWorkspace.vue`
 - 创建：`datacenter/tests/alarm-store.test.ts`
@@ -656,26 +661,57 @@ git commit -m "feat(datacenter): 定义报警规则前端模型"
 创建 `alarm-store.test.ts`，用 mock API 验证列表、详情和保存。
 
 ```ts
-import { beforeEach, describe, expect, test, vi } from "vitest";
-import { createPinia, setActivePinia } from "pinia";
+import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 
-vi.mock("../src/api/alarm.api", () => ({
-  getAlarmRules: vi.fn(async () => ({ list: [{ id: "rule-1", name: "温度高报" }], pagination: { total: 1 } })),
-  getAlarmRule: vi.fn(async () => ({ id: "rule-1", name: "温度高报", ruleType: "H", severity: "major", isEnabled: true, condition: {}, suppression: {}, contract: {}, targetPath: "metrics.temperature", targetDatapointId: "dp-1", targetDataType: "number", createdAt: "", updatedAt: "" })),
-  updateAlarmRule: vi.fn(async () => ({ id: "rule-1", name: "温度高报2", ruleType: "H", severity: "major", isEnabled: true, condition: {}, suppression: {}, contract: {}, targetPath: "metrics.temperature", targetDatapointId: "dp-1", targetDataType: "number", createdAt: "", updatedAt: "" })),
-}));
+vi.mock('../src/api/alarm.api', () => ({
+  getAlarmRules: vi.fn(async () => ({
+    list: [{ id: 'rule-1', name: '温度高报' }],
+    pagination: { total: 1 },
+  })),
+  getAlarmRule: vi.fn(async () => ({
+    id: 'rule-1',
+    name: '温度高报',
+    ruleType: 'H',
+    severity: 'major',
+    isEnabled: true,
+    condition: {},
+    suppression: {},
+    contract: {},
+    targetPath: 'metrics.temperature',
+    targetDatapointId: 'dp-1',
+    targetDataType: 'number',
+    createdAt: '',
+    updatedAt: '',
+  })),
+  updateAlarmRule: vi.fn(async () => ({
+    id: 'rule-1',
+    name: '温度高报2',
+    ruleType: 'H',
+    severity: 'major',
+    isEnabled: true,
+    condition: {},
+    suppression: {},
+    contract: {},
+    targetPath: 'metrics.temperature',
+    targetDatapointId: 'dp-1',
+    targetDataType: 'number',
+    createdAt: '',
+    updatedAt: '',
+  })),
+}))
 
-describe("alarm store", () => {
-  beforeEach(() => setActivePinia(createPinia()));
+describe('alarm store', () => {
+  beforeEach(() => setActivePinia(createPinia()))
 
-  test("拉取列表并记录 total", async () => {
-    const { useAlarmStore } = await import("../src/stores/alarm.store");
-    const store = useAlarmStore();
-    await store.fetchList("project-1");
-    expect(store.total).toBe(1);
-    expect(store.list[0].id).toBe("rule-1");
-  });
-});
+  test('拉取列表并记录 total', async () => {
+    const { useAlarmStore } = await import('../src/stores/alarm.store')
+    const store = useAlarmStore()
+    await store.fetchList('project-1')
+    expect(store.total).toBe(1)
+    expect(store.list[0].id).toBe('rule-1')
+  })
+})
 ```
 
 - [ ] **步骤 2：运行测试验证失败**
@@ -740,6 +776,7 @@ git commit -m "feat(datacenter): 接入报警工作区状态"
 ## 任务 6：报警列表与新建弹窗
 
 **文件：**
+
 - 创建：`datacenter/src/components/alarm/AlarmRuleList.vue`
 - 创建：`datacenter/src/components/alarm/CreateAlarmRuleDialog.vue`
 - 创建：`datacenter/src/components/alarm/DataPointPicker.vue`
@@ -771,7 +808,12 @@ git commit -m "feat(datacenter): 接入报警工作区状态"
         <option value="critical">critical</option>
       </select>
     </div>
-    <EmptyState v-if="!loading && !rules.length" icon-name="bell" title="暂无报警规则" description="新建规则后会显示在这里。" />
+    <EmptyState
+      v-if="!loading && !rules.length"
+      icon-name="bell"
+      title="暂无报警规则"
+      description="新建规则后会显示在这里。"
+    />
     <button
       v-for="rule in rules"
       v-else
@@ -784,7 +826,10 @@ git commit -m "feat(datacenter): 接入报警工作区状态"
       <i :class="`is-${rule.severity}`"></i>
       <strong>{{ rule.name }}</strong>
       <code>{{ rule.targetPath }}</code>
-      <StatusBadge :text="rule.isEnabled ? '启用' : '停用'" :tone="rule.isEnabled ? 'success' : 'neutral'" />
+      <StatusBadge
+        :text="rule.isEnabled ? '启用' : '停用'"
+        :tone="rule.isEnabled ? 'success' : 'neutral'"
+      />
     </button>
   </aside>
 </template>
@@ -811,6 +856,7 @@ git commit -m "feat(datacenter): 实现报警规则列表和新建入口"
 ## 任务 7：报警编辑器表单
 
 **文件：**
+
 - 创建：`datacenter/src/components/alarm/AlarmEditorShell.vue`
 - 创建：`datacenter/src/components/alarm/AlarmEditorHeader.vue`
 - 创建：`datacenter/src/components/alarm/AlarmRuleForm.vue`
@@ -824,18 +870,56 @@ git commit -m "feat(datacenter): 实现报警规则列表和新建入口"
 ```vue
 <template>
   <section class="alarm-editor">
-    <EmptyState v-if="!draft" icon-name="bell" title="选择报警规则" description="从左侧选择规则或新建规则。" />
+    <EmptyState
+      v-if="!draft"
+      icon-name="bell"
+      title="选择报警规则"
+      description="从左侧选择规则或新建规则。"
+    />
     <template v-else>
-      <AlarmEditorHeader :draft="draft" :saving="saving" @save="$emit('save')" @delete-rule="$emit('delete-rule', draft.id)" @toggle-enabled="$emit('toggle-enabled', draft.id, !draft.isEnabled)" @mark-dirty="$emit('mark-dirty')" />
+      <AlarmEditorHeader
+        :draft="draft"
+        :saving="saving"
+        @save="$emit('save')"
+        @delete-rule="$emit('delete-rule', draft.id)"
+        @toggle-enabled="$emit('toggle-enabled', draft.id, !draft.isEnabled)"
+        @mark-dirty="$emit('mark-dirty')"
+      />
       <main class="alarm-editor__main">
         <AlarmRuleForm :draft="draft" @mark-dirty="$emit('mark-dirty')" />
       </main>
       <footer class="alarm-editor__bottom">
-        <button type="button" :class="{ 'is-active': activePanel === 'config' }" @click="activePanel = 'config'">规则配置</button>
-        <button type="button" :class="{ 'is-active': activePanel === 'test' }" @click="$emit('switch-panel', 'test')">试算</button>
-        <button type="button" :class="{ 'is-active': activePanel === 'contract' }" @click="$emit('switch-panel', 'contract')">契约</button>
-        <AlarmSuppressionPanel v-if="activePanel === 'config'" :draft="draft" @mark-dirty="$emit('mark-dirty')" />
-        <AlarmMessageTemplatePanel v-if="activePanel === 'config'" :draft="draft" @mark-dirty="$emit('mark-dirty')" />
+        <button
+          type="button"
+          :class="{ 'is-active': activePanel === 'config' }"
+          @click="activePanel = 'config'"
+        >
+          规则配置
+        </button>
+        <button
+          type="button"
+          :class="{ 'is-active': activePanel === 'test' }"
+          @click="$emit('switch-panel', 'test')"
+        >
+          试算
+        </button>
+        <button
+          type="button"
+          :class="{ 'is-active': activePanel === 'contract' }"
+          @click="$emit('switch-panel', 'contract')"
+        >
+          契约
+        </button>
+        <AlarmSuppressionPanel
+          v-if="activePanel === 'config'"
+          :draft="draft"
+          @mark-dirty="$emit('mark-dirty')"
+        />
+        <AlarmMessageTemplatePanel
+          v-if="activePanel === 'config'"
+          :draft="draft"
+          @mark-dirty="$emit('mark-dirty')"
+        />
       </footer>
     </template>
   </section>
@@ -848,12 +932,34 @@ git commit -m "feat(datacenter): 实现报警规则列表和新建入口"
 
 ```vue
 <template v-if="['H', 'HH', 'L', 'LL'].includes(draft.ruleType)">
-  <label><span>{{ draft.ruleType.includes('H') ? '上限' : '下限' }}</span><input v-model.number="draft.condition.limit" type="number" @input="$emit('mark-dirty')" /></label>
-  <label><span>回差</span><input v-model.number="draft.condition.hysteresis" type="number" min="0" @input="$emit('mark-dirty')" /></label>
-  <label><span>持续毫秒</span><input v-model.number="draft.condition.durationMs" type="number" min="0" @input="$emit('mark-dirty')" /></label>
+  <label
+    ><span>{{ draft.ruleType.includes('H') ? '上限' : '下限' }}</span
+    ><input v-model.number="draft.condition.limit" type="number" @input="$emit('mark-dirty')"
+  /></label>
+  <label
+    ><span>回差</span
+    ><input
+      v-model.number="draft.condition.hysteresis"
+      type="number"
+      min="0"
+      @input="$emit('mark-dirty')"
+  /></label>
+  <label
+    ><span>持续毫秒</span
+    ><input
+      v-model.number="draft.condition.durationMs"
+      type="number"
+      min="0"
+      @input="$emit('mark-dirty')"
+  /></label>
 </template>
 <template v-else-if="draft.ruleType === 'cel'">
-  <MonacoEditor v-model="draft.condition.expression" language="javascript" height="180px" @change="$emit('mark-dirty')" />
+  <MonacoEditor
+    v-model="draft.condition.expression"
+    language="javascript"
+    height="180px"
+    @change="$emit('mark-dirty')"
+  />
 </template>
 ```
 
@@ -863,9 +969,13 @@ git commit -m "feat(datacenter): 实现报警规则列表和新建入口"
 
 ```ts
 async function saveActiveDraft() {
-  if (!activeDraft.value) return;
-  const saved = await alarmStore.saveRule(projectId.value, activeDraft.value.id, draftToAlarmSavePayload(activeDraft.value));
-  drafts.value[saved.id] = toAlarmDraft(saved);
+  if (!activeDraft.value) return
+  const saved = await alarmStore.saveRule(
+    projectId.value,
+    activeDraft.value.id,
+    draftToAlarmSavePayload(activeDraft.value),
+  )
+  drafts.value[saved.id] = toAlarmDraft(saved)
 }
 ```
 
@@ -886,6 +996,7 @@ git commit -m "feat(datacenter): 实现报警规则编辑器"
 ## 任务 8：试算、契约和跨模块入口
 
 **文件：**
+
 - 创建：`datacenter/src/components/alarm/AlarmTestPanel.vue`
 - 创建：`datacenter/src/components/alarm/AlarmContractPanel.vue`
 - 修改：`datacenter/src/components/alarm/AlarmEditorShell.vue`
@@ -902,7 +1013,7 @@ git commit -m "feat(datacenter): 实现报警规则编辑器"
     <button type="button" :disabled="running" @click="run">试算</button>
     <div v-if="result" :class="`alarm-test-panel__result is-${result.state}`">
       <strong>{{ stateText }}</strong>
-      <span>{{ result.message || "-" }}</span>
+      <span>{{ result.message || '-' }}</span>
       <pre>{{ JSON.stringify(result.diagnostics, null, 2) }}</pre>
     </div>
   </section>
@@ -936,7 +1047,7 @@ git commit -m "feat(datacenter): 实现报警规则编辑器"
 void router.push({
   path: `${alarmBasePath.value}/${activeDraft.value.id}/${tab}`,
   query: route.query,
-});
+})
 ```
 
 - [ ] **步骤 4：连接“打开目标数据点”和“检查当前规则”**
@@ -944,15 +1055,15 @@ void router.push({
 `AlarmEditorHeader.vue` 发出：
 
 ```ts
-emit("open-target", draft.targetDatapointId);
-emit("check-current", draft.id);
+emit('open-target', draft.targetDatapointId)
+emit('check-current', draft.id)
 ```
 
 `AlarmWorkspace.vue` 中：
 
 ```ts
 function openTargetDatapoint(id: string) {
-  void router.push({ path: `${debugPrefix.value}/datapoint/${id}`, query: route.query });
+  void router.push({ path: `${debugPrefix.value}/datapoint/${id}`, query: route.query })
 }
 ```
 
@@ -973,6 +1084,7 @@ git commit -m "feat(datacenter): 完成报警试算和契约预览"
 ## 任务 9：全量验证与收尾
 
 **文件：**
+
 - 修改：按验证发现的问题精确修改相关文件。
 
 - [ ] **步骤 1：运行后端全量测试**

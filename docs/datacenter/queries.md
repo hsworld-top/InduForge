@@ -14,19 +14,19 @@
 
 ### 查询 CRUD
 
-| 接口 | 方法 | 说明 |
-| ---- | ---- | ---- |
-| `/api/v1/data/projects/:projectId/queries` | GET | 获取查询列表，支持 connectionId 过滤 |
-| `/api/v1/data/projects/:projectId/queries` | POST | 创建新查询 |
-| `/api/v1/data/queries/:id` | PUT | 更新查询配置 |
-| `/api/v1/data/queries/:id` | DELETE | 删除查询 |
+| 接口                                       | 方法   | 说明                                 |
+| ------------------------------------------ | ------ | ------------------------------------ |
+| `/api/v1/data/projects/:projectId/queries` | GET    | 获取查询列表，支持 connectionId 过滤 |
+| `/api/v1/data/projects/:projectId/queries` | POST   | 创建新查询                           |
+| `/api/v1/data/queries/:id`                 | PUT    | 更新查询配置                         |
+| `/api/v1/data/queries/:id`                 | DELETE | 删除查询                             |
 
 ### 查询执行
 
-| 接口 | 方法 | 说明 |
-| ---- | ---- | ---- |
-| `/api/v1/data/queries/:id/execute` | POST | 执行已保存的查询 |
-| `/api/v1/data/projects/:projectId/connections/:connectionId/execute-sql` | POST | 直接执行 SQL 语句（支持参数化）|
+| 接口                                                                     | 方法 | 说明                            |
+| ------------------------------------------------------------------------ | ---- | ------------------------------- |
+| `/api/v1/data/queries/:id/execute`                                       | POST | 执行已保存的查询                |
+| `/api/v1/data/projects/:projectId/connections/:connectionId/execute-sql` | POST | 直接执行 SQL 语句（支持参数化） |
 
 ## 查询配置结构
 
@@ -53,4 +53,3 @@
 - 参数化查询支持（`?` 占位符）
 - 查询结果分页展示
 - 右键菜单管理（查看详情/打开/删除）
-

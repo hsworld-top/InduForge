@@ -1,4 +1,4 @@
-const mockProjectFindAll = jest.fn();
+const mockProjectFindAll = jest.fn()
 
 jest.mock('../../models', () => ({
   Project: {
@@ -12,7 +12,7 @@ jest.mock('../../models', () => ({
   ProjectGroup: {},
   NodeDeployment: {},
   Node: {},
-}));
+}))
 
 jest.mock('../../config/app', () => ({
   pagination: {
@@ -20,21 +20,21 @@ jest.mock('../../config/app', () => ({
     defaultLimit: 20,
     maxLimit: 100,
   },
-}));
+}))
 
-const { listProjectOverviews } = require('../projectOverviewService');
+const { listProjectOverviews } = require('../projectOverviewService')
 
 const makeProjectModel = (payload) => ({
   toOverviewPayload: jest.fn(() => ({
     visibility: 'internal',
     ...payload,
   })),
-});
+})
 
 describe('projectOverviewService', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-  });
+    jest.clearAllMocks()
+  })
 
   test('会基于 toOverviewPayload 聚合工程总览结构（含 tags/group/runtimeSummary 与创建更新人名称）', async () => {
     const project = makeProjectModel({
@@ -74,8 +74,8 @@ describe('projectOverviewService', () => {
           updatedAt: '2026-04-10T08:00:00.000Z',
         },
       ],
-    });
-    mockProjectFindAll.mockResolvedValue([project]);
+    })
+    mockProjectFindAll.mockResolvedValue([project])
 
     const result = await listProjectOverviews({
       req: {
@@ -85,10 +85,10 @@ describe('projectOverviewService', () => {
         },
       },
       query: {},
-    });
+    })
 
-    expect(project.toOverviewPayload).toHaveBeenCalledTimes(1);
-    expect(result.projects).toHaveLength(1);
+    expect(project.toOverviewPayload).toHaveBeenCalledTimes(1)
+    expect(result.projects).toHaveLength(1)
     expect(result.projects[0]).toEqual(
       expect.objectContaining({
         tags: [
@@ -117,8 +117,8 @@ describe('projectOverviewService', () => {
           ],
         }),
       }),
-    );
-  });
+    )
+  })
 
   test.each([
     {
@@ -150,7 +150,7 @@ describe('projectOverviewService', () => {
       nodeDeployments: [
         { status: 'running', mode: 'RELEASE', deployedAt: '2026-04-20T00:00:00.000Z' },
       ],
-    });
+    })
     const projectB = makeProjectModel({
       id: 'project-b',
       name: 'B',
@@ -159,25 +159,30 @@ describe('projectOverviewService', () => {
       nodeDeployments: [
         { status: 'deploying', mode: 'DEV', deployedAt: '2026-04-22T00:00:00.000Z' },
       ],
-    });
+    })
     const projectC = makeProjectModel({
       id: 'project-c',
       name: 'C',
       createdAt: '2026-04-03T00:00:00.000Z',
       updatedAt: '2026-04-03T00:00:00.000Z',
       nodeDeployments: [
-        { status: 'error', mode: 'RELEASE', deployedAt: null, updatedAt: '2026-04-03T00:00:00.000Z' },
+        {
+          status: 'error',
+          mode: 'RELEASE',
+          deployedAt: null,
+          updatedAt: '2026-04-03T00:00:00.000Z',
+        },
       ],
-    });
+    })
 
-    mockProjectFindAll.mockResolvedValue([projectA, projectB, projectC]);
+    mockProjectFindAll.mockResolvedValue([projectA, projectB, projectC])
     const result = await listProjectOverviews({
       req: { user: { role: 'PROJECT_ADMIN', tenantId: 'tenant-1' } },
       query,
-    });
+    })
 
-    expect(result.projects.map((item) => item.id)).toEqual(expected);
-  });
+    expect(result.projects.map((item) => item.id)).toEqual(expected)
+  })
 
   test('支持按分组、标签、运行模式、部署状态、创建人筛选', async () => {
     const matched = makeProjectModel({
@@ -187,10 +192,12 @@ describe('projectOverviewService', () => {
       creator: { id: 'user-1', username: 'zhangsan', fullName: '张三' },
       tags: [{ id: 'tag-core', name: '核心' }],
       group: { id: 'group-main', name: '重点项目' },
-      nodeDeployments: [{ status: 'running', mode: 'RELEASE', deployedAt: '2026-04-20T00:00:00.000Z' }],
+      nodeDeployments: [
+        { status: 'running', mode: 'RELEASE', deployedAt: '2026-04-20T00:00:00.000Z' },
+      ],
       createdAt: '2026-04-01T00:00:00.000Z',
       updatedAt: '2026-04-01T00:00:00.000Z',
-    });
+    })
     const unmatched = makeProjectModel({
       id: 'project-unmatch',
       name: '不满足条件',
@@ -201,8 +208,8 @@ describe('projectOverviewService', () => {
       nodeDeployments: [{ status: 'stopped', mode: 'DEV', deployedAt: '2026-04-10T00:00:00.000Z' }],
       createdAt: '2026-04-02T00:00:00.000Z',
       updatedAt: '2026-04-02T00:00:00.000Z',
-    });
-    mockProjectFindAll.mockResolvedValue([matched, unmatched]);
+    })
+    mockProjectFindAll.mockResolvedValue([matched, unmatched])
 
     const result = await listProjectOverviews({
       req: { user: { role: 'PROJECT_ADMIN', tenantId: 'tenant-1' } },
@@ -213,16 +220,16 @@ describe('projectOverviewService', () => {
         deployStatus: 'running',
         createdBy: '张三',
       },
-    });
+    })
 
-    expect(result.projects).toHaveLength(1);
-    expect(result.projects[0].id).toBe('project-match');
-  });
+    expect(result.projects).toHaveLength(1)
+    expect(result.projects[0].id).toBe('project-match')
+  })
 
   test('UUID 精确筛选支持大小写无关匹配（group/tag/createdBy）', async () => {
-    const groupId = '6f9619ff-8b86-4d01-b42d-00cf4fc964ff';
-    const tagId = '7f9619ff-8b86-4d01-b42d-00cf4fc964ff';
-    const creatorId = '8f9619ff-8b86-4d01-b42d-00cf4fc964ff';
+    const groupId = '6f9619ff-8b86-4d01-b42d-00cf4fc964ff'
+    const tagId = '7f9619ff-8b86-4d01-b42d-00cf4fc964ff'
+    const creatorId = '8f9619ff-8b86-4d01-b42d-00cf4fc964ff'
     const matched = makeProjectModel({
       id: 'project-uuid-match',
       name: 'UUID命中工程',
@@ -230,22 +237,30 @@ describe('projectOverviewService', () => {
       creator: { id: creatorId, username: 'uuid-user', fullName: 'UUID 用户' },
       tags: [{ id: tagId, name: '标签A' }],
       group: { id: groupId, name: '分组A' },
-      nodeDeployments: [{ status: 'running', mode: 'RELEASE', deployedAt: '2026-04-20T00:00:00.000Z' }],
+      nodeDeployments: [
+        { status: 'running', mode: 'RELEASE', deployedAt: '2026-04-20T00:00:00.000Z' },
+      ],
       createdAt: '2026-04-01T00:00:00.000Z',
       updatedAt: '2026-04-01T00:00:00.000Z',
-    });
+    })
     const unmatched = makeProjectModel({
       id: 'project-uuid-unmatch',
       name: 'UUID未命中工程',
       createdBy: '9f9619ff-8b86-4d01-b42d-00cf4fc964ff',
-      creator: { id: '9f9619ff-8b86-4d01-b42d-00cf4fc964ff', username: 'other', fullName: '其它用户' },
+      creator: {
+        id: '9f9619ff-8b86-4d01-b42d-00cf4fc964ff',
+        username: 'other',
+        fullName: '其它用户',
+      },
       tags: [{ id: 'af9619ff-8b86-4d01-b42d-00cf4fc964ff', name: '标签B' }],
       group: { id: 'bf9619ff-8b86-4d01-b42d-00cf4fc964ff', name: '分组B' },
-      nodeDeployments: [{ status: 'running', mode: 'RELEASE', deployedAt: '2026-04-21T00:00:00.000Z' }],
+      nodeDeployments: [
+        { status: 'running', mode: 'RELEASE', deployedAt: '2026-04-21T00:00:00.000Z' },
+      ],
       createdAt: '2026-04-02T00:00:00.000Z',
       updatedAt: '2026-04-02T00:00:00.000Z',
-    });
-    mockProjectFindAll.mockResolvedValue([matched, unmatched]);
+    })
+    mockProjectFindAll.mockResolvedValue([matched, unmatched])
 
     const result = await listProjectOverviews({
       req: { user: { role: 'PROJECT_ADMIN', tenantId: 'tenant-1' } },
@@ -254,11 +269,11 @@ describe('projectOverviewService', () => {
         tagId: tagId.toUpperCase(),
         createdBy: creatorId.toUpperCase(),
       },
-    });
+    })
 
-    expect(result.projects).toHaveLength(1);
-    expect(result.projects[0].id).toBe('project-uuid-match');
-  });
+    expect(result.projects).toHaveLength(1)
+    expect(result.projects[0].id).toBe('project-uuid-match')
+  })
 
   test('私有工程仅创建者可见，共享工程对工程管理角色可见', async () => {
     const privateProject = makeProjectModel({
@@ -269,7 +284,7 @@ describe('projectOverviewService', () => {
       nodeDeployments: [],
       createdAt: '2026-04-01T00:00:00.000Z',
       updatedAt: '2026-04-01T00:00:00.000Z',
-    });
+    })
     const sharedProject = makeProjectModel({
       id: 'project-shared',
       name: '共享工程',
@@ -278,23 +293,23 @@ describe('projectOverviewService', () => {
       nodeDeployments: [],
       createdAt: '2026-04-02T00:00:00.000Z',
       updatedAt: '2026-04-02T00:00:00.000Z',
-    });
-    mockProjectFindAll.mockResolvedValue([privateProject, sharedProject]);
+    })
+    mockProjectFindAll.mockResolvedValue([privateProject, sharedProject])
 
     const result = await listProjectOverviews({
       req: { user: { id: 'creator-1', role: 'PROJECT_ADMIN', tenantId: 'tenant-1' } },
       query: { sortBy: 'createdAt', sortOrder: 'ASC' },
-    });
+    })
 
-    expect(result.projects.map((item) => item.id)).toEqual(['project-private', 'project-shared']);
+    expect(result.projects.map((item) => item.id)).toEqual(['project-private', 'project-shared'])
 
     const otherUserResult = await listProjectOverviews({
       req: { user: { id: 'other-user', role: 'PROJECT_ADMIN', tenantId: 'tenant-1' } },
       query: { sortBy: 'createdAt', sortOrder: 'ASC' },
-    });
+    })
 
-    expect(otherUserResult.projects.map((item) => item.id)).toEqual(['project-shared']);
-  });
+    expect(otherUserResult.projects.map((item) => item.id)).toEqual(['project-shared'])
+  })
 
   test('未部署工程默认返回开发运行模式，避免前端把运行模式显示为未部署', async () => {
     const project = makeProjectModel({
@@ -305,21 +320,21 @@ describe('projectOverviewService', () => {
       deployments: [],
       createdAt: '2026-04-01T00:00:00.000Z',
       updatedAt: '2026-04-01T00:00:00.000Z',
-    });
-    mockProjectFindAll.mockResolvedValue([project]);
+    })
+    mockProjectFindAll.mockResolvedValue([project])
 
     const result = await listProjectOverviews({
       req: { user: { id: 'creator-1', role: 'PROJECT_ADMIN', tenantId: 'tenant-1' } },
       query: { runtimeMode: 'DEV' },
-    });
+    })
 
-    expect(result.projects).toHaveLength(1);
+    expect(result.projects).toHaveLength(1)
     expect(result.projects[0].runtimeSummary).toEqual(
       expect.objectContaining({
         runtimeStatus: 'NOT_DEPLOYED',
         runtimeMode: 'DEV',
         deploymentCount: 0,
       }),
-    );
-  });
-});
+    )
+  })
+})

@@ -1,8 +1,8 @@
-﻿const { DataTypes } = require("sequelize");
-const { sequelize } = require("../config/database");
+﻿const { DataTypes } = require('sequelize')
+const { sequelize } = require('../config/database')
 
 const DesignAsset = sequelize.define(
-  "DesignAsset",
+  'DesignAsset',
   {
     id: {
       type: DataTypes.UUID,
@@ -26,16 +26,7 @@ const DesignAsset = sequelize.define(
       allowNull: true,
     },
     type: {
-      type: DataTypes.ENUM(
-        "image",
-        "svg",
-        "video",
-        "audio",
-        "model_3d",
-        "font",
-        "json",
-        "other"
-      ),
+      type: DataTypes.ENUM('image', 'svg', 'video', 'audio', 'model_3d', 'font', 'json', 'other'),
       allowNull: false,
     },
     mimeType: {
@@ -86,11 +77,11 @@ const DesignAsset = sequelize.define(
     },
   },
   {
-    tableName: "design_assets",
+    tableName: 'design_assets',
     timestamps: true,
-    createdAt: "createdAt",
-    updatedAt: "updatedAt",
-  }
-);
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt',
+  },
+)
 
-module.exports = DesignAsset;
+module.exports = DesignAsset

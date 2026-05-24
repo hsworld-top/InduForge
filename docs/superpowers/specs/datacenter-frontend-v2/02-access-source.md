@@ -60,16 +60,17 @@
 └────────────────────────────┘
 ```
 
-| 字段 | 来源 | 备注 |
-|---|---|---|
-| 图标 | 协议类型 | tabler 图标库 |
-| 状态徽标 | `connection.status` | status-badge 视觉 |
-| 名称 | `connection.name` | 长名截断 |
-| 类型 | `connection.type` + 子类型 | mysql / postgresql / sqlserver / mqtt / kafka / http / websocket / redis / opcua / s7 / modbus / tdengine / opcda |
-| 端点 | host:port / brokerUrl / endpoint | 脱敏（密码不在卡片上） |
-| 数据点数量 | 后端聚合 | 后端未提供时显 `-` |
+| 字段       | 来源                             | 备注                                                                                                              |
+| ---------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 图标       | 协议类型                         | tabler 图标库                                                                                                     |
+| 状态徽标   | `connection.status`              | status-badge 视觉                                                                                                 |
+| 名称       | `connection.name`                | 长名截断                                                                                                          |
+| 类型       | `connection.type` + 子类型       | mysql / postgresql / sqlserver / mqtt / kafka / http / websocket / redis / opcua / s7 / modbus / tdengine / opcda |
+| 端点       | host:port / brokerUrl / endpoint | 脱敏（密码不在卡片上）                                                                                            |
+| 数据点数量 | 后端聚合                         | 后端未提供时显 `-`                                                                                                |
 
 **Phase 2 协议**（opcua / s7 / modbus / opcda）：
+
 - 卡片右上角加"仅配置"小角标，hover tooltip 解释「该协议本期仅支持配置，进入工作台后只能查看配置详情」。
 
 ## 5. 卡片操作（3 个）
@@ -106,12 +107,14 @@
 ```
 
 **砍掉**：
+
 - 配置脱敏 JSON 折叠区。
 - 概览 / 配置 / 解析或映射 / 预览 / 数据点 / 记录 这种多 Tab 结构。
 - 「记录」（连接测试历史、预览失败、配置变更等）。
 - 「能力」摘要。
 
 **连通性测试**：
+
 - 点击触发后端 `testConnection` 或对应协议的握手接口。
 - 结果展示：成功 ✅ + 响应耗时；失败 ❌ + 错误简要 + 详情可展开。
 - 结果驻留在 UI 上直到下次点击或关闭抽屉。
@@ -121,14 +124,17 @@
 **单一入口**：新增连接按钮 → ConnectionDialog。
 
 **dialog 内分两步**：
+
 1. **选协议类型**（grid 形态）：mysql / postgres / sqlserver / mqtt / kafka / http / websocket / redis / tdengine / opcua / s7 / modbus / opcda。Phase 2 协议显角标"仅配置"。
 2. **填该协议的配置**：不同协议不同表单，公共字段 name / 备注 / 标签 + 协议特定字段。
 
 **编辑入口**：
+
 - 卡片"⚙"图标 → 直接打开第二步表单。
 - 抽屉"编辑配置" → 直接打开第二步表单。
 
 **砍掉**：
+
 - "模板优先 / 协议高级"两种入口（单一入口更直接）。
 - "从已有配置导入"入口（v2 不实现）。
 
@@ -137,6 +143,7 @@
 子文档 02 只**定义占位**，二级工作台的详细页面后续可单独成文。
 
 **占位框架**：
+
 ```
 ┌─ 接入源工作台头 ───────────────────────────────────┐
 │  [‹ 返回]  [图标] 接入源名称   [状态]  [测试连接]  │
@@ -147,17 +154,18 @@
 └─────────────────────────────────────────────────────┘
 ```
 
-| 协议 | 工作台内容（占位） |
-|---|---|
-| 关系库（mysql/postgresql/sqlserver/tdengine） | 表浏览 + SQL 编辑 + 已保存查询管理 |
-| MQTT | 订阅管理 + Tag 管理 + 消息预览（短时） |
-| Kafka | 短时 reader 预览（按 topic / partition / offset） |
-| HTTP | 一次性请求预览（method / url / headers / body） |
-| WebSocket | 一次性短连接消息预览 |
-| Redis | key / value 受限预览 |
-| Phase 2 工业协议（opcua/s7/modbus/opcda） | 只读配置详情视图，无预览 |
+| 协议                                          | 工作台内容（占位）                                |
+| --------------------------------------------- | ------------------------------------------------- |
+| 关系库（mysql/postgresql/sqlserver/tdengine） | 表浏览 + SQL 编辑 + 已保存查询管理                |
+| MQTT                                          | 订阅管理 + Tag 管理 + 消息预览（短时）            |
+| Kafka                                         | 短时 reader 预览（按 topic / partition / offset） |
+| HTTP                                          | 一次性请求预览（method / url / headers / body）   |
+| WebSocket                                     | 一次性短连接消息预览                              |
+| Redis                                         | key / value 受限预览                              |
+| Phase 2 工业协议（opcua/s7/modbus/opcda）     | 只读配置详情视图，无预览                          |
 
 **v2 主文档与子文档 02 决策**：
+
 - 删除旧 `SqlQueryWorkbench` / `MqttWorkbench` / `DataCenterNew.vue` 的 el-tabs 系统。
 - 新的二级工作台以接入源为主体，每个接入源一个独立的工作台路由。
 
@@ -167,18 +175,19 @@
 - 数据点详情"跳转来源" → 接入源详情抽屉。
 
 **URL**：
+
 - 接入源工作区：`/datacenter/access-source?type=mqtt&status=connected`
 - 接入源详情打开：`/datacenter/access-source/:objectId`
 - 接入源二级工作台：`/datacenter/access-source/:objectId/workbench`
 
 ## 10. 后端依赖与降级
 
-| 能力 | 后端缺口 | 前端降级 |
-|---|---|---|
-| 接入源摘要（数据点数量、状态、地址脱敏） | 现有 connections 接口字段不全 | 缺失字段显 `-`，卡片仍可渲染 |
-| 连通性测试 | 关系库 / MQTT 已有；Kafka / HTTP / WebSocket / Redis 已具备短时预览；工业协议未支持 | 不支持的协议按钮禁用 + tooltip |
-| 协议子工作台对应预览 | 各协议预览能力进度不一 | 工作台内"能力未启用"占位 |
-| 删除保护（关联数据点 / 引用对象检查） | 后端需要先返回引用关系 | 暂不强制，前端二次确认 |
+| 能力                                     | 后端缺口                                                                            | 前端降级                       |
+| ---------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------ |
+| 接入源摘要（数据点数量、状态、地址脱敏） | 现有 connections 接口字段不全                                                       | 缺失字段显 `-`，卡片仍可渲染   |
+| 连通性测试                               | 关系库 / MQTT 已有；Kafka / HTTP / WebSocket / Redis 已具备短时预览；工业协议未支持 | 不支持的协议按钮禁用 + tooltip |
+| 协议子工作台对应预览                     | 各协议预览能力进度不一                                                              | 工作台内"能力未启用"占位       |
+| 删除保护（关联数据点 / 引用对象检查）    | 后端需要先返回引用关系                                                              | 暂不强制，前端二次确认         |
 
 ## 11. 测试要点
 

@@ -1,22 +1,22 @@
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const Joi = require('joi');
-const dayjs = require('dayjs');
-const { validate } = require('../../middlewares/validate');
-const { logger } = require('../../utils/logger');
-const ApiResponse = require('../../utils/response');
-const ErrorCodes = require('../../constants/errorCodes');
-const AppError = require('../../utils/AppError');
-const appConfig = require('../../config/app');
-const TokenManager = require('../../utils/token');
-const { buildAccessTokenPayload, listAccessibleProjectIds } = require('../../utils/authz');
-const Captcha = require('../../utils/captcha');
-const { TIME_FORMAT } = require('../../constants/time');
+const express = require('express')
+const bcrypt = require('bcryptjs')
+const Joi = require('joi')
+const dayjs = require('dayjs')
+const { validate } = require('../../middlewares/validate')
+const { logger } = require('../../utils/logger')
+const ApiResponse = require('../../utils/response')
+const ErrorCodes = require('../../constants/errorCodes')
+const AppError = require('../../utils/AppError')
+const appConfig = require('../../config/app')
+const TokenManager = require('../../utils/token')
+const { buildAccessTokenPayload, listAccessibleProjectIds } = require('../../utils/authz')
+const Captcha = require('../../utils/captcha')
+const { TIME_FORMAT } = require('../../constants/time')
 
-const router = express.Router();
+const router = express.Router()
 
 // 导入模型
-const { User, Tenant, Project, Log } = require('../../models');
+const { User, Tenant, Project, Log } = require('../../models')
 
 /**
  * @swagger
@@ -44,19 +44,19 @@ const { User, Tenant, Project, Log } = require('../../models');
  */
 router.get('/captcha', async (req, res) => {
   try {
-    const { key, svg, expireSeconds } = await Captcha.generateCaptcha();
+    const { key, svg, expireSeconds } = await Captcha.generateCaptcha()
     // 以 data URL 返回，便于前端直接 <img src="...">
-    const base64 = Buffer.from(svg).toString('base64');
+    const base64 = Buffer.from(svg).toString('base64')
     return ApiResponse.success(res, {
       key,
       image: `data:image/svg+xml;base64,${base64}`,
-      expireSeconds
-    });
+      expireSeconds,
+    })
   } catch (error) {
-    logger.error('Generate captcha error', { error: error.message, requestId: req.requestId });
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+    logger.error('Generate captcha error', { error: error.message, requestId: req.requestId })
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500)
   }
-});
+})
 
 /**
  * @swagger
@@ -95,32 +95,38 @@ router.get('/captcha', async (req, res) => {
  *       401:
  *         description: 认证失败或验证码错误
  */
-router.post('/login',
-  validate(Joi.object({
-    body: Joi.object({
-      username: Joi.string().required(),
-      password: Joi.string().required(),
-      tenantCode: Joi.string().optional(),
-      captchaKey: Joi.string().optional().allow(''),
-      captchaCode: Joi.string().optional().allow('')
-    }).required()
-  })),
+router.post(
+  '/login',
+  validate(
+    Joi.object({
+      body: Joi.object({
+        username: Joi.string().required(),
+        password: Joi.string().required(),
+        tenantCode: Joi.string().optional(),
+        captchaKey: Joi.string().optional().allow(''),
+        captchaCode: Joi.string().optional().allow(''),
+      }).required(),
+    }),
+  ),
   async (req, res) => {
     try {
-      const { username, password, tenantCode, captchaKey, captchaCode } = req.body;
-      const loginIp = req.ip;
-      const loginUserAgent = req.get('user-agent') || null;
+      const { username, password, tenantCode, captchaKey, captchaCode } = req.body
+      const loginIp = req.ip
+      const loginUserAgent = req.get('user-agent') || null
 
       // 验证码校验（只有当提供了有效的验证码参数时才验证）
       if (captchaKey && captchaCode && captchaKey.trim() && captchaCode.trim()) {
-        const isValidCaptcha = await Captcha.verifyCaptcha(captchaKey.trim(), captchaCode.trim());
+        const isValidCaptcha = await Captcha.verifyCaptcha(captchaKey.trim(), captchaCode.trim())
         if (!isValidCaptcha) {
-          return ApiResponse.error(res, ErrorCodes.AUTH_INVALID_CAPTCHA, {}, 200);
+          return ApiResponse.error(res, ErrorCodes.AUTH_INVALID_CAPTCHA, {}, 200)
         }
       }
 
       // 检查是否为超级管理员登录（租户管理）
-      if (username === appConfig.superAdmin.username && password === appConfig.superAdmin.password) {
+      if (
+        username === appConfig.superAdmin.username &&
+        password === appConfig.superAdmin.password
+      ) {
         // 记录超级管理员登录日志（该账号非数据库用户，userId 置空）
         try {
           await Log.create({
@@ -133,9 +139,12 @@ router.post('/login',
             ip: loginIp,
             userAgent: loginUserAgent,
             createdAt: new Date(),
-          });
+          })
         } catch (logError) {
-          logger.warn('Write super admin login log failed', { error: logError.message, requestId: req.requestId });
+          logger.warn('Write super admin login log failed', {
+            error: logError.message,
+            requestId: req.requestId,
+          })
         }
 
         const payload = buildAccessTokenPayload({
@@ -144,75 +153,79 @@ router.post('/login',
           role: appConfig.superAdmin.role,
           tenantId: appConfig.defaultTenant.id,
           projectIds: ['*'],
-        });
+        })
 
         // 生成双令牌
         const { accessToken, refreshToken } = await TokenManager.generateTokenPair(
           payload,
           appConfig.superAdmin.userId,
-          appConfig.defaultTenant.id
-        );
+          appConfig.defaultTenant.id,
+        )
 
         // 设置 accessToken 到 cookie（用于 iframe 共享）
         res.cookie('accessToken', accessToken, {
           httpOnly: true, // 防止 XSS 攻击
           secure: process.env.NODE_ENV === 'production', // 生产环境使用 HTTPS
           sameSite: 'lax', // 允许同站和跨站请求携带 cookie
-          maxAge: 24 * 60 * 60 * 1000 // 24 小时
-        });
+          maxAge: 24 * 60 * 60 * 1000, // 24 小时
+        })
 
-        return ApiResponse.success(res, {
-          accessToken,
-          refreshToken,
-          user: {
-            id: appConfig.superAdmin.userId,
-            username: appConfig.superAdmin.username,
-            email: appConfig.superAdmin.email || '',
-            avatarUrl: appConfig.superAdmin.avatarUrl || '',
-            role: appConfig.superAdmin.role,
-            tenant: {
-              id: appConfig.defaultTenant.id,
-              name: appConfig.defaultTenant.name,
-              code: appConfig.defaultTenant.code
-            }
-          }
-        }, 'login_success');
+        return ApiResponse.success(
+          res,
+          {
+            accessToken,
+            refreshToken,
+            user: {
+              id: appConfig.superAdmin.userId,
+              username: appConfig.superAdmin.username,
+              email: appConfig.superAdmin.email || '',
+              avatarUrl: appConfig.superAdmin.avatarUrl || '',
+              role: appConfig.superAdmin.role,
+              tenant: {
+                id: appConfig.defaultTenant.id,
+                name: appConfig.defaultTenant.name,
+                code: appConfig.defaultTenant.code,
+              },
+            },
+          },
+          'login_success',
+        )
       }
 
       // 普通用户登录
-      let user;
+      let user
       if (tenantCode) {
         // 多租户模式
-        const tenant = await Tenant.findOne({ where: { code: tenantCode, status: 'active' } });
+        const tenant = await Tenant.findOne({ where: { code: tenantCode, status: 'active' } })
         if (!tenant) {
-          return ApiResponse.error(res, ErrorCodes.AUTH_TENANT_CODE_INVALID, {}, 200);
+          return ApiResponse.error(res, ErrorCodes.AUTH_TENANT_CODE_INVALID, {}, 200)
         }
 
         user = await User.findOne({
           where: { username, tenantId: tenant.id, status: 'active' },
-          include: [{ model: Tenant, as: 'tenant' }]
-        });
+          include: [{ model: Tenant, as: 'tenant' }],
+        })
       } else {
         // 单租户模式或自动检测
-        const tenants = await Tenant.findAll({ where: { status: 'active' } });
+        const tenants = await Tenant.findAll({ where: { status: 'active' } })
 
         if (tenants.length === 1) {
           // 只有单个租户
           user = await User.findOne({
             where: { username, tenantId: tenants[0].id, status: 'active' },
-            include: [{ model: Tenant, as: 'tenant' }]
-          });
+            include: [{ model: Tenant, as: 'tenant' }],
+          })
         } else {
-          return ApiResponse.error(res, ErrorCodes.AUTH_TENANT_CODE_REQUIRED, {}, 200);
+          return ApiResponse.error(res, ErrorCodes.AUTH_TENANT_CODE_REQUIRED, {}, 200)
         }
       }
 
       if (!user || !(await bcrypt.compare(password, user.password))) {
-        return ApiResponse.error(res, ErrorCodes.AUTH_INVALID_CREDENTIALS, {}, 200);
+        return ApiResponse.error(res, ErrorCodes.AUTH_INVALID_CREDENTIALS, {}, 200)
       }
 
       // 更新最后登录时间
-      await user.update({ lastLoginAt: new Date() });
+      await user.update({ lastLoginAt: new Date() })
 
       // 记录登录日志（日志写入失败不影响登录成功）
       try {
@@ -226,56 +239,63 @@ router.post('/login',
           ip: loginIp,
           userAgent: loginUserAgent,
           createdAt: new Date(),
-        });
+        })
       } catch (logError) {
-        logger.warn('Write user login log failed', { error: logError.message, requestId: req.requestId });
+        logger.warn('Write user login log failed', {
+          error: logError.message,
+          requestId: req.requestId,
+        })
       }
 
       const projectIds = await listAccessibleProjectIds(Project, {
         tenantId: user.tenantId,
         role: user.role,
-      });
+      })
       const payload = buildAccessTokenPayload({
         userId: user.id,
         username: user.username,
         role: user.role,
         tenantId: user.tenantId,
         projectIds,
-      });
+      })
 
       // 生成双令牌
       const { accessToken, refreshToken } = await TokenManager.generateTokenPair(
         payload,
         user.id,
-        user.tenantId
-      );
+        user.tenantId,
+      )
 
       // 设置 accessToken 到 cookie（用于 iframe 共享）
       res.cookie('accessToken', accessToken, {
         httpOnly: true, // 防止 XSS 攻击
         secure: process.env.NODE_ENV === 'production', // 生产环境使用 HTTPS
         sameSite: 'lax', // 允许同站和跨站请求携带 cookie
-        maxAge: 24 * 60 * 60 * 1000 // 24 小时
-      });
+        maxAge: 24 * 60 * 60 * 1000, // 24 小时
+      })
 
-      return ApiResponse.success(res, {
-        accessToken,
-        refreshToken,
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email || '',
-          avatarUrl: user.avatarUrl || '',
-          role: user.role,
-          tenant: user.tenant
-        }
-      }, 'login_success');
+      return ApiResponse.success(
+        res,
+        {
+          accessToken,
+          refreshToken,
+          user: {
+            id: user.id,
+            username: user.username,
+            email: user.email || '',
+            avatarUrl: user.avatarUrl || '',
+            role: user.role,
+            tenant: user.tenant,
+          },
+        },
+        'login_success',
+      )
     } catch (error) {
-      logger.error('Login error', { error: error.message, requestId: req.requestId });
-      return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+      logger.error('Login error', { error: error.message, requestId: req.requestId })
+      return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500)
     }
-  }
-);
+  },
+)
 
 /**
  * @swagger
@@ -313,59 +333,66 @@ router.post('/login',
  *       401:
  *         description: Refresh Token 无效或已过期
  */
-router.post('/refresh',
-  validate(Joi.object({
-    body: Joi.object({
-      refreshToken: Joi.string().required()
-    }).required()
-  })),
+router.post(
+  '/refresh',
+  validate(
+    Joi.object({
+      body: Joi.object({
+        refreshToken: Joi.string().required(),
+      }).required(),
+    }),
+  ),
   async (req, res) => {
     try {
-      const { refreshToken } = req.body;
+      const { refreshToken } = req.body
 
       // 验证 Refresh Token
-      const tokenData = await TokenManager.verifyRefreshToken(refreshToken);
+      const tokenData = await TokenManager.verifyRefreshToken(refreshToken)
       if (!tokenData) {
-        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200);
+        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200)
       }
 
       // 获取用户信息
       const user = await User.findByPk(tokenData.userId, {
-        include: [{ model: Tenant, as: 'tenant' }]
-      });
+        include: [{ model: Tenant, as: 'tenant' }],
+      })
 
       if (!user || user.status !== 'active') {
-        return ApiResponse.error(res, ErrorCodes.AUTH_USER_NOT_FOUND, {}, 200);
+        return ApiResponse.error(res, ErrorCodes.AUTH_USER_NOT_FOUND, {}, 200)
       }
 
       // 生成新的 Access Token
       const projectIds = await listAccessibleProjectIds(Project, {
         tenantId: user.tenantId,
         role: user.role,
-      });
+      })
       const payload = buildAccessTokenPayload({
         userId: user.id,
         username: user.username,
         role: user.role,
         tenantId: user.tenantId,
         projectIds,
-      });
+      })
 
-      const result = await TokenManager.refreshAccessToken(refreshToken, payload);
+      const result = await TokenManager.refreshAccessToken(refreshToken, payload)
       if (!result) {
-        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200);
+        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200)
       }
 
-      return ApiResponse.success(res, {
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken
-      }, 'token_refresh_success');
+      return ApiResponse.success(
+        res,
+        {
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+        },
+        'token_refresh_success',
+      )
     } catch (error) {
-      logger.error('Refresh token error', { error: error.message, requestId: req.requestId });
-      return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+      logger.error('Refresh token error', { error: error.message, requestId: req.requestId })
+      return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500)
     }
-  }
-);
+  },
+)
 
 /**
  * @swagger
@@ -391,32 +418,35 @@ router.post('/refresh',
  *       200:
  *         description: 登出成功
  */
-router.post('/logout',
-  validate(Joi.object({
-    body: Joi.object({
-      refreshToken: Joi.string().required()
-    }).required()
-  })),
+router.post(
+  '/logout',
+  validate(
+    Joi.object({
+      body: Joi.object({
+        refreshToken: Joi.string().required(),
+      }).required(),
+    }),
+  ),
   async (req, res) => {
     try {
-      const { refreshToken } = req.body;
-      const accessToken = req.headers.authorization?.split(' ')[1];
+      const { refreshToken } = req.body
+      const accessToken = req.headers.authorization?.split(' ')[1]
 
       // 撤销 Refresh Token
-      await TokenManager.revokeRefreshToken(refreshToken);
+      await TokenManager.revokeRefreshToken(refreshToken)
 
       // 将 Access Token 加入黑名单
       if (accessToken) {
-        await TokenManager.blacklistAccessToken(accessToken);
+        await TokenManager.blacklistAccessToken(accessToken)
       }
 
-      return ApiResponse.success(res, null, 'logout_success');
+      return ApiResponse.success(res, null, 'logout_success')
     } catch (error) {
-      logger.error('Logout error', { error: error.message, requestId: req.requestId });
-      return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+      logger.error('Logout error', { error: error.message, requestId: req.requestId })
+      return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500)
     }
-  }
-);
+  },
+)
 
 /**
  * @swagger
@@ -447,49 +477,52 @@ router.post('/logout',
  *       401:
  *         description: 旧密码错误或 token 无效
  */
-router.put('/password',
-  validate(Joi.object({
-    body: Joi.object({
-      oldPassword: Joi.string().required(),
-      newPassword: Joi.string().min(6).required()
-    }).required()
-  })),
+router.put(
+  '/password',
+  validate(
+    Joi.object({
+      body: Joi.object({
+        oldPassword: Joi.string().required(),
+        newPassword: Joi.string().min(6).required(),
+      }).required(),
+    }),
+  ),
   async (req, res) => {
     try {
-      const token = req.headers.authorization?.split(' ')[1];
+      const token = req.headers.authorization?.split(' ')[1]
       if (!token) {
-        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_REQUIRED, {}, 200);
+        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_REQUIRED, {}, 200)
       }
 
-      const isBlacklisted = await TokenManager.isAccessTokenBlacklisted(token);
+      const isBlacklisted = await TokenManager.isAccessTokenBlacklisted(token)
       if (isBlacklisted) {
-        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200);
+        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200)
       }
 
-      const decoded = TokenManager.verifyAccessToken(token);
+      const decoded = TokenManager.verifyAccessToken(token)
       if (!decoded) {
-        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200);
+        return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200)
       }
 
-      const user = await User.findByPk(decoded.userId);
+      const user = await User.findByPk(decoded.userId)
       if (!user) {
-        return ApiResponse.error(res, ErrorCodes.AUTH_USER_NOT_FOUND, {}, 200);
+        return ApiResponse.error(res, ErrorCodes.AUTH_USER_NOT_FOUND, {}, 200)
       }
 
-      const { oldPassword, newPassword } = req.body;
-      const isOldPasswordValid = await bcrypt.compare(oldPassword, user.password);
+      const { oldPassword, newPassword } = req.body
+      const isOldPasswordValid = await bcrypt.compare(oldPassword, user.password)
       if (!isOldPasswordValid) {
-        return ApiResponse.error(res, ErrorCodes.AUTH_INVALID_CREDENTIALS, {}, 200);
+        return ApiResponse.error(res, ErrorCodes.AUTH_INVALID_CREDENTIALS, {}, 200)
       }
 
-      await user.update({ password: newPassword });
-      return ApiResponse.success(res, null, 'password_update_success');
+      await user.update({ password: newPassword })
+      return ApiResponse.success(res, null, 'password_update_success')
     } catch (error) {
-      logger.error('Change password error', { error: error.message, requestId: req.requestId });
-      return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+      logger.error('Change password error', { error: error.message, requestId: req.requestId })
+      return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500)
     }
-  }
-);
+  },
+)
 
 /**
  * @swagger
@@ -505,29 +538,29 @@ router.put('/password',
  */
 router.get('/me', async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
+    const token = req.headers.authorization?.split(' ')[1]
     if (!token) {
-      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_REQUIRED, {}, 200);
+      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_REQUIRED, {}, 200)
     }
 
     // 检查是否在黑名单中
-    const isBlacklisted = await TokenManager.isAccessTokenBlacklisted(token);
+    const isBlacklisted = await TokenManager.isAccessTokenBlacklisted(token)
     if (isBlacklisted) {
-      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200);
+      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200)
     }
 
     // 验证 Access Token
-    const decoded = TokenManager.verifyAccessToken(token);
+    const decoded = TokenManager.verifyAccessToken(token)
     if (!decoded) {
-      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200);
+      return ApiResponse.error(res, ErrorCodes.AUTH_TOKEN_INVALID, {}, 200)
     }
 
     const user = await User.findByPk(decoded.userId, {
-      include: [{ model: Tenant, as: 'tenant' }]
-    });
+      include: [{ model: Tenant, as: 'tenant' }],
+    })
 
     if (!user) {
-      return ApiResponse.error(res, ErrorCodes.AUTH_USER_NOT_FOUND, {}, 200);
+      return ApiResponse.error(res, ErrorCodes.AUTH_USER_NOT_FOUND, {}, 200)
     }
 
     return ApiResponse.success(res, {
@@ -537,14 +570,14 @@ router.get('/me', async (req, res) => {
         email: user.email || '',
         avatarUrl: user.avatarUrl || '',
         role: user.role,
-        tenant: user.tenant
-      }
-    });
+        tenant: user.tenant,
+      },
+    })
   } catch (error) {
-    logger.error('Get me error', { error: error.message, requestId: req.requestId });
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+    logger.error('Get me error', { error: error.message, requestId: req.requestId })
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500)
   }
-});
+})
 
 /**
  * @swagger
@@ -582,77 +615,84 @@ router.get('/me', async (req, res) => {
  *                   type: integer
  *                   description: 活跃租户数量
  */
-router.get('/config', validate(Joi.object({
-  query: Joi.object({
-    tenantCode: Joi.string().optional().allow(''),
-  }),
-})), async (req, res) => {
-  try {
-    const { tenantCode } = req.query;
-    // 从package.json或其他配置文件读取应用信息
-    const packageInfo = require('../../../package.json');
+router.get(
+  '/config',
+  validate(
+    Joi.object({
+      query: Joi.object({
+        tenantCode: Joi.string().optional().allow(''),
+      }),
+    }),
+  ),
+  async (req, res) => {
+    try {
+      const { tenantCode } = req.query
+      // 从package.json或其他配置文件读取应用信息
+      const packageInfo = require('../../../package.json')
 
-    // 获取活跃租户数量，决定是否启用多租户模式
-    const { Tenant } = require('../../models');
-    const activeTenantsCount = await Tenant.count({ where: { status: 'active' } });
-    let tenantBranding = null;
+      // 获取活跃租户数量，决定是否启用多租户模式
+      const { Tenant } = require('../../models')
+      const activeTenantsCount = await Tenant.count({ where: { status: 'active' } })
+      let tenantBranding = null
 
-    const tenantWhere = tenantCode && String(tenantCode).trim()
-      ? { code: String(tenantCode).trim(), status: 'active' }
-      : { id: appConfig.defaultTenant.id, status: 'active' };
-    tenantBranding = await Tenant.findOne({
-      where: tenantWhere,
-      attributes: [
-        'id',
-        'name',
-        'code',
-        'logoUrl',
-        'loginBackgroundUrl',
-        'companyName',
-        'companyPhone',
-        'companyAddress',
-        'companyWebsite',
-        'settings',
-      ],
-    });
+      const tenantWhere =
+        tenantCode && String(tenantCode).trim()
+          ? { code: String(tenantCode).trim(), status: 'active' }
+          : { id: appConfig.defaultTenant.id, status: 'active' }
+      tenantBranding = await Tenant.findOne({
+        where: tenantWhere,
+        attributes: [
+          'id',
+          'name',
+          'code',
+          'logoUrl',
+          'loginBackgroundUrl',
+          'companyName',
+          'companyPhone',
+          'companyAddress',
+          'companyWebsite',
+          'settings',
+        ],
+      })
 
-    const loginDisplayConfig = tenantBranding?.settings?.loginDisplay || {};
-    const loginDisplay = {
-      showCompanyName: Boolean(loginDisplayConfig.showCompanyName),
-      showCompanyPhone: Boolean(loginDisplayConfig.showCompanyPhone),
-      showCompanyAddress: Boolean(loginDisplayConfig.showCompanyAddress),
-      showCompanyWebsite: Boolean(loginDisplayConfig.showCompanyWebsite),
-      showIcp: Boolean(loginDisplayConfig.showIcp),
-      icpNumber: loginDisplayConfig.icpNumber || '',
-      companyName: tenantBranding?.companyName || '',
-      companyPhone: tenantBranding?.companyPhone || '',
-      companyAddress: tenantBranding?.companyAddress || '',
-      companyWebsite: tenantBranding?.companyWebsite || '',
-    };
+      const loginDisplayConfig = tenantBranding?.settings?.loginDisplay || {}
+      const loginDisplay = {
+        showCompanyName: Boolean(loginDisplayConfig.showCompanyName),
+        showCompanyPhone: Boolean(loginDisplayConfig.showCompanyPhone),
+        showCompanyAddress: Boolean(loginDisplayConfig.showCompanyAddress),
+        showCompanyWebsite: Boolean(loginDisplayConfig.showCompanyWebsite),
+        showIcp: Boolean(loginDisplayConfig.showIcp),
+        icpNumber: loginDisplayConfig.icpNumber || '',
+        companyName: tenantBranding?.companyName || '',
+        companyPhone: tenantBranding?.companyPhone || '',
+        companyAddress: tenantBranding?.companyAddress || '',
+        companyWebsite: tenantBranding?.companyWebsite || '',
+      }
 
-    const config = {
-      title: tenantBranding?.name || appConfig.defaultTenant.name,
-      name: tenantBranding?.name || appConfig.defaultTenant.name,
-      tenantName: tenantBranding?.name || appConfig.defaultTenant.name,
-      tenantCode: tenantBranding?.code || appConfig.defaultTenant.code,
-      appName: tenantBranding?.name || appConfig.defaultTenant.name,
-      version: packageInfo.version || '1.0.0',
-      description: packageInfo.description || '',
-      author: packageInfo.author || '',
-      buildTime: dayjs().format(TIME_FORMAT),
-      // 如果活跃租户数量大于1，则启用多租户模式
-      multiTenant: activeTenantsCount > 1,
-      activeTenantsCount,
-      logoUrl: tenantBranding?.logoUrl || null,
-      loginBackgroundUrl: tenantBranding?.loginBackgroundUrl || null,
-      loginDisplay,
-    };
+      const config = {
+        title: tenantBranding?.name || appConfig.defaultTenant.name,
+        name: tenantBranding?.name || appConfig.defaultTenant.name,
+        tenantName: tenantBranding?.name || appConfig.defaultTenant.name,
+        tenantCode: tenantBranding?.code || appConfig.defaultTenant.code,
+        appName: tenantBranding?.name || appConfig.defaultTenant.name,
+        version: packageInfo.version || '1.0.0',
+        description: packageInfo.description || '',
+        author: packageInfo.author || '',
+        buildTime: dayjs().format(TIME_FORMAT),
+        // 如果活跃租户数量大于1，则启用多租户模式
+        multiTenant: activeTenantsCount > 1,
+        activeTenantsCount,
+        logoUrl: tenantBranding?.logoUrl || null,
+        loginBackgroundUrl: tenantBranding?.loginBackgroundUrl || null,
+        loginDisplay,
+      }
 
-    return ApiResponse.success(res, config);
-  } catch (error) {
-    logger.error('Get config error', { error: error.message, requestId: req.requestId });
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
-  }
-});
+      return ApiResponse.success(res, config)
+    } catch (error) {
+      logger.error('Get config error', { error: error.message, requestId: req.requestId })
+      return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500)
+    }
+  },
+)
 
-module.exports = router;
+module.exports = router

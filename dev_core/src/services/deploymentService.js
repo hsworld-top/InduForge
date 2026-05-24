@@ -2,19 +2,12 @@
  * 部署服务 - 部署管理、启停、回滚
  * @description 处理工程部署到节点的相关操作，支持DEV/RELEASE模式
  */
-const crypto = require("crypto");
-const {
-  Deployment,
-  NodeDeployment,
-  NodeCommand,
-  Node,
-  Project,
-  User,
-} = require("../models");
-const { Op } = require("sequelize");
-const socketService = require("./socketService");
-const AppError = require("../utils/AppError");
-const ErrorCodes = require("../constants/errorCodes");
+const crypto = require('crypto')
+const { Deployment, NodeDeployment, NodeCommand, Node, Project, User } = require('../models')
+const { Op } = require('sequelize')
+const socketService = require('./socketService')
+const AppError = require('../utils/AppError')
+const ErrorCodes = require('../constants/errorCodes')
 
 /**
  * 部署服务类
@@ -30,11 +23,11 @@ class DeploymentService {
       where: {
         deploymentId: nodeDeployment.id,
         nodeId: nodeDeployment.nodeId,
-        status: { [Op.in]: ["pending", "issued", "acknowledged"] },
+        status: { [Op.in]: ['pending', 'issued', 'acknowledged'] },
         deletedAt: null,
       },
-      order: [["updatedAt", "DESC"]],
-    });
+      order: [['updatedAt', 'DESC']],
+    })
   }
 
   /**
@@ -44,37 +37,37 @@ class DeploymentService {
    * @returns {Promise<void>}
    */
   async ensureRuntimeCommandAllowed(nodeDeployment, commandType) {
-    const inFlightCommand = await this.getInFlightCommand(nodeDeployment);
+    const inFlightCommand = await this.getInFlightCommand(nodeDeployment)
     if (inFlightCommand) {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
         message: `当前存在未完成的 ${inFlightCommand.type} 指令，请稍后重试`,
-      });
+      })
     }
 
-    const currentStatus = nodeDeployment.status;
-    if (commandType === "start") {
-      if (!["stopped", "error"].includes(currentStatus)) {
+    const currentStatus = nodeDeployment.status
+    if (commandType === 'start') {
+      if (!['stopped', 'error'].includes(currentStatus)) {
         throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
           message: `当前状态为 ${currentStatus}，仅 stopped/error 状态可启动`,
-        });
+        })
       }
-      return;
+      return
     }
 
-    if (commandType === "stop") {
-      if (currentStatus !== "running") {
+    if (commandType === 'stop') {
+      if (currentStatus !== 'running') {
         throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
           message: `当前状态为 ${currentStatus}，仅 running 状态可停止`,
-        });
+        })
       }
-      return;
+      return
     }
 
-    if (commandType === "restart") {
-      if (currentStatus !== "running") {
+    if (commandType === 'restart') {
+      if (currentStatus !== 'running') {
         throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
           message: `当前状态为 ${currentStatus}，仅 running 状态可重启`,
-        });
+        })
       }
     }
   }
@@ -92,11 +85,11 @@ class DeploymentService {
         projectId,
       },
       paranoid: false,
-    });
+    })
 
     for (const item of staleDeployments) {
       if (item.deletedAt) {
-        await item.destroy({ force: true });
+        await item.destroy({ force: true })
       }
     }
   }
@@ -110,15 +103,15 @@ class DeploymentService {
    * @returns {Promise<void>}
    */
   async createDeployCommandRecord({ tenantId, nodeDeployment, payload = {} }) {
-    const commandId = crypto.randomUUID();
+    const commandId = crypto.randomUUID()
     await NodeCommand.create({
       id: commandId,
       tenantId,
       nodeId: nodeDeployment.nodeId,
       deploymentId: nodeDeployment.id,
       projectId: nodeDeployment.projectId,
-      type: "deploy",
-      status: "pending",
+      type: 'deploy',
+      status: 'pending',
       payload: {
         commandId,
         deploymentId: nodeDeployment.id,
@@ -130,7 +123,7 @@ class DeploymentService {
       maxAttempts: 3,
       timeoutSeconds: 30,
       requestedAt: new Date(),
-    });
+    })
   }
 
   /**
@@ -140,12 +133,12 @@ class DeploymentService {
    */
   async getProjectBase(projectId) {
     const project = await Project.findByPk(projectId, {
-      attributes: ["id", "tenantId", "name"],
-    });
+      attributes: ['id', 'tenantId', 'name'],
+    })
     if (!project) {
-      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "工程不存在" });
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: '工程不存在' })
     }
-    return project;
+    return project
   }
 
   /**
@@ -155,42 +148,42 @@ class DeploymentService {
    * @returns {Promise<Object>} DEV 源发布记录
    */
   async ensureDevSourceDeployment(projectId, deployedBy) {
-    const project = await this.getProjectBase(projectId);
-    const devVersion = "__DEV__";
+    const project = await this.getProjectBase(projectId)
+    const devVersion = '__DEV__'
 
     const existing = await Deployment.findOne({
       where: {
         projectId,
         version: devVersion,
-        mode: "DEV",
+        mode: 'DEV',
         deletedAt: null,
       },
-    });
+    })
     if (existing) {
-      if (existing.status !== "success") {
+      if (existing.status !== 'success') {
         await existing.update({
-          status: "success",
+          status: 'success',
           completedAt: existing.completedAt || new Date(),
-        });
+        })
       }
-      return existing;
+      return existing
     }
 
-    const id = crypto.randomUUID();
+    const id = crypto.randomUUID()
     return Deployment.create({
       id,
       projectId,
       tenantId: project.tenantId,
       version: devVersion,
-      name: "DEV 最新工程",
-      description: "DEV模式源记录（无需发布版本）",
-      type: "development",
-      mode: "DEV",
-      status: "success",
+      name: 'DEV 最新工程',
+      description: 'DEV模式源记录（无需发布版本）',
+      type: 'development',
+      mode: 'DEV',
+      status: 'success',
       deployedBy,
       startedAt: new Date(),
       completedAt: new Date(),
-    });
+    })
   }
   /**
    * 根据发布记录ID获取工程ID
@@ -199,12 +192,12 @@ class DeploymentService {
    */
   async getProjectIdByDeploymentId(deploymentId) {
     const deployment = await Deployment.findByPk(deploymentId, {
-      attributes: ["id", "projectId"],
-    });
+      attributes: ['id', 'projectId'],
+    })
     if (!deployment) {
-      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "发布版本不存在" });
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: '发布版本不存在' })
     }
-    return deployment.projectId;
+    return deployment.projectId
   }
 
   /**
@@ -214,12 +207,12 @@ class DeploymentService {
    */
   async getProjectIdByNodeDeploymentId(nodeDeploymentId) {
     const nodeDeployment = await NodeDeployment.findByPk(nodeDeploymentId, {
-      attributes: ["id", "projectId"],
-    });
+      attributes: ['id', 'projectId'],
+    })
     if (!nodeDeployment) {
-      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "部署记录不存在" });
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: '部署记录不存在' })
     }
-    return nodeDeployment.projectId;
+    return nodeDeployment.projectId
   }
 
   /**
@@ -234,24 +227,24 @@ class DeploymentService {
       version,
       name,
       description,
-      type = "development",
-      mode = "RELEASE",
+      type = 'development',
+      mode = 'RELEASE',
       deployedBy,
-    } = data;
+    } = data
 
     // RELEASE模式检查版本号是否重复
-    if (mode === "RELEASE") {
+    if (mode === 'RELEASE') {
       const existing = await Deployment.findOne({
         where: { projectId, version, deletedAt: null },
-      });
+      })
       if (existing) {
         throw new AppError(ErrorCodes.RESOURCE_ALREADY_EXISTS, 409, {
           message: `版本 ${version} 已存在`,
-        });
+        })
       }
     }
 
-    const id = crypto.randomUUID();
+    const id = crypto.randomUUID()
     const deployment = await Deployment.create({
       id,
       projectId,
@@ -261,12 +254,12 @@ class DeploymentService {
       description,
       type,
       mode,
-      status: "pending",
+      status: 'pending',
       deployedBy,
       startedAt: new Date(),
-    });
+    })
 
-    return deployment;
+    return deployment
   }
 
   /**
@@ -275,11 +268,11 @@ class DeploymentService {
    * @param {Object} data - 更新数据
    */
   async updateDeploymentStatus(deploymentId, data) {
-    const deployment = await Deployment.findByPk(deploymentId);
+    const deployment = await Deployment.findByPk(deploymentId)
     if (!deployment) {
       throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
         message: `发布版本 ${deploymentId} 不存在`,
-      });
+      })
     }
 
     const {
@@ -295,34 +288,30 @@ class DeploymentService {
       datapointCount,
       errorMessage,
       buildLog,
-    } = data;
+    } = data
 
-    const updateData = {};
-    if (status) updateData.status = status;
-    if (artifactUrl) updateData.artifactUrl = artifactUrl;
-    if (artifactHash) updateData.artifactHash = artifactHash;
-    if (artifactSize) updateData.artifactSize = artifactSize;
-    if (snapshotUrl) updateData.snapshotUrl = snapshotUrl;
-    if (snapshotHash) updateData.snapshotHash = snapshotHash;
-    if (manifest) updateData.manifest = manifest;
-    if (pageCount !== undefined) updateData.pageCount = pageCount;
-    if (componentCount !== undefined)
-      updateData.componentCount = componentCount;
-    if (datapointCount !== undefined)
-      updateData.datapointCount = datapointCount;
-    if (errorMessage) updateData.errorMessage = errorMessage;
+    const updateData = {}
+    if (status) updateData.status = status
+    if (artifactUrl) updateData.artifactUrl = artifactUrl
+    if (artifactHash) updateData.artifactHash = artifactHash
+    if (artifactSize) updateData.artifactSize = artifactSize
+    if (snapshotUrl) updateData.snapshotUrl = snapshotUrl
+    if (snapshotHash) updateData.snapshotHash = snapshotHash
+    if (manifest) updateData.manifest = manifest
+    if (pageCount !== undefined) updateData.pageCount = pageCount
+    if (componentCount !== undefined) updateData.componentCount = componentCount
+    if (datapointCount !== undefined) updateData.datapointCount = datapointCount
+    if (errorMessage) updateData.errorMessage = errorMessage
     if (buildLog) {
-      updateData.buildLog = [...(deployment.buildLog || []), ...buildLog].slice(
-        -100
-      );
+      updateData.buildLog = [...(deployment.buildLog || []), ...buildLog].slice(-100)
     }
 
-    if (status === "success" || status === "failed") {
-      updateData.completedAt = new Date();
+    if (status === 'success' || status === 'failed') {
+      updateData.completedAt = new Date()
     }
 
-    await deployment.update(updateData);
-    return deployment;
+    await deployment.update(updateData)
+    return deployment
   }
 
   /**
@@ -331,27 +320,27 @@ class DeploymentService {
    * @param {Object} options - 查询选项
    */
   async listByProject(projectId, options = {}) {
-    const { page = 1, pageSize = 20, status, type, mode } = options;
-    const offset = (page - 1) * pageSize;
+    const { page = 1, pageSize = 20, status, type, mode } = options
+    const offset = (page - 1) * pageSize
 
-    const where = { projectId };
-    if (status) where.status = status;
-    if (type) where.type = type;
-    if (mode) where.mode = mode;
+    const where = { projectId }
+    if (status) where.status = status
+    if (type) where.type = type
+    if (mode) where.mode = mode
 
     const { rows, count } = await Deployment.findAndCountAll({
       where,
       include: [
         {
           model: User,
-          as: "deployer",
-          attributes: ["id", "username"],
+          as: 'deployer',
+          attributes: ['id', 'username'],
         },
       ],
-      order: [["createdAt", "DESC"]],
+      order: [['createdAt', 'DESC']],
       limit: pageSize,
       offset,
-    });
+    })
 
     return {
       items: rows,
@@ -359,7 +348,7 @@ class DeploymentService {
       page,
       pageSize,
       totalPages: Math.ceil(count / pageSize),
-    };
+    }
   }
 
   /**
@@ -371,35 +360,35 @@ class DeploymentService {
       include: [
         {
           model: Project,
-          as: "project",
-          attributes: ["id", "name", "code"],
+          as: 'project',
+          attributes: ['id', 'name', 'code'],
         },
         {
           model: User,
-          as: "deployer",
-          attributes: ["id", "username"],
+          as: 'deployer',
+          attributes: ['id', 'username'],
         },
         {
           model: NodeDeployment,
-          as: "nodeDeployments",
+          as: 'nodeDeployments',
           include: [
             {
               model: Node,
-              as: "node",
-              attributes: ["id", "name", "status", "ipAddress"],
+              as: 'node',
+              attributes: ['id', 'name', 'status', 'ipAddress'],
             },
           ],
         },
       ],
-    });
+    })
 
     if (!deployment) {
       throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
         message: `发布版本 ${deploymentId} 不存在`,
-      });
+      })
     }
 
-    return deployment;
+    return deployment
   }
 
   /**
@@ -409,14 +398,14 @@ class DeploymentService {
    * @param {string} deployedBy - 部署者ID
    */
   async deployDevMode(deploymentId, nodeId, deployedBy) {
-    const sourceDeployment = await Deployment.findByPk(deploymentId);
+    const sourceDeployment = await Deployment.findByPk(deploymentId)
     if (!sourceDeployment) {
-      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "源部署记录不存在" });
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: '源部署记录不存在' })
     }
-    if (sourceDeployment.status !== "success") {
+    if (sourceDeployment.status !== 'success') {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
-        message: "仅支持使用构建成功的版本进行DEV部署",
-      });
+        message: '仅支持使用构建成功的版本进行DEV部署',
+      })
     }
 
     // 检查节点是否已有部署
@@ -426,29 +415,29 @@ class DeploymentService {
         projectId: sourceDeployment.projectId,
         deletedAt: null,
       },
-    });
+    })
 
     if (existingDeployment) {
       // 检查当前模式
-      if (existingDeployment.mode === "RELEASE") {
+      if (existingDeployment.mode === 'RELEASE') {
         throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
-          message: "该节点当前处于RELEASE模式，请先撤销部署后再切换到DEV模式",
-        });
+          message: '该节点当前处于RELEASE模式，请先撤销部署后再切换到DEV模式',
+        })
       }
 
       // 已经是DEV模式，直接更新状态为运行
-      if (existingDeployment.mode === "DEV") {
+      if (existingDeployment.mode === 'DEV') {
         await existingDeployment.update({
-          status: "running",
+          status: 'running',
           deployLog: [
             ...(existingDeployment.deployLog || []),
             {
               time: new Date().toISOString(),
-              status: "running",
-              message: "DEV模式重新部署",
+              status: 'running',
+              message: 'DEV模式重新部署',
             },
           ],
-        });
+        })
 
         // 更新节点当前工程信息
         await Node.update(
@@ -457,44 +446,44 @@ class DeploymentService {
             currentVersion: sourceDeployment.version,
             currentDeploymentId: existingDeployment.id,
           },
-          { where: { id: nodeId } }
-        );
+          { where: { id: nodeId } },
+        )
 
-        return existingDeployment;
+        return existingDeployment
       }
     }
 
     // 清理软删除残留，避免唯一索引冲突后无法重新部署
-    await this.purgeSoftDeletedDeployments(nodeId, sourceDeployment.projectId);
+    await this.purgeSoftDeletedDeployments(nodeId, sourceDeployment.projectId)
 
     // 创建新的DEV模式部署记录
-    const id = crypto.randomUUID();
+    const id = crypto.randomUUID()
     const nodeDeployment = await NodeDeployment.create({
       id,
       nodeId,
       deploymentId: sourceDeployment.id,
       projectId: sourceDeployment.projectId,
       version: sourceDeployment.version, // 使用源版本号
-      mode: "DEV",
-      status: "pending",
-      runtimeConfig: { syncMode: "development_database" },
+      mode: 'DEV',
+      status: 'pending',
+      runtimeConfig: { syncMode: 'development_database' },
       deployedBy,
       deployLog: [
         {
           time: new Date().toISOString(),
-          status: "pending",
-          message: "DEV模式部署任务已创建",
+          status: 'pending',
+          message: 'DEV模式部署任务已创建',
         },
       ],
-    });
+    })
 
     await this.createDeployCommandRecord({
       tenantId: sourceDeployment.tenantId,
       nodeDeployment,
       payload: {
-        runtimeConfig: { syncMode: "development_database" },
+        runtimeConfig: { syncMode: 'development_database' },
       },
-    });
+    })
 
     // 更新节点当前工程信息
     await Node.update(
@@ -503,10 +492,10 @@ class DeploymentService {
         currentVersion: sourceDeployment.version,
         currentDeploymentId: id,
       },
-      { where: { id: nodeId } }
-    );
+      { where: { id: nodeId } },
+    )
 
-    return nodeDeployment;
+    return nodeDeployment
   }
 
   /**
@@ -517,19 +506,19 @@ class DeploymentService {
    * @param {string} deployedBy - 部署者ID
    */
   async deployReleaseMode(deploymentId, nodeId, runtimeConfig, deployedBy) {
-    const deployment = await Deployment.findByPk(deploymentId);
+    const deployment = await Deployment.findByPk(deploymentId)
     if (!deployment) {
-      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "发布版本不存在" });
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: '发布版本不存在' })
     }
-    if (deployment.mode !== "RELEASE") {
+    if (deployment.mode !== 'RELEASE') {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
-        message: "仅支持RELEASE模式的发布版本进行部署",
-      });
+        message: '仅支持RELEASE模式的发布版本进行部署',
+      })
     }
-    if (deployment.status !== "success") {
+    if (deployment.status !== 'success') {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
-        message: "仅支持部署构建成功的发布版本",
-      });
+        message: '仅支持部署构建成功的发布版本',
+      })
     }
 
     // 检查节点当前是否已有该工程部署记录（数据库层对 nodeId+projectId 做了唯一约束）
@@ -539,70 +528,70 @@ class DeploymentService {
         projectId: deployment.projectId,
         deletedAt: null,
       },
-    });
+    })
 
-    let nodeDeployment;
+    let nodeDeployment
     if (existingDeployment) {
-      const nextLog = [...(existingDeployment.deployLog || [])];
-      if (existingDeployment.mode === "DEV") {
+      const nextLog = [...(existingDeployment.deployLog || [])]
+      if (existingDeployment.mode === 'DEV') {
         nextLog.push({
           time: new Date().toISOString(),
-          status: "stopped",
-          message: "切换到RELEASE模式，停止DEV实例",
-        });
+          status: 'stopped',
+          message: '切换到RELEASE模式，停止DEV实例',
+        })
       }
       nextLog.push({
         time: new Date().toISOString(),
-        status: "pending",
-        message: "RELEASE模式部署任务已创建",
-      });
+        status: 'pending',
+        message: 'RELEASE模式部署任务已创建',
+      })
 
       await existingDeployment.update({
         deploymentId,
         version: deployment.version,
-        mode: "RELEASE",
-        status: "pending",
-        runtimeConfig: { ...runtimeConfig, syncMode: "local_database" },
+        mode: 'RELEASE',
+        status: 'pending',
+        runtimeConfig: { ...runtimeConfig, syncMode: 'local_database' },
         deployedBy,
         stoppedAt: null,
         errorMessage: null,
         errorStack: null,
         deployLog: nextLog.slice(-50),
-      });
-      nodeDeployment = existingDeployment;
+      })
+      nodeDeployment = existingDeployment
     } else {
       // 清理软删除残留，避免唯一索引冲突后无法重新部署
-      await this.purgeSoftDeletedDeployments(nodeId, deployment.projectId);
+      await this.purgeSoftDeletedDeployments(nodeId, deployment.projectId)
 
       // 创建新的RELEASE部署记录
-      const id = crypto.randomUUID();
+      const id = crypto.randomUUID()
       nodeDeployment = await NodeDeployment.create({
         id,
         nodeId,
         deploymentId,
         projectId: deployment.projectId,
         version: deployment.version,
-        mode: "RELEASE",
-        status: "pending",
-        runtimeConfig: { ...runtimeConfig, syncMode: "local_database" },
+        mode: 'RELEASE',
+        status: 'pending',
+        runtimeConfig: { ...runtimeConfig, syncMode: 'local_database' },
         deployedBy,
         deployLog: [
           {
             time: new Date().toISOString(),
-            status: "pending",
-            message: "RELEASE模式部署任务已创建",
+            status: 'pending',
+            message: 'RELEASE模式部署任务已创建',
           },
         ],
-      });
+      })
     }
 
     await this.createDeployCommandRecord({
       tenantId: deployment.tenantId,
       nodeDeployment,
       payload: {
-        runtimeConfig: { ...runtimeConfig, syncMode: "local_database" },
+        runtimeConfig: { ...runtimeConfig, syncMode: 'local_database' },
       },
-    });
+    })
 
     // 更新节点当前工程信息
     await Node.update(
@@ -611,10 +600,10 @@ class DeploymentService {
         currentVersion: deployment.version,
         currentDeploymentId: nodeDeployment.id,
       },
-      { where: { id: nodeId } }
-    );
+      { where: { id: nodeId } },
+    )
 
-    return nodeDeployment;
+    return nodeDeployment
   }
 
   /**
@@ -626,33 +615,28 @@ class DeploymentService {
    * @param {string} deployedBy - 部署者ID
    */
   async deployToNodes(deploymentId, nodeIds, mode, runtimeConfig, deployedBy) {
-    const results = [];
+    const results = []
 
     for (const nodeId of nodeIds) {
       try {
-        let result;
-        if (mode === "DEV") {
-          result = await this.deployDevMode(deploymentId, nodeId, deployedBy);
+        let result
+        if (mode === 'DEV') {
+          result = await this.deployDevMode(deploymentId, nodeId, deployedBy)
         } else {
-          result = await this.deployReleaseMode(
-            deploymentId,
-            nodeId,
-            runtimeConfig,
-            deployedBy
-          );
+          result = await this.deployReleaseMode(deploymentId, nodeId, runtimeConfig, deployedBy)
         }
-        results.push({ nodeId, success: true, deploymentId: result.id });
+        results.push({ nodeId, success: true, deploymentId: result.id })
       } catch (error) {
         const detail =
           Array.isArray(error?.errors) && error.errors.length > 0
-            ? error.errors.map((item) => item.message).join("; ")
-            : "";
-        const errorMessage = detail ? `${error.message}: ${detail}` : error.message;
-        results.push({ nodeId, success: false, error: errorMessage });
+            ? error.errors.map((item) => item.message).join('; ')
+            : ''
+        const errorMessage = detail ? `${error.message}: ${detail}` : error.message
+        results.push({ nodeId, success: false, error: errorMessage })
       }
     }
 
-    return results;
+    return results
   }
 
   /**
@@ -663,12 +647,7 @@ class DeploymentService {
    * @param {string} deployedBy - 部署操作者ID
    */
   async deployToNode(deploymentId, nodeId, runtimeConfig, deployedBy) {
-    return this.deployReleaseMode(
-      deploymentId,
-      nodeId,
-      runtimeConfig,
-      deployedBy
-    );
+    return this.deployReleaseMode(deploymentId, nodeId, runtimeConfig, deployedBy)
   }
 
   /**
@@ -678,9 +657,9 @@ class DeploymentService {
    * @param {string} expectedStatus - 预期状态（用于界面即时反馈）
    * @returns {Promise<Object>} 更新后的记录
    */
-  async enqueueRuntimeCommand(nodeDeployment, commandType, expectedStatus, commandMessage = "") {
-    const commandId = crypto.randomUUID();
-    const requestedAt = new Date();
+  async enqueueRuntimeCommand(nodeDeployment, commandType, expectedStatus, commandMessage = '') {
+    const commandId = crypto.randomUUID()
+    const requestedAt = new Date()
 
     const updateData = {
       deployLog: [
@@ -691,17 +670,17 @@ class DeploymentService {
           message: commandMessage || `已下发${commandType}指令，等待节点执行`,
         },
       ],
-    };
-    if (expectedStatus) {
-      updateData.status = expectedStatus;
     }
-    await nodeDeployment.update(updateData);
+    if (expectedStatus) {
+      updateData.status = expectedStatus
+    }
+    await nodeDeployment.update(updateData)
 
     const node = await Node.findByPk(nodeDeployment.nodeId, {
-      attributes: ["id", "tenantId"],
-    });
+      attributes: ['id', 'tenantId'],
+    })
     if (!node) {
-      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "节点不存在" });
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: '节点不存在' })
     }
 
     await NodeCommand.create({
@@ -711,7 +690,7 @@ class DeploymentService {
       deploymentId: nodeDeployment.id,
       projectId: nodeDeployment.projectId,
       type: commandType,
-      status: "pending",
+      status: 'pending',
       payload: {
         commandId,
         deploymentId: nodeDeployment.id,
@@ -722,9 +701,9 @@ class DeploymentService {
       maxAttempts: 3,
       timeoutSeconds: 30,
       requestedAt,
-    });
+    })
 
-    return nodeDeployment;
+    return nodeDeployment
   }
 
   /**
@@ -732,12 +711,17 @@ class DeploymentService {
    * @param {string} nodeDeploymentId - 节点部署记录ID
    */
   async start(nodeDeploymentId) {
-    const nodeDeployment = await NodeDeployment.findByPk(nodeDeploymentId);
+    const nodeDeployment = await NodeDeployment.findByPk(nodeDeploymentId)
     if (!nodeDeployment) {
-      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "部署记录不存在" });
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: '部署记录不存在' })
     }
-    await this.ensureRuntimeCommandAllowed(nodeDeployment, "start");
-    return this.enqueueRuntimeCommand(nodeDeployment, "start", "deploying", "已下发启动指令，等待节点执行");
+    await this.ensureRuntimeCommandAllowed(nodeDeployment, 'start')
+    return this.enqueueRuntimeCommand(
+      nodeDeployment,
+      'start',
+      'deploying',
+      '已下发启动指令，等待节点执行',
+    )
   }
 
   /**
@@ -745,12 +729,12 @@ class DeploymentService {
    * @param {string} nodeDeploymentId - 节点部署记录ID
    */
   async stop(nodeDeploymentId) {
-    const nodeDeployment = await NodeDeployment.findByPk(nodeDeploymentId);
+    const nodeDeployment = await NodeDeployment.findByPk(nodeDeploymentId)
     if (!nodeDeployment) {
-      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "部署记录不存在" });
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: '部署记录不存在' })
     }
-    await this.ensureRuntimeCommandAllowed(nodeDeployment, "stop");
-    return this.enqueueRuntimeCommand(nodeDeployment, "stop", null, "已下发停止指令，等待节点执行");
+    await this.ensureRuntimeCommandAllowed(nodeDeployment, 'stop')
+    return this.enqueueRuntimeCommand(nodeDeployment, 'stop', null, '已下发停止指令，等待节点执行')
   }
 
   /**
@@ -758,12 +742,17 @@ class DeploymentService {
    * @param {string} nodeDeploymentId - 节点部署记录ID
    */
   async restart(nodeDeploymentId) {
-    const nodeDeployment = await NodeDeployment.findByPk(nodeDeploymentId);
+    const nodeDeployment = await NodeDeployment.findByPk(nodeDeploymentId)
     if (!nodeDeployment) {
-      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "部署记录不存在" });
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: '部署记录不存在' })
     }
-    await this.ensureRuntimeCommandAllowed(nodeDeployment, "restart");
-    return this.enqueueRuntimeCommand(nodeDeployment, "restart", null, "已下发重启指令，等待节点执行");
+    await this.ensureRuntimeCommandAllowed(nodeDeployment, 'restart')
+    return this.enqueueRuntimeCommand(
+      nodeDeployment,
+      'restart',
+      null,
+      '已下发重启指令，等待节点执行',
+    )
   }
 
   /**
@@ -771,30 +760,30 @@ class DeploymentService {
    * @param {string} nodeDeploymentId - 节点部署记录ID
    */
   async undeploy(nodeDeploymentId) {
-    const nodeDeployment = await NodeDeployment.findByPk(nodeDeploymentId);
+    const nodeDeployment = await NodeDeployment.findByPk(nodeDeploymentId)
     if (!nodeDeployment) {
-      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "部署记录不存在" });
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: '部署记录不存在' })
     }
 
-    const now = new Date();
-    const runtimeActiveStatuses = new Set(["pending", "deploying", "running"]);
-    const shouldStopRuntime = runtimeActiveStatuses.has(nodeDeployment.status);
+    const now = new Date()
+    const runtimeActiveStatuses = new Set(['pending', 'deploying', 'running'])
+    const shouldStopRuntime = runtimeActiveStatuses.has(nodeDeployment.status)
     const undeployMessage = shouldStopRuntime
-      ? "撤销部署：已停止运行并释放资源"
-      : "撤销部署：已释放资源";
+      ? '撤销部署：已停止运行并释放资源'
+      : '撤销部署：已释放资源'
 
     await nodeDeployment.update({
-      status: "stopped",
+      status: 'stopped',
       stoppedAt: now,
       deployLog: [
         ...(nodeDeployment.deployLog || []),
         {
           time: now.toISOString(),
-          status: "stopped",
+          status: 'stopped',
           message: undeployMessage,
         },
       ],
-    });
+    })
 
     // 仅当该部署正作为节点当前部署时才清除指针，避免误清理其他工程
     await Node.update(
@@ -803,27 +792,27 @@ class DeploymentService {
         currentVersion: null,
         currentDeploymentId: null,
       },
-      { where: { id: nodeDeployment.nodeId, currentDeploymentId: nodeDeployment.id } }
-    );
+      { where: { id: nodeDeployment.nodeId, currentDeploymentId: nodeDeployment.id } },
+    )
 
     // 撤销部署后直接硬删除关系，避免唯一索引阻塞后续重新部署
-    await nodeDeployment.destroy({ force: true });
+    await nodeDeployment.destroy({ force: true })
 
     const node = await Node.findByPk(nodeDeployment.nodeId, {
-      attributes: ["id", "tenantId"],
-    });
+      attributes: ['id', 'tenantId'],
+    })
     if (node?.tenantId) {
       socketService.broadcastDeployStatus(node.tenantId, {
         nodeId: nodeDeployment.nodeId,
         projectId: nodeDeployment.projectId,
         deploymentId: nodeDeployment.id,
-        status: "undeployed",
+        status: 'undeployed',
         removed: true,
         stoppedAt: now.toISOString(),
-      });
+      })
     }
 
-    return nodeDeployment;
+    return nodeDeployment
   }
 
   /**
@@ -836,12 +825,12 @@ class DeploymentService {
       where: {
         projectId,
         nodeId,
-        status: "running",
+        status: 'running',
         deletedAt: null,
       },
-    });
+    })
 
-    return deployment ? deployment.mode : null;
+    return deployment ? deployment.mode : null
   }
 
   /**
@@ -849,7 +838,7 @@ class DeploymentService {
    * @param {string} nodeDeploymentId - 节点部署记录ID
    */
   async stopNodeDeployment(nodeDeploymentId) {
-    return this.stop(nodeDeploymentId);
+    return this.stop(nodeDeploymentId)
   }
 
   /**
@@ -860,24 +849,24 @@ class DeploymentService {
    */
   async rollback(nodeId, deploymentId, deployedBy) {
     const targetDeployment = await Deployment.findByPk(deploymentId, {
-      attributes: ["id", "mode", "status"],
-    });
+      attributes: ['id', 'mode', 'status'],
+    })
     if (!targetDeployment) {
-      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "回滚目标版本不存在" });
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: '回滚目标版本不存在' })
     }
-    if (targetDeployment.mode !== "RELEASE") {
+    if (targetDeployment.mode !== 'RELEASE') {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
-        message: "仅支持回滚到RELEASE模式版本",
-      });
+        message: '仅支持回滚到RELEASE模式版本',
+      })
     }
-    if (targetDeployment.status !== "success") {
+    if (targetDeployment.status !== 'success') {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
-        message: "仅支持回滚到构建成功的版本",
-      });
+        message: '仅支持回滚到构建成功的版本',
+      })
     }
 
     // 回滚仅作用于RELEASE模式
-    return this.deployReleaseMode(deploymentId, nodeId, {}, deployedBy);
+    return this.deployReleaseMode(deploymentId, nodeId, {}, deployedBy)
   }
 
   /**
@@ -888,8 +877,8 @@ class DeploymentService {
    * @returns {Promise<Array>} 部署结果
    */
   async deployDevToNodesByProject(projectId, nodeIds, deployedBy) {
-    const devSource = await this.ensureDevSourceDeployment(projectId, deployedBy);
-    return this.deployToNodes(devSource.id, nodeIds, "DEV", {}, deployedBy);
+    const devSource = await this.ensureDevSourceDeployment(projectId, deployedBy)
+    return this.deployToNodes(devSource.id, nodeIds, 'DEV', {}, deployedBy)
   }
 
   /**
@@ -898,32 +887,32 @@ class DeploymentService {
    * @param {Object} options - 查询选项
    */
   async getNodeDeploymentHistory(nodeId, options = {}) {
-    const { page = 1, pageSize = 20 } = options;
-    const offset = (page - 1) * pageSize;
+    const { page = 1, pageSize = 20 } = options
+    const offset = (page - 1) * pageSize
 
     const { rows, count } = await NodeDeployment.findAndCountAll({
       where: { nodeId },
       include: [
         {
           model: Deployment,
-          as: "deployment",
-          attributes: ["id", "version", "name", "type", "mode"],
+          as: 'deployment',
+          attributes: ['id', 'version', 'name', 'type', 'mode'],
         },
         {
           model: Project,
-          as: "project",
-          attributes: ["id", "name"],
+          as: 'project',
+          attributes: ['id', 'name'],
         },
         {
           model: User,
-          as: "deployer",
-          attributes: ["id", "username"],
+          as: 'deployer',
+          attributes: ['id', 'username'],
         },
       ],
-      order: [["createdAt", "DESC"]],
+      order: [['createdAt', 'DESC']],
       limit: pageSize,
       offset,
-    });
+    })
 
     return {
       items: rows,
@@ -931,7 +920,7 @@ class DeploymentService {
       page,
       pageSize,
       totalPages: Math.ceil(count / pageSize),
-    };
+    }
   }
 
   /**
@@ -945,23 +934,23 @@ class DeploymentService {
       include: [
         {
           model: Node,
-          as: "node",
-          attributes: ["id", "name", "status", "ipAddress", "port"],
+          as: 'node',
+          attributes: ['id', 'name', 'status', 'ipAddress', 'port'],
         },
         {
           model: Deployment,
-          as: "deployment",
-          attributes: ["id", "version", "name", "type", "mode"],
+          as: 'deployment',
+          attributes: ['id', 'version', 'name', 'type', 'mode'],
         },
         {
           model: Project,
-          as: "project",
-          attributes: ["id", "name"],
+          as: 'project',
+          attributes: ['id', 'name'],
         },
       ],
-      order: [["updatedAt", "DESC"]],
-    });
+      order: [['updatedAt', 'DESC']],
+    })
   }
 }
 
-module.exports = new DeploymentService();
+module.exports = new DeploymentService()

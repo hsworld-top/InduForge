@@ -2,34 +2,34 @@
  * Page Lock Controller - 页面锁控制器
  * 处理页面锁定相关的 HTTP 请求
  */
-const designService = require("../services/designService");
-const { Project } = require("../models");
-const ApiResponse = require("../utils/response");
-const AppError = require("../utils/AppError");
-const ErrorCodes = require("../constants/errorCodes");
-const { getErrorMessage } = require("../utils/i18n");
+const designService = require('../services/designService')
+const { Project } = require('../models')
+const ApiResponse = require('../utils/response')
+const AppError = require('../utils/AppError')
+const ErrorCodes = require('../constants/errorCodes')
+const { getErrorMessage } = require('../utils/i18n')
 
 /**
  * 当业务失败仍需携带额外数据时（例如页面已被锁定），手动输出统一契约：
  * code/msg/data/reqId。
  */
 function respondBusinessErrorWithData(res, errorCode, message, data) {
-  const request = res.req || {};
-  const locals = res.locals || {};
-  const language = locals.language || request.language || "zh-CN";
-  const reqId = locals.requestId || request.requestId || null;
+  const request = res.req || {}
+  const locals = res.locals || {}
+  const language = locals.language || request.language || 'zh-CN'
+  const reqId = locals.requestId || request.requestId || null
 
-  res.locals = locals;
-  res.locals.language = language;
-  res.locals.requestId = reqId;
-  res.setHeader("Content-Language", language);
+  res.locals = locals
+  res.locals.language = language
+  res.locals.requestId = reqId
+  res.setHeader('Content-Language', language)
 
   return res.status(200).json({
     code: ErrorCodes.toPublicCode(errorCode),
     msg: message,
     data,
     reqId,
-  });
+  })
 }
 
 /**
@@ -38,18 +38,18 @@ function respondBusinessErrorWithData(res, errorCode, message, data) {
  * @param {string} projectId - 工程ID
  */
 async function checkProjectAccess(req, projectId) {
-  if (req.user.role === "SYSTEM_ADMIN") {
-    return;
+  if (req.user.role === 'SYSTEM_ADMIN') {
+    return
   }
 
   const project = await Project.findOne({
     where: { id: projectId, tenantId: req.user.tenantId },
-  });
+  })
 
   if (!project) {
     throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
-      message: "无权访问此工程",
-    });
+      message: '无权访问此工程',
+    })
   }
 }
 
@@ -59,14 +59,14 @@ async function checkProjectAccess(req, projectId) {
  */
 async function getPageLock(req, res, next) {
   try {
-    const { pageId } = req.params;
-    const pageDetail = await designService.getPageDetail(pageId);
-    await checkProjectAccess(req, pageDetail.projectId);
+    const { pageId } = req.params
+    const pageDetail = await designService.getPageDetail(pageId)
+    await checkProjectAccess(req, pageDetail.projectId)
 
-    const data = await designService.getPageLockStatus(pageId);
-    return ApiResponse.success(res, data);
+    const data = await designService.getPageLockStatus(pageId)
+    return ApiResponse.success(res, data)
   } catch (error) {
-    return next(error);
+    return next(error)
   }
 }
 
@@ -76,32 +76,23 @@ async function getPageLock(req, res, next) {
  */
 async function acquirePageLock(req, res, next) {
   try {
-    const { pageId } = req.params;
-    const pageDetail = await designService.getPageDetail(pageId);
-    await checkProjectAccess(req, pageDetail.projectId);
+    const { pageId } = req.params
+    const pageDetail = await designService.getPageDetail(pageId)
+    await checkProjectAccess(req, pageDetail.projectId)
 
-    const result = await designService.acquirePageLock(
-      pageId,
-      req.user.id,
-      req.user.username
-    );
+    const result = await designService.acquirePageLock(pageId, req.user.id, req.user.username)
 
     if (result.success) {
-      return ApiResponse.success(res, result.data);
+      return ApiResponse.success(res, result.data)
     }
 
-    const language = res.locals.language || res.req.language || "zh-CN";
+    const language = res.locals.language || res.req.language || 'zh-CN'
     const message = getErrorMessage(language, ErrorCodes.DESIGN_PAGE_LOCKED, {
-      message: "页面已被其他用户锁定",
-    });
-    return respondBusinessErrorWithData(
-      res,
-      ErrorCodes.DESIGN_PAGE_LOCKED,
-      message,
-      result.data
-    );
+      message: '页面已被其他用户锁定',
+    })
+    return respondBusinessErrorWithData(res, ErrorCodes.DESIGN_PAGE_LOCKED, message, result.data)
   } catch (error) {
-    return next(error);
+    return next(error)
   }
 }
 
@@ -111,14 +102,14 @@ async function acquirePageLock(req, res, next) {
  */
 async function releasePageLock(req, res, next) {
   try {
-    const { pageId } = req.params;
-    const pageDetail = await designService.getPageDetail(pageId);
-    await checkProjectAccess(req, pageDetail.projectId);
+    const { pageId } = req.params
+    const pageDetail = await designService.getPageDetail(pageId)
+    await checkProjectAccess(req, pageDetail.projectId)
 
-    const data = await designService.releasePageLock(pageId, req.user.id);
-    return ApiResponse.success(res, data);
+    const data = await designService.releasePageLock(pageId, req.user.id)
+    return ApiResponse.success(res, data)
   } catch (error) {
-    return next(error);
+    return next(error)
   }
 }
 
@@ -128,14 +119,14 @@ async function releasePageLock(req, res, next) {
  */
 async function heartbeatPageLock(req, res, next) {
   try {
-    const { pageId } = req.params;
-    const pageDetail = await designService.getPageDetail(pageId);
-    await checkProjectAccess(req, pageDetail.projectId);
+    const { pageId } = req.params
+    const pageDetail = await designService.getPageDetail(pageId)
+    await checkProjectAccess(req, pageDetail.projectId)
 
-    const data = await designService.heartbeatPageLock(pageId, req.user.id);
-    return ApiResponse.success(res, data);
+    const data = await designService.heartbeatPageLock(pageId, req.user.id)
+    return ApiResponse.success(res, data)
   } catch (error) {
-    return next(error);
+    return next(error)
   }
 }
 
@@ -145,14 +136,14 @@ async function heartbeatPageLock(req, res, next) {
  */
 async function releasePageLockBeacon(req, res, next) {
   try {
-    const { pageId } = req.params;
-    const pageDetail = await designService.getPageDetail(pageId);
-    await checkProjectAccess(req, pageDetail.projectId);
+    const { pageId } = req.params
+    const pageDetail = await designService.getPageDetail(pageId)
+    await checkProjectAccess(req, pageDetail.projectId)
 
-    const data = await designService.releasePageLock(pageId, req.user.id);
-    return ApiResponse.success(res, data);
+    const data = await designService.releasePageLock(pageId, req.user.id)
+    return ApiResponse.success(res, data)
   } catch (error) {
-    return next(error);
+    return next(error)
   }
 }
 
@@ -162,20 +153,20 @@ async function releasePageLockBeacon(req, res, next) {
  */
 async function forceReleasePageLock(req, res, next) {
   try {
-    const { pageId } = req.params;
-    const pageDetail = await designService.getPageDetail(pageId);
-    await checkProjectAccess(req, pageDetail.projectId);
+    const { pageId } = req.params
+    const pageDetail = await designService.getPageDetail(pageId)
+    await checkProjectAccess(req, pageDetail.projectId)
 
-    if (!["SYSTEM_ADMIN"].includes(req.user.role)) {
+    if (!['SYSTEM_ADMIN'].includes(req.user.role)) {
       throw new AppError(ErrorCodes.PERMISSION_DENIED, 403, {
-        message: "无权限强制释放页面锁",
-      });
+        message: '无权限强制释放页面锁',
+      })
     }
 
-    const data = await designService.forceReleasePageLock(pageId);
-    return ApiResponse.success(res, data);
+    const data = await designService.forceReleasePageLock(pageId)
+    return ApiResponse.success(res, data)
   } catch (error) {
-    return next(error);
+    return next(error)
   }
 }
 
@@ -186,4 +177,4 @@ module.exports = {
   heartbeatPageLock,
   releasePageLockBeacon,
   forceReleasePageLock,
-};
+}

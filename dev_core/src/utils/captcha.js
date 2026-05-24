@@ -1,10 +1,10 @@
-const svgCaptcha = require('svg-captcha');
-const crypto = require('crypto');
-const Redis = require('./redis');
-const { logger } = require('./logger');
+const svgCaptcha = require('svg-captcha')
+const crypto = require('crypto')
+const Redis = require('./redis')
+const { logger } = require('./logger')
 
-const DEFAULT_TTL_SECONDS = Number(process.env.CAPTCHA_TTL_SECONDS || 120);
-const REDIS_KEY_PREFIX = 'captcha:';
+const DEFAULT_TTL_SECONDS = Number(process.env.CAPTCHA_TTL_SECONDS || 120)
+const REDIS_KEY_PREFIX = 'captcha:'
 
 /**
  * 生成一个验证码并保存到 Redis（带过期）
@@ -20,24 +20,24 @@ async function generateCaptcha() {
     width: 140,
     height: 44,
     fontSize: 56,
-  };
+  }
 
-  const captcha = svgCaptcha.create(options);
+  const captcha = svgCaptcha.create(options)
   // 生成请求唯一 key（不暴露明文）
-  const key = crypto.randomUUID();
-  const storeKey = REDIS_KEY_PREFIX + key;
+  const key = crypto.randomUUID()
+  const storeKey = REDIS_KEY_PREFIX + key
 
   // 存入 Redis（统一小写，便于校验时忽略大小写）
-  const ok = await Redis.set(storeKey, captcha.text.toLowerCase(), DEFAULT_TTL_SECONDS);
+  const ok = await Redis.set(storeKey, captcha.text.toLowerCase(), DEFAULT_TTL_SECONDS)
   if (!ok) {
-    logger.error('Failed to save captcha to Redis');
+    logger.error('Failed to save captcha to Redis')
   }
 
   return {
     key,
     svg: captcha.data,
     expireSeconds: DEFAULT_TTL_SECONDS,
-  };
+  }
 }
 
 /**
@@ -50,19 +50,19 @@ async function generateCaptcha() {
  */
 async function verifyCaptcha(key, code, options = {}) {
   try {
-    if (!key || !code) return false;
-    const { deleteOnCheck = true } = options;
-    const storeKey = REDIS_KEY_PREFIX + key;
-    const saved = await Redis.get(storeKey);
-    if (!saved) return false;
-    const ok = String(saved).toLowerCase() === String(code).trim().toLowerCase();
+    if (!key || !code) return false
+    const { deleteOnCheck = true } = options
+    const storeKey = REDIS_KEY_PREFIX + key
+    const saved = await Redis.get(storeKey)
+    if (!saved) return false
+    const ok = String(saved).toLowerCase() === String(code).trim().toLowerCase()
     if (deleteOnCheck) {
-      await Redis.del(storeKey);
+      await Redis.del(storeKey)
     }
-    return ok;
+    return ok
   } catch (err) {
-    logger.error('Captcha verify error', { error: err.message });
-    return false;
+    logger.error('Captcha verify error', { error: err.message })
+    return false
   }
 }
 
@@ -72,15 +72,13 @@ async function verifyCaptcha(key, code, options = {}) {
  * @returns {Promise<boolean>}
  */
 async function invalidateCaptcha(key) {
-  if (!key) return false;
-  const storeKey = REDIS_KEY_PREFIX + key;
-  return await Redis.del(storeKey);
+  if (!key) return false
+  const storeKey = REDIS_KEY_PREFIX + key
+  return await Redis.del(storeKey)
 }
 
 module.exports = {
   generateCaptcha,
   verifyCaptcha,
   invalidateCaptcha,
-};
-
-
+}

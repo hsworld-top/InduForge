@@ -1,25 +1,25 @@
-const Redis = require('ioredis');
-const dayjs = require('dayjs');
-const { logger } = require('./logger');
-const { TIME_FORMAT } = require('../constants/time');
-const { buildCacheStoreConfig } = require('../config/infra');
+const Redis = require('ioredis')
+const dayjs = require('dayjs')
+const { logger } = require('./logger')
+const { TIME_FORMAT } = require('../constants/time')
+const { buildCacheStoreConfig } = require('../config/infra')
 
 /**
  * Redis 客户端实例
  */
-let redisClient = null;
+let redisClient = null
 
 /**
  * Redis 连接状态
  */
-let redisStatus = {
+const redisStatus = {
   connected: false,
-  degraded: false,      // 降级状态（超过最大重试次数）
+  degraded: false, // 降级状态（超过最大重试次数）
   lastError: null,
   lastErrorTime: null,
   retryCount: 0,
-  maxRetries: buildCacheStoreConfig().maxRetries
-};
+  maxRetries: buildCacheStoreConfig().maxRetries,
+}
 
 /**
  * 初始化 Redis 连接
@@ -27,11 +27,11 @@ let redisStatus = {
  */
 function initRedis() {
   if (redisClient) {
-    return redisClient;
+    return redisClient
   }
 
-  const cacheConfig = buildCacheStoreConfig();
-  redisStatus.maxRetries = cacheConfig.maxRetries;
+  const cacheConfig = buildCacheStoreConfig()
+  redisStatus.maxRetries = cacheConfig.maxRetries
 
   const redisConfig = {
     host: cacheConfig.host,
@@ -40,33 +40,37 @@ function initRedis() {
     db: cacheConfig.db,
     // 重连策略：指数退避，最多重试指定次数
     retryStrategy: (times) => {
-      redisStatus.retryCount = times;
-      
+      redisStatus.retryCount = times
+
       if (times > redisStatus.maxRetries) {
         // 超过最大重试次数，进入降级模式
         if (!redisStatus.degraded) {
-          redisStatus.degraded = true;
-          redisStatus.lastErrorTime = dayjs().format(TIME_FORMAT);
+          redisStatus.degraded = true
+          redisStatus.lastErrorTime = dayjs().format(TIME_FORMAT)
           logger.error('Redis max retry attempts reached, entering degraded mode', {
             maxRetries: redisStatus.maxRetries,
             retryCount: times,
-            degraded: true
-          });
-          logger.warn('⚠️  Redis is in degraded mode. Service will continue but Redis-dependent features are disabled.');
-          logger.info('Redis will continue to retry periodically. Service will recover automatically when Redis is available.');
+            degraded: true,
+          })
+          logger.warn(
+            '⚠️  Redis is in degraded mode. Service will continue but Redis-dependent features are disabled.',
+          )
+          logger.info(
+            'Redis will continue to retry periodically. Service will recover automatically when Redis is available.',
+          )
         }
-        
+
         // 降级模式：每 30 秒重试一次（而不是完全停止）
-        const degradedRetryInterval = cacheConfig.degradedRetryInterval;
-        logger.debug(`Redis degraded mode: retrying in ${degradedRetryInterval}ms`);
-        return degradedRetryInterval;
+        const degradedRetryInterval = cacheConfig.degradedRetryInterval
+        logger.debug(`Redis degraded mode: retrying in ${degradedRetryInterval}ms`)
+        return degradedRetryInterval
       }
-      
+
       // 正常重连：指数退避
       // 延迟：50ms, 100ms, 200ms, 400ms, 800ms, 1600ms, 2000ms (max)
-      const delay = Math.min(times * 50, 2000);
-      logger.info(`Redis retry attempt ${times}/${redisStatus.maxRetries}, waiting ${delay}ms`);
-      return delay;
+      const delay = Math.min(times * 50, 2000)
+      logger.info(`Redis retry attempt ${times}/${redisStatus.maxRetries}, waiting ${delay}ms`)
+      return delay
     },
     // 每个请求最多重试 3 次
     maxRetriesPerRequest: 3,
@@ -80,60 +84,60 @@ function initRedis() {
     commandTimeout: 5000,
     // 自动重连
     lazyConnect: false,
-  };
+  }
 
-  redisClient = new Redis(redisConfig);
+  redisClient = new Redis(redisConfig)
 
   redisClient.on('connect', () => {
-    logger.info('Redis connected');
-    redisStatus.connected = true;
-    redisStatus.degraded = false;
-    redisStatus.retryCount = 0;
-    redisStatus.lastError = null;
-  });
+    logger.info('Redis connected')
+    redisStatus.connected = true
+    redisStatus.degraded = false
+    redisStatus.retryCount = 0
+    redisStatus.lastError = null
+  })
 
   redisClient.on('ready', () => {
-    logger.info('Redis ready');
-    redisStatus.connected = true;
-    redisStatus.degraded = false;
-    redisStatus.retryCount = 0;
-    redisStatus.lastError = null;
-  });
+    logger.info('Redis ready')
+    redisStatus.connected = true
+    redisStatus.degraded = false
+    redisStatus.retryCount = 0
+    redisStatus.lastError = null
+  })
 
   redisClient.on('error', (err) => {
-    logger.error('Redis error', { 
+    logger.error('Redis error', {
       error: err.message,
       code: err.code,
-      errno: err.errno
-    });
-    redisStatus.connected = false;
-    redisStatus.lastError = err.message;
-    redisStatus.lastErrorTime = dayjs().format(TIME_FORMAT);
-  });
+      errno: err.errno,
+    })
+    redisStatus.connected = false
+    redisStatus.lastError = err.message
+    redisStatus.lastErrorTime = dayjs().format(TIME_FORMAT)
+  })
 
   redisClient.on('close', () => {
-    logger.warn('Redis connection closed');
-    redisStatus.connected = false;
-  });
+    logger.warn('Redis connection closed')
+    redisStatus.connected = false
+  })
 
   redisClient.on('reconnecting', (delay) => {
-    logger.info(`Redis reconnecting in ${delay}ms`);
-  });
+    logger.info(`Redis reconnecting in ${delay}ms`)
+  })
 
   redisClient.on('end', () => {
-    logger.warn('Redis connection ended');
-  });
+    logger.warn('Redis connection ended')
+  })
 
   // 连接断开后，ioredis 会自动重连（根据 retryStrategy）
   redisClient.on('+node', (node) => {
-    logger.info('Redis node added', { address: node.address });
-  });
+    logger.info('Redis node added', { address: node.address })
+  })
 
   redisClient.on('-node', (node) => {
-    logger.warn('Redis node removed', { address: node.address });
-  });
+    logger.warn('Redis node removed', { address: node.address })
+  })
 
-  return redisClient;
+  return redisClient
 }
 
 /**
@@ -142,9 +146,9 @@ function initRedis() {
  */
 function getRedis() {
   if (!redisClient) {
-    return initRedis();
+    return initRedis()
   }
-  return redisClient;
+  return redisClient
 }
 
 /**
@@ -154,18 +158,18 @@ function getRedis() {
 async function isConnected() {
   try {
     if (!redisClient) {
-      return false;
+      return false
     }
-    const status = redisClient.status;
+    const status = redisClient.status
     if (status === 'ready' || status === 'connect') {
       // 执行一个简单的命令来验证连接
-      await redisClient.ping();
-      return true;
+      await redisClient.ping()
+      return true
     }
-    return false;
+    return false
   } catch (error) {
-    logger.error('Redis connection check failed', { error: error.message });
-    return false;
+    logger.error('Redis connection check failed', { error: error.message })
+    return false
   }
 }
 
@@ -176,8 +180,8 @@ async function isConnected() {
 function getStatus() {
   return {
     ...redisStatus,
-    clientStatus: redisClient ? redisClient.status : 'not_initialized'
-  };
+    clientStatus: redisClient ? redisClient.status : 'not_initialized',
+  }
 }
 
 /**
@@ -185,7 +189,7 @@ function getStatus() {
  * @returns {boolean} 是否降级
  */
 function isDegraded() {
-  return redisStatus.degraded;
+  return redisStatus.degraded
 }
 
 /**
@@ -197,19 +201,19 @@ function isDegraded() {
  */
 async function set(key, value, expireSeconds = null) {
   try {
-    const redis = getRedis();
-    const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
-    
+    const redis = getRedis()
+    const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value)
+
     if (expireSeconds) {
-      await redis.setex(key, expireSeconds, stringValue);
+      await redis.setex(key, expireSeconds, stringValue)
     } else {
-      await redis.set(key, stringValue);
+      await redis.set(key, stringValue)
     }
-    
-    return true;
+
+    return true
   } catch (error) {
-    logger.error('Redis set error', { key, error: error.message });
-    return false;
+    logger.error('Redis set error', { key, error: error.message })
+    return false
   }
 }
 
@@ -220,12 +224,12 @@ async function set(key, value, expireSeconds = null) {
  */
 async function get(key) {
   try {
-    const redis = getRedis();
-    const value = await redis.get(key);
-    return value;
+    const redis = getRedis()
+    const value = await redis.get(key)
+    return value
   } catch (error) {
-    logger.error('Redis get error', { key, error: error.message });
-    return null;
+    logger.error('Redis get error', { key, error: error.message })
+    return null
   }
 }
 
@@ -236,12 +240,12 @@ async function get(key) {
  */
 async function getJSON(key) {
   try {
-    const value = await get(key);
-    if (!value) return null;
-    return JSON.parse(value);
+    const value = await get(key)
+    if (!value) return null
+    return JSON.parse(value)
   } catch (error) {
-    logger.error('Redis getJSON error', { key, error: error.message });
-    return null;
+    logger.error('Redis getJSON error', { key, error: error.message })
+    return null
   }
 }
 
@@ -252,12 +256,12 @@ async function getJSON(key) {
  */
 async function del(key) {
   try {
-    const redis = getRedis();
-    await redis.del(key);
-    return true;
+    const redis = getRedis()
+    await redis.del(key)
+    return true
   } catch (error) {
-    logger.error('Redis del error', { key, error: error.message });
-    return false;
+    logger.error('Redis del error', { key, error: error.message })
+    return false
   }
 }
 
@@ -268,14 +272,14 @@ async function del(key) {
  */
 async function delPattern(pattern) {
   try {
-    const redis = getRedis();
-    const keys = await redis.keys(pattern);
-    if (keys.length === 0) return 0;
-    await redis.del(...keys);
-    return keys.length;
+    const redis = getRedis()
+    const keys = await redis.keys(pattern)
+    if (keys.length === 0) return 0
+    await redis.del(...keys)
+    return keys.length
   } catch (error) {
-    logger.error('Redis delPattern error', { pattern, error: error.message });
-    return 0;
+    logger.error('Redis delPattern error', { pattern, error: error.message })
+    return 0
   }
 }
 
@@ -286,12 +290,12 @@ async function delPattern(pattern) {
  */
 async function exists(key) {
   try {
-    const redis = getRedis();
-    const result = await redis.exists(key);
-    return result === 1;
+    const redis = getRedis()
+    const result = await redis.exists(key)
+    return result === 1
   } catch (error) {
-    logger.error('Redis exists error', { key, error: error.message });
-    return false;
+    logger.error('Redis exists error', { key, error: error.message })
+    return false
   }
 }
 
@@ -303,12 +307,12 @@ async function exists(key) {
  */
 async function expire(key, seconds) {
   try {
-    const redis = getRedis();
-    await redis.expire(key, seconds);
-    return true;
+    const redis = getRedis()
+    await redis.expire(key, seconds)
+    return true
   } catch (error) {
-    logger.error('Redis expire error', { key, seconds, error: error.message });
-    return false;
+    logger.error('Redis expire error', { key, seconds, error: error.message })
+    return false
   }
 }
 
@@ -319,11 +323,11 @@ async function expire(key, seconds) {
  */
 async function ttl(key) {
   try {
-    const redis = getRedis();
-    return await redis.ttl(key);
+    const redis = getRedis()
+    return await redis.ttl(key)
   } catch (error) {
-    logger.error('Redis ttl error', { key, error: error.message });
-    return -2;
+    logger.error('Redis ttl error', { key, error: error.message })
+    return -2
   }
 }
 
@@ -332,9 +336,9 @@ async function ttl(key) {
  */
 async function close() {
   if (redisClient) {
-    await redisClient.quit();
-    redisClient = null;
-    logger.info('Redis connection closed');
+    await redisClient.quit()
+    redisClient = null
+    logger.info('Redis connection closed')
   }
 }
 
@@ -353,5 +357,4 @@ module.exports = {
   expire,
   ttl,
   close,
-};
-
+}

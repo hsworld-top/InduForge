@@ -4,67 +4,67 @@
  */
 module.exports = (sequelize, DataTypes) => {
   const ProjectRole = sequelize.define(
-    "ProjectRole",
+    'ProjectRole',
     {
       id: {
         type: DataTypes.UUID,
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
-        comment: "角色ID",
+        comment: '角色ID',
       },
       projectId: {
         type: DataTypes.UUID,
         allowNull: false,
         references: {
-          model: "projects",
-          key: "id",
+          model: 'projects',
+          key: 'id',
         },
-        comment: "所属工程ID",
+        comment: '所属工程ID',
       },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,
         references: {
-          model: "users",
-          key: "id",
+          model: 'users',
+          key: 'id',
         },
-        comment: "创建者ID",
+        comment: '创建者ID',
       },
       updatedBy: {
         type: DataTypes.UUID,
         allowNull: true,
         references: {
-          model: "users",
-          key: "id",
+          model: 'users',
+          key: 'id',
         },
-        comment: "更新者ID",
+        comment: '更新者ID',
       },
       code: {
         type: DataTypes.STRING(100),
         allowNull: false,
-        comment: "角色编码",
+        comment: '角色编码',
       },
       name: {
         type: DataTypes.STRING(100),
         allowNull: false,
-        comment: "角色名称",
+        comment: '角色名称',
       },
       description: {
         type: DataTypes.TEXT,
         allowNull: true,
-        comment: "角色描述",
+        comment: '角色描述',
       },
       isSystem: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: false,
-        comment: "是否系统内置角色",
+        comment: '是否系统内置角色',
       },
       status: {
-        type: DataTypes.ENUM("active", "inactive"),
+        type: DataTypes.ENUM('active', 'inactive'),
         allowNull: false,
-        defaultValue: "active",
-        comment: "角色状态",
+        defaultValue: 'active',
+        comment: '角色状态',
       },
       createdAt: {
         type: DataTypes.DATE,
@@ -76,25 +76,25 @@ module.exports = (sequelize, DataTypes) => {
       },
     },
     {
-      tableName: "project_roles",
-      comment: "工程运行态角色表",
+      tableName: 'project_roles',
+      comment: '工程运行态角色表',
       indexes: [
         {
           unique: true,
-          fields: ["projectId", "code"],
+          fields: ['projectId', 'code'],
         },
         {
-          fields: ["projectId", "status"],
+          fields: ['projectId', 'status'],
         },
         {
-          fields: ["createdBy"],
+          fields: ['createdBy'],
         },
         {
-          fields: ["updatedBy"],
+          fields: ['updatedBy'],
         },
       ],
     },
-  );
+  )
 
-  return ProjectRole;
-};
+  return ProjectRole
+}

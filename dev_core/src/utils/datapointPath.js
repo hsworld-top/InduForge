@@ -10,20 +10,20 @@
  */
 function normalizeSegment(segment) {
   if (segment === null || segment === undefined) {
-    return "";
+    return ''
   }
 
-  const raw = String(segment).trim();
+  const raw = String(segment).trim()
   if (!raw) {
-    return "";
+    return ''
   }
 
   return raw
-    .replace(/[./\\]+/g, "_")
-    .replace(/\s+/g, "_")
-    .replace(/[^\w\u4e00-\u9fa5-]+/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "");
+    .replace(/[./\\]+/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/[^\w\u4e00-\u9fa5-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
 }
 
 /**
@@ -33,18 +33,18 @@ function normalizeSegment(segment) {
  */
 function normalizePath(path) {
   if (!path) {
-    return "";
+    return ''
   }
 
   const segments = String(path)
-    .split(".")
+    .split('.')
     .map((segment) => normalizeSegment(segment))
-    .filter(Boolean);
+    .filter(Boolean)
 
-  return segments.join(".");
+  return segments.join('.')
 }
 
 module.exports = {
   normalizeSegment,
   normalizePath,
-};
+}

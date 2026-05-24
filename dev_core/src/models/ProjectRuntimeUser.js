@@ -4,71 +4,71 @@
  */
 module.exports = (sequelize, DataTypes) => {
   const ProjectRuntimeUser = sequelize.define(
-    "ProjectRuntimeUser",
+    'ProjectRuntimeUser',
     {
       id: {
         type: DataTypes.UUID,
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
-        comment: "运行态用户ID",
+        comment: '运行态用户ID',
       },
       projectId: {
         type: DataTypes.UUID,
         allowNull: false,
         references: {
-          model: "projects",
-          key: "id",
+          model: 'projects',
+          key: 'id',
         },
-        comment: "所属工程ID",
+        comment: '所属工程ID',
       },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,
         references: {
-          model: "users",
-          key: "id",
+          model: 'users',
+          key: 'id',
         },
-        comment: "创建者ID",
+        comment: '创建者ID',
       },
       updatedBy: {
         type: DataTypes.UUID,
         allowNull: true,
         references: {
-          model: "users",
-          key: "id",
+          model: 'users',
+          key: 'id',
         },
-        comment: "更新者ID",
+        comment: '更新者ID',
       },
       username: {
         type: DataTypes.STRING(100),
         allowNull: false,
-        comment: "运行态用户名",
+        comment: '运行态用户名',
       },
       passwordHash: {
         type: DataTypes.STRING(255),
         allowNull: false,
-        comment: "密码哈希",
+        comment: '密码哈希',
       },
       displayName: {
         type: DataTypes.STRING(100),
         allowNull: true,
-        comment: "显示名称",
+        comment: '显示名称',
       },
       status: {
-        type: DataTypes.ENUM("active", "inactive", "suspended"),
+        type: DataTypes.ENUM('active', 'inactive', 'suspended'),
         allowNull: false,
-        defaultValue: "active",
-        comment: "账号状态",
+        defaultValue: 'active',
+        comment: '账号状态',
       },
       lastLoginAt: {
         type: DataTypes.DATE,
         allowNull: true,
-        comment: "最后登录时间",
+        comment: '最后登录时间',
       },
       lastLoginIp: {
         type: DataTypes.STRING(45),
         allowNull: true,
-        comment: "最后登录IP",
+        comment: '最后登录IP',
       },
       createdAt: {
         type: DataTypes.DATE,
@@ -80,25 +80,25 @@ module.exports = (sequelize, DataTypes) => {
       },
     },
     {
-      tableName: "project_runtime_users",
-      comment: "工程运行态用户表",
+      tableName: 'project_runtime_users',
+      comment: '工程运行态用户表',
       indexes: [
         {
           unique: true,
-          fields: ["projectId", "username"],
+          fields: ['projectId', 'username'],
         },
         {
-          fields: ["projectId", "status"],
+          fields: ['projectId', 'status'],
         },
         {
-          fields: ["createdBy"],
+          fields: ['createdBy'],
         },
         {
-          fields: ["updatedBy"],
+          fields: ['updatedBy'],
         },
       ],
     },
-  );
+  )
 
-  return ProjectRuntimeUser;
-};
+  return ProjectRuntimeUser
+}

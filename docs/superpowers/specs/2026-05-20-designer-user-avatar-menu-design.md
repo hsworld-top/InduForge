@@ -96,12 +96,12 @@
 
 默认菜单项：
 
-| key | 名称 | 类型 | 行为 |
-| --- | --- | --- | --- |
-| profile | 个人资料 | script | 默认脚本为空，由开发用户配置 |
-| locale | 语言切换 | builtin | 展开语言子菜单 |
-| theme | 主题切换 | builtin | 展开浅色/深色主题子菜单 |
-| logout | 退出登录 | builtin | 执行退出登录 |
+| key     | 名称     | 类型    | 行为                         |
+| ------- | -------- | ------- | ---------------------------- |
+| profile | 个人资料 | script  | 默认脚本为空，由开发用户配置 |
+| locale  | 语言切换 | builtin | 展开语言子菜单               |
+| theme   | 主题切换 | builtin | 展开浅色/深色主题子菜单      |
+| logout  | 退出登录 | builtin | 执行退出登录                 |
 
 菜单项字段：
 
@@ -219,10 +219,7 @@
 
 ```ts
 {
-  item,
-  user,
-  runtimeTheme,
-  runtimeLocale
+  ;(item, user, runtimeTheme, runtimeLocale)
 }
 ```
 

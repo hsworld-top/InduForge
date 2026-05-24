@@ -1,10 +1,10 @@
-const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
-const dayjs = require('dayjs');
-const { logger } = require('./logger');
-const redis = require('./redis');
-const appConfig = require('../config/app');
-const { TIME_FORMAT } = require('../constants/time');
+const jwt = require('jsonwebtoken')
+const crypto = require('crypto')
+const dayjs = require('dayjs')
+const { logger } = require('./logger')
+const redis = require('./redis')
+const appConfig = require('../config/app')
+const { TIME_FORMAT } = require('../constants/time')
 
 /**
  * Token 管理工具类
@@ -17,16 +17,16 @@ class TokenManager {
    * @returns {string} Access Token
    */
   static generateAccessToken(payload) {
-    const secret = process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET;
+    const secret = process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET
     if (!secret) {
-      throw new Error('JWT_SECRET or JWT_ACCESS_SECRET is not configured');
+      throw new Error('JWT_SECRET or JWT_ACCESS_SECRET is not configured')
     }
 
     return jwt.sign(payload, secret, {
       expiresIn: appConfig.jwt.accessExpiresIn,
       issuer: process.env.JWT_ISSUER || 'tenant-management',
       audience: process.env.JWT_AUDIENCE || 'tenant-management-api',
-    });
+    })
   }
 
   /**
@@ -34,7 +34,7 @@ class TokenManager {
    * @returns {string} Refresh Token
    */
   static generateRefreshToken() {
-    return crypto.randomBytes(32).toString('hex');
+    return crypto.randomBytes(32).toString('hex')
   }
 
   /**
@@ -44,18 +44,18 @@ class TokenManager {
    */
   static verifyAccessToken(token) {
     try {
-      const secret = process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET;
+      const secret = process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET
       if (!secret) {
-        throw new Error('JWT_SECRET or JWT_ACCESS_SECRET is not configured');
+        throw new Error('JWT_SECRET or JWT_ACCESS_SECRET is not configured')
       }
 
       return jwt.verify(token, secret, {
         issuer: process.env.JWT_ISSUER || 'tenant-management',
         audience: process.env.JWT_AUDIENCE || 'tenant-management-api',
-      });
+      })
     } catch (error) {
-      logger.debug('Access token verification failed', { error: error.message });
-      return null;
+      logger.debug('Access token verification failed', { error: error.message })
+      return null
     }
   }
 
@@ -68,19 +68,19 @@ class TokenManager {
    */
   static async storeRefreshToken(refreshToken, userId, tenantId) {
     try {
-      const key = this.getRefreshTokenKey(refreshToken);
-      const refreshExpiresIn = this.getRefreshTokenExpireSeconds();
-      
+      const key = this.getRefreshTokenKey(refreshToken)
+      const refreshExpiresIn = this.getRefreshTokenExpireSeconds()
+
       const tokenData = {
         userId,
         tenantId,
         createdAt: dayjs().format(TIME_FORMAT),
-      };
+      }
 
-      return await redis.set(key, tokenData, refreshExpiresIn);
+      return await redis.set(key, tokenData, refreshExpiresIn)
     } catch (error) {
-      logger.error('Store refresh token error', { error: error.message });
-      return false;
+      logger.error('Store refresh token error', { error: error.message })
+      return false
     }
   }
 
@@ -91,17 +91,17 @@ class TokenManager {
    */
   static async verifyRefreshToken(refreshToken) {
     try {
-      const key = this.getRefreshTokenKey(refreshToken);
-      const tokenData = await redis.getJSON(key);
-      
+      const key = this.getRefreshTokenKey(refreshToken)
+      const tokenData = await redis.getJSON(key)
+
       if (!tokenData) {
-        return null;
+        return null
       }
 
-      return tokenData;
+      return tokenData
     } catch (error) {
-      logger.error('Verify refresh token error', { error: error.message });
-      return null;
+      logger.error('Verify refresh token error', { error: error.message })
+      return null
     }
   }
 
@@ -112,11 +112,11 @@ class TokenManager {
    */
   static async revokeRefreshToken(refreshToken) {
     try {
-      const key = this.getRefreshTokenKey(refreshToken);
-      return await redis.del(key);
+      const key = this.getRefreshTokenKey(refreshToken)
+      return await redis.del(key)
     } catch (error) {
-      logger.error('Revoke refresh token error', { error: error.message });
-      return false;
+      logger.error('Revoke refresh token error', { error: error.message })
+      return false
     }
   }
 
@@ -127,24 +127,24 @@ class TokenManager {
    */
   static async revokeAllUserRefreshTokens(userId) {
     try {
-      const pattern = this.getUserRefreshTokenPattern(userId);
-      const redisClient = redis.getRedis();
-      const keys = await redisClient.keys(pattern);
-      let count = 0;
-      
+      const pattern = this.getUserRefreshTokenPattern(userId)
+      const redisClient = redis.getRedis()
+      const keys = await redisClient.keys(pattern)
+      let count = 0
+
       // 检查每个 token 是否属于该用户
       for (const key of keys) {
-        const tokenData = await redis.getJSON(key);
+        const tokenData = await redis.getJSON(key)
         if (tokenData && tokenData.userId === userId) {
-          await redis.del(key);
-          count++;
+          await redis.del(key)
+          count++
         }
       }
-      
-      return count;
+
+      return count
     } catch (error) {
-      logger.error('Revoke all user refresh tokens error', { userId, error: error.message });
-      return 0;
+      logger.error('Revoke all user refresh tokens error', { userId, error: error.message })
+      return 0
     }
   }
 
@@ -156,28 +156,28 @@ class TokenManager {
    */
   static async blacklistAccessToken(accessToken, expireSeconds = null) {
     try {
-      const key = this.getAccessTokenBlacklistKey(accessToken);
-      
+      const key = this.getAccessTokenBlacklistKey(accessToken)
+
       // 如果没有指定过期时间，尝试从 token 中获取剩余时间
       if (!expireSeconds) {
-        const decoded = jwt.decode(accessToken);
+        const decoded = jwt.decode(accessToken)
         if (decoded && decoded.exp) {
-          const now = Math.floor(Date.now() / 1000);
-          expireSeconds = Math.max(decoded.exp - now, 0);
+          const now = Math.floor(Date.now() / 1000)
+          expireSeconds = Math.max(decoded.exp - now, 0)
         } else {
           // 如果无法解码，使用默认的 Access Token 过期时间
-          expireSeconds = this.getAccessTokenExpireSeconds();
+          expireSeconds = this.getAccessTokenExpireSeconds()
         }
       }
 
       if (expireSeconds <= 0) {
-        return true; // Token 已过期，无需加入黑名单
+        return true // Token 已过期，无需加入黑名单
       }
 
-      return await redis.set(key, '1', expireSeconds);
+      return await redis.set(key, '1', expireSeconds)
     } catch (error) {
-      logger.error('Blacklist access token error', { error: error.message });
-      return false;
+      logger.error('Blacklist access token error', { error: error.message })
+      return false
     }
   }
 
@@ -188,11 +188,11 @@ class TokenManager {
    */
   static async isAccessTokenBlacklisted(accessToken) {
     try {
-      const key = this.getAccessTokenBlacklistKey(accessToken);
-      return await redis.exists(key);
+      const key = this.getAccessTokenBlacklistKey(accessToken)
+      return await redis.exists(key)
     } catch (error) {
-      logger.error('Check access token blacklist error', { error: error.message });
-      return false;
+      logger.error('Check access token blacklist error', { error: error.message })
+      return false
     }
   }
 
@@ -204,16 +204,16 @@ class TokenManager {
    * @returns {Promise<object>} { accessToken, refreshToken }
    */
   static async generateTokenPair(payload, userId, tenantId) {
-    const accessToken = this.generateAccessToken(payload);
-    const refreshToken = this.generateRefreshToken();
+    const accessToken = this.generateAccessToken(payload)
+    const refreshToken = this.generateRefreshToken()
 
     // 存储 Refresh Token
-    await this.storeRefreshToken(refreshToken, userId, tenantId);
+    await this.storeRefreshToken(refreshToken, userId, tenantId)
 
     return {
       accessToken,
       refreshToken,
-    };
+    }
   }
 
   /**
@@ -224,31 +224,31 @@ class TokenManager {
    */
   static async refreshAccessToken(refreshToken, newPayload) {
     // 验证 Refresh Token
-    const tokenData = await this.verifyRefreshToken(refreshToken);
+    const tokenData = await this.verifyRefreshToken(refreshToken)
     if (!tokenData) {
-      return null;
+      return null
     }
 
     // 生成新的 Access Token
-    const accessToken = this.generateAccessToken(newPayload);
+    const accessToken = this.generateAccessToken(newPayload)
 
     // 可选：生成新的 Refresh Token（刷新令牌轮换）
-    const rotateRefreshToken = process.env.ROTATE_REFRESH_TOKEN === 'true';
-    let newRefreshToken = refreshToken;
+    const rotateRefreshToken = process.env.ROTATE_REFRESH_TOKEN === 'true'
+    let newRefreshToken = refreshToken
 
     if (rotateRefreshToken) {
       // 撤销旧的 Refresh Token
-      await this.revokeRefreshToken(refreshToken);
-      
+      await this.revokeRefreshToken(refreshToken)
+
       // 生成新的 Refresh Token
-      newRefreshToken = this.generateRefreshToken();
-      await this.storeRefreshToken(newRefreshToken, tokenData.userId, tokenData.tenantId);
+      newRefreshToken = this.generateRefreshToken()
+      await this.storeRefreshToken(newRefreshToken, tokenData.userId, tokenData.tenantId)
     }
 
     return {
       accessToken,
       refreshToken: newRefreshToken,
-    };
+    }
   }
 
   /**
@@ -257,7 +257,7 @@ class TokenManager {
    * @returns {string} Redis 键
    */
   static getRefreshTokenKey(refreshToken) {
-    return `refresh_token:${refreshToken}`;
+    return `refresh_token:${refreshToken}`
   }
 
   /**
@@ -268,7 +268,7 @@ class TokenManager {
   static getUserRefreshTokenPattern(userId) {
     // 注意：由于 Refresh Token 是随机字符串，无法直接通过模式匹配用户
     // 需要在 revokeAllUserRefreshTokens 中遍历所有 token 并检查 userId
-    return `refresh_token:*`;
+    return `refresh_token:*`
   }
 
   /**
@@ -278,8 +278,8 @@ class TokenManager {
    */
   static getAccessTokenBlacklistKey(accessToken) {
     // 使用 token 的哈希值作为键，避免键过长
-    const hash = crypto.createHash('sha256').update(accessToken).digest('hex');
-    return `access_token_blacklist:${hash}`;
+    const hash = crypto.createHash('sha256').update(accessToken).digest('hex')
+    return `access_token_blacklist:${hash}`
   }
 
   /**
@@ -287,23 +287,28 @@ class TokenManager {
    * @returns {number} 过期时间（秒）
    */
   static getRefreshTokenExpireSeconds() {
-    const refreshExpiresIn = appConfig.jwt.refreshExpiresIn;
-    
+    const refreshExpiresIn = appConfig.jwt.refreshExpiresIn
+
     // 解析时间字符串（如 '7d', '30d'）
-    const match = refreshExpiresIn.match(/^(\d+)([smhd])$/);
+    const match = refreshExpiresIn.match(/^(\d+)([smhd])$/)
     if (!match) {
-      return 7 * 24 * 60 * 60; // 默认 7 天
+      return 7 * 24 * 60 * 60 // 默认 7 天
     }
 
-    const value = parseInt(match[1]);
-    const unit = match[2];
+    const value = parseInt(match[1])
+    const unit = match[2]
 
     switch (unit) {
-      case 's': return value;
-      case 'm': return value * 60;
-      case 'h': return value * 60 * 60;
-      case 'd': return value * 24 * 60 * 60;
-      default: return 7 * 24 * 60 * 60;
+      case 's':
+        return value
+      case 'm':
+        return value * 60
+      case 'h':
+        return value * 60 * 60
+      case 'd':
+        return value * 24 * 60 * 60
+      default:
+        return 7 * 24 * 60 * 60
     }
   }
 
@@ -312,26 +317,30 @@ class TokenManager {
    * @returns {number} 过期时间（秒）
    */
   static getAccessTokenExpireSeconds() {
-    const accessExpiresIn = appConfig.jwt.accessExpiresIn;
-    
+    const accessExpiresIn = appConfig.jwt.accessExpiresIn
+
     // 解析时间字符串（如 '15m', '1h'）
-    const match = accessExpiresIn.match(/^(\d+)([smhd])$/);
+    const match = accessExpiresIn.match(/^(\d+)([smhd])$/)
     if (!match) {
-      return 15 * 60; // 默认 15 分钟
+      return 15 * 60 // 默认 15 分钟
     }
 
-    const value = parseInt(match[1]);
-    const unit = match[2];
+    const value = parseInt(match[1])
+    const unit = match[2]
 
     switch (unit) {
-      case 's': return value;
-      case 'm': return value * 60;
-      case 'h': return value * 60 * 60;
-      case 'd': return value * 24 * 60 * 60;
-      default: return 15 * 60;
+      case 's':
+        return value
+      case 'm':
+        return value * 60
+      case 'h':
+        return value * 60 * 60
+      case 'd':
+        return value * 24 * 60 * 60
+      default:
+        return 15 * 60
     }
   }
 }
 
-module.exports = TokenManager;
-
+module.exports = TokenManager

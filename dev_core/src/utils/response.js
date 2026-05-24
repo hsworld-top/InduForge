@@ -1,5 +1,5 @@
-const ErrorCodes = require('../constants/errorCodes');
-const { getErrorMessage, getSuccessMessage } = require('./i18n');
+const ErrorCodes = require('../constants/errorCodes')
+const { getErrorMessage, getSuccessMessage } = require('./i18n')
 
 /**
  * 统一提取语言与请求 ID，确保四字段契约中的 reqId 始终存在（允许为 null）。
@@ -8,17 +8,17 @@ const { getErrorMessage, getSuccessMessage } = require('./i18n');
  * @returns {{language: string, reqId: string|null}}
  */
 function resolveResponseContext(res) {
-  const request = res.req || {};
-  const locals = res.locals || {};
-  const language = locals.language || request.language || 'zh-CN';
-  const reqId = locals.requestId || request.requestId || null;
+  const request = res.req || {}
+  const locals = res.locals || {}
+  const language = locals.language || request.language || 'zh-CN'
+  const reqId = locals.requestId || request.requestId || null
 
-  res.locals = locals;
-  res.locals.language = language;
-  res.locals.requestId = reqId;
-  res.setHeader('Content-Language', language);
+  res.locals = locals
+  res.locals.language = language
+  res.locals.requestId = reqId
+  res.setHeader('Content-Language', language)
 
-  return { language, reqId };
+  return { language, reqId }
 }
 
 /**
@@ -31,7 +31,7 @@ function resolveResponseContext(res) {
  * @returns {{code: number, msg: string, data: any, reqId: string|null}}
  */
 function buildContractPayload(code, msg, data, reqId) {
-  return { code, msg, data, reqId };
+  return { code, msg, data, reqId }
 }
 
 /**
@@ -47,19 +47,14 @@ class ApiResponse {
    * @param {number} statusCode - HTTP 状态码（默认 200）
    */
   static success(res, data = null, messageKey = null, options = {}, statusCode = 200) {
-    const { language, reqId } = resolveResponseContext(res);
+    const { language, reqId } = resolveResponseContext(res)
     const message = messageKey
       ? getSuccessMessage(language, messageKey, options)
-      : getSuccessMessage(language, 'operation_success');
+      : getSuccessMessage(language, 'operation_success')
 
-    return res.status(statusCode).json(
-      buildContractPayload(
-        ErrorCodes.toPublicCode(ErrorCodes.SUCCESS),
-        message,
-        data,
-        reqId
-      )
-    );
+    return res
+      .status(statusCode)
+      .json(buildContractPayload(ErrorCodes.toPublicCode(ErrorCodes.SUCCESS), message, data, reqId))
   }
 
   /**
@@ -70,19 +65,15 @@ class ApiResponse {
    * @param {number} statusCode - HTTP 状态码（默认 400）
    */
   static error(res, errorCode, options = {}, statusCode = 400) {
-    const normalizedOptions = options && typeof options === 'object' ? options : {};
-    const { language, reqId } = resolveResponseContext(res);
-    const message = normalizedOptions.message
-      || getErrorMessage(language, ErrorCodes.toI18nCode(errorCode), normalizedOptions);
+    const normalizedOptions = options && typeof options === 'object' ? options : {}
+    const { language, reqId } = resolveResponseContext(res)
+    const message =
+      normalizedOptions.message ||
+      getErrorMessage(language, ErrorCodes.toI18nCode(errorCode), normalizedOptions)
 
-    return res.status(statusCode).json(
-      buildContractPayload(
-        ErrorCodes.toPublicCode(errorCode),
-        message,
-        null,
-        reqId
-      )
-    );
+    return res
+      .status(statusCode)
+      .json(buildContractPayload(ErrorCodes.toPublicCode(errorCode), message, null, reqId))
   }
 
   /**
@@ -93,10 +84,10 @@ class ApiResponse {
    * @param {string} messageKey - 消息键（可选）
    */
   static paginated(res, data, pagination, messageKey = null) {
-    const { language, reqId } = resolveResponseContext(res);
+    const { language, reqId } = resolveResponseContext(res)
     const message = messageKey
       ? getSuccessMessage(language, messageKey)
-      : getSuccessMessage(language, 'operation_success');
+      : getSuccessMessage(language, 'operation_success')
 
     return res.status(200).json(
       buildContractPayload(
@@ -106,11 +97,10 @@ class ApiResponse {
           list: data,
           pagination,
         },
-        reqId
-      )
-    );
+        reqId,
+      ),
+    )
   }
 }
 
-module.exports = ApiResponse;
-
+module.exports = ApiResponse

@@ -3,8 +3,8 @@ package handler
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -54,15 +54,15 @@ func (h *APIHandler) CenterLogin(w http.ResponseWriter, r *http.Request) {
 // CenterRegister 代理运维中心节点注册请求
 func (h *APIHandler) CenterRegister(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		CenterURL     string `json:"centerUrl"`
-		Username      string `json:"username"`
-		Password      string `json:"password"`
-		NodeName      string `json:"nodeName"`
-		NodeDesc      string `json:"nodeDescription"`
-		IPAddress     string `json:"ipAddress"`
-		Port          int    `json:"port"`
-		AgentVersion  string `json:"agentVersion"`
-		TenantCode    string `json:"tenantCode"`
+		CenterURL    string `json:"centerUrl"`
+		Username     string `json:"username"`
+		Password     string `json:"password"`
+		NodeName     string `json:"nodeName"`
+		NodeDesc     string `json:"nodeDescription"`
+		IPAddress    string `json:"ipAddress"`
+		Port         int    `json:"port"`
+		AgentVersion string `json:"agentVersion"`
+		TenantCode   string `json:"tenantCode"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

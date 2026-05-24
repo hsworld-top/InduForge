@@ -16,11 +16,15 @@
         <el-table-column prop="currentVersion" :label="t('local.version')" width="120" />
         <el-table-column :label="t('local.status')" width="110">
           <template #default="{ row }">
-            <el-tag class="status-tag" :type="getStatusType(row.status)">{{ formatStatus(row.status) }}</el-tag>
+            <el-tag class="status-tag" :type="getStatusType(row.status)">{{
+              formatStatus(row.status)
+            }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column :label="t('local.runtimeStatus')" width="140">
-          <template #default="{ row }">{{ formatStatus(row.runtimeStatus?.state || 'stopped') }}</template>
+          <template #default="{ row }">{{
+            formatStatus(row.runtimeStatus?.state || 'stopped')
+          }}</template>
         </el-table-column>
         <el-table-column :label="t('local.pid')" width="100">
           <template #default="{ row }">{{ row.runtimeStatus?.pid || t('common.na') }}</template>
@@ -30,16 +34,30 @@
         </el-table-column>
         <el-table-column :label="t('local.actions')" min-width="320" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="row.status !== 'running'" type="primary" size="small" @click="startProject(row.id)">
+            <el-button
+              v-if="row.status !== 'running'"
+              type="primary"
+              size="small"
+              @click="startProject(row.id)"
+            >
               {{ t('local.start') }}
             </el-button>
-            <el-button v-else type="warning" size="small" @click="stopProject(row.id)">{{ t('local.stop') }}</el-button>
-            <el-button type="info" size="small" @click="restartProject(row.id)">{{ t('local.restart') }}</el-button>
-            <el-button type="success" size="small" @click="viewLogs(row.id)">{{ t('local.logs') }}</el-button>
+            <el-button v-else type="warning" size="small" @click="stopProject(row.id)">{{
+              t('local.stop')
+            }}</el-button>
+            <el-button type="info" size="small" @click="restartProject(row.id)">{{
+              t('local.restart')
+            }}</el-button>
+            <el-button type="success" size="small" @click="viewLogs(row.id)">{{
+              t('local.logs')
+            }}</el-button>
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!localProjects.length && !nodeStore.loading" :description="t('local.empty')" />
+      <el-empty
+        v-if="!localProjects.length && !nodeStore.loading"
+        :description="t('local.empty')"
+      />
     </el-card>
 
     <el-dialog v-model="showDeployDialog" :title="t('local.deployDialogTitle')" width="600px">
@@ -63,7 +81,9 @@
       </el-form>
       <template #footer>
         <el-button @click="showDeployDialog = false">{{ t('local.cancel') }}</el-button>
-        <el-button type="primary" :loading="deploying" @click="deployProject">{{ t('local.confirmDeploy') }}</el-button>
+        <el-button type="primary" :loading="deploying" @click="deployProject">{{
+          t('local.confirmDeploy')
+        }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -91,7 +111,9 @@ const deployForm = reactive({
   autoStart: true,
 })
 
-const localProjects = computed(() => nodeStore.projects.filter((project) => project?.source !== 'center'))
+const localProjects = computed(() =>
+  nodeStore.projects.filter((project) => project?.source !== 'center'),
+)
 
 const triggerFilePick = () => {
   ifpFileInput.value?.click()

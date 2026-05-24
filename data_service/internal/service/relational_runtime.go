@@ -63,9 +63,9 @@ type RelationalForeignKey struct {
 
 // RelationalTableStructure 表示表结构响应。
 type RelationalTableStructure struct {
-	Columns     []RelationalTableColumn  `json:"columns"`
-	Indexes     []RelationalIndex        `json:"indexes"`
-	ForeignKeys []RelationalForeignKey   `json:"foreignKeys"`
+	Columns     []RelationalTableColumn `json:"columns"`
+	Indexes     []RelationalIndex       `json:"indexes"`
+	ForeignKeys []RelationalForeignKey  `json:"foreignKeys"`
 }
 
 // RelationalPagination 表示分页元信息。
@@ -78,9 +78,9 @@ type RelationalPagination struct {
 
 // RelationalTableData 表示表数据预览响应。
 type RelationalTableData struct {
-	Columns    []string               `json:"columns"`
-	Rows       [][]any                `json:"rows"`
-	Pagination RelationalPagination   `json:"pagination"`
+	Columns    []string             `json:"columns"`
+	Rows       [][]any              `json:"rows"`
+	Pagination RelationalPagination `json:"pagination"`
 }
 
 // RelationalQueryResult 表示只读 SQL 执行结果。
@@ -322,17 +322,17 @@ func parseRelationalRuntimeConfig(config map[string]any) (relationalRuntimeConfi
 	}
 
 	return relationalRuntimeConfig{
-		DBType:      dbType,
-		DatabaseURL: databaseURL,
-		Host:        getString("host"),
-		Port:        getInt(defaultRelationalPort(dbType), "port"),
-		Database:    getString("database", "dbname"),
-		Username:    getString("username", "user"),
-		Password:    getString("password"),
-		Schema:      schema,
-		SSLMode:     sslMode,
-		Charset:     getString("charset"),
-		Encrypt:     getBool("encrypt"),
+		DBType:                 dbType,
+		DatabaseURL:            databaseURL,
+		Host:                   getString("host"),
+		Port:                   getInt(defaultRelationalPort(dbType), "port"),
+		Database:               getString("database", "dbname"),
+		Username:               getString("username", "user"),
+		Password:               getString("password"),
+		Schema:                 schema,
+		SSLMode:                sslMode,
+		Charset:                getString("charset"),
+		Encrypt:                getBool("encrypt"),
 		TrustServerCertificate: getBool("trustServerCertificate"),
 	}, nil
 }
@@ -530,10 +530,10 @@ type pgxRowsAdapter struct {
 	rows pgx.Rows
 }
 
-func (r *pgxRowsAdapter) Next() bool { return r.rows.Next() }
+func (r *pgxRowsAdapter) Next() bool             { return r.rows.Next() }
 func (r *pgxRowsAdapter) Scan(dest ...any) error { return r.rows.Scan(dest...) }
-func (r *pgxRowsAdapter) Close() { r.rows.Close() }
-func (r *pgxRowsAdapter) Err() error { return r.rows.Err() }
+func (r *pgxRowsAdapter) Close()                 { r.rows.Close() }
+func (r *pgxRowsAdapter) Err() error             { return r.rows.Err() }
 func (r *pgxRowsAdapter) Columns() ([]string, error) {
 	columns := make([]string, 0, len(r.rows.FieldDescriptions()))
 	for _, field := range r.rows.FieldDescriptions() {
@@ -549,10 +549,10 @@ type sqlRowsAdapter struct {
 	rows *sql.Rows
 }
 
-func (r *sqlRowsAdapter) Next() bool { return r.rows.Next() }
-func (r *sqlRowsAdapter) Scan(dest ...any) error { return r.rows.Scan(dest...) }
-func (r *sqlRowsAdapter) Close() { _ = r.rows.Close() }
-func (r *sqlRowsAdapter) Err() error { return r.rows.Err() }
+func (r *sqlRowsAdapter) Next() bool                 { return r.rows.Next() }
+func (r *sqlRowsAdapter) Scan(dest ...any) error     { return r.rows.Scan(dest...) }
+func (r *sqlRowsAdapter) Close()                     { _ = r.rows.Close() }
+func (r *sqlRowsAdapter) Err() error                 { return r.rows.Err() }
 func (r *sqlRowsAdapter) Columns() ([]string, error) { return r.rows.Columns() }
 func (r *sqlRowsAdapter) Values() ([]any, error) {
 	columns, err := r.rows.Columns()

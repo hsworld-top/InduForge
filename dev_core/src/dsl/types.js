@@ -3,13 +3,7 @@
  * Requirements: 1.1, 2.1, 3.1, 4.1, 5.1
  */
 
-const {
-  ScaleMode,
-  Theme,
-  ActionType,
-  DataSourceType,
-  DataSourceMode,
-} = require('./constants');
+const { ScaleMode, Theme, ActionType, DataSourceType, DataSourceMode } = require('./constants')
 
 /**
  * Page meta information
@@ -44,7 +38,6 @@ const {
  * @property {number} [zIndex] - Z-index for layering
  * @property {string} [transform] - CSS transform value
  */
-
 
 /**
  * Animation definition
@@ -98,7 +91,6 @@ const {
  * @property {*} [data] - Static data for static type
  */
 
-
 /**
  * Component ACL entry
  * Requirements: 5.2
@@ -147,4 +139,4 @@ const {
 module.exports = {
   // Type exports are for documentation purposes
   // The actual validation is done in validators.js
-};
+}

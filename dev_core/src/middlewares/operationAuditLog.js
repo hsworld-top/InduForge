@@ -1,43 +1,43 @@
-const { Log } = require("../models");
-const { logger } = require("../utils/logger");
+const { Log } = require('../models')
+const { logger } = require('../utils/logger')
 
 const RESOURCE_LABELS = {
-  tenants: "租户",
-  users: "用户",
-  projects: "工程",
-  logs: "系统日志",
-  roles: "角色",
-  data: "数据中心",
-  design: "设计器",
-  pages: "页面锁",
-  nodes: "节点",
-  "node-register": "节点注册",
-  deployments: "部署",
-  publish: "发布",
-  auth: "认证",
-};
+  tenants: '租户',
+  users: '用户',
+  projects: '工程',
+  logs: '系统日志',
+  roles: '角色',
+  data: '数据中心',
+  design: '设计器',
+  pages: '页面锁',
+  nodes: '节点',
+  'node-register': '节点注册',
+  deployments: '部署',
+  publish: '发布',
+  auth: '认证',
+}
 
 const ACTION_LABELS = {
-  create: "新增",
-  update: "更新",
-  delete: "删除",
-  patch: "变更",
-  activate: "激活",
-  suspend: "暂停",
-  upload: "上传",
-  import: "导入",
-  export: "导出",
-  deploy: "部署",
-  rollback: "回滚",
-  start: "启动",
-  stop: "停止",
-  restart: "重启",
-  approve: "审批通过",
-  reject: "审批拒绝",
-  lock: "加锁",
-  unlock: "解锁",
-  password: "修改密码",
-};
+  create: '新增',
+  update: '更新',
+  delete: '删除',
+  patch: '变更',
+  activate: '激活',
+  suspend: '暂停',
+  upload: '上传',
+  import: '导入',
+  export: '导出',
+  deploy: '部署',
+  rollback: '回滚',
+  start: '启动',
+  stop: '停止',
+  restart: '重启',
+  approve: '审批通过',
+  reject: '审批拒绝',
+  lock: '加锁',
+  unlock: '解锁',
+  password: '修改密码',
+}
 
 /**
  * 构建日志 action 字段，长度限制在 100 以内。
@@ -45,10 +45,10 @@ const ACTION_LABELS = {
  * @returns {string} action 字段
  */
 function buildAction(req) {
-  const resource = extractResource(req) || "unknown";
-  const op = detectOperation(req);
-  const raw = `${resource}.${op}`;
-  return raw.length > 100 ? raw.slice(0, 100) : raw;
+  const resource = extractResource(req) || 'unknown'
+  const op = detectOperation(req)
+  const raw = `${resource}.${op}`
+  return raw.length > 100 ? raw.slice(0, 100) : raw
 }
 
 /**
@@ -58,13 +58,13 @@ function buildAction(req) {
  * @returns {string|null} 资源名
  */
 function extractResource(req) {
-  const path = String(req.originalUrl || req.url || "").split("?")[0];
-  const parts = path.split("/").filter(Boolean);
-  const v1Index = parts.indexOf("v1");
+  const path = String(req.originalUrl || req.url || '').split('?')[0]
+  const parts = path.split('/').filter(Boolean)
+  const v1Index = parts.indexOf('v1')
   if (v1Index < 0 || !parts[v1Index + 1]) {
-    return null;
+    return null
   }
-  return parts[v1Index + 1];
+  return parts[v1Index + 1]
 }
 
 /**
@@ -74,31 +74,31 @@ function extractResource(req) {
  * @returns {boolean} 是否需要记录
  */
 function shouldLog(req) {
-  const method = String(req.method || "GET").toUpperCase();
-  if (!["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
-    return false;
+  const method = String(req.method || 'GET').toUpperCase()
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    return false
   }
 
-  const path = String(req.originalUrl || req.url || "").split("?")[0];
+  const path = String(req.originalUrl || req.url || '').split('?')[0]
   const ignored = [
-    "/api/v1/auth/captcha",
-    "/api/v1/auth/login",
-    "/api/v1/auth/config",
-    "/api/v1/auth/refresh",
-  ];
+    '/api/v1/auth/captcha',
+    '/api/v1/auth/login',
+    '/api/v1/auth/config',
+    '/api/v1/auth/refresh',
+  ]
   if (ignored.includes(path)) {
-    return false;
+    return false
   }
 
   // 高频 Agent 心跳与部署状态回调不写审计日志，避免产生大量无业务价值日志写入。
   if (/^\/api\/v1\/nodes\/[^/]+\/heartbeat$/.test(path)) {
-    return false;
+    return false
   }
   if (/^\/api\/v1\/nodes\/[^/]+\/deployment-status$/.test(path)) {
-    return false;
+    return false
   }
 
-  return true;
+  return true
 }
 
 /**
@@ -107,9 +107,9 @@ function shouldLog(req) {
  * @returns {boolean} 是否资源 ID
  */
 function isIdSegment(segment) {
-  if (!segment) return false;
-  if (segment === "me") return false;
-  return isUuid(segment) || /^\d+$/.test(segment);
+  if (!segment) return false
+  if (segment === 'me') return false
+  return isUuid(segment) || /^\d+$/.test(segment)
 }
 
 /**
@@ -118,41 +118,41 @@ function isIdSegment(segment) {
  * @returns {string} 操作标识
  */
 function detectOperation(req) {
-  const method = String(req.method || "GET").toUpperCase();
-  const path = String(req.originalUrl || req.url || "").split("?")[0];
-  const parts = path.split("/").filter(Boolean);
-  const v1Index = parts.indexOf("v1");
-  const segments = v1Index >= 0 ? parts.slice(v1Index + 1) : parts;
-  const routeSegments = segments.slice(1).filter((item) => !isIdSegment(item));
+  const method = String(req.method || 'GET').toUpperCase()
+  const path = String(req.originalUrl || req.url || '').split('?')[0]
+  const parts = path.split('/').filter(Boolean)
+  const v1Index = parts.indexOf('v1')
+  const segments = v1Index >= 0 ? parts.slice(v1Index + 1) : parts
+  const routeSegments = segments.slice(1).filter((item) => !isIdSegment(item))
 
   const explicitOp = routeSegments.find((item) =>
     [
-      "activate",
-      "suspend",
-      "upload",
-      "import",
-      "export",
-      "deploy",
-      "rollback",
-      "start",
-      "stop",
-      "restart",
-      "approve",
-      "reject",
-      "lock",
-      "unlock",
-      "password",
+      'activate',
+      'suspend',
+      'upload',
+      'import',
+      'export',
+      'deploy',
+      'rollback',
+      'start',
+      'stop',
+      'restart',
+      'approve',
+      'reject',
+      'lock',
+      'unlock',
+      'password',
     ].includes(item),
-  );
+  )
   if (explicitOp) {
-    return explicitOp;
+    return explicitOp
   }
 
-  if (method === "POST") return "create";
-  if (method === "PUT") return "update";
-  if (method === "PATCH") return "patch";
-  if (method === "DELETE") return "delete";
-  return method.toLowerCase();
+  if (method === 'POST') return 'create'
+  if (method === 'PUT') return 'update'
+  if (method === 'PATCH') return 'patch'
+  if (method === 'DELETE') return 'delete'
+  return method.toLowerCase()
 }
 
 /**
@@ -162,16 +162,16 @@ function detectOperation(req) {
  * @returns {string} 日志消息
  */
 function buildMessage(req, statusCode) {
-  const resource = extractResource(req) || "unknown";
-  const op = detectOperation(req);
-  const resourceLabel = RESOURCE_LABELS[resource] || resource;
-  const actionLabel = ACTION_LABELS[op] || op;
-  const result = statusCode >= 400 ? "失败" : "成功";
-  const operator = req.user?.username || "unknown";
+  const resource = extractResource(req) || 'unknown'
+  const op = detectOperation(req)
+  const resourceLabel = RESOURCE_LABELS[resource] || resource
+  const actionLabel = ACTION_LABELS[op] || op
+  const result = statusCode >= 400 ? '失败' : '成功'
+  const operator = req.user?.username || 'unknown'
   if (statusCode >= 400) {
-    return `${resourceLabel}${actionLabel}${result}，操作者：${operator}，状态码：${statusCode}`;
+    return `${resourceLabel}${actionLabel}${result}，操作者：${operator}，状态码：${statusCode}`
   }
-  return `${resourceLabel}${actionLabel}${result}，操作者：${operator}`;
+  return `${resourceLabel}${actionLabel}${result}，操作者：${operator}`
 }
 
 /**
@@ -181,11 +181,9 @@ function buildMessage(req, statusCode) {
  */
 function isUuid(value) {
   return (
-    typeof value === "string" &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      value,
-    )
-  );
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  )
 }
 
 /**
@@ -197,26 +195,25 @@ function isUuid(value) {
  */
 function operationAuditLog(req, res, next) {
   if (!shouldLog(req)) {
-    return next();
+    return next()
   }
 
-  res.on("finish", () => {
+  res.on('finish', () => {
     setImmediate(async () => {
       try {
-        const statusCode = Number(res.statusCode || 200);
-        const user = req.user || {};
-        let userId = isUuid(user.id) ? user.id : null;
-        let tenantId = isUuid(user.tenantId) ? user.tenantId : null;
+        const statusCode = Number(res.statusCode || 200)
+        const user = req.user || {}
+        let userId = isUuid(user.id) ? user.id : null
+        const tenantId = isUuid(user.tenantId) ? user.tenantId : null
 
         // 超级管理员账号可能不在 users 表中，避免触发外键错误。
-        if (user.role === "SUPER_ADMIN") {
-          userId = null;
+        if (user.role === 'SUPER_ADMIN') {
+          userId = null
         }
 
-        const level =
-          statusCode >= 500 ? "error" : statusCode >= 400 ? "warning" : "info";
-        const resource = extractResource(req);
-        const message = buildMessage(req, statusCode);
+        const level = statusCode >= 500 ? 'error' : statusCode >= 400 ? 'warning' : 'info'
+        const resource = extractResource(req)
+        const message = buildMessage(req, statusCode)
 
         await Log.create({
           level,
@@ -226,19 +223,19 @@ function operationAuditLog(req, res, next) {
           userId,
           tenantId,
           ip: req.ip || null,
-          userAgent: req.get("user-agent") || null,
+          userAgent: req.get('user-agent') || null,
           createdAt: new Date(),
-        });
+        })
       } catch (error) {
-        logger.warn("Write operation audit log failed", {
+        logger.warn('Write operation audit log failed', {
           error: error.message,
           requestId: req.requestId,
-        });
+        })
       }
-    });
-  });
+    })
+  })
 
-  return next();
+  return next()
 }
 
-module.exports = { operationAuditLog };
+module.exports = { operationAuditLog }

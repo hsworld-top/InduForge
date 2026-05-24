@@ -126,15 +126,7 @@ type AlarmInputRef = {
 ```ts
 type AlarmCondition = {
   id: string
-  type:
-    | 'HH'
-    | 'H'
-    | 'L'
-    | 'LL'
-    | 'deviation_high'
-    | 'deviation_low'
-    | 'rate_of_change'
-    | 'cel'
+  type: 'HH' | 'H' | 'L' | 'LL' | 'deviation_high' | 'deviation_low' | 'rate_of_change' | 'cel'
   name: string
   isEnabled: boolean
   severity: 'info' | 'warning' | 'major' | 'critical'

@@ -380,21 +380,21 @@ Response:
 
 ```javascript
 // 订阅数据点
-socket.emit("datapoint:subscribe", {
-  projectId: "xxx",
-  paths: ["mqtt.EMQX.温度传感器.temperature", "calc.功率计算.power"],
-});
+socket.emit('datapoint:subscribe', {
+  projectId: 'xxx',
+  paths: ['mqtt.EMQX.温度传感器.temperature', 'calc.功率计算.power'],
+})
 
 // 接收值更新
-socket.on("datapoint:value", (data) => {
+socket.on('datapoint:value', (data) => {
   // { path: 'mqtt.EMQX.温度传感器.temperature', value: 25.6, timestamp: ... }
-});
+})
 
 // 取消订阅
-socket.emit("datapoint:unsubscribe", {
-  projectId: "xxx",
-  paths: ["mqtt.EMQX.温度传感器.temperature"],
-});
+socket.emit('datapoint:unsubscribe', {
+  projectId: 'xxx',
+  paths: ['mqtt.EMQX.温度传感器.temperature'],
+})
 ```
 
 ### 设计器中使用数据点

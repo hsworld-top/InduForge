@@ -2,11 +2,11 @@
  * 发布服务 - 工程发布流水线
  * @description 处理工程发布：验证 → 编译清单 → 打包 IFP → 上传
  */
-const path = require("path");
-const fs = require("fs-extra");
-const archiver = require("archiver");
-const crypto = require("crypto");
-const { dataDomainClient } = require("./dataDomainClient");
+const path = require('path')
+const fs = require('fs-extra')
+const archiver = require('archiver')
+const crypto = require('crypto')
+const { dataDomainClient } = require('./dataDomainClient')
 const {
   Project,
   DesignPage,
@@ -17,92 +17,92 @@ const {
   ProjectRole,
   ProjectUserRoleBinding,
   ProjectRoleGrant,
-} = require("../models");
-const AppError = require("../utils/AppError");
-const ErrorCodes = require("../constants/errorCodes");
+} = require('../models')
+const AppError = require('../utils/AppError')
+const ErrorCodes = require('../constants/errorCodes')
 
 // 制品存储目录
-const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.join(__dirname, "../../artifacts");
-const RUNTIME_SECURITY_FILE_NAME = "runtime-security.json";
-const RUNTIME_PERMISSIONS_FILE_NAME = "runtime-permissions.json";
+const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.join(__dirname, '../../artifacts')
+const RUNTIME_SECURITY_FILE_NAME = 'runtime-security.json'
+const RUNTIME_PERMISSIONS_FILE_NAME = 'runtime-permissions.json'
 
-const asArray = (value) => (Array.isArray(value) ? value : []);
+const asArray = (value) => (Array.isArray(value) ? value : [])
 
 const normalizeArtifactProtocols = (protocols = {}) => ({
   kafka: asArray(protocols?.kafka),
   http: asArray(protocols?.http),
   websocket: asArray(protocols?.websocket),
   redis: asArray(protocols?.redis),
-});
+})
 
 const resolveStoredArtifactFileName = (deployment) => {
-  const explicitFileName = deployment?.buildConfig?.artifactFileName;
+  const explicitFileName = deployment?.buildConfig?.artifactFileName
   if (explicitFileName) {
-    return path.basename(String(explicitFileName));
+    return path.basename(String(explicitFileName))
   }
 
-  const artifactUrl = String(deployment?.artifactUrl || "");
-  const urlFileName = path.basename(artifactUrl);
-  if (urlFileName && urlFileName !== "download" && /\.ifp$/i.test(urlFileName)) {
-    return urlFileName;
+  const artifactUrl = String(deployment?.artifactUrl || '')
+  const urlFileName = path.basename(artifactUrl)
+  if (urlFileName && urlFileName !== 'download' && /\.ifp$/i.test(urlFileName)) {
+    return urlFileName
   }
 
-  return "";
-};
+  return ''
+}
 
 const buildLegacyArtifactFilePrefix = (deployment) => {
-  const projectId = String(deployment?.projectId || "").trim();
-  const version = String(deployment?.version || "").trim();
+  const projectId = String(deployment?.projectId || '').trim()
+  const version = String(deployment?.version || '').trim()
   if (!projectId || !version) {
-    return "";
+    return ''
   }
-  return `${projectId}_v${version}_`;
-};
+  return `${projectId}_v${version}_`
+}
 
 const resolveArtifactFileCandidates = async (deployment) => {
-  const directFileName = resolveStoredArtifactFileName(deployment);
+  const directFileName = resolveStoredArtifactFileName(deployment)
   if (directFileName) {
-    return [path.join(ARTIFACTS_DIR, directFileName)];
+    return [path.join(ARTIFACTS_DIR, directFileName)]
   }
 
-  const legacyPrefix = buildLegacyArtifactFilePrefix(deployment);
+  const legacyPrefix = buildLegacyArtifactFilePrefix(deployment)
   if (!legacyPrefix) {
-    return [];
+    return []
   }
 
-  const artifactNames = await fs.readdir(ARTIFACTS_DIR).catch(() => []);
+  const artifactNames = await fs.readdir(ARTIFACTS_DIR).catch(() => [])
   return artifactNames
     .filter((name) => name.startsWith(legacyPrefix) && /\.ifp$/i.test(name))
     .sort((left, right) => right.localeCompare(left))
-    .map((name) => path.join(ARTIFACTS_DIR, name));
-};
+    .map((name) => path.join(ARTIFACTS_DIR, name))
+}
 
 const buildRelationalConfigsFromConnections = (connections = []) =>
   asArray(connections)
-    .filter((connection) => connection?.type === "relational")
+    .filter((connection) => connection?.type === 'relational')
     .map((connection) => {
-      const config = connection?.config || {};
+      const config = connection?.config || {}
       return {
         connectionId: connection.id,
-        dbType: config.dbType || "postgresql",
-        host: config.host || "",
+        dbType: config.dbType || 'postgresql',
+        host: config.host || '',
         port: config.port ?? 5432,
-        database: config.database || "",
-        username: config.username || "",
-        password: config.password || "",
+        database: config.database || '',
+        username: config.username || '',
+        password: config.password || '',
         schema: config.schema || null,
         charset: config.charset || null,
         timezone: config.timezone || null,
         ssl: Boolean(config.ssl),
         sslConfig: config.sslConfig || {},
-      };
-    });
+      }
+    })
 
 const buildMqttConfigsFromArtifact = (connections = []) =>
   asArray(connections).map((connection) => ({
     connectionId: connection.id,
-    brokerUrl: connection.brokerUrl || "",
-    protocol: connection.protocol || "mqtt",
+    brokerUrl: connection.brokerUrl || '',
+    protocol: connection.protocol || 'mqtt',
     port: connection.port ?? 1883,
     clientId: connection.clientId ?? null,
     username: connection.username ?? null,
@@ -114,23 +114,27 @@ const buildMqttConfigsFromArtifact = (connections = []) =>
     connectTimeout: connection.connectTimeout ?? 30000,
     will: connection.will || {},
     sslConfig: connection.sslConfig || {},
-  }));
+  }))
 
 const collectPlainRows = async (model, where) =>
   model.findAll({
     where,
-    order: [["createdAt", "ASC"]],
+    order: [['createdAt', 'ASC']],
     raw: true,
-  });
+  })
 
-const buildManifestWithRuntimeSecurity = (manifest, runtimeSecuritySnapshot, runtimePermissionsIndex) => {
+const buildManifestWithRuntimeSecurity = (
+  manifest,
+  runtimeSecuritySnapshot,
+  runtimePermissionsIndex,
+) => {
   const snapshot = runtimeSecuritySnapshot || {
     version: new Date().toISOString(),
     users: [],
     roles: [],
     bindings: [],
     grants: [],
-  };
+  }
 
   return {
     ...manifest,
@@ -150,76 +154,76 @@ const buildManifestWithRuntimeSecurity = (manifest, runtimeSecuritySnapshot, run
           }
         : manifest.security?.runtimePermissions || undefined,
     },
-  };
-};
+  }
+}
 
-const normalizeId = (value) => String(value ?? "").trim();
+const normalizeId = (value) => String(value ?? '').trim()
 
 const collectSchemaNodes = (schemaContent = {}) => {
-  if (schemaContent?.nodesById && typeof schemaContent.nodesById === "object") {
-    return Object.values(schemaContent.nodesById).filter(Boolean);
+  if (schemaContent?.nodesById && typeof schemaContent.nodesById === 'object') {
+    return Object.values(schemaContent.nodesById).filter(Boolean)
   }
-  const result = [];
+  const result = []
   const visit = (node) => {
-    if (!node || typeof node !== "object") return;
-    result.push(node);
-    asArray(node.children).forEach(visit);
-  };
-  asArray(schemaContent.components || schemaContent.componentTree).forEach(visit);
-  return result;
-};
+    if (!node || typeof node !== 'object') return
+    result.push(node)
+    asArray(node.children).forEach(visit)
+  }
+  asArray(schemaContent.components || schemaContent.componentTree).forEach(visit)
+  return result
+}
 
 const resolveSchemaPage = (pageRecord) => {
-  const schemaContent = pageRecord?.schemaContent || {};
-  if (schemaContent.page && typeof schemaContent.page === "object") {
-    return schemaContent.page;
+  const schemaContent = pageRecord?.schemaContent || {}
+  if (schemaContent.page && typeof schemaContent.page === 'object') {
+    return schemaContent.page
   }
-  const pagesById = schemaContent.pagesById;
-  if (pagesById && typeof pagesById === "object") {
-    return pagesById[pageRecord.id] || Object.values(pagesById)[0] || {};
+  const pagesById = schemaContent.pagesById
+  if (pagesById && typeof pagesById === 'object') {
+    return pagesById[pageRecord.id] || Object.values(pagesById)[0] || {}
   }
-  return {};
-};
+  return {}
+}
 
 const normalizeRoleRefsForIndex = (roleRefs, roleById, errors, context) => {
-  const roleIds = [];
-  const roleCodes = [];
+  const roleIds = []
+  const roleCodes = []
   for (const ref of asArray(roleRefs)) {
-    const roleId = normalizeId(ref?.roleId || ref?.id);
-    if (!roleId) continue;
-    const role = roleById.get(roleId);
+    const roleId = normalizeId(ref?.roleId || ref?.id)
+    if (!roleId) continue
+    const role = roleById.get(roleId)
     if (!role) {
-      errors.push(`${context} 引用了不存在的运行态角色 ${roleId}`);
-      continue;
+      errors.push(`${context} 引用了不存在的运行态角色 ${roleId}`)
+      continue
     }
-    roleIds.push(roleId);
-    roleCodes.push(role.code);
+    roleIds.push(roleId)
+    roleCodes.push(role.code)
   }
   return {
     roleIds: [...new Set(roleIds)],
     roleCodes: [...new Set(roleCodes.filter(Boolean))],
-  };
-};
+  }
+}
 
 const buildRuntimePermissionsIndex = (pages, runtimeSecuritySnapshot) => {
-  const roles = asArray(runtimeSecuritySnapshot?.roles);
-  const roleById = new Map(roles.map((role) => [role.id, role]));
-  const errors = [];
-  const pageEntries = {};
+  const roles = asArray(runtimeSecuritySnapshot?.roles)
+  const roleById = new Map(roles.map((role) => [role.id, role]))
+  const errors = []
+  const pageEntries = {}
 
   asArray(pages)
-    .filter((page) => page?.type !== "folder")
+    .filter((page) => page?.type !== 'folder')
     .forEach((pageRecord) => {
-      const schemaPage = resolveSchemaPage(pageRecord);
-      const pageConfig = schemaPage?.config || pageRecord.pageConfig || {};
-      const access = pageConfig.runtimeAccess || {};
-      const schemes = {};
-      const schemeIds = new Set();
+      const schemaPage = resolveSchemaPage(pageRecord)
+      const pageConfig = schemaPage?.config || pageRecord.pageConfig || {}
+      const access = pageConfig.runtimeAccess || {}
+      const schemes = {}
+      const schemeIds = new Set()
 
       asArray(access.schemes).forEach((scheme) => {
-        const schemeId = normalizeId(scheme?.id);
-        if (!schemeId) return;
-        schemeIds.add(schemeId);
+        const schemeId = normalizeId(scheme?.id)
+        if (!schemeId) return
+        schemeIds.add(schemeId)
         schemes[schemeId] = {
           name: normalizeId(scheme?.name),
           ...normalizeRoleRefsForIndex(
@@ -228,25 +232,27 @@ const buildRuntimePermissionsIndex = (pages, runtimeSecuritySnapshot) => {
             errors,
             `页面 ${pageRecord.id} 的权限方案 ${schemeId}`,
           ),
-        };
-      });
+        }
+      })
 
-      const components = {};
+      const components = {}
       collectSchemaNodes(pageRecord.schemaContent).forEach((node) => {
-        const runtimeAccess = node?.permissions?.runtimeAccess;
-        if (!runtimeAccess || typeof runtimeAccess !== "object") return;
-        const visibleSchemeId = normalizeId(runtimeAccess.visibleSchemeId);
-        const operableSchemeId = normalizeId(runtimeAccess.operableSchemeId);
-        [visibleSchemeId, operableSchemeId].filter(Boolean).forEach((schemeId) => {
+        const runtimeAccess = node?.permissions?.runtimeAccess
+        if (!runtimeAccess || typeof runtimeAccess !== 'object') return
+        const visibleSchemeId = normalizeId(runtimeAccess.visibleSchemeId)
+        const operableSchemeId = normalizeId(runtimeAccess.operableSchemeId)
+        ;[visibleSchemeId, operableSchemeId].filter(Boolean).forEach((schemeId) => {
           if (!schemeIds.has(schemeId)) {
-            errors.push(`页面 ${pageRecord.id} 的组件 ${node.id} 引用了不存在的权限方案 ${schemeId}`);
+            errors.push(
+              `页面 ${pageRecord.id} 的组件 ${node.id} 引用了不存在的权限方案 ${schemeId}`,
+            )
           }
-        });
+        })
         components[node.id] = {
           ...(visibleSchemeId ? { visibleSchemeId } : {}),
           ...(operableSchemeId ? { operableSchemeId } : {}),
-        };
-      });
+        }
+      })
 
       pageEntries[pageRecord.id] = {
         enabled: Boolean(access.enabled),
@@ -258,31 +264,31 @@ const buildRuntimePermissionsIndex = (pages, runtimeSecuritySnapshot) => {
         ),
         schemes,
         components,
-      };
-    });
+      }
+    })
 
   if (errors.length > 0) {
     throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
-      message: `运行态权限配置校验失败: ${errors.join("; ")}`,
+      message: `运行态权限配置校验失败: ${errors.join('; ')}`,
       errors,
-    });
+    })
   }
 
   return {
-    version: "1.0",
+    version: '1.0',
     generatedAt: new Date().toISOString(),
     pages: pageEntries,
-  };
-};
+  }
+}
 
 /**
  * 发布服务类
  */
 class PublishService {
   constructor(options = {}) {
-    this.dataDomainClient = options.dataDomainClient || dataDomainClient;
+    this.dataDomainClient = options.dataDomainClient || dataDomainClient
     // 确保制品目录存在
-    fs.ensureDirSync(ARTIFACTS_DIR);
+    fs.ensureDirSync(ARTIFACTS_DIR)
   }
 
   /**
@@ -297,49 +303,42 @@ class PublishService {
    * @returns {Promise<Object>} 发布结果
    */
   async publish(projectId, options) {
-    const {
-      version,
-      name,
-      description,
-      type = "development",
-      deployedBy,
-      authorization,
-    } = options;
+    const { version, name, description, type = 'development', deployedBy, authorization } = options
 
     // 获取工程信息
-    const project = await Project.findByPk(projectId);
+    const project = await Project.findByPk(projectId)
     if (!project) {
       throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, {
         message: `工程 ${projectId} 不存在`,
-      });
+      })
     }
 
     // 检查版本号是否已存在（包含软删除记录，避免唯一索引冲突）。
     const existingVersion = await Deployment.findOne({
       where: { projectId, version },
       paranoid: false,
-    });
+    })
     if (existingVersion) {
       if (existingVersion.deletedAt) {
         // 软删除记录在唯一索引中仍占位。若无部署引用则物理删除以释放版本号。
         const referencedCount = await NodeDeployment.count({
           where: { deploymentId: existingVersion.id },
-        });
+        })
         if (referencedCount > 0) {
           throw new AppError(ErrorCodes.RESOURCE_ALREADY_EXISTS, 409, {
             message: `版本 ${version} 已存在且被部署引用，无法复用`,
-          });
+          })
         }
-        await existingVersion.destroy({ force: true });
+        await existingVersion.destroy({ force: true })
       } else {
         throw new AppError(ErrorCodes.RESOURCE_ALREADY_EXISTS, 409, {
           message: `版本 ${version} 已存在`,
-        });
+        })
       }
     }
 
     // 创建发布记录
-    const deploymentId = crypto.randomUUID();
+    const deploymentId = crypto.randomUUID()
     const deployment = await Deployment.create({
       id: deploymentId,
       projectId,
@@ -348,50 +347,50 @@ class PublishService {
       name: name || `v${version}`,
       description,
       type,
-      status: "building",
+      status: 'building',
       deployedBy,
       startedAt: new Date(),
-      buildLog: [{ time: new Date().toISOString(), message: "开始构建..." }],
-    });
+      buildLog: [{ time: new Date().toISOString(), message: '开始构建...' }],
+    })
 
     try {
       // 1. 验证工程
-      await this.addBuildLog(deploymentId, "验证工程配置...");
-      const validation = await this.validateProject(projectId);
+      await this.addBuildLog(deploymentId, '验证工程配置...')
+      const validation = await this.validateProject(projectId)
       if (!validation.valid) {
         throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
-          message: `工程验证失败: ${validation.errors.join(", ")}`,
-        });
+          message: `工程验证失败: ${validation.errors.join(', ')}`,
+        })
       }
 
       // 2. 收集工程数据
-      await this.addBuildLog(deploymentId, "收集工程数据...");
-      const projectData = await this.collectProjectData(projectId, authorization);
+      await this.addBuildLog(deploymentId, '收集工程数据...')
+      const projectData = await this.collectProjectData(projectId, authorization)
 
       // 3. 编译清单
-      await this.addBuildLog(deploymentId, "生成清单文件...");
-      const manifest = await this.compileManifest(project, projectData, version);
+      await this.addBuildLog(deploymentId, '生成清单文件...')
+      const manifest = await this.compileManifest(project, projectData, version)
       const manifestWithRuntimeSecurity = buildManifestWithRuntimeSecurity(
         manifest,
         projectData.runtimeSecuritySnapshot,
         projectData.runtimePermissionsIndex,
-      );
+      )
 
       // 4. 打包 IFP
-      await this.addBuildLog(deploymentId, "打包 IFP 文件...");
+      await this.addBuildLog(deploymentId, '打包 IFP 文件...')
       const { ifpPath, hash, size } = await this.bundleIFP(
         deploymentId,
         projectId,
         manifestWithRuntimeSecurity,
-        projectData
-      );
+        projectData,
+      )
 
       // 5. 生成受控下载 URL（统一通过发布下载接口）。
-      const artifactUrl = `/api/v1/publish/deployment/${deploymentId}/download`;
+      const artifactUrl = `/api/v1/publish/deployment/${deploymentId}/download`
 
       // 6. 更新发布记录
       await deployment.update({
-        status: "success",
+        status: 'success',
         artifactUrl,
         artifactHash: hash,
         artifactSize: size,
@@ -404,9 +403,9 @@ class PublishService {
         componentCount: this.countComponents(projectData.pages),
         datapointCount: projectData.dataPoints.length,
         completedAt: new Date(),
-      });
+      })
 
-      await this.addBuildLog(deploymentId, "发布成功！");
+      await this.addBuildLog(deploymentId, '发布成功！')
 
       return {
         id: deploymentId,
@@ -416,16 +415,16 @@ class PublishService {
         artifactSize: size,
         pageCount: projectData.pages.length,
         componentCount: this.countComponents(projectData.pages),
-      };
+      }
     } catch (error) {
       // 记录错误
       await deployment.update({
-        status: "failed",
+        status: 'failed',
         errorMessage: error.message,
         completedAt: new Date(),
-      });
-      await this.addBuildLog(deploymentId, `发布失败: ${error.message}`);
-      throw error;
+      })
+      await this.addBuildLog(deploymentId, `发布失败: ${error.message}`)
+      throw error
     }
   }
 
@@ -433,11 +432,11 @@ class PublishService {
    * 添加构建日志
    */
   async addBuildLog(deploymentId, message) {
-    const deployment = await Deployment.findByPk(deploymentId);
+    const deployment = await Deployment.findByPk(deploymentId)
     if (deployment) {
-      const logs = deployment.buildLog || [];
-      logs.push({ time: new Date().toISOString(), message });
-      await deployment.update({ buildLog: logs });
+      const logs = deployment.buildLog || []
+      logs.push({ time: new Date().toISOString(), message })
+      await deployment.update({ buildLog: logs })
     }
   }
 
@@ -445,21 +444,21 @@ class PublishService {
    * 验证工程
    */
   async validateProject(projectId) {
-    const errors = [];
+    const errors = []
 
     // 检查页面
     const pages = await DesignPage.findAll({
-      where: { projectId, type: "page" },
-    });
+      where: { projectId, type: 'page' },
+    })
     if (pages.length === 0) {
-      errors.push("工程没有任何页面");
+      errors.push('工程没有任何页面')
     }
 
     // 检查是否有首页
-    const homePage = pages.find((p) => p.isHome);
+    const homePage = pages.find((p) => p.isHome)
     if (!homePage && pages.length > 0) {
       // 警告但不阻止发布
-      console.warn("工程没有设置首页，将使用第一个页面作为首页");
+      console.warn('工程没有设置首页，将使用第一个页面作为首页')
     }
 
     // 检查数据绑定（可选，仅警告）
@@ -469,7 +468,7 @@ class PublishService {
       valid: errors.length === 0,
       errors,
       warnings: [],
-    };
+    }
   }
 
   /**
@@ -480,21 +479,21 @@ class PublishService {
     const pages = await DesignPage.findAll({
       where: { projectId },
       order: [
-        ["type", "ASC"],
-        ["sortOrder", "ASC"],
+        ['type', 'ASC'],
+        ['sortOrder', 'ASC'],
       ],
-    });
+    })
     // 发布包需要同时携带数据域制品与运行态安全快照，节点侧才能完成离线认证与鉴权。
     const [artifact, runtimeSecuritySnapshot] = await Promise.all([
       this.dataDomainClient.getProjectArtifact(projectId, authorization),
       this.collectRuntimeSecuritySnapshot(projectId),
-    ]);
-    const protocols = normalizeArtifactProtocols(artifact?.protocols);
-    const runtimePermissionsIndex = buildRuntimePermissionsIndex(pages, runtimeSecuritySnapshot);
+    ])
+    const protocols = normalizeArtifactProtocols(artifact?.protocols)
+    const runtimePermissionsIndex = buildRuntimePermissionsIndex(pages, runtimeSecuritySnapshot)
 
     return {
       pages,
-      artifactVersion: artifact?.version || "1.0",
+      artifactVersion: artifact?.version || '1.0',
       artifactGeneratedAt: artifact?.generatedAt || new Date().toISOString(),
       connections: asArray(artifact?.connections),
       relationalConfigs: buildRelationalConfigsFromConnections(artifact?.connections),
@@ -507,7 +506,7 @@ class PublishService {
       protocols,
       runtimeSecuritySnapshot,
       runtimePermissionsIndex,
-    };
+    }
   }
 
   /**
@@ -520,7 +519,7 @@ class PublishService {
       collectPlainRows(ProjectRole, { projectId }),
       collectPlainRows(ProjectUserRoleBinding, { projectId }),
       collectPlainRows(ProjectRoleGrant, { projectId }),
-    ]);
+    ])
 
     return {
       version: new Date().toISOString(),
@@ -528,7 +527,7 @@ class PublishService {
       roles,
       bindings,
       grants,
-    };
+    }
   }
 
   /**
@@ -547,18 +546,18 @@ class PublishService {
         sourceType: dp.sourceType,
         dataType: dp.dataType,
       })),
-    };
+    }
 
     // 分析能力需求
-    const capabilities = [];
-    if (projectData.connections.some((c) => c.type === "mqtt")) {
-      capabilities.push("mqtt");
+    const capabilities = []
+    if (projectData.connections.some((c) => c.type === 'mqtt')) {
+      capabilities.push('mqtt')
     }
-    if (projectData.connections.some((c) => c.type === "relational")) {
-      capabilities.push("database");
+    if (projectData.connections.some((c) => c.type === 'relational')) {
+      capabilities.push('database')
     }
     if (projectData.queries.length > 0) {
-      capabilities.push("query");
+      capabilities.push('query')
     }
 
     return {
@@ -568,62 +567,62 @@ class PublishService {
       projectId: project.id,
       tenantId: project.tenantId,
       buildTime: new Date().toISOString(),
-      schemaVersion: "1.0.0",
+      schemaVersion: '1.0.0',
       entryConfig: project.entryConfig || {},
       dataRequirements,
       capabilities,
       security: {
         requireAuth: false, // 可配置
       },
-    };
+    }
   }
 
   /**
    * 打包 IFP
    */
   async bundleIFP(deploymentId, projectId, manifest, projectData) {
-    const fileName = `${projectId}_v${manifest.version}_${Date.now()}.ifp`;
-    const ifpPath = path.join(ARTIFACTS_DIR, fileName);
+    const fileName = `${projectId}_v${manifest.version}_${Date.now()}.ifp`
+    const ifpPath = path.join(ARTIFACTS_DIR, fileName)
     const runtimeSecuritySnapshot = projectData.runtimeSecuritySnapshot || {
       version: new Date().toISOString(),
       users: [],
       roles: [],
       bindings: [],
       grants: [],
-    };
+    }
     const manifestWithSecurity = buildManifestWithRuntimeSecurity(
       manifest,
       runtimeSecuritySnapshot,
       projectData.runtimePermissionsIndex,
-    );
+    )
 
     return new Promise((resolve, reject) => {
-      const output = fs.createWriteStream(ifpPath);
-      const archive = archiver("zip", { zlib: { level: 9 } });
+      const output = fs.createWriteStream(ifpPath)
+      const archive = archiver('zip', { zlib: { level: 9 } })
 
-      output.on("close", async () => {
+      output.on('close', async () => {
         // 计算哈希
-        const hash = await this.calculateFileHash(ifpPath);
-        const stats = await fs.stat(ifpPath);
+        const hash = await this.calculateFileHash(ifpPath)
+        const stats = await fs.stat(ifpPath)
 
         resolve({
           ifpPath,
           hash,
           size: stats.size,
-        });
-      });
-      output.on("error", (err) => {
-        reject(err);
-      });
+        })
+      })
+      output.on('error', (err) => {
+        reject(err)
+      })
 
-      archive.on("error", (err) => {
-        reject(err);
-      });
+      archive.on('error', (err) => {
+        reject(err)
+      })
 
-      archive.pipe(output);
+      archive.pipe(output)
 
       // 添加 manifest.json
-      archive.append(JSON.stringify(manifestWithSecurity, null, 2), { name: "manifest.json" });
+      archive.append(JSON.stringify(manifestWithSecurity, null, 2), { name: 'manifest.json' })
 
       // 添加 project.json（页面和组件 Schema）
       const projectJson = {
@@ -642,12 +641,12 @@ class PublishService {
           lifecycle: p.lifecycle,
           sortOrder: p.sortOrder,
         })),
-      };
-      archive.append(JSON.stringify(projectJson, null, 2), { name: "project.json" });
+      }
+      archive.append(JSON.stringify(projectJson, null, 2), { name: 'project.json' })
 
       // 添加 datacenter.json（数据配置）
       const datacenterJson = {
-        version: projectData.artifactVersion || "1.0",
+        version: projectData.artifactVersion || '1.0',
         projectId,
         generatedAt: projectData.artifactGeneratedAt || new Date().toISOString(),
         connections: projectData.connections.map((c) => ({
@@ -659,7 +658,9 @@ class PublishService {
         })),
         relationalConfigs: projectData.relationalConfigs.map((config) => ({ ...config })),
         mqttConfigs: projectData.mqttConfigs.map((config) => ({ ...config })),
-        mqttSubscriptions: projectData.mqttSubscriptions.map((subscription) => ({ ...subscription })),
+        mqttSubscriptions: projectData.mqttSubscriptions.map((subscription) => ({
+          ...subscription,
+        })),
         mqttTagGroups: projectData.mqttTagGroups.map((group) => ({ ...group })),
         mqttTags: projectData.mqttTags.map((tag) => ({ ...tag })),
         dataPoints: projectData.dataPoints.map((dp) => ({
@@ -685,17 +686,17 @@ class PublishService {
           cacheTtlSeconds: q.cacheTtlSeconds,
         })),
         protocols: normalizeArtifactProtocols(projectData.protocols),
-      };
-      archive.append(JSON.stringify(datacenterJson, null, 2), { name: "datacenter.json" });
+      }
+      archive.append(JSON.stringify(datacenterJson, null, 2), { name: 'datacenter.json' })
 
       // 添加运行态安全快照，供节点侧离线认证和鉴权直接读取。
       archive.append(JSON.stringify(runtimeSecuritySnapshot, null, 2), {
         name: RUNTIME_SECURITY_FILE_NAME,
-      });
+      })
       archive.append(
         JSON.stringify(
           projectData.runtimePermissionsIndex || {
-            version: "1.0",
+            version: '1.0',
             generatedAt: new Date().toISOString(),
             pages: {},
           },
@@ -703,12 +704,12 @@ class PublishService {
           2,
         ),
         { name: RUNTIME_PERMISSIONS_FILE_NAME },
-      );
+      )
 
       // TODO: 添加 assets 目录（如果有资源文件）
 
-      archive.finalize();
-    });
+      archive.finalize()
+    })
   }
 
   /**
@@ -716,36 +717,36 @@ class PublishService {
    */
   async calculateFileHash(filePath) {
     return new Promise((resolve, reject) => {
-      const hash = crypto.createHash("sha256");
-      const stream = fs.createReadStream(filePath);
-      stream.on("data", (data) => hash.update(data));
-      stream.on("end", () => resolve(hash.digest("hex")));
-      stream.on("error", reject);
-    });
+      const hash = crypto.createHash('sha256')
+      const stream = fs.createReadStream(filePath)
+      stream.on('data', (data) => hash.update(data))
+      stream.on('end', () => resolve(hash.digest('hex')))
+      stream.on('error', reject)
+    })
   }
 
   /**
    * 统计组件数量
    */
   countComponents(pages) {
-    let count = 0;
+    let count = 0
     for (const page of pages) {
       if (page.schemaContent?.components) {
-        count += this.countNestedComponents(page.schemaContent.components);
+        count += this.countNestedComponents(page.schemaContent.components)
       }
     }
-    return count;
+    return count
   }
 
   countNestedComponents(components) {
-    if (!Array.isArray(components)) return 0;
-    let count = components.length;
+    if (!Array.isArray(components)) return 0
+    let count = components.length
     for (const comp of components) {
       if (comp.children) {
-        count += this.countNestedComponents(comp.children);
+        count += this.countNestedComponents(comp.children)
       }
     }
-    return count;
+    return count
   }
 
   /**
@@ -754,67 +755,67 @@ class PublishService {
   async getDeployment(deploymentId) {
     return Deployment.findByPk(deploymentId, {
       include: [
-        { model: Project, as: "project", attributes: ["id", "name", "code"] },
-        { model: User, as: "deployer", attributes: ["id", "username"] },
+        { model: Project, as: 'project', attributes: ['id', 'name', 'code'] },
+        { model: User, as: 'deployer', attributes: ['id', 'username'] },
       ],
-    });
+    })
   }
 
   /**
    * 获取工程的发布历史
    */
   async getDeploymentsByProject(projectId, options = {}) {
-    const { page = 1, pageSize = 20 } = options;
-    const offset = (page - 1) * pageSize;
+    const { page = 1, pageSize = 20 } = options
+    const offset = (page - 1) * pageSize
 
     const { rows, count } = await Deployment.findAndCountAll({
       where: { projectId },
       include: [
-        { model: User, as: "deployer", attributes: ["id", "username"] },
-        { model: NodeDeployment, as: "nodeDeployments", attributes: ["id"] },
+        { model: User, as: 'deployer', attributes: ['id', 'username'] },
+        { model: NodeDeployment, as: 'nodeDeployments', attributes: ['id'] },
       ],
-      order: [["createdAt", "DESC"]],
+      order: [['createdAt', 'DESC']],
       limit: pageSize,
       offset,
-    });
+    })
 
     const items = rows.map((item) => {
-      const json = item.toJSON();
-      const refs = Array.isArray(json.nodeDeployments) ? json.nodeDeployments.length : 0;
+      const json = item.toJSON()
+      const refs = Array.isArray(json.nodeDeployments) ? json.nodeDeployments.length : 0
       return {
         ...json,
         nodeDeploymentRefCount: refs,
         canDelete: refs === 0,
-      };
-    });
+      }
+    })
 
     return {
       items,
       total: count,
       page,
       pageSize,
-    };
+    }
   }
 
   /**
    * 下载制品
    */
   async getArtifactPath(deploymentId) {
-    const deployment = await Deployment.findByPk(deploymentId);
+    const deployment = await Deployment.findByPk(deploymentId)
     if (!deployment || !deployment.artifactUrl) {
-      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "制品不存在" });
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: '制品不存在' })
     }
 
     // 新记录优先使用 buildConfig 中固化的 artifactFileName；
     // 旧记录则按 `projectId + version + 时间戳` 的既有命名规则回溯，避免受受控下载 URL 影响。
-    const candidates = await resolveArtifactFileCandidates(deployment);
+    const candidates = await resolveArtifactFileCandidates(deployment)
     for (const filePath of candidates) {
       if (await fs.pathExists(filePath)) {
-        return filePath;
+        return filePath
       }
     }
 
-    throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "制品文件不存在" });
+    throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: '制品文件不存在' })
   }
 
   /**
@@ -824,24 +825,24 @@ class PublishService {
    * @returns {Promise<{deleted:boolean,id:string}>}
    */
   async deleteDeployment(deploymentId) {
-    const deployment = await Deployment.findByPk(deploymentId);
+    const deployment = await Deployment.findByPk(deploymentId)
     if (!deployment) {
-      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: "发布记录不存在" });
+      throw new AppError(ErrorCodes.RESOURCE_NOT_FOUND, 404, { message: '发布记录不存在' })
     }
 
     const referencedCount = await NodeDeployment.count({
       where: { deploymentId },
-    });
+    })
     if (referencedCount > 0) {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
-        message: "发布版本已被部署引用，无法删除",
-      });
+        message: '发布版本已被部署引用，无法删除',
+      })
     }
 
     // 发布版本号受唯一索引约束，删除时必须物理删除以释放版本号。
-    await deployment.destroy({ force: true });
-    return { deleted: true, id: deploymentId };
+    await deployment.destroy({ force: true })
+    return { deleted: true, id: deploymentId }
   }
 }
 
-module.exports = new PublishService();
+module.exports = new PublishService()

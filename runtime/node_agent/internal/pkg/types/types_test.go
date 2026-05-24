@@ -44,14 +44,14 @@ func TestNodeInfoJSON(t *testing.T) {
 func TestRuntimeStatusJSON(t *testing.T) {
 	now := time.Now()
 	status := RuntimeStatus{
-		ProjectID:   "project-001",
-		Version:     "1.0.0",
-		State:       "running",
-		PID:         12345,
-		StartedAt:   &now,
-		Health:      "healthy",
-		Metrics:     map[string]interface{}{"cpu": 0.5, "memory": 1024},
-		LastCheck:   now,
+		ProjectID: "project-001",
+		Version:   "1.0.0",
+		State:     "running",
+		PID:       12345,
+		StartedAt: &now,
+		Health:    "healthy",
+		Metrics:   map[string]interface{}{"cpu": 0.5, "memory": 1024},
+		LastCheck: now,
 	}
 
 	data, err := json.Marshal(status)
@@ -83,11 +83,11 @@ func TestDeployRequestJSON(t *testing.T) {
 		IFPPackage:   "/path/to/package.ifp",
 		ExecutorType: "process",
 		ConnectionProfile: ConnectionProfile{
-			Name:      "test-profile",
-			Endpoint:  "http://localhost:8080",
-			AuthType:  "token",
-			AuthData:  map[string]string{"token": "secret"},
-			Metadata:  map[string]string{"env": "test"},
+			Name:     "test-profile",
+			Endpoint: "http://localhost:8080",
+			AuthType: "token",
+			AuthData: map[string]string{"token": "secret"},
+			Metadata: map[string]string{"env": "test"},
 		},
 		EnvVars:   map[string]string{"KEY": "value"},
 		AutoStart: true,
@@ -118,12 +118,12 @@ func TestDeployRequestJSON(t *testing.T) {
 // TestConnectionProfileSecrets 测试连接配置敏感信息处理
 func TestConnectionProfileSecrets(t *testing.T) {
 	profile := ConnectionProfile{
-		Name:      "test-profile",
-		Endpoint:  "http://localhost:8080",
-		AuthType:  "token",
-		AuthData:  map[string]string{"token": "secret"},
-		Secrets:   map[string]string{"password": "secret"},
-		Metadata:  map[string]string{"env": "test"},
+		Name:     "test-profile",
+		Endpoint: "http://localhost:8080",
+		AuthType: "token",
+		AuthData: map[string]string{"token": "secret"},
+		Secrets:  map[string]string{"password": "secret"},
+		Metadata: map[string]string{"env": "test"},
 	}
 
 	// 序列化后 Secrets 应该被过滤
@@ -147,8 +147,8 @@ func TestConnectionProfileSecrets(t *testing.T) {
 func TestProjectInfoJSON(t *testing.T) {
 	now := time.Now()
 	info := ProjectInfo{
-		ID:     "project-001",
-		Name:   "Test Project",
+		ID:             "project-001",
+		Name:           "Test Project",
 		CurrentVersion: "1.0.0",
 		Status:         "running",
 		ConnectionProfile: ConnectionProfile{

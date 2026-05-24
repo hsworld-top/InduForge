@@ -38,4 +38,3 @@ export const usePreferencesStore = defineStore('preferences', () => {
     setLocale,
   }
 })
-

@@ -1,8 +1,8 @@
-const { DataTypes } = require("sequelize");
-const { sequelize } = require("../config/database");
+const { DataTypes } = require('sequelize')
+const { sequelize } = require('../config/database')
 
 const Project = sequelize.define(
-  "Project",
+  'Project',
   {
     id: {
       type: DataTypes.UUID,
@@ -12,77 +12,77 @@ const Project = sequelize.define(
     name: {
       type: DataTypes.STRING(200),
       allowNull: false,
-      comment: "工程名称",
+      comment: '工程名称',
     },
     code: {
       type: DataTypes.STRING(50),
       allowNull: true,
-      comment: "工程代码",
+      comment: '工程代码',
     },
     description: {
       type: DataTypes.TEXT,
       allowNull: true,
-      comment: "工程描述",
+      comment: '工程描述',
     },
     projectVariables: {
       type: DataTypes.JSON,
       allowNull: true,
-      comment: "工程级别全局变量",
+      comment: '工程级别全局变量',
     },
     entryConfig: {
       type: DataTypes.JSON,
       allowNull: true,
       defaultValue: {},
-      comment: "入口配置：homePageId, loginPageId, logoutPageId 等",
+      comment: '入口配置：homePageId, loginPageId, logoutPageId 等',
     },
     icon: {
       type: DataTypes.STRING(100),
       allowNull: true,
-      comment: "工程图标",
+      comment: '工程图标',
     },
     status: {
-      type: DataTypes.ENUM("active", "archived", "deleted"),
+      type: DataTypes.ENUM('active', 'archived', 'deleted'),
       allowNull: false,
-      defaultValue: "active",
-      comment: "工程状态",
+      defaultValue: 'active',
+      comment: '工程状态',
     },
     visibility: {
-      type: DataTypes.ENUM("private", "internal", "public"),
+      type: DataTypes.ENUM('private', 'internal', 'public'),
       allowNull: false,
-      defaultValue: "private",
-      comment: "可见性",
+      defaultValue: 'private',
+      comment: '可见性',
     },
     tenantId: {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
-        model: "tenants",
-        key: "id",
+        model: 'tenants',
+        key: 'id',
       },
-      comment: "所属租户ID",
+      comment: '所属租户ID',
     },
     createdBy: {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
-        model: "users",
-        key: "id",
+        model: 'users',
+        key: 'id',
       },
-      comment: "创建者ID",
+      comment: '创建者ID',
     },
     updatedBy: {
       type: DataTypes.UUID,
       allowNull: true,
       references: {
-        model: "users",
-        key: "id",
+        model: 'users',
+        key: 'id',
       },
-      comment: "更新者ID",
+      comment: '更新者ID',
     },
     archivedAt: {
       type: DataTypes.DATE,
       allowNull: true,
-      comment: "归档时间",
+      comment: '归档时间',
     },
     createdAt: {
       type: DataTypes.DATE,
@@ -94,25 +94,25 @@ const Project = sequelize.define(
     },
   },
   {
-    tableName: "projects",
-    comment: "工程表",
+    tableName: 'projects',
+    comment: '工程表',
     indexes: [
       {
-        fields: ["tenantId"],
+        fields: ['tenantId'],
       },
       {
-        fields: ["createdBy"],
+        fields: ['createdBy'],
       },
       {
-        fields: ["status"],
+        fields: ['status'],
       },
       {
         unique: true,
-        fields: ["tenantId", "code"],
+        fields: ['tenantId', 'code'],
       },
     ],
-  }
-);
+  },
+)
 
 /**
  * 仅用于工程总览/列表场景的局部序列化。
@@ -122,34 +122,32 @@ const Project = sequelize.define(
  * 3. 对外始终输出稳定的 tags/group 字段。
  */
 Project.prototype.toOverviewPayload = function toOverviewPayload() {
-  const values = { ...this.get({ plain: true }) };
-  const tagBindings = Array.isArray(values.tagBindings) ? values.tagBindings : [];
+  const values = { ...this.get({ plain: true }) }
+  const tagBindings = Array.isArray(values.tagBindings) ? values.tagBindings : []
 
-  let tags = [];
+  let tags = []
   if (Array.isArray(values.tags)) {
-    tags = values.tags;
+    tags = values.tags
   } else if (tagBindings.length > 0) {
-    tags = tagBindings
-      .map((binding) => binding?.tag)
-      .filter(Boolean);
+    tags = tagBindings.map((binding) => binding?.tag).filter(Boolean)
   }
 
-  let group = null;
-  if (typeof values.group !== "undefined") {
-    group = values.group;
+  let group = null
+  if (typeof values.group !== 'undefined') {
+    group = values.group
   } else if (values.groupMember?.group) {
-    group = values.groupMember.group;
+    group = values.groupMember.group
   } else if (values.groupMember) {
-    group = values.groupMember;
+    group = values.groupMember
   }
 
-  const { tagBindings: _ignoredTagBindings, groupMember: _ignoredGroupMember, ...rest } = values;
+  const { tagBindings: _ignoredTagBindings, groupMember: _ignoredGroupMember, ...rest } = values
 
   return {
     ...rest,
     tags,
     group: group ?? null,
-  };
-};
+  }
+}
 
-module.exports = Project;
+module.exports = Project

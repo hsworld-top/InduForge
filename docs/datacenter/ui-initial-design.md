@@ -93,16 +93,16 @@
 
 数据点列表建议展示：
 
-| 字段 | 说明 |
-| --- | --- |
-| Path | 数据点唯一路径 |
-| 名称 | 用户可读名称 |
-| 来源 | `db.query`、`mqtt.tag`、`calc.output`、`alarm.state` 等 |
-| 消费方式 | 运行态查询、运行态订阅、仅开发态预览 |
-| 当前值 | 最近预览值或运行态同步值 |
-| 质量 | `good`、`bad`、`unknown` 等 |
-| 状态 | `active`、`invalid`、`error` |
-| 引用 | 设计中心页面、计算单元、报警规则引用情况 |
+| 字段     | 说明                                                    |
+| -------- | ------------------------------------------------------- |
+| Path     | 数据点唯一路径                                          |
+| 名称     | 用户可读名称                                            |
+| 来源     | `db.query`、`mqtt.tag`、`calc.output`、`alarm.state` 等 |
+| 消费方式 | 运行态查询、运行态订阅、仅开发态预览                    |
+| 当前值   | 最近预览值或运行态同步值                                |
+| 质量     | `good`、`bad`、`unknown` 等                             |
+| 状态     | `active`、`invalid`、`error`                            |
+| 引用     | 设计中心页面、计算单元、报警规则引用情况                |
 
 ### 5.4 详情区能力
 
@@ -130,12 +130,12 @@
 
 ### 6.2 接入源分类
 
-| 分类 | 示例 |
-| --- | --- |
+| 分类            | 示例                                    |
+| --------------- | --------------------------------------- |
 | 数据库 / 时序库 | MySQL、PostgreSQL、SQL Server、TDengine |
-| 消息 / 流 | MQTT、Kafka、WebSocket、HTTP、Redis |
-| 工业协议 | OPC UA、Modbus、OPC DA |
-| 设备 / 厂商模板 | 西门子 PLC、三星设备等 |
+| 消息 / 流       | MQTT、Kafka、WebSocket、HTTP、Redis     |
+| 工业协议        | OPC UA、Modbus、OPC DA                  |
+| 设备 / 厂商模板 | 西门子 PLC、三星设备等                  |
 
 ### 6.3 新增接入入口
 
@@ -175,11 +175,11 @@
 
 它支持三种模式：
 
-| 模式 | 说明 |
-| --- | --- |
-| 输出数据点模式 | 脚本结果生成或更新 `calc.*` 数据点 |
-| 执行任务模式 | 不输出数据点，直接写库、发布消息或调用外部请求 |
-| 混合模式 | 同时输出 `calc.*` 数据点并执行外部动作 |
+| 模式           | 说明                                           |
+| -------------- | ---------------------------------------------- |
+| 输出数据点模式 | 脚本结果生成或更新 `calc.*` 数据点             |
+| 执行任务模式   | 不输出数据点，直接写库、发布消息或调用外部请求 |
+| 混合模式       | 同时输出 `calc.*` 数据点并执行外部动作         |
 
 ### 7.2 页面结构
 
@@ -196,52 +196,47 @@
 
 基础能力：
 
-| 方法 | 说明 |
-| --- | --- |
-| `ctx.datapoint.get(path)` | 获取数据点当前值 |
-| `ctx.sql.query(source, sql, args)` | 对关系库接入源执行只读参数化 SQL |
-| `ctx.sql.execute(source, sql, args)` | 对目标库执行写入 SQL |
-| `ctx.mqtt.publish(source, topic, payload)` | 发布 MQTT 消息 |
-| `ctx.kafka.publish(source, topic, payload)` | 发布 Kafka 消息 |
-| `ctx.http.get(url, options)` | 调用外部 GET 请求 |
-| `ctx.http.post(url, body, options)` | 调用外部 POST 请求 |
-| `ctx.math.*` | 常见数学、统计、取整、限幅方法 |
-| `ctx.text.*` | 字符串格式化、正则、模板方法 |
-| `ctx.json.*` | JSONPath、对象路径读取、转换方法 |
+| 方法                                        | 说明                             |
+| ------------------------------------------- | -------------------------------- |
+| `ctx.datapoint.get(path)`                   | 获取数据点当前值                 |
+| `ctx.sql.query(source, sql, args)`          | 对关系库接入源执行只读参数化 SQL |
+| `ctx.sql.execute(source, sql, args)`        | 对目标库执行写入 SQL             |
+| `ctx.mqtt.publish(source, topic, payload)`  | 发布 MQTT 消息                   |
+| `ctx.kafka.publish(source, topic, payload)` | 发布 Kafka 消息                  |
+| `ctx.http.get(url, options)`                | 调用外部 GET 请求                |
+| `ctx.http.post(url, body, options)`         | 调用外部 POST 请求               |
+| `ctx.math.*`                                | 常见数学、统计、取整、限幅方法   |
+| `ctx.text.*`                                | 字符串格式化、正则、模板方法     |
+| `ctx.json.*`                                | JSONPath、对象路径读取、转换方法 |
 
 示例：
 
 ```javascript
-const point = await ctx.datapoint.get("mqtt.EMQX.LineA.temperature");
+const point = await ctx.datapoint.get('mqtt.EMQX.LineA.temperature')
 
-const rows = await ctx.sql.query(
-  "生产库",
-  "SELECT rated_power FROM device WHERE id = ?",
-  [inputs.deviceId]
-);
+const rows = await ctx.sql.query('生产库', 'SELECT rated_power FROM device WHERE id = ?', [
+  inputs.deviceId,
+])
 
-outputs.power = point.value * rows[0].rated_power;
+outputs.power = point.value * rows[0].rated_power
 ```
 
 执行任务示例：
 
 ```javascript
-const total = await ctx.sql.query(
-  "生产库",
-  "SELECT SUM(power) AS value FROM meter WHERE day = ?",
-  [inputs.day]
-);
+const total = await ctx.sql.query('生产库', 'SELECT SUM(power) AS value FROM meter WHERE day = ?', [
+  inputs.day,
+])
 
-await ctx.sql.execute(
-  "报表库",
-  "INSERT INTO daily_power(day, value) VALUES(?, ?)",
-  [inputs.day, total.rows[0].value]
-);
+await ctx.sql.execute('报表库', 'INSERT INTO daily_power(day, value) VALUES(?, ?)', [
+  inputs.day,
+  total.rows[0].value,
+])
 
-await ctx.mqtt.publish("EMQX", "report/daily_power", {
+await ctx.mqtt.publish('EMQX', 'report/daily_power', {
   day: inputs.day,
-  value: total.rows[0].value
-});
+  value: total.rows[0].value,
+})
 ```
 
 ### 7.4 触发方式
@@ -301,16 +296,16 @@ Bool 数据点触发必须具备防重复能力：
 
 基础字段：
 
-| 字段 | 说明 |
-| --- | --- |
-| 目标数据点 | 规则引用的数据点 path |
-| 数据质量要求 | 如 `quality == good` |
-| 规则类型 | 高高、高、低、低低、偏差、变化率、表达式 |
-| 触发条件 | 阈值、持续时间、触发延时 |
-| 清除条件 | 清除阈值、清除延时、回差 |
-| 严重度 | 提示、低、中、高、紧急 |
-| 抑制策略 | 合并窗口、重复触发策略 |
-| 消息模板 | 运行态报警消息模板 |
+| 字段         | 说明                                     |
+| ------------ | ---------------------------------------- |
+| 目标数据点   | 规则引用的数据点 path                    |
+| 数据质量要求 | 如 `quality == good`                     |
+| 规则类型     | 高高、高、低、低低、偏差、变化率、表达式 |
+| 触发条件     | 阈值、持续时间、触发延时                 |
+| 清除条件     | 清除阈值、清除延时、回差                 |
+| 严重度       | 提示、低、中、高、紧急                   |
+| 抑制策略     | 合并窗口、重复触发策略                   |
+| 消息模板     | 运行态报警消息模板                       |
 
 ### 8.4 样本试算与契约预览
 
@@ -355,14 +350,14 @@ Bool 数据点触发必须具备防重复能力：
 
 记录不做独立日志中心，跟随对象详情展示。
 
-| 对象 | 记录内容 |
-| --- | --- |
-| 接入源 | 连接测试、配置变更、预览失败 |
-| 查询 | 执行记录、保存记录、数据点同步记录 |
-| MQTT/Kafka | 消息样本、解析失败、Tag 发现记录 |
-| 数据点 | 值预览、质量变化、来源失效 |
-| 计算单元 | 调试运行、脚本错误、权限检查、副作用执行结果 |
-| 报警单元 | 规则保存、目标点校验、样本试算、契约生成 |
+| 对象       | 记录内容                                     |
+| ---------- | -------------------------------------------- |
+| 接入源     | 连接测试、配置变更、预览失败                 |
+| 查询       | 执行记录、保存记录、数据点同步记录           |
+| MQTT/Kafka | 消息样本、解析失败、Tag 发现记录             |
+| 数据点     | 值预览、质量变化、来源失效                   |
+| 计算单元   | 调试运行、脚本错误、权限检查、副作用执行结果 |
+| 报警单元   | 规则保存、目标点校验、样本试算、契约生成     |
 
 ## 11. 首期落地建议
 

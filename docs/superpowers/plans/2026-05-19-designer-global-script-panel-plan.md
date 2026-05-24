@@ -69,6 +69,7 @@
 ### 任务 1：新增通用脚本编辑弹窗
 
 **文件：**
+
 - 创建：`designer/src/ui/shared/tool-panels/ScriptEditorDialog.vue`
 - 新增测试：`designer/src/ui/shared/tool-panels/ScriptEditorDialog.test.ts`
 
@@ -77,40 +78,40 @@
 测试内容：
 
 ```ts
-import { mount } from "@vue/test-utils";
-import { describe, expect, it, vi } from "vitest";
-import ScriptEditorDialog from "./ScriptEditorDialog.vue";
+import { mount } from '@vue/test-utils'
+import { describe, expect, it, vi } from 'vitest'
+import ScriptEditorDialog from './ScriptEditorDialog.vue'
 
-vi.mock("@/ui/shared/widgets/base/monaco-editor-async", () => ({
+vi.mock('@/ui/shared/widgets/base/monaco-editor-async', () => ({
   default: {
-    props: ["modelValue"],
-    emits: ["update:modelValue"],
+    props: ['modelValue'],
+    emits: ['update:modelValue'],
     template: `<textarea class="mock-monaco" :value="modelValue" @input="$emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)" />`,
   },
-}));
+}))
 
-describe("ScriptEditorDialog", () => {
-  it("显示工程全局作用域并保存代码", async () => {
+describe('ScriptEditorDialog', () => {
+  it('显示工程全局作用域并保存代码', async () => {
     const wrapper = mount(ScriptEditorDialog, {
       props: {
         modelValue: true,
-        code: "console.log(1)",
-        scope: "global",
-        kind: "custom",
-        title: "formatUser",
+        code: 'console.log(1)',
+        scope: 'global',
+        kind: 'custom',
+        title: 'formatUser',
         completions: [],
       },
       global: {
-        stubs: ["el-dialog", "el-button", "el-tooltip", "el-input", "el-tree", "el-icon"],
+        stubs: ['el-dialog', 'el-button', 'el-tooltip', 'el-input', 'el-tree', 'el-icon'],
       },
-    });
+    })
 
-    expect(wrapper.text()).toContain("工程全局");
-    await wrapper.find(".mock-monaco").setValue("console.log(2)");
-    await wrapper.find('[data-test="script-editor-save"]').trigger("click");
-    expect(wrapper.emitted("save")?.[0]).toEqual(["console.log(2)"]);
-  });
-});
+    expect(wrapper.text()).toContain('工程全局')
+    await wrapper.find('.mock-monaco').setValue('console.log(2)')
+    await wrapper.find('[data-test="script-editor-save"]').trigger('click')
+    expect(wrapper.emitted('save')?.[0]).toEqual(['console.log(2)'])
+  })
+})
 ```
 
 - [ ] **步骤 2：运行测试验证失败**
@@ -154,6 +155,7 @@ pnpm --dir designer exec vitest --run src/ui/shared/tool-panels/ScriptEditorDial
 ### 任务 2：通用弹窗接入系统脚本
 
 **文件：**
+
 - 修改：`designer/src/ui/shared/tool-panels/ScriptVarsPanel.vue`
 - 修改：`designer/src/ui/shared/tool-panels/ScriptVarsSystemScriptDialog.vue`
 - 测试：`designer/src/ui/shared/tool-panels/ScriptVarsDialogs.i18n.test.ts`
@@ -163,8 +165,8 @@ pnpm --dir designer exec vitest --run src/ui/shared/tool-panels/ScriptEditorDial
 在 `ScriptVarsDialogs.i18n.test.ts` 增加断言：
 
 ```ts
-expect(wrapper.text()).toContain("工程全局");
-expect(wrapper.text()).toContain("系统启动");
+expect(wrapper.text()).toContain('工程全局')
+expect(wrapper.text()).toContain('系统启动')
 ```
 
 - [ ] **步骤 2：运行测试验证失败**
@@ -208,6 +210,7 @@ pnpm --dir designer exec vitest --run src/ui/shared/tool-panels/ScriptVarsDialog
 ### 任务 3：优化工程全局脚本面板信息架构
 
 **文件：**
+
 - 修改：`designer/src/ui/shared/tool-panels/ScriptVarsPanel.vue`
 - 修改：`designer/src/ui/shared/tool-panels/ScriptVarsSystemSection.vue`
 - 修改：`designer/src/ui/shared/tool-panels/ScriptVarsTimersSection.vue`
@@ -220,15 +223,15 @@ pnpm --dir designer exec vitest --run src/ui/shared/tool-panels/ScriptVarsDialog
 测试断言：
 
 ```ts
-expect(wrapper.text()).toContain("工程全局脚本");
-expect(wrapper.text()).toContain("系统脚本");
-expect(wrapper.text()).toContain("全局定时器");
-expect(wrapper.text()).toContain("全局变量监听");
-expect(wrapper.text()).toContain("全局自定义函数");
-expect(wrapper.find('[data-test="system-add"]').exists()).toBe(false);
-expect(wrapper.find('[data-test="timer-add"]').exists()).toBe(true);
-expect(wrapper.find('[data-test="variable-change-add"]').exists()).toBe(true);
-expect(wrapper.find('[data-test="custom-script-add"]').exists()).toBe(true);
+expect(wrapper.text()).toContain('工程全局脚本')
+expect(wrapper.text()).toContain('系统脚本')
+expect(wrapper.text()).toContain('全局定时器')
+expect(wrapper.text()).toContain('全局变量监听')
+expect(wrapper.text()).toContain('全局自定义函数')
+expect(wrapper.find('[data-test="system-add"]').exists()).toBe(false)
+expect(wrapper.find('[data-test="timer-add"]').exists()).toBe(true)
+expect(wrapper.find('[data-test="variable-change-add"]').exists()).toBe(true)
+expect(wrapper.find('[data-test="custom-script-add"]').exists()).toBe(true)
 ```
 
 - [ ] **步骤 2：运行测试验证失败**
@@ -271,6 +274,7 @@ pnpm --dir designer exec vitest --run src/ui/shared/tool-panels/ScriptVarsPanel.
 ### 任务 4：高级面板页面脚本语义区分
 
 **文件：**
+
 - 修改：`designer/src/ui/editors/page/sidebar-panels/right/AdvancedPanel.vue`
 - 修改：`designer/src/ui/editors/page/sidebar-panels/right/EventPanel.vue`
 - 测试：新增或扩展右侧高级面板测试
@@ -280,13 +284,13 @@ pnpm --dir designer exec vitest --run src/ui/shared/tool-panels/ScriptVarsPanel.
 断言高级面板出现：
 
 ```ts
-expect(wrapper.text()).toContain("当前页面脚本");
+expect(wrapper.text()).toContain('当前页面脚本')
 ```
 
 并且不出现：
 
 ```ts
-expect(wrapper.text()).not.toContain("工程全局脚本");
+expect(wrapper.text()).not.toContain('工程全局脚本')
 ```
 
 - [ ] **步骤 2：运行测试验证失败**
@@ -332,6 +336,7 @@ pnpm --dir designer exec vitest --run src/ui/editors/page/sidebar-panels/right/A
 ### 任务 5：文案与类型检查
 
 **文件：**
+
 - 修改：`designer/src/i18n/messages/zh.ts`
 - 修改：`designer/src/i18n/messages/en.ts`
 

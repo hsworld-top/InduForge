@@ -101,35 +101,39 @@ JWT_REFRESH_EXPIRES_IN=7d
 
 ### 角色定义
 
-| 角色 | 说明 | 权限范围 |
-|------|------|---------|
-| SUPER_ADMIN | 超级管理员 | 所有权限 |
-| SYSTEM_ADMIN | 系统管理员 | 租户管理、系统级管理 |
-| PROJECT_ADMIN | 工程管理员 | 工程管理与配置 |
-| OPS_ADMIN | 运维管理员 | 运维与日志相关 |
-| USER_ADMIN | 用户管理员 | 用户管理 |
+| 角色          | 说明       | 权限范围             |
+| ------------- | ---------- | -------------------- |
+| SUPER_ADMIN   | 超级管理员 | 所有权限             |
+| SYSTEM_ADMIN  | 系统管理员 | 租户管理、系统级管理 |
+| PROJECT_ADMIN | 工程管理员 | 工程管理与配置       |
+| OPS_ADMIN     | 运维管理员 | 运维与日志相关       |
+| USER_ADMIN    | 用户管理员 | 用户管理             |
 
 ### 权限列表
 
 #### 用户管理
+
 - `user:create` - 创建用户
 - `user:read` - 查看用户
 - `user:update` - 更新用户
 - `user:delete` - 删除用户
 
 #### 租户管理
+
 - `tenant:create` - 创建租户
 - `tenant:read` - 查看租户
 - `tenant:update` - 更新租户
 - `tenant:delete` - 删除租户
 
 #### 工程管理
+
 - `project:create` - 创建工程
 - `project:read` - 查看工程
 - `project:update` - 更新工程
 - `project:delete` - 删除工程
 
 #### 数据管理
+
 - `data:connection:create` - 创建数据连接
 - `data:connection:read` - 查看数据连接
 - `data:connection:update` - 更新数据连接
@@ -144,7 +148,7 @@ const rolePermissions = {
   SYSTEM_ADMIN: ['*'],
   PROJECT_ADMIN: ['project:*', 'data:*', 'design:*'],
   OPS_ADMIN: ['logs:*', 'project:read', 'data:read'],
-  USER_ADMIN: ['user:*', 'tenant:read']
+  USER_ADMIN: ['user:*', 'tenant:read'],
 }
 ```
 
@@ -159,7 +163,7 @@ const requireAuth = (req, res, next) => {
   if (!token) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
-  
+
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
     req.user = decoded
@@ -190,7 +194,12 @@ router.get('/users', requireAuth, getUsers)
 router.post('/users', requireAuth, requirePermission('user:create'), createUser)
 
 // 需要多个权限之一
-router.get('/projects', requireAuth, requireAnyPermission(['project:read', 'project:update']), getProjects)
+router.get(
+  '/projects',
+  requireAuth,
+  requireAnyPermission(['project:read', 'project:update']),
+  getProjects,
+)
 ```
 
 ## 数据隔离
@@ -204,8 +213,8 @@ router.get('/projects', requireAuth, requireAnyPermission(['project:read', 'proj
 const getProjects = async (req, res) => {
   const projects = await Project.findAll({
     where: {
-      tenantId: req.user.tenantId
-    }
+      tenantId: req.user.tenantId,
+    },
   })
   res.json(projects)
 }
@@ -220,8 +229,8 @@ const getMyProjects = async (req, res) => {
   const projects = await Project.findAll({
     where: {
       tenantId: req.user.tenantId,
-      createdBy: req.user.userId
-    }
+      createdBy: req.user.userId,
+    },
   })
   res.json(projects)
 }
@@ -268,23 +277,28 @@ logger.info('User login', {
   userId: user.id,
   username: user.username,
   ip: req.ip,
-  timestamp: new Date()
+  timestamp: new Date(),
 })
 ```
 
 ## 常见问题
 
 ### Q: Token 过期怎么办？
+
 A: 使用 refreshToken 获取新的 Token。
 
 ### Q: 如何实现单点登录（SSO）？
+
 A: 可以集成 OAuth 2.0 或 SAML 协议。
 
 ### Q: 如何实现多租户隔离？
+
 A: 在数据库查询时自动添加 tenantId 过滤条件。
 
 ### Q: 如何防止 Token 被盗用？
-A: 
+
+A:
+
 1. 使用 HTTPS
 2. 设置短过期时间
 3. 绑定 IP 地址

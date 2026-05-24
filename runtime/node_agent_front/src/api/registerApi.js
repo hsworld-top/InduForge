@@ -15,23 +15,28 @@ import axios from 'axios'
  */
 export async function loginWithAuth(data) {
   const { centerUrl, ...requestData } = data
-  
+
   try {
     const response = await axios.post(
       `/api/v1/center/login`,
       { centerUrl, ...requestData },
       {
         timeout: 10000,
-      }
+      },
     )
-    
+
     if (!response.data?.success) {
       throw new Error(response.data?.message || '登录失败')
     }
 
     return response.data
   } catch (error) {
-    throw new Error(error.response?.data?.message || error.response?.data?.error || error.message || '登录请求失败')
+    throw new Error(
+      error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        '登录请求失败',
+    )
   }
 }
 
@@ -50,7 +55,17 @@ export async function loginWithAuth(data) {
  * @returns {Promise<Object>} 注册结果
  */
 export async function registerNodeWithToken(data) {
-  const { centerUrl, username, password, tenantCode, nodeName, nodeDescription, ipAddress, port, agentVersion } = data
+  const {
+    centerUrl,
+    username,
+    password,
+    tenantCode,
+    nodeName,
+    nodeDescription,
+    ipAddress,
+    port,
+    agentVersion,
+  } = data
 
   try {
     const response = await axios.post(
@@ -68,7 +83,7 @@ export async function registerNodeWithToken(data) {
       },
       {
         timeout: 10000,
-      }
+      },
     )
 
     if (!response.data?.success) {
@@ -77,7 +92,12 @@ export async function registerNodeWithToken(data) {
 
     return response.data
   } catch (error) {
-    throw new Error(error.response?.data?.message || error.response?.data?.error || error.message || '注册请求失败')
+    throw new Error(
+      error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        '注册请求失败',
+    )
   }
 }
 
@@ -89,14 +109,11 @@ export async function registerNodeWithToken(data) {
  */
 export async function checkApprovalStatus(centerUrl, nodeId) {
   try {
-    const response = await axios.get(
-      `/api/v1/center/approval-status`,
-      {
-        params: { centerUrl, nodeId },
-        timeout: 5000,
-      }
-    )
-    
+    const response = await axios.get(`/api/v1/center/approval-status`, {
+      params: { centerUrl, nodeId },
+      timeout: 5000,
+    })
+
     return response.data
   } catch (error) {
     const err = new Error(error.response?.data?.error || error.message || '查询审批状态失败')

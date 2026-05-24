@@ -12,7 +12,8 @@ export const useNodeStore = defineStore('node', () => {
    * 获取当前语言。
    * @returns {'zh-CN'|'en-US'}
    */
-  const getLocale = () => (localStorage.getItem('node_agent_locale') === 'en-US' ? 'en-US' : 'zh-CN')
+  const getLocale = () =>
+    localStorage.getItem('node_agent_locale') === 'en-US' ? 'en-US' : 'zh-CN'
 
   /**
    * 返回中英文文案。

@@ -1,14 +1,14 @@
-const express = require('express');
-const Joi = require('joi');
-const { validate } = require('../../middlewares/validate');
-const { logger } = require('../../utils/logger');
-const { Op, fn, col } = require('sequelize');
-const dayjs = require('dayjs');
-const ApiResponse = require('../../utils/response');
-const ErrorCodes = require('../../constants/errorCodes');
-const appConfig = require('../../config/app');
+const express = require('express')
+const Joi = require('joi')
+const { validate } = require('../../middlewares/validate')
+const { logger } = require('../../utils/logger')
+const { Op, fn, col } = require('sequelize')
+const dayjs = require('dayjs')
+const ApiResponse = require('../../utils/response')
+const ErrorCodes = require('../../constants/errorCodes')
+const appConfig = require('../../config/app')
 
-const router = express.Router();
+const router = express.Router()
 /**
  * 路由统一错误响应：
  * - 业务错误：HTTP 200 + 非 0 code
@@ -16,19 +16,19 @@ const router = express.Router();
  */
 function respondRouteError(res, error, fallbackCode, fallbackStatus = 200) {
   if (error?.errorCode && error?.statusCode) {
-    const normalizedStatus = error.statusCode >= 500 ? error.statusCode : 200;
-    const options = error.options || (error.message ? { message: error.message } : {});
-    return ApiResponse.error(res, error.errorCode, options, normalizedStatus);
+    const normalizedStatus = error.statusCode >= 500 ? error.statusCode : 200
+    const options = error.options || (error.message ? { message: error.message } : {})
+    return ApiResponse.error(res, error.errorCode, options, normalizedStatus)
   }
 
-  const options = error?.message ? { message: error.message } : {};
-  return ApiResponse.error(res, fallbackCode, options, fallbackStatus);
+  const options = error?.message ? { message: error.message } : {}
+  return ApiResponse.error(res, fallbackCode, options, fallbackStatus)
 }
 
 // 导入模型和中间件
-const { Log, User, Tenant } = require('../../models');
-const { authenticateToken } = require('../../middlewares/auth');
-const ALLOWED_SYSTEM_LOG_ROLES = ['SYSTEM_ADMIN', 'OPS_ADMIN'];
+const { Log, User, Tenant } = require('../../models')
+const { authenticateToken } = require('../../middlewares/auth')
+const ALLOWED_SYSTEM_LOG_ROLES = ['SYSTEM_ADMIN', 'OPS_ADMIN']
 
 /**
  * @swagger
@@ -70,75 +70,81 @@ const ALLOWED_SYSTEM_LOG_ROLES = ['SYSTEM_ADMIN', 'OPS_ADMIN'];
  *       200:
  *         description: 获取成功
  */
-router.get('/', authenticateToken, validate(Joi.object({
-  query: Joi.object({
-    page: Joi.number().integer().min(1).default(appConfig.pagination.defaultPage),
-    limit: Joi.number().integer().min(1).max(appConfig.pagination.maxLimit).default(appConfig.pagination.defaultLimit),
-    level: Joi.string().valid('info','warning','error','debug').optional(),
-    action: Joi.string().optional(),
-    startDate: Joi.date().optional(),
-    endDate: Joi.date().optional(),
-    resource: Joi.string().optional(),
-    userId: Joi.string().uuid().optional()
-  })
-})), async (req, res) => {
-  try {
-    const {
-      page,
-      limit,
-      level,
-      action,
-      startDate,
-      endDate,
-      resource,
-      userId
-    } = req.query;
-    const { tenantId, role } = req.user;
-    if (!ALLOWED_SYSTEM_LOG_ROLES.includes(role)) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 200);
+router.get(
+  '/',
+  authenticateToken,
+  validate(
+    Joi.object({
+      query: Joi.object({
+        page: Joi.number().integer().min(1).default(appConfig.pagination.defaultPage),
+        limit: Joi.number()
+          .integer()
+          .min(1)
+          .max(appConfig.pagination.maxLimit)
+          .default(appConfig.pagination.defaultLimit),
+        level: Joi.string().valid('info', 'warning', 'error', 'debug').optional(),
+        action: Joi.string().optional(),
+        startDate: Joi.date().optional(),
+        endDate: Joi.date().optional(),
+        resource: Joi.string().optional(),
+        userId: Joi.string().uuid().optional(),
+      }),
+    }),
+  ),
+  async (req, res) => {
+    try {
+      const { page, limit, level, action, startDate, endDate, resource, userId } = req.query
+      const { tenantId, role } = req.user
+      if (!ALLOWED_SYSTEM_LOG_ROLES.includes(role)) {
+        return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 200)
+      }
+
+      const where = { tenantId }
+
+      if (level) where.level = level
+      if (action) where.action = action
+      if (resource) where.resource = resource
+      if (userId) where.userId = userId
+
+      // 时间范围查询
+      if (startDate || endDate) {
+        where.createdAt = {}
+        if (startDate) where.createdAt[Op.gte] = dayjs(startDate).toDate()
+        if (endDate) where.createdAt[Op.lte] = dayjs(endDate).toDate()
+      }
+
+      const pageNum = parseInt(page, 10)
+      const limitNum = parseInt(limit, 10)
+      const offset = (pageNum - 1) * limitNum
+
+      const { count, rows } = await Log.findAndCountAll({
+        where,
+        attributes: { exclude: ['metadata'] },
+        include: [
+          { model: User, as: 'user', attributes: ['id', 'username', 'fullName'] },
+          { model: Tenant, as: 'tenant', attributes: ['id', 'name'] },
+        ],
+        limit: limitNum,
+        offset,
+        order: [['createdAt', 'DESC']],
+      })
+
+      return ApiResponse.paginated(
+        res,
+        { logs: rows },
+        {
+          total: count,
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(count / limitNum),
+        },
+      )
+    } catch (error) {
+      logger.error('Get logs error', { error: error.message, requestId: req.requestId })
+      return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500)
     }
-
-    const where = { tenantId };
-
-    if (level) where.level = level;
-    if (action) where.action = action;
-    if (resource) where.resource = resource;
-    if (userId) where.userId = userId;
-
-    // 时间范围查询
-    if (startDate || endDate) {
-      where.createdAt = {};
-      if (startDate) where.createdAt[Op.gte] = dayjs(startDate).toDate();
-      if (endDate) where.createdAt[Op.lte] = dayjs(endDate).toDate();
-    }
-
-    const pageNum = parseInt(page, 10);
-    const limitNum = parseInt(limit, 10);
-    const offset = (pageNum - 1) * limitNum;
-
-    const { count, rows } = await Log.findAndCountAll({
-      where,
-      attributes: { exclude: ['metadata'] },
-      include: [
-        { model: User, as: 'user', attributes: ['id', 'username', 'fullName'] },
-        { model: Tenant, as: 'tenant', attributes: ['id', 'name'] }
-      ],
-      limit: limitNum,
-      offset,
-      order: [['createdAt', 'DESC']],
-    });
-
-    return ApiResponse.paginated(res, { logs: rows }, {
-      total: count,
-      page: pageNum,
-      limit: limitNum,
-      totalPages: Math.ceil(count / limitNum),
-    });
-  } catch (error) {
-    logger.error('Get logs error', { error: error.message, requestId: req.requestId });
-    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
-  }
-});
+  },
+)
 
 /**
  * @swagger
@@ -154,70 +160,63 @@ router.get('/', authenticateToken, validate(Joi.object({
  */
 router.get('/stats', authenticateToken, async (req, res) => {
   try {
-    const { tenantId, role } = req.user;
+    const { tenantId, role } = req.user
     if (!ALLOWED_SYSTEM_LOG_ROLES.includes(role)) {
-      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 200);
+      return ApiResponse.error(res, ErrorCodes.PERMISSION_DENIED, {}, 200)
     }
 
-    const where = { tenantId };
+    const where = { tenantId }
 
     // 统计不同级别的日志数量
     const levelStats = await Log.findAll({
       where,
-      attributes: [
-        'level',
-        [fn('COUNT', col('level')), 'count']
-      ],
+      attributes: ['level', [fn('COUNT', col('level')), 'count']],
       group: ['level'],
-      raw: true
-    });
+      raw: true,
+    })
 
     // 统计最近7天的日志趋势
-    const sevenDaysAgo = dayjs().subtract(7, 'day').toDate();
+    const sevenDaysAgo = dayjs().subtract(7, 'day').toDate()
 
     const trendStats = await Log.findAll({
       where: {
         ...where,
         createdAt: {
-          [Op.gte]: sevenDaysAgo
-        }
+          [Op.gte]: sevenDaysAgo,
+        },
       },
       attributes: [
         [fn('DATE', col('createdAt')), 'date'],
-        [fn('COUNT', '*'), 'count']
+        [fn('COUNT', '*'), 'count'],
       ],
       group: [fn('DATE', col('createdAt'))],
       order: [[fn('DATE', col('createdAt')), 'ASC']],
-      raw: true
-    });
+      raw: true,
+    })
 
     // 统计最活跃的操作
     const actionStats = await Log.findAll({
       where,
-      attributes: [
-        'action',
-        [fn('COUNT', '*'), 'count']
-      ],
+      attributes: ['action', [fn('COUNT', '*'), 'count']],
       group: ['action'],
       order: [[fn('COUNT', '*'), 'DESC']],
       limit: 10,
-      raw: true
-    });
+      raw: true,
+    })
 
     return ApiResponse.success(res, {
       levelStats: levelStats.reduce((acc, stat) => {
-        acc[stat.level] = parseInt(stat.count);
-        return acc;
+        acc[stat.level] = parseInt(stat.count)
+        return acc
       }, {}),
       trendStats,
-      actionStats
-    });
-
+      actionStats,
+    })
   } catch (error) {
-    logger.error('Get log stats error', { error: error.message, requestId: req.requestId });
-    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
+    logger.error('Get log stats error', { error: error.message, requestId: req.requestId })
+    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500)
   }
-});
+})
 
 /**
  * @swagger
@@ -236,30 +235,40 @@ router.get('/stats', authenticateToken, async (req, res) => {
  *       200:
  *         description: 获取成功
  */
-router.get('/recent-activities', authenticateToken, validate(Joi.object({
-  query: Joi.object({
-    limit: Joi.number().integer().min(1).max(20).default(5),
-  }),
-})), async (req, res) => {
-  try {
-    const { tenantId } = req.user;
-    if (!tenantId) {
-      return ApiResponse.success(res, { activities: [] });
+router.get(
+  '/recent-activities',
+  authenticateToken,
+  validate(
+    Joi.object({
+      query: Joi.object({
+        limit: Joi.number().integer().min(1).max(20).default(5),
+      }),
+    }),
+  ),
+  async (req, res) => {
+    try {
+      const { tenantId } = req.user
+      if (!tenantId) {
+        return ApiResponse.success(res, { activities: [] })
+      }
+
+      const logs = await Log.findAll({
+        where: { tenantId },
+        attributes: ['id', 'message', 'action', 'createdAt'],
+        include: [{ model: User, as: 'user', attributes: ['id', 'username', 'fullName'] }],
+        order: [['createdAt', 'DESC']],
+        limit: Number(req.query.limit || 5),
+      })
+
+      return ApiResponse.success(res, { activities: logs })
+    } catch (error) {
+      logger.error('Get recent activities error', {
+        error: error.message,
+        requestId: req.requestId,
+      })
+      return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500)
     }
+  },
+)
 
-    const logs = await Log.findAll({
-      where: { tenantId },
-      attributes: ['id', 'message', 'action', 'createdAt'],
-      include: [{ model: User, as: 'user', attributes: ['id', 'username', 'fullName'] }],
-      order: [['createdAt', 'DESC']],
-      limit: Number(req.query.limit || 5),
-    });
-
-    return ApiResponse.success(res, { activities: logs });
-  } catch (error) {
-    logger.error('Get recent activities error', { error: error.message, requestId: req.requestId });
-    return respondRouteError(res, error, ErrorCodes.INTERNAL_SERVER_ERROR, 500);
-  }
-});
-
-module.exports = router;
+module.exports = router

@@ -8,12 +8,12 @@
 
 ### 1.1 涉及模块
 
-| 模块 | 职责 | 关键文件 |
-|------|------|----------|
-| **放置目标解析** | 判断「拖放时鼠标下是谁」：页面根 vs 某布局/容器 | `DesignCanvas.vue`、`NodeRenderer.vue`、`DragDropManager.js` |
-| **位置计算** | 绝对定位的 x/y、流式布局的 index | `DesignCanvas.vue`、`NodeRenderer.vue`（`resolveDropOffset` / `clampDropPosition`）、`editor-store.js`（`insertNode`） |
-| **父子与顺序** | parentId、children 顺序、插入 index | `DocumentModel.js`（`_insertNode`）、`nodeCommands.js`（Insert/Move/Reorder） |
-| **堆叠顺序** | 同父下谁在上谁在下 | `nodeCommands.js`（`ReorderNodeCommand`）、`layer-order-convention.md` |
+| 模块             | 职责                                            | 关键文件                                                                                                               |
+| ---------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **放置目标解析** | 判断「拖放时鼠标下是谁」：页面根 vs 某布局/容器 | `DesignCanvas.vue`、`NodeRenderer.vue`、`DragDropManager.js`                                                           |
+| **位置计算**     | 绝对定位的 x/y、流式布局的 index                | `DesignCanvas.vue`、`NodeRenderer.vue`（`resolveDropOffset` / `clampDropPosition`）、`editor-store.js`（`insertNode`） |
+| **父子与顺序**   | parentId、children 顺序、插入 index             | `DocumentModel.js`（`_insertNode`）、`nodeCommands.js`（Insert/Move/Reorder）                                          |
+| **堆叠顺序**     | 同父下谁在上谁在下                              | `nodeCommands.js`（`ReorderNodeCommand`）、`layer-order-convention.md`                                                 |
 
 ### 1.2 典型问题来源
 
@@ -46,8 +46,8 @@
 
 - **原则**：拖放结束时，**只在一个地方**根据「鼠标位置」解析出：**最终父节点 parentId**、**插入索引 index**（流式容器）、**落点坐标 dropPosition**（仅绝对定位容器需要）。
 - **推荐**：由 **DragDropManager**（或抽成 `placementResolver.js`）提供单一方法，例如：
-  - 输入：`(event, canvasRootElement, doc, currentPage)`  
-  - 输出：`{ parentId, index, dropPosition: { x, y } | null }`  
+  - 输入：`(event, canvasRootElement, doc, currentPage)`
+  - 输出：`{ parentId, index, dropPosition: { x, y } | null }`
   - 内部用 `document.elementFromPoint(clientX, clientY)` + `closest('[data-node-id]')` 找到最内层节点，再判断是否为容器、是否接受该组件类型；若为流式布局则算 index，若为 FreeContainer/根则算 dropPosition（并做 clamp）。
 
 这样 DesignCanvas 与 NodeRenderer 的 drop 都**只负责**：取 payload、调该解析器、再调 `editorStore.insertNode(type, parentId, index, { dropPosition })`，避免两套坐标与目标逻辑。
@@ -64,11 +64,11 @@
 
 ### 2.4 父类型与子节点定位方式
 
-| 父节点类型 | 子节点 positioning | 子节点位置信息 |
-|------------|--------------------|----------------|
-| FreeContainer / 页面根（rootNodeId） | `absolute` | `absolutePos`（x, y, w, h） |
-| HorizontalLayout / VerticalLayout / FlexContainer / ElLayout / ElCol / … | `flow` | 无 absolutePos；顺序由 children index 决定 |
-| FreeContainer（非根） | `absolute` | `absolutePos` 或 layoutItem.free.abs |
+| 父节点类型                                                               | 子节点 positioning | 子节点位置信息                             |
+| ------------------------------------------------------------------------ | ------------------ | ------------------------------------------ |
+| FreeContainer / 页面根（rootNodeId）                                     | `absolute`         | `absolutePos`（x, y, w, h）                |
+| HorizontalLayout / VerticalLayout / FlexContainer / ElLayout / ElCol / … | `flow`             | 无 absolutePos；顺序由 children index 决定 |
+| FreeContainer（非根）                                                    | `absolute`         | `absolutePos` 或 layoutItem.free.abs       |
 
 确保 **insertNode** 中「是否根画布」「是否 FreeContainer」分支与上述一致，且不重复、不遗漏。
 

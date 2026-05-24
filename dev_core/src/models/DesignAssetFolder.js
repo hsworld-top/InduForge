@@ -1,8 +1,8 @@
-﻿const { DataTypes } = require("sequelize");
-const { sequelize } = require("../config/database");
+﻿const { DataTypes } = require('sequelize')
+const { sequelize } = require('../config/database')
 
 const DesignAssetFolder = sequelize.define(
-  "DesignAssetFolder",
+  'DesignAssetFolder',
   {
     id: {
       type: DataTypes.UUID,
@@ -28,11 +28,11 @@ const DesignAssetFolder = sequelize.define(
     },
   },
   {
-    tableName: "design_asset_folders",
+    tableName: 'design_asset_folders',
     timestamps: true,
-    createdAt: "createdAt",
-    updatedAt: "updatedAt",
-  }
-);
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt',
+  },
+)
 
-module.exports = DesignAssetFolder;
+module.exports = DesignAssetFolder

@@ -49,46 +49,46 @@
 ### 2.1 客户端连接
 
 ```javascript
-import { io } from "socket.io-client";
+import { io } from 'socket.io-client'
 
-const socket = io("http://localhost:18101", {
-  path: "/socket.io",
-  transports: ["websocket", "polling"],
+const socket = io('http://localhost:18101', {
+  path: '/socket.io',
+  transports: ['websocket', 'polling'],
   query: {
-    projectId: "proj_xxx", // 项目 ID（可选）
+    projectId: 'proj_xxx', // 项目 ID（可选）
   },
-});
+})
 
 // 连接成功
-socket.on("connect", () => {
-  console.log("Connected:", socket.id);
-});
+socket.on('connect', () => {
+  console.log('Connected:', socket.id)
+})
 
 // 连接断开
-socket.on("disconnect", (reason) => {
-  console.log("Disconnected:", reason);
-});
+socket.on('disconnect', (reason) => {
+  console.log('Disconnected:', reason)
+})
 
 // 连接错误
-socket.on("error", (error) => {
-  console.error("Socket error:", error);
-});
+socket.on('error', (error) => {
+  console.error('Socket error:', error)
+})
 ```
 
 ### 2.2 服务端配置
 
 ```javascript
-const { Server } = require("socket.io");
+const { Server } = require('socket.io')
 
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.CORS_ORIGINS || "*",
-    methods: ["GET", "POST"],
+    origin: process.env.CORS_ORIGINS || '*',
+    methods: ['GET', 'POST'],
     credentials: true,
   },
-  path: "/socket.io",
-  transports: ["websocket", "polling"],
-});
+  path: '/socket.io',
+  transports: ['websocket', 'polling'],
+})
 ```
 
 ## 3. 房间（Rooms）设计
@@ -249,18 +249,18 @@ MQTT 消息推送。
 ```typescript
 // 数据结构
 interface MqttMessageEvent {
-  subscriptionId: string;
+  subscriptionId: string
   message: {
-    topic: string;
-    payload: string | object;
-    qos: 0 | 1 | 2;
-    timestamp: number;
-  };
+    topic: string
+    payload: string | object
+    qos: 0 | 1 | 2
+    timestamp: number
+  }
 }
 
 // 示例
-socket.on("mqtt:message", (data) => {
-  console.log("MQTT Message:", data);
+socket.on('mqtt:message', (data) => {
+  console.log('MQTT Message:', data)
   // {
   //   subscriptionId: 'sub_xxx',
   //   message: {
@@ -270,7 +270,7 @@ socket.on("mqtt:message", (data) => {
   //     timestamp: 1704614400000
   //   }
   // }
-});
+})
 ```
 
 #### mqtt:connection:status
@@ -280,21 +280,21 @@ MQTT 连接状态变化。
 ```typescript
 // 数据结构
 interface ConnectionStatusEvent {
-  connectionId: string;
-  status: "connected" | "disconnected" | "connecting" | "error";
-  timestamp: number;
-  error?: string;
+  connectionId: string
+  status: 'connected' | 'disconnected' | 'connecting' | 'error'
+  timestamp: number
+  error?: string
 }
 
 // 示例
-socket.on("mqtt:connection:status", (data) => {
-  console.log("Connection Status:", data);
+socket.on('mqtt:connection:status', (data) => {
+  console.log('Connection Status:', data)
   // {
   //   connectionId: 'conn_xxx',
   //   status: 'connected',
   //   timestamp: 1704614400000
   // }
-});
+})
 ```
 
 #### mqtt:subscription:status
@@ -304,16 +304,16 @@ MQTT 订阅状态变化。
 ```typescript
 // 数据结构
 interface SubscriptionStatusEvent {
-  subscriptionId: string;
-  status: "active" | "inactive" | "error";
-  timestamp: number;
-  error?: string;
+  subscriptionId: string
+  status: 'active' | 'inactive' | 'error'
+  timestamp: number
+  error?: string
 }
 
 // 示例
-socket.on("mqtt:subscription:status", (data) => {
-  console.log("Subscription Status:", data);
-});
+socket.on('mqtt:subscription:status', (data) => {
+  console.log('Subscription Status:', data)
+})
 ```
 
 #### mqtt:tag:value
@@ -323,23 +323,23 @@ Tag 值更新推送。
 ```typescript
 // 数据结构
 interface TagValueEvent {
-  tagId: string;
-  value: any;
-  quality: "good" | "bad" | "uncertain";
-  timestamp: number;
-  source?: string;
+  tagId: string
+  value: any
+  quality: 'good' | 'bad' | 'uncertain'
+  timestamp: number
+  source?: string
 }
 
 // 示例
-socket.on("mqtt:tag:value", (data) => {
-  console.log("Tag Value:", data);
+socket.on('mqtt:tag:value', (data) => {
+  console.log('Tag Value:', data)
   // {
   //   tagId: 'tag_xxx',
   //   value: 25.5,
   //   quality: 'good',
   //   timestamp: 1704614400000
   // }
-});
+})
 ```
 
 #### datapoint:value
@@ -349,17 +349,17 @@ socket.on("mqtt:tag:value", (data) => {
 ```typescript
 // 数据结构
 interface DataPointValueEvent {
-  projectId: string;
-  path: string;
-  value: any;
-  dataType: string;
-  quality: "good" | "bad" | "uncertain";
-  timestamp: number;
+  projectId: string
+  path: string
+  value: any
+  dataType: string
+  quality: 'good' | 'bad' | 'uncertain'
+  timestamp: number
 }
 
 // 示例
-socket.on("datapoint:value", (data) => {
-  console.log("DataPoint Value:", data);
+socket.on('datapoint:value', (data) => {
+  console.log('DataPoint Value:', data)
   // {
   //   projectId: 'proj_xxx',
   //   path: 'mqtt.EMQX.温度组.temperature',
@@ -368,7 +368,7 @@ socket.on("datapoint:value", (data) => {
   //   quality: 'good',
   //   timestamp: 1704614400000
   // }
-});
+})
 ```
 
 ### 4.3 Designer 协作事件
@@ -380,17 +380,17 @@ socket.on("datapoint:value", (data) => {
 ```typescript
 // 数据结构
 interface PageLockChangedEvent {
-  pageId: string;
-  pageName: string;
-  locked: boolean;
-  lockedBy?: string; // 用户 ID
-  lockedByName?: string; // 用户姓名
-  lockedAt?: number; // 锁定时间戳
+  pageId: string
+  pageName: string
+  locked: boolean
+  lockedBy?: string // 用户 ID
+  lockedByName?: string // 用户姓名
+  lockedAt?: number // 锁定时间戳
 }
 
 // 示例
-socket.on("page:lock:changed", (data) => {
-  console.log("Page Lock Changed:", data);
+socket.on('page:lock:changed', (data) => {
+  console.log('Page Lock Changed:', data)
   // {
   //   pageId: 'page_xxx',
   //   pageName: '首页',
@@ -402,11 +402,9 @@ socket.on("page:lock:changed", (data) => {
 
   if (data.locked && data.lockedBy !== currentUserId) {
     // 提示用户页面已被锁定
-    showNotification(
-      `页面 "${data.pageName}" 正在被 ${data.lockedByName} 编辑`
-    );
+    showNotification(`页面 "${data.pageName}" 正在被 ${data.lockedByName} 编辑`)
   }
-});
+})
 ```
 
 #### page:lock:force_release
@@ -416,22 +414,20 @@ socket.on("page:lock:changed", (data) => {
 ```typescript
 // 数据结构
 interface PageLockForceReleaseEvent {
-  pageId: string;
-  pageName: string;
-  releasedBy: string; // 执行强制释放的管理员 ID
-  releasedByName: string;
-  reason: "timeout" | "admin_force" | "user_logout";
+  pageId: string
+  pageName: string
+  releasedBy: string // 执行强制释放的管理员 ID
+  releasedByName: string
+  reason: 'timeout' | 'admin_force' | 'user_logout'
 }
 
 // 示例
-socket.on("page:lock:force_release", (data) => {
-  console.log("Page Lock Force Released:", data);
+socket.on('page:lock:force_release', (data) => {
+  console.log('Page Lock Force Released:', data)
   // 提示用户并切换到只读模式
-  showWarning(
-    `你在页面 "${data.pageName}" 的编辑权限已被释放，原因：${data.reason}`
-  );
-  setReadonlyMode(true);
-});
+  showWarning(`你在页面 "${data.pageName}" 的编辑权限已被释放，原因：${data.reason}`)
+  setReadonlyMode(true)
+})
 ```
 
 #### designer:user:presence
@@ -441,22 +437,22 @@ socket.on("page:lock:force_release", (data) => {
 ```typescript
 // 数据结构
 interface UserPresenceEvent {
-  projectId: string;
+  projectId: string
   users: {
-    userId: string;
-    userName: string;
-    avatar?: string;
-    currentPageId?: string;
-    status: "viewing" | "editing";
-  }[];
+    userId: string
+    userName: string
+    avatar?: string
+    currentPageId?: string
+    status: 'viewing' | 'editing'
+  }[]
 }
 
 // 示例
-socket.on("designer:user:presence", (data) => {
-  console.log("User Presence:", data);
+socket.on('designer:user:presence', (data) => {
+  console.log('User Presence:', data)
   // 更新在线用户列表（可在 UI 上显示头像）
-  updateOnlineUsers(data.users);
-});
+  updateOnlineUsers(data.users)
+})
 ```
 
 ## 5. 节点通信协议（待实现）
@@ -525,7 +521,7 @@ socket.emit('node:log', {
 部署指令。
 
 ```typescript
-socket.on("node:deploy", (data) => {
+socket.on('node:deploy', (data) => {
   // {
   //   deploymentId: 'dep_xxx',
   //   ifpUrl: 'https://registry.example.com/projects/xxx/v1.0.0.ifp',
@@ -536,7 +532,7 @@ socket.on("node:deploy", (data) => {
   //     defaultTheme: 'dark'
   //   }
   // }
-});
+})
 ```
 
 #### node:stop
@@ -544,9 +540,9 @@ socket.on("node:deploy", (data) => {
 停止工程。
 
 ```typescript
-socket.on("node:stop", (data) => {
+socket.on('node:stop', (data) => {
   // { projectId: 'proj_xxx' }
-});
+})
 ```
 
 #### node:restart
@@ -554,9 +550,9 @@ socket.on("node:stop", (data) => {
 重启工程。
 
 ```typescript
-socket.on("node:restart", (data) => {
+socket.on('node:restart', (data) => {
   // { projectId: 'proj_xxx' }
-});
+})
 ```
 
 #### node:rollback
@@ -564,9 +560,9 @@ socket.on("node:restart", (data) => {
 回滚版本。
 
 ```typescript
-socket.on("node:rollback", (data) => {
+socket.on('node:rollback', (data) => {
   // { projectId: 'proj_xxx', version: 'v1.1.0' }
-});
+})
 ```
 
 ## 6. 使用示例
@@ -574,63 +570,63 @@ socket.on("node:rollback", (data) => {
 ### 6.1 DataCenter 订阅 MQTT 消息
 
 ```javascript
-import { io } from "socket.io-client";
+import { io } from 'socket.io-client'
 
 class MqttSocketManager {
   constructor(projectId) {
-    this.socket = io("http://localhost:18101", {
+    this.socket = io('http://localhost:18101', {
       query: { projectId },
-    });
-    this.messageHandlers = new Map();
+    })
+    this.messageHandlers = new Map()
   }
 
   // 订阅订阅消息
   subscribeSubscription(subscriptionId, handler) {
-    this.socket.emit("mqtt:subscribe", { subscriptionId });
+    this.socket.emit('mqtt:subscribe', { subscriptionId })
 
-    const key = `subscription:${subscriptionId}`;
-    this.messageHandlers.set(key, handler);
+    const key = `subscription:${subscriptionId}`
+    this.messageHandlers.set(key, handler)
 
     return () => {
-      this.socket.emit("mqtt:unsubscribe", { subscriptionId });
-      this.messageHandlers.delete(key);
-    };
+      this.socket.emit('mqtt:unsubscribe', { subscriptionId })
+      this.messageHandlers.delete(key)
+    }
   }
 
   // 订阅 Tag 值
   subscribeTag(tagId, handler) {
-    this.socket.emit("mqtt:tag:subscribe", { tagId });
+    this.socket.emit('mqtt:tag:subscribe', { tagId })
 
-    const key = `tag:${tagId}`;
-    this.messageHandlers.set(key, handler);
+    const key = `tag:${tagId}`
+    this.messageHandlers.set(key, handler)
 
     return () => {
-      this.socket.emit("mqtt:tag:unsubscribe", { tagId });
-      this.messageHandlers.delete(key);
-    };
+      this.socket.emit('mqtt:tag:unsubscribe', { tagId })
+      this.messageHandlers.delete(key)
+    }
   }
 
   // 初始化监听器
   init() {
-    this.socket.on("mqtt:message", (data) => {
-      const key = `subscription:${data.subscriptionId}`;
-      const handler = this.messageHandlers.get(key);
-      if (handler) handler(data.message);
-    });
+    this.socket.on('mqtt:message', (data) => {
+      const key = `subscription:${data.subscriptionId}`
+      const handler = this.messageHandlers.get(key)
+      if (handler) handler(data.message)
+    })
 
-    this.socket.on("mqtt:tag:value", (data) => {
-      const key = `tag:${data.tagId}`;
-      const handler = this.messageHandlers.get(key);
-      if (handler) handler(data);
-    });
+    this.socket.on('mqtt:tag:value', (data) => {
+      const key = `tag:${data.tagId}`
+      const handler = this.messageHandlers.get(key)
+      if (handler) handler(data)
+    })
 
-    this.socket.on("mqtt:connection:status", (data) => {
-      console.log("Connection status changed:", data);
-    });
+    this.socket.on('mqtt:connection:status', (data) => {
+      console.log('Connection status changed:', data)
+    })
   }
 
   disconnect() {
-    this.socket.disconnect();
+    this.socket.disconnect()
   }
 }
 ```
@@ -640,55 +636,55 @@ class MqttSocketManager {
 ```javascript
 class PreviewDataService {
   constructor(projectId) {
-    this.projectId = projectId;
-    this.socket = io("http://localhost:18101", {
+    this.projectId = projectId
+    this.socket = io('http://localhost:18101', {
       query: { projectId },
-    });
-    this.subscribers = new Map();
+    })
+    this.subscribers = new Map()
   }
 
   // 订阅数据点
   subscribe(path, callback) {
-    const paths = Array.isArray(path) ? path : [path];
+    const paths = Array.isArray(path) ? path : [path]
 
-    this.socket.emit("datapoint:subscribe", {
+    this.socket.emit('datapoint:subscribe', {
       projectId: this.projectId,
       paths,
-    });
+    })
 
     paths.forEach((p) => {
       if (!this.subscribers.has(p)) {
-        this.subscribers.set(p, new Set());
+        this.subscribers.set(p, new Set())
       }
-      this.subscribers.get(p).add(callback);
-    });
+      this.subscribers.get(p).add(callback)
+    })
 
     // 返回取消订阅函数
     return () => {
       paths.forEach((p) => {
-        const subs = this.subscribers.get(p);
+        const subs = this.subscribers.get(p)
         if (subs) {
-          subs.delete(callback);
+          subs.delete(callback)
           if (subs.size === 0) {
-            this.subscribers.delete(p);
+            this.subscribers.delete(p)
           }
         }
-      });
+      })
 
-      this.socket.emit("datapoint:unsubscribe", {
+      this.socket.emit('datapoint:unsubscribe', {
         projectId: this.projectId,
         paths,
-      });
-    };
+      })
+    }
   }
 
   init() {
-    this.socket.on("datapoint:value", (data) => {
-      const subs = this.subscribers.get(data.path);
+    this.socket.on('datapoint:value', (data) => {
+      const subs = this.subscribers.get(data.path)
       if (subs) {
-        subs.forEach((callback) => callback(data.value, data));
+        subs.forEach((callback) => callback(data.value, data))
       }
-    });
+    })
   }
 }
 ```
@@ -698,67 +694,67 @@ class PreviewDataService {
 ```javascript
 class NodeAgentSocket {
   constructor(nodeId, token) {
-    this.nodeId = nodeId;
-    this.socket = io("http://dev-server:18101", {
+    this.nodeId = nodeId
+    this.socket = io('http://dev-server:18101', {
       auth: { token },
       query: { nodeId },
-    });
+    })
   }
 
   // 发送心跳
   sendHeartbeat(status) {
-    this.socket.emit("node:heartbeat", {
+    this.socket.emit('node:heartbeat', {
       nodeId: this.nodeId,
       status,
-    });
+    })
   }
 
   // 上报部署结果
   reportDeployResult(deploymentId, success, error) {
-    this.socket.emit("node:deploy:result", {
+    this.socket.emit('node:deploy:result', {
       deploymentId,
       success,
       error,
       startedAt: success ? Date.now() : undefined,
-    });
+    })
   }
 
   // 上报日志
   log(level, message, meta) {
-    this.socket.emit("node:log", {
+    this.socket.emit('node:log', {
       nodeId: this.nodeId,
       level,
       message,
       meta,
       timestamp: Date.now(),
-    });
+    })
   }
 
   init() {
     // 监听部署指令
-    this.socket.on("node:deploy", async (data) => {
+    this.socket.on('node:deploy', async (data) => {
       try {
-        await this.handleDeploy(data);
-        this.reportDeployResult(data.deploymentId, true);
+        await this.handleDeploy(data)
+        this.reportDeployResult(data.deploymentId, true)
       } catch (error) {
-        this.reportDeployResult(data.deploymentId, false, error.message);
+        this.reportDeployResult(data.deploymentId, false, error.message)
       }
-    });
+    })
 
     // 监听停止指令
-    this.socket.on("node:stop", async (data) => {
-      await this.handleStop(data.projectId);
-    });
+    this.socket.on('node:stop', async (data) => {
+      await this.handleStop(data.projectId)
+    })
 
     // 监听重启指令
-    this.socket.on("node:restart", async (data) => {
-      await this.handleRestart(data.projectId);
-    });
+    this.socket.on('node:restart', async (data) => {
+      await this.handleRestart(data.projectId)
+    })
 
     // 监听回滚指令
-    this.socket.on("node:rollback", async (data) => {
-      await this.handleRollback(data.projectId, data.version);
-    });
+    this.socket.on('node:rollback', async (data) => {
+      await this.handleRollback(data.projectId, data.version)
+    })
   }
 }
 ```
@@ -768,40 +764,40 @@ class NodeAgentSocket {
 ### 7.1 连接错误
 
 ```javascript
-socket.on("connect_error", (error) => {
-  console.error("Connection error:", error.message);
+socket.on('connect_error', (error) => {
+  console.error('Connection error:', error.message)
   // 重连逻辑由 Socket.IO 自动处理
-});
+})
 
-socket.on("reconnect", (attemptNumber) => {
-  console.log("Reconnected after", attemptNumber, "attempts");
-});
+socket.on('reconnect', (attemptNumber) => {
+  console.log('Reconnected after', attemptNumber, 'attempts')
+})
 
-socket.on("reconnect_error", (error) => {
-  console.error("Reconnection error:", error.message);
-});
+socket.on('reconnect_error', (error) => {
+  console.error('Reconnection error:', error.message)
+})
 
-socket.on("reconnect_failed", () => {
-  console.error("Reconnection failed");
+socket.on('reconnect_failed', () => {
+  console.error('Reconnection failed')
   // 通知用户或执行降级策略
-});
+})
 ```
 
 ### 7.2 业务错误
 
 ```javascript
 // 服务端发送错误事件
-socket.emit("error", {
-  code: "SUBSCRIPTION_NOT_FOUND",
-  message: "订阅不存在",
-  details: { subscriptionId: "sub_xxx" },
-});
+socket.emit('error', {
+  code: 'SUBSCRIPTION_NOT_FOUND',
+  message: '订阅不存在',
+  details: { subscriptionId: 'sub_xxx' },
+})
 
 // 客户端处理
-socket.on("error", (error) => {
-  console.error("Server error:", error);
+socket.on('error', (error) => {
+  console.error('Server error:', error)
   // 根据 error.code 处理不同错误
-});
+})
 ```
 
 ## 8. 安全考虑
@@ -812,38 +808,38 @@ socket.on("error", (error) => {
 
 ```javascript
 // 客户端携带 Token
-const socket = io("http://localhost:18101", {
+const socket = io('http://localhost:18101', {
   auth: {
-    token: localStorage.getItem("token"),
+    token: localStorage.getItem('token'),
   },
-});
+})
 
 // 服务端验证
 io.use((socket, next) => {
-  const token = socket.handshake.auth.token;
+  const token = socket.handshake.auth.token
   if (verifyToken(token)) {
-    next();
+    next()
   } else {
-    next(new Error("Authentication failed"));
+    next(new Error('Authentication failed'))
   }
-});
+})
 ```
 
 ### 8.2 房间访问控制
 
 ```javascript
 // 验证项目访问权限
-socket.on("mqtt:subscribe", async (data) => {
-  const userId = socket.userId;
-  const hasAccess = await checkProjectAccess(userId, data.projectId);
+socket.on('mqtt:subscribe', async (data) => {
+  const userId = socket.userId
+  const hasAccess = await checkProjectAccess(userId, data.projectId)
 
   if (!hasAccess) {
-    socket.emit("error", { code: "ACCESS_DENIED" });
-    return;
+    socket.emit('error', { code: 'ACCESS_DENIED' })
+    return
   }
 
-  socket.join(`mqtt:subscription:${data.subscriptionId}`);
-});
+  socket.join(`mqtt:subscription:${data.subscriptionId}`)
+})
 ```
 
 ## 9. 性能优化
@@ -855,7 +851,7 @@ const io = new Server(httpServer, {
   perMessageDeflate: {
     threshold: 1024, // 只压缩大于 1KB 的消息
   },
-});
+})
 ```
 
 ### 9.2 消息节流
@@ -863,18 +859,18 @@ const io = new Server(httpServer, {
 ```javascript
 // 服务端节流广播
 const throttledBroadcast = throttle((room, event, data) => {
-  io.to(room).emit(event, data);
-}, 100); // 最小间隔 100ms
+  io.to(room).emit(event, data)
+}, 100) // 最小间隔 100ms
 ```
 
 ### 9.3 批量订阅
 
 ```javascript
 // 客户端批量订阅
-socket.emit("datapoint:subscribe", {
-  projectId: "proj_xxx",
+socket.emit('datapoint:subscribe', {
+  projectId: 'proj_xxx',
   paths: paths, // 一次性订阅多个路径
-});
+})
 ```
 
 ---

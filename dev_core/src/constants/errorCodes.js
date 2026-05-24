@@ -77,24 +77,27 @@ const ErrorCodes = {
   DESIGN_PAGE_LOCKED: 'B5003',
   DESIGN_FOLDER_NOT_EMPTY: 'B5004',
   DESIGN_INVALID_PARENT: 'B5005',
-};
+}
 
 // 统一公开错误码前缀：A/B/C 分别映射到 1/2/3 万段。
 const PUBLIC_CODE_PREFIX = {
   A: 10000,
   B: 20000,
   C: 30000,
-};
+}
 
-const PUBLIC_CODE_UNKNOWN = 30000;
-const LEGACY_ERROR_CODE_PATTERN = /^[ABC]\d{4}$/;
+const PUBLIC_CODE_UNKNOWN = 30000
+const LEGACY_ERROR_CODE_PATTERN = /^[ABC]\d{4}$/
 
 /**
  * 已定义的历史字符串错误码集合，用于避免生成不存在的 i18n key。
  */
 const KNOWN_LEGACY_CODES = new Set(
-  Object.values(ErrorCodes).filter(value => typeof value === 'string' && (LEGACY_ERROR_CODE_PATTERN.test(value) || value === '00000'))
-);
+  Object.values(ErrorCodes).filter(
+    (value) =>
+      typeof value === 'string' && (LEGACY_ERROR_CODE_PATTERN.test(value) || value === '00000'),
+  ),
+)
 
 /**
  * 将历史字符串错误码转换为对外整数错误码。
@@ -106,32 +109,34 @@ const KNOWN_LEGACY_CODES = new Set(
  */
 function toPublicCode(errorCode) {
   if (Number.isSafeInteger(errorCode)) {
-    return errorCode;
+    return errorCode
   }
 
-  const normalized = String(errorCode || '').trim().toUpperCase();
+  const normalized = String(errorCode || '')
+    .trim()
+    .toUpperCase()
   if (normalized === '' || normalized === 'NULL' || normalized === 'UNDEFINED') {
-    return PUBLIC_CODE_UNKNOWN;
+    return PUBLIC_CODE_UNKNOWN
   }
   if (normalized === 'SUCCESS' || normalized === '00000') {
-    return 0;
+    return 0
   }
 
-  const abcMatched = normalized.match(/^([ABC])(\d{4})$/);
+  const abcMatched = normalized.match(/^([ABC])(\d{4})$/)
   if (abcMatched) {
-    const moduleCode = abcMatched[1];
-    const sequence = Number.parseInt(abcMatched[2], 10);
-    return (PUBLIC_CODE_PREFIX[moduleCode] || PUBLIC_CODE_UNKNOWN) + sequence;
+    const moduleCode = abcMatched[1]
+    const sequence = Number.parseInt(abcMatched[2], 10)
+    return (PUBLIC_CODE_PREFIX[moduleCode] || PUBLIC_CODE_UNKNOWN) + sequence
   }
 
   if (/^\d+$/.test(normalized)) {
-    const parsed = Number.parseInt(normalized, 10);
+    const parsed = Number.parseInt(normalized, 10)
     if (Number.isSafeInteger(parsed)) {
-      return parsed;
+      return parsed
     }
   }
 
-  return PUBLIC_CODE_UNKNOWN;
+  return PUBLIC_CODE_UNKNOWN
 }
 
 /**
@@ -141,43 +146,44 @@ function toPublicCode(errorCode) {
  * @returns {string}
  */
 function toI18nCode(errorCode) {
-  const normalized = String(errorCode || '').trim().toUpperCase();
+  const normalized = String(errorCode || '')
+    .trim()
+    .toUpperCase()
   if (LEGACY_ERROR_CODE_PATTERN.test(normalized) && KNOWN_LEGACY_CODES.has(normalized)) {
-    return normalized;
+    return normalized
   }
   if (normalized === 'SUCCESS' || normalized === '00000') {
-    return '00000';
+    return '00000'
   }
 
   if (Number.isSafeInteger(errorCode)) {
-    const numeric = Number(errorCode);
+    const numeric = Number(errorCode)
     if (numeric === 0) {
-      return '00000';
+      return '00000'
     }
     if (numeric >= 10000 && numeric < 20000) {
-      const mappedCode = `A${String(numeric - 10000).padStart(4, '0')}`;
-      return KNOWN_LEGACY_CODES.has(mappedCode) ? mappedCode : ErrorCodes.INTERNAL_SERVER_ERROR;
+      const mappedCode = `A${String(numeric - 10000).padStart(4, '0')}`
+      return KNOWN_LEGACY_CODES.has(mappedCode) ? mappedCode : ErrorCodes.INTERNAL_SERVER_ERROR
     }
     if (numeric >= 20000 && numeric < 30000) {
-      const mappedCode = `B${String(numeric - 20000).padStart(4, '0')}`;
-      return KNOWN_LEGACY_CODES.has(mappedCode) ? mappedCode : ErrorCodes.INTERNAL_SERVER_ERROR;
+      const mappedCode = `B${String(numeric - 20000).padStart(4, '0')}`
+      return KNOWN_LEGACY_CODES.has(mappedCode) ? mappedCode : ErrorCodes.INTERNAL_SERVER_ERROR
     }
     if (numeric >= 30000 && numeric < 40000) {
-      const mappedCode = `C${String(numeric - 30000).padStart(4, '0')}`;
-      return KNOWN_LEGACY_CODES.has(mappedCode) ? mappedCode : ErrorCodes.INTERNAL_SERVER_ERROR;
+      const mappedCode = `C${String(numeric - 30000).padStart(4, '0')}`
+      return KNOWN_LEGACY_CODES.has(mappedCode) ? mappedCode : ErrorCodes.INTERNAL_SERVER_ERROR
     }
-    return ErrorCodes.INTERNAL_SERVER_ERROR;
+    return ErrorCodes.INTERNAL_SERVER_ERROR
   }
 
   if (/^\d+$/.test(normalized)) {
-    return toI18nCode(Number.parseInt(normalized, 10));
+    return toI18nCode(Number.parseInt(normalized, 10))
   }
 
-  return ErrorCodes.INTERNAL_SERVER_ERROR;
+  return ErrorCodes.INTERNAL_SERVER_ERROR
 }
 
-ErrorCodes.toPublicCode = toPublicCode;
-ErrorCodes.toI18nCode = toI18nCode;
+ErrorCodes.toPublicCode = toPublicCode
+ErrorCodes.toI18nCode = toI18nCode
 
-module.exports = ErrorCodes;
-
+module.exports = ErrorCodes

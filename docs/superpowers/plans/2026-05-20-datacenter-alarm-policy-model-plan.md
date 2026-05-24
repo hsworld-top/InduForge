@@ -89,6 +89,7 @@
 ## 任务 1：数据库迁移改为策略模型
 
 **文件：**
+
 - 创建：`data_service/internal/db/migrations/0018_alarm_policies.sql`
 - 创建：`data_service/internal/db/migrations/0018_alarm_policies_down.sql`
 - 修改：`data_service/internal/db/migrations/0010_alarm_rules.sql`
@@ -246,6 +247,7 @@ git commit -m "feat(data_service): 新增报警策略数据表"
 ## 任务 2：后端仓储实现分组、策略和树查询
 
 **文件：**
+
 - 创建：`data_service/internal/repository/alarm_policy_repository.go`
 
 - [ ] **步骤 1：创建仓储类型和记录结构**
@@ -466,6 +468,7 @@ git commit -m "feat(data_service): 实现报警策略仓储"
 ## 任务 3：后端服务实现策略校验、条件集和契约
 
 **文件：**
+
 - 创建：`data_service/internal/service/alarm_policy_service.go`
 - 创建：`data_service/internal/service/alarm_policy_service_test.go`
 
@@ -699,6 +702,7 @@ git commit -m "feat(data_service): 实现报警策略服务"
 ## 任务 4：HTTP handler、路由和应用装配
 
 **文件：**
+
 - 创建：`data_service/internal/http/handler/alarm_policy_handler.go`
 - 修改：`data_service/internal/http/router/router.go`
 - 修改：`data_service/internal/app/server.go`
@@ -842,6 +846,7 @@ git commit -m "feat(data_service): 接入报警策略接口"
 ## 任务 5：前端 schema 和 API 切到策略模型
 
 **文件：**
+
 - 修改：`datacenter/src/api/schemas/alarm.schema.ts`
 - 修改：`datacenter/src/api/alarm.api.ts`
 - 修改：`datacenter/tests/alarm-schema.test.ts`
@@ -851,67 +856,81 @@ git commit -m "feat(data_service): 接入报警策略接口"
 在 `alarm-schema.test.ts` 写入：
 
 ```ts
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from 'vitest'
 import {
   AlarmPolicySchema,
   AlarmPolicySaveSchema,
   AlarmPolicyTreeSchema,
   AlarmBulkSelectionSchema,
-} from "@/api/schemas/alarm.schema";
+} from '@/api/schemas/alarm.schema'
 
-describe("alarm policy schema", () => {
-  it("parses policy with multiple conditions", () => {
+describe('alarm policy schema', () => {
+  it('parses policy with multiple conditions', () => {
     const parsed = AlarmPolicySchema.parse({
-      id: "policy-1",
-      projectId: "project-1",
+      id: 'policy-1',
+      projectId: 'project-1',
       groupId: null,
-      name: "温度策略",
-      mode: "per_target",
-      targets: [{ datapointId: "dp-1", path: "metrics.temperature", dataType: "number" }],
+      name: '温度策略',
+      mode: 'per_target',
+      targets: [{ datapointId: 'dp-1', path: 'metrics.temperature', dataType: 'number' }],
       inputs: [],
-      derivedExpression: "",
+      derivedExpression: '',
       conditions: [
-        { id: "c-h", type: "H", name: "高限", isEnabled: true, severity: "major", params: { limit: 80 } },
-        { id: "c-l", type: "L", name: "低限", isEnabled: true, severity: "warning", params: { limit: 20 } },
+        {
+          id: 'c-h',
+          type: 'H',
+          name: '高限',
+          isEnabled: true,
+          severity: 'major',
+          params: { limit: 80 },
+        },
+        {
+          id: 'c-l',
+          type: 'L',
+          name: '低限',
+          isEnabled: true,
+          severity: 'warning',
+          params: { limit: 20 },
+        },
       ],
       suppression: {},
-      messageTemplate: "",
+      messageTemplate: '',
       isEnabled: true,
       effectiveEnabled: true,
       contract: {},
-      createdAt: "2026-05-20T10:00:00Z",
-      updatedAt: "2026-05-20T10:00:00Z",
-    });
+      createdAt: '2026-05-20T10:00:00Z',
+      updatedAt: '2026-05-20T10:00:00Z',
+    })
 
-    expect(parsed.conditions).toHaveLength(2);
-  });
+    expect(parsed.conditions).toHaveLength(2)
+  })
 
-  it("rejects unknown save fields", () => {
+  it('rejects unknown save fields', () => {
     expect(() =>
       AlarmPolicySaveSchema.parse({
-        name: "策略",
-        mode: "per_target",
+        name: '策略',
+        mode: 'per_target',
         targets: [],
         inputs: [],
-        derivedExpression: "",
+        derivedExpression: '',
         conditions: [],
         suppression: {},
-        messageTemplate: "",
+        messageTemplate: '',
         isEnabled: true,
-        targetPath: "old.field",
+        targetPath: 'old.field',
       }),
-    ).toThrow();
-  });
+    ).toThrow()
+  })
 
-  it("parses filtered selection", () => {
+  it('parses filtered selection', () => {
     const parsed = AlarmBulkSelectionSchema.parse({
-      mode: "filtered",
-      filters: { search: "温度", enabled: true },
-      excludePolicyIds: ["policy-2"],
-    });
-    expect(parsed.mode).toBe("filtered");
-  });
-});
+      mode: 'filtered',
+      filters: { search: '温度', enabled: true },
+      excludePolicyIds: ['policy-2'],
+    })
+    expect(parsed.mode).toBe('filtered')
+  })
+})
 ```
 
 - [ ] **步骤 2：运行测试验证失败**
@@ -928,29 +947,29 @@ pnpm --dir datacenter test -- alarm-schema
 
 ```ts
 export const AlarmConditionTypeSchema = z.enum([
-  "HH",
-  "H",
-  "L",
-  "LL",
-  "deviation_high",
-  "deviation_low",
-  "rate_of_change",
-  "cel",
-]);
+  'HH',
+  'H',
+  'L',
+  'LL',
+  'deviation_high',
+  'deviation_low',
+  'rate_of_change',
+  'cel',
+])
 
-export const AlarmPolicyModeSchema = z.enum(["per_target", "derived"]);
-export const AlarmSeveritySchema = z.enum(["info", "warning", "major", "critical"]);
+export const AlarmPolicyModeSchema = z.enum(['per_target', 'derived'])
+export const AlarmSeveritySchema = z.enum(['info', 'warning', 'major', 'critical'])
 
 export const AlarmTargetRefSchema = z.object({
   datapointId: z.string(),
   path: z.string(),
   name: z.string().optional(),
   dataType: z.string(),
-});
+})
 
 export const AlarmInputRefSchema = AlarmTargetRefSchema.extend({
   key: z.string(),
-});
+})
 
 export const AlarmConditionSchema = z.object({
   id: z.string(),
@@ -959,7 +978,7 @@ export const AlarmConditionSchema = z.object({
   isEnabled: z.boolean(),
   severity: AlarmSeveritySchema,
   params: z.record(z.string(), z.unknown()).default({}),
-});
+})
 
 export const AlarmPolicyGroupSchema = z.object({
   id: z.string(),
@@ -970,7 +989,7 @@ export const AlarmPolicyGroupSchema = z.object({
   sortOrder: z.number(),
   createdAt: z.string(),
   updatedAt: z.string(),
-});
+})
 
 export const AlarmPolicySchema = z.object({
   id: z.string(),
@@ -992,74 +1011,78 @@ export const AlarmPolicySchema = z.object({
   contract: z.record(z.string(), z.unknown()).default({}),
   createdAt: z.string(),
   updatedAt: z.string(),
-});
+})
 
-export const AlarmPolicySaveSchema = z.object({
-  groupId: z.string().nullable().optional(),
-  name: z.string().min(1),
-  description: z.string().nullable().optional(),
-  mode: AlarmPolicyModeSchema,
-  targets: z.array(AlarmTargetRefSchema),
-  inputs: z.array(AlarmInputRefSchema),
-  derivedExpression: z.string(),
-  conditions: z.array(AlarmConditionSchema),
-  suppression: z.record(z.string(), z.unknown()).default({}),
-  messageTemplate: z.string().default(""),
-  isEnabled: z.boolean().default(true),
-}).strict();
+export const AlarmPolicySaveSchema = z
+  .object({
+    groupId: z.string().nullable().optional(),
+    name: z.string().min(1),
+    description: z.string().nullable().optional(),
+    mode: AlarmPolicyModeSchema,
+    targets: z.array(AlarmTargetRefSchema),
+    inputs: z.array(AlarmInputRefSchema),
+    derivedExpression: z.string(),
+    conditions: z.array(AlarmConditionSchema),
+    suppression: z.record(z.string(), z.unknown()).default({}),
+    messageTemplate: z.string().default(''),
+    isEnabled: z.boolean().default(true),
+  })
+  .strict()
 ```
 
 同一步内导出：
 
 ```ts
-export const AlarmPolicyUpdateSchema = AlarmPolicySaveSchema.partial().strict();
+export const AlarmPolicyUpdateSchema = AlarmPolicySaveSchema.partial().strict()
 
 export const AlarmPolicyTreeSchema = z.object({
   groups: z.array(AlarmPolicyGroupSchema),
   rootPolicies: z.array(AlarmPolicySchema),
   matchedPolicyCount: z.number(),
   totalPolicyCount: z.number(),
-});
+})
 
-export const AlarmBulkSelectionSchema = z.discriminatedUnion("mode", [
-  z.object({ mode: z.literal("ids"), policyIds: z.array(z.string()) }),
+export const AlarmBulkSelectionSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('ids'), policyIds: z.array(z.string()) }),
   z.object({
-    mode: z.literal("filtered"),
+    mode: z.literal('filtered'),
     filters: z.record(z.string(), z.unknown()),
     excludePolicyIds: z.array(z.string()).default([]),
   }),
-]);
+])
 
-export const AlarmPolicyTrialPayloadSchema = z.object({
-  value: z.unknown().optional(),
-  values: z.record(z.string(), z.unknown()).optional(),
-  timestamp: z.string().optional(),
-  context: z.record(z.string(), z.unknown()).default({}),
-}).default({});
+export const AlarmPolicyTrialPayloadSchema = z
+  .object({
+    value: z.unknown().optional(),
+    values: z.record(z.string(), z.unknown()).optional(),
+    timestamp: z.string().optional(),
+    context: z.record(z.string(), z.unknown()).default({}),
+  })
+  .default({})
 
 export const AlarmPolicyTrialResultSchema = z.object({
   triggered: z.boolean(),
-  state: z.enum(["triggered", "not_triggered", "insufficient_input"]),
+  state: z.enum(['triggered', 'not_triggered', 'insufficient_input']),
   triggeredConditions: z.array(AlarmConditionSchema).default([]),
   diagnostics: z.record(z.string(), z.unknown()).default({}),
   conditionResults: z.array(z.record(z.string(), z.unknown())).default([]),
-});
+})
 
-export const AlarmPolicyContractSchema = z.record(z.string(), z.unknown());
+export const AlarmPolicyContractSchema = z.record(z.string(), z.unknown())
 ```
 
 导出对应 type：
 
 ```ts
-export type AlarmPolicy = z.infer<typeof AlarmPolicySchema>;
-export type AlarmPolicySave = z.infer<typeof AlarmPolicySaveSchema>;
-export type AlarmPolicyUpdate = z.infer<typeof AlarmPolicyUpdateSchema>;
-export type AlarmPolicyGroup = z.infer<typeof AlarmPolicyGroupSchema>;
-export type AlarmPolicyTree = z.infer<typeof AlarmPolicyTreeSchema>;
-export type AlarmBulkSelection = z.infer<typeof AlarmBulkSelectionSchema>;
-export type AlarmPolicyTrialPayload = z.infer<typeof AlarmPolicyTrialPayloadSchema>;
-export type AlarmPolicyTrialResult = z.infer<typeof AlarmPolicyTrialResultSchema>;
-export type AlarmPolicyContract = z.infer<typeof AlarmPolicyContractSchema>;
+export type AlarmPolicy = z.infer<typeof AlarmPolicySchema>
+export type AlarmPolicySave = z.infer<typeof AlarmPolicySaveSchema>
+export type AlarmPolicyUpdate = z.infer<typeof AlarmPolicyUpdateSchema>
+export type AlarmPolicyGroup = z.infer<typeof AlarmPolicyGroupSchema>
+export type AlarmPolicyTree = z.infer<typeof AlarmPolicyTreeSchema>
+export type AlarmBulkSelection = z.infer<typeof AlarmBulkSelectionSchema>
+export type AlarmPolicyTrialPayload = z.infer<typeof AlarmPolicyTrialPayloadSchema>
+export type AlarmPolicyTrialResult = z.infer<typeof AlarmPolicyTrialResultSchema>
+export type AlarmPolicyContract = z.infer<typeof AlarmPolicyContractSchema>
 ```
 
 - [ ] **步骤 4：更新 API**
@@ -1070,20 +1093,23 @@ export type AlarmPolicyContract = z.infer<typeof AlarmPolicyContractSchema>;
 export async function getAlarmPolicyTree(projectId: string, params: Record<string, unknown> = {}) {
   const res = await request({
     url: `/data/projects/${projectId}/alarm-policies/tree`,
-    method: "get",
+    method: 'get',
     params,
-  });
-  return AlarmPolicyTreeSchema.parse(unwrapData(res));
+  })
+  return AlarmPolicyTreeSchema.parse(unwrapData(res))
 }
 
-export async function createAlarmPolicy(projectId: string, data: AlarmPolicySave): Promise<AlarmPolicy> {
-  const body = AlarmPolicySaveSchema.parse(data);
+export async function createAlarmPolicy(
+  projectId: string,
+  data: AlarmPolicySave,
+): Promise<AlarmPolicy> {
+  const body = AlarmPolicySaveSchema.parse(data)
   const res = await request({
     url: `/data/projects/${projectId}/alarm-policies`,
-    method: "post",
+    method: 'post',
     data: body,
-  });
-  return AlarmPolicySchema.parse(unwrapData(res));
+  })
+  return AlarmPolicySchema.parse(unwrapData(res))
 }
 ```
 
@@ -1091,22 +1117,68 @@ export async function createAlarmPolicy(projectId: string, data: AlarmPolicySave
 
 ```ts
 export async function getAlarmPolicyGroups(projectId: string): Promise<AlarmPolicyGroup[]>
-export async function createAlarmPolicyGroup(projectId: string, data: AlarmPolicyGroupSave): Promise<AlarmPolicyGroup>
-export async function updateAlarmPolicyGroup(projectId: string, groupId: string, data: AlarmPolicyGroupUpdate): Promise<AlarmPolicyGroup>
-export async function toggleAlarmPolicyGroup(projectId: string, groupId: string, isEnabled: boolean): Promise<AlarmPolicyGroup>
+export async function createAlarmPolicyGroup(
+  projectId: string,
+  data: AlarmPolicyGroupSave,
+): Promise<AlarmPolicyGroup>
+export async function updateAlarmPolicyGroup(
+  projectId: string,
+  groupId: string,
+  data: AlarmPolicyGroupUpdate,
+): Promise<AlarmPolicyGroup>
+export async function toggleAlarmPolicyGroup(
+  projectId: string,
+  groupId: string,
+  isEnabled: boolean,
+): Promise<AlarmPolicyGroup>
 export async function deleteAlarmPolicyGroup(projectId: string, groupId: string): Promise<void>
-export async function getAlarmPolicies(projectId: string, params?: Record<string, unknown>): Promise<AlarmPolicyListResp>
+export async function getAlarmPolicies(
+  projectId: string,
+  params?: Record<string, unknown>,
+): Promise<AlarmPolicyListResp>
 export async function getAlarmPolicy(projectId: string, policyId: string): Promise<AlarmPolicy>
-export async function updateAlarmPolicy(projectId: string, policyId: string, data: AlarmPolicyUpdate): Promise<AlarmPolicy>
-export async function toggleAlarmPolicy(projectId: string, policyId: string, isEnabled: boolean): Promise<AlarmPolicy>
+export async function updateAlarmPolicy(
+  projectId: string,
+  policyId: string,
+  data: AlarmPolicyUpdate,
+): Promise<AlarmPolicy>
+export async function toggleAlarmPolicy(
+  projectId: string,
+  policyId: string,
+  isEnabled: boolean,
+): Promise<AlarmPolicy>
 export async function deleteAlarmPolicy(projectId: string, policyId: string): Promise<void>
-export async function testAlarmPolicy(projectId: string, policyId: string, payload?: AlarmPolicyTrialPayload): Promise<AlarmPolicyTrialResult>
-export async function getAlarmPolicyContract(projectId: string, policyId: string): Promise<AlarmPolicyContract>
-export async function validateAlarmPolicyDraft(projectId: string, data: AlarmPolicySave): Promise<AlarmDraftValidation>
-export async function batchEnableAlarmPolicies(projectId: string, selection: AlarmBulkSelection): Promise<void>
-export async function batchDisableAlarmPolicies(projectId: string, selection: AlarmBulkSelection): Promise<void>
-export async function batchMoveAlarmPolicies(projectId: string, selection: AlarmBulkSelection, groupId: string | null): Promise<void>
-export async function batchApplyAlarmConditions(projectId: string, selection: AlarmBulkSelection, conditions: AlarmCondition[]): Promise<void>
+export async function testAlarmPolicy(
+  projectId: string,
+  policyId: string,
+  payload?: AlarmPolicyTrialPayload,
+): Promise<AlarmPolicyTrialResult>
+export async function getAlarmPolicyContract(
+  projectId: string,
+  policyId: string,
+): Promise<AlarmPolicyContract>
+export async function validateAlarmPolicyDraft(
+  projectId: string,
+  data: AlarmPolicySave,
+): Promise<AlarmDraftValidation>
+export async function batchEnableAlarmPolicies(
+  projectId: string,
+  selection: AlarmBulkSelection,
+): Promise<void>
+export async function batchDisableAlarmPolicies(
+  projectId: string,
+  selection: AlarmBulkSelection,
+): Promise<void>
+export async function batchMoveAlarmPolicies(
+  projectId: string,
+  selection: AlarmBulkSelection,
+  groupId: string | null,
+): Promise<void>
+export async function batchApplyAlarmConditions(
+  projectId: string,
+  selection: AlarmBulkSelection,
+  conditions: AlarmCondition[],
+): Promise<void>
 ```
 
 - [ ] **步骤 5：运行 schema 测试**
@@ -1127,6 +1199,7 @@ git commit -m "feat(datacenter): 定义报警策略前端接口"
 ## 任务 6：前端策略草稿模型和选择模型
 
 **文件：**
+
 - 创建：`datacenter/src/components/alarm/alarmPolicyModel.ts`
 - 修改：`datacenter/tests/alarm-rule-model.test.ts`
 
@@ -1135,70 +1208,84 @@ git commit -m "feat(datacenter): 定义报警策略前端接口"
 将 `alarm-rule-model.test.ts` 改为：
 
 ```ts
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from 'vitest'
 import {
   createDefaultAlarmPolicyDraft,
   draftToAlarmPolicySavePayload,
   makeFilteredSelection,
   togglePolicyInSelection,
   toAlarmPolicyDraft,
-} from "@/components/alarm/alarmPolicyModel";
-import type { AlarmPolicy } from "@/api/schemas/alarm.schema";
+} from '@/components/alarm/alarmPolicyModel'
+import type { AlarmPolicy } from '@/api/schemas/alarm.schema'
 
-describe("alarmPolicyModel", () => {
-  it("creates per target draft with empty conditions", () => {
-    const draft = createDefaultAlarmPolicyDraft();
-    expect(draft.mode).toBe("per_target");
-    expect(draft.targets).toEqual([]);
-    expect(draft.conditions).toEqual([]);
-  });
+describe('alarmPolicyModel', () => {
+  it('creates per target draft with empty conditions', () => {
+    const draft = createDefaultAlarmPolicyDraft()
+    expect(draft.mode).toBe('per_target')
+    expect(draft.targets).toEqual([])
+    expect(draft.conditions).toEqual([])
+  })
 
-  it("serializes multiple conditions", () => {
+  it('serializes multiple conditions', () => {
     const payload = draftToAlarmPolicySavePayload({
       ...createDefaultAlarmPolicyDraft(),
-      name: "温度策略",
+      name: '温度策略',
       conditions: [
-        { id: "c-h", type: "H", name: "高限", isEnabled: true, severity: "major", params: { limit: 80 } },
-        { id: "c-l", type: "L", name: "低限", isEnabled: true, severity: "warning", params: { limit: 20 } },
+        {
+          id: 'c-h',
+          type: 'H',
+          name: '高限',
+          isEnabled: true,
+          severity: 'major',
+          params: { limit: 80 },
+        },
+        {
+          id: 'c-l',
+          type: 'L',
+          name: '低限',
+          isEnabled: true,
+          severity: 'warning',
+          params: { limit: 20 },
+        },
       ],
-    });
-    expect(payload.conditions).toHaveLength(2);
-  });
+    })
+    expect(payload.conditions).toHaveLength(2)
+  })
 
-  it("keeps root policy group id null", () => {
-    const policy = makePolicy({ groupId: null });
-    const draft = toAlarmPolicyDraft(policy);
-    expect(draft.groupId).toBeNull();
-  });
+  it('keeps root policy group id null', () => {
+    const policy = makePolicy({ groupId: null })
+    const draft = toAlarmPolicyDraft(policy)
+    expect(draft.groupId).toBeNull()
+  })
 
-  it("tracks filtered select all with exclusions", () => {
-    const selection = makeFilteredSelection({ search: "温度", enabled: true });
-    const next = togglePolicyInSelection(selection, "policy-2", false);
-    expect(next.mode).toBe("filtered");
-    expect(next.excludePolicyIds).toContain("policy-2");
-  });
-});
+  it('tracks filtered select all with exclusions', () => {
+    const selection = makeFilteredSelection({ search: '温度', enabled: true })
+    const next = togglePolicyInSelection(selection, 'policy-2', false)
+    expect(next.mode).toBe('filtered')
+    expect(next.excludePolicyIds).toContain('policy-2')
+  })
+})
 
 function makePolicy(patch: Partial<AlarmPolicy> = {}): AlarmPolicy {
   return {
-    id: "policy-1",
-    projectId: "project-1",
+    id: 'policy-1',
+    projectId: 'project-1',
     groupId: null,
-    name: "温度策略",
-    mode: "per_target",
+    name: '温度策略',
+    mode: 'per_target',
     targets: [],
     inputs: [],
-    derivedExpression: "",
+    derivedExpression: '',
     conditions: [],
     suppression: {},
-    messageTemplate: "",
+    messageTemplate: '',
     isEnabled: true,
     effectiveEnabled: true,
     contract: {},
-    createdAt: "2026-05-20T10:00:00Z",
-    updatedAt: "2026-05-20T10:00:00Z",
+    createdAt: '2026-05-20T10:00:00Z',
+    updatedAt: '2026-05-20T10:00:00Z',
     ...patch,
-  };
+  }
 }
 ```
 
@@ -1223,39 +1310,39 @@ import type {
   AlarmPolicySave,
   AlarmTargetRef,
   AlarmInputRef,
-} from "@/api/schemas/alarm.schema";
+} from '@/api/schemas/alarm.schema'
 
 export type AlarmPolicyDraft = {
-  id?: string;
-  groupId: string | null;
-  name: string;
-  description: string;
-  mode: AlarmPolicyMode;
-  targets: AlarmTargetRef[];
-  inputs: AlarmInputRef[];
-  derivedExpression: string;
-  conditions: AlarmCondition[];
-  suppression: Record<string, unknown>;
-  messageTemplate: string;
-  isEnabled: boolean;
-  dirty: boolean;
-};
+  id?: string
+  groupId: string | null
+  name: string
+  description: string
+  mode: AlarmPolicyMode
+  targets: AlarmTargetRef[]
+  inputs: AlarmInputRef[]
+  derivedExpression: string
+  conditions: AlarmCondition[]
+  suppression: Record<string, unknown>
+  messageTemplate: string
+  isEnabled: boolean
+  dirty: boolean
+}
 
 export function createDefaultAlarmPolicyDraft(): AlarmPolicyDraft {
   return {
     groupId: null,
-    name: "",
-    description: "",
-    mode: "per_target",
+    name: '',
+    description: '',
+    mode: 'per_target',
     targets: [],
     inputs: [],
-    derivedExpression: "",
+    derivedExpression: '',
     conditions: [],
     suppression: { enabled: false },
-    messageTemplate: "",
+    messageTemplate: '',
     isEnabled: true,
     dirty: false,
-  };
+  }
 }
 ```
 
@@ -1267,7 +1354,7 @@ export function toAlarmPolicyDraft(policy: AlarmPolicy): AlarmPolicyDraft {
     id: policy.id,
     groupId: policy.groupId ?? null,
     name: policy.name,
-    description: policy.description ?? "",
+    description: policy.description ?? '',
     mode: policy.mode,
     targets: [...policy.targets],
     inputs: [...policy.inputs],
@@ -1280,7 +1367,7 @@ export function toAlarmPolicyDraft(policy: AlarmPolicy): AlarmPolicyDraft {
     messageTemplate: policy.messageTemplate,
     isEnabled: policy.isEnabled,
     dirty: false,
-  };
+  }
 }
 
 export function draftToAlarmPolicySavePayload(draft: AlarmPolicyDraft): AlarmPolicySave {
@@ -1296,34 +1383,38 @@ export function draftToAlarmPolicySavePayload(draft: AlarmPolicyDraft): AlarmPol
     suppression: draft.suppression,
     messageTemplate: draft.messageTemplate.trim(),
     isEnabled: draft.isEnabled,
-  };
+  }
 }
 
 export function makeIdSelection(policyIds: string[] = []): AlarmBulkSelection {
-  return { mode: "ids", policyIds };
+  return { mode: 'ids', policyIds }
 }
 
 export function makeFilteredSelection(filters: Record<string, unknown>): AlarmBulkSelection {
-  return { mode: "filtered", filters, excludePolicyIds: [] };
+  return { mode: 'filtered', filters, excludePolicyIds: [] }
 }
 
-export function togglePolicyInSelection(selection: AlarmBulkSelection, policyId: string, selected: boolean): AlarmBulkSelection {
-  if (selection.mode === "filtered") {
-    const excluded = new Set(selection.excludePolicyIds);
+export function togglePolicyInSelection(
+  selection: AlarmBulkSelection,
+  policyId: string,
+  selected: boolean,
+): AlarmBulkSelection {
+  if (selection.mode === 'filtered') {
+    const excluded = new Set(selection.excludePolicyIds)
     if (selected) {
-      excluded.delete(policyId);
+      excluded.delete(policyId)
     } else {
-      excluded.add(policyId);
+      excluded.add(policyId)
     }
-    return { ...selection, excludePolicyIds: [...excluded] };
+    return { ...selection, excludePolicyIds: [...excluded] }
   }
-  const ids = new Set(selection.policyIds);
+  const ids = new Set(selection.policyIds)
   if (selected) {
-    ids.add(policyId);
+    ids.add(policyId)
   } else {
-    ids.delete(policyId);
+    ids.delete(policyId)
   }
-  return { mode: "ids", policyIds: [...ids] };
+  return { mode: 'ids', policyIds: [...ids] }
 }
 ```
 
@@ -1345,6 +1436,7 @@ git commit -m "feat(datacenter): 实现报警策略草稿模型"
 ## 任务 7：前端 store 管理策略树和批量操作
 
 **文件：**
+
 - 修改：`datacenter/src/stores/alarm.store.ts`
 - 修改：`datacenter/tests/alarm-store.test.ts`
 
@@ -1353,35 +1445,64 @@ git commit -m "feat(datacenter): 实现报警策略草稿模型"
 在 `alarm-store.test.ts` 增加：
 
 ```ts
-import { createPinia, setActivePinia } from "pinia";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useAlarmStore } from "@/stores/alarm.store";
+import { createPinia, setActivePinia } from 'pinia'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useAlarmStore } from '@/stores/alarm.store'
 
-vi.mock("@/api/alarm.api", () => ({
+vi.mock('@/api/alarm.api', () => ({
   getAlarmPolicyGroups: vi.fn(async () => []),
   getAlarmPolicyTree: vi.fn(async () => ({
-    groups: [{ id: "group-1", projectId: "project-1", name: "A", isEnabled: true, sortOrder: 1, createdAt: "", updatedAt: "" }],
-    rootPolicies: [{ id: "policy-root", projectId: "project-1", groupId: null, name: "根策略", mode: "per_target", targets: [], inputs: [], derivedExpression: "", conditions: [], suppression: {}, messageTemplate: "", isEnabled: true, effectiveEnabled: true, contract: {}, createdAt: "", updatedAt: "" }],
+    groups: [
+      {
+        id: 'group-1',
+        projectId: 'project-1',
+        name: 'A',
+        isEnabled: true,
+        sortOrder: 1,
+        createdAt: '',
+        updatedAt: '',
+      },
+    ],
+    rootPolicies: [
+      {
+        id: 'policy-root',
+        projectId: 'project-1',
+        groupId: null,
+        name: '根策略',
+        mode: 'per_target',
+        targets: [],
+        inputs: [],
+        derivedExpression: '',
+        conditions: [],
+        suppression: {},
+        messageTemplate: '',
+        isEnabled: true,
+        effectiveEnabled: true,
+        contract: {},
+        createdAt: '',
+        updatedAt: '',
+      },
+    ],
     matchedPolicyCount: 1,
     totalPolicyCount: 1,
   })),
-}));
+}))
 
-describe("alarm store policy tree", () => {
-  beforeEach(() => setActivePinia(createPinia()));
+describe('alarm store policy tree', () => {
+  beforeEach(() => setActivePinia(createPinia()))
 
-  it("loads root policies without virtual ungrouped group", async () => {
-    const store = useAlarmStore();
-    await store.fetchTree("project-1", {});
-    expect(store.tree.rootPolicies.map((item) => item.name)).toEqual(["根策略"]);
-  });
+  it('loads root policies without virtual ungrouped group', async () => {
+    const store = useAlarmStore()
+    await store.fetchTree('project-1', {})
+    expect(store.tree.rootPolicies.map((item) => item.name)).toEqual(['根策略'])
+  })
 
-  it("selects filtered result with snapshot", () => {
-    const store = useAlarmStore();
-    store.selectFiltered({ search: "温度" });
-    expect(store.selection.mode).toBe("filtered");
-  });
-});
+  it('selects filtered result with snapshot', () => {
+    const store = useAlarmStore()
+    store.selectFiltered({ search: '温度' })
+    expect(store.selection.mode).toBe('filtered')
+  })
+})
 ```
 
 - [ ] **步骤 2：运行测试验证失败**
@@ -1397,15 +1518,15 @@ pnpm --dir datacenter test -- alarm-store
 在 `alarm.store.ts` 使用策略命名：
 
 ```ts
-const groups = ref<AlarmPolicyGroup[]>([]);
+const groups = ref<AlarmPolicyGroup[]>([])
 const tree = ref<AlarmPolicyTree>({
   groups: [],
   rootPolicies: [],
   matchedPolicyCount: 0,
   totalPolicyCount: 0,
-});
-const selection = ref<AlarmBulkSelection>({ mode: "ids", policyIds: [] });
-const editing = ref<AlarmPolicy | null>(null);
+})
+const selection = ref<AlarmBulkSelection>({ mode: 'ids', policyIds: [] })
+const editing = ref<AlarmPolicy | null>(null)
 ```
 
 实现：
@@ -1455,6 +1576,7 @@ git commit -m "feat(datacenter): 接入报警策略状态管理"
 ## 任务 8：左侧管理面板 UI
 
 **文件：**
+
 - 创建：`datacenter/src/components/alarm/AlarmManagementPanel.vue`
 - 创建：`datacenter/src/components/alarm/AlarmPolicyTree.vue`
 - 创建：`datacenter/src/components/alarm/AlarmPolicyFilters.vue`
@@ -1466,14 +1588,14 @@ git commit -m "feat(datacenter): 接入报警策略状态管理"
 
 ```ts
 const props = defineProps<{
-  groups: AlarmPolicyGroup[];
-  modelValue: Record<string, string | boolean | null>;
-}>();
+  groups: AlarmPolicyGroup[]
+  modelValue: Record<string, string | boolean | null>
+}>()
 
 const emit = defineEmits<{
-  "update:modelValue": [value: Record<string, string | boolean | null>];
-  search: [value: Record<string, string | boolean | null>];
-}>();
+  'update:modelValue': [value: Record<string, string | boolean | null>]
+  search: [value: Record<string, string | boolean | null>]
+}>()
 ```
 
 界面包含名称、分组、启停、级别、条件类型、模式筛选。文案短。
@@ -1484,13 +1606,13 @@ const emit = defineEmits<{
 
 ```ts
 const props = defineProps<{
-  groups: AlarmPolicyGroup[];
-  rootPolicies: AlarmPolicy[];
-  policiesByGroup: Record<string, AlarmPolicy[]>;
-  selectedPolicyId: string;
-  selection: AlarmBulkSelection;
-  loading: boolean;
-}>();
+  groups: AlarmPolicyGroup[]
+  rootPolicies: AlarmPolicy[]
+  policiesByGroup: Record<string, AlarmPolicy[]>
+  selectedPolicyId: string
+  selection: AlarmBulkSelection
+  loading: boolean
+}>()
 ```
 
 规则：
@@ -1560,6 +1682,7 @@ git commit -m "feat(datacenter): 实现报警策略管理面板"
 ## 任务 9：右侧策略编辑器和条件矩阵
 
 **文件：**
+
 - 创建：`datacenter/src/components/alarm/AlarmPolicyEditor.vue`
 - 创建：`datacenter/src/components/alarm/AlarmConditionMatrix.vue`
 - 创建：`datacenter/src/components/alarm/AlarmTargetSelector.vue`
@@ -1573,17 +1696,17 @@ git commit -m "feat(datacenter): 实现报警策略管理面板"
 
 ```ts
 const props = defineProps<{
-  modelValue: AlarmCondition[];
-  disabled?: boolean;
-}>();
+  modelValue: AlarmCondition[]
+  disabled?: boolean
+}>()
 ```
 
 emits：
 
 ```ts
 const emit = defineEmits<{
-  "update:modelValue": [value: AlarmCondition[]];
-}>();
+  'update:modelValue': [value: AlarmCondition[]]
+}>()
 ```
 
 表格列：启用、类型、名称、参数摘要、持续时间、回差、级别、操作。  
@@ -1657,6 +1780,7 @@ git commit -m "feat(datacenter): 实现报警策略编辑器"
 ## 任务 10：工作区编排、分组概览和批量设置视图
 
 **文件：**
+
 - 修改：`datacenter/src/components/alarm/AlarmWorkspace.vue`
 - 创建：`datacenter/src/components/alarm/AlarmGroupOverview.vue`
 - 创建：`datacenter/src/components/alarm/AlarmBulkEditor.vue`
@@ -1742,6 +1866,7 @@ git commit -m "feat(datacenter): 完成报警策略工作区编排"
 ## 任务 11：契约检查联动和旧规则入口收口
 
 **文件：**
+
 - 修改：`data_service/internal/service/contract_check_service.go`
 - 修改：`data_service/internal/service/contract_check_service_test.go`
 - 检查：`datacenter/src` 中所有 `AlarmRule`、`alarm-rules`、`alarmRuleModel` 引用
@@ -1808,6 +1933,7 @@ git commit -m "feat(data_service): 契约检查接入报警策略"
 ## 任务 12：最终验证和构建
 
 **文件：**
+
 - 无固定修改。只允许修复本计划引入的问题。
 
 - [ ] **步骤 1：后端全量测试**

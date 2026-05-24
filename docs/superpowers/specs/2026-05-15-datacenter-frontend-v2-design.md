@@ -3,6 +3,7 @@
 > 更新时间：2026-05-15
 > 适用范围：`datacenter/` 前端的目标态设计。
 > 子文档：
+>
 > - [01 数据点工作区](./datacenter-frontend-v2/01-datapoint.md)
 > - [02 接入源工作区](./datacenter-frontend-v2/02-access-source.md)
 > - [03 计算单元工作区](./datacenter-frontend-v2/03-compute.md)
@@ -41,6 +42,7 @@
 ### `DESIGN.md` / `PRODUCT.md` 优化方向
 
 详见 K 节。要点：
+
 - `DESIGN.md` 补齐数据中心特有原子组件规范（pill-button、status-badge、抽屉、批量操作条、LinkChip）。
 - `PRODUCT.md` 在「Design Principles」补一条「模块布局自由，视觉基底统一」。
 
@@ -101,6 +103,7 @@
 v2 不为四个模块定义统一布局结构。各模块按自身任务特点选形态，但视觉基底（A 节列出的 token 与原子组件）必须一致。
 
 预期布局取向（具体方案在子文档展开）：
+
 - 数据点：单栏列表（工具栏 + 表格 + 抽屉详情 + 分页）。
 - 接入源：卡片网格 + 详情抽屉 + 二级工作台（接入源专属全屏）。
 - 计算单元：左侧文件夹树 + 右侧编辑器 IDE 形态。
@@ -143,6 +146,7 @@ v2 不为四个模块定义统一布局结构。各模块按自身任务特点�
 ```
 /datacenter/:module/:objectId?/:tab?
 ```
+
 - `module`: `datapoint | access-source | compute | alarm`（默认 `datapoint`）
 - `objectId`: 选中对象 ID（在详情抽屉打开）
 - `tab`: 详情抽屉当前 Tab key
@@ -227,6 +231,7 @@ token / refreshToken **不进 URL、不进 localStorage**，统一通过 IDE 消
 ### 定位
 
 预览会话**不是数据中心的全局基础设施**，仅在接入源工作台内由协议特定场景按需启动：
+
 - MQTT 订阅消息预览、Tag 监视
 - Kafka 短时 reader 预览
 - HTTP / WebSocket 一次性预览
@@ -367,6 +372,7 @@ token / refreshToken **不进 URL、不进 localStorage**，统一通过 IDE 消
 ### 手工验收清单
 
 各子文档自带模块级清单。共性项：
+
 - 列表筛选 / 排序 / 分页基线动作。
 - 详情抽屉打开 / 钉住 / 关闭。
 - 跨模块跳转 LinkChip。

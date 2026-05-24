@@ -2,85 +2,85 @@
 name: InduForge
 description: 工业应用低代码开发平台的产品工作台视觉系统
 colors:
-  primary: "#1d4ed8"
-  primary-hover: "#1e40af"
-  accent: "#0ea5a5"
-  success: "#22c55e"
-  warning: "#f59e0b"
-  danger: "#ef4444"
-  background: "#f6f5f2"
-  surface: "#ffffff"
-  surface-muted: "#eef2f7"
-  text-primary: "#0f172a"
-  text-secondary: "#475569"
-  text-muted: "#94a3b8"
-  border: "#d7dde7"
+  primary: '#1d4ed8'
+  primary-hover: '#1e40af'
+  accent: '#0ea5a5'
+  success: '#22c55e'
+  warning: '#f59e0b'
+  danger: '#ef4444'
+  background: '#f6f5f2'
+  surface: '#ffffff'
+  surface-muted: '#eef2f7'
+  text-primary: '#0f172a'
+  text-secondary: '#475569'
+  text-muted: '#94a3b8'
+  border: '#d7dde7'
 typography:
   headline:
-    fontFamily: "Source Han Sans SC, PingFang SC, Microsoft YaHei, Helvetica Neue, sans-serif"
-    fontSize: "20px"
+    fontFamily: 'Source Han Sans SC, PingFang SC, Microsoft YaHei, Helvetica Neue, sans-serif'
+    fontSize: '20px'
     fontWeight: 700
     lineHeight: 1.4
-    letterSpacing: "0"
+    letterSpacing: '0'
   title:
-    fontFamily: "Source Han Sans SC, PingFang SC, Microsoft YaHei, Helvetica Neue, sans-serif"
-    fontSize: "16px"
+    fontFamily: 'Source Han Sans SC, PingFang SC, Microsoft YaHei, Helvetica Neue, sans-serif'
+    fontSize: '16px'
     fontWeight: 700
     lineHeight: 1.5
-    letterSpacing: "0"
+    letterSpacing: '0'
   body:
-    fontFamily: "Source Han Sans SC, PingFang SC, Microsoft YaHei, Helvetica Neue, sans-serif"
-    fontSize: "14px"
+    fontFamily: 'Source Han Sans SC, PingFang SC, Microsoft YaHei, Helvetica Neue, sans-serif'
+    fontSize: '14px'
     fontWeight: 400
     lineHeight: 1.5
-    letterSpacing: "0"
+    letterSpacing: '0'
   label:
-    fontFamily: "Source Han Sans SC, PingFang SC, Microsoft YaHei, Helvetica Neue, sans-serif"
-    fontSize: "13px"
+    fontFamily: 'Source Han Sans SC, PingFang SC, Microsoft YaHei, Helvetica Neue, sans-serif'
+    fontSize: '13px'
     fontWeight: 500
     lineHeight: 1.4
-    letterSpacing: "0"
+    letterSpacing: '0'
   mono:
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace"
-    fontSize: "12px"
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace'
+    fontSize: '12px'
     fontWeight: 400
     lineHeight: 1.4
-    letterSpacing: "0"
+    letterSpacing: '0'
 rounded:
-  sm: "8px"
-  md: "12px"
-  lg: "18px"
-  xl: "24px"
+  sm: '8px'
+  md: '12px'
+  lg: '18px'
+  xl: '24px'
 spacing:
-  xs: "4px"
-  sm: "8px"
-  md: "12px"
-  lg: "16px"
-  xl: "24px"
+  xs: '4px'
+  sm: '8px'
+  md: '12px'
+  lg: '16px'
+  xl: '24px'
 components:
   icon-button:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.text-secondary}"
-    rounded: "{rounded.md}"
-    width: "32px"
-    height: "32px"
+    backgroundColor: '{colors.surface}'
+    textColor: '{colors.text-secondary}'
+    rounded: '{rounded.md}'
+    width: '32px'
+    height: '32px'
   button-primary:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.surface}"
-    rounded: "{rounded.md}"
-    padding: "0 12px"
-    height: "32px"
+    backgroundColor: '{colors.primary}'
+    textColor: '{colors.surface}'
+    rounded: '{rounded.md}'
+    padding: '0 12px'
+    height: '32px'
   card:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.text-primary}"
-    rounded: "{rounded.md}"
-    padding: "14px"
+    backgroundColor: '{colors.surface}'
+    textColor: '{colors.text-primary}'
+    rounded: '{rounded.md}'
+    padding: '14px'
   input:
-    backgroundColor: "{colors.surface-muted}"
-    textColor: "{colors.text-primary}"
-    rounded: "{rounded.md}"
-    padding: "6px 12px"
-    height: "32px"
+    backgroundColor: '{colors.surface-muted}'
+    textColor: '{colors.text-primary}'
+    rounded: '{rounded.md}'
+    padding: '6px 12px'
+    height: '32px'
 ---
 
 # Design System: InduForge

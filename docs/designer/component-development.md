@@ -32,17 +32,17 @@
 
 ```typescript
 export const manifest: ComponentManifest = {
-  type: "Button",
-  name: "按钮",
-  category: "PC端组件",
-  defaultStyle: { width: "auto", height: "auto" },
+  type: 'Button',
+  name: '按钮',
+  category: 'PC端组件',
+  defaultStyle: { width: 'auto', height: 'auto' },
   props: [
     {
-      name: "text",
-      type: "string",
-      label: "按钮文字",
-      group: "内容",
-      defaultValue: "按钮",
+      name: 'text',
+      type: 'string',
+      label: '按钮文字',
+      group: '内容',
+      defaultValue: '按钮',
       bindable: true,
     },
   ],

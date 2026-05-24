@@ -10,7 +10,7 @@
         <el-tag :type="bootstrapStatus.centerBound ? 'success' : 'info'">
           {{ bootstrapStatus.centerBound ? '已绑定运维中心' : '未绑定（本地运行）' }}
         </el-tag>
-        <el-tag style="margin-left: 8px;" type="warning">
+        <el-tag style="margin-left: 8px" type="warning">
           初始化状态: {{ bootstrapStatus.status || '-' }}
         </el-tag>
       </div>
@@ -26,7 +26,12 @@
           <el-input v-model="centerForm.username" placeholder="请输入用户名" />
         </el-form-item>
         <el-form-item label="密码" required>
-          <el-input v-model="centerForm.password" type="password" show-password placeholder="请输入密码" />
+          <el-input
+            v-model="centerForm.password"
+            type="password"
+            show-password
+            placeholder="请输入密码"
+          />
         </el-form-item>
         <el-form-item label="节点名称" required>
           <el-input v-model="centerForm.nodeName" placeholder="node-local-01" />
@@ -37,13 +42,17 @@
       </el-form>
 
       <div class="ops-row">
-        <el-button type="primary" :loading="binding" @click="bindCenter">
-          绑定运维中心
-        </el-button>
+        <el-button type="primary" :loading="binding" @click="bindCenter"> 绑定运维中心 </el-button>
         <el-button :disabled="!approvalPending" :loading="checkingApproval" @click="checkApproval">
           刷新审批状态
         </el-button>
-        <el-button type="danger" plain :disabled="!bootstrapStatus.centerBound" :loading="unbinding" @click="unbindCenter">
+        <el-button
+          type="danger"
+          plain
+          :disabled="!bootstrapStatus.centerBound"
+          :loading="unbinding"
+          @click="unbindCenter"
+        >
           解绑（切回本地）
         </el-button>
       </div>
@@ -64,8 +73,13 @@
 
       <el-form label-width="120px">
         <el-form-item label="项目ID" required>
-          <el-input v-model="projectId" placeholder="输入项目ID" style="max-width: 300px;" />
-          <el-button type="primary" @click="loadProfile" :loading="loading" style="margin-left: 10px;">
+          <el-input v-model="projectId" placeholder="输入项目ID" style="max-width: 300px" />
+          <el-button
+            type="primary"
+            @click="loadProfile"
+            :loading="loading"
+            style="margin-left: 10px"
+          >
             加载配置
           </el-button>
         </el-form-item>
@@ -86,13 +100,13 @@
         </el-descriptions-item>
       </el-descriptions>
 
-      <div v-if="profileData" style="margin-top: 20px;">
+      <div v-if="profileData" style="margin-top: 20px">
         <el-button type="primary" @click="editMode = !editMode">
           {{ editMode ? '取消编辑' : '编辑配置' }}
         </el-button>
       </div>
 
-      <el-form v-if="editMode" :model="editForm" label-width="120px" style="margin-top: 20px;">
+      <el-form v-if="editMode" :model="editForm" label-width="120px" style="margin-top: 20px">
         <el-form-item label="名称">
           <el-input v-model="editForm.name" />
         </el-form-item>
@@ -115,9 +129,7 @@
           />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="saveProfile" :loading="saving">
-            保存
-          </el-button>
+          <el-button type="primary" @click="saveProfile" :loading="saving"> 保存 </el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -217,7 +229,12 @@ const loadServiceConfig = async () => {
 }
 
 const bindCenter = async () => {
-  if (!centerForm.centerUrl || !centerForm.username || !centerForm.password || !centerForm.nodeName) {
+  if (
+    !centerForm.centerUrl ||
+    !centerForm.username ||
+    !centerForm.password ||
+    !centerForm.nodeName
+  ) {
     ElMessage.warning('请填写运维中心地址、用户名、密码和节点名称')
     return
   }
@@ -283,7 +300,10 @@ const checkApproval = async () => {
 
   checkingApproval.value = true
   try {
-    const result = await checkApprovalStatus(pendingRegistration.centerUrl, pendingRegistration.nodeId)
+    const result = await checkApprovalStatus(
+      pendingRegistration.centerUrl,
+      pendingRegistration.nodeId,
+    )
     if (!result?.success) {
       throw new Error(result?.message || '查询审批状态失败')
     }

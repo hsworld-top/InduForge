@@ -5,53 +5,49 @@
  * 使用 PostgreSQL 创建 if_core，并执行 core-schema.sql 完成结构同步和初始数据补齐。
  */
 
-const { Client } = require("pg");
-const bcrypt = require("bcryptjs");
-const dayjs = require("dayjs");
-const fs = require("fs");
-const path = require("path");
-require("dotenv").config({ path: path.resolve(__dirname, "../../../.env") });
-const { buildMetaStoreConfig } = require("../../src/config/infra");
+const { Client } = require('pg')
+const bcrypt = require('bcryptjs')
+const dayjs = require('dayjs')
+const fs = require('fs')
+const path = require('path')
+require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') })
+const { buildMetaStoreConfig } = require('../../src/config/infra')
 
 const dbConfig = {
   ...buildMetaStoreConfig(),
   connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT || 60000),
-};
+}
 
-const NON_CRITICAL_SQL_ERROR_CODES = new Set(["42P07", "42710", "23505"]);
+const NON_CRITICAL_SQL_ERROR_CODES = new Set(['42P07', '42710', '23505'])
 
 const initialData = {
   superAdmin: {
-    username: process.env.SUPER_ADMIN_USERNAME || "superadmin",
-    password: process.env.SUPER_ADMIN_PASSWORD || "admin123",
-    userId:
-      process.env.SUPER_ADMIN_USER_ID || "550e8400-e29b-41d4-a716-446655440001",
+    username: process.env.SUPER_ADMIN_USERNAME || 'superadmin',
+    password: process.env.SUPER_ADMIN_PASSWORD || 'admin123',
+    userId: process.env.SUPER_ADMIN_USER_ID || '550e8400-e29b-41d4-a716-446655440001',
   },
   defaultTenant: {
-    id: process.env.DEFAULT_TENANT_ID || "550e8400-e29b-41d4-a716-446655440000",
-    name: process.env.DEFAULT_TENANT_NAME || "InduForge",
-    code: process.env.DEFAULT_TENANT_CODE || "default",
-    description: process.env.DEFAULT_TENANT_DESCRIPTION || "InduForge 默认租户",
-    contactEmail:
-      process.env.DEFAULT_TENANT_CONTACT_EMAIL || "admin@example.com",
+    id: process.env.DEFAULT_TENANT_ID || '550e8400-e29b-41d4-a716-446655440000',
+    name: process.env.DEFAULT_TENANT_NAME || 'InduForge',
+    code: process.env.DEFAULT_TENANT_CODE || 'default',
+    description: process.env.DEFAULT_TENANT_DESCRIPTION || 'InduForge 默认租户',
+    contactEmail: process.env.DEFAULT_TENANT_CONTACT_EMAIL || 'admin@example.com',
     maxUsers: Number(process.env.DEFAULT_TENANT_MAX_USERS || 100),
     maxProjects: Number(process.env.DEFAULT_TENANT_MAX_PROJECTS || 50),
   },
   tenantDefaults: {
-    defaultAdminUsername: process.env.TENANT_DEFAULT_ADMIN_USERNAME || "admin",
-    defaultAdminPassword:
-      process.env.TENANT_DEFAULT_ADMIN_PASSWORD || "admin123",
+    defaultAdminUsername: process.env.TENANT_DEFAULT_ADMIN_USERNAME || 'admin',
+    defaultAdminPassword: process.env.TENANT_DEFAULT_ADMIN_PASSWORD || 'admin123',
   },
-};
+}
 
 const getSslConfig = () =>
   dbConfig.sslEnabled
     ? {
         rejectUnauthorized:
-          String(process.env.DB_SSL_REJECT_UNAUTHORIZED || "false").toLowerCase() ===
-          "true",
+          String(process.env.DB_SSL_REJECT_UNAUTHORIZED || 'false').toLowerCase() === 'true',
       }
-    : false;
+    : false
 
 const buildClient = (database) =>
   new Client({
@@ -62,23 +58,23 @@ const buildClient = (database) =>
     database,
     connectionTimeoutMillis: dbConfig.connectTimeout,
     ssl: getSslConfig(),
-  });
+  })
 
 const quoteIdentifier = (value) => {
-  const normalized = String(value || "").trim();
+  const normalized = String(value || '').trim()
   if (!normalized) {
-    throw new Error("数据库名称不能为空");
+    throw new Error('数据库名称不能为空')
   }
-  return `"${normalized.replace(/"/g, '""')}"`;
-};
+  return `"${normalized.replace(/"/g, '""')}"`
+}
 
 async function insertInitialData(client) {
   try {
-    console.log("📝 插入初始数据...");
+    console.log('📝 插入初始数据...')
 
-    const now = dayjs().toDate();
+    const now = dayjs().toDate()
 
-    console.log("🏢 创建默认租户...");
+    console.log('🏢 创建默认租户...')
     await client.query(
       `
         INSERT INTO tenants (
@@ -109,20 +105,17 @@ async function insertInitialData(client) {
         initialData.defaultTenant.name,
         initialData.defaultTenant.code,
         initialData.defaultTenant.description,
-        "active",
+        'active',
         initialData.defaultTenant.contactEmail,
         initialData.defaultTenant.maxUsers,
         initialData.defaultTenant.maxProjects,
         now,
         now,
       ],
-    );
+    )
 
-    console.log("👑 创建超级管理员...");
-    const superAdminHashedPassword = await bcrypt.hash(
-      initialData.superAdmin.password,
-      12,
-    );
+    console.log('👑 创建超级管理员...')
+    const superAdminHashedPassword = await bcrypt.hash(initialData.superAdmin.password, 12)
     await client.query(
       `
         INSERT INTO users (
@@ -149,21 +142,21 @@ async function insertInitialData(client) {
         initialData.superAdmin.userId,
         initialData.superAdmin.username,
         superAdminHashedPassword,
-        "超级管理员",
-        "SUPER_ADMIN",
-        "active",
+        '超级管理员',
+        'SUPER_ADMIN',
+        'active',
         initialData.defaultTenant.id,
         now,
         now,
       ],
-    );
+    )
 
-    console.log("👤 创建系统管理员...");
+    console.log('👤 创建系统管理员...')
     const systemAdminHashedPassword = await bcrypt.hash(
       initialData.tenantDefaults.defaultAdminPassword,
       12,
-    );
-    const systemAdminId = "550e8400-e29b-41d4-a716-446655440002";
+    )
+    const systemAdminId = '550e8400-e29b-41d4-a716-446655440002'
     await client.query(
       `
         INSERT INTO users (
@@ -190,30 +183,30 @@ async function insertInitialData(client) {
         systemAdminId,
         initialData.tenantDefaults.defaultAdminUsername,
         systemAdminHashedPassword,
-        "系统管理员",
-        "SYSTEM_ADMIN",
-        "active",
+        '系统管理员',
+        'SYSTEM_ADMIN',
+        'active',
         initialData.defaultTenant.id,
         now,
         now,
       ],
-    );
+    )
 
-    console.log("✅ 初始数据插入完成");
+    console.log('✅ 初始数据插入完成')
   } catch (error) {
-    console.error("❌ 插入初始数据失败:", error);
-    throw error;
+    console.error('❌ 插入初始数据失败:', error)
+    throw error
   }
 }
 
 function splitSqlStatements(sqlContent) {
-  const statements = [];
-  let current = "";
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-  let inLineComment = false;
-  let blockCommentDepth = 0;
-  let dollarTag = null;
+  const statements = []
+  let current = ''
+  let inSingleQuote = false
+  let inDoubleQuote = false
+  let inLineComment = false
+  let blockCommentDepth = 0
+  let dollarTag = null
 
   /**
    * 按字符扫描 SQL，确保仅在“真实语句边界”的分号处分割：
@@ -222,132 +215,132 @@ function splitSqlStatements(sqlContent) {
    * - 兼容 PostgreSQL 的 DO $$ ... $$ / $tag$ ... $tag$ 结构
    */
   for (let index = 0; index < sqlContent.length; index += 1) {
-    const char = sqlContent[index];
-    const nextChar = sqlContent[index + 1];
-    const rest = sqlContent.slice(index);
+    const char = sqlContent[index]
+    const nextChar = sqlContent[index + 1]
+    const rest = sqlContent.slice(index)
 
     if (inLineComment) {
-      current += char;
-      if (char === "\n") {
-        inLineComment = false;
+      current += char
+      if (char === '\n') {
+        inLineComment = false
       }
-      continue;
+      continue
     }
 
     if (blockCommentDepth > 0) {
-      current += char;
-      if (char === "/" && nextChar === "*") {
-        current += nextChar;
-        blockCommentDepth += 1;
-        index += 1;
-        continue;
+      current += char
+      if (char === '/' && nextChar === '*') {
+        current += nextChar
+        blockCommentDepth += 1
+        index += 1
+        continue
       }
-      if (char === "*" && nextChar === "/") {
-        current += nextChar;
-        blockCommentDepth -= 1;
-        index += 1;
+      if (char === '*' && nextChar === '/') {
+        current += nextChar
+        blockCommentDepth -= 1
+        index += 1
       }
-      continue;
+      continue
     }
 
     if (dollarTag) {
       if (rest.startsWith(dollarTag)) {
-        current += dollarTag;
-        index += dollarTag.length - 1;
-        dollarTag = null;
+        current += dollarTag
+        index += dollarTag.length - 1
+        dollarTag = null
       } else {
-        current += char;
+        current += char
       }
-      continue;
+      continue
     }
 
     if (inSingleQuote) {
-      current += char;
+      current += char
       if (char === "'" && nextChar === "'") {
-        current += nextChar;
-        index += 1;
-        continue;
+        current += nextChar
+        index += 1
+        continue
       }
       if (char === "'") {
-        inSingleQuote = false;
+        inSingleQuote = false
       }
-      continue;
+      continue
     }
 
     if (inDoubleQuote) {
-      current += char;
+      current += char
       if (char === '"' && nextChar === '"') {
-        current += nextChar;
-        index += 1;
-        continue;
+        current += nextChar
+        index += 1
+        continue
       }
       if (char === '"') {
-        inDoubleQuote = false;
+        inDoubleQuote = false
       }
-      continue;
+      continue
     }
 
-    if (char === "-" && nextChar === "-") {
-      current += "--";
-      inLineComment = true;
-      index += 1;
-      continue;
+    if (char === '-' && nextChar === '-') {
+      current += '--'
+      inLineComment = true
+      index += 1
+      continue
     }
 
-    if (char === "/" && nextChar === "*") {
-      current += "/*";
-      blockCommentDepth = 1;
-      index += 1;
-      continue;
+    if (char === '/' && nextChar === '*') {
+      current += '/*'
+      blockCommentDepth = 1
+      index += 1
+      continue
     }
 
     if (char === "'") {
-      current += char;
-      inSingleQuote = true;
-      continue;
+      current += char
+      inSingleQuote = true
+      continue
     }
 
     if (char === '"') {
-      current += char;
-      inDoubleQuote = true;
-      continue;
+      current += char
+      inDoubleQuote = true
+      continue
     }
 
-    if (char === "$") {
-      const dollarMatch = rest.match(/^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/);
+    if (char === '$') {
+      const dollarMatch = rest.match(/^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/)
       if (dollarMatch) {
-        dollarTag = dollarMatch[0];
-        current += dollarTag;
-        index += dollarTag.length - 1;
-        continue;
+        dollarTag = dollarMatch[0]
+        current += dollarTag
+        index += dollarTag.length - 1
+        continue
       }
     }
 
-    if (char === ";") {
-      const statement = current.trim();
+    if (char === ';') {
+      const statement = current.trim()
       if (statement) {
-        statements.push(statement);
+        statements.push(statement)
       }
-      current = "";
-      continue;
+      current = ''
+      continue
     }
 
-    current += char;
+    current += char
   }
 
-  const tail = current.trim();
+  const tail = current.trim()
   if (tail) {
-    statements.push(tail);
+    statements.push(tail)
   }
 
-  return statements;
+  return statements
 }
 
 async function ensureDatabaseExists(reset = false) {
-  const adminClient = buildClient(dbConfig.adminDatabase);
+  const adminClient = buildClient(dbConfig.adminDatabase)
 
   try {
-    await adminClient.connect();
+    await adminClient.connect()
 
     if (reset) {
       await adminClient.query(
@@ -358,113 +351,106 @@ async function ensureDatabaseExists(reset = false) {
             AND pid <> pg_backend_pid()
         `,
         [dbConfig.database],
-      );
-      await adminClient.query(
-        `DROP DATABASE IF EXISTS ${quoteIdentifier(dbConfig.database)}`,
-      );
+      )
+      await adminClient.query(`DROP DATABASE IF EXISTS ${quoteIdentifier(dbConfig.database)}`)
     }
 
-    const result = await adminClient.query(
-      "SELECT 1 FROM pg_database WHERE datname = $1 LIMIT 1",
-      [dbConfig.database],
-    );
+    const result = await adminClient.query('SELECT 1 FROM pg_database WHERE datname = $1 LIMIT 1', [
+      dbConfig.database,
+    ])
 
     if (result.rowCount === 0) {
-      await adminClient.query(
-        `CREATE DATABASE ${quoteIdentifier(dbConfig.database)}`,
-      );
+      await adminClient.query(`CREATE DATABASE ${quoteIdentifier(dbConfig.database)}`)
     }
   } finally {
-    await adminClient.end().catch(() => {});
+    await adminClient.end().catch(() => {})
   }
 }
 
 async function syncDatabaseSchema(options = {}) {
-  const { reset = false, seed = true } = options;
-  let client;
+  const { reset = false, seed = true } = options
+  let client
 
   try {
-    await ensureDatabaseExists(reset);
+    await ensureDatabaseExists(reset)
 
-    client = buildClient(dbConfig.database);
-    await client.connect();
+    client = buildClient(dbConfig.database)
+    await client.connect()
 
-    const sqlFilePath = path.join(__dirname, "sql", "core-schema.sql");
+    const sqlFilePath = path.join(__dirname, 'sql', 'core-schema.sql')
     if (!fs.existsSync(sqlFilePath)) {
-      throw new Error(`SQL 文件不存在: ${sqlFilePath}`);
+      throw new Error(`SQL 文件不存在: ${sqlFilePath}`)
     }
 
-    const sqlContent = fs.readFileSync(sqlFilePath, "utf8");
-    const statements = splitSqlStatements(sqlContent);
-    let executed = 0;
-    let skipped = 0;
+    const sqlContent = fs.readFileSync(sqlFilePath, 'utf8')
+    const statements = splitSqlStatements(sqlContent)
+    let executed = 0
+    let skipped = 0
 
     for (const statement of statements) {
       try {
-        await client.query(statement);
-        executed += 1;
+        await client.query(statement)
+        executed += 1
       } catch (error) {
         if (NON_CRITICAL_SQL_ERROR_CODES.has(error.code)) {
-          skipped += 1;
-          continue;
+          skipped += 1
+          continue
         }
-        throw error;
+        throw error
       }
     }
 
     if (seed) {
-      await insertInitialData(client);
+      await insertInitialData(client)
     }
 
     return {
       total: statements.length,
       executed,
       skipped,
-    };
+    }
   } finally {
     if (client) {
-      await client.end().catch(() => {});
+      await client.end().catch(() => {})
     }
   }
 }
 
 async function executeSqlFile() {
   try {
-    console.log("🔄 正在同步数据库结构...");
-    const result = await syncDatabaseSchema({ reset: false, seed: true });
+    console.log('🔄 正在同步数据库结构...')
+    const result = await syncDatabaseSchema({ reset: false, seed: true })
     console.log(
       `✅ 数据库结构同步完成，总语句 ${result.total}，执行 ${result.executed}，跳过 ${result.skipped}`,
-    );
-    console.log("🎉 数据库初始化完成！");
+    )
+    console.log('🎉 数据库初始化完成！')
   } catch (error) {
-    console.error("❌ 数据库初始化失败:", error);
-    process.exit(1);
+    console.error('❌ 数据库初始化失败:', error)
+    process.exit(1)
   }
 }
 
 async function main() {
-  const command = process.argv[2];
+  const command = process.argv[2]
 
-  if (command === "init" || !command) {
-    await executeSqlFile();
+  if (command === 'init' || !command) {
+    await executeSqlFile()
   } else {
-    console.log("使用方法:");
-    console.log(
-      "  node scripts/bootstrap/init-core-database.js init    # 初始化控制面数据库",
-    );
-    process.exit(1);
+    console.log('使用方法:')
+    console.log('  node scripts/bootstrap/init-core-database.js init    # 初始化控制面数据库')
+    process.exit(1)
   }
 }
 
 if (require.main === module) {
   main().catch((error) => {
-    console.error("❌ 脚本执行失败:", error);
-    process.exit(1);
-  });
+    console.error('❌ 脚本执行失败:', error)
+    process.exit(1)
+  })
 }
 
 module.exports = {
   executeSqlFile,
   syncDatabaseSchema,
   splitSqlStatements,
-};
+}

@@ -1,23 +1,23 @@
-const express = require('express');
-const multer = require('multer');
-const Joi = require('joi');
-const sharp = require('sharp');
-const { randomUUID } = require('crypto');
-const { Readable } = require('stream');
-const { Op } = require('sequelize');
-const { validate } = require('../../middlewares/validate');
-const { logger } = require('../../utils/logger');
-const ApiResponse = require('../../utils/response');
-const ErrorCodes = require('../../constants/errorCodes');
-const AppError = require('../../utils/AppError');
-const appConfig = require('../../config/app');
-const storageService = require('../../services/storageService');
+const express = require('express')
+const multer = require('multer')
+const Joi = require('joi')
+const sharp = require('sharp')
+const { randomUUID } = require('crypto')
+const { Readable } = require('stream')
+const { Op } = require('sequelize')
+const { validate } = require('../../middlewares/validate')
+const { logger } = require('../../utils/logger')
+const ApiResponse = require('../../utils/response')
+const ErrorCodes = require('../../constants/errorCodes')
+const AppError = require('../../utils/AppError')
+const appConfig = require('../../config/app')
+const storageService = require('../../services/storageService')
 
-const router = express.Router();
+const router = express.Router()
 
 // 导入模型和中间件
-const { Tenant, User } = require('../../models');
-const { authenticateToken, requireRole } = require('../../middlewares/auth');
+const { Tenant, User } = require('../../models')
+const { authenticateToken, requireRole } = require('../../middlewares/auth')
 
 /**
  * 构建租户资产访问 URL。
@@ -25,7 +25,7 @@ const { authenticateToken, requireRole } = require('../../middlewares/auth');
  * @returns {string} 对外访问 URL
  */
 const buildTenantAssetUrl = (objectKey) =>
-  `/api/v1/tenants/assets?key=${encodeURIComponent(objectKey)}`;
+  `/api/v1/tenants/assets?key=${encodeURIComponent(objectKey)}`
 
 /**
  * 判断是否为 base64 图片 DataURL。
@@ -33,7 +33,7 @@ const buildTenantAssetUrl = (objectKey) =>
  * @returns {boolean} 是否为 DataURL
  */
 const isImageDataUrl = (value) =>
-  typeof value === 'string' && /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(value);
+  typeof value === 'string' && /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(value)
 
 /**
  * 判断对象存储错误是否为资源不存在。
@@ -42,11 +42,19 @@ const isImageDataUrl = (value) =>
  * @returns {boolean} 是否为不存在类错误
  */
 const isStorageNotFoundError = (error) => {
-  const normalizedCode = String(error?.code || '').trim().toUpperCase();
-  const statusCode = Number(error?.statusCode || error?.status);
-  const notFoundCodes = new Set(['NOTFOUND', 'NOSUCHKEY', 'NO_SUCH_KEY', 'NOSUCHBUCKET', 'NO_SUCH_BUCKET']);
-  return statusCode === 404 || notFoundCodes.has(normalizedCode);
-};
+  const normalizedCode = String(error?.code || '')
+    .trim()
+    .toUpperCase()
+  const statusCode = Number(error?.statusCode || error?.status)
+  const notFoundCodes = new Set([
+    'NOTFOUND',
+    'NOSUCHKEY',
+    'NO_SUCH_KEY',
+    'NOSUCHBUCKET',
+    'NO_SUCH_BUCKET',
+  ])
+  return statusCode === 404 || notFoundCodes.has(normalizedCode)
+}
 
 /**
  * 解析 base64 图片 DataURL。
@@ -55,15 +63,15 @@ const isStorageNotFoundError = (error) => {
  * @throws {Error} 非法格式抛错
  */
 const parseImageDataUrl = (dataUrl) => {
-  const matched = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  const matched = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/)
   if (!matched) {
-    throw new Error('图片数据格式不正确');
+    throw new Error('图片数据格式不正确')
   }
   return {
     mimeType: matched[1],
     buffer: Buffer.from(matched[2], 'base64'),
-  };
-};
+  }
+}
 
 /**
  * 上传租户品牌资产到对象存储。
@@ -75,25 +83,25 @@ const parseImageDataUrl = (dataUrl) => {
  * @returns {Promise<{fileUrl: string}>} 上传结果
  */
 const uploadTenantAsset = async ({ tenantId, type, buffer }) => {
-  const assetPrefix = `tenant-assets/${tenantId}`;
-  const objectId = randomUUID();
+  const assetPrefix = `tenant-assets/${tenantId}`
+  const objectId = randomUUID()
 
   if (type === 'logo') {
     const thumbnailBuffer = await sharp(buffer)
       .rotate()
       .resize(96, 96, { fit: 'cover' })
       .webp({ quality: 82 })
-      .toBuffer();
+      .toBuffer()
 
-    const objectKey = `${assetPrefix}/logo-thumb-${objectId}.webp`;
+    const objectKey = `${assetPrefix}/logo-thumb-${objectId}.webp`
     await storageService.uploadObject(
       'ifp',
       objectKey,
       Readable.from(thumbnailBuffer),
       thumbnailBuffer.length,
-      { 'Content-Type': 'image/webp' }
-    );
-    return { fileUrl: buildTenantAssetUrl(objectKey) };
+      { 'Content-Type': 'image/webp' },
+    )
+    return { fileUrl: buildTenantAssetUrl(objectKey) }
   }
 
   const backgroundBuffer = await sharp(buffer)
@@ -105,33 +113,33 @@ const uploadTenantAsset = async ({ tenantId, type, buffer }) => {
       withoutEnlargement: true,
     })
     .webp({ quality: 86 })
-    .toBuffer();
+    .toBuffer()
 
-  const objectKey = `${assetPrefix}/background-${objectId}.webp`;
+  const objectKey = `${assetPrefix}/background-${objectId}.webp`
   await storageService.uploadObject(
     'ifp',
     objectKey,
     Readable.from(backgroundBuffer),
     backgroundBuffer.length,
-    { 'Content-Type': 'image/webp' }
-  );
-  return { fileUrl: buildTenantAssetUrl(objectKey) };
-};
+    { 'Content-Type': 'image/webp' },
+  )
+  return { fileUrl: buildTenantAssetUrl(objectKey) }
+}
 
 // 配置文件上传
 
 // 配置multer存储到内存
-const storage = multer.memoryStorage();
+const storage = multer.memoryStorage()
 
 // 文件过滤器
 const fileFilter = (req, file, cb) => {
   // 只允许图片文件
   if (file.mimetype.startsWith('image/')) {
-    cb(null, true);
+    cb(null, true)
   } else {
-    cb(new Error('只允许上传图片文件'), false);
+    cb(new Error('只允许上传图片文件'), false)
   }
-};
+}
 
 // 配置multer上传
 const upload = multer({
@@ -139,8 +147,8 @@ const upload = multer({
   fileFilter: fileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB
-  }
-});
+  },
+})
 
 // 使用统一的认证和角色检查中间件
 
@@ -161,37 +169,48 @@ const upload = multer({
  *       200:
  *         description: 获取成功
  */
-router.get('/assets', validate(Joi.object({
-  query: Joi.object({
-    key: Joi.string().required(),
-  }),
-})), async (req, res) => {
-  try {
-    const { key } = req.query;
-    if (!key.startsWith('tenant-assets/')) {
-      return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: '非法资源路径' }, 200);
-    }
+router.get(
+  '/assets',
+  validate(
+    Joi.object({
+      query: Joi.object({
+        key: Joi.string().required(),
+      }),
+    }),
+  ),
+  async (req, res) => {
+    try {
+      const { key } = req.query
+      if (!key.startsWith('tenant-assets/')) {
+        return ApiResponse.error(
+          res,
+          ErrorCodes.VALIDATION_FAILED,
+          { message: '非法资源路径' },
+          200,
+        )
+      }
 
-    const [stat, stream] = await Promise.all([
-      storageService.statObject('ifp', key),
-      storageService.getObjectStream('ifp', key),
-    ]);
+      const [stat, stream] = await Promise.all([
+        storageService.statObject('ifp', key),
+        storageService.getObjectStream('ifp', key),
+      ])
 
-    if (stat.metaData?.['content-type']) {
-      res.setHeader('Content-Type', stat.metaData['content-type']);
-    } else {
-      res.setHeader('Content-Type', 'application/octet-stream');
+      if (stat.metaData?.['content-type']) {
+        res.setHeader('Content-Type', stat.metaData['content-type'])
+      } else {
+        res.setHeader('Content-Type', 'application/octet-stream')
+      }
+      res.setHeader('Cache-Control', 'public, max-age=86400')
+      return stream.pipe(res)
+    } catch (error) {
+      logger.error('Get tenant asset error', { error: error.message, requestId: req.requestId })
+      if (isStorageNotFoundError(error)) {
+        return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, {}, 404)
+      }
+      return ApiResponse.error(res, ErrorCodes.EXTERNAL_SERVICE_ERROR, {}, 500)
     }
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    return stream.pipe(res);
-  } catch (error) {
-    logger.error('Get tenant asset error', { error: error.message, requestId: req.requestId });
-    if (isStorageNotFoundError(error)) {
-      return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, {}, 404);
-    }
-    return ApiResponse.error(res, ErrorCodes.EXTERNAL_SERVICE_ERROR, {}, 500);
-  }
-});
+  },
+)
 
 /**
  * 获取当前用户所属租户，便签读写都严格落在当前租户范围内。
@@ -201,20 +220,20 @@ router.get('/assets', validate(Joi.object({
  * @returns {Promise<object|null>} 当前租户记录
  */
 async function resolveCurrentTenant(req, res, attributes = ['id', 'settings']) {
-  const tenantId = req.user?.tenantId;
+  const tenantId = req.user?.tenantId
   if (!tenantId) {
-    ApiResponse.error(res, ErrorCodes.PERMISSION_TENANT_MISMATCH, {}, 200);
-    return null;
+    ApiResponse.error(res, ErrorCodes.PERMISSION_TENANT_MISMATCH, {}, 200)
+    return null
   }
 
   const tenant = await Tenant.findByPk(tenantId, {
     attributes,
-  });
+  })
   if (!tenant) {
-    ApiResponse.error(res, ErrorCodes.TENANT_NOT_FOUND, {}, 200);
-    return null;
+    ApiResponse.error(res, ErrorCodes.TENANT_NOT_FOUND, {}, 200)
+    return null
   }
-  return tenant;
+  return tenant
 }
 
 /**
@@ -229,15 +248,15 @@ router.get('/current', authenticateToken, async (req, res) => {
       'code',
       'logoUrl',
       'loginBackgroundUrl',
-    ]);
-    if (!tenant) return null;
+    ])
+    if (!tenant) return null
 
-    return ApiResponse.success(res, { tenant });
+    return ApiResponse.success(res, { tenant })
   } catch (error) {
-    logger.error('Get current tenant error', { error: error.message, requestId: req.requestId });
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+    logger.error('Get current tenant error', { error: error.message, requestId: req.requestId })
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500)
   }
-});
+})
 
 /**
  * 规范化租户仪表盘便签列表。
@@ -245,7 +264,7 @@ router.get('/current', authenticateToken, async (req, res) => {
  * @returns {Array<object>} 便签列表
  */
 function normalizeDashboardNotes(settings) {
-  const rawNotes = Array.isArray(settings?.dashboardNotes) ? settings.dashboardNotes : [];
+  const rawNotes = Array.isArray(settings?.dashboardNotes) ? settings.dashboardNotes : []
   return rawNotes
     .filter((note) => note && typeof note === 'object' && typeof note.content === 'string')
     .map((note) => ({
@@ -258,7 +277,10 @@ function normalizeDashboardNotes(settings) {
       updatedBy: note.updatedBy || note.createdBy || null,
       updatedByName: note.updatedByName || note.createdByName || null,
     }))
-    .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
+    .sort(
+      (a, b) =>
+        new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0),
+    )
 }
 
 /**
@@ -270,7 +292,7 @@ function resolveNoteAuthor(req) {
   return {
     userId: req.user?.id || null,
     userName: req.user?.fullName || req.user?.username || null,
-  };
+  }
 }
 
 /**
@@ -282,17 +304,20 @@ function resolveNoteAuthor(req) {
  */
 router.get('/current/dashboard-notes', authenticateToken, async (req, res) => {
   try {
-    const tenant = await resolveCurrentTenant(req, res);
-    if (!tenant) return null;
+    const tenant = await resolveCurrentTenant(req, res)
+    if (!tenant) return null
 
     return ApiResponse.success(res, {
       notes: normalizeDashboardNotes(tenant.settings),
-    });
+    })
   } catch (error) {
-    logger.error('Get tenant dashboard notes error', { error: error.message, requestId: req.requestId });
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+    logger.error('Get tenant dashboard notes error', {
+      error: error.message,
+      requestId: req.requestId,
+    })
+    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500)
   }
-});
+})
 
 /**
  * @swagger
@@ -301,40 +326,50 @@ router.get('/current/dashboard-notes', authenticateToken, async (req, res) => {
  *     summary: 新增当前租户仪表盘共享便签
  *     tags: [租户管理]
  */
-router.post('/current/dashboard-notes', authenticateToken, validate(Joi.object({
-  body: Joi.object({
-    content: Joi.string().trim().min(1).max(2000).required(),
-  }).required(),
-})), async (req, res) => {
-  try {
-    const tenant = await resolveCurrentTenant(req, res);
-    if (!tenant) return null;
+router.post(
+  '/current/dashboard-notes',
+  authenticateToken,
+  validate(
+    Joi.object({
+      body: Joi.object({
+        content: Joi.string().trim().min(1).max(2000).required(),
+      }).required(),
+    }),
+  ),
+  async (req, res) => {
+    try {
+      const tenant = await resolveCurrentTenant(req, res)
+      if (!tenant) return null
 
-    const now = new Date().toISOString();
-    const { userId, userName } = resolveNoteAuthor(req);
-    const notes = normalizeDashboardNotes(tenant.settings);
-    const note = {
-      id: randomUUID(),
-      content: req.body.content,
-      createdAt: now,
-      createdBy: userId,
-      createdByName: userName,
-      updatedAt: now,
-      updatedBy: userId,
-      updatedByName: userName,
-    };
-    const settings = {
-      ...(tenant.settings && typeof tenant.settings === 'object' ? tenant.settings : {}),
-      dashboardNotes: [note, ...notes],
-    };
+      const now = new Date().toISOString()
+      const { userId, userName } = resolveNoteAuthor(req)
+      const notes = normalizeDashboardNotes(tenant.settings)
+      const note = {
+        id: randomUUID(),
+        content: req.body.content,
+        createdAt: now,
+        createdBy: userId,
+        createdByName: userName,
+        updatedAt: now,
+        updatedBy: userId,
+        updatedByName: userName,
+      }
+      const settings = {
+        ...(tenant.settings && typeof tenant.settings === 'object' ? tenant.settings : {}),
+        dashboardNotes: [note, ...notes],
+      }
 
-    await tenant.update({ settings });
-    return ApiResponse.success(res, { note }, 'operation_success', {}, 201);
-  } catch (error) {
-    logger.error('Create tenant dashboard note error', { error: error.message, requestId: req.requestId });
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
-  }
-});
+      await tenant.update({ settings })
+      return ApiResponse.success(res, { note }, 'operation_success', {}, 201)
+    } catch (error) {
+      logger.error('Create tenant dashboard note error', {
+        error: error.message,
+        requestId: req.requestId,
+      })
+      return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500)
+    }
+  },
+)
 
 /**
  * @swagger
@@ -343,47 +378,57 @@ router.post('/current/dashboard-notes', authenticateToken, validate(Joi.object({
  *     summary: 更新当前租户仪表盘共享便签
  *     tags: [租户管理]
  */
-router.put('/current/dashboard-notes/:noteId', authenticateToken, validate(Joi.object({
-  params: Joi.object({
-    noteId: Joi.string().required(),
-  }),
-  body: Joi.object({
-    content: Joi.string().trim().min(1).max(2000).required(),
-  }).required(),
-})), async (req, res) => {
-  try {
-    const tenant = await resolveCurrentTenant(req, res);
-    if (!tenant) return null;
+router.put(
+  '/current/dashboard-notes/:noteId',
+  authenticateToken,
+  validate(
+    Joi.object({
+      params: Joi.object({
+        noteId: Joi.string().required(),
+      }),
+      body: Joi.object({
+        content: Joi.string().trim().min(1).max(2000).required(),
+      }).required(),
+    }),
+  ),
+  async (req, res) => {
+    try {
+      const tenant = await resolveCurrentTenant(req, res)
+      if (!tenant) return null
 
-    const notes = normalizeDashboardNotes(tenant.settings);
-    const targetIndex = notes.findIndex((note) => note.id === req.params.noteId);
-    if (targetIndex < 0) {
-      return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, {}, 200);
+      const notes = normalizeDashboardNotes(tenant.settings)
+      const targetIndex = notes.findIndex((note) => note.id === req.params.noteId)
+      if (targetIndex < 0) {
+        return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, {}, 200)
+      }
+
+      const now = new Date().toISOString()
+      const { userId, userName } = resolveNoteAuthor(req)
+      const updatedNote = {
+        ...notes[targetIndex],
+        content: req.body.content,
+        updatedAt: now,
+        updatedBy: userId,
+        updatedByName: userName,
+      }
+      notes[targetIndex] = updatedNote
+
+      const settings = {
+        ...(tenant.settings && typeof tenant.settings === 'object' ? tenant.settings : {}),
+        dashboardNotes: notes,
+      }
+      await tenant.update({ settings })
+
+      return ApiResponse.success(res, { note: updatedNote }, 'update_success')
+    } catch (error) {
+      logger.error('Update tenant dashboard note error', {
+        error: error.message,
+        requestId: req.requestId,
+      })
+      return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500)
     }
-
-    const now = new Date().toISOString();
-    const { userId, userName } = resolveNoteAuthor(req);
-    const updatedNote = {
-      ...notes[targetIndex],
-      content: req.body.content,
-      updatedAt: now,
-      updatedBy: userId,
-      updatedByName: userName,
-    };
-    notes[targetIndex] = updatedNote;
-
-    const settings = {
-      ...(tenant.settings && typeof tenant.settings === 'object' ? tenant.settings : {}),
-      dashboardNotes: notes,
-    };
-    await tenant.update({ settings });
-
-    return ApiResponse.success(res, { note: updatedNote }, 'update_success');
-  } catch (error) {
-    logger.error('Update tenant dashboard note error', { error: error.message, requestId: req.requestId });
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
-  }
-});
+  },
+)
 
 /**
  * @swagger
@@ -392,33 +437,43 @@ router.put('/current/dashboard-notes/:noteId', authenticateToken, validate(Joi.o
  *     summary: 删除当前租户仪表盘共享便签
  *     tags: [租户管理]
  */
-router.delete('/current/dashboard-notes/:noteId', authenticateToken, validate(Joi.object({
-  params: Joi.object({
-    noteId: Joi.string().required(),
-  }),
-})), async (req, res) => {
-  try {
-    const tenant = await resolveCurrentTenant(req, res);
-    if (!tenant) return null;
+router.delete(
+  '/current/dashboard-notes/:noteId',
+  authenticateToken,
+  validate(
+    Joi.object({
+      params: Joi.object({
+        noteId: Joi.string().required(),
+      }),
+    }),
+  ),
+  async (req, res) => {
+    try {
+      const tenant = await resolveCurrentTenant(req, res)
+      if (!tenant) return null
 
-    const notes = normalizeDashboardNotes(tenant.settings);
-    const nextNotes = notes.filter((note) => note.id !== req.params.noteId);
-    if (nextNotes.length === notes.length) {
-      return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, {}, 200);
+      const notes = normalizeDashboardNotes(tenant.settings)
+      const nextNotes = notes.filter((note) => note.id !== req.params.noteId)
+      if (nextNotes.length === notes.length) {
+        return ApiResponse.error(res, ErrorCodes.RESOURCE_NOT_FOUND, {}, 200)
+      }
+
+      const settings = {
+        ...(tenant.settings && typeof tenant.settings === 'object' ? tenant.settings : {}),
+        dashboardNotes: nextNotes,
+      }
+      await tenant.update({ settings })
+
+      return ApiResponse.success(res, { deletedId: req.params.noteId }, 'delete_success')
+    } catch (error) {
+      logger.error('Delete tenant dashboard note error', {
+        error: error.message,
+        requestId: req.requestId,
+      })
+      return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500)
     }
-
-    const settings = {
-      ...(tenant.settings && typeof tenant.settings === 'object' ? tenant.settings : {}),
-      dashboardNotes: nextNotes,
-    };
-    await tenant.update({ settings });
-
-    return ApiResponse.success(res, { deletedId: req.params.noteId }, 'delete_success');
-  } catch (error) {
-    logger.error('Delete tenant dashboard note error', { error: error.message, requestId: req.requestId });
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
-  }
-});
+  },
+)
 
 /**
  * @swagger
@@ -448,56 +503,72 @@ router.delete('/current/dashboard-notes/:noteId', authenticateToken, validate(Jo
  *       200:
  *         description: 获取成功
  */
-router.get('/', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.object({
-  query: Joi.object({
-    page: Joi.number().integer().min(1).default(appConfig.pagination.defaultPage),
-    limit: Joi.number().integer().min(1).max(appConfig.pagination.maxLimit).default(appConfig.pagination.defaultLimit),
-    status: Joi.string().valid('active','inactive','suspended').optional(),
-    keyword: Joi.string().allow('').optional(),
-  })
-})), async (req, res) => {
-  try {
-    const { page, limit, status, keyword } = req.query;
+router.get(
+  '/',
+  authenticateToken,
+  requireRole('SUPER_ADMIN'),
+  validate(
+    Joi.object({
+      query: Joi.object({
+        page: Joi.number().integer().min(1).default(appConfig.pagination.defaultPage),
+        limit: Joi.number()
+          .integer()
+          .min(1)
+          .max(appConfig.pagination.maxLimit)
+          .default(appConfig.pagination.defaultLimit),
+        status: Joi.string().valid('active', 'inactive', 'suspended').optional(),
+        keyword: Joi.string().allow('').optional(),
+      }),
+    }),
+  ),
+  async (req, res) => {
+    try {
+      const { page, limit, status, keyword } = req.query
 
-    // 将字符串转换为数字
-    const pageNum = parseInt(page, 10);
-    const limitNum = parseInt(limit, 10);
+      // 将字符串转换为数字
+      const pageNum = parseInt(page, 10)
+      const limitNum = parseInt(limit, 10)
 
-    const where = {};
-    if (status) {
-      where.status = status;
-    }
-    const normalizedKeyword = typeof keyword === 'string' ? keyword.trim() : '';
-    if (normalizedKeyword) {
-      where[Op.or] = [
-        { name: { [Op.like]: `%${normalizedKeyword}%` } },
-        { code: { [Op.like]: `%${normalizedKeyword}%` } },
-        { companyName: { [Op.like]: `%${normalizedKeyword}%` } },
-        { contactEmail: { [Op.like]: `%${normalizedKeyword}%` } },
-        { contactPhone: { [Op.like]: `%${normalizedKeyword}%` } },
-      ];
-    }
+      const where = {}
+      if (status) {
+        where.status = status
+      }
+      const normalizedKeyword = typeof keyword === 'string' ? keyword.trim() : ''
+      if (normalizedKeyword) {
+        where[Op.or] = [
+          { name: { [Op.like]: `%${normalizedKeyword}%` } },
+          { code: { [Op.like]: `%${normalizedKeyword}%` } },
+          { companyName: { [Op.like]: `%${normalizedKeyword}%` } },
+          { contactEmail: { [Op.like]: `%${normalizedKeyword}%` } },
+          { contactPhone: { [Op.like]: `%${normalizedKeyword}%` } },
+        ]
+      }
 
-    const offset = (pageNum - 1) * limitNum;
+      const offset = (pageNum - 1) * limitNum
 
-    const { count, rows } = await Tenant.findAndCountAll({
-      where,
-      limit: limitNum,
-      offset,
-      order: [['createdAt', 'DESC']],
-    });
-
-    return ApiResponse.paginated(res, { tenants: rows }, {
-        total: count,
-        page: pageNum,
+      const { count, rows } = await Tenant.findAndCountAll({
+        where,
         limit: limitNum,
-        totalPages: Math.ceil(count / limitNum),
-    });
-  } catch (error) {
-    logger.error('Get tenants error', { error: error.message, requestId: req.requestId });
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
-  }
-});
+        offset,
+        order: [['createdAt', 'DESC']],
+      })
+
+      return ApiResponse.paginated(
+        res,
+        { tenants: rows },
+        {
+          total: count,
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(count / limitNum),
+        },
+      )
+    } catch (error) {
+      logger.error('Get tenants error', { error: error.message, requestId: req.requestId })
+      return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500)
+    }
+  },
+)
 
 /**
  * @swagger
@@ -542,104 +613,133 @@ router.get('/', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.obje
  *       201:
  *         description: 创建成功
  */
-router.post('/', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.object({
-  body: Joi.object({
-    name: Joi.string().required(),
-    code: Joi.string().min(2).max(50).required(),
-    description: Joi.string().allow('').optional(),
-    contactEmail: Joi.string().email().optional().allow(''),
-    contactPhone: Joi.string().optional().allow(''),
-    maxUsers: Joi.number().integer().min(1).optional(),
-    maxProjects: Joi.number().integer().min(1).optional(),
-    // 新增字段
-    logoUrl: Joi.string().optional().allow('', null),
-    loginBackgroundUrl: Joi.string().optional().allow('', null),
-    companyName: Joi.string().optional().allow(''),
-    companyAddress: Joi.string().optional().allow(''),
-    companyPhone: Joi.string().optional().allow(''),
-    companyWebsite: Joi.string().optional().allow(''),
-    settings: Joi.object().optional().allow(null)
-  }).required()
-})), async (req, res) => {
-  try {
-    const {
-      name, code, description, contactEmail, contactPhone, maxUsers, maxProjects,
-      logoUrl, loginBackgroundUrl, companyName, companyAddress, companyPhone, companyWebsite, settings
-    } = req.body;
+router.post(
+  '/',
+  authenticateToken,
+  requireRole('SUPER_ADMIN'),
+  validate(
+    Joi.object({
+      body: Joi.object({
+        name: Joi.string().required(),
+        code: Joi.string().min(2).max(50).required(),
+        description: Joi.string().allow('').optional(),
+        contactEmail: Joi.string().email().optional().allow(''),
+        contactPhone: Joi.string().optional().allow(''),
+        maxUsers: Joi.number().integer().min(1).optional(),
+        maxProjects: Joi.number().integer().min(1).optional(),
+        // 新增字段
+        logoUrl: Joi.string().optional().allow('', null),
+        loginBackgroundUrl: Joi.string().optional().allow('', null),
+        companyName: Joi.string().optional().allow(''),
+        companyAddress: Joi.string().optional().allow(''),
+        companyPhone: Joi.string().optional().allow(''),
+        companyWebsite: Joi.string().optional().allow(''),
+        settings: Joi.object().optional().allow(null),
+      }).required(),
+    }),
+  ),
+  async (req, res) => {
+    try {
+      const {
+        name,
+        code,
+        description,
+        contactEmail,
+        contactPhone,
+        maxUsers,
+        maxProjects,
+        logoUrl,
+        loginBackgroundUrl,
+        companyName,
+        companyAddress,
+        companyPhone,
+        companyWebsite,
+        settings,
+      } = req.body
 
-    // 检查租户代码是否已存在
-    const existingTenant = await Tenant.findOne({ where: { code } });
-    if (existingTenant) {
-      return ApiResponse.error(res, ErrorCodes.TENANT_CODE_EXISTS, {}, 200);
-    }
+      // 检查租户代码是否已存在
+      const existingTenant = await Tenant.findOne({ where: { code } })
+      if (existingTenant) {
+        return ApiResponse.error(res, ErrorCodes.TENANT_CODE_EXISTS, {}, 200)
+      }
 
-    // 创建租户（品牌图先置空，后续若有 base64 则上传到对象存储并回写 URL）
-    const tenant = await Tenant.create({
-      name,
-      code,
-      description: description || null,
-      contactEmail: contactEmail || null,
-      contactPhone: contactPhone || null,
-      maxUsers: maxUsers || appConfig.tenantDefaults.defaultMaxUsers,
-      maxProjects: maxProjects || appConfig.tenantDefaults.defaultMaxProjects,
-      logoUrl: null,
-      loginBackgroundUrl: null,
-      companyName: companyName || null,
-      companyAddress: companyAddress || null,
-      companyPhone: companyPhone || null,
-      companyWebsite: companyWebsite || null,
-      settings: settings || null,
-    });
+      // 创建租户（品牌图先置空，后续若有 base64 则上传到对象存储并回写 URL）
+      const tenant = await Tenant.create({
+        name,
+        code,
+        description: description || null,
+        contactEmail: contactEmail || null,
+        contactPhone: contactPhone || null,
+        maxUsers: maxUsers || appConfig.tenantDefaults.defaultMaxUsers,
+        maxProjects: maxProjects || appConfig.tenantDefaults.defaultMaxProjects,
+        logoUrl: null,
+        loginBackgroundUrl: null,
+        companyName: companyName || null,
+        companyAddress: companyAddress || null,
+        companyPhone: companyPhone || null,
+        companyWebsite: companyWebsite || null,
+        settings: settings || null,
+      })
 
-    const brandingUpdates = {};
-    if (isImageDataUrl(logoUrl)) {
-      const parsed = parseImageDataUrl(logoUrl);
-      brandingUpdates.logoUrl = (await uploadTenantAsset({
+      const brandingUpdates = {}
+      if (isImageDataUrl(logoUrl)) {
+        const parsed = parseImageDataUrl(logoUrl)
+        brandingUpdates.logoUrl = (
+          await uploadTenantAsset({
+            tenantId: tenant.id,
+            type: 'logo',
+            buffer: parsed.buffer,
+          })
+        ).fileUrl
+      } else if (logoUrl && !String(logoUrl).includes('/assets/images/default-logo.svg')) {
+        brandingUpdates.logoUrl = logoUrl
+      }
+
+      if (isImageDataUrl(loginBackgroundUrl)) {
+        const parsed = parseImageDataUrl(loginBackgroundUrl)
+        brandingUpdates.loginBackgroundUrl = (
+          await uploadTenantAsset({
+            tenantId: tenant.id,
+            type: 'background',
+            buffer: parsed.buffer,
+          })
+        ).fileUrl
+      } else if (
+        loginBackgroundUrl &&
+        !String(loginBackgroundUrl).includes('/assets/images/default-login-bg.svg')
+      ) {
+        brandingUpdates.loginBackgroundUrl = loginBackgroundUrl
+      }
+
+      if (Object.keys(brandingUpdates).length > 0) {
+        await tenant.update(brandingUpdates)
+      }
+
+      // 创建默认的系统管理员用户
+      await User.create({
+        username: appConfig.tenantDefaults.defaultAdminUsername,
+        password: appConfig.tenantDefaults.defaultAdminPassword,
+        fullName: `${name}系统管理员`,
+        role: 'SYSTEM_ADMIN',
         tenantId: tenant.id,
-        type: 'logo',
-        buffer: parsed.buffer,
-      })).fileUrl;
-    } else if (logoUrl && !String(logoUrl).includes('/assets/images/default-logo.svg')) {
-      brandingUpdates.logoUrl = logoUrl;
+      })
+
+      return ApiResponse.success(
+        res,
+        {
+          tenant,
+          message: `Tenant created successfully. Default admin user created with username: ${appConfig.tenantDefaults.defaultAdminUsername}, password: ${appConfig.tenantDefaults.defaultAdminPassword}`,
+        },
+        'tenant_create_success',
+        {},
+        201,
+      )
+    } catch (error) {
+      logger.error('Create tenant error', { error: error.message, requestId: req.requestId })
+      return ApiResponse.error(res, ErrorCodes.TENANT_CREATE_FAILED, {}, 500)
     }
-
-    if (isImageDataUrl(loginBackgroundUrl)) {
-      const parsed = parseImageDataUrl(loginBackgroundUrl);
-      brandingUpdates.loginBackgroundUrl = (await uploadTenantAsset({
-        tenantId: tenant.id,
-        type: 'background',
-        buffer: parsed.buffer,
-      })).fileUrl;
-    } else if (
-      loginBackgroundUrl &&
-      !String(loginBackgroundUrl).includes('/assets/images/default-login-bg.svg')
-    ) {
-      brandingUpdates.loginBackgroundUrl = loginBackgroundUrl;
-    }
-
-    if (Object.keys(brandingUpdates).length > 0) {
-      await tenant.update(brandingUpdates);
-    }
-
-    // 创建默认的系统管理员用户
-    await User.create({
-      username: appConfig.tenantDefaults.defaultAdminUsername,
-      password: appConfig.tenantDefaults.defaultAdminPassword,
-      fullName: `${name}系统管理员`,
-      role: 'SYSTEM_ADMIN',
-      tenantId: tenant.id,
-    });
-
-    return ApiResponse.success(res, {
-      tenant,
-      message: `Tenant created successfully. Default admin user created with username: ${appConfig.tenantDefaults.defaultAdminUsername}, password: ${appConfig.tenantDefaults.defaultAdminPassword}`
-    }, 'tenant_create_success', {}, 201);
-
-  } catch (error) {
-    logger.error('Create tenant error', { error: error.message, requestId: req.requestId });
-    return ApiResponse.error(res, ErrorCodes.TENANT_CREATE_FAILED, {}, 500);
-  }
-});
+  },
+)
 
 /**
  * @swagger
@@ -681,89 +781,106 @@ router.post('/', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.obj
  *       200:
  *         description: 更新成功
  */
-router.put('/:id', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.object({
-  params: Joi.object({ id: Joi.string().required() }), // 支持UUID或租户代码
-  body: Joi.object({
-    name: Joi.string().optional(),
-    code: Joi.string().min(2).max(50).optional(),
-    description: Joi.string().allow('').optional(),
-    status: Joi.string().valid('active','inactive','suspended').optional(),
-    contactEmail: Joi.string().email().optional().allow(''),
-    contactPhone: Joi.string().optional().allow(''),
-    maxUsers: Joi.number().integer().min(1).optional(),
-    maxProjects: Joi.number().integer().min(1).optional(),
-    // 新增字段
-    logoUrl: Joi.string().optional().allow('', null),
-    loginBackgroundUrl: Joi.string().optional().allow('', null),
-    companyName: Joi.string().optional().allow(''),
-    companyAddress: Joi.string().optional().allow(''),
-    companyPhone: Joi.string().optional().allow(''),
-    companyWebsite: Joi.string().optional().allow(''),
-    settings: Joi.object().optional().allow(null)
-  }).min(1)
-})), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updateData = req.body;
+router.put(
+  '/:id',
+  authenticateToken,
+  requireRole('SUPER_ADMIN'),
+  validate(
+    Joi.object({
+      params: Joi.object({ id: Joi.string().required() }), // 支持UUID或租户代码
+      body: Joi.object({
+        name: Joi.string().optional(),
+        code: Joi.string().min(2).max(50).optional(),
+        description: Joi.string().allow('').optional(),
+        status: Joi.string().valid('active', 'inactive', 'suspended').optional(),
+        contactEmail: Joi.string().email().optional().allow(''),
+        contactPhone: Joi.string().optional().allow(''),
+        maxUsers: Joi.number().integer().min(1).optional(),
+        maxProjects: Joi.number().integer().min(1).optional(),
+        // 新增字段
+        logoUrl: Joi.string().optional().allow('', null),
+        loginBackgroundUrl: Joi.string().optional().allow('', null),
+        companyName: Joi.string().optional().allow(''),
+        companyAddress: Joi.string().optional().allow(''),
+        companyPhone: Joi.string().optional().allow(''),
+        companyWebsite: Joi.string().optional().allow(''),
+        settings: Joi.object().optional().allow(null),
+      }).min(1),
+    }),
+  ),
+  async (req, res) => {
+    try {
+      const { id } = req.params
+      const updateData = req.body
 
-    // 支持通过UUID或租户代码查找租户
-    let tenant = await Tenant.findByPk(id);
-    if (!tenant) {
-      tenant = await Tenant.findOne({ where: { code: id } });
-    }
-    if (!tenant) {
-      return ApiResponse.error(res, ErrorCodes.TENANT_NOT_FOUND, {}, 200);
-    }
-
-    // 如果更新代码，检查是否重复
-    if (updateData.code && updateData.code !== tenant.code) {
-      const existingTenant = await Tenant.findOne({ where: { code: updateData.code } });
-      if (existingTenant) {
-        return ApiResponse.error(res, ErrorCodes.TENANT_CODE_EXISTS, {}, 200);
+      // 支持通过UUID或租户代码查找租户
+      let tenant = await Tenant.findByPk(id)
+      if (!tenant) {
+        tenant = await Tenant.findOne({ where: { code: id } })
       }
-    }
-
-    // 将空字符串转换为null
-    const processedData = { ...updateData };
-    const stringFields = [
-      'description', 'contactEmail', 'contactPhone',
-      'logoUrl', 'loginBackgroundUrl', 'companyName',
-      'companyAddress', 'companyPhone', 'companyWebsite'
-    ];
-
-    stringFields.forEach(field => {
-      if (processedData[field] === '') {
-        processedData[field] = null;
+      if (!tenant) {
+        return ApiResponse.error(res, ErrorCodes.TENANT_NOT_FOUND, {}, 200)
       }
-    });
 
-    if (isImageDataUrl(processedData.logoUrl)) {
-      const parsed = parseImageDataUrl(processedData.logoUrl);
-      processedData.logoUrl = (await uploadTenantAsset({
-        tenantId: tenant.id,
-        type: 'logo',
-        buffer: parsed.buffer,
-      })).fileUrl;
+      // 如果更新代码，检查是否重复
+      if (updateData.code && updateData.code !== tenant.code) {
+        const existingTenant = await Tenant.findOne({ where: { code: updateData.code } })
+        if (existingTenant) {
+          return ApiResponse.error(res, ErrorCodes.TENANT_CODE_EXISTS, {}, 200)
+        }
+      }
+
+      // 将空字符串转换为null
+      const processedData = { ...updateData }
+      const stringFields = [
+        'description',
+        'contactEmail',
+        'contactPhone',
+        'logoUrl',
+        'loginBackgroundUrl',
+        'companyName',
+        'companyAddress',
+        'companyPhone',
+        'companyWebsite',
+      ]
+
+      stringFields.forEach((field) => {
+        if (processedData[field] === '') {
+          processedData[field] = null
+        }
+      })
+
+      if (isImageDataUrl(processedData.logoUrl)) {
+        const parsed = parseImageDataUrl(processedData.logoUrl)
+        processedData.logoUrl = (
+          await uploadTenantAsset({
+            tenantId: tenant.id,
+            type: 'logo',
+            buffer: parsed.buffer,
+          })
+        ).fileUrl
+      }
+
+      if (isImageDataUrl(processedData.loginBackgroundUrl)) {
+        const parsed = parseImageDataUrl(processedData.loginBackgroundUrl)
+        processedData.loginBackgroundUrl = (
+          await uploadTenantAsset({
+            tenantId: tenant.id,
+            type: 'background',
+            buffer: parsed.buffer,
+          })
+        ).fileUrl
+      }
+
+      await tenant.update(processedData)
+
+      return ApiResponse.success(res, { tenant }, 'update_success')
+    } catch (error) {
+      logger.error('Update tenant error', { error: error.message, requestId: req.requestId })
+      return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500)
     }
-
-    if (isImageDataUrl(processedData.loginBackgroundUrl)) {
-      const parsed = parseImageDataUrl(processedData.loginBackgroundUrl);
-      processedData.loginBackgroundUrl = (await uploadTenantAsset({
-        tenantId: tenant.id,
-        type: 'background',
-        buffer: parsed.buffer,
-      })).fileUrl;
-    }
-
-    await tenant.update(processedData);
-
-    return ApiResponse.success(res, { tenant }, 'update_success');
-
-  } catch (error) {
-    logger.error('Update tenant error', { error: error.message, requestId: req.requestId });
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
-  }
-});
+  },
+)
 
 /**
  * @swagger
@@ -783,30 +900,37 @@ router.put('/:id', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.o
  *       200:
  *         description: 删除成功
  */
-router.delete('/:id', authenticateToken, requireRole('SUPER_ADMIN'), validate(Joi.object({
-  params: Joi.object({ id: Joi.string().required() }) // 支持UUID或租户代码
-})), async (req, res) => {
-  try {
-    const { id } = req.params;
+router.delete(
+  '/:id',
+  authenticateToken,
+  requireRole('SUPER_ADMIN'),
+  validate(
+    Joi.object({
+      params: Joi.object({ id: Joi.string().required() }), // 支持UUID或租户代码
+    }),
+  ),
+  async (req, res) => {
+    try {
+      const { id } = req.params
 
-    // 支持通过UUID或租户代码查找租户
-    let tenant = await Tenant.findByPk(id);
-    if (!tenant) {
-      tenant = await Tenant.findOne({ where: { code: id } });
+      // 支持通过UUID或租户代码查找租户
+      let tenant = await Tenant.findByPk(id)
+      if (!tenant) {
+        tenant = await Tenant.findOne({ where: { code: id } })
+      }
+      if (!tenant) {
+        return ApiResponse.error(res, ErrorCodes.TENANT_NOT_FOUND, {}, 200)
+      }
+
+      await tenant.destroy()
+
+      return ApiResponse.success(res, null, 'delete_success')
+    } catch (error) {
+      logger.error('Delete tenant error', { error: error.message, requestId: req.requestId })
+      return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500)
     }
-    if (!tenant) {
-      return ApiResponse.error(res, ErrorCodes.TENANT_NOT_FOUND, {}, 200);
-    }
-
-    await tenant.destroy();
-
-    return ApiResponse.success(res, null, 'delete_success');
-
-  } catch (error) {
-    logger.error('Delete tenant error', { error: error.message, requestId: req.requestId });
-    return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
-  }
-});
+  },
+)
 
 /**
  * @swagger
@@ -845,74 +969,88 @@ router.delete('/:id', authenticateToken, requireRole('SUPER_ADMIN'), validate(Jo
  *       200:
  *         description: 上传成功
  */
-router.post('/:id/upload', authenticateToken, requireRole('SUPER_ADMIN'),
+router.post(
+  '/:id/upload',
+  authenticateToken,
+  requireRole('SUPER_ADMIN'),
   upload.single('file'),
-  validate(Joi.object({
-    params: Joi.object({ id: Joi.string().required() }), // 支持UUID或租户代码
-    query: Joi.object({
-      type: Joi.string().valid('logo', 'background').required()
-    })
-  })),
+  validate(
+    Joi.object({
+      params: Joi.object({ id: Joi.string().required() }), // 支持UUID或租户代码
+      query: Joi.object({
+        type: Joi.string().valid('logo', 'background').required(),
+      }),
+    }),
+  ),
   async (req, res) => {
     try {
-      const { id } = req.params;
-      const { type } = req.query;
+      const { id } = req.params
+      const { type } = req.query
 
       if (!req.file) {
-        return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: '没有上传文件' }, 200);
+        return ApiResponse.error(
+          res,
+          ErrorCodes.VALIDATION_FAILED,
+          { message: '没有上传文件' },
+          200,
+        )
       }
 
       // 检查租户是否存在（支持通过UUID或租户代码查找）
-      let tenant;
+      let tenant
       // 尝试通过UUID查找
-      tenant = await Tenant.findByPk(id);
+      tenant = await Tenant.findByPk(id)
       // 如果没找到，尝试通过租户代码查找
       if (!tenant) {
-        tenant = await Tenant.findOne({ where: { code: id } });
+        tenant = await Tenant.findOne({ where: { code: id } })
       }
       if (!tenant) {
-        return ApiResponse.error(res, ErrorCodes.TENANT_NOT_FOUND, {}, 200);
+        return ApiResponse.error(res, ErrorCodes.TENANT_NOT_FOUND, {}, 200)
       }
 
       const uploadResult = await uploadTenantAsset({
         tenantId: tenant.id,
         type,
         buffer: req.file.buffer,
-      });
+      })
 
       // 更新租户的对应字段
-      const updateData = {};
+      const updateData = {}
       if (type === 'logo') {
-        updateData.logoUrl = uploadResult.fileUrl;
+        updateData.logoUrl = uploadResult.fileUrl
       } else if (type === 'background') {
-        updateData.loginBackgroundUrl = uploadResult.fileUrl;
+        updateData.loginBackgroundUrl = uploadResult.fileUrl
       }
 
-      await tenant.update(updateData);
+      await tenant.update(updateData)
 
       return ApiResponse.success(res, {
         fileUrl: uploadResult.fileUrl,
-        message: `${type === 'logo' ? 'Logo' : '背景图'}上传成功`
-      });
-
+        message: `${type === 'logo' ? 'Logo' : '背景图'}上传成功`,
+      })
     } catch (error) {
-      logger.error('Upload tenant file error', { error: error.message, requestId: req.requestId });
+      logger.error('Upload tenant file error', { error: error.message, requestId: req.requestId })
 
       // 如果是multer错误
       if (error instanceof multer.MulterError) {
         if (error.code === 'LIMIT_FILE_SIZE') {
-          return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: '文件大小超过限制（最大5MB）' }, 200);
+          return ApiResponse.error(
+            res,
+            ErrorCodes.VALIDATION_FAILED,
+            { message: '文件大小超过限制（最大5MB）' },
+            200,
+          )
         }
       }
 
       // 如果是自定义错误（如文件类型不匹配）
       if (error.message === '只允许上传图片文件') {
-        return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: error.message }, 200);
+        return ApiResponse.error(res, ErrorCodes.VALIDATION_FAILED, { message: error.message }, 200)
       }
 
-      return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500);
+      return ApiResponse.error(res, ErrorCodes.INTERNAL_SERVER_ERROR, {}, 500)
     }
-  }
-);
+  },
+)
 
-module.exports = router;
+module.exports = router

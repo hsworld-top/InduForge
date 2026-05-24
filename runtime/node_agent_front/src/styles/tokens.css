@@ -51,7 +51,7 @@
   --metadata-fg: #243247;
 }
 
-[data-theme="dark"] {
+[data-theme='dark'] {
   --bg-canvas: #0b1220;
   --bg-surface: #0f172a;
   --bg-surface-2: #111f36;
@@ -114,42 +114,44 @@
 
 body {
   margin: 0;
-  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   background: var(--bg-canvas);
   color: var(--fg-primary);
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
 }
 
 #app {
   min-height: 100vh;
 }
 
-[data-theme="dark"] .el-tag {
+[data-theme='dark'] .el-tag {
   border-color: transparent;
   font-weight: 600;
 }
 
-[data-theme="dark"] .el-tag.el-tag--success {
+[data-theme='dark'] .el-tag.el-tag--success {
   background-color: rgba(34, 197, 94, 0.2);
   color: #86efac;
 }
 
-[data-theme="dark"] .el-tag.el-tag--warning {
+[data-theme='dark'] .el-tag.el-tag--warning {
   background-color: rgba(245, 158, 11, 0.22);
   color: #fcd34d;
 }
 
-[data-theme="dark"] .el-tag.el-tag--danger {
+[data-theme='dark'] .el-tag.el-tag--danger {
   background-color: rgba(239, 68, 68, 0.22);
   color: #fca5a5;
 }
 
-[data-theme="dark"] .el-tag.el-tag--info {
+[data-theme='dark'] .el-tag.el-tag--info {
   background-color: rgba(148, 163, 184, 0.22);
   color: #cbd5e1;
 }
 
-[data-theme="dark"] .el-button--warning {
+[data-theme='dark'] .el-button--warning {
   --el-button-bg-color: #d97706;
   --el-button-border-color: #d97706;
   --el-button-hover-bg-color: #f59e0b;
@@ -158,7 +160,7 @@ body {
   --el-button-active-border-color: #b45309;
 }
 
-[data-theme="dark"] .el-button--success {
+[data-theme='dark'] .el-button--success {
   --el-button-bg-color: #059669;
   --el-button-border-color: #059669;
   --el-button-hover-bg-color: #10b981;
@@ -187,5 +189,5 @@ body {
 }
 
 .mono {
-  font-family: "Cascadia Mono", "Fira Code", Consolas, monospace;
+  font-family: 'Cascadia Mono', 'Fira Code', Consolas, monospace;
 }
