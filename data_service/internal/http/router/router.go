@@ -12,6 +12,7 @@ type options struct {
 	accessSourceHandler    *handler.AccessSourceHandler
 	alarmPolicyHandler     *handler.AlarmPolicyHandler
 	alarmRuleHandler       *handler.AlarmRuleHandler
+	builtinRuntimeHandler  *handler.BuiltinRuntimeHandler
 	connectionHandler      *handler.ConnectionHandler
 	contractCheckHandler   *handler.ContractCheckHandler
 	queryHandler           *handler.QueryHandler
@@ -24,6 +25,14 @@ type options struct {
 	computeHandler         *handler.ComputeHandler
 	projectSnapshotHandler *handler.ProjectSnapshotHandler
 	jwtValidator           *auth.JWTValidator
+}
+
+// WithBuiltinRuntimeRoutes wires IF builtin runtime store routes.
+func WithBuiltinRuntimeRoutes(builtinRuntimeHandler *handler.BuiltinRuntimeHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.builtinRuntimeHandler = builtinRuntimeHandler
+		opts.jwtValidator = jwtValidator
+	}
 }
 
 // Option defines route wiring dependencies.
@@ -148,6 +157,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 
 	mountAlarmRuleRoutes(mux, opts)
 	mountAlarmPolicyRoutes(mux, opts)
+	mountBuiltinRuntimeRoutes(mux, opts)
 	mountAccessSourceRoutes(mux, opts)
 	mountContractCheckRoutes(mux, opts)
 	mountConnectionRoutes(mux, opts)
@@ -160,6 +170,41 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountComputeRoutes(mux, opts)
 	mountProjectSnapshotRoutes(mux, opts)
 	return mux
+}
+
+func mountBuiltinRuntimeRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.builtinRuntimeHandler == nil || opts.jwtValidator == nil {
+		return
+	}
+
+	read := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+	write := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+
+	mux.Handle("POST /api/v1/data/projects/{projectId}/builtin/relation/sql/execute", read(opts.builtinRuntimeHandler.ExecuteRelationSQL))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/builtin/timeseries/query", read(opts.builtinRuntimeHandler.QueryTimeseries))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/builtin/timeseries/sample", write(opts.builtinRuntimeHandler.SampleTimeseries))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/builtin/message/preview-session", write(opts.builtinRuntimeHandler.CreateMessagePreviewSession))
+	mux.Handle("GET /api/v1/data/projects/{projectId}/connections/{connectionId}/realtime/keys", read(opts.builtinRuntimeHandler.ListRealtimeKeys))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/connections/{connectionId}/realtime/keys", write(opts.builtinRuntimeHandler.SetRealtimeKey))
+	mux.Handle("GET /api/v1/data/projects/{projectId}/connections/{connectionId}/realtime/keys/{key}", read(opts.builtinRuntimeHandler.GetRealtimeKey))
+	mux.Handle("DELETE /api/v1/data/projects/{projectId}/connections/{connectionId}/realtime/keys/{key}", write(opts.builtinRuntimeHandler.DeleteRealtimeKey))
+	mux.Handle("GET /api/v1/data/projects/{projectId}/connections/{connectionId}/message/topics", read(opts.builtinRuntimeHandler.ListMessageTopics))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/connections/{connectionId}/message/topics", write(opts.builtinRuntimeHandler.CreateMessageTopic))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/connections/{connectionId}/message/publish", write(opts.builtinRuntimeHandler.PublishMessage))
+	mux.Handle("GET /api/v1/data/projects/{projectId}/connections/{connectionId}/message/topics/{topicId}/variables", read(opts.builtinRuntimeHandler.ListMessageVariables))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/connections/{connectionId}/message/topics/{topicId}/variables", write(opts.builtinRuntimeHandler.CreateMessageVariable))
 }
 
 func mountAlarmPolicyRoutes(mux *http.ServeMux, opts options) {
@@ -674,6 +719,14 @@ func mountMqttRoutes(mux *http.ServeMux, opts options) {
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:write")(
 				middleware.ErrorHandler(opts.mqttHandler.StopConnection),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/mqtt/connections/{connectionId}/publish",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.mqttHandler.PublishMessage),
 			),
 		),
 	)

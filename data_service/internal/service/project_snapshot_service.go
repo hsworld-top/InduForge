@@ -82,7 +82,8 @@ func normalizeProjectSnapshot(snapshot repository.ProjectSnapshot) repository.Pr
 
 func validateSnapshotConnectionType(connectionType string) error {
 	switch strings.TrimSpace(strings.ToLower(connectionType)) {
-	case "relational", "mqtt", "kafka", "http", "websocket", "redis", "opcua", "modbus", "s7", "tdengine":
+	case "relational", "mqtt", "kafka", "http", "websocket", "redis", "opcua", "modbus", "s7", "tdengine",
+		"builtin.relation", "builtin.timeseries", "builtin.realtime", "builtin.message":
 		return nil
 	case "opcda":
 		return newPhaseBoundaryProtocolError("OPC DA")

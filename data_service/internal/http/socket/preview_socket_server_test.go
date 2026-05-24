@@ -537,6 +537,71 @@ func TestPreviewSocketServer_HandleMqttSubscribeDoesNotPolluteSessionStateOnRunt
 	}
 }
 
+func TestPreviewSocketServer_HandleBuiltinMessageSubscribeUsesMqttSubscription(t *testing.T) {
+	server := newPreviewSocketServerForTests()
+	server.builtinRuntime = service.NewBuiltinRuntimeService(service.BuiltinRuntimeOptions{})
+	server.mqttRepository = &fakePreviewMqttRepository{
+		subscription: &repository.MqttSubscriptionRecord{
+			ID:           "sub-1",
+			ProjectID:    "project-1",
+			ConnectionID: "conn-1",
+			Topic:        "device/demo/1",
+		},
+	}
+
+	socket := newTestSocket("socket-1", "project-1", "session-1")
+	event := &socketio.EventPayload{
+		Data: []interface{}{
+			map[string]any{
+				"requestId":    "req-builtin-1",
+				"topicId":      "sub-1",
+				"connectionId": "conn-1",
+			},
+		},
+	}
+
+	server.handleBuiltinMessageSubscribe(socket, event)
+
+	session := server.sessions["session-1"]
+	if _, ok := session.socketSubscriptions["socket-1"].builtinMessages["sub-1"]; !ok {
+		t.Fatal("expected builtin message subscription to be keyed by MQTT subscription id")
+	}
+	if _, ok := session.builtinMessageStops["sub-1"]; !ok {
+		t.Fatal("expected builtin runtime stop handle to be keyed by MQTT subscription id")
+	}
+}
+
+func TestPreviewSocketServer_HandleBuiltinMessageSubscribeRejectsOtherConnection(t *testing.T) {
+	server := newPreviewSocketServerForTests()
+	server.builtinRuntime = service.NewBuiltinRuntimeService(service.BuiltinRuntimeOptions{})
+	server.mqttRepository = &fakePreviewMqttRepository{
+		subscription: &repository.MqttSubscriptionRecord{
+			ID:           "sub-1",
+			ProjectID:    "project-1",
+			ConnectionID: "conn-other",
+			Topic:        "device/demo/1",
+		},
+	}
+
+	socket := newTestSocket("socket-1", "project-1", "session-1")
+	event := &socketio.EventPayload{
+		Data: []interface{}{
+			map[string]any{
+				"requestId":    "req-builtin-2",
+				"topicId":      "sub-1",
+				"connectionId": "conn-1",
+			},
+		},
+	}
+
+	server.handleBuiltinMessageSubscribe(socket, event)
+
+	session := server.sessions["session-1"]
+	if _, ok := session.socketSubscriptions["socket-1"].builtinMessages["sub-1"]; ok {
+		t.Fatal("expected mismatched connection not to register builtin message subscription")
+	}
+}
+
 func TestPreviewSocketServer_HandleDatapointUnsubscribeClearsState(t *testing.T) {
 	cancelCount := 0
 	server := newPreviewSocketServerForTests()

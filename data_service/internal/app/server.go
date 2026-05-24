@@ -21,6 +21,8 @@ import (
 	previewsocket "github.com/indu-forge/data_service/internal/http/socket"
 	"github.com/indu-forge/data_service/internal/repository"
 	"github.com/indu-forge/data_service/internal/service"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -143,6 +145,18 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	}
 	cleanupFns := []func(){pool.Close}
 
+	var devPool *pgxpool.Pool
+	if strings.TrimSpace(cfg.DevDatabaseURL) != "" {
+		devPool, err = postgres.NewPool(context.Background(), postgres.PoolConfig{
+			DatabaseURL: strings.TrimSpace(cfg.DevDatabaseURL),
+			SearchPath:  "",
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		cleanupFns = append(cleanupFns, devPool.Close)
+	}
+
 	connectionRepository := repository.NewConnectionRepository(pool)
 	accessSourceRepository := repository.NewAccessSourceRepository(pool)
 	alarmRuleRepository := repository.NewAlarmRuleRepository(pool)
@@ -160,7 +174,8 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	alarmRuleService := service.NewAlarmRuleService(alarmRuleRepository, dataPointRepository)
 	alarmPolicyService := service.NewAlarmPolicyService(alarmPolicyRepository, dataPointRepository)
 	contractCheckService := service.NewContractCheckService(dataPointRepository, computeRepository, alarmRuleRepository, queryRepository, contractCheckRepository)
-	connectionService := service.NewConnectionService(connectionRepository)
+	builtinRuntimeService := newBuiltinRuntimeServiceFromConfig(cfg, pool, devPool, &cleanupFns)
+	connectionService := service.NewConnectionService(connectionRepository, builtinRuntimeService)
 	queryService := service.NewQueryService(queryRepository, connectionRepository, dataPointRepository)
 	dataPointService := service.NewDataPointService(dataPointRepository, queryService, mqttRepository, computeRepository)
 	mqttService := service.NewMqttService(mqttRepository, connectionRepository, dataPointRepository)
@@ -183,6 +198,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	alarmPolicyHandler := handler.NewAlarmPolicyHandler(alarmPolicyService)
 	contractCheckHandler := handler.NewContractCheckHandler(contractCheckService)
 	connectionHandler := handler.NewConnectionHandler(connectionService)
+	builtinRuntimeHandler := handler.NewBuiltinRuntimeHandler(builtinRuntimeService, connectionService)
 	queryHandler := handler.NewQueryHandler(queryService)
 	dataPointHandler := handler.NewDataPointHandler(dataPointService)
 	mqttHandler := handler.NewMqttHandler(mqttService)
@@ -194,6 +210,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	routeOptions := []router.Option{
 		router.WithAlarmRuleRoutes(alarmRuleHandler, jwtValidator),
 		router.WithAlarmPolicyRoutes(alarmPolicyHandler, jwtValidator),
+		router.WithBuiltinRuntimeRoutes(builtinRuntimeHandler, jwtValidator),
 		router.WithAccessSourceRoutes(accessSourceHandler, jwtValidator),
 		router.WithContractCheckRoutes(contractCheckHandler, jwtValidator),
 		router.WithConnectionRoutes(connectionHandler, jwtValidator),
@@ -208,6 +225,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		"connections=enabled",
 		"accessSources=enabled",
 		"data=enabled",
+		"builtinRuntime=enabled",
 		"mqtt=enabled",
 		"projectSnapshot=enabled",
 		"protocolWave1=enabled",
@@ -233,7 +251,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 
 			previewRepository := repository.NewPreviewSessionRepository(pool)
 			previewService := service.NewPreviewSessionService(previewRepository, redisClient)
-			previewSocketServer, previewSocketErr := previewsocket.NewPreviewSocketServer(jwtValidator, previewService, dataPointService, mqttRepository)
+			previewSocketServer, previewSocketErr := previewsocket.NewPreviewSocketServer(jwtValidator, previewService, dataPointService, mqttRepository, builtinRuntimeService)
 			if previewSocketErr != nil {
 				logf("warning: data_service preview socket 未启用 reason=%v", previewSocketErr)
 			}
@@ -265,4 +283,44 @@ func joinCleanup(cleanups ...func()) func() {
 			cleanups[index]()
 		}
 	}
+}
+
+func newBuiltinRuntimeServiceFromConfig(cfg config.Config, metaPool *pgxpool.Pool, devPool *pgxpool.Pool, cleanupFns *[]func()) *service.BuiltinRuntimeService {
+	var realtimeClient redis.UniversalClient
+	if strings.TrimSpace(cfg.RedisAddr) != "" {
+		client := redis.NewClient(&redis.Options{
+			Addr:     strings.TrimSpace(cfg.RedisAddr),
+			Password: strings.TrimSpace(cfg.RedisPassword),
+			DB:       cfg.RedisDevDB,
+		})
+		if err := client.Ping(context.Background()).Err(); err != nil {
+			logf("warning: IF实时库开发态客户端未启用 reason=%v", err)
+			_ = client.Close()
+		} else {
+			realtimeClient = client
+			*cleanupFns = append(*cleanupFns, func() {
+				_ = client.Close()
+			})
+		}
+	}
+
+	var messagePublisher service.BuiltinMessagePublisher
+	if strings.TrimSpace(cfg.MessageHubAddr) != "" {
+		publisher, err := service.NewPahoBuiltinMessagePublisher(cfg.MessageHubAddr, cfg.MessageHubUsername, cfg.MessageHubPassword)
+		if err != nil {
+			logf("warning: IF消息库开发态发布器未启用 reason=%v", err)
+		} else {
+			messagePublisher = publisher
+			*cleanupFns = append(*cleanupFns, publisher.Close)
+		}
+	}
+
+	return service.NewBuiltinRuntimeService(service.BuiltinRuntimeOptions{
+		DevPool:            devPool,
+		MetaPool:           metaPool,
+		RealtimeClient:     realtimeClient,
+		RealtimeKeyPrefix:  cfg.DevCacheKeyPrefix,
+		MessagePublisher:   messagePublisher,
+		MessageTopicPrefix: cfg.MessageTopicPrefix,
+	})
 }

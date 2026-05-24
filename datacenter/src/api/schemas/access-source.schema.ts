@@ -14,6 +14,10 @@ export const AccessSourceTypeSchema = z.enum([
   'modbus',
   'tdengine',
   'database',
+  'builtin.relation',
+  'builtin.timeseries',
+  'builtin.realtime',
+  'builtin.message',
 ])
 
 export type AccessSourceType = z.infer<typeof AccessSourceTypeSchema>

@@ -146,6 +146,10 @@ describe('embedded bridge', () => {
       target: 'design-center-project-2',
       message: {
         type: 'APP_BOOTSTRAP_RESPONSE',
+        payload: {
+          projectId: 'project-2',
+          tenantId: 'tenant-2',
+        },
       },
     })
   })

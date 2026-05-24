@@ -47,7 +47,11 @@ export function useConnection(projectId) {
    * 加载连接列表
    */
   const loadConnections = async () => {
-    if (!projectId.value) return
+    if (!projectId.value) {
+      connections.value = []
+      selectedConnectionId.value = null
+      return
+    }
 
     loading.value = true
     try {
@@ -65,6 +69,15 @@ export function useConnection(projectId) {
     } finally {
       loading.value = false
     }
+  }
+
+  /**
+   * 工程上下文切换时必须清空上一工程的连接状态。
+   * IDE 会缓存多个数据中心标签页，同源 localStorage 变化不能让旧列表继续显示。
+   */
+  const resetConnections = () => {
+    connections.value = []
+    selectedConnectionId.value = null
   }
 
   /**
@@ -229,6 +242,7 @@ export function useConnection(projectId) {
     relationalConnections,
     loading,
     loadConnections,
+    resetConnections,
     createConnection,
     updateConnection,
     deleteConnection,

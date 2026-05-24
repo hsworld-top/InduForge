@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -96,6 +97,31 @@ func TestProjectArtifactV1Contract(t *testing.T) {
 		"topic":         "factory.events",
 		"consumerGroup": "artifact-group",
 	})
+	mustCreateConnection(t, server.URL, token, projectID, map[string]any{
+		"name": "IF关系库",
+		"type": "builtin.relation",
+		"config": map[string]any{
+			"host": "127.0.0.1",
+		},
+	})
+	mustCreateConnection(t, server.URL, token, projectID, map[string]any{
+		"name": "IF时序库",
+		"type": "builtin.timeseries",
+		"config": map[string]any{
+			"retentionDays": 30,
+		},
+	})
+	mustCreateConnection(t, server.URL, token, projectID, map[string]any{
+		"name": "IF实时库",
+		"type": "builtin.realtime",
+		"config": map[string]any{
+			"defaultTtlSeconds": 300,
+		},
+	})
+	mustCreateConnection(t, server.URL, token, projectID, map[string]any{
+		"name": "IF消息库",
+		"type": "builtin.message",
+	})
 
 	responseEnvelope := doJSONRequest(t, http.MethodGet, server.URL+"/api/v1/data/projects/"+projectID+"/artifact", token, nil)
 	var artifact projectArtifactPayload
@@ -145,17 +171,42 @@ func TestProjectArtifactV1Contract(t *testing.T) {
 	if !artifactHasProtocol(artifact.Protocols.Kafka, kafkaConnection.ID) {
 		t.Fatalf("expected protocols.kafka include %q", kafkaConnection.ID)
 	}
+	if len(artifact.BuiltinStores.Relations) != 1 || artifact.BuiltinStores.Relations[0].RuntimeKey == "" {
+		t.Fatalf("expected relation builtin store contract, got %#v", artifact.BuiltinStores.Relations)
+	}
+	if artifact.BuiltinStores.Relations[0].Schema != artifact.BuiltinStores.Relations[0].RuntimeKey {
+		t.Fatalf("expected relation runtime schema to use runtimeKey, got %#v", artifact.BuiltinStores.Relations[0])
+	}
+	if len(artifact.BuiltinStores.Timeseries) != 1 || artifact.BuiltinStores.Timeseries[0].RuntimeKey == "" {
+		t.Fatalf("expected timeseries builtin store contract, got %#v", artifact.BuiltinStores.Timeseries)
+	}
+	if len(artifact.BuiltinStores.RealtimeSpaces) != 1 || artifact.BuiltinStores.RealtimeSpaces[0].Namespace != artifact.BuiltinStores.RealtimeSpaces[0].RuntimeKey {
+		t.Fatalf("expected realtime builtin store contract, got %#v", artifact.BuiltinStores.RealtimeSpaces)
+	}
+	if len(artifact.BuiltinStores.MessageSpaces) != 1 || artifact.BuiltinStores.MessageSpaces[0].TopicPrefix != artifact.BuiltinStores.MessageSpaces[0].RuntimeKey {
+		t.Fatalf("expected message builtin store contract, got %#v", artifact.BuiltinStores.MessageSpaces)
+	}
+	rawArtifact, err := json.Marshal(artifact)
+	if err != nil {
+		t.Fatalf("marshal artifact failed: %v", err)
+	}
+	for _, forbidden := range []string{"if_dev_data", "18379", "18883", "password", "broker"} {
+		if strings.Contains(strings.ToLower(string(rawArtifact)), forbidden) {
+			t.Fatalf("artifact leaked internal value %q: %s", forbidden, string(rawArtifact))
+		}
+	}
 }
 
 type projectArtifactPayload struct {
-	Version     string                         `json:"version"`
-	ProjectID   string                         `json:"projectId"`
-	GeneratedAt time.Time                      `json:"generatedAt"`
-	Connections []projectArtifactConnection    `json:"connections"`
-	Queries     []projectArtifactQuery         `json:"queries"`
-	DataPoints  []projectArtifactDataPoint     `json:"datapoints"`
-	Mqtt        projectArtifactMqttPayload     `json:"mqtt"`
-	Protocols   projectArtifactProtocolPayload `json:"protocols"`
+	Version       string                         `json:"version"`
+	ProjectID     string                         `json:"projectId"`
+	GeneratedAt   time.Time                      `json:"generatedAt"`
+	Connections   []projectArtifactConnection    `json:"connections"`
+	Queries       []projectArtifactQuery         `json:"queries"`
+	DataPoints    []projectArtifactDataPoint     `json:"datapoints"`
+	Mqtt          projectArtifactMqttPayload     `json:"mqtt"`
+	Protocols     projectArtifactProtocolPayload `json:"protocols"`
+	BuiltinStores projectArtifactBuiltinStores   `json:"builtinStores"`
 }
 
 type projectArtifactConnection struct {
@@ -194,6 +245,33 @@ type projectArtifactProtocolPayload struct {
 	HTTP      []projectArtifactNamedID `json:"http"`
 	Websocket []projectArtifactNamedID `json:"websocket"`
 	Redis     []projectArtifactNamedID `json:"redis"`
+}
+
+type projectArtifactBuiltinStores struct {
+	Relations      []projectArtifactBuiltinRelationStore   `json:"relations"`
+	Timeseries     []projectArtifactBuiltinTimeseriesStore `json:"timeseries"`
+	RealtimeSpaces []projectArtifactBuiltinRealtimeStore   `json:"realtimeSpaces"`
+	MessageSpaces  []projectArtifactBuiltinMessageStore    `json:"messageSpaces"`
+}
+
+type projectArtifactBuiltinRelationStore struct {
+	RuntimeKey string `json:"runtimeKey"`
+	Schema     string `json:"schema"`
+}
+
+type projectArtifactBuiltinTimeseriesStore struct {
+	RuntimeKey string `json:"runtimeKey"`
+	Schema     string `json:"schema"`
+}
+
+type projectArtifactBuiltinRealtimeStore struct {
+	RuntimeKey string `json:"runtimeKey"`
+	Namespace  string `json:"namespace"`
+}
+
+type projectArtifactBuiltinMessageStore struct {
+	RuntimeKey  string `json:"runtimeKey"`
+	TopicPrefix string `json:"topicPrefix"`
 }
 
 func insertTestMqttTagGroup(t *testing.T, ctx context.Context, fixture *testDatabase, projectID, subscriptionID, userID string) string {

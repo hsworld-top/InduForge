@@ -1,31 +1,34 @@
 <template>
   <section class="protocol-workbench">
-    <header class="protocol-workbench__head">
-      <button type="button" class="protocol-workbench__back" @click="$emit('back')">
-        <IconTablerArrowLeft />
-      </button>
-      <div class="protocol-workbench__title">
-        <span>{{ protocolLabel }}</span>
-        <strong>{{ connection.name || '未命名接入源' }}</strong>
-      </div>
-      <WorkbenchStatusPill :label="statusLabel" :tone="statusTone" />
-      <div class="protocol-workbench__spacer"></div>
-      <el-input-number
-        v-model="limit"
-        :min="1"
-        :max="100"
-        :step="1"
-        size="small"
-        controls-position="right"
-      />
-      <el-button size="small" :loading="testing" @click="runConnectionTest"> 测试连接 </el-button>
-      <el-button type="primary" size="small" :loading="previewing" @click="runPreview">
-        获取样本
-      </el-button>
-    </header>
-
     <div class="protocol-workbench__body">
       <aside class="protocol-workbench__side">
+        <WorkbenchSourceHeader
+          :title="connection.name || '未命名接入源'"
+          fallback-title="未命名接入源"
+          :status-label="statusLabel"
+          :status-tone="statusTone"
+          :meta="sourceMetaRows"
+          @back="$emit('back')"
+        >
+          <template #actions>
+            <el-input-number
+              v-model="limit"
+              :min="1"
+              :max="100"
+              :step="1"
+              size="small"
+              controls-position="right"
+              class="protocol-workbench__limit"
+            />
+            <el-button size="small" :loading="testing" @click="runConnectionTest">
+              测试连接
+            </el-button>
+            <el-button type="primary" size="small" :loading="previewing" @click="runPreview">
+              获取样本
+            </el-button>
+          </template>
+        </WorkbenchSourceHeader>
+
         <section class="protocol-workbench__panel">
           <div class="protocol-workbench__panel-title">连接配置</div>
           <dl class="protocol-workbench__meta">
@@ -84,10 +87,9 @@ import { computed, markRaw, nextTick, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import dataAPI from '@/api/data.api'
 import { getApiErrorMessage } from '@/utils/request'
-import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
 import WorkbenchStreamMessageList from '@/components/workbench/WorkbenchStreamMessageList.vue'
 import WorkbenchStreamToolbar from '@/components/workbench/WorkbenchStreamToolbar.vue'
-import IconTablerArrowLeft from '~icons/tabler/arrow-left'
+import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
 import IconTablerBraces from '~icons/tabler/braces'
 import IconTablerDatabase from '~icons/tabler/database'
 import IconTablerWebhook from '~icons/tabler/webhook'
@@ -195,6 +197,11 @@ const endpointText = computed(() => {
   }
   return '等待配置'
 })
+
+const sourceMetaRows = computed(() => [
+  { label: '类型', value: protocolLabel.value },
+  { label: '地址', value: endpointText.value },
+])
 
 const configRows = computed(() => {
   const c = config.value
@@ -368,62 +375,6 @@ const formatPayload = (value: unknown) => {
   background: var(--dc-surface-raised);
 }
 
-.protocol-workbench__head {
-  min-height: 56px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--dc-border);
-  background: var(--dc-surface-subtle);
-}
-
-.protocol-workbench__back {
-  width: 30px;
-  height: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-raised);
-  color: var(--dc-text-secondary);
-}
-
-.protocol-workbench__back:hover {
-  color: var(--dc-primary);
-}
-
-.protocol-workbench__back svg {
-  width: 16px;
-  height: 16px;
-}
-
-.protocol-workbench__title {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.protocol-workbench__title span {
-  color: var(--dc-text-muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.protocol-workbench__title strong {
-  overflow: hidden;
-  color: var(--dc-text);
-  font-size: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.protocol-workbench__spacer {
-  flex: 1;
-  min-width: 12px;
-}
-
 .protocol-workbench__body {
   flex: 1;
   min-height: 0;
@@ -436,17 +387,25 @@ const formatPayload = (value: unknown) => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px;
   overflow: auto;
   border-right: 1px solid var(--dc-border);
   background: var(--dc-surface-muted);
 }
 
 .protocol-workbench__panel {
+  margin: 0 12px;
   padding: 12px;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-md);
   background: var(--dc-surface-raised);
+}
+
+.protocol-workbench__panel:last-child {
+  margin-bottom: 12px;
+}
+
+.protocol-workbench__limit {
+  width: 88px;
 }
 
 .protocol-workbench__panel-title {
@@ -486,11 +445,6 @@ const formatPayload = (value: unknown) => {
 }
 
 @media (max-width: 920px) {
-  .protocol-workbench__head {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-
   .protocol-workbench__body {
     grid-template-columns: 1fr;
   }

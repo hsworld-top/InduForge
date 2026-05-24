@@ -10,13 +10,6 @@
       <div class="access-source-card__badges">
         <!-- Phase 2 仅配置角标 -->
         <StatusBadge v-if="isPhase2" tone="warning" text="仅配置" />
-        <span
-          class="access-source-card__status"
-          :class="`is-${resolveStatusKey(connection.status)}`"
-        >
-          <span class="access-source-card__status-dot"></span>
-          {{ resolveStatusText(connection.status) }}
-        </span>
       </div>
     </div>
 
@@ -83,7 +76,6 @@ type AccessSourceConnection = {
   id: string
   name?: string
   type?: string
-  status?: string
   datapointCount?: number
   dataPointCount?: number
   relationalConfig?: {
@@ -126,12 +118,21 @@ const databaseTypes = new Set([
   'sqlserver',
   'tdengine',
   'redis',
+  'builtin.relation',
+  'builtin.timeseries',
 ])
-const streamTypes = new Set(['mqtt', 'kafka', 'websocket', 'http'])
+const streamTypes = new Set(['mqtt', 'kafka', 'websocket', 'http', 'builtin.message'])
 const industrialTypes = new Set(['opcua', 'opcda', 's7', 'modbus'])
+const builtinTypes = new Set([
+  'builtin.relation',
+  'builtin.timeseries',
+  'builtin.realtime',
+  'builtin.message',
+])
 
 const resolveConnectionCategory = (connection: AccessSourceConnection) => {
   const type = connection.type || ''
+  if (type === 'builtin.realtime') return 'stream'
   if (databaseTypes.has(type)) return 'database'
   if (streamTypes.has(type)) return 'stream'
   if (industrialTypes.has(type)) return 'industrial'
@@ -155,6 +156,15 @@ const resolveConnectionVisual = (connection: AccessSourceConnection) => {
 }
 
 const resolveConnectionType = (connection: AccessSourceConnection) => {
+  const builtinLabels: Record<string, string> = {
+    'builtin.relation': 'IF关系库',
+    'builtin.timeseries': 'IF时序库',
+    'builtin.realtime': 'IF实时库',
+    'builtin.message': 'IF消息库',
+  }
+  if (connection.type && builtinLabels[connection.type]) {
+    return builtinLabels[connection.type]
+  }
   if (connection.type === 'relational') {
     const dbType = connection.relationalConfig?.dbType || ''
     const dbTypeLabels: Record<string, string> = {
@@ -183,6 +193,11 @@ const resolveConnectionType = (connection: AccessSourceConnection) => {
 }
 
 const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
+  if (connection.type && builtinTypes.has(connection.type)) {
+    const runtimeKey = String(connection.config?.['runtimeKey'] || '').trim()
+    if (runtimeKey) return runtimeKey
+    return '工程内置运行库'
+  }
   if (connection.type === 'relational') {
     const config = connection.relationalConfig
     if (!config) return '未配置数据库地址'
@@ -233,23 +248,6 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
   }
   return '等待接入配置'
 }
-
-const resolveStatusKey = (status?: string) => {
-  if (status === 'connected') return 'connected'
-  if (status === 'disconnected') return 'disconnected'
-  if (status === 'error' || status === 'degraded') return 'degraded'
-  return 'unknown'
-}
-
-const statusLabels: Record<string, string> = {
-  connected: '在线',
-  disconnected: '离线',
-  error: '异常',
-  degraded: '降级',
-  unknown: '未知',
-}
-
-const resolveStatusText = (status?: string) => statusLabels[status || 'unknown'] || status || '未知'
 </script>
 
 <style scoped>
@@ -310,39 +308,6 @@ const resolveStatusText = (status?: string) => statusLabels[status || 'unknown']
 .access-source-card__icon svg {
   width: 18px;
   height: 18px;
-}
-
-/* 状态徽标：单色圆点 + 灰色文字，去掉胶囊背景 */
-.access-source-card__status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--dc-text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.access-source-card__status-dot {
-  width: 6px;
-  height: 6px;
-  flex-shrink: 0;
-  border-radius: 999px;
-  background: currentColor;
-}
-
-/* 圆点颜色按状态切换；文字始终是 dc-text-secondary */
-.access-source-card__status.is-connected .access-source-card__status-dot {
-  color: var(--dc-success);
-}
-
-.access-source-card__status.is-disconnected .access-source-card__status-dot,
-.access-source-card__status.is-unknown .access-source-card__status-dot {
-  color: var(--dc-text-muted);
-}
-
-.access-source-card__status.is-degraded .access-source-card__status-dot {
-  color: var(--dc-danger);
 }
 
 .access-source-card__body {

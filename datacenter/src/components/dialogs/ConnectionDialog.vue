@@ -3,7 +3,8 @@
     v-model="visible"
     class="connection-dialog"
     width="920px"
-    :dirty="isDirty"
+    :dirty="false"
+    :close-on-click-modal="canCloseByModalClick"
     :body-max-height="'none'"
     @close="handleClosed"
   >
@@ -14,19 +15,39 @@
           <h3 class="connection-dialog__step1-title">选择接入类型</h3>
           <p class="connection-dialog__step1-sub">先选择协议，再填写配置参数</p>
         </div>
-        <div class="connection-dialog__step1-grid">
-          <button
-            v-for="source in sourceOptions"
-            :key="source.value"
-            type="button"
-            class="connection-dialog__step1-card"
-            :class="{ 'is-active': connectionType === source.value }"
-            @click="selectSourceAndAdvance(source.value)"
-          >
-            <component :is="source.icon" class="connection-dialog__step1-icon" />
-            <strong>{{ source.label }}</strong>
-            <span class="connection-dialog__step1-desc">{{ source.description }}</span>
-          </button>
+        <div class="connection-dialog__type-section">
+          <div class="connection-dialog__section-title">内置运行库</div>
+          <div class="connection-dialog__step1-grid">
+            <button
+              v-for="source in builtinSourceOptions"
+              :key="source.value"
+              type="button"
+              class="connection-dialog__step1-card"
+              :class="{ 'is-active': connectionType === source.value }"
+              @click="selectSourceAndAdvance(source.value)"
+            >
+              <component :is="source.icon" class="connection-dialog__step1-icon" />
+              <strong>{{ source.label }}</strong>
+              <span class="connection-dialog__step1-desc">{{ source.description }}</span>
+            </button>
+          </div>
+        </div>
+        <div class="connection-dialog__type-section">
+          <div class="connection-dialog__section-title">外部数据源</div>
+          <div class="connection-dialog__step1-grid">
+            <button
+              v-for="source in externalSourceOptions"
+              :key="source.value"
+              type="button"
+              class="connection-dialog__step1-card"
+              :class="{ 'is-active': connectionType === source.value }"
+              @click="selectSourceAndAdvance(source.value)"
+            >
+              <component :is="source.icon" class="connection-dialog__step1-icon" />
+              <strong>{{ source.label }}</strong>
+              <span class="connection-dialog__step1-desc">{{ source.description }}</span>
+            </button>
+          </div>
         </div>
       </div>
     </template>
@@ -69,8 +90,11 @@
             label-position="top"
             class="connection-dialog__protocol-form"
           >
-            <el-form-item label="连接名称" prop="name">
-              <el-input v-model="formData.name" placeholder="例如：产线 Kafka" />
+            <el-form-item :label="isBuiltinStoreSelected ? '名称' : '连接名称'" prop="name">
+              <el-input
+                v-model="formData.name"
+                :placeholder="isBuiltinStoreSelected ? activeSource.label : '例如：产线 Kafka'"
+              />
             </el-form-item>
 
             <template v-if="connectionType === 'kafka'">
@@ -406,6 +430,32 @@
                 />
               </el-form-item>
             </template>
+
+            <template v-else-if="isBuiltinStoreSelected">
+              <el-form-item label="说明">
+                <el-input
+                  v-model="formData.description"
+                  type="textarea"
+                  :rows="3"
+                  placeholder="可选，描述该运行库在工程中的用途"
+                />
+              </el-form-item>
+              <template v-if="connectionType === 'builtin.timeseries'">
+                <el-form-item label="默认保留天数">
+                  <el-input-number v-model="formData.retentionDays" :min="1" :max="3650" />
+                </el-form-item>
+              </template>
+              <template v-else-if="connectionType === 'builtin.realtime'">
+                <el-form-item label="默认 TTL">
+                  <el-input-number v-model="formData.defaultTtlSeconds" :min="0" :max="86400" />
+                </el-form-item>
+              </template>
+              <template v-else-if="connectionType === 'builtin.message'">
+                <el-form-item label="默认 Topic">
+                  <el-input v-model="formData.topic" placeholder="mock-data" />
+                </el-form-item>
+              </template>
+            </template>
           </el-form>
         </main>
 
@@ -420,7 +470,7 @@
             </dl>
           </section>
 
-          <section class="connection-dialog__test">
+          <section v-if="!isBuiltinStoreSelected" class="connection-dialog__test">
             <div class="connection-dialog__section-title">连接测试</div>
             <div class="connection-dialog__test-state" :class="`is-${testState.status}`">
               <component :is="testState.icon" class="connection-dialog__test-icon" />
@@ -468,7 +518,7 @@
             <!-- 返回上一步：仅 create 模式可见 -->
             <el-button v-if="mode === 'create'" @click="goBackToStep1"> ← 返回上一步 </el-button>
             <el-button @click="requestClose">{{ t('actions.cancel') }}</el-button>
-            <el-button @click="handleTest" :loading="testing">
+            <el-button v-if="!isBuiltinStoreSelected" @click="handleTest" :loading="testing">
               {{ t('actions.testConnection') }}
             </el-button>
             <el-button type="primary" @click="handleSubmit" :loading="submitting">
@@ -497,11 +547,18 @@ import IconTablerPlugConnected from '~icons/tabler/plug-connected'
 import IconTablerServer from '~icons/tabler/server'
 import IconTablerWorldWww from '~icons/tabler/world-www'
 import IconTablerWebhook from '~icons/tabler/webhook'
+import IconTablerBolt from '~icons/tabler/bolt'
+import IconTablerRadio from '~icons/tabler/radio'
+import IconTablerTimeline from '~icons/tabler/timeline'
 import MysqlConnectionForm from '../connection/forms/MysqlConnectionForm.vue'
 import PostgresConnectionForm from '../connection/forms/PostgresConnectionForm.vue'
 import SqlServerConnectionForm from '../connection/forms/SqlServerConnectionForm.vue'
 import MqttConnectionForm from '../connection/forms/MqttConnectionForm.vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
+import {
+  BUILTIN_STORE_TYPES,
+  isBuiltinStoreType,
+} from '@/components/access-source/workbench/builtin-store'
 
 const props = defineProps({
   modelValue: {
@@ -537,11 +594,13 @@ const step = ref<1 | 2>(props.mode === 'edit' ? 2 : 1)
 const selectSourceAndAdvance = (value: string) => {
   selectSource(value)
   step.value = 2
+  emptyFormSignature.value = formInputSignature.value
 }
 
 // 返回上一步：清空表单与测试状态，保留协议高亮
 const goBackToStep1 = () => {
   formData.value = {}
+  emptyFormSignature.value = ''
   resetTestState()
   step.value = 1
 }
@@ -554,7 +613,7 @@ const protocolFormRef = ref(null)
 const testing = ref(false)
 const submitting = ref(false)
 const lastTestSignature = ref('')
-const initialDialogSignature = ref('')
+const emptyFormSignature = ref('')
 const testResult = ref({
   status: 'idle',
   title: '尚未测试',
@@ -563,7 +622,22 @@ const testResult = ref({
   durationMs: 0,
 })
 
-const sourceOptions = [
+const builtinSourceOptions = BUILTIN_STORE_TYPES.map((store) => ({
+  value: store.type,
+  label: store.name,
+  description: store.description,
+  icon: markRaw(
+    store.type === 'builtin.timeseries'
+      ? IconTablerTimeline
+      : store.type === 'builtin.realtime'
+        ? IconTablerBolt
+        : store.type === 'builtin.message'
+          ? IconTablerRadio
+          : IconTablerDatabase,
+  ),
+}))
+
+const externalSourceOptions = [
   {
     value: 'mysql',
     label: 'MySQL',
@@ -637,6 +711,7 @@ const sourceOptions = [
     icon: markRaw(IconTablerDatabase),
   },
 ]
+const sourceOptions = [...builtinSourceOptions, ...externalSourceOptions]
 
 const previewProtocolTypes = ['kafka', 'http', 'websocket', 'redis']
 const industrialProtocolTypes = ['opcua', 's7', 'modbus', 'tdengine']
@@ -687,6 +762,7 @@ const activeSource = computed(() => {
 const activeDatabase = computed(() => sourceOptions.find((item) => item.value === dbType.value))
 
 const activeFormTitle = computed(() => {
+  if (isBuiltinStoreSelected.value) return activeSource.value.label
   if (connectionType.value === 'mqtt') {
     return 'MQTT Broker'
   }
@@ -716,6 +792,8 @@ const formComponent = computed(() => {
   return null
 })
 
+const isBuiltinStoreSelected = computed(() => isBuiltinStoreType(connectionType.value))
+
 const configSignature = computed(() => {
   return JSON.stringify({
     step: step.value,
@@ -725,12 +803,17 @@ const configSignature = computed(() => {
   })
 })
 
-const isDirty = computed(
+const formInputSignature = computed(() => JSON.stringify(formData.value || {}))
+
+const hasUserInput = computed(
   () =>
     visible.value &&
-    Boolean(initialDialogSignature.value) &&
-    configSignature.value !== initialDialogSignature.value,
+    step.value === 2 &&
+    Boolean(emptyFormSignature.value) &&
+    formInputSignature.value !== emptyFormSignature.value,
 )
+
+const canCloseByModalClick = computed(() => !hasUserInput.value)
 
 const isTestStale = computed(() => {
   return (
@@ -770,7 +853,9 @@ const summaryRows = computed(() => {
     { label: '名称', value: data.name || '未填写' },
   ]
 
-  if (relationalSourceTypes.includes(connectionType.value)) {
+  if (isBuiltinStoreSelected.value) {
+    rows.push({ label: '能力', value: '平台内置' }, { label: '运行态', value: '随工程环境映射' })
+  } else if (relationalSourceTypes.includes(connectionType.value)) {
     rows.push(
       { label: '数据库', value: activeDatabase.value?.label || dbType.value },
       { label: '地址', value: formatEndpoint(data.host, data.port) },
@@ -863,6 +948,14 @@ const summaryRows = computed(() => {
 const checklist = computed(() => {
   const data = formData.value || {}
   const hasName = Boolean(data.name)
+  if (isBuiltinStoreSelected.value) {
+    return [
+      { label: '名称已填写', ready: hasName },
+      { label: '使用工程内置运行库', ready: true },
+      { label: '无需配置外部地址和账号', ready: true },
+      { label: '保存后在工作台验证功能', ready: true },
+    ]
+  }
   const hasEndpoint =
     connectionType.value === 'mqtt'
       ? Boolean(data.brokerUrl && data.port)
@@ -920,7 +1013,12 @@ watch(
   (newConnection) => {
     if (newConnection && props.mode === 'edit') {
       connectionType.value = newConnection.type
-      if (newConnection.type === 'relational' && newConnection.relationalConfig) {
+      if (isBuiltinStoreType(newConnection.type)) {
+        formData.value = normalizeBuiltinFormData(newConnection.type, {
+          name: newConnection.name,
+          ...(newConnection.config || {}),
+        })
+      } else if (newConnection.type === 'relational' && newConnection.relationalConfig) {
         dbType.value = newConnection.relationalConfig.dbType
         connectionType.value = dbType.value
         formData.value = {
@@ -954,12 +1052,12 @@ watch(
       connectionType.value = 'mysql'
       dbType.value = 'mysql'
       formData.value = getDefaultConfig('mysql')
+      emptyFormSignature.value = ''
       resetTestState()
-      initialDialogSignature.value = configSignature.value
     } else if (isOpen && props.mode === 'edit') {
       // edit 模式直接进入 step 2
       step.value = 2
-      initialDialogSignature.value = configSignature.value
+      emptyFormSignature.value = formInputSignature.value
     }
   },
 )
@@ -968,7 +1066,9 @@ const selectSource = (value) => {
   if (props.mode === 'edit' || connectionType.value === value) return
   connectionType.value = value
   // 连接类型变化时重置表单
-  if (relationalSourceTypes.includes(connectionType.value)) {
+  if (isBuiltinStoreSelected.value) {
+    formData.value = normalizeBuiltinFormData(connectionType.value, {})
+  } else if (relationalSourceTypes.includes(connectionType.value)) {
     dbType.value = connectionType.value
     formData.value = getDefaultConfig(dbType.value)
   } else if (connectionType.value === 'mqtt') {
@@ -977,10 +1077,13 @@ const selectSource = (value) => {
     formData.value = getProtocolDefaultConfig(connectionType.value)
   }
   resetTestState()
+  emptyFormSignature.value = formInputSignature.value
 }
 
 const resetCurrentForm = () => {
-  if (relationalSourceTypes.includes(connectionType.value)) {
+  if (isBuiltinStoreSelected.value) {
+    formData.value = normalizeBuiltinFormData(connectionType.value, {})
+  } else if (relationalSourceTypes.includes(connectionType.value)) {
     dbType.value = connectionType.value
     formData.value = getDefaultConfig(dbType.value)
   } else {
@@ -990,6 +1093,7 @@ const resetCurrentForm = () => {
         : getProtocolDefaultConfig(connectionType.value)
   }
   resetTestState()
+  emptyFormSignature.value = formInputSignature.value
 }
 
 const resetTestState = () => {
@@ -1030,7 +1134,9 @@ const buildConnectionPayload = () => {
   const name = config.name
   delete config.name
 
-  if (relationalSourceTypes.includes(connectionType.value)) {
+  if (isBuiltinStoreSelected.value) {
+    normalizeBuiltinSubmitConfig(connectionType.value, config)
+  } else if (relationalSourceTypes.includes(connectionType.value)) {
     config.dbType = dbType.value
   } else if (specializedProtocolTypes.includes(connectionType.value)) {
     normalizeProtocolSubmitConfig(connectionType.value, config)
@@ -1132,6 +1238,18 @@ const handleTest = async () => {
     return
   }
 
+  if (isBuiltinStoreSelected.value) {
+    testResult.value = {
+      status: 'idle',
+      title: '保存后测试',
+      message: '内置运行库不需要连接测试，保存后进入对应工作台执行真实开发态测试。',
+      detail: '',
+      durationMs: 0,
+    }
+    ElMessage.info('保存后进入内置运行库工作台测试')
+    return
+  }
+
   if (!relationalSourceTypes.includes(connectionType.value)) {
     if (['s7', 'tdengine'].includes(connectionType.value)) {
       testResult.value = {
@@ -1213,7 +1331,6 @@ const handleSubmit = async () => {
       type: payload.type,
       config: payload.config,
     })
-    initialDialogSignature.value = configSignature.value
   } finally {
     submitting.value = false
   }
@@ -1224,7 +1341,7 @@ const requestClose = () => {
 }
 
 const handleClosed = () => {
-  initialDialogSignature.value = ''
+  emptyFormSignature.value = ''
   // 清空表单
   if (formRef.value) {
     formRef.value.clearValidate()
@@ -1315,6 +1432,27 @@ const getProtocolDefaultConfig = (type) => {
     },
   }
   return { ...(defaults[type] || {}) }
+}
+
+const normalizeBuiltinFormData = (type, config) => {
+  const found = BUILTIN_STORE_TYPES.find((item) => item.type === type)
+  return {
+    name: found?.name || '',
+    ...(found?.defaultConfig || {}),
+    ...config,
+  }
+}
+
+const normalizeBuiltinSubmitConfig = (type, config) => {
+  if (type === 'builtin.timeseries') {
+    config.retentionDays = Number(config.retentionDays) || 30
+  }
+  if (type === 'builtin.realtime') {
+    config.defaultTtlSeconds = Number(config.defaultTtlSeconds) || 300
+  }
+  if (type === 'builtin.message' && !config.topic) {
+    config.topic = 'mock-data'
+  }
 }
 
 const normalizeProtocolFormData = (type, config) => {

@@ -14,6 +14,16 @@ describe('entrypoint-url', () => {
   it('根路径入口仍保持 datacenter 正式入口路径', () => {
     const url = buildRouteRuntimeUrl('http://datacenter.example/datacenter/?handoff=handoff-1', '/')
 
-    expect(url.toString()).toBe('http://datacenter.example/datacenter/')
+    expect(url.toString()).toBe('http://datacenter.example/datacenter/?handoff=handoff-1')
+  })
+
+  it('根路径入口保留 handoffId，避免复用上一工程缓存', () => {
+    const url = buildRouteRuntimeUrl(
+      'http://datacenter.example/datacenter/?handoffId=handoff-2&handoff=handoff-2',
+      '/',
+    )
+
+    expect(url.searchParams.get('handoffId')).toBe('handoff-2')
+    expect(url.searchParams.get('handoff')).toBe('handoff-2')
   })
 })

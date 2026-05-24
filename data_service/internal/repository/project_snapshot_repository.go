@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -235,18 +236,66 @@ type ArtifactProtocolsPayload struct {
 	TDengine  []ArtifactProtocolRecord `json:"tdengine"`
 }
 
+// ArtifactBuiltinStoresPayload 表示产物层 IF 内置运行库契约。
+type ArtifactBuiltinStoresPayload struct {
+	Relations      []ArtifactBuiltinRelationStore   `json:"relations"`
+	Timeseries     []ArtifactBuiltinTimeseriesStore `json:"timeseries"`
+	RealtimeSpaces []ArtifactBuiltinRealtimeStore   `json:"realtimeSpaces"`
+	MessageSpaces  []ArtifactBuiltinMessageStore    `json:"messageSpaces"`
+}
+
+type ArtifactBuiltinRelationStore struct {
+	ID         string   `json:"id"`
+	RuntimeKey string   `json:"runtimeKey"`
+	Name       string   `json:"name"`
+	Schema     string   `json:"schema"`
+	DDLVersion string   `json:"ddlVersion"`
+	Queries    []string `json:"queries"`
+}
+
+type ArtifactBuiltinTimeseriesStore struct {
+	ID            string   `json:"id"`
+	RuntimeKey    string   `json:"runtimeKey"`
+	Name          string   `json:"name"`
+	Schema        string   `json:"schema"`
+	RetentionDays int      `json:"retentionDays"`
+	DDLVersion    string   `json:"ddlVersion"`
+	Tables        []string `json:"tables"`
+}
+
+type ArtifactBuiltinRealtimeStore struct {
+	ID                string   `json:"id"`
+	RuntimeKey        string   `json:"runtimeKey"`
+	Name              string   `json:"name"`
+	Enabled           bool     `json:"enabled"`
+	Namespace         string   `json:"namespace"`
+	DefaultTtlSeconds int      `json:"defaultTtlSeconds"`
+	Keys              []string `json:"keys"`
+}
+
+type ArtifactBuiltinMessageStore struct {
+	ID          string   `json:"id"`
+	RuntimeKey  string   `json:"runtimeKey"`
+	Name        string   `json:"name"`
+	TopicPrefix string   `json:"topicPrefix"`
+	Topics      []string `json:"topics"`
+	Variables   []string `json:"variables"`
+	Bindings    []string `json:"bindings"`
+}
+
 // ProjectArtifactV1 表示 Phase 1 项目级数据产物。
 type ProjectArtifactV1 struct {
-	Version     string                      `json:"version"`
-	ProjectID   string                      `json:"projectId"`
-	GeneratedAt time.Time                   `json:"generatedAt"`
-	Connections []ArtifactConnectionRecord  `json:"connections"`
-	Queries     []ArtifactQueryRecord       `json:"queries"`
-	DataPoints  []ArtifactDataPointRecord   `json:"datapoints"`
-	Compute     []ArtifactComputeUnitRecord `json:"compute"`
-	Alarms      []ArtifactAlarmRuleRecord   `json:"alarms"`
-	Mqtt        ArtifactMqttPayload         `json:"mqtt"`
-	Protocols   ArtifactProtocolsPayload    `json:"protocols"`
+	Version       string                       `json:"version"`
+	ProjectID     string                       `json:"projectId"`
+	GeneratedAt   time.Time                    `json:"generatedAt"`
+	Connections   []ArtifactConnectionRecord   `json:"connections"`
+	Queries       []ArtifactQueryRecord        `json:"queries"`
+	DataPoints    []ArtifactDataPointRecord    `json:"datapoints"`
+	Compute       []ArtifactComputeUnitRecord  `json:"compute"`
+	Alarms        []ArtifactAlarmRuleRecord    `json:"alarms"`
+	Mqtt          ArtifactMqttPayload          `json:"mqtt"`
+	Protocols     ArtifactProtocolsPayload     `json:"protocols"`
+	BuiltinStores ArtifactBuiltinStoresPayload `json:"builtinStores"`
 }
 
 // ProjectSnapshotRepository 负责项目级数据域快照读写。
@@ -377,7 +426,7 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 			Name:   connection.Name,
 			Type:   connection.Type,
 			Status: connection.Status,
-			Config: cloneSnapshotObject(connection.Config),
+			Config: buildArtifactConnectionConfig(connection),
 		})
 	}
 
@@ -486,6 +535,7 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 		Modbus:    make([]ArtifactProtocolRecord, 0),
 		TDengine:  make([]ArtifactProtocolRecord, 0),
 	}
+	builtinStores := buildBuiltinStores(snapshot.Connections)
 	for _, connection := range snapshot.Connections {
 		protocolRecord := ArtifactProtocolRecord{
 			ID:     connection.ID,
@@ -529,8 +579,112 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 			TagGroups:     append([]SnapshotMqttTagGroupRecord{}, snapshot.MqttTagGroups...),
 			Tags:          append([]SnapshotMqttTagRecord{}, snapshot.MqttTags...),
 		},
-		Protocols: protocols,
+		Protocols:     protocols,
+		BuiltinStores: builtinStores,
 	}
+}
+
+func buildArtifactConnectionConfig(connection ConnectionRecord) map[string]any {
+	if !strings.HasPrefix(connection.Type, "builtin.") {
+		return cloneSnapshotObject(connection.Config)
+	}
+	result := map[string]any{}
+	allowedKeys := map[string]struct{}{
+		"store":             {},
+		"runtimeKey":        {},
+		"runtimeSchema":     {},
+		"ddlVersion":        {},
+		"retentionDays":     {},
+		"namespace":         {},
+		"defaultTtlSeconds": {},
+		"topicPrefix":       {},
+		"description":       {},
+		"allowDdlTest":      {},
+	}
+	for key, value := range connection.Config {
+		if _, ok := allowedKeys[key]; ok {
+			result[key] = value
+		}
+	}
+	return result
+}
+
+func buildBuiltinStores(connections []ConnectionRecord) ArtifactBuiltinStoresPayload {
+	payload := ArtifactBuiltinStoresPayload{}
+	for _, connection := range connections {
+		runtimeKey := artifactConfigString(connection.Config, "runtimeKey", "")
+		if runtimeKey == "" {
+			continue
+		}
+		switch connection.Type {
+		case "builtin.relation":
+			payload.Relations = append(payload.Relations, ArtifactBuiltinRelationStore{
+				ID:         connection.ID,
+				RuntimeKey: runtimeKey,
+				Name:       connection.Name,
+				Schema:     runtimeKey,
+				DDLVersion: artifactConfigString(connection.Config, "ddlVersion", "2026-05-24.1"),
+				Queries:    []string{},
+			})
+		case "builtin.timeseries":
+			payload.Timeseries = append(payload.Timeseries, ArtifactBuiltinTimeseriesStore{
+				ID:            connection.ID,
+				RuntimeKey:    runtimeKey,
+				Name:          connection.Name,
+				Schema:        runtimeKey,
+				RetentionDays: artifactConfigInt(connection.Config, "retentionDays", 30),
+				DDLVersion:    artifactConfigString(connection.Config, "ddlVersion", "2026-05-24.1"),
+				Tables:        []string{},
+			})
+		case "builtin.realtime":
+			payload.RealtimeSpaces = append(payload.RealtimeSpaces, ArtifactBuiltinRealtimeStore{
+				ID:                connection.ID,
+				RuntimeKey:        runtimeKey,
+				Name:              connection.Name,
+				Enabled:           true,
+				Namespace:         runtimeKey,
+				DefaultTtlSeconds: artifactConfigInt(connection.Config, "defaultTtlSeconds", 300),
+				Keys:              []string{},
+			})
+		case "builtin.message":
+			payload.MessageSpaces = append(payload.MessageSpaces, ArtifactBuiltinMessageStore{
+				ID:          connection.ID,
+				RuntimeKey:  runtimeKey,
+				Name:        connection.Name,
+				TopicPrefix: runtimeKey,
+				Topics:      []string{},
+				Variables:   []string{},
+				Bindings:    []string{},
+			})
+		}
+	}
+	return payload
+}
+
+func artifactConfigString(config map[string]any, key string, defaultValue string) string {
+	value, ok := config[key].(string)
+	if !ok || value == "" {
+		return defaultValue
+	}
+	return value
+}
+
+func artifactConfigInt(config map[string]any, key string, defaultValue int) int {
+	switch typed := config[key].(type) {
+	case int:
+		if typed > 0 {
+			return typed
+		}
+	case int64:
+		if typed > 0 {
+			return int(typed)
+		}
+	case float64:
+		if typed > 0 {
+			return int(typed)
+		}
+	}
+	return defaultValue
 }
 
 func (r *ProjectSnapshotRepository) listConnections(ctx context.Context, projectID string) ([]ConnectionRecord, error) {

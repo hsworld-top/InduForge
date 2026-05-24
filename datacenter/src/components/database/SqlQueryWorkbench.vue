@@ -1,32 +1,40 @@
 <template>
   <section class="sql-workbench">
     <aside class="sql-workbench__explorer">
-      <div class="sql-workbench__source">
-        <button type="button" class="sql-workbench__back" @click="$emit('back')">
-          <IconTablerArrowLeft />
-          <span>返回接入源</span>
-        </button>
-        <span>{{ dbTypeLabel }}</span>
-        <strong>{{ connection.name || '未命名接入源' }}</strong>
-        <small>{{ databaseLabel }}</small>
-      </div>
-
-      <div class="sql-workbench__toolbar">
-        <button type="button" title="新建查询" @click="createQueryTab()">
-          <IconTablerPlus />
-        </button>
-        <button type="button" title="刷新对象" @click="reloadExplorer">
-          <IconTablerRefresh />
-        </button>
-      </div>
-
-      <el-input
-        v-model="filterText"
-        class="sql-workbench__search"
-        size="small"
-        placeholder="筛选表或查询"
-        clearable
-      />
+      <WorkbenchSourceHeader
+        :title="connection.name || '未命名接入源'"
+        fallback-title="未命名接入源"
+        :meta="sourceMetaRows"
+        @back="$emit('back')"
+      >
+        <template #actions>
+          <el-input
+            v-model="filterText"
+            class="sql-workbench__search"
+            size="small"
+            placeholder="筛选表或查询"
+            clearable
+          />
+          <button
+            type="button"
+            class="workbench-source-header__icon-action is-primary"
+            title="新建查询"
+            aria-label="新建查询"
+            @click="createQueryTab()"
+          >
+            <IconTablerPlus />
+          </button>
+          <button
+            type="button"
+            class="workbench-source-header__icon-action"
+            title="刷新对象"
+            aria-label="刷新对象"
+            @click="reloadExplorer"
+          >
+            <IconTablerRefresh />
+          </button>
+        </template>
+      </WorkbenchSourceHeader>
 
       <div class="sql-workbench__tree">
         <section class="sql-workbench__tree-section">
@@ -144,11 +152,7 @@
           <component :is="tab.icon" />
           <span>{{ tab.title }}</span>
           <i v-if="tab.modified" />
-          <IconTablerX
-            v-if="tabs.length > 1"
-            class="sql-workbench__tab-close"
-            @click.stop="closeTab(tab.id)"
-          />
+          <IconTablerX class="sql-workbench__tab-close" @click.stop="closeTab(tab.id)" />
         </button>
       </div>
 
@@ -346,7 +350,6 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { format as formatSql } from 'sql-formatter'
-import IconTablerArrowLeft from '~icons/tabler/arrow-left'
 import IconTablerChevronDown from '~icons/tabler/chevron-down'
 import IconTablerChevronRight from '~icons/tabler/chevron-right'
 import IconTablerColumns from '~icons/tabler/columns'
@@ -362,6 +365,7 @@ import IconTablerX from '~icons/tabler/x'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 import dataAPI from '@/api/data.api'
 import { getApiErrorMessage } from '@/utils/request'
+import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
 
 type SqlConnection = {
   id: string
@@ -402,6 +406,8 @@ const dbType = computed(() => {
   return props.connection.type || dbConfig.value.dbType || 'mysql'
 })
 const dbTypeLabel = computed(() => {
+  if (props.connection.type === 'builtin.relation') return 'IF关系库'
+  if (props.connection.type === 'builtin.timeseries') return 'IF时序库'
   const labels: Record<string, string> = {
     mysql: 'MySQL',
     postgresql: 'PostgreSQL',
@@ -410,7 +416,21 @@ const dbTypeLabel = computed(() => {
   }
   return labels[dbType.value] || dbType.value
 })
-const databaseLabel = computed(() => dbConfig.value.database || dbConfig.value.schema || '已配置库')
+const databaseLabel = computed(() => {
+  if (props.connection.type === 'builtin.relation') return '工程内置关系库'
+  if (props.connection.type === 'builtin.timeseries') return '工程内置时序库'
+  return dbConfig.value.database || dbConfig.value.schema || '已配置库'
+})
+const sourceMetaRows = computed(() => [
+  { label: '类型', value: dbTypeLabel.value },
+  {
+    label: props.connection.type?.startsWith('builtin.') ? '标识' : '库',
+    value:
+      props.connection.type?.startsWith('builtin.') && dbConfig.value.schema
+        ? String(dbConfig.value.schema)
+        : databaseLabel.value,
+  },
+])
 const editorLanguage = computed(() => {
   if (dbType.value === 'postgresql') return 'pgsql'
   if (dbType.value === 'sqlserver') return 'sql'
@@ -832,60 +852,6 @@ onMounted(async () => {
   overflow-y: auto;
 }
 
-.sql-workbench__source {
-  padding: 14px;
-  border-bottom: 1px solid var(--dc-border);
-}
-
-.sql-workbench__back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 12px;
-  padding: 6px 8px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-raised);
-  color: var(--dc-text-secondary);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.sql-workbench__back svg {
-  width: 14px;
-  height: 14px;
-}
-
-.sql-workbench__back:hover {
-  border-color: color-mix(in oklch, var(--dc-primary) 28%, var(--dc-border));
-  color: var(--dc-primary);
-}
-
-.sql-workbench__source span,
-.sql-workbench__source small {
-  display: block;
-  color: var(--dc-text-muted);
-  font-size: 11px;
-}
-
-.sql-workbench__source strong {
-  display: block;
-  margin: 6px 0 4px;
-  overflow: hidden;
-  color: var(--dc-text);
-  font-size: 15px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sql-workbench__toolbar {
-  display: flex;
-  gap: 6px;
-  padding: 10px 12px 6px;
-}
-
-.sql-workbench__toolbar button,
 .sql-workbench__inline-action {
   width: 28px;
   height: 28px;
@@ -898,20 +864,18 @@ onMounted(async () => {
   color: var(--dc-text-secondary);
 }
 
-.sql-workbench__toolbar svg,
 .sql-workbench__inline-action svg {
   width: 15px;
   height: 15px;
 }
 
-.sql-workbench__toolbar button:hover,
 .sql-workbench__inline-action:hover {
   color: var(--dc-primary);
   border-color: color-mix(in oklch, var(--dc-primary) 28%, var(--dc-border));
 }
 
 .sql-workbench__search {
-  padding: 0 12px 10px;
+  min-width: 0;
 }
 
 .sql-workbench__tree {

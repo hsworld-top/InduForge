@@ -103,6 +103,34 @@ func (h *MqttHandler) GetConnectionStatus(w http.ResponseWriter, r *http.Request
 	return nil
 }
 
+// PublishMessage 使用已保存的 MQTT 连接发布一条测试消息。
+func (h *MqttHandler) PublishMessage(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+
+	var request struct {
+		Topic   string `json:"topic"`
+		Payload any    `json:"payload"`
+		QOS     *int   `json:"qos"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+
+	result, err := h.service.PublishMessage(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), service.MqttPublishInput{
+		Topic:   request.Topic,
+		Payload: request.Payload,
+		QOS:     request.QOS,
+	})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 // ListMessages 读取指定订阅的消息缓存列表。
 func (h *MqttHandler) ListMessages(w http.ResponseWriter, r *http.Request) error {
 	if _, err := requireClaims(r); err != nil {

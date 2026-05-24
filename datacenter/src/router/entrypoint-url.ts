@@ -10,9 +10,21 @@ export const resolveRoutePathname = (routePath: string) => {
   return `/datacenter${routePath}`.replace(/\/{2,}/g, '/')
 }
 
+const hasHandoffSearch = (search: string) => {
+  const params = new URLSearchParams(search)
+  return Boolean(params.get('handoff') || params.get('handoffId'))
+}
+
 /**
  * 用目标路由生成入口判断 URL。
- * 只使用 currentUrl 的 origin，不继承旧 query，避免内部模块切换重复消费 handoff。
+ * 首次进入根路由时必须保留入口 handoff，否则 iframe 会复用旧工程缓存。
+ * 内部模块切换仍丢弃旧 query，避免重复消费已经完成的 handoff。
  */
-export const buildRouteRuntimeUrl = (currentUrl: string, routePath: string) =>
-  new URL(resolveRoutePathname(routePath), currentUrl)
+export const buildRouteRuntimeUrl = (currentUrl: string, routePath: string) => {
+  const source = new URL(currentUrl)
+  const target = new URL(resolveRoutePathname(routePath), source)
+  if ((routePath === '/' || routePath === '') && hasHandoffSearch(source.search)) {
+    target.search = source.search
+  }
+  return target
+}

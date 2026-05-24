@@ -1,63 +1,47 @@
 <template>
   <section class="mqtt-workbench">
     <aside class="mqtt-workbench__explorer">
-      <div class="mqtt-workbench__source">
-        <button type="button" class="mqtt-workbench__back" @click="$emit('back')">
-          <IconTablerArrowLeft />
-          <span>返回接入源</span>
-        </button>
-        <div class="mqtt-workbench__source-head">
-          <el-tooltip
-            :content="connection.name || '未命名 MQTT 接入源'"
-            placement="top"
-            :show-after="400"
-          >
-            <strong class="mqtt-workbench__source-name">
-              {{ connection.name || '未命名 MQTT 接入源' }}
-            </strong>
-          </el-tooltip>
+      <WorkbenchSourceHeader
+        :title="connection.name || fallbackTitle"
+        :fallback-title="fallbackTitle"
+        :meta="sourceMetaRows"
+        @back="$emit('back')"
+      >
+        <template #status>
           <button
             type="button"
             class="mqtt-workbench__connect-action"
             :class="{ 'is-connected': connectionStarted }"
-            :title="connectionStarted ? '断开' : '连接'"
+            :title="connectButtonTitle"
             @click="toggleMqttPreview"
           >
-            <span>{{ connectionStarted ? '断开' : '连接' }}</span>
+            <span class="mqtt-workbench__connect-label is-default">{{ connectButtonLabel }}</span>
+            <span v-if="connectionStarted" class="mqtt-workbench__connect-label is-hover">
+              断开
+            </span>
           </button>
-        </div>
-
-        <div class="mqtt-workbench__source-meta">
-          <div>
-            <span>类型</span>
-            <strong>MQTT Broker</strong>
-          </div>
-          <div>
-            <span>地址</span>
-            <strong :title="endpointText">{{ endpointText }}</strong>
-          </div>
-        </div>
-
-        <div class="mqtt-workbench__source-actions">
+        </template>
+        <template #actions>
           <el-input
             v-model="filterText"
             class="mqtt-workbench__search"
             size="small"
-            placeholder="筛选订阅或 Topic"
+            :placeholder="filterPlaceholder"
             clearable
           />
           <button
             type="button"
-            class="mqtt-workbench__source-action is-primary"
-            title="新建订阅"
-            aria-label="新建订阅"
+            class="workbench-source-header__icon-action is-primary"
+            :title="createSubscriptionLabel"
+            :aria-label="createSubscriptionLabel"
             @click="openCreateSubscriptionDialog(null)"
           >
             <IconTablerPlus />
           </button>
           <button
+            v-if="supportsSubscriptionGroups"
             type="button"
-            class="mqtt-workbench__source-action"
+            class="workbench-source-header__icon-action"
             title="新建分组"
             aria-label="新建分组"
             @click="openCreateGroupDialog"
@@ -66,20 +50,20 @@
           </button>
           <button
             type="button"
-            class="mqtt-workbench__source-action"
-            title="刷新订阅"
-            aria-label="刷新订阅"
+            class="workbench-source-header__icon-action"
+            :title="refreshLabel"
+            :aria-label="refreshLabel"
             @click="loadWorkbenchTree"
           >
             <IconTablerRefresh />
           </button>
-        </div>
-      </div>
+        </template>
+      </WorkbenchSourceHeader>
 
       <div class="mqtt-workbench__tree">
         <div v-if="loading" class="mqtt-workbench__loading">
           <IconTablerLoader2 />
-          <span>加载订阅...</span>
+          <span>{{ loadingLabel }}</span>
         </div>
         <template v-else>
           <MqttSubscriptionTreeBranch
@@ -122,7 +106,7 @@
             v-if="filteredGroups.length === 0 && filteredRootSubscriptions.length === 0"
             class="mqtt-workbench__empty"
           >
-            {{ filterText ? '没有匹配的订阅' : '暂无订阅' }}
+            {{ filterText ? `没有匹配的${treeItemNoun}` : `暂无${treeItemNoun}` }}
           </div>
         </template>
       </div>
@@ -153,6 +137,7 @@
               :subscription="tab.subscription"
               :project-id="projectIdText"
               :connection-id="connection.id"
+              :source="workbenchMode"
             />
 
             <div
@@ -166,6 +151,7 @@
                   :subscription-id="tab.subscription.id"
                   :preview-session-id="connectionStarted ? previewSessionId : ''"
                   @open-monitor="openTagMonitor(tab.subscription)"
+                  @open-publish="openPublishDialog(tab.subscription)"
                 />
               </div>
             </div>
@@ -173,8 +159,8 @@
         </template>
         <div v-else class="mqtt-workbench__placeholder">
           <IconTablerRss />
-          <strong>选择订阅开始工作</strong>
-          <span>从左侧订阅树进入变量管理；连接后可查看实时消息。</span>
+          <strong>{{ placeholderTitle }}</strong>
+          <span>{{ placeholderHint }}</span>
         </div>
       </div>
     </main>
@@ -213,7 +199,7 @@
       title="变量预览/监控"
       width="960px"
       class="mqtt-workbench__monitor-dialog"
-      @close="monitorSubscription = null"
+      @close="closeMonitorDialog"
     >
       <div class="mqtt-workbench__monitor-heading">
         <strong>{{ monitorSubscription?.name || monitorSubscription?.topic }}</strong>
@@ -225,6 +211,41 @@
         :subscription-id="monitorSubscription.id"
         :preview-session-id="previewSessionId"
       />
+    </DcDialog>
+
+    <DcDialog v-model="publishDialogVisible" title="发布测试" width="640px">
+      <div class="mqtt-workbench__dialog-form">
+        <label>
+          <span>Topic</span>
+          <el-input v-model="publishTopic" placeholder="device/demo/1" />
+        </label>
+        <label>
+          <span>QoS</span>
+          <el-input-number v-model="publishQos" :min="0" :max="2" />
+        </label>
+        <label>
+          <span>Payload JSON</span>
+          <el-input v-model="payloadText" type="textarea" :rows="10" spellcheck="false" />
+        </label>
+        <el-alert
+          v-if="publishErrorMessage"
+          type="error"
+          :closable="false"
+          :title="publishErrorMessage"
+          show-icon
+        />
+      </div>
+      <template #footer>
+        <el-button @click="publishDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="publishing"
+          :disabled="!publishTopic.trim()"
+          @click="publishMessage"
+        >
+          发布
+        </el-button>
+      </template>
     </DcDialog>
 
     <DcDialog
@@ -271,17 +292,19 @@
               <dd>{{ detailSubscription.description || '-' }}</dd>
             </div>
             <div>
-              <dt>订阅 ID</dt>
+              <dt>{{ isBuiltinMessageMode ? 'Topic ID' : '订阅 ID' }}</dt>
               <dd>{{ detailSubscription.id }}</dd>
             </div>
           </dl>
         </section>
 
         <section class="mqtt-workbench__detail-section">
-          <div class="mqtt-workbench__panel-title">当前 Broker</div>
+          <div class="mqtt-workbench__panel-title">
+            {{ isBuiltinMessageMode ? '当前消息库' : '当前 Broker' }}
+          </div>
           <dl class="mqtt-workbench__facts">
             <div>
-              <dt>地址</dt>
+              <dt>{{ isBuiltinMessageMode ? '标识' : '地址' }}</dt>
               <dd>{{ endpointText }}</dd>
             </div>
             <div>
@@ -289,7 +312,7 @@
               <dd>{{ connectionStarted ? '已连接' : '未连接' }}</dd>
             </div>
             <div>
-              <dt>订阅</dt>
+              <dt>{{ treeItemNoun }}</dt>
               <dd>{{ subscriptions.length }}</dd>
             </div>
           </dl>
@@ -332,15 +355,28 @@
             <IconTablerMessages class="mqtt-workbench__menu-icon" />
             <span>查看消息</span>
           </button>
-          <button type="button" @click="emitContextAction('rename')">
+          <button
+            v-if="contextMenu.type === 'subscription'"
+            type="button"
+            @click="emitContextAction('rename')"
+          >
             <IconTablerPencil class="mqtt-workbench__menu-icon" />
             <span>重命名</span>
           </button>
-          <button type="button" @click="emitContextAction('move')">
+          <button
+            v-if="supportsSubscriptionGroups"
+            type="button"
+            @click="emitContextAction('move')"
+          >
             <IconTablerFolderSymlink class="mqtt-workbench__menu-icon" />
             <span>移动到分组</span>
           </button>
-          <button type="button" class="is-danger" @click="emitContextAction('delete')">
+          <button
+            v-if="contextMenu.type === 'subscription'"
+            type="button"
+            class="is-danger"
+            @click="emitContextAction('delete')"
+          >
             <IconTablerTrash class="mqtt-workbench__menu-icon" />
             <span>删除</span>
           </button>
@@ -353,7 +389,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import IconTablerArrowLeft from '~icons/tabler/arrow-left'
 import IconTablerFolderPlus from '~icons/tabler/folder-plus'
 import IconTablerFolderSymlink from '~icons/tabler/folder-symlink'
 import IconTablerInfoCircle from '~icons/tabler/info-circle'
@@ -367,6 +402,7 @@ import IconTablerTags from '~icons/tabler/tags'
 import IconTablerTrash from '~icons/tabler/trash'
 import IconTablerX from '~icons/tabler/x'
 import dataAPI from '@/api/data.api'
+import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
 import { usePreviewSession } from '@/composables/usePreviewSession'
 import { useMqttSocket } from '@/composables/useMqttSocket'
 import { getApiErrorMessage } from '@/utils/request'
@@ -391,11 +427,15 @@ type MqttConnection = {
   name?: string
   mqttConfig?: Record<string, any>
   config?: Record<string, any>
+  type?: string
 }
+
+type WorkbenchMode = 'mqtt' | 'builtin-message'
 
 const props = defineProps<{
   projectId: string | number
   connection: MqttConnection
+  mode?: WorkbenchMode
 }>()
 
 defineEmits<{
@@ -404,20 +444,62 @@ defineEmits<{
 
 const projectIdRef = computed(() => String(props.projectId || ''))
 const projectIdText = computed(() => projectIdRef.value)
+const workbenchMode = computed<WorkbenchMode>(() =>
+  props.mode === 'builtin-message' || props.connection.type === 'builtin.message'
+    ? 'builtin-message'
+    : 'mqtt',
+)
+const isBuiltinMessageMode = computed(() => workbenchMode.value === 'builtin-message')
 const config = computed(() => props.connection.mqttConfig || props.connection.config || {})
 const endpointText = computed(() => {
+  if (isBuiltinMessageMode.value) {
+    return String(config.value.runtimeKey || '未生成')
+  }
   const host = config.value.brokerUrl || config.value.host || '未配置 Broker'
   const port = config.value.port ? `:${config.value.port}` : ''
   return `${host}${port}`
 })
+const fallbackTitle = computed(() =>
+  isBuiltinMessageMode.value ? 'IF消息库' : '未命名 MQTT 接入源',
+)
+const treeItemNoun = computed(() => (isBuiltinMessageMode.value ? 'Topic' : '订阅'))
+const filterPlaceholder = computed(() =>
+  isBuiltinMessageMode.value ? '筛选 Topic' : '筛选订阅或 Topic',
+)
+const createSubscriptionLabel = computed(() =>
+  isBuiltinMessageMode.value ? '新建 Topic' : '新建订阅',
+)
+const refreshLabel = computed(() => (isBuiltinMessageMode.value ? '刷新 Topic' : '刷新订阅'))
+const loadingLabel = computed(() => (isBuiltinMessageMode.value ? '加载 Topic...' : '加载订阅...'))
+const placeholderTitle = computed(() =>
+  isBuiltinMessageMode.value ? '选择 Topic 开始工作' : '选择订阅开始工作',
+)
+const placeholderHint = computed(() =>
+  isBuiltinMessageMode.value
+    ? '左键管理变量，右键查看消息或打开实时监控。'
+    : '从左侧订阅树进入变量管理；连接后可查看实时消息。',
+)
+const supportsSubscriptionGroups = computed(() => true)
+const sourceMetaRows = computed(() =>
+  isBuiltinMessageMode.value
+    ? [
+        { label: '类型', value: 'IF消息库' },
+        { label: '标识', value: endpointText.value },
+      ]
+    : [
+        { label: '类型', value: 'MQTT Broker' },
+        { label: '地址', value: endpointText.value },
+      ],
+)
 
 const { sessionId: previewSessionId, ensureSession } = usePreviewSession(projectIdRef, {
   autoStart: false,
 })
-const { connected: socketConnected, subscribeMessages } = useMqttSocket(
-  projectIdRef,
-  previewSessionId,
-)
+const {
+  connected: socketConnected,
+  subscribeMessages,
+  subscribeBuiltinMessage,
+} = useMqttSocket(projectIdRef, previewSessionId)
 
 const loading = ref(false)
 const subscriptions = ref<MqttSubscription[]>([])
@@ -425,6 +507,8 @@ const subscriptionGroups = ref<MqttSubscriptionGroup[]>([])
 const selectedSubscription = ref<MqttSubscription | null>(null)
 const filterText = ref('')
 const connectionStarted = ref(false)
+const connectButtonLabel = computed(() => (connectionStarted.value ? '已连接' : '连接'))
+const connectButtonTitle = computed(() => (connectionStarted.value ? '断开' : '连接'))
 const tabs = ref<any[]>([])
 const activeTabId = ref('')
 const messageViewerRefs = shallowRef(new Map<string, any>())
@@ -445,6 +529,12 @@ const detailDialogVisible = ref(false)
 const detailSubscription = ref<MqttSubscription | null>(null)
 const contextSubscription = ref<MqttSubscription | null>(null)
 const contextGroup = ref<MqttSubscriptionGroupNode | null>(null)
+const publishTopic = ref('')
+const publishQos = ref(0)
+const payloadText = ref(JSON.stringify({ value: 1 }, null, 2))
+const publishDialogVisible = ref(false)
+const publishing = ref(false)
+const publishErrorMessage = ref('')
 const contextMenu = ref<{
   visible: boolean
   type: 'subscription' | 'group' | null
@@ -483,6 +573,14 @@ const filteredTree = computed(() =>
 const filteredGroups = computed(() => filteredTree.value.groups)
 const filteredRootSubscriptions = computed(() => filteredTree.value.subscriptions)
 
+const normalizeBuiltinMessage = (subscription: MqttSubscription, message: any) => ({
+  id: String(message?.id || `${Date.now()}-${Math.random()}`),
+  topic: String(message?.topic || subscription.topic || ''),
+  payload: message?.payload,
+  qos: Number(message?.qos ?? 0),
+  timestamp: message?.timestamp || Date.now(),
+})
+
 const groupNameMap = computed(() => {
   const map = new Map<string, { name: string; parentId: string | null }>()
   const visit = (groups: MqttSubscriptionGroup[], parentId: string | null) => {
@@ -518,13 +616,64 @@ const loadWorkbenchTree = async () => {
       selectedSubscription.value = subscriptions.value[0]
     }
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载 MQTT 订阅树失败'))
+    ElMessage.error(
+      getApiErrorMessage(
+        error,
+        isBuiltinMessageMode.value ? '加载 IF消息库 Topic 失败' : '加载 MQTT 订阅树失败',
+      ),
+    )
   } finally {
     loading.value = false
   }
 }
 
-const loadSubscriptions = loadWorkbenchTree
+const openPublishDialog = (subscription: MqttSubscription) => {
+  if (!connectionStarted.value) {
+    ElMessage.warning('请先连接后再发布测试消息')
+    return
+  }
+  publishTopic.value = subscription.topic || ''
+  publishErrorMessage.value = ''
+  publishDialogVisible.value = true
+}
+
+const publishMessage = async () => {
+  let payload: unknown
+  try {
+    payload = JSON.parse(payloadText.value)
+  } catch {
+    publishErrorMessage.value = 'Payload 必须是合法 JSON'
+    return
+  }
+
+  publishing.value = true
+  publishErrorMessage.value = ''
+  try {
+    const input = {
+      topic: publishTopic.value.trim(),
+      qos: publishQos.value,
+      payload,
+    }
+    if (!connectionStarted.value) {
+      publishErrorMessage.value = '请先连接后再发布测试消息'
+      return
+    }
+    if (isBuiltinMessageMode.value) {
+      await dataAPI.publishBuiltinMessage(projectIdText.value, props.connection.id, input)
+    } else {
+      await dataAPI.publishMqttMessage(projectIdText.value, props.connection.id, input)
+    }
+    ElMessage.success('消息已发布')
+    publishDialogVisible.value = false
+  } catch (error) {
+    publishErrorMessage.value = getApiErrorMessage(
+      error,
+      isBuiltinMessageMode.value ? '发布 IF消息库消息失败' : '发布 MQTT 消息失败',
+    )
+  } finally {
+    publishing.value = false
+  }
+}
 
 const ensureMqttPreview = async () => {
   const session = await ensureSession()
@@ -533,6 +682,12 @@ const ensureMqttPreview = async () => {
     return false
   }
   if (connectionStarted.value) return true
+
+  if (isBuiltinMessageMode.value) {
+    connectionStarted.value = true
+    ElMessage.success('IF消息库已连接')
+    return true
+  }
 
   try {
     await dataAPI.startMqttConnection(projectIdText.value, props.connection.id)
@@ -557,9 +712,11 @@ const stopMqttPreview = async () => {
     if (!tabs.value.some((tab) => tab.id === activeTabId.value)) {
       activeTabId.value = tabs.value[0]?.id || ''
     }
-    await dataAPI.stopMqttConnection(projectIdText.value, props.connection.id)
+    if (!isBuiltinMessageMode.value) {
+      await dataAPI.stopMqttConnection(projectIdText.value, props.connection.id)
+    }
     connectionStarted.value = false
-    ElMessage.success('MQTT 已断开')
+    ElMessage.success(isBuiltinMessageMode.value ? 'IF消息库已断开' : 'MQTT 已断开')
     return true
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, 'MQTT 断开失败'))
@@ -606,11 +763,17 @@ const openMessages = async (subscription: MqttSubscription) => {
   })
 
   if (!messageCleanups.has(tab.id)) {
-    const cleanup = subscribeMessages(subscription.id, (data) => {
-      const viewer = messageViewerRefs.value.get(tab.id)
-      viewer?.addMessage?.(data?.message || data)
-      viewer?.setConnected?.(true)
-    })
+    const cleanup = isBuiltinMessageMode.value
+      ? subscribeBuiltinMessage(subscription.id, props.connection.id, (data) => {
+          const viewer = messageViewerRefs.value.get(tab.id)
+          viewer?.addMessage?.(normalizeBuiltinMessage(subscription, data?.message || data || {}))
+          viewer?.setConnected?.(true)
+        })
+      : subscribeMessages(subscription.id, (data) => {
+          const viewer = messageViewerRefs.value.get(tab.id)
+          viewer?.addMessage?.(data?.message || data)
+          viewer?.setConnected?.(true)
+        })
     messageCleanups.set(tab.id, cleanup)
   }
 
@@ -620,6 +783,9 @@ const openMessages = async (subscription: MqttSubscription) => {
 
 const openTagManager = async (subscription: MqttSubscription) => {
   selectedSubscription.value = subscription
+  if (isBuiltinMessageMode.value) {
+    publishTopic.value = subscription.topic || ''
+  }
 
   addTab({
     id: `mqtt-tags-${subscription.id}`,
@@ -638,6 +804,10 @@ const openTagMonitor = (subscription: MqttSubscription) => {
   }
   monitorSubscription.value = subscription
   monitorDialogVisible.value = true
+}
+
+const closeMonitorDialog = () => {
+  monitorSubscription.value = null
 }
 
 const refreshSelectedAndTabs = (subscription: MqttSubscription) => {
@@ -722,6 +892,9 @@ async function handleSubscriptionSaved(data?: any) {
 }
 
 function openCreateGroupDialog() {
+  if (!supportsSubscriptionGroups.value) {
+    return
+  }
   contextGroup.value = null
   groupDialogMode.value = 'create'
   groupDialogVisible.value = true
@@ -769,6 +942,10 @@ function openMoveGroupDialog(group: MqttSubscriptionGroupNode) {
 }
 
 async function handleMoveSubmit(groupId: string | null) {
+  if (!supportsSubscriptionGroups.value) {
+    moveDialogVisible.value = false
+    return
+  }
   moveSaving.value = true
   try {
     if (moveTargetType.value === 'subscription' && contextSubscription.value) {
@@ -907,6 +1084,9 @@ function emitContextAction(action: 'rename' | 'move' | 'delete' | 'messages' | '
     return
   }
   if (type === 'group' && group) {
+    if (!supportsSubscriptionGroups.value) {
+      return
+    }
     if (action === 'rename') {
       openRenameGroupDialog(group)
       return
@@ -965,6 +1145,8 @@ watch(
     activeTabId.value = ''
     selectedSubscription.value = null
     connectionStarted.value = false
+    publishTopic.value = ''
+    publishErrorMessage.value = ''
     await loadWorkbenchTree()
   },
 )
@@ -1010,143 +1192,10 @@ onBeforeUnmount(() => {
   border-right: 1px solid var(--dc-border);
 }
 
-.mqtt-workbench__source {
-  padding: 12px;
-  border-bottom: 1px solid var(--dc-border);
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklch, var(--dc-surface-raised) 92%, var(--dc-primary) 8%),
-    var(--dc-surface-muted)
-  );
-}
-
-.mqtt-workbench__back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 12px;
-  padding: 6px 8px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-raised);
-  color: var(--dc-text-secondary);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.mqtt-workbench__back svg {
-  width: 14px;
-  height: 14px;
-}
-
-.mqtt-workbench__back:hover {
-  border-color: color-mix(in oklch, var(--dc-primary) 28%, var(--dc-border));
-  color: var(--dc-primary);
-}
-
-.mqtt-workbench__source-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 8px;
-}
-
-.mqtt-workbench__source-name {
-  min-width: 0;
-  display: block;
-  overflow: hidden;
-  color: var(--dc-text);
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 26px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mqtt-workbench__source-meta {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.mqtt-workbench__source-meta div {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  min-height: 28px;
-  padding: 5px 8px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: color-mix(in oklch, var(--dc-surface-raised) 78%, transparent);
-}
-
-.mqtt-workbench__source-meta span {
-  color: var(--dc-text-muted);
-  font-size: 11px;
-}
-
-.mqtt-workbench__source-meta strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--dc-text-secondary);
-  font-size: 12px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mqtt-workbench__source-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 12px;
-}
-
-.mqtt-workbench__source-actions .mqtt-workbench__search {
-  min-width: 0;
-  flex: 1;
-}
-
-.mqtt-workbench__source-actions button {
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-raised);
-  color: var(--dc-text-secondary);
-}
-
-.mqtt-workbench__source-actions button.is-primary {
-  border-color: var(--dc-primary);
-  background: var(--dc-primary);
-  color: var(--dc-surface-raised);
-}
-
-.mqtt-workbench__source-actions svg {
-  width: 15px;
-  height: 15px;
-}
-
-.mqtt-workbench__source-actions button:hover {
-  color: var(--dc-primary);
-  border-color: color-mix(in oklch, var(--dc-primary) 28%, var(--dc-border));
-}
-
-.mqtt-workbench__source-actions button.is-primary:hover {
-  color: var(--dc-surface-raised);
-  transform: translateY(-1px);
-}
-
 .mqtt-workbench__connect-action {
-  width: auto;
+  min-width: 58px;
   height: 26px;
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1159,6 +1208,22 @@ onBeforeUnmount(() => {
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.mqtt-workbench__connect-label.is-hover {
+  display: none;
+}
+
+.mqtt-workbench__connect-action.is-connected:hover .mqtt-workbench__connect-label.is-default {
+  display: none;
+}
+
+.mqtt-workbench__connect-action.is-connected:hover .mqtt-workbench__connect-label.is-hover {
+  display: inline;
+}
+
+.mqtt-workbench__search {
+  min-width: 0;
 }
 
 .mqtt-workbench__connect-action::before {
@@ -1174,6 +1239,12 @@ onBeforeUnmount(() => {
 }
 
 .mqtt-workbench__connect-action.is-connected {
+  border-color: color-mix(in oklch, var(--dc-success) 32%, var(--dc-border));
+  background: color-mix(in oklch, var(--dc-success) 12%, var(--dc-surface-raised));
+  color: var(--dc-success);
+}
+
+.mqtt-workbench__connect-action.is-connected:hover {
   border-color: rgba(220, 38, 38, 0.22);
   background: rgba(220, 38, 38, 0.08);
   color: #b91c1c;
@@ -1348,6 +1419,19 @@ onBeforeUnmount(() => {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.mqtt-workbench__dialog-form {
+  display: grid;
+  gap: 12px;
+}
+
+.mqtt-workbench__dialog-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .mqtt-workbench__panel-title {

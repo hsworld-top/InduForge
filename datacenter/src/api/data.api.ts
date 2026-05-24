@@ -187,6 +187,114 @@ export const getTableStructure = (projectId, connectionId, tableName) => {
   })
 }
 
+export const executeBuiltinRelationSql = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/execute-sql`,
+    method: 'post',
+    data,
+  })
+}
+
+export const queryBuiltinTimeseries = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/execute-sql`,
+    method: 'post',
+    data,
+  })
+}
+
+export const sampleBuiltinTimeseries = (projectId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/builtin/timeseries/sample`,
+    method: 'post',
+    data,
+  })
+}
+
+export const getBuiltinRealtimeKeys = (projectId, connectionId, params = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/realtime/keys`,
+    method: 'get',
+    params,
+  })
+}
+
+export const setBuiltinRealtimeKey = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/realtime/keys`,
+    method: 'post',
+    data,
+  })
+}
+
+export const getBuiltinRealtimeKey = (projectId, connectionId, key) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/realtime/keys/${encodeURIComponent(key)}`,
+    method: 'get',
+  })
+}
+
+export const deleteBuiltinRealtimeKey = (projectId, connectionId, key) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/realtime/keys/${encodeURIComponent(key)}`,
+    method: 'delete',
+  })
+}
+
+export const publishBuiltinMessage = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/message/publish`,
+    method: 'post',
+    data,
+  })
+}
+
+export const publishMqttMessage = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/connections/${connectionId}/publish`,
+    method: 'post',
+    data,
+  })
+}
+
+export const getBuiltinMessageTopics = (projectId, connectionId) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/message/topics`,
+    method: 'get',
+  })
+}
+
+export const createBuiltinMessageTopic = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/message/topics`,
+    method: 'post',
+    data,
+  })
+}
+
+export const getBuiltinMessageVariables = (projectId, connectionId, topicId) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/message/topics/${topicId}/variables`,
+    method: 'get',
+  })
+}
+
+export const createBuiltinMessageVariable = (projectId, connectionId, topicId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/message/topics/${topicId}/variables`,
+    method: 'post',
+    data,
+  })
+}
+
+export const createBuiltinMessagePreviewSession = (projectId, data = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/builtin/message/preview-session`,
+    method: 'post',
+    data,
+  })
+}
+
 /**
  * 更新数据连接
  * @param {string} projectId - 工程ID
@@ -903,6 +1011,19 @@ export default {
   getConnectionTables,
   getTableData,
   getTableStructure,
+  executeBuiltinRelationSql,
+  queryBuiltinTimeseries,
+  sampleBuiltinTimeseries,
+  setBuiltinRealtimeKey,
+  getBuiltinRealtimeKey,
+  deleteBuiltinRealtimeKey,
+  publishBuiltinMessage,
+  getBuiltinMessageTopics,
+  createBuiltinMessageTopic,
+  getBuiltinMessageVariables,
+  createBuiltinMessageVariable,
+  publishMqttMessage,
+  createBuiltinMessagePreviewSession,
   updateConnection,
   deleteConnection,
   updateConnectionStatus,

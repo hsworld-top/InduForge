@@ -372,6 +372,7 @@ const {
   connections,
   selectedConnectionId,
   loadConnections,
+  resetConnections,
   createConnection,
   updateConnection,
   deleteConnection,
@@ -788,8 +789,16 @@ onMounted(() => {
 // 路由中 project 变化时（如正式入口 bootstrap 完成后路由元数据更新）也同步
 watch(
   () => project.value?.id,
-  (newId) => {
-    if (newId) syncProjectStore()
+  (newId, oldId) => {
+    if (!newId) {
+      resetConnections()
+      return
+    }
+    syncProjectStore()
+    if (newId !== oldId) {
+      resetConnections()
+      loadConnections()
+    }
   },
 )
 

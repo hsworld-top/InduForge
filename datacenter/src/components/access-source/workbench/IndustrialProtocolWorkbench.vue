@@ -1,20 +1,22 @@
 <template>
   <section class="industrial-workbench">
-    <header class="industrial-workbench__head">
-      <button type="button" class="industrial-workbench__back" @click="$emit('back')">
-        <IconTablerArrowLeft />
-      </button>
-      <div class="industrial-workbench__title">
-        <span>{{ protocolLabel }}</span>
-        <strong>{{ connection.name || '未命名工业接入源' }}</strong>
-      </div>
-      <WorkbenchStatusPill :label="statusLabel" :tone="statusTone" />
-      <div class="industrial-workbench__spacer"></div>
-      <el-button size="small" :loading="testing" @click="runConnectionTest"> 测试连接 </el-button>
-    </header>
-
     <div class="industrial-workbench__body">
       <aside class="industrial-workbench__side">
+        <WorkbenchSourceHeader
+          :title="connection.name || '未命名工业接入源'"
+          fallback-title="未命名工业接入源"
+          :status-label="statusLabel"
+          :status-tone="statusTone"
+          :meta="sourceMetaRows"
+          @back="$emit('back')"
+        >
+          <template #actions>
+            <el-button type="primary" size="small" :loading="testing" @click="runConnectionTest">
+              测试连接
+            </el-button>
+          </template>
+        </WorkbenchSourceHeader>
+
         <section class="industrial-workbench__panel">
           <div class="industrial-workbench__panel-title">连接参数</div>
           <dl class="industrial-workbench__meta">
@@ -101,9 +103,8 @@ import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import dataAPI from '@/api/data.api'
 import { getApiErrorMessage } from '@/utils/request'
-import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
+import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
 import IconTablerActivityHeartbeat from '~icons/tabler/activity-heartbeat'
-import IconTablerArrowLeft from '~icons/tabler/arrow-left'
 
 type AccessSourceConnection = {
   id: string
@@ -157,6 +158,11 @@ const endpointText = computed(() => {
   }
   return [config.value.host, config.value.port].filter(Boolean).join(':') || '未配置 host'
 })
+
+const sourceMetaRows = computed(() => [
+  { label: '类型', value: protocolLabel.value },
+  { label: '地址', value: endpointText.value },
+])
 
 const configRows = computed(() => {
   const c = config.value
@@ -254,56 +260,9 @@ const formatObject = (value: unknown) => {
   background: var(--dc-surface-raised);
 }
 
-.industrial-workbench__head {
-  min-height: 56px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--dc-border);
-  background: var(--dc-surface-subtle);
-}
-
-.industrial-workbench__back {
-  width: 30px;
-  height: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-raised);
-  color: var(--dc-text-secondary);
-}
-
-.industrial-workbench__back svg,
 .industrial-workbench__test svg {
   width: 16px;
   height: 16px;
-}
-
-.industrial-workbench__title {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.industrial-workbench__title span {
-  color: var(--dc-text-muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.industrial-workbench__title strong {
-  overflow: hidden;
-  color: var(--dc-text);
-  font-size: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.industrial-workbench__spacer {
-  flex: 1;
 }
 
 .industrial-workbench__body {
@@ -318,17 +277,21 @@ const formatObject = (value: unknown) => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px;
   overflow: auto;
   border-right: 1px solid var(--dc-border);
   background: var(--dc-surface-muted);
 }
 
 .industrial-workbench__panel {
+  margin: 0 12px;
   padding: 12px;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-md);
   background: var(--dc-surface-raised);
+}
+
+.industrial-workbench__panel:last-child {
+  margin-bottom: 12px;
 }
 
 .industrial-workbench__panel-title {

@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS data_mqtt_subscriptions (
     updated_at timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT data_mqtt_subscriptions_connection_fkey
         FOREIGN KEY (connection_id) REFERENCES data_connections (id) ON DELETE CASCADE,
-    CONSTRAINT data_mqtt_subscriptions_project_name_key UNIQUE (project_id, name)
+    CONSTRAINT data_mqtt_subscriptions_project_connection_name_key UNIQUE (project_id, connection_id, name)
 );
 
 CREATE INDEX IF NOT EXISTS data_mqtt_subscriptions_project_connection_idx

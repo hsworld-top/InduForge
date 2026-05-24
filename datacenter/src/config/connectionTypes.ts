@@ -5,6 +5,31 @@
  */
 
 export const CONNECTION_TYPES = {
+  'builtin.relation': {
+    label: 'IF关系库',
+    category: 'builtin',
+    icon: 'Database',
+    defaultConfig: {},
+  },
+  'builtin.timeseries': {
+    label: 'IF时序库',
+    category: 'builtin',
+    icon: 'Timer',
+    defaultConfig: { retentionDays: 30, timeField: 'ts' },
+  },
+  'builtin.realtime': {
+    label: 'IF实时库',
+    category: 'builtin',
+    icon: 'Zap',
+    defaultConfig: { defaultTtlSeconds: 300, group: 'rt' },
+  },
+  'builtin.message': {
+    label: 'IF消息库',
+    category: 'builtin',
+    icon: 'Radio',
+    defaultConfig: { topic: 'mock-data', samplePayload: { value: 1 } },
+  },
+
   // MySQL
   mysql: {
     label: 'MySQL',

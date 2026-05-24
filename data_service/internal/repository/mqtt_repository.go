@@ -3,7 +3,9 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -36,6 +38,21 @@ type MqttMessageRecord struct {
 	Payload        string
 	QOS            int
 	ReceivedAt     time.Time
+}
+
+// MqttPublishConnectionRecord 是发布测试所需的最小连接配置。
+type MqttPublishConnectionRecord struct {
+	ID               string
+	BrokerURL        string
+	Protocol         string
+	Port             int
+	ClientID         *string
+	Username         *string
+	Password         *string
+	Keepalive        int
+	CleanSession     bool
+	QOS              int
+	ConnectTimeoutMS int
 }
 
 // CreateMqttConnectionParams 描述创建 MQTT 连接时的数据库入参。
@@ -226,6 +243,50 @@ func (r *MqttRepository) GetConnectionStatus(ctx context.Context, projectID, con
 	return &MqttConnectionStatusRecord{Status: status}, nil
 }
 
+// GetPublishConnection 按项目和连接读取 MQTT 发布测试需要的 broker 配置。
+func (r *MqttRepository) GetPublishConnection(ctx context.Context, projectID, connectionID string) (*MqttPublishConnectionRecord, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT
+			conn.id,
+			cfg.broker_url,
+			cfg.protocol,
+			cfg.port,
+			cfg.client_id,
+			cfg.username,
+			cfg.password,
+			cfg.keepalive,
+			cfg.clean_session,
+			cfg.qos,
+			cfg.connect_timeout_ms
+		FROM data_connections conn
+		JOIN data_mqtt_configs cfg ON cfg.connection_id = conn.id
+		WHERE conn.project_id = $1
+		  AND conn.id = $2
+		  AND conn.type = 'mqtt'
+	`, projectID, connectionID)
+
+	record := MqttPublishConnectionRecord{}
+	if err := row.Scan(
+		&record.ID,
+		&record.BrokerURL,
+		&record.Protocol,
+		&record.Port,
+		&record.ClientID,
+		&record.Username,
+		&record.Password,
+		&record.Keepalive,
+		&record.CleanSession,
+		&record.QOS,
+		&record.ConnectTimeoutMS,
+	); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "MQTT 连接不存在")
+		}
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 MQTT 发布连接失败", err)
+	}
+	return &record, nil
+}
+
 // ListMessages 按 subscription 读取消息缓存。
 // 查询路径说明：先校验 subscription 在当前项目内存在，再走 (project_id, subscription_id, received_at desc) 索引读取。
 func (r *MqttRepository) ListMessages(ctx context.Context, projectID, subscriptionID string, limit int) ([]MqttMessageRecord, error) {
@@ -277,6 +338,92 @@ func (r *MqttRepository) ListMessages(ctx context.Context, projectID, subscripti
 	}
 
 	return messages, nil
+}
+
+// CreatePublishedMessage 记录工作台发布测试产生的消息，便于消息查看窗口立即看到本次样本。
+func (r *MqttRepository) CreatePublishedMessage(ctx context.Context, params CreateMqttMessageParams) (*MqttMessageRecord, error) {
+	receivedAt := params.ReceivedAt.UTC()
+	if receivedAt.IsZero() {
+		receivedAt = time.Now().UTC()
+	}
+	payload, err := json.Marshal(params.Metadata)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "序列化 MQTT 发布元数据失败", err)
+	}
+	row := r.pool.QueryRow(ctx, `
+		INSERT INTO data_mqtt_messages (
+			project_id,
+			connection_id,
+			subscription_id,
+			topic,
+			payload,
+			qos,
+			received_at,
+			metadata
+		)
+		SELECT
+			sub.project_id,
+			sub.connection_id,
+			sub.id,
+			$3,
+			$4,
+			$5,
+			$6,
+			$7::jsonb
+		FROM data_mqtt_subscriptions sub
+		WHERE sub.project_id = $1
+		  AND sub.connection_id = $2
+		  AND sub.topic = $3
+		ORDER BY sub.created_at
+		LIMIT 1
+		RETURNING id, subscription_id, topic, payload, qos, received_at
+	`, params.ProjectID, params.ConnectionID, params.Topic, params.Payload, params.QOS, receivedAt, string(payload))
+
+	record := MqttMessageRecord{}
+	if err := row.Scan(&record.ID, &record.SubscriptionID, &record.Topic, &record.Payload, &record.QOS, &record.ReceivedAt); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "记录 MQTT 发布消息失败", err)
+	}
+
+	if params.RetentionLimit > 0 {
+		_, _ = r.pool.Exec(ctx, `
+			DELETE FROM data_mqtt_messages
+			WHERE project_id = $1
+			  AND subscription_id = $2
+			  AND id NOT IN (
+				SELECT id
+				FROM data_mqtt_messages
+				WHERE project_id = $1
+				  AND subscription_id = $2
+				ORDER BY received_at DESC, id DESC
+				LIMIT $3
+			  )
+		`, params.ProjectID, record.SubscriptionID, params.RetentionLimit)
+	}
+
+	return &record, nil
+}
+
+func BuildMqttBrokerAddress(protocol, brokerURL string, port int) string {
+	broker := strings.TrimSpace(brokerURL)
+	if strings.Contains(broker, "://") {
+		return broker
+	}
+	scheme := strings.TrimSpace(strings.ToLower(protocol))
+	if scheme == "" {
+		scheme = "mqtt"
+	}
+	if scheme == "mqtt" {
+		scheme = "tcp"
+	} else if scheme == "mqtts" {
+		scheme = "ssl"
+	}
+	if port > 0 {
+		return fmt.Sprintf("%s://%s:%d", scheme, broker, port)
+	}
+	return fmt.Sprintf("%s://%s", scheme, broker)
 }
 
 // CreateMessage 持久化一条 MQTT 预览消息，并按订阅保留策略裁剪旧消息。

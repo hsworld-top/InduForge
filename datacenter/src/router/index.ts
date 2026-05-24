@@ -14,6 +14,7 @@ import {
   applyThemeToDocument,
   buildIdeLoginUrl,
   buildIdeRestoreUrl,
+  getCurrentHostContext,
   hasReusableTopLevelSession,
   resolveIdeOriginFromRuntime,
   restoreTopLevelHandoffRecord,
@@ -21,6 +22,7 @@ import {
   shouldUseDebugMode,
   waitForHostBootstrap,
 } from '../runtime/host-bootstrap'
+import { resolveRouteProjectContext } from './project-context'
 
 const routes = createDatacenterRoutes({
   DataCenterComponent: DataCenter,
@@ -108,8 +110,7 @@ export function registerDatacenterBeforeEachGuard(
       // handoff 超时只负责解除等待；后续由 projectId 缺失分支回到 IDE 恢复，不再误导到登录页。
     }
 
-    const projectId = Storage.getProjectId()
-    const tenantId = Storage.getTenantId()
+    const { id: projectId, tenantId } = resolveRouteProjectContext(getCurrentHostContext(), Storage)
 
     if (!projectId) {
       navigateToUrl(buildIdeRestoreUrl(handoff, ideOrigin))

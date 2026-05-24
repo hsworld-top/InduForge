@@ -23,8 +23,8 @@
         :loading="loading"
         :format-json="formatJson"
         :show-timestamp="showTimestamp"
-        empty-text="暂无 MQTT 消息"
-        empty-hint="启动预览连接后，实时消息会显示在这里"
+        :empty-text="emptyText"
+        :empty-hint="emptyHint"
         @select="handleSelectMessage"
         @copy="handleCopyMessage"
       />
@@ -73,6 +73,10 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  source: {
+    type: String,
+    default: 'mqtt',
+  },
 })
 
 const emit = defineEmits(['message-select'])
@@ -89,6 +93,11 @@ const messageListRef = ref<any>(null)
 
 const subscriptionTitle = computed(
   () => props.subscription?.name || props.subscription?.topic || '消息查看器',
+)
+const isBuiltinMessage = computed(() => props.source === 'builtin-message')
+const emptyText = computed(() => (isBuiltinMessage.value ? '暂无 IF消息' : '暂无 MQTT 消息'))
+const emptyHint = computed(() =>
+  isBuiltinMessage.value ? '发布或接收消息后会显示在这里' : '启动预览连接后，实时消息会显示在这里',
 )
 
 const filteredMessages = computed(() => {
@@ -149,6 +158,10 @@ const normalizeIncomingMessage = (message) => {
  */
 const loadMessages = async () => {
   if (!props.subscription?.id) return
+  if (isBuiltinMessage.value) {
+    messages.value = []
+    return
+  }
 
   loading.value = true
   try {

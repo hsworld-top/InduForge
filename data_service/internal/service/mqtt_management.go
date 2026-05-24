@@ -478,8 +478,8 @@ func (s *MqttService) CreateSubscription(ctx context.Context, projectID, userID 
 	if err != nil {
 		return nil, err
 	}
-	if connection.Type != "mqtt" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "连接不是 MQTT 类型")
+	if !isMqttManagedMessageConnectionType(connection.Type) {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "连接不是 MQTT 消息工作台类型")
 	}
 
 	params := repository.CreateMqttSubscriptionParams{
@@ -1351,6 +1351,15 @@ func (s *MqttService) ensureSubscriptionGroupInConnection(ctx context.Context, p
 		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "订阅分组不属于当前连接")
 	}
 	return nil
+}
+
+func isMqttManagedMessageConnectionType(connectionType string) bool {
+	switch strings.TrimSpace(strings.ToLower(connectionType)) {
+	case "mqtt", "builtin.message":
+		return true
+	default:
+		return false
+	}
 }
 
 func findMqttSubscriptionGroupRecord(records []repository.MqttSubscriptionGroupRecord, groupID string) (repository.MqttSubscriptionGroupRecord, bool) {

@@ -2,10 +2,13 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/google/uuid"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -43,6 +46,17 @@ type MqttMessage struct {
 	Payload        string    `json:"payload"`
 	QOS            int       `json:"qos"`
 	ReceivedAt     time.Time `json:"receivedAt"`
+}
+
+type MqttPublishInput struct {
+	Topic   string
+	Payload any
+	QOS     *int
+}
+
+type MqttPublishResult struct {
+	Topic string `json:"topic"`
+	QOS   int    `json:"qos"`
 }
 
 // CreateMqttConnectionInput 表示创建 MQTT 连接的业务输入。
@@ -229,6 +243,54 @@ func (s *MqttService) ListMessages(ctx context.Context, projectID, subscriptionI
 	return messages, nil
 }
 
+// PublishMessage 使用已保存的 MQTT 连接做一次发布测试。
+func (s *MqttService) PublishMessage(ctx context.Context, projectID, connectionID string, input MqttPublishInput) (*MqttPublishResult, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateConnectionID(connectionID); err != nil {
+		return nil, err
+	}
+	topic := strings.Trim(strings.TrimSpace(input.Topic), "/")
+	if topic == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "topic 不能为空")
+	}
+	qos, err := normalizeMqttQOS(input.QOS)
+	if err != nil {
+		return nil, err
+	}
+
+	connection, err := s.repository.GetPublishConnection(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	if input.QOS == nil {
+		qos = connection.QOS
+	}
+
+	payload, err := json.Marshal(input.Payload)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "MQTT payload 必须可序列化为 JSON", err)
+	}
+
+	if err := publishMQTTWorkbenchMessage(ctx, connection, topic, payload, qos); err != nil {
+		return nil, err
+	}
+
+	_, _ = s.repository.CreatePublishedMessage(ctx, repository.CreateMqttMessageParams{
+		ProjectID:      projectID,
+		ConnectionID:   connectionID,
+		Topic:          topic,
+		Payload:        string(payload),
+		QOS:            qos,
+		ReceivedAt:     time.Now().UTC(),
+		Metadata:       map[string]any{"source": "workbench-publish"},
+		RetentionLimit: 100,
+	})
+
+	return &MqttPublishResult{Topic: topic, QOS: qos}, nil
+}
+
 func toMqttConnection(record repository.MqttConnectionRecord) MqttConnection {
 	return MqttConnection{
 		ID:        record.ID,
@@ -239,6 +301,60 @@ func toMqttConnection(record repository.MqttConnectionRecord) MqttConnection {
 		CreatedAt: record.CreatedAt,
 		UpdatedAt: record.UpdatedAt,
 	}
+}
+
+func publishMQTTWorkbenchMessage(ctx context.Context, connection *repository.MqttPublishConnectionRecord, topic string, payload []byte, qos int) error {
+	if connection == nil {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "MQTT 连接不存在")
+	}
+	timeout := time.Duration(connection.ConnectTimeoutMS) * time.Millisecond
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+
+	options := mqtt.NewClientOptions()
+	options.AddBroker(repository.BuildMqttBrokerAddress(connection.Protocol, connection.BrokerURL, connection.Port))
+	options.SetClientID(buildMqttPublishClientID(connection))
+	options.SetCleanSession(connection.CleanSession)
+	options.SetConnectTimeout(timeout)
+	if connection.Keepalive > 0 {
+		options.SetKeepAlive(time.Duration(connection.Keepalive) * time.Second)
+	}
+	if connection.Username != nil && strings.TrimSpace(*connection.Username) != "" {
+		options.SetUsername(strings.TrimSpace(*connection.Username))
+	}
+	if connection.Password != nil && strings.TrimSpace(*connection.Password) != "" {
+		options.SetPassword(strings.TrimSpace(*connection.Password))
+	}
+
+	client := mqtt.NewClient(options)
+	token := client.Connect()
+	if !waitMqttToken(ctx, token, timeout) {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "MQTT 连接超时")
+	}
+	if err := token.Error(); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "MQTT 连接失败", err)
+	}
+	defer client.Disconnect(250)
+
+	token = client.Publish(topic, byte(qos), false, payload)
+	if !waitMqttToken(ctx, token, timeout) {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "MQTT 发布超时")
+	}
+	if err := token.Error(); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "MQTT 发布失败", err)
+	}
+	return nil
+}
+
+func buildMqttPublishClientID(connection *repository.MqttPublishConnectionRecord) string {
+	if connection != nil && connection.ClientID != nil && strings.TrimSpace(*connection.ClientID) != "" {
+		return strings.TrimSpace(*connection.ClientID) + "-publish"
+	}
+	if connection != nil && strings.TrimSpace(connection.ID) != "" {
+		return "workbench-publish-" + connection.ID
+	}
+	return fmt.Sprintf("workbench-publish-%d", time.Now().UnixNano())
 }
 
 func normalizeMqttInitialStatus(status string) (string, error) {

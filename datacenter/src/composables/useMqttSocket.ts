@@ -25,6 +25,7 @@ const sharedRegistry = createMqttSocketSharedRegistry({
 let nextHandlerId = 1
 let nextSubscriptionHandleId = 1
 let nextTagHandleId = 1
+let nextBuiltinMessageHandleId = 1
 
 /**
  * MQTT Socket.IO Composable
@@ -43,6 +44,7 @@ export function useMqttSocket(projectIdSource, previewSessionIdSource = null) {
   const localMessageHandlers = new Map()
   const localSubscriptionHandles = new Map()
   const localTagHandles = new Map()
+  const localBuiltinMessageHandles = new Map()
 
   let currentConnectionKey = ''
   let stopStateWatcher = null
@@ -111,6 +113,10 @@ export function useMqttSocket(projectIdSource, previewSessionIdSource = null) {
     localTagHandles.forEach((tagId) => {
       sharedRegistry.subscribeTag(connectionKey, tagId)
     })
+
+    localBuiltinMessageHandles.forEach((item) => {
+      sharedRegistry.subscribeBuiltinMessage(connectionKey, item.topicId, item.connectionId)
+    })
   }
 
   const detachLocalResources = (connectionKey) => {
@@ -128,6 +134,10 @@ export function useMqttSocket(projectIdSource, previewSessionIdSource = null) {
 
     localTagHandles.forEach((tagId) => {
       sharedRegistry.unsubscribeTag(connectionKey, tagId)
+    })
+
+    localBuiltinMessageHandles.forEach((item) => {
+      sharedRegistry.unsubscribeBuiltinMessage(connectionKey, item.topicId)
     })
   }
 
@@ -269,6 +279,47 @@ export function useMqttSocket(projectIdSource, previewSessionIdSource = null) {
     }
   }
 
+  const subscribeBuiltinMessage = (topicId, connectionId, handler) => {
+    const normalizedTopicId = String(topicId || '').trim()
+    const normalizedConnectionId = String(connectionId || '').trim()
+    if (!normalizedTopicId || !normalizedConnectionId) {
+      return () => {}
+    }
+
+    const handlerId = `builtin-message-${nextHandlerId++}`
+    const handleId = `builtin-message-${nextBuiltinMessageHandleId++}`
+    const wrappedHandler = (data) => {
+      if (typeof handler === 'function' && data?.topicId === normalizedTopicId) {
+        handler(data)
+      }
+    }
+
+    localMessageHandlers.set(handlerId, wrappedHandler)
+    localBuiltinMessageHandles.set(handleId, {
+      topicId: normalizedTopicId,
+      connectionId: normalizedConnectionId,
+    })
+
+    if (currentConnectionKey) {
+      sharedRegistry.addMessageHandler(currentConnectionKey, handlerId, wrappedHandler)
+      sharedRegistry.subscribeBuiltinMessage(
+        currentConnectionKey,
+        normalizedTopicId,
+        normalizedConnectionId,
+      )
+    }
+
+    return () => {
+      if (currentConnectionKey) {
+        sharedRegistry.removeMessageHandler(currentConnectionKey, handlerId)
+        sharedRegistry.unsubscribeBuiltinMessage(currentConnectionKey, normalizedTopicId)
+      }
+
+      localMessageHandlers.delete(handlerId)
+      localBuiltinMessageHandles.delete(handleId)
+    }
+  }
+
   const emit = (event, data) => {
     if (!currentConnectionKey) {
       console.warn('[MqttSocket] Not connected, cannot emit:', event)
@@ -297,6 +348,7 @@ export function useMqttSocket(projectIdSource, previewSessionIdSource = null) {
     disconnect,
     subscribeMessages,
     subscribeTag,
+    subscribeBuiltinMessage,
     onMessage,
     emit,
   }

@@ -42,32 +42,6 @@
             </div>
           </el-popover>
 
-          <!-- 状态筛选 pill -->
-          <el-popover
-            trigger="click"
-            placement="bottom-start"
-            :width="130"
-            popper-class="access-source-workspace__popover"
-          >
-            <template #reference>
-              <PillButton :active="filterStatus !== 'all'">
-                {{ statusLabel }}
-              </PillButton>
-            </template>
-            <div class="access-source-workspace__pop-list">
-              <button
-                v-for="item in statusOptions"
-                :key="item.value"
-                type="button"
-                class="access-source-workspace__pop-item"
-                :class="{ 'is-active': filterStatus === item.value }"
-                @click="selectStatus(item.value)"
-              >
-                {{ item.label }}
-              </button>
-            </div>
-          </el-popover>
-
           <!-- 刷新 -->
           <button
             type="button"
@@ -78,12 +52,9 @@
             <IconTablerRefresh class="access-source-workspace__icon-btn-icon" />
           </button>
 
-          <!-- 概览数字：总数 / 在线 / 异常，靠右展示 -->
+          <!-- 概览数字：只展示接入源总数，连接态进入工作台后由用户手动触发 -->
           <div class="access-source-workspace__overview">
-            <span class="access-source-workspace__overview-text">
-              共 {{ overviewTotal }} · 在线 {{ overviewOnline
-              }}<template v-if="overviewError > 0"> · 异常 {{ overviewError }}</template>
-            </span>
+            <span class="access-source-workspace__overview-text">共 {{ overviewTotal }}</span>
           </div>
 
           <!-- 新增连接 -->
@@ -119,6 +90,7 @@ import { useConfirm } from '@/composables/useConfirm'
 import { getApiErrorMessage } from '@/utils/request'
 import AccessSourceList from './AccessSourceList.vue'
 import PillButton from '@/components/shared/PillButton.vue'
+import { isBuiltinStoreType } from './workbench/builtin-store'
 
 /* Search 图标赋值给变量，传给 el-input prefix-icon */
 const SearchIcon = Search
@@ -127,7 +99,6 @@ type AccessSourceConnection = {
   id: string
   name?: string
   type?: string
-  status?: string
   datapointCount?: number
   dataPointCount?: number
   relationalConfig?: {
@@ -161,12 +132,6 @@ const emit = defineEmits<{
 
 /* ── toolbar 概览计算属性 ── */
 const overviewTotal = computed(() => props.connections.length)
-const overviewOnline = computed(
-  () => props.connections.filter((c) => c.status === 'connected').length,
-)
-const overviewError = computed(
-  () => props.connections.filter((c) => c.status === 'error' || c.status === 'degraded').length,
-)
 
 const route = useRoute()
 const router = useRouter()
@@ -175,7 +140,6 @@ const { confirm } = useConfirm()
 /* ── URL 同步：从 query 读取初始筛选值 ── */
 const filterQ = ref(String(route.query.q || ''))
 const filterType = ref(String(route.query.type || 'all'))
-const filterStatus = ref(String(route.query.status || 'all'))
 
 /* 搜索框双向绑定值（防抖前的输入缓存） */
 const searchInputValue = ref(filterQ.value)
@@ -210,13 +174,13 @@ function syncQuery() {
   const query: Record<string, string> = {}
   if (filterQ.value) query.q = filterQ.value
   if (filterType.value && filterType.value !== 'all') query.type = filterType.value
-  if (filterStatus.value && filterStatus.value !== 'all') query.status = filterStatus.value
   void router.replace({ query })
 }
 
 /* ── 类型筛选选项 ── */
 const typeOptions = [
   { label: '全部', value: 'all' },
+  { label: '内置运行库', value: 'builtin' },
   { label: '数据库', value: 'database' },
   { label: '消息/流', value: 'stream' },
   { label: '工业协议', value: 'industrial' },
@@ -232,42 +196,16 @@ const selectType = (val: string) => {
   syncQuery()
 }
 
-/* ── 状态筛选选项 ── */
-const statusOptions = [
-  { label: '全部', value: 'all' },
-  { label: '在线', value: 'connected' },
-  { label: '离线', value: 'disconnected' },
-  { label: '异常', value: 'error' },
-  { label: '未知', value: 'unknown' },
-]
-
-const statusLabel = computed(() => {
-  const found = statusOptions.find((o) => o.value === filterStatus.value)
-  return found ? (filterStatus.value === 'all' ? '状态' : found.label) : '状态'
-})
-
-const selectStatus = (val: string) => {
-  filterStatus.value = val
-  syncQuery()
-}
-
 /* ── 分类判断（与旧 resolveCategory 逻辑一致）── */
 const resolveCategory = (connection: AccessSourceConnection) => {
   const type = connection.type || ''
+  if (isBuiltinStoreType(type)) return 'builtin'
   if (['relational', 'mysql', 'postgresql', 'sqlserver', 'tdengine', 'redis'].includes(type))
     return 'database'
   if (['mqtt', 'kafka', 'websocket', 'http'].includes(type)) return 'stream'
   if (['opcua', 'opcda', 's7', 'modbus'].includes(type)) return 'industrial'
   if (type.includes('opc') || type.includes('modbus')) return 'industrial'
   return 'all'
-}
-
-/* 状态归一：connected→connected, disconnected→disconnected, error/degraded→error, 其他→unknown */
-const resolveStatusKey = (status?: string) => {
-  if (status === 'connected') return 'connected'
-  if (status === 'disconnected') return 'disconnected'
-  if (status === 'error' || status === 'degraded') return 'error'
-  return 'unknown'
 }
 
 /* ── SQL 数据点数量本地加载（过渡期保留） ── */
@@ -342,11 +280,6 @@ const filteredConnections = computed(() => {
   /* 类型筛选 */
   if (filterType.value !== 'all') {
     list = list.filter((c) => resolveCategory(c) === filterType.value)
-  }
-
-  /* 状态筛选 */
-  if (filterStatus.value !== 'all') {
-    list = list.filter((c) => resolveStatusKey(c.status) === filterStatus.value)
   }
 
   return list

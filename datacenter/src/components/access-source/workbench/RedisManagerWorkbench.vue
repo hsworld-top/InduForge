@@ -1,30 +1,30 @@
 <template>
   <section class="redis-manager">
-    <header class="redis-manager__topbar">
-      <button type="button" class="redis-manager__back" @click="$emit('back')">
-        <IconTablerArrowLeft />
-      </button>
-      <div class="redis-manager__identity">
-        <span>Redis</span>
-        <strong>{{ connection.name || '未命名 Redis' }}</strong>
-      </div>
-      <WorkbenchStatusPill :label="statusLabel" :tone="statusTone" />
-      <div class="redis-manager__topbar-spacer"></div>
-      <el-input
-        v-model="pattern"
-        class="redis-manager__pattern"
-        size="small"
-        placeholder="Key pattern"
-        @keyup.enter="loadKeys"
-      />
-      <el-button size="small" :loading="testing" @click="testConnection">测试连接</el-button>
-      <el-button type="primary" size="small" :loading="loadingKeys" @click="loadKeys">
-        刷新 Key
-      </el-button>
-    </header>
-
     <div class="redis-manager__layout">
       <aside class="redis-manager__sidebar">
+        <WorkbenchSourceHeader
+          :title="connection.name || '未命名 Redis'"
+          fallback-title="未命名 Redis"
+          :status-label="statusLabel"
+          :status-tone="statusTone"
+          :meta="sourceMetaRows"
+          @back="$emit('back')"
+        >
+          <template #actions>
+            <el-input
+              v-model="pattern"
+              class="redis-manager__pattern"
+              size="small"
+              placeholder="Key pattern"
+              @keyup.enter="loadKeys"
+            />
+            <el-button size="small" :loading="testing" @click="testConnection">测试连接</el-button>
+            <el-button type="primary" size="small" :loading="loadingKeys" @click="loadKeys">
+              刷新 Key
+            </el-button>
+          </template>
+        </WorkbenchSourceHeader>
+
         <section class="redis-manager__server">
           <div class="redis-manager__server-icon">
             <IconTablerDatabase />
@@ -50,10 +50,7 @@
             :key="group.name"
             type="button"
             class="redis-manager__tree-node is-child"
-            @click="
-              pattern = `${group.name}:*`
-              loadKeys()
-            "
+            @click="selectKeyGroup(group.name)"
           >
             <IconTablerFolder />
             <span>{{ group.name }}</span>
@@ -159,8 +156,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import dataAPI from '@/api/data.api'
 import { getApiErrorMessage } from '@/utils/request'
-import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
-import IconTablerArrowLeft from '~icons/tabler/arrow-left'
+import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
 import IconTablerDatabase from '~icons/tabler/database'
 import IconTablerFolder from '~icons/tabler/folder'
 import IconTablerServer from '~icons/tabler/server'
@@ -211,6 +207,10 @@ const commandOutput = ref('等待执行命令')
 
 const endpoint = computed(() => String(config.value.address || '未配置地址'))
 const modeLabel = computed(() => String(config.value.mode || 'standalone'))
+const sourceMetaRows = computed(() => [
+  { label: '类型', value: 'Redis' },
+  { label: '地址', value: endpoint.value },
+])
 
 const statusLabel = computed(() => {
   const labels: Record<string, string> = {
@@ -246,6 +246,11 @@ const keyGroups = computed(() => {
     .sort((a, b) => b.count - a.count)
     .slice(0, 12)
 })
+
+const selectKeyGroup = (groupName: string) => {
+  pattern.value = `${groupName}:*`
+  void loadKeys()
+}
 
 const formattedValue = computed(() => {
   if (!selectedValue.value) return '从左侧选择一个 key 查看内容'
@@ -363,65 +368,17 @@ onMounted(() => {
   overflow: hidden;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-md);
-  background: #f6f7f9;
+  background: var(--dc-surface-raised);
 }
 
-.redis-manager__topbar {
-  min-height: 50px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-bottom: 1px solid #d7dce2;
-  background: linear-gradient(180deg, #ffffff 0%, #edf1f5 100%);
-}
-
-.redis-manager__back {
-  width: 30px;
-  height: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #cbd5df;
-  border-radius: 4px;
-  background: #ffffff;
-  color: #334155;
-}
-
-.redis-manager__back svg,
 .redis-manager__server-icon svg,
 .redis-manager__tree-node svg {
   width: 16px;
   height: 16px;
 }
 
-.redis-manager__identity {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.redis-manager__identity span {
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.redis-manager__identity strong {
-  overflow: hidden;
-  color: #0f172a;
-  font-size: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.redis-manager__topbar-spacer {
-  flex: 1;
-  min-width: 12px;
-}
-
 .redis-manager__pattern {
-  width: 240px;
+  min-width: 0;
 }
 
 .redis-manager__layout {
@@ -435,8 +392,8 @@ onMounted(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #cfd6df;
-  background: #eef2f6;
+  border-right: 1px solid var(--dc-border);
+  background: var(--dc-surface-muted);
 }
 
 .redis-manager__server {
@@ -444,7 +401,7 @@ onMounted(() => {
   grid-template-columns: 34px minmax(0, 1fr);
   gap: 10px;
   padding: 12px;
-  border-bottom: 1px solid #d8dee6;
+  border-bottom: 1px solid var(--dc-border);
 }
 
 .redis-manager__server-icon {
@@ -454,8 +411,8 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
 }
 
 .redis-manager__server strong,
@@ -467,13 +424,13 @@ onMounted(() => {
 }
 
 .redis-manager__server strong {
-  color: #0f172a;
+  color: var(--dc-text);
   font-size: 13px;
 }
 
 .redis-manager__server span {
   margin-top: 3px;
-  color: #64748b;
+  color: var(--dc-text-muted);
   font-size: 12px;
 }
 
@@ -494,7 +451,7 @@ onMounted(() => {
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: #334155;
+  color: var(--dc-text-secondary);
   font-size: 12px;
   text-align: left;
 }
@@ -505,8 +462,8 @@ onMounted(() => {
 
 .redis-manager__tree-node.is-active,
 .redis-manager__tree-node:hover {
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
 }
 
 .redis-manager__tree-node span {
@@ -516,7 +473,7 @@ onMounted(() => {
 }
 
 .redis-manager__tree-node em {
-  color: #64748b;
+  color: var(--dc-text-muted);
   font-style: normal;
   font-size: 11px;
 }
@@ -526,7 +483,7 @@ onMounted(() => {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(460px, 1fr) 420px;
-  background: #ffffff;
+  background: var(--dc-surface-raised);
 }
 
 .redis-manager__key-pane,
@@ -538,7 +495,7 @@ onMounted(() => {
 .redis-manager__key-pane {
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #d7dce2;
+  border-right: 1px solid var(--dc-border);
 }
 
 .redis-manager__detail {
@@ -553,8 +510,8 @@ onMounted(() => {
   justify-content: space-between;
   gap: 10px;
   padding: 8px 10px;
-  border-bottom: 1px solid #d7dce2;
-  background: #f8fafc;
+  border-bottom: 1px solid var(--dc-border);
+  background: var(--dc-surface-subtle);
 }
 
 .redis-manager__pane-head strong,
@@ -563,13 +520,13 @@ onMounted(() => {
 }
 
 .redis-manager__pane-head strong {
-  color: #0f172a;
+  color: var(--dc-text);
   font-size: 13px;
 }
 
 .redis-manager__pane-head span {
   margin-top: 2px;
-  color: #64748b;
+  color: var(--dc-text-muted);
   font-size: 11px;
 }
 
@@ -595,9 +552,9 @@ onMounted(() => {
   z-index: 1;
   height: 30px;
   padding: 0 10px;
-  border-bottom: 1px solid #d7dce2;
-  background: #eef2f6;
-  color: #475569;
+  border-bottom: 1px solid var(--dc-border);
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-muted);
   font-size: 11px;
   font-weight: 700;
 }
@@ -607,16 +564,16 @@ onMounted(() => {
   min-height: 31px;
   padding: 0 10px;
   border: 0;
-  border-bottom: 1px solid #eef2f6;
-  background: #ffffff;
-  color: #0f172a;
+  border-bottom: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text);
   font-size: 12px;
   text-align: left;
 }
 
 .redis-manager__row:hover,
 .redis-manager__row.is-selected {
-  background: #eaf2ff;
+  background: var(--dc-primary-soft);
 }
 
 .redis-manager__row span {
@@ -627,13 +584,13 @@ onMounted(() => {
 }
 
 .redis-manager__row em {
-  color: #64748b;
+  color: var(--dc-text-muted);
   font-style: normal;
 }
 
 .redis-manager__empty {
   padding: 28px;
-  color: #64748b;
+  color: var(--dc-text-muted);
   font-size: 13px;
   text-align: center;
 }
@@ -646,7 +603,7 @@ onMounted(() => {
 }
 
 .redis-manager__value {
-  border-bottom: 1px solid #d7dce2;
+  border-bottom: 1px solid var(--dc-border);
 }
 
 .redis-manager__value-meta {
@@ -655,19 +612,19 @@ onMounted(() => {
   gap: 6px 8px;
   margin: 0;
   padding: 10px;
-  border-bottom: 1px solid #eef2f6;
+  border-bottom: 1px solid var(--dc-border);
   font-size: 12px;
 }
 
 .redis-manager__value-meta dt {
-  color: #64748b;
+  color: var(--dc-text-muted);
 }
 
 .redis-manager__value-meta dd {
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  color: #0f172a;
+  color: var(--dc-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -690,7 +647,7 @@ onMounted(() => {
 
 .redis-manager__command {
   padding: 10px;
-  border-bottom: 1px solid #eef2f6;
+  border-bottom: 1px solid var(--dc-border);
 }
 
 @media (max-width: 1180px) {
@@ -704,7 +661,7 @@ onMounted(() => {
   }
 
   .redis-manager__detail {
-    border-top: 1px solid #d7dce2;
+    border-top: 1px solid var(--dc-border);
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr;
   }

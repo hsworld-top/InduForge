@@ -75,6 +75,9 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_compute_runs",
 		"data_alarm_policy_groups",
 		"data_alarm_policies",
+		"data_builtin_realtime_keys",
+		"data_builtin_message_topics",
+		"data_builtin_message_variables",
 	} {
 		if !tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
 			t.Fatalf("expected table %s to exist", tableName)
@@ -85,8 +88,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&appliedCount); err != nil {
 		t.Fatalf("鏌ヨ schema_migrations 澶辫触: %v", err)
 	}
-	if appliedCount != 19 {
-		t.Fatalf("expected 19 migration records, got %d", appliedCount)
+	if appliedCount != 25 {
+		t.Fatalf("expected 25 migration records, got %d", appliedCount)
 	}
 
 	if err := migrator.DownAll(ctx); err != nil {
@@ -151,7 +154,7 @@ func TestMigrationIndexes(t *testing.T) {
 		"data_points_source_config_gin_idx",
 		"data_points_tags_gin_idx",
 		"data_mqtt_configs_protocol_idx",
-		"data_mqtt_subscriptions_project_name_key",
+		"data_mqtt_subscriptions_project_connection_name_key",
 		"data_mqtt_subscriptions_project_connection_idx",
 		"data_mqtt_subscriptions_connection_enabled_idx",
 		"data_mqtt_messages_project_subscription_received_idx",
@@ -185,6 +188,81 @@ func TestMigrationIndexes(t *testing.T) {
 	} {
 		if _, ok := indexes[indexName]; !ok {
 			t.Fatalf("鏈熸湜绱㈠紩/绾︽潫绱㈠紩 %s 瀛樺湪锛屽綋鍓嶇储寮曢泦鍚堜负 %v", indexName, mapsKeys(indexes))
+		}
+	}
+}
+
+func TestBuiltinRuntimeStoreMigration(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	fixture := setupTestDatabase(t, ctx)
+	migrator := setupMigrator(t, fixture.pool)
+	if err := migrator.Up(ctx); err != nil {
+		t.Fatalf("migrate up failed: %v", err)
+	}
+
+	projectID := "11111111-1111-1111-1111-111111111111"
+	userID := "22222222-2222-2222-2222-222222222222"
+	storeTypes := []string{
+		"builtin.relation",
+		"builtin.timeseries",
+		"builtin.realtime",
+		"builtin.message",
+	}
+	for _, storeType := range storeTypes {
+		_, err := fixture.pool.Exec(ctx, `
+			INSERT INTO data_connections (project_id, name, type, category, status, metadata, created_by, updated_by)
+			VALUES ($1, $2, $3, 'builtin', 'connected', '{}'::jsonb, $4, $4)
+		`, projectID, storeType, storeType, userID)
+		if err != nil {
+			t.Fatalf("insert builtin type %s failed: %v", storeType, err)
+		}
+	}
+
+	_, err := fixture.pool.Exec(ctx, `
+		INSERT INTO data_connections (project_id, name, type, category, status, metadata, created_by, updated_by)
+		VALUES ($1, 'repeat relation', 'builtin.relation', 'builtin', 'connected', '{}'::jsonb, $2, $2)
+	`, projectID, userID)
+	if err != nil {
+		t.Fatalf("expected duplicate builtin relation type to be allowed: %v", err)
+	}
+
+	indexes := loadIndexNames(ctx, t, fixture.pool, fixture.schemaName)
+	if _, ok := indexes["data_connections_project_builtin_type_unique"]; ok {
+		t.Fatalf("expected legacy builtin type unique index to be removed")
+	}
+
+	rows, err := fixture.pool.Query(ctx, `
+		SELECT type, metadata
+		FROM data_connections
+		WHERE project_id = $1
+		  AND type IN ('builtin.relation', 'builtin.timeseries', 'builtin.realtime', 'builtin.message')
+	`, projectID)
+	if err != nil {
+		t.Fatalf("query builtin connections failed: %v", err)
+	}
+	defer rows.Close()
+
+	seen := map[string]bool{}
+	for rows.Next() {
+		var storeType string
+		var metadata map[string]any
+		if err := rows.Scan(&storeType, &metadata); err != nil {
+			t.Fatalf("scan builtin connection failed: %v", err)
+		}
+		runtimeKey, _ := metadata["runtimeKey"].(string)
+		if runtimeKey == "" {
+			t.Fatalf("expected runtimeKey for %s, got %#v", storeType, metadata)
+		}
+		seen[storeType] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate builtin connections failed: %v", err)
+	}
+	for _, storeType := range storeTypes {
+		if !seen[storeType] {
+			t.Fatalf("expected migrated builtin connection %s", storeType)
 		}
 	}
 }

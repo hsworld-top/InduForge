@@ -328,7 +328,7 @@ func (r *MqttRepository) GetConnectionSummary(ctx context.Context, projectID, co
         FROM data_connections
         WHERE project_id = $1
           AND id = $2
-          AND type = 'mqtt'
+          AND type IN ('mqtt', 'builtin.message')
     `, projectID, connectionID)
 
 	var record MqttConnectionSummaryRecord
@@ -1205,7 +1205,12 @@ func translateMqttWriteError(message string, err error) error {
 	if errors.As(err, &pgErr) {
 		switch pgErr.Code {
 		case "23505":
-			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "MQTT 配置存在重复名称或标识")
+			switch pgErr.ConstraintName {
+			case "data_mqtt_subscriptions_project_connection_name_key":
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前接入源内已存在同名订阅")
+			default:
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "MQTT 配置存在重复名称或标识")
+			}
 		case "23503":
 			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "关联 MQTT 资源不存在")
 		}

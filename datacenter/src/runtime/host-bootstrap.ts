@@ -18,6 +18,10 @@ const DEFAULT_DEBUG_ROUTE_ENABLED =
     : true
 
 let currentSession = null
+let currentHostContext = {
+  projectId: null,
+  tenantId: null,
+}
 
 const asNonEmptyString = (value) =>
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
@@ -99,8 +103,16 @@ export const restoreTopLevelHandoffRecord = (handoff) => {
   }
 
   Storage.setProjectId(nextProjectId)
+  currentHostContext = {
+    ...currentHostContext,
+    projectId: nextProjectId,
+  }
   if (nextTenantId) {
     Storage.setTenantId(nextTenantId)
+    currentHostContext = {
+      ...currentHostContext,
+      tenantId: nextTenantId,
+    }
   }
   if (nextTheme) {
     Storage.setTheme(nextTheme)
@@ -306,6 +318,15 @@ export function applyBootstrapPayload(payload = {}) {
     Storage.setProjectId(nextProjectId)
   }
 
+  /**
+   * IDE 中多个数据中心 iframe 同源运行，localStorage 会被后打开的工程覆盖。
+   * 当前 iframe 的工程边界必须保存在模块内存里，路由守卫优先读取这里。
+   */
+  currentHostContext = {
+    projectId: nextProjectId ?? currentHostContext.projectId,
+    tenantId: nextTenantId ?? currentHostContext.tenantId,
+  }
+
   if (nextTheme) {
     Storage.setTheme(nextTheme)
     applyThemeToDocument(nextTheme)
@@ -464,6 +485,10 @@ export function waitForHostBootstrap() {
   return currentSession?.gate.promise ?? Promise.resolve(true)
 }
 
+export function getCurrentHostContext() {
+  return { ...currentHostContext }
+}
+
 export function getTrustedHostOriginSet() {
   const origin = currentSession?.target?.origin ?? null
   return origin ? new Set([origin]) : new Set()
@@ -559,4 +584,8 @@ export function handleAuthRefreshedMessage(data) {
 
 export function resetHostBootstrapSessionForTests() {
   currentSession = null
+  currentHostContext = {
+    projectId: null,
+    tenantId: null,
+  }
 }

@@ -70,6 +70,7 @@
         <div class="dashboard-tab-panel-shell h-full overflow-hidden">
           <component
             :is="tab.component"
+            :key="tab.key"
             :tab-key="tab.key"
             @open-tab="$emit('open-tab', $event)"
             @embedded-register="$emit('embedded-register', $event)"

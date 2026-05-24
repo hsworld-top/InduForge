@@ -115,6 +115,24 @@ func (r *ConnectionRepository) GetByProjectAndID(ctx context.Context, projectID,
 	return &record, nil
 }
 
+// GetByProjectAndType 按项目和连接类型读取一条记录。
+// 用于校验工程级内置运行库唯一性；调用方只关心是否存在，不依赖排序。
+func (r *ConnectionRepository) GetByProjectAndType(ctx context.Context, projectID, connectionType string) (*ConnectionRecord, error) {
+	row := r.pool.QueryRow(ctx, `
+        SELECT id, project_id, name, type, category, status, metadata, created_at, updated_at
+        FROM data_connections
+        WHERE project_id = $1 AND type = $2
+        LIMIT 1
+    `, projectID, connectionType)
+
+	record, err := scanConnection(row)
+	if err != nil {
+		return nil, err
+	}
+
+	return &record, nil
+}
+
 // Create 写入一条新的连接记录。
 // 写入时显式绑定 project_id/type/status，便于后续列表查询直接复用已有索引。
 // 该语句依赖默认列补齐其余运行参数，若未来写入字段增多，需要同步评估 INSERT RETURNING 体积。

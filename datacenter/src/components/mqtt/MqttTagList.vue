@@ -18,9 +18,27 @@
           <IconTablerDownload class="mr-1 w-4 h-4" />
           批量导出
         </el-button>
-        <el-button size="small" type="primary" plain @click="$emit('openMonitor')">
+        <el-button
+          class="mqtt-tag-list__live-action"
+          :class="{ 'is-connected': liveActionConnected }"
+          size="small"
+          type="primary"
+          plain
+          @click="$emit('openMonitor')"
+        >
           <IconTablerActivity class="mr-1 w-4 h-4" />
           变量预览/监控
+        </el-button>
+        <el-button
+          class="mqtt-tag-list__live-action"
+          :class="{ 'is-connected': liveActionConnected }"
+          size="small"
+          type="primary"
+          plain
+          @click="$emit('openPublish')"
+        >
+          <IconTablerSend class="mr-1 w-4 h-4" />
+          发布测试
         </el-button>
       </div>
       <div class="mqtt-tag-list__filters">
@@ -198,6 +216,7 @@ import IconTablerChevronRight from '~icons/tabler/chevron-right'
 import IconTablerChevronDown from '~icons/tabler/chevron-down'
 import IconTablerDownload from '~icons/tabler/download'
 import IconTablerActivity from '~icons/tabler/activity'
+import IconTablerSend from '~icons/tabler/send'
 import { getApiErrorMessage } from '@/utils/request'
 
 const props = defineProps({
@@ -215,7 +234,7 @@ const props = defineProps({
   },
 })
 
-defineEmits(['openMonitor'])
+defineEmits(['openMonitor', 'openPublish'])
 
 const loading = ref(false)
 const tags = ref([])
@@ -232,6 +251,7 @@ const groupDialogMode = ref('create')
 const currentGroup = ref(null)
 
 const { notify: notifyTagChange } = useMqttTagSync(props.subscriptionId)
+const liveActionConnected = computed(() => Boolean(props.previewSessionId))
 
 const sortedGroups = computed(() => {
   return [...groups.value].sort((a, b) => a.order - b.order)
@@ -496,6 +516,32 @@ onMounted(async () => {
 
 .mqtt-tag-list__filters :deep(.el-input) {
   width: 220px;
+}
+
+.mqtt-tag-list__actions :deep(.mqtt-tag-list__live-action.el-button) {
+  border-color: var(--dc-border);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-secondary);
+}
+
+.mqtt-tag-list__actions :deep(.mqtt-tag-list__live-action.el-button:hover),
+.mqtt-tag-list__actions :deep(.mqtt-tag-list__live-action.el-button:focus) {
+  border-color: var(--dc-border);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-secondary);
+}
+
+.mqtt-tag-list__actions :deep(.mqtt-tag-list__live-action.el-button.is-connected) {
+  border-color: var(--el-color-primary);
+  background: var(--el-color-primary);
+  color: var(--el-color-white);
+}
+
+.mqtt-tag-list__actions :deep(.mqtt-tag-list__live-action.el-button.is-connected:hover),
+.mqtt-tag-list__actions :deep(.mqtt-tag-list__live-action.el-button.is-connected:focus) {
+  border-color: var(--el-color-primary);
+  background: var(--el-color-primary);
+  color: var(--el-color-white);
 }
 
 .mqtt-tag-list__body {

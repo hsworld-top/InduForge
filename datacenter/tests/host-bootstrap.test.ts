@@ -7,6 +7,7 @@ import {
   applyBootstrapPayload,
   buildIdeRestoreUrl,
   createBootstrapRequest,
+  getCurrentHostContext,
   initializeHostBootstrap,
   isTrustedHostMessage,
   postAppBootstrapRequest,
@@ -166,6 +167,21 @@ test('applyBootstrapPayload 会写入 token、refreshToken、tenantId、projectI
   assert.equal(globalThis.localStorage.getItem('project_id'), JSON.stringify('project-1'))
   assert.equal(globalThis.localStorage.getItem('theme'), JSON.stringify('dark'))
   assert.equal(globalThis.localStorage.getItem('language'), JSON.stringify('en'))
+})
+
+test('applyBootstrapPayload 会保留当前 iframe 的工程上下文，避免同源 localStorage 覆盖', () => {
+  applyBootstrapPayload({
+    tenantId: 'tenant-iframe-1',
+    projectId: 'project-iframe-1',
+  })
+
+  globalThis.localStorage.setItem('project_id', JSON.stringify('project-iframe-2'))
+  globalThis.localStorage.setItem('tenant_id', JSON.stringify('tenant-iframe-2'))
+
+  assert.deepEqual(getCurrentHostContext(), {
+    projectId: 'project-iframe-1',
+    tenantId: 'tenant-iframe-1',
+  })
 })
 
 test('trusted origin/source 校验要求两者同时匹配', () => {

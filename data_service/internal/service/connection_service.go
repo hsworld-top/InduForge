@@ -26,10 +26,14 @@ import (
 // publicConnectionTypeCategoryMap 只保留通用连接接口允许新建/改型的类型。
 // 说明：kafka/http/websocket/redis 与 opcua/modbus/s7/tdengine 均走各自协议专用配置接口。
 var publicConnectionTypeCategoryMap = map[string]string{
-	"relational": "database",
-	"mqtt":       "message",
-	"websocket":  "protocol",
-	"http":       "api",
+	"relational":         "database",
+	"mqtt":               "message",
+	"websocket":          "protocol",
+	"http":               "api",
+	"builtin.relation":   "builtin",
+	"builtin.timeseries": "builtin",
+	"builtin.realtime":   "builtin",
+	"builtin.message":    "builtin",
 }
 
 // reservedPhase2ConnectionTypes 用于阻止工业协议从通用连接入口写入，避免只生成 metadata 而缺失专用配置表。
@@ -90,12 +94,17 @@ type UpdateConnectionInput struct {
 
 // ConnectionService 承载连接领域的基本业务校验与映射。
 type ConnectionService struct {
-	repository *repository.ConnectionRepository
+	repository     *repository.ConnectionRepository
+	builtinRuntime *BuiltinRuntimeService
 }
 
 // NewConnectionService 创建连接服务。
-func NewConnectionService(repo *repository.ConnectionRepository) *ConnectionService {
-	return &ConnectionService{repository: repo}
+func NewConnectionService(repo *repository.ConnectionRepository, builtinRuntime ...*BuiltinRuntimeService) *ConnectionService {
+	service := &ConnectionService{repository: repo}
+	if len(builtinRuntime) > 0 {
+		service.builtinRuntime = builtinRuntime[0]
+	}
+	return service
 }
 
 // ListConnections 查询项目下的连接列表。
@@ -117,6 +126,21 @@ func (s *ConnectionService) ListConnections(ctx context.Context, projectID, tena
 	return connections, nil
 }
 
+func (s *ConnectionService) GetConnection(ctx context.Context, projectID, connectionID, tenantID string) (*Connection, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateConnectionID(connectionID); err != nil {
+		return nil, err
+	}
+	record, err := s.repository.GetByProjectAndID(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	connection := toConnection(*record, tenantID)
+	return &connection, nil
+}
+
 // CreateConnection 创建项目连接。
 func (s *ConnectionService) CreateConnection(ctx context.Context, projectID, tenantID, userID string, input CreateConnectionInput) (*Connection, error) {
 	if err := validateProjectID(projectID); err != nil {
@@ -133,6 +157,32 @@ func (s *ConnectionService) CreateConnection(ctx context.Context, projectID, ten
 	connectionType, category, err := normalizeConnectionType(input.Type)
 	if err != nil {
 		return nil, err
+	}
+	if isBuiltinStoreType(connectionType) {
+		normalized, err := normalizeBuiltinStoreCreateInput(projectID, CreateConnectionInput{
+			Name:   input.Name,
+			Type:   connectionType,
+			Status: input.Status,
+			Config: input.Config,
+		})
+		if err != nil {
+			return nil, err
+		}
+		record, err := s.repository.Create(ctx, repository.CreateConnectionParams{
+			ProjectID: projectID,
+			UserID:    userID,
+			Name:      normalized.Name,
+			Type:      normalized.Type,
+			Category:  normalized.Category,
+			Status:    normalized.Status,
+			Config:    normalized.Config,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		connection := toConnection(*record, tenantID)
+		return &connection, nil
 	}
 	status, err := normalizeConnectionStatus(input.Status)
 	if err != nil {
@@ -198,6 +248,12 @@ func (s *ConnectionService) UpdateConnection(ctx context.Context, projectID, con
 		if err != nil {
 			return nil, err
 		}
+		if isBuiltinStoreType(current.Type) && nextType != current.Type {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "内置运行库类型不允许修改")
+		}
+		if !isBuiltinStoreType(current.Type) && isBuiltinStoreType(nextType) {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "外部接入源不允许改为内置运行库")
+		}
 	}
 
 	nextStatus := current.Status
@@ -213,6 +269,13 @@ func (s *ConnectionService) UpdateConnection(ctx context.Context, projectID, con
 		nextConfig, err = normalizeConnectionConfig(input.Config)
 		if err != nil {
 			return nil, err
+		}
+	}
+	if isBuiltinStoreType(nextType) {
+		nextCategory = "builtin"
+		nextStatus = "connected"
+		if input.HasConfig {
+			nextConfig = mergeBuiltinConfigUpdate(current.Config, input.Config)
 		}
 	}
 
@@ -585,6 +648,15 @@ func (s *ConnectionService) ListTables(ctx context.Context, projectID, connectio
 	if err != nil {
 		return nil, err
 	}
+	if schemaName, ok, err := builtinSQLSchemaFromRecord(connection); ok || err != nil {
+		if err != nil {
+			return nil, err
+		}
+		if s.builtinRuntime == nil {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开发态内置运行库未初始化")
+		}
+		return s.builtinRuntime.ListTablesInSchema(ctx, schemaName)
+	}
 
 	runtime, err := connectRelationalRuntime(ctx, connection.Config)
 	if err != nil {
@@ -624,6 +696,15 @@ func (s *ConnectionService) GetTableStructure(ctx context.Context, projectID, co
 	normalizedTableName, err := normalizeRuntimeIdentifier(tableName, "tableName")
 	if err != nil {
 		return nil, err
+	}
+	if schemaName, ok, err := builtinSQLSchemaFromRecord(connection); ok || err != nil {
+		if err != nil {
+			return nil, err
+		}
+		if s.builtinRuntime == nil {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开发态内置运行库未初始化")
+		}
+		return s.builtinRuntime.GetTableStructureInSchema(ctx, schemaName, normalizedTableName)
 	}
 
 	runtime, err := connectRelationalRuntime(ctx, connection.Config)
@@ -666,6 +747,34 @@ func (s *ConnectionService) GetTableData(ctx context.Context, projectID, connect
 	}
 
 	page, limit = normalizePageAndSize(page, limit, 100, 500)
+	if schemaName, ok, err := builtinSQLSchemaFromRecord(connection); ok || err != nil {
+		if err != nil {
+			return nil, err
+		}
+		query := fmt.Sprintf("SELECT * FROM %s LIMIT %d OFFSET %d", pgx.Identifier{normalizedTableName}.Sanitize(), limit, (page-1)*limit)
+		result, err := s.builtinRuntime.ExecuteSQLInSchema(ctx, schemaName, query, nil, limit)
+		if err != nil {
+			return nil, err
+		}
+		rows := make([][]any, 0, len(result.Rows))
+		for _, row := range result.Rows {
+			values := make([]any, 0, len(result.Columns))
+			for _, column := range result.Columns {
+				values = append(values, row[column])
+			}
+			rows = append(rows, values)
+		}
+		return &RelationalTableData{
+			Columns: result.Columns,
+			Rows:    rows,
+			Pagination: RelationalPagination{
+				Page:       page,
+				Limit:      limit,
+				Total:      result.RowCount,
+				TotalPages: 1,
+			},
+		}, nil
+	}
 
 	runtime, err := connectRelationalRuntime(ctx, connection.Config)
 	if err != nil {
@@ -730,6 +839,19 @@ func (s *ConnectionService) ExecuteSQL(ctx context.Context, projectID, connectio
 	connection, err := s.loadRelationalConnection(ctx, projectID, connectionID)
 	if err != nil {
 		return nil, err
+	}
+	if schemaName, ok, err := builtinSQLSchemaFromRecord(connection); ok || err != nil {
+		if err != nil {
+			return nil, err
+		}
+		if s.builtinRuntime == nil {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开发态内置运行库未初始化")
+		}
+		result, err := s.builtinRuntime.ExecuteSQLInSchema(ctx, schemaName, sqlText, parameters, 500)
+		if err != nil {
+			return nil, err
+		}
+		return builtinSQLResultToRelational(result), nil
 	}
 	if err := ensureReadOnlySQLText(sqlText); err != nil {
 		return nil, err
@@ -798,9 +920,49 @@ func (s *ConnectionService) loadRelationalConnection(ctx context.Context, projec
 		return nil, err
 	}
 	if connection.Type != "relational" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前仅支持关系型连接")
+		if connection.Type != "builtin.relation" && connection.Type != "builtin.timeseries" {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前仅支持关系型连接")
+		}
 	}
 	return connection, nil
+}
+
+func builtinSQLSchemaFromRecord(connection *repository.ConnectionRecord) (string, bool, error) {
+	if connection == nil {
+		return "", false, nil
+	}
+	if connection.Type != "builtin.relation" && connection.Type != "builtin.timeseries" {
+		return "", false, nil
+	}
+	schemaName := builtinConfigString(connection.Config, "devSchema", "")
+	if schemaName == "" {
+		runtimeKey := builtinConfigString(connection.Config, "runtimeKey", "")
+		if runtimeKey == "" {
+			return "", true, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "内置运行库缺少系统标识")
+		}
+		schemaName = deriveBuiltinConnectionSchema(connection.ProjectID, runtimeKey)
+	}
+	return schemaName, true, nil
+}
+
+func builtinSQLResultToRelational(result *BuiltinSQLExecuteResult) *RelationalQueryResult {
+	if result == nil {
+		return &RelationalQueryResult{Columns: []string{}, Rows: [][]any{}}
+	}
+	rows := make([][]any, 0, len(result.Rows))
+	for _, row := range result.Rows {
+		values := make([]any, 0, len(result.Columns))
+		for _, column := range result.Columns {
+			values = append(values, row[column])
+		}
+		rows = append(rows, values)
+	}
+	return &RelationalQueryResult{
+		Columns:       append([]string{}, result.Columns...),
+		Rows:          rows,
+		RowCount:      result.RowCount,
+		ExecutionTime: result.ExecutionTime,
+	}
 }
 
 func normalizeRuntimeIdentifier(value, fieldName string) (string, error) {
@@ -1033,6 +1195,8 @@ func deriveStoredConnectionCategory(connectionType string) string {
 		return "database"
 	case "mqtt":
 		return "message"
+	case "builtin.relation", "builtin.timeseries", "builtin.realtime", "builtin.message":
+		return "builtin"
 	case "kafka", "http", "websocket", "redis", "opcua", "modbus", "s7", "tdengine":
 		return "protocol"
 	default:

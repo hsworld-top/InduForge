@@ -175,6 +175,7 @@ const emit = defineEmits(['close', 'success'])
 const formRef = ref(null)
 const submitting = ref(false)
 const initialFormSnapshot = ref('')
+const formInitialized = ref(false)
 const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
 
 const formData = ref({
@@ -220,7 +221,11 @@ const formSnapshot = computed(() =>
   }),
 )
 const isDirty = computed(
-  () => props.visible && props.mode !== 'view' && formSnapshot.value !== initialFormSnapshot.value,
+  () =>
+    props.visible &&
+    formInitialized.value &&
+    props.mode !== 'view' &&
+    formSnapshot.value !== initialFormSnapshot.value,
 )
 
 /**
@@ -228,6 +233,8 @@ const isDirty = computed(
  * @returns {void}
  */
 const initForm = () => {
+  // 弹窗打开首帧先禁止 dirty 判断，避免默认表单和空快照短暂不一致触发关闭确认。
+  formInitialized.value = false
   if (props.tag && props.mode !== 'create') {
     formData.value = {
       ...props.tag,
@@ -255,6 +262,7 @@ const initForm = () => {
     validationStr.value = ''
   }
   initialFormSnapshot.value = formSnapshot.value
+  formInitialized.value = true
 }
 
 /**

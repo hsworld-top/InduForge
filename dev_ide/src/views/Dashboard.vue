@@ -324,6 +324,8 @@ export default {
       refreshToken: Storage.getRefreshToken(),
       theme: appStore.theme,
       locale: appStore.language,
+      // iframe 可能持有上一个工程的本地缓存，bootstrap 必须显式下发当前标签的工程边界。
+      projectId: entry?.project?.id ?? entry?.project?.projectId ?? null,
       tenantId: entry?.project?.tenantId ?? Storage.getTenantId(),
     })
 

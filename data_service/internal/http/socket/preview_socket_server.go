@@ -41,6 +41,7 @@ type socketSessionMetadata struct {
 type socketSubscriptionSet struct {
 	mqttSubscriptions map[string]struct{}
 	mqttTags          map[string]struct{}
+	builtinMessages   map[string]struct{}
 	datapoints        map[string]struct{}
 }
 
@@ -60,6 +61,7 @@ type previewSessionState struct {
 	tagSubscriptionByID map[string]string
 	mqttRuntimes        map[string]*mqttPreviewRuntime
 	mqttRuntimePending  map[string]*mqttRuntimePendingState
+	builtinMessageStops map[string]context.CancelFunc
 
 	datapointFingerprints map[string]string
 	datapointPollCancel   context.CancelFunc
@@ -98,6 +100,7 @@ type PreviewSocketServer struct {
 	previewService     *service.PreviewSessionService
 	dataPoints         datapointValueReader
 	mqttRepository     previewMqttRepository
+	builtinRuntime     *service.BuiltinRuntimeService
 	mqttRuntimeBuilder func(ctx context.Context, sessionID, projectID, subscriptionID string) (*mqttPreviewRuntime, error)
 
 	mu       sync.Mutex
@@ -113,6 +116,7 @@ func NewPreviewSocketServer(
 	previewService *service.PreviewSessionService,
 	dataPointService *service.DataPointService,
 	mqttRepository *repository.MqttRepository,
+	builtinRuntime ...*service.BuiltinRuntimeService,
 ) (*PreviewSocketServer, error) {
 	if jwtValidator == nil {
 		return nil, fmt.Errorf("preview socket missing JWT validator")
@@ -133,6 +137,7 @@ func NewPreviewSocketServer(
 		previewService:     previewService,
 		dataPoints:         dataPointService,
 		mqttRepository:     mqttRepository,
+		builtinRuntime:     firstBuiltinRuntime(builtinRuntime),
 		mqttRuntimeBuilder: nil,
 		sessions:           make(map[string]*previewSessionState),
 		closed:             make(chan struct{}),
@@ -245,6 +250,7 @@ func (s *PreviewSocketServer) handleConnection(socket *socketio.Socket) {
 			tagSubscriptionByID:   make(map[string]string),
 			mqttRuntimes:          make(map[string]*mqttPreviewRuntime),
 			mqttRuntimePending:    make(map[string]*mqttRuntimePendingState),
+			builtinMessageStops:   make(map[string]context.CancelFunc),
 			datapointFingerprints: make(map[string]string),
 		}
 		s.sessions[metadata.PreviewSession] = session
@@ -269,6 +275,12 @@ func (s *PreviewSocketServer) handleConnection(socket *socketio.Socket) {
 	})
 	socket.On("mqtt:tag:unsubscribe", func(event *socketio.EventPayload) {
 		s.handleMqttTagUnsubscribe(socket, event)
+	})
+	socket.On("builtin:message:subscribe", func(event *socketio.EventPayload) {
+		s.handleBuiltinMessageSubscribe(socket, event)
+	})
+	socket.On("builtin:message:unsubscribe", func(event *socketio.EventPayload) {
+		s.handleBuiltinMessageUnsubscribe(socket, event)
 	})
 	socket.On("datapoint:subscribe", func(event *socketio.EventPayload) {
 		s.handleDatapointSubscribe(socket, event)
@@ -312,6 +324,14 @@ func (s *PreviewSocketServer) handleSocketDisconnect(socket *socketio.Socket) {
 			delete(session.tagSubscriptionByID, tagID)
 		}
 	}
+	for topicID, stop := range session.builtinMessageStops {
+		if !session.hasBuiltinMessageInterestLocked(topicID) {
+			delete(session.builtinMessageStops, topicID)
+			if stop != nil {
+				defer stop()
+			}
+		}
+	}
 
 	if !session.hasAnyDatapointInterestLocked() && session.datapointPollCancel != nil {
 		pollCancel = session.datapointPollCancel
@@ -329,6 +349,12 @@ func (s *PreviewSocketServer) handleSocketDisconnect(socket *socketio.Socket) {
 		for subscriptionID, runtime := range session.mqttRuntimes {
 			delete(session.mqttRuntimes, subscriptionID)
 			runtimesToClose = append(runtimesToClose, runtime)
+		}
+		for topicID, stop := range session.builtinMessageStops {
+			delete(session.builtinMessageStops, topicID)
+			if stop != nil {
+				defer stop()
+			}
 		}
 		if session.datapointPollCancel != nil {
 			pollCancel = session.datapointPollCancel
@@ -526,6 +552,110 @@ func (s *PreviewSocketServer) handleMqttTagUnsubscribe(socket *socketio.Socket, 
 		runtime.close()
 	}
 	respondSocketRequest(socket, requestID, map[string]any{"tagId": tagID}, nil)
+}
+
+func (s *PreviewSocketServer) handleBuiltinMessageSubscribe(socket *socketio.Socket, event *socketio.EventPayload) {
+	payload := firstPayloadMap(event)
+	requestID := payloadString(payload, "requestId")
+	subscriptionID := payloadString(payload, "topicId")
+	connectionID := payloadString(payload, "connectionId")
+	if subscriptionID == "" {
+		respondSocketRequest(socket, requestID, nil, fmt.Errorf("topicId is required"))
+		return
+	}
+	if connectionID == "" {
+		respondSocketRequest(socket, requestID, nil, fmt.Errorf("connectionId is required"))
+		return
+	}
+	if s.builtinRuntime == nil {
+		respondSocketRequest(socket, requestID, nil, fmt.Errorf("builtin message runtime is not available"))
+		return
+	}
+	metadata := socketMetadataFromSocket(socket)
+	if metadata == nil {
+		respondSocketRequest(socket, requestID, nil, errors.New("socket metadata missing"))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), previewSocketOpTimeout)
+	defer cancel()
+	subscription, err := s.mqttRepository.GetSubscription(ctx, metadata.ProjectID, subscriptionID)
+	if err != nil {
+		respondSocketRequest(socket, requestID, nil, err)
+		return
+	}
+	if subscription.ConnectionID != connectionID {
+		respondSocketRequest(socket, requestID, nil, fmt.Errorf("topicId is not in current connection"))
+		return
+	}
+
+	s.mu.Lock()
+	session := s.sessions[metadata.PreviewSession]
+	if session == nil {
+		s.mu.Unlock()
+		respondSocketRequest(socket, requestID, nil, fmt.Errorf("preview session not found"))
+		return
+	}
+	subscriptions := session.socketSubscriptions[socket.Id]
+	if subscriptions == nil {
+		subscriptions = newSocketSubscriptionSet()
+		session.socketSubscriptions[socket.Id] = subscriptions
+	}
+	subscriptions.builtinMessages[subscription.ID] = struct{}{}
+	if session.builtinMessageStops == nil {
+		session.builtinMessageStops = make(map[string]context.CancelFunc)
+	}
+	if _, ok := session.builtinMessageStops[subscription.ID]; !ok {
+		stop := s.builtinRuntime.SubscribeMessageSubscription(subscription.ID, func(message service.BuiltinMessageEvent) {
+			s.emitBuiltinMessage(metadata.PreviewSession, subscription.ID, message)
+		})
+		session.builtinMessageStops[subscription.ID] = stop
+	}
+	s.mu.Unlock()
+
+	_ = socket.Emit("builtin:message:status", map[string]any{
+		"topicId": subscription.ID,
+		"status":  "subscribed",
+	})
+	respondSocketRequest(socket, requestID, map[string]any{"topicId": subscription.ID}, nil)
+}
+
+func (s *PreviewSocketServer) handleBuiltinMessageUnsubscribe(socket *socketio.Socket, event *socketio.EventPayload) {
+	payload := firstPayloadMap(event)
+	requestID := payloadString(payload, "requestId")
+	topicID := payloadString(payload, "topicId")
+	if topicID == "" {
+		respondSocketRequest(socket, requestID, nil, fmt.Errorf("topicId is required"))
+		return
+	}
+	metadata := socketMetadataFromSocket(socket)
+	if metadata == nil {
+		respondSocketRequest(socket, requestID, nil, errors.New("socket metadata missing"))
+		return
+	}
+
+	var stop context.CancelFunc
+	s.mu.Lock()
+	session := s.sessions[metadata.PreviewSession]
+	if session != nil {
+		if subscriptions := session.socketSubscriptions[socket.Id]; subscriptions != nil {
+			delete(subscriptions.builtinMessages, topicID)
+		}
+		if !session.hasBuiltinMessageInterestLocked(topicID) {
+			stop = session.builtinMessageStops[topicID]
+			delete(session.builtinMessageStops, topicID)
+		}
+	}
+	s.mu.Unlock()
+	if stop != nil {
+		stop()
+	}
+
+	_ = socket.Emit("builtin:message:status", map[string]any{
+		"topicId": topicID,
+		"status":  "unsubscribed",
+	})
+	respondSocketRequest(socket, requestID, map[string]any{"topicId": topicID}, nil)
 }
 
 func (s *PreviewSocketServer) handleDatapointSubscribe(socket *socketio.Socket, event *socketio.EventPayload) {
@@ -1162,6 +1292,23 @@ func (s *PreviewSocketServer) emitMqttTagValue(sessionID string, snapshot servic
 	}
 }
 
+func (s *PreviewSocketServer) emitBuiltinMessage(sessionID, topicID string, message service.BuiltinMessageEvent) {
+	recipients := s.builtinMessageRecipients(sessionID, topicID)
+	payload := map[string]any{
+		"topicId":      topicID,
+		"connectionId": message.ConnectionID,
+		"runtimeKey":   message.RuntimeKey,
+		"topic":        message.Topic,
+		"fullTopic":    message.FullTopic,
+		"payload":      message.Payload,
+		"qos":          message.QOS,
+		"timestamp":    message.Timestamp,
+	}
+	for _, socket := range recipients {
+		_ = socket.Emit("builtin:message", payload)
+	}
+}
+
 func (s *PreviewSocketServer) emitSessionEvent(sessionID, event string, payload any) {
 	recipients := s.sessionRecipients(sessionID)
 	for _, socket := range recipients {
@@ -1197,6 +1344,27 @@ func (s *PreviewSocketServer) mqttSubscriptionRecipients(sessionID, subscription
 	recipients := make([]*socketio.Socket, 0)
 	for socketID, subscriptions := range session.socketSubscriptions {
 		if _, ok := subscriptions.mqttSubscriptions[subscriptionID]; !ok {
+			continue
+		}
+		if socket := session.sockets[socketID]; socket != nil {
+			recipients = append(recipients, socket)
+		}
+	}
+	return recipients
+}
+
+func (s *PreviewSocketServer) builtinMessageRecipients(sessionID, topicID string) []*socketio.Socket {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session := s.sessions[sessionID]
+	if session == nil {
+		return nil
+	}
+
+	recipients := make([]*socketio.Socket, 0)
+	for socketID, subscriptions := range session.socketSubscriptions {
+		if _, ok := subscriptions.builtinMessages[topicID]; !ok {
 			continue
 		}
 		if socket := session.sockets[socketID]; socket != nil {
@@ -1349,6 +1517,15 @@ func (session *previewSessionState) hasDatapointInterestLocked(path string) bool
 	return false
 }
 
+func (session *previewSessionState) hasBuiltinMessageInterestLocked(topicID string) bool {
+	for _, subscriptions := range session.socketSubscriptions {
+		if _, ok := subscriptions.builtinMessages[topicID]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 func (session *previewSessionState) hasAnyDatapointInterestLocked() bool {
 	for _, subscriptions := range session.socketSubscriptions {
 		if len(subscriptions.datapoints) > 0 {
@@ -1362,8 +1539,16 @@ func newSocketSubscriptionSet() *socketSubscriptionSet {
 	return &socketSubscriptionSet{
 		mqttSubscriptions: make(map[string]struct{}),
 		mqttTags:          make(map[string]struct{}),
+		builtinMessages:   make(map[string]struct{}),
 		datapoints:        make(map[string]struct{}),
 	}
+}
+
+func firstBuiltinRuntime(items []*service.BuiltinRuntimeService) *service.BuiltinRuntimeService {
+	if len(items) == 0 {
+		return nil
+	}
+	return items[0]
 }
 
 func socketMetadataFromSocket(socket *socketio.Socket) *socketSessionMetadata {

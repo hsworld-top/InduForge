@@ -23,6 +23,13 @@ type Config struct {
 	RedisAddr          string
 	RedisPassword      string
 	RedisDB            int
+	DevDatabaseURL     string
+	RedisDevDB         int
+	DevCacheKeyPrefix  string
+	MessageHubAddr     string
+	MessageHubUsername string
+	MessageHubPassword string
+	MessageTopicPrefix string
 }
 
 // Load 从环境变量读取服务配置，并在缺省时使用内置默认值。
@@ -42,15 +49,26 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	redisDevDB, err := parseRedisDB(firstEnv("IF_CACHE_STORE_DEV_RT_DB", "DATA_SERVICE_REDIS_DEV_DB"))
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		Addr:               addr,
 		DatabaseURL:        buildDatabaseURL(),
+		DevDatabaseURL:     buildDevDatabaseURL(),
 		DatabaseSearchPath: strings.TrimSpace(firstEnv("IF_META_STORE_DATA_SCHEMA", "DATA_SERVICE_DATABASE_SCHEMA")),
 		JWTSecret:          strings.TrimSpace(os.Getenv("DATA_SERVICE_JWT_SECRET")),
 		RedisAddr:          buildRedisAddr(),
 		RedisPassword:      strings.TrimSpace(firstEnv("IF_CACHE_STORE_PASSWORD", "DATA_SERVICE_REDIS_PASSWORD")),
 		RedisDB:            redisDB,
+		RedisDevDB:         redisDevDB,
+		DevCacheKeyPrefix:  firstEnvWithDefault("IF_DEV_CACHE_KEY_PREFIX", "ifdev"),
+		MessageHubAddr:     buildMessageHubAddr(),
+		MessageHubUsername: strings.TrimSpace(firstEnv("IF_MESSAGE_HUB_USERNAME")),
+		MessageHubPassword: strings.TrimSpace(firstEnv("IF_MESSAGE_HUB_PASSWORD")),
+		MessageTopicPrefix: firstEnvWithDefault("IF_MESSAGE_HUB_TOPIC_PREFIX", "ifdev"),
 	}, nil
 }
 
@@ -102,13 +120,27 @@ func firstEnv(names ...string) string {
 	return ""
 }
 
+func firstEnvWithDefault(name string, defaultValue string) string {
+	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
 func buildDatabaseURL() string {
+	return buildDatabaseURLFor(firstEnv("IF_META_STORE_DATA_DB"), strings.TrimSpace(os.Getenv("DATA_SERVICE_DATABASE_URL")))
+}
+
+func buildDevDatabaseURL() string {
+	return buildDatabaseURLFor(firstEnv("IF_META_STORE_DEV_DATA_DB"), strings.TrimSpace(os.Getenv("DATA_SERVICE_DEV_DATABASE_URL")))
+}
+
+func buildDatabaseURLFor(database string, fallback string) string {
 	host := firstEnv("IF_META_STORE_HOST")
 	user := firstEnv("IF_META_STORE_USER")
 	password := firstEnv("IF_META_STORE_PASSWORD")
-	database := firstEnv("IF_META_STORE_DATA_DB")
 	if host == "" || user == "" || database == "" {
-		return strings.TrimSpace(os.Getenv("DATA_SERVICE_DATABASE_URL"))
+		return fallback
 	}
 
 	port := firstEnv("IF_META_STORE_PORT")
@@ -142,6 +174,19 @@ func buildRedisAddr() string {
 	port := firstEnv("IF_CACHE_STORE_PORT")
 	if port == "" {
 		port = "18379"
+	}
+	return net.JoinHostPort(host, port)
+}
+
+func buildMessageHubAddr() string {
+	host := firstEnv("IF_MESSAGE_HUB_HOST")
+	if host == "" {
+		return strings.TrimSpace(os.Getenv("DATA_SERVICE_MESSAGE_HUB_ADDR"))
+	}
+
+	port := firstEnv("IF_MESSAGE_HUB_MQTT_PORT")
+	if port == "" {
+		port = "18883"
 	}
 	return net.JoinHostPort(host, port)
 }
