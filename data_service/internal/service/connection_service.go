@@ -94,8 +94,9 @@ type UpdateConnectionInput struct {
 
 // ConnectionService 承载连接领域的基本业务校验与映射。
 type ConnectionService struct {
-	repository     *repository.ConnectionRepository
-	builtinRuntime *BuiltinRuntimeService
+	repository      *repository.ConnectionRepository
+	builtinRuntime  *BuiltinRuntimeService
+	workbenchGroups *WorkbenchGroupService
 }
 
 // NewConnectionService 创建连接服务。
@@ -105,6 +106,12 @@ func NewConnectionService(repo *repository.ConnectionRepository, builtinRuntime 
 		service.builtinRuntime = builtinRuntime[0]
 	}
 	return service
+}
+
+func (s *ConnectionService) SetWorkbenchGroupService(groups *WorkbenchGroupService) {
+	if s != nil {
+		s.workbenchGroups = groups
+	}
 }
 
 // ListConnections 查询项目下的连接列表。
@@ -678,6 +685,7 @@ func (s *ConnectionService) ListTables(ctx context.Context, projectID, connectio
 		if err := rows.Scan(&table.Schema, &table.Name, &table.Type); err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取表列表失败", err)
 		}
+		table.Kind = relationalTableKind(connection.Type, runtime.DBType(), table.Type, table.Name)
 		tables = append(tables, table)
 	}
 	if err := rows.Err(); err != nil {
@@ -685,6 +693,141 @@ func (s *ConnectionService) ListTables(ctx context.Context, projectID, connectio
 	}
 
 	return tables, nil
+}
+
+// CreateTable 按结构化表设计创建物理表。
+// 该接口用于低频建模操作：服务端统一做标识符校验和方言生成，调用方不传入 SQL 文本。
+func (s *ConnectionService) CreateTable(ctx context.Context, projectID, connectionID string, input CreateRelationalTableInput) (*RelationalTableStructure, error) {
+	connection, err := s.loadRelationalConnection(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	connectionType := connection.Type
+	if connectionType == "relational" {
+		connectionType = strings.TrimSpace(strings.ToLower(toString(connection.Config["dbType"])))
+	}
+	design, err := normalizeCreateTableInput(connectionType, input)
+	if err != nil {
+		return nil, err
+	}
+	if connection.Type == "tdengine" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "TDengine 建表需要启用 TDengine 运行时驱动后才能执行")
+	}
+	if schemaName, ok, err := builtinSQLSchemaFromRecord(connection); ok || err != nil {
+		if err != nil {
+			return nil, err
+		}
+		if s.builtinRuntime == nil {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开发态内置运行库未初始化")
+		}
+		if err := s.builtinRuntime.CreateTableInSchema(ctx, schemaName, design); err != nil {
+			return nil, err
+		}
+		return s.builtinRuntime.GetTableStructureInSchema(ctx, schemaName, design.Name)
+	}
+
+	runtime, err := connectRelationalRuntime(ctx, connection.Config)
+	if err != nil {
+		return nil, err
+	}
+	defer runtime.Close()
+	ddl, err := buildCreateTableDDL(runtime.DBType(), runtime.SearchPath(), design)
+	if err != nil {
+		return nil, err
+	}
+	if err := runtime.Exec(ctx, ddl); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "创建表失败", err)
+	}
+	return s.GetTableStructure(ctx, projectID, connectionID, design.Name)
+}
+
+func (s *ConnectionService) RenameTable(ctx context.Context, projectID, connectionID, oldName, newName, userID string) error {
+	connection, err := s.loadRelationalConnection(ctx, projectID, connectionID)
+	if err != nil {
+		return err
+	}
+	oldName, err = normalizeRuntimeIdentifier(oldName, "tableName")
+	if err != nil {
+		return err
+	}
+	newName, err = normalizeRuntimeIdentifier(newName, "newTableName")
+	if err != nil {
+		return err
+	}
+	if oldName == newName {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "新表名不能与原表名相同")
+	}
+	if connection.Type == "tdengine" {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "TDengine 表重命名需要启用 TDengine 运行时驱动后才能执行")
+	}
+	if schemaName, ok, err := builtinSQLSchemaFromRecord(connection); ok || err != nil {
+		if err != nil {
+			return err
+		}
+		if s.builtinRuntime == nil {
+			return apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开发态内置运行库未初始化")
+		}
+		if err := s.builtinRuntime.RenameTableInSchema(ctx, schemaName, oldName, newName); err != nil {
+			return err
+		}
+		if s.workbenchGroups != nil {
+			return s.workbenchGroups.RenameTableMember(ctx, projectID, connectionID, oldName, newName, userID)
+		}
+		return nil
+	}
+	runtime, err := connectRelationalRuntime(ctx, connection.Config)
+	if err != nil {
+		return err
+	}
+	defer runtime.Close()
+	if err := runtime.Exec(ctx, relationalRenameTableDDL(runtime.DBType(), runtime.SearchPath(), oldName, newName)); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "重命名表失败", err)
+	}
+	if s.workbenchGroups != nil {
+		return s.workbenchGroups.RenameTableMember(ctx, projectID, connectionID, oldName, newName, userID)
+	}
+	return nil
+}
+
+func (s *ConnectionService) DeleteTable(ctx context.Context, projectID, connectionID, tableName string) error {
+	connection, err := s.loadRelationalConnection(ctx, projectID, connectionID)
+	if err != nil {
+		return err
+	}
+	tableName, err = normalizeRuntimeIdentifier(tableName, "tableName")
+	if err != nil {
+		return err
+	}
+	if connection.Type == "tdengine" {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "TDengine 删除表需要启用 TDengine 运行时驱动后才能执行")
+	}
+	if schemaName, ok, err := builtinSQLSchemaFromRecord(connection); ok || err != nil {
+		if err != nil {
+			return err
+		}
+		if s.builtinRuntime == nil {
+			return apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开发态内置运行库未初始化")
+		}
+		if err := s.builtinRuntime.DeleteTableInSchema(ctx, schemaName, tableName); err != nil {
+			return err
+		}
+		if s.workbenchGroups != nil {
+			return s.workbenchGroups.DeleteTableMember(ctx, projectID, connectionID, tableName)
+		}
+		return nil
+	}
+	runtime, err := connectRelationalRuntime(ctx, connection.Config)
+	if err != nil {
+		return err
+	}
+	defer runtime.Close()
+	if err := runtime.Exec(ctx, relationalDropTableDDL(runtime.DBType(), runtime.SearchPath(), tableName)); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "删除表失败", err)
+	}
+	if s.workbenchGroups != nil {
+		return s.workbenchGroups.DeleteTableMember(ctx, projectID, connectionID, tableName)
+	}
+	return nil
 }
 
 // GetTableStructure 返回指定表结构。
@@ -920,7 +1063,7 @@ func (s *ConnectionService) loadRelationalConnection(ctx context.Context, projec
 		return nil, err
 	}
 	if connection.Type != "relational" {
-		if connection.Type != "builtin.relation" && connection.Type != "builtin.timeseries" {
+		if connection.Type != "builtin.relation" && connection.Type != "builtin.timeseries" && connection.Type != "tdengine" {
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前仅支持关系型连接")
 		}
 	}
@@ -1326,6 +1469,36 @@ func relationalQualifiedTableName(dbType, schema, tableName string) string {
 	}
 }
 
+func relationalRenameTableDDL(dbType, schema, oldName, newName string) string {
+	switch dbType {
+	case "mysql":
+		return fmt.Sprintf(
+			"RENAME TABLE `%s`.`%s` TO `%s`.`%s`",
+			escapeMySQLIdentifier(schema),
+			escapeMySQLIdentifier(oldName),
+			escapeMySQLIdentifier(schema),
+			escapeMySQLIdentifier(newName),
+		)
+	case "sqlserver":
+		return fmt.Sprintf(
+			"EXEC sp_rename N'%s.%s', N'%s'",
+			escapeSQLServerLiteral(schema),
+			escapeSQLServerLiteral(oldName),
+			escapeSQLServerLiteral(newName),
+		)
+	default:
+		return fmt.Sprintf(
+			"ALTER TABLE %s RENAME TO %s",
+			pgx.Identifier{schema, oldName}.Sanitize(),
+			pgx.Identifier{newName}.Sanitize(),
+		)
+	}
+}
+
+func relationalDropTableDDL(dbType, schema, tableName string) string {
+	return fmt.Sprintf("DROP TABLE %s", relationalQualifiedTableName(dbType, schema, tableName))
+}
+
 func relationalTableDataQuery(dbType, qualifiedTableName string, page, limit int) string {
 	offset := (page - 1) * limit
 	switch dbType {
@@ -1589,4 +1762,8 @@ func escapeMySQLIdentifier(value string) string {
 
 func escapeSQLServerIdentifier(value string) string {
 	return strings.ReplaceAll(value, "]", "]]")
+}
+
+func escapeSQLServerLiteral(value string) string {
+	return strings.ReplaceAll(value, "'", "''")
 }

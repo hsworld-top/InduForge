@@ -74,6 +74,7 @@
     />
 
     <CreateAlarmPolicyDialog
+      ref="createPolicyDialogRef"
       v-model="createDialogVisible"
       :groups="alarmStore.groups"
       :submitting="alarmStore.creating"
@@ -82,6 +83,7 @@
     />
 
     <CreateAlarmGroupDialog
+      ref="createGroupDialogRef"
       v-model="createGroupDialogVisible"
       :groups="alarmStore.groups"
       :submitting="alarmStore.saving"
@@ -191,6 +193,8 @@ const alarmStore = useAlarmStore()
 const drafts = ref<Record<string, AlarmPolicyDraft>>({})
 const createDialogVisible = ref(false)
 const createGroupDialogVisible = ref(false)
+const createPolicyDialogRef = ref<InstanceType<typeof CreateAlarmPolicyDialog> | null>(null)
+const createGroupDialogRef = ref<InstanceType<typeof CreateAlarmGroupDialog> | null>(null)
 const bulkConditionDialogVisible = ref(false)
 const bulkMoveDialogVisible = ref(false)
 const renamePolicyDialogVisible = ref(false)
@@ -296,7 +300,7 @@ const openCreateGroupDialog = () => {
 
 const createGroup = async (payload: AlarmPolicyGroupSave) => {
   await alarmStore.createGroup(props.projectId, payload)
-  createGroupDialogVisible.value = false
+  createGroupDialogRef.value?.closeSilently()
   await reloadList()
 }
 
@@ -313,7 +317,7 @@ const createPolicy = async (draft: AlarmPolicyDraft) => {
     ...drafts.value,
     [policy.id]: toAlarmPolicyDraft(policy),
   }
-  createDialogVisible.value = false
+  createPolicyDialogRef.value?.closeSilently()
   await reloadList()
   replaceAlarmRoute(policy.id, 'config')
   ElMessage.success('报警策略已创建')

@@ -53,6 +53,7 @@ func (h *QueryHandler) Create(w http.ResponseWriter, r *http.Request) error {
 		Name            string         `json:"name"`
 		Description     *string        `json:"description"`
 		Category        *string        `json:"category"`
+		GroupID         *string        `json:"groupId"`
 		ConnectionID    string         `json:"connectionId"`
 		QueryType       string         `json:"queryType"`
 		Config          map[string]any `json:"config"`
@@ -70,6 +71,7 @@ func (h *QueryHandler) Create(w http.ResponseWriter, r *http.Request) error {
 		Name:            request.Name,
 		Description:     request.Description,
 		Category:        request.Category,
+		GroupID:         request.GroupID,
 		ConnectionID:    request.ConnectionID,
 		QueryType:       request.QueryType,
 		Config:          request.Config,
@@ -192,6 +194,7 @@ func validateQueryUpdatePayloadKeys(raw map[string]json.RawMessage) error {
 		"name":            {},
 		"description":     {},
 		"category":        {},
+		"groupId":         {},
 		"connectionId":    {},
 		"queryType":       {},
 		"config":          {},
@@ -234,6 +237,18 @@ func parseQueryUpdateInput(raw map[string]json.RawMessage) (service.UpdateQueryI
 			return input, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "category 字段格式无效", err)
 		}
 		input.Category = &next
+	}
+	if value, ok := raw["groupId"]; ok {
+		if string(value) == "null" {
+			empty := ""
+			input.GroupID = &empty
+		} else {
+			var next string
+			if err := json.Unmarshal(value, &next); err != nil {
+				return input, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "groupId 字段格式无效", err)
+			}
+			input.GroupID = &next
+		}
 	}
 	if value, ok := raw["connectionId"]; ok {
 		var next string

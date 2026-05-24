@@ -26,6 +26,7 @@ type RelationalTable struct {
 	Schema string `json:"schema"`
 	Name   string `json:"name"`
 	Type   string `json:"type"`
+	Kind   string `json:"kind"`
 }
 
 // RelationalTableColumn 表示表字段元信息。
@@ -89,6 +90,46 @@ type RelationalQueryResult struct {
 	Rows          [][]any  `json:"rows"`
 	RowCount      int      `json:"rowCount"`
 	ExecutionTime int64    `json:"executionTime"`
+}
+
+// CreateRelationalTableInput 是工作台结构化建表的领域输入。
+// 输入只表达表、字段和索引意图；具体 DDL 由服务端按连接类型生成，避免前端拼接 SQL。
+type CreateRelationalTableInput struct {
+	Name       string
+	Kind       string
+	Columns    []CreateRelationalTableColumnInput
+	Indexes    []CreateRelationalTableIndexInput
+	Timeseries *CreateRelationalTimeseriesInput
+}
+
+// CreateRelationalTableColumnInput 表示建表字段定义。
+// Type 为受控类型标识，Length/Precision/Scale 只在对应类型需要时生效。
+type CreateRelationalTableColumnInput struct {
+	Name          string
+	Type          string
+	Length        *int
+	Precision     *int
+	Scale         *int
+	Nullable      bool
+	Primary       bool
+	AutoIncrement bool
+	DefaultValue  string
+	Comment       string
+}
+
+// CreateRelationalTableIndexInput 表示建表索引定义。
+// Type 仅支持 index/unique；主键由字段 Primary 汇总生成。
+type CreateRelationalTableIndexInput struct {
+	Name    string
+	Type    string
+	Columns []string
+}
+
+// CreateRelationalTimeseriesInput 为时序库建表扩展。
+// 当前内置时序库使用 PostgreSQL 承载，SuperTable 作为 UI/元数据概念保留；TDengine 暂缺运行时驱动。
+type CreateRelationalTimeseriesInput struct {
+	TimeColumn string
+	Tags       []CreateRelationalTableColumnInput
 }
 
 type relationalRuntimeConfig struct {
@@ -460,6 +501,18 @@ func (r *relationalRuntime) QueryRow(ctx context.Context, query string, args ...
 	}
 
 	return &sqlRowAdapter{row: r.sqlDB.QueryRowContext(ctx, query, adaptRuntimeArgs(r.dbType, query, args)...)}
+}
+
+func (r *relationalRuntime) Exec(ctx context.Context, query string, args ...any) error {
+	if r == nil {
+		return apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "关系库运行时未初始化")
+	}
+	if r.pgPool != nil {
+		_, err := r.pgPool.Exec(ctx, query, adaptRuntimeArgs(r.dbType, query, args)...)
+		return err
+	}
+	_, err := r.sqlDB.ExecContext(ctx, query, adaptRuntimeArgs(r.dbType, query, args)...)
+	return err
 }
 
 func (r *relationalRuntime) BeginReadOnlyTx(ctx context.Context) (relationalTx, error) {

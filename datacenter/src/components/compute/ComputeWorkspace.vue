@@ -42,6 +42,7 @@
     />
 
     <CreateComputeUnitDialog
+      ref="createUnitDialogRef"
       v-model="showCreateUnitDialog"
       :folders="computeStore.folders"
       :loading="computeStore.creating"
@@ -50,6 +51,7 @@
     />
 
     <CreateComputeFolderDialog
+      ref="createFolderDialogRef"
       v-model="showCreateFolderDialog"
       :folders="computeStore.folders"
       :loading="computeStore.creating"
@@ -123,6 +125,8 @@ const computeStore = useComputeStore()
 
 const showCreateUnitDialog = ref(false)
 const showCreateFolderDialog = ref(false)
+const createUnitDialogRef = ref<InstanceType<typeof CreateComputeUnitDialog> | null>(null)
+const createFolderDialogRef = ref<InstanceType<typeof CreateComputeFolderDialog> | null>(null)
 const showRenameUnitDialog = ref(false)
 const showMoveUnitDialog = ref(false)
 const showRenameFolderDialog = ref(false)
@@ -425,12 +429,18 @@ onBeforeRouteLeave(async () => {
 async function handleCreateUnit(data: ComputeUnitSave) {
   try {
     const unit = await computeStore.createUnit(String(props.projectId), data)
-    showCreateUnitDialog.value = false
+    const draft = toComputeDraft(unit)
+    const savedUnit = await computeStore.saveUnit(
+      String(props.projectId),
+      String(unit.id),
+      draftToSavePayload(draft),
+    )
+    createUnitDialogRef.value?.closeSilently()
     drafts.value = {
       ...drafts.value,
-      [String(unit.id)]: toComputeDraft(unit),
+      [String(savedUnit.id)]: toComputeDraft(savedUnit),
     }
-    selectUnit(String(unit.id))
+    selectUnit(String(savedUnit.id))
     ElMessage.success('计算单元已创建')
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '新建计算单元失败'))
@@ -541,7 +551,7 @@ async function handleMoveFolder(parentId: string | null) {
 async function handleCreateFolder(data: ComputeFolderSave) {
   try {
     await computeStore.createFolder(String(props.projectId), data)
-    showCreateFolderDialog.value = false
+    createFolderDialogRef.value?.closeSilently()
     ElMessage.success('文件夹已创建')
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '新建文件夹失败'))

@@ -113,6 +113,10 @@ const requestClose = async (done?: () => void) => {
   completeClose(done)
 }
 
+const closeSilently = () => {
+  completeClose()
+}
+
 const visible = computed({
   get: () => internalVisible.value,
   set: (val: boolean) => {
@@ -194,7 +198,7 @@ const handleClosed = () => {
   emit('close')
 }
 
-defineExpose({ requestClose })
+defineExpose({ requestClose, closeSilently })
 </script>
 
 <style scoped>

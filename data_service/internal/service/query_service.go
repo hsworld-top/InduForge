@@ -31,6 +31,7 @@ type Query struct {
 	Name            string         `json:"name"`
 	Description     *string        `json:"description"`
 	Category        *string        `json:"category"`
+	GroupID         *string        `json:"groupId"`
 	QueryType       string         `json:"queryType"`
 	Config          map[string]any `json:"config"`
 	Transformer     *string        `json:"transformer"`
@@ -78,6 +79,7 @@ type CreateQueryInput struct {
 	Name            string
 	Description     *string
 	Category        *string
+	GroupID         *string
 	ConnectionID    string
 	QueryType       string
 	Config          map[string]any
@@ -93,6 +95,7 @@ type UpdateQueryInput struct {
 	Name            *string
 	Description     *string
 	Category        *string
+	GroupID         *string
 	ConnectionID    *string
 	QueryType       *string
 	Config          map[string]any
@@ -114,6 +117,7 @@ type QueryService struct {
 	repository  *repository.QueryRepository
 	connections *repository.ConnectionRepository
 	datapoints  *repository.DataPointRepository
+	builtin     *BuiltinRuntimeService
 }
 
 // NewQueryService 创建查询服务。
@@ -124,6 +128,13 @@ func NewQueryService(repo *repository.QueryRepository, connectionRepo *repositor
 		repository:  repo,
 		connections: connectionRepo,
 		datapoints:  datapoints,
+	}
+}
+
+// SetBuiltinRuntime 注入内置关系/时序运行库，让已保存查询作为数据点执行时可覆盖内置库。
+func (s *QueryService) SetBuiltinRuntime(builtin *BuiltinRuntimeService) {
+	if s != nil {
+		s.builtin = builtin
 	}
 }
 
@@ -226,6 +237,7 @@ func (s *QueryService) CreateQuery(ctx context.Context, projectID, userID string
 		Name:            name,
 		Description:     cloneOptionalString(input.Description),
 		Category:        cloneOptionalString(input.Category),
+		GroupID:         cloneOptionalString(input.GroupID),
 		QueryType:       queryType,
 		Config:          config,
 		Transformer:     cloneOptionalString(input.Transformer),
@@ -326,7 +338,7 @@ func (s *QueryService) updateRecord(ctx context.Context, current *repository.Que
 	if err := validateUserID(userID); err != nil {
 		return nil, err
 	}
-	if input.Name == nil && input.Description == nil && input.Category == nil && input.ConnectionID == nil && input.QueryType == nil && !input.HasConfig && input.Transformer == nil && input.IsEnabled == nil && input.TimeoutMS == nil && input.CacheEnabled == nil && input.CacheTtlSeconds == nil {
+	if input.Name == nil && input.Description == nil && input.Category == nil && input.GroupID == nil && input.ConnectionID == nil && input.QueryType == nil && !input.HasConfig && input.Transformer == nil && input.IsEnabled == nil && input.TimeoutMS == nil && input.CacheEnabled == nil && input.CacheTtlSeconds == nil {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "至少需要提供一个待更新字段")
 	}
 
@@ -347,6 +359,14 @@ func (s *QueryService) updateRecord(ctx context.Context, current *repository.Que
 	nextCategory := cloneOptionalString(current.Category)
 	if input.Category != nil {
 		nextCategory = cloneOptionalString(input.Category)
+	}
+
+	nextGroupID := cloneOptionalString(current.GroupID)
+	if input.GroupID != nil {
+		nextGroupID = cloneOptionalString(input.GroupID)
+		if nextGroupID != nil && *nextGroupID == "" {
+			nextGroupID = nil
+		}
 	}
 
 	nextConnectionID := current.ConnectionID
@@ -417,6 +437,7 @@ func (s *QueryService) updateRecord(ctx context.Context, current *repository.Que
 		Name:            nextName,
 		Description:     nextDescription,
 		Category:        nextCategory,
+		GroupID:         nextGroupID,
 		QueryType:       nextQueryType,
 		Config:          nextConfig,
 		Transformer:     nextTransformer,
@@ -459,6 +480,10 @@ func (s *QueryService) executeRecord(ctx context.Context, record repository.Quer
 
 	execCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
 	defer cancel()
+
+	if result, ok, err := s.executeBuiltinRecord(execCtx, record, sqlText, args); ok || err != nil {
+		return result, err
+	}
 
 	runtime, err := s.executionRuntimeForRecord(execCtx, record)
 	if err != nil {
@@ -526,6 +551,25 @@ func (s *QueryService) executionRuntimeForRecord(ctx context.Context, record rep
 	return connectRelationalRuntime(ctx, connection.Config)
 }
 
+func (s *QueryService) executeBuiltinRecord(ctx context.Context, record repository.QueryRecord, sqlText string, args []any) (*QueryExecutionResult, bool, error) {
+	connection, err := s.connections.GetByProjectAndID(ctx, record.ProjectID, record.ConnectionID)
+	if err != nil {
+		return nil, false, err
+	}
+	schemaName, ok, err := builtinSQLSchemaFromRecord(connection)
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	if s.builtin == nil {
+		return nil, true, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开发态内置运行库未初始化")
+	}
+	result, err := s.builtin.ExecuteSQLInSchema(ctx, schemaName, sqlText, args, 500)
+	if err != nil {
+		return nil, true, err
+	}
+	return builtinQueryResult(result), true, nil
+}
+
 func (s *QueryService) syncQueryDataPoint(ctx context.Context, record repository.QueryRecord, userID string) error {
 	if s == nil || s.datapoints == nil || record.QueryType != "sql" {
 		return nil
@@ -534,7 +578,7 @@ func (s *QueryService) syncQueryDataPoint(ctx context.Context, record repository
 	if err != nil {
 		return err
 	}
-	if connection.Type != "relational" {
+	if connection.Type != "relational" && connection.Type != "builtin.relation" && connection.Type != "builtin.timeseries" {
 		return nil
 	}
 
@@ -559,6 +603,25 @@ func (s *QueryService) syncQueryDataPoint(ctx context.Context, record repository
 		RefreshMode:  "manual",
 		Status:       "active",
 	})
+}
+
+func builtinQueryResult(result *BuiltinSQLExecuteResult) *QueryExecutionResult {
+	if result == nil {
+		return &QueryExecutionResult{Data: []map[string]any{}, ExecutionTime: 0, RowCount: 0}
+	}
+	rows := make([]map[string]any, 0, len(result.Rows))
+	for _, row := range result.Rows {
+		next := make(map[string]any, len(row))
+		for key, value := range row {
+			next[key] = normalizeQueryValue(value)
+		}
+		rows = append(rows, next)
+	}
+	return &QueryExecutionResult{
+		Data:          rows,
+		ExecutionTime: result.ExecutionTime,
+		RowCount:      result.RowCount,
+	}
 }
 
 func (s *QueryService) upsertQueryDataPoint(ctx context.Context, input repository.CreateDataPointParams) error {
@@ -599,6 +662,7 @@ func toQuery(record repository.QueryRecord) Query {
 		Name:            record.Name,
 		Description:     cloneOptionalString(record.Description),
 		Category:        cloneOptionalString(record.Category),
+		GroupID:         cloneOptionalString(record.GroupID),
 		QueryType:       record.QueryType,
 		Config:          cloneMap(record.Config),
 		Transformer:     cloneOptionalString(record.Transformer),

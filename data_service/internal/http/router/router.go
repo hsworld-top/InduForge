@@ -16,6 +16,7 @@ type options struct {
 	connectionHandler      *handler.ConnectionHandler
 	contractCheckHandler   *handler.ContractCheckHandler
 	queryHandler           *handler.QueryHandler
+	workbenchGroupHandler  *handler.WorkbenchGroupHandler
 	dataPointHandler       *handler.DataPointHandler
 	mqttHandler            *handler.MqttHandler
 	protocolWave1Handler   *handler.ProtocolWave1Handler
@@ -83,6 +84,14 @@ func WithDataRoutes(queryHandler *handler.QueryHandler, dataPointHandler *handle
 	return func(opts *options) {
 		opts.queryHandler = queryHandler
 		opts.dataPointHandler = dataPointHandler
+		opts.jwtValidator = jwtValidator
+	}
+}
+
+// WithWorkbenchGroupRoutes wires SQL workbench object group routes.
+func WithWorkbenchGroupRoutes(workbenchGroupHandler *handler.WorkbenchGroupHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.workbenchGroupHandler = workbenchGroupHandler
 		opts.jwtValidator = jwtValidator
 	}
 }
@@ -162,6 +171,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountContractCheckRoutes(mux, opts)
 	mountConnectionRoutes(mux, opts)
 	mountDataRoutes(mux, opts)
+	mountWorkbenchGroupRoutes(mux, opts)
 	mountMqttRoutes(mux, opts)
 	mountProtocolWave1Routes(mux, opts)
 	mountProtocolWave2Routes(mux, opts)
@@ -464,6 +474,30 @@ func mountConnectionRoutes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/connections/{connectionId}/tables",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.connectionHandler.CreateTable),
+			),
+		),
+	)
+	mux.Handle(
+		"PUT /api/v1/data/projects/{projectId}/connections/{connectionId}/tables/{tableName}",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.connectionHandler.RenameTable),
+			),
+		),
+	)
+	mux.Handle(
+		"DELETE /api/v1/data/projects/{projectId}/connections/{connectionId}/tables/{tableName}",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.connectionHandler.DeleteTable),
+			),
+		),
+	)
+	mux.Handle(
 		"GET /api/v1/data/projects/{projectId}/connections/{connectionId}/tables/{tableName}/structure",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:read")(
@@ -651,6 +685,35 @@ func mountDataRoutes(mux *http.ServeMux, opts options) {
 			),
 		)
 	}
+}
+
+func mountWorkbenchGroupRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.workbenchGroupHandler == nil || opts.jwtValidator == nil {
+		return
+	}
+
+	read := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+	write := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+
+	mux.Handle("GET /api/v1/data/projects/{projectId}/connections/{connectionId}/workbench-groups", read(opts.workbenchGroupHandler.ListGroups))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/connections/{connectionId}/workbench-groups", write(opts.workbenchGroupHandler.CreateGroup))
+	mux.Handle("PUT /api/v1/data/projects/{projectId}/workbench-groups/{groupId}", write(opts.workbenchGroupHandler.UpdateGroup))
+	mux.Handle("DELETE /api/v1/data/projects/{projectId}/workbench-groups/{groupId}", write(opts.workbenchGroupHandler.DeleteGroup))
+	mux.Handle("PATCH /api/v1/data/projects/{projectId}/queries/{queryId}/group", write(opts.workbenchGroupHandler.MoveQuery))
+	mux.Handle("GET /api/v1/data/projects/{projectId}/connections/{connectionId}/table-group-members", read(opts.workbenchGroupHandler.ListTableMembers))
+	mux.Handle("PATCH /api/v1/data/projects/{projectId}/connections/{connectionId}/tables/{tableName}/group", write(opts.workbenchGroupHandler.MoveTable))
 }
 
 func mountMqttRoutes(mux *http.ServeMux, opts options) {

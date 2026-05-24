@@ -1,5 +1,6 @@
 <template>
   <DcDialog
+    ref="dialogRef"
     v-model="visible"
     title="新建计算单元"
     width="520px"
@@ -68,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import type { ComputeFolder, ComputeUnitSave } from '@/api/schemas/compute.schema'
 import DcDialog from '@/components/shared/DcDialog.vue'
 
@@ -94,6 +95,7 @@ const visible = computed({
   get: () => props.modelValue,
   set: (value: boolean) => emit('update:modelValue', value),
 })
+const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
 
 const form = reactive<ComputeUnitSave>({
   name: '',
@@ -144,12 +146,18 @@ function submit() {
   })
 }
 
+function closeSilently() {
+  dialogRef.value?.closeSilently()
+}
+
 watch(
   () => props.modelValue,
   (open) => {
     if (open) resetForm()
   },
 )
+
+defineExpose({ closeSilently })
 </script>
 
 <style scoped>

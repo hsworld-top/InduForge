@@ -639,7 +639,7 @@ func (s *DataPointService) isQueryDataPointValid(ctx context.Context, projectID 
 	if err != nil {
 		return false, err
 	}
-	if connection.Type != "relational" {
+	if connection.Type != "relational" && connection.Type != "builtin.relation" && connection.Type != "builtin.timeseries" {
 		return false, nil
 	}
 	expectedPath := "db." + normalizeDatapointSegment(connection.Name) + "." + normalizeDatapointSegment(query.Name)

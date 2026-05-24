@@ -184,9 +184,13 @@ const initEditor = () => {
       emitCursorChange()
     })
 
-    // 设置初始值
-    if (props.modelValue) {
+    // Monaco 创建时已经传入 value；这里只处理被 options 覆盖后的补偿设置，避免初始化触发 change。
+    if (props.modelValue && editorInstance.getValue() !== props.modelValue) {
+      isInternalUpdate = true
       editorInstance.setValue(props.modelValue)
+      setTimeout(() => {
+        isInternalUpdate = false
+      }, 0)
     }
 
     emitCursorChange()

@@ -1,5 +1,6 @@
 <template>
   <DcDialog
+    ref="dialogRef"
     v-model="visible"
     :title="t('alarm.createPolicy')"
     width="520px"
@@ -95,6 +96,7 @@ const visible = computed({
   get: () => props.modelValue,
   set: (value: boolean) => emit('update:modelValue', value),
 })
+const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
 
 const draft = reactive<AlarmPolicyDraft>(createDefaultAlarmPolicyDraft())
 const localError = ref('')
@@ -137,6 +139,10 @@ const close = () => {
   visible.value = false
 }
 
+const closeSilently = () => {
+  dialogRef.value?.closeSilently()
+}
+
 const handleClose = () => {
   reset()
 }
@@ -163,6 +169,8 @@ watch(
     }
   },
 )
+
+defineExpose({ closeSilently })
 </script>
 
 <style scoped>

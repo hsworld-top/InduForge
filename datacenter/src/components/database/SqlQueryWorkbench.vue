@@ -40,12 +40,15 @@
         <section class="sql-workbench__tree-section">
           <button
             type="button"
-            class="sql-workbench__tree-head"
-            @click="queriesExpanded = !queriesExpanded"
+            class="sql-workbench__tree-category"
+            :class="{ 'is-active': selectedExplorerNode === 'queries' }"
+            @click="toggleExplorerCategory('queries')"
+            @contextmenu.prevent.stop="openQueryCategoryMenu"
           >
             <IconTablerChevronDown v-if="queriesExpanded" />
             <IconTablerChevronRight v-else />
-            <span>保存的查询</span>
+            <IconTablerFileText class="sql-workbench__category-icon" />
+            <span>查询</span>
             <small>{{ filteredQueries.length }}</small>
           </button>
 
@@ -55,30 +58,50 @@
               <span>加载查询...</span>
             </div>
             <template v-else>
-              <button
-                v-for="query in filteredQueries"
-                :key="query.id"
-                type="button"
-                class="sql-workbench__tree-item"
-                @dblclick="openSavedQuery(query)"
+              <div
+                v-for="group in queryTreeGroups"
+                :key="group.id"
+                class="sql-workbench__tree-group-block"
               >
-                <IconTablerFileText />
-                <span>{{ query.name }}</span>
-                <small
-                  class="sql-workbench__datapoint-pill"
-                  :class="{
-                    'is-missing': !queryDataPointBySourceId[query.id],
-                  }"
+                <button
+                  type="button"
+                  class="sql-workbench__tree-group"
+                  :class="{ 'is-active': selectedExplorerNode === `query-group:${group.id}` }"
+                  @click="toggleObjectGroup('query', group.id)"
+                  @contextmenu.prevent.stop="openObjectGroupMenu($event, 'query', group)"
                 >
-                  {{
-                    queryDataPointBySourceId[query.id]?.status === 'invalid'
-                      ? '数据点失效'
-                      : queryDataPointBySourceId[query.id]
-                        ? '数据点'
-                        : '未同步'
-                  }}
-                </small>
-              </button>
+                  <IconTablerChevronDown v-if="isObjectGroupExpanded('query', group.id)" />
+                  <IconTablerChevronRight v-else />
+                  <span>{{ group.name }}</span>
+                  <small>{{ group.items.length }}</small>
+                </button>
+                <div
+                  v-if="isObjectGroupExpanded('query', group.id)"
+                  class="sql-workbench__tree-group-body"
+                >
+                  <button
+                    v-for="query in group.items"
+                    :key="query.id"
+                    type="button"
+                    class="sql-workbench__tree-item"
+                    :class="{ 'is-active': selectedExplorerNode === `query:${query.id}` }"
+                    @click="selectedExplorerNode = `query:${query.id}`"
+                    @dblclick="openSavedQuery(query)"
+                    @contextmenu.prevent.stop="openQueryMenu($event, query)"
+                  >
+                    <IconTablerFileText />
+                    <span>{{ query.name }}</span>
+                    <small
+                      class="sql-workbench__datapoint-pill"
+                    >
+                      数据点
+                    </small>
+                  </button>
+                  <div v-if="group.items.length === 0" class="sql-workbench__empty is-compact">
+                    暂无查询
+                  </div>
+                </div>
+              </div>
             </template>
             <div
               v-if="!queriesLoading && filteredQueries.length === 0"
@@ -92,43 +115,71 @@
         <section class="sql-workbench__tree-section">
           <button
             type="button"
-            class="sql-workbench__tree-head"
-            @click="tablesExpanded = !tablesExpanded"
+            class="sql-workbench__tree-category"
+            :class="{ 'is-active': selectedExplorerNode === 'tables' }"
+            @click="toggleExplorerCategory('tables')"
+            @contextmenu.prevent.stop="openTableCategoryMenu"
           >
             <IconTablerChevronDown v-if="tablesExpanded" />
             <IconTablerChevronRight v-else />
+            <IconTablerTable class="sql-workbench__category-icon" />
             <span>表</span>
             <small>{{ filteredTables.length }}</small>
           </button>
 
-          <div v-if="tablesExpanded" class="sql-workbench__tree-body">
+          <div
+            v-if="tablesExpanded"
+            class="sql-workbench__tree-body"
+          >
             <div v-if="tablesLoading" class="sql-workbench__loading">
               <IconTablerLoader2 />
               <span>加载表结构...</span>
             </div>
             <template v-else>
               <div
-                v-for="table in filteredTables"
-                :key="table.name"
-                role="button"
-                tabindex="0"
-                class="sql-workbench__tree-item"
-                :class="{ 'is-active': selectedTableName === table.name }"
-                @click="selectedTableName = table.name"
-                @dblclick="openTableData(table)"
-                @keydown.enter="openTableData(table)"
+                v-for="group in tableTreeGroups"
+                :key="group.id"
+                class="sql-workbench__tree-group-block"
               >
-                <IconTablerTable />
-                <span>{{ table.name }}</span>
-                <small v-if="table.rows !== undefined">{{ table.rows }}</small>
                 <button
                   type="button"
-                  class="sql-workbench__inline-action"
-                  title="查看结构"
-                  @click.stop="openTableStructure(table)"
+                  class="sql-workbench__tree-group"
+                  :class="{ 'is-active': selectedExplorerNode === `table-group:${group.id}` }"
+                  @click="toggleObjectGroup('table', group.id)"
+                  @contextmenu.prevent.stop="openObjectGroupMenu($event, 'table', group)"
                 >
-                  <IconTablerColumns />
+                  <IconTablerChevronDown v-if="isObjectGroupExpanded('table', group.id)" />
+                  <IconTablerChevronRight v-else />
+                  <span>{{ group.name }}</span>
+                  <small>{{ group.items.length }}</small>
                 </button>
+                <div
+                  v-if="isObjectGroupExpanded('table', group.id)"
+                  class="sql-workbench__tree-group-body"
+                >
+                  <div
+                    v-for="table in group.items"
+                    :key="table.name"
+                    role="button"
+                    tabindex="0"
+                    class="sql-workbench__tree-item"
+                    :class="{ 'is-active': selectedExplorerNode === `table:${table.name}` }"
+                    @click="selectTableNode(table)"
+                    @dblclick="openTableData(table)"
+                    @keydown.enter="openTableData(table)"
+                    @contextmenu.prevent.stop="openTableMenu($event, table)"
+                  >
+                    <component :is="resolveTableIcon(table)" />
+                    <span>{{ table.name }}</span>
+                    <small v-if="table.kind === 'super_table'" class="sql-workbench__kind-pill">
+                      超表
+                    </small>
+                    <small v-if="table.rows !== undefined">{{ table.rows }}</small>
+                  </div>
+                  <div v-if="group.items.length === 0" class="sql-workbench__empty is-compact">
+                    暂无表
+                  </div>
+                </div>
               </div>
             </template>
             <div v-if="!tablesLoading && filteredTables.length === 0" class="sql-workbench__empty">
@@ -232,42 +283,48 @@
         </template>
 
         <template v-else-if="activeTab.type === 'structure'">
-          <div class="sql-workbench__structure-head">
-            <div>
-              <strong>{{ activeTab.table }}</strong>
-              <span>表结构</span>
+          <div class="sql-workbench__structure">
+            <div class="sql-workbench__structure-head">
+              <div>
+                <strong>{{ activeTab.table }}</strong>
+                <span>表结构</span>
+              </div>
+              <el-button size="small" @click="openTableData({ name: activeTab.table })">
+                查询数据
+              </el-button>
             </div>
-            <el-button size="small" @click="openTableData({ name: activeTab.table })">
-              查询数据
-            </el-button>
+            <div v-if="activeTab.loading" class="sql-workbench__loading is-structure">
+              <IconTablerLoader2 />
+              <span>加载表结构...</span>
+            </div>
+            <el-tabs v-else v-model="activeTab.structureTab" class="sql-workbench__meta-tabs">
+              <el-tab-pane label="字段" name="columns">
+                <el-table :data="activeTab.structure.columns" size="small" border height="100%">
+                  <el-table-column prop="name" label="字段" min-width="160" />
+                  <el-table-column prop="type" label="类型" width="140" />
+                  <el-table-column label="可空" width="80" align="center">
+                    <template #default="{ row }">
+                      {{ row.nullable ? '是' : '否' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="defaultValue" label="默认值" width="140" />
+                  <el-table-column prop="comment" label="备注" min-width="180" />
+                </el-table>
+              </el-tab-pane>
+              <el-tab-pane label="索引" name="indexes">
+                <el-table :data="activeTab.structure.indexes" size="small" border height="100%">
+                  <el-table-column prop="name" label="索引" min-width="180" />
+                  <el-table-column prop="type" label="类型" width="120" />
+                  <el-table-column prop="method" label="方法" width="120" />
+                  <el-table-column label="字段" min-width="220">
+                    <template #default="{ row }">
+                      {{ (row.columns || []).join(', ') || '-' }}
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </el-tab-pane>
+            </el-tabs>
           </div>
-          <el-tabs v-model="activeTab.structureTab" class="sql-workbench__meta-tabs">
-            <el-tab-pane label="字段" name="columns">
-              <el-table :data="activeTab.structure.columns" size="small" border height="100%">
-                <el-table-column prop="name" label="字段" min-width="160" />
-                <el-table-column prop="type" label="类型" width="140" />
-                <el-table-column label="可空" width="80" align="center">
-                  <template #default="{ row }">
-                    {{ row.nullable ? '是' : '否' }}
-                  </template>
-                </el-table-column>
-                <el-table-column prop="defaultValue" label="默认值" width="140" />
-                <el-table-column prop="comment" label="备注" min-width="180" />
-              </el-table>
-            </el-tab-pane>
-            <el-tab-pane label="索引" name="indexes">
-              <el-table :data="activeTab.structure.indexes" size="small" border height="100%">
-                <el-table-column prop="name" label="索引" min-width="180" />
-                <el-table-column prop="type" label="类型" width="120" />
-                <el-table-column prop="method" label="方法" width="120" />
-                <el-table-column label="字段" min-width="220">
-                  <template #default="{ row }">
-                    {{ (row.columns || []).join(', ') || '-' }}
-                  </template>
-                </el-table-column>
-              </el-table>
-            </el-tab-pane>
-          </el-tabs>
         </template>
       </div>
 
@@ -343,6 +400,129 @@
         </div>
       </section>
     </aside>
+
+    <TableDesignDialog
+      v-model="tableDesignVisible"
+      :project-id="projectId"
+      :connection-id="connection.id"
+      :db-type="dbType"
+      :supports-super-table="supportsSuperTable"
+      @created="handleTableCreated"
+    />
+
+    <Teleport to="body">
+      <div
+        v-if="contextMenu.visible"
+        class="sql-workbench__menu-mask"
+        @click="closeContextMenu"
+        @contextmenu.prevent="closeContextMenu"
+      >
+        <div
+          class="sql-workbench__context-menu"
+          :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
+          @click.stop
+        >
+          <button
+            v-if="contextMenu.type === 'query-category'"
+            type="button"
+            @click="openContextNewQuery"
+          >
+            <IconTablerPlus />
+            <span>新建查询</span>
+          </button>
+          <button
+            v-if="contextMenu.type === 'query-category'"
+            type="button"
+            @click="refreshContextQueries"
+          >
+            <IconTablerRefresh />
+            <span>刷新查询</span>
+          </button>
+          <button v-if="contextMenu.type === 'query'" type="button" @click="openContextQuery">
+            <IconTablerFileText />
+            <span>打开查询</span>
+          </button>
+          <button v-if="contextMenu.type === 'query'" type="button" @click="renameContextQuery">
+            <IconTablerEdit />
+            <span>重命名查询</span>
+          </button>
+          <button v-if="contextMenu.type === 'query'" type="button" @click="moveContextQuery">
+            <IconTablerFolder />
+            <span>移动到分组</span>
+          </button>
+          <button v-if="contextMenu.type === 'query'" type="button" @click="deleteContextQuery">
+            <IconTablerTrash />
+            <span>删除查询</span>
+          </button>
+          <button
+            v-if="contextMenu.type === 'table-category'"
+            type="button"
+            @click="openTableDesign"
+          >
+            <IconTablerPlus />
+            <span>新建表</span>
+          </button>
+          <button
+            v-if="contextMenu.type === 'table-category'"
+            type="button"
+            @click="refreshContextTables"
+          >
+            <IconTablerRefresh />
+            <span>刷新表</span>
+          </button>
+          <button
+            v-if="contextMenu.type === 'query-group' || contextMenu.type === 'table-group'"
+            type="button"
+            @click="createContextGroup"
+          >
+            <IconTablerPlus />
+            <span>新建分组</span>
+          </button>
+          <button
+            v-if="
+              (contextMenu.type === 'query-group' || contextMenu.type === 'table-group') &&
+              !contextMenu.group?.virtual
+            "
+            type="button"
+            @click="renameContextGroup"
+          >
+            <IconTablerEdit />
+            <span>重命名分组</span>
+          </button>
+          <button
+            v-if="
+              (contextMenu.type === 'query-group' || contextMenu.type === 'table-group') &&
+              !contextMenu.group?.virtual
+            "
+            type="button"
+            @click="deleteContextGroup"
+          >
+            <IconTablerTrash />
+            <span>删除分组</span>
+          </button>
+          <button v-if="contextMenu.type === 'table'" type="button" @click="openContextStructure">
+            <IconTablerColumns />
+            <span>查看表结构</span>
+          </button>
+          <button v-if="contextMenu.type === 'table'" type="button" @click="openContextData">
+            <IconTablerTable />
+            <span>查询数据</span>
+          </button>
+          <button v-if="contextMenu.type === 'table'" type="button" @click="renameContextTable">
+            <IconTablerEdit />
+            <span>重命名表</span>
+          </button>
+          <button v-if="contextMenu.type === 'table'" type="button" @click="moveContextTable">
+            <IconTablerFolder />
+            <span>移动到分组</span>
+          </button>
+          <button v-if="contextMenu.type === 'table'" type="button" @click="deleteContextTable">
+            <IconTablerTrash />
+            <span>删除表</span>
+          </button>
+        </div>
+      </div>
+    </Teleport>
   </section>
 </template>
 
@@ -354,18 +534,23 @@ import IconTablerChevronDown from '~icons/tabler/chevron-down'
 import IconTablerChevronRight from '~icons/tabler/chevron-right'
 import IconTablerColumns from '~icons/tabler/columns'
 import IconTablerDatabase from '~icons/tabler/database'
+import IconTablerEdit from '~icons/tabler/edit'
 import IconTablerFileSearch from '~icons/tabler/file-search'
 import IconTablerFileText from '~icons/tabler/file-text'
+import IconTablerFolder from '~icons/tabler/folder'
 import IconTablerLoader2 from '~icons/tabler/loader-2'
 import IconTablerPlayerPlay from '~icons/tabler/player-play'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerRefresh from '~icons/tabler/refresh'
+import IconTablerStack2 from '~icons/tabler/stack-2'
 import IconTablerTable from '~icons/tabler/table'
+import IconTablerTrash from '~icons/tabler/trash'
 import IconTablerX from '~icons/tabler/x'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 import dataAPI from '@/api/data.api'
 import { getApiErrorMessage } from '@/utils/request'
 import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
+import TableDesignDialog from './TableDesignDialog.vue'
 
 type SqlConnection = {
   id: string
@@ -373,6 +558,15 @@ type SqlConnection = {
   type?: string
   relationalConfig?: Record<string, any>
   config?: Record<string, any>
+}
+
+type WorkbenchScope = 'query' | 'table'
+type WorkbenchGroup = {
+  id: string
+  name: string
+  scope: WorkbenchScope
+  virtual?: boolean
+  items?: any[]
 }
 
 const props = defineProps<{
@@ -386,16 +580,39 @@ defineEmits<{
 
 const tables = ref<any[]>([])
 const queries = ref<any[]>([])
+const queryGroups = ref<WorkbenchGroup[]>([])
+const tableGroups = ref<WorkbenchGroup[]>([])
+const tableGroupMembers = ref<any[]>([])
 const queryDataPoints = ref<any[]>([])
 const tabs = ref<any[]>([])
 const activeTabId = ref('')
 const filterText = ref('')
 const selectedTableName = ref('')
+const selectedExplorerNode = ref('')
 const tablesLoading = ref(false)
 const queriesLoading = ref(false)
 const tablesExpanded = ref(true)
 const queriesExpanded = ref(true)
+const expandedObjectGroups = ref<Record<string, boolean>>({})
 const executionHistory = ref<any[]>([])
+const tableDesignVisible = ref(false)
+const contextMenu = ref<{
+  visible: boolean
+  type: 'query-category' | 'query-group' | 'query' | 'table-category' | 'table-group' | 'table' | null
+  x: number
+  y: number
+  table: any | null
+  query: any | null
+  group: WorkbenchGroup | null
+}>({
+  visible: false,
+  type: null,
+  x: 0,
+  y: 0,
+  table: null,
+  query: null,
+  group: null,
+})
 let tabCounter = 0
 
 const dbConfig = computed(() => props.connection.relationalConfig || props.connection.config || {})
@@ -405,6 +622,9 @@ const dbType = computed(() => {
   }
   return props.connection.type || dbConfig.value.dbType || 'mysql'
 })
+const supportsSuperTable = computed(() =>
+  ['builtin.timeseries', 'tdengine'].includes(props.connection.type || dbType.value),
+)
 const dbTypeLabel = computed(() => {
   if (props.connection.type === 'builtin.relation') return 'IF关系库'
   if (props.connection.type === 'builtin.timeseries') return 'IF时序库'
@@ -490,6 +710,50 @@ const filteredQueries = computed(() => {
   )
 })
 
+const tableGroupByName = computed(() =>
+  tableGroupMembers.value.reduce(
+    (records, member) => {
+      if (member.tableName && member.groupId) records[member.tableName] = member.groupId
+      return records
+    },
+    {} as Record<string, string>,
+  ),
+)
+
+const buildTreeGroups = (scope: WorkbenchScope, groups: WorkbenchGroup[], items: any[]) => {
+  const ungrouped: WorkbenchGroup = {
+    id: '__ungrouped__',
+    name: '未分组',
+    scope,
+    virtual: true,
+    items: [],
+  }
+  const groupMap = new Map<string, WorkbenchGroup>()
+  const result = [
+    ungrouped,
+    ...groups.map((group) => {
+      const next = { ...group, items: [] as any[] }
+      groupMap.set(next.id, next)
+      return next
+    }),
+  ]
+
+  items.forEach((item) => {
+    const groupID = scope === 'query' ? item.groupId : tableGroupByName.value[item.name]
+    const target = groupID ? groupMap.get(groupID) : null
+    ;(target || ungrouped).items?.push(item)
+  })
+  return result
+}
+
+const queryTreeGroups = computed(() => buildTreeGroups('query', queryGroups.value, filteredQueries.value))
+const tableTreeGroups = computed(() => buildTreeGroups('table', tableGroups.value, filteredTables.value))
+
+const resolveTableIcon = (table: any) => {
+  if (table?.kind === 'super_table') return IconTablerStack2
+  return IconTablerTable
+}
+
 const quoteTable = (tableName: string) => {
   if (dbType.value === 'mysql') return `\`${tableName}\``
   if (dbType.value === 'sqlserver') return `[${tableName}]`
@@ -551,6 +815,21 @@ const loadQueries = async () => {
   }
 }
 
+const loadWorkbenchGroups = async () => {
+  try {
+    const [queryResponse, tableResponse, memberResponse] = await Promise.all([
+      dataAPI.getWorkbenchGroups(props.projectId, props.connection.id, 'query'),
+      dataAPI.getWorkbenchGroups(props.projectId, props.connection.id, 'table'),
+      dataAPI.getTableGroupMembers(props.projectId, props.connection.id),
+    ])
+    queryGroups.value = queryResponse.data?.groups || []
+    tableGroups.value = tableResponse.data?.groups || []
+    tableGroupMembers.value = memberResponse.data?.members || []
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '加载工作台分组失败'))
+  }
+}
+
 const loadQueryDataPoints = async () => {
   const sourceIds = queries.value.map((query) => query.id).filter(Boolean)
   if (sourceIds.length === 0) {
@@ -571,7 +850,7 @@ const loadQueryDataPoints = async () => {
 }
 
 const reloadExplorer = async () => {
-  await Promise.all([loadTables(), loadQueries()])
+  await Promise.all([loadTables(), loadQueries(), loadWorkbenchGroups()])
 }
 
 const createQueryTab = (initial: Record<string, any> = {}) => {
@@ -605,6 +884,7 @@ const createQueryTab = (initial: Record<string, any> = {}) => {
 
 const openTableData = async (table: any) => {
   selectedTableName.value = table.name
+  selectedExplorerNode.value = `table:${table.name}`
   const tab = createQueryTab({
     title: table.name,
     table: table.name,
@@ -614,6 +894,7 @@ const openTableData = async (table: any) => {
 }
 
 const openSavedQuery = (query: any) => {
+  selectedExplorerNode.value = `query:${query.id}`
   createQueryTab({
     id: `saved-query-${query.id}`,
     queryId: query.id,
@@ -622,8 +903,14 @@ const openSavedQuery = (query: any) => {
   })
 }
 
+const selectTableNode = (table: any) => {
+  selectedExplorerNode.value = `table:${table.name}`
+  selectedTableName.value = table.name
+}
+
 const openTableStructure = async (table: any) => {
   selectedTableName.value = table.name
+  selectedExplorerNode.value = `table:${table.name}`
   const id = `structure-${props.connection.id}-${table.name}`
   const existing = tabs.value.find((tab) => tab.id === id)
   if (existing) {
@@ -639,10 +926,15 @@ const openTableStructure = async (table: any) => {
     table: table.name,
     structureTab: 'columns',
     structure: { columns: [], indexes: [], foreignKeys: [] },
+    loading: true,
     modified: false,
   }
   tabs.value.push(tab)
   activeTabId.value = id
+
+  const patchTab = (patch: Record<string, any>) => {
+    tabs.value = tabs.value.map((item) => (item.id === id ? { ...item, ...patch } : item))
+  }
 
   try {
     const response = await dataAPI.getTableStructure(
@@ -650,14 +942,361 @@ const openTableStructure = async (table: any) => {
       props.connection.id,
       table.name,
     )
-    tab.structure = response.data || {
-      columns: [],
-      indexes: [],
-      foreignKeys: [],
-    }
+    patchTab({
+      structure: response.data || {
+        columns: [],
+        indexes: [],
+        foreignKeys: [],
+      },
+      loading: false,
+    })
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '加载表结构失败'))
+    patchTab({ loading: false })
   }
+}
+
+const openExplorerMenu = (
+  event: MouseEvent,
+  type: 'query-category' | 'query-group' | 'query' | 'table-category' | 'table-group' | 'table',
+  payload: { table?: any; query?: any; group?: WorkbenchGroup; maxHeight?: number } = {},
+) => {
+  contextMenu.value = {
+    visible: true,
+    type,
+    x: Math.min(event.clientX, window.innerWidth - 170),
+    y: Math.min(event.clientY, window.innerHeight - (payload.maxHeight || 110)),
+    table: payload.table || null,
+    query: payload.query || null,
+    group: payload.group || null,
+  }
+}
+
+const toggleExplorerCategory = (category: 'queries' | 'tables') => {
+  selectedExplorerNode.value = category
+  if (category === 'queries') {
+    queriesExpanded.value = !queriesExpanded.value
+    return
+  }
+  tablesExpanded.value = !tablesExpanded.value
+}
+
+const openQueryCategoryMenu = (event: MouseEvent) => {
+  selectedExplorerNode.value = 'queries'
+  openExplorerMenu(event, 'query-category', { maxHeight: 100 })
+}
+
+const openObjectGroupMenu = (event: MouseEvent, scope: WorkbenchScope, group: WorkbenchGroup) => {
+  selectedExplorerNode.value = `${scope}-group:${group.id}`
+  openExplorerMenu(event, `${scope}-group` as 'query-group' | 'table-group', {
+    group,
+    maxHeight: group.virtual ? 80 : 140,
+  })
+}
+
+const openQueryMenu = (event: MouseEvent, query: any) => {
+  selectedExplorerNode.value = `query:${query.id}`
+  openExplorerMenu(event, 'query', { query, maxHeight: 150 })
+}
+
+const openTableCategoryMenu = (event: MouseEvent) => {
+  selectedExplorerNode.value = 'tables'
+  openExplorerMenu(event, 'table-category', { maxHeight: 100 })
+}
+
+const openTableMenu = (event: MouseEvent, table: any) => {
+  selectTableNode(table)
+  openExplorerMenu(event, 'table', { table, maxHeight: 190 })
+}
+
+const closeContextMenu = () => {
+  contextMenu.value.visible = false
+}
+
+const openTableDesign = () => {
+  closeContextMenu()
+  tableDesignVisible.value = true
+}
+
+const openContextNewQuery = () => {
+  closeContextMenu()
+  createQueryTab()
+}
+
+const refreshContextQueries = async () => {
+  closeContextMenu()
+  await Promise.all([loadQueries(), loadWorkbenchGroups()])
+}
+
+const refreshContextTables = async () => {
+  closeContextMenu()
+  await Promise.all([loadTables(), loadWorkbenchGroups()])
+}
+
+const openContextQuery = () => {
+  const query = contextMenu.value.query
+  closeContextMenu()
+  if (query) openSavedQuery(query)
+}
+
+const renameContextQuery = async () => {
+  const query = contextMenu.value.query
+  closeContextMenu()
+  if (!query) return
+  try {
+    const { value } = await ElMessageBox.prompt('请输入查询名称', '重命名查询', {
+      inputValue: query.name,
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+      inputPattern: /^.{2,100}$/,
+      inputErrorMessage: '名称长度需要在 2 到 100 个字符之间',
+    })
+    const nextName = String(value || '').trim()
+    await dataAPI.updateQuery(query.id, { name: nextName })
+    tabs.value.forEach((tab) => {
+      if (tab.queryId === query.id) {
+        tab.title = nextName
+        tab.modified = false
+      }
+    })
+    await loadQueries()
+    ElMessage.success('查询已重命名')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(getApiErrorMessage(error, '重命名查询失败'))
+    }
+  }
+}
+
+const deleteContextQuery = async () => {
+  const query = contextMenu.value.query
+  closeContextMenu()
+  if (!query) return
+  try {
+    await ElMessageBox.confirm(`确定删除查询“${query.name}”吗？`, '删除查询', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    await dataAPI.deleteQuery(query.id)
+    tabs.value
+      .filter((tab) => tab.queryId === query.id)
+      .forEach((tab) => closeTab(tab.id))
+    await loadQueries()
+    ElMessage.success('查询已删除')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(getApiErrorMessage(error, '删除查询失败'))
+    }
+  }
+}
+
+const objectGroupKey = (scope: WorkbenchScope, groupID: string) => `${scope}:${groupID}`
+
+const isObjectGroupExpanded = (scope: WorkbenchScope, groupID: string) => {
+  return expandedObjectGroups.value[objectGroupKey(scope, groupID)] !== false
+}
+
+const toggleObjectGroup = (scope: WorkbenchScope, groupID: string) => {
+  selectedExplorerNode.value = `${scope}-group:${groupID}`
+  const key = objectGroupKey(scope, groupID)
+  expandedObjectGroups.value = {
+    ...expandedObjectGroups.value,
+    [key]: !isObjectGroupExpanded(scope, groupID),
+  }
+}
+
+const groupsForScope = (scope: WorkbenchScope) =>
+  scope === 'query' ? queryGroups.value : tableGroups.value
+
+const createContextGroup = async () => {
+  const group = contextMenu.value.group
+  const scope = group?.scope || (contextMenu.value.type === 'query-group' ? 'query' : 'table')
+  closeContextMenu()
+  try {
+    const { value } = await ElMessageBox.prompt('请输入分组名称', '新建分组', {
+      confirmButtonText: '创建',
+      cancelButtonText: '取消',
+      inputPattern: /\S+/,
+      inputErrorMessage: '分组名称不能为空',
+    })
+    await dataAPI.createWorkbenchGroup(props.projectId, props.connection.id, {
+      scope,
+      name: String(value || '').trim(),
+    })
+    await loadWorkbenchGroups()
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(getApiErrorMessage(error, '创建分组失败'))
+    }
+  }
+}
+
+const renameContextGroup = async () => {
+  const group = contextMenu.value.group
+  closeContextMenu()
+  if (!group || group.virtual) return
+  try {
+    const { value } = await ElMessageBox.prompt('请输入分组名称', '重命名分组', {
+      inputValue: group.name,
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+      inputPattern: /\S+/,
+      inputErrorMessage: '分组名称不能为空',
+    })
+    await dataAPI.updateWorkbenchGroup(props.projectId, group.id, {
+      name: String(value || '').trim(),
+    })
+    await loadWorkbenchGroups()
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(getApiErrorMessage(error, '重命名分组失败'))
+    }
+  }
+}
+
+const deleteContextGroup = async () => {
+  const group = contextMenu.value.group
+  closeContextMenu()
+  if (!group || group.virtual) return
+  try {
+    await ElMessageBox.confirm('删除分组不会删除其中的对象，对象会回到未分组。', '删除分组', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    await dataAPI.deleteWorkbenchGroup(props.projectId, group.id)
+    await Promise.all([loadWorkbenchGroups(), loadQueries()])
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(getApiErrorMessage(error, '删除分组失败'))
+    }
+  }
+}
+
+const selectTargetGroup = async (scope: WorkbenchScope) => {
+  const groups = groupsForScope(scope)
+  const options = ['0. 未分组', ...groups.map((group, index) => `${index + 1}. ${group.name}`)]
+  const { value } = await ElMessageBox.prompt(options.join('\n'), '移动到分组', {
+    confirmButtonText: '移动',
+    cancelButtonText: '取消',
+    inputPlaceholder: '输入序号',
+    inputPattern: /^[0-9]+$/,
+    inputErrorMessage: '请输入分组序号',
+  })
+  const index = Number(value)
+  if (index === 0) return null
+  return groups[index - 1]?.id || null
+}
+
+const moveContextQuery = async () => {
+  const query = contextMenu.value.query
+  closeContextMenu()
+  if (!query) return
+  try {
+    const groupID = await selectTargetGroup('query')
+    await dataAPI.moveQueryToWorkbenchGroup(props.projectId, query.id, groupID)
+    await loadQueries()
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(getApiErrorMessage(error, '移动查询失败'))
+    }
+  }
+}
+
+const moveContextTable = async () => {
+  const table = contextMenu.value.table
+  closeContextMenu()
+  if (!table) return
+  try {
+    const groupID = await selectTargetGroup('table')
+    await dataAPI.moveTableToWorkbenchGroup(props.projectId, props.connection.id, table.name, groupID)
+    await loadWorkbenchGroups()
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(getApiErrorMessage(error, '移动表失败'))
+    }
+  }
+}
+
+const renameContextTable = async () => {
+  const table = contextMenu.value.table
+  closeContextMenu()
+  if (!table) return
+  try {
+    const { value } = await ElMessageBox.prompt('请输入新表名', '重命名表', {
+      inputValue: table.name,
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+      inputPattern: /^[A-Za-z_][A-Za-z0-9_]*$/,
+      inputErrorMessage: '表名只能包含字母、数字、下划线，且不能以数字开头',
+    })
+    const nextName = String(value || '').trim()
+    await dataAPI.renameConnectionTable(props.projectId, props.connection.id, table.name, {
+      name: nextName,
+    })
+    tabs.value.forEach((tab) => {
+      if (tab.table === table.name) {
+        tab.table = nextName
+        tab.title = tab.title.replace(table.name, nextName)
+      }
+    })
+    if (selectedTableName.value === table.name) selectedTableName.value = nextName
+    selectedExplorerNode.value = `table:${nextName}`
+    await Promise.all([loadTables(), loadWorkbenchGroups()])
+    ElMessage.success('表已重命名')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(getApiErrorMessage(error, '重命名表失败'))
+    }
+  }
+}
+
+const deleteContextTable = async () => {
+  const table = contextMenu.value.table
+  closeContextMenu()
+  if (!table) return
+  try {
+    await ElMessageBox.confirm(
+      `删除表“${table.name}”会删除真实数据库表，且不会级联删除依赖对象。确认继续？`,
+      '删除表',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+    await dataAPI.deleteConnectionTable(props.projectId, props.connection.id, table.name)
+    tabs.value
+      .filter((tab) => tab.table === table.name)
+      .forEach((tab) => closeTab(tab.id))
+    if (selectedTableName.value === table.name) selectedTableName.value = ''
+    if (selectedExplorerNode.value === `table:${table.name}`) selectedExplorerNode.value = 'tables'
+    await Promise.all([loadTables(), loadWorkbenchGroups()])
+    ElMessage.success('表已删除')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(getApiErrorMessage(error, '删除表失败'))
+    }
+  }
+}
+
+const openContextStructure = () => {
+  const table = contextMenu.value.table
+  closeContextMenu()
+  if (table) void openTableStructure(table)
+}
+
+const openContextData = () => {
+  const table = contextMenu.value.table
+  closeContextMenu()
+  if (table) void openTableData(table)
+}
+
+const handleTableCreated = async (tableName: string) => {
+  await loadTables()
+  const table = tables.value.find((item) => item.name === tableName)
+  if (table) selectedTableName.value = table.name
 }
 
 const closeTab = (tabId: string) => {
@@ -805,6 +1444,8 @@ watch(
     tabs.value = []
     activeTabId.value = ''
     selectedTableName.value = ''
+    selectedExplorerNode.value = ''
+    expandedObjectGroups.value = {}
     executionHistory.value = []
     await reloadExplorer()
     createQueryTab()
@@ -852,28 +1493,6 @@ onMounted(async () => {
   overflow-y: auto;
 }
 
-.sql-workbench__inline-action {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-raised);
-  color: var(--dc-text-secondary);
-}
-
-.sql-workbench__inline-action svg {
-  width: 15px;
-  height: 15px;
-}
-
-.sql-workbench__inline-action:hover {
-  color: var(--dc-primary);
-  border-color: color-mix(in oklch, var(--dc-primary) 28%, var(--dc-border));
-}
-
 .sql-workbench__search {
   min-width: 0;
 }
@@ -886,10 +1505,10 @@ onMounted(async () => {
 }
 
 .sql-workbench__tree-section + .sql-workbench__tree-section {
-  margin-top: 10px;
+  margin-top: 4px;
 }
 
-.sql-workbench__tree-head,
+.sql-workbench__tree-category,
 .sql-workbench__tree-item,
 .sql-workbench__history-item {
   width: 100%;
@@ -901,33 +1520,78 @@ onMounted(async () => {
   text-align: left;
 }
 
-.sql-workbench__tree-head {
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  min-height: 30px;
-  padding: 5px 8px;
-  font-size: 12px;
+.sql-workbench__tree-category {
+  grid-template-columns: 16px 24px minmax(0, 1fr) auto;
+  gap: 8px;
+  min-height: 36px;
+  padding: 5px 8px 5px 6px;
+  border-radius: var(--dc-radius-sm);
+  color: var(--dc-text);
+  font-size: 14px;
   font-weight: 700;
 }
 
-.sql-workbench__tree-head svg,
+.sql-workbench__tree-category svg,
 .sql-workbench__tree-item svg {
   width: 15px;
   height: 15px;
 }
 
-.sql-workbench__tree-head small,
+.sql-workbench__tree-category small,
 .sql-workbench__tree-item small {
   color: var(--dc-text-muted);
   font-size: 11px;
 }
 
+.sql-workbench__category-icon {
+  width: 22px !important;
+  height: 22px !important;
+  color: var(--dc-primary);
+}
+
 .sql-workbench__tree-body {
-  padding-left: 8px;
+  padding: 2px 0 2px 22px;
+}
+
+.sql-workbench__tree-group-block {
+  display: grid;
+  gap: 2px;
+}
+
+.sql-workbench__tree-group {
+  width: 100%;
+  min-height: 28px;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--dc-radius-sm);
+  background: transparent;
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.sql-workbench__tree-group svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sql-workbench__tree-group small {
+  color: var(--dc-text-muted);
+  font-size: 11px;
+}
+
+.sql-workbench__tree-group-body {
+  padding-left: 14px;
 }
 
 .sql-workbench__tree-item {
   position: relative;
-  grid-template-columns: 20px minmax(0, 1fr) auto 30px;
+  grid-template-columns: 20px minmax(0, 1fr) auto auto 30px;
   gap: 6px;
   min-height: 30px;
   padding: 5px 4px 5px 8px;
@@ -944,10 +1608,14 @@ onMounted(async () => {
   font-weight: 700;
 }
 
-.sql-workbench__datapoint-pill.is-missing {
-  border-color: var(--dc-border);
-  background: var(--dc-surface-muted);
-  color: var(--dc-text-muted) !important;
+.sql-workbench__kind-pill {
+  padding: 2px 6px;
+  border: 1px solid color-mix(in oklch, var(--dc-primary) 22%, var(--dc-border));
+  border-radius: var(--dc-radius-xs);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary) !important;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .sql-workbench__tree-item span {
@@ -956,19 +1624,15 @@ onMounted(async () => {
   white-space: nowrap;
 }
 
+.sql-workbench__tree-category:hover,
+.sql-workbench__tree-category.is-active,
+.sql-workbench__tree-group:hover,
+.sql-workbench__tree-group.is-active,
 .sql-workbench__tree-item:hover,
 .sql-workbench__tree-item.is-active,
 .sql-workbench__history-item:hover {
   background: var(--dc-primary-soft);
   color: var(--dc-primary);
-}
-
-.sql-workbench__inline-action {
-  opacity: 0;
-}
-
-.sql-workbench__tree-item:hover .sql-workbench__inline-action {
-  opacity: 1;
 }
 
 .sql-workbench__main {
@@ -1131,6 +1795,14 @@ onMounted(async () => {
   flex: 1;
 }
 
+.sql-workbench__structure {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .sql-workbench__empty-result,
 .sql-workbench__blank {
   height: 100%;
@@ -1255,6 +1927,10 @@ onMounted(async () => {
   font-size: 11px;
 }
 
+.sql-workbench__empty.is-compact {
+  padding: 6px 8px;
+}
+
 .sql-workbench__loading {
   display: flex;
   align-items: center;
@@ -1262,10 +1938,56 @@ onMounted(async () => {
   padding: 8px;
 }
 
+.sql-workbench__loading.is-structure {
+  flex: 1;
+  justify-content: center;
+}
+
 .sql-workbench__loading svg {
   width: 14px;
   height: 14px;
   animation: sql-workbench-spin 0.9s linear infinite;
+}
+
+.sql-workbench__menu-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+}
+
+.sql-workbench__context-menu {
+  position: fixed;
+  min-width: 148px;
+  padding: 4px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-surface);
+}
+
+.sql-workbench__context-menu button {
+  width: 100%;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--dc-radius-sm);
+  background: transparent;
+  color: var(--dc-text-secondary);
+  font-size: 13px;
+  text-align: left;
+}
+
+.sql-workbench__context-menu button:hover {
+  background: var(--dc-surface-muted);
+  color: var(--dc-primary);
+}
+
+.sql-workbench__context-menu svg {
+  width: 15px;
+  height: 15px;
 }
 
 .sql-workbench__column-chip {

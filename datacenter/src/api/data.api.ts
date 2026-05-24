@@ -166,11 +166,88 @@ export const getConnectionTables = (projectId, connectionId) => {
   })
 }
 
+export const createConnectionTable = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/tables`,
+    method: 'post',
+    data,
+  })
+}
+
+export const renameConnectionTable = (projectId, connectionId, tableName, data) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/tables/${encodeURIComponent(tableName)}`,
+    method: 'put',
+    data,
+  })
+}
+
+export const deleteConnectionTable = (projectId, connectionId, tableName) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/tables/${encodeURIComponent(tableName)}`,
+    method: 'delete',
+  })
+}
+
 export const getTableData = (projectId, connectionId, tableName, params = {}) => {
   return request({
-    url: `/data/projects/${projectId}/connections/${connectionId}/tables/${tableName}/data`,
+    url: `/data/projects/${projectId}/connections/${connectionId}/tables/${encodeURIComponent(tableName)}/data`,
     method: 'get',
     params,
+  })
+}
+
+export const getWorkbenchGroups = (projectId, connectionId, scope) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/workbench-groups`,
+    method: 'get',
+    params: { scope },
+  })
+}
+
+export const createWorkbenchGroup = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/workbench-groups`,
+    method: 'post',
+    data,
+  })
+}
+
+export const updateWorkbenchGroup = (projectId, groupId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/workbench-groups/${groupId}`,
+    method: 'put',
+    data,
+  })
+}
+
+export const deleteWorkbenchGroup = (projectId, groupId) => {
+  return request({
+    url: `/data/projects/${projectId}/workbench-groups/${groupId}`,
+    method: 'delete',
+  })
+}
+
+export const moveQueryToWorkbenchGroup = (projectId, queryId, groupId) => {
+  return request({
+    url: `/data/projects/${projectId}/queries/${queryId}/group`,
+    method: 'patch',
+    data: { groupId },
+  })
+}
+
+export const getTableGroupMembers = (projectId, connectionId) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/table-group-members`,
+    method: 'get',
+  })
+}
+
+export const moveTableToWorkbenchGroup = (projectId, connectionId, tableName, groupId) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/tables/${encodeURIComponent(tableName)}/group`,
+    method: 'patch',
+    data: { groupId },
   })
 }
 
@@ -182,7 +259,7 @@ export const getTableData = (projectId, connectionId, tableName, params = {}) =>
  */
 export const getTableStructure = (projectId, connectionId, tableName) => {
   return request({
-    url: `/data/projects/${projectId}/connections/${connectionId}/tables/${tableName}/structure`,
+    url: `/data/projects/${projectId}/connections/${connectionId}/tables/${encodeURIComponent(tableName)}/structure`,
     method: 'get',
   })
 }
@@ -1009,8 +1086,18 @@ export default {
   validateOpcdaContract,
   previewProtocol,
   getConnectionTables,
+  createConnectionTable,
+  renameConnectionTable,
+  deleteConnectionTable,
   getTableData,
   getTableStructure,
+  getWorkbenchGroups,
+  createWorkbenchGroup,
+  updateWorkbenchGroup,
+  deleteWorkbenchGroup,
+  moveQueryToWorkbenchGroup,
+  getTableGroupMembers,
+  moveTableToWorkbenchGroup,
   executeBuiltinRelationSql,
   queryBuiltinTimeseries,
   sampleBuiltinTimeseries,

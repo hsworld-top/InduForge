@@ -1,0 +1,436 @@
+package service
+
+import (
+	"fmt"
+	"net/http"
+	"regexp"
+	"strings"
+
+	"github.com/jackc/pgx/v5"
+
+	apperrors "github.com/indu-forge/data_service/internal/errors"
+)
+
+var tableDesignIdentifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func normalizeCreateTableInput(connectionType string, input CreateRelationalTableInput) (CreateRelationalTableInput, error) {
+	tableName, err := normalizeTableDesignIdentifier(input.Name, "表名")
+	if err != nil {
+		return CreateRelationalTableInput{}, err
+	}
+	kind := strings.TrimSpace(strings.ToLower(input.Kind))
+	if kind == "" {
+		kind = "table"
+	}
+	if kind != "table" && kind != "super_table" {
+		return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "表类型仅支持普通表或超表")
+	}
+	if kind == "super_table" && connectionType != "builtin.timeseries" && connectionType != "tdengine" {
+		return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "仅时序库支持超表")
+	}
+	if len(input.Columns) == 0 {
+		return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "至少需要一个字段")
+	}
+	columns := make([]CreateRelationalTableColumnInput, 0, len(input.Columns))
+	columnNames := map[string]struct{}{}
+	for _, column := range input.Columns {
+		normalizedColumn, err := normalizeTableColumnInput(column)
+		if err != nil {
+			return CreateRelationalTableInput{}, err
+		}
+		if _, exists := columnNames[normalizedColumn.Name]; exists {
+			return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "字段名重复: "+normalizedColumn.Name)
+		}
+		columnNames[normalizedColumn.Name] = struct{}{}
+		columns = append(columns, normalizedColumn)
+	}
+	indexes := make([]CreateRelationalTableIndexInput, 0, len(input.Indexes))
+	indexNames := map[string]struct{}{}
+	for _, index := range input.Indexes {
+		normalizedIndex, err := normalizeTableIndexInput(index, columnNames)
+		if err != nil {
+			return CreateRelationalTableInput{}, err
+		}
+		if _, exists := indexNames[normalizedIndex.Name]; exists {
+			return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "索引名重复: "+normalizedIndex.Name)
+		}
+		indexNames[normalizedIndex.Name] = struct{}{}
+		indexes = append(indexes, normalizedIndex)
+	}
+	var timeseries *CreateRelationalTimeseriesInput
+	if input.Timeseries != nil {
+		tags := make([]CreateRelationalTableColumnInput, 0, len(input.Timeseries.Tags))
+		tagNames := map[string]struct{}{}
+		for _, tag := range input.Timeseries.Tags {
+			normalizedTag, err := normalizeTableColumnInput(tag)
+			if err != nil {
+				return CreateRelationalTableInput{}, err
+			}
+			if _, exists := tagNames[normalizedTag.Name]; exists {
+				return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "标签名重复: "+normalizedTag.Name)
+			}
+			tagNames[normalizedTag.Name] = struct{}{}
+			tags = append(tags, normalizedTag)
+		}
+		timeseries = &CreateRelationalTimeseriesInput{
+			TimeColumn: strings.TrimSpace(input.Timeseries.TimeColumn),
+			Tags:       tags,
+		}
+	}
+	return CreateRelationalTableInput{
+		Name:       tableName,
+		Kind:       kind,
+		Columns:    columns,
+		Indexes:    indexes,
+		Timeseries: timeseries,
+	}, nil
+}
+
+func normalizeTableColumnInput(input CreateRelationalTableColumnInput) (CreateRelationalTableColumnInput, error) {
+	name, err := normalizeTableDesignIdentifier(input.Name, "字段名")
+	if err != nil {
+		return CreateRelationalTableColumnInput{}, err
+	}
+	columnType := strings.TrimSpace(strings.ToLower(input.Type))
+	if columnType == "" {
+		return CreateRelationalTableColumnInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "字段类型不能为空")
+	}
+	return CreateRelationalTableColumnInput{
+		Name:          name,
+		Type:          columnType,
+		Length:        normalizePositivePointer(input.Length),
+		Precision:     normalizePositivePointer(input.Precision),
+		Scale:         normalizeNonNegativePointer(input.Scale),
+		Nullable:      input.Nullable,
+		Primary:       input.Primary,
+		AutoIncrement: input.AutoIncrement,
+		DefaultValue:  strings.TrimSpace(input.DefaultValue),
+		Comment:       strings.TrimSpace(input.Comment),
+	}, nil
+}
+
+func normalizeTableIndexInput(input CreateRelationalTableIndexInput, columnNames map[string]struct{}) (CreateRelationalTableIndexInput, error) {
+	name, err := normalizeTableDesignIdentifier(input.Name, "索引名")
+	if err != nil {
+		return CreateRelationalTableIndexInput{}, err
+	}
+	indexType := strings.TrimSpace(strings.ToLower(input.Type))
+	if indexType == "" {
+		indexType = "index"
+	}
+	if indexType != "index" && indexType != "unique" {
+		return CreateRelationalTableIndexInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "索引类型仅支持普通索引或唯一索引")
+	}
+	columns := make([]string, 0, len(input.Columns))
+	for _, column := range input.Columns {
+		columnName, err := normalizeTableDesignIdentifier(column, "索引字段")
+		if err != nil {
+			return CreateRelationalTableIndexInput{}, err
+		}
+		if _, exists := columnNames[columnName]; !exists {
+			return CreateRelationalTableIndexInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "索引字段不存在: "+columnName)
+		}
+		columns = append(columns, columnName)
+	}
+	if len(columns) == 0 {
+		return CreateRelationalTableIndexInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "索引至少需要一个字段")
+	}
+	return CreateRelationalTableIndexInput{Name: name, Type: indexType, Columns: columns}, nil
+}
+
+func normalizeTableDesignIdentifier(value, label string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, label+"不能为空")
+	}
+	if !tableDesignIdentifierPattern.MatchString(value) {
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, label+"只能包含字母、数字、下划线，且不能以数字开头")
+	}
+	return value, nil
+}
+
+func normalizePositivePointer(value *int) *int {
+	if value == nil || *value <= 0 {
+		return nil
+	}
+	next := *value
+	return &next
+}
+
+func normalizeNonNegativePointer(value *int) *int {
+	if value == nil || *value < 0 {
+		return nil
+	}
+	next := *value
+	return &next
+}
+
+func buildCreateTableDDL(dbType, schema string, input CreateRelationalTableInput) (string, error) {
+	switch dbType {
+	case "mysql":
+		return buildMySQLCreateTableDDL(schema, input)
+	case "sqlserver":
+		return buildSQLServerCreateTableDDL(schema, input)
+	default:
+		return buildPostgresCreateTableDDL(schema, input)
+	}
+}
+
+func buildPostgresCreateTableDDL(schema string, input CreateRelationalTableInput) (string, error) {
+	definitions := make([]string, 0, len(input.Columns)+1)
+	primaryColumns := make([]string, 0)
+	for _, column := range input.Columns {
+		columnType, err := postgresColumnType(column)
+		if err != nil {
+			return "", err
+		}
+		definition := fmt.Sprintf("%s %s", pgx.Identifier{column.Name}.Sanitize(), columnType)
+		if column.Primary || !column.Nullable {
+			definition += " NOT NULL"
+		}
+		if column.DefaultValue != "" && !column.AutoIncrement {
+			definition += " DEFAULT " + column.DefaultValue
+		}
+		definitions = append(definitions, definition)
+		if column.Primary {
+			primaryColumns = append(primaryColumns, pgx.Identifier{column.Name}.Sanitize())
+		}
+	}
+	if len(primaryColumns) > 0 {
+		definitions = append(definitions, fmt.Sprintf("PRIMARY KEY (%s)", strings.Join(primaryColumns, ", ")))
+	}
+	tableName := pgx.Identifier{schema, input.Name}.Sanitize()
+	statements := []string{fmt.Sprintf("CREATE TABLE %s (\n  %s\n)", tableName, strings.Join(definitions, ",\n  "))}
+	for _, index := range input.Indexes {
+		columns := quotePostgresColumns(index.Columns)
+		prefix := "CREATE INDEX"
+		if index.Type == "unique" {
+			prefix = "CREATE UNIQUE INDEX"
+		}
+		statements = append(statements, fmt.Sprintf("%s %s ON %s (%s)", prefix, pgx.Identifier{index.Name}.Sanitize(), tableName, strings.Join(columns, ", ")))
+	}
+	return strings.Join(statements, ";\n") + ";", nil
+}
+
+func postgresColumnType(column CreateRelationalTableColumnInput) (string, error) {
+	if column.AutoIncrement {
+		if column.Type == "bigint" {
+			return "bigserial", nil
+		}
+		return "serial", nil
+	}
+	switch column.Type {
+	case "string", "varchar":
+		length := 255
+		if column.Length != nil {
+			length = *column.Length
+		}
+		return fmt.Sprintf("varchar(%d)", length), nil
+	case "text":
+		return "text", nil
+	case "int", "integer":
+		return "integer", nil
+	case "bigint":
+		return "bigint", nil
+	case "float", "double":
+		return "double precision", nil
+	case "decimal":
+		return decimalType("numeric", column), nil
+	case "boolean":
+		return "boolean", nil
+	case "datetime", "timestamp":
+		return "timestamp", nil
+	case "timestamptz":
+		return "timestamptz", nil
+	case "json", "jsonb":
+		return "jsonb", nil
+	default:
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "字段类型不受支持: "+column.Type)
+	}
+}
+
+func buildMySQLCreateTableDDL(schema string, input CreateRelationalTableInput) (string, error) {
+	definitions := make([]string, 0, len(input.Columns)+len(input.Indexes)+1)
+	primaryColumns := make([]string, 0)
+	for _, column := range input.Columns {
+		columnType, err := mysqlColumnType(column)
+		if err != nil {
+			return "", err
+		}
+		definition := fmt.Sprintf("`%s` %s", escapeMySQLIdentifier(column.Name), columnType)
+		if column.Primary || !column.Nullable {
+			definition += " NOT NULL"
+		}
+		if column.AutoIncrement {
+			definition += " AUTO_INCREMENT"
+		} else if column.DefaultValue != "" {
+			definition += " DEFAULT " + column.DefaultValue
+		}
+		definitions = append(definitions, definition)
+		if column.Primary {
+			primaryColumns = append(primaryColumns, fmt.Sprintf("`%s`", escapeMySQLIdentifier(column.Name)))
+		}
+	}
+	if len(primaryColumns) > 0 {
+		definitions = append(definitions, fmt.Sprintf("PRIMARY KEY (%s)", strings.Join(primaryColumns, ", ")))
+	}
+	for _, index := range input.Indexes {
+		columns := quoteMySQLColumns(index.Columns)
+		prefix := "KEY"
+		if index.Type == "unique" {
+			prefix = "UNIQUE KEY"
+		}
+		definitions = append(definitions, fmt.Sprintf("%s `%s` (%s)", prefix, escapeMySQLIdentifier(index.Name), strings.Join(columns, ", ")))
+	}
+	return fmt.Sprintf("CREATE TABLE `%s`.`%s` (\n  %s\n)", escapeMySQLIdentifier(schema), escapeMySQLIdentifier(input.Name), strings.Join(definitions, ",\n  ")), nil
+}
+
+func mysqlColumnType(column CreateRelationalTableColumnInput) (string, error) {
+	switch column.Type {
+	case "string", "varchar":
+		length := 255
+		if column.Length != nil {
+			length = *column.Length
+		}
+		return fmt.Sprintf("varchar(%d)", length), nil
+	case "text":
+		return "text", nil
+	case "int", "integer":
+		return "int", nil
+	case "bigint":
+		return "bigint", nil
+	case "float":
+		return "float", nil
+	case "double":
+		return "double", nil
+	case "decimal":
+		return decimalType("decimal", column), nil
+	case "boolean":
+		return "tinyint(1)", nil
+	case "datetime", "timestamp", "timestamptz":
+		return "datetime", nil
+	case "json", "jsonb":
+		return "json", nil
+	default:
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "字段类型不受支持: "+column.Type)
+	}
+}
+
+func buildSQLServerCreateTableDDL(schema string, input CreateRelationalTableInput) (string, error) {
+	tableName := fmt.Sprintf("[%s].[%s]", escapeSQLServerIdentifier(schema), escapeSQLServerIdentifier(input.Name))
+	definitions := make([]string, 0, len(input.Columns)+1)
+	primaryColumns := make([]string, 0)
+	for _, column := range input.Columns {
+		columnType, err := sqlServerColumnType(column)
+		if err != nil {
+			return "", err
+		}
+		definition := fmt.Sprintf("[%s] %s", escapeSQLServerIdentifier(column.Name), columnType)
+		if column.AutoIncrement {
+			definition += " IDENTITY(1,1)"
+		}
+		if column.Primary || !column.Nullable {
+			definition += " NOT NULL"
+		} else {
+			definition += " NULL"
+		}
+		if column.DefaultValue != "" && !column.AutoIncrement {
+			definition += " DEFAULT " + column.DefaultValue
+		}
+		definitions = append(definitions, definition)
+		if column.Primary {
+			primaryColumns = append(primaryColumns, fmt.Sprintf("[%s]", escapeSQLServerIdentifier(column.Name)))
+		}
+	}
+	if len(primaryColumns) > 0 {
+		definitions = append(definitions, fmt.Sprintf("CONSTRAINT [PK_%s] PRIMARY KEY (%s)", escapeSQLServerIdentifier(input.Name), strings.Join(primaryColumns, ", ")))
+	}
+	statements := []string{fmt.Sprintf("CREATE TABLE %s (\n  %s\n)", tableName, strings.Join(definitions, ",\n  "))}
+	for _, index := range input.Indexes {
+		columns := quoteSQLServerColumns(index.Columns)
+		prefix := "CREATE INDEX"
+		if index.Type == "unique" {
+			prefix = "CREATE UNIQUE INDEX"
+		}
+		statements = append(statements, fmt.Sprintf("%s [%s] ON %s (%s)", prefix, escapeSQLServerIdentifier(index.Name), tableName, strings.Join(columns, ", ")))
+	}
+	return strings.Join(statements, ";\n") + ";", nil
+}
+
+func sqlServerColumnType(column CreateRelationalTableColumnInput) (string, error) {
+	switch column.Type {
+	case "string", "varchar":
+		length := 255
+		if column.Length != nil {
+			length = *column.Length
+		}
+		return fmt.Sprintf("nvarchar(%d)", length), nil
+	case "text":
+		return "nvarchar(max)", nil
+	case "int", "integer":
+		return "int", nil
+	case "bigint":
+		return "bigint", nil
+	case "float", "double":
+		return "float", nil
+	case "decimal":
+		return decimalType("decimal", column), nil
+	case "boolean":
+		return "bit", nil
+	case "datetime", "timestamp", "timestamptz":
+		return "datetime2", nil
+	case "json", "jsonb":
+		return "nvarchar(max)", nil
+	default:
+		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "字段类型不受支持: "+column.Type)
+	}
+}
+
+func decimalType(name string, column CreateRelationalTableColumnInput) string {
+	precision := 18
+	scale := 2
+	if column.Precision != nil {
+		precision = *column.Precision
+	}
+	if column.Scale != nil {
+		scale = *column.Scale
+	}
+	return fmt.Sprintf("%s(%d,%d)", name, precision, scale)
+}
+
+func quotePostgresColumns(columns []string) []string {
+	result := make([]string, 0, len(columns))
+	for _, column := range columns {
+		result = append(result, pgx.Identifier{column}.Sanitize())
+	}
+	return result
+}
+
+func quoteMySQLColumns(columns []string) []string {
+	result := make([]string, 0, len(columns))
+	for _, column := range columns {
+		result = append(result, fmt.Sprintf("`%s`", escapeMySQLIdentifier(column)))
+	}
+	return result
+}
+
+func quoteSQLServerColumns(columns []string) []string {
+	result := make([]string, 0, len(columns))
+	for _, column := range columns {
+		result = append(result, fmt.Sprintf("[%s]", escapeSQLServerIdentifier(column)))
+	}
+	return result
+}
+
+func relationalTableKind(connectionType, dbType, tableType, tableName string) string {
+	normalizedType := strings.ToUpper(strings.TrimSpace(tableType))
+	if strings.Contains(normalizedType, "VIEW") {
+		return "view"
+	}
+	if dbType == "tdengine" {
+		if strings.Contains(normalizedType, "STABLE") || strings.Contains(normalizedType, "SUPER") {
+			return "super_table"
+		}
+	}
+	return "table"
+}

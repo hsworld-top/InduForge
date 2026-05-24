@@ -25,6 +25,7 @@ type QueryRecord struct {
 	Name            string
 	Description     *string
 	Category        *string
+	GroupID         *string
 	QueryType       string
 	Config          map[string]any
 	Transformer     *string
@@ -73,7 +74,7 @@ func (r *QueryRepository) ListByProject(ctx context.Context, projectID string, f
 
 	selectArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, connection_id, name, description, category, query_type, config, transformer,
+        SELECT id, project_id, connection_id, name, description, category, group_id, query_type, config, transformer,
                is_enabled, timeout_ms, cache_enabled, cache_ttl_seconds, created_by, updated_by, created_at, updated_at
         FROM data_queries
         WHERE `+whereSQL+`
@@ -105,7 +106,7 @@ func (r *QueryRepository) ListByProject(ctx context.Context, projectID string, f
 // 潜在性能风险：若后续频繁按 project_id + id 复合访问，可再评估联合索引，但当前主键命中已足够稳定。
 func (r *QueryRepository) GetByProjectAndID(ctx context.Context, projectID, queryID string) (*QueryRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-        SELECT id, project_id, connection_id, name, description, category, query_type, config, transformer,
+        SELECT id, project_id, connection_id, name, description, category, group_id, query_type, config, transformer,
                is_enabled, timeout_ms, cache_enabled, cache_ttl_seconds, created_by, updated_by, created_at, updated_at
         FROM data_queries
         WHERE project_id = $1 AND id = $2
@@ -123,7 +124,7 @@ func (r *QueryRepository) GetByProjectAndID(ctx context.Context, projectID, quer
 // 潜在性能风险：如果后续大量依赖 project_id 过滤，仍建议在业务侧尽量保留项目边界参数。
 func (r *QueryRepository) GetByID(ctx context.Context, queryID string) (*QueryRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-        SELECT id, project_id, connection_id, name, description, category, query_type, config, transformer,
+        SELECT id, project_id, connection_id, name, description, category, group_id, query_type, config, transformer,
                is_enabled, timeout_ms, cache_enabled, cache_ttl_seconds, created_by, updated_by, created_at, updated_at
         FROM data_queries
         WHERE id = $1
@@ -152,6 +153,7 @@ func (r *QueryRepository) Create(ctx context.Context, params CreateQueryParams) 
             name,
             description,
             category,
+            group_id,
             query_type,
             config,
             transformer,
@@ -162,10 +164,10 @@ func (r *QueryRepository) Create(ctx context.Context, params CreateQueryParams) 
             created_by,
             updated_by
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $13)
-        RETURNING id, project_id, connection_id, name, description, category, query_type, config, transformer,
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $14)
+        RETURNING id, project_id, connection_id, name, description, category, group_id, query_type, config, transformer,
                   is_enabled, timeout_ms, cache_enabled, cache_ttl_seconds, created_by, updated_by, created_at, updated_at
-    `, params.ProjectID, params.ConnectionID, params.Name, params.Description, params.Category, params.QueryType, string(configBytes), params.Transformer, params.IsEnabled, params.TimeoutMS, params.CacheEnabled, params.CacheTtlSeconds, params.UserID)
+    `, params.ProjectID, params.ConnectionID, params.Name, params.Description, params.Category, params.GroupID, params.QueryType, string(configBytes), params.Transformer, params.IsEnabled, params.TimeoutMS, params.CacheEnabled, params.CacheTtlSeconds, params.UserID)
 
 	record, err := scanQueryRecord(row)
 	if err != nil {
@@ -190,19 +192,20 @@ func (r *QueryRepository) Update(ctx context.Context, params UpdateQueryParams) 
             name = $4,
             description = $5,
             category = $6,
-            query_type = $7,
-            config = $8::jsonb,
-            transformer = $9,
-            is_enabled = $10,
-            timeout_ms = $11,
-            cache_enabled = $12,
-            cache_ttl_seconds = $13,
-            updated_by = $14,
+            group_id = $7,
+            query_type = $8,
+            config = $9::jsonb,
+            transformer = $10,
+            is_enabled = $11,
+            timeout_ms = $12,
+            cache_enabled = $13,
+            cache_ttl_seconds = $14,
+            updated_by = $15,
             updated_at = now()
         WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, connection_id, name, description, category, query_type, config, transformer,
+        RETURNING id, project_id, connection_id, name, description, category, group_id, query_type, config, transformer,
                   is_enabled, timeout_ms, cache_enabled, cache_ttl_seconds, created_by, updated_by, created_at, updated_at
-    `, params.ProjectID, params.ID, params.ConnectionID, params.Name, params.Description, params.Category, params.QueryType, string(configBytes), params.Transformer, params.IsEnabled, params.TimeoutMS, params.CacheEnabled, params.CacheTtlSeconds, params.UserID)
+    `, params.ProjectID, params.ID, params.ConnectionID, params.Name, params.Description, params.Category, params.GroupID, params.QueryType, string(configBytes), params.Transformer, params.IsEnabled, params.TimeoutMS, params.CacheEnabled, params.CacheTtlSeconds, params.UserID)
 
 	record, err := scanQueryRecord(row)
 	if err != nil {
@@ -237,6 +240,7 @@ type CreateQueryParams struct {
 	Name            string
 	Description     *string
 	Category        *string
+	GroupID         *string
 	QueryType       string
 	Config          map[string]any
 	Transformer     *string
@@ -255,6 +259,7 @@ type UpdateQueryParams struct {
 	Name            string
 	Description     *string
 	Category        *string
+	GroupID         *string
 	QueryType       string
 	Config          map[string]any
 	Transformer     *string
@@ -273,6 +278,7 @@ func scanQueryRecord(row queryScannable) (QueryRecord, error) {
 		record      QueryRecord
 		description sql.NullString
 		category    sql.NullString
+		groupID     sql.NullString
 		transformer sql.NullString
 		updatedBy   sql.NullString
 		configBytes []byte
@@ -285,6 +291,7 @@ func scanQueryRecord(row queryScannable) (QueryRecord, error) {
 		&record.Name,
 		&description,
 		&category,
+		&groupID,
 		&record.QueryType,
 		&configBytes,
 		&transformer,
@@ -305,6 +312,7 @@ func scanQueryRecord(row queryScannable) (QueryRecord, error) {
 
 	record.Description = nullStringToPtr(description)
 	record.Category = nullStringToPtr(category)
+	record.GroupID = nullStringToPtr(groupID)
 	record.Transformer = nullStringToPtr(transformer)
 	record.UpdatedBy = nullStringToPtr(updatedBy)
 	record.Config = map[string]any{}

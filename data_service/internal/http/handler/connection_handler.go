@@ -209,6 +209,81 @@ func (h *ConnectionHandler) ListTables(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
+// CreateTable 按结构化表设计创建表。
+func (h *ConnectionHandler) CreateTable(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+
+	var request struct {
+		Name       string                                     `json:"name"`
+		Kind       string                                     `json:"kind"`
+		Columns    []service.CreateRelationalTableColumnInput `json:"columns"`
+		Indexes    []service.CreateRelationalTableIndexInput  `json:"indexes"`
+		Timeseries *service.CreateRelationalTimeseriesInput   `json:"timeseries"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+
+	result, err := h.service.CreateTable(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), service.CreateRelationalTableInput{
+		Name:       request.Name,
+		Kind:       request.Kind,
+		Columns:    request.Columns,
+		Indexes:    request.Indexes,
+		Timeseries: request.Timeseries,
+	})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// RenameTable 重命名物理表，并同步工作台表分组映射。
+func (h *ConnectionHandler) RenameTable(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Name string `json:"name"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	if err := h.service.RenameTable(
+		r.Context(),
+		r.PathValue("projectId"),
+		r.PathValue("connectionId"),
+		r.PathValue("tableName"),
+		request.Name,
+		claims.UserID,
+	); err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"renamed": true})
+	return nil
+}
+
+// DeleteTable 删除物理表，并清理工作台表分组映射。
+func (h *ConnectionHandler) DeleteTable(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	if err := h.service.DeleteTable(
+		r.Context(),
+		r.PathValue("projectId"),
+		r.PathValue("connectionId"),
+		r.PathValue("tableName"),
+	); err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"deleted": true})
+	return nil
+}
+
 // GetTableStructure 返回表结构。
 func (h *ConnectionHandler) GetTableStructure(w http.ResponseWriter, r *http.Request) error {
 	if _, err := requireClaims(r); err != nil {

@@ -78,6 +78,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_builtin_realtime_keys",
 		"data_builtin_message_topics",
 		"data_builtin_message_variables",
+		"data_workbench_object_groups",
+		"data_table_group_members",
 	} {
 		if !tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
 			t.Fatalf("expected table %s to exist", tableName)
@@ -88,8 +90,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&appliedCount); err != nil {
 		t.Fatalf("鏌ヨ schema_migrations 澶辫触: %v", err)
 	}
-	if appliedCount != 25 {
-		t.Fatalf("expected 25 migration records, got %d", appliedCount)
+	if appliedCount != 26 {
+		t.Fatalf("expected 26 migration records, got %d", appliedCount)
 	}
 
 	if err := migrator.DownAll(ctx); err != nil {
@@ -118,6 +120,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_compute_runs",
 		"data_alarm_policy_groups",
 		"data_alarm_policies",
+		"data_workbench_object_groups",
+		"data_table_group_members",
 	} {
 		if tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
 			t.Fatalf("鏈熸湜琛?%s 宸茶鍒犻櫎", tableName)
@@ -185,6 +189,10 @@ func TestMigrationIndexes(t *testing.T) {
 		"data_alarm_policies_project_group_idx",
 		"data_alarm_policies_project_updated_idx",
 		"data_alarm_policies_project_enabled_idx",
+		"data_workbench_object_groups_name_key",
+		"data_workbench_object_groups_connection_scope_idx",
+		"data_queries_project_connection_group_idx",
+		"data_table_group_members_group_idx",
 	} {
 		if _, ok := indexes[indexName]; !ok {
 			t.Fatalf("鏈熸湜绱㈠紩/绾︽潫绱㈠紩 %s 瀛樺湪锛屽綋鍓嶇储寮曢泦鍚堜负 %v", indexName, mapsKeys(indexes))

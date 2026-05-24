@@ -163,6 +163,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	alarmPolicyRepository := repository.NewAlarmPolicyRepository(pool)
 	contractCheckRepository := repository.NewContractCheckRepository(pool)
 	queryRepository := repository.NewQueryRepository(pool)
+	workbenchGroupRepository := repository.NewWorkbenchGroupRepository(pool)
 	dataPointRepository := repository.NewDataPointRepository(pool)
 	mqttRepository := repository.NewMqttRepository(pool)
 	projectSnapshotRepository := repository.NewProjectSnapshotRepository(pool)
@@ -177,6 +178,9 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	builtinRuntimeService := newBuiltinRuntimeServiceFromConfig(cfg, pool, devPool, &cleanupFns)
 	connectionService := service.NewConnectionService(connectionRepository, builtinRuntimeService)
 	queryService := service.NewQueryService(queryRepository, connectionRepository, dataPointRepository)
+	queryService.SetBuiltinRuntime(builtinRuntimeService)
+	workbenchGroupService := service.NewWorkbenchGroupService(workbenchGroupRepository, connectionRepository)
+	connectionService.SetWorkbenchGroupService(workbenchGroupService)
 	dataPointService := service.NewDataPointService(dataPointRepository, queryService, mqttRepository, computeRepository)
 	mqttService := service.NewMqttService(mqttRepository, connectionRepository, dataPointRepository)
 	projectSnapshotService := service.NewProjectSnapshotService(projectSnapshotRepository)
@@ -200,6 +204,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	connectionHandler := handler.NewConnectionHandler(connectionService)
 	builtinRuntimeHandler := handler.NewBuiltinRuntimeHandler(builtinRuntimeService, connectionService)
 	queryHandler := handler.NewQueryHandler(queryService)
+	workbenchGroupHandler := handler.NewWorkbenchGroupHandler(workbenchGroupService)
 	dataPointHandler := handler.NewDataPointHandler(dataPointService)
 	mqttHandler := handler.NewMqttHandler(mqttService)
 	projectSnapshotHandler := handler.NewProjectSnapshotHandler(projectSnapshotService)
@@ -215,6 +220,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		router.WithContractCheckRoutes(contractCheckHandler, jwtValidator),
 		router.WithConnectionRoutes(connectionHandler, jwtValidator),
 		router.WithDataRoutes(queryHandler, dataPointHandler, jwtValidator),
+		router.WithWorkbenchGroupRoutes(workbenchGroupHandler, jwtValidator),
 		router.WithMqttRoutes(mqttHandler, jwtValidator),
 		router.WithProjectSnapshotRoutes(projectSnapshotHandler, jwtValidator),
 		router.WithProtocolWave1Routes(protocolWave1Handler, jwtValidator),

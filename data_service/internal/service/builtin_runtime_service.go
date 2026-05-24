@@ -318,11 +318,15 @@ func (s *BuiltinRuntimeService) ListTablesInSchema(ctx context.Context, schemaNa
 		return nil, err
 	}
 	rows, err := s.devPool.Query(ctx, `
-		SELECT table_schema, table_name, table_type
-		FROM information_schema.tables
-		WHERE table_schema = $1
-		  AND table_type IN ('BASE TABLE', 'VIEW')
-		ORDER BY table_name
+		SELECT t.table_schema, t.table_name, t.table_type, COALESCE(m.kind, '')
+		FROM information_schema.tables t
+		LEFT JOIN if_table_metadata m
+		  ON m.schema_name = t.table_schema
+		 AND m.table_name = t.table_name
+		WHERE t.table_schema = $1
+		  AND t.table_type IN ('BASE TABLE', 'VIEW')
+		  AND t.table_name NOT IN ('if_schema_migrations', 'if_table_metadata')
+		ORDER BY t.table_name
 	`, schemaName)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询内置运行库表列表失败", err)
@@ -331,8 +335,13 @@ func (s *BuiltinRuntimeService) ListTablesInSchema(ctx context.Context, schemaNa
 	tables := make([]RelationalTable, 0)
 	for rows.Next() {
 		table := RelationalTable{}
-		if err := rows.Scan(&table.Schema, &table.Name, &table.Type); err != nil {
+		var storedKind string
+		if err := rows.Scan(&table.Schema, &table.Name, &table.Type, &storedKind); err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取内置运行库表列表失败", err)
+		}
+		table.Kind = relationalTableKind("builtin.relation", "postgresql", table.Type, table.Name)
+		if storedKind != "" {
+			table.Kind = storedKind
 		}
 		tables = append(tables, table)
 	}
@@ -340,6 +349,35 @@ func (s *BuiltinRuntimeService) ListTablesInSchema(ctx context.Context, schemaNa
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历内置运行库表列表失败", err)
 	}
 	return tables, nil
+}
+
+func (s *BuiltinRuntimeService) CreateTableInSchema(ctx context.Context, schemaName string, input CreateRelationalTableInput) error {
+	if s == nil || s.devPool == nil {
+		return apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开发态关系/时序运行库未初始化")
+	}
+	schemaName = sanitizeBuiltinIdentifier(schemaName, "")
+	if schemaName == "" {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "内置运行库 schema 无效")
+	}
+	if err := s.ensureSchema(ctx, schemaName); err != nil {
+		return err
+	}
+	ddl, err := buildCreateTableDDL("postgresql", schemaName, input)
+	if err != nil {
+		return err
+	}
+	if _, err := s.devPool.Exec(ctx, ddl); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "创建内置运行库表失败", err)
+	}
+	if _, err := s.devPool.Exec(ctx, `
+		INSERT INTO if_table_metadata (schema_name, table_name, kind)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (schema_name, table_name)
+		DO UPDATE SET kind = EXCLUDED.kind, updated_at = now()
+	`, schemaName, input.Name, input.Kind); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "记录内置运行库表元数据失败", err)
+	}
+	return nil
 }
 
 func (s *BuiltinRuntimeService) GetTableStructureInSchema(ctx context.Context, schemaName, tableName string) (*RelationalTableStructure, error) {
@@ -375,6 +413,57 @@ func (s *BuiltinRuntimeService) GetTableStructureInSchema(ctx context.Context, s
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历内置运行库表结构失败", err)
 	}
 	return &RelationalTableStructure{Columns: columns, Indexes: []RelationalIndex{}, ForeignKeys: []RelationalForeignKey{}}, nil
+}
+
+func (s *BuiltinRuntimeService) RenameTableInSchema(ctx context.Context, schemaName, oldName, newName string) error {
+	if s == nil || s.devPool == nil {
+		return apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开发态关系/时序运行库未初始化")
+	}
+	schemaName = sanitizeBuiltinIdentifier(schemaName, "")
+	oldName = sanitizeBuiltinIdentifier(oldName, "")
+	newName = sanitizeBuiltinIdentifier(newName, "")
+	if schemaName == "" || oldName == "" || newName == "" {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "内置运行库表名无效")
+	}
+	if _, err := s.devPool.Exec(ctx, fmt.Sprintf(
+		"ALTER TABLE %s RENAME TO %s",
+		pgx.Identifier{schemaName, oldName}.Sanitize(),
+		pgx.Identifier{newName}.Sanitize(),
+	)); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "重命名内置运行库表失败", err)
+	}
+	if _, err := s.devPool.Exec(ctx, `
+		UPDATE if_table_metadata
+		SET table_name = $3, updated_at = now()
+		WHERE schema_name = $1 AND table_name = $2
+	`, schemaName, oldName, newName); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "更新内置运行库表元数据失败", err)
+	}
+	return nil
+}
+
+func (s *BuiltinRuntimeService) DeleteTableInSchema(ctx context.Context, schemaName, tableName string) error {
+	if s == nil || s.devPool == nil {
+		return apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开发态关系/时序运行库未初始化")
+	}
+	schemaName = sanitizeBuiltinIdentifier(schemaName, "")
+	tableName = sanitizeBuiltinIdentifier(tableName, "")
+	if schemaName == "" || tableName == "" {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "内置运行库表名无效")
+	}
+	if _, err := s.devPool.Exec(ctx, fmt.Sprintf(
+		"DROP TABLE %s",
+		pgx.Identifier{schemaName, tableName}.Sanitize(),
+	)); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "删除内置运行库表失败", err)
+	}
+	if _, err := s.devPool.Exec(ctx, `
+		DELETE FROM if_table_metadata
+		WHERE schema_name = $1 AND table_name = $2
+	`, schemaName, tableName); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "删除内置运行库表元数据失败", err)
+	}
+	return nil
 }
 
 func (s *BuiltinRuntimeService) WriteTimeseriesSample(ctx context.Context, projectID string, input BuiltinTimeseriesSampleInput) (*BuiltinSQLExecuteResult, error) {
@@ -853,6 +942,17 @@ func (s *BuiltinRuntimeService) ensureSchema(ctx context.Context, schemaName str
 		)
 	`, identifier)); err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "创建开发态迁移表失败", err)
+	}
+	if _, err := s.devPool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS if_table_metadata (
+			schema_name text NOT NULL,
+			table_name text NOT NULL,
+			kind text NOT NULL DEFAULT 'table',
+			updated_at timestamptz NOT NULL DEFAULT now(),
+			PRIMARY KEY (schema_name, table_name)
+		)
+	`); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "创建开发态表元数据失败", err)
 	}
 	return nil
 }

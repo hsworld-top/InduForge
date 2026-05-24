@@ -1,5 +1,6 @@
 <template>
   <DcDialog
+    ref="dialogRef"
     v-model="visible"
     title="新建报警分组"
     width="460px"
@@ -50,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import type { AlarmPolicyGroup, AlarmPolicyGroupSave } from '@/api/schemas/alarm.schema'
 import DcDialog from '@/components/shared/DcDialog.vue'
 
@@ -76,6 +77,7 @@ const visible = computed({
   get: () => props.modelValue,
   set: (value: boolean) => emit('update:modelValue', value),
 })
+const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
 
 const form = reactive<AlarmPolicyGroupSave>({
   name: '',
@@ -114,12 +116,18 @@ function submit() {
   })
 }
 
+function closeSilently() {
+  dialogRef.value?.closeSilently()
+}
+
 watch(
   () => props.modelValue,
   (open) => {
     if (open) resetForm()
   },
 )
+
+defineExpose({ closeSilently })
 </script>
 
 <style scoped>
