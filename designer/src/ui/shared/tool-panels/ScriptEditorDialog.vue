@@ -110,6 +110,7 @@ function handlePageVariableInsert(row: PageVariableRowLike) {
   <el-dialog
     v-model="visible"
     :title="dialogTitle"
+    class="script-editor-dialog"
     width="1120px"
     top="3vh"
     :close-on-click-modal="false"
@@ -253,9 +254,40 @@ function handlePageVariableInsert(row: PageVariableRowLike) {
 </template>
 
 <style scoped>
+.script-editor-dialog {
+  --script-dialog-border: #e6ebf2;
+  --script-dialog-soft: #f7f9fc;
+  --script-dialog-hover: #f0f5ff;
+  --script-dialog-primary: #3b82f6;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.script-editor-dialog :deep(.el-dialog__header) {
+  margin-right: 0;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--script-dialog-border);
+}
+
+.script-editor-dialog :deep(.el-dialog__title) {
+  color: var(--designer-text-primary);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.script-editor-dialog :deep(.el-dialog__body) {
+  padding: 14px 18px 0;
+}
+
+.script-editor-dialog :deep(.el-dialog__footer) {
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--script-dialog-border);
+  background: #fff;
+}
+
 .editor-body {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   flex: 1;
   align-items: stretch;
   height: 520px;
@@ -277,9 +309,12 @@ function handlePageVariableInsert(row: PageVariableRowLike) {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 42px;
-  margin-bottom: 10px;
-  padding: 0 2px;
+  min-height: 46px;
+  margin-bottom: 12px;
+  padding: 0 12px;
+  border: 1px solid var(--script-dialog-border);
+  border-radius: 8px;
+  background: var(--script-dialog-soft);
 }
 
 .editor-tabs {
@@ -319,25 +354,31 @@ function handlePageVariableInsert(row: PageVariableRowLike) {
 }
 
 .icon-button {
-  background: var(--designer-primary-soft);
+  background: #eaf2ff;
   border: none;
-  color: var(--designer-primary-text);
+  color: var(--script-dialog-primary);
 }
 
 .icon-button:hover {
-  background: var(--designer-hover-surface);
+  background: #dbeafe;
 }
 
 .editor-main {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--script-dialog-border);
+  border-radius: 8px;
+  background: #fff;
 }
 
 .editor-sidebar {
-  width: 200px;
+  width: 246px;
   height: 520px;
-  border-left: 1px solid var(--designer-border-color);
-  padding-left: 12px;
+  padding: 8px 10px 10px;
+  border: 1px solid var(--script-dialog-border);
+  border-radius: 8px;
+  background: var(--script-dialog-soft);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -351,7 +392,7 @@ function handlePageVariableInsert(row: PageVariableRowLike) {
 }
 
 .sidebar-tabs :deep(.el-tabs__header) {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
 }
 
 .sidebar-tabs :deep(.el-tabs__nav-wrap::after) {
@@ -361,7 +402,7 @@ function handlePageVariableInsert(row: PageVariableRowLike) {
 
 .sidebar-tabs :deep(.el-tabs__item) {
   height: 32px;
-  padding: 0 10px;
+  padding: 0 9px;
   font-size: 12px;
 }
 
@@ -374,7 +415,7 @@ function handlePageVariableInsert(row: PageVariableRowLike) {
 .sidebar-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   flex: 1;
   min-height: 0;
 }
@@ -389,7 +430,7 @@ function handlePageVariableInsert(row: PageVariableRowLike) {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding-right: 4px;
+  padding: 2px 2px 2px 0;
 }
 
 .tree-node {
@@ -398,9 +439,14 @@ function handlePageVariableInsert(row: PageVariableRowLike) {
   gap: 8px;
   min-width: 0;
   width: 100%;
+  min-height: 32px;
   padding: 6px 8px;
   border-radius: 6px;
   transition: background-color 0.2s;
+}
+
+.tree-node:hover {
+  background: var(--script-dialog-hover);
 }
 
 .node-icon {
@@ -440,14 +486,14 @@ function handlePageVariableInsert(row: PageVariableRowLike) {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 28px;
-  padding: 4px 6px;
+  min-height: 32px;
+  padding: 5px 8px;
   border-radius: var(--designer-radius-sm);
   cursor: pointer;
 }
 
 .page-var-item:hover {
-  background: var(--designer-hover-surface);
+  background: var(--script-dialog-hover);
 }
 
 .page-var-type {

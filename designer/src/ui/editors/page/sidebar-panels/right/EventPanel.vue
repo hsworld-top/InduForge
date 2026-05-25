@@ -375,6 +375,7 @@ const jsCompletions = computed<any[]>(() => {
       prefix: '$global.',
     })
   })
+
   ;((globalScripts.value?.custom?.items || []) as any[]).forEach((script) => {
     if (!script?.name) return
     const params =
@@ -535,6 +536,7 @@ function confirmEnumInsert(): void {
   <el-dialog
     v-model="editorVisible"
     :title="editorTitle"
+    class="component-event-editor-dialog"
     width="980px"
     top="3vh"
     :close-on-click-modal="false"
@@ -645,6 +647,7 @@ function confirmEnumInsert(): void {
   <el-dialog
     v-model="variableEnumVisible"
     title="变量枚举"
+    class="component-event-variable-dialog"
     width="760px"
     :close-on-click-modal="false"
     :lock-scroll="false"
@@ -708,17 +711,29 @@ function confirmEnumInsert(): void {
 .event-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
+  padding: 4px;
 }
 
 .event-item {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 6px 8px;
+  min-height: 48px;
+  padding: 8px 8px 8px 10px;
   border-radius: 8px;
-  border: 1px solid #e4e7ed;
-  background: var(--designer-shell-surface);
+  border: 1px solid #edf1f6;
+  background: #fff;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.event-item:hover {
+  border-color: #dbeafe;
+  background: #fbfdff;
+  box-shadow: 0 1px 4px rgba(59, 130, 246, 0.06);
 }
 
 .event-row {
@@ -745,9 +760,9 @@ function confirmEnumInsert(): void {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
-  border-radius: 8px;
-  background: var(--el-fill-color-lighter);
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #f8fafc;
 }
 
 .event-label {
@@ -766,15 +781,43 @@ function confirmEnumInsert(): void {
   background: #e0e7ff;
 }
 
+.event-list :deep(.el-switch) {
+  --el-switch-on-color: #3b82f6;
+}
+
+.component-event-editor-dialog,
+.component-event-variable-dialog {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.component-event-editor-dialog :deep(.el-dialog__header),
+.component-event-variable-dialog :deep(.el-dialog__header) {
+  margin-right: 0;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #e6ebf2;
+}
+
+.component-event-editor-dialog :deep(.el-dialog__body),
+.component-event-variable-dialog :deep(.el-dialog__body) {
+  padding: 16px 20px;
+}
+
+.component-event-editor-dialog :deep(.el-dialog__footer),
+.component-event-variable-dialog :deep(.el-dialog__footer) {
+  padding: 12px 20px 16px;
+  border-top: 1px solid #e6ebf2;
+}
+
 .editor-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 10px 16px;
   padding: 10px 12px;
-  border: 1px solid #e4e7ed;
-  border-radius: 6px;
-  background: #fafafa;
-  margin-bottom: 10px;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
+  background: #f8fafc;
+  margin-bottom: 12px;
   align-items: center;
 }
 
@@ -816,13 +859,18 @@ function confirmEnumInsert(): void {
 .editor-main {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
 }
 
 .editor-sidebar {
-  width: 220px;
+  width: 242px;
   height: 520px;
-  border-left: 1px solid #e4e7ed;
-  padding-left: 12px;
+  padding: 10px;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
+  background: #f8fafc;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -943,14 +991,17 @@ function confirmEnumInsert(): void {
 
 .enum-layout {
   display: flex;
-  gap: 12px;
-  padding-top: 8px;
+  gap: 14px;
+  min-height: 340px;
+  padding-top: 2px;
 }
 
 .enum-left {
   width: 200px;
-  border-right: 1px solid #e4e7ed;
-  padding-right: 8px;
+  padding: 10px;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
+  background: #f8fafc;
   max-height: 360px;
   overflow: auto;
 }
@@ -961,6 +1012,9 @@ function confirmEnumInsert(): void {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 10px;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
 }
 
 .enum-right :deep(.el-table__row.is-selected) {

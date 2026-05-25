@@ -137,7 +137,7 @@ function handleNodeClick(data: ScriptTreeNodeLike, event: MouseEvent) {
 <style scoped>
 .scripts-layout {
   display: block;
-  padding: 4px 4px 8px;
+  padding: 6px 4px 8px;
   box-sizing: border-box;
 }
 
@@ -214,8 +214,10 @@ function handleNodeClick(data: ScriptTreeNodeLike, event: MouseEvent) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 40px;
-  padding: 0 8px;
+  min-height: 46px;
+  padding: 0 10px;
+  border: 1px dashed #e2e8f0;
+  border-radius: 8px;
   color: var(--designer-text-muted);
 }
 
@@ -229,9 +231,10 @@ function handleNodeClick(data: ScriptTreeNodeLike, event: MouseEvent) {
   gap: 8px;
   min-width: 0;
   width: 100%;
-  height: 32px;
-  padding: 0 8px;
-  border-radius: 6px;
+  height: 38px;
+  padding: 0 8px 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
   transition: background-color 0.2s;
 }
 
@@ -249,11 +252,13 @@ function handleNodeClick(data: ScriptTreeNodeLike, event: MouseEvent) {
 }
 
 .tree-node:hover {
-  background: var(--designer-hover-surface);
+  border-color: #dbeafe;
+  background: #f5f9ff;
 }
 
 .tree-node.is-selected {
-  background: var(--designer-primary-soft);
+  border-color: #bfdbfe;
+  background: #eef5ff;
   color: var(--designer-text-primary);
 }
 
@@ -272,7 +277,7 @@ function handleNodeClick(data: ScriptTreeNodeLike, event: MouseEvent) {
 }
 
 .row-action {
-  opacity: 0;
+  opacity: 0.65;
   color: var(--designer-primary-text);
 }
 

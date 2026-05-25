@@ -48,11 +48,12 @@ function handleMarkers(payload: unknown) {
         ? t('datapointPanel.variableDialog.editTitle')
         : t('datapointPanel.variableDialog.createTitle')
     "
+    class="variable-editor-dialog"
     width="520px"
     :close-on-click-modal="false"
     :lock-scroll="false"
   >
-    <el-form label-width="80px">
+    <el-form class="variable-editor-form" label-width="80px">
       <el-form-item :label="t('datapointPanel.variableDialog.name')">
         <el-input v-model="editName" />
       </el-form-item>
@@ -125,10 +126,59 @@ function handleMarkers(payload: unknown) {
 </template>
 
 <style scoped>
+.variable-editor-dialog {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.variable-editor-dialog :deep(.el-dialog__header) {
+  margin-right: 0;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #e6ebf2;
+}
+
+.variable-editor-dialog :deep(.el-dialog__title) {
+  color: #1f2937;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.variable-editor-dialog :deep(.el-dialog__body) {
+  padding: 20px 22px 8px;
+}
+
+.variable-editor-dialog :deep(.el-dialog__footer) {
+  padding: 14px 20px 16px;
+  border-top: 1px solid #e6ebf2;
+}
+
+.variable-editor-form :deep(.el-form-item) {
+  margin-bottom: 18px;
+}
+
+.variable-editor-form :deep(.el-input),
+.variable-editor-form :deep(.el-select),
+.variable-editor-form :deep(.el-textarea) {
+  width: 100%;
+}
+
+.variable-editor-form :deep(.el-input__wrapper),
+.variable-editor-form :deep(.el-select__wrapper) {
+  min-height: 34px;
+  border-radius: 6px;
+}
+
+.variable-editor-form :deep(.el-textarea__inner) {
+  border-radius: 6px;
+}
+
 .edit-value-block {
   width: 100%;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  overflow: hidden;
+  border: 1px solid #e6ebf2;
+  border-radius: 6px;
 }
 </style>

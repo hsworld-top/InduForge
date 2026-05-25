@@ -1661,6 +1661,7 @@ onUnmounted(() => {
     <el-dialog
       v-model="variableEnumVisible"
       :title="t('scriptPanel.variableEnum.title')"
+      class="script-variable-enum-dialog"
       width="760px"
       :close-on-click-modal="false"
       :lock-scroll="false"
@@ -1834,6 +1835,8 @@ onUnmounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
+  padding: 4px 6px 8px;
+  background: #fff;
 }
 
 .scripts-collapse {
@@ -1841,25 +1844,32 @@ onUnmounted(() => {
   flex: 1;
   overflow: auto;
   padding-bottom: 8px;
+  border: 0;
 }
 
 :deep(.scripts-collapse .el-collapse-item__header) {
   font-weight: 600;
-  height: 40px;
-  line-height: 40px;
-  padding: 0 4px;
+  height: 44px;
+  line-height: 44px;
+  margin-top: 6px;
+  padding: 0 10px;
+  border: 1px solid #e8edf5;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2937;
 }
 
 :deep(.scripts-collapse .el-collapse-item) {
-  border-bottom: 1px solid color-mix(in srgb, var(--designer-border-color) 70%, transparent);
+  border-bottom: 0;
 }
 
 :deep(.scripts-collapse .el-collapse-item__wrap) {
   border-bottom: 0;
+  background: transparent;
 }
 
 :deep(.scripts-collapse .el-collapse-item__content) {
-  padding: 0;
+  padding: 4px 0 0;
 }
 
 .scripts-layout {
@@ -1992,13 +2002,16 @@ onUnmounted(() => {
 
 .enum-layout {
   display: flex;
-  gap: 12px;
+  gap: 14px;
+  min-height: 360px;
 }
 
 .enum-left {
   width: 200px;
-  border-right: 1px solid var(--designer-border-color);
-  padding-right: 8px;
+  padding: 10px;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
+  background: #f8fafc;
   max-height: 420px;
   overflow: auto;
 }
@@ -2009,10 +2022,33 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 10px;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
 }
 
 .enum-right :deep(.el-table__row.is-selected) {
   background: var(--designer-primary-soft);
+}
+
+.script-variable-enum-dialog {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.script-variable-enum-dialog :deep(.el-dialog__header) {
+  margin-right: 0;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #e6ebf2;
+}
+
+.script-variable-enum-dialog :deep(.el-dialog__body) {
+  padding: 16px 20px;
+}
+
+.script-variable-enum-dialog :deep(.el-dialog__footer) {
+  padding: 12px 20px 16px;
+  border-top: 1px solid #e6ebf2;
 }
 
 :deep(.scripts-list .el-tree) {

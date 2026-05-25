@@ -61,6 +61,12 @@ interface QueueItem {
   reject: (err: unknown) => void
 }
 
+interface RetriableRequestConfig extends InternalAxiosRequestConfig {
+  _retry?: boolean
+}
+
+const REFRESHABLE_AUTH_CODES = new Set([10001, 10002, 10003])
+
 /** Element Plus 的 ElMessage 选项类型在部分 TS 配置下过窄，此处收窄为运行时实际用法 */
 function notifyRequestError(message: string): void {
   ;(ElMessage as unknown as (opts: { type: 'error'; message: string }) => void)({
@@ -289,6 +295,82 @@ function handleLogout(): void {
   postMessageToHost({ type: 'AUTH_EXPIRED' })
 }
 
+function retryWithRefreshedToken(
+  config: RetriableRequestConfig | undefined,
+  originalError: unknown,
+): Promise<unknown> {
+  const requestUrl = config?.url || ''
+  if (config?._retry || requestUrl.includes('/auth/refresh')) {
+    handleLogout()
+    return Promise.reject(originalError)
+  }
+  if (requestUrl.includes('/auth/login')) {
+    return Promise.reject(originalError)
+  }
+
+  const refreshToken = Storage.getRefreshToken()
+  if (!refreshToken || !config) {
+    handleLogout()
+    return Promise.reject(originalError)
+  }
+
+  if (!isRefreshing) {
+    isRefreshing = true
+
+    return refreshAccessToken(refreshToken)
+      .then((result) => {
+        const { accessToken, refreshToken: newRefreshToken } = extractRefreshTokens(result)
+        if (!accessToken) {
+          throw new Error('刷新令牌响应缺少 accessToken/token 字段')
+        }
+
+        Storage.setToken(accessToken)
+        if (newRefreshToken) {
+          Storage.setRefreshToken(newRefreshToken)
+        }
+
+        postMessageToHost({
+          type: 'AUTH_REFRESHED',
+          payload: {
+            token: accessToken,
+            accessToken,
+            refreshToken: newRefreshToken ?? refreshToken,
+          },
+        })
+
+        processQueue(null, accessToken)
+
+        config._retry = true
+        config.headers = config.headers || {}
+        config.headers.Authorization = `Bearer ${accessToken}`
+        return requestCore(config)
+      })
+      .catch((refreshError: unknown) => {
+        processQueue(refreshError, null)
+        handleLogout()
+        return Promise.reject(refreshError)
+      })
+      .finally(() => {
+        isRefreshing = false
+      })
+  }
+
+  return new Promise((resolve, reject) => {
+    failedQueue.push({
+      resolve: (token) => {
+        if (!token) {
+          reject(new Error('刷新令牌后未获取到 access token'))
+          return
+        }
+        config.headers = config.headers || {}
+        config.headers.Authorization = `Bearer ${token}`
+        resolve(requestCore(config))
+      },
+      reject,
+    })
+  })
+}
+
 requestCore.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = Storage.getToken()
@@ -309,7 +391,11 @@ requestCore.interceptors.response.use(
     const normalizedPayload = normalizeApiResponsePayload(response.data)
     if (normalizedPayload) {
       if (normalizedPayload.code !== 0) {
-        return Promise.reject(new ApiBusinessError(normalizedPayload, response.status))
+        const error = new ApiBusinessError(normalizedPayload, response.status)
+        if (REFRESHABLE_AUTH_CODES.has(normalizedPayload.code)) {
+          return retryWithRefreshedToken(response.config as RetriableRequestConfig, error)
+        }
+        return Promise.reject(error)
       }
       return normalizedPayload
     }
@@ -317,83 +403,14 @@ requestCore.interceptors.response.use(
   },
   (error: AxiosError<ErrorResponseData>) => {
     const response = error.response
-    const config = error.config
-    const requestUrl = config?.url || ''
+    const config = error.config as RetriableRequestConfig | undefined
 
     if (response) {
       const { status, data } = response
 
       switch (status) {
         case 401: {
-          if (requestUrl.includes('/auth/refresh')) {
-            handleLogout()
-            return Promise.reject(error)
-          }
-
-          const refreshToken = Storage.getRefreshToken()
-          if (!refreshToken) {
-            handleLogout()
-            return Promise.reject(error)
-          }
-          if (!config) {
-            handleLogout()
-            return Promise.reject(error)
-          }
-
-          if (!isRefreshing) {
-            isRefreshing = true
-
-            return refreshAccessToken(refreshToken)
-              .then((result) => {
-                const { accessToken, refreshToken: newRefreshToken } = extractRefreshTokens(result)
-                if (!accessToken) {
-                  throw new Error('刷新令牌响应缺少 accessToken/token 字段')
-                }
-
-                Storage.setToken(accessToken)
-                if (newRefreshToken) {
-                  Storage.setRefreshToken(newRefreshToken)
-                }
-
-                postMessageToHost({
-                  type: 'AUTH_REFRESHED',
-                  payload: {
-                    token: accessToken,
-                    accessToken,
-                    refreshToken: newRefreshToken ?? refreshToken,
-                  },
-                })
-
-                processQueue(null, accessToken)
-
-                config.headers = config.headers || {}
-                config.headers.Authorization = `Bearer ${accessToken}`
-                return requestCore(config)
-              })
-              .catch((refreshError: unknown) => {
-                processQueue(refreshError, null)
-                handleLogout()
-                return Promise.reject(refreshError)
-              })
-              .finally(() => {
-                isRefreshing = false
-              })
-          }
-
-          return new Promise((resolve, reject) => {
-            failedQueue.push({
-              resolve: (token) => {
-                if (!token) {
-                  reject(new Error('刷新令牌后未获取到 access token'))
-                  return
-                }
-                config.headers = config.headers || {}
-                config.headers.Authorization = `Bearer ${token}`
-                resolve(requestCore(config))
-              },
-              reject,
-            })
-          })
+          return retryWithRefreshedToken(config, error)
         }
         case 403:
           notifyRequestError(typeof data?.msg === 'string' ? data.msg : '没有权限访问此资源')

@@ -499,6 +499,7 @@ const jsCompletions = computed<any[]>(() => {
       prefix: '$global.',
     })
   })
+
   ;((globalScripts.value?.custom?.items || []) as any[]).forEach((script: any) => {
     if (!script?.name) return
     const params =
@@ -981,6 +982,7 @@ watch(
   <el-dialog
     v-model="editorVisible"
     :title="editorDescription"
+    class="page-script-editor-dialog"
     width="1120px"
     top="3vh"
     :close-on-click-modal="false"
@@ -1098,6 +1100,7 @@ watch(
   <el-dialog
     v-model="variableEnumVisible"
     title="变量枚举"
+    class="page-variable-enum-dialog"
     width="760px"
     :close-on-click-modal="false"
     :lock-scroll="false"
@@ -1150,8 +1153,13 @@ watch(
     </template>
   </el-dialog>
 
-  <el-dialog v-model="createDialogVisible" :title="createDialogTitle" width="420px">
-    <el-form label-width="90px">
+  <el-dialog
+    v-model="createDialogVisible"
+    :title="createDialogTitle"
+    class="page-create-script-dialog"
+    width="420px"
+  >
+    <el-form class="create-script-form" label-width="90px">
       <template v-if="createDialogType === 'timer'">
         <el-form-item label="定时器名称">
           <el-input v-model="createForm.name" placeholder="请输入定时器名称" />
@@ -1195,7 +1203,8 @@ watch(
 .binding-panel {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  padding: 6px;
 }
 
 .binding-context {
@@ -1203,8 +1212,10 @@ watch(
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 2px 2px 8px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  padding: 10px 10px;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
+  background: #f8fafc;
 }
 
 .binding-context-title {
@@ -1227,24 +1238,26 @@ watch(
 .binding-context-tag {
   flex-shrink: 0;
   padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--el-fill-color-light);
-  color: var(--el-text-color-secondary);
+  border-radius: 999px;
+  background: #edf4ff;
+  color: #3b82f6;
   font-size: 12px;
   line-height: 20px;
 }
 
 .binding-section {
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  padding: 8px 8px 9px;
+  border: 1px solid #edf1f6;
+  border-radius: 8px;
+  background: #fff;
 }
 
 .section-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 32px;
-  padding: 0 2px;
+  min-height: 30px;
+  padding: 0 2px 5px;
 }
 
 .section-title {
@@ -1259,8 +1272,8 @@ watch(
   min-width: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: var(--el-fill-color-light);
-  color: var(--el-text-color-secondary);
+  background: #f1f5f9;
+  color: #64748b;
   font-size: 11px;
   line-height: 18px;
   text-align: center;
@@ -1272,7 +1285,7 @@ watch(
   border: none;
   background: transparent;
   color: var(--el-text-color-secondary);
-  opacity: 0;
+  opacity: 0.66;
 }
 
 .section-header:hover .section-action {
@@ -1287,15 +1300,16 @@ watch(
 .section-body {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 5px;
 }
 
 .binding-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 32px;
-  padding: 0 4px 0 8px;
+  min-height: 38px;
+  padding: 0 5px 0 10px;
+  border: 1px solid transparent;
   border-radius: 6px;
   cursor: pointer;
   transition:
@@ -1304,7 +1318,8 @@ watch(
 }
 
 .binding-row:hover {
-  background: var(--el-fill-color-lighter);
+  border-color: #dbeafe;
+  background: #f5f9ff;
 }
 
 .binding-name {
@@ -1340,8 +1355,9 @@ watch(
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 0 2px;
-  border-radius: 6px;
+  padding: 3px 5px;
+  border-radius: 999px;
+  background: #f8fafc;
 }
 
 .binding-toggle-label {
@@ -1360,7 +1376,7 @@ watch(
   background: transparent;
   border: none;
   color: var(--el-text-color-secondary);
-  opacity: 0;
+  opacity: 0.72;
 }
 
 .binding-row:hover .icon-button,
@@ -1381,8 +1397,10 @@ watch(
 .empty-block {
   display: flex;
   align-items: center;
-  min-height: 32px;
+  justify-content: center;
+  min-height: 46px;
   padding: 0 8px;
+  border: 1px dashed #e2e8f0;
   border-radius: 6px;
   font-size: 12px;
   color: var(--el-text-color-secondary);
@@ -1390,8 +1408,46 @@ watch(
 }
 
 .empty-block:hover {
-  background: var(--el-fill-color-lighter);
+  border-color: #bfdbfe;
+  background: #f5f9ff;
   color: var(--el-text-color-regular);
+}
+
+.page-script-editor-dialog,
+.page-variable-enum-dialog,
+.page-create-script-dialog {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.page-script-editor-dialog :deep(.el-dialog__header),
+.page-variable-enum-dialog :deep(.el-dialog__header),
+.page-create-script-dialog :deep(.el-dialog__header) {
+  margin-right: 0;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #e6ebf2;
+}
+
+.page-script-editor-dialog :deep(.el-dialog__body),
+.page-variable-enum-dialog :deep(.el-dialog__body),
+.page-create-script-dialog :deep(.el-dialog__body) {
+  padding: 16px 20px;
+}
+
+.page-script-editor-dialog :deep(.el-dialog__footer),
+.page-variable-enum-dialog :deep(.el-dialog__footer),
+.page-create-script-dialog :deep(.el-dialog__footer) {
+  padding: 12px 20px 16px;
+  border-top: 1px solid #e6ebf2;
+}
+
+.create-script-form :deep(.el-form-item) {
+  margin-bottom: 18px;
+}
+
+.create-script-form :deep(.el-input),
+.create-script-form :deep(.el-select) {
+  width: 100%;
 }
 
 .empty-hint {
@@ -1412,13 +1468,18 @@ watch(
 .editor-main {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
 }
 
 .editor-sidebar {
   width: 260px;
   height: 520px;
-  border-left: 1px solid #e4e7ed;
-  padding-left: 14px;
+  padding: 10px;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
+  background: #f8fafc;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1543,14 +1604,17 @@ watch(
 
 .enum-layout {
   display: flex;
-  gap: 12px;
-  padding-top: 8px;
+  gap: 14px;
+  min-height: 340px;
+  padding-top: 2px;
 }
 
 .enum-left {
   width: 200px;
-  border-right: 1px solid #e4e7ed;
-  padding-right: 8px;
+  padding: 10px;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
+  background: #f8fafc;
   max-height: 360px;
   overflow: auto;
 }
@@ -1561,6 +1625,9 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 10px;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
 }
 
 .enum-right :deep(.el-table__row.is-selected) {

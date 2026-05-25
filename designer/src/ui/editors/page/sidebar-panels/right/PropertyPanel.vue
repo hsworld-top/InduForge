@@ -82,8 +82,19 @@ import { elementTypeName } from './property-panel-utils'
 import PropertyPanelBasicSection from './PropertyPanelBasicSection.vue'
 import PropertyPanelBindingVarEnumDialog from './PropertyPanelBindingVarEnumDialog.vue'
 import PropertyPanelConfigStrip from './PropertyPanelConfigStrip.vue'
+import PropertyPanelLayoutDistributionSection from './PropertyPanelLayoutDistributionSection.vue'
 import PropertyPanelLayoutForceSection from './PropertyPanelLayoutForceSection.vue'
+import PropertyPanelLayoutOccupancySection from './PropertyPanelLayoutOccupancySection.vue'
 import PropertyPanelRawPropsFallback from './PropertyPanelRawPropsFallback.vue'
+import {
+  buildAverageChildOccupancyPatch,
+  buildLayoutOccupancyPatch,
+  isSupportedLayoutParentType,
+  resolveLayoutAxis,
+  resolveLayoutOccupancyState,
+  type LayoutOccupancyMode,
+  type LayoutOccupancyUnit,
+} from './layout-occupancy'
 import { usePropertyPanelNormalizeNodeType } from './use-property-panel-normalize-node-type'
 
 interface AnyRecord extends Record<string, any> {}
@@ -644,7 +655,7 @@ function runDetailConfigLocal(node: AnyRecord, content: string) {
   const methodName = getDslMethodName(normalizedType || '')
   const safeContent = normalizedType === 'Menu' ? buildMenuDslContent(content, methodName) : content
   let lastMenuConfig: AnyRecord | null = null
-
+  // eslint-disable-next-line no-new-func
   const runner = new Function(`"use strict";\nreturn (function() {\n${safeContent}\n}).call(this);`)
   const context = {
     menu: (config: AnyRecord) => {
@@ -6005,6 +6016,7 @@ const bindingCompletions = computed<AnyArray>(() => {
       prefix: '$global.',
     })
   })
+
   ;(Array.isArray(globalScripts.value?.custom?.items)
     ? globalScripts.value.custom.items
     : []
@@ -6079,6 +6091,7 @@ const detailCompletions = computed<AnyArray>(() => {
       prefix: '$global.',
     })
   })
+
   ;(Array.isArray(globalScripts.value?.custom?.items)
     ? globalScripts.value.custom.items
     : []
@@ -6278,7 +6291,7 @@ function validateDetailConfig(content: string): { valid: boolean; message?: stri
   if (!text) return { valid: true }
   try {
     // 仅做语法检查，不执行
-
+    // eslint-disable-next-line no-new-func
     const validator = new Function(text)
     void validator
     return { valid: true }
@@ -6514,6 +6527,31 @@ const currentStyle = computed<AnyRecord>(() => {
   return selectedNode.value.style || {}
 })
 
+const layoutOccupancyState = computed(() => {
+  void docVersion.value
+  const node = selectedNode.value as AnyRecord | null
+  if (!node?.id) {
+    return resolveLayoutOccupancyState({ node: null, parentType: null })
+  }
+  const parentNode = doc.value?.getParent?.(node.id) as AnyRecord | null | undefined
+  return resolveLayoutOccupancyState({
+    node,
+    parentType: parentNode?.type,
+  })
+})
+
+const layoutDistributionState = computed(() => {
+  void docVersion.value
+  const node = selectedNode.value as AnyRecord | null
+  const type = String(node?.type || '')
+  const visible = isSupportedLayoutParentType(type)
+  return {
+    visible,
+    axis: visible ? resolveLayoutAxis(type) : 'row',
+    childCount: Array.isArray(node?.children) ? node.children.length : 0,
+  }
+})
+
 function resolveCanvasDomPosition(nodeId: string): { left: number; top: number } | null {
   const rootId = currentPage.value?.rootNodeId
   if (!rootId || typeof document === 'undefined') return null
@@ -6616,6 +6654,109 @@ function handleStyleChange(newStyle: AnyRecord) {
  * 更新折叠面板专用属性，保持运行态字段仍落在 props 中。
  * @param {Record<string, unknown>} propsPatch - 折叠面板 props 补丁
  */
+function applySelectedLayoutOccupancyPatch(patch: AnyRecord): void {
+  const node = selectedNode.value as AnyRecord | null
+  if (!node?.id) return
+  const ok = editorStore.updateNode(node.id, patch)
+  if (!ok) {
+    applyNodePatch(node.id, patch)
+  }
+  docVersion.value += 1
+  editorStore.saveCurrentPageDraft?.()
+}
+
+function handleLayoutOccupancyModeChange(mode: LayoutOccupancyMode): void {
+  const node = selectedNode.value as AnyRecord | null
+  if (!node?.id) return
+  const parentNode = doc.value?.getParent?.(node.id) as AnyRecord | null | undefined
+  if (!isSupportedLayoutParentType(parentNode?.type)) return
+  const state = layoutOccupancyState.value
+  applySelectedLayoutOccupancyPatch(
+    buildLayoutOccupancyPatch({
+      parentType: String(parentNode?.type),
+      mode,
+      currentStyle: node.style || {},
+      fixedValue: state.fixedValue,
+      fixedUnit: state.fixedUnit,
+      ratio: state.ratio,
+    }) as AnyRecord,
+  )
+}
+
+function handleLayoutOccupancyFixedValueChange(value: string): void {
+  const node = selectedNode.value as AnyRecord | null
+  if (!node?.id) return
+  const parentNode = doc.value?.getParent?.(node.id) as AnyRecord | null | undefined
+  if (!isSupportedLayoutParentType(parentNode?.type)) return
+  const state = layoutOccupancyState.value
+  applySelectedLayoutOccupancyPatch(
+    buildLayoutOccupancyPatch({
+      parentType: String(parentNode?.type),
+      mode: 'fixed',
+      currentStyle: node.style || {},
+      fixedValue: value,
+      fixedUnit: state.fixedUnit,
+      ratio: state.ratio,
+    }) as AnyRecord,
+  )
+}
+
+function handleLayoutOccupancyFixedUnitChange(unit: LayoutOccupancyUnit): void {
+  const node = selectedNode.value as AnyRecord | null
+  if (!node?.id) return
+  const parentNode = doc.value?.getParent?.(node.id) as AnyRecord | null | undefined
+  if (!isSupportedLayoutParentType(parentNode?.type)) return
+  const state = layoutOccupancyState.value
+  applySelectedLayoutOccupancyPatch(
+    buildLayoutOccupancyPatch({
+      parentType: String(parentNode?.type),
+      mode: 'fixed',
+      currentStyle: node.style || {},
+      fixedValue: state.fixedValue,
+      fixedUnit: unit,
+      ratio: state.ratio,
+    }) as AnyRecord,
+  )
+}
+
+function handleLayoutOccupancyRatioChange(ratio: number): void {
+  const node = selectedNode.value as AnyRecord | null
+  if (!node?.id) return
+  const parentNode = doc.value?.getParent?.(node.id) as AnyRecord | null | undefined
+  if (!isSupportedLayoutParentType(parentNode?.type)) return
+  applySelectedLayoutOccupancyPatch(
+    buildLayoutOccupancyPatch({
+      parentType: String(parentNode?.type),
+      mode: 'ratio',
+      currentStyle: node.style || {},
+      ratio,
+    }) as AnyRecord,
+  )
+}
+
+function handleDistributeLayoutChildrenAverage(): void {
+  const node = selectedNode.value as AnyRecord | null
+  const parentType = String(node?.type || '')
+  if (!node?.id || !isSupportedLayoutParentType(parentType)) return
+  const childIds = Array.isArray(node.children) ? node.children : []
+  if (childIds.length === 0) return
+
+  childIds.forEach((childId: string) => {
+    const child = doc.value?.getNode?.(childId) as AnyRecord | null | undefined
+    if (!child?.id) return
+    const patch = buildAverageChildOccupancyPatch({
+      parentType,
+      currentStyle: child.style || {},
+    })
+    const ok = editorStore.updateNode(child.id, patch as AnyRecord)
+    if (!ok) {
+      applyNodePatch(child.id, patch as AnyRecord)
+    }
+  })
+  docVersion.value += 1
+  editorStore.saveCurrentPageDraft?.()
+}
+
 function handleCollapsePropsChange(propsPatch: AnyRecord) {
   const node = selectedNode.value
   if (!node || elementType.value !== 'Collapse') return
@@ -7272,6 +7413,23 @@ function updateNodeRuntimeAccess(key: 'visibleSchemeId' | 'operableSchemeId', va
           @open-config="openConfigDialog"
         />
       </template>
+
+      <PropertyPanelLayoutDistributionSection
+        v-if="layoutDistributionState.visible"
+        :visible="layoutDistributionState.visible"
+        :axis="layoutDistributionState.axis"
+        :child-count="layoutDistributionState.childCount"
+        @distribute-average="handleDistributeLayoutChildrenAverage"
+      />
+
+      <PropertyPanelLayoutOccupancySection
+        v-if="layoutOccupancyState.visible"
+        :state="layoutOccupancyState"
+        @mode-change="handleLayoutOccupancyModeChange"
+        @fixed-value-change="handleLayoutOccupancyFixedValueChange"
+        @fixed-unit-change="handleLayoutOccupancyFixedUnitChange"
+        @ratio-change="handleLayoutOccupancyRatioChange"
+      />
 
       <div class="prop-section">
         <div class="prop-section-header is-static">

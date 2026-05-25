@@ -25,6 +25,8 @@ import IconPinOff from '~icons/lucide/pin-off'
 import IconEqualWidth from '~icons/lucide/unfold-horizontal'
 import IconEqualHeight from '~icons/lucide/unfold-vertical'
 import { useEditorStore } from '@/stores/editor-store'
+import SelectionBreadcrumb from './SelectionBreadcrumb.vue'
+import { buildSelectionBreadcrumbItems, type SelectionBreadcrumbItem } from './selection-breadcrumb'
 
 interface SelectionElementLike {
   id: string
@@ -70,6 +72,21 @@ const allTargetsLocked = computed(
   () => canToggleLock.value && selectedLockTargets.value.every((item: any) => Boolean(item.locked)),
 )
 
+const breadcrumbItems = computed<SelectionBreadcrumbItem[]>(() => {
+  void selectionVersion.value
+  void docVersion.value
+  if (selectionCount.value !== 1) return []
+  const primaryEl = (selection.value as SelectionLike | null)?.getPrimaryElement?.()
+  if (!primaryEl || primaryEl.id === currentPage.value?.rootNodeId) return []
+  return buildSelectionBreadcrumbItems({
+    doc: doc.value,
+    selectedNodeId: primaryEl.id,
+    rootNodeId: currentPage.value?.rootNodeId,
+  })
+})
+
+const hasBreadcrumb = computed(() => breadcrumbItems.value.length > 1)
+
 /**
  * 合并选中元素的 DOM 包围盒
  * @returns {{ left: number, top: number, right: number, bottom: number } | null}
@@ -113,7 +130,7 @@ function updatePosition() {
     return
   }
 
-  const toolbarWidth = selectionCount.value >= 2 ? 520 : 176
+  const toolbarWidth = selectionCount.value >= 2 ? 520 : hasBreadcrumb.value ? 560 : 176
   const toolbarHeight = 36
   const centerX = (rect.left + rect.right) / 2
 
@@ -178,6 +195,9 @@ const handleMoveDown = () => editorStore.moveNodeDown()
 const handleMoveToTop = () => editorStore.moveNodeToTop()
 const handleMoveToBottom = () => editorStore.moveNodeToBottom()
 const handleToggleLock = () => editorStore.toggleSelectedNodesLock()
+function handleBreadcrumbSelect(id: string): void {
+  selection.value?.select({ kind: 'node', id })
+}
 </script>
 
 <template>
@@ -190,6 +210,12 @@ const handleToggleLock = () => editorStore.toggleSelectedNodesLock()
         @pointerdown.stop
         @click.stop
       >
+        <SelectionBreadcrumb
+          v-if="hasBreadcrumb"
+          :items="breadcrumbItems"
+          @select="handleBreadcrumbSelect"
+        />
+
         <!-- 对齐组：选中 >= 2 -->
         <template v-if="selectionCount >= 2">
           <div class="sel-toolbar__group">

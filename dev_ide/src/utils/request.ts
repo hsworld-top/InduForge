@@ -6,7 +6,7 @@ import axios, {
 } from 'axios'
 import { ElMessage } from 'element-plus'
 import { Storage } from '@/utils/storage'
-import { authAPI, type AuthTokenPayload } from '@/api/auth.api'
+import type { AuthTokenPayload } from '@/api/auth.api'
 import { STORAGE_KEYS } from '@/constants'
 import type { ApiResponse } from '@/types/api'
 
@@ -61,6 +61,8 @@ type ApiErrorMeta = {
   reqId?: string
   status?: number
 }
+
+const REFRESHABLE_AUTH_CODES = new Set([10001, 10002, 10003])
 
 const toNumericCode = (value: unknown): number | undefined => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -183,6 +185,123 @@ const processQueue = (error: unknown, token: string | null = null) => {
   failedQueue = []
 }
 
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : null
+
+/**
+ * 刷新请求不经过业务 request 实例，避免过期 access token 和 401 重放逻辑参与续租请求本身。
+ * @param refreshToken 当前刷新令牌
+ */
+const refreshAccessToken = (refreshToken: string) =>
+  axios.post('/api/v1/auth/refresh', { refreshToken })
+
+/**
+ * 解析刷新接口统一包络；业务失败直接转成 ApiBusinessError 交给登录态清理流程处理。
+ * @param result 原始 axios 响应
+ */
+const extractRefreshTokens = (result: { data?: unknown; status?: number }): AuthTokenPayload => {
+  const body = result.data
+  if (isApiResponsePayload(body)) {
+    const normalizedCode = toNumericCode(body.code) ?? 30000
+    const normalizedPayload: ApiResponse<unknown> = {
+      code: normalizedCode,
+      msg: body.msg,
+      data: body.data,
+      reqId: body.reqId,
+    }
+    if (normalizedCode !== 0) {
+      throw new ApiBusinessError(normalizedPayload, result.status)
+    }
+    const payload = asRecord(body.data) || {}
+    return {
+      accessToken: typeof payload.accessToken === 'string' ? payload.accessToken : undefined,
+      token: typeof payload.token === 'string' ? payload.token : undefined,
+      refreshToken: typeof payload.refreshToken === 'string' ? payload.refreshToken : undefined,
+    }
+  }
+
+  const payload = asRecord(body) || {}
+  return {
+    accessToken: typeof payload.accessToken === 'string' ? payload.accessToken : undefined,
+    token: typeof payload.token === 'string' ? payload.token : undefined,
+    refreshToken: typeof payload.refreshToken === 'string' ? payload.refreshToken : undefined,
+  }
+}
+
+const retryWithRefreshedToken = (
+  config: ExtendedRequestConfig | undefined,
+  originalError: unknown,
+): Promise<unknown> => {
+  const requestUrl = config?.url || ''
+
+  if (config?._retry) {
+    clearAuthAndRedirectToLogin()
+    return Promise.reject(originalError)
+  }
+  if (requestUrl.includes('/auth/login')) {
+    return Promise.reject(originalError)
+  }
+  if (requestUrl.includes('/auth/refresh')) {
+    clearAuthAndRedirectToLogin()
+    return Promise.reject(originalError)
+  }
+
+  const refreshToken = Storage.getRefreshToken()
+  if (!refreshToken || !config) {
+    clearAuthAndRedirectToLogin()
+    return Promise.reject(originalError)
+  }
+
+  if (!isRefreshing) {
+    isRefreshing = true
+
+    return refreshAccessToken(refreshToken)
+      .then((result) => {
+        const refreshResult = extractRefreshTokens(result)
+        const accessToken = refreshResult.accessToken || refreshResult.token
+        const newRefreshToken = refreshResult.refreshToken
+
+        if (!accessToken) {
+          throw new Error('刷新令牌响应缺少 accessToken/token 字段')
+        }
+        Storage.setToken(accessToken)
+        if (newRefreshToken) {
+          Storage.setRefreshToken(newRefreshToken)
+        }
+
+        processQueue(null, accessToken)
+
+        config._retry = true
+        config.headers = config.headers || {}
+        ;(config.headers as Record<string, string>).Authorization = `Bearer ${accessToken}`
+        return request(config)
+      })
+      .catch((refreshError: unknown) => {
+        processQueue(refreshError, null)
+        clearAuthAndRedirectToLogin()
+        return Promise.reject(refreshError)
+      })
+      .finally(() => {
+        isRefreshing = false
+      })
+  }
+
+  return new Promise((resolve, reject) => {
+    failedQueue.push({
+      resolve: (token) => {
+        if (!token) {
+          reject(new Error('刷新令牌后未获取到 access token'))
+          return
+        }
+        config.headers = config.headers || {}
+        ;(config.headers as Record<string, string>).Authorization = `Bearer ${token}`
+        resolve(request(config))
+      },
+      reject,
+    })
+  })
+}
+
 // 请求拦截器
 request.interceptors.request.use(
   (config) => {
@@ -227,7 +346,11 @@ request.interceptors.response.use(
         reqId: responseData.reqId,
       }
       if (normalizedCode !== 0) {
-        return Promise.reject(new ApiBusinessError(normalizedPayload, response.status))
+        const error = new ApiBusinessError(normalizedPayload, response.status)
+        if (REFRESHABLE_AUTH_CODES.has(normalizedCode)) {
+          return retryWithRefreshedToken(response.config as ExtendedRequestConfig, error)
+        }
+        return Promise.reject(error)
       }
       return normalizedPayload
     }
@@ -236,103 +359,13 @@ request.interceptors.response.use(
   (error: AxiosError<ErrorResponseData>) => {
     const response = error.response
     const config = error.config as ExtendedRequestConfig | undefined
-    const requestUrl = config?.url || ''
 
     if (response) {
       const { status, data } = response
 
       switch (status) {
         case 401: {
-          if (config?._retry) {
-            clearAuthAndRedirectToLogin()
-            return Promise.reject(error)
-          }
-
-          // 检查是否是登录接口的401错误（用户名密码错误）
-          if (requestUrl.includes('/auth/login')) {
-            // 登录接口的401错误不重定向，直接返回错误让页面处理
-            return Promise.reject(error)
-          }
-
-          // 检查是否是刷新token接口的401错误
-          if (requestUrl.includes('/auth/refresh')) {
-            // 刷新token失败，跳转到登录页
-            clearAuthAndRedirectToLogin()
-            return Promise.reject(error)
-          }
-
-          // 尝试刷新token
-          const refreshToken = Storage.getRefreshToken()
-          if (!refreshToken) {
-            // 没有refresh token，直接跳转登录页
-            clearAuthAndRedirectToLogin()
-            return Promise.reject(error)
-          }
-          if (!config) {
-            // 缺失原始请求配置时无法重放，请求按未登录处理。
-            clearAuthAndRedirectToLogin()
-            return Promise.reject(error)
-          }
-
-          if (!isRefreshing) {
-            isRefreshing = true
-
-            return authAPI
-              .refreshToken(refreshToken)
-              .then(
-                (
-                  result: ApiResponse<AuthTokenPayload> | { data: ApiResponse<AuthTokenPayload> },
-                ) => {
-                  const refreshResult = 'code' in result ? result : result.data
-                  const accessToken = refreshResult.data?.accessToken || refreshResult.data?.token
-                  const newRefreshToken = refreshResult.data?.refreshToken
-
-                  // 更新存储的token
-                  if (!accessToken) {
-                    throw new Error('刷新令牌响应缺少 accessToken/token 字段')
-                  }
-                  Storage.setToken(accessToken)
-                  if (newRefreshToken) {
-                    Storage.setRefreshToken(newRefreshToken)
-                  }
-
-                  // 处理队列中的请求
-                  processQueue(null, accessToken)
-
-                  // 重新发起原始请求
-                  config._retry = true
-                  config.headers = config.headers || {}
-                  ;(config.headers as Record<string, string>).Authorization =
-                    `Bearer ${accessToken}`
-                  return request(config)
-                },
-              )
-              .catch((refreshError: unknown) => {
-                // 刷新失败，跳转到登录页
-                processQueue(refreshError, null)
-                clearAuthAndRedirectToLogin()
-                return Promise.reject(refreshError)
-              })
-              .finally(() => {
-                isRefreshing = false
-              })
-          } else {
-            // 如果正在刷新，将请求加入队列
-            return new Promise((resolve, reject) => {
-              failedQueue.push({
-                resolve: (token) => {
-                  if (!token) {
-                    reject(new Error('刷新令牌后未获取到 access token'))
-                    return
-                  }
-                  config.headers = config.headers || {}
-                  ;(config.headers as Record<string, string>).Authorization = `Bearer ${token}`
-                  resolve(request(config))
-                },
-                reject,
-              })
-            })
-          }
+          return retryWithRefreshedToken(config, error)
         }
         case 403:
           // 默认不弹全局 403 提示，避免与业务层 catch 中的错误提示重复。

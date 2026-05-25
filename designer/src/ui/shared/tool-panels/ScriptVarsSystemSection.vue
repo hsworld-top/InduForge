@@ -95,8 +95,8 @@ const { t } = useI18n()
 .system-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 4px 4px 8px;
+  gap: 6px;
+  padding: 6px 4px 8px;
 }
 
 .system-row {
@@ -104,11 +104,11 @@ const { t } = useI18n()
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 32px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
+  min-height: 38px;
+  padding: 0 8px 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: #fff;
   color: var(--designer-text-primary);
   cursor: pointer;
   text-align: left;
@@ -116,7 +116,8 @@ const { t } = useI18n()
 
 .system-row:hover,
 .system-row.is-selected {
-  background: var(--designer-primary-soft);
+  border-color: #dbeafe;
+  background: #f2f7ff;
 }
 
 .node-icon {
@@ -135,7 +136,7 @@ const { t } = useI18n()
 }
 
 .row-action {
-  opacity: 0;
+  opacity: 0.65;
   color: var(--designer-primary-text);
 }
 

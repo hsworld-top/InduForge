@@ -29,6 +29,7 @@ const EL_CONTAINER_REGION_PRESET_ASIDE_BETWEEN = 'aside-between'
 const PANEL_CONTAINER_TYPES = new Set(['Tabs', 'Collapse'])
 const AUTO_SIZE_PANEL_LAYOUT_TYPES = new Set(['HorizontalLayout', 'VerticalLayout'])
 const EL_CONTAINER_SECTION_TYPES = new Set(['ElHeader', 'ElAside', 'ElMain', 'ElFooter'])
+const FLOW_LAYOUT_CONTAINER_TYPES = new Set(['HorizontalLayout', 'VerticalLayout'])
 
 interface NodeStyleProps {
   readonly?: boolean
@@ -83,6 +84,17 @@ function isExplicitNumericSize(value: unknown): boolean {
   return /^-?\d+(\.\d+)?(px)?$/i.test(text)
 }
 
+function parseExplicitNumericSize(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+  if (typeof value !== 'string') return null
+  const text = value.trim()
+  if (!/^-?\d+(\.\d+)?(px)?$/i.test(text)) return null
+  const numeric = Number.parseFloat(text)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
 function isAutoSizeValue(value: unknown): boolean {
   return typeof value === 'string' && value.trim().toLowerCase() === 'auto'
 }
@@ -97,6 +109,44 @@ function isDefaultPanelLayoutMinHeight(value: unknown): boolean {
   if (typeof value === 'number') return value === 40
   if (typeof value !== 'string') return false
   return value.trim().toLowerCase() === '40px'
+}
+
+function hasExplicitFixedHeight(style: StyleMap): boolean {
+  return isExplicitNumericSize(style.height)
+}
+
+function shouldReleaseLayoutMinHeight(
+  currentNode: ComponentNode | null | undefined,
+  customStyle: StyleMap,
+): boolean {
+  // 水平/垂直布局的新节点会持久化默认 minHeight；固定高度必须优先生效，避免选框被默认下限撑大。
+  return Boolean(
+    currentNode?.type &&
+    FLOW_LAYOUT_CONTAINER_TYPES.has(currentNode.type) &&
+    hasExplicitFixedHeight(customStyle),
+  )
+}
+
+function shouldCompactButtonInFixedHeightLayout(
+  currentNode: ComponentNode | null | undefined,
+  parentNode: ComponentNode | null | undefined,
+): boolean {
+  const parentHeight = parseExplicitNumericSize(parentNode?.style?.height)
+  return Boolean(
+    currentNode?.type === 'Button' &&
+    parentNode?.type &&
+    FLOW_LAYOUT_CONTAINER_TYPES.has(parentNode.type) &&
+    parentHeight !== null &&
+    parentHeight <= 32,
+  )
+}
+
+function applyCompactButtonStyle(style: StyleMap): void {
+  style.minHeight = '0'
+  style.maxHeight = '100%'
+  style.paddingTop = '0'
+  style.paddingBottom = '0'
+  style.lineHeight = '1'
 }
 
 /**
@@ -687,6 +737,9 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
         ...textStyle,
         ...customStyle,
       }
+      if (shouldReleaseLayoutMinHeight(nodeRef.value, customStyle)) {
+        style.minHeight = '0'
+      }
       if (!style.overflow && !isContainerRef.value) {
         style.overflow = 'hidden'
       }
@@ -843,6 +896,9 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
           if (childStyle.minHeight && !style.minHeight) {
             style.minHeight = childStyle.minHeight
           }
+        }
+        if (shouldCompactButtonInFixedHeightLayout(nodeRef.value, parentNode)) {
+          applyCompactButtonStyle(style)
         }
       }
       return style
@@ -1118,6 +1174,9 @@ export function createNodeStyleHelpers(deps: NodeStyleHelpersDeps) {
       }
       if (customStyle.height && !style.height) {
         style.height = customStyle.height
+      }
+      if (shouldReleaseLayoutMinHeight(nodeRef.value, customStyle)) {
+        style.minHeight = '0'
       }
       // 图层操作写入 style.zIndex，必须作用在外层节点上，避免流式布局因调整 children 顺序而改变位置。
       if (customStyle.zIndex !== undefined && customStyle.zIndex !== null) {

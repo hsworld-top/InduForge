@@ -1753,17 +1753,19 @@ function handleDragLeave(): void {
   background-color: rgba(148, 163, 184, 0.06);
 }
 
-.designer-node.layout-container-visible:not(.is-preview) > div {
+.designer-node.layout-container-visible:not(.is-preview)
+  > div:not(.resize-handles):not(.insert-line):not(.empty-container-hint) {
   border: 1px solid #dcdfe6;
   border-radius: 4px;
-  min-height: 60px;
 }
 
-.designer-node.layout-container-visible:not(.is-preview):hover > div {
+.designer-node.layout-container-visible:not(.is-preview):hover
+  > div:not(.resize-handles):not(.insert-line):not(.empty-container-hint) {
   border-color: #a0a8b4;
 }
 
-.designer-node.layout-container-visible.is-selected > div {
+.designer-node.layout-container-visible.is-selected
+  > div:not(.resize-handles):not(.insert-line):not(.empty-container-hint) {
   border-color: #409eff;
 }
 

@@ -63,6 +63,18 @@ const dialogAttrs = computed(() =>
     : {},
 )
 
+function handleCustomInsert(data: SidebarNodeLike): void {
+  emit('customInsert', data)
+}
+
+function handlePageInsert(data: SidebarNodeLike): void {
+  emit('pageInsert', data)
+}
+
+function handlePageVariableInsert(row: PageVariableRowLike): void {
+  emit('pageVariableInsert', row)
+}
+
 defineExpose({
   insertText: (text: string) => editorRef.value?.insertText?.(text),
   format: () => editorRef.value?.format?.(),
@@ -91,8 +103,8 @@ defineExpose({
     v-bind="dialogAttrs"
     @open-variable-enum="emit('openVariableEnum')"
     @save="emit('save')"
-    @custom-insert="(data) => emit('customInsert', data)"
-    @page-insert="(data) => emit('pageInsert', data)"
-    @page-variable-insert="(row) => emit('pageVariableInsert', row)"
+    @custom-insert="handleCustomInsert"
+    @page-insert="handlePageInsert"
+    @page-variable-insert="handlePageVariableInsert"
   />
 </template>
