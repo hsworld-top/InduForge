@@ -1,7 +1,7 @@
 <template>
   <el-drawer :model-value="modelValue" title="建模校验" size="360px" @close="$emit('update:modelValue', false)">
     <div class="modbus-validation-drawer">
-      <p>结果：{{ issues.length }} 个问题</p>
+      <p>{{ scopeLabel }}：{{ issues.length }} 个问题</p>
       <article v-for="issue in issues" :key="`${issue.code}-${issue.registerId}`">
         <el-tag size="small" :type="issue.severity === 'error' ? 'danger' : 'warning'">{{ issue.severity }}</el-tag>
         <strong>{{ issue.registerName || '寄存器组' }}</strong>
@@ -15,7 +15,7 @@
 <script setup lang="ts">
 import type { ModbusValidationIssue } from './types'
 
-defineProps<{ modelValue: boolean; issues: ModbusValidationIssue[] }>()
+defineProps<{ modelValue: boolean; issues: ModbusValidationIssue[]; scopeLabel?: string }>()
 defineEmits<{
   (event: 'update:modelValue', value: boolean): void
   (event: 'locate', registerId: string): void

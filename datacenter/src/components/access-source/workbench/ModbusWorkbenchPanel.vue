@@ -1,39 +1,27 @@
 <template>
   <section class="modbus-workbench">
-    <header class="modbus-workbench__header">
+    <aside class="modbus-workbench__side">
       <WorkbenchSourceHeader
         :title="connection.name || '未命名 Modbus 接入源'"
         fallback-title="未命名 Modbus 接入源"
         :meta="sourceMetaRows"
         @back="$emit('back')"
       >
-        <template #actions>
-          <el-button size="small" :icon="IconTablerPlugConnected" :loading="testing" @click="runConnectionTest">
-            测试连接
-          </el-button>
-          <button type="button" class="workbench-source-header__icon-action" title="导入变量" aria-label="导入变量" @click="importVisible = true">
-            <IconTablerUpload />
-          </button>
-          <button type="button" class="workbench-source-header__icon-action is-primary" title="新建变量" aria-label="新建变量" @click="openCreateRegister">
-            <IconTablerPlus />
-          </button>
-          <button type="button" class="workbench-source-header__icon-action" title="变量预览" aria-label="变量预览" @click="openPreview">
-            <IconTablerActivityHeartbeat />
-          </button>
-          <button type="button" class="workbench-source-header__icon-action" title="建模校验" aria-label="建模校验" @click="runValidation">
-            <IconTablerChecklist />
-          </button>
-          <button type="button" class="workbench-source-header__icon-action" title="运行态读取预估" aria-label="运行态读取预估" @click="openReadPlan">
-            <IconTablerRoute />
-          </button>
-          <button type="button" class="workbench-source-header__icon-action" title="刷新" aria-label="刷新" @click="reloadAll">
-            <IconTablerRefresh />
+        <template #status>
+          <button
+            type="button"
+            class="modbus-workbench__connect-action"
+            :class="{ 'is-connected': session.connected.value }"
+            :title="session.connected.value ? '断开 Modbus 开发态会话' : '连接 Modbus 开发态会话'"
+            @click="toggleSession"
+          >
+            <span class="modbus-workbench__connect-label is-default">
+              {{ session.connected.value ? '已连接' : '连接' }}
+            </span>
+            <span v-if="session.connected.value" class="modbus-workbench__connect-label is-hover">断开</span>
           </button>
         </template>
       </WorkbenchSourceHeader>
-    </header>
-
-    <div class="modbus-workbench__body">
       <ModbusGroupTree
         :groups="groups"
         :registers="registers"
@@ -43,6 +31,7 @@
         @edit="openEditGroup"
         @delete="removeGroup"
       />
+    </aside>
 
       <main class="modbus-workbench__main">
         <div class="modbus-workbench__bar">
@@ -56,6 +45,33 @@
               <span><b>{{ readPlanEstimate.readCount }}</b>读取</span>
               <span><b>{{ readPlanEstimate.readsPerSecond.toFixed(2) }}</b>reads/s</span>
             </div>
+          </div>
+          <div class="modbus-workbench__actions">
+            <button type="button" class="modbus-workbench__icon-action" :title="importActionTitle" :aria-label="importActionTitle" @click="importVisible = true">
+              <IconTablerUpload />
+            </button>
+            <button type="button" class="modbus-workbench__icon-action is-primary" title="新建变量" aria-label="新建变量" @click="openCreateRegister">
+              <IconTablerPlus />
+            </button>
+            <button
+              type="button"
+              class="modbus-workbench__icon-action"
+              :disabled="!session.connected.value"
+              :title="previewActionTitle"
+              :aria-label="previewActionTitle"
+              @click="openPreview"
+            >
+              <IconTablerActivityHeartbeat />
+            </button>
+            <button type="button" class="modbus-workbench__icon-action" :title="validationActionTitle" :aria-label="validationActionTitle" @click="runValidation">
+              <IconTablerChecklist />
+            </button>
+            <button type="button" class="modbus-workbench__icon-action" :title="readPlanActionTitle" :aria-label="readPlanActionTitle" @click="openReadPlan">
+              <IconTablerRoute />
+            </button>
+            <button type="button" class="modbus-workbench__icon-action" title="刷新" aria-label="刷新" @click="reloadAll">
+              <IconTablerRefresh />
+            </button>
           </div>
           <el-input v-model="registerKeyword" class="modbus-workbench__search" size="small" placeholder="搜索变量" clearable />
         </div>
@@ -73,10 +89,9 @@
         :group="currentGroup"
         :register="selectedRegister"
         :registers="registers"
-        :issues="validationIssues"
+        :issues="scopedValidationIssues"
         :estimate="readPlanEstimate"
       />
-    </div>
 
     <ModbusGroupDialog
       v-model="groupDialogVisible"
@@ -97,7 +112,12 @@
     />
     <ModbusImportDialog v-model="importVisible" :loading="saving" @submit="importRegisters" />
     <ModbusPreviewDialog v-model="previewVisible" :registers="previewRegisters" :diagnostics="previewDiagnostics" />
-    <ModbusValidationDrawer v-model="validationVisible" :issues="validationIssues" @locate="locateRegister" />
+    <ModbusValidationDrawer
+      v-model="validationVisible"
+      :issues="scopedValidationIssues"
+      :scope-label="validationScopeLabel"
+      @locate="locateRegister"
+    />
     <ModbusReadPlanDialog v-model="readPlanVisible" :estimate="readPlanEstimate" />
   </section>
 </template>
@@ -107,6 +127,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dataAPI from '@/api/data.api'
 import { getApiErrorMessage } from '@/utils/request'
+import { useProtocolDevSession } from './useProtocolDevSession'
 import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
 import ModbusGroupDialog from '@/components/modbus/ModbusGroupDialog.vue'
 import ModbusGroupTree from '@/components/modbus/ModbusGroupTree.vue'
@@ -119,13 +140,13 @@ import ModbusRegisterTable from '@/components/modbus/ModbusRegisterTable.vue'
 import ModbusValidationDrawer from '@/components/modbus/ModbusValidationDrawer.vue'
 import type {
   ModbusReadPlanEstimate,
+  ModbusReadValue,
   ModbusRegister,
   ModbusRegisterGroup,
   ModbusValidationIssue,
 } from '@/components/modbus/types'
 import IconTablerActivityHeartbeat from '~icons/tabler/activity-heartbeat'
 import IconTablerChecklist from '~icons/tabler/checklist'
-import IconTablerPlugConnected from '~icons/tabler/plug-connected'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerRoute from '~icons/tabler/route'
@@ -160,7 +181,6 @@ const registers = ref<ModbusRegister[]>([])
 const readPlanEstimate = ref<ModbusReadPlanEstimate>(emptyEstimate())
 const loading = ref(false)
 const saving = ref(false)
-const testing = ref(false)
 const selectedGroupId = ref('')
 const selectedRegisterId = ref('')
 const registerKeyword = ref('')
@@ -172,11 +192,16 @@ const registerDialogMode = ref<'create' | 'edit'>('create')
 const editingRegister = ref<ModbusRegister | null>(null)
 const importVisible = ref(false)
 const previewVisible = ref(false)
-const previewRegisters = ref<ModbusRegister[]>([])
+const previewRegisters = ref<ModbusReadValue[]>([])
 const previewDiagnostics = ref<string[]>([])
 const validationVisible = ref(false)
 const validationIssues = ref<ModbusValidationIssue[]>([])
 const readPlanVisible = ref(false)
+
+const session = useProtocolDevSession({
+  create: () => dataAPI.createModbusDevSession(props.projectId, props.connection.id),
+  close: (sessionId: string) => dataAPI.closeModbusDevSession(props.projectId, props.connection.id, sessionId),
+})
 
 const config = computed(() => props.connection.config || {})
 const endpointText = computed(() => {
@@ -190,6 +215,41 @@ const sourceMetaRows = computed(() => [
 ])
 const currentGroup = computed(() => groups.value.find((group) => group.id === selectedGroupId.value) || null)
 const selectedRegister = computed(() => registers.value.find((item) => item.id === selectedRegisterId.value) || null)
+const importActionTitle = computed(() =>
+  currentGroup.value ? `导入到「${currentGroup.value.name}」` : '导入到未分组',
+)
+const previewActionTitle = computed(() =>
+  session.connected.value
+    ? currentGroup.value
+      ? `预览「${currentGroup.value.name}」变量`
+      : '预览全部变量'
+    : '连接后可预览当前分组变量',
+)
+const validationActionTitle = computed(() =>
+  selectedRegister.value
+    ? `校验当前变量：${selectedRegister.value.name}`
+    : currentGroup.value
+      ? `校验当前分组：${currentGroup.value.name}`
+      : '校验全部变量',
+)
+const readPlanActionTitle = computed(() =>
+  currentGroup.value ? `当前分组读取计划：${currentGroup.value.name}` : '全部变量读取计划',
+)
+const validationScopeLabel = computed(() => {
+  if (selectedRegister.value) return `当前变量：${selectedRegister.value.name}`
+  if (currentGroup.value) return `当前分组：${currentGroup.value.name}`
+  return '全部变量'
+})
+const scopedValidationIssues = computed(() => {
+  if (selectedRegisterId.value) {
+    return validationIssues.value.filter((item) => item.registerId === selectedRegisterId.value)
+  }
+  if (selectedGroupId.value) {
+    const ids = new Set(registers.value.filter((item) => item.groupId === selectedGroupId.value).map((item) => item.id))
+    return validationIssues.value.filter((item) => item.registerId && ids.has(item.registerId))
+  }
+  return validationIssues.value
+})
 const filteredRegisters = computed(() => {
   const text = registerKeyword.value.trim().toLowerCase()
   return registers.value.filter((item) => {
@@ -331,25 +391,18 @@ const importRegisters = async (rows: Array<Record<string, unknown>>) => {
   }
 }
 
-const runConnectionTest = async () => {
-  testing.value = true
-  try {
-    await dataAPI.testConnection(props.projectId, {
-      type: 'modbus',
-      name: props.connection.name,
-      config: props.connection.config,
-    })
-    ElMessage.success('测试请求已完成')
-  } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '测试连接失败'))
-  } finally {
-    testing.value = false
-  }
+const toggleSession = () => {
+  if (session.connected.value) void session.disconnect()
+  else void session.connect()
 }
 
 const openPreview = async () => {
+  if (!session.connected.value || !session.sessionId.value) {
+    ElMessage.warning('请先连接 Modbus 开发态会话')
+    return
+  }
   try {
-    const response = await dataAPI.previewModbusRegisters(props.projectId, props.connection.id, {
+    const response = await dataAPI.pollModbusDevSession(props.projectId, props.connection.id, session.sessionId.value, {
       groupId: selectedGroupId.value || null,
     })
     const data = unwrapData(response)
@@ -392,7 +445,7 @@ onMounted(reloadAll)
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: 264px minmax(0, 1fr) 292px;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-md);
   background: var(--dc-surface-raised);
@@ -400,15 +453,67 @@ onMounted(reloadAll)
   overflow: hidden;
 }
 
-.modbus-workbench__header {
-  border-bottom: 1px solid var(--dc-border);
-  background: var(--dc-surface-raised);
+.modbus-workbench__side {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--dc-border);
+  overflow: hidden;
+  background: var(--dc-surface-muted);
 }
 
-.modbus-workbench__body {
+.modbus-workbench__side :deep(.modbus-groups) {
+  flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: 264px minmax(0, 1fr) 292px;
+}
+
+.modbus-workbench__connect-action {
+  min-width: 58px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in oklch, var(--dc-primary) 32%, var(--dc-border));
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.modbus-workbench__connect-label.is-hover {
+  display: none;
+}
+
+.modbus-workbench__connect-action.is-connected:hover .modbus-workbench__connect-label.is-default {
+  display: none;
+}
+
+.modbus-workbench__connect-action.is-connected:hover .modbus-workbench__connect-label.is-hover {
+  display: inline;
+}
+
+.modbus-workbench__connect-action::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  content: '';
+}
+
+.modbus-workbench__connect-action.is-connected {
+  border-color: color-mix(in oklch, var(--dc-success) 32%, var(--dc-border));
+  background: color-mix(in oklch, var(--dc-success) 12%, var(--dc-surface-raised));
+  color: var(--dc-success);
+}
+
+.modbus-workbench__connect-action.is-connected:hover {
+  border-color: rgba(220, 38, 38, 0.22);
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
 }
 
 .modbus-workbench__main {
@@ -428,7 +533,7 @@ onMounted(reloadAll)
     linear-gradient(90deg, color-mix(in oklch, var(--dc-surface-subtle) 84%, var(--dc-primary) 16%), var(--dc-surface-subtle)),
     var(--dc-surface-subtle);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 240px;
+  grid-template-columns: minmax(0, 1fr) auto 240px;
   align-items: center;
   gap: 12px;
 }
@@ -483,16 +588,55 @@ onMounted(reloadAll)
   font-size: 12px;
 }
 
+.modbus-workbench__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.modbus-workbench__icon-action {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-secondary);
+}
+
+.modbus-workbench__icon-action:hover:not(:disabled) {
+  color: var(--dc-primary);
+  border-color: color-mix(in oklch, var(--dc-primary) 28%, var(--dc-border));
+}
+
+.modbus-workbench__icon-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.modbus-workbench__icon-action.is-primary {
+  border-color: var(--dc-primary);
+  background: var(--dc-primary);
+  color: var(--dc-surface-raised);
+}
+
+.modbus-workbench__icon-action svg {
+  width: 15px;
+  height: 15px;
+}
+
 .modbus-workbench__search {
   min-width: 0;
 }
 
 @media (max-width: 1100px) {
-  .modbus-workbench__body {
+  .modbus-workbench {
     grid-template-columns: 230px minmax(0, 1fr);
   }
 
-  .modbus-workbench__body :deep(.modbus-inspector) {
+  .modbus-workbench :deep(.modbus-inspector) {
     display: none;
   }
 }
