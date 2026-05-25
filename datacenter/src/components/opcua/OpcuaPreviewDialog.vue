@@ -5,26 +5,33 @@
       <span>{{ diagnostics.join('；') || '真实采集由运行态执行，当前用于核对建模变量。' }}</span>
     </div>
     <el-table class="opcua-preview__table" :data="nodes" height="360" size="small">
-      <el-table-column prop="name" label="变量名" min-width="150" />
       <el-table-column prop="nodeId" label="NodeId" min-width="240" show-overflow-tooltip />
-      <el-table-column label="最近值" min-width="120">
-        <template #default="{ row }">{{ row.lastValue ?? '-' }}</template>
+      <el-table-column label="当前值" min-width="120">
+        <template #default="{ row }">{{ row.value ?? '-' }}</template>
       </el-table-column>
+      <el-table-column prop="dataType" label="类型" width="110" />
       <el-table-column label="质量" width="100">
         <template #default="{ row }">
-          <el-tag size="small" type="info">{{ row.quality || 'unknown' }}</el-tag>
+          <el-tag size="small" :type="row.quality === 'Good' ? 'success' : 'info'">
+            {{ row.quality || 'unknown' }}
+          </el-tag>
         </template>
+      </el-table-column>
+      <el-table-column prop="sourceTimestamp" label="SourceTime" min-width="150" />
+      <el-table-column prop="serverTimestamp" label="ServerTime" min-width="150" />
+      <el-table-column label="错误" min-width="120">
+        <template #default="{ row }">{{ row.error || '-' }}</template>
       </el-table-column>
     </el-table>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import type { OpcuaNode } from './types'
+import type { OpcuaReadValue } from './types'
 
 defineProps<{
   modelValue: boolean
-  nodes: OpcuaNode[]
+  nodes: OpcuaReadValue[]
   diagnostics: string[]
 }>()
 

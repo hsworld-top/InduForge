@@ -2,7 +2,7 @@
   <el-drawer :model-value="modelValue" title="建模校验" size="420px" @close="$emit('update:modelValue', false)">
     <div class="opcua-validation__summary">
       <strong>{{ issues.length === 0 ? '建模通过' : `${issues.length} 个校验问题` }}</strong>
-      <span>点击问题可回到对应变量</span>
+      <span>{{ scopeLabel }}，点击问题可回到对应变量</span>
     </div>
     <div v-if="issues.length === 0" class="opcua-validation__empty">当前建模无校验问题</div>
     <div v-for="issue in issues" :key="`${issue.code}-${issue.nodeId || issue.groupId}`" class="opcua-validation__item">
@@ -26,6 +26,7 @@ import type { OpcuaValidationIssue } from './types'
 defineProps<{
   modelValue: boolean
   issues: OpcuaValidationIssue[]
+  scopeLabel?: string
 }>()
 
 defineEmits<{
