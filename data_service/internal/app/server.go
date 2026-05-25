@@ -187,6 +187,11 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	modbusModelingService := service.NewModbusModelingService(modbusModelingRepository, connectionRepository, dataPointRepository)
 	mqttService := service.NewMqttService(mqttRepository, connectionRepository, dataPointRepository)
 	opcuaModelingService := service.NewOpcuaModelingService(opcuaModelingRepository, connectionRepository, dataPointRepository)
+	protocolDevSessionService := service.NewProtocolDevSessionService(
+		service.NewProtocolDevConnectionRepositoryAdapter(connectionRepository),
+		service.NewProtocolDevOpcuaModelingAdapter(opcuaModelingService),
+		service.NewProtocolDevModbusModelingAdapter(modbusModelingService),
+	)
 	projectSnapshotService := service.NewProjectSnapshotService(projectSnapshotRepository)
 	protocolWave1Service := service.NewProtocolWave1Service(protocolWave1Repository)
 	protocolPreviewService := service.NewProtocolPreviewService(protocolWave1Repository, service.NewDefaultProtocolPreviewAdapters())
@@ -213,6 +218,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	modbusModelingHandler := handler.NewModbusModelingHandler(modbusModelingService)
 	mqttHandler := handler.NewMqttHandler(mqttService)
 	opcuaModelingHandler := handler.NewOpcuaModelingHandler(opcuaModelingService)
+	protocolDevSessionHandler := handler.NewProtocolDevSessionHandler(protocolDevSessionService)
 	projectSnapshotHandler := handler.NewProjectSnapshotHandler(projectSnapshotService)
 	protocolWave1Handler := handler.NewProtocolWave1Handler(protocolWave1Service, protocolPreviewService)
 	protocolWave2Handler := handler.NewProtocolWave2Handler(protocolWave2Service)
@@ -230,6 +236,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		router.WithMqttRoutes(mqttHandler, jwtValidator),
 		router.WithModbusModelingRoutes(modbusModelingHandler, jwtValidator),
 		router.WithOpcuaModelingRoutes(opcuaModelingHandler, jwtValidator),
+		router.WithProtocolDevSessionRoutes(protocolDevSessionHandler, jwtValidator),
 		router.WithProjectSnapshotRoutes(projectSnapshotHandler, jwtValidator),
 		router.WithProtocolWave1Routes(protocolWave1Handler, jwtValidator),
 		router.WithProtocolWave2Routes(protocolWave2Handler, jwtValidator),
@@ -243,6 +250,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		"mqtt=enabled",
 		"modbusModeling=enabled",
 		"opcuaModeling=enabled",
+		"protocolDevSession=enabled",
 		"projectSnapshot=enabled",
 		"protocolWave1=enabled",
 		"protocolWave2=enabled",

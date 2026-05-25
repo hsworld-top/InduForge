@@ -8,8 +8,9 @@ import (
 	"sync"
 	"time"
 
-	apperrors "github.com/indu-forge/data_service/internal/errors"
 	"github.com/google/uuid"
+	apperrors "github.com/indu-forge/data_service/internal/errors"
+	"github.com/indu-forge/data_service/internal/repository"
 )
 
 // ProtocolDevConnection 是开发态会话需要的最小接入源投影。
@@ -24,6 +25,37 @@ type ProtocolDevConnection struct {
 // ProtocolDevConnectionReader 隔离会话服务和具体仓储实现，后续可由 connection repository 适配。
 type ProtocolDevConnectionReader interface {
 	GetProtocolDevConnection(ctx context.Context, projectID, connectionID string) (*ProtocolDevConnection, error)
+}
+
+// ProtocolDevConnectionRepositoryAdapter 把现有连接仓储适配成开发态会话所需的最小接口。
+type ProtocolDevConnectionRepositoryAdapter struct {
+	repository *repository.ConnectionRepository
+}
+
+// NewProtocolDevConnectionRepositoryAdapter 创建连接仓储适配器。
+func NewProtocolDevConnectionRepositoryAdapter(repository *repository.ConnectionRepository) *ProtocolDevConnectionRepositoryAdapter {
+	return &ProtocolDevConnectionRepositoryAdapter{repository: repository}
+}
+
+// GetProtocolDevConnection 读取并转换接入源投影。
+func (a *ProtocolDevConnectionRepositoryAdapter) GetProtocolDevConnection(ctx context.Context, projectID, connectionID string) (*ProtocolDevConnection, error) {
+	if a == nil || a.repository == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开发态会话连接仓储未初始化")
+	}
+	record, err := a.repository.GetByProjectAndID(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	if record == nil {
+		return nil, nil
+	}
+	return &ProtocolDevConnection{
+		ID:        record.ID,
+		ProjectID: record.ProjectID,
+		Type:      record.Type,
+		Name:      record.Name,
+		Config:    record.Config,
+	}, nil
 }
 
 // ProtocolDevOpcuaModelReader 表示 OPC UA 开发态会话需要读取的建模数据接口。
@@ -133,9 +165,101 @@ type ProtocolDevModbusPollResult struct {
 	Diagnostics []string                     `json:"diagnostics"`
 }
 
+// ProtocolDevOpcuaModelingAdapter 把 OPC UA 建模服务适配为会话浏览/读取投影。
+type ProtocolDevOpcuaModelingAdapter struct {
+	service *OpcuaModelingService
+}
+
+// NewProtocolDevOpcuaModelingAdapter 创建 OPC UA 建模适配器。
+func NewProtocolDevOpcuaModelingAdapter(service *OpcuaModelingService) *ProtocolDevOpcuaModelingAdapter {
+	return &ProtocolDevOpcuaModelingAdapter{service: service}
+}
+
+// ListDevSessionOpcuaGroups 返回会话浏览树使用的变量组投影。
+func (a *ProtocolDevOpcuaModelingAdapter) ListDevSessionOpcuaGroups(ctx context.Context, projectID, connectionID string) ([]ProtocolDevOpcuaGroup, error) {
+	if a == nil || a.service == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "OPC UA 建模服务未初始化")
+	}
+	groups, err := a.service.ListGroups(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]ProtocolDevOpcuaGroup, 0, len(groups))
+	for _, group := range groups {
+		result = append(result, ProtocolDevOpcuaGroup{ID: group.ID, ParentID: group.ParentID, Name: group.Name})
+	}
+	return result, nil
+}
+
+// ListDevSessionOpcuaNodes 返回会话读取使用的变量投影。
+func (a *ProtocolDevOpcuaModelingAdapter) ListDevSessionOpcuaNodes(ctx context.Context, projectID, connectionID string, groupID *string) ([]ProtocolDevOpcuaNode, error) {
+	if a == nil || a.service == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "OPC UA 建模服务未初始化")
+	}
+	nodes, err := a.service.ListNodes(ctx, projectID, connectionID, groupID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]ProtocolDevOpcuaNode, 0, len(nodes))
+	for _, node := range nodes {
+		result = append(result, ProtocolDevOpcuaNode{
+			ID:       node.ID,
+			GroupID:  node.GroupID,
+			Name:     node.Name,
+			Code:     node.Code,
+			NodeID:   node.NodeID,
+			DataType: node.DataType,
+		})
+	}
+	return result, nil
+}
+
+// ProtocolDevModbusModelingAdapter 把 Modbus 建模服务适配为会话读取/轮询投影。
+type ProtocolDevModbusModelingAdapter struct {
+	service *ModbusModelingService
+}
+
+// NewProtocolDevModbusModelingAdapter 创建 Modbus 建模适配器。
+func NewProtocolDevModbusModelingAdapter(service *ModbusModelingService) *ProtocolDevModbusModelingAdapter {
+	return &ProtocolDevModbusModelingAdapter{service: service}
+}
+
+// ListDevSessionModbusRegisters 返回会话读取使用的寄存器投影。
+func (a *ProtocolDevModbusModelingAdapter) ListDevSessionModbusRegisters(ctx context.Context, projectID, connectionID string, groupID *string) ([]ProtocolDevModbusRegister, error) {
+	if a == nil || a.service == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "Modbus 建模服务未初始化")
+	}
+	registers, err := a.service.ListRegisters(ctx, projectID, connectionID, groupID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]ProtocolDevModbusRegister, 0, len(registers))
+	for _, register := range registers {
+		result = append(result, ProtocolDevModbusRegister{
+			ID:              register.ID,
+			ProjectID:       register.ProjectID,
+			ConnectionID:    register.ConnectionID,
+			GroupID:         register.GroupID,
+			Name:            register.Name,
+			Code:            register.Code,
+			UnitID:          register.UnitID,
+			Area:            register.Area,
+			Address:         register.Address,
+			ProtocolAddress: register.ProtocolAddress,
+			Quantity:        register.Quantity,
+			DataType:        register.DataType,
+			PollIntervalMS:  register.PollIntervalMS,
+			Status:          register.Status,
+			Scale:           register.Scale,
+			Offset:          register.Offset,
+		})
+	}
+	return result, nil
+}
+
 // ProtocolDevSession 表示 OPC UA / Modbus 工作台的一次开发态短时会话。
 type ProtocolDevSession struct {
-	SessionID   string         `json:"sessionId"`
+	SessionID    string         `json:"sessionId"`
 	ProjectID    string         `json:"projectId"`
 	ConnectionID string         `json:"connectionId"`
 	Protocol     string         `json:"protocol"`
@@ -177,7 +301,7 @@ func (s *ProtocolDevSessionService) CreateSession(ctx context.Context, projectID
 	}
 	now := s.now().UTC()
 	session := ProtocolDevSession{
-		SessionID:   uuid.NewString(),
+		SessionID:    uuid.NewString(),
 		ProjectID:    projectID,
 		ConnectionID: connectionID,
 		Protocol:     protocol,

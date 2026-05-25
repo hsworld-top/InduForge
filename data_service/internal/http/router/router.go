@@ -9,25 +9,26 @@ import (
 )
 
 type options struct {
-	accessSourceHandler    *handler.AccessSourceHandler
-	alarmPolicyHandler     *handler.AlarmPolicyHandler
-	alarmRuleHandler       *handler.AlarmRuleHandler
-	builtinRuntimeHandler  *handler.BuiltinRuntimeHandler
-	connectionHandler      *handler.ConnectionHandler
-	contractCheckHandler   *handler.ContractCheckHandler
-	queryHandler           *handler.QueryHandler
-	workbenchGroupHandler  *handler.WorkbenchGroupHandler
-	dataPointHandler       *handler.DataPointHandler
-	modbusModelingHandler  *handler.ModbusModelingHandler
-	mqttHandler            *handler.MqttHandler
-	opcuaModelingHandler   *handler.OpcuaModelingHandler
-	protocolWave1Handler   *handler.ProtocolWave1Handler
-	protocolWave2Handler   *handler.ProtocolWave2Handler
-	previewHandler         *handler.PreviewHandler
-	previewSocketHandler   http.Handler
-	computeHandler         *handler.ComputeHandler
-	projectSnapshotHandler *handler.ProjectSnapshotHandler
-	jwtValidator           *auth.JWTValidator
+	accessSourceHandler       *handler.AccessSourceHandler
+	alarmPolicyHandler        *handler.AlarmPolicyHandler
+	alarmRuleHandler          *handler.AlarmRuleHandler
+	builtinRuntimeHandler     *handler.BuiltinRuntimeHandler
+	connectionHandler         *handler.ConnectionHandler
+	contractCheckHandler      *handler.ContractCheckHandler
+	queryHandler              *handler.QueryHandler
+	workbenchGroupHandler     *handler.WorkbenchGroupHandler
+	dataPointHandler          *handler.DataPointHandler
+	modbusModelingHandler     *handler.ModbusModelingHandler
+	mqttHandler               *handler.MqttHandler
+	opcuaModelingHandler      *handler.OpcuaModelingHandler
+	protocolDevSessionHandler *handler.ProtocolDevSessionHandler
+	protocolWave1Handler      *handler.ProtocolWave1Handler
+	protocolWave2Handler      *handler.ProtocolWave2Handler
+	previewHandler            *handler.PreviewHandler
+	previewSocketHandler      http.Handler
+	computeHandler            *handler.ComputeHandler
+	projectSnapshotHandler    *handler.ProjectSnapshotHandler
+	jwtValidator              *auth.JWTValidator
 }
 
 // WithBuiltinRuntimeRoutes wires IF builtin runtime store routes.
@@ -122,6 +123,14 @@ func WithOpcuaModelingRoutes(opcuaModelingHandler *handler.OpcuaModelingHandler,
 	}
 }
 
+// WithProtocolDevSessionRoutes wires OPC UA / Modbus 开发态会话 routes.
+func WithProtocolDevSessionRoutes(protocolDevSessionHandler *handler.ProtocolDevSessionHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.protocolDevSessionHandler = protocolDevSessionHandler
+		opts.jwtValidator = jwtValidator
+	}
+}
+
 // WithProtocolWave1Routes wires protocol wave 1 routes.
 func WithProtocolWave1Routes(protocolWave1Handler *handler.ProtocolWave1Handler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
@@ -193,6 +202,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountMqttRoutes(mux, opts)
 	mountModbusModelingRoutes(mux, opts)
 	mountOpcuaModelingRoutes(mux, opts)
+	mountProtocolDevSessionRoutes(mux, opts)
 	mountProtocolWave1Routes(mux, opts)
 	mountProtocolWave2Routes(mux, opts)
 	mountPreviewSocketRoutes(mux, opts)
@@ -1098,6 +1108,42 @@ func mountModbusModelingRoutes(mux *http.ServeMux, opts options) {
 	mux.Handle("POST "+base+"/validate-model", read(opts.modbusModelingHandler.ValidateModel))
 	mux.Handle("POST "+base+"/preview", read(opts.modbusModelingHandler.PreviewRegisters))
 	mux.Handle("GET "+base+"/read-plan-estimate", read(opts.modbusModelingHandler.EstimateReadPlans))
+}
+
+func mountProtocolDevSessionRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.jwtValidator == nil || opts.protocolDevSessionHandler == nil {
+		return
+	}
+
+	read := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+	write := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+
+	opcuaBase := "/api/v1/data/projects/{projectId}/opcua/{connectionId}/sessions"
+	mux.Handle("POST "+opcuaBase, read(opts.protocolDevSessionHandler.CreateOpcua))
+	mux.Handle("DELETE "+opcuaBase+"/{sessionId}", write(opts.protocolDevSessionHandler.CloseOpcua))
+	mux.Handle("GET "+opcuaBase+"/{sessionId}/browse", read(opts.protocolDevSessionHandler.BrowseOpcua))
+	mux.Handle("POST "+opcuaBase+"/{sessionId}/read", read(opts.protocolDevSessionHandler.ReadOpcua))
+	mux.Handle("POST "+opcuaBase+"/{sessionId}/subscribe", read(opts.protocolDevSessionHandler.SubscribeOpcua))
+	mux.Handle("DELETE "+opcuaBase+"/{sessionId}/subscribe", write(opts.protocolDevSessionHandler.StopSubscribeOpcua))
+
+	modbusBase := "/api/v1/data/projects/{projectId}/modbus/{connectionId}/sessions"
+	mux.Handle("POST "+modbusBase, read(opts.protocolDevSessionHandler.CreateModbus))
+	mux.Handle("DELETE "+modbusBase+"/{sessionId}", write(opts.protocolDevSessionHandler.CloseModbus))
+	mux.Handle("POST "+modbusBase+"/{sessionId}/read", read(opts.protocolDevSessionHandler.ReadModbus))
+	mux.Handle("POST "+modbusBase+"/{sessionId}/poll", read(opts.protocolDevSessionHandler.PollModbus))
+	mux.Handle("DELETE "+modbusBase+"/{sessionId}/poll", write(opts.protocolDevSessionHandler.StopPollModbus))
 }
 
 func mountProjectSnapshotRoutes(mux *http.ServeMux, opts options) {
