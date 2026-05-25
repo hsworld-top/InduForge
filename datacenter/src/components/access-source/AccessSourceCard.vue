@@ -14,10 +14,6 @@
         {{ connection.name || '未命名连接' }}
       </div>
       <div class="access-source-card__type">
-        <component
-          :is="resolveConnectionVisual(connection).miniIcon"
-          class="access-source-card__type-icon"
-        />
         <span>{{ resolveConnectionType(connection) }}</span>
         <span class="access-source-card__divider">·</span>
         <span class="access-source-card__endpoint">
@@ -133,16 +129,15 @@ const resolveConnectionCategory = (connection: AccessSourceConnection) => {
 const resolveConnectionVisual = (connection: AccessSourceConnection) => {
   const category = resolveConnectionCategory(connection)
   if (category === 'stream') {
-    return { category, icon: IconTablerMessages, miniIcon: IconTablerMessages }
+    return { category, icon: IconTablerMessages }
   }
   if (category === 'industrial') {
     return {
       category,
       icon: IconTablerBuildingFactory2,
-      miniIcon: IconTablerBuildingFactory2,
     }
   }
-  return { category, icon: IconTablerDatabase, miniIcon: IconTablerDatabase }
+  return { category, icon: IconTablerDatabase }
 }
 
 const resolveConnectionType = (connection: AccessSourceConnection) => {
@@ -315,18 +310,11 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin-top: 10px;
+  gap: 6px;
+  margin-top: 9px;
   color: var(--dc-text-secondary);
   font-size: 12px;
   line-height: 1.45;
-}
-
-.access-source-card__type-icon {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-  color: var(--dc-text-secondary);
 }
 
 .access-source-card__type span:not(.access-source-card__divider):not(.access-source-card__endpoint) {
