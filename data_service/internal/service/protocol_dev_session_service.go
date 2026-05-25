@@ -33,7 +33,9 @@ type ProtocolDevOpcuaModelReader interface {
 }
 
 // ProtocolDevModbusModelReader 表示 Modbus 开发态会话需要读取的建模数据接口。
-type ProtocolDevModbusModelReader interface{}
+type ProtocolDevModbusModelReader interface {
+	ListDevSessionModbusRegisters(ctx context.Context, projectID, connectionID string, groupID *string) ([]ProtocolDevModbusRegister, error)
+}
 
 // ProtocolDevOpcuaGroup 是 OPC UA 浏览树需要的变量组投影。
 type ProtocolDevOpcuaGroup struct {
@@ -83,6 +85,52 @@ type ProtocolDevOpcuaReadValue struct {
 type ProtocolDevOpcuaReadResult struct {
 	Values      []ProtocolDevOpcuaReadValue `json:"values"`
 	Diagnostics []string                    `json:"diagnostics"`
+}
+
+// ProtocolDevModbusRegister 是 Modbus 开发态读取和轮询需要的寄存器投影。
+type ProtocolDevModbusRegister struct {
+	ID              string
+	ProjectID       string
+	ConnectionID    string
+	GroupID         *string
+	Name            string
+	Code            string
+	UnitID          int
+	Area            string
+	Address         int
+	ProtocolAddress int
+	Quantity        int
+	DataType        string
+	PollIntervalMS  int
+	Status          string
+	Scale           float64
+	Offset          float64
+}
+
+// ProtocolDevModbusReadValue 表示 Modbus 开发态读取返回的一条值。
+type ProtocolDevModbusReadValue struct {
+	RegisterID string  `json:"registerId"`
+	SlaveID    int     `json:"slaveId"`
+	Area       string  `json:"area"`
+	Address    int     `json:"address"`
+	RawValue   []int   `json:"rawValue"`
+	Value      any     `json:"value"`
+	DataType   string  `json:"dataType"`
+	Timestamp  string  `json:"timestamp"`
+	Error      *string `json:"error"`
+}
+
+// ProtocolDevModbusReadResult 表示 Modbus 开发态读取结果。
+type ProtocolDevModbusReadResult struct {
+	Values      []ProtocolDevModbusReadValue `json:"values"`
+	Diagnostics []string                     `json:"diagnostics"`
+}
+
+// ProtocolDevModbusPollResult 表示 Modbus 开发态短时轮询结果。
+type ProtocolDevModbusPollResult struct {
+	Values      []ProtocolDevModbusReadValue `json:"values"`
+	ReadPlan    ModbusReadPlanEstimate       `json:"readPlan"`
+	Diagnostics []string                     `json:"diagnostics"`
 }
 
 // ProtocolDevSession 表示 OPC UA / Modbus 工作台的一次开发态短时会话。
@@ -238,6 +286,63 @@ func (s *ProtocolDevSessionService) ReadOpcua(ctx context.Context, projectID, co
 	return result, nil
 }
 
+// SubscribeOpcua 复用读取结构返回当前分组的短时订阅快照，后续可替换为真实订阅缓冲区。
+func (s *ProtocolDevSessionService) SubscribeOpcua(ctx context.Context, projectID, connectionID, sessionID, userID string, nodeIDs []string, groupID *string) (*ProtocolDevOpcuaReadResult, error) {
+	result, err := s.ReadOpcua(ctx, projectID, connectionID, sessionID, userID, nodeIDs, groupID)
+	if err != nil {
+		return nil, err
+	}
+	result.Diagnostics = append(result.Diagnostics, "当前订阅结果为开发态短时读取快照，后续接入真实订阅后保持响应结构不变。")
+	return result, nil
+}
+
+// StopSubscribeOpcua 结束 OPC UA 短时订阅占位，会话仍保持连接。
+func (s *ProtocolDevSessionService) StopSubscribeOpcua(ctx context.Context, projectID, connectionID, sessionID, userID string) (*ProtocolDevSession, error) {
+	session, err := s.requireSession(projectID, connectionID, sessionID, userID, "opcua")
+	if err != nil {
+		return nil, err
+	}
+	return &session, nil
+}
+
+// ReadModbus 读取会话内 Modbus 寄存器当前值，第一版基于建模数据生成开发态样例值。
+func (s *ProtocolDevSessionService) ReadModbus(ctx context.Context, projectID, connectionID, sessionID, userID string, registerIDs []string, groupID *string) (*ProtocolDevModbusReadResult, error) {
+	if _, err := s.requireSession(projectID, connectionID, sessionID, userID, "modbus"); err != nil {
+		return nil, err
+	}
+	registers, err := s.listModbusRegisters(ctx, projectID, connectionID, groupID)
+	if err != nil {
+		return nil, err
+	}
+	values := s.buildModbusReadValues(registers, registerIDs)
+	return &ProtocolDevModbusReadResult{Values: values, Diagnostics: []string{}}, nil
+}
+
+// PollModbus 返回当前会话的短时轮询快照，并附带与运行态一致的读取计划估算。
+func (s *ProtocolDevSessionService) PollModbus(ctx context.Context, projectID, connectionID, sessionID, userID string, groupID *string) (*ProtocolDevModbusPollResult, error) {
+	if _, err := s.requireSession(projectID, connectionID, sessionID, userID, "modbus"); err != nil {
+		return nil, err
+	}
+	registers, err := s.listModbusRegisters(ctx, projectID, connectionID, groupID)
+	if err != nil {
+		return nil, err
+	}
+	values := s.buildModbusReadValues(registers, nil)
+	readPlan := BuildModbusReadPlanEstimate(toModbusRegisters(registers))
+	diagnostics := append([]string{}, readPlan.Diagnostics...)
+	diagnostics = append(diagnostics, "当前轮询结果为开发态短时读取快照，不写入历史库、不触发报警或计算。")
+	return &ProtocolDevModbusPollResult{Values: values, ReadPlan: readPlan, Diagnostics: diagnostics}, nil
+}
+
+// StopPollModbus 结束 Modbus 短时轮询占位，会话仍保持连接。
+func (s *ProtocolDevSessionService) StopPollModbus(ctx context.Context, projectID, connectionID, sessionID, userID string) (*ProtocolDevSession, error) {
+	session, err := s.requireSession(projectID, connectionID, sessionID, userID, "modbus")
+	if err != nil {
+		return nil, err
+	}
+	return &session, nil
+}
+
 func (s *ProtocolDevSessionService) loadProtocolConnection(ctx context.Context, projectID, connectionID, protocol string) (*ProtocolDevConnection, error) {
 	if strings.TrimSpace(projectID) == "" || strings.TrimSpace(connectionID) == "" || strings.TrimSpace(protocol) == "" {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "开发态会话参数不完整")
@@ -268,6 +373,37 @@ func (s *ProtocolDevSessionService) requireSession(projectID, connectionID, sess
 	session.lastUsedAt = s.now().UTC()
 	s.sessions[sessionID] = session
 	return session, nil
+}
+
+func (s *ProtocolDevSessionService) listModbusRegisters(ctx context.Context, projectID, connectionID string, groupID *string) ([]ProtocolDevModbusRegister, error) {
+	if s.modbus == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "Modbus 开发态模型读取器未初始化")
+	}
+	return s.modbus.ListDevSessionModbusRegisters(ctx, projectID, connectionID, groupID)
+}
+
+func (s *ProtocolDevSessionService) buildModbusReadValues(registers []ProtocolDevModbusRegister, registerIDs []string) []ProtocolDevModbusReadValue {
+	wanted := stringSet(registerIDs)
+	now := s.now().UTC().Format("2006-01-02 15:04:05")
+	values := make([]ProtocolDevModbusReadValue, 0, len(registers))
+	for _, register := range registers {
+		if len(wanted) > 0 && !wanted[register.ID] && !wanted[register.Code] {
+			continue
+		}
+		raw := sampleModbusRawValue(register)
+		values = append(values, ProtocolDevModbusReadValue{
+			RegisterID: register.ID,
+			SlaveID:    register.UnitID,
+			Area:       register.Area,
+			Address:    register.Address,
+			RawValue:   raw,
+			Value:      sampleModbusValue(register, raw),
+			DataType:   register.DataType,
+			Timestamp:  now,
+			Error:      nil,
+		})
+	}
+	return values
 }
 
 func protocolDevEndpoint(protocol string, config map[string]any) string {
@@ -348,4 +484,75 @@ func sampleProtocolValue(dataType, seed string) any {
 		}
 		return "preview"
 	}
+}
+
+func sampleModbusRawValue(register ProtocolDevModbusRegister) []int {
+	quantity := register.Quantity
+	if quantity <= 0 {
+		quantity = 1
+	}
+	raw := make([]int, quantity)
+	base := register.ProtocolAddress
+	if base <= 0 {
+		base = register.Address
+	}
+	for index := range raw {
+		raw[index] = base + index + len(register.Code)
+	}
+	return raw
+}
+
+func sampleModbusValue(register ProtocolDevModbusRegister, raw []int) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	switch strings.ToLower(strings.TrimSpace(register.DataType)) {
+	case "bool", "boolean":
+		return raw[0]%2 == 1
+	case "float", "float32", "double":
+		scale := register.Scale
+		if scale == 0 {
+			scale = 1
+		}
+		return float64(raw[0])*scale + register.Offset
+	default:
+		return raw[0]
+	}
+}
+
+func toModbusRegisters(registers []ProtocolDevModbusRegister) []ModbusRegister {
+	result := make([]ModbusRegister, 0, len(registers))
+	for _, register := range registers {
+		quantity := register.Quantity
+		if quantity <= 0 {
+			quantity = 1
+		}
+		pollInterval := register.PollIntervalMS
+		if pollInterval <= 0 {
+			pollInterval = 1000
+		}
+		status := strings.TrimSpace(register.Status)
+		if status == "" {
+			status = "active"
+		}
+		result = append(result, ModbusRegister{
+			ID:              register.ID,
+			ProjectID:       register.ProjectID,
+			ConnectionID:    register.ConnectionID,
+			GroupID:         register.GroupID,
+			Name:            register.Name,
+			Code:            register.Code,
+			UnitID:          register.UnitID,
+			Area:            register.Area,
+			Address:         register.Address,
+			ProtocolAddress: register.ProtocolAddress,
+			Quantity:        quantity,
+			DataType:        register.DataType,
+			PollIntervalMS:  pollInterval,
+			Status:          status,
+			Scale:           register.Scale,
+			Offset:          register.Offset,
+		})
+	}
+	return result
 }
