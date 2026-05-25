@@ -165,6 +165,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	queryRepository := repository.NewQueryRepository(pool)
 	workbenchGroupRepository := repository.NewWorkbenchGroupRepository(pool)
 	dataPointRepository := repository.NewDataPointRepository(pool)
+	modbusModelingRepository := repository.NewModbusModelingRepository(pool)
 	mqttRepository := repository.NewMqttRepository(pool)
 	opcuaModelingRepository := repository.NewOpcuaModelingRepository(pool)
 	projectSnapshotRepository := repository.NewProjectSnapshotRepository(pool)
@@ -183,6 +184,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	workbenchGroupService := service.NewWorkbenchGroupService(workbenchGroupRepository, connectionRepository)
 	connectionService.SetWorkbenchGroupService(workbenchGroupService)
 	dataPointService := service.NewDataPointService(dataPointRepository, queryService, mqttRepository, computeRepository)
+	modbusModelingService := service.NewModbusModelingService(modbusModelingRepository, connectionRepository, dataPointRepository)
 	mqttService := service.NewMqttService(mqttRepository, connectionRepository, dataPointRepository)
 	opcuaModelingService := service.NewOpcuaModelingService(opcuaModelingRepository, connectionRepository, dataPointRepository)
 	projectSnapshotService := service.NewProjectSnapshotService(projectSnapshotRepository)
@@ -208,6 +210,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	queryHandler := handler.NewQueryHandler(queryService)
 	workbenchGroupHandler := handler.NewWorkbenchGroupHandler(workbenchGroupService)
 	dataPointHandler := handler.NewDataPointHandler(dataPointService)
+	modbusModelingHandler := handler.NewModbusModelingHandler(modbusModelingService)
 	mqttHandler := handler.NewMqttHandler(mqttService)
 	opcuaModelingHandler := handler.NewOpcuaModelingHandler(opcuaModelingService)
 	projectSnapshotHandler := handler.NewProjectSnapshotHandler(projectSnapshotService)
@@ -225,6 +228,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		router.WithDataRoutes(queryHandler, dataPointHandler, jwtValidator),
 		router.WithWorkbenchGroupRoutes(workbenchGroupHandler, jwtValidator),
 		router.WithMqttRoutes(mqttHandler, jwtValidator),
+		router.WithModbusModelingRoutes(modbusModelingHandler, jwtValidator),
 		router.WithOpcuaModelingRoutes(opcuaModelingHandler, jwtValidator),
 		router.WithProjectSnapshotRoutes(projectSnapshotHandler, jwtValidator),
 		router.WithProtocolWave1Routes(protocolWave1Handler, jwtValidator),
@@ -237,6 +241,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		"data=enabled",
 		"builtinRuntime=enabled",
 		"mqtt=enabled",
+		"modbusModeling=enabled",
 		"opcuaModeling=enabled",
 		"projectSnapshot=enabled",
 		"protocolWave1=enabled",

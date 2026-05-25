@@ -3,7 +3,9 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -112,6 +114,46 @@ type SnapshotOpcuaNodeRecord struct {
 	DataPointPath *string  `json:"datapointPath,omitempty"`
 }
 
+// SnapshotModbusRegisterRecord 表示 artifact 使用的 Modbus 寄存器变量投影。
+type SnapshotModbusRegisterRecord struct {
+	ID              string   `json:"id"`
+	ConnectionID    string   `json:"connectionId"`
+	GroupID         *string  `json:"groupId,omitempty"`
+	Name            string   `json:"name"`
+	Code            string   `json:"code"`
+	UnitID          int      `json:"unitId"`
+	Area            string   `json:"area"`
+	Address         int      `json:"address"`
+	AddressBase     string   `json:"addressBase"`
+	ProtocolAddress int      `json:"protocolAddress"`
+	Quantity        int      `json:"quantity"`
+	DataType        string   `json:"dataType"`
+	ByteOrder       string   `json:"byteOrder"`
+	WordOrder       string   `json:"wordOrder"`
+	BitIndex        *int     `json:"bitIndex,omitempty"`
+	Scale           float64  `json:"scale"`
+	Offset          float64  `json:"offset"`
+	Unit            *string  `json:"unit,omitempty"`
+	PollIntervalMS  int      `json:"pollIntervalMs"`
+	TimeoutMS       *int     `json:"timeoutMs,omitempty"`
+	RetryCount      *int     `json:"retryCount,omitempty"`
+	AccessLevel     string   `json:"accessLevel"`
+	DataPointPath   *string  `json:"datapointPath,omitempty"`
+}
+
+// SnapshotModbusReadPlanRecord 表示 artifact 使用的 Modbus 运行态读取计划。
+type SnapshotModbusReadPlanRecord struct {
+	ID             string   `json:"id"`
+	ConnectionID   string   `json:"connectionId"`
+	UnitID         int      `json:"unitId"`
+	Area           string   `json:"area"`
+	ProtocolStart  int      `json:"protocolStart"`
+	Quantity       int      `json:"quantity"`
+	PollIntervalMS int      `json:"pollIntervalMs"`
+	RegisterIDs    []string `json:"registerIds"`
+	RegisterCount  int      `json:"registerCount"`
+}
+
 // ProjectSnapshot 表示工程级数据域快照。
 type ProjectSnapshot struct {
 	Connections       []ConnectionRecord               `json:"connections"`
@@ -122,6 +164,7 @@ type ProjectSnapshot struct {
 	MqttTagGroups     []SnapshotMqttTagGroupRecord     `json:"mqttTagGroups"`
 	MqttTags          []SnapshotMqttTagRecord          `json:"mqttTags"`
 	OpcuaNodes        []SnapshotOpcuaNodeRecord        `json:"opcuaNodes"`
+	ModbusRegisters  []SnapshotModbusRegisterRecord   `json:"modbusRegisters"`
 	DataPoints        []DataPointRecord                `json:"datapoints"`
 	ComputeUnits      []ComputeUnitRecord              `json:"computeUnits"`
 	AlarmRules        []AlarmRuleRecord                `json:"alarmRules"`
@@ -231,6 +274,8 @@ type ArtifactProtocolRecord struct {
 	Status    string                         `json:"status"`
 	Config    map[string]any                 `json:"config"`
 	Nodes     []SnapshotOpcuaNodeRecord      `json:"nodes,omitempty"`
+	Registers []SnapshotModbusRegisterRecord `json:"registers,omitempty"`
+	ReadPlans []SnapshotModbusReadPlanRecord `json:"readPlans,omitempty"`
 }
 
 // ArtifactMqttPayload 表示产物层 MQTT 区块。
@@ -359,6 +404,10 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 	if err != nil {
 		return nil, err
 	}
+	modbusRegisters, err := r.listModbusRegisters(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
 	computeUnits, err := r.listComputeUnits(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -377,6 +426,7 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 		MqttTagGroups:     mqttTagGroups,
 		MqttTags:          mqttTags,
 		OpcuaNodes:        opcuaNodes,
+		ModbusRegisters:  modbusRegisters,
 		DataPoints:        datapoints,
 		ComputeUnits:      computeUnits,
 		AlarmRules:        alarmRules,
@@ -559,6 +609,8 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 	}
 	builtinStores := buildBuiltinStores(snapshot.Connections)
 	opcuaNodesByConnection := groupOpcuaNodesByConnection(snapshot.OpcuaNodes)
+	modbusRegistersByConnection := groupModbusRegistersByConnection(snapshot.ModbusRegisters)
+	modbusReadPlansByConnection := buildSnapshotModbusReadPlansByConnection(snapshot.ModbusRegisters)
 	for _, connection := range snapshot.Connections {
 		protocolRecord := ArtifactProtocolRecord{
 			ID:     connection.ID,
@@ -582,6 +634,8 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 		case "s7":
 			protocols.S7 = append(protocols.S7, protocolRecord)
 		case "modbus":
+			protocolRecord.Registers = append([]SnapshotModbusRegisterRecord{}, modbusRegistersByConnection[connection.ID]...)
+			protocolRecord.ReadPlans = append([]SnapshotModbusReadPlanRecord{}, modbusReadPlansByConnection[connection.ID]...)
 			protocols.Modbus = append(protocols.Modbus, protocolRecord)
 		case "tdengine":
 			protocols.TDengine = append(protocols.TDengine, protocolRecord)
@@ -1071,6 +1125,64 @@ func (r *ProjectSnapshotRepository) listOpcuaNodes(ctx context.Context, projectI
 	return result, nil
 }
 
+func (r *ProjectSnapshotRepository) listModbusRegisters(ctx context.Context, projectID string) ([]SnapshotModbusRegisterRecord, error) {
+	rows, err := r.pool.Query(ctx, `
+        SELECT r.id, r.connection_id, r.group_id, r.name, r.code, r.unit_id, r.area,
+               r.address, r.address_base, r.protocol_address, r.quantity, r.data_type,
+               r.byte_order, r.word_order, r.bit_index, r.scale, r.offset_value, r.unit,
+               r.poll_interval_ms, r.timeout_ms, r.retry_count, r.access_level, dp.path
+        FROM data_modbus_registers r
+        LEFT JOIN data_points dp
+          ON dp.project_id = r.project_id
+         AND dp.source_type = 'modbus.register'
+         AND dp.source_id = r.id
+        WHERE r.project_id = $1
+          AND r.status = 'active'
+        ORDER BY r.connection_id ASC, r.unit_id ASC, r.area ASC, r.protocol_address ASC
+    `, projectID)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询快照 Modbus 变量失败", err)
+	}
+	defer rows.Close()
+
+	result := make([]SnapshotModbusRegisterRecord, 0)
+	for rows.Next() {
+		record := SnapshotModbusRegisterRecord{}
+		if err := rows.Scan(
+			&record.ID,
+			&record.ConnectionID,
+			&record.GroupID,
+			&record.Name,
+			&record.Code,
+			&record.UnitID,
+			&record.Area,
+			&record.Address,
+			&record.AddressBase,
+			&record.ProtocolAddress,
+			&record.Quantity,
+			&record.DataType,
+			&record.ByteOrder,
+			&record.WordOrder,
+			&record.BitIndex,
+			&record.Scale,
+			&record.Offset,
+			&record.Unit,
+			&record.PollIntervalMS,
+			&record.TimeoutMS,
+			&record.RetryCount,
+			&record.AccessLevel,
+			&record.DataPointPath,
+		); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取快照 Modbus 变量失败", err)
+		}
+		result = append(result, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历快照 Modbus 变量失败", err)
+	}
+	return result, nil
+}
+
 func (r *ProjectSnapshotRepository) deleteProjectSnapshot(ctx context.Context, tx pgx.Tx, projectID string) error {
 	for _, sqlText := range []string{
 		`DELETE FROM data_alarm_rules WHERE project_id = $1`,
@@ -1359,6 +1471,85 @@ func groupOpcuaNodesByConnection(nodes []SnapshotOpcuaNodeRecord) map[string][]S
 		result[node.ConnectionID] = append(result[node.ConnectionID], node)
 	}
 	return result
+}
+
+func groupModbusRegistersByConnection(registers []SnapshotModbusRegisterRecord) map[string][]SnapshotModbusRegisterRecord {
+	result := make(map[string][]SnapshotModbusRegisterRecord)
+	for _, register := range registers {
+		result[register.ConnectionID] = append(result[register.ConnectionID], register)
+	}
+	return result
+}
+
+func buildSnapshotModbusReadPlansByConnection(registers []SnapshotModbusRegisterRecord) map[string][]SnapshotModbusReadPlanRecord {
+	grouped := map[string][]SnapshotModbusRegisterRecord{}
+	for _, register := range registers {
+		key := strings.Join([]string{register.ConnectionID, intToSnapshotString(register.UnitID), register.Area, intToSnapshotString(register.PollIntervalMS)}, "|")
+		grouped[key] = append(grouped[key], register)
+	}
+	result := map[string][]SnapshotModbusReadPlanRecord{}
+	for _, items := range grouped {
+		sort.Slice(items, func(i, j int) bool {
+			return items[i].ProtocolAddress < items[j].ProtocolAddress
+		})
+		maxQuantity := snapshotModbusMaxReadQuantity(items[0].Area)
+		var current *SnapshotModbusReadPlanRecord
+		for _, item := range items {
+			start := item.ProtocolAddress
+			end := item.ProtocolAddress + item.Quantity - 1
+			if current == nil || start > current.ProtocolStart+maxQuantity-1 || start > current.ProtocolStart+current.Quantity+1 {
+				plan := SnapshotModbusReadPlanRecord{
+					ConnectionID:   item.ConnectionID,
+					UnitID:         item.UnitID,
+					Area:           item.Area,
+					ProtocolStart:  start,
+					Quantity:       item.Quantity,
+					PollIntervalMS: item.PollIntervalMS,
+					RegisterIDs:    []string{item.ID},
+					RegisterCount:  1,
+				}
+				current = &plan
+				result[item.ConnectionID] = append(result[item.ConnectionID], plan)
+				continue
+			}
+			currentEnd := current.ProtocolStart + current.Quantity - 1
+			if end > currentEnd {
+				current.Quantity = end - current.ProtocolStart + 1
+			}
+			current.RegisterIDs = append(current.RegisterIDs, item.ID)
+			current.RegisterCount++
+			plans := result[item.ConnectionID]
+			plans[len(plans)-1] = *current
+			result[item.ConnectionID] = plans
+		}
+	}
+	for connectionID, plans := range result {
+		sort.Slice(plans, func(i, j int) bool {
+			if plans[i].UnitID != plans[j].UnitID {
+				return plans[i].UnitID < plans[j].UnitID
+			}
+			if plans[i].Area != plans[j].Area {
+				return plans[i].Area < plans[j].Area
+			}
+			return plans[i].ProtocolStart < plans[j].ProtocolStart
+		})
+		for index := range plans {
+			plans[index].ID = "modbus-read-plan-" + intToSnapshotString(index+1)
+		}
+		result[connectionID] = plans
+	}
+	return result
+}
+
+func snapshotModbusMaxReadQuantity(area string) int {
+	if area == "coil" || area == "discrete_input" {
+		return 2000
+	}
+	return 125
+}
+
+func intToSnapshotString(value int) string {
+	return fmt.Sprintf("%d", value)
 }
 
 func deriveConnectionCategory(connectionType string) string {

@@ -147,6 +147,8 @@ const normalizeOpcuaListPayload = (payload, legacyKey = '') => {
   return { list }
 }
 
+const normalizeModbusListPayload = normalizeOpcuaListPayload
+
 export const getOpcuaNodeGroups = (projectId, connectionId) => {
   return request({
     url: `/data/projects/${projectId}/opcua/${connectionId}/node-groups`,
@@ -234,6 +236,104 @@ export const previewOpcuaNodes = (projectId, connectionId, data = {}) => {
     url: `/data/projects/${projectId}/opcua/${connectionId}/preview`,
     method: 'post',
     data,
+  })
+}
+
+export const getModbusRegisterGroups = (projectId, connectionId) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/register-groups`,
+    method: 'get',
+  }).then((response) => ({
+    ...response,
+    data: normalizeModbusListPayload(response, 'groups'),
+  }))
+}
+
+export const createModbusRegisterGroup = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/register-groups`,
+    method: 'post',
+    data,
+  })
+}
+
+export const updateModbusRegisterGroup = (projectId, connectionId, groupId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/register-groups/${groupId}`,
+    method: 'put',
+    data,
+  })
+}
+
+export const deleteModbusRegisterGroup = (projectId, connectionId, groupId) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/register-groups/${groupId}`,
+    method: 'delete',
+  })
+}
+
+export const getModbusRegisters = (projectId, connectionId, params = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/registers`,
+    method: 'get',
+    params,
+  }).then((response) => ({
+    ...response,
+    data: normalizeModbusListPayload(response, 'registers'),
+  }))
+}
+
+export const createModbusRegister = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/registers`,
+    method: 'post',
+    data,
+  })
+}
+
+export const batchImportModbusRegisters = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/registers/batch-import`,
+    method: 'post',
+    data,
+  })
+}
+
+export const updateModbusRegister = (projectId, connectionId, registerId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/registers/${registerId}`,
+    method: 'put',
+    data,
+  })
+}
+
+export const deleteModbusRegister = (projectId, connectionId, registerId) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/registers/${registerId}`,
+    method: 'delete',
+  })
+}
+
+export const validateModbusModel = (projectId, connectionId) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/validate-model`,
+    method: 'post',
+  })
+}
+
+export const previewModbusRegisters = (projectId, connectionId, data = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/preview`,
+    method: 'post',
+    data,
+  })
+}
+
+export const getModbusReadPlanEstimate = (projectId, connectionId, params = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/read-plan-estimate`,
+    method: 'get',
+    params,
   })
 }
 
@@ -1198,6 +1298,18 @@ export default {
   deleteOpcuaNode,
   validateOpcuaModel,
   previewOpcuaNodes,
+  getModbusRegisterGroups,
+  createModbusRegisterGroup,
+  updateModbusRegisterGroup,
+  deleteModbusRegisterGroup,
+  getModbusRegisters,
+  createModbusRegister,
+  batchImportModbusRegisters,
+  updateModbusRegister,
+  deleteModbusRegister,
+  validateModbusModel,
+  previewModbusRegisters,
+  getModbusReadPlanEstimate,
   getConnectionTables,
   createConnectionTable,
   renameConnectionTable,

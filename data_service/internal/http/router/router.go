@@ -18,6 +18,7 @@ type options struct {
 	queryHandler           *handler.QueryHandler
 	workbenchGroupHandler  *handler.WorkbenchGroupHandler
 	dataPointHandler       *handler.DataPointHandler
+	modbusModelingHandler  *handler.ModbusModelingHandler
 	mqttHandler            *handler.MqttHandler
 	opcuaModelingHandler   *handler.OpcuaModelingHandler
 	protocolWave1Handler   *handler.ProtocolWave1Handler
@@ -105,6 +106,14 @@ func WithMqttRoutes(mqttHandler *handler.MqttHandler, jwtValidator *auth.JWTVali
 	}
 }
 
+// WithModbusModelingRoutes wires Modbus 寄存器建模 routes.
+func WithModbusModelingRoutes(modbusModelingHandler *handler.ModbusModelingHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.modbusModelingHandler = modbusModelingHandler
+		opts.jwtValidator = jwtValidator
+	}
+}
+
 // WithOpcuaModelingRoutes wires OPC UA 点位建模 routes.
 func WithOpcuaModelingRoutes(opcuaModelingHandler *handler.OpcuaModelingHandler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
@@ -182,6 +191,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountDataRoutes(mux, opts)
 	mountWorkbenchGroupRoutes(mux, opts)
 	mountMqttRoutes(mux, opts)
+	mountModbusModelingRoutes(mux, opts)
 	mountOpcuaModelingRoutes(mux, opts)
 	mountProtocolWave1Routes(mux, opts)
 	mountProtocolWave2Routes(mux, opts)
@@ -1053,6 +1063,41 @@ func mountOpcuaModelingRoutes(mux *http.ServeMux, opts options) {
 	mux.Handle("DELETE "+base+"/nodes/{nodeId}", write(opts.opcuaModelingHandler.DeleteNode))
 	mux.Handle("POST "+base+"/validate-model", read(opts.opcuaModelingHandler.ValidateModel))
 	mux.Handle("POST "+base+"/preview", read(opts.opcuaModelingHandler.PreviewNodes))
+}
+
+func mountModbusModelingRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.jwtValidator == nil || opts.modbusModelingHandler == nil {
+		return
+	}
+
+	read := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+	write := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+
+	base := "/api/v1/data/projects/{projectId}/modbus/{connectionId}"
+	mux.Handle("GET "+base+"/register-groups", read(opts.modbusModelingHandler.ListGroups))
+	mux.Handle("POST "+base+"/register-groups", write(opts.modbusModelingHandler.CreateGroup))
+	mux.Handle("PUT "+base+"/register-groups/{groupId}", write(opts.modbusModelingHandler.UpdateGroup))
+	mux.Handle("DELETE "+base+"/register-groups/{groupId}", write(opts.modbusModelingHandler.DeleteGroup))
+	mux.Handle("GET "+base+"/registers", read(opts.modbusModelingHandler.ListRegisters))
+	mux.Handle("POST "+base+"/registers", write(opts.modbusModelingHandler.CreateRegister))
+	mux.Handle("POST "+base+"/registers/batch-import", write(opts.modbusModelingHandler.BatchImportRegisters))
+	mux.Handle("PUT "+base+"/registers/{registerId}", write(opts.modbusModelingHandler.UpdateRegister))
+	mux.Handle("DELETE "+base+"/registers/{registerId}", write(opts.modbusModelingHandler.DeleteRegister))
+	mux.Handle("POST "+base+"/validate-model", read(opts.modbusModelingHandler.ValidateModel))
+	mux.Handle("POST "+base+"/preview", read(opts.modbusModelingHandler.PreviewRegisters))
+	mux.Handle("GET "+base+"/read-plan-estimate", read(opts.modbusModelingHandler.EstimateReadPlans))
 }
 
 func mountProjectSnapshotRoutes(mux *http.ServeMux, opts options) {
