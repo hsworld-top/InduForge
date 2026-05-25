@@ -187,7 +187,7 @@ DELETE /api/v1/data/projects/{projectId}/modbus/{connectionId}/sessions/{session
 POST   /api/v1/data/projects/{projectId}/modbus/{connectionId}/sessions/{sessionId}/read
 POST   /api/v1/data/projects/{projectId}/modbus/{connectionId}/sessions/{sessionId}/poll
 DELETE /api/v1/data/projects/{projectId}/modbus/{connectionId}/sessions/{sessionId}/poll
-GET    /api/v1/data/projects/{projectId}/modbus/{connectionId}/read-plan
+GET    /api/v1/data/projects/{projectId}/modbus/{connectionId}/read-plan-estimate
 ```
 
 寄存器读取响应：
@@ -299,4 +299,3 @@ Modbus：
 - 变量预览只针对当前分组。
 - 建模校验按当前变量、当前分组或全部范围展示。
 - 离开工作台时会话被释放。
-
