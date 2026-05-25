@@ -26,6 +26,11 @@ type fakeProtocolDevModbusReader struct {
 	registers []ProtocolDevModbusRegister
 }
 
+type fakeProtocolDevS7Reader struct {
+	variables []ProtocolDevS7Variable
+	updated   map[string]any
+}
+
 func (r *fakeProtocolDevConnectionRepository) GetProtocolDevConnection(_ context.Context, projectID, connectionID string) (*ProtocolDevConnection, error) {
 	if r.connection.ProjectID != projectID || r.connection.ID != connectionID {
 		return nil, nil
@@ -65,6 +70,29 @@ func (r *fakeProtocolDevModbusReader) ListDevSessionModbusRegisters(_ context.Co
 	return result, nil
 }
 
+func (r *fakeProtocolDevS7Reader) ListDevSessionS7Variables(_ context.Context, _, _ string, groupID *string) ([]ProtocolDevS7Variable, error) {
+	result := make([]ProtocolDevS7Variable, 0, len(r.variables))
+	for _, variable := range r.variables {
+		if groupID != nil && (variable.GroupID == nil || *variable.GroupID != *groupID) {
+			continue
+		}
+		result = append(result, variable)
+	}
+	return result, nil
+}
+
+func (r *fakeProtocolDevS7Reader) EstimateDevSessionS7ReadPlan(_ context.Context, _, _ string, _ *string) (*S7ReadPlanEstimate, error) {
+	return &S7ReadPlanEstimate{VariableCount: len(r.variables), BlockCount: 1, Diagnostics: []string{"ok"}}, nil
+}
+
+func (r *fakeProtocolDevS7Reader) UpdateVariableLastValue(_ context.Context, _, _, variableID, _ string, value any, _ string) error {
+	if r.updated == nil {
+		r.updated = map[string]any{}
+	}
+	r.updated[variableID] = value
+	return nil
+}
+
 func TestProtocolDevSessionService_CreateAndCloseSession(t *testing.T) {
 	repo := &fakeProtocolDevConnectionRepository{
 		connection: fakeProtocolConnection{
@@ -75,7 +103,7 @@ func TestProtocolDevSessionService_CreateAndCloseSession(t *testing.T) {
 			Config:    map[string]any{"endpoint": "opc.tcp://127.0.0.1:4840"},
 		},
 	}
-	service := NewProtocolDevSessionService(repo, nil, nil)
+	service := NewProtocolDevSessionService(repo, nil, nil, nil)
 
 	session, err := service.CreateSession(context.Background(), "project-1", "conn-1", "user-1", "opcua")
 	if err != nil {
@@ -115,7 +143,7 @@ func TestProtocolDevSessionService_BrowseAndReadOpcuaNodes(t *testing.T) {
 			DataType: "Double",
 		}},
 	}
-	service := NewProtocolDevSessionService(repo, opcua, nil)
+	service := NewProtocolDevSessionService(repo, opcua, nil, nil)
 	session, err := service.CreateSession(context.Background(), "project-1", "conn-1", "user-1", "opcua")
 	if err != nil {
 		t.Fatalf("create session failed: %v", err)
@@ -166,7 +194,7 @@ func TestProtocolDevSessionService_ReadAndPollModbusRegisters(t *testing.T) {
 			Scale:           1,
 		}},
 	}
-	service := NewProtocolDevSessionService(repo, nil, modbus)
+	service := NewProtocolDevSessionService(repo, nil, modbus, nil)
 	session, err := service.CreateSession(context.Background(), "project-1", "conn-1", "user-1", "modbus")
 	if err != nil {
 		t.Fatalf("create session failed: %v", err)
@@ -189,6 +217,58 @@ func TestProtocolDevSessionService_ReadAndPollModbusRegisters(t *testing.T) {
 	}
 }
 
+func TestProtocolDevSessionService_ReadAndPollS7Variables(t *testing.T) {
+	repo := &fakeProtocolDevConnectionRepository{
+		connection: fakeProtocolConnection{
+			ID:        "conn-1",
+			ProjectID: "project-1",
+			Type:      "s7",
+			Name:      "s7-main",
+			Config:    map[string]any{"host": "127.0.0.1", "port": 102},
+		},
+	}
+	s7 := &fakeProtocolDevS7Reader{
+		variables: []ProtocolDevS7Variable{{
+			ID:                "v-1",
+			Name:              "Speed",
+			Code:              "speed",
+			Area:              "DB",
+			DBNumber:          protocolDevIntPtr(1),
+			ByteOffset:        4,
+			AddressText:       "DB1.DBD4",
+			NormalizedAddress: "DB1.DBD4",
+			ReadLength:        4,
+			DataType:          "Real",
+			Scale:             1,
+		}},
+	}
+	service := NewProtocolDevSessionService(repo, nil, nil, s7)
+	session, err := service.CreateSession(context.Background(), "project-1", "conn-1", "user-1", "s7")
+	if err != nil {
+		t.Fatalf("create session failed: %v", err)
+	}
+
+	read, err := service.ReadS7(context.Background(), "project-1", "conn-1", session.SessionID, "user-1", []string{"v-1"}, nil)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	if len(read.Values) != 1 || read.Values[0].Value == nil || s7.updated["v-1"] == nil {
+		t.Fatalf("unexpected read result: %#v updated=%#v", read, s7.updated)
+	}
+
+	poll, err := service.PollS7(context.Background(), "project-1", "conn-1", session.SessionID, "user-1", nil)
+	if err != nil {
+		t.Fatalf("poll failed: %v", err)
+	}
+	if len(poll.Values) != 1 || poll.ReadPlan.BlockCount != 1 || len(poll.Diagnostics) == 0 {
+		t.Fatalf("unexpected poll result: %#v", poll)
+	}
+}
+
 func protocolDevStringPtr(value string) *string {
+	return &value
+}
+
+func protocolDevIntPtr(value int) *int {
 	return &value
 }

@@ -69,6 +69,13 @@ type ProtocolDevModbusModelReader interface {
 	ListDevSessionModbusRegisters(ctx context.Context, projectID, connectionID string, groupID *string) ([]ProtocolDevModbusRegister, error)
 }
 
+// ProtocolDevS7ModelReader 表示 S7 开发态会话需要读取的建模数据接口。
+type ProtocolDevS7ModelReader interface {
+	ListDevSessionS7Variables(ctx context.Context, projectID, connectionID string, groupID *string) ([]ProtocolDevS7Variable, error)
+	EstimateDevSessionS7ReadPlan(ctx context.Context, projectID, connectionID string, groupID *string) (*S7ReadPlanEstimate, error)
+	UpdateVariableLastValue(ctx context.Context, projectID, connectionID, variableID, userID string, value any, quality string) error
+}
+
 // ProtocolDevOpcuaGroup 是 OPC UA 浏览树需要的变量组投影。
 type ProtocolDevOpcuaGroup struct {
 	ID       string
@@ -163,6 +170,31 @@ type ProtocolDevModbusPollResult struct {
 	Values      []ProtocolDevModbusReadValue `json:"values"`
 	ReadPlan    ModbusReadPlanEstimate       `json:"readPlan"`
 	Diagnostics []string                     `json:"diagnostics"`
+}
+
+// ProtocolDevS7ReadValue 表示 S7 开发态读取返回的一条值。
+type ProtocolDevS7ReadValue struct {
+	VariableID string  `json:"variableId"`
+	Address    string  `json:"address"`
+	RawValue   any     `json:"rawValue"`
+	Value      any     `json:"value"`
+	DataType   string  `json:"dataType"`
+	Quality    string  `json:"quality"`
+	Timestamp  string  `json:"timestamp"`
+	Error      *string `json:"error,omitempty"`
+}
+
+// ProtocolDevS7ReadResult 表示 S7 开发态读取结果。
+type ProtocolDevS7ReadResult struct {
+	Values      []ProtocolDevS7ReadValue `json:"values"`
+	Diagnostics []string                 `json:"diagnostics"`
+}
+
+// ProtocolDevS7PollResult 表示 S7 开发态短时轮询结果。
+type ProtocolDevS7PollResult struct {
+	Values      []ProtocolDevS7ReadValue `json:"values"`
+	ReadPlan    S7ReadPlanEstimate       `json:"readPlan"`
+	Diagnostics []string                 `json:"diagnostics"`
 }
 
 // ProtocolDevOpcuaModelingAdapter 把 OPC UA 建模服务适配为会话浏览/读取投影。
@@ -277,17 +309,19 @@ type ProtocolDevSessionService struct {
 	connections ProtocolDevConnectionReader
 	opcua       ProtocolDevOpcuaModelReader
 	modbus      ProtocolDevModbusModelReader
+	s7          ProtocolDevS7ModelReader
 	mu          sync.Mutex
 	sessions    map[string]ProtocolDevSession
 	now         func() time.Time
 }
 
 // NewProtocolDevSessionService 创建协议开发态会话服务。
-func NewProtocolDevSessionService(connections ProtocolDevConnectionReader, opcua ProtocolDevOpcuaModelReader, modbus ProtocolDevModbusModelReader) *ProtocolDevSessionService {
+func NewProtocolDevSessionService(connections ProtocolDevConnectionReader, opcua ProtocolDevOpcuaModelReader, modbus ProtocolDevModbusModelReader, s7 ProtocolDevS7ModelReader) *ProtocolDevSessionService {
 	return &ProtocolDevSessionService{
 		connections: connections,
 		opcua:       opcua,
 		modbus:      modbus,
+		s7:          s7,
 		sessions:    map[string]ProtocolDevSession{},
 		now:         time.Now,
 	}
@@ -467,6 +501,47 @@ func (s *ProtocolDevSessionService) StopPollModbus(ctx context.Context, projectI
 	return &session, nil
 }
 
+// ReadS7 读取会话内 S7 变量当前值，第一版基于建模数据生成开发态样例值并写回最近值。
+func (s *ProtocolDevSessionService) ReadS7(ctx context.Context, projectID, connectionID, sessionID, userID string, variableIDs []string, groupID *string) (*ProtocolDevS7ReadResult, error) {
+	if _, err := s.requireSession(projectID, connectionID, sessionID, userID, "s7"); err != nil {
+		return nil, err
+	}
+	variables, err := s.listS7Variables(ctx, projectID, connectionID, groupID)
+	if err != nil {
+		return nil, err
+	}
+	values := s.buildS7ReadValues(ctx, projectID, connectionID, userID, variables, variableIDs)
+	return &ProtocolDevS7ReadResult{Values: values, Diagnostics: []string{}}, nil
+}
+
+// PollS7 返回当前会话的短时轮询快照，并附带与运行态一致的读取计划估算。
+func (s *ProtocolDevSessionService) PollS7(ctx context.Context, projectID, connectionID, sessionID, userID string, groupID *string) (*ProtocolDevS7PollResult, error) {
+	if _, err := s.requireSession(projectID, connectionID, sessionID, userID, "s7"); err != nil {
+		return nil, err
+	}
+	variables, err := s.listS7Variables(ctx, projectID, connectionID, groupID)
+	if err != nil {
+		return nil, err
+	}
+	values := s.buildS7ReadValues(ctx, projectID, connectionID, userID, variables, nil)
+	readPlan, err := s.s7.EstimateDevSessionS7ReadPlan(ctx, projectID, connectionID, groupID)
+	if err != nil {
+		return nil, err
+	}
+	diagnostics := append([]string{}, readPlan.Diagnostics...)
+	diagnostics = append(diagnostics, "当前轮询结果为开发态短时读取快照，不写入历史库、不触发报警或计算。")
+	return &ProtocolDevS7PollResult{Values: values, ReadPlan: *readPlan, Diagnostics: diagnostics}, nil
+}
+
+// StopPollS7 结束 S7 短时轮询占位，会话仍保持连接。
+func (s *ProtocolDevSessionService) StopPollS7(ctx context.Context, projectID, connectionID, sessionID, userID string) (*ProtocolDevSession, error) {
+	session, err := s.requireSession(projectID, connectionID, sessionID, userID, "s7")
+	if err != nil {
+		return nil, err
+	}
+	return &session, nil
+}
+
 func (s *ProtocolDevSessionService) loadProtocolConnection(ctx context.Context, projectID, connectionID, protocol string) (*ProtocolDevConnection, error) {
 	if strings.TrimSpace(projectID) == "" || strings.TrimSpace(connectionID) == "" || strings.TrimSpace(protocol) == "" {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "开发态会话参数不完整")
@@ -506,6 +581,13 @@ func (s *ProtocolDevSessionService) listModbusRegisters(ctx context.Context, pro
 	return s.modbus.ListDevSessionModbusRegisters(ctx, projectID, connectionID, groupID)
 }
 
+func (s *ProtocolDevSessionService) listS7Variables(ctx context.Context, projectID, connectionID string, groupID *string) ([]ProtocolDevS7Variable, error) {
+	if s.s7 == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "S7 开发态模型读取器未初始化")
+	}
+	return s.s7.ListDevSessionS7Variables(ctx, projectID, connectionID, groupID)
+}
+
 func (s *ProtocolDevSessionService) buildModbusReadValues(registers []ProtocolDevModbusRegister, registerIDs []string) []ProtocolDevModbusReadValue {
 	wanted := stringSet(registerIDs)
 	now := s.now().UTC().Format("2006-01-02 15:04:05")
@@ -530,9 +612,46 @@ func (s *ProtocolDevSessionService) buildModbusReadValues(registers []ProtocolDe
 	return values
 }
 
+func (s *ProtocolDevSessionService) buildS7ReadValues(ctx context.Context, projectID, connectionID, userID string, variables []ProtocolDevS7Variable, variableIDs []string) []ProtocolDevS7ReadValue {
+	wanted := stringSet(variableIDs)
+	now := s.now().UTC().Format("2006-01-02 15:04:05")
+	values := make([]ProtocolDevS7ReadValue, 0, len(variables))
+	for _, variable := range variables {
+		if len(wanted) > 0 && !wanted[variable.ID] && !wanted[variable.Code] {
+			continue
+		}
+		raw := sampleS7RawValue(variable)
+		value := sampleS7Value(variable, raw)
+		quality := "Good"
+		_ = s.s7.UpdateVariableLastValue(ctx, projectID, connectionID, variable.ID, userID, value, quality)
+		values = append(values, ProtocolDevS7ReadValue{
+			VariableID: variable.ID,
+			Address:    firstNonEmpty(variable.NormalizedAddress, variable.AddressText),
+			RawValue:   raw,
+			Value:      value,
+			DataType:   variable.DataType,
+			Quality:    quality,
+			Timestamp:  now,
+			Error:      nil,
+		})
+	}
+	return values
+}
+
 func protocolDevEndpoint(protocol string, config map[string]any) string {
 	if protocol == "opcua" {
 		return firstProtocolString(config, "endpoint", "url")
+	}
+	if protocol == "s7" {
+		host := firstProtocolString(config, "host", "ip")
+		port := firstProtocolString(config, "port")
+		if port == "" {
+			port = "102"
+		}
+		if host == "" {
+			return ""
+		}
+		return host + ":" + port
 	}
 	if firstProtocolString(config, "mode") == "rtu" {
 		return "RTU"
@@ -641,6 +760,35 @@ func sampleModbusValue(register ProtocolDevModbusRegister, raw []int) any {
 		return float64(raw[0])*scale + register.Offset
 	default:
 		return raw[0]
+	}
+}
+
+func sampleS7RawValue(variable ProtocolDevS7Variable) any {
+	base := variable.ByteOffset + len(variable.Code)
+	switch strings.ToLower(strings.TrimSpace(variable.DataType)) {
+	case "bool", "boolean":
+		return base%2 == 0
+	case "real", "float", "float32", "double":
+		return float64(1000+base) / 10
+	case "string":
+		return firstNonEmpty(variable.Code, variable.Name, "preview")
+	default:
+		return base
+	}
+}
+
+func sampleS7Value(variable ProtocolDevS7Variable, raw any) any {
+	switch typed := raw.(type) {
+	case int:
+		return float64(typed)*variable.Scale + variable.Offset
+	case float64:
+		scale := variable.Scale
+		if scale == 0 {
+			scale = 1
+		}
+		return typed*scale + variable.Offset
+	default:
+		return typed
 	}
 }
 

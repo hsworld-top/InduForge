@@ -193,6 +193,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		service.NewProtocolDevConnectionRepositoryAdapter(connectionRepository),
 		service.NewProtocolDevOpcuaModelingAdapter(opcuaModelingService),
 		service.NewProtocolDevModbusModelingAdapter(modbusModelingService),
+		s7ModelingService,
 	)
 	projectSnapshotService := service.NewProjectSnapshotService(projectSnapshotRepository)
 	protocolWave1Service := service.NewProtocolWave1Service(protocolWave1Repository)

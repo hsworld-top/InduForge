@@ -188,6 +188,84 @@ func (h *ProtocolDevSessionHandler) StopPollModbus(w http.ResponseWriter, r *htt
 	return nil
 }
 
+// CreateS7 创建 S7 开发态会话。
+func (h *ProtocolDevSessionHandler) CreateS7(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	result, err := h.service.CreateSession(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, "s7")
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// CloseS7 断开 S7 开发态会话。
+func (h *ProtocolDevSessionHandler) CloseS7(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	result, err := h.service.CloseSession(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), r.PathValue("sessionId"), claims.UserID, "s7")
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// ReadS7 读取 S7 开发态变量当前值。
+func (h *ProtocolDevSessionHandler) ReadS7(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request protocolDevReadRequest
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.ReadS7(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), r.PathValue("sessionId"), claims.UserID, request.IDs, request.GroupID)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// PollS7 返回 S7 开发态短时轮询快照。
+func (h *ProtocolDevSessionHandler) PollS7(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request protocolDevReadRequest
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.PollS7(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), r.PathValue("sessionId"), claims.UserID, request.GroupID)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// StopPollS7 结束 S7 短时轮询。
+func (h *ProtocolDevSessionHandler) StopPollS7(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	result, err := h.service.StopPollS7(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), r.PathValue("sessionId"), claims.UserID)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 type protocolDevReadRequest struct {
 	IDs     []string `json:"ids"`
 	GroupID *string  `json:"groupId"`

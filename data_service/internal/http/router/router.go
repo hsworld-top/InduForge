@@ -1191,6 +1191,13 @@ func mountProtocolDevSessionRoutes(mux *http.ServeMux, opts options) {
 	mux.Handle("POST "+modbusBase+"/{sessionId}/read", read(opts.protocolDevSessionHandler.ReadModbus))
 	mux.Handle("POST "+modbusBase+"/{sessionId}/poll", read(opts.protocolDevSessionHandler.PollModbus))
 	mux.Handle("DELETE "+modbusBase+"/{sessionId}/poll", write(opts.protocolDevSessionHandler.StopPollModbus))
+
+	s7Base := "/api/v1/data/projects/{projectId}/s7/{connectionId}/sessions"
+	mux.Handle("POST "+s7Base, read(opts.protocolDevSessionHandler.CreateS7))
+	mux.Handle("DELETE "+s7Base+"/{sessionId}", write(opts.protocolDevSessionHandler.CloseS7))
+	mux.Handle("POST "+s7Base+"/{sessionId}/read", read(opts.protocolDevSessionHandler.ReadS7))
+	mux.Handle("POST "+s7Base+"/{sessionId}/poll", read(opts.protocolDevSessionHandler.PollS7))
+	mux.Handle("DELETE "+s7Base+"/{sessionId}/poll", write(opts.protocolDevSessionHandler.StopPollS7))
 }
 
 func mountProjectSnapshotRoutes(mux *http.ServeMux, opts options) {
