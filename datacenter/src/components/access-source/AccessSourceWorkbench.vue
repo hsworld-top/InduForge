@@ -18,6 +18,7 @@ import SqlWorkbench from './workbench/SqlWorkbench.vue'
 import MqttWorkbenchPanel from './workbench/MqttWorkbenchPanel.vue'
 import ModbusWorkbenchPanel from './workbench/ModbusWorkbenchPanel.vue'
 import OpcuaWorkbenchPanel from './workbench/OpcuaWorkbenchPanel.vue'
+import S7WorkbenchPanel from './workbench/S7WorkbenchPanel.vue'
 import ProtocolWorkbenchPanel from './workbench/ProtocolWorkbenchPanel.vue'
 import RedisManagerWorkbench from './workbench/RedisManagerWorkbench.vue'
 import IndustrialProtocolWorkbench from './workbench/IndustrialProtocolWorkbench.vue'
@@ -67,6 +68,9 @@ const resolvedPanel = computed(() => {
   }
   if (type === 'modbus') {
     return ModbusWorkbenchPanel
+  }
+  if (type === 's7') {
+    return S7WorkbenchPanel
   }
   if (['kafka', 'http', 'websocket'].includes(type)) {
     return ProtocolWorkbenchPanel
