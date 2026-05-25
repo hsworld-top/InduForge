@@ -1,5 +1,5 @@
 <template>
-  <DcDialog v-model="visible" title="配置 PLC 类型" width="820px">
+  <DcDialog v-model="visible" title="配置 PLC 类型" width="820px" body-max-height="calc(100vh - 180px)">
     <el-form class="s7-profile-dialog" label-position="top">
       <section>
         <h3><span>01</span>PLC 类型</h3>
@@ -126,11 +126,28 @@ watch(
 
 const submit = () => {
   emit('submit', {
-    ...form,
+    plcFamily: form.plcFamily,
+    communicationMode: form.communicationMode,
+    host: form.host.trim(),
+    port: form.port,
+    rack: form.rack,
+    slot: form.slot,
     localTsap: form.localTsap || null,
     remoteTsap: form.remoteTsap || null,
+    pollIntervalMs: form.pollIntervalMs,
+    connectTimeoutMs: form.connectTimeoutMs,
+    readTimeoutMs: form.readTimeoutMs,
     pduSize: form.pduSize || null,
     maxReadBytes: form.maxReadBytes || null,
+    maxGapBytes: form.maxGapBytes,
+    maxConcurrentReads: form.maxConcurrentReads,
+    byteOrder: 'big_endian',
+    wordOrder: 'big_endian',
+    optimizedBlockAccess: form.optimizedBlockAccess,
+    allowAbsoluteAddress: form.allowAbsoluteAddress,
+    allowSymbolAddress: form.allowSymbolAddress,
+    supportedAreas: [...form.supportedAreas],
+    options: {},
   })
 }
 </script>

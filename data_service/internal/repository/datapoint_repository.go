@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -337,7 +338,7 @@ func scanDataPointRecord(row dataPointScannable) (DataPointRecord, error) {
 	var (
 		record                  DataPointRecord
 		description             sql.NullString
-		sourceID                sql.NullString
+		sourceID                pgtype.UUID
 		unit                    sql.NullString
 		precisionNum            sql.NullInt32
 		defaultValue            sql.NullString
@@ -346,8 +347,8 @@ func scanDataPointRecord(row dataPointScannable) (DataPointRecord, error) {
 		alarmLow                sql.NullFloat64
 		alarmHigh               sql.NullFloat64
 		refreshIntervalMS       sql.NullInt32
-		createdBy               sql.NullString
-		updatedBy               sql.NullString
+		createdBy               pgtype.UUID
+		updatedBy               pgtype.UUID
 		sourceConfigBytes       []byte
 		tagsBytes               []byte
 		runtimePermissionsBytes []byte
@@ -387,7 +388,7 @@ func scanDataPointRecord(row dataPointScannable) (DataPointRecord, error) {
 	}
 
 	record.Description = nullStringToPtr(description)
-	record.SourceID = nullStringToPtr(sourceID)
+	record.SourceID = uuidToPtr(sourceID)
 	record.Unit = nullStringToPtr(unit)
 	record.PrecisionNum = nullInt32ToPtr(precisionNum)
 	record.DefaultValue = nullStringToPtr(defaultValue)
@@ -396,8 +397,8 @@ func scanDataPointRecord(row dataPointScannable) (DataPointRecord, error) {
 	record.AlarmLow = nullFloat64ToPtr(alarmLow)
 	record.AlarmHigh = nullFloat64ToPtr(alarmHigh)
 	record.RefreshIntervalMS = nullInt32ToPtr(refreshIntervalMS)
-	record.CreatedBy = nullStringToPtr(createdBy)
-	record.UpdatedBy = nullStringToPtr(updatedBy)
+	record.CreatedBy = uuidToPtr(createdBy)
+	record.UpdatedBy = uuidToPtr(updatedBy)
 	record.SourceConfig = map[string]any{}
 	if len(sourceConfigBytes) > 0 {
 		if err := json.Unmarshal(sourceConfigBytes, &record.SourceConfig); err != nil {
@@ -474,6 +475,14 @@ func marshalJSONArray(value []any) ([]byte, error) {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "JSON 数组格式无效", err)
 	}
 	return bytes, nil
+}
+
+func uuidToPtr(value pgtype.UUID) *string {
+	if !value.Valid {
+		return nil
+	}
+	result := value.String()
+	return &result
 }
 
 func nullInt32ToPtr(value sql.NullInt32) *int {

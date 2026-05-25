@@ -252,7 +252,9 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
 
 <style scoped>
 .access-source-card {
-  min-height: 132px;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 164px;
   display: flex;
   flex-direction: column;
   padding: 14px;
@@ -262,6 +264,7 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
   box-shadow: var(--dc-connection-card-shadow);
   color: var(--dc-text);
   text-align: left;
+  overflow: hidden;
   transition:
     border-color 0.18s ease,
     box-shadow 0.18s ease;
@@ -278,6 +281,8 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
 }
 
 .access-source-card__top {
+  flex: 0 0 auto;
+  min-width: 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -286,6 +291,7 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
 
 /* 右上角角标区：竖向排列或横向排列均可，间距 6px */
 .access-source-card__badges {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -312,6 +318,7 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
 
 .access-source-card__body {
   min-width: 0;
+  flex: 1 1 auto;
   margin-top: 12px;
 }
 
@@ -343,6 +350,14 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
   color: var(--dc-text-secondary);
 }
 
+.access-source-card__type span:not(.access-source-card__divider):not(.access-source-card__endpoint) {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .access-source-card__divider,
 .access-source-card__endpoint {
   color: var(--dc-text-secondary);
@@ -356,13 +371,16 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
 }
 
 .access-source-card__divider-line {
+  flex: 0 0 auto;
   height: 1px;
-  margin: auto 0 12px;
+  margin: 12px 0;
   background: var(--dc-border);
   opacity: 0.6;
 }
 
 .access-source-card__bottom {
+  min-width: 0;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -371,7 +389,9 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
 
 /* 「打开工作台」改为 outline 风格 */
 .access-source-card__open {
+  flex: 1 1 auto;
   min-width: 0;
+  max-width: 160px;
   height: 32px;
   display: inline-flex;
   align-items: center;
@@ -478,7 +498,7 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
 
 @media (max-width: 760px) {
   .access-source-card {
-    min-height: 120px;
+    min-height: 156px;
     padding: 12px;
   }
 

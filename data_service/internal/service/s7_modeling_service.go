@@ -875,7 +875,7 @@ func (s *S7ModelingService) syncVariableDatapoint(ctx context.Context, variable 
 		DataType:          normalizeS7DataPointType(variable.DataType),
 		Unit:              cloneOptionalString(variable.Unit),
 		Tags:              []any{},
-		RefreshMode:       "polling",
+		RefreshMode:       "auto",
 		RefreshIntervalMS: &refreshInterval,
 		Status:            "active",
 	})

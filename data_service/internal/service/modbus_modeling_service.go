@@ -678,7 +678,7 @@ func (s *ModbusModelingService) syncRegisterDatapoint(ctx context.Context, regis
 		DataType:          normalizeModbusDataPointType(register.DataType),
 		Unit:              cloneOptionalString(register.Unit),
 		Tags:              []any{},
-		RefreshMode:       "polling",
+		RefreshMode:       "auto",
 		RefreshIntervalMS: &refreshInterval,
 		Status:            "active",
 	})
@@ -864,9 +864,9 @@ func normalizeModbusRequiredText(value string, message string) (string, error) {
 }
 
 var allowedModbusAreas = map[string]struct{}{
-	"coil":           {},
-	"discrete_input": {},
-	"input_register": {},
+	"coil":             {},
+	"discrete_input":   {},
+	"input_register":   {},
 	"holding_register": {},
 }
 
