@@ -147,6 +147,7 @@
             >
               <div class="mqtt-workbench__tag-list">
                 <MqttTagList
+                  :ref="(el) => setTagListRef(tab.id, el)"
                   :project-id="projectIdText"
                   :subscription-id="tab.subscription.id"
                   :preview-session-id="connectionStarted ? previewSessionId : ''"
@@ -210,6 +211,7 @@
         :project-id="projectIdText"
         :subscription-id="monitorSubscription.id"
         :preview-session-id="previewSessionId"
+        @tag-value="handleMonitorTagValue"
       />
     </DcDialog>
 
@@ -512,6 +514,7 @@ const connectButtonTitle = computed(() => (connectionStarted.value ? '断开' : 
 const tabs = ref<any[]>([])
 const activeTabId = ref('')
 const messageViewerRefs = shallowRef(new Map<string, any>())
+const tagListRefs = shallowRef(new Map<string, any>())
 const messageCleanups = new Map<string, () => void>()
 const subscriptionDialogVisible = ref(false)
 const subscriptionDialogMode = ref<'create' | 'edit'>('create')
@@ -1103,6 +1106,7 @@ const closeTab = (tabId: string) => {
   messageCleanups.get(tabId)?.()
   messageCleanups.delete(tabId)
   messageViewerRefs.value.delete(tabId)
+  tagListRefs.value.delete(tabId)
 
   const index = tabs.value.findIndex((tab) => tab.id === tabId)
   if (index < 0) return
@@ -1123,6 +1127,22 @@ const setMessageViewerRef = (tabId: string, el: any) => {
   messageViewerRefs.value.delete(tabId)
 }
 
+const setTagListRef = (tabId: string, el: any) => {
+  if (el) {
+    tagListRefs.value.set(tabId, el)
+    return
+  }
+  tagListRefs.value.delete(tabId)
+}
+
+const handleMonitorTagValue = (value: any) => {
+  const subscriptionId = value?.subscriptionId || monitorSubscription.value?.id
+  if (!subscriptionId) {
+    return
+  }
+  tagListRefs.value.get(`mqtt-tags-${subscriptionId}`)?.applyTagValueUpdate?.(value)
+}
+
 const cleanupMessageSubscriptions = () => {
   Array.from(messageCleanups.values()).forEach((cleanup) => cleanup?.())
   messageCleanups.clear()
@@ -1137,6 +1157,7 @@ watch(
   async () => {
     cleanupMessageSubscriptions()
     messageViewerRefs.value.clear()
+    tagListRefs.value.clear()
     monitorDialogVisible.value = false
     monitorSubscription.value = null
     detailDialogVisible.value = false
@@ -1164,6 +1185,7 @@ watch(
 onBeforeUnmount(() => {
   cleanupMessageSubscriptions()
   messageViewerRefs.value.clear()
+  tagListRefs.value.clear()
 })
 </script>
 

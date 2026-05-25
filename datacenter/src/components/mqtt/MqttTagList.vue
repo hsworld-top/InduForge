@@ -61,102 +61,196 @@
     </div>
 
     <div class="mqtt-tag-list__body" v-loading="loading">
-      <div class="tag-tree">
-        <div v-if="ungroupedTags.length > 0" class="group-node">
-          <div
-            class="group-header"
-            :class="{ expanded: activeGroups.includes('ungrouped') }"
+      <div v-if="tags.length > 0 || groups.length > 0" class="tag-table">
+        <div class="tag-table__head tag-table__row">
+          <span>变量 / 分组名称</span>
+          <span>标识符</span>
+          <span>类型</span>
+          <span>解析规则</span>
+          <span>数据点</span>
+          <span>最近值</span>
+          <span>状态</span>
+          <span>操作</span>
+        </div>
+
+        <template v-if="ungroupedTags.length > 0">
+          <button
+            type="button"
+            class="tag-table__row tag-table__row--group"
             @click="toggleGroup('ungrouped')"
           >
-            <div
-              class="group-icon-wrapper"
-              style="--group-color: #6c757d; --group-bg-color: #f8f9fa"
-            >
-              <IconTablerFolderOpened class="w-4 h-4" />
-            </div>
-            <div class="group-info">
-              <div class="group-name">未分组</div>
-              <div class="group-stats">{{ ungroupedTags.length }} 个变量</div>
-            </div>
-            <div class="group-actions">
-              <IconTablerChevronRight
-                v-if="!activeGroups.includes('ungrouped')"
-                class="group-expand-icon w-4 h-4"
+            <span class="tag-table__name-cell">
+              <component
+                :is="activeGroups.includes('ungrouped') ? IconTablerChevronDown : IconTablerChevronRight"
+                class="tag-table__chevron"
               />
-              <IconTablerChevronDown v-else class="group-expand-icon w-4 h-4" />
-            </div>
-          </div>
-          <div v-if="activeGroups.includes('ungrouped')" class="group-content">
-            <div class="tag-items">
-              <TagItem
-                v-for="tag in ungroupedTags"
-                :key="tag.id"
-                :tag="tag"
-                @edit="handleEditTag"
-                @delete="handleDeleteTag"
-                @view="handleViewTag"
-              />
-            </div>
-          </div>
-        </div>
+              <IconTablerFolderOpened class="tag-table__folder" />
+              <strong>未分组</strong>
+              <em>{{ ungroupedTags.length }} 个变量</em>
+            </span>
+            <span>—</span>
+            <span>—</span>
+            <span>—</span>
+            <span>—</span>
+            <span>—</span>
+            <span>
+              <span class="tag-table__status is-neutral">GROUP</span>
+            </span>
+            <span class="tag-table__actions"></span>
+          </button>
 
-        <div
-          v-for="group in sortedGroups"
-          :key="group.id"
-          class="group-node"
-          :style="getGroupStyle(group)"
-        >
           <div
-            class="group-header"
-            :class="{ expanded: activeGroups.includes(group.id) }"
+            v-for="tag in ungroupedTags"
+            v-show="activeGroups.includes('ungrouped')"
+            :key="tag.id"
+            class="tag-table__row tag-table__row--tag"
+          >
+            <span class="tag-table__name-cell is-child">
+              <IconTablerCodeDots class="tag-table__tag-icon" />
+              <span class="tag-table__tag-title">
+                <strong>{{ tag.name }}</strong>
+                <em>{{ tag.description || tag.code }}</em>
+              </span>
+            </span>
+            <span class="tag-table__mono" :title="tag.code">{{ tag.code }}</span>
+            <span>{{ getDataTypeLabel(tag.dataType) }}</span>
+            <span class="tag-table__mono" :title="formatParseRule(tag)">
+              {{ formatParseRule(tag) }}
+            </span>
+            <span class="tag-table__mono" :title="tag.datapointPath || '-'">
+              {{ tag.datapointPath || '-' }}
+            </span>
+            <span class="tag-table__value" :title="formatLastValue(tag, true)">
+              {{ formatLastValue(tag) }}
+            </span>
+            <span>
+              <span class="tag-table__status" :class="statusClass(tag)">
+                {{ statusLabel(tag) }}
+              </span>
+            </span>
+            <span class="tag-table__actions">
+              <el-tooltip content="查看" placement="top">
+                <button type="button" class="tag-table__action" @click="handleViewTag(tag)">
+                  <IconTablerEye />
+                </button>
+              </el-tooltip>
+              <el-tooltip content="编辑" placement="top">
+                <button type="button" class="tag-table__action" @click="handleEditTag(tag)">
+                  <IconTablerEdit />
+                </button>
+              </el-tooltip>
+              <el-tooltip content="删除" placement="top">
+                <button
+                  type="button"
+                  class="tag-table__action is-danger"
+                  @click="handleDeleteTag(tag)"
+                >
+                  <IconTablerTrash />
+                </button>
+              </el-tooltip>
+            </span>
+          </div>
+        </template>
+
+        <template v-for="group in sortedGroups" :key="group.id">
+          <button
+            v-if="shouldRenderGroup(group)"
+            type="button"
+            class="tag-table__row tag-table__row--group"
+            :style="getGroupStyle(group)"
             @click="toggleGroup(group.id)"
           >
-            <div class="group-icon-wrapper">
-              <IconTablerFolder class="w-4 h-4" />
-            </div>
-            <div class="group-info">
-              <div class="group-name">{{ group.name }}</div>
-              <div class="group-stats">{{ getGroupTagCount(group.id) }} 个变量</div>
-            </div>
-            <div class="group-actions">
-              <el-button type="text" size="small" @click.stop="handleEditGroup(group)">
-                <IconTablerEdit class="w-4 h-4" />
-              </el-button>
-              <el-button
-                type="text"
-                size="small"
-                class="text-red-500"
-                @click.stop="handleDeleteGroup(group)"
-              >
-                <IconTablerTrash class="w-4 h-4" />
-              </el-button>
-              <IconTablerChevronRight
-                v-if="!activeGroups.includes(group.id)"
-                class="group-expand-icon w-4 h-4"
+            <span class="tag-table__name-cell">
+              <component
+                :is="activeGroups.includes(group.id) ? IconTablerChevronDown : IconTablerChevronRight"
+                class="tag-table__chevron"
               />
-              <IconTablerChevronDown v-else class="group-expand-icon w-4 h-4" />
+              <IconTablerFolder class="tag-table__folder" />
+              <strong>{{ group.name }}</strong>
+              <em>{{ getGroupTagCount(group.id) }} 个变量</em>
+            </span>
+            <span class="tag-table__mono" :title="group.code || '-'">{{ group.code || '-' }}</span>
+            <span>—</span>
+            <span>—</span>
+            <span>—</span>
+            <span>—</span>
+            <span>
+              <span class="tag-table__status is-neutral">GROUP</span>
+            </span>
+            <span class="tag-table__actions" @click.stop>
+              <el-tooltip content="编辑分组" placement="top">
+                <button type="button" class="tag-table__action" @click="handleEditGroup(group)">
+                  <IconTablerEdit />
+                </button>
+              </el-tooltip>
+              <el-tooltip content="删除分组" placement="top">
+                <button
+                  type="button"
+                  class="tag-table__action is-danger"
+                  @click="handleDeleteGroup(group)"
+                >
+                  <IconTablerTrash />
+                </button>
+              </el-tooltip>
+            </span>
+          </button>
+
+          <template v-if="activeGroups.includes(group.id)">
+            <div
+              v-for="tag in getGroupTags(group.id)"
+              :key="tag.id"
+              class="tag-table__row tag-table__row--tag"
+            >
+              <span class="tag-table__name-cell is-child">
+                <IconTablerCodeDots class="tag-table__tag-icon" />
+                <span class="tag-table__tag-title">
+                  <strong>{{ tag.name }}</strong>
+                  <em>{{ tag.description || tag.code }}</em>
+                </span>
+              </span>
+              <span class="tag-table__mono" :title="tag.code">{{ tag.code }}</span>
+              <span>{{ getDataTypeLabel(tag.dataType) }}</span>
+              <span class="tag-table__mono" :title="formatParseRule(tag)">
+                {{ formatParseRule(tag) }}
+              </span>
+              <span class="tag-table__mono" :title="tag.datapointPath || '-'">
+                {{ tag.datapointPath || '-' }}
+              </span>
+              <span class="tag-table__value" :title="formatLastValue(tag, true)">
+                {{ formatLastValue(tag) }}
+              </span>
+              <span>
+                <span class="tag-table__status" :class="statusClass(tag)">
+                  {{ statusLabel(tag) }}
+                </span>
+              </span>
+              <span class="tag-table__actions">
+                <el-tooltip content="查看" placement="top">
+                  <button type="button" class="tag-table__action" @click="handleViewTag(tag)">
+                    <IconTablerEye />
+                  </button>
+                </el-tooltip>
+                <el-tooltip content="编辑" placement="top">
+                  <button type="button" class="tag-table__action" @click="handleEditTag(tag)">
+                    <IconTablerEdit />
+                  </button>
+                </el-tooltip>
+                <el-tooltip content="删除" placement="top">
+                  <button
+                    type="button"
+                    class="tag-table__action is-danger"
+                    @click="handleDeleteTag(tag)"
+                  >
+                    <IconTablerTrash />
+                  </button>
+                </el-tooltip>
+              </span>
             </div>
-          </div>
-          <div v-if="activeGroups.includes(group.id)" class="group-content">
-            <div class="tag-items">
-              <TagItem
-                v-for="tag in getGroupTags(group.id)"
-                :key="tag.id"
-                :tag="tag"
-                @edit="handleEditTag"
-                @delete="handleDeleteTag"
-                @view="handleViewTag"
-              />
-              <div v-if="getGroupTags(group.id).length === 0" class="empty-group">
-                <IconTablerFolderOpened class="empty-icon w-6 h-6" />
-                <p class="empty-text">该分组暂无变量</p>
-              </div>
-            </div>
-          </div>
-        </div>
+          </template>
+        </template>
       </div>
 
-      <div v-if="tags.length === 0 && !loading" class="empty-state">
+      <div v-if="tags.length === 0 && groups.length === 0 && !loading" class="empty-state">
         <IconTablerFile />
         <p>暂无变量</p>
         <small>点击“新建变量”开始创建</small>
@@ -197,11 +291,11 @@ import {
   getMqttTagGroups,
   deleteMqttTagGroup,
   getDataPoints,
+  getMqttTagValues,
 } from '@/api/data.api'
 import { useMqttTagSync } from '@/composables/useMqttTagSync'
 import MqttTagDialog from './MqttTagDialog.vue'
 import MqttTagGroupDialog from './MqttTagGroupDialog.vue'
-import TagItem from './TagItem.vue'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerFolderAdd from '~icons/tabler/folder-plus'
 import IconTablerDocumentAdd from '~icons/tabler/file-plus'
@@ -211,12 +305,14 @@ import IconTablerFolderOpened from '~icons/tabler/folder-open'
 import IconTablerFolder from '~icons/tabler/folder'
 import IconTablerEdit from '~icons/tabler/edit'
 import IconTablerTrash from '~icons/tabler/trash'
+import IconTablerEye from '~icons/tabler/eye'
 import IconTablerFile from '~icons/tabler/file'
 import IconTablerChevronRight from '~icons/tabler/chevron-right'
 import IconTablerChevronDown from '~icons/tabler/chevron-down'
 import IconTablerDownload from '~icons/tabler/download'
 import IconTablerActivity from '~icons/tabler/activity'
 import IconTablerSend from '~icons/tabler/send'
+import IconTablerCodeDots from '~icons/tabler/code-dots'
 import { getApiErrorMessage } from '@/utils/request'
 
 const props = defineProps({
@@ -279,6 +375,13 @@ const getGroupTagCount = (groupId) => {
   return tags.value.filter((tag) => tag.groupId === groupId).length
 }
 
+const shouldRenderGroup = (group) => {
+  if (!searchKeyword.value) {
+    return true
+  }
+  return getGroupTags(group.id).length > 0
+}
+
 const getGroupStyle = (group) => {
   const baseColor = group?.color || '#3b82f6'
   return {
@@ -338,12 +441,33 @@ const loadTags = async () => {
     loading.value = true
     const response = await getMqttTags(props.projectId, props.subscriptionId)
     tags.value = response.data?.list || []
-    await loadTagDatapoints(tags.value)
+    await Promise.all([loadTagDatapoints(tags.value), loadTagValues(tags.value)])
   } catch (error) {
     console.error('Failed to load tags:', error)
     ElMessage.error(getApiErrorMessage(error, '加载变量失败'))
   } finally {
     loading.value = false
+  }
+}
+
+const loadTagValues = async (tagList) => {
+  const ids = (tagList || []).map((tag) => tag.id).filter(Boolean)
+  if (ids.length === 0) {
+    return
+  }
+
+  try {
+    const response = await getMqttTagValues(props.projectId, ids)
+    const list = Array.isArray(response.data) ? response.data : response.data?.list || []
+    const valueMap = new Map(list.map((item) => [item.tagId, item]))
+    tags.value.forEach((tag) => {
+      const value = valueMap.get(tag.id)
+      if (value) {
+        tag.currentValue = normalizeTagValue(value)
+      }
+    })
+  } catch (error) {
+    console.error('Failed to load tag values:', error)
   }
 }
 
@@ -482,8 +606,111 @@ const handleSearch = () => {
   // 搜索逻辑由 computed 自动处理
 }
 
+const normalizeTagValue = (value) => ({
+  parsedValue: value?.parsedValue ?? value?.value,
+  value: value?.value ?? value?.parsedValue,
+  quality: value?.quality || 'unknown',
+  timestamp: value?.timestamp || value?.receivedAt || '',
+  error: value?.error || '',
+})
+
+const applyTagValueUpdate = (value) => {
+  const tagId = value?.tagId
+  if (!tagId) {
+    return
+  }
+  const tag = tags.value.find((item) => item.id === tagId)
+  if (!tag) {
+    return
+  }
+  tag.currentValue = normalizeTagValue(value)
+}
+
+const getDataTypeLabel = (dataType) => {
+  const labels = {
+    string: '字符串',
+    number: '数值',
+    boolean: '布尔',
+    object: '对象',
+    array: '数组',
+  }
+  return labels[dataType] || dataType || '-'
+}
+
+const getParseTypeLabel = (parseType) => {
+  const labels = {
+    jsonpath: 'JSONPath',
+    regex: '正则',
+    script: '脚本',
+    fixed: '固定值',
+  }
+  return labels[parseType] || parseType || '-'
+}
+
+const formatParseRule = (tag) => {
+  const type = getParseTypeLabel(tag.parseType)
+  const rule = String(tag.parseRule || '').trim()
+  return rule ? `${type}: ${rule}` : type
+}
+
+const formatLastValue = (tag, full = false) => {
+  const raw = tag.currentValue?.parsedValue ?? tag.currentValue?.value
+  if (raw === null || raw === undefined || raw === '') {
+    return '-'
+  }
+
+  let text = ''
+  if (typeof raw === 'object') {
+    text = JSON.stringify(raw)
+  } else if (tag.dataType === 'number') {
+    const num = Number(raw)
+    text = Number.isFinite(num) ? String(Number(num.toFixed(4))) : String(raw)
+  } else {
+    text = String(raw)
+  }
+
+  if (tag.unit && text !== '-') {
+    text = `${text} ${tag.unit}`
+  }
+  if (full || text.length <= 36) {
+    return text
+  }
+  return `${text.slice(0, 35)}...`
+}
+
+const statusLabel = (tag) => {
+  if (tag.currentValue?.quality === 'bad') {
+    return '解析异常'
+  }
+  if (tag.datapointStatus === 'invalid') {
+    return '失效'
+  }
+  if (tag.datapointPath) {
+    return '活跃'
+  }
+  return '未生成'
+}
+
+const statusClass = (tag) => {
+  if (tag.currentValue?.quality === 'bad') {
+    return 'is-danger'
+  }
+  if (tag.datapointStatus === 'invalid') {
+    return 'is-muted'
+  }
+  if (tag.datapointPath) {
+    return 'is-success'
+  }
+  return 'is-warning'
+}
+
 onMounted(async () => {
   await Promise.all([loadGroups(), loadTags()])
+})
+
+defineExpose({
+  applyTagValueUpdate,
+  refresh: handleRefresh,
 })
 </script>
 
@@ -551,150 +778,236 @@ onMounted(async () => {
   padding: 10px;
 }
 
-.tag-tree {
+.tag-table {
+  min-width: 1040px;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-subtle);
+  background: var(--dc-surface-raised);
   overflow: hidden;
 }
 
-.group-node {
+.tag-table__row {
+  display: grid;
+  grid-template-columns:
+    minmax(230px, 1.8fr) minmax(130px, 1fr) minmax(72px, 0.48fr)
+    minmax(140px, 1fr) minmax(160px, 1.35fr) minmax(110px, 0.8fr)
+    minmax(82px, 0.48fr) 94px;
+  align-items: center;
+  column-gap: 14px;
+  min-height: 44px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--dc-border);
+  color: var(--dc-text-secondary);
+  font-size: 12px;
 }
 
-.group-node:last-child {
+.tag-table__row:last-child {
   border-bottom: none;
 }
 
-.group-header {
-  display: flex;
-  align-items: center;
-  padding: 10px 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  background: var(--dc-surface-raised);
-  border-radius: var(--dc-radius-sm);
-  margin: 2px 6px;
-  position: relative;
+.tag-table__row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.group-header:hover {
+.tag-table__head {
+  min-height: 42px;
+  background: color-mix(in oklch, var(--dc-primary) 5%, var(--dc-surface-subtle));
+  color: var(--dc-text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tag-table__row--group {
+  width: 100%;
+  border-right: 0;
+  border-left: 0;
+  border-top: 0;
+  background: color-mix(in oklch, var(--group-bg-color, var(--dc-surface-muted)) 55%, var(--dc-surface-raised));
+  color: var(--dc-text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tag-table__row--group:hover,
+.tag-table__row--tag:hover {
   background: var(--dc-primary-soft);
 }
 
-.group-header.expanded {
-  background: var(--group-bg-color, #f0f9ff);
-  border-left: 4px solid var(--group-color, #3b82f6);
-  margin-left: 4px;
-  margin-right: 4px;
-  padding-left: 12px;
-}
-
-.group-icon-wrapper {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 12px;
-  background: var(--group-color, #3b82f6);
-  color: white;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-}
-
-.group-header:hover .group-icon-wrapper {
-  transform: scale(1.05);
-}
-
-.group-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.group-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--dc-text);
-  margin-bottom: 2px;
-}
-
-.group-stats {
-  font-size: 11px;
-  color: var(--dc-text-muted);
-}
-
-.group-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.group-header:hover .group-actions {
-  opacity: 1;
-}
-
-.group-actions .el-button {
-  padding: 4px 6px;
-  border-radius: 4px;
-}
-
-.group-expand-icon {
-  color: var(--dc-text-muted);
-  transition: transform 0.2s ease;
-  margin-left: 8px;
-}
-
-.group-header.expanded .group-expand-icon {
-  transform: rotate(90deg);
-}
-
-.group-content {
-  background: var(--group-bg-color, #f0f9ff);
-  border-top: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-.tag-items {
-  padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.empty-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 24px 16px;
-  color: #9ca3af;
-}
-
-.empty-icon {
-  font-size: 24px;
-  margin-bottom: 8px;
-  opacity: 0.6;
-}
-
-.empty-text {
-  font-size: 12px;
-  margin: 0;
-}
-
-.tag-items :deep(.tag-item) {
-  margin: 0;
-  border-radius: 4px;
+.tag-table__row--tag {
   background: var(--dc-surface-raised);
-  border: 1px solid var(--dc-border);
-  transition: all 0.2s ease;
 }
 
-.tag-items :deep(.tag-item:hover) {
-  border-color: var(--group-color, #3b82f6);
-  box-shadow: var(--dc-shadow-surface);
+.tag-table__name-cell {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tag-table__name-cell strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dc-text);
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-table__name-cell em {
+  flex: 0 0 auto;
+  color: var(--dc-text-muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.tag-table__name-cell.is-child {
+  padding-left: 32px;
+  position: relative;
+}
+
+.tag-table__name-cell.is-child::before {
+  position: absolute;
+  left: 12px;
+  top: -16px;
+  bottom: 50%;
+  width: 1px;
+  background: var(--dc-border);
+  content: '';
+}
+
+.tag-table__name-cell.is-child::after {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 12px;
+  height: 1px;
+  background: var(--dc-border);
+  content: '';
+}
+
+.tag-table__chevron,
+.tag-table__folder,
+.tag-table__tag-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.tag-table__chevron {
+  color: var(--dc-text-muted);
+}
+
+.tag-table__folder {
+  color: var(--group-color, var(--dc-primary));
+}
+
+.tag-table__tag-icon {
+  color: var(--dc-primary);
+}
+
+.tag-table__tag-title {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tag-table__tag-title em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-table__mono,
+.tag-table__value {
+  font-family: var(--dc-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+}
+
+.tag-table__value {
+  color: var(--dc-text);
+  font-weight: 700;
+}
+
+.tag-table__status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.tag-table__status::before {
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  content: '';
+}
+
+.tag-table__status.is-success {
+  background: color-mix(in oklch, var(--dc-success) 12%, var(--dc-surface-raised));
+  color: var(--dc-success);
+}
+
+.tag-table__status.is-warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+}
+
+.tag-table__status.is-danger {
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
+}
+
+.tag-table__status.is-muted,
+.tag-table__status.is-neutral {
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-muted);
+}
+
+.tag-table__actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.tag-table__action {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--dc-radius-sm);
+  background: transparent;
+  color: var(--dc-text-muted);
+}
+
+.tag-table__action:hover {
+  border-color: var(--dc-border);
+  background: var(--dc-surface-raised);
+  color: var(--dc-primary);
+}
+
+.tag-table__action.is-danger:hover {
+  color: var(--dc-danger);
+}
+
+.tag-table__action svg {
+  width: 14px;
+  height: 14px;
 }
 
 .empty-state {

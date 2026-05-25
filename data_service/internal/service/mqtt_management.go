@@ -982,7 +982,8 @@ func (s *MqttService) UpdateTagsOrder(ctx context.Context, projectID string, tag
 	return s.repository.UpdateTagsOrder(ctx, projectID, tagIDs, userID)
 }
 
-// GetTagValue 返回单个变量当前值，当前降级为 defaultValue。
+// GetTagValue 返回单个变量最近值。
+// 优先从订阅最近消息解析变量值；没有消息时使用 defaultValue 降级，保证前端下次打开仍有可解释的快照。
 func (s *MqttService) GetTagValue(ctx context.Context, projectID, tagID string) (map[string]any, error) {
 	record, err := s.repository.GetTag(ctx, projectID, tagID)
 	if err != nil {

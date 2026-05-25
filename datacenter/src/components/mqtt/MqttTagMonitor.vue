@@ -161,6 +161,10 @@ const props = defineProps({
   },
 })
 
+const emit = defineEmits<{
+  (event: 'tag-value', value: any): void
+}>()
+
 const tags = ref([])
 const viewMode = ref('list')
 
@@ -271,11 +275,13 @@ const handleTagValueUpdate = (data) => {
   }
 
   tag.currentValue = {
-    parsedValue: data.value,
+    parsedValue: data.parsedValue ?? data.value,
+    value: data.value ?? data.parsedValue,
     quality: data.quality,
     timestamp: data.timestamp,
     error: data.error,
   }
+  emit('tag-value', data)
 }
 
 const handleTagSyncEvent = async (event) => {
