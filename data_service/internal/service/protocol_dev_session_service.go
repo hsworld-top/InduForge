@@ -27,10 +27,63 @@ type ProtocolDevConnectionReader interface {
 }
 
 // ProtocolDevOpcuaModelReader 表示 OPC UA 开发态会话需要读取的建模数据接口。
-type ProtocolDevOpcuaModelReader interface{}
+type ProtocolDevOpcuaModelReader interface {
+	ListDevSessionOpcuaGroups(ctx context.Context, projectID, connectionID string) ([]ProtocolDevOpcuaGroup, error)
+	ListDevSessionOpcuaNodes(ctx context.Context, projectID, connectionID string, groupID *string) ([]ProtocolDevOpcuaNode, error)
+}
 
 // ProtocolDevModbusModelReader 表示 Modbus 开发态会话需要读取的建模数据接口。
 type ProtocolDevModbusModelReader interface{}
+
+// ProtocolDevOpcuaGroup 是 OPC UA 浏览树需要的变量组投影。
+type ProtocolDevOpcuaGroup struct {
+	ID       string
+	ParentID *string
+	Name     string
+}
+
+// ProtocolDevOpcuaNode 是 OPC UA 开发态读取需要的变量投影。
+type ProtocolDevOpcuaNode struct {
+	ID       string
+	GroupID  *string
+	Name     string
+	Code     string
+	NodeID   string
+	DataType string
+}
+
+// ProtocolDevBrowseNode 表示前端浏览树中的节点。
+type ProtocolDevBrowseNode struct {
+	ID       string  `json:"id"`
+	ParentID *string `json:"parentId,omitempty"`
+	Name     string  `json:"name"`
+	NodeID   string  `json:"nodeId"`
+	NodeType string  `json:"nodeType"`
+	DataType string  `json:"dataType,omitempty"`
+}
+
+// ProtocolDevOpcuaBrowseResult 表示 OPC UA 开发态浏览结果。
+type ProtocolDevOpcuaBrowseResult struct {
+	Nodes       []ProtocolDevBrowseNode `json:"nodes"`
+	Diagnostics []string                `json:"diagnostics"`
+}
+
+// ProtocolDevOpcuaReadValue 表示 OPC UA 开发态读取返回的一条值。
+type ProtocolDevOpcuaReadValue struct {
+	NodeID          string  `json:"nodeId"`
+	Value           any     `json:"value"`
+	DataType        string  `json:"dataType"`
+	Quality         string  `json:"quality"`
+	SourceTimestamp string  `json:"sourceTimestamp"`
+	ServerTimestamp string  `json:"serverTimestamp"`
+	Error           *string `json:"error"`
+}
+
+// ProtocolDevOpcuaReadResult 表示 OPC UA 开发态读取结果。
+type ProtocolDevOpcuaReadResult struct {
+	Values      []ProtocolDevOpcuaReadValue `json:"values"`
+	Diagnostics []string                    `json:"diagnostics"`
+}
 
 // ProtocolDevSession 表示 OPC UA / Modbus 工作台的一次开发态短时会话。
 type ProtocolDevSession struct {
@@ -107,6 +160,84 @@ func (s *ProtocolDevSessionService) CloseSession(ctx context.Context, projectID,
 	return &session, nil
 }
 
+// BrowseOpcua 基于当前会话返回 OPC UA 浏览树，第一版使用已建模分组和变量投影生成结果。
+func (s *ProtocolDevSessionService) BrowseOpcua(ctx context.Context, projectID, connectionID, sessionID, userID string) (*ProtocolDevOpcuaBrowseResult, error) {
+	if _, err := s.requireSession(projectID, connectionID, sessionID, userID, "opcua"); err != nil {
+		return nil, err
+	}
+	if s.opcua == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "OPC UA 开发态模型读取器未初始化")
+	}
+	groups, err := s.opcua.ListDevSessionOpcuaGroups(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	nodes, err := s.opcua.ListDevSessionOpcuaNodes(ctx, projectID, connectionID, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &ProtocolDevOpcuaBrowseResult{
+		Nodes: make([]ProtocolDevBrowseNode, 0, len(groups)+len(nodes)),
+		Diagnostics: []string{
+			"当前浏览结果来自已建模变量，真实 OPC UA 地址空间适配器接入后保持同一响应结构。",
+		},
+	}
+	for _, group := range groups {
+		result.Nodes = append(result.Nodes, ProtocolDevBrowseNode{
+			ID:       "group-" + group.ID,
+			ParentID: optionalPrefixedID("group-", group.ParentID),
+			Name:     group.Name,
+			NodeID:   group.ID,
+			NodeType: "folder",
+		})
+	}
+	for _, node := range nodes {
+		result.Nodes = append(result.Nodes, ProtocolDevBrowseNode{
+			ID:       node.ID,
+			ParentID: optionalPrefixedID("group-", node.GroupID),
+			Name:     node.Name,
+			NodeID:   node.NodeID,
+			NodeType: "variable",
+			DataType: node.DataType,
+		})
+	}
+	return result, nil
+}
+
+// ReadOpcua 读取会话内 OPC UA 变量当前值，第一版生成可预测的开发态样例值。
+func (s *ProtocolDevSessionService) ReadOpcua(ctx context.Context, projectID, connectionID, sessionID, userID string, nodeIDs []string, groupID *string) (*ProtocolDevOpcuaReadResult, error) {
+	if _, err := s.requireSession(projectID, connectionID, sessionID, userID, "opcua"); err != nil {
+		return nil, err
+	}
+	if s.opcua == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "OPC UA 开发态模型读取器未初始化")
+	}
+	nodes, err := s.opcua.ListDevSessionOpcuaNodes(ctx, projectID, connectionID, groupID)
+	if err != nil {
+		return nil, err
+	}
+
+	wanted := stringSet(nodeIDs)
+	now := s.now().UTC().Format("2006-01-02 15:04:05")
+	result := &ProtocolDevOpcuaReadResult{Values: []ProtocolDevOpcuaReadValue{}, Diagnostics: []string{}}
+	for _, node := range nodes {
+		if len(wanted) > 0 && !wanted[node.ID] && !wanted[node.NodeID] {
+			continue
+		}
+		result.Values = append(result.Values, ProtocolDevOpcuaReadValue{
+			NodeID:          node.NodeID,
+			Value:           sampleProtocolValue(node.DataType, node.Code),
+			DataType:        node.DataType,
+			Quality:         "Good",
+			SourceTimestamp: now,
+			ServerTimestamp: now,
+			Error:           nil,
+		})
+	}
+	return result, nil
+}
+
 func (s *ProtocolDevSessionService) loadProtocolConnection(ctx context.Context, projectID, connectionID, protocol string) (*ProtocolDevConnection, error) {
 	if strings.TrimSpace(projectID) == "" || strings.TrimSpace(connectionID) == "" || strings.TrimSpace(protocol) == "" {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "开发态会话参数不完整")
@@ -181,5 +312,40 @@ func toProtocolString(value any) string {
 		return strconv.Itoa(int(typed))
 	default:
 		return ""
+	}
+}
+
+func optionalPrefixedID(prefix string, value *string) *string {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return nil
+	}
+	prefixed := prefix + strings.TrimSpace(*value)
+	return &prefixed
+}
+
+func stringSet(values []string) map[string]bool {
+	result := make(map[string]bool, len(values))
+	for _, value := range values {
+		text := strings.TrimSpace(value)
+		if text != "" {
+			result[text] = true
+		}
+	}
+	return result
+}
+
+func sampleProtocolValue(dataType, seed string) any {
+	switch strings.ToLower(strings.TrimSpace(dataType)) {
+	case "bool", "boolean":
+		return len(seed)%2 == 0
+	case "int", "int16", "int32", "integer", "uint", "uint16", "uint32":
+		return 100 + len(seed)
+	case "float", "float32", "double":
+		return float64(1000+len(seed)) / 10
+	default:
+		if strings.TrimSpace(seed) != "" {
+			return seed
+		}
+		return "preview"
 	}
 }

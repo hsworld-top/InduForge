@@ -17,6 +17,11 @@ type fakeProtocolDevConnectionRepository struct {
 	connection fakeProtocolConnection
 }
 
+type fakeProtocolDevOpcuaReader struct {
+	groups []ProtocolDevOpcuaGroup
+	nodes  []ProtocolDevOpcuaNode
+}
+
 func (r *fakeProtocolDevConnectionRepository) GetProtocolDevConnection(_ context.Context, projectID, connectionID string) (*ProtocolDevConnection, error) {
 	if r.connection.ProjectID != projectID || r.connection.ID != connectionID {
 		return nil, nil
@@ -28,6 +33,21 @@ func (r *fakeProtocolDevConnectionRepository) GetProtocolDevConnection(_ context
 		Name:      r.connection.Name,
 		Config:    r.connection.Config,
 	}, nil
+}
+
+func (r *fakeProtocolDevOpcuaReader) ListDevSessionOpcuaGroups(_ context.Context, _, _ string) ([]ProtocolDevOpcuaGroup, error) {
+	return append([]ProtocolDevOpcuaGroup{}, r.groups...), nil
+}
+
+func (r *fakeProtocolDevOpcuaReader) ListDevSessionOpcuaNodes(_ context.Context, _, _ string, groupID *string) ([]ProtocolDevOpcuaNode, error) {
+	result := make([]ProtocolDevOpcuaNode, 0, len(r.nodes))
+	for _, node := range r.nodes {
+		if groupID != nil && (node.GroupID == nil || *node.GroupID != *groupID) {
+			continue
+		}
+		result = append(result, node)
+	}
+	return result, nil
 }
 
 func TestProtocolDevSessionService_CreateAndCloseSession(t *testing.T) {
@@ -57,4 +77,52 @@ func TestProtocolDevSessionService_CreateAndCloseSession(t *testing.T) {
 	if closed.Status != "closed" {
 		t.Fatalf("expected closed session, got %#v", closed)
 	}
+}
+
+func TestProtocolDevSessionService_BrowseAndReadOpcuaNodes(t *testing.T) {
+	repo := &fakeProtocolDevConnectionRepository{
+		connection: fakeProtocolConnection{
+			ID:        "conn-1",
+			ProjectID: "project-1",
+			Type:      "opcua",
+			Name:      "opcua-main",
+			Config:    map[string]any{"endpoint": "opc.tcp://127.0.0.1:4840"},
+		},
+	}
+	opcua := &fakeProtocolDevOpcuaReader{
+		groups: []ProtocolDevOpcuaGroup{{ID: "g-1", Name: "Furnace01"}},
+		nodes: []ProtocolDevOpcuaNode{{
+			ID:       "n-1",
+			GroupID:  protocolDevStringPtr("g-1"),
+			Name:     "Temp",
+			Code:     "temp",
+			NodeID:   "ns=2;s=Furnace01.Temp",
+			DataType: "Double",
+		}},
+	}
+	service := NewProtocolDevSessionService(repo, opcua, nil)
+	session, err := service.CreateSession(context.Background(), "project-1", "conn-1", "user-1", "opcua")
+	if err != nil {
+		t.Fatalf("create session failed: %v", err)
+	}
+
+	browse, err := service.BrowseOpcua(context.Background(), "project-1", "conn-1", session.SessionID, "user-1")
+	if err != nil {
+		t.Fatalf("browse failed: %v", err)
+	}
+	if len(browse.Nodes) != 2 || browse.Nodes[1].NodeID != "ns=2;s=Furnace01.Temp" {
+		t.Fatalf("unexpected browse result: %#v", browse)
+	}
+
+	read, err := service.ReadOpcua(context.Background(), "project-1", "conn-1", session.SessionID, "user-1", []string{"n-1"}, nil)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	if len(read.Values) != 1 || read.Values[0].Quality != "Good" || read.Values[0].Value == nil {
+		t.Fatalf("unexpected read result: %#v", read)
+	}
+}
+
+func protocolDevStringPtr(value string) *string {
+	return &value
 }
