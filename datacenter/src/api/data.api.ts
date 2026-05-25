@@ -135,6 +135,108 @@ export const previewProtocol = (projectId, connectionId, data = {}) => {
   })
 }
 
+const normalizeOpcuaListPayload = (payload, legacyKey = '') => {
+  const data = payload?.data ?? payload ?? {}
+  const list = Array.isArray(data.list)
+    ? data.list
+    : legacyKey && Array.isArray(data[legacyKey])
+      ? data[legacyKey]
+      : Array.isArray(data)
+        ? data
+        : []
+  return { list }
+}
+
+export const getOpcuaNodeGroups = (projectId, connectionId) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/node-groups`,
+    method: 'get',
+  }).then((response) => ({
+    ...response,
+    data: normalizeOpcuaListPayload(response, 'groups'),
+  }))
+}
+
+export const createOpcuaNodeGroup = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/node-groups`,
+    method: 'post',
+    data,
+  })
+}
+
+export const updateOpcuaNodeGroup = (projectId, connectionId, groupId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/node-groups/${groupId}`,
+    method: 'put',
+    data,
+  })
+}
+
+export const deleteOpcuaNodeGroup = (projectId, connectionId, groupId) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/node-groups/${groupId}`,
+    method: 'delete',
+  })
+}
+
+export const getOpcuaNodes = (projectId, connectionId, params = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/nodes`,
+    method: 'get',
+    params,
+  }).then((response) => ({
+    ...response,
+    data: normalizeOpcuaListPayload(response, 'nodes'),
+  }))
+}
+
+export const createOpcuaNode = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/nodes`,
+    method: 'post',
+    data,
+  })
+}
+
+export const batchImportOpcuaNodes = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/nodes/batch-import`,
+    method: 'post',
+    data,
+  })
+}
+
+export const updateOpcuaNode = (projectId, connectionId, nodeId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/nodes/${nodeId}`,
+    method: 'put',
+    data,
+  })
+}
+
+export const deleteOpcuaNode = (projectId, connectionId, nodeId) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/nodes/${nodeId}`,
+    method: 'delete',
+  })
+}
+
+export const validateOpcuaModel = (projectId, connectionId) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/validate-model`,
+    method: 'post',
+  })
+}
+
+export const previewOpcuaNodes = (projectId, connectionId, data = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/preview`,
+    method: 'post',
+    data,
+  })
+}
+
 export const getRedisKeys = (projectId, connectionId, params = {}) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/redis/keys`,
@@ -1085,6 +1187,17 @@ export default {
   createTdengineConfig,
   validateOpcdaContract,
   previewProtocol,
+  getOpcuaNodeGroups,
+  createOpcuaNodeGroup,
+  updateOpcuaNodeGroup,
+  deleteOpcuaNodeGroup,
+  getOpcuaNodes,
+  createOpcuaNode,
+  batchImportOpcuaNodes,
+  updateOpcuaNode,
+  deleteOpcuaNode,
+  validateOpcuaModel,
+  previewOpcuaNodes,
   getConnectionTables,
   createConnectionTable,
   renameConnectionTable,

@@ -97,6 +97,21 @@ type SnapshotMqttTagRecord struct {
 	UpdatedAt      time.Time      `json:"updatedAt"`
 }
 
+// SnapshotOpcuaNodeRecord 表示 artifact 使用的 OPC UA 变量投影。
+type SnapshotOpcuaNodeRecord struct {
+	ID            string   `json:"id"`
+	ConnectionID  string   `json:"connectionId"`
+	GroupID       *string  `json:"groupId,omitempty"`
+	Name          string   `json:"name"`
+	Code          string   `json:"code"`
+	NodeID        string   `json:"nodeId"`
+	DataType      string   `json:"dataType"`
+	SamplingMS    int      `json:"samplingMs"`
+	Deadband      *float64 `json:"deadband,omitempty"`
+	AccessLevel   string   `json:"accessLevel"`
+	DataPointPath *string  `json:"datapointPath,omitempty"`
+}
+
 // ProjectSnapshot 表示工程级数据域快照。
 type ProjectSnapshot struct {
 	Connections       []ConnectionRecord               `json:"connections"`
@@ -106,6 +121,7 @@ type ProjectSnapshot struct {
 	MqttSubscriptions []SnapshotMqttSubscriptionRecord `json:"mqttSubscriptions"`
 	MqttTagGroups     []SnapshotMqttTagGroupRecord     `json:"mqttTagGroups"`
 	MqttTags          []SnapshotMqttTagRecord          `json:"mqttTags"`
+	OpcuaNodes        []SnapshotOpcuaNodeRecord        `json:"opcuaNodes"`
 	DataPoints        []DataPointRecord                `json:"datapoints"`
 	ComputeUnits      []ComputeUnitRecord              `json:"computeUnits"`
 	AlarmRules        []AlarmRuleRecord                `json:"alarmRules"`
@@ -209,11 +225,12 @@ type ArtifactMqttConnectionRecord struct {
 
 // ArtifactProtocolRecord 表示产物层协议对象（kafka/http/websocket/redis）。
 type ArtifactProtocolRecord struct {
-	ID     string         `json:"id"`
-	Name   string         `json:"name"`
-	Type   string         `json:"type"`
-	Status string         `json:"status"`
-	Config map[string]any `json:"config"`
+	ID        string                         `json:"id"`
+	Name      string                         `json:"name"`
+	Type      string                         `json:"type"`
+	Status    string                         `json:"status"`
+	Config    map[string]any                 `json:"config"`
+	Nodes     []SnapshotOpcuaNodeRecord      `json:"nodes,omitempty"`
 }
 
 // ArtifactMqttPayload 表示产物层 MQTT 区块。
@@ -338,6 +355,10 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 	if err != nil {
 		return nil, err
 	}
+	opcuaNodes, err := r.listOpcuaNodes(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
 	computeUnits, err := r.listComputeUnits(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -355,6 +376,7 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 		MqttSubscriptions: mqttSubscriptions,
 		MqttTagGroups:     mqttTagGroups,
 		MqttTags:          mqttTags,
+		OpcuaNodes:        opcuaNodes,
 		DataPoints:        datapoints,
 		ComputeUnits:      computeUnits,
 		AlarmRules:        alarmRules,
@@ -536,6 +558,7 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 		TDengine:  make([]ArtifactProtocolRecord, 0),
 	}
 	builtinStores := buildBuiltinStores(snapshot.Connections)
+	opcuaNodesByConnection := groupOpcuaNodesByConnection(snapshot.OpcuaNodes)
 	for _, connection := range snapshot.Connections {
 		protocolRecord := ArtifactProtocolRecord{
 			ID:     connection.ID,
@@ -554,6 +577,7 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 		case "redis":
 			protocols.Redis = append(protocols.Redis, protocolRecord)
 		case "opcua":
+			protocolRecord.Nodes = append([]SnapshotOpcuaNodeRecord{}, opcuaNodesByConnection[connection.ID]...)
 			protocols.OPCUA = append(protocols.OPCUA, protocolRecord)
 		case "s7":
 			protocols.S7 = append(protocols.S7, protocolRecord)
@@ -1003,6 +1027,50 @@ func (r *ProjectSnapshotRepository) listMqttTags(ctx context.Context, projectID 
 	return result, nil
 }
 
+func (r *ProjectSnapshotRepository) listOpcuaNodes(ctx context.Context, projectID string) ([]SnapshotOpcuaNodeRecord, error) {
+	rows, err := r.pool.Query(ctx, `
+        SELECT n.id, n.connection_id, n.group_id, n.name, n.code, n.node_id, n.data_type,
+               n.sampling_ms, n.deadband, n.access_level, dp.path
+        FROM data_opcua_nodes n
+        LEFT JOIN data_points dp
+          ON dp.project_id = n.project_id
+         AND dp.source_type = 'opcua.node'
+         AND dp.source_id = n.id
+        WHERE n.project_id = $1
+          AND n.status = 'active'
+        ORDER BY n.connection_id ASC, n.sort_order ASC, n.created_at ASC
+    `, projectID)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询快照 OPC UA 变量失败", err)
+	}
+	defer rows.Close()
+
+	result := make([]SnapshotOpcuaNodeRecord, 0)
+	for rows.Next() {
+		record := SnapshotOpcuaNodeRecord{}
+		if err := rows.Scan(
+			&record.ID,
+			&record.ConnectionID,
+			&record.GroupID,
+			&record.Name,
+			&record.Code,
+			&record.NodeID,
+			&record.DataType,
+			&record.SamplingMS,
+			&record.Deadband,
+			&record.AccessLevel,
+			&record.DataPointPath,
+		); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取快照 OPC UA 变量失败", err)
+		}
+		result = append(result, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历快照 OPC UA 变量失败", err)
+	}
+	return result, nil
+}
+
 func (r *ProjectSnapshotRepository) deleteProjectSnapshot(ctx context.Context, tx pgx.Tx, projectID string) error {
 	for _, sqlText := range []string{
 		`DELETE FROM data_alarm_rules WHERE project_id = $1`,
@@ -1283,6 +1351,14 @@ func coalesceProtocolType(value string, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func groupOpcuaNodesByConnection(nodes []SnapshotOpcuaNodeRecord) map[string][]SnapshotOpcuaNodeRecord {
+	result := make(map[string][]SnapshotOpcuaNodeRecord)
+	for _, node := range nodes {
+		result[node.ConnectionID] = append(result[node.ConnectionID], node)
+	}
+	return result
 }
 
 func deriveConnectionCategory(connectionType string) string {

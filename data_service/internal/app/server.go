@@ -166,6 +166,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	workbenchGroupRepository := repository.NewWorkbenchGroupRepository(pool)
 	dataPointRepository := repository.NewDataPointRepository(pool)
 	mqttRepository := repository.NewMqttRepository(pool)
+	opcuaModelingRepository := repository.NewOpcuaModelingRepository(pool)
 	projectSnapshotRepository := repository.NewProjectSnapshotRepository(pool)
 	protocolWave1Repository := repository.NewProtocolWave1Repository(pool)
 	protocolWave2Repository := repository.NewProtocolWave2Repository(pool)
@@ -183,6 +184,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	connectionService.SetWorkbenchGroupService(workbenchGroupService)
 	dataPointService := service.NewDataPointService(dataPointRepository, queryService, mqttRepository, computeRepository)
 	mqttService := service.NewMqttService(mqttRepository, connectionRepository, dataPointRepository)
+	opcuaModelingService := service.NewOpcuaModelingService(opcuaModelingRepository, connectionRepository, dataPointRepository)
 	projectSnapshotService := service.NewProjectSnapshotService(projectSnapshotRepository)
 	protocolWave1Service := service.NewProtocolWave1Service(protocolWave1Repository)
 	protocolPreviewService := service.NewProtocolPreviewService(protocolWave1Repository, service.NewDefaultProtocolPreviewAdapters())
@@ -207,6 +209,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	workbenchGroupHandler := handler.NewWorkbenchGroupHandler(workbenchGroupService)
 	dataPointHandler := handler.NewDataPointHandler(dataPointService)
 	mqttHandler := handler.NewMqttHandler(mqttService)
+	opcuaModelingHandler := handler.NewOpcuaModelingHandler(opcuaModelingService)
 	projectSnapshotHandler := handler.NewProjectSnapshotHandler(projectSnapshotService)
 	protocolWave1Handler := handler.NewProtocolWave1Handler(protocolWave1Service, protocolPreviewService)
 	protocolWave2Handler := handler.NewProtocolWave2Handler(protocolWave2Service)
@@ -222,6 +225,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		router.WithDataRoutes(queryHandler, dataPointHandler, jwtValidator),
 		router.WithWorkbenchGroupRoutes(workbenchGroupHandler, jwtValidator),
 		router.WithMqttRoutes(mqttHandler, jwtValidator),
+		router.WithOpcuaModelingRoutes(opcuaModelingHandler, jwtValidator),
 		router.WithProjectSnapshotRoutes(projectSnapshotHandler, jwtValidator),
 		router.WithProtocolWave1Routes(protocolWave1Handler, jwtValidator),
 		router.WithProtocolWave2Routes(protocolWave2Handler, jwtValidator),
@@ -233,6 +237,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		"data=enabled",
 		"builtinRuntime=enabled",
 		"mqtt=enabled",
+		"opcuaModeling=enabled",
 		"projectSnapshot=enabled",
 		"protocolWave1=enabled",
 		"protocolWave2=enabled",

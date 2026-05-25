@@ -19,6 +19,7 @@ type options struct {
 	workbenchGroupHandler  *handler.WorkbenchGroupHandler
 	dataPointHandler       *handler.DataPointHandler
 	mqttHandler            *handler.MqttHandler
+	opcuaModelingHandler   *handler.OpcuaModelingHandler
 	protocolWave1Handler   *handler.ProtocolWave1Handler
 	protocolWave2Handler   *handler.ProtocolWave2Handler
 	previewHandler         *handler.PreviewHandler
@@ -104,6 +105,14 @@ func WithMqttRoutes(mqttHandler *handler.MqttHandler, jwtValidator *auth.JWTVali
 	}
 }
 
+// WithOpcuaModelingRoutes wires OPC UA 点位建模 routes.
+func WithOpcuaModelingRoutes(opcuaModelingHandler *handler.OpcuaModelingHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.opcuaModelingHandler = opcuaModelingHandler
+		opts.jwtValidator = jwtValidator
+	}
+}
+
 // WithProtocolWave1Routes wires protocol wave 1 routes.
 func WithProtocolWave1Routes(protocolWave1Handler *handler.ProtocolWave1Handler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
@@ -173,6 +182,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountDataRoutes(mux, opts)
 	mountWorkbenchGroupRoutes(mux, opts)
 	mountMqttRoutes(mux, opts)
+	mountOpcuaModelingRoutes(mux, opts)
 	mountProtocolWave1Routes(mux, opts)
 	mountProtocolWave2Routes(mux, opts)
 	mountPreviewSocketRoutes(mux, opts)
@@ -1009,6 +1019,40 @@ func mountMqttRoutes(mux *http.ServeMux, opts options) {
 			),
 		),
 	)
+}
+
+func mountOpcuaModelingRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.jwtValidator == nil || opts.opcuaModelingHandler == nil {
+		return
+	}
+
+	read := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+	write := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+
+	base := "/api/v1/data/projects/{projectId}/opcua/{connectionId}"
+	mux.Handle("GET "+base+"/node-groups", read(opts.opcuaModelingHandler.ListGroups))
+	mux.Handle("POST "+base+"/node-groups", write(opts.opcuaModelingHandler.CreateGroup))
+	mux.Handle("PUT "+base+"/node-groups/{groupId}", write(opts.opcuaModelingHandler.UpdateGroup))
+	mux.Handle("DELETE "+base+"/node-groups/{groupId}", write(opts.opcuaModelingHandler.DeleteGroup))
+	mux.Handle("GET "+base+"/nodes", read(opts.opcuaModelingHandler.ListNodes))
+	mux.Handle("POST "+base+"/nodes", write(opts.opcuaModelingHandler.CreateNode))
+	mux.Handle("POST "+base+"/nodes/batch-import", write(opts.opcuaModelingHandler.BatchImportNodes))
+	mux.Handle("PUT "+base+"/nodes/{nodeId}", write(opts.opcuaModelingHandler.UpdateNode))
+	mux.Handle("DELETE "+base+"/nodes/{nodeId}", write(opts.opcuaModelingHandler.DeleteNode))
+	mux.Handle("POST "+base+"/validate-model", read(opts.opcuaModelingHandler.ValidateModel))
+	mux.Handle("POST "+base+"/preview", read(opts.opcuaModelingHandler.PreviewNodes))
 }
 
 func mountProjectSnapshotRoutes(mux *http.ServeMux, opts options) {
