@@ -239,6 +239,43 @@ export const previewOpcuaNodes = (projectId, connectionId, data = {}) => {
   })
 }
 
+export const createOpcuaDevSession = (projectId, connectionId) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/sessions`,
+    method: 'post',
+  })
+}
+
+export const closeOpcuaDevSession = (projectId, connectionId, sessionId) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/sessions/${sessionId}`,
+    method: 'delete',
+  })
+}
+
+export const browseOpcuaDevSession = (projectId, connectionId, sessionId) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/sessions/${sessionId}/browse`,
+    method: 'get',
+  })
+}
+
+export const readOpcuaDevSession = (projectId, connectionId, sessionId, data = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/sessions/${sessionId}/read`,
+    method: 'post',
+    data,
+  })
+}
+
+export const subscribeOpcuaDevSession = (projectId, connectionId, sessionId, data = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/sessions/${sessionId}/subscribe`,
+    method: 'post',
+    data,
+  })
+}
+
 export const getModbusRegisterGroups = (projectId, connectionId) => {
   return request({
     url: `/data/projects/${projectId}/modbus/${connectionId}/register-groups`,
@@ -334,6 +371,36 @@ export const getModbusReadPlanEstimate = (projectId, connectionId, params = {}) 
     url: `/data/projects/${projectId}/modbus/${connectionId}/read-plan-estimate`,
     method: 'get',
     params,
+  })
+}
+
+export const createModbusDevSession = (projectId, connectionId) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/sessions`,
+    method: 'post',
+  })
+}
+
+export const closeModbusDevSession = (projectId, connectionId, sessionId) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/sessions/${sessionId}`,
+    method: 'delete',
+  })
+}
+
+export const readModbusDevSession = (projectId, connectionId, sessionId, data = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/sessions/${sessionId}/read`,
+    method: 'post',
+    data,
+  })
+}
+
+export const pollModbusDevSession = (projectId, connectionId, sessionId, data = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/sessions/${sessionId}/poll`,
+    method: 'post',
+    data,
   })
 }
 
@@ -1298,6 +1365,11 @@ export default {
   deleteOpcuaNode,
   validateOpcuaModel,
   previewOpcuaNodes,
+  createOpcuaDevSession,
+  closeOpcuaDevSession,
+  browseOpcuaDevSession,
+  readOpcuaDevSession,
+  subscribeOpcuaDevSession,
   getModbusRegisterGroups,
   createModbusRegisterGroup,
   updateModbusRegisterGroup,
@@ -1310,6 +1382,10 @@ export default {
   validateModbusModel,
   previewModbusRegisters,
   getModbusReadPlanEstimate,
+  createModbusDevSession,
+  closeModbusDevSession,
+  readModbusDevSession,
+  pollModbusDevSession,
   getConnectionTables,
   createConnectionTable,
   renameConnectionTable,

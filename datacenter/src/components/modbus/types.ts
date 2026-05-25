@@ -75,3 +75,15 @@ export type ModbusReadPlanEstimate = {
   plans: ModbusReadPlan[]
   diagnostics: string[]
 }
+
+export type ModbusReadValue = {
+  registerId: string
+  slaveId: number
+  area: string
+  address: number
+  rawValue: number[]
+  value: unknown
+  dataType: string
+  timestamp: string
+  error?: string | null
+}

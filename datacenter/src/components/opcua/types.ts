@@ -38,3 +38,31 @@ export type OpcuaValidationIssue = {
   nodeName?: string
   message: string
 }
+
+export type ProtocolDevSession = {
+  sessionId: string
+  status: 'connected' | 'closed' | 'error'
+  protocol: string
+  connectedAt: string
+  endpoint: string
+  diagnostics: string[]
+}
+
+export type OpcuaBrowseNode = {
+  id: string
+  parentId?: string | null
+  name: string
+  nodeId: string
+  nodeType: 'folder' | 'variable'
+  dataType?: string
+}
+
+export type OpcuaReadValue = {
+  nodeId: string
+  value: unknown
+  dataType: string
+  quality: string
+  sourceTimestamp: string
+  serverTimestamp: string
+  error?: string | null
+}
