@@ -148,6 +148,7 @@ const normalizeOpcuaListPayload = (payload, legacyKey = '') => {
 }
 
 const normalizeModbusListPayload = normalizeOpcuaListPayload
+const normalizeS7ListPayload = normalizeOpcuaListPayload
 
 export const getOpcuaNodeGroups = (projectId, connectionId) => {
   return request({
@@ -401,6 +402,156 @@ export const pollModbusDevSession = (projectId, connectionId, sessionId, data = 
     url: `/data/projects/${projectId}/modbus/${connectionId}/sessions/${sessionId}/poll`,
     method: 'post',
     data,
+  })
+}
+
+export const getS7Profile = (projectId, connectionId) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/profile`,
+    method: 'get',
+  })
+}
+
+export const updateS7Profile = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/profile`,
+    method: 'put',
+    data,
+  })
+}
+
+export const getS7VariableGroups = (projectId, connectionId) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/variable-groups`,
+    method: 'get',
+  }).then((response) => ({
+    ...response,
+    data: normalizeS7ListPayload(response, 'groups'),
+  }))
+}
+
+export const createS7VariableGroup = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/variable-groups`,
+    method: 'post',
+    data,
+  })
+}
+
+export const updateS7VariableGroup = (projectId, connectionId, groupId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/variable-groups/${groupId}`,
+    method: 'put',
+    data,
+  })
+}
+
+export const deleteS7VariableGroup = (projectId, connectionId, groupId) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/variable-groups/${groupId}`,
+    method: 'delete',
+  })
+}
+
+export const getS7Variables = (projectId, connectionId, params = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/variables`,
+    method: 'get',
+    params,
+  }).then((response) => ({
+    ...response,
+    data: normalizeS7ListPayload(response, 'variables'),
+  }))
+}
+
+export const createS7Variable = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/variables`,
+    method: 'post',
+    data,
+  })
+}
+
+export const batchImportS7Variables = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/variables/batch-import`,
+    method: 'post',
+    data,
+  })
+}
+
+export const updateS7Variable = (projectId, connectionId, variableId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/variables/${variableId}`,
+    method: 'put',
+    data,
+  })
+}
+
+export const deleteS7Variable = (projectId, connectionId, variableId) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/variables/${variableId}`,
+    method: 'delete',
+  })
+}
+
+export const validateS7Model = (projectId, connectionId) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/validate-model`,
+    method: 'post',
+  })
+}
+
+export const previewS7Variables = (projectId, connectionId, data = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/preview`,
+    method: 'post',
+    data,
+  })
+}
+
+export const getS7ReadPlanEstimate = (projectId, connectionId, params = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/read-plan-estimate`,
+    method: 'get',
+    params,
+  })
+}
+
+export const createS7DevSession = (projectId, connectionId) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/sessions`,
+    method: 'post',
+  })
+}
+
+export const closeS7DevSession = (projectId, connectionId, sessionId) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/sessions/${sessionId}`,
+    method: 'delete',
+  })
+}
+
+export const readS7DevSession = (projectId, connectionId, sessionId, data = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/sessions/${sessionId}/read`,
+    method: 'post',
+    data,
+  })
+}
+
+export const pollS7DevSession = (projectId, connectionId, sessionId, data = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/sessions/${sessionId}/poll`,
+    method: 'post',
+    data,
+  })
+}
+
+export const stopS7DevSessionPoll = (projectId, connectionId, sessionId) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/${connectionId}/sessions/${sessionId}/poll`,
+    method: 'delete',
   })
 }
 
@@ -1386,6 +1537,25 @@ export default {
   closeModbusDevSession,
   readModbusDevSession,
   pollModbusDevSession,
+  getS7Profile,
+  updateS7Profile,
+  getS7VariableGroups,
+  createS7VariableGroup,
+  updateS7VariableGroup,
+  deleteS7VariableGroup,
+  getS7Variables,
+  createS7Variable,
+  batchImportS7Variables,
+  updateS7Variable,
+  deleteS7Variable,
+  validateS7Model,
+  previewS7Variables,
+  getS7ReadPlanEstimate,
+  createS7DevSession,
+  closeS7DevSession,
+  readS7DevSession,
+  pollS7DevSession,
+  stopS7DevSessionPoll,
   getConnectionTables,
   createConnectionTable,
   renameConnectionTable,
