@@ -5,7 +5,6 @@
       :key="connection.id"
       :connection="connection"
       :active="selectedConnectionId === connection.id"
-      :is-phase2="isPhase2Type(connection.type)"
       @open="$emit('open', $event)"
       @edit="$emit('edit', $event)"
       @delete-connection="$emit('delete-connection', $event)"
@@ -62,10 +61,6 @@ defineEmits<{
   (event: 'create'): void
 }>()
 
-/* Phase 2 类型：当前仅提供配置，无运行时工作台 */
-const PHASE2_TYPES = new Set(['opcda', 's7', 'kafka', 'tdengine'])
-
-const isPhase2Type = (type?: string) => PHASE2_TYPES.has(type || '')
 </script>
 
 <style scoped>

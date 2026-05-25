@@ -7,10 +7,6 @@
       >
         <component :is="resolveConnectionVisual(connection).icon" />
       </span>
-      <div class="access-source-card__badges">
-        <!-- Phase 2 仅配置角标 -->
-        <StatusBadge v-if="isPhase2" tone="warning" text="仅配置" />
-      </div>
     </div>
 
     <div class="access-source-card__body">
@@ -30,12 +26,9 @@
       </div>
     </div>
 
-    <div class="access-source-card__divider-line"></div>
-
-    <!-- 底部按钮区：左：打开工作台（outline），右：编辑+删除组合按钮 -->
     <div class="access-source-card__bottom">
       <button type="button" class="access-source-card__open" @click="$emit('open', connection)">
-        <span>打开工作台</span>
+        <span>工作台</span>
         <IconTablerArrowRight class="access-source-card__open-icon" />
       </button>
       <div class="access-source-card__actions">
@@ -70,7 +63,6 @@ import IconTablerDatabase from '~icons/tabler/database'
 import IconTablerMessages from '~icons/tabler/messages'
 import IconTablerSettings from '~icons/tabler/settings'
 import IconTablerTrash from '~icons/tabler/trash'
-import StatusBadge from '@/components/shared/StatusBadge.vue'
 
 type AccessSourceConnection = {
   id: string
@@ -98,8 +90,6 @@ type AccessSourceConnection = {
 const props = defineProps<{
   connection: AccessSourceConnection
   active: boolean
-  /** 工业协议等 Phase 2 类型，显示「仅配置」角标 */
-  isPhase2?: boolean
 }>()
 
 defineEmits<{
@@ -254,7 +244,7 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
 .access-source-card {
   box-sizing: border-box;
   min-width: 0;
-  min-height: 164px;
+  min-height: 148px;
   display: flex;
   flex-direction: column;
   padding: 14px;
@@ -285,18 +275,7 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
   min-width: 0;
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-/* 右上角角标区：竖向排列或横向排列均可，间距 6px */
-.access-source-card__badges {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .access-source-card__icon {
@@ -370,43 +349,33 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
   white-space: nowrap;
 }
 
-.access-source-card__divider-line {
-  flex: 0 0 auto;
-  height: 1px;
-  margin: 12px 0;
-  background: var(--dc-border);
-  opacity: 0.6;
-}
-
 .access-source-card__bottom {
   min-width: 0;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
+  margin-top: 14px;
 }
 
-/* 「打开工作台」改为 outline 风格 */
 .access-source-card__open {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: 160px;
-  height: 32px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 12px;
-  border: 1px solid var(--dc-primary);
-  border-radius: var(--dc-radius-sm);
+  justify-content: flex-start;
+  gap: 5px;
+  padding: 0;
+  border: 0;
   background: transparent;
   color: var(--dc-primary);
   font-size: 13px;
   font-weight: 700;
   transition:
-    background-color 0.18s ease,
-    color 0.18s ease;
+    color 0.18s ease,
+    transform 0.18s ease;
 }
 
 .access-source-card__open span {
@@ -416,44 +385,39 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
 }
 
 .access-source-card__open:hover {
-  background: var(--dc-primary);
-  color: var(--dc-surface-raised);
+  color: color-mix(in oklch, var(--dc-primary) 82%, var(--dc-text));
+  transform: translateX(1px);
 }
 
 .access-source-card__open-icon {
-  width: 17px;
-  height: 17px;
+  width: 15px;
+  height: 15px;
   flex: 0 0 auto;
 }
 
-/* 编辑+删除操作组：边框容器 */
 .access-source-card__actions {
   display: inline-flex;
   align-items: center;
-  height: 32px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  overflow: hidden;
-  background: var(--dc-surface-raised);
-  flex-shrink: 0;
+  gap: 4px;
+  flex: 0 0 auto;
 }
 
-/* 中间竖向分隔线 */
 .access-source-card__actions-divider {
   width: 1px;
-  height: 100%;
+  height: 14px;
   background: var(--dc-border);
   flex-shrink: 0;
 }
 
-/* 编辑按钮 */
-.access-source-card__edit {
-  width: 32px;
-  height: 32px;
+.access-source-card__edit,
+.access-source-card__delete {
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 0;
+  border-radius: var(--dc-radius-sm);
   background: transparent;
   color: var(--dc-text-secondary);
   transition:
@@ -461,7 +425,8 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
     color 0.18s ease;
 }
 
-.access-source-card__edit svg {
+.access-source-card__edit svg,
+.access-source-card__delete svg {
   width: 15px;
   height: 15px;
 }
@@ -471,24 +436,8 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
   color: var(--dc-primary);
 }
 
-/* 删除按钮：默认比编辑视觉略轻，hover 强调危险色 */
 .access-source-card__delete {
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  background: transparent;
   color: var(--dc-text-muted);
-  transition:
-    background-color 0.18s ease,
-    color 0.18s ease;
-}
-
-.access-source-card__delete svg {
-  width: 15px;
-  height: 15px;
 }
 
 .access-source-card__delete:hover {
@@ -498,7 +447,7 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
 
 @media (max-width: 760px) {
   .access-source-card {
-    min-height: 156px;
+    min-height: 144px;
     padding: 12px;
   }
 
