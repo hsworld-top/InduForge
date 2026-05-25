@@ -21,6 +21,7 @@ type options struct {
 	modbusModelingHandler     *handler.ModbusModelingHandler
 	mqttHandler               *handler.MqttHandler
 	opcuaModelingHandler      *handler.OpcuaModelingHandler
+	s7ModelingHandler         *handler.S7ModelingHandler
 	protocolDevSessionHandler *handler.ProtocolDevSessionHandler
 	protocolWave1Handler      *handler.ProtocolWave1Handler
 	protocolWave2Handler      *handler.ProtocolWave2Handler
@@ -123,6 +124,14 @@ func WithOpcuaModelingRoutes(opcuaModelingHandler *handler.OpcuaModelingHandler,
 	}
 }
 
+// WithS7ModelingRoutes wires S7 变量建模 routes.
+func WithS7ModelingRoutes(s7ModelingHandler *handler.S7ModelingHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.s7ModelingHandler = s7ModelingHandler
+		opts.jwtValidator = jwtValidator
+	}
+}
+
 // WithProtocolDevSessionRoutes wires OPC UA / Modbus 开发态会话 routes.
 func WithProtocolDevSessionRoutes(protocolDevSessionHandler *handler.ProtocolDevSessionHandler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
@@ -202,6 +211,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountMqttRoutes(mux, opts)
 	mountModbusModelingRoutes(mux, opts)
 	mountOpcuaModelingRoutes(mux, opts)
+	mountS7ModelingRoutes(mux, opts)
 	mountProtocolDevSessionRoutes(mux, opts)
 	mountProtocolWave1Routes(mux, opts)
 	mountProtocolWave2Routes(mux, opts)
@@ -1108,6 +1118,43 @@ func mountModbusModelingRoutes(mux *http.ServeMux, opts options) {
 	mux.Handle("POST "+base+"/validate-model", read(opts.modbusModelingHandler.ValidateModel))
 	mux.Handle("POST "+base+"/preview", read(opts.modbusModelingHandler.PreviewRegisters))
 	mux.Handle("GET "+base+"/read-plan-estimate", read(opts.modbusModelingHandler.EstimateReadPlans))
+}
+
+func mountS7ModelingRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.jwtValidator == nil || opts.s7ModelingHandler == nil {
+		return
+	}
+
+	read := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+	write := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+
+	base := "/api/v1/data/projects/{projectId}/s7/{connectionId}"
+	mux.Handle("GET "+base+"/profile", read(opts.s7ModelingHandler.GetProfile))
+	mux.Handle("PUT "+base+"/profile", write(opts.s7ModelingHandler.UpsertProfile))
+	mux.Handle("GET "+base+"/variable-groups", read(opts.s7ModelingHandler.ListGroups))
+	mux.Handle("POST "+base+"/variable-groups", write(opts.s7ModelingHandler.CreateGroup))
+	mux.Handle("PUT "+base+"/variable-groups/{groupId}", write(opts.s7ModelingHandler.UpdateGroup))
+	mux.Handle("DELETE "+base+"/variable-groups/{groupId}", write(opts.s7ModelingHandler.DeleteGroup))
+	mux.Handle("GET "+base+"/variables", read(opts.s7ModelingHandler.ListVariables))
+	mux.Handle("POST "+base+"/variables", write(opts.s7ModelingHandler.CreateVariable))
+	mux.Handle("POST "+base+"/variables/batch-import", write(opts.s7ModelingHandler.BatchImportVariables))
+	mux.Handle("PUT "+base+"/variables/{variableId}", write(opts.s7ModelingHandler.UpdateVariable))
+	mux.Handle("DELETE "+base+"/variables/{variableId}", write(opts.s7ModelingHandler.DeleteVariable))
+	mux.Handle("POST "+base+"/validate-model", read(opts.s7ModelingHandler.ValidateModel))
+	mux.Handle("POST "+base+"/preview", read(opts.s7ModelingHandler.PreviewVariables))
+	mux.Handle("GET "+base+"/read-plan-estimate", read(opts.s7ModelingHandler.EstimateReadPlans))
 }
 
 func mountProtocolDevSessionRoutes(mux *http.ServeMux, opts options) {

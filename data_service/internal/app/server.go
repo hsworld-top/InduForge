@@ -168,6 +168,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	modbusModelingRepository := repository.NewModbusModelingRepository(pool)
 	mqttRepository := repository.NewMqttRepository(pool)
 	opcuaModelingRepository := repository.NewOpcuaModelingRepository(pool)
+	s7ModelingRepository := repository.NewS7ModelingRepository(pool)
 	projectSnapshotRepository := repository.NewProjectSnapshotRepository(pool)
 	protocolWave1Repository := repository.NewProtocolWave1Repository(pool)
 	protocolWave2Repository := repository.NewProtocolWave2Repository(pool)
@@ -187,6 +188,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	modbusModelingService := service.NewModbusModelingService(modbusModelingRepository, connectionRepository, dataPointRepository)
 	mqttService := service.NewMqttService(mqttRepository, connectionRepository, dataPointRepository)
 	opcuaModelingService := service.NewOpcuaModelingService(opcuaModelingRepository, connectionRepository, dataPointRepository)
+	s7ModelingService := service.NewS7ModelingService(s7ModelingRepository, connectionRepository, dataPointRepository)
 	protocolDevSessionService := service.NewProtocolDevSessionService(
 		service.NewProtocolDevConnectionRepositoryAdapter(connectionRepository),
 		service.NewProtocolDevOpcuaModelingAdapter(opcuaModelingService),
@@ -218,6 +220,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	modbusModelingHandler := handler.NewModbusModelingHandler(modbusModelingService)
 	mqttHandler := handler.NewMqttHandler(mqttService)
 	opcuaModelingHandler := handler.NewOpcuaModelingHandler(opcuaModelingService)
+	s7ModelingHandler := handler.NewS7ModelingHandler(s7ModelingService)
 	protocolDevSessionHandler := handler.NewProtocolDevSessionHandler(protocolDevSessionService)
 	projectSnapshotHandler := handler.NewProjectSnapshotHandler(projectSnapshotService)
 	protocolWave1Handler := handler.NewProtocolWave1Handler(protocolWave1Service, protocolPreviewService)
@@ -236,6 +239,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		router.WithMqttRoutes(mqttHandler, jwtValidator),
 		router.WithModbusModelingRoutes(modbusModelingHandler, jwtValidator),
 		router.WithOpcuaModelingRoutes(opcuaModelingHandler, jwtValidator),
+		router.WithS7ModelingRoutes(s7ModelingHandler, jwtValidator),
 		router.WithProtocolDevSessionRoutes(protocolDevSessionHandler, jwtValidator),
 		router.WithProjectSnapshotRoutes(projectSnapshotHandler, jwtValidator),
 		router.WithProtocolWave1Routes(protocolWave1Handler, jwtValidator),
@@ -250,6 +254,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		"mqtt=enabled",
 		"modbusModeling=enabled",
 		"opcuaModeling=enabled",
+		"s7Modeling=enabled",
 		"protocolDevSession=enabled",
 		"projectSnapshot=enabled",
 		"protocolWave1=enabled",
