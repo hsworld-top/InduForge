@@ -30,8 +30,12 @@
           <em>{{ countByGroup[group.id] || 0 }}</em>
         </button>
         <div class="s7-group-tree__actions">
-          <el-button text size="small" :icon="IconTablerEdit" @click="$emit('edit', group)" />
-          <el-button text size="small" :icon="IconTablerTrash" @click="$emit('delete', group)" />
+          <el-tooltip content="编辑变量组" placement="top">
+            <el-button text size="small" :icon="IconTablerEdit" @click="$emit('edit', group)" />
+          </el-tooltip>
+          <el-tooltip content="删除变量组" placement="top">
+            <el-button text size="small" :icon="IconTablerTrash" @click="$emit('delete', group)" />
+          </el-tooltip>
         </div>
       </div>
     </div>

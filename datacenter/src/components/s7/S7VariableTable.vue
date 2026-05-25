@@ -13,16 +13,16 @@
     <el-table-column label="变量名" min-width="150">
       <template #default="{ row }">
         <div class="s7-variable-table__name">
-          <strong>{{ row.name }}</strong>
-          <span>{{ row.code }}</span>
+          <strong :title="row.name">{{ row.name }}</strong>
+          <span :title="row.code">{{ row.code }}</span>
         </div>
       </template>
     </el-table-column>
     <el-table-column label="地址" min-width="138">
       <template #default="{ row }">
         <div class="s7-variable-table__address">
-          <strong>{{ row.normalizedAddress || row.addressText }}</strong>
-          <span>{{ row.area }} {{ formatByteRange(row) }}</span>
+          <strong :title="row.normalizedAddress || row.addressText">{{ row.normalizedAddress || row.addressText }}</strong>
+          <span :title="`${row.area} ${formatByteRange(row)}`">{{ row.area }} {{ formatByteRange(row) }}</span>
         </div>
       </template>
     </el-table-column>
@@ -40,7 +40,7 @@
       </template>
     </el-table-column>
     <el-table-column label="最近值" width="96">
-      <template #default="{ row }">{{ formatValue(row.lastValue) }}</template>
+      <template #default="{ row }"><span class="s7-variable-table__value" :title="formatValue(row.lastValue)">{{ formatValue(row.lastValue) }}</span></template>
     </el-table-column>
     <el-table-column label="质量" width="86">
       <template #default="{ row }">
@@ -127,7 +127,9 @@ const rowClassName = ({ row }: { row: S7Variable }) =>
 }
 .s7-variable-table__name span,
 .s7-variable-table__address span,
-.s7-variable-table__path {
+.s7-variable-table__path,
+.s7-variable-table__value {
+  display: block;
   overflow: hidden;
   color: var(--dc-text-muted);
   text-overflow: ellipsis;

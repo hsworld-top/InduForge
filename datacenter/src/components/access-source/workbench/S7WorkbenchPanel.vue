@@ -23,25 +23,14 @@
     </aside>
     <main class="s7-workbench__main">
       <div class="s7-workbench__bar">
-        <div class="s7-workbench__title">
-          <div>
-            <strong>{{ currentGroup?.name || '全部变量' }}</strong>
-            <span>{{ filteredVariables.length }} 个变量 · 自动同步 s7.variable 数据点</span>
-          </div>
-          <div class="s7-workbench__metrics">
-            <span><b>{{ readPlanEstimate.blockCount }}</b>读取块</span>
-            <span><b>{{ readPlanEstimate.totalReadBytes }}</b>bytes</span>
-            <span><b>{{ readPlanEstimate.readsPerSecond.toFixed(2) }}</b>reads/s</span>
-          </div>
-        </div>
         <div class="s7-workbench__actions">
           <button type="button" class="s7-workbench__icon-action" title="配置 PLC 类型" aria-label="配置 PLC 类型" @click="profileVisible = true"><IconTablerCpu /></button>
-          <button type="button" class="s7-workbench__icon-action" title="导入变量" aria-label="导入变量" @click="importVisible = true"><IconTablerUpload /></button>
+          <button type="button" class="s7-workbench__icon-action" :title="importActionTitle" :aria-label="importActionTitle" @click="importVisible = true"><IconTablerUpload /></button>
           <button type="button" class="s7-workbench__icon-action is-primary" title="新建变量" aria-label="新建变量" @click="openCreateVariable"><IconTablerPlus /></button>
-          <button type="button" class="s7-workbench__icon-action" :disabled="!session.connected.value" title="读取当前值" aria-label="读取当前值" @click="readCurrentScope"><IconTablerBolt /></button>
-          <button type="button" class="s7-workbench__icon-action" :disabled="!session.connected.value" title="变量预览" aria-label="变量预览" @click="openPreview"><IconTablerActivityHeartbeat /></button>
-          <button type="button" class="s7-workbench__icon-action" title="建模校验" aria-label="建模校验" @click="runValidation"><IconTablerChecklist /></button>
-          <button type="button" class="s7-workbench__icon-action" title="读取计划" aria-label="读取计划" @click="openReadPlan"><IconTablerRoute /></button>
+          <button type="button" class="s7-workbench__icon-action" :disabled="!session.connected.value" :title="readActionTitle" :aria-label="readActionTitle" @click="readCurrentScope"><IconTablerBolt /></button>
+          <button type="button" class="s7-workbench__icon-action" :disabled="!session.connected.value" :title="previewActionTitle" :aria-label="previewActionTitle" @click="openPreview"><IconTablerActivityHeartbeat /></button>
+          <button type="button" class="s7-workbench__icon-action" :title="validationActionTitle" :aria-label="validationActionTitle" @click="runValidation"><IconTablerChecklist /></button>
+          <button type="button" class="s7-workbench__icon-action" :title="readPlanActionTitle" :aria-label="readPlanActionTitle" @click="openReadPlan"><IconTablerRoute /></button>
           <button type="button" class="s7-workbench__icon-action" title="刷新" aria-label="刷新" @click="reloadAll"><IconTablerRefresh /></button>
         </div>
         <el-input v-model="keyword" class="s7-workbench__search" size="small" placeholder="搜索变量" clearable />
@@ -130,6 +119,33 @@ const sourceMetaRows = computed(() => [
 ])
 const currentGroup = computed(() => groups.value.find((group) => group.id === selectedGroupId.value) || null)
 const selectedVariable = computed(() => variables.value.find((item) => item.id === selectedVariableId.value) || null)
+const importActionTitle = computed(() =>
+  currentGroup.value ? `导入到「${currentGroup.value.name}」` : '导入到未分组',
+)
+const readActionTitle = computed(() =>
+  session.connected.value
+    ? currentGroup.value
+      ? `读取「${currentGroup.value.name}」最近值`
+      : '读取全部变量最近值'
+    : '连接后可读取最近值',
+)
+const previewActionTitle = computed(() =>
+  session.connected.value
+    ? currentGroup.value
+      ? `预览「${currentGroup.value.name}」变量`
+      : '预览全部变量'
+    : '连接后可预览当前分组变量',
+)
+const validationActionTitle = computed(() =>
+  selectedVariable.value
+    ? `校验当前变量：${selectedVariable.value.name}`
+    : currentGroup.value
+      ? `校验当前分组：${currentGroup.value.name}`
+      : '校验全部变量',
+)
+const readPlanActionTitle = computed(() =>
+  currentGroup.value ? `当前分组读取计划：${currentGroup.value.name}` : '全部变量读取计划',
+)
 const filteredVariables = computed(() => {
   const text = keyword.value.trim().toLowerCase()
   return variables.value.filter((item) => {
@@ -327,6 +343,7 @@ onMounted(reloadAll)
   min-height: 0;
   display: flex;
   flex-direction: column;
+  background: var(--dc-surface-raised);
   overflow: hidden;
 }
 .s7-workbench__bar {
@@ -335,50 +352,16 @@ onMounted(reloadAll)
   border-bottom: 1px solid var(--dc-border);
   background: var(--dc-surface-subtle);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 230px;
+  grid-template-columns: auto minmax(180px, 260px);
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 10px;
 }
-.s7-workbench__title {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.s7-workbench__title > div:first-child {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-.s7-workbench__bar strong {
-  color: var(--dc-text);
-  font-size: 14px;
-}
-.s7-workbench__bar span {
-  color: var(--dc-text-muted);
-  font-size: 12px;
-}
-.s7-workbench__metrics,
 .s7-workbench__actions {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-.s7-workbench__metrics span {
-  height: 26px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 8px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-raised);
-  color: var(--dc-text-secondary);
-  font-size: 11px;
-  font-weight: 700;
-}
-.s7-workbench__metrics b {
-  color: var(--dc-primary);
+  min-width: 0;
 }
 .s7-workbench__icon-action {
   width: 28px;
