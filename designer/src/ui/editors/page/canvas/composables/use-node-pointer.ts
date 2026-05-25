@@ -462,9 +462,10 @@ export function useNodePointer(deps: UseNodePointerDeps): {
     if (event.pointerType === 'mouse' && event.button !== 0) return
     const targetElement = event.target instanceof Element ? event.target : null
     if (targetElement?.closest('.resize-handle')) return
-    if (isNativeInteractiveTarget(targetElement)) return
     const targetNodeEl = targetElement?.closest('[data-node-id]')
     const targetNodeId = targetNodeEl?.getAttribute?.('data-node-id')
+    // 只拦截子节点内部的原生控件事件，当前节点本身是 Button/InputNumber 等控件时仍允许拖动画布节点。
+    if (isNativeInteractiveTarget(targetElement) && targetNodeId !== node.value.id) return
     if (node.value.type === 'Tabs' && targetNodeId && targetNodeId !== node.value.id) {
       return
     }
