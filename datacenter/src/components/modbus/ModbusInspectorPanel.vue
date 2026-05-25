@@ -120,20 +120,19 @@ const formatArea = (area: string) => {
 
 <style scoped>
 .modbus-inspector {
+  width: 292px;
   min-width: 0;
   min-height: 0;
   padding: 12px;
   border-left: 1px solid var(--dc-border);
-  background:
-    linear-gradient(180deg, color-mix(in oklch, var(--dc-surface-subtle) 90%, var(--dc-primary) 10%), var(--dc-surface-subtle)),
-    var(--dc-surface-subtle);
+  background: var(--dc-surface-subtle);
   overflow: auto;
 }
 
 .modbus-inspector__summary {
   margin-bottom: 10px;
   padding: 10px;
-  border: 1px solid color-mix(in oklch, var(--dc-primary) 18%, var(--dc-border));
+  border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-sm);
   background: var(--dc-surface-raised);
   display: grid;
@@ -159,8 +158,14 @@ const formatArea = (area: string) => {
 }
 
 .modbus-inspector section {
-  padding: 10px 0 12px;
-  border-top: 1px solid var(--dc-border-subtle, var(--dc-border));
+  padding: 10px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+}
+
+.modbus-inspector section + section {
+  margin-top: 10px;
 }
 
 .modbus-inspector h3 {

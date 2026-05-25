@@ -462,7 +462,7 @@ onMounted(reloadAll)
   background: var(--dc-surface-muted);
 }
 
-.modbus-workbench__side :deep(.modbus-groups) {
+.modbus-workbench__side :deep(.modbus-group-tree) {
   flex: 1;
   min-height: 0;
 }
@@ -526,12 +526,10 @@ onMounted(reloadAll)
 }
 
 .modbus-workbench__bar {
-  min-height: 52px;
-  padding: 8px 12px;
+  min-height: 46px;
+  padding: 7px 10px 7px 12px;
   border-bottom: 1px solid var(--dc-border);
-  background:
-    linear-gradient(90deg, color-mix(in oklch, var(--dc-surface-subtle) 84%, var(--dc-primary) 16%), var(--dc-surface-subtle)),
-    var(--dc-surface-subtle);
+  background: var(--dc-surface-subtle);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto 240px;
   align-items: center;

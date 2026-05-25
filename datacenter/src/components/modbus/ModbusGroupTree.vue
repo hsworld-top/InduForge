@@ -2,46 +2,53 @@
   <aside class="modbus-group-tree">
     <div class="modbus-group-tree__head">
       <strong>寄存器组</strong>
-      <button type="button" title="新建寄存器组" aria-label="新建寄存器组" @click="$emit('create')">
-        <IconTablerPlus />
+      <span>{{ groups.length }} 组</span>
+    </div>
+    <div class="modbus-group-tree__toolbar">
+      <el-input v-model="keyword" size="small" placeholder="搜索寄存器组" clearable />
+      <button
+        type="button"
+        class="modbus-group-tree__icon-action"
+        title="新建寄存器组"
+        aria-label="新建寄存器组"
+        @click="$emit('create')"
+      >
+        <IconTablerFolderPlus />
       </button>
     </div>
-    <el-input v-model="keyword" size="small" placeholder="搜索寄存器组" clearable />
+
+    <button
+      type="button"
+      class="modbus-group-tree__item modbus-group-tree__all"
+      :class="{ 'is-active': !selectedGroupId }"
+      @click="$emit('select', '')"
+    >
+      <IconTablerStack2 />
+      <span>全部变量</span>
+      <em>{{ registers.length }}</em>
+    </button>
+
     <div class="modbus-group-tree__list">
-      <div
-        role="button"
-        tabindex="0"
-        type="button"
-        class="modbus-group-tree__item"
-        :class="{ 'is-active': !selectedGroupId }"
-        @click="$emit('select', '')"
-      >
-        <IconTablerStack2 />
-        <span>全部变量</span>
-        <em>{{ registers.length }}</em>
-        <i></i>
-        <i></i>
+      <div v-if="filteredGroups.length === 0" class="modbus-group-tree__empty">
+        {{ keyword ? '没有匹配的寄存器组' : '暂无寄存器组' }}
       </div>
-      <div
-        v-for="group in filteredGroups"
-        :key="group.id"
-        role="button"
-        tabindex="0"
-        class="modbus-group-tree__item"
-        :class="{ 'is-active': selectedGroupId === group.id }"
-        @click="$emit('select', group.id)"
-      >
-        <IconTablerFolder />
-        <span>{{ group.name }}</span>
-        <em>{{ countByGroup[group.id] || 0 }}</em>
-        <button type="button" class="modbus-group-tree__action" title="编辑" aria-label="编辑" @click.stop="$emit('edit', group)">
-          <IconTablerPencil />
+      <div v-for="group in filteredGroups" :key="group.id" class="modbus-group-tree__row">
+        <button
+          type="button"
+          class="modbus-group-tree__item"
+          :class="{ 'is-active': selectedGroupId === group.id }"
+          :style="{ paddingLeft: `${12 + group.depth * 16}px` }"
+          @click="$emit('select', group.id)"
+        >
+          <IconTablerFolder />
+          <span>{{ group.name }}</span>
+          <em>{{ countByGroup[group.id] || 0 }}</em>
         </button>
-        <button type="button" class="modbus-group-tree__action" title="删除" aria-label="删除" @click.stop="$emit('delete', group)">
-          <IconTablerTrash />
-        </button>
+        <div class="modbus-group-tree__actions">
+          <el-button text size="small" :icon="IconTablerEdit" @click="$emit('edit', group)" />
+          <el-button text size="small" :icon="IconTablerTrash" @click="$emit('delete', group)" />
+        </div>
       </div>
-      <div v-if="filteredGroups.length === 0" class="modbus-group-tree__empty">没有匹配的寄存器组</div>
     </div>
   </aside>
 </template>
@@ -49,9 +56,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { ModbusRegister, ModbusRegisterGroup } from './types'
+import IconTablerEdit from '~icons/tabler/edit'
 import IconTablerFolder from '~icons/tabler/folder'
-import IconTablerPencil from '~icons/tabler/pencil'
-import IconTablerPlus from '~icons/tabler/plus'
+import IconTablerFolderPlus from '~icons/tabler/folder-plus'
 import IconTablerStack2 from '~icons/tabler/stack-2'
 import IconTablerTrash from '~icons/tabler/trash'
 
@@ -69,10 +76,25 @@ defineEmits<{
 }>()
 
 const keyword = ref('')
+
+const treeGroups = computed(() => {
+  const children = new Map<string, ModbusRegisterGroup[]>()
+  props.groups.forEach((group) => {
+    const parent = group.parentId || ''
+    children.set(parent, [...(children.get(parent) || []), group])
+  })
+  const walk = (parentId = '', depth = 0): Array<ModbusRegisterGroup & { depth: number }> =>
+    (children.get(parentId) || []).flatMap((group) => [
+      { ...group, depth },
+      ...walk(group.id, depth + 1),
+    ])
+  return walk()
+})
+
 const filteredGroups = computed(() => {
   const text = keyword.value.trim().toLowerCase()
-  if (!text) return props.groups
-  return props.groups.filter((group) => group.name.toLowerCase().includes(text))
+  if (!text) return treeGroups.value
+  return treeGroups.value.filter((group) => group.name.toLowerCase().includes(text))
 })
 const countByGroup = computed(() => {
   const result: Record<string, number> = {}
@@ -88,86 +110,108 @@ const countByGroup = computed(() => {
 .modbus-group-tree {
   min-width: 0;
   min-height: 0;
-  padding: 12px 10px;
   border-right: 1px solid var(--dc-border);
-  background:
-    linear-gradient(180deg, color-mix(in oklch, var(--dc-surface-subtle) 88%, var(--dc-primary) 12%), var(--dc-surface-subtle)),
-    var(--dc-surface-subtle);
+  background: var(--dc-surface-muted);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  overflow: hidden;
 }
 
 .modbus-group-tree__head {
-  height: 28px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px 0 12px;
+  border-bottom: 1px solid var(--dc-border);
+  color: var(--dc-text);
 }
 
 .modbus-group-tree__head strong {
-  color: var(--dc-text);
   font-size: 13px;
 }
 
-.modbus-group-tree button {
-  border: 0;
-  background: transparent;
-  color: inherit;
+.modbus-group-tree__head span {
+  color: var(--dc-text-muted);
+  font-size: 12px;
 }
 
-.modbus-group-tree__head button {
-  width: 28px;
-  height: 28px;
+.modbus-group-tree__toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--dc-border);
+}
+
+.modbus-group-tree__icon-action {
+  width: 30px;
+  height: 30px;
+  border: 1px solid color-mix(in oklch, var(--dc-primary) 40%, var(--dc-border));
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-raised);
-  color: var(--dc-text-secondary);
+  cursor: pointer;
 }
 
-.modbus-group-tree__list {
-  min-height: 0;
-  overflow: auto;
-  display: grid;
-  gap: 4px;
+.modbus-group-tree__icon-action:hover {
+  border-color: var(--dc-primary);
+}
+
+.modbus-group-tree__all {
+  margin: 8px 8px 0;
 }
 
 .modbus-group-tree__item {
   width: 100%;
-  min-height: 34px;
-  padding: 0 7px;
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto 22px 22px;
-  align-items: center;
-  gap: 6px;
+  min-height: 30px;
   border: 1px solid transparent;
   border-radius: var(--dc-radius-sm);
+  background: transparent;
   color: var(--dc-text-secondary);
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
   text-align: left;
   cursor: pointer;
+  font-size: 12px;
+}
+
+.modbus-group-tree__item > svg {
+  width: 15px;
+  height: 15px;
+  color: var(--dc-primary);
 }
 
 .modbus-group-tree__item:hover {
-  border-color: color-mix(in oklch, var(--dc-primary) 16%, var(--dc-border));
-  background: color-mix(in oklch, var(--dc-surface-raised) 86%, var(--dc-primary) 14%);
-  color: var(--dc-text);
+  border-color: var(--dc-border);
 }
 
+.modbus-group-tree__item:hover,
 .modbus-group-tree__item.is-active {
-  border-color: color-mix(in oklch, var(--dc-primary) 34%, var(--dc-border));
-  background: var(--dc-surface-raised);
-  color: var(--dc-text);
-  box-shadow: inset 3px 0 0 var(--dc-primary);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
 }
 
 .modbus-group-tree__item span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  color: var(--dc-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.modbus-group-tree__item:hover span,
+.modbus-group-tree__item.is-active span {
+  color: var(--dc-primary);
 }
 
 .modbus-group-tree__item em {
@@ -176,38 +220,50 @@ const countByGroup = computed(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: 0 6px;
   border-radius: 999px;
-  background: color-mix(in oklch, var(--dc-surface-raised) 68%, var(--dc-border) 32%);
+  background: var(--dc-surface-raised);
+  border: 1px solid var(--dc-border);
   font-style: normal;
   color: var(--dc-text-muted);
   font-size: 11px;
+  font-weight: 700;
 }
 
-.modbus-group-tree__action {
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
+.modbus-group-tree__list {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  overflow: auto;
+  padding: 8px 8px 12px;
+}
+
+.modbus-group-tree__row {
+  position: relative;
+}
+
+.modbus-group-tree__actions {
+  position: absolute;
+  right: 3px;
+  top: 1px;
+  display: none;
   align-items: center;
-  justify-content: center;
+  height: 28px;
+  padding-left: 4px;
   border-radius: var(--dc-radius-sm);
-  color: var(--dc-text-muted);
-  opacity: 0;
+  background: var(--dc-primary-soft);
 }
 
-.modbus-group-tree__item:hover .modbus-group-tree__action,
-.modbus-group-tree__item.is-active .modbus-group-tree__action {
-  opacity: 1;
-}
-
-.modbus-group-tree__action:hover {
-  background: color-mix(in oklch, var(--dc-primary) 10%, var(--dc-surface-raised));
-  color: var(--dc-primary);
+.modbus-group-tree__row:hover .modbus-group-tree__actions {
+  display: flex;
 }
 
 .modbus-group-tree__empty {
-  padding: 18px 8px;
+  padding: 22px 8px;
   color: var(--dc-text-muted);
-  font-size: 12px;
+  font-size: 13px;
   text-align: center;
 }
 </style>
