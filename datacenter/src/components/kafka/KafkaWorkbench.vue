@@ -119,6 +119,21 @@
     </main>
 
     <KafkaInspectorPanel :connection="connection" :mapping="selectedMapping" :preview="activePreview" />
+
+    <KafkaTopicGroupDialog
+      v-model="groupDialogVisible"
+      mode="create"
+      :loading="groupSaving"
+      @submit="saveGroup"
+    />
+    <KafkaTopicMappingDialog
+      v-model="mappingDialogVisible"
+      :mode="mappingDialogMode"
+      :groups="groups"
+      :mapping="editingMapping"
+      :loading="mappingSaving"
+      @submit="saveMapping"
+    />
   </section>
 </template>
 
@@ -137,6 +152,8 @@ import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.
 import { getApiErrorMessage } from '@/utils/request'
 import { buildKafkaTopicTree, filterKafkaTopicTree } from './kafkaTopicTreeModel'
 import KafkaInspectorPanel from './KafkaInspectorPanel.vue'
+import KafkaTopicGroupDialog from './KafkaTopicGroupDialog.vue'
+import KafkaTopicMappingDialog from './KafkaTopicMappingDialog.vue'
 import KafkaTopicTreeBranch from './KafkaTopicTreeBranch.vue'
 import type { KafkaPreview, KafkaPreviewSample, KafkaTopicGroup, KafkaTopicMapping, KafkaWorkbenchConnection } from './types'
 
@@ -167,6 +184,12 @@ const activeTabId = ref('')
 const tabs = ref<KafkaWorkbenchTab[]>([])
 const previewSamplesByMapping = shallowRef(new Map<string, KafkaPreviewSample[]>())
 const activePreview = ref<KafkaPreview | null>(null)
+const groupDialogVisible = ref(false)
+const groupSaving = ref(false)
+const mappingDialogVisible = ref(false)
+const mappingDialogMode = ref<'create' | 'edit'>('create')
+const mappingSaving = ref(false)
+const editingMapping = ref<KafkaTopicMapping | null>(null)
 
 const config = computed(() => props.connection.config || {})
 const sourceMetaRows = computed(() => [
@@ -198,11 +221,47 @@ const toggleConnection = () => {
 }
 
 const openCreateMapping = () => {
-  ElMessage.info('Topic 映射弹窗将在下一步接入')
+  mappingDialogMode.value = 'create'
+  editingMapping.value = null
+  mappingDialogVisible.value = true
 }
 
 const openCreateGroup = () => {
-  ElMessage.info('Topic 分组弹窗将在下一步接入')
+  groupDialogVisible.value = true
+}
+
+const saveGroup = async (payload: { name: string }) => {
+  groupSaving.value = true
+  try {
+    await dataAPI.createKafkaTopicGroup(props.projectId, props.connection.id, payload)
+    groupDialogVisible.value = false
+    ElMessage.success('Topic 分组已创建')
+    await loadWorkbench()
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '保存 Topic 分组失败'))
+  } finally {
+    groupSaving.value = false
+  }
+}
+
+const saveMapping = async (payload: Record<string, unknown>) => {
+  mappingSaving.value = true
+  try {
+    const saved =
+      mappingDialogMode.value === 'edit' && editingMapping.value
+        ? await dataAPI.updateKafkaTopicMapping(props.projectId, editingMapping.value.id, payload)
+        : await dataAPI.createKafkaTopicMapping(props.projectId, props.connection.id, payload)
+    mappingDialogVisible.value = false
+    ElMessage.success('Topic 映射已保存')
+    await loadWorkbench()
+    if (saved?.id) {
+      openPreview(saved)
+    }
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '保存 Topic 映射失败'))
+  } finally {
+    mappingSaving.value = false
+  }
 }
 
 const openPreview = (mapping: KafkaTopicMapping) => {
