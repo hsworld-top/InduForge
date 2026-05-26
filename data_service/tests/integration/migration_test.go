@@ -62,6 +62,9 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_mqtt_subscriptions",
 		"data_mqtt_messages",
 		"data_kafka_configs",
+		"data_kafka_topic_groups",
+		"data_kafka_topic_mappings",
+		"data_kafka_fields",
 		"data_http_configs",
 		"data_websocket_configs",
 		"data_redis_configs",
@@ -90,8 +93,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&appliedCount); err != nil {
 		t.Fatalf("鏌ヨ schema_migrations 澶辫触: %v", err)
 	}
-	if appliedCount != 26 {
-		t.Fatalf("expected 26 migration records, got %d", appliedCount)
+	if appliedCount != 27 {
+		t.Fatalf("expected 27 migration records, got %d", appliedCount)
 	}
 
 	if err := migrator.DownAll(ctx); err != nil {
@@ -107,6 +110,9 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_mqtt_subscriptions",
 		"data_mqtt_messages",
 		"data_kafka_configs",
+		"data_kafka_topic_groups",
+		"data_kafka_topic_mappings",
+		"data_kafka_fields",
 		"data_http_configs",
 		"data_websocket_configs",
 		"data_redis_configs",
@@ -164,6 +170,9 @@ func TestMigrationIndexes(t *testing.T) {
 		"data_mqtt_messages_project_subscription_received_idx",
 		"data_mqtt_messages_subscription_received_idx",
 		"data_kafka_configs_topic_idx",
+		"data_kafka_topic_groups_tree_idx",
+		"data_kafka_topic_mappings_group_idx",
+		"data_kafka_fields_connection_idx",
 		"data_http_configs_method_idx",
 		"data_websocket_configs_url_idx",
 		"data_redis_configs_mode_idx",
