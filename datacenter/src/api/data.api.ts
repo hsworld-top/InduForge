@@ -1,5 +1,14 @@
 // @ts-nocheck
 import request from '@/utils/request'
+import {
+  KafkaFieldListSchema,
+  KafkaFieldSchema,
+  KafkaPreviewSchema,
+  KafkaTopicGroupListSchema,
+  KafkaTopicGroupSchema,
+  KafkaTopicMappingListSchema,
+  KafkaTopicMappingSchema,
+} from './schemas/kafka-workbench.schema'
 
 // ===========================================
 // 数据连接相关API
@@ -133,6 +142,149 @@ export const previewProtocol = (projectId, connectionId, data = {}) => {
     method: 'post',
     data,
   })
+}
+
+export const getKafkaTopicGroups = async (projectId, connectionId) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/kafka/${connectionId}/topic-groups`,
+    method: 'get',
+  })
+  return KafkaTopicGroupListSchema.parse(res)
+}
+
+export const createKafkaTopicGroup = async (projectId, connectionId, data) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/kafka/${connectionId}/topic-groups`,
+    method: 'post',
+    data,
+  })
+  return KafkaTopicGroupSchema.parse(res)
+}
+
+export const updateKafkaTopicGroup = async (projectId, groupId, data) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/kafka/topic-groups/${groupId}`,
+    method: 'put',
+    data,
+  })
+  return KafkaTopicGroupSchema.parse(res)
+}
+
+export const deleteKafkaTopicGroup = (projectId, groupId) => {
+  return request({
+    url: `/data/projects/${projectId}/kafka/topic-groups/${groupId}`,
+    method: 'delete',
+  })
+}
+
+export const getKafkaTopicMappings = async (projectId, connectionId) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/kafka/${connectionId}/topic-mappings`,
+    method: 'get',
+  })
+  return KafkaTopicMappingListSchema.parse(res)
+}
+
+export const getKafkaTopicMapping = async (projectId, mappingId) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/kafka/topic-mappings/${mappingId}`,
+    method: 'get',
+  })
+  return KafkaTopicMappingSchema.parse(res)
+}
+
+export const createKafkaTopicMapping = async (projectId, connectionId, data) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/kafka/${connectionId}/topic-mappings`,
+    method: 'post',
+    data,
+  })
+  return KafkaTopicMappingSchema.parse(res)
+}
+
+export const updateKafkaTopicMapping = async (projectId, mappingId, data) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/kafka/topic-mappings/${mappingId}`,
+    method: 'put',
+    data,
+  })
+  return KafkaTopicMappingSchema.parse(res)
+}
+
+export const deleteKafkaTopicMapping = (projectId, mappingId) => {
+  return request({
+    url: `/data/projects/${projectId}/kafka/topic-mappings/${mappingId}`,
+    method: 'delete',
+  })
+}
+
+export const previewKafkaConnection = async (projectId, connectionId, data = {}) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/kafka/${connectionId}/preview`,
+    method: 'post',
+    data,
+  })
+  return KafkaPreviewSchema.parse(res)
+}
+
+export const previewKafkaTopicMapping = async (projectId, mappingId, data = {}) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/kafka/topic-mappings/${mappingId}/preview`,
+    method: 'post',
+    data,
+  })
+  return KafkaPreviewSchema.parse(res)
+}
+
+export const getKafkaFields = async (projectId, mappingId) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/kafka/topic-mappings/${mappingId}/fields`,
+    method: 'get',
+  })
+  return KafkaFieldListSchema.parse(res)
+}
+
+export const createKafkaField = async (projectId, mappingId, data) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/kafka/topic-mappings/${mappingId}/fields`,
+    method: 'post',
+    data,
+  })
+  return KafkaFieldSchema.parse(res)
+}
+
+export const createKafkaFieldsBatch = async (projectId, mappingId, fields) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/kafka/topic-mappings/${mappingId}/fields/batch`,
+    method: 'post',
+    data: { fields },
+  })
+  return KafkaFieldListSchema.parse(res)
+}
+
+export const updateKafkaField = async (projectId, fieldId, data) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/kafka/fields/${fieldId}`,
+    method: 'put',
+    data,
+  })
+  return KafkaFieldSchema.parse(res)
+}
+
+export const deleteKafkaField = (projectId, fieldId) => {
+  return request({
+    url: `/data/projects/${projectId}/kafka/fields/${fieldId}`,
+    method: 'delete',
+  })
+}
+
+export const toggleKafkaField = async (projectId, fieldId, enabled) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/kafka/fields/${fieldId}/toggle`,
+    method: 'patch',
+    data: { enabled },
+  })
+  return KafkaFieldSchema.parse(res)
 }
 
 const normalizeOpcuaListPayload = (payload, legacyKey = '') => {
@@ -1505,6 +1657,23 @@ export default {
   createTdengineConfig,
   validateOpcdaContract,
   previewProtocol,
+  getKafkaTopicGroups,
+  createKafkaTopicGroup,
+  updateKafkaTopicGroup,
+  deleteKafkaTopicGroup,
+  getKafkaTopicMappings,
+  getKafkaTopicMapping,
+  createKafkaTopicMapping,
+  updateKafkaTopicMapping,
+  deleteKafkaTopicMapping,
+  previewKafkaConnection,
+  previewKafkaTopicMapping,
+  getKafkaFields,
+  createKafkaField,
+  createKafkaFieldsBatch,
+  updateKafkaField,
+  deleteKafkaField,
+  toggleKafkaField,
   getOpcuaNodeGroups,
   createOpcuaNodeGroup,
   updateOpcuaNodeGroup,
