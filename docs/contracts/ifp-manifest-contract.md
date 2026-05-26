@@ -3,7 +3,7 @@
 ## 1. 文档定位
 
 - 本文档定义 `dev_core` 发布出的 `.ifp` 制品结构和 `manifest.json` 契约。
-- 本文档是 `dev_core`、`runtime/node_agent`、`runtime_engine` 的共同输入。
+- 本文档是 `dev_core`、`runtime/node_agent`、`client_engine`、`runtime_api` 和运行态数据引擎的共同输入。
 
 ## 2. 当前已实现
 

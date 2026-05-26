@@ -2,7 +2,7 @@
 
 ## 1. 文档定位
 
-- 本文档定义 `designer` 输出给 `dev_core` 与 `runtime_engine` 的发布态最小 Schema。
+- 本文档定义 `designer` 输出给 `dev_core` 与 `client_engine` 的发布态最小 Schema。
 - 本文档只约束发布态，不约束编辑器内部存储结构。
 - 本文档是运行时闭环的前置契约，未冻结前不应并行扩 Runtime 解析细节。
 

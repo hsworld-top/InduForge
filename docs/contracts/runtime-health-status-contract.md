@@ -2,14 +2,15 @@
 
 ## 1. 文档定位
 
-- 本文档定义 RuntimeEngine 对 NodeAgent 和平台暴露的最小健康与状态协议。
+- 本文档定义节点侧运行组件对 NodeAgent 和平台暴露的最小健康与状态协议。
+- 适用组件包括 `runtime_api`、`runtime_data_service` 各角色容器、工程入口容器、Windows / Linux 原生 collector 子进程以及后续纳入工程运行栈的长期运行服务。
 - 本协议的目标是支撑托管、探活、错误定位和运维展示。
 
 ## 2. 当前已实现
 
 ### 当前缺口
 
-- RuntimeEngine 尚未实现，因此 `/health` 和 `/status` 目前没有事实接口。
+- `runtime_api`、客户端引擎静态托管和运行态数据引擎尚未实现，因此 `/health` 和 `/status` 目前没有事实接口。
 
 ## 3. 协议目标
 
@@ -42,7 +43,7 @@
 
 ### 目标
 
-- 返回当前运行版本、项目、启动时间、运行状态和最后错误。
+- 返回当前运行版本、项目、组件角色、启动时间、运行状态和最后错误。
 
 ### 建议响应
 
@@ -51,11 +52,17 @@
   "success": true,
   "data": {
     "runtimeStatus": "RUNNING",
+    "componentRole": "runtime_api",
     "projectId": "proj_xxx",
     "projectCode": "factory_dashboard",
     "version": "2026.03.06-001",
+    "executionMode": "collector-windows-native",
+    "siteId": "collector-line-1",
     "startedAt": "2026-03-06T10:05:00Z",
     "uptimeSeconds": 3600,
+    "processId": 1234,
+    "upstreamStatus": "CONNECTED",
+    "walBacklog": 0,
     "lastError": null
   }
 }
@@ -74,11 +81,17 @@
 | 字段            | 必填 | 说明         |
 | --------------- | ---- | ------------ |
 | `runtimeStatus` | 是   | 运行状态     |
+| `componentRole` | 否   | 组件角色     |
 | `projectId`     | 是   | 工程 ID      |
 | `projectCode`   | 是   | 工程编码     |
 | `version`       | 是   | 当前运行版本 |
+| `executionMode` | 否   | 执行方式，例如 `service-linux-container`、`collector-windows-native` |
+| `siteId`        | 否   | 当前运行站点 ID |
 | `startedAt`     | 是   | 启动时间     |
 | `uptimeSeconds` | 是   | 运行时长     |
+| `processId`     | 否   | 原生进程 PID，容器模式可不返回 |
+| `upstreamStatus` | 否  | 采集站点上游连接状态 |
+| `walBacklog`    | 否   | 采集站点本地 WAL 待补投条数或批次数 |
 | `lastError`     | 否   | 最后错误摘要 |
 
 ## 8. 错误约定
@@ -103,5 +116,5 @@
 
 - [高层设计](../高层设计.md)
 - [详细设计](../详细设计.md)
-- [NodeAgent 与 RuntimeEngine 启动协议](./node-agent-runtime-protocol.md)
+- [NodeAgent 与工程运行栈启动协议](./node-agent-runtime-protocol.md)
 - [测试与质量策略](../测试与质量策略.md)
