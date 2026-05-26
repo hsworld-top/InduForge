@@ -96,7 +96,7 @@
           type="button"
           class="kafka-workbench__tab"
           :class="{ 'is-active': tab.id === activeTabId }"
-          @click="activeTabId = tab.id"
+          @click="activateTab(tab)"
         >
           <component :is="tab.icon" />
           <span>{{ tab.title }}</span>
@@ -105,10 +105,16 @@
       </div>
 
       <div class="kafka-workbench__content">
-        <div v-if="activeTab" class="kafka-workbench__placeholder">
+        <KafkaPreviewPanel
+          v-if="activeTab?.type === 'preview'"
+          :project-id="projectId"
+          :mapping="activeTab.mapping"
+          @samples="handlePreviewSamples"
+        />
+        <div v-else-if="activeTab" class="kafka-workbench__placeholder">
           <component :is="activeTab.icon" />
           <strong>{{ activeTab.title }}</strong>
-          <span>{{ activeTab.type === 'fields' ? '字段映射面板将在下一步接入。' : '消息预览面板将在下一步接入。' }}</span>
+          <span>字段映射面板将在下一步接入。</span>
         </div>
         <div v-else class="kafka-workbench__placeholder">
           <IconTablerMessages />
@@ -152,6 +158,7 @@ import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.
 import { getApiErrorMessage } from '@/utils/request'
 import { buildKafkaTopicTree, filterKafkaTopicTree } from './kafkaTopicTreeModel'
 import KafkaInspectorPanel from './KafkaInspectorPanel.vue'
+import KafkaPreviewPanel from './KafkaPreviewPanel.vue'
 import KafkaTopicGroupDialog from './KafkaTopicGroupDialog.vue'
 import KafkaTopicMappingDialog from './KafkaTopicMappingDialog.vue'
 import KafkaTopicTreeBranch from './KafkaTopicTreeBranch.vue'
@@ -292,6 +299,11 @@ const openFields = (mapping: KafkaTopicMapping) => {
     })
   }
   activeTabId.value = id
+}
+
+const activateTab = (tab: KafkaWorkbenchTab) => {
+  activeTabId.value = tab.id
+  selectedMapping.value = tab.mapping
 }
 
 const closeTab = (tabId: string) => {
