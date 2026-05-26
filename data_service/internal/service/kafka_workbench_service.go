@@ -299,6 +299,22 @@ func (s *KafkaWorkbenchService) ListTopicMappings(ctx context.Context, projectID
 	return result, nil
 }
 
+// GetTopicMapping 返回单个 Topic 映射。
+func (s *KafkaWorkbenchService) GetTopicMapping(ctx context.Context, projectID, mappingID string) (*KafkaTopicMapping, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateUUIDText(mappingID, "mappingId 格式无效"); err != nil {
+		return nil, err
+	}
+	record, err := s.repository.GetTopicMapping(ctx, projectID, mappingID)
+	if err != nil {
+		return nil, err
+	}
+	result := toKafkaTopicMapping(*record)
+	return &result, nil
+}
+
 // CreateTopicMapping 创建 Topic 映射。
 func (s *KafkaWorkbenchService) CreateTopicMapping(ctx context.Context, projectID, connectionID, userID string, input CreateKafkaTopicMappingInput) (*KafkaTopicMapping, error) {
 	if err := validateProjectConnectionAndUser(projectID, connectionID, userID); err != nil {

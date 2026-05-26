@@ -20,6 +20,7 @@ type options struct {
 	dataPointHandler          *handler.DataPointHandler
 	modbusModelingHandler     *handler.ModbusModelingHandler
 	mqttHandler               *handler.MqttHandler
+	kafkaWorkbenchHandler     *handler.KafkaWorkbenchHandler
 	opcuaModelingHandler      *handler.OpcuaModelingHandler
 	s7ModelingHandler         *handler.S7ModelingHandler
 	protocolDevSessionHandler *handler.ProtocolDevSessionHandler
@@ -104,6 +105,14 @@ func WithWorkbenchGroupRoutes(workbenchGroupHandler *handler.WorkbenchGroupHandl
 func WithMqttRoutes(mqttHandler *handler.MqttHandler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
 		opts.mqttHandler = mqttHandler
+		opts.jwtValidator = jwtValidator
+	}
+}
+
+// WithKafkaWorkbenchRoutes wires Kafka 工作台 routes.
+func WithKafkaWorkbenchRoutes(kafkaHandler *handler.KafkaWorkbenchHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.kafkaWorkbenchHandler = kafkaHandler
 		opts.jwtValidator = jwtValidator
 	}
 }
@@ -209,6 +218,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountDataRoutes(mux, opts)
 	mountWorkbenchGroupRoutes(mux, opts)
 	mountMqttRoutes(mux, opts)
+	mountKafkaWorkbenchRoutes(mux, opts)
 	mountModbusModelingRoutes(mux, opts)
 	mountOpcuaModelingRoutes(mux, opts)
 	mountS7ModelingRoutes(mux, opts)
@@ -1049,6 +1059,52 @@ func mountMqttRoutes(mux *http.ServeMux, opts options) {
 			),
 		),
 	)
+}
+
+func mountKafkaWorkbenchRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.kafkaWorkbenchHandler == nil || opts.jwtValidator == nil {
+		return
+	}
+
+	read := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+	write := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+
+	sourceBase := "/api/v1/data/projects/{projectId}/kafka/{connectionId}"
+	mappingBase := "/api/v1/data/projects/{projectId}/kafka/topic-mappings/{mappingId}"
+	fieldBase := "/api/v1/data/projects/{projectId}/kafka/fields/{fieldId}"
+
+	mux.Handle("GET "+sourceBase+"/topic-groups", read(opts.kafkaWorkbenchHandler.ListTopicGroups))
+	mux.Handle("POST "+sourceBase+"/topic-groups", write(opts.kafkaWorkbenchHandler.CreateTopicGroup))
+	mux.Handle("PUT /api/v1/data/projects/{projectId}/kafka/topic-groups/{groupId}", write(opts.kafkaWorkbenchHandler.UpdateTopicGroup))
+	mux.Handle("DELETE /api/v1/data/projects/{projectId}/kafka/topic-groups/{groupId}", write(opts.kafkaWorkbenchHandler.DeleteTopicGroup))
+
+	mux.Handle("GET "+sourceBase+"/topic-mappings", read(opts.kafkaWorkbenchHandler.ListTopicMappings))
+	mux.Handle("POST "+sourceBase+"/topic-mappings", write(opts.kafkaWorkbenchHandler.CreateTopicMapping))
+	mux.Handle("GET "+mappingBase, read(opts.kafkaWorkbenchHandler.GetTopicMapping))
+	mux.Handle("PUT "+mappingBase, write(opts.kafkaWorkbenchHandler.UpdateTopicMapping))
+	mux.Handle("DELETE "+mappingBase, write(opts.kafkaWorkbenchHandler.DeleteTopicMapping))
+
+	mux.Handle("POST "+sourceBase+"/preview", read(opts.kafkaWorkbenchHandler.PreviewConnection))
+	mux.Handle("POST "+mappingBase+"/preview", read(opts.kafkaWorkbenchHandler.PreviewTopicMapping))
+
+	mux.Handle("GET "+mappingBase+"/fields", read(opts.kafkaWorkbenchHandler.ListFields))
+	mux.Handle("POST "+mappingBase+"/fields", write(opts.kafkaWorkbenchHandler.CreateField))
+	mux.Handle("POST "+mappingBase+"/fields/batch", write(opts.kafkaWorkbenchHandler.CreateFieldsBatch))
+	mux.Handle("PUT "+fieldBase, write(opts.kafkaWorkbenchHandler.UpdateField))
+	mux.Handle("DELETE "+fieldBase, write(opts.kafkaWorkbenchHandler.DeleteField))
+	mux.Handle("PATCH "+fieldBase+"/toggle", write(opts.kafkaWorkbenchHandler.ToggleField))
 }
 
 func mountOpcuaModelingRoutes(mux *http.ServeMux, opts options) {
