@@ -16,6 +16,7 @@
 import { computed } from 'vue'
 import SqlWorkbench from './workbench/SqlWorkbench.vue'
 import MqttWorkbenchPanel from './workbench/MqttWorkbenchPanel.vue'
+import KafkaWorkbenchPanel from './workbench/KafkaWorkbenchPanel.vue'
 import ModbusWorkbenchPanel from './workbench/ModbusWorkbenchPanel.vue'
 import OpcuaWorkbenchPanel from './workbench/OpcuaWorkbenchPanel.vue'
 import S7WorkbenchPanel from './workbench/S7WorkbenchPanel.vue'
@@ -60,6 +61,9 @@ const resolvedPanel = computed(() => {
   if (type === 'mqtt') {
     return MqttWorkbenchPanel
   }
+  if (type === 'kafka') {
+    return KafkaWorkbenchPanel
+  }
   if (type === 'opcua') {
     return OpcuaWorkbenchPanel
   }
@@ -72,7 +76,7 @@ const resolvedPanel = computed(() => {
   if (type === 's7') {
     return S7WorkbenchPanel
   }
-  if (['kafka', 'http', 'websocket'].includes(type)) {
+  if (['http', 'websocket'].includes(type)) {
     return ProtocolWorkbenchPanel
   }
   if (['opcua', 'opcda', 's7', 'modbus'].includes(type)) {

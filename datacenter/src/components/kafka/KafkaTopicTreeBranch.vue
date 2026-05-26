@@ -1,0 +1,166 @@
+<template>
+  <section class="kafka-topic-branch">
+    <button type="button" class="kafka-topic-branch__group" @click="expanded = !expanded">
+      <IconTablerChevronRight class="kafka-topic-branch__chevron" :class="{ 'is-open': expanded }" />
+      <IconTablerFolderOpen v-if="expanded" class="kafka-topic-branch__icon" />
+      <IconTablerFolder v-else class="kafka-topic-branch__icon" />
+      <span class="kafka-topic-branch__group-name">{{ node.name }}</span>
+      <span class="kafka-topic-branch__count">{{ totalCount }}</span>
+    </button>
+
+    <div v-if="expanded" class="kafka-topic-branch__children">
+      <button
+        v-for="mapping in node.mappings"
+        :key="String(mapping.id)"
+        type="button"
+        class="kafka-topic-branch__mapping"
+        :class="{ 'is-active': String(mapping.id) === selectedMappingId }"
+        @click="$emit('selectMapping', mapping)"
+        @dblclick="$emit('openFields', mapping)"
+        @keydown.enter="$emit('openFields', mapping)"
+      >
+        <IconTablerMessages class="kafka-topic-branch__mapping-icon" />
+        <el-tooltip :content="mapping.topic" placement="top" :show-after="400">
+          <span class="kafka-topic-branch__mapping-name">{{ mapping.name || mapping.topic }}</span>
+        </el-tooltip>
+      </button>
+
+      <KafkaTopicTreeBranch
+        v-for="child in node.children"
+        :key="String(child.id)"
+        :node="child"
+        :selected-mapping-id="selectedMappingId"
+        @select-mapping="$emit('selectMapping', $event)"
+        @open-fields="$emit('openFields', $event)"
+      />
+    </div>
+  </section>
+</template>
+
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import IconTablerChevronRight from '~icons/tabler/chevron-right'
+import IconTablerFolder from '~icons/tabler/folder'
+import IconTablerFolderOpen from '~icons/tabler/folder-open'
+import IconTablerMessages from '~icons/tabler/messages'
+import type { KafkaTopicGroupNode, KafkaTopicMapping } from './types'
+
+defineOptions({ name: 'KafkaTopicTreeBranch' })
+
+const props = defineProps<{
+  node: KafkaTopicGroupNode
+  selectedMappingId?: string | null
+}>()
+
+defineEmits<{
+  (event: 'selectMapping', mapping: KafkaTopicMapping): void
+  (event: 'openFields', mapping: KafkaTopicMapping): void
+}>()
+
+const expanded = ref(true)
+
+const countMappings = (node: KafkaTopicGroupNode): number =>
+  node.mappings.length + node.children.reduce((sum, child) => sum + countMappings(child), 0)
+
+const totalCount = computed(() => countMappings(props.node))
+</script>
+
+<style scoped>
+.kafka-topic-branch {
+  display: grid;
+  gap: 2px;
+}
+
+.kafka-topic-branch__group,
+.kafka-topic-branch__mapping {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: var(--dc-radius-sm);
+  background: transparent;
+  color: var(--dc-text-secondary);
+  text-align: left;
+}
+
+.kafka-topic-branch__group {
+  min-height: 28px;
+  display: grid;
+  grid-template-columns: 16px 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+  padding: 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.kafka-topic-branch__group:hover,
+.kafka-topic-branch__mapping:hover {
+  border-color: var(--dc-border);
+  background: var(--dc-surface-muted);
+  color: var(--dc-text);
+}
+
+.kafka-topic-branch__chevron {
+  width: 14px;
+  height: 14px;
+  transform: rotate(0deg);
+  transition: transform 0.16s ease;
+}
+
+.kafka-topic-branch__chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.kafka-topic-branch__icon,
+.kafka-topic-branch__mapping-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--dc-primary);
+}
+
+.kafka-topic-branch__group-name,
+.kafka-topic-branch__mapping-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kafka-topic-branch__count {
+  min-width: 20px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.kafka-topic-branch__children {
+  display: grid;
+  gap: 2px;
+  margin-left: 10px;
+  padding-left: 6px;
+}
+
+.kafka-topic-branch__mapping {
+  min-height: 30px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+}
+
+.kafka-topic-branch__mapping.is-active {
+  border-color: rgba(29, 78, 216, 0.28);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+}
+
+.kafka-topic-branch__mapping-name {
+  display: block;
+  color: var(--dc-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+</style>
