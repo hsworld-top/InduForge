@@ -146,7 +146,7 @@ export const previewProtocol = (projectId, connectionId, data = {}) => {
 
 export const getKafkaTopicGroups = async (projectId, connectionId) => {
   const res = await request({
-    url: `/data/projects/${projectId}/kafka/${connectionId}/topic-groups`,
+    url: `/data/projects/${projectId}/kafka/sources/${connectionId}/topic-groups`,
     method: 'get',
   })
   return KafkaTopicGroupListSchema.parse(res)
@@ -154,7 +154,7 @@ export const getKafkaTopicGroups = async (projectId, connectionId) => {
 
 export const createKafkaTopicGroup = async (projectId, connectionId, data) => {
   const res = await request({
-    url: `/data/projects/${projectId}/kafka/${connectionId}/topic-groups`,
+    url: `/data/projects/${projectId}/kafka/sources/${connectionId}/topic-groups`,
     method: 'post',
     data,
   })
@@ -179,7 +179,7 @@ export const deleteKafkaTopicGroup = (projectId, groupId) => {
 
 export const getKafkaTopicMappings = async (projectId, connectionId) => {
   const res = await request({
-    url: `/data/projects/${projectId}/kafka/${connectionId}/topic-mappings`,
+    url: `/data/projects/${projectId}/kafka/sources/${connectionId}/topic-mappings`,
     method: 'get',
   })
   return KafkaTopicMappingListSchema.parse(res)
@@ -195,7 +195,7 @@ export const getKafkaTopicMapping = async (projectId, mappingId) => {
 
 export const createKafkaTopicMapping = async (projectId, connectionId, data) => {
   const res = await request({
-    url: `/data/projects/${projectId}/kafka/${connectionId}/topic-mappings`,
+    url: `/data/projects/${projectId}/kafka/sources/${connectionId}/topic-mappings`,
     method: 'post',
     data,
   })
@@ -220,7 +220,7 @@ export const deleteKafkaTopicMapping = (projectId, mappingId) => {
 
 export const previewKafkaConnection = async (projectId, connectionId, data = {}) => {
   const res = await request({
-    url: `/data/projects/${projectId}/kafka/${connectionId}/preview`,
+    url: `/data/projects/${projectId}/kafka/sources/${connectionId}/preview`,
     method: 'post',
     data,
   })

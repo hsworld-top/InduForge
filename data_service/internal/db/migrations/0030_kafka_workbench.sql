@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS data_kafka_topic_mappings (
         FOREIGN KEY (connection_id) REFERENCES data_connections (id) ON DELETE CASCADE,
     CONSTRAINT data_kafka_topic_mappings_group_fkey
         FOREIGN KEY (group_id) REFERENCES data_kafka_topic_groups (id) ON DELETE SET NULL,
-    CONSTRAINT data_kafka_topic_mappings_partition_check
+    CONSTRAINT data_kafka_topic_mappings_single_partition_check
         CHECK (partition_mode <> 'single' OR partition IS NOT NULL),
     CONSTRAINT data_kafka_topic_mappings_topic_key
         UNIQUE (project_id, connection_id, topic)

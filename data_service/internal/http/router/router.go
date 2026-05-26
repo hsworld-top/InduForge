@@ -1081,7 +1081,7 @@ func mountKafkaWorkbenchRoutes(mux *http.ServeMux, opts options) {
 		)
 	}
 
-	sourceBase := "/api/v1/data/projects/{projectId}/kafka/{connectionId}"
+	sourceBase := "/api/v1/data/projects/{projectId}/kafka/sources/{connectionId}"
 	mappingBase := "/api/v1/data/projects/{projectId}/kafka/topic-mappings/{mappingId}"
 	fieldBase := "/api/v1/data/projects/{projectId}/kafka/fields/{fieldId}"
 

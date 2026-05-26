@@ -484,12 +484,13 @@ Kafka 工作台接口：
 
 | 方法     | 路径                                                                                 | 功能概要                |
 | -------- | ------------------------------------------------------------------------------------ | ----------------------- |
-| `GET`    | `/api/v1/data/projects/{projectId}/kafka/{connectionId}/topic-groups`                | 获取 Kafka Topic 分组   |
-| `POST`   | `/api/v1/data/projects/{projectId}/kafka/{connectionId}/topic-groups`                | 创建 Kafka Topic 分组   |
+| `GET`    | `/api/v1/data/projects/{projectId}/kafka/sources/{connectionId}/topic-groups`        | 获取 Kafka Topic 分组   |
+| `POST`   | `/api/v1/data/projects/{projectId}/kafka/sources/{connectionId}/topic-groups`        | 创建 Kafka Topic 分组   |
 | `PUT`    | `/api/v1/data/projects/{projectId}/kafka/topic-groups/{groupId}`                     | 更新 Kafka Topic 分组   |
 | `DELETE` | `/api/v1/data/projects/{projectId}/kafka/topic-groups/{groupId}`                     | 删除 Kafka Topic 分组   |
-| `GET`    | `/api/v1/data/projects/{projectId}/kafka/{connectionId}/topic-mappings`              | 获取 Kafka Topic 映射   |
-| `POST`   | `/api/v1/data/projects/{projectId}/kafka/{connectionId}/topic-mappings`              | 创建 Kafka Topic 映射   |
+| `GET`    | `/api/v1/data/projects/{projectId}/kafka/sources/{connectionId}/topic-mappings`      | 获取 Kafka Topic 映射   |
+| `POST`   | `/api/v1/data/projects/{projectId}/kafka/sources/{connectionId}/topic-mappings`      | 创建 Kafka Topic 映射   |
+| `POST`   | `/api/v1/data/projects/{projectId}/kafka/sources/{connectionId}/preview`             | 短时预览 Kafka 接入源   |
 | `PUT`    | `/api/v1/data/projects/{projectId}/kafka/topic-mappings/{mappingId}`                 | 更新 Kafka Topic 映射   |
 | `DELETE` | `/api/v1/data/projects/{projectId}/kafka/topic-mappings/{mappingId}`                 | 删除 Kafka Topic 映射   |
 | `POST`   | `/api/v1/data/projects/{projectId}/kafka/topic-mappings/{mappingId}/preview`         | 短时预览 Kafka Topic    |

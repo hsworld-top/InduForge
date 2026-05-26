@@ -144,7 +144,7 @@ type kafkaListPayload[T any] struct {
 func mustCreateKafkaTopicGroup(t *testing.T, baseURL, token, projectID, connectionID string, payload map[string]any) kafkaTopicGroupPayload {
 	t.Helper()
 
-	responseEnvelope := doJSONRequest(t, http.MethodPost, baseURL+"/api/v1/data/projects/"+projectID+"/kafka/"+connectionID+"/topic-groups", token, payload)
+	responseEnvelope := doJSONRequest(t, http.MethodPost, baseURL+"/api/v1/data/projects/"+projectID+"/kafka/sources/"+connectionID+"/topic-groups", token, payload)
 	var result kafkaTopicGroupPayload
 	if err := json.Unmarshal(responseEnvelope.Data, &result); err != nil {
 		t.Fatalf("decode kafka topic group response failed: %v", err)
@@ -155,7 +155,7 @@ func mustCreateKafkaTopicGroup(t *testing.T, baseURL, token, projectID, connecti
 func mustCreateKafkaTopicMapping(t *testing.T, baseURL, token, projectID, connectionID string, payload map[string]any) kafkaTopicMappingPayload {
 	t.Helper()
 
-	responseEnvelope := doJSONRequest(t, http.MethodPost, baseURL+"/api/v1/data/projects/"+projectID+"/kafka/"+connectionID+"/topic-mappings", token, payload)
+	responseEnvelope := doJSONRequest(t, http.MethodPost, baseURL+"/api/v1/data/projects/"+projectID+"/kafka/sources/"+connectionID+"/topic-mappings", token, payload)
 	var result kafkaTopicMappingPayload
 	if err := json.Unmarshal(responseEnvelope.Data, &result); err != nil {
 		t.Fatalf("decode kafka topic mapping response failed: %v", err)
@@ -166,7 +166,7 @@ func mustCreateKafkaTopicMapping(t *testing.T, baseURL, token, projectID, connec
 func mustListKafkaTopicMappings(t *testing.T, baseURL, token, projectID, connectionID string) []kafkaTopicMappingPayload {
 	t.Helper()
 
-	responseEnvelope := doJSONRequest(t, http.MethodGet, baseURL+"/api/v1/data/projects/"+projectID+"/kafka/"+connectionID+"/topic-mappings", token, nil)
+	responseEnvelope := doJSONRequest(t, http.MethodGet, baseURL+"/api/v1/data/projects/"+projectID+"/kafka/sources/"+connectionID+"/topic-mappings", token, nil)
 	var result kafkaListPayload[kafkaTopicMappingPayload]
 	if err := json.Unmarshal(responseEnvelope.Data, &result); err != nil {
 		t.Fatalf("decode kafka topic mappings response failed: %v", err)
