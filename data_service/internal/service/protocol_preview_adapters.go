@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -225,17 +226,36 @@ func (a KafkaPreviewAdapter) Preview(ctx context.Context, input ProtocolPreviewA
 	if len(brokers) == 0 || strings.TrimSpace(brokers[0]) == "" {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka preview brokers 不能为空")
 	}
-	topic := strings.TrimSpace(toString(config["topic"]))
+	topic := strings.TrimSpace(toString(input.Options["topic"]))
+	if topic == "" {
+		topic = strings.TrimSpace(toString(config["topic"]))
+	}
 	if topic == "" {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka preview topic 不能为空")
 	}
-	startPosition := strings.ToLower(strings.TrimSpace(toString(config["startPosition"])))
+	startPosition := strings.ToLower(strings.TrimSpace(toString(input.Options["startPosition"])))
+	if startPosition == "" {
+		startPosition = strings.ToLower(strings.TrimSpace(toString(config["startPosition"])))
+	}
 	startOffset := kafka.LastOffset
 	if startPosition == "earliest" {
 		startOffset = kafka.FirstOffset
+	} else if startPosition == "offset" {
+		if _, ok := input.Options["offset"]; !ok {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka offset 预览必须指定 offset")
+		}
+		startOffset = int64FromAny(input.Options["offset"], kafka.LastOffset)
 	}
 	if startPosition == "" {
 		startPosition = "latest"
+	}
+	partitionMode := strings.ToLower(strings.TrimSpace(toString(input.Options["partitionMode"])))
+	if partitionMode == "" {
+		partitionMode = "all"
+	}
+	partition := intFromAny(input.Options["partition"], -1)
+	if startPosition == "offset" && partitionMode != "single" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka offset 预览必须指定单分区")
 	}
 
 	factory := a.ReaderFactory
@@ -244,18 +264,27 @@ func (a KafkaPreviewAdapter) Preview(ctx context.Context, input ProtocolPreviewA
 			return kafka.NewReader(config)
 		}
 	}
-	reader := factory(kafka.ReaderConfig{
+	readerConfig := kafka.ReaderConfig{
 		Brokers:     brokers,
-		GroupID:     fmt.Sprintf("data-service-preview-%s-%d", input.Connection.ID, time.Now().UnixNano()),
 		Topic:       topic,
 		StartOffset: startOffset,
 		MinBytes:    1,
 		MaxBytes:    maxProtocolPreviewPayloadBytes,
 		MaxWait:     input.Timeout,
-	})
+	}
+	if partitionMode == "single" {
+		if partition < 0 {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka 单分区预览 partition 不能为空")
+		}
+		readerConfig.Partition = partition
+	} else {
+		readerConfig.GroupID = fmt.Sprintf("data-service-preview-%s-%d", input.Connection.ID, time.Now().UnixNano())
+	}
+	reader := factory(readerConfig)
 	defer reader.Close()
 
 	samples := make([]any, 0, input.Limit)
+	decode := normalizeKafkaDecode(toString(input.Options["decode"]))
 	for len(samples) < input.Limit {
 		message, err := reader.ReadMessage(ctx)
 		if err != nil {
@@ -264,7 +293,7 @@ func (a KafkaPreviewAdapter) Preview(ctx context.Context, input ProtocolPreviewA
 			}
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka preview 读取消息失败", err)
 		}
-		samples = append(samples, kafkaMessagePreviewSample(message))
+		samples = append(samples, kafkaMessagePreviewSample(message, decode))
 	}
 
 	return &ProtocolPreviewResult{
@@ -277,6 +306,8 @@ func (a KafkaPreviewAdapter) Preview(ctx context.Context, input ProtocolPreviewA
 			"topic":         topic,
 			"brokerCount":   len(brokers),
 			"startPosition": startPosition,
+			"partitionMode": partitionMode,
+			"partition":     partition,
 			"sampleCount":   len(samples),
 		},
 		DurationMS: time.Since(startedAt).Milliseconds(),
@@ -284,17 +315,48 @@ func (a KafkaPreviewAdapter) Preview(ctx context.Context, input ProtocolPreviewA
 	}, nil
 }
 
-func kafkaMessagePreviewSample(message kafka.Message) map[string]any {
-	value, _, rawPayload := decodePreviewPayload(message.Value)
+func kafkaMessagePreviewSample(message kafka.Message, decode string) map[string]any {
+	value, rawPayload := decodeKafkaPreviewPayload(message.Value, decode)
 	return map[string]any{
 		"topic":      message.Topic,
 		"partition":  message.Partition,
 		"offset":     message.Offset,
 		"key":        string(message.Key),
+		"headers":    sanitizeKafkaPreviewHeaders(message.Headers),
 		"value":      value,
 		"rawPayload": rawPayload,
 		"timestamp":  message.Time,
 	}
+}
+
+func decodeKafkaPreviewPayload(payload []byte, decode string) (any, string) {
+	switch normalizeKafkaDecode(decode) {
+	case "string":
+		text := string(payload)
+		return text, text
+	case "binary":
+		encoded := base64.StdEncoding.EncodeToString(payload)
+		return encoded, encoded
+	default:
+		value, _, rawPayload := decodePreviewPayload(payload)
+		return value, rawPayload
+	}
+}
+
+func sanitizeKafkaPreviewHeaders(headers []kafka.Header) map[string]string {
+	result := map[string]string{}
+	for _, header := range headers {
+		key := strings.TrimSpace(header.Key)
+		if key == "" {
+			continue
+		}
+		if isSensitiveConfigKey(key) {
+			result[key] = "******"
+			continue
+		}
+		result[key] = string(header.Value)
+	}
+	return result
 }
 
 func readPreviewPayload(reader io.Reader) ([]byte, bool, error) {
@@ -489,6 +551,23 @@ func intFromAny(value any, defaultValue int) int {
 		parsed, err := typed.Int64()
 		if err == nil {
 			return int(parsed)
+		}
+	}
+	return defaultValue
+}
+
+func int64FromAny(value any, defaultValue int64) int64 {
+	switch typed := value.(type) {
+	case int:
+		return int64(typed)
+	case int64:
+		return typed
+	case float64:
+		return int64(typed)
+	case json.Number:
+		parsed, err := typed.Int64()
+		if err == nil {
+			return parsed
 		}
 	}
 	return defaultValue

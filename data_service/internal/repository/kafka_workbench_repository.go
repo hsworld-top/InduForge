@@ -191,6 +191,23 @@ func (r *KafkaWorkbenchRepository) ListTopicGroups(ctx context.Context, projectI
 	return result, nil
 }
 
+// GetTopicGroup 返回单个 Topic 分组。
+func (r *KafkaWorkbenchRepository) GetTopicGroup(ctx context.Context, projectID, groupID string) (*KafkaTopicGroupRecord, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT id, project_id, connection_id, parent_id, name, sort_order, created_at, updated_at
+		FROM data_kafka_topic_groups
+		WHERE project_id = $1 AND id = $2
+	`, projectID, groupID)
+	record, err := scanKafkaTopicGroupRecord(row)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "Kafka Topic 分组不存在")
+		}
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 Kafka Topic 分组失败", err)
+	}
+	return &record, nil
+}
+
 // CreateTopicGroup 创建 Topic 分组。
 func (r *KafkaWorkbenchRepository) CreateTopicGroup(ctx context.Context, params CreateKafkaTopicGroupParams) (*KafkaTopicGroupRecord, error) {
 	row := r.pool.QueryRow(ctx, `
@@ -420,6 +437,29 @@ func (r *KafkaWorkbenchRepository) ListFields(ctx context.Context, projectID, ma
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 Kafka 字段映射失败", err)
 	}
 	return result, nil
+}
+
+// GetField 返回单个字段映射，用于更新时保留未变更配置。
+func (r *KafkaWorkbenchRepository) GetField(ctx context.Context, projectID, fieldID string) (*KafkaFieldRecord, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT f.id, f.project_id, f.connection_id, f.topic_mapping_id, f.name, f.value_path,
+		       f.key_path, f.data_type, f.enabled, f.description, f.sort_order,
+		       dp.id, dp.path, f.created_at, f.updated_at
+		FROM data_kafka_fields f
+		LEFT JOIN data_points dp
+		  ON dp.project_id = f.project_id
+		 AND dp.source_type = 'kafka.field'
+		 AND dp.source_config->>'fieldId' = f.id::text
+		WHERE f.project_id = $1 AND f.id = $2
+	`, projectID, fieldID)
+	record, err := scanKafkaFieldRecord(row)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "Kafka 字段映射不存在")
+		}
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 Kafka 字段映射失败", err)
+	}
+	return &record, nil
 }
 
 // CreateFieldWithDataPoint 创建字段映射并同步生成数据点。

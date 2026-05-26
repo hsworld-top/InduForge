@@ -213,3 +213,70 @@ func TestKafkaPreviewAdapter_UsesTemporaryReaderAndReturnsSamples(t *testing.T) 
 		t.Fatalf("expected topic diagnostic, got %#v", result.Diagnostics)
 	}
 }
+
+func TestKafkaPreviewAdapter_SupportsSinglePartitionOffsetAndHeaders(t *testing.T) {
+	reader := &fakeKafkaPreviewReader{
+		messages: []kafka.Message{
+			{
+				Topic:     "factory.override",
+				Partition: 2,
+				Offset:    42,
+				Value:     []byte("plain-text"),
+				Headers: []kafka.Header{
+					{Key: "access-token", Value: []byte("secret")},
+					{Key: "x-source", Value: []byte("bench")},
+				},
+				Time: time.Unix(102, 0),
+			},
+		},
+	}
+	var capturedConfig kafka.ReaderConfig
+	adapter := KafkaPreviewAdapter{
+		ReaderFactory: func(config kafka.ReaderConfig) kafkaPreviewReader {
+			capturedConfig = config
+			return reader
+		},
+	}
+
+	result, err := adapter.Preview(context.Background(), ProtocolPreviewAdapterInput{
+		Connection: repository.ProtocolPreviewConnectionRecord{
+			ID:   "conn-kafka",
+			Type: "kafka",
+			Config: map[string]any{
+				"brokers":       "127.0.0.1:9092",
+				"topic":         "factory.default",
+				"startPosition": "latest",
+			},
+		},
+		Limit:   1,
+		Timeout: time.Second,
+		Options: map[string]any{
+			"topic":         "factory.override",
+			"partitionMode": "single",
+			"partition":     2,
+			"startPosition": "offset",
+			"offset":        int64(42),
+			"decode":        "string",
+		},
+	})
+	if err != nil {
+		t.Fatalf("kafka preview failed: %v", err)
+	}
+	if capturedConfig.GroupID != "" || capturedConfig.Partition != 2 || capturedConfig.StartOffset != 42 {
+		t.Fatalf("expected single partition reader without group, got %#v", capturedConfig)
+	}
+	if capturedConfig.Topic != "factory.override" {
+		t.Fatalf("expected topic override, got %q", capturedConfig.Topic)
+	}
+	sample, ok := result.Samples[0].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected sample: %#v", result.Samples[0])
+	}
+	if sample["value"] != "plain-text" {
+		t.Fatalf("expected string decoded value, got %#v", sample["value"])
+	}
+	headers := sample["headers"].(map[string]string)
+	if headers["access-token"] != "******" || headers["x-source"] != "bench" {
+		t.Fatalf("expected sanitized headers, got %#v", headers)
+	}
+}
