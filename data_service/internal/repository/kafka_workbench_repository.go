@@ -3,7 +3,9 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -50,6 +52,7 @@ type KafkaFieldRecord struct {
 	ProjectID      string
 	ConnectionID   string
 	TopicMappingID string
+	GroupID        *string
 	Name           string
 	ValuePath      string
 	KeyPath        string
@@ -59,6 +62,23 @@ type KafkaFieldRecord struct {
 	SortOrder      int
 	DataPointID    *string
 	DataPointPath  *string
+	LastValue      any
+	Quality        string
+	LastUpdatedAt  *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+// KafkaFieldGroupRecord 表示 Kafka Topic 映射下的变量分组。
+type KafkaFieldGroupRecord struct {
+	ID             string
+	ProjectID      string
+	ConnectionID   string
+	TopicMappingID string
+	ParentID       *string
+	Name           string
+	Description    *string
+	SortOrder      int
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }
@@ -126,6 +146,7 @@ type CreateKafkaFieldParams struct {
 	ProjectID      string
 	ConnectionID   string
 	TopicMappingID string
+	GroupID        *string
 	Name           string
 	ValuePath      string
 	KeyPath        string
@@ -142,6 +163,7 @@ type CreateKafkaFieldParams struct {
 type UpdateKafkaFieldParams struct {
 	ID            string
 	ProjectID     string
+	GroupID       *string
 	Name          string
 	ValuePath     string
 	KeyPath       string
@@ -152,6 +174,38 @@ type UpdateKafkaFieldParams struct {
 	DataPointPath string
 	SourceConfig  map[string]any
 	UserID        string
+}
+
+// CreateKafkaFieldGroupParams 描述 Kafka 变量分组创建参数。
+type CreateKafkaFieldGroupParams struct {
+	ProjectID      string
+	ConnectionID   string
+	TopicMappingID string
+	ParentID       *string
+	Name           string
+	Description    *string
+	SortOrder      int
+	UserID         string
+}
+
+// UpdateKafkaFieldGroupParams 描述 Kafka 变量分组更新参数。
+type UpdateKafkaFieldGroupParams struct {
+	ProjectID   string
+	GroupID     string
+	ParentID    *string
+	HasParentID bool
+	Name        string
+	Description *string
+	SortOrder   int
+	UserID      string
+}
+
+// KafkaFieldValueUpdate 描述一次预览后需要写回的变量快照。
+type KafkaFieldValueUpdate struct {
+	FieldID       string
+	LastValue     any
+	Quality       string
+	LastUpdatedAt time.Time
 }
 
 // KafkaWorkbenchRepository 封装 Kafka 工作台参数化 SQL。
@@ -406,12 +460,137 @@ func (r *KafkaWorkbenchRepository) DeleteTopicMapping(ctx context.Context, proje
 	return nil
 }
 
+// ListFieldGroups 返回 Topic 映射下的变量分组。
+func (r *KafkaWorkbenchRepository) ListFieldGroups(ctx context.Context, projectID, mappingID string) ([]KafkaFieldGroupRecord, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, project_id, connection_id, topic_mapping_id, parent_id, name, description,
+		       sort_order, created_at, updated_at
+		FROM data_kafka_field_groups
+		WHERE project_id = $1 AND topic_mapping_id = $2
+		ORDER BY sort_order ASC, created_at ASC
+	`, projectID, mappingID)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 Kafka 变量分组失败", err)
+	}
+	defer rows.Close()
+
+	result := make([]KafkaFieldGroupRecord, 0)
+	for rows.Next() {
+		record, scanErr := scanKafkaFieldGroupRecord(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		result = append(result, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 Kafka 变量分组失败", err)
+	}
+	return result, nil
+}
+
+// GetFieldGroup 返回单个 Kafka 变量分组。
+func (r *KafkaWorkbenchRepository) GetFieldGroup(ctx context.Context, projectID, groupID string) (*KafkaFieldGroupRecord, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT id, project_id, connection_id, topic_mapping_id, parent_id, name, description,
+		       sort_order, created_at, updated_at
+		FROM data_kafka_field_groups
+		WHERE project_id = $1 AND id = $2
+	`, projectID, groupID)
+	record, err := scanKafkaFieldGroupRecord(row)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "Kafka 变量分组不存在")
+		}
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 Kafka 变量分组失败", err)
+	}
+	return &record, nil
+}
+
+// CreateFieldGroup 创建 Kafka 变量分组。
+func (r *KafkaWorkbenchRepository) CreateFieldGroup(ctx context.Context, params CreateKafkaFieldGroupParams) (*KafkaFieldGroupRecord, error) {
+	row := r.pool.QueryRow(ctx, `
+		INSERT INTO data_kafka_field_groups (
+			project_id, connection_id, topic_mapping_id, parent_id, name, description,
+			sort_order, created_by, updated_by
+		)
+		VALUES ($1, $2, $3, $4, $5, COALESCE($6, ''), $7, $8, $8)
+		RETURNING id, project_id, connection_id, topic_mapping_id, parent_id, name, description,
+		          sort_order, created_at, updated_at
+	`, params.ProjectID, params.ConnectionID, params.TopicMappingID, params.ParentID, params.Name, params.Description, params.SortOrder, params.UserID)
+	record, err := scanKafkaFieldGroupRecord(row)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "创建 Kafka 变量分组失败", err)
+	}
+	return &record, nil
+}
+
+// UpdateFieldGroup 更新 Kafka 变量分组。
+func (r *KafkaWorkbenchRepository) UpdateFieldGroup(ctx context.Context, params UpdateKafkaFieldGroupParams) (*KafkaFieldGroupRecord, error) {
+	parentSQL := "parent_id"
+	args := []any{params.ProjectID, params.GroupID, params.Name, params.Description, params.SortOrder, params.UserID}
+	if params.HasParentID {
+		parentSQL = "$7"
+		args = append(args, params.ParentID)
+	}
+	row := r.pool.QueryRow(ctx, `
+		UPDATE data_kafka_field_groups
+		SET name = $3,
+		    description = COALESCE($4, ''),
+		    sort_order = $5,
+		    updated_by = $6,
+		    updated_at = now(),
+		    parent_id = `+parentSQL+`
+		WHERE project_id = $1 AND id = $2
+		RETURNING id, project_id, connection_id, topic_mapping_id, parent_id, name, description,
+		          sort_order, created_at, updated_at
+	`, args...)
+	record, err := scanKafkaFieldGroupRecord(row)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "Kafka 变量分组不存在")
+		}
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "更新 Kafka 变量分组失败", err)
+	}
+	return &record, nil
+}
+
+// DeleteFieldGroup 删除 Kafka 变量分组，并把组内变量移动到未分组。
+func (r *KafkaWorkbenchRepository) DeleteFieldGroup(ctx context.Context, projectID, groupID, userID string) error {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 Kafka 变量分组删除事务失败", err)
+	}
+	defer rollbackProtocolTxQuietly(ctx, tx)
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE data_kafka_fields
+		SET group_id = NULL,
+		    updated_by = $3,
+		    updated_at = now()
+		WHERE project_id = $1 AND group_id = $2
+	`, projectID, groupID, userID); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "移动 Kafka 变量到未分组失败", err)
+	}
+
+	tag, err := tx.Exec(ctx, `DELETE FROM data_kafka_field_groups WHERE project_id = $1 AND id = $2`, projectID, groupID)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "删除 Kafka 变量分组失败", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "Kafka 变量分组不存在")
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 Kafka 变量分组删除事务失败", err)
+	}
+	return nil
+}
+
 // ListFields 返回 Topic 映射下的字段映射。
 func (r *KafkaWorkbenchRepository) ListFields(ctx context.Context, projectID, mappingID string) ([]KafkaFieldRecord, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT f.id, f.project_id, f.connection_id, f.topic_mapping_id, f.name, f.value_path,
+		SELECT f.id, f.project_id, f.connection_id, f.topic_mapping_id, f.group_id, f.name, f.value_path,
 		       f.key_path, f.data_type, f.enabled, f.description, f.sort_order,
-		       dp.id, dp.path, f.created_at, f.updated_at
+		       dp.id, dp.path, f.last_value, f.quality, f.last_updated_at, f.created_at, f.updated_at
 		FROM data_kafka_fields f
 		LEFT JOIN data_points dp
 		  ON dp.project_id = f.project_id
@@ -439,12 +618,69 @@ func (r *KafkaWorkbenchRepository) ListFields(ctx context.Context, projectID, ma
 	return result, nil
 }
 
+// ListFieldsPage 返回 Topic 映射下字段映射的一页数据。
+func (r *KafkaWorkbenchRepository) ListFieldsPage(ctx context.Context, projectID, mappingID string, groupID *string, search string, page, pageSize int) ([]KafkaFieldRecord, int, error) {
+	page, pageSize = normalizePageAndSize(page, pageSize, 20, 100)
+	where := []string{"f.project_id = $1", "f.topic_mapping_id = $2"}
+	args := []any{projectID, mappingID}
+	if groupID != nil {
+		normalizedGroupID := strings.TrimSpace(*groupID)
+		if normalizedGroupID == "__ungrouped" {
+			where = append(where, "f.group_id IS NULL")
+		} else if normalizedGroupID != "" {
+			args = append(args, normalizedGroupID)
+			where = append(where, fmt.Sprintf("f.group_id = $%d", len(args)))
+		}
+	}
+	if keyword := strings.TrimSpace(search); keyword != "" {
+		args = append(args, "%"+keyword+"%")
+		where = append(where, fmt.Sprintf("(f.name ILIKE $%d OR f.value_path ILIKE $%d OR f.key_path ILIKE $%d)", len(args), len(args), len(args)))
+	}
+	whereSQL := strings.Join(where, " AND ")
+
+	var total int
+	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM data_kafka_fields f WHERE `+whereSQL, args...).Scan(&total); err != nil {
+		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "统计 Kafka 字段映射失败", err)
+	}
+
+	queryArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
+	rows, err := r.pool.Query(ctx, `
+		SELECT f.id, f.project_id, f.connection_id, f.topic_mapping_id, f.group_id, f.name, f.value_path,
+		       f.key_path, f.data_type, f.enabled, f.description, f.sort_order,
+		       dp.id, dp.path, f.last_value, f.quality, f.last_updated_at, f.created_at, f.updated_at
+		FROM data_kafka_fields f
+		LEFT JOIN data_points dp
+		  ON dp.project_id = f.project_id
+		 AND dp.source_type = 'kafka.field'
+		 AND dp.source_config->>'fieldId' = f.id::text
+		WHERE `+whereSQL+`
+		ORDER BY f.sort_order ASC, f.created_at ASC
+		LIMIT $`+fmt.Sprint(len(args)+1)+` OFFSET $`+fmt.Sprint(len(args)+2), queryArgs...)
+	if err != nil {
+		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 Kafka 字段映射失败", err)
+	}
+	defer rows.Close()
+
+	result := make([]KafkaFieldRecord, 0)
+	for rows.Next() {
+		record, scanErr := scanKafkaFieldRecord(rows)
+		if scanErr != nil {
+			return nil, 0, scanErr
+		}
+		result = append(result, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 Kafka 字段映射失败", err)
+	}
+	return result, total, nil
+}
+
 // GetField 返回单个字段映射，用于更新时保留未变更配置。
 func (r *KafkaWorkbenchRepository) GetField(ctx context.Context, projectID, fieldID string) (*KafkaFieldRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT f.id, f.project_id, f.connection_id, f.topic_mapping_id, f.name, f.value_path,
+		SELECT f.id, f.project_id, f.connection_id, f.topic_mapping_id, f.group_id, f.name, f.value_path,
 		       f.key_path, f.data_type, f.enabled, f.description, f.sort_order,
-		       dp.id, dp.path, f.created_at, f.updated_at
+		       dp.id, dp.path, f.last_value, f.quality, f.last_updated_at, f.created_at, f.updated_at
 		FROM data_kafka_fields f
 		LEFT JOIN data_points dp
 		  ON dp.project_id = f.project_id
@@ -471,19 +707,22 @@ func (r *KafkaWorkbenchRepository) CreateFieldWithDataPoint(ctx context.Context,
 	defer rollbackProtocolTxQuietly(ctx, tx)
 
 	record := KafkaFieldRecord{}
+	var lastValuePayload []byte
 	err = tx.QueryRow(ctx, `
 		INSERT INTO data_kafka_fields (
-			project_id, connection_id, topic_mapping_id, name, value_path, key_path,
+			project_id, connection_id, topic_mapping_id, group_id, name, value_path, key_path,
 			data_type, enabled, description, sort_order, created_by, updated_by
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
-		RETURNING id, project_id, connection_id, topic_mapping_id, name, value_path,
-		          key_path, data_type, enabled, description, sort_order, created_at, updated_at
-	`, params.ProjectID, params.ConnectionID, params.TopicMappingID, params.Name, params.ValuePath, params.KeyPath, params.DataType, params.Enabled, params.Description, params.SortOrder, params.UserID).Scan(
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
+		RETURNING id, project_id, connection_id, topic_mapping_id, group_id, name, value_path,
+		          key_path, data_type, enabled, description, sort_order,
+		          last_value, quality, last_updated_at, created_at, updated_at
+	`, params.ProjectID, params.ConnectionID, params.TopicMappingID, params.GroupID, params.Name, params.ValuePath, params.KeyPath, params.DataType, params.Enabled, params.Description, params.SortOrder, params.UserID).Scan(
 		&record.ID,
 		&record.ProjectID,
 		&record.ConnectionID,
 		&record.TopicMappingID,
+		&record.GroupID,
 		&record.Name,
 		&record.ValuePath,
 		&record.KeyPath,
@@ -491,11 +730,17 @@ func (r *KafkaWorkbenchRepository) CreateFieldWithDataPoint(ctx context.Context,
 		&record.Enabled,
 		&record.Description,
 		&record.SortOrder,
+		&lastValuePayload,
+		&record.Quality,
+		&record.LastUpdatedAt,
 		&record.CreatedAt,
 		&record.UpdatedAt,
 	)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "创建 Kafka 字段映射失败", err)
+	}
+	if err := decodeKafkaFieldLastValue(lastValuePayload, &record); err != nil {
+		return nil, err
 	}
 
 	dataPointID, dataPointPath, err := upsertKafkaFieldDataPoint(ctx, tx, record, params.DataPointPath, params.SourceConfig, params.UserID)
@@ -520,25 +765,29 @@ func (r *KafkaWorkbenchRepository) UpdateFieldWithDataPoint(ctx context.Context,
 	defer rollbackProtocolTxQuietly(ctx, tx)
 
 	record := KafkaFieldRecord{}
+	var lastValuePayload []byte
 	err = tx.QueryRow(ctx, `
 		UPDATE data_kafka_fields
-		SET name = $3,
-		    value_path = $4,
-		    key_path = $5,
-		    data_type = $6,
-		    enabled = $7,
-		    description = $8,
-		    sort_order = $9,
-		    updated_by = $10,
+		SET group_id = $3,
+		    name = $4,
+		    value_path = $5,
+		    key_path = $6,
+		    data_type = $7,
+		    enabled = $8,
+		    description = $9,
+		    sort_order = $10,
+		    updated_by = $11,
 		    updated_at = now()
 		WHERE project_id = $1 AND id = $2
-		RETURNING id, project_id, connection_id, topic_mapping_id, name, value_path,
-		          key_path, data_type, enabled, description, sort_order, created_at, updated_at
-	`, params.ProjectID, params.ID, params.Name, params.ValuePath, params.KeyPath, params.DataType, params.Enabled, params.Description, params.SortOrder, params.UserID).Scan(
+		RETURNING id, project_id, connection_id, topic_mapping_id, group_id, name, value_path,
+		          key_path, data_type, enabled, description, sort_order,
+		          last_value, quality, last_updated_at, created_at, updated_at
+	`, params.ProjectID, params.ID, params.GroupID, params.Name, params.ValuePath, params.KeyPath, params.DataType, params.Enabled, params.Description, params.SortOrder, params.UserID).Scan(
 		&record.ID,
 		&record.ProjectID,
 		&record.ConnectionID,
 		&record.TopicMappingID,
+		&record.GroupID,
 		&record.Name,
 		&record.ValuePath,
 		&record.KeyPath,
@@ -546,6 +795,9 @@ func (r *KafkaWorkbenchRepository) UpdateFieldWithDataPoint(ctx context.Context,
 		&record.Enabled,
 		&record.Description,
 		&record.SortOrder,
+		&lastValuePayload,
+		&record.Quality,
+		&record.LastUpdatedAt,
 		&record.CreatedAt,
 		&record.UpdatedAt,
 	)
@@ -554,6 +806,9 @@ func (r *KafkaWorkbenchRepository) UpdateFieldWithDataPoint(ctx context.Context,
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "Kafka 字段映射不存在")
 		}
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "更新 Kafka 字段映射失败", err)
+	}
+	if err := decodeKafkaFieldLastValue(lastValuePayload, &record); err != nil {
+		return nil, err
 	}
 
 	dataPointID, dataPointPath, err := upsertKafkaFieldDataPoint(ctx, tx, record, params.DataPointPath, params.SourceConfig, params.UserID)
@@ -595,6 +850,43 @@ func (r *KafkaWorkbenchRepository) DeleteFieldWithDataPoint(ctx context.Context,
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 Kafka 字段删除事务失败", err)
+	}
+	return nil
+}
+
+// UpdateFieldLastValues 保存开发态短时预览解析出的变量最后值。
+func (r *KafkaWorkbenchRepository) UpdateFieldLastValues(ctx context.Context, projectID, mappingID string, updates []KafkaFieldValueUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 Kafka 字段值写回事务失败", err)
+	}
+	defer rollbackProtocolTxQuietly(ctx, tx)
+
+	for _, update := range updates {
+		valuePayload, marshalErr := json.Marshal(update.LastValue)
+		if marshalErr != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka 字段最后值格式无效", marshalErr)
+		}
+		_, err := tx.Exec(ctx, `
+			UPDATE data_kafka_fields
+			SET last_value = $4::jsonb,
+			    quality = $5,
+			    last_updated_at = $6,
+			    updated_at = now()
+			WHERE project_id = $1
+			  AND topic_mapping_id = $2
+			  AND id = $3
+		`, projectID, mappingID, update.FieldID, string(valuePayload), update.Quality, update.LastUpdatedAt)
+		if err != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写回 Kafka 字段最后值失败", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 Kafka 字段值写回事务失败", err)
 	}
 	return nil
 }
@@ -668,6 +960,29 @@ func upsertKafkaFieldDataPoint(ctx context.Context, tx pgx.Tx, field KafkaFieldR
 
 	var dataPointID, dataPointPath string
 	err = tx.QueryRow(ctx, `
+		UPDATE data_points
+		SET path = $2,
+		    name = $3,
+		    source_id = $4,
+		    source_config = $5::jsonb,
+		    data_type = $6,
+		    refresh_mode = 'subscription',
+		    status = $7,
+		    updated_by = $8,
+		    updated_at = now()
+		WHERE project_id = $1
+		  AND source_type = 'kafka.field'
+		  AND source_config->>'fieldId' = $9
+		RETURNING id, path
+	`, field.ProjectID, path, field.Name, field.ConnectionID, string(sourceConfigPayload), field.DataType, status, userID, field.ID).Scan(&dataPointID, &dataPointPath)
+	if err == nil {
+		return dataPointID, dataPointPath, nil
+	}
+	if err != pgx.ErrNoRows {
+		return "", "", apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步 Kafka 字段数据点失败", err)
+	}
+
+	err = tx.QueryRow(ctx, `
 		INSERT INTO data_points (
 			project_id, path, name, source_type, source_id, source_config,
 			data_type, refresh_mode, status, created_by, updated_by
@@ -727,11 +1042,13 @@ func scanKafkaTopicMappingRecord(row pgx.Row) (KafkaTopicMappingRecord, error) {
 
 func scanKafkaFieldRecord(row pgx.Row) (KafkaFieldRecord, error) {
 	record := KafkaFieldRecord{}
+	var lastValuePayload []byte
 	if err := row.Scan(
 		&record.ID,
 		&record.ProjectID,
 		&record.ConnectionID,
 		&record.TopicMappingID,
+		&record.GroupID,
 		&record.Name,
 		&record.ValuePath,
 		&record.KeyPath,
@@ -741,10 +1058,45 @@ func scanKafkaFieldRecord(row pgx.Row) (KafkaFieldRecord, error) {
 		&record.SortOrder,
 		&record.DataPointID,
 		&record.DataPointPath,
+		&lastValuePayload,
+		&record.Quality,
+		&record.LastUpdatedAt,
+		&record.CreatedAt,
+		&record.UpdatedAt,
+	); err != nil {
+		return record, err
+	}
+	if err := decodeKafkaFieldLastValue(lastValuePayload, &record); err != nil {
+		return record, err
+	}
+	return record, nil
+}
+
+func scanKafkaFieldGroupRecord(row pgx.Row) (KafkaFieldGroupRecord, error) {
+	record := KafkaFieldGroupRecord{}
+	if err := row.Scan(
+		&record.ID,
+		&record.ProjectID,
+		&record.ConnectionID,
+		&record.TopicMappingID,
+		&record.ParentID,
+		&record.Name,
+		&record.Description,
+		&record.SortOrder,
 		&record.CreatedAt,
 		&record.UpdatedAt,
 	); err != nil {
 		return record, err
 	}
 	return record, nil
+}
+
+func decodeKafkaFieldLastValue(payload []byte, record *KafkaFieldRecord) error {
+	if len(payload) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(payload, &record.LastValue); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "解析 Kafka 字段最后值失败", err)
+	}
+	return nil
 }

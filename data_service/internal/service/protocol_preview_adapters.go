@@ -233,6 +233,30 @@ func (a KafkaPreviewAdapter) Preview(ctx context.Context, input ProtocolPreviewA
 	if topic == "" {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka preview topic 不能为空")
 	}
+	if boolFromAny(input.Options["probe"]) {
+		conn, err := (&kafka.Dialer{}).DialContext(ctx, "tcp", brokers[0])
+		if err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka preview 连接失败", err)
+		}
+		defer conn.Close()
+		if _, err := conn.ReadPartitions(topic); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka preview Topic 探测失败", err)
+		}
+		return &ProtocolPreviewResult{
+			Protocol:     "kafka",
+			ConnectionID: input.Connection.ID,
+			Status:       "ok",
+			Schema:       map[string]any{},
+			Samples:      []any{},
+			Diagnostics: map[string]any{
+				"topic":       topic,
+				"brokerCount": len(brokers),
+				"probe":       true,
+			},
+			DurationMS: time.Since(startedAt).Milliseconds(),
+			Truncated:  false,
+		}, nil
+	}
 	startPosition := strings.ToLower(strings.TrimSpace(toString(input.Options["startPosition"])))
 	if startPosition == "" {
 		startPosition = strings.ToLower(strings.TrimSpace(toString(config["startPosition"])))

@@ -14,7 +14,7 @@
       </el-form-item>
       <el-form-item label="分组">
         <el-select v-model="form.groupId" clearable placeholder="根目录">
-          <el-option label="根目录" :value="null" />
+          <el-option label="根目录" value="" />
           <el-option
             v-for="group in groups"
             :key="String(group.id)"
@@ -111,7 +111,7 @@ const partitionModeOptions = [
 const form = reactive({
   name: '',
   topic: '',
-  groupId: null as string | null,
+  groupId: '',
   partitionMode: 'all',
   partition: 0,
   startPosition: 'latest',
@@ -130,7 +130,7 @@ const canSubmit = computed(() => {
 const resetForm = () => {
   form.name = props.mapping?.name || ''
   form.topic = props.mapping?.topic || ''
-  form.groupId = props.mapping?.groupId ? String(props.mapping.groupId) : null
+  form.groupId = props.mapping?.groupId ? String(props.mapping.groupId) : ''
   form.partitionMode = props.mapping?.partitionMode || 'all'
   form.partition = props.mapping?.partition ?? 0
   form.startPosition = props.mapping?.startPosition || 'latest'

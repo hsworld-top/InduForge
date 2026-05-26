@@ -230,6 +230,64 @@ func TestMqttSubscriptionDataPointValidWithoutMqttConfig(t *testing.T) {
 	}
 }
 
+func TestMqttTagsListSupportsGroupPagination(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	fixture := setupTestDatabase(t, ctx)
+	migrator := setupMigrator(t, fixture.pool)
+	if err := migrator.Up(ctx); err != nil {
+		t.Fatalf("migrate up failed: %v", err)
+	}
+
+	projectID := uuid.NewString()
+	userID := uuid.NewString()
+	secret := "mqtt-tag-pagination-secret-01"
+
+	srv, err := app.NewServer(config.Config{
+		Addr:               ":0",
+		DatabaseURL:        fixture.databaseURL,
+		DatabaseSearchPath: fixture.schemaName,
+		JWTSecret:          secret,
+	})
+	if err != nil {
+		t.Fatalf("create server failed: %v", err)
+	}
+	t.Cleanup(srv.Close)
+
+	server := httptest.NewServer(srv.Handler())
+	t.Cleanup(server.Close)
+
+	token := mustSignIntegrationJWT(t, secret, &auth.Claims{
+		UserID:       userID,
+		TenantID:     "tenant-mqtt-tag-pagination",
+		ProjectIDs:   []string{projectID},
+		Capabilities: []string{"project:read", "project:write"},
+	})
+
+	connection := mustCreateMqttConnection(t, server.URL, token, projectID, map[string]any{
+		"name":      "mqtt-tags",
+		"brokerUrl": "tcp://localhost:1883",
+		"protocol":  "mqtt",
+		"port":      1883,
+		"qos":       1,
+	})
+	subscriptionID := insertTestMqttSubscription(t, ctx, fixture, projectID, connection.ID, userID)
+	groupID := insertTestMqttTagGroup(t, ctx, fixture, projectID, subscriptionID, userID)
+	insertTestMqttTagWithName(t, ctx, fixture, projectID, subscriptionID, &groupID, userID, "tag-a", "tag_a", 1)
+	insertTestMqttTagWithName(t, ctx, fixture, projectID, subscriptionID, &groupID, userID, "tag-b", "tag_b", 2)
+	insertTestMqttTagWithName(t, ctx, fixture, projectID, subscriptionID, nil, userID, "tag-root", "tag_root", 3)
+
+	grouped := mustListMqttTags(t, server.URL, token, projectID, subscriptionID, "groupId="+groupID+"&page=1&pageSize=1")
+	if grouped.Pagination.Total != 2 || len(grouped.List) != 1 || grouped.List[0].GroupID == nil || *grouped.List[0].GroupID != groupID {
+		t.Fatalf("expected paged mqtt tags inside group, got %#v", grouped)
+	}
+	ungrouped := mustListMqttTags(t, server.URL, token, projectID, subscriptionID, "groupId=__ungrouped&page=1&pageSize=20")
+	if ungrouped.Pagination.Total != 1 || len(ungrouped.List) != 1 || ungrouped.List[0].Code != "tag_root" {
+		t.Fatalf("expected ungrouped mqtt tag, got %#v", ungrouped)
+	}
+}
+
 type mqttConnectionPayload struct {
 	ID        string `json:"id"`
 	ProjectID string `json:"projectId"`
@@ -256,9 +314,31 @@ type mqttMessagePayload struct {
 	ReceivedAt     time.Time `json:"receivedAt"`
 }
 
+type mqttTagPayload struct {
+	ID      string  `json:"id"`
+	GroupID *string `json:"groupId"`
+	Name    string  `json:"name"`
+	Code    string  `json:"code"`
+}
+
 type mqttListResponse[T any] struct {
 	List       []T                `json:"list"`
 	Pagination mqttPaginationData `json:"pagination"`
+}
+
+func mustListMqttTags(t *testing.T, baseURL, token, projectID, subscriptionID, rawQuery string) mqttListResponse[mqttTagPayload] {
+	t.Helper()
+
+	endpoint := baseURL + "/api/v1/data/projects/" + projectID + "/mqtt/subscriptions/" + subscriptionID + "/tags"
+	if rawQuery != "" {
+		endpoint += "?" + rawQuery
+	}
+	responseEnvelope := doJSONRequest(t, http.MethodGet, endpoint, token, nil)
+	var result mqttListResponse[mqttTagPayload]
+	if err := json.Unmarshal(responseEnvelope.Data, &result); err != nil {
+		t.Fatalf("decode mqtt tags response failed: %v", err)
+	}
+	return result
 }
 
 type mqttPaginationData struct {
@@ -360,6 +440,34 @@ func insertTestMqttSubscription(t *testing.T, ctx context.Context, fixture *test
 	}
 
 	return subscriptionID
+}
+
+func insertTestMqttTagWithName(t *testing.T, ctx context.Context, fixture *testDatabase, projectID, subscriptionID string, groupID *string, userID, name, code string, order int) string {
+	t.Helper()
+
+	tagID := uuid.NewString()
+	_, err := fixture.pool.Exec(ctx, `
+		INSERT INTO data_mqtt_tags (
+			id,
+			project_id,
+			subscription_id,
+			group_id,
+			name,
+			code,
+			data_type,
+			parse_type,
+			parse_rule,
+			validation,
+			display_order,
+			created_by,
+			updated_by
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, 'number', 'jsonpath', '$.value', '{}'::jsonb, $7, $8, $8)
+	`, tagID, projectID, subscriptionID, groupID, name, code, order, userID)
+	if err != nil {
+		t.Fatalf("insert mqtt tag %s failed: %v", code, err)
+	}
+	return tagID
 }
 
 func insertTestMqttMessage(t *testing.T, ctx context.Context, fixture *testDatabase, projectID, connectionID, subscriptionID, topic, payload string, qos int) {

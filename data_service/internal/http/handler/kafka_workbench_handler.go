@@ -184,13 +184,87 @@ func (h *KafkaWorkbenchHandler) PreviewTopicMapping(w http.ResponseWriter, r *ht
 	return nil
 }
 
-// ListFields 查询 Kafka 字段映射。
-func (h *KafkaWorkbenchHandler) ListFields(w http.ResponseWriter, r *http.Request) error {
-	fields, err := h.service.ListFields(r.Context(), r.PathValue("projectId"), r.PathValue("mappingId"))
+// ListFieldGroups 查询 Kafka Topic 下变量分组。
+func (h *KafkaWorkbenchHandler) ListFieldGroups(w http.ResponseWriter, r *http.Request) error {
+	groups, err := h.service.ListFieldGroups(r.Context(), r.PathValue("projectId"), r.PathValue("mappingId"))
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"list": fields})
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"list": groups})
+	return nil
+}
+
+// CreateFieldGroup 创建 Kafka Topic 下变量分组。
+func (h *KafkaWorkbenchHandler) CreateFieldGroup(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var input service.CreateKafkaFieldGroupInput
+	if err := decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	group, err := h.service.CreateFieldGroup(r.Context(), r.PathValue("projectId"), r.PathValue("mappingId"), claims.UserID, input)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), group)
+	return nil
+}
+
+// UpdateFieldGroup 更新 Kafka 变量分组。
+func (h *KafkaWorkbenchHandler) UpdateFieldGroup(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var input service.UpdateKafkaFieldGroupInput
+	raw, err := decodeKafkaWorkbenchBody(r, &input)
+	if err != nil {
+		return err
+	}
+	_, input.HasParentID = raw["parentId"]
+	group, err := h.service.UpdateFieldGroup(r.Context(), r.PathValue("projectId"), r.PathValue("groupId"), claims.UserID, input)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), group)
+	return nil
+}
+
+// DeleteFieldGroup 删除 Kafka 变量分组。
+func (h *KafkaWorkbenchHandler) DeleteFieldGroup(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	if err := h.service.DeleteFieldGroup(r.Context(), r.PathValue("projectId"), r.PathValue("groupId"), claims.UserID); err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"deleted": true})
+	return nil
+}
+
+// ListFields 查询 Kafka 字段映射。
+func (h *KafkaWorkbenchHandler) ListFields(w http.ResponseWriter, r *http.Request) error {
+	query := r.URL.Query()
+	var groupID *string
+	if value := query.Get("groupId"); value != "" {
+		groupID = &value
+	}
+	page, err := parseOptionalInt(query.Get("page"), 1, "page")
+	if err != nil {
+		return err
+	}
+	pageSize, err := parseOptionalInt(firstNonEmpty(query.Get("pageSize"), query.Get("limit")), 20, "pageSize")
+	if err != nil {
+		return err
+	}
+	result, err := h.service.ListFieldsPage(r.Context(), r.PathValue("projectId"), r.PathValue("mappingId"), groupID, query.Get("q"), page, pageSize)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
 }
 
@@ -239,9 +313,11 @@ func (h *KafkaWorkbenchHandler) UpdateField(w http.ResponseWriter, r *http.Reque
 		return err
 	}
 	var input service.UpdateKafkaFieldInput
-	if err := decodeJSONBody(r, &input); err != nil {
+	raw, err := decodeKafkaWorkbenchBody(r, &input)
+	if err != nil {
 		return err
 	}
+	_, input.HasGroupID = raw["groupId"]
 	field, err := h.service.UpdateField(r.Context(), r.PathValue("projectId"), r.PathValue("fieldId"), claims.UserID, input)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)

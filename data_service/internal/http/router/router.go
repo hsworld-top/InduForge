@@ -1084,6 +1084,7 @@ func mountKafkaWorkbenchRoutes(mux *http.ServeMux, opts options) {
 	sourceBase := "/api/v1/data/projects/{projectId}/kafka/sources/{connectionId}"
 	mappingBase := "/api/v1/data/projects/{projectId}/kafka/topic-mappings/{mappingId}"
 	fieldBase := "/api/v1/data/projects/{projectId}/kafka/fields/{fieldId}"
+	fieldGroupBase := "/api/v1/data/projects/{projectId}/kafka/field-groups/{groupId}"
 
 	mux.Handle("GET "+sourceBase+"/topic-groups", read(opts.kafkaWorkbenchHandler.ListTopicGroups))
 	mux.Handle("POST "+sourceBase+"/topic-groups", write(opts.kafkaWorkbenchHandler.CreateTopicGroup))
@@ -1098,6 +1099,11 @@ func mountKafkaWorkbenchRoutes(mux *http.ServeMux, opts options) {
 
 	mux.Handle("POST "+sourceBase+"/preview", read(opts.kafkaWorkbenchHandler.PreviewConnection))
 	mux.Handle("POST "+mappingBase+"/preview", read(opts.kafkaWorkbenchHandler.PreviewTopicMapping))
+
+	mux.Handle("GET "+mappingBase+"/field-groups", read(opts.kafkaWorkbenchHandler.ListFieldGroups))
+	mux.Handle("POST "+mappingBase+"/field-groups", write(opts.kafkaWorkbenchHandler.CreateFieldGroup))
+	mux.Handle("PUT "+fieldGroupBase, write(opts.kafkaWorkbenchHandler.UpdateFieldGroup))
+	mux.Handle("DELETE "+fieldGroupBase, write(opts.kafkaWorkbenchHandler.DeleteFieldGroup))
 
 	mux.Handle("GET "+mappingBase+"/fields", read(opts.kafkaWorkbenchHandler.ListFields))
 	mux.Handle("POST "+mappingBase+"/fields", write(opts.kafkaWorkbenchHandler.CreateField))

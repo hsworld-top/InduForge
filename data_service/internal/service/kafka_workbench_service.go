@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -60,20 +62,38 @@ type KafkaTopicMapping struct {
 
 // KafkaField 表示 Kafka 消息字段与平台数据点之间的映射。
 type KafkaField struct {
+	ID             string     `json:"id"`
+	ProjectID      string     `json:"projectId"`
+	ConnectionID   string     `json:"connectionId"`
+	TopicMappingID string     `json:"topicMappingId"`
+	GroupID        *string    `json:"groupId"`
+	Name           string     `json:"name"`
+	ValuePath      string     `json:"valuePath"`
+	KeyPath        string     `json:"keyPath"`
+	DataType       string     `json:"dataType"`
+	Enabled        bool       `json:"enabled"`
+	Description    string     `json:"description"`
+	SortOrder      int        `json:"sortOrder"`
+	SourceType     string     `json:"sourceType"`
+	DataPointID    string     `json:"dataPointId"`
+	DataPointPath  string     `json:"dataPointPath"`
+	LastValue      any        `json:"lastValue"`
+	Quality        string     `json:"quality"`
+	LastUpdatedAt  *time.Time `json:"lastUpdatedAt"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
+}
+
+// KafkaFieldGroup 表示 Kafka Topic 下的变量分组。
+type KafkaFieldGroup struct {
 	ID             string    `json:"id"`
 	ProjectID      string    `json:"projectId"`
 	ConnectionID   string    `json:"connectionId"`
 	TopicMappingID string    `json:"topicMappingId"`
+	ParentID       *string   `json:"parentId"`
 	Name           string    `json:"name"`
-	ValuePath      string    `json:"valuePath"`
-	KeyPath        string    `json:"keyPath"`
-	DataType       string    `json:"dataType"`
-	Enabled        bool      `json:"enabled"`
-	Description    string    `json:"description"`
+	Description    *string   `json:"description"`
 	SortOrder      int       `json:"sortOrder"`
-	SourceType     string    `json:"sourceType"`
-	DataPointID    string    `json:"dataPointId"`
-	DataPointPath  string    `json:"dataPointPath"`
 	CreatedAt      time.Time `json:"createdAt"`
 	UpdatedAt      time.Time `json:"updatedAt"`
 }
@@ -85,6 +105,7 @@ type KafkaPreviewInput struct {
 	Decode    string `json:"decode"`
 	Offset    *int64 `json:"offset"`
 	Partition *int   `json:"partition"`
+	Probe     bool   `json:"probe"`
 }
 
 // KafkaSchemaField 是从样本 value 中递归推断出的字段候选。
@@ -154,24 +175,44 @@ type UpdateKafkaTopicMappingInput struct {
 
 // CreateKafkaFieldInput 描述创建字段映射的输入。
 type CreateKafkaFieldInput struct {
-	Name        string `json:"name"`
-	ValuePath   string `json:"valuePath"`
-	KeyPath     string `json:"keyPath"`
-	DataType    string `json:"dataType"`
-	Enabled     bool   `json:"enabled"`
-	Description string `json:"description"`
-	SortOrder   int    `json:"sortOrder"`
+	GroupID     *string `json:"groupId"`
+	Name        string  `json:"name"`
+	ValuePath   string  `json:"valuePath"`
+	KeyPath     string  `json:"keyPath"`
+	DataType    string  `json:"dataType"`
+	Enabled     bool    `json:"enabled"`
+	Description string  `json:"description"`
+	SortOrder   int     `json:"sortOrder"`
 }
 
 // UpdateKafkaFieldInput 描述更新字段映射的输入。
 type UpdateKafkaFieldInput struct {
-	Name        string `json:"name"`
-	ValuePath   string `json:"valuePath"`
-	KeyPath     string `json:"keyPath"`
-	DataType    string `json:"dataType"`
-	Enabled     bool   `json:"enabled"`
-	Description string `json:"description"`
-	SortOrder   int    `json:"sortOrder"`
+	GroupID     *string `json:"groupId"`
+	HasGroupID  bool    `json:"-"`
+	Name        string  `json:"name"`
+	ValuePath   string  `json:"valuePath"`
+	KeyPath     string  `json:"keyPath"`
+	DataType    string  `json:"dataType"`
+	Enabled     bool    `json:"enabled"`
+	Description string  `json:"description"`
+	SortOrder   int     `json:"sortOrder"`
+}
+
+// CreateKafkaFieldGroupInput 描述创建 Kafka 变量组的输入。
+type CreateKafkaFieldGroupInput struct {
+	ParentID    *string `json:"parentId"`
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	SortOrder   int     `json:"sortOrder"`
+}
+
+// UpdateKafkaFieldGroupInput 描述更新 Kafka 变量组的输入。
+type UpdateKafkaFieldGroupInput struct {
+	ParentID    *string `json:"parentId"`
+	HasParentID bool    `json:"-"`
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	SortOrder   int     `json:"sortOrder"`
 }
 
 // KafkaWorkbenchService 承载 Kafka 工作台开发态配置、预览和字段建模规则。
@@ -367,15 +408,127 @@ func (s *KafkaWorkbenchService) DeleteTopicMapping(ctx context.Context, projectI
 	return s.repository.DeleteTopicMapping(ctx, projectID, mappingID)
 }
 
-// ListFields 返回 Topic 映射下字段映射。
-func (s *KafkaWorkbenchService) ListFields(ctx context.Context, projectID, mappingID string) ([]KafkaField, error) {
+// ListFieldGroups 返回 Topic 映射下变量组。
+func (s *KafkaWorkbenchService) ListFieldGroups(ctx context.Context, projectID, mappingID string) ([]KafkaFieldGroup, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
 	if err := validateUUIDText(mappingID, "mappingId 格式无效"); err != nil {
 		return nil, err
 	}
-	records, err := s.repository.ListFields(ctx, projectID, mappingID)
+	records, err := s.repository.ListFieldGroups(ctx, projectID, mappingID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]KafkaFieldGroup, 0, len(records))
+	for _, record := range records {
+		result = append(result, toKafkaFieldGroup(record))
+	}
+	return result, nil
+}
+
+// CreateFieldGroup 创建 Topic 映射下变量组。
+func (s *KafkaWorkbenchService) CreateFieldGroup(ctx context.Context, projectID, mappingID, userID string, input CreateKafkaFieldGroupInput) (*KafkaFieldGroup, error) {
+	if err := validateProjectAndUser(projectID, userID); err != nil {
+		return nil, err
+	}
+	mapping, err := s.repository.GetTopicMapping(ctx, projectID, mappingID)
+	if err != nil {
+		return nil, err
+	}
+	parentID, err := s.normalizeKafkaFieldGroupParent(ctx, projectID, mappingID, input.ParentID, "")
+	if err != nil {
+		return nil, err
+	}
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "变量组名称不能为空")
+	}
+	record, err := s.repository.CreateFieldGroup(ctx, repository.CreateKafkaFieldGroupParams{
+		ProjectID:      projectID,
+		ConnectionID:   mapping.ConnectionID,
+		TopicMappingID: mapping.ID,
+		ParentID:       parentID,
+		Name:           name,
+		Description:    trimOptionalString(input.Description),
+		SortOrder:      input.SortOrder,
+		UserID:         userID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := toKafkaFieldGroup(*record)
+	return &result, nil
+}
+
+// UpdateFieldGroup 更新 Topic 映射下变量组。
+func (s *KafkaWorkbenchService) UpdateFieldGroup(ctx context.Context, projectID, groupID, userID string, input UpdateKafkaFieldGroupInput) (*KafkaFieldGroup, error) {
+	if err := validateProjectAndUser(projectID, userID); err != nil {
+		return nil, err
+	}
+	current, err := s.repository.GetFieldGroup(ctx, projectID, groupID)
+	if err != nil {
+		return nil, err
+	}
+	parentID := current.ParentID
+	if input.HasParentID {
+		parentID, err = s.normalizeKafkaFieldGroupParent(ctx, projectID, current.TopicMappingID, input.ParentID, current.ID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	name := fallbackTrimmed(input.Name, current.Name)
+	record, err := s.repository.UpdateFieldGroup(ctx, repository.UpdateKafkaFieldGroupParams{
+		ProjectID:   projectID,
+		GroupID:     groupID,
+		ParentID:    parentID,
+		HasParentID: input.HasParentID,
+		Name:        name,
+		Description: coalesceOptionalString(trimOptionalString(input.Description), current.Description),
+		SortOrder:   input.SortOrder,
+		UserID:      userID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := toKafkaFieldGroup(*record)
+	return &result, nil
+}
+
+// DeleteFieldGroup 删除变量组，并把组内变量移动到未分组。
+func (s *KafkaWorkbenchService) DeleteFieldGroup(ctx context.Context, projectID, groupID, userID string) error {
+	if err := validateProjectAndUser(projectID, userID); err != nil {
+		return err
+	}
+	if err := validateUUIDText(groupID, "groupId 格式无效"); err != nil {
+		return err
+	}
+	return s.repository.DeleteFieldGroup(ctx, projectID, groupID, userID)
+}
+
+type KafkaFieldListResult struct {
+	Fields     []KafkaField               `json:"list"`
+	Pagination ProtocolModelingPagination `json:"pagination"`
+}
+
+// ListFieldsPage 返回 Topic 映射下字段映射分页数据。
+func (s *KafkaWorkbenchService) ListFieldsPage(ctx context.Context, projectID, mappingID string, groupID *string, search string, page, pageSize int) (*KafkaFieldListResult, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateUUIDText(mappingID, "mappingId 格式无效"); err != nil {
+		return nil, err
+	}
+	groupID = normalizeOptionalText(groupID)
+	if groupID != nil && *groupID != "__ungrouped" {
+		normalized, err := s.normalizeKafkaFieldGroup(ctx, projectID, mappingID, groupID)
+		if err != nil {
+			return nil, err
+		}
+		groupID = normalized
+	}
+	page, pageSize = normalizePageAndSize(page, pageSize, 1, 100)
+	records, total, err := s.repository.ListFieldsPage(ctx, projectID, mappingID, groupID, search, page, pageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -383,7 +536,7 @@ func (s *KafkaWorkbenchService) ListFields(ctx context.Context, projectID, mappi
 	for _, record := range records {
 		result = append(result, toKafkaField(record))
 	}
-	return result, nil
+	return &KafkaFieldListResult{Fields: result, Pagination: newProtocolModelingPagination(page, pageSize, total)}, nil
 }
 
 // CreateField 创建字段映射并同步 kafka.field 数据点。
@@ -398,7 +551,7 @@ func (s *KafkaWorkbenchService) CreateField(ctx context.Context, projectID, mapp
 	if err != nil {
 		return nil, err
 	}
-	params, err := s.normalizeCreateField(projectID, userID, *mapping, input)
+	params, err := s.normalizeCreateField(ctx, projectID, userID, *mapping, input)
 	if err != nil {
 		return nil, err
 	}
@@ -466,6 +619,8 @@ func (s *KafkaWorkbenchService) ToggleField(ctx context.Context, projectID, fiel
 		return nil, err
 	}
 	return s.UpdateField(ctx, projectID, fieldID, userID, UpdateKafkaFieldInput{
+		GroupID:     current.GroupID,
+		HasGroupID:  true,
 		Name:        current.Name,
 		ValuePath:   current.ValuePath,
 		KeyPath:     current.KeyPath,
@@ -537,6 +692,9 @@ func (s *KafkaWorkbenchService) PreviewTopicMapping(ctx context.Context, project
 		input.Partition = cloneOptionalInt(mapping.Partition)
 	}
 	result, previewErr := s.previewKafka(ctx, *connection, input, overrides)
+	if previewErr == nil {
+		_ = s.syncKafkaFieldLastValues(ctx, mapping.ProjectID, mapping.ID, result)
+	}
 	_ = s.recordKafkaPreview(ctx, mapping.ProjectID, mapping.ConnectionID, result, previewErr)
 	return result, previewErr
 }
@@ -554,6 +712,9 @@ func (s *KafkaWorkbenchService) previewKafka(ctx context.Context, connection rep
 	if input.Partition != nil {
 		options["partitionMode"] = "single"
 		options["partition"] = *input.Partition
+	}
+	if input.Probe {
+		options["probe"] = true
 	}
 	previewCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -597,6 +758,40 @@ func (s *KafkaWorkbenchService) recordKafkaPreview(ctx context.Context, projectI
 			"truncated":   result.Truncated,
 		},
 	})
+}
+
+func (s *KafkaWorkbenchService) syncKafkaFieldLastValues(ctx context.Context, projectID, mappingID string, result *KafkaPreviewResult) error {
+	if result == nil || len(result.Samples) == 0 {
+		return nil
+	}
+	fields, err := s.repository.ListFields(ctx, projectID, mappingID)
+	if err != nil {
+		return err
+	}
+	if len(fields) == 0 {
+		return nil
+	}
+	lastSample := result.Samples[len(result.Samples)-1]
+	timestamp := resolveKafkaSampleTimestamp(lastSample, time.Now().UTC())
+	updates := make([]repository.KafkaFieldValueUpdate, 0, len(fields))
+	for _, field := range fields {
+		if !field.Enabled {
+			continue
+		}
+		value, ok := extractKafkaFieldValue(lastSample, field.ValuePath)
+		quality := "good"
+		if !ok {
+			quality = "bad"
+			value = nil
+		}
+		updates = append(updates, repository.KafkaFieldValueUpdate{
+			FieldID:       field.ID,
+			LastValue:     value,
+			Quality:       quality,
+			LastUpdatedAt: timestamp,
+		})
+	}
+	return s.repository.UpdateFieldLastValues(ctx, projectID, mappingID, updates)
 }
 
 func (s *KafkaWorkbenchService) normalizeCreateTopicMapping(ctx context.Context, projectID, connectionID, userID string, input CreateKafkaTopicMappingInput) (repository.CreateKafkaTopicMappingParams, error) {
@@ -681,16 +876,24 @@ func (s *KafkaWorkbenchService) normalizeUpdateTopicMapping(ctx context.Context,
 	}, nil
 }
 
-func (s *KafkaWorkbenchService) normalizeCreateField(projectID, userID string, mapping repository.KafkaTopicMappingRecord, input CreateKafkaFieldInput) (repository.CreateKafkaFieldParams, error) {
+func (s *KafkaWorkbenchService) normalizeCreateField(ctx context.Context, projectID, userID string, mapping repository.KafkaTopicMappingRecord, input CreateKafkaFieldInput) (repository.CreateKafkaFieldParams, error) {
 	name, valuePath, dataType, err := normalizeKafkaFieldCore(input.Name, input.ValuePath, input.DataType)
 	if err != nil {
 		return repository.CreateKafkaFieldParams{}, err
 	}
+	groupID, err := s.normalizeKafkaFieldGroup(ctx, projectID, mapping.ID, input.GroupID)
+	if err != nil {
+		return repository.CreateKafkaFieldParams{}, err
+	}
 	sourceConfig := kafkaFieldSourceConfig(mapping, valuePath, input.KeyPath)
+	if groupID != nil {
+		sourceConfig["groupId"] = *groupID
+	}
 	return repository.CreateKafkaFieldParams{
 		ProjectID:      projectID,
 		ConnectionID:   mapping.ConnectionID,
 		TopicMappingID: mapping.ID,
+		GroupID:        groupID,
 		Name:           name,
 		ValuePath:      valuePath,
 		KeyPath:        strings.TrimSpace(input.KeyPath),
@@ -717,10 +920,21 @@ func (s *KafkaWorkbenchService) normalizeUpdateField(ctx context.Context, projec
 	if strings.TrimSpace(keyPath) == "" {
 		keyPath = current.KeyPath
 	}
+	groupID := current.GroupID
+	if input.HasGroupID {
+		groupID, err = s.normalizeKafkaFieldGroup(ctx, projectID, current.TopicMappingID, input.GroupID)
+		if err != nil {
+			return repository.UpdateKafkaFieldParams{}, err
+		}
+	}
 	sourceConfig := kafkaFieldSourceConfig(*mapping, valuePath, keyPath)
+	if groupID != nil {
+		sourceConfig["groupId"] = *groupID
+	}
 	return repository.UpdateKafkaFieldParams{
 		ID:            current.ID,
 		ProjectID:     projectID,
+		GroupID:       groupID,
 		Name:          name,
 		ValuePath:     valuePath,
 		KeyPath:       strings.TrimSpace(keyPath),
@@ -749,6 +963,65 @@ func (s *KafkaWorkbenchService) normalizeKafkaMappingGroup(ctx context.Context, 
 		}
 	}
 	return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Topic 分组不属于当前 Kafka 接入源")
+}
+
+func (s *KafkaWorkbenchService) normalizeKafkaFieldGroup(ctx context.Context, projectID, mappingID string, groupID *string) (*string, error) {
+	groupID = normalizeOptionalText(groupID)
+	if groupID == nil {
+		return nil, nil
+	}
+	if *groupID == "__ungrouped" {
+		return nil, nil
+	}
+	groups, err := s.repository.ListFieldGroups(ctx, projectID, mappingID)
+	if err != nil {
+		return nil, err
+	}
+	for _, group := range groups {
+		if group.ID == *groupID {
+			return groupID, nil
+		}
+	}
+	return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "变量组不属于当前 Kafka Topic")
+}
+
+func (s *KafkaWorkbenchService) normalizeKafkaFieldGroupParent(ctx context.Context, projectID, mappingID string, parentID *string, currentID string) (*string, error) {
+	parentID = normalizeOptionalText(parentID)
+	if parentID == nil {
+		return nil, nil
+	}
+	if *parentID == currentID && currentID != "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "变量组不能选择自身为父级")
+	}
+	groups, err := s.repository.ListFieldGroups(ctx, projectID, mappingID)
+	if err != nil {
+		return nil, err
+	}
+	children := map[string][]string{}
+	exists := false
+	for _, group := range groups {
+		if group.ID == *parentID {
+			exists = true
+		}
+		if group.ParentID != nil {
+			children[*group.ParentID] = append(children[*group.ParentID], group.ID)
+		}
+	}
+	if !exists {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "父级变量组不属于当前 Kafka Topic")
+	}
+	if currentID != "" {
+		stack := append([]string{}, children[currentID]...)
+		for len(stack) > 0 {
+			next := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			if next == *parentID {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "父级变量组不能是当前组的子级")
+			}
+			stack = append(stack, children[next]...)
+		}
+	}
+	return parentID, nil
 }
 
 func (s *KafkaWorkbenchService) normalizeKafkaGroupParent(ctx context.Context, projectID, connectionID string, parentID *string, currentID string) (*string, error) {
@@ -907,6 +1180,78 @@ func buildKafkaDataPointPath(mappingName, fieldName string) string {
 	return "kafka." + normalizeDatapointSegment(mappingName) + "." + normalizeDatapointSegment(fieldName)
 }
 
+func extractKafkaFieldValue(sample any, valuePath string) (any, bool) {
+	root := normalizeKafkaPreviewSampleValue(sample)
+	if strings.TrimSpace(valuePath) == "" {
+		return nil, false
+	}
+	current := root
+	for _, segment := range strings.Split(valuePath, ".") {
+		key := strings.TrimSpace(segment)
+		if key == "" {
+			return nil, false
+		}
+		switch typed := current.(type) {
+		case map[string]any:
+			next, ok := typed[key]
+			if !ok {
+				return nil, false
+			}
+			current = next
+		case []any:
+			index, err := strconv.Atoi(key)
+			if err != nil || index < 0 || index >= len(typed) {
+				return nil, false
+			}
+			current = typed[index]
+		default:
+			return nil, false
+		}
+	}
+	return current, true
+}
+
+func normalizeKafkaPreviewSampleValue(sample any) any {
+	if sampleMap, ok := sample.(map[string]any); ok {
+		if value, exists := sampleMap["value"]; exists {
+			return normalizeKafkaJSONValue(value)
+		}
+	}
+	return normalizeKafkaJSONValue(sample)
+}
+
+func normalizeKafkaJSONValue(value any) any {
+	text, ok := value.(string)
+	if !ok {
+		return value
+	}
+	var decoded any
+	if err := json.Unmarshal([]byte(text), &decoded); err != nil {
+		return value
+	}
+	return decoded
+}
+
+func resolveKafkaSampleTimestamp(sample any, fallback time.Time) time.Time {
+	sampleMap, ok := sample.(map[string]any)
+	if !ok {
+		return fallback
+	}
+	raw, ok := sampleMap["timestamp"]
+	if !ok {
+		return fallback
+	}
+	switch typed := raw.(type) {
+	case time.Time:
+		return typed
+	case string:
+		if parsed, err := time.Parse(time.RFC3339Nano, typed); err == nil {
+			return parsed
+		}
+	}
+	return fallback
+}
+
 func toKafkaTopicGroup(record repository.KafkaTopicGroupRecord) KafkaTopicGroup {
 	return KafkaTopicGroup{
 		ID:           record.ID,
@@ -947,6 +1292,7 @@ func toKafkaField(record repository.KafkaFieldRecord) KafkaField {
 		ProjectID:      record.ProjectID,
 		ConnectionID:   record.ConnectionID,
 		TopicMappingID: record.TopicMappingID,
+		GroupID:        cloneOptionalString(record.GroupID),
 		Name:           record.Name,
 		ValuePath:      record.ValuePath,
 		KeyPath:        record.KeyPath,
@@ -957,6 +1303,24 @@ func toKafkaField(record repository.KafkaFieldRecord) KafkaField {
 		SourceType:     "kafka.field",
 		DataPointID:    kafkaStringValue(record.DataPointID),
 		DataPointPath:  kafkaStringValue(record.DataPointPath),
+		LastValue:      record.LastValue,
+		Quality:        fallbackTrimmed(record.Quality, "unknown"),
+		LastUpdatedAt:  record.LastUpdatedAt,
+		CreatedAt:      record.CreatedAt,
+		UpdatedAt:      record.UpdatedAt,
+	}
+}
+
+func toKafkaFieldGroup(record repository.KafkaFieldGroupRecord) KafkaFieldGroup {
+	return KafkaFieldGroup{
+		ID:             record.ID,
+		ProjectID:      record.ProjectID,
+		ConnectionID:   record.ConnectionID,
+		TopicMappingID: record.TopicMappingID,
+		ParentID:       cloneOptionalString(record.ParentID),
+		Name:           record.Name,
+		Description:    cloneOptionalString(record.Description),
+		SortOrder:      record.SortOrder,
 		CreatedAt:      record.CreatedAt,
 		UpdatedAt:      record.UpdatedAt,
 	}

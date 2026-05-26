@@ -1,6 +1,8 @@
 // @ts-nocheck
 import request from '@/utils/request'
 import {
+  KafkaFieldGroupListSchema,
+  KafkaFieldGroupSchema,
   KafkaFieldListSchema,
   KafkaFieldSchema,
   KafkaPreviewSchema,
@@ -144,12 +146,14 @@ export const previewProtocol = (projectId, connectionId, data = {}) => {
   })
 }
 
+const unwrapKafkaPayload = (response) => response?.data ?? response
+
 export const getKafkaTopicGroups = async (projectId, connectionId) => {
   const res = await request({
     url: `/data/projects/${projectId}/kafka/sources/${connectionId}/topic-groups`,
     method: 'get',
   })
-  return KafkaTopicGroupListSchema.parse(res)
+  return KafkaTopicGroupListSchema.parse(unwrapKafkaPayload(res))
 }
 
 export const createKafkaTopicGroup = async (projectId, connectionId, data) => {
@@ -158,7 +162,7 @@ export const createKafkaTopicGroup = async (projectId, connectionId, data) => {
     method: 'post',
     data,
   })
-  return KafkaTopicGroupSchema.parse(res)
+  return KafkaTopicGroupSchema.parse(unwrapKafkaPayload(res))
 }
 
 export const updateKafkaTopicGroup = async (projectId, groupId, data) => {
@@ -167,7 +171,7 @@ export const updateKafkaTopicGroup = async (projectId, groupId, data) => {
     method: 'put',
     data,
   })
-  return KafkaTopicGroupSchema.parse(res)
+  return KafkaTopicGroupSchema.parse(unwrapKafkaPayload(res))
 }
 
 export const deleteKafkaTopicGroup = (projectId, groupId) => {
@@ -182,7 +186,7 @@ export const getKafkaTopicMappings = async (projectId, connectionId) => {
     url: `/data/projects/${projectId}/kafka/sources/${connectionId}/topic-mappings`,
     method: 'get',
   })
-  return KafkaTopicMappingListSchema.parse(res)
+  return KafkaTopicMappingListSchema.parse(unwrapKafkaPayload(res))
 }
 
 export const getKafkaTopicMapping = async (projectId, mappingId) => {
@@ -190,7 +194,7 @@ export const getKafkaTopicMapping = async (projectId, mappingId) => {
     url: `/data/projects/${projectId}/kafka/topic-mappings/${mappingId}`,
     method: 'get',
   })
-  return KafkaTopicMappingSchema.parse(res)
+  return KafkaTopicMappingSchema.parse(unwrapKafkaPayload(res))
 }
 
 export const createKafkaTopicMapping = async (projectId, connectionId, data) => {
@@ -199,7 +203,7 @@ export const createKafkaTopicMapping = async (projectId, connectionId, data) => 
     method: 'post',
     data,
   })
-  return KafkaTopicMappingSchema.parse(res)
+  return KafkaTopicMappingSchema.parse(unwrapKafkaPayload(res))
 }
 
 export const updateKafkaTopicMapping = async (projectId, mappingId, data) => {
@@ -208,7 +212,7 @@ export const updateKafkaTopicMapping = async (projectId, mappingId, data) => {
     method: 'put',
     data,
   })
-  return KafkaTopicMappingSchema.parse(res)
+  return KafkaTopicMappingSchema.parse(unwrapKafkaPayload(res))
 }
 
 export const deleteKafkaTopicMapping = (projectId, mappingId) => {
@@ -224,7 +228,7 @@ export const previewKafkaConnection = async (projectId, connectionId, data = {})
     method: 'post',
     data,
   })
-  return KafkaPreviewSchema.parse(res)
+  return KafkaPreviewSchema.parse(unwrapKafkaPayload(res))
 }
 
 export const previewKafkaTopicMapping = async (projectId, mappingId, data = {}) => {
@@ -233,15 +237,49 @@ export const previewKafkaTopicMapping = async (projectId, mappingId, data = {}) 
     method: 'post',
     data,
   })
-  return KafkaPreviewSchema.parse(res)
+  return KafkaPreviewSchema.parse(unwrapKafkaPayload(res))
 }
 
-export const getKafkaFields = async (projectId, mappingId) => {
+export const getKafkaFieldGroups = async (projectId, mappingId) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/kafka/topic-mappings/${mappingId}/field-groups`,
+    method: 'get',
+  })
+  return KafkaFieldGroupListSchema.parse(unwrapKafkaPayload(res))
+}
+
+export const createKafkaFieldGroup = async (projectId, mappingId, data) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/kafka/topic-mappings/${mappingId}/field-groups`,
+    method: 'post',
+    data,
+  })
+  return KafkaFieldGroupSchema.parse(unwrapKafkaPayload(res))
+}
+
+export const updateKafkaFieldGroup = async (projectId, groupId, data) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/kafka/field-groups/${groupId}`,
+    method: 'put',
+    data,
+  })
+  return KafkaFieldGroupSchema.parse(unwrapKafkaPayload(res))
+}
+
+export const deleteKafkaFieldGroup = (projectId, groupId) => {
+  return request({
+    url: `/data/projects/${projectId}/kafka/field-groups/${groupId}`,
+    method: 'delete',
+  })
+}
+
+export const getKafkaFields = async (projectId, mappingId, params = {}) => {
   const res = await request({
     url: `/data/projects/${projectId}/kafka/topic-mappings/${mappingId}/fields`,
     method: 'get',
+    params,
   })
-  return KafkaFieldListSchema.parse(res)
+  return KafkaFieldListSchema.parse(unwrapKafkaPayload(res))
 }
 
 export const createKafkaField = async (projectId, mappingId, data) => {
@@ -250,7 +288,7 @@ export const createKafkaField = async (projectId, mappingId, data) => {
     method: 'post',
     data,
   })
-  return KafkaFieldSchema.parse(res)
+  return KafkaFieldSchema.parse(unwrapKafkaPayload(res))
 }
 
 export const createKafkaFieldsBatch = async (projectId, mappingId, fields) => {
@@ -259,7 +297,7 @@ export const createKafkaFieldsBatch = async (projectId, mappingId, fields) => {
     method: 'post',
     data: { fields },
   })
-  return KafkaFieldListSchema.parse(res)
+  return KafkaFieldListSchema.parse(unwrapKafkaPayload(res))
 }
 
 export const updateKafkaField = async (projectId, fieldId, data) => {
@@ -268,7 +306,7 @@ export const updateKafkaField = async (projectId, fieldId, data) => {
     method: 'put',
     data,
   })
-  return KafkaFieldSchema.parse(res)
+  return KafkaFieldSchema.parse(unwrapKafkaPayload(res))
 }
 
 export const deleteKafkaField = (projectId, fieldId) => {
@@ -284,7 +322,7 @@ export const toggleKafkaField = async (projectId, fieldId, enabled) => {
     method: 'patch',
     data: { enabled },
   })
-  return KafkaFieldSchema.parse(res)
+  return KafkaFieldSchema.parse(unwrapKafkaPayload(res))
 }
 
 const normalizeOpcuaListPayload = (payload, legacyKey = '') => {
@@ -1669,6 +1707,10 @@ export default {
   previewKafkaConnection,
   previewKafkaTopicMapping,
   getKafkaFields,
+  getKafkaFieldGroups,
+  createKafkaFieldGroup,
+  updateKafkaFieldGroup,
+  deleteKafkaFieldGroup,
   createKafkaField,
   createKafkaFieldsBatch,
   updateKafkaField,

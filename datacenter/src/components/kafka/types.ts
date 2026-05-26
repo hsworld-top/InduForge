@@ -1,5 +1,6 @@
 import type {
   KafkaField,
+  KafkaFieldGroup,
   KafkaPreview,
   KafkaPreviewSample,
   KafkaSchemaField,
@@ -9,6 +10,7 @@ import type {
 
 export type {
   KafkaField,
+  KafkaFieldGroup,
   KafkaPreview,
   KafkaPreviewSample,
   KafkaSchemaField,

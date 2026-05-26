@@ -12,10 +12,11 @@
             type="button"
             class="kafka-workbench__connect-action"
             :class="{ 'is-connected': connected }"
-            :title="connected ? '标记未连接' : '标记已连接'"
+            :title="connected ? '断开' : '连接'"
             @click="toggleConnection"
           >
-            <span>{{ connected ? '已连接' : '连接' }}</span>
+            <IconTablerLoader2 v-if="connecting" />
+            <span>{{ connecting ? '连接中' : connected ? '已连接' : '连接' }}</span>
           </button>
         </template>
         <template #actions>
@@ -67,8 +68,8 @@
             :key="String(group.id)"
             :node="group"
             :selected-mapping-id="selectedMapping ? String(selectedMapping.id) : ''"
-            @select-mapping="openPreview"
-            @open-fields="openFields"
+            @select-mapping="openVariables"
+            @open-fields="openVariables"
           />
 
           <button
@@ -77,9 +78,9 @@
             type="button"
             class="kafka-workbench__tree-item"
             :class="{ 'is-active': selectedMapping?.id === mapping.id }"
-            @click="openPreview(mapping)"
-            @dblclick="openFields(mapping)"
-            @keydown.enter="openFields(mapping)"
+            @click="openVariables(mapping)"
+            @dblclick="openVariables(mapping)"
+            @keydown.enter="openVariables(mapping)"
           >
             <IconTablerMessages class="kafka-workbench__tree-item-icon" />
             <el-tooltip :content="mapping.topic" placement="top" :show-after="400">
@@ -127,17 +128,20 @@
           :project-id="projectId"
           :mapping="activeTab.mapping"
           :samples="getPreviewSamples(activeTab.mapping.id)"
+          :connected="connected"
+          @open-preview="openPreview"
+          @samples="handlePreviewSamples"
         />
         <div v-else class="kafka-workbench__placeholder">
           <IconTablerMessages />
-          <strong>选择 Topic 开始预览</strong>
-          <span>从左侧 Topic 映射进入消息预览或字段映射。</span>
+          <strong>选择 Topic 管理变量</strong>
+          <span>从左侧 Topic 映射进入变量管理。</span>
         </div>
       </div>
     </main>
 
     <KafkaInspectorPanel
-      :connection="connection"
+      :connection="inspectorConnection"
       :mapping="selectedMapping"
       :preview="activePreview"
     />
@@ -209,6 +213,7 @@ const mappings = ref<KafkaTopicMapping[]>([])
 const loading = ref(false)
 const filterText = ref('')
 const connected = ref(false)
+const connecting = ref(false)
 const selectedMapping = ref<KafkaTopicMapping | null>(null)
 const activeTabId = ref('')
 const tabs = ref<KafkaWorkbenchTab[]>([])
@@ -231,6 +236,10 @@ const filteredTree = computed(() =>
   filterKafkaTopicTree(tree.value.groups, tree.value.rootMappings, filterText.value),
 )
 const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId.value) || null)
+const inspectorConnection = computed(() => ({
+  ...props.connection,
+  status: connected.value ? 'connected' : 'disconnected',
+}))
 
 const loadWorkbench = async () => {
   loading.value = true
@@ -248,8 +257,33 @@ const loadWorkbench = async () => {
   }
 }
 
-const toggleConnection = () => {
-  connected.value = !connected.value
+const toggleConnection = async () => {
+  if (connecting.value) return
+  if (connected.value) {
+    connected.value = false
+    tabs.value = tabs.value.filter((tab) => tab.type !== 'preview')
+    if (!tabs.value.some((tab) => tab.id === activeTabId.value)) {
+      activeTabId.value = tabs.value[0]?.id || ''
+    }
+    ElMessage.success('Kafka 已断开')
+    return
+  }
+
+  connecting.value = true
+  try {
+    await dataAPI.previewKafkaConnection(props.projectId, props.connection.id, {
+      limit: 1,
+      timeoutMs: 1000,
+      probe: true,
+    })
+    connected.value = true
+    ElMessage.success('Kafka 已连接')
+  } catch (error) {
+    connected.value = false
+    ElMessage.error(getApiErrorMessage(error, 'Kafka 连接失败'))
+  } finally {
+    connecting.value = false
+  }
 }
 
 const openCreateMapping = () => {
@@ -266,6 +300,7 @@ const saveGroup = async (payload: { name: string }) => {
   groupSaving.value = true
   try {
     await dataAPI.createKafkaTopicGroup(props.projectId, props.connection.id, payload)
+    groupSaving.value = false
     groupDialogVisible.value = false
     ElMessage.success('Topic 分组已创建')
     await loadWorkbench()
@@ -283,11 +318,12 @@ const saveMapping = async (payload: Record<string, unknown>) => {
       mappingDialogMode.value === 'edit' && editingMapping.value
         ? await dataAPI.updateKafkaTopicMapping(props.projectId, editingMapping.value.id, payload)
         : await dataAPI.createKafkaTopicMapping(props.projectId, props.connection.id, payload)
+    mappingSaving.value = false
     mappingDialogVisible.value = false
     ElMessage.success('Topic 映射已保存')
     await loadWorkbench()
     if (saved?.id) {
-      openPreview(saved)
+      openVariables(saved)
     }
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '保存 Topic 映射失败'))
@@ -311,14 +347,14 @@ const openPreview = (mapping: KafkaTopicMapping) => {
   activeTabId.value = id
 }
 
-const openFields = (mapping: KafkaTopicMapping) => {
+const openVariables = (mapping: KafkaTopicMapping) => {
   selectedMapping.value = mapping
   const id = `kafka-fields-${mapping.id}`
   if (!tabs.value.some((tab) => tab.id === id)) {
     tabs.value.push({
       id,
       type: 'fields',
-      title: `${mapping.name || mapping.topic} / 字段映射`,
+      title: `${mapping.name || mapping.topic} / 变量`,
       icon: markRaw(IconTablerSchema),
       mapping,
     })

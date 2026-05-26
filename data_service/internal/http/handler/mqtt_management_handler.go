@@ -539,15 +539,21 @@ func (h *MqttHandler) ListTagsBySubscription(w http.ResponseWriter, r *http.Requ
 	if _, err := requireClaims(r); err != nil {
 		return err
 	}
-	page, err := parseOptionalInt(r.URL.Query().Get("page"), 1, "page")
+	query := r.URL.Query()
+	var groupID *string
+	if value := query.Get("groupId"); value != "" {
+		groupID = &value
+	}
+	page, err := parseOptionalInt(query.Get("page"), 1, "page")
 	if err != nil {
 		return err
 	}
-	pageSize, err := parseOptionalInt(firstNonEmpty(r.URL.Query().Get("pageSize"), r.URL.Query().Get("limit")), 50, "pageSize")
+	pageSize, err := parseOptionalInt(firstNonEmpty(query.Get("pageSize"), query.Get("limit")), 20, "pageSize")
 	if err != nil {
 		return err
 	}
-	tags, total, err := h.service.ListTagsBySubscription(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), page, pageSize)
+	search := firstNonEmpty(query.Get("q"), query.Get("search"))
+	tags, total, err := h.service.ListTagsBySubscription(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), groupID, search, page, pageSize)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}

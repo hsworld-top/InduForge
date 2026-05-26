@@ -164,6 +164,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  defaultGroupId: {
+    type: String,
+    default: '',
+  },
   mode: {
     type: String,
     default: 'create', // create | edit | view
@@ -249,7 +253,7 @@ const initForm = () => {
       name: '',
       code: '',
       description: '',
-      groupId: null,
+      groupId: props.defaultGroupId || null,
       dataType: 'string',
       parseType: 'jsonpath',
       parseRule: '',

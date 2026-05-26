@@ -856,23 +856,36 @@ func (r *MqttRepository) UpdateTagGroupsOrder(ctx context.Context, projectID str
 	return nil
 }
 
-// ListTagsBySubscription 查询订阅下变量。
-func (r *MqttRepository) ListTagsBySubscription(ctx context.Context, projectID, subscriptionID string, page, pageSize int) ([]MqttTagRecord, int, error) {
-	return r.listTags(ctx, projectID, subscriptionID, page, pageSize)
+// ListTagsBySubscription 查询订阅下变量，可按变量组限定分页范围。
+func (r *MqttRepository) ListTagsBySubscription(ctx context.Context, projectID, subscriptionID string, groupID *string, search string, page, pageSize int) ([]MqttTagRecord, int, error) {
+	return r.listTags(ctx, projectID, subscriptionID, groupID, search, page, pageSize)
 }
 
 // ListTagsByProject 查询项目下变量。
 func (r *MqttRepository) ListTagsByProject(ctx context.Context, projectID string, page, pageSize int, subscriptionID string) ([]MqttTagRecord, int, error) {
-	return r.listTags(ctx, projectID, subscriptionID, page, pageSize)
+	return r.listTags(ctx, projectID, subscriptionID, nil, "", page, pageSize)
 }
 
-func (r *MqttRepository) listTags(ctx context.Context, projectID, subscriptionID string, page, pageSize int) ([]MqttTagRecord, int, error) {
+func (r *MqttRepository) listTags(ctx context.Context, projectID, subscriptionID string, groupID *string, search string, page, pageSize int) ([]MqttTagRecord, int, error) {
 	page, pageSize = normalizePageAndSize(page, pageSize, 50, 200)
 	where := []string{"project_id = $1"}
 	args := []any{projectID}
 	if strings.TrimSpace(subscriptionID) != "" {
 		args = append(args, strings.TrimSpace(subscriptionID))
 		where = append(where, fmt.Sprintf("subscription_id = $%d", len(args)))
+	}
+	if groupID != nil {
+		normalizedGroupID := strings.TrimSpace(*groupID)
+		if normalizedGroupID == "__ungrouped" {
+			where = append(where, "group_id IS NULL")
+		} else if normalizedGroupID != "" {
+			args = append(args, normalizedGroupID)
+			where = append(where, fmt.Sprintf("group_id = $%d", len(args)))
+		}
+	}
+	if keyword := strings.TrimSpace(search); keyword != "" {
+		args = append(args, "%"+keyword+"%")
+		where = append(where, fmt.Sprintf("(name ILIKE $%d OR code ILIKE $%d OR parse_rule ILIKE $%d)", len(args), len(args), len(args)))
 	}
 	whereSQL := strings.Join(where, " AND ")
 

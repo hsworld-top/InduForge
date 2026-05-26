@@ -41,6 +41,7 @@ export const KafkaFieldSchema = z
     projectId: IdSchema.optional(),
     connectionId: IdSchema,
     topicMappingId: IdSchema,
+    groupId: IdSchema.nullable().optional(),
     name: z.string(),
     valuePath: z.string(),
     keyPath: z.string().default(''),
@@ -51,6 +52,24 @@ export const KafkaFieldSchema = z
     sourceType: z.string().optional(),
     dataPointId: IdSchema.optional().or(z.literal('')),
     dataPointPath: z.string().optional(),
+    lastValue: z.unknown().optional().nullable(),
+    quality: z.enum(['good', 'bad', 'unknown']).default('unknown'),
+    lastUpdatedAt: TimeFieldSchema,
+    createdAt: TimeFieldSchema,
+    updatedAt: TimeFieldSchema,
+  })
+  .passthrough()
+
+export const KafkaFieldGroupSchema = z
+  .object({
+    id: IdSchema,
+    projectId: IdSchema.optional(),
+    connectionId: IdSchema,
+    topicMappingId: IdSchema,
+    parentId: IdSchema.nullable().optional(),
+    name: z.string(),
+    description: z.string().nullable().optional(),
+    sortOrder: z.number().default(0),
     createdAt: TimeFieldSchema,
     updatedAt: TimeFieldSchema,
   })
@@ -100,10 +119,12 @@ export const KafkaPreviewSchema = z
 
 export const KafkaTopicGroupListSchema = listResponseSchema(KafkaTopicGroupSchema)
 export const KafkaTopicMappingListSchema = listResponseSchema(KafkaTopicMappingSchema)
+export const KafkaFieldGroupListSchema = listResponseSchema(KafkaFieldGroupSchema)
 export const KafkaFieldListSchema = listResponseSchema(KafkaFieldSchema)
 
 export type KafkaTopicGroup = z.infer<typeof KafkaTopicGroupSchema>
 export type KafkaTopicMapping = z.infer<typeof KafkaTopicMappingSchema>
+export type KafkaFieldGroup = z.infer<typeof KafkaFieldGroupSchema>
 export type KafkaField = z.infer<typeof KafkaFieldSchema>
 export type KafkaSchemaField = z.infer<typeof KafkaSchemaFieldSchema>
 export type KafkaPreviewSample = z.infer<typeof KafkaPreviewSampleSchema>

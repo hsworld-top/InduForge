@@ -804,7 +804,7 @@ func (s *MqttService) DeleteTagGroup(ctx context.Context, projectID, groupID str
 		return err
 	}
 
-	tags, _, err := s.repository.ListTagsBySubscription(ctx, projectID, group.SubscriptionID, 1, 500)
+	tags, _, err := s.repository.ListTagsBySubscription(ctx, projectID, group.SubscriptionID, nil, "", 1, 500)
 	if err != nil {
 		return err
 	}
@@ -837,9 +837,15 @@ func (s *MqttService) UpdateTagGroupsOrder(ctx context.Context, projectID, userI
 	return s.repository.UpdateTagGroupsOrder(ctx, projectID, records, userID)
 }
 
-// ListTagsBySubscription 查询订阅下变量。
-func (s *MqttService) ListTagsBySubscription(ctx context.Context, projectID, subscriptionID string, page, pageSize int) ([]MqttTag, int, error) {
-	records, total, err := s.repository.ListTagsBySubscription(ctx, projectID, subscriptionID, page, pageSize)
+// ListTagsBySubscription 查询订阅下变量，groupID 为空表示全部，__ungrouped 表示未分组。
+func (s *MqttService) ListTagsBySubscription(ctx context.Context, projectID, subscriptionID string, groupID *string, search string, page, pageSize int) ([]MqttTag, int, error) {
+	groupID = normalizeOptionalText(groupID)
+	if groupID != nil && *groupID != "__ungrouped" {
+		if _, err := uuid.Parse(*groupID); err != nil {
+			return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "groupId 格式无效", err)
+		}
+	}
+	records, total, err := s.repository.ListTagsBySubscription(ctx, projectID, subscriptionID, groupID, search, page, pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
