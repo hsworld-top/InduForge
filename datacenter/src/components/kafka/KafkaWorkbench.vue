@@ -111,11 +111,12 @@
           :mapping="activeTab.mapping"
           @samples="handlePreviewSamples"
         />
-        <div v-else-if="activeTab" class="kafka-workbench__placeholder">
-          <component :is="activeTab.icon" />
-          <strong>{{ activeTab.title }}</strong>
-          <span>字段映射面板将在下一步接入。</span>
-        </div>
+        <KafkaFieldMappingPanel
+          v-else-if="activeTab?.type === 'fields'"
+          :project-id="projectId"
+          :mapping="activeTab.mapping"
+          :samples="getPreviewSamples(activeTab.mapping.id)"
+        />
         <div v-else class="kafka-workbench__placeholder">
           <IconTablerMessages />
           <strong>选择 Topic 开始预览</strong>
@@ -157,6 +158,7 @@ import dataAPI from '@/api/data.api'
 import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
 import { getApiErrorMessage } from '@/utils/request'
 import { buildKafkaTopicTree, filterKafkaTopicTree } from './kafkaTopicTreeModel'
+import KafkaFieldMappingPanel from './KafkaFieldMappingPanel.vue'
 import KafkaInspectorPanel from './KafkaInspectorPanel.vue'
 import KafkaPreviewPanel from './KafkaPreviewPanel.vue'
 import KafkaTopicGroupDialog from './KafkaTopicGroupDialog.vue'
@@ -319,6 +321,10 @@ const handlePreviewSamples = (payload: { mappingId: string; samples: KafkaPrevie
   next.set(payload.mappingId, payload.samples)
   previewSamplesByMapping.value = next
   activePreview.value = payload.preview
+}
+
+const getPreviewSamples = (mappingId: string | number) => {
+  return previewSamplesByMapping.value.get(String(mappingId)) || []
 }
 
 onMounted(loadWorkbench)
