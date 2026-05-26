@@ -480,6 +480,26 @@
 | `POST` | `/api/v1/data/projects/{projectId}/redis/configs`                        | 创建 Redis 配置     |
 | `POST` | `/api/v1/data/projects/{projectId}/protocols/{connectionId}/preview`     | 统一短时真实抓样    |
 
+Kafka 工作台接口：
+
+| 方法     | 路径                                                                                 | 功能概要                |
+| -------- | ------------------------------------------------------------------------------------ | ----------------------- |
+| `GET`    | `/api/v1/data/projects/{projectId}/kafka/{connectionId}/topic-groups`                | 获取 Kafka Topic 分组   |
+| `POST`   | `/api/v1/data/projects/{projectId}/kafka/{connectionId}/topic-groups`                | 创建 Kafka Topic 分组   |
+| `PUT`    | `/api/v1/data/projects/{projectId}/kafka/topic-groups/{groupId}`                     | 更新 Kafka Topic 分组   |
+| `DELETE` | `/api/v1/data/projects/{projectId}/kafka/topic-groups/{groupId}`                     | 删除 Kafka Topic 分组   |
+| `GET`    | `/api/v1/data/projects/{projectId}/kafka/{connectionId}/topic-mappings`              | 获取 Kafka Topic 映射   |
+| `POST`   | `/api/v1/data/projects/{projectId}/kafka/{connectionId}/topic-mappings`              | 创建 Kafka Topic 映射   |
+| `PUT`    | `/api/v1/data/projects/{projectId}/kafka/topic-mappings/{mappingId}`                 | 更新 Kafka Topic 映射   |
+| `DELETE` | `/api/v1/data/projects/{projectId}/kafka/topic-mappings/{mappingId}`                 | 删除 Kafka Topic 映射   |
+| `POST`   | `/api/v1/data/projects/{projectId}/kafka/topic-mappings/{mappingId}/preview`         | 短时预览 Kafka Topic    |
+| `GET`    | `/api/v1/data/projects/{projectId}/kafka/topic-mappings/{mappingId}/fields`          | 获取 Kafka 字段映射     |
+| `POST`   | `/api/v1/data/projects/{projectId}/kafka/topic-mappings/{mappingId}/fields`          | 创建 Kafka 字段映射     |
+| `POST`   | `/api/v1/data/projects/{projectId}/kafka/topic-mappings/{mappingId}/fields/batch`    | 批量创建 Kafka 字段映射 |
+| `PUT`    | `/api/v1/data/projects/{projectId}/kafka/fields/{fieldId}`                           | 更新 Kafka 字段映射     |
+| `DELETE` | `/api/v1/data/projects/{projectId}/kafka/fields/{fieldId}`                           | 删除 Kafka 字段映射     |
+| `PATCH`  | `/api/v1/data/projects/{projectId}/kafka/fields/{fieldId}/toggle`                    | 启停 Kafka 字段映射     |
+
 统一协议 preview 请求体：
 
 ```json
