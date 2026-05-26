@@ -25,7 +25,7 @@
     >
       <IconTablerStack2 />
       <span>全部变量</span>
-      <em>{{ registers.length }}</em>
+      <em>{{ !selectedGroupId ? total : '' }}</em>
     </button>
 
     <div class="modbus-group-tree__list">
@@ -42,7 +42,7 @@
         >
           <IconTablerFolder />
           <span>{{ group.name }}</span>
-          <em>{{ countByGroup[group.id] || 0 }}</em>
+          <em>{{ selectedGroupId === group.id ? total : '' }}</em>
         </button>
         <div class="modbus-group-tree__actions">
           <el-button text size="small" :icon="IconTablerEdit" @click="$emit('edit', group)" />
@@ -55,7 +55,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { ModbusRegister, ModbusRegisterGroup } from './types'
+import type { ModbusRegisterGroup } from './types'
 import IconTablerEdit from '~icons/tabler/edit'
 import IconTablerFolder from '~icons/tabler/folder'
 import IconTablerFolderPlus from '~icons/tabler/folder-plus'
@@ -64,8 +64,8 @@ import IconTablerTrash from '~icons/tabler/trash'
 
 const props = defineProps<{
   groups: ModbusRegisterGroup[]
-  registers: ModbusRegister[]
   selectedGroupId: string
+  total?: number
 }>()
 
 defineEmits<{
@@ -95,14 +95,6 @@ const filteredGroups = computed(() => {
   const text = keyword.value.trim().toLowerCase()
   if (!text) return treeGroups.value
   return treeGroups.value.filter((group) => group.name.toLowerCase().includes(text))
-})
-const countByGroup = computed(() => {
-  const result: Record<string, number> = {}
-  for (const item of props.registers) {
-    if (!item.groupId) continue
-    result[item.groupId] = (result[item.groupId] || 0) + 1
-  }
-  return result
 })
 </script>
 

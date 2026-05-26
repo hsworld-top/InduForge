@@ -311,6 +311,31 @@ func (s *ModbusModelingService) ListRegisters(ctx context.Context, projectID, co
 	return result, nil
 }
 
+type ModbusRegisterListResult struct {
+	Registers  []ModbusRegister           `json:"list"`
+	Pagination ProtocolModelingPagination `json:"pagination"`
+}
+
+// ListRegistersPage 返回当前分组下的一页变量，分页条件只影响列表展示，不影响预览和校验等全量流程。
+func (s *ModbusModelingService) ListRegistersPage(ctx context.Context, projectID, connectionID string, groupID *string, page, pageSize int) (*ModbusRegisterListResult, error) {
+	if err := s.validateProjectConnection(ctx, projectID, connectionID); err != nil {
+		return nil, err
+	}
+	page, pageSize = normalizePageAndSize(page, pageSize, 1, 100)
+	records, total, err := s.repository.ListRegistersPage(ctx, projectID, connectionID, normalizeOptionalText(groupID), page, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	registers := make([]ModbusRegister, 0, len(records))
+	for _, record := range records {
+		registers = append(registers, toModbusRegister(record))
+	}
+	return &ModbusRegisterListResult{
+		Registers:  registers,
+		Pagination: newProtocolModelingPagination(page, pageSize, total),
+	}, nil
+}
+
 // CreateRegister 创建变量并同步数据点。
 func (s *ModbusModelingService) CreateRegister(ctx context.Context, projectID, connectionID, userID string, input CreateModbusRegisterInput) (*ModbusRegister, error) {
 	if err := s.validateProjectConnectionAndUser(ctx, projectID, connectionID, userID); err != nil {

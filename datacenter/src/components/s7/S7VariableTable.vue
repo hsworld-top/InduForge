@@ -1,73 +1,104 @@
 <template>
-  <el-table
-    class="s7-variable-table"
-    :data="variables"
-    :loading="loading"
-    height="100%"
-    row-key="id"
-    highlight-current-row
-    :row-class-name="rowClassName"
-    empty-text="暂无 S7 变量"
-    @row-click="(row) => $emit('select', row)"
-  >
-    <el-table-column label="变量名" min-width="150">
-      <template #default="{ row }">
-        <div class="s7-variable-table__name">
-          <strong :title="row.name">{{ row.name }}</strong>
-          <span :title="row.code">{{ row.code }}</span>
-        </div>
-      </template>
-    </el-table-column>
-    <el-table-column label="地址" min-width="138">
-      <template #default="{ row }">
-        <div class="s7-variable-table__address">
-          <strong :title="row.normalizedAddress || row.addressText">{{ row.normalizedAddress || row.addressText }}</strong>
-          <span :title="`${row.area} ${formatByteRange(row)}`">{{ row.area }} {{ formatByteRange(row) }}</span>
-        </div>
-      </template>
-    </el-table-column>
-    <el-table-column label="类型" width="84">
-      <template #default="{ row }">
-        <span class="s7-variable-table__pill">{{ row.dataType }}</span>
-      </template>
-    </el-table-column>
-    <el-table-column label="字节范围" width="108">
-      <template #default="{ row }">{{ formatByteRange(row) }}</template>
-    </el-table-column>
-    <el-table-column label="数据点" min-width="180">
-      <template #default="{ row }">
-        <span class="s7-variable-table__path" :title="row.datapointPath || ''">{{ row.datapointPath || '-' }}</span>
-      </template>
-    </el-table-column>
-    <el-table-column label="最近值" width="96">
-      <template #default="{ row }"><span class="s7-variable-table__value" :title="formatValue(row.lastValue)">{{ formatValue(row.lastValue) }}</span></template>
-    </el-table-column>
-    <el-table-column label="质量" width="86">
-      <template #default="{ row }">
-        <el-tag size="small" :type="row.quality === 'Good' || row.quality === 'good' ? 'success' : 'info'">{{ row.quality || 'unknown' }}</el-tag>
-      </template>
-    </el-table-column>
-    <el-table-column label="周期" width="82">
-      <template #default="{ row }">{{ row.pollIntervalMs }}ms</template>
-    </el-table-column>
-    <el-table-column label="状态" width="86">
-      <template #default="{ row }">
-        <el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{ row.status }}</el-tag>
-      </template>
-    </el-table-column>
-    <el-table-column label="操作" width="92" fixed="right">
-      <template #default="{ row }">
-        <div class="s7-variable-table__actions">
-          <button type="button" title="编辑" aria-label="编辑" @click.stop="$emit('edit', row)">
-            <IconTablerPencil />
-          </button>
-          <button type="button" title="删除" aria-label="删除" @click.stop="$emit('delete', row)">
-            <IconTablerTrash />
-          </button>
-        </div>
-      </template>
-    </el-table-column>
-  </el-table>
+  <div class="s7-variable-table">
+    <el-table
+      class="s7-variable-table__grid"
+      :data="variables"
+      :loading="loading"
+      height="100%"
+      row-key="id"
+      highlight-current-row
+      :row-class-name="rowClassName"
+      empty-text="暂无 S7 变量"
+      @row-click="(row) => $emit('select', row)"
+    >
+      <el-table-column label="变量名" min-width="150">
+        <template #default="{ row }">
+          <div class="s7-variable-table__name">
+            <strong :title="row.name">{{ row.name }}</strong>
+            <span :title="row.code">{{ row.code }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="地址" min-width="138">
+        <template #default="{ row }">
+          <div class="s7-variable-table__address">
+            <strong :title="row.normalizedAddress || row.addressText">{{
+              row.normalizedAddress || row.addressText
+            }}</strong>
+            <span :title="`${row.area} ${formatByteRange(row)}`"
+              >{{ row.area }} {{ formatByteRange(row) }}</span
+            >
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="类型" width="84">
+        <template #default="{ row }">
+          <span class="s7-variable-table__pill">{{ row.dataType }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="字节范围" width="108">
+        <template #default="{ row }">{{ formatByteRange(row) }}</template>
+      </el-table-column>
+      <el-table-column label="数据点" min-width="180">
+        <template #default="{ row }">
+          <span class="s7-variable-table__path" :title="row.datapointPath || ''">{{
+            row.datapointPath || '-'
+          }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="最近值" width="96">
+        <template #default="{ row }"
+          ><span class="s7-variable-table__value" :title="formatValue(row.lastValue)">{{
+            formatValue(row.lastValue)
+          }}</span></template
+        >
+      </el-table-column>
+      <el-table-column label="质量" width="86">
+        <template #default="{ row }">
+          <el-tag
+            size="small"
+            :type="row.quality === 'Good' || row.quality === 'good' ? 'success' : 'info'"
+            >{{ row.quality || 'unknown' }}</el-tag
+          >
+        </template>
+      </el-table-column>
+      <el-table-column label="周期" width="82">
+        <template #default="{ row }">{{ row.pollIntervalMs }}ms</template>
+      </el-table-column>
+      <el-table-column label="状态" width="86">
+        <template #default="{ row }">
+          <el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{
+            row.status
+          }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="92" fixed="right">
+        <template #default="{ row }">
+          <div class="s7-variable-table__actions">
+            <button type="button" title="编辑" aria-label="编辑" @click.stop="$emit('edit', row)">
+              <IconTablerPencil />
+            </button>
+            <button type="button" title="删除" aria-label="删除" @click.stop="$emit('delete', row)">
+              <IconTablerTrash />
+            </button>
+          </div>
+        </template>
+      </el-table-column>
+    </el-table>
+    <div class="s7-variable-table__pagination">
+      <el-pagination
+        :current-page="page"
+        :page-size="pageSize"
+        :page-sizes="[20, 50, 100]"
+        :total="total"
+        background
+        layout="total, sizes, prev, pager, next, jumper"
+        small
+        @current-change="$emit('page-change', $event)"
+        @size-change="$emit('page-size-change', $event)"
+      />
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -79,17 +110,25 @@ const props = defineProps<{
   variables: S7Variable[]
   loading?: boolean
   selectedVariableId?: string
+  page: number
+  pageSize: number
+  total: number
 }>()
 
 defineEmits<{
   (event: 'select', variable: S7Variable): void
   (event: 'edit', variable: S7Variable): void
   (event: 'delete', variable: S7Variable): void
+  (event: 'page-change', page: number): void
+  (event: 'page-size-change', pageSize: number): void
 }>()
 
 const formatByteRange = (row: S7Variable) => {
   const end = row.byteOffset + row.readLength - 1
-  const db = row.area === 'DB' && row.dbNumber !== null && row.dbNumber !== undefined ? `DB${row.dbNumber} ` : ''
+  const db =
+    row.area === 'DB' && row.dbNumber !== null && row.dbNumber !== undefined
+      ? `DB${row.dbNumber} `
+      : ''
   return `${db}${row.byteOffset}-${end}`
 }
 const formatValue = (value: unknown) => {
@@ -104,11 +143,18 @@ const rowClassName = ({ row }: { row: S7Variable }) =>
 <style scoped>
 .s7-variable-table {
   flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
-.s7-variable-table :deep(.el-table__row) {
+.s7-variable-table__grid {
+  flex: 1;
+  min-height: 0;
+}
+.s7-variable-table__grid :deep(.el-table__row) {
   cursor: pointer;
 }
-.s7-variable-table :deep(.s7-variable-table__row--selected td) {
+.s7-variable-table__grid :deep(.s7-variable-table__row--selected td) {
   background: color-mix(in oklch, var(--dc-primary) 8%, var(--dc-surface-raised));
 }
 .s7-variable-table__name,
@@ -167,5 +213,14 @@ const rowClassName = ({ row }: { row: S7Variable }) =>
 .s7-variable-table__actions button:hover {
   border-color: color-mix(in oklch, var(--dc-primary) 28%, var(--dc-border));
   color: var(--dc-primary);
+}
+.s7-variable-table__pagination {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 6px 12px;
+  border-top: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
 }
 </style>

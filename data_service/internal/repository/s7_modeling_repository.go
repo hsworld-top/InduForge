@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -476,6 +477,58 @@ func (r *S7ModelingRepository) ListVariables(ctx context.Context, projectID, con
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 S7 变量失败", err)
 	}
 	return result, nil
+}
+
+// ListVariablesPage 返回当前分组下的一页 S7 变量，并同时返回匹配总数。
+func (r *S7ModelingRepository) ListVariablesPage(ctx context.Context, projectID, connectionID string, groupID *string, page, pageSize int) ([]S7VariableRecord, int, error) {
+	where := "v.project_id = $1 AND v.connection_id = $2"
+	args := []any{projectID, connectionID}
+	if groupID != nil {
+		where += " AND v.group_id = $3"
+		args = append(args, groupID)
+	}
+
+	var total int
+	if err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM data_s7_variables v WHERE "+where, args...).Scan(&total); err != nil {
+		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "统计 S7 变量失败", err)
+	}
+
+	limitIndex := len(args) + 1
+	offsetIndex := len(args) + 2
+	queryArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
+	rows, err := r.pool.Query(ctx, fmt.Sprintf(`
+		SELECT v.id, v.project_id, v.connection_id, v.group_id, v.name, v.code, v.description,
+		       v.area, v.db_number, v.byte_offset, v.bit_offset, v.address_text, v.normalized_address,
+		       v.address_type, v.read_length, v.data_type, v.length, v.array_length, v.byte_order,
+		       v.word_order, v.scale, v.offset_value, v.unit, v.poll_interval_ms, v.quality_rule,
+		       v.metadata, v.last_value, v.quality, v.last_updated_at, v.sort_order, v.status,
+		       dp.id, dp.path, dp.status, v.created_at, v.updated_at
+		FROM data_s7_variables v
+		LEFT JOIN data_points dp
+		  ON dp.project_id = v.project_id
+		 AND dp.source_type = 's7.variable'
+		 AND dp.source_id = v.id
+		WHERE %s
+		ORDER BY v.sort_order ASC, v.created_at ASC
+		LIMIT $%d OFFSET $%d
+	`, where, limitIndex, offsetIndex), queryArgs...)
+	if err != nil {
+		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 S7 变量分页失败", err)
+	}
+	defer rows.Close()
+
+	result := make([]S7VariableRecord, 0)
+	for rows.Next() {
+		record, scanErr := scanS7VariableRecord(rows)
+		if scanErr != nil {
+			return nil, 0, scanErr
+		}
+		result = append(result, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 S7 变量分页失败", err)
+	}
+	return result, total, nil
 }
 
 // GetVariable 按连接和变量 ID 读取 S7 变量。

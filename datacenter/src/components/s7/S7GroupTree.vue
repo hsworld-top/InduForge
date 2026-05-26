@@ -6,17 +6,30 @@
     </div>
     <div class="s7-group-tree__toolbar">
       <el-input v-model="keyword" size="small" placeholder="搜索变量组" clearable />
-      <button type="button" class="s7-group-tree__icon-action" title="新建变量组" aria-label="新建变量组" @click="$emit('create')">
+      <button
+        type="button"
+        class="s7-group-tree__icon-action"
+        title="新建变量组"
+        aria-label="新建变量组"
+        @click="$emit('create')"
+      >
         <IconTablerFolderPlus />
       </button>
     </div>
-    <button type="button" class="s7-group-tree__item s7-group-tree__all" :class="{ 'is-active': !selectedGroupId }" @click="$emit('select', '')">
+    <button
+      type="button"
+      class="s7-group-tree__item s7-group-tree__all"
+      :class="{ 'is-active': !selectedGroupId }"
+      @click="$emit('select', '')"
+    >
       <IconTablerStack2 />
       <span>全部变量</span>
-      <em>{{ variables.length }}</em>
+      <em>{{ !selectedGroupId ? total : '' }}</em>
     </button>
     <div class="s7-group-tree__list">
-      <div v-if="filteredGroups.length === 0" class="s7-group-tree__empty">{{ keyword ? '没有匹配的变量组' : '暂无变量组' }}</div>
+      <div v-if="filteredGroups.length === 0" class="s7-group-tree__empty">
+        {{ keyword ? '没有匹配的变量组' : '暂无变量组' }}
+      </div>
       <div v-for="group in filteredGroups" :key="group.id" class="s7-group-tree__row">
         <button
           type="button"
@@ -27,7 +40,7 @@
         >
           <IconTablerFolder />
           <span>{{ group.name }}</span>
-          <em>{{ countByGroup[group.id] || 0 }}</em>
+          <em>{{ selectedGroupId === group.id ? total : '' }}</em>
         </button>
         <div class="s7-group-tree__actions">
           <el-tooltip content="编辑变量组" placement="top">
@@ -44,7 +57,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { S7Variable, S7VariableGroup } from './types'
+import type { S7VariableGroup } from './types'
 import IconTablerEdit from '~icons/tabler/edit'
 import IconTablerFolder from '~icons/tabler/folder'
 import IconTablerFolderPlus from '~icons/tabler/folder-plus'
@@ -53,8 +66,8 @@ import IconTablerTrash from '~icons/tabler/trash'
 
 const props = defineProps<{
   groups: S7VariableGroup[]
-  variables: S7Variable[]
   selectedGroupId: string
+  total?: number
 }>()
 
 defineEmits<{
@@ -72,21 +85,18 @@ const treeGroups = computed(() => {
     children.set(parent, [...(children.get(parent) || []), group])
   })
   const walk = (parentId = '', depth = 0): Array<S7VariableGroup & { depth: number }> =>
-    (children.get(parentId) || []).flatMap((group) => [{ ...group, depth }, ...walk(group.id, depth + 1)])
+    (children.get(parentId) || []).flatMap((group) => [
+      { ...group, depth },
+      ...walk(group.id, depth + 1),
+    ])
   return walk()
 })
 const filteredGroups = computed(() => {
   const text = keyword.value.trim().toLowerCase()
   if (!text) return treeGroups.value
-  return treeGroups.value.filter((group) => [group.name, group.code].some((value) => value.toLowerCase().includes(text)))
-})
-const countByGroup = computed(() => {
-  const result: Record<string, number> = {}
-  for (const item of props.variables) {
-    if (!item.groupId) continue
-    result[item.groupId] = (result[item.groupId] || 0) + 1
-  }
-  return result
+  return treeGroups.value.filter((group) =>
+    [group.name, group.code].some((value) => value.toLowerCase().includes(text)),
+  )
 })
 </script>
 

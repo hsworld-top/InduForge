@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -304,6 +305,58 @@ func (r *ModbusModelingRepository) ListRegisters(ctx context.Context, projectID,
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 Modbus 变量失败", err)
 	}
 	return result, nil
+}
+
+// ListRegistersPage 返回当前分组下的一页 Modbus 变量，并同时返回匹配总数。
+func (r *ModbusModelingRepository) ListRegistersPage(ctx context.Context, projectID, connectionID string, groupID *string, page, pageSize int) ([]ModbusRegisterRecord, int, error) {
+	where := "r.project_id = $1 AND r.connection_id = $2"
+	args := []any{projectID, connectionID}
+	if groupID != nil {
+		where += " AND r.group_id = $3"
+		args = append(args, groupID)
+	}
+
+	var total int
+	if err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM data_modbus_registers r WHERE "+where, args...).Scan(&total); err != nil {
+		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "统计 Modbus 变量失败", err)
+	}
+
+	limitIndex := len(args) + 1
+	offsetIndex := len(args) + 2
+	queryArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
+	rows, err := r.pool.Query(ctx, fmt.Sprintf(`
+		SELECT r.id, r.project_id, r.connection_id, r.group_id, r.name, r.code,
+		       r.unit_id, r.area, r.address, r.address_base, r.protocol_address, r.quantity,
+		       r.data_type, r.byte_order, r.word_order, r.bit_index, r.scale, r.offset_value,
+		       r.unit, r.poll_interval_ms, r.timeout_ms, r.retry_count, r.access_level,
+		       r.description, r.sort_order, r.status, dp.id, dp.path, dp.status,
+		       r.created_at, r.updated_at
+		FROM data_modbus_registers r
+		LEFT JOIN data_points dp
+		  ON dp.project_id = r.project_id
+		 AND dp.source_type = 'modbus.register'
+		 AND dp.source_id = r.id
+		WHERE %s
+		ORDER BY r.sort_order ASC, r.created_at ASC
+		LIMIT $%d OFFSET $%d
+	`, where, limitIndex, offsetIndex), queryArgs...)
+	if err != nil {
+		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 Modbus 变量分页失败", err)
+	}
+	defer rows.Close()
+
+	result := make([]ModbusRegisterRecord, 0)
+	for rows.Next() {
+		record, scanErr := scanModbusRegisterRecord(rows)
+		if scanErr != nil {
+			return nil, 0, scanErr
+		}
+		result = append(result, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 Modbus 变量分页失败", err)
+	}
+	return result, total, nil
 }
 
 // GetRegister 按项目和变量 ID 读取 Modbus 变量。

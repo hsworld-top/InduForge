@@ -18,14 +18,16 @@
             <span class="modbus-workbench__connect-label is-default">
               {{ session.connected.value ? '已连接' : '连接' }}
             </span>
-            <span v-if="session.connected.value" class="modbus-workbench__connect-label is-hover">断开</span>
+            <span v-if="session.connected.value" class="modbus-workbench__connect-label is-hover"
+              >断开</span
+            >
           </button>
         </template>
       </WorkbenchSourceHeader>
       <ModbusGroupTree
         :groups="groups"
-        :registers="registers"
         :selected-group-id="selectedGroupId"
+        :total="registerPagination.total"
         @select="selectGroup"
         @create="openCreateGroup"
         @edit="openEditGroup"
@@ -33,65 +35,95 @@
       />
     </aside>
 
-      <main class="modbus-workbench__main">
-        <div class="modbus-workbench__bar">
-          <div class="modbus-workbench__title">
-            <div>
-              <strong>{{ currentGroup?.name || '全部变量' }}</strong>
-              <span>{{ filteredRegisters.length }} 个变量 · 自动同步 modbus.register 数据点</span>
-            </div>
-            <div class="modbus-workbench__metrics">
-              <span><b>{{ readPlanEstimate.unitCount }}</b>从站</span>
-              <span><b>{{ readPlanEstimate.readCount }}</b>读取</span>
-              <span><b>{{ readPlanEstimate.readsPerSecond.toFixed(2) }}</b>reads/s</span>
-            </div>
-          </div>
-          <div class="modbus-workbench__actions">
-            <button type="button" class="modbus-workbench__icon-action" :title="importActionTitle" :aria-label="importActionTitle" @click="importVisible = true">
-              <IconTablerUpload />
-            </button>
-            <button type="button" class="modbus-workbench__icon-action is-primary" title="新建变量" aria-label="新建变量" @click="openCreateRegister">
-              <IconTablerPlus />
-            </button>
-            <button
-              type="button"
-              class="modbus-workbench__icon-action"
-              :disabled="!session.connected.value"
-              :title="previewActionTitle"
-              :aria-label="previewActionTitle"
-              @click="openPreview"
-            >
-              <IconTablerActivityHeartbeat />
-            </button>
-            <button type="button" class="modbus-workbench__icon-action" :title="validationActionTitle" :aria-label="validationActionTitle" @click="runValidation">
-              <IconTablerChecklist />
-            </button>
-            <button type="button" class="modbus-workbench__icon-action" :title="readPlanActionTitle" :aria-label="readPlanActionTitle" @click="openReadPlan">
-              <IconTablerRoute />
-            </button>
-            <button type="button" class="modbus-workbench__icon-action" title="刷新" aria-label="刷新" @click="reloadAll">
-              <IconTablerRefresh />
-            </button>
-          </div>
-          <el-input v-model="registerKeyword" class="modbus-workbench__search" size="small" placeholder="搜索变量" clearable />
+    <main class="modbus-workbench__main">
+      <div class="modbus-workbench__bar">
+        <div class="modbus-workbench__actions">
+          <button
+            type="button"
+            class="modbus-workbench__icon-action"
+            :title="importActionTitle"
+            :aria-label="importActionTitle"
+            @click="importVisible = true"
+          >
+            <IconTablerUpload />
+          </button>
+          <button
+            type="button"
+            class="modbus-workbench__icon-action is-primary"
+            title="新建变量"
+            aria-label="新建变量"
+            @click="openCreateRegister"
+          >
+            <IconTablerPlus />
+          </button>
+          <button
+            type="button"
+            class="modbus-workbench__icon-action"
+            :disabled="!session.connected.value"
+            :title="previewActionTitle"
+            :aria-label="previewActionTitle"
+            @click="openPreview"
+          >
+            <IconTablerActivityHeartbeat />
+          </button>
+          <button
+            type="button"
+            class="modbus-workbench__icon-action"
+            :title="validationActionTitle"
+            :aria-label="validationActionTitle"
+            @click="runValidation"
+          >
+            <IconTablerChecklist />
+          </button>
+          <button
+            type="button"
+            class="modbus-workbench__icon-action"
+            :title="readPlanActionTitle"
+            :aria-label="readPlanActionTitle"
+            @click="openReadPlan"
+          >
+            <IconTablerRoute />
+          </button>
+          <button
+            type="button"
+            class="modbus-workbench__icon-action"
+            title="刷新"
+            aria-label="刷新"
+            @click="reloadAll"
+          >
+            <IconTablerRefresh />
+          </button>
         </div>
-        <ModbusRegisterTable
-          :registers="filteredRegisters"
-          :loading="loading"
-          :selected-register-id="selectedRegisterId"
-          @select="selectRegister"
-          @edit="openEditRegister"
-          @delete="removeRegister"
+        <el-input
+          v-model="registerKeyword"
+          class="modbus-workbench__search"
+          size="small"
+          placeholder="搜索变量"
+          clearable
         />
-      </main>
-
-      <ModbusInspectorPanel
-        :group="currentGroup"
-        :register="selectedRegister"
-        :registers="registers"
-        :issues="scopedValidationIssues"
-        :estimate="readPlanEstimate"
+      </div>
+      <ModbusRegisterTable
+        :registers="filteredRegisters"
+        :loading="loading"
+        :selected-register-id="selectedRegisterId"
+        :page="registerPagination.page"
+        :page-size="registerPagination.pageSize"
+        :total="registerPagination.total"
+        @select="selectRegister"
+        @edit="openEditRegister"
+        @delete="removeRegister"
+        @page-change="changeRegisterPage"
+        @page-size-change="changeRegisterPageSize"
       />
+    </main>
+
+    <ModbusInspectorPanel
+      :group="currentGroup"
+      :register="selectedRegister"
+      :registers="registers"
+      :issues="scopedValidationIssues"
+      :estimate="readPlanEstimate"
+    />
 
     <ModbusGroupDialog
       v-model="groupDialogVisible"
@@ -111,7 +143,11 @@
       @submit="saveRegister"
     />
     <ModbusImportDialog v-model="importVisible" :loading="saving" @submit="importRegisters" />
-    <ModbusPreviewDialog v-model="previewVisible" :registers="previewRegisters" :diagnostics="previewDiagnostics" />
+    <ModbusPreviewDialog
+      v-model="previewVisible"
+      :registers="previewRegisters"
+      :diagnostics="previewDiagnostics"
+    />
     <ModbusValidationDrawer
       v-model="validationVisible"
       :issues="scopedValidationIssues"
@@ -179,6 +215,7 @@ const emptyEstimate = (): ModbusReadPlanEstimate => ({
 const groups = ref<ModbusRegisterGroup[]>([])
 const registers = ref<ModbusRegister[]>([])
 const readPlanEstimate = ref<ModbusReadPlanEstimate>(emptyEstimate())
+const registerPagination = ref({ page: 1, pageSize: 20, total: 0, totalPages: 0 })
 const loading = ref(false)
 const saving = ref(false)
 const selectedGroupId = ref('')
@@ -200,12 +237,14 @@ const readPlanVisible = ref(false)
 
 const session = useProtocolDevSession({
   create: () => dataAPI.createModbusDevSession(props.projectId, props.connection.id),
-  close: (sessionId: string) => dataAPI.closeModbusDevSession(props.projectId, props.connection.id, sessionId),
+  close: (sessionId: string) =>
+    dataAPI.closeModbusDevSession(props.projectId, props.connection.id, sessionId),
 })
 
 const config = computed(() => props.connection.config || {})
 const endpointText = computed(() => {
-  if (config.value.mode === 'rtu') return String(config.value.serialConfig?.port || 'RTU 串口未配置')
+  if (config.value.mode === 'rtu')
+    return String(config.value.serialConfig?.port || 'RTU 串口未配置')
   return `${config.value.host || '未配置 host'}:${config.value.port || 502}`
 })
 const sourceMetaRows = computed(() => [
@@ -213,8 +252,12 @@ const sourceMetaRows = computed(() => [
   { label: '端点', value: endpointText.value },
   { label: '默认从站', value: String(config.value.slaveId ?? 1) },
 ])
-const currentGroup = computed(() => groups.value.find((group) => group.id === selectedGroupId.value) || null)
-const selectedRegister = computed(() => registers.value.find((item) => item.id === selectedRegisterId.value) || null)
+const currentGroup = computed(
+  () => groups.value.find((group) => group.id === selectedGroupId.value) || null,
+)
+const selectedRegister = computed(
+  () => registers.value.find((item) => item.id === selectedRegisterId.value) || null,
+)
 const importActionTitle = computed(() =>
   currentGroup.value ? `导入到「${currentGroup.value.name}」` : '导入到未分组',
 )
@@ -245,7 +288,11 @@ const scopedValidationIssues = computed(() => {
     return validationIssues.value.filter((item) => item.registerId === selectedRegisterId.value)
   }
   if (selectedGroupId.value) {
-    const ids = new Set(registers.value.filter((item) => item.groupId === selectedGroupId.value).map((item) => item.id))
+    const ids = new Set(
+      registers.value
+        .filter((item) => item.groupId === selectedGroupId.value)
+        .map((item) => item.id),
+    )
     return validationIssues.value.filter((item) => item.registerId && ids.has(item.registerId))
   }
   return validationIssues.value
@@ -257,14 +304,19 @@ const filteredRegisters = computed(() => {
     const matched =
       !text ||
       [item.name, item.code, item.datapointPath || '', item.area, item.address].some((value) =>
-        String(value || '').toLowerCase().includes(text),
+        String(value || '')
+          .toLowerCase()
+          .includes(text),
       )
     return inGroup && matched
   })
 })
 
-const unwrapList = <T,>(response: any): T[] => response?.data?.list || response?.data?.data?.list || []
+const unwrapList = <T,>(response: any): T[] =>
+  response?.data?.list || response?.data?.data?.list || []
 const unwrapData = (response: any) => response?.data?.data || response?.data || {}
+const unwrapPagination = (response: any) =>
+  response?.data?.pagination || response?.data?.data?.pagination
 
 const reloadEstimate = async () => {
   const response = await dataAPI.getModbusReadPlanEstimate(props.projectId, props.connection.id, {
@@ -278,10 +330,18 @@ const reloadAll = async () => {
   try {
     const [groupResponse, registerResponse] = await Promise.all([
       dataAPI.getModbusRegisterGroups(props.projectId, props.connection.id),
-      dataAPI.getModbusRegisters(props.projectId, props.connection.id),
+      dataAPI.getModbusRegisters(props.projectId, props.connection.id, {
+        groupId: selectedGroupId.value || undefined,
+        page: registerPagination.value.page,
+        pageSize: registerPagination.value.pageSize,
+      }),
     ])
     groups.value = unwrapList<ModbusRegisterGroup>(groupResponse)
     registers.value = unwrapList<ModbusRegister>(registerResponse)
+    registerPagination.value = {
+      ...registerPagination.value,
+      ...unwrapPagination(registerResponse),
+    }
     await reloadEstimate()
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '加载 Modbus 建模数据失败'))
@@ -293,7 +353,19 @@ const reloadAll = async () => {
 const selectGroup = async (groupId: string) => {
   selectedGroupId.value = groupId
   selectedRegisterId.value = ''
-  await reloadEstimate()
+  registerPagination.value.page = 1
+  await reloadAll()
+}
+
+const changeRegisterPage = async (page: number) => {
+  registerPagination.value.page = page
+  await reloadAll()
+}
+
+const changeRegisterPageSize = async (pageSize: number) => {
+  registerPagination.value.page = 1
+  registerPagination.value.pageSize = pageSize
+  await reloadAll()
 }
 
 const selectRegister = (register: ModbusRegister) => {
@@ -316,10 +388,15 @@ const saveGroup = async (payload: Record<string, unknown>) => {
   saving.value = true
   try {
     if (groupDialogMode.value === 'edit' && editingGroup.value) {
-      await dataAPI.updateModbusRegisterGroup(props.projectId, props.connection.id, editingGroup.value.id, {
-        ...payload,
-        hasParentId: true,
-      })
+      await dataAPI.updateModbusRegisterGroup(
+        props.projectId,
+        props.connection.id,
+        editingGroup.value.id,
+        {
+          ...payload,
+          hasParentId: true,
+        },
+      )
     } else {
       await dataAPI.createModbusRegisterGroup(props.projectId, props.connection.id, payload)
     }
@@ -333,7 +410,10 @@ const saveGroup = async (payload: Record<string, unknown>) => {
 }
 
 const removeGroup = async (group: ModbusRegisterGroup) => {
-  await ElMessageBox.confirm(`删除寄存器组“${group.name}”？组内变量会移动到未分组。`, '删除寄存器组')
+  await ElMessageBox.confirm(
+    `删除寄存器组“${group.name}”？组内变量会移动到未分组。`,
+    '删除寄存器组',
+  )
   await dataAPI.deleteModbusRegisterGroup(props.projectId, props.connection.id, group.id)
   if (selectedGroupId.value === group.id) selectedGroupId.value = ''
   await reloadAll()
@@ -356,7 +436,12 @@ const saveRegister = async (payload: Record<string, unknown>) => {
   try {
     const saved =
       registerDialogMode.value === 'edit' && editingRegister.value
-        ? await dataAPI.updateModbusRegister(props.projectId, props.connection.id, editingRegister.value.id, payload)
+        ? await dataAPI.updateModbusRegister(
+            props.projectId,
+            props.connection.id,
+            editingRegister.value.id,
+            payload,
+          )
         : await dataAPI.createModbusRegister(props.projectId, props.connection.id, payload)
     registerDialogVisible.value = false
     await reloadAll()
@@ -402,9 +487,14 @@ const openPreview = async () => {
     return
   }
   try {
-    const response = await dataAPI.pollModbusDevSession(props.projectId, props.connection.id, session.sessionId.value, {
-      groupId: selectedGroupId.value || null,
-    })
+    const response = await dataAPI.pollModbusDevSession(
+      props.projectId,
+      props.connection.id,
+      session.sessionId.value,
+      {
+        groupId: selectedGroupId.value || null,
+      },
+    )
     const data = unwrapData(response)
     previewRegisters.value = data.values || []
     previewDiagnostics.value = data.diagnostics || []
@@ -531,65 +621,17 @@ onMounted(reloadAll)
   border-bottom: 1px solid var(--dc-border);
   background: var(--dc-surface-subtle);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 240px;
+  grid-template-columns: auto minmax(180px, 260px);
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
-}
-
-.modbus-workbench__title {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.modbus-workbench__title > div:first-child {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.modbus-workbench__bar strong {
-  color: var(--dc-text);
-  font-size: 14px;
-  line-height: 18px;
-}
-
-.modbus-workbench__bar span {
-  color: var(--dc-text-muted);
-  font-size: 12px;
-}
-
-.modbus-workbench__metrics {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.modbus-workbench__metrics span {
-  height: 26px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 8px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-raised);
-  color: var(--dc-text-secondary);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.modbus-workbench__metrics b {
-  color: var(--dc-primary);
-  font-size: 12px;
 }
 
 .modbus-workbench__actions {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 
 .modbus-workbench__icon-action {

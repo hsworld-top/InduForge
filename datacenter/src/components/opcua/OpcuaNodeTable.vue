@@ -1,6 +1,7 @@
 <template>
   <div class="opcua-table">
     <el-table
+      class="opcua-table__grid"
       :data="nodes"
       :loading="loading"
       height="100%"
@@ -30,7 +31,9 @@
       </el-table-column>
       <el-table-column prop="datapointPath" label="数据点" min-width="210" show-overflow-tooltip>
         <template #default="{ row }">
-          <span v-if="row.datapointPath" class="opcua-table__datapoint">{{ row.datapointPath }}</span>
+          <span v-if="row.datapointPath" class="opcua-table__datapoint">{{
+            row.datapointPath
+          }}</span>
           <span v-else class="opcua-table__muted">待生成</span>
         </template>
       </el-table-column>
@@ -39,14 +42,22 @@
       </el-table-column>
       <el-table-column label="质量" width="86">
         <template #default="{ row }">
-          <el-tag class="opcua-table__tag" size="small" :type="row.quality === 'good' ? 'success' : 'info'">
+          <el-tag
+            class="opcua-table__tag"
+            size="small"
+            :type="row.quality === 'good' ? 'success' : 'info'"
+          >
             {{ row.quality || 'unknown' }}
           </el-tag>
         </template>
       </el-table-column>
       <el-table-column label="状态" width="86">
         <template #default="{ row }">
-          <el-tag class="opcua-table__tag" size="small" :type="row.status === 'active' ? 'success' : 'warning'">
+          <el-tag
+            class="opcua-table__tag"
+            size="small"
+            :type="row.status === 'active' ? 'success' : 'warning'"
+          >
             {{ row.status || 'active' }}
           </el-tag>
         </template>
@@ -55,11 +66,29 @@
         <template #default="{ row }">
           <div class="opcua-table__actions">
             <el-button text size="small" :icon="IconTablerEdit" @click.stop="$emit('edit', row)" />
-            <el-button text size="small" :icon="IconTablerTrash" @click.stop="$emit('delete', row)" />
+            <el-button
+              text
+              size="small"
+              :icon="IconTablerTrash"
+              @click.stop="$emit('delete', row)"
+            />
           </div>
         </template>
       </el-table-column>
     </el-table>
+    <div class="opcua-table__pagination">
+      <el-pagination
+        :current-page="page"
+        :page-size="pageSize"
+        :page-sizes="[20, 50, 100]"
+        :total="total"
+        background
+        layout="total, sizes, prev, pager, next, jumper"
+        small
+        @current-change="$emit('page-change', $event)"
+        @size-change="$emit('page-size-change', $event)"
+      />
+    </div>
   </div>
 </template>
 
@@ -72,12 +101,17 @@ defineProps<{
   nodes: OpcuaNode[]
   loading: boolean
   selectedNodeId: string
+  page: number
+  pageSize: number
+  total: number
 }>()
 
 defineEmits<{
   (event: 'select', node: OpcuaNode): void
   (event: 'edit', node: OpcuaNode): void
   (event: 'delete', node: OpcuaNode): void
+  (event: 'page-change', page: number): void
+  (event: 'page-size-change', pageSize: number): void
 }>()
 
 const formatValue = (value: unknown) => {
@@ -91,7 +125,14 @@ const formatValue = (value: unknown) => {
 .opcua-table {
   height: 100%;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   background: var(--dc-surface-raised);
+}
+
+.opcua-table__grid {
+  flex: 1;
+  min-height: 0;
 }
 
 .opcua-table :deep(.el-table) {
@@ -176,5 +217,15 @@ const formatValue = (value: unknown) => {
 
 .opcua-table__muted {
   color: var(--dc-text-muted);
+}
+
+.opcua-table__pagination {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 6px 12px;
+  border-top: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
 }
 </style>

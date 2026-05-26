@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -276,6 +277,57 @@ func (r *OpcuaModelingRepository) ListNodes(ctx context.Context, projectID, conn
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 OPC UA 变量失败", err)
 	}
 	return result, nil
+}
+
+// ListNodesPage 返回当前分组下的一页 OPC UA 变量，并同时返回匹配总数。
+func (r *OpcuaModelingRepository) ListNodesPage(ctx context.Context, projectID, connectionID string, groupID *string, page, pageSize int) ([]OpcuaNodeRecord, int, error) {
+	where := "n.project_id = $1 AND n.connection_id = $2"
+	args := []any{projectID, connectionID}
+	if groupID != nil {
+		where += " AND n.group_id = $3"
+		args = append(args, groupID)
+	}
+
+	var total int
+	if err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM data_opcua_nodes n WHERE "+where, args...).Scan(&total); err != nil {
+		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "统计 OPC UA 变量失败", err)
+	}
+
+	limitIndex := len(args) + 1
+	offsetIndex := len(args) + 2
+	queryArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
+	rows, err := r.pool.Query(ctx, fmt.Sprintf(`
+		SELECT n.id, n.project_id, n.connection_id, n.group_id, n.name, n.code, n.node_id,
+		       n.browse_name, n.display_name, n.data_type, n.unit, n.sampling_ms, n.deadband,
+		       n.access_level, n.description, n.sort_order, n.status,
+		       dp.id, dp.path, dp.status,
+		       n.created_at, n.updated_at
+		FROM data_opcua_nodes n
+		LEFT JOIN data_points dp
+		  ON dp.project_id = n.project_id
+		 AND dp.source_type = 'opcua.node'
+		 AND dp.source_id = n.id
+		WHERE %s
+		ORDER BY n.sort_order ASC, n.created_at ASC
+		LIMIT $%d OFFSET $%d
+	`, where, limitIndex, offsetIndex), queryArgs...)
+	if err != nil {
+		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 OPC UA 变量分页失败", err)
+	}
+	defer rows.Close()
+
+	result := make([]OpcuaNodeRecord, 0)
+	for rows.Next() {
+		record, scanErr := scanOpcuaNodeRecord(rows)
+		if scanErr != nil {
+			return nil, 0, scanErr
+		}
+		result = append(result, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 OPC UA 变量分页失败", err)
+	}
+	return result, total, nil
 }
 
 // GetNode 按项目和变量 ID 读取 OPC UA 变量。

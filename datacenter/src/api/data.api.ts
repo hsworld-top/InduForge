@@ -144,7 +144,7 @@ const normalizeOpcuaListPayload = (payload, legacyKey = '') => {
       : Array.isArray(data)
         ? data
         : []
-  return { list }
+  return { list, pagination: data.pagination }
 }
 
 const normalizeModbusListPayload = normalizeOpcuaListPayload

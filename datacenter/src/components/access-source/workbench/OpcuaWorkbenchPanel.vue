@@ -18,14 +18,16 @@
             <span class="opcua-workbench__connect-label is-default">
               {{ session.connected.value ? '已连接' : '连接' }}
             </span>
-            <span v-if="session.connected.value" class="opcua-workbench__connect-label is-hover">断开</span>
+            <span v-if="session.connected.value" class="opcua-workbench__connect-label is-hover"
+              >断开</span
+            >
           </button>
         </template>
       </WorkbenchSourceHeader>
       <OpcuaGroupTree
         :groups="groups"
-        :nodes="nodes"
         :selected-group-id="selectedGroupId"
+        :total="nodePagination.total"
         @select="selectGroup"
         @create="openCreateGroup"
         @edit="openEditGroup"
@@ -33,85 +35,85 @@
       />
     </aside>
 
-      <main class="opcua-workbench__main">
-        <div class="opcua-workbench__bar">
-          <div class="opcua-workbench__title">
-            <div>
-              <strong>{{ currentGroup?.name || '全部变量' }}</strong>
-              <span>{{ filteredNodes.length }} 个变量，保存后自动同步数据点</span>
-            </div>
-            <div class="opcua-workbench__metrics">
-              <span>{{ activeNodeCount }} active</span>
-              <span>{{ generatedDatapointCount }} dp</span>
-              <span>{{ validationIssues.length }} issues</span>
-            </div>
-          </div>
-          <div class="opcua-workbench__actions">
-            <button
-              type="button"
-              class="opcua-workbench__icon-action"
-              :title="importActionTitle"
-              :aria-label="importActionTitle"
-              @click="importVisible = true"
-            >
-              <IconTablerUpload />
-            </button>
-            <button
-              type="button"
-              class="opcua-workbench__icon-action is-primary"
-              title="新建变量"
-              aria-label="新建变量"
-              @click="openCreateNode"
-            >
-              <IconTablerPlus />
-            </button>
-            <button
-              type="button"
-              class="opcua-workbench__icon-action"
-              :disabled="!session.connected.value"
-              :title="previewActionTitle"
-              :aria-label="previewActionTitle"
-              @click="openPreview"
-            >
-              <IconTablerActivityHeartbeat />
-            </button>
-            <button
-              type="button"
-              class="opcua-workbench__icon-action"
-              :title="validationActionTitle"
-              :aria-label="validationActionTitle"
-              @click="runValidation"
-            >
-              <IconTablerChecklist />
-            </button>
-            <button
-              type="button"
-              class="opcua-workbench__icon-action"
-              title="刷新"
-              aria-label="刷新"
-              @click="reloadAll"
-            >
-              <IconTablerRefresh />
-            </button>
-          </div>
-          <el-input v-model="nodeKeyword" class="opcua-workbench__search" size="small" placeholder="搜索变量" clearable />
+    <main class="opcua-workbench__main">
+      <div class="opcua-workbench__bar">
+        <div class="opcua-workbench__actions">
+          <button
+            type="button"
+            class="opcua-workbench__icon-action"
+            :title="importActionTitle"
+            :aria-label="importActionTitle"
+            @click="importVisible = true"
+          >
+            <IconTablerUpload />
+          </button>
+          <button
+            type="button"
+            class="opcua-workbench__icon-action is-primary"
+            title="新建变量"
+            aria-label="新建变量"
+            @click="openCreateNode"
+          >
+            <IconTablerPlus />
+          </button>
+          <button
+            type="button"
+            class="opcua-workbench__icon-action"
+            :disabled="!session.connected.value"
+            :title="previewActionTitle"
+            :aria-label="previewActionTitle"
+            @click="openPreview"
+          >
+            <IconTablerActivityHeartbeat />
+          </button>
+          <button
+            type="button"
+            class="opcua-workbench__icon-action"
+            :title="validationActionTitle"
+            :aria-label="validationActionTitle"
+            @click="runValidation"
+          >
+            <IconTablerChecklist />
+          </button>
+          <button
+            type="button"
+            class="opcua-workbench__icon-action"
+            title="刷新"
+            aria-label="刷新"
+            @click="reloadAll"
+          >
+            <IconTablerRefresh />
+          </button>
         </div>
-        <OpcuaNodeTable
-          :nodes="filteredNodes"
-          :loading="loading"
-          :selected-node-id="selectedNodeId"
-          @select="selectNode"
-          @edit="openEditNode"
-          @delete="removeNode"
+        <el-input
+          v-model="nodeKeyword"
+          class="opcua-workbench__search"
+          size="small"
+          placeholder="搜索变量"
+          clearable
         />
-      </main>
-
-      <OpcuaInspectorPanel
-        :group="currentGroup"
-        :node="selectedNode"
-        :nodes="nodes"
-        :issues="scopedValidationIssues"
+      </div>
+      <OpcuaNodeTable
+        :nodes="filteredNodes"
+        :loading="loading"
+        :selected-node-id="selectedNodeId"
+        :page="nodePagination.page"
+        :page-size="nodePagination.pageSize"
+        :total="nodePagination.total"
+        @select="selectNode"
+        @edit="openEditNode"
+        @delete="removeNode"
+        @page-change="changeNodePage"
+        @page-size-change="changeNodePageSize"
       />
+    </main>
+
+    <OpcuaInspectorPanel
+      :group="currentGroup"
+      :node="selectedNode"
+      :nodes="nodes"
+      :issues="scopedValidationIssues"
+    />
 
     <OpcuaGroupDialog
       v-model="groupDialogVisible"
@@ -131,7 +133,11 @@
       @submit="saveNode"
     />
     <OpcuaImportDialog v-model="importVisible" :loading="saving" @submit="importNodes" />
-    <OpcuaPreviewDialog v-model="previewVisible" :nodes="previewNodes" :diagnostics="previewDiagnostics" />
+    <OpcuaPreviewDialog
+      v-model="previewVisible"
+      :nodes="previewNodes"
+      :diagnostics="previewDiagnostics"
+    />
     <OpcuaValidationDrawer
       v-model="validationVisible"
       :issues="scopedValidationIssues"
@@ -156,7 +162,12 @@ import OpcuaNodeDialog from '@/components/opcua/OpcuaNodeDialog.vue'
 import OpcuaNodeTable from '@/components/opcua/OpcuaNodeTable.vue'
 import OpcuaPreviewDialog from '@/components/opcua/OpcuaPreviewDialog.vue'
 import OpcuaValidationDrawer from '@/components/opcua/OpcuaValidationDrawer.vue'
-import type { OpcuaNode, OpcuaNodeGroup, OpcuaReadValue, OpcuaValidationIssue } from '@/components/opcua/types'
+import type {
+  OpcuaNode,
+  OpcuaNodeGroup,
+  OpcuaReadValue,
+  OpcuaValidationIssue,
+} from '@/components/opcua/types'
 import IconTablerActivityHeartbeat from '~icons/tabler/activity-heartbeat'
 import IconTablerChecklist from '~icons/tabler/checklist'
 import IconTablerPlus from '~icons/tabler/plus'
@@ -182,6 +193,7 @@ defineEmits<{
 
 const groups = ref<OpcuaNodeGroup[]>([])
 const nodes = ref<OpcuaNode[]>([])
+const nodePagination = ref({ page: 1, pageSize: 20, total: 0, totalPages: 0 })
 const loading = ref(false)
 const saving = ref(false)
 const selectedGroupId = ref('')
@@ -202,19 +214,24 @@ const validationIssues = ref<OpcuaValidationIssue[]>([])
 
 const session = useProtocolDevSession({
   create: () => dataAPI.createOpcuaDevSession(props.projectId, props.connection.id),
-  close: (sessionId: string) => dataAPI.closeOpcuaDevSession(props.projectId, props.connection.id, sessionId),
+  close: (sessionId: string) =>
+    dataAPI.closeOpcuaDevSession(props.projectId, props.connection.id, sessionId),
 })
 
 const config = computed(() => props.connection.config || {})
-const endpointText = computed(() => String(config.value.endpoint || config.value.url || '未配置 endpoint'))
+const endpointText = computed(() =>
+  String(config.value.endpoint || config.value.url || '未配置 endpoint'),
+)
 const sourceMetaRows = computed(() => [
   { label: '类型', value: 'OPC UA' },
   { label: 'Endpoint', value: endpointText.value },
 ])
-const currentGroup = computed(() => groups.value.find((group) => group.id === selectedGroupId.value) || null)
-const selectedNode = computed(() => nodes.value.find((node) => node.id === selectedNodeId.value) || null)
-const activeNodeCount = computed(() => nodes.value.filter((node) => node.status === 'active').length)
-const generatedDatapointCount = computed(() => nodes.value.filter((node) => node.datapointPath).length)
+const currentGroup = computed(
+  () => groups.value.find((group) => group.id === selectedGroupId.value) || null,
+)
+const selectedNode = computed(
+  () => nodes.value.find((node) => node.id === selectedNodeId.value) || null,
+)
 const importActionTitle = computed(() =>
   currentGroup.value ? `导入到「${currentGroup.value.name}」` : '导入到未分组',
 )
@@ -242,7 +259,9 @@ const scopedValidationIssues = computed(() => {
     return validationIssues.value.filter((item) => item.nodeId === selectedNodeId.value)
   }
   if (selectedGroupId.value) {
-    const ids = new Set(nodes.value.filter((node) => node.groupId === selectedGroupId.value).map((node) => node.id))
+    const ids = new Set(
+      nodes.value.filter((node) => node.groupId === selectedGroupId.value).map((node) => node.id),
+    )
     return validationIssues.value.filter((item) => item.nodeId && ids.has(item.nodeId))
   }
   return validationIssues.value
@@ -254,24 +273,34 @@ const filteredNodes = computed(() => {
     const matched =
       !text ||
       [node.name, node.nodeId, node.code, node.datapointPath || ''].some((value) =>
-        String(value || '').toLowerCase().includes(text),
+        String(value || '')
+          .toLowerCase()
+          .includes(text),
       )
     return inGroup && matched
   })
 })
 
-const unwrapList = <T,>(response: any): T[] => response?.data?.list || response?.data?.data?.list || []
+const unwrapList = <T,>(response: any): T[] =>
+  response?.data?.list || response?.data?.data?.list || []
 const unwrapData = (response: any) => response?.data?.data || response?.data || {}
+const unwrapPagination = (response: any) =>
+  response?.data?.pagination || response?.data?.data?.pagination
 
 const reloadAll = async () => {
   loading.value = true
   try {
     const [groupResponse, nodeResponse] = await Promise.all([
       dataAPI.getOpcuaNodeGroups(props.projectId, props.connection.id),
-      dataAPI.getOpcuaNodes(props.projectId, props.connection.id),
+      dataAPI.getOpcuaNodes(props.projectId, props.connection.id, {
+        groupId: selectedGroupId.value || undefined,
+        page: nodePagination.value.page,
+        pageSize: nodePagination.value.pageSize,
+      }),
     ])
     groups.value = unwrapList<OpcuaNodeGroup>(groupResponse)
     nodes.value = unwrapList<OpcuaNode>(nodeResponse)
+    nodePagination.value = { ...nodePagination.value, ...unwrapPagination(nodeResponse) }
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '加载 OPC UA 建模数据失败'))
   } finally {
@@ -279,9 +308,22 @@ const reloadAll = async () => {
   }
 }
 
-const selectGroup = (groupId: string) => {
+const selectGroup = async (groupId: string) => {
   selectedGroupId.value = groupId
   selectedNodeId.value = ''
+  nodePagination.value.page = 1
+  await reloadAll()
+}
+
+const changeNodePage = async (page: number) => {
+  nodePagination.value.page = page
+  await reloadAll()
+}
+
+const changeNodePageSize = async (pageSize: number) => {
+  nodePagination.value.page = 1
+  nodePagination.value.pageSize = pageSize
+  await reloadAll()
 }
 
 const selectNode = (node: OpcuaNode) => {
@@ -304,10 +346,15 @@ const saveGroup = async (payload: Record<string, unknown>) => {
   saving.value = true
   try {
     if (groupDialogMode.value === 'edit' && editingGroup.value) {
-      await dataAPI.updateOpcuaNodeGroup(props.projectId, props.connection.id, editingGroup.value.id, {
-        ...payload,
-        hasParentId: true,
-      })
+      await dataAPI.updateOpcuaNodeGroup(
+        props.projectId,
+        props.connection.id,
+        editingGroup.value.id,
+        {
+          ...payload,
+          hasParentId: true,
+        },
+      )
     } else {
       await dataAPI.createOpcuaNodeGroup(props.projectId, props.connection.id, payload)
     }
@@ -344,7 +391,12 @@ const saveNode = async (payload: Record<string, unknown>) => {
   try {
     const saved =
       nodeDialogMode.value === 'edit' && editingNode.value
-        ? await dataAPI.updateOpcuaNode(props.projectId, props.connection.id, editingNode.value.id, payload)
+        ? await dataAPI.updateOpcuaNode(
+            props.projectId,
+            props.connection.id,
+            editingNode.value.id,
+            payload,
+          )
         : await dataAPI.createOpcuaNode(props.projectId, props.connection.id, payload)
     nodeDialogVisible.value = false
     await reloadAll()
@@ -390,9 +442,14 @@ const openPreview = async () => {
     return
   }
   try {
-    const response = await dataAPI.subscribeOpcuaDevSession(props.projectId, props.connection.id, session.sessionId.value, {
-      groupId: selectedGroupId.value || null,
-    })
+    const response = await dataAPI.subscribeOpcuaDevSession(
+      props.projectId,
+      props.connection.id,
+      session.sessionId.value,
+      {
+        groupId: selectedGroupId.value || null,
+      },
+    )
     const data = unwrapData(response)
     previewNodes.value = data.values || []
     previewDiagnostics.value = data.diagnostics || []
@@ -514,46 +571,17 @@ onMounted(reloadAll)
   border-bottom: 1px solid var(--dc-border);
   background: var(--dc-surface-subtle);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 230px;
+  grid-template-columns: auto minmax(180px, 260px);
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
-}
-
-.opcua-workbench__title {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.opcua-workbench__title > div:first-child {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.opcua-workbench__bar strong {
-  color: var(--dc-text);
-  font-size: 14px;
-  line-height: 18px;
-}
-
-.opcua-workbench__bar span {
-  color: var(--dc-text-muted);
-  font-size: 12px;
-}
-
-.opcua-workbench__metrics {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
 }
 
 .opcua-workbench__actions {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 
 .opcua-workbench__icon-action {
@@ -587,19 +615,6 @@ onMounted(reloadAll)
 .opcua-workbench__icon-action svg {
   width: 15px;
   height: 15px;
-}
-
-.opcua-workbench__metrics span {
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 7px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-raised);
-  color: var(--dc-text-secondary);
-  font-size: 11px;
-  font-weight: 700;
 }
 
 .opcua-workbench__search {

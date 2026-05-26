@@ -113,15 +113,24 @@ func (h *S7ModelingHandler) ListVariables(w http.ResponseWriter, r *http.Request
 	if _, err := requireClaims(r); err != nil {
 		return err
 	}
+	query := r.URL.Query()
 	var groupID *string
-	if value := r.URL.Query().Get("groupId"); value != "" {
+	if value := query.Get("groupId"); value != "" {
 		groupID = &value
 	}
-	result, err := h.service.ListVariables(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), groupID)
+	page, err := parseOptionalInt(query.Get("page"), 1, "page")
+	if err != nil {
+		return err
+	}
+	pageSize, err := parseOptionalInt(firstNonEmpty(query.Get("pageSize"), query.Get("limit")), 20, "pageSize")
+	if err != nil {
+		return err
+	}
+	result, err := h.service.ListVariablesPage(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), groupID, page, pageSize)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"list": result})
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
 }
 

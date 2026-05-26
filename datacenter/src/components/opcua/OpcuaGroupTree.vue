@@ -25,7 +25,7 @@
     >
       <IconTablerStack2 />
       <span>全部变量</span>
-      <em class="opcua-groups__count">{{ nodes.length }}</em>
+      <em class="opcua-groups__count">{{ selectedGroupId === '' ? total : '' }}</em>
     </button>
 
     <div class="opcua-groups__tree">
@@ -42,7 +42,7 @@
         >
           <IconTablerFolder />
           <span>{{ group.name }}</span>
-          <em class="opcua-groups__count">{{ countByGroup[group.id] || 0 }}</em>
+          <em class="opcua-groups__count">{{ selectedGroupId === group.id ? total : '' }}</em>
         </button>
         <div class="opcua-groups__actions">
           <el-button text size="small" :icon="IconTablerEdit" @click="$emit('edit', group)" />
@@ -60,12 +60,12 @@ import IconTablerFolder from '~icons/tabler/folder'
 import IconTablerFolderPlus from '~icons/tabler/folder-plus'
 import IconTablerStack2 from '~icons/tabler/stack-2'
 import IconTablerTrash from '~icons/tabler/trash'
-import type { OpcuaNode, OpcuaNodeGroup } from './types'
+import type { OpcuaNodeGroup } from './types'
 
 const props = defineProps<{
   groups: OpcuaNodeGroup[]
-  nodes: OpcuaNode[]
   selectedGroupId: string
+  total?: number
 }>()
 
 defineEmits<{
@@ -76,13 +76,6 @@ defineEmits<{
 }>()
 
 const keyword = ref('')
-
-const countByGroup = computed(() =>
-  props.nodes.reduce<Record<string, number>>((acc, node) => {
-    if (node.groupId) acc[node.groupId] = (acc[node.groupId] || 0) + 1
-    return acc
-  }, {}),
-)
 
 const treeGroups = computed(() => {
   const children = new Map<string, OpcuaNodeGroup[]>()

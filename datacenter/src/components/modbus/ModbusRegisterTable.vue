@@ -1,80 +1,101 @@
 <template>
-  <el-table
-    class="modbus-register-table"
-    :data="registers"
-    :loading="loading"
-    height="100%"
-    row-key="id"
-    highlight-current-row
-    :row-class-name="rowClassName"
-    empty-text="暂无 Modbus 变量"
-    @row-click="(row) => $emit('select', row)"
-  >
-    <el-table-column label="变量名" min-width="150">
-      <template #default="{ row }">
-        <div class="modbus-register-table__name">
-          <strong>{{ row.name }}</strong>
-          <span>{{ row.code }}</span>
-        </div>
-      </template>
-    </el-table-column>
-    <el-table-column label="从站" width="76">
-      <template #default="{ row }">
-        <span class="modbus-register-table__unit">{{ row.unitId }}</span>
-      </template>
-    </el-table-column>
-    <el-table-column label="区域" min-width="128">
-      <template #default="{ row }">
-        <span class="modbus-register-table__area" :data-area="row.area">{{ formatArea(row.area) }}</span>
-      </template>
-    </el-table-column>
-    <el-table-column label="地址" width="126">
-      <template #default="{ row }">
-        <div class="modbus-register-table__address">
-          <strong>{{ row.address }}</strong>
-          <span>协议 {{ row.protocolAddress }}</span>
-        </div>
-      </template>
-    </el-table-column>
-    <el-table-column label="类型" width="92">
-      <template #default="{ row }">
-        <span class="modbus-register-table__type">{{ row.dataType }}</span>
-      </template>
-    </el-table-column>
-    <el-table-column label="字节序" width="86">
-      <template #default="{ row }">{{ row.byteOrder || '-' }}</template>
-    </el-table-column>
-    <el-table-column label="数据点" min-width="170">
-      <template #default="{ row }">
-        <span class="modbus-register-table__path">{{ row.datapointPath || '-' }}</span>
-      </template>
-    </el-table-column>
-    <el-table-column label="最近值" width="90">
-      <template #default="{ row }">{{ row.lastValue ?? '-' }}</template>
-    </el-table-column>
-    <el-table-column label="质量" width="84">
-      <template #default="{ row }">
-        <el-tag size="small" :type="row.quality === 'Good' ? 'success' : 'info'">{{ row.quality || 'unknown' }}</el-tag>
-      </template>
-    </el-table-column>
-    <el-table-column label="状态" width="86">
-      <template #default="{ row }">
-        <el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{ row.status }}</el-tag>
-      </template>
-    </el-table-column>
-    <el-table-column label="操作" width="92" fixed="right">
-      <template #default="{ row }">
-        <div class="modbus-register-table__actions">
-          <button type="button" title="编辑" aria-label="编辑" @click.stop="$emit('edit', row)">
-            <IconTablerPencil />
-          </button>
-          <button type="button" title="删除" aria-label="删除" @click.stop="$emit('delete', row)">
-            <IconTablerTrash />
-          </button>
-        </div>
-      </template>
-    </el-table-column>
-  </el-table>
+  <div class="modbus-register-table">
+    <el-table
+      class="modbus-register-table__grid"
+      :data="registers"
+      :loading="loading"
+      height="100%"
+      row-key="id"
+      highlight-current-row
+      :row-class-name="rowClassName"
+      empty-text="暂无 Modbus 变量"
+      @row-click="(row) => $emit('select', row)"
+    >
+      <el-table-column label="变量名" min-width="150">
+        <template #default="{ row }">
+          <div class="modbus-register-table__name">
+            <strong>{{ row.name }}</strong>
+            <span>{{ row.code }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="从站" width="76">
+        <template #default="{ row }">
+          <span class="modbus-register-table__unit">{{ row.unitId }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="区域" min-width="128">
+        <template #default="{ row }">
+          <span class="modbus-register-table__area" :data-area="row.area">{{
+            formatArea(row.area)
+          }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="地址" width="126">
+        <template #default="{ row }">
+          <div class="modbus-register-table__address">
+            <strong>{{ row.address }}</strong>
+            <span>协议 {{ row.protocolAddress }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="类型" width="92">
+        <template #default="{ row }">
+          <span class="modbus-register-table__type">{{ row.dataType }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="字节序" width="86">
+        <template #default="{ row }">{{ row.byteOrder || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="数据点" min-width="170">
+        <template #default="{ row }">
+          <span class="modbus-register-table__path">{{ row.datapointPath || '-' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="最近值" width="90">
+        <template #default="{ row }">{{ row.lastValue ?? '-' }}</template>
+      </el-table-column>
+      <el-table-column label="质量" width="84">
+        <template #default="{ row }">
+          <el-tag size="small" :type="row.quality === 'Good' ? 'success' : 'info'">{{
+            row.quality || 'unknown'
+          }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="状态" width="86">
+        <template #default="{ row }">
+          <el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{
+            row.status
+          }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="92" fixed="right">
+        <template #default="{ row }">
+          <div class="modbus-register-table__actions">
+            <button type="button" title="编辑" aria-label="编辑" @click.stop="$emit('edit', row)">
+              <IconTablerPencil />
+            </button>
+            <button type="button" title="删除" aria-label="删除" @click.stop="$emit('delete', row)">
+              <IconTablerTrash />
+            </button>
+          </div>
+        </template>
+      </el-table-column>
+    </el-table>
+    <div class="modbus-register-table__pagination">
+      <el-pagination
+        :current-page="page"
+        :page-size="pageSize"
+        :page-sizes="[20, 50, 100]"
+        :total="total"
+        background
+        layout="total, sizes, prev, pager, next, jumper"
+        small
+        @current-change="$emit('page-change', $event)"
+        @size-change="$emit('page-size-change', $event)"
+      />
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -86,12 +107,17 @@ const props = defineProps<{
   registers: ModbusRegister[]
   loading?: boolean
   selectedRegisterId?: string
+  page: number
+  pageSize: number
+  total: number
 }>()
 
 defineEmits<{
   (event: 'select', register: ModbusRegister): void
   (event: 'edit', register: ModbusRegister): void
   (event: 'delete', register: ModbusRegister): void
+  (event: 'page-change', page: number): void
+  (event: 'page-size-change', pageSize: number): void
 }>()
 
 const formatArea = (area: string) => {
@@ -111,13 +137,21 @@ const rowClassName = ({ row }: { row: ModbusRegister }) =>
 <style scoped>
 .modbus-register-table {
   flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-.modbus-register-table :deep(.el-table__row) {
+.modbus-register-table__grid {
+  flex: 1;
+  min-height: 0;
+}
+
+.modbus-register-table__grid :deep(.el-table__row) {
   cursor: pointer;
 }
 
-.modbus-register-table :deep(.modbus-register-table__row--selected td) {
+.modbus-register-table__grid :deep(.modbus-register-table__row--selected td) {
   background: color-mix(in oklch, var(--dc-primary) 8%, var(--dc-surface-raised));
 }
 
@@ -210,5 +244,15 @@ const rowClassName = ({ row }: { row: ModbusRegister }) =>
 .modbus-register-table__actions button:hover {
   border-color: color-mix(in oklch, var(--dc-primary) 28%, var(--dc-border));
   color: var(--dc-primary);
+}
+
+.modbus-register-table__pagination {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 6px 12px;
+  border-top: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
 }
 </style>
