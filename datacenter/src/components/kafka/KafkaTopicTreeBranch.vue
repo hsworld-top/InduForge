@@ -1,7 +1,10 @@
 <template>
   <section class="kafka-topic-branch">
     <button type="button" class="kafka-topic-branch__group" @click="expanded = !expanded">
-      <IconTablerChevronRight class="kafka-topic-branch__chevron" :class="{ 'is-open': expanded }" />
+      <IconTablerChevronRight
+        class="kafka-topic-branch__chevron"
+        :class="{ 'is-open': expanded }"
+      />
       <IconTablerFolderOpen v-if="expanded" class="kafka-topic-branch__icon" />
       <IconTablerFolder v-else class="kafka-topic-branch__icon" />
       <span class="kafka-topic-branch__group-name">{{ node.name }}</span>

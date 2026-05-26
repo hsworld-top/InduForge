@@ -1,8 +1,19 @@
 <template>
-  <DcDialog v-model="visible" :title="mode === 'create' ? '新建 Topic 分组' : '编辑 Topic 分组'" width="420px" :close-disabled="loading">
+  <DcDialog
+    v-model="visible"
+    :title="mode === 'create' ? '新建 Topic 分组' : '编辑 Topic 分组'"
+    width="420px"
+    :close-disabled="loading"
+  >
     <el-form label-position="top" class="kafka-topic-group-dialog">
       <el-form-item label="分组名称" required>
-        <el-input v-model="form.name" maxlength="100" show-word-limit placeholder="输入分组名称" @keyup.enter="submit" />
+        <el-input
+          v-model="form.name"
+          maxlength="100"
+          show-word-limit
+          placeholder="输入分组名称"
+          @keyup.enter="submit"
+        />
       </el-form-item>
     </el-form>
 

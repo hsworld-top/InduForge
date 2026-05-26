@@ -46,7 +46,10 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (event: 'samples', payload: { mappingId: string; samples: KafkaPreviewSample[]; preview: KafkaPreview }): void
+  (
+    event: 'samples',
+    payload: { mappingId: string; samples: KafkaPreviewSample[]; preview: KafkaPreview },
+  ): void
 }>()
 
 const loading = ref(false)
@@ -77,7 +80,9 @@ const displayMessages = computed(() => {
   return samples.value
     .filter((sample) => {
       if (!keyword) return true
-      return `${sample.topic || ''} ${sample.key || ''} ${formatPayload(sample.value)}`.toLowerCase().includes(keyword)
+      return `${sample.topic || ''} ${sample.key || ''} ${formatPayload(sample.value)}`
+        .toLowerCase()
+        .includes(keyword)
     })
     .slice(0, displayLimit.value)
     .map((sample) => ({

@@ -31,21 +31,24 @@ describe('kafkaTopicTreeModel', () => {
   })
 
   test('按名称和 topic 过滤树', () => {
-    const tree = buildKafkaTopicTree([], [
-      {
-        id: 'm1',
-        connectionId: 'c1',
-        name: '报警事件',
-        topic: 'alarm.events',
-        description: '',
-        partitionMode: 'all',
-        startPosition: 'latest',
-        decode: 'json',
-        sampleLimit: 100,
-        timeoutMs: 5000,
-        sortOrder: 0,
-      },
-    ])
+    const tree = buildKafkaTopicTree(
+      [],
+      [
+        {
+          id: 'm1',
+          connectionId: 'c1',
+          name: '报警事件',
+          topic: 'alarm.events',
+          description: '',
+          partitionMode: 'all',
+          startPosition: 'latest',
+          decode: 'json',
+          sampleLimit: 100,
+          timeoutMs: 5000,
+          sortOrder: 0,
+        },
+      ],
+    )
     const result = filterKafkaTopicTree(tree.groups, tree.rootMappings, 'alarm')
     expect(result.rootMappings).toHaveLength(1)
   })

@@ -35,7 +35,10 @@
           <el-table-column prop="dataType" label="类型" width="100" />
           <el-table-column label="状态" width="110">
             <template #default="{ row }">
-              <WorkbenchStatusPill :label="row.exists ? '已映射' : '候选'" :tone="row.exists ? 'success' : 'info'" />
+              <WorkbenchStatusPill
+                :label="row.exists ? '已映射' : '候选'"
+                :tone="row.exists ? 'success' : 'info'"
+              />
             </template>
           </el-table-column>
         </el-table>
@@ -48,9 +51,19 @@
         </div>
         <el-table v-loading="loading" :data="fields" height="100%" empty-text="暂无字段映射">
           <el-table-column prop="name" label="名称" min-width="130" show-overflow-tooltip />
-          <el-table-column prop="valuePath" label="字段路径" min-width="150" show-overflow-tooltip />
+          <el-table-column
+            prop="valuePath"
+            label="字段路径"
+            min-width="150"
+            show-overflow-tooltip
+          />
           <el-table-column prop="dataType" label="类型" width="90" />
-          <el-table-column prop="dataPointPath" label="数据点" min-width="180" show-overflow-tooltip>
+          <el-table-column
+            prop="dataPointPath"
+            label="数据点"
+            min-width="180"
+            show-overflow-tooltip
+          >
             <template #default="{ row }">
               {{ row.dataPointPath || '-' }}
             </template>

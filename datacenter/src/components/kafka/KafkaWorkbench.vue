@@ -19,7 +19,13 @@
           </button>
         </template>
         <template #actions>
-          <el-input v-model="filterText" class="kafka-workbench__search" size="small" clearable placeholder="筛选 Topic" />
+          <el-input
+            v-model="filterText"
+            class="kafka-workbench__search"
+            size="small"
+            clearable
+            placeholder="筛选 Topic"
+          />
           <button
             type="button"
             class="workbench-source-header__icon-action is-primary"
@@ -77,11 +83,16 @@
           >
             <IconTablerMessages class="kafka-workbench__tree-item-icon" />
             <el-tooltip :content="mapping.topic" placement="top" :show-after="400">
-              <span class="kafka-workbench__tree-item-name">{{ mapping.name || mapping.topic }}</span>
+              <span class="kafka-workbench__tree-item-name">{{
+                mapping.name || mapping.topic
+              }}</span>
             </el-tooltip>
           </button>
 
-          <div v-if="filteredTree.groups.length === 0 && filteredTree.rootMappings.length === 0" class="kafka-workbench__empty">
+          <div
+            v-if="filteredTree.groups.length === 0 && filteredTree.rootMappings.length === 0"
+            class="kafka-workbench__empty"
+          >
             {{ filterText ? '没有匹配的 Topic' : '暂无 Topic 映射' }}
           </div>
         </template>
@@ -125,7 +136,11 @@
       </div>
     </main>
 
-    <KafkaInspectorPanel :connection="connection" :mapping="selectedMapping" :preview="activePreview" />
+    <KafkaInspectorPanel
+      :connection="connection"
+      :mapping="selectedMapping"
+      :preview="activePreview"
+    />
 
     <KafkaTopicGroupDialog
       v-model="groupDialogVisible"
@@ -164,7 +179,13 @@ import KafkaPreviewPanel from './KafkaPreviewPanel.vue'
 import KafkaTopicGroupDialog from './KafkaTopicGroupDialog.vue'
 import KafkaTopicMappingDialog from './KafkaTopicMappingDialog.vue'
 import KafkaTopicTreeBranch from './KafkaTopicTreeBranch.vue'
-import type { KafkaPreview, KafkaPreviewSample, KafkaTopicGroup, KafkaTopicMapping, KafkaWorkbenchConnection } from './types'
+import type {
+  KafkaPreview,
+  KafkaPreviewSample,
+  KafkaTopicGroup,
+  KafkaTopicMapping,
+  KafkaWorkbenchConnection,
+} from './types'
 
 const props = defineProps<{
   projectId: string
@@ -206,7 +227,9 @@ const sourceMetaRows = computed(() => [
   { label: 'Brokers', value: String(config.value.brokers || '未配置') },
 ])
 const tree = computed(() => buildKafkaTopicTree(groups.value, mappings.value))
-const filteredTree = computed(() => filterKafkaTopicTree(tree.value.groups, tree.value.rootMappings, filterText.value))
+const filteredTree = computed(() =>
+  filterKafkaTopicTree(tree.value.groups, tree.value.rootMappings, filterText.value),
+)
 const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId.value) || null)
 
 const loadWorkbench = async () => {
@@ -316,7 +339,11 @@ const closeTab = (tabId: string) => {
   }
 }
 
-const handlePreviewSamples = (payload: { mappingId: string; samples: KafkaPreviewSample[]; preview: KafkaPreview }) => {
+const handlePreviewSamples = (payload: {
+  mappingId: string
+  samples: KafkaPreviewSample[]
+  preview: KafkaPreview
+}) => {
   const next = new Map(previewSamplesByMapping.value)
   next.set(payload.mappingId, payload.samples)
   previewSamplesByMapping.value = next

@@ -1,5 +1,10 @@
 <template>
-  <DcDialog v-model="visible" :title="mode === 'create' ? '新建 Topic 映射' : '编辑 Topic 映射'" width="640px" :close-disabled="loading">
+  <DcDialog
+    v-model="visible"
+    :title="mode === 'create' ? '新建 Topic 映射' : '编辑 Topic 映射'"
+    width="640px"
+    :close-disabled="loading"
+  >
     <el-form label-position="top" class="kafka-topic-dialog">
       <el-form-item label="显示名称" required>
         <el-input v-model="form.name" maxlength="100" show-word-limit placeholder="设备遥测" />
@@ -10,7 +15,12 @@
       <el-form-item label="分组">
         <el-select v-model="form.groupId" clearable placeholder="根目录">
           <el-option label="根目录" :value="null" />
-          <el-option v-for="group in groups" :key="String(group.id)" :label="group.name" :value="String(group.id)" />
+          <el-option
+            v-for="group in groups"
+            :key="String(group.id)"
+            :label="group.name"
+            :value="String(group.id)"
+          />
         </el-select>
       </el-form-item>
       <div class="kafka-topic-dialog__grid">
@@ -42,7 +52,13 @@
         </el-form-item>
       </div>
       <el-form-item label="描述">
-        <el-input v-model="form.description" type="textarea" :rows="3" maxlength="500" show-word-limit />
+        <el-input
+          v-model="form.description"
+          type="textarea"
+          :rows="3"
+          maxlength="500"
+          show-word-limit
+        />
       </el-form-item>
     </el-form>
 

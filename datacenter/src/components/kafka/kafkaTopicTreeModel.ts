@@ -32,10 +32,16 @@ export function buildKafkaTopicTree(
   })
 
   const sortMappings = (items: KafkaTopicMapping[]) =>
-    items.sort((left, right) => (left.sortOrder || 0) - (right.sortOrder || 0) || left.name.localeCompare(right.name))
+    items.sort(
+      (left, right) =>
+        (left.sortOrder || 0) - (right.sortOrder || 0) || left.name.localeCompare(right.name),
+    )
 
   const sortNodes = (items: KafkaTopicGroupNode[]) => {
-    items.sort((left, right) => (left.sortOrder || 0) - (right.sortOrder || 0) || left.name.localeCompare(right.name))
+    items.sort(
+      (left, right) =>
+        (left.sortOrder || 0) - (right.sortOrder || 0) || left.name.localeCompare(right.name),
+    )
     items.forEach((item) => {
       sortNodes(item.children)
       sortMappings(item.mappings)
@@ -61,7 +67,9 @@ export function filterKafkaTopicTree(
     `${mapping.name} ${mapping.topic}`.toLowerCase().includes(normalized)
 
   const filterNode = (node: KafkaTopicGroupNode): KafkaTopicGroupNode | null => {
-    const children = node.children.map(filterNode).filter((child): child is KafkaTopicGroupNode => Boolean(child))
+    const children = node.children
+      .map(filterNode)
+      .filter((child): child is KafkaTopicGroupNode => Boolean(child))
     const mappings = node.mappings.filter(mappingMatches)
     const selfMatches = node.name.toLowerCase().includes(normalized)
     if (selfMatches || children.length > 0 || mappings.length > 0) {
