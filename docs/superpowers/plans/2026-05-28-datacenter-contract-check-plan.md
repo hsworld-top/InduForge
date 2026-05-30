@@ -2,9 +2,9 @@
 
 > **面向 AI 代理的工作者：** 必需子技能：使用 superpowers:subagent-driven-development（推荐）或 superpowers:executing-plans 逐任务实现此计划。步骤使用复选框（`- [ ]`）语法来跟踪进度。
 
-**目标：** 将现有数据契约检查从基础 dry-run 和静态弹窗升级为数据中心可独立运行、发布前可调用的契约检查中心。
+**目标：** 将现有数据契约检查从基础 dry-run 和静态弹窗升级为数据中心可独立运行、可供运维发布流程调用的契约检查中心。
 
-**架构：** 后端复用现有 `data_contract_check_runs`、`ContractCheckService` 和接口入口，升级结果模型为 `progress/summary/issues/blocking`，并用规则流水线覆盖数据点、接入源、查询、协议对象、计算、报警和 artifact dry-run。前端复用左下角入口，替换静态弹窗为不强遮罩的悬浮检查中心，统一展示进度、汇总、筛选、问题详情和跳转修复。
+**架构：** 后端复用现有 `data_contract_check_runs`、`ContractCheckService` 和接口入口，升级结果模型为 `progress/summary/issues/blocking`，并用规则流水线覆盖数据点、接入源、查询、协议对象、计算、报警和 `DataDomainArtifact` dry-run。前端复用左下角入口，替换静态弹窗为不强遮罩的悬浮检查中心，统一展示进度、汇总、筛选、问题详情和跳转修复。当前开发边界只包含 `data_service` 和 `datacenter`；`dev_core` 代码调用点只作为接口契约和后续集成说明，不在本计划中实现。
 
 **技术栈：** Go、pgx、PostgreSQL jsonb、Vue 3、Pinia、Zod、Element Plus、pnpm、Go test。
 
@@ -38,14 +38,10 @@
   - 改造成悬浮检查中心。
 - 修改：`datacenter/src/views/DataCenterNew.vue`
   - 左下角入口接入 store 状态色，打开悬浮检查中心。
-- 修改：`dev_core/src/services/dataDomainClient.js`
-  - 增加调用 data_service 发布契约检查的客户端方法。
-- 修改：`dev_core/src/services/publishService.js`
-  - 在发布流程读取 artifact 前调用数据中心契约检查，并按 `blocking` 阻断发布。
-- 修改：`dev_core/src/services/__tests__/dataDomainClient.test.js`
-  - 覆盖 data_service 契约检查接口调用。
-- 修改：`dev_core/src/services/__tests__/publishService.snapshot.test.js`
-  - 覆盖发布前数据中心契约检查阻断和通过路径。
+- 修改：`docs/统一REST接口规范与清单.md`
+  - 记录运维发布流程调用数据中心契约检查的请求体和结果门禁字段。
+- 修改：`docs/superpowers/specs/2026-05-28-datacenter-contract-check-design.md`
+  - 同步 `DataDomainArtifact` 与发布部署边界。
 
 ---
 
@@ -1022,7 +1018,7 @@ git commit -m "feat(data): 增加数据点接入源查询契约规则"
 
 ---
 
-## 任务 6：实现计算、报警和 artifact dry-run 规则
+## 任务 6：实现计算、报警和 DataDomainArtifact dry-run 规则
 
 **文件：**
 - 修改：`data_service/internal/service/contract_check_service.go`
@@ -1067,7 +1063,7 @@ func TestComputeAndAlarmContractIssuesAreBlockingForEnabledObjects(t *testing.T)
 }
 ```
 
-- [ ] **步骤 2：编写 artifact dry-run 测试**
+- [ ] **步骤 2：编写 DataDomainArtifact 基础 dry-run 测试**
 
 ```go
 func TestArtifactDryRunReportsProjectWithoutDatapoints(t *testing.T) {
@@ -1079,15 +1075,64 @@ func TestArtifactDryRunReportsProjectWithoutDatapoints(t *testing.T) {
 }
 ```
 
-- [ ] **步骤 3：运行测试验证失败**
+- [ ] **步骤 3：编写 DataDomainArtifact 完整性 dry-run 测试**
+
+```go
+func TestArtifactDryRunValidatesDataDomainArtifactSections(t *testing.T) {
+	ctx := contractCheckContext{
+		ProjectID: "project-1",
+		Connections: []repository.ConnectionRecord{
+			{ID: "builtin-rt", Name: "IF实时库", Type: "builtin.realtime", Status: "active", Config: map[string]any{"runtimeKey": "rt_1"}},
+			{ID: "s7-1", Name: "S7", Type: "s7", Status: "active", Config: map[string]any{"host": "192.168.1.10"}},
+		},
+		Datapoints: []repository.DataPointRecord{
+			{ID: "dp-1", Path: "line.temp", Name: "温度", SourceType: "s7.variable", DataType: "number", Status: "active"},
+		},
+		ComputeUnits: []repository.ComputeUnitRecord{
+			{ID: "calc-1", Name: "计算", IsEnabled: true},
+		},
+		AlarmRules: []repository.AlarmRuleRecord{
+			{ID: "alarm-1", Name: "报警", TargetPath: "line.temp", Severity: "high", IsEnabled: true},
+		},
+	}
+	buildContractCheckIndexes(&ctx)
+
+	issues := checkArtifactDryRunIssues(ctx)
+	if len(issues) != 0 {
+		t.Fatalf("expected clean artifact dry-run, got %#v", issues)
+	}
+}
+
+func TestArtifactDryRunRejectsInternalValueLeak(t *testing.T) {
+	ctx := contractCheckContext{
+		ProjectID: "project-1",
+		Connections: []repository.ConnectionRecord{
+			{ID: "rel-1", Name: "关系库", Type: "relational", Status: "active", Config: map[string]any{
+				"database": "if_dev_data",
+				"password": "plain-password",
+			}},
+		},
+		Datapoints: []repository.DataPointRecord{
+			{ID: "dp-1", Path: "db.value", Name: "值", SourceType: "query", DataType: "number", Status: "active"},
+		},
+	}
+
+	issues := checkArtifactDryRunIssues(ctx)
+	if !hasContractIssue(issues, "artifact", "DataDomainArtifact 包含开发态敏感信息") {
+		t.Fatalf("expected sensitive leak issue: %#v", issues)
+	}
+}
+```
+
+- [ ] **步骤 4：运行测试验证失败**
 
 ```powershell
-go test ./internal/service -run 'TestComputeAndAlarmContractIssuesAreBlockingForEnabledObjects|TestArtifactDryRunReportsProjectWithoutDatapoints' -count=1
+go test ./internal/service -run 'TestComputeAndAlarmContractIssuesAreBlockingForEnabledObjects|TestArtifactDryRun' -count=1
 ```
 
 预期：FAIL，规则函数行为未升级。
 
-- [ ] **步骤 4：升级计算规则**
+- [ ] **步骤 5：升级计算规则**
 
 将旧 `checkComputeContracts` 改为新版 `checkComputeContractIssues`：
 
@@ -1122,7 +1167,7 @@ func checkComputeContractIssues(ctx contractCheckContext) []ContractCheckIssue {
 }
 ```
 
-- [ ] **步骤 5：升级报警规则**
+- [ ] **步骤 6：升级报警规则**
 
 ```go
 func checkAlarmContractIssues(ctx contractCheckContext) []ContractCheckIssue {
@@ -1151,12 +1196,13 @@ func checkAlarmContractIssues(ctx contractCheckContext) []ContractCheckIssue {
 }
 ```
 
-- [ ] **步骤 6：实现 artifact dry-run 第一版规则**
+- [ ] **步骤 7：实现 DataDomainArtifact dry-run 规则**
 
 ```go
 func checkArtifactDryRunIssues(ctx contractCheckContext) []ContractCheckIssue {
+	issues := make([]ContractCheckIssue, 0)
 	if len(ctx.Datapoints) == 0 {
-		return []ContractCheckIssue{{
+		issues = append(issues, ContractCheckIssue{
 			Status:        "failed",
 			Blocking:      true,
 			Category:      "artifact",
@@ -1167,13 +1213,42 @@ func checkArtifactDryRunIssues(ctx contractCheckContext) []ContractCheckIssue {
 			Title:         "artifact 缺少数据点契约",
 			Detail:        "运行态数据契约至少需要包含数据点定义。",
 			Suggestion:    "创建数据点或保存接入源变量以生成数据点",
-		}}
+		})
 	}
-	return nil
+
+	artifact := repository.BuildProjectArtifactV1(ctx.ProjectID, &repository.ProjectSnapshot{
+		Connections:  ctx.Connections,
+		Queries:      ctx.Queries,
+		DataPoints:   ctx.Datapoints,
+		ComputeUnits: ctx.ComputeUnits,
+		AlarmRules:   ctx.AlarmRules,
+	}, time.Now().UTC())
+	artifactBytes, err := json.Marshal(artifact)
+	if err != nil {
+		issues = append(issues, blockingIssue("artifact", "project", ctx.ProjectID, "", "DataDomainArtifact 无法序列化", err.Error(), "检查数据域配置中的 JSON 字段"))
+		return issues
+	}
+	if artifact == nil || artifact.Version == "" || artifact.ProjectID == "" {
+		issues = append(issues, blockingIssue("artifact", "project", ctx.ProjectID, "", "DataDomainArtifact 基础字段缺失", "version/projectId 不能为空", "检查 artifact 生成逻辑"))
+	}
+	if artifact.BuiltinStores.RealtimeSpaces == nil {
+		issues = append(issues, blockingIssue("artifact", "project", ctx.ProjectID, "", "DataDomainArtifact 缺少 builtinStores 区块", "IF 内置库契约必须进入发布态数据产物", "检查内置库契约生成逻辑"))
+	}
+
+	lower := strings.ToLower(string(artifactBytes))
+	for _, forbidden := range []string{"if_dev_data", "plain-password", "\"password\"", "18379", "18883"} {
+		if strings.Contains(lower, strings.ToLower(forbidden)) {
+			issues = append(issues, blockingIssue("artifact", "project", ctx.ProjectID, "", "DataDomainArtifact 包含开发态敏感信息", forbidden, "过滤开发态库名、端口和明文密钥，只发布运行态契约"))
+			break
+		}
+	}
+	return issues
 }
 ```
 
-- [ ] **步骤 7：运行测试验证通过**
+说明：本步骤只检查 `data_service` 生成的 `DataDomainArtifact`。最终 `.ifp` 的 `datacenter.json`、`runtime-capabilities.json` 和部署 profile 由后续 `dev_core` 发布部署计划覆盖，不在本计划中修改代码。
+
+- [ ] **步骤 8：运行测试验证通过**
 
 ```powershell
 go test ./internal/service -run 'ComputeAndAlarmContract|ArtifactDryRun' -count=1
@@ -1181,7 +1256,7 @@ go test ./internal/service -run 'ComputeAndAlarmContract|ArtifactDryRun' -count=
 
 预期：PASS。
 
-- [ ] **步骤 8：Commit**
+- [ ] **步骤 9：Commit**
 
 ```powershell
 git add data_service/internal/service/contract_check_service.go data_service/internal/service/contract_check_service_test.go
@@ -2012,185 +2087,53 @@ git commit -m "docs(data): 更新契约检查接口说明"
 
 ---
 
-## 任务 11：dev_core 发布前调用 data_service 契约检查
+## 任务 11：记录运维发布调用契约
 
 **文件：**
-- 修改：`dev_core/src/services/dataDomainClient.js`
-- 修改：`dev_core/src/services/publishService.js`
-- 修改：`dev_core/src/services/__tests__/dataDomainClient.test.js`
-- 修改：`dev_core/src/services/__tests__/publishService.snapshot.test.js`
+- 修改：`docs/统一REST接口规范与清单.md`
+- 修改：`docs/superpowers/specs/2026-05-28-datacenter-contract-check-design.md`
+- 修改：`docs/superpowers/specs/2026-05-28-datacenter-contract-check-ops-integration-temp-design.md`
 
-- [ ] **步骤 1：编写 dataDomainClient 失败测试**
+- [ ] **步骤 1：在 REST 文档补充运维调用示例**
 
-在 `dev_core/src/services/__tests__/dataDomainClient.test.js` 中增加：
+在 `docs/统一REST接口规范与清单.md` 的契约检查接口段落中加入：
 
-```js
-test('runProjectContractCheck 会调用 data_service 发布契约检查接口', async () => {
-  const fetchMock = jest.fn().mockResolvedValue({
-    ok: true,
-    headers: { get: () => 'application/json' },
-    json: async () => ({
-      code: 0,
-      data: {
-        projectId: 'project-1',
-        scope: 'project',
-        mode: 'contract',
-        trigger: 'dev_core.publish',
-        status: 'passed',
-        blocking: false,
-        summary: { failed: 0, pending: 0, warning: 0, passed: 1, blocking: 0 },
-        progress: { currentStage: '汇总检查结果', checkedCount: 1, totalCount: 1 },
-        issues: [],
-      },
-    }),
-  })
-  global.fetch = fetchMock
+```markdown
+发布流程调用数据中心契约检查时，请求体固定使用：
 
-  const client = new DataDomainClient({ baseUrl: 'http://data-service.test' })
-  const result = await client.runProjectContractCheck('project-1', 'Bearer token')
-
-  expect(fetchMock).toHaveBeenCalledWith(
-    'http://data-service.test/api/v1/data/projects/project-1/contract-checks/run',
-    expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify({
-        scope: 'project',
-        mode: 'contract',
-        trigger: 'dev_core.publish',
-      }),
-    }),
-  )
-  expect(result.blocking).toBe(false)
-})
+```json
+{
+  "scope": "project",
+  "mode": "contract",
+  "trigger": "dev_core.publish"
+}
 ```
 
-- [ ] **步骤 2：运行测试验证失败**
+调用方只按响应中的 `blocking` 字段做发布门禁判断。`blocking=true` 时中止发布；`blocking=false` 时可继续读取 `GET /api/v1/data/projects/{projectId}/artifact` 获取 `DataDomainArtifact`。
+```
+
+- [ ] **步骤 2：在设计文档补充当前开发边界**
+
+确认 `docs/superpowers/specs/2026-05-28-datacenter-contract-check-design.md` 中包含以下边界：
+
+```markdown
+当前开发边界限定在 `data_service` 和 `datacenter`：本设计只要求数据中心提供可被运维发布流程调用的检查接口和稳定 `DataDomainArtifact`；`dev_core` 的发布制品装配、部署命令和节点适配检查作为后续运维实现范围。
+```
+
+- [ ] **步骤 3：运行文档占位符扫描**
 
 ```powershell
-pnpm --filter dev_core test -- dataDomainClient.test.js
+$pattern = @('T'+'ODO', '待'+'定', 'T'+'BD', 'x'+'xx', 'X'+'XX', '后续'+'实现', '补充'+'细节', '必要'+'时', '类似'+'任务', '添加'+'适当', '添加'+'验证', '处理'+'边界') -join '|'
+rg -n $pattern docs/superpowers/specs/2026-05-28-datacenter-contract-check-design.md docs/superpowers/specs/2026-05-28-datacenter-contract-check-ops-integration-temp-design.md docs/统一REST接口规范与清单.md -S
 ```
 
-预期：FAIL，`runProjectContractCheck` 未定义。
+预期：无输出。
 
-- [ ] **步骤 3：实现 dataDomainClient 方法**
-
-在 `dev_core/src/services/dataDomainClient.js` 的 class 中加入：
-
-```js
-  /**
-   * 运行数据中心发布契约检查。
-   * @param {string} projectId - 工程 ID
-   * @param {string} [authorization] - 当前发布请求的 Bearer Token
-   * @returns {Promise<object>}
-   */
-  async runProjectContractCheck(projectId, authorization) {
-    return this.request(`/api/v1/data/projects/${projectId}/contract-checks/run`, {
-      method: 'POST',
-      authorization,
-      body: {
-        scope: 'project',
-        mode: 'contract',
-        trigger: 'dev_core.publish',
-      },
-    })
-  }
-```
-
-- [ ] **步骤 4：运行 dataDomainClient 测试验证通过**
+- [ ] **步骤 4：Commit**
 
 ```powershell
-pnpm --filter dev_core test -- dataDomainClient.test.js
-```
-
-预期：PASS。
-
-- [ ] **步骤 5：编写 publishService 阻断测试**
-
-在 `dev_core/src/services/__tests__/publishService.snapshot.test.js` 中新增测试。复用该文件已有 mock 结构，将 dataDomainClient mock 增加 `runProjectContractCheck`：
-
-```js
-test('publish 会在数据中心契约检查阻断时停止发布', async () => {
-  publishService.dataDomainClient.runProjectContractCheck = jest.fn().mockResolvedValue({
-    status: 'failed',
-    blocking: true,
-    summary: { failed: 1, pending: 0, warning: 0, passed: 0, blocking: 1 },
-    issues: [
-      {
-        status: 'failed',
-        blocking: true,
-        module: 'datapoint',
-        objectType: 'datapoint',
-        title: '数据点已失效',
-        detail: 'http.device.status',
-        suggestion: '恢复来源对象或移除引用',
-      },
-    ],
-  })
-
-  await expect(
-    publishService.publish('project-publish', {
-      version: '9.9.9',
-      deployedBy: 'user-1',
-      authorization: 'Bearer publish-token',
-    }),
-  ).rejects.toMatchObject({
-    statusCode: 400,
-  })
-
-  expect(publishService.dataDomainClient.getProjectArtifact).not.toHaveBeenCalled()
-})
-```
-
-如果现有测试中 `publishService.dataDomainClient` 不可直接访问，则改为在 dataDomainClient 模块 mock 中暴露同一个 mock 对象，并断言该 mock 的调用。
-
-- [ ] **步骤 6：运行 publishService 测试验证失败**
-
-```powershell
-pnpm --filter dev_core test -- publishService.snapshot.test.js
-```
-
-预期：FAIL，发布流程尚未调用 `runProjectContractCheck` 或未阻断。
-
-- [ ] **步骤 7：实现发布前门禁**
-
-在 `dev_core/src/services/publishService.js` 的 `publish` 方法中，工程基础验证通过后、`collectProjectData` 前加入：
-
-```js
-      // 2. 数据中心发布契约检查
-      await this.addBuildLog(deploymentId, '检查数据中心发布契约...')
-      const dataContractCheck = await this.dataDomainClient.runProjectContractCheck(
-        projectId,
-        authorization,
-      )
-      if (dataContractCheck?.blocking) {
-        const issues = Array.isArray(dataContractCheck.issues) ? dataContractCheck.issues : []
-        const blockingIssues = issues.filter((item) => item?.blocking)
-        const summaryText = blockingIssues
-          .slice(0, 5)
-          .map((item) => item.title || item.detail || '未命名阻断项')
-          .join('；')
-        throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
-          message: `数据中心契约检查未通过${summaryText ? `：${summaryText}` : ''}`,
-          dataContractCheck,
-        })
-      }
-```
-
-随后把原本“收集工程数据”步骤注释编号顺延为第 3 步，后续注释编号依次顺延。
-
-- [ ] **步骤 8：运行 dev_core 测试验证通过**
-
-```powershell
-pnpm --filter dev_core test -- dataDomainClient.test.js publishService.snapshot.test.js
-```
-
-预期：PASS。
-
-- [ ] **步骤 9：Commit**
-
-```powershell
-git add dev_core/src/services/dataDomainClient.js dev_core/src/services/publishService.js dev_core/src/services/__tests__/dataDomainClient.test.js dev_core/src/services/__tests__/publishService.snapshot.test.js
-git commit -m "feat(dev_core): 发布前检查数据中心契约"
+git add docs/统一REST接口规范与清单.md docs/superpowers/specs/2026-05-28-datacenter-contract-check-design.md docs/superpowers/specs/2026-05-28-datacenter-contract-check-ops-integration-temp-design.md
+git commit -m "docs(data): 明确契约检查运维调用边界"
 ```
 
 ---

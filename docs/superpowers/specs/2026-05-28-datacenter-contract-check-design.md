@@ -58,6 +58,31 @@ POST /api/v1/data/projects/{projectId}/contract-checks/run
 
 `dev_core` 不解析数据中心内部规则，不复刻接入源、数据点、查询、计算或报警检查逻辑；只按 `blocking` 进行门禁判断，并展示 `issues`。
 
+### 3.2 与发布制品和部署的边界
+
+数据中心对外提供的发布态数据产物称为 `DataDomainArtifact`。当前接口仍沿用：
+
+```text
+GET /api/v1/data/projects/{projectId}/artifact
+```
+
+`DataDomainArtifact` 是 `dev_core` 组装最终 `.ifp` 工程制品的输入，不是节点侧完整部署包。数据中心契约检查只保证该数据域产物可生成、引用闭合、结构完整、可序列化，并且不泄漏开发态内部配置或明文密钥。
+
+`DataDomainArtifact` 至少应覆盖：
+
+- `connections`
+- `datapoints`
+- `queries`
+- `compute`
+- `alarms`
+- `mqtt`
+- `protocols`
+- `builtinStores`
+
+未来最终 `.ifp` 制品由 `dev_core` 组装，节点侧 `node_agent` 只消费 `.ifp`、部署 profile 和节点资源 profile。数据中心不决定节点实际启动哪些容器、启动几个副本、是否扩容，也不检查节点镜像、端口池和部署 profile 适配性。
+
+当前开发边界限定在 `data_service` 和 `datacenter`：本设计只要求数据中心提供可被运维发布流程调用的检查接口和稳定 `DataDomainArtifact`；`dev_core` 的发布制品装配、部署命令和节点适配检查作为后续运维实现范围。
+
 ## 4. 检查边界
 
 ### 4.1 覆盖对象
@@ -78,6 +103,8 @@ POST /api/v1/data/projects/{projectId}/contract-checks/run
 - 不把外部 Kafka、HTTP、WebSocket、Redis、OPC UA、Modbus、S7 连通失败作为发布阻断。
 - 不替代 Designer 契约检查。
 - 不替代运维发布编排。
+- 不检查最终 `.ifp` 装配过程。
+- 不检查节点侧镜像、端口、资源和部署 profile。
 - 不做运行态长期健康监控。
 - 不检查用户现场网络质量。
 - 不因为未启用草稿对象阻断发布。
