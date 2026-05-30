@@ -8,6 +8,13 @@ import {
   HttpSendResponseSchema,
 } from './schemas/http-workbench.schema'
 import {
+  WebSocketPreviewResponseSchema,
+  WebSocketSessionGroupListSchema,
+  WebSocketSessionGroupSchema,
+  WebSocketSessionListSchema,
+  WebSocketSessionSchema,
+} from './schemas/websocket-workbench.schema'
+import {
   KafkaFieldGroupListSchema,
   KafkaFieldGroupSchema,
   KafkaFieldListSchema,
@@ -237,6 +244,89 @@ export const sendHttpRequest = async (projectId, requestId) => {
     method: 'post',
   })
   return HttpSendResponseSchema.parse(unwrapHTTPPayload(res))
+}
+
+export const getWebSocketSessionGroups = async (projectId, connectionId) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/websocket/sources/${connectionId}/session-groups`,
+    method: 'get',
+  })
+  return WebSocketSessionGroupListSchema.parse(unwrapHTTPPayload(res))
+}
+
+export const createWebSocketSessionGroup = async (projectId, connectionId, data) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/websocket/sources/${connectionId}/session-groups`,
+    method: 'post',
+    data,
+  })
+  return WebSocketSessionGroupSchema.parse(unwrapHTTPPayload(res))
+}
+
+export const updateWebSocketSessionGroup = async (projectId, groupId, data) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/websocket/session-groups/${groupId}`,
+    method: 'put',
+    data,
+  })
+  return WebSocketSessionGroupSchema.parse(unwrapHTTPPayload(res))
+}
+
+export const deleteWebSocketSessionGroup = (projectId, groupId) => {
+  return request({
+    url: `/data/projects/${projectId}/websocket/session-groups/${groupId}`,
+    method: 'delete',
+  })
+}
+
+export const getWebSocketSessions = async (projectId, connectionId, params = {}) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/websocket/sources/${connectionId}/sessions`,
+    method: 'get',
+    params,
+  })
+  return WebSocketSessionListSchema.parse(unwrapHTTPPayload(res))
+}
+
+export const getWebSocketSession = async (projectId, sessionId) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/websocket/sessions/${sessionId}`,
+    method: 'get',
+  })
+  return WebSocketSessionSchema.parse(unwrapHTTPPayload(res))
+}
+
+export const createWebSocketSession = async (projectId, connectionId, data) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/websocket/sources/${connectionId}/sessions`,
+    method: 'post',
+    data,
+  })
+  return WebSocketSessionSchema.parse(unwrapHTTPPayload(res))
+}
+
+export const updateWebSocketSession = async (projectId, sessionId, data) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/websocket/sessions/${sessionId}`,
+    method: 'put',
+    data,
+  })
+  return WebSocketSessionSchema.parse(unwrapHTTPPayload(res))
+}
+
+export const deleteWebSocketSession = (projectId, sessionId) => {
+  return request({
+    url: `/data/projects/${projectId}/websocket/sessions/${sessionId}`,
+    method: 'delete',
+  })
+}
+
+export const connectWebSocketPreview = async (projectId, sessionId) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/websocket/sessions/${sessionId}/connect-preview`,
+    method: 'post',
+  })
+  return WebSocketPreviewResponseSchema.parse(unwrapHTTPPayload(res))
 }
 
 export const getKafkaTopicGroups = async (projectId, connectionId) => {
@@ -1796,6 +1886,16 @@ export default {
   updateHttpRequest,
   deleteHttpRequest,
   sendHttpRequest,
+  getWebSocketSessionGroups,
+  createWebSocketSessionGroup,
+  updateWebSocketSessionGroup,
+  deleteWebSocketSessionGroup,
+  getWebSocketSessions,
+  getWebSocketSession,
+  createWebSocketSession,
+  updateWebSocketSession,
+  deleteWebSocketSession,
+  connectWebSocketPreview,
   getKafkaTopicGroups,
   createKafkaTopicGroup,
   updateKafkaTopicGroup,

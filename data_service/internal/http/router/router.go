@@ -22,6 +22,7 @@ type options struct {
 	mqttHandler               *handler.MqttHandler
 	kafkaWorkbenchHandler     *handler.KafkaWorkbenchHandler
 	httpWorkbenchHandler      *handler.HTTPWorkbenchHandler
+	websocketWorkbenchHandler *handler.WebSocketWorkbenchHandler
 	opcuaModelingHandler      *handler.OpcuaModelingHandler
 	s7ModelingHandler         *handler.S7ModelingHandler
 	protocolDevSessionHandler *handler.ProtocolDevSessionHandler
@@ -122,6 +123,14 @@ func WithKafkaWorkbenchRoutes(kafkaHandler *handler.KafkaWorkbenchHandler, jwtVa
 func WithHTTPWorkbenchRoutes(httpHandler *handler.HTTPWorkbenchHandler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
 		opts.httpWorkbenchHandler = httpHandler
+		opts.jwtValidator = jwtValidator
+	}
+}
+
+// WithWebSocketWorkbenchRoutes wires WebSocket 工作台 routes.
+func WithWebSocketWorkbenchRoutes(websocketHandler *handler.WebSocketWorkbenchHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.websocketWorkbenchHandler = websocketHandler
 		opts.jwtValidator = jwtValidator
 	}
 }
@@ -229,6 +238,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountMqttRoutes(mux, opts)
 	mountKafkaWorkbenchRoutes(mux, opts)
 	mountHTTPWorkbenchRoutes(mux, opts)
+	mountWebSocketWorkbenchRoutes(mux, opts)
 	mountModbusModelingRoutes(mux, opts)
 	mountOpcuaModelingRoutes(mux, opts)
 	mountS7ModelingRoutes(mux, opts)
@@ -1158,6 +1168,43 @@ func mountHTTPWorkbenchRoutes(mux *http.ServeMux, opts options) {
 	mux.Handle("PUT "+requestBase, write(opts.httpWorkbenchHandler.UpdateRequest))
 	mux.Handle("DELETE "+requestBase, write(opts.httpWorkbenchHandler.DeleteRequest))
 	mux.Handle("POST "+requestBase+"/send", write(opts.httpWorkbenchHandler.SendRequest))
+}
+
+func mountWebSocketWorkbenchRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.websocketWorkbenchHandler == nil || opts.jwtValidator == nil {
+		return
+	}
+
+	read := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+	write := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+
+	sourceBase := "/api/v1/data/projects/{projectId}/websocket/sources/{connectionId}"
+	sessionBase := "/api/v1/data/projects/{projectId}/websocket/sessions/{sessionId}"
+	groupBase := "/api/v1/data/projects/{projectId}/websocket/session-groups/{groupId}"
+
+	mux.Handle("GET "+sourceBase+"/session-groups", read(opts.websocketWorkbenchHandler.ListGroups))
+	mux.Handle("POST "+sourceBase+"/session-groups", write(opts.websocketWorkbenchHandler.CreateGroup))
+	mux.Handle("PUT "+groupBase, write(opts.websocketWorkbenchHandler.UpdateGroup))
+	mux.Handle("DELETE "+groupBase, write(opts.websocketWorkbenchHandler.DeleteGroup))
+
+	mux.Handle("GET "+sourceBase+"/sessions", read(opts.websocketWorkbenchHandler.ListSessions))
+	mux.Handle("POST "+sourceBase+"/sessions", write(opts.websocketWorkbenchHandler.CreateSession))
+	mux.Handle("GET "+sessionBase, read(opts.websocketWorkbenchHandler.GetSession))
+	mux.Handle("PUT "+sessionBase, write(opts.websocketWorkbenchHandler.UpdateSession))
+	mux.Handle("DELETE "+sessionBase, write(opts.websocketWorkbenchHandler.DeleteSession))
+	mux.Handle("POST "+sessionBase+"/connect-preview", write(opts.websocketWorkbenchHandler.ConnectPreview))
 }
 
 func mountOpcuaModelingRoutes(mux *http.ServeMux, opts options) {

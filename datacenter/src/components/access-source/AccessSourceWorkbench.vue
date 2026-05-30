@@ -22,6 +22,7 @@ import OpcuaWorkbenchPanel from './workbench/OpcuaWorkbenchPanel.vue'
 import S7WorkbenchPanel from './workbench/S7WorkbenchPanel.vue'
 import ProtocolWorkbenchPanel from './workbench/ProtocolWorkbenchPanel.vue'
 import HttpWorkbenchPanel from './workbench/http/HttpWorkbenchPanel.vue'
+import WebSocketWorkbenchPanel from './workbench/websocket/WebSocketWorkbenchPanel.vue'
 import RedisManagerWorkbench from './workbench/RedisManagerWorkbench.vue'
 import IndustrialProtocolWorkbench from './workbench/IndustrialProtocolWorkbench.vue'
 import ReadOnlyConfigPanel from './workbench/ReadOnlyConfigPanel.vue'
@@ -81,7 +82,7 @@ const resolvedPanel = computed(() => {
     return HttpWorkbenchPanel
   }
   if (type === 'websocket') {
-    return ProtocolWorkbenchPanel
+    return WebSocketWorkbenchPanel
   }
   if (['opcua', 'opcda', 's7', 'modbus'].includes(type)) {
     return ReadOnlyConfigPanel

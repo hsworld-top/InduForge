@@ -174,6 +174,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	protocolWave2Repository := repository.NewProtocolWave2Repository(pool)
 	kafkaWorkbenchRepository := repository.NewKafkaWorkbenchRepository(pool)
 	httpWorkbenchRepository := repository.NewHTTPWorkbenchRepository(pool)
+	websocketWorkbenchRepository := repository.NewWebSocketWorkbenchRepository(pool)
 	computeRepository := repository.NewComputeRepository(pool)
 
 	accessSourceService := service.NewAccessSourceService(connectionRepository, mqttRepository, accessSourceRepository)
@@ -203,6 +204,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	protocolWave2Service := service.NewProtocolWave2Service(protocolWave2Repository)
 	kafkaWorkbenchService := service.NewKafkaWorkbenchService(kafkaWorkbenchRepository)
 	httpWorkbenchService := service.NewHTTPWorkbenchService(httpWorkbenchRepository, connectionRepository)
+	websocketWorkbenchService := service.NewWebSocketWorkbenchService(websocketWorkbenchRepository, connectionRepository)
 	computeService := service.NewComputeService(
 		computeRepository,
 		enginecompute.NewNodeRunner("", ""),
@@ -232,6 +234,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	protocolWave2Handler := handler.NewProtocolWave2Handler(protocolWave2Service)
 	kafkaWorkbenchHandler := handler.NewKafkaWorkbenchHandler(kafkaWorkbenchService)
 	httpWorkbenchHandler := handler.NewHTTPWorkbenchHandler(httpWorkbenchService)
+	websocketWorkbenchHandler := handler.NewWebSocketWorkbenchHandler(websocketWorkbenchService)
 	computeHandler := handler.NewComputeHandler(computeService)
 
 	routeOptions := []router.Option{
@@ -253,6 +256,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		router.WithProtocolWave2Routes(protocolWave2Handler, jwtValidator),
 		router.WithKafkaWorkbenchRoutes(kafkaWorkbenchHandler, jwtValidator),
 		router.WithHTTPWorkbenchRoutes(httpWorkbenchHandler, jwtValidator),
+		router.WithWebSocketWorkbenchRoutes(websocketWorkbenchHandler, jwtValidator),
 		router.WithComputeRoutes(computeHandler, jwtValidator),
 	}
 	routeSummaryParts := []string{
@@ -270,6 +274,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		"protocolWave2=enabled",
 		"kafkaWorkbench=enabled",
 		"httpWorkbench=enabled",
+		"websocketWorkbench=enabled",
 		"compute=enabled",
 		"preview=disabled",
 	}

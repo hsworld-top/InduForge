@@ -772,6 +772,8 @@ func deriveDataPointInvalidReason(record repository.DataPointRecord) string {
 		return "MQTT 变量数据点已失效：变量、订阅、分组或连接不存在，或路径已变更"
 	case "http.request":
 		return "HTTP 请求数据点已失效：接口请求或接入源不存在，或路径已变更"
+	case "websocket.session":
+		return "WebSocket 会话数据点已失效：会话或接入源不存在，或路径已变更"
 	default:
 		return "数据点已失效"
 	}

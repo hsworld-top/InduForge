@@ -265,7 +265,7 @@ func (s *DataPointService) buildValueFromRecord(ctx context.Context, projectID s
 	if value.Value != nil {
 		value.Quality = "good"
 	}
-	if record.SourceType == "http.request" {
+	if record.SourceType == "http.request" || record.SourceType == "websocket.session" {
 		value.Value = parseStoredHTTPDefaultValue(record.DefaultValue)
 		if value.Value != nil {
 			value.Quality = "good"
