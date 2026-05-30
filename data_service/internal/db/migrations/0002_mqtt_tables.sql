@@ -31,8 +31,9 @@ CREATE TABLE IF NOT EXISTS data_mqtt_subscriptions (
     name text NOT NULL CHECK (char_length(name) <= 100),
     topic text NOT NULL CHECK (char_length(topic) <= 500),
     qos smallint NOT NULL DEFAULT 0 CHECK (qos IN (0, 1, 2)),
+    group_id uuid,
     description text,
-    is_enabled boolean NOT NULL DEFAULT true,
+    display_order integer NOT NULL DEFAULT 0,
     message_retention integer NOT NULL DEFAULT 100 CHECK (message_retention > 0),
     created_by uuid NOT NULL,
     updated_by uuid,
@@ -46,8 +47,8 @@ CREATE TABLE IF NOT EXISTS data_mqtt_subscriptions (
 CREATE INDEX IF NOT EXISTS data_mqtt_subscriptions_project_connection_idx
     ON data_mqtt_subscriptions (project_id, connection_id);
 
-CREATE INDEX IF NOT EXISTS data_mqtt_subscriptions_connection_enabled_idx
-    ON data_mqtt_subscriptions (connection_id, is_enabled);
+CREATE INDEX IF NOT EXISTS data_mqtt_subscriptions_connection_order_idx
+    ON data_mqtt_subscriptions (connection_id, display_order, created_at DESC);
 
 -- data_mqtt_messages: 保存订阅实时消息缓存。
 CREATE TABLE IF NOT EXISTS data_mqtt_messages (

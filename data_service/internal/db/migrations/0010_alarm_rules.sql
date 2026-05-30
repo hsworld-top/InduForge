@@ -42,6 +42,7 @@ CREATE INDEX IF NOT EXISTS data_alarm_rules_condition_gin_idx
 CREATE TABLE IF NOT EXISTS data_alarm_policy_groups (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id uuid NOT NULL,
+    parent_id uuid,
     name varchar(100) NOT NULL,
     description text,
     is_enabled boolean NOT NULL DEFAULT true,
@@ -50,7 +51,8 @@ CREATE TABLE IF NOT EXISTS data_alarm_policy_groups (
     updated_by uuid,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
-    CONSTRAINT data_alarm_policy_groups_project_name_key UNIQUE (project_id, name)
+    CONSTRAINT data_alarm_policy_groups_parent_fkey
+        FOREIGN KEY (parent_id) REFERENCES data_alarm_policy_groups(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS data_alarm_policies (
@@ -83,6 +85,17 @@ CREATE TABLE IF NOT EXISTS data_alarm_policies (
 
 CREATE INDEX IF NOT EXISTS data_alarm_policy_groups_project_sort_idx
     ON data_alarm_policy_groups(project_id, sort_order, created_at);
+
+CREATE INDEX IF NOT EXISTS data_alarm_policy_groups_project_parent_idx
+    ON data_alarm_policy_groups(project_id, parent_id, sort_order, created_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS data_alarm_policy_groups_project_root_name_key
+    ON data_alarm_policy_groups(project_id, name)
+    WHERE parent_id IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS data_alarm_policy_groups_project_parent_name_key
+    ON data_alarm_policy_groups(project_id, parent_id, name)
+    WHERE parent_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS data_alarm_policies_project_group_idx
     ON data_alarm_policies(project_id, group_id);

@@ -94,8 +94,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&appliedCount); err != nil {
 		t.Fatalf("鏌ヨ schema_migrations 澶辫触: %v", err)
 	}
-	if appliedCount != 29 {
-		t.Fatalf("expected 29 migration records, got %d", appliedCount)
+	if appliedCount != 34 {
+		t.Fatalf("expected 34 migration records, got %d", appliedCount)
 	}
 
 	if err := migrator.DownAll(ctx); err != nil {
@@ -168,7 +168,7 @@ func TestMigrationIndexes(t *testing.T) {
 		"data_mqtt_configs_protocol_idx",
 		"data_mqtt_subscriptions_project_connection_name_key",
 		"data_mqtt_subscriptions_project_connection_idx",
-		"data_mqtt_subscriptions_connection_enabled_idx",
+		"data_mqtt_subscriptions_connection_order_idx",
 		"data_mqtt_messages_project_subscription_received_idx",
 		"data_mqtt_messages_subscription_received_idx",
 		"data_kafka_configs_topic_idx",

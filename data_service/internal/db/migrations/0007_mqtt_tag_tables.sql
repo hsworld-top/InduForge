@@ -40,7 +40,6 @@ CREATE TABLE IF NOT EXISTS data_mqtt_tags (
     unit text CHECK (unit IS NULL OR char_length(unit) <= 50),
     transform text,
     validation jsonb CHECK (validation IS NULL OR jsonb_typeof(validation) = 'object'),
-    is_enabled boolean NOT NULL DEFAULT true,
     display_order integer NOT NULL DEFAULT 0,
     created_by uuid NOT NULL,
     updated_by uuid,
@@ -53,8 +52,8 @@ CREATE TABLE IF NOT EXISTS data_mqtt_tags (
         FOREIGN KEY (group_id) REFERENCES data_mqtt_tag_groups (id) ON DELETE SET NULL
 );
 
-CREATE INDEX IF NOT EXISTS data_mqtt_tags_subscription_enabled_idx
-    ON data_mqtt_tags (subscription_id, is_enabled, display_order, created_at DESC);
+CREATE INDEX IF NOT EXISTS data_mqtt_tags_subscription_order_idx
+    ON data_mqtt_tags (subscription_id, display_order, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS data_mqtt_tags_project_idx
     ON data_mqtt_tags (project_id, display_order, created_at DESC);

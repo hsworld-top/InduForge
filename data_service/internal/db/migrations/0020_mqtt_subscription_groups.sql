@@ -26,12 +26,6 @@ CREATE INDEX IF NOT EXISTS data_mqtt_subscription_groups_project_connection_pare
     ON data_mqtt_subscription_groups (project_id, connection_id, parent_id, created_at ASC);
 
 ALTER TABLE data_mqtt_subscriptions
-    ADD COLUMN IF NOT EXISTS group_id uuid;
-
-ALTER TABLE data_mqtt_subscriptions
-    ADD COLUMN IF NOT EXISTS display_order integer NOT NULL DEFAULT 0;
-
-ALTER TABLE data_mqtt_subscriptions
     ADD CONSTRAINT data_mqtt_subscriptions_group_fkey
         FOREIGN KEY (group_id) REFERENCES data_mqtt_subscription_groups (id) ON DELETE SET NULL;
 

@@ -1,2 +1,1 @@
-ALTER TABLE data_points
-    DROP COLUMN IF EXISTS runtime_permissions;
+-- no-op: 当前开发态重建库基线不回退数据点运行权限字段。

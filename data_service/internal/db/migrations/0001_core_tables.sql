@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS data_queries (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id uuid NOT NULL,
     connection_id uuid NOT NULL,
+    group_id uuid,
     name text NOT NULL CHECK (char_length(name) <= 200),
     description text,
     category text,
@@ -119,6 +120,8 @@ CREATE TABLE IF NOT EXISTS data_points (
     refresh_mode text NOT NULL DEFAULT 'auto' CHECK (refresh_mode IN ('auto', 'manual', 'subscription')),
     refresh_interval_ms integer CHECK (refresh_interval_ms IS NULL OR refresh_interval_ms >= 0),
     status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'invalid')),
+    runtime_permissions jsonb NOT NULL DEFAULT '{"write":{"allowRoles":[],"denyRoles":[],"inherit":true}}'::jsonb
+        CHECK (jsonb_typeof(runtime_permissions) = 'object'),
     created_by uuid,
     updated_by uuid,
     created_at timestamptz NOT NULL DEFAULT now(),

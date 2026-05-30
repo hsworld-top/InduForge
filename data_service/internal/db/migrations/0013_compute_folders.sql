@@ -7,7 +7,6 @@ CREATE TABLE IF NOT EXISTS data_compute_folders (
     updated_by uuid,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
-    CONSTRAINT data_compute_folders_project_name_parent_key UNIQUE (project_id, parent_id, name),
     CONSTRAINT data_compute_folders_parent_fkey
         FOREIGN KEY (parent_id) REFERENCES data_compute_folders (id) ON DELETE CASCADE
 );
@@ -15,12 +14,14 @@ CREATE TABLE IF NOT EXISTS data_compute_folders (
 CREATE INDEX IF NOT EXISTS data_compute_folders_project_parent_idx
     ON data_compute_folders (project_id, parent_id, created_at DESC);
 
-ALTER TABLE data_compute_units
-    ADD COLUMN IF NOT EXISTS folder_id uuid;
+CREATE UNIQUE INDEX IF NOT EXISTS data_compute_folders_project_root_name_key
+    ON data_compute_folders (project_id, name)
+    WHERE parent_id IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS data_compute_folders_project_parent_name_key
+    ON data_compute_folders (project_id, parent_id, name)
+    WHERE parent_id IS NOT NULL;
 
 ALTER TABLE data_compute_units
     ADD CONSTRAINT data_compute_units_folder_fkey
         FOREIGN KEY (folder_id) REFERENCES data_compute_folders (id) ON DELETE SET NULL;
-
-CREATE INDEX IF NOT EXISTS data_compute_units_project_folder_idx
-    ON data_compute_units (project_id, folder_id, created_at DESC);

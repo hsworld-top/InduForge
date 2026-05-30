@@ -1,2 +1,1 @@
-ALTER TABLE data_compute_units
-    ADD COLUMN IF NOT EXISTS description text;
+-- no-op: 当前开发态重建库基线已在 0006_compute_tables.sql 中包含计算描述字段。

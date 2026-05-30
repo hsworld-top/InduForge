@@ -20,10 +20,6 @@ CREATE INDEX IF NOT EXISTS data_workbench_object_groups_connection_scope_idx
     ON data_workbench_object_groups (project_id, connection_id, scope, sort_order, created_at);
 
 ALTER TABLE data_queries
-    ADD COLUMN IF NOT EXISTS group_id uuid;
-
-ALTER TABLE data_queries DROP CONSTRAINT IF EXISTS data_queries_group_fkey;
-ALTER TABLE data_queries
     ADD CONSTRAINT data_queries_group_fkey
     FOREIGN KEY (group_id) REFERENCES data_workbench_object_groups (id) ON DELETE SET NULL;
 

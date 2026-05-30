@@ -4,7 +4,10 @@ CREATE TABLE IF NOT EXISTS data_compute_units (
     project_id uuid NOT NULL,
     name text NOT NULL CHECK (char_length(name) <= 100),
     language text NOT NULL CHECK (language IN ('js', 'python')),
+    description text,
+    folder_id uuid,
     script_code text NOT NULL,
+    dependencies jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(dependencies) = 'array'),
     trigger_type text NOT NULL DEFAULT 'manual' CHECK (trigger_type IN ('manual', 'timer', 'datapoint_change')),
     trigger_config jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(trigger_config) = 'object'),
     input_bindings jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(input_bindings) = 'object'),
@@ -23,6 +26,9 @@ CREATE INDEX IF NOT EXISTS data_compute_units_project_enabled_idx
 
 CREATE INDEX IF NOT EXISTS data_compute_units_project_language_idx
     ON data_compute_units (project_id, language);
+
+CREATE INDEX IF NOT EXISTS data_compute_units_project_folder_idx
+    ON data_compute_units (project_id, folder_id, created_at DESC);
 
 -- data_compute_runs: 保存运行与调试记录，支持超时/失败审计。
 CREATE TABLE IF NOT EXISTS data_compute_runs (

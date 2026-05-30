@@ -1,9 +1,3 @@
--- 扩展 data_connections 支持 tdengine 连接类型。
-ALTER TABLE data_connections DROP CONSTRAINT IF EXISTS data_connections_type_check;
-ALTER TABLE data_connections
-    ADD CONSTRAINT data_connections_type_check
-    CHECK (type IN ('relational', 'mqtt', 'websocket', 'opcua', 'modbus', 'http', 's7', 'kafka', 'redis', 'tdengine'));
-
 -- data_opcua_configs: 保存 OPC UA Source 配置。
 CREATE TABLE IF NOT EXISTS data_opcua_configs (
     connection_id uuid PRIMARY KEY,

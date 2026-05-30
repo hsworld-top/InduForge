@@ -1,2 +1,1 @@
-ALTER TABLE data_compute_units
-    DROP COLUMN IF EXISTS dependencies;
+-- no-op: 当前开发态重建库基线不回退计算依赖字段。
