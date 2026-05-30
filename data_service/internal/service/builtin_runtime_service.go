@@ -525,8 +525,8 @@ func (s *BuiltinRuntimeService) ListRealtimeKeyDefinitions(ctx context.Context, 
 	}
 	rows, err := metaPool.Query(ctx, `
 		SELECT id::text, key_path, value_type, default_ttl_seconds, description, created_at, updated_at
-		FROM data_builtin_realtime_keys
-		WHERE project_id = $1 AND connection_id = $2
+		FROM data_realtime_keys
+		WHERE project_id = $1 AND connection_id = $2 AND provider = 'builtin'
 		ORDER BY key_path
 	`, projectID, connectionID)
 	if err != nil {
@@ -564,8 +564,8 @@ func (s *BuiltinRuntimeService) UpsertRealtimeKeyDefinition(ctx context.Context,
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "TTL 不能小于 0")
 	}
 	row := metaPool.QueryRow(ctx, `
-		INSERT INTO data_builtin_realtime_keys (project_id, connection_id, key_path, value_type, default_ttl_seconds, description)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO data_realtime_keys (project_id, connection_id, provider, key_path, redis_type, value_type, default_ttl_seconds, description)
+		VALUES ($1, $2, 'builtin', $3, 'string', $4, $5, $6)
 		ON CONFLICT (project_id, connection_id, key_path)
 		DO UPDATE SET value_type = EXCLUDED.value_type,
 		              default_ttl_seconds = EXCLUDED.default_ttl_seconds,

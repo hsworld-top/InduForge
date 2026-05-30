@@ -79,7 +79,7 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_compute_runs",
 		"data_alarm_policy_groups",
 		"data_alarm_policies",
-		"data_builtin_realtime_keys",
+		"data_realtime_keys",
 		"data_builtin_message_topics",
 		"data_builtin_message_variables",
 		"data_workbench_object_groups",

@@ -926,26 +926,52 @@ export const stopS7DevSessionPoll = (projectId, connectionId, sessionId) => {
   })
 }
 
-export const getRedisKeys = (projectId, connectionId, params = {}) => {
+export const getRealtimeStoreKeys = (projectId, connectionId, params = {}) => {
   return request({
-    url: `/data/projects/${projectId}/connections/${connectionId}/redis/keys`,
+    url: `/data/projects/${projectId}/realtime-stores/${connectionId}/keys`,
     method: 'get',
     params,
   })
 }
 
-export const getRedisValue = (projectId, connectionId, key) => {
+export const getRealtimeStoreKey = (projectId, connectionId, key) => {
   return request({
-    url: `/data/projects/${projectId}/connections/${connectionId}/redis/value`,
+    url: `/data/projects/${projectId}/realtime-stores/${connectionId}/key`,
     method: 'get',
     params: { key },
   })
 }
 
-export const executeRedisCommand = (projectId, connectionId, data) => {
+export const saveRealtimeStoreKey = (projectId, connectionId, data) => {
   return request({
-    url: `/data/projects/${projectId}/connections/${connectionId}/redis/command`,
+    url: `/data/projects/${projectId}/realtime-stores/${connectionId}/key`,
+    method: 'put',
+    data,
+  })
+}
+
+export const renameRealtimeStoreKey = (projectId, connectionId, key, data) => {
+  return request({
+    url: `/data/projects/${projectId}/realtime-stores/${connectionId}/key/rename`,
+    method: 'patch',
+    params: { key },
+    data,
+  })
+}
+
+export const deleteRealtimeStoreKey = (projectId, connectionId, key) => {
+  return request({
+    url: `/data/projects/${projectId}/realtime-stores/${connectionId}/key`,
+    method: 'delete',
+    params: { key },
+  })
+}
+
+export const createRealtimeStoreKeyDatapoint = (projectId, connectionId, key, data) => {
+  return request({
+    url: `/data/projects/${projectId}/realtime-stores/${connectionId}/key/datapoint`,
     method: 'post',
+    params: { key },
     data,
   })
 }
@@ -1076,36 +1102,6 @@ export const sampleBuiltinTimeseries = (projectId, data) => {
     url: `/data/projects/${projectId}/builtin/timeseries/sample`,
     method: 'post',
     data,
-  })
-}
-
-export const getBuiltinRealtimeKeys = (projectId, connectionId, params = {}) => {
-  return request({
-    url: `/data/projects/${projectId}/connections/${connectionId}/realtime/keys`,
-    method: 'get',
-    params,
-  })
-}
-
-export const setBuiltinRealtimeKey = (projectId, connectionId, data) => {
-  return request({
-    url: `/data/projects/${projectId}/connections/${connectionId}/realtime/keys`,
-    method: 'post',
-    data,
-  })
-}
-
-export const getBuiltinRealtimeKey = (projectId, connectionId, key) => {
-  return request({
-    url: `/data/projects/${projectId}/connections/${connectionId}/realtime/keys/${encodeURIComponent(key)}`,
-    method: 'get',
-  })
-}
-
-export const deleteBuiltinRealtimeKey = (projectId, connectionId, key) => {
-  return request({
-    url: `/data/projects/${projectId}/connections/${connectionId}/realtime/keys/${encodeURIComponent(key)}`,
-    method: 'delete',
   })
 }
 
@@ -1867,9 +1863,12 @@ export default {
   createHttpConfig,
   createWebSocketConfig,
   createRedisConfig,
-  getRedisKeys,
-  getRedisValue,
-  executeRedisCommand,
+  getRealtimeStoreKeys,
+  getRealtimeStoreKey,
+  saveRealtimeStoreKey,
+  renameRealtimeStoreKey,
+  deleteRealtimeStoreKey,
+  createRealtimeStoreKeyDatapoint,
   createOpcuaConfig,
   createS7Config,
   createModbusConfig,
@@ -1984,9 +1983,6 @@ export default {
   executeBuiltinRelationSql,
   queryBuiltinTimeseries,
   sampleBuiltinTimeseries,
-  setBuiltinRealtimeKey,
-  getBuiltinRealtimeKey,
-  deleteBuiltinRealtimeKey,
   publishBuiltinMessage,
   getBuiltinMessageTopics,
   createBuiltinMessageTopic,

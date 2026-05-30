@@ -23,12 +23,11 @@ import S7WorkbenchPanel from './workbench/S7WorkbenchPanel.vue'
 import ProtocolWorkbenchPanel from './workbench/ProtocolWorkbenchPanel.vue'
 import HttpWorkbenchPanel from './workbench/http/HttpWorkbenchPanel.vue'
 import WebSocketWorkbenchPanel from './workbench/websocket/WebSocketWorkbenchPanel.vue'
-import RedisManagerWorkbench from './workbench/RedisManagerWorkbench.vue'
+import RealtimeStoreWorkbench from './workbench/realtime/RealtimeStoreWorkbench.vue'
 import IndustrialProtocolWorkbench from './workbench/IndustrialProtocolWorkbench.vue'
 import ReadOnlyConfigPanel from './workbench/ReadOnlyConfigPanel.vue'
 import BuiltinRelationWorkbench from './workbench/BuiltinRelationWorkbench.vue'
 import BuiltinTimeseriesWorkbench from './workbench/BuiltinTimeseriesWorkbench.vue'
-import BuiltinRealtimeWorkbench from './workbench/BuiltinRealtimeWorkbench.vue'
 import BuiltinMessageWorkbench from './workbench/BuiltinMessageWorkbench.vue'
 
 type AccessSourceConnection = {
@@ -55,7 +54,7 @@ const resolvedPanel = computed(() => {
   const type = props.connection.type || ''
   if (type === 'builtin.relation') return BuiltinRelationWorkbench
   if (type === 'builtin.timeseries') return BuiltinTimeseriesWorkbench
-  if (type === 'builtin.realtime') return BuiltinRealtimeWorkbench
+  if (type === 'builtin.realtime') return RealtimeStoreWorkbench
   if (type === 'builtin.message') return BuiltinMessageWorkbench
   if (['relational', 'mysql', 'postgresql', 'sqlserver', 'tdengine'].includes(type)) {
     return SqlWorkbench
@@ -70,7 +69,7 @@ const resolvedPanel = computed(() => {
     return OpcuaWorkbenchPanel
   }
   if (type === 'redis') {
-    return RedisManagerWorkbench
+    return RealtimeStoreWorkbench
   }
   if (type === 'modbus') {
     return ModbusWorkbenchPanel

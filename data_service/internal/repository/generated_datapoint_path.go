@@ -80,6 +80,8 @@ func generatedDataPointSourceConfigKey(sourceType string) string {
 		return "sessionId"
 	case "kafka.field":
 		return "fieldId"
+	case "realtime.key":
+		return "keyId"
 	default:
 		return ""
 	}

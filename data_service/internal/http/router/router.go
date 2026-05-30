@@ -17,6 +17,7 @@ type options struct {
 	contractCheckHandler      *handler.ContractCheckHandler
 	queryHandler              *handler.QueryHandler
 	workbenchGroupHandler     *handler.WorkbenchGroupHandler
+	realtimeStoreHandler      *handler.RealtimeStoreHandler
 	dataPointHandler          *handler.DataPointHandler
 	modbusModelingHandler     *handler.ModbusModelingHandler
 	mqttHandler               *handler.MqttHandler
@@ -99,6 +100,14 @@ func WithDataRoutes(queryHandler *handler.QueryHandler, dataPointHandler *handle
 func WithWorkbenchGroupRoutes(workbenchGroupHandler *handler.WorkbenchGroupHandler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
 		opts.workbenchGroupHandler = workbenchGroupHandler
+		opts.jwtValidator = jwtValidator
+	}
+}
+
+// WithRealtimeStoreRoutes wires Redis/IF 实时库统一工作台 routes.
+func WithRealtimeStoreRoutes(realtimeStoreHandler *handler.RealtimeStoreHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.realtimeStoreHandler = realtimeStoreHandler
 		opts.jwtValidator = jwtValidator
 	}
 }
@@ -243,6 +252,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountOpcuaModelingRoutes(mux, opts)
 	mountS7ModelingRoutes(mux, opts)
 	mountProtocolDevSessionRoutes(mux, opts)
+	mountRealtimeStoreRoutes(mux, opts)
 	mountProtocolWave1Routes(mux, opts)
 	mountProtocolWave2Routes(mux, opts)
 	mountPreviewSocketRoutes(mux, opts)
@@ -276,15 +286,38 @@ func mountBuiltinRuntimeRoutes(mux *http.ServeMux, opts options) {
 	mux.Handle("POST /api/v1/data/projects/{projectId}/builtin/timeseries/query", read(opts.builtinRuntimeHandler.QueryTimeseries))
 	mux.Handle("POST /api/v1/data/projects/{projectId}/builtin/timeseries/sample", write(opts.builtinRuntimeHandler.SampleTimeseries))
 	mux.Handle("POST /api/v1/data/projects/{projectId}/builtin/message/preview-session", write(opts.builtinRuntimeHandler.CreateMessagePreviewSession))
-	mux.Handle("GET /api/v1/data/projects/{projectId}/connections/{connectionId}/realtime/keys", read(opts.builtinRuntimeHandler.ListRealtimeKeys))
-	mux.Handle("POST /api/v1/data/projects/{projectId}/connections/{connectionId}/realtime/keys", write(opts.builtinRuntimeHandler.SetRealtimeKey))
-	mux.Handle("GET /api/v1/data/projects/{projectId}/connections/{connectionId}/realtime/keys/{key}", read(opts.builtinRuntimeHandler.GetRealtimeKey))
-	mux.Handle("DELETE /api/v1/data/projects/{projectId}/connections/{connectionId}/realtime/keys/{key}", write(opts.builtinRuntimeHandler.DeleteRealtimeKey))
 	mux.Handle("GET /api/v1/data/projects/{projectId}/connections/{connectionId}/message/topics", read(opts.builtinRuntimeHandler.ListMessageTopics))
 	mux.Handle("POST /api/v1/data/projects/{projectId}/connections/{connectionId}/message/topics", write(opts.builtinRuntimeHandler.CreateMessageTopic))
 	mux.Handle("POST /api/v1/data/projects/{projectId}/connections/{connectionId}/message/publish", write(opts.builtinRuntimeHandler.PublishMessage))
 	mux.Handle("GET /api/v1/data/projects/{projectId}/connections/{connectionId}/message/topics/{topicId}/variables", read(opts.builtinRuntimeHandler.ListMessageVariables))
 	mux.Handle("POST /api/v1/data/projects/{projectId}/connections/{connectionId}/message/topics/{topicId}/variables", write(opts.builtinRuntimeHandler.CreateMessageVariable))
+}
+
+func mountRealtimeStoreRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.realtimeStoreHandler == nil || opts.jwtValidator == nil {
+		return
+	}
+	read := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+	write := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+
+	mux.Handle("GET /api/v1/data/projects/{projectId}/realtime-stores/{connectionId}/keys", read(opts.realtimeStoreHandler.ListKeys))
+	mux.Handle("GET /api/v1/data/projects/{projectId}/realtime-stores/{connectionId}/key", read(opts.realtimeStoreHandler.GetKey))
+	mux.Handle("PUT /api/v1/data/projects/{projectId}/realtime-stores/{connectionId}/key", write(opts.realtimeStoreHandler.SaveKey))
+	mux.Handle("PATCH /api/v1/data/projects/{projectId}/realtime-stores/{connectionId}/key/rename", write(opts.realtimeStoreHandler.RenameKey))
+	mux.Handle("DELETE /api/v1/data/projects/{projectId}/realtime-stores/{connectionId}/key", write(opts.realtimeStoreHandler.DeleteKey))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/realtime-stores/{connectionId}/key/datapoint", write(opts.realtimeStoreHandler.CreateDataPoint))
 }
 
 func mountAlarmPolicyRoutes(mux *http.ServeMux, opts options) {
@@ -588,30 +621,6 @@ func mountConnectionRoutes(mux *http.ServeMux, opts options) {
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:read")(
 				middleware.ErrorHandler(opts.connectionHandler.ExecuteSQL),
-			),
-		),
-	)
-	mux.Handle(
-		"GET /api/v1/data/projects/{projectId}/connections/{connectionId}/redis/keys",
-		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:read")(
-				middleware.ErrorHandler(opts.connectionHandler.ListRedisKeys),
-			),
-		),
-	)
-	mux.Handle(
-		"GET /api/v1/data/projects/{projectId}/connections/{connectionId}/redis/value",
-		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:read")(
-				middleware.ErrorHandler(opts.connectionHandler.GetRedisValue),
-			),
-		),
-	)
-	mux.Handle(
-		"POST /api/v1/data/projects/{projectId}/connections/{connectionId}/redis/command",
-		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:read")(
-				middleware.ErrorHandler(opts.connectionHandler.ExecuteRedisCommand),
 			),
 		),
 	)
