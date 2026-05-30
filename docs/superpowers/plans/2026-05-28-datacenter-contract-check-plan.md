@@ -38,6 +38,14 @@
   - 改造成悬浮检查中心。
 - 修改：`datacenter/src/views/DataCenterNew.vue`
   - 左下角入口接入 store 状态色，打开悬浮检查中心。
+- 修改：`dev_core/src/services/dataDomainClient.js`
+  - 增加调用 data_service 发布契约检查的客户端方法。
+- 修改：`dev_core/src/services/publishService.js`
+  - 在发布流程读取 artifact 前调用数据中心契约检查，并按 `blocking` 阻断发布。
+- 修改：`dev_core/src/services/__tests__/dataDomainClient.test.js`
+  - 覆盖 data_service 契约检查接口调用。
+- 修改：`dev_core/src/services/__tests__/publishService.snapshot.test.js`
+  - 覆盖发布前数据中心契约检查阻断和通过路径。
 
 ---
 
@@ -114,6 +122,7 @@ type ContractCheckInput struct {
 	Module     string
 	ObjectType string
 	ObjectID   string
+	Trigger    string
 }
 
 type ContractCheckRunResult struct {
@@ -121,6 +130,7 @@ type ContractCheckRunResult struct {
 	ProjectID  string                  `json:"projectId"`
 	Scope      string                  `json:"scope"`
 	Mode       string                  `json:"mode"`
+	Trigger    string                  `json:"trigger,omitempty"`
 	Status     string                  `json:"status"`
 	Blocking   bool                    `json:"blocking"`
 	StartedAt  time.Time               `json:"startedAt"`
@@ -211,6 +221,7 @@ func buildContractCheckRunResult(projectID string, input ContractCheckInput, iss
 		ProjectID: projectID,
 		Scope:     scope,
 		Mode:      mode,
+		Trigger:   strings.TrimSpace(input.Trigger),
 		Status:    status,
 		Blocking:  blocking,
 		StartedAt: now,
@@ -616,10 +627,12 @@ var request struct {
 	Module     string `json:"module"`
 	ObjectType string `json:"objectType"`
 	ObjectID   string `json:"objectId"`
+	Trigger    string `json:"trigger"`
 }
 ```
 
 调用服务时传入 `Mode` 和 `Module`。
+同时传入 `Trigger`，用于区分 datacenter UI 自检与 dev_core 发布门禁。
 
 - [ ] **步骤 7：运行测试验证通过**
 
@@ -1400,6 +1413,7 @@ export interface RunContractCheckPayload {
   module?: ContractCheckModule
   objectType?: string
   objectId?: string
+  trigger?: 'datacenter.ui' | 'dev_core.publish'
 }
 ```
 
@@ -1934,7 +1948,7 @@ git commit -m "feat(datacenter): 实现契约检查悬浮面板"
 在 `docs/统一REST接口规范与清单.md` 的契约检查段落中明确：
 
 ```markdown
-契约检查 `run` 请求体支持 `scope`、`mode`、`module`、`objectType`、`objectId`。
+契约检查 `run` 请求体支持 `scope`、`mode`、`module`、`objectType`、`objectId`、`trigger`。
 响应包含 `status`、`blocking`、`progress`、`summary`、`issues`。
 发布门禁以 `blocking=true` 为阻断依据，外部接入源连接诊断默认不阻断。
 ```
@@ -1998,11 +2012,195 @@ git commit -m "docs(data): 更新契约检查接口说明"
 
 ---
 
+## 任务 11：dev_core 发布前调用 data_service 契约检查
+
+**文件：**
+- 修改：`dev_core/src/services/dataDomainClient.js`
+- 修改：`dev_core/src/services/publishService.js`
+- 修改：`dev_core/src/services/__tests__/dataDomainClient.test.js`
+- 修改：`dev_core/src/services/__tests__/publishService.snapshot.test.js`
+
+- [ ] **步骤 1：编写 dataDomainClient 失败测试**
+
+在 `dev_core/src/services/__tests__/dataDomainClient.test.js` 中增加：
+
+```js
+test('runProjectContractCheck 会调用 data_service 发布契约检查接口', async () => {
+  const fetchMock = jest.fn().mockResolvedValue({
+    ok: true,
+    headers: { get: () => 'application/json' },
+    json: async () => ({
+      code: 0,
+      data: {
+        projectId: 'project-1',
+        scope: 'project',
+        mode: 'contract',
+        trigger: 'dev_core.publish',
+        status: 'passed',
+        blocking: false,
+        summary: { failed: 0, pending: 0, warning: 0, passed: 1, blocking: 0 },
+        progress: { currentStage: '汇总检查结果', checkedCount: 1, totalCount: 1 },
+        issues: [],
+      },
+    }),
+  })
+  global.fetch = fetchMock
+
+  const client = new DataDomainClient({ baseUrl: 'http://data-service.test' })
+  const result = await client.runProjectContractCheck('project-1', 'Bearer token')
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    'http://data-service.test/api/v1/data/projects/project-1/contract-checks/run',
+    expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        scope: 'project',
+        mode: 'contract',
+        trigger: 'dev_core.publish',
+      }),
+    }),
+  )
+  expect(result.blocking).toBe(false)
+})
+```
+
+- [ ] **步骤 2：运行测试验证失败**
+
+```powershell
+pnpm --filter dev_core test -- dataDomainClient.test.js
+```
+
+预期：FAIL，`runProjectContractCheck` 未定义。
+
+- [ ] **步骤 3：实现 dataDomainClient 方法**
+
+在 `dev_core/src/services/dataDomainClient.js` 的 class 中加入：
+
+```js
+  /**
+   * 运行数据中心发布契约检查。
+   * @param {string} projectId - 工程 ID
+   * @param {string} [authorization] - 当前发布请求的 Bearer Token
+   * @returns {Promise<object>}
+   */
+  async runProjectContractCheck(projectId, authorization) {
+    return this.request(`/api/v1/data/projects/${projectId}/contract-checks/run`, {
+      method: 'POST',
+      authorization,
+      body: {
+        scope: 'project',
+        mode: 'contract',
+        trigger: 'dev_core.publish',
+      },
+    })
+  }
+```
+
+- [ ] **步骤 4：运行 dataDomainClient 测试验证通过**
+
+```powershell
+pnpm --filter dev_core test -- dataDomainClient.test.js
+```
+
+预期：PASS。
+
+- [ ] **步骤 5：编写 publishService 阻断测试**
+
+在 `dev_core/src/services/__tests__/publishService.snapshot.test.js` 中新增测试。复用该文件已有 mock 结构，将 dataDomainClient mock 增加 `runProjectContractCheck`：
+
+```js
+test('publish 会在数据中心契约检查阻断时停止发布', async () => {
+  publishService.dataDomainClient.runProjectContractCheck = jest.fn().mockResolvedValue({
+    status: 'failed',
+    blocking: true,
+    summary: { failed: 1, pending: 0, warning: 0, passed: 0, blocking: 1 },
+    issues: [
+      {
+        status: 'failed',
+        blocking: true,
+        module: 'datapoint',
+        objectType: 'datapoint',
+        title: '数据点已失效',
+        detail: 'http.device.status',
+        suggestion: '恢复来源对象或移除引用',
+      },
+    ],
+  })
+
+  await expect(
+    publishService.publish('project-publish', {
+      version: '9.9.9',
+      deployedBy: 'user-1',
+      authorization: 'Bearer publish-token',
+    }),
+  ).rejects.toMatchObject({
+    statusCode: 400,
+  })
+
+  expect(publishService.dataDomainClient.getProjectArtifact).not.toHaveBeenCalled()
+})
+```
+
+如果现有测试中 `publishService.dataDomainClient` 不可直接访问，则改为在 dataDomainClient 模块 mock 中暴露同一个 mock 对象，并断言该 mock 的调用。
+
+- [ ] **步骤 6：运行 publishService 测试验证失败**
+
+```powershell
+pnpm --filter dev_core test -- publishService.snapshot.test.js
+```
+
+预期：FAIL，发布流程尚未调用 `runProjectContractCheck` 或未阻断。
+
+- [ ] **步骤 7：实现发布前门禁**
+
+在 `dev_core/src/services/publishService.js` 的 `publish` 方法中，工程基础验证通过后、`collectProjectData` 前加入：
+
+```js
+      // 2. 数据中心发布契约检查
+      await this.addBuildLog(deploymentId, '检查数据中心发布契约...')
+      const dataContractCheck = await this.dataDomainClient.runProjectContractCheck(
+        projectId,
+        authorization,
+      )
+      if (dataContractCheck?.blocking) {
+        const issues = Array.isArray(dataContractCheck.issues) ? dataContractCheck.issues : []
+        const blockingIssues = issues.filter((item) => item?.blocking)
+        const summaryText = blockingIssues
+          .slice(0, 5)
+          .map((item) => item.title || item.detail || '未命名阻断项')
+          .join('；')
+        throw new AppError(ErrorCodes.VALIDATION_FAILED, 400, {
+          message: `数据中心契约检查未通过${summaryText ? `：${summaryText}` : ''}`,
+          dataContractCheck,
+        })
+      }
+```
+
+随后把原本“收集工程数据”步骤注释编号顺延为第 3 步，后续注释编号依次顺延。
+
+- [ ] **步骤 8：运行 dev_core 测试验证通过**
+
+```powershell
+pnpm --filter dev_core test -- dataDomainClient.test.js publishService.snapshot.test.js
+```
+
+预期：PASS。
+
+- [ ] **步骤 9：Commit**
+
+```powershell
+git add dev_core/src/services/dataDomainClient.js dev_core/src/services/publishService.js dev_core/src/services/__tests__/dataDomainClient.test.js dev_core/src/services/__tests__/publishService.snapshot.test.js
+git commit -m "feat(dev_core): 发布前检查数据中心契约"
+```
+
+---
+
 ## 自检
 
 - 设计文档中的对象范围已映射到任务 5、6、7。
 - 设计文档中的 UI 形态已映射到任务 8、9。
-- 设计文档中的发布前调用与 API 结构已映射到任务 2、3、10。
+- 设计文档中的发布前调用与 API 结构已映射到任务 2、3、10、11。
 - 设计文档中的“外部连接诊断不阻断”通过 `mode`、`category=diagnostic` 和 `blocking` 字段表达。
 - 计划不要求开发态真实连通用户现场外部接入源。
 - 计划保持现有接口入口，不引入新的发布编排职责。
+- `dev_core` 只负责发布编排和阻断展示，不复制 data_service 的数据域检查规则。

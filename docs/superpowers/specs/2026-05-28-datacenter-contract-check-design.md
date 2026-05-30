@@ -29,6 +29,35 @@ Designer 契约检查与数据中心契约检查分域提供，由发布流程�
 
 发布流程负责汇总结果和拦截，不复制 Designer 或数据中心内部规则。
 
+### 3.1 与 dev_core 发布编排的关系
+
+工程发布、部署和运维操作属于 `dev_core`。`data_service` 不主动编排发布，也不直接决定工程是否发布；它只提供数据中心发布契约检查接口，并返回结构化检查结果。
+
+`dev_core` 在发布工程时必须调用数据中心契约检查：
+
+1. `dev_core` 接收发布请求，并完成工程访问权限、发布权限和 Designer 发布态契约检查。
+2. `dev_core` 使用当前发布请求的 `Authorization` 调用 `data_service`：
+
+```text
+POST /api/v1/data/projects/{projectId}/contract-checks/run
+```
+
+请求体使用：
+
+```json
+{
+  "scope": "project",
+  "mode": "contract",
+  "trigger": "dev_core.publish"
+}
+```
+
+3. `data_service` 返回 `blocking/summary/issues`。
+4. 如果 `blocking=true`，`dev_core` 中止发布，发布记录标记为失败，构建日志写入阻断摘要，并把阻断项返回给运维前端。
+5. 如果 `blocking=false`，`dev_core` 继续读取 `data_service` artifact 并生成 IFP。
+
+`dev_core` 不解析数据中心内部规则，不复刻接入源、数据点、查询、计算或报警检查逻辑；只按 `blocking` 进行门禁判断，并展示 `issues`。
+
 ## 4. 检查边界
 
 ### 4.1 覆盖对象
@@ -441,6 +470,7 @@ interface RunContractCheckRequest {
   module?: ContractCheckIssue['module']
   objectType?: string
   objectId?: string
+  trigger?: 'datacenter.ui' | 'dev_core.publish'
 }
 ```
 
