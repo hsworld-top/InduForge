@@ -104,6 +104,7 @@
             <el-input
               v-model="activeTab.draft.key"
               class="realtime-store__key-input"
+              :disabled="Boolean(activeTab.draft.originalKey)"
               placeholder="device:line1:status"
               @input="markDirty"
             />
@@ -502,6 +503,10 @@ const saveActive = async () => {
   }
   saving.value = true
   try {
+    if (tab.draft.originalKey && tab.draft.key !== tab.draft.originalKey) {
+      ElMessage.warning('已存在 Key 请使用重命名操作')
+      return
+    }
     const payload = {
       key: tab.draft.key.trim(),
       type: tab.draft.type,

@@ -186,7 +186,13 @@ func (r *RealtimeStoreRepository) Upsert(ctx context.Context, params UpsertRealt
 }
 
 func (r *RealtimeStoreRepository) Rename(ctx context.Context, projectID, connectionID, provider, oldKey, newKey string) (*RealtimeKeyRecord, error) {
-	row := r.pool.QueryRow(ctx, `
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启实时库 key 重命名事务失败", err)
+	}
+	defer rollbackProtocolTxQuietly(ctx, tx)
+
+	row := tx.QueryRow(ctx, `
 		UPDATE data_realtime_keys
 		SET key_path = $5,
 		    updated_at = now()
@@ -212,6 +218,20 @@ func (r *RealtimeStoreRepository) Rename(ctx context.Context, projectID, connect
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "实时库 key 元数据不存在")
 		}
 		return nil, translateRealtimeStoreWriteError(err, "重命名实时库 key 元数据失败")
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE data_points
+		SET name = $3,
+		    source_config = jsonb_set(source_config, '{key}', to_jsonb($3::text), true),
+		    updated_at = now()
+		WHERE project_id = $1
+		  AND source_type = 'realtime.key'
+		  AND source_config->>'keyId' = $2
+	`, projectID, record.ID, newKey); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步实时库 key 数据点配置失败", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交实时库 key 重命名事务失败", err)
 	}
 	return &record, nil
 }

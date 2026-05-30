@@ -105,9 +105,9 @@ func (s *RealtimeStoreService) ListKeys(ctx context.Context, projectID, connecti
 			applyRealtimeMetadata(&items[index], record)
 		}
 	}
-	items = filterRealtimeKeys(items, q, group)
-	groups := buildRealtimeGroups(items)
-	return &RealtimeStoreKeyList{List: items, Groups: groups}, nil
+	searchedItems := filterRealtimeKeys(items, q, "")
+	groups := buildRealtimeGroups(searchedItems)
+	return &RealtimeStoreKeyList{List: filterRealtimeKeys(searchedItems, "", group), Groups: groups}, nil
 }
 
 func (s *RealtimeStoreService) GetKey(ctx context.Context, projectID, connectionID, key string) (*RealtimeStoreValue, error) {
@@ -181,9 +181,20 @@ func (s *RealtimeStoreService) RenameKey(ctx context.Context, projectID, connect
 	if oldKey == newKey {
 		return s.GetKey(ctx, projectID, connectionID, oldKey)
 	}
+	current, err := s.GetKey(ctx, projectID, connectionID, oldKey)
+	if err != nil {
+		return nil, err
+	}
 	if provider == "redis" {
 		if err := s.withRedisClient(ctx, connection, func(client redis.UniversalClient) error {
-			return client.Rename(ctx, oldKey, newKey).Err()
+			renamed, err := client.RenameNX(ctx, oldKey, newKey).Result()
+			if err != nil {
+				return err
+			}
+			if !renamed {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "目标 key 已存在")
+			}
+			return nil
 		}); err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "重命名 Redis key 失败", err)
 		}
@@ -192,11 +203,29 @@ func (s *RealtimeStoreService) RenameKey(ctx context.Context, projectID, connect
 		if err != nil {
 			return nil, err
 		}
-		if err := s.builtinRuntime.realtimeClient.Rename(ctx, oldFullKey, newFullKey).Err(); err != nil {
+		renamed, err := s.builtinRuntime.realtimeClient.RenameNX(ctx, oldFullKey, newFullKey).Result()
+		if err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "重命名 IF 实时库 key 失败", err)
 		}
+		if !renamed {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "目标 key 已存在")
+		}
 	}
-	_, _ = s.repository.Rename(ctx, projectID, connectionID, provider, oldKey, newKey)
+	if _, err := s.repository.Rename(ctx, projectID, connectionID, provider, oldKey, newKey); err != nil {
+		_, upsertErr := s.repository.Upsert(ctx, repository.UpsertRealtimeKeyParams{
+			ProjectID:         projectID,
+			ConnectionID:      connectionID,
+			Provider:          provider,
+			KeyPath:           newKey,
+			RedisType:         current.Type,
+			ValueType:         current.ValueType,
+			DefaultTtlSeconds: int(current.TTL),
+			Description:       "",
+		})
+		if upsertErr != nil {
+			return nil, err
+		}
+	}
 	return s.GetKey(ctx, projectID, connectionID, newKey)
 }
 
@@ -447,11 +476,23 @@ func (s *RealtimeStoreService) getBuiltinValue(ctx context.Context, connection *
 }
 
 func (s *RealtimeStoreService) saveRedisKey(ctx context.Context, connection *repository.ConnectionRecord, key, redisType string, value any, ttlSeconds int) error {
+	if err := validateRealtimeRedisValue(redisType, value); err != nil {
+		return err
+	}
 	return s.withRedisClient(ctx, connection, func(client redis.UniversalClient) error {
-		if err := writeRealtimeRedisValue(ctx, client, key, redisType, value); err != nil {
+		tempKey := key + ":__if_tmp__:" + fmt.Sprintf("%d", time.Now().UnixNano())
+		if err := writeRealtimeRedisValue(ctx, client, tempKey, redisType, value); err != nil {
 			return err
 		}
-		return applyRealtimeTTL(ctx, client, key, ttlSeconds)
+		if err := applyRealtimeTTL(ctx, client, tempKey, ttlSeconds); err != nil {
+			_ = client.Del(ctx, tempKey).Err()
+			return err
+		}
+		if err := client.Rename(ctx, tempKey, key).Err(); err != nil {
+			_ = client.Del(ctx, tempKey).Err()
+			return err
+		}
+		return nil
 	})
 }
 
@@ -549,9 +590,6 @@ func writeRealtimeRedisValue(ctx context.Context, client redis.UniversalClient, 
 	if keyType == "stream" {
 		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "stream 第一版仅支持只读")
 	}
-	if err := client.Del(ctx, key).Err(); err != nil {
-		return err
-	}
 	switch keyType {
 	case "string":
 		return client.Set(ctx, key, stringifyRealtimeValue(value), 0).Err()
@@ -559,21 +597,35 @@ func writeRealtimeRedisValue(ctx context.Context, client redis.UniversalClient, 
 		return client.HSet(ctx, key, stringMapFromAny(value)).Err()
 	case "list":
 		values := stringSliceFromAny(value)
-		if len(values) == 0 {
-			return client.RPush(ctx, key, "").Err()
-		}
 		return client.RPush(ctx, key, values).Err()
 	case "set":
 		values := stringSliceFromAny(value)
-		if len(values) == 0 {
-			return client.SAdd(ctx, key, "").Err()
-		}
 		return client.SAdd(ctx, key, values).Err()
 	case "zset":
 		return client.ZAdd(ctx, key, zsetMembersFromAny(value)...).Err()
 	default:
 		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "实时库 key 类型不受支持")
 	}
+}
+
+func validateRealtimeRedisValue(keyType string, value any) error {
+	switch normalizeRedisType(keyType) {
+	case "string":
+		return nil
+	case "hash":
+		if len(stringMapFromAny(value)) == 0 {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "hash 至少需要一行有效字段")
+		}
+	case "list", "set":
+		if len(stringSliceFromAny(value)) == 0 {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "集合至少需要一行有效值")
+		}
+	case "zset":
+		if len(zsetMembersFromAny(value)) == 0 {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "zset 至少需要一行有效 member")
+		}
+	}
+	return nil
 }
 
 func applyRealtimeTTL(ctx context.Context, client redis.UniversalClient, key string, ttlSeconds int) error {
