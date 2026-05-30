@@ -49,6 +49,32 @@ func TestWriteRealtimeRedisValueRejectsEmptyCollectionBeforeDeletingOldKey(t *te
 	}
 }
 
+func TestSaveRedisKeyReplacesCollectionInTransaction(t *testing.T) {
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	defer client.Close()
+
+	ctx := context.Background()
+	if err := client.HSet(ctx, "device:hash", map[string]string{"old": "value"}).Err(); err != nil {
+		t.Fatalf("seed hash failed: %v", err)
+	}
+	svc := &RealtimeStoreService{}
+	connection := &repository.ConnectionRecord{Config: map[string]any{"address": server.Addr()}}
+	value := []any{map[string]any{"key": "next", "value": "updated"}}
+	if err := svc.saveRedisKey(ctx, connection, "device:hash", "hash", value, 30); err != nil {
+		t.Fatalf("save redis key failed: %v", err)
+	}
+	if exists, err := client.HExists(ctx, "device:hash", "old").Result(); err != nil || exists {
+		t.Fatalf("old hash field should be removed, exists=%v err=%v", exists, err)
+	}
+	if got, err := client.HGet(ctx, "device:hash", "next").Result(); err != nil || got != "updated" {
+		t.Fatalf("new hash field mismatch, got=%q err=%v", got, err)
+	}
+	if ttl, err := client.TTL(ctx, "device:hash").Result(); err != nil || ttl <= 0 {
+		t.Fatalf("expected ttl to be applied, ttl=%v err=%v", ttl, err)
+	}
+}
+
 func TestRealtimeRenameNXDoesNotOverwriteTarget(t *testing.T) {
 	server := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: server.Addr()})

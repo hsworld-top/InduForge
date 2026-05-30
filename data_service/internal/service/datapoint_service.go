@@ -115,14 +115,23 @@ type UpdateDataPointRuntimePermissionsInput struct {
 
 // DataPointService 承载数据点领域的校验、映射与值读取逻辑。
 type DataPointService struct {
-	repository *repository.DataPointRepository
-	queries    *QueryService
-	mqtt       *repository.MqttRepository
-	computes   *repository.ComputeRepository
+	repository     *repository.DataPointRepository
+	queries        *QueryService
+	mqtt           *repository.MqttRepository
+	computes       *repository.ComputeRepository
+	kafkaWorkbench *repository.KafkaWorkbenchRepository
+	httpWorkbench  *repository.HTTPWorkbenchRepository
+	websocketWb    *repository.WebSocketWorkbenchRepository
+	realtimeStore  *repository.RealtimeStoreRepository
+	connections    *repository.ConnectionRepository
+	builtinRuntime *BuiltinRuntimeService
+	opcuaModeling  *repository.OpcuaModelingRepository
+	modbusModeling *repository.ModbusModelingRepository
+	s7Modeling     *repository.S7ModelingRepository
 }
 
-// NewDataPointService ????????
-// MQTT ?????????????????????? MQTT ???????
+// NewDataPointService 创建数据点服务。
+// 工作台类源对象仓储通过 SetGeneratedSourceRepositories 可选注入，避免构造函数继续膨胀。
 func NewDataPointService(repo *repository.DataPointRepository, queryService *QueryService, mqttRepository *repository.MqttRepository, computeRepository *repository.ComputeRepository) *DataPointService {
 	return &DataPointService{
 		repository: repo,
@@ -130,6 +139,29 @@ func NewDataPointService(repo *repository.DataPointRepository, queryService *Que
 		mqtt:       mqttRepository,
 		computes:   computeRepository,
 	}
+}
+
+// SetGeneratedSourceRepositories 注入各协议工作台仓储，用于统一校验自动生成数据点的源对象是否仍然有效。
+func (s *DataPointService) SetGeneratedSourceRepositories(
+	kafkaWorkbench *repository.KafkaWorkbenchRepository,
+	httpWorkbench *repository.HTTPWorkbenchRepository,
+	websocketWorkbench *repository.WebSocketWorkbenchRepository,
+	realtimeStore *repository.RealtimeStoreRepository,
+	connections *repository.ConnectionRepository,
+	builtinRuntime *BuiltinRuntimeService,
+	opcuaModeling *repository.OpcuaModelingRepository,
+	modbusModeling *repository.ModbusModelingRepository,
+	s7Modeling *repository.S7ModelingRepository,
+) {
+	s.kafkaWorkbench = kafkaWorkbench
+	s.httpWorkbench = httpWorkbench
+	s.websocketWb = websocketWorkbench
+	s.realtimeStore = realtimeStore
+	s.connections = connections
+	s.builtinRuntime = builtinRuntime
+	s.opcuaModeling = opcuaModeling
+	s.modbusModeling = modbusModeling
+	s.s7Modeling = s7Modeling
 }
 
 // ListDataPoints 查询项目下的数据点列表。
@@ -573,7 +605,7 @@ func (s *DataPointService) refreshDataPointValidity(ctx context.Context, project
 
 func isGeneratedDataPoint(sourceType string) bool {
 	switch strings.TrimSpace(sourceType) {
-	case "calc.output", "db.query", "mqtt.subscription", "mqtt.tag":
+	case "calc.output", "db.query", "mqtt.subscription", "mqtt.tag", "kafka.field", "http.request", "websocket.session", "realtime.key", "opcua.node", "modbus.register", "s7.variable":
 		return true
 	default:
 		return false
@@ -590,6 +622,20 @@ func (s *DataPointService) isDataPointSourceValid(ctx context.Context, projectID
 		return s.isMqttSubscriptionDataPointValid(ctx, projectID, record)
 	case "mqtt.tag":
 		return s.isMqttTagDataPointValid(ctx, projectID, record)
+	case "kafka.field":
+		return s.isKafkaFieldDataPointValid(ctx, projectID, record)
+	case "http.request":
+		return s.isHTTPRequestDataPointValid(ctx, projectID, record)
+	case "websocket.session":
+		return s.isWebSocketSessionDataPointValid(ctx, projectID, record)
+	case "realtime.key":
+		return s.isRealtimeKeyDataPointValid(ctx, projectID, record)
+	case "opcua.node":
+		return s.isOpcuaNodeDataPointValid(ctx, projectID, record)
+	case "modbus.register":
+		return s.isModbusRegisterDataPointValid(ctx, projectID, record)
+	case "s7.variable":
+		return s.isS7VariableDataPointValid(ctx, projectID, record)
 	default:
 		return true, nil
 	}
@@ -708,6 +754,206 @@ func (s *DataPointService) isMqttTagDataPointValid(ctx context.Context, projectI
 	return record.Name == tag.Name && isGeneratedPathMatch(record.Path, expectedPath, tag.ID), nil
 }
 
+func (s *DataPointService) isKafkaFieldDataPointValid(ctx context.Context, projectID string, record repository.DataPointRecord) (bool, error) {
+	fieldID := strings.TrimSpace(firstString(record.SourceConfig, "fieldId"))
+	if s.kafkaWorkbench == nil || fieldID == "" {
+		return true, nil
+	}
+	field, err := s.kafkaWorkbench.GetField(ctx, projectID, fieldID)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	mapping, err := s.kafkaWorkbench.GetTopicMapping(ctx, projectID, field.TopicMappingID)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	expectedPath := buildKafkaDataPointPath(mapping.Name, field.Name)
+	return record.Name == field.Name &&
+		record.SourceID != nil && strings.TrimSpace(*record.SourceID) == field.ConnectionID &&
+		isGeneratedPathMatch(record.Path, expectedPath, field.ID), nil
+}
+
+func (s *DataPointService) isHTTPRequestDataPointValid(ctx context.Context, projectID string, record repository.DataPointRecord) (bool, error) {
+	requestID := strings.TrimSpace(firstString(record.SourceConfig, "requestId"))
+	if s.httpWorkbench == nil || s.connections == nil || requestID == "" {
+		return true, nil
+	}
+	request, err := s.httpWorkbench.GetRequest(ctx, projectID, requestID)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	connection, err := s.connections.GetByProjectAndID(ctx, projectID, request.ConnectionID)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	expectedPath := buildHTTPDataPointPath(connection.Name, request.Name)
+	return record.Name == request.Name &&
+		record.SourceID != nil && strings.TrimSpace(*record.SourceID) == request.ConnectionID &&
+		isGeneratedPathMatch(record.Path, expectedPath, request.ID), nil
+}
+
+func (s *DataPointService) isWebSocketSessionDataPointValid(ctx context.Context, projectID string, record repository.DataPointRecord) (bool, error) {
+	sessionID := strings.TrimSpace(firstString(record.SourceConfig, "sessionId"))
+	if s.websocketWb == nil || s.connections == nil || sessionID == "" {
+		return true, nil
+	}
+	session, err := s.websocketWb.GetSession(ctx, projectID, sessionID)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	connection, err := s.connections.GetByProjectAndID(ctx, projectID, session.ConnectionID)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	expectedPath := buildWebSocketDataPointPath(connection.Name, session.Name)
+	return record.Name == session.Name &&
+		record.SourceID != nil && strings.TrimSpace(*record.SourceID) == session.ConnectionID &&
+		isGeneratedPathMatch(record.Path, expectedPath, session.ID), nil
+}
+
+func (s *DataPointService) isRealtimeKeyDataPointValid(ctx context.Context, projectID string, record repository.DataPointRecord) (bool, error) {
+	keyID := strings.TrimSpace(firstString(record.SourceConfig, "keyId"))
+	if s.realtimeStore == nil || s.connections == nil || keyID == "" || record.SourceID == nil {
+		return true, nil
+	}
+	connectionID := strings.TrimSpace(*record.SourceID)
+	connection, err := s.connections.GetByProjectAndID(ctx, projectID, connectionID)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	provider := "builtin"
+	if connection.Type == "redis" {
+		provider = "redis"
+	}
+	if connection.Type != "redis" && connection.Type != "builtin.realtime" {
+		return false, nil
+	}
+	keyPath := strings.TrimSpace(firstString(record.SourceConfig, "key"))
+	if keyPath == "" {
+		keyPath = record.Name
+	}
+	key, err := s.realtimeStore.GetByKey(ctx, projectID, connectionID, provider, keyPath)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	basePath := "realtime." + realtimeDataPointPathSegment(key.KeyPath)
+	if provider == "redis" {
+		basePath = "redis." + realtimeDataPointPathSegment(key.KeyPath)
+	}
+	return key.ID == keyID &&
+		record.Name == key.KeyPath &&
+		isGeneratedPathMatch(record.Path, basePath, key.ID), nil
+}
+
+func (s *DataPointService) isOpcuaNodeDataPointValid(ctx context.Context, projectID string, record repository.DataPointRecord) (bool, error) {
+	if s.opcuaModeling == nil || s.connections == nil || record.SourceID == nil {
+		return true, nil
+	}
+	node, err := s.opcuaModeling.GetNode(ctx, projectID, strings.TrimSpace(*record.SourceID))
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	connection, err := s.connections.GetByProjectAndID(ctx, projectID, node.ConnectionID)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	expectedPath := "opcua." + normalizeDatapointSegment(connection.Name)
+	groups, _ := s.opcuaModeling.ListGroups(ctx, projectID, node.ConnectionID)
+	if groupPath := opcuaDataPointGroupPath(groups, node.GroupID); groupPath != "" {
+		expectedPath += "." + groupPath
+	}
+	expectedPath += "." + normalizeDatapointSegment(node.Code)
+	return record.Name == node.Name && isGeneratedPathMatch(record.Path, expectedPath, node.ID), nil
+}
+
+func (s *DataPointService) isModbusRegisterDataPointValid(ctx context.Context, projectID string, record repository.DataPointRecord) (bool, error) {
+	if s.modbusModeling == nil || s.connections == nil || record.SourceID == nil {
+		return true, nil
+	}
+	register, err := s.modbusModeling.GetRegister(ctx, projectID, strings.TrimSpace(*record.SourceID))
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	connection, err := s.connections.GetByProjectAndID(ctx, projectID, register.ConnectionID)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	expectedPath := "modbus." + normalizeDatapointSegment(connection.Name)
+	groups, _ := s.modbusModeling.ListGroups(ctx, projectID, register.ConnectionID)
+	if groupPath := modbusDataPointGroupPath(groups, register.GroupID); groupPath != "" {
+		expectedPath += "." + groupPath
+	}
+	expectedPath += "." + normalizeDatapointSegment(register.Code)
+	return record.Name == register.Name && isGeneratedPathMatch(record.Path, expectedPath, register.ID), nil
+}
+
+func (s *DataPointService) isS7VariableDataPointValid(ctx context.Context, projectID string, record repository.DataPointRecord) (bool, error) {
+	if s.s7Modeling == nil || s.connections == nil || record.SourceID == nil {
+		return true, nil
+	}
+	connectionID := strings.TrimSpace(firstString(record.SourceConfig, "connectionId"))
+	if connectionID == "" {
+		return true, nil
+	}
+	variable, err := s.s7Modeling.GetVariable(ctx, projectID, connectionID, strings.TrimSpace(*record.SourceID))
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	connection, err := s.connections.GetByProjectAndID(ctx, projectID, variable.ConnectionID)
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	expectedPath := "s7." + normalizeDatapointSegment(connection.Name)
+	groups, _ := s.s7Modeling.ListGroups(ctx, projectID, variable.ConnectionID)
+	if groupPath := s7DataPointGroupPath(groups, variable.GroupID); groupPath != "" {
+		expectedPath += "." + groupPath
+	}
+	expectedPath += "." + normalizeDatapointSegment(variable.Code)
+	return record.Name == variable.Name && isGeneratedPathMatch(record.Path, expectedPath, variable.ID), nil
+}
+
 func isNotFoundError(err error) bool {
 	if err == nil {
 		return false
@@ -729,6 +975,82 @@ func isGeneratedPathMatch(actualPath, basePath, sourceID string) bool {
 		return true
 	}
 	return strings.HasPrefix(actualPath, basePath+"_")
+}
+
+func realtimeDataPointPathSegment(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "unnamed"
+	}
+	replacer := strings.NewReplacer(":", ".", "/", ".", "\\", ".", " ", "_")
+	value = strings.Trim(replacer.Replace(value), ".")
+	if value == "" {
+		return "unnamed"
+	}
+	return value
+}
+
+func opcuaDataPointGroupPath(groups []repository.OpcuaNodeGroupRecord, groupID *string) string {
+	if groupID == nil || strings.TrimSpace(*groupID) == "" {
+		return ""
+	}
+	byID := make(map[string]repository.OpcuaNodeGroupRecord, len(groups))
+	for _, group := range groups {
+		byID[group.ID] = group
+	}
+	return buildDataPointGroupPath(strings.TrimSpace(*groupID), func(id string) (string, *string, bool) {
+		group, ok := byID[id]
+		return group.Name, group.ParentID, ok
+	})
+}
+
+func modbusDataPointGroupPath(groups []repository.ModbusRegisterGroupRecord, groupID *string) string {
+	if groupID == nil || strings.TrimSpace(*groupID) == "" {
+		return ""
+	}
+	byID := make(map[string]repository.ModbusRegisterGroupRecord, len(groups))
+	for _, group := range groups {
+		byID[group.ID] = group
+	}
+	return buildDataPointGroupPath(strings.TrimSpace(*groupID), func(id string) (string, *string, bool) {
+		group, ok := byID[id]
+		return group.Name, group.ParentID, ok
+	})
+}
+
+func s7DataPointGroupPath(groups []repository.S7VariableGroupRecord, groupID *string) string {
+	if groupID == nil || strings.TrimSpace(*groupID) == "" {
+		return ""
+	}
+	byID := make(map[string]repository.S7VariableGroupRecord, len(groups))
+	for _, group := range groups {
+		byID[group.ID] = group
+	}
+	return buildDataPointGroupPath(strings.TrimSpace(*groupID), func(id string) (string, *string, bool) {
+		group, ok := byID[id]
+		return group.Code, group.ParentID, ok
+	})
+}
+
+func buildDataPointGroupPath(groupID string, resolve func(string) (string, *string, bool)) string {
+	segments := make([]string, 0)
+	visited := map[string]struct{}{}
+	for currentID := groupID; currentID != ""; {
+		if _, ok := visited[currentID]; ok {
+			break
+		}
+		visited[currentID] = struct{}{}
+		name, parentID, ok := resolve(currentID)
+		if !ok {
+			break
+		}
+		segments = append([]string{normalizeDatapointSegment(name)}, segments...)
+		if parentID == nil {
+			break
+		}
+		currentID = strings.TrimSpace(*parentID)
+	}
+	return strings.Join(segments, ".")
 }
 
 func (s *DataPointService) enrichDataPointPreview(ctx context.Context, projectID string, record repository.DataPointRecord, target *DataPoint) {
@@ -774,6 +1096,16 @@ func deriveDataPointInvalidReason(record repository.DataPointRecord) string {
 		return "HTTP 请求数据点已失效：接口请求或接入源不存在，或路径已变更"
 	case "websocket.session":
 		return "WebSocket 会话数据点已失效：会话或接入源不存在，或路径已变更"
+	case "realtime.key":
+		return "实时库 key 数据点已失效：key 元数据、接入源不存在，或路径已变更"
+	case "kafka.field":
+		return "Kafka 变量数据点已失效：变量、Topic 映射不存在，或路径已变更"
+	case "opcua.node":
+		return "OPC UA 变量数据点已失效：变量、接入源不存在，或路径已变更"
+	case "modbus.register":
+		return "Modbus 变量数据点已失效：变量、接入源不存在，或路径已变更"
+	case "s7.variable":
+		return "S7 变量数据点已失效：变量、接入源不存在，或路径已变更"
 	default:
 		return "数据点已失效"
 	}

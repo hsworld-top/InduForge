@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	apperrors "github.com/indu-forge/data_service/internal/errors"
 	"github.com/indu-forge/data_service/internal/repository"
 )
@@ -265,13 +267,158 @@ func (s *DataPointService) buildValueFromRecord(ctx context.Context, projectID s
 	if value.Value != nil {
 		value.Quality = "good"
 	}
-	if record.SourceType == "http.request" || record.SourceType == "websocket.session" {
-		value.Value = parseStoredHTTPDefaultValue(record.DefaultValue)
-		if value.Value != nil {
-			value.Quality = "good"
+	if record.SourceType == "http.request" {
+		return s.buildHTTPRequestValue(ctx, projectID, record, value)
+	}
+	if record.SourceType == "websocket.session" {
+		return s.buildWebSocketSessionValue(ctx, projectID, record, value)
+	}
+	if record.SourceType == "kafka.field" {
+		return s.buildKafkaFieldValue(ctx, projectID, record, value)
+	}
+	if record.SourceType == "realtime.key" {
+		return s.buildRealtimeKeyValue(ctx, projectID, record, value)
+	}
+	return &value, nil
+}
+
+func (s *DataPointService) buildHTTPRequestValue(ctx context.Context, projectID string, record repository.DataPointRecord, value DataPointValue) (*DataPointValue, error) {
+	requestID := strings.TrimSpace(firstString(record.SourceConfig, "requestId"))
+	if s.httpWorkbench != nil && requestID != "" {
+		request, err := s.httpWorkbench.GetRequest(ctx, projectID, requestID)
+		if err != nil {
+			return nil, err
 		}
+		if request.Quality != "" {
+			value.Quality = request.Quality
+		}
+		if request.LastSentAt != nil {
+			value.Timestamp = *request.LastSentAt
+		}
+		if request.Quality == "bad" {
+			value.Value = request.LastResponse
+			return &value, nil
+		}
+	}
+	value.Value = parseStoredHTTPDefaultValue(record.DefaultValue)
+	if value.Value != nil {
+		value.Quality = "good"
+	}
+	return &value, nil
+}
+
+func (s *DataPointService) buildWebSocketSessionValue(ctx context.Context, projectID string, record repository.DataPointRecord, value DataPointValue) (*DataPointValue, error) {
+	sessionID := strings.TrimSpace(firstString(record.SourceConfig, "sessionId"))
+	if s.websocketWb != nil && sessionID != "" {
+		session, err := s.websocketWb.GetSession(ctx, projectID, sessionID)
+		if err != nil {
+			return nil, err
+		}
+		if session.Quality != "" {
+			value.Quality = session.Quality
+		}
+		if session.LastMessageAt != nil {
+			value.Timestamp = *session.LastMessageAt
+		}
+		if session.Quality == "bad" {
+			value.Value = map[string]any{
+				"message":    session.LastMessage,
+				"diagnostic": derefString(session.LastDiagnostic),
+			}
+			return &value, nil
+		}
+	}
+	value.Value = parseStoredHTTPDefaultValue(record.DefaultValue)
+	if value.Value != nil {
+		value.Quality = "good"
+	}
+	return &value, nil
+}
+
+func (s *DataPointService) buildKafkaFieldValue(ctx context.Context, projectID string, record repository.DataPointRecord, value DataPointValue) (*DataPointValue, error) {
+	fieldID := strings.TrimSpace(firstString(record.SourceConfig, "fieldId"))
+	if s.kafkaWorkbench == nil || fieldID == "" {
 		return &value, nil
 	}
+	field, err := s.kafkaWorkbench.GetField(ctx, projectID, fieldID)
+	if err != nil {
+		return nil, err
+	}
+	value.Value = field.LastValue
+	value.Quality = fallbackTrimmed(field.Quality, "unknown")
+	if field.LastUpdatedAt != nil {
+		value.Timestamp = *field.LastUpdatedAt
+	}
+	return &value, nil
+}
+
+func (s *DataPointService) buildRealtimeKeyValue(ctx context.Context, projectID string, record repository.DataPointRecord, value DataPointValue) (*DataPointValue, error) {
+	if s.connections == nil || record.SourceID == nil {
+		return &value, nil
+	}
+	connectionID := strings.TrimSpace(*record.SourceID)
+	connection, err := s.connections.GetByProjectAndID(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	key := strings.TrimSpace(firstString(record.SourceConfig, "key"))
+	if key == "" {
+		key = record.Name
+	}
+	if connection.Type == "redis" {
+		return s.buildRedisKeyValue(ctx, connection, key, value)
+	}
+	if connection.Type == "builtin.realtime" {
+		return s.buildBuiltinRealtimeKeyValue(ctx, projectID, connection, key, value)
+	}
+	return &value, nil
+}
+
+func (s *DataPointService) buildRedisKeyValue(ctx context.Context, connection *repository.ConnectionRecord, key string, value DataPointValue) (*DataPointValue, error) {
+	client, err := newRedisPreviewClient(connection.Config, mapFromAny(connection.Config["options"]))
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+	keyType, err := client.Type(ctx, key).Result()
+	if err != nil {
+		return nil, err
+	}
+	if keyType == "none" {
+		value.Quality = "bad"
+		return &value, nil
+	}
+	current, err := readRealtimeRedisValue(ctx, client, key, keyType)
+	if err != nil {
+		return nil, err
+	}
+	value.Value = current
+	value.Quality = "good"
+	return &value, nil
+}
+
+func (s *DataPointService) buildBuiltinRealtimeKeyValue(ctx context.Context, projectID string, connection *repository.ConnectionRecord, key string, value DataPointValue) (*DataPointValue, error) {
+	if s.builtinRuntime == nil || s.builtinRuntime.realtimeClient == nil {
+		return &value, nil
+	}
+	fullKey, err := deriveBuiltinRealtimeKey(s.builtinRuntime.realtimeKeyPrefix, projectID, dataPointRuntimeKey(connection), key)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := s.builtinRuntime.realtimeClient.Get(ctx, fullKey).Result()
+	if err != nil {
+		if err == redis.Nil {
+			value.Quality = "bad"
+			return &value, nil
+		}
+		return nil, err
+	}
+	var decoded any
+	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
+		decoded = raw
+	}
+	value.Value = decoded
+	value.Quality = "good"
 	return &value, nil
 }
 
@@ -284,6 +431,17 @@ func parseStoredHTTPDefaultValue(value *string) any {
 		return *value
 	}
 	return decoded
+}
+
+func dataPointRuntimeKey(connection *repository.ConnectionRecord) string {
+	runtimeKey := strings.TrimSpace(toString(connection.Config["runtimeKey"]))
+	if runtimeKey == "" {
+		runtimeKey = strings.TrimSpace(toString(connection.Config["storeKey"]))
+	}
+	if runtimeKey == "" {
+		runtimeKey = connection.ID
+	}
+	return runtimeKey
 }
 
 func defaultValueOrNil(value *string) any {

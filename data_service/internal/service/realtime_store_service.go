@@ -480,19 +480,15 @@ func (s *RealtimeStoreService) saveRedisKey(ctx context.Context, connection *rep
 		return err
 	}
 	return s.withRedisClient(ctx, connection, func(client redis.UniversalClient) error {
-		tempKey := key + ":__if_tmp__:" + fmt.Sprintf("%d", time.Now().UnixNano())
-		if err := writeRealtimeRedisValue(ctx, client, tempKey, redisType, value); err != nil {
-			return err
-		}
-		if err := applyRealtimeTTL(ctx, client, tempKey, ttlSeconds); err != nil {
-			_ = client.Del(ctx, tempKey).Err()
-			return err
-		}
-		if err := client.Rename(ctx, tempKey, key).Err(); err != nil {
-			_ = client.Del(ctx, tempKey).Err()
-			return err
-		}
-		return nil
+		_, err := client.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+			// 只操作同一个 key，Redis Cluster 下不会触发跨 slot；MULTI/EXEC 避免删除后写入中途失败留下半截集合。
+			pipe.Del(ctx, key)
+			if err := writeRealtimeRedisValue(ctx, pipe, key, redisType, value); err != nil {
+				return err
+			}
+			return applyRealtimeTTL(ctx, pipe, key, ttlSeconds)
+		})
+		return err
 	})
 }
 
@@ -585,7 +581,7 @@ func readRealtimeRedisValue(ctx context.Context, client redis.UniversalClient, k
 	}
 }
 
-func writeRealtimeRedisValue(ctx context.Context, client redis.UniversalClient, key, keyType string, value any) error {
+func writeRealtimeRedisValue(ctx context.Context, client redis.Cmdable, key, keyType string, value any) error {
 	keyType = normalizeRedisType(keyType)
 	if keyType == "stream" {
 		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "stream 第一版仅支持只读")
@@ -628,7 +624,7 @@ func validateRealtimeRedisValue(keyType string, value any) error {
 	return nil
 }
 
-func applyRealtimeTTL(ctx context.Context, client redis.UniversalClient, key string, ttlSeconds int) error {
+func applyRealtimeTTL(ctx context.Context, client redis.Cmdable, key string, ttlSeconds int) error {
 	if ttlSeconds < 0 {
 		return client.Persist(ctx, key).Err()
 	}

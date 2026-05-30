@@ -45,15 +45,15 @@ type UpsertRealtimeKeyParams struct {
 }
 
 type CreateRealtimeKeyDataPointParams struct {
-	ProjectID         string
-	ConnectionID      string
-	KeyID             string
-	KeyPath           string
-	Provider          string
-	RedisType         string
-	DataType          string
-	SourceConfig      map[string]any
-	UserID            *string
+	ProjectID    string
+	ConnectionID string
+	KeyID        string
+	KeyPath      string
+	Provider     string
+	RedisType    string
+	DataType     string
+	SourceConfig map[string]any
+	UserID       *string
 }
 
 type RealtimeStoreRepository struct {
@@ -219,15 +219,24 @@ func (r *RealtimeStoreRepository) Rename(ctx context.Context, projectID, connect
 		}
 		return nil, translateRealtimeStoreWriteError(err, "重命名实时库 key 元数据失败")
 	}
+	basePath := "realtime." + safeDataPointPathSegment(record.KeyPath)
+	if provider == "redis" {
+		basePath = "redis." + safeDataPointPathSegment(record.KeyPath)
+	}
+	allocatedPath, err := allocateGeneratedDataPointPath(ctx, tx, projectID, basePath, "realtime.key", record.ID)
+	if err != nil {
+		return nil, err
+	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE data_points
-		SET name = $3,
-		    source_config = jsonb_set(source_config, '{key}', to_jsonb($3::text), true),
+		SET path = $3,
+		    name = $4,
+		    source_config = jsonb_set(source_config, '{key}', to_jsonb($4::text), true),
 		    updated_at = now()
 		WHERE project_id = $1
 		  AND source_type = 'realtime.key'
 		  AND source_config->>'keyId' = $2
-	`, projectID, record.ID, newKey); err != nil {
+	`, projectID, record.ID, allocatedPath, newKey); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步实时库 key 数据点配置失败", err)
 	}
 	if err := tx.Commit(ctx); err != nil {

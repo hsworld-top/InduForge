@@ -521,6 +521,10 @@ func upsertHTTPRequestDataPoint(ctx context.Context, tx pgx.Tx, record HTTPReque
 	if !record.Enabled {
 		status = "inactive"
 	}
+	allocatedPath, err := allocateGeneratedDataPointPath(ctx, tx, record.ProjectID, path, "http.request", record.ID)
+	if err != nil {
+		return "", "", err
+	}
 
 	var dataPointID, dataPointPath string
 	err = tx.QueryRow(ctx, `
@@ -547,10 +551,6 @@ func upsertHTTPRequestDataPoint(ctx context.Context, tx pgx.Tx, record HTTPReque
 		return "", "", apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步 HTTP 请求数据点失败", err)
 	}
 
-	allocatedPath, err := allocateGeneratedDataPointPath(ctx, tx, record.ProjectID, path, "http.request", record.ID)
-	if err != nil {
-		return "", "", err
-	}
 	err = tx.QueryRow(ctx, `
 		INSERT INTO data_points (
 			project_id, path, name, source_type, source_id, source_config,

@@ -498,6 +498,10 @@ func upsertWebSocketSessionDataPoint(ctx context.Context, tx pgx.Tx, record WebS
 	if !record.Enabled {
 		status = "inactive"
 	}
+	allocatedPath, err := allocateGeneratedDataPointPath(ctx, tx, record.ProjectID, path, "websocket.session", record.ID)
+	if err != nil {
+		return "", "", err
+	}
 
 	var dataPointID, dataPointPath string
 	err = tx.QueryRow(ctx, `
@@ -524,10 +528,6 @@ func upsertWebSocketSessionDataPoint(ctx context.Context, tx pgx.Tx, record WebS
 		return "", "", apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步 WebSocket 会话数据点失败", err)
 	}
 
-	allocatedPath, err := allocateGeneratedDataPointPath(ctx, tx, record.ProjectID, path, "websocket.session", record.ID)
-	if err != nil {
-		return "", "", err
-	}
 	err = tx.QueryRow(ctx, `
 		INSERT INTO data_points (
 			project_id, path, name, source_type, source_id, source_config,
