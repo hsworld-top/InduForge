@@ -50,8 +50,16 @@ CREATE TABLE IF NOT EXISTS data_websocket_sessions (
 CREATE INDEX IF NOT EXISTS data_websocket_session_groups_tree_idx
     ON data_websocket_session_groups (project_id, connection_id, parent_id, sort_order, updated_at DESC);
 
+CREATE UNIQUE INDEX IF NOT EXISTS data_websocket_session_groups_root_name_key
+    ON data_websocket_session_groups (project_id, connection_id, name)
+    WHERE parent_id IS NULL;
+
 CREATE INDEX IF NOT EXISTS data_websocket_sessions_group_idx
     ON data_websocket_sessions (project_id, connection_id, group_id, sort_order, updated_at DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS data_websocket_sessions_root_name_key
+    ON data_websocket_sessions (project_id, connection_id, name)
+    WHERE group_id IS NULL;
 
 CREATE INDEX IF NOT EXISTS data_websocket_sessions_connection_idx
     ON data_websocket_sessions (project_id, connection_id, updated_at DESC);

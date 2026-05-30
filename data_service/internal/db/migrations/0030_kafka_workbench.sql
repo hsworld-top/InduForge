@@ -73,6 +73,10 @@ CREATE TABLE IF NOT EXISTS data_kafka_fields (
 CREATE INDEX IF NOT EXISTS data_kafka_topic_groups_tree_idx
     ON data_kafka_topic_groups (project_id, connection_id, parent_id, sort_order, created_at);
 
+CREATE UNIQUE INDEX IF NOT EXISTS data_kafka_topic_groups_root_name_key
+    ON data_kafka_topic_groups (project_id, connection_id, name)
+    WHERE parent_id IS NULL;
+
 CREATE INDEX IF NOT EXISTS data_kafka_topic_mappings_group_idx
     ON data_kafka_topic_mappings (project_id, connection_id, group_id, sort_order, created_at);
 

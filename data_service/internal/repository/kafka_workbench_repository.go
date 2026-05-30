@@ -982,25 +982,18 @@ func upsertKafkaFieldDataPoint(ctx context.Context, tx pgx.Tx, field KafkaFieldR
 		return "", "", apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步 Kafka 字段数据点失败", err)
 	}
 
+	allocatedPath, err := allocateGeneratedDataPointPath(ctx, tx, field.ProjectID, path, "kafka.field", field.ID)
+	if err != nil {
+		return "", "", err
+	}
 	err = tx.QueryRow(ctx, `
 		INSERT INTO data_points (
 			project_id, path, name, source_type, source_id, source_config,
 			data_type, refresh_mode, status, created_by, updated_by
 		)
 		VALUES ($1, $2, $3, 'kafka.field', $4, $5::jsonb, $6, 'subscription', $7, $8, $8)
-		ON CONFLICT (project_id, path)
-		DO UPDATE SET
-			name = EXCLUDED.name,
-			source_type = EXCLUDED.source_type,
-			source_id = EXCLUDED.source_id,
-			source_config = EXCLUDED.source_config,
-			data_type = EXCLUDED.data_type,
-			refresh_mode = EXCLUDED.refresh_mode,
-			status = EXCLUDED.status,
-			updated_by = EXCLUDED.updated_by,
-			updated_at = now()
 		RETURNING id, path
-	`, field.ProjectID, path, field.Name, field.ConnectionID, string(sourceConfigPayload), field.DataType, status, userID).Scan(&dataPointID, &dataPointPath)
+	`, field.ProjectID, allocatedPath, field.Name, field.ConnectionID, string(sourceConfigPayload), field.DataType, status, userID).Scan(&dataPointID, &dataPointPath)
 	if err != nil {
 		return "", "", apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步 Kafka 字段数据点失败", err)
 	}

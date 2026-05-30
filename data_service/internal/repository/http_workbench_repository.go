@@ -547,26 +547,18 @@ func upsertHTTPRequestDataPoint(ctx context.Context, tx pgx.Tx, record HTTPReque
 		return "", "", apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步 HTTP 请求数据点失败", err)
 	}
 
+	allocatedPath, err := allocateGeneratedDataPointPath(ctx, tx, record.ProjectID, path, "http.request", record.ID)
+	if err != nil {
+		return "", "", err
+	}
 	err = tx.QueryRow(ctx, `
 		INSERT INTO data_points (
 			project_id, path, name, source_type, source_id, source_config,
 			data_type, default_value, refresh_mode, status, created_by, updated_by
 		)
 		VALUES ($1, $2, $3, 'http.request', $4, $5::jsonb, 'object', $6, 'manual', $7, $8, $8)
-		ON CONFLICT (project_id, path)
-		DO UPDATE SET
-			name = EXCLUDED.name,
-			source_type = EXCLUDED.source_type,
-			source_id = EXCLUDED.source_id,
-			source_config = EXCLUDED.source_config,
-			data_type = EXCLUDED.data_type,
-			default_value = COALESCE(EXCLUDED.default_value, data_points.default_value),
-			refresh_mode = EXCLUDED.refresh_mode,
-			status = EXCLUDED.status,
-			updated_by = EXCLUDED.updated_by,
-			updated_at = now()
 		RETURNING id, path
-	`, record.ProjectID, path, record.Name, record.ConnectionID, string(configPayload), defaultValue, status, userID).Scan(&dataPointID, &dataPointPath)
+	`, record.ProjectID, allocatedPath, record.Name, record.ConnectionID, string(configPayload), defaultValue, status, userID).Scan(&dataPointID, &dataPointPath)
 	if err != nil {
 		return "", "", apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步 HTTP 请求数据点失败", err)
 	}
