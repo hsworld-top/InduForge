@@ -1,6 +1,13 @@
 // @ts-nocheck
 import request from '@/utils/request'
 import {
+  HttpRequestGroupListSchema,
+  HttpRequestGroupSchema,
+  HttpRequestListSchema,
+  HttpRequestSchema,
+  HttpSendResponseSchema,
+} from './schemas/http-workbench.schema'
+import {
   KafkaFieldGroupListSchema,
   KafkaFieldGroupSchema,
   KafkaFieldListSchema,
@@ -147,6 +154,90 @@ export const previewProtocol = (projectId, connectionId, data = {}) => {
 }
 
 const unwrapKafkaPayload = (response) => response?.data ?? response
+const unwrapHTTPPayload = (response) => response?.data ?? response
+
+export const getHttpRequestGroups = async (projectId, connectionId) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/http/sources/${connectionId}/request-groups`,
+    method: 'get',
+  })
+  return HttpRequestGroupListSchema.parse(unwrapHTTPPayload(res))
+}
+
+export const createHttpRequestGroup = async (projectId, connectionId, data) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/http/sources/${connectionId}/request-groups`,
+    method: 'post',
+    data,
+  })
+  return HttpRequestGroupSchema.parse(unwrapHTTPPayload(res))
+}
+
+export const updateHttpRequestGroup = async (projectId, groupId, data) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/http/request-groups/${groupId}`,
+    method: 'put',
+    data,
+  })
+  return HttpRequestGroupSchema.parse(unwrapHTTPPayload(res))
+}
+
+export const deleteHttpRequestGroup = (projectId, groupId) => {
+  return request({
+    url: `/data/projects/${projectId}/http/request-groups/${groupId}`,
+    method: 'delete',
+  })
+}
+
+export const getHttpRequests = async (projectId, connectionId, params = {}) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/http/sources/${connectionId}/requests`,
+    method: 'get',
+    params,
+  })
+  return HttpRequestListSchema.parse(unwrapHTTPPayload(res))
+}
+
+export const getHttpRequest = async (projectId, requestId) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/http/requests/${requestId}`,
+    method: 'get',
+  })
+  return HttpRequestSchema.parse(unwrapHTTPPayload(res))
+}
+
+export const createHttpRequest = async (projectId, connectionId, data) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/http/sources/${connectionId}/requests`,
+    method: 'post',
+    data,
+  })
+  return HttpRequestSchema.parse(unwrapHTTPPayload(res))
+}
+
+export const updateHttpRequest = async (projectId, requestId, data) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/http/requests/${requestId}`,
+    method: 'put',
+    data,
+  })
+  return HttpRequestSchema.parse(unwrapHTTPPayload(res))
+}
+
+export const deleteHttpRequest = (projectId, requestId) => {
+  return request({
+    url: `/data/projects/${projectId}/http/requests/${requestId}`,
+    method: 'delete',
+  })
+}
+
+export const sendHttpRequest = async (projectId, requestId) => {
+  const res = await request({
+    url: `/data/projects/${projectId}/http/requests/${requestId}/send`,
+    method: 'post',
+  })
+  return HttpSendResponseSchema.parse(unwrapHTTPPayload(res))
+}
 
 export const getKafkaTopicGroups = async (projectId, connectionId) => {
   const res = await request({
@@ -1695,6 +1786,16 @@ export default {
   createTdengineConfig,
   validateOpcdaContract,
   previewProtocol,
+  getHttpRequestGroups,
+  createHttpRequestGroup,
+  updateHttpRequestGroup,
+  deleteHttpRequestGroup,
+  getHttpRequests,
+  getHttpRequest,
+  createHttpRequest,
+  updateHttpRequest,
+  deleteHttpRequest,
+  sendHttpRequest,
   getKafkaTopicGroups,
   createKafkaTopicGroup,
   updateKafkaTopicGroup,

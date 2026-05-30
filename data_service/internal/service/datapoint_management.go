@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -264,7 +265,25 @@ func (s *DataPointService) buildValueFromRecord(ctx context.Context, projectID s
 	if value.Value != nil {
 		value.Quality = "good"
 	}
+	if record.SourceType == "http.request" {
+		value.Value = parseStoredHTTPDefaultValue(record.DefaultValue)
+		if value.Value != nil {
+			value.Quality = "good"
+		}
+		return &value, nil
+	}
 	return &value, nil
+}
+
+func parseStoredHTTPDefaultValue(value *string) any {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return nil
+	}
+	var decoded any
+	if err := json.Unmarshal([]byte(*value), &decoded); err != nil {
+		return *value
+	}
+	return decoded
 }
 
 func defaultValueOrNil(value *string) any {
