@@ -86,6 +86,39 @@ func normalizeCreateTableInput(connectionType string, input CreateRelationalTabl
 	}, nil
 }
 
+func normalizeUpdateTableInput(input UpdateRelationalTableInput) (UpdateRelationalTableInput, error) {
+	if len(input.Columns) == 0 {
+		return UpdateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "至少需要一个字段")
+	}
+	columns := make([]CreateRelationalTableColumnInput, 0, len(input.Columns))
+	columnNames := map[string]struct{}{}
+	for _, column := range input.Columns {
+		normalizedColumn, err := normalizeTableColumnInput(column)
+		if err != nil {
+			return UpdateRelationalTableInput{}, err
+		}
+		if _, exists := columnNames[normalizedColumn.Name]; exists {
+			return UpdateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "字段名重复: "+normalizedColumn.Name)
+		}
+		columnNames[normalizedColumn.Name] = struct{}{}
+		columns = append(columns, normalizedColumn)
+	}
+	indexes := make([]CreateRelationalTableIndexInput, 0, len(input.Indexes))
+	indexNames := map[string]struct{}{}
+	for _, index := range input.Indexes {
+		normalizedIndex, err := normalizeTableIndexInput(index, columnNames)
+		if err != nil {
+			return UpdateRelationalTableInput{}, err
+		}
+		if _, exists := indexNames[normalizedIndex.Name]; exists {
+			return UpdateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "索引名重复: "+normalizedIndex.Name)
+		}
+		indexNames[normalizedIndex.Name] = struct{}{}
+		indexes = append(indexes, normalizedIndex)
+	}
+	return UpdateRelationalTableInput{Columns: columns, Indexes: indexes}, nil
+}
+
 func normalizeTableColumnInput(input CreateRelationalTableColumnInput) (CreateRelationalTableColumnInput, error) {
 	name, err := normalizeTableDesignIdentifier(input.Name, "字段名")
 	if err != nil {
@@ -210,6 +243,185 @@ func buildPostgresCreateTableDDL(schema string, input CreateRelationalTableInput
 		statements = append(statements, fmt.Sprintf("%s %s ON %s (%s)", prefix, pgx.Identifier{index.Name}.Sanitize(), tableName, strings.Join(columns, ", ")))
 	}
 	return strings.Join(statements, ";\n") + ";", nil
+}
+
+func buildPostgresUpdateTableDDL(schema, tableName string, current *RelationalTableStructure, input UpdateRelationalTableInput) ([]string, error) {
+	if current == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前表结构不能为空")
+	}
+	qualifiedTable := pgx.Identifier{schema, tableName}.Sanitize()
+	currentColumns := make(map[string]RelationalTableColumn, len(current.Columns))
+	for _, column := range current.Columns {
+		currentColumns[column.Name] = column
+	}
+	nextColumns := make(map[string]CreateRelationalTableColumnInput, len(input.Columns))
+	for _, column := range input.Columns {
+		nextColumns[column.Name] = column
+	}
+
+	statements := make([]string, 0)
+	for _, column := range input.Columns {
+		currentColumn, exists := currentColumns[column.Name]
+		if !exists {
+			columnType, err := postgresColumnType(column)
+			if err != nil {
+				return nil, err
+			}
+			definition := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", qualifiedTable, pgx.Identifier{column.Name}.Sanitize(), columnType)
+			if !column.Nullable {
+				definition += " NOT NULL"
+			}
+			if column.DefaultValue != "" && !column.AutoIncrement {
+				definition += " DEFAULT " + column.DefaultValue
+			}
+			statements = append(statements, definition)
+			if column.Comment != "" {
+				statements = append(statements, postgresColumnCommentDDL(schema, tableName, column.Name, column.Comment))
+			}
+			continue
+		}
+		if currentColumn.IsPrimary != column.Primary || currentColumn.AutoIncrement != column.AutoIncrement {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "暂不支持修改主键或自增字段: "+column.Name)
+		}
+		if !postgresColumnTypeMatches(currentColumn, column) {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "暂不支持修改字段类型: "+column.Name)
+		}
+		if !postgresColumnDefaultMatches(currentColumn, column) {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "暂不支持修改字段默认值: "+column.Name)
+		}
+		if currentColumn.Nullable != column.Nullable {
+			if column.Nullable {
+				statements = append(statements, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL", qualifiedTable, pgx.Identifier{column.Name}.Sanitize()))
+			} else {
+				statements = append(statements, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL", qualifiedTable, pgx.Identifier{column.Name}.Sanitize()))
+			}
+		}
+		currentComment := ""
+		if currentColumn.Comment != nil {
+			currentComment = *currentColumn.Comment
+		}
+		if currentComment != column.Comment {
+			statements = append(statements, postgresColumnCommentDDL(schema, tableName, column.Name, column.Comment))
+		}
+	}
+	for _, column := range current.Columns {
+		if _, exists := nextColumns[column.Name]; exists {
+			continue
+		}
+		if column.IsPrimary {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "暂不支持删除主键字段: "+column.Name)
+		}
+		statements = append(statements, fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", qualifiedTable, pgx.Identifier{column.Name}.Sanitize()))
+	}
+
+	indexStatements, err := buildPostgresUpdateIndexDDL(schema, qualifiedTable, current.Indexes, input.Indexes)
+	if err != nil {
+		return nil, err
+	}
+	statements = append(statements, indexStatements...)
+	return statements, nil
+}
+
+func buildPostgresUpdateIndexDDL(schema, qualifiedTable string, current []RelationalIndex, next []CreateRelationalTableIndexInput) ([]string, error) {
+	currentIndexes := make(map[string]RelationalIndex, len(current))
+	for _, index := range current {
+		if strings.EqualFold(index.Type, "PRIMARY") {
+			continue
+		}
+		currentIndexes[index.Name] = index
+	}
+	nextIndexes := make(map[string]CreateRelationalTableIndexInput, len(next))
+	for _, index := range next {
+		nextIndexes[index.Name] = index
+	}
+	statements := make([]string, 0)
+	for name, index := range currentIndexes {
+		nextIndex, exists := nextIndexes[name]
+		if !exists {
+			statements = append(statements, fmt.Sprintf("DROP INDEX %s", pgx.Identifier{schema, name}.Sanitize()))
+			continue
+		}
+		if !postgresIndexMatches(index, nextIndex) {
+			statements = append(statements, fmt.Sprintf("DROP INDEX %s", pgx.Identifier{schema, name}.Sanitize()))
+			statements = append(statements, postgresCreateIndexDDL(qualifiedTable, nextIndex))
+		}
+	}
+	for name, index := range nextIndexes {
+		if _, exists := currentIndexes[name]; !exists {
+			statements = append(statements, postgresCreateIndexDDL(qualifiedTable, index))
+		}
+	}
+	return statements, nil
+}
+
+func postgresColumnCommentDDL(schema, tableName, columnName, comment string) string {
+	value := "NULL"
+	if comment != "" {
+		value = "'" + strings.ReplaceAll(comment, "'", "''") + "'"
+	}
+	return fmt.Sprintf(
+		"COMMENT ON COLUMN %s IS %s",
+		pgx.Identifier{schema, tableName, columnName}.Sanitize(),
+		value,
+	)
+}
+
+func postgresCreateIndexDDL(qualifiedTable string, index CreateRelationalTableIndexInput) string {
+	prefix := "CREATE INDEX"
+	if index.Type == "unique" {
+		prefix = "CREATE UNIQUE INDEX"
+	}
+	return fmt.Sprintf("%s %s ON %s (%s)", prefix, pgx.Identifier{index.Name}.Sanitize(), qualifiedTable, strings.Join(quotePostgresColumns(index.Columns), ", "))
+}
+
+func postgresIndexMatches(current RelationalIndex, next CreateRelationalTableIndexInput) bool {
+	currentType := "index"
+	if strings.EqualFold(current.Type, "UNIQUE") {
+		currentType = "unique"
+	}
+	if currentType != next.Type || len(current.Columns) != len(next.Columns) {
+		return false
+	}
+	for index, column := range current.Columns {
+		if column != next.Columns[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func postgresColumnTypeMatches(current RelationalTableColumn, next CreateRelationalTableColumnInput) bool {
+	if next.AutoIncrement && current.AutoIncrement {
+		return true
+	}
+	normalized := strings.ToLower(strings.TrimSpace(current.Type))
+	switch next.Type {
+	case "varchar", "string":
+		return normalized == "character varying" || normalized == "varchar"
+	case "int", "integer":
+		return normalized == "integer"
+	case "double", "float":
+		return normalized == "double precision"
+	case "json", "jsonb":
+		return normalized == "jsonb"
+	case "datetime", "timestamp":
+		return normalized == "timestamp without time zone" || normalized == "timestamp"
+	case "timestamptz":
+		return normalized == "timestamp with time zone" || normalized == "timestamptz"
+	default:
+		return normalized == next.Type
+	}
+}
+
+func postgresColumnDefaultMatches(current RelationalTableColumn, next CreateRelationalTableColumnInput) bool {
+	if current.AutoIncrement {
+		return true
+	}
+	currentDefault := ""
+	if current.DefaultValue != nil {
+		currentDefault = strings.TrimSpace(*current.DefaultValue)
+	}
+	return currentDefault == strings.TrimSpace(next.DefaultValue)
 }
 
 func postgresColumnType(column CreateRelationalTableColumnInput) (string, error) {

@@ -991,6 +991,14 @@ export const createConnectionTable = (projectId, connectionId, data) => {
   })
 }
 
+export const updateConnectionTableStructure = (projectId, connectionId, tableName, data) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}/tables/${encodeURIComponent(tableName)}/structure`,
+    method: 'patch',
+    data,
+  })
+}
+
 export const renameConnectionTable = (projectId, connectionId, tableName, data) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/tables/${encodeURIComponent(tableName)}`,
@@ -1969,6 +1977,7 @@ export default {
   stopS7DevSessionPoll,
   getConnectionTables,
   createConnectionTable,
+  updateConnectionTableStructure,
   renameConnectionTable,
   deleteConnectionTable,
   getTableData,

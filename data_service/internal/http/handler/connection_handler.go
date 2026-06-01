@@ -299,6 +299,32 @@ func (h *ConnectionHandler) GetTableStructure(w http.ResponseWriter, r *http.Req
 	return nil
 }
 
+// UpdateTableStructure 修改内置 IF 表结构。
+func (h *ConnectionHandler) UpdateTableStructure(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+
+	var request struct {
+		Columns []service.CreateRelationalTableColumnInput `json:"columns"`
+		Indexes []service.CreateRelationalTableIndexInput  `json:"indexes"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+
+	result, err := h.service.UpdateTableStructure(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), r.PathValue("tableName"), service.UpdateRelationalTableInput{
+		Columns: request.Columns,
+		Indexes: request.Indexes,
+	})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 // GetTableData 返回表数据预览。
 func (h *ConnectionHandler) GetTableData(w http.ResponseWriter, r *http.Request) error {
 	if _, err := requireClaims(r); err != nil {

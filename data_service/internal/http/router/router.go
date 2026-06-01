@@ -609,6 +609,14 @@ func mountConnectionRoutes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
+		"PATCH /api/v1/data/projects/{projectId}/connections/{connectionId}/tables/{tableName}/structure",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.connectionHandler.UpdateTableStructure),
+			),
+		),
+	)
+	mux.Handle(
 		"GET /api/v1/data/projects/{projectId}/connections/{connectionId}/tables/{tableName}/data",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:read")(

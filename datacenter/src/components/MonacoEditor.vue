@@ -289,6 +289,17 @@ const revealPosition = (line: number, column = 1) => {
   editorInstance.focus()
 }
 
+const revealEnd = () => {
+  const model = editorInstance?.getModel?.()
+  if (!editorInstance || !model) return false
+  const line = model.getLineCount()
+  const column = model.getLineMaxColumn(line)
+  editorInstance.setPosition({ lineNumber: line, column })
+  editorInstance.revealPositionInCenter({ lineNumber: line, column })
+  editorInstance.focus()
+  return true
+}
+
 // 暴露方法给父组件
 defineExpose({
   getValue: () => editorInstance?.getValue() || '',
@@ -296,6 +307,7 @@ defineExpose({
   insertText,
   setDiagnostics,
   revealPosition,
+  revealEnd,
   format: formatCode,
   focus: () => editorInstance?.focus(),
   dispose: () => {

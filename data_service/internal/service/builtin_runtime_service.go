@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +23,12 @@ const (
 	defaultBuiltinSQLLimit = 100
 	maxBuiltinSQLLimit     = 500
 )
+
+type builtinRuntimeTx interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Commit(context.Context) error
+	Rollback(context.Context) error
+}
 
 // BuiltinMessagePublisher 抽象消息发布实现，便于测试时注入 fake publisher。
 type BuiltinMessagePublisher interface {
@@ -390,10 +398,49 @@ func (s *BuiltinRuntimeService) GetTableStructureInSchema(ctx context.Context, s
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "内置运行库表名无效")
 	}
 	rows, err := s.devPool.Query(ctx, `
-		SELECT column_name, data_type, is_nullable = 'YES', column_default
-		FROM information_schema.columns
-		WHERE table_schema = $1 AND table_name = $2
-		ORDER BY ordinal_position
+		SELECT
+			c.column_name,
+			c.data_type,
+			c.character_maximum_length,
+			c.numeric_precision,
+			c.numeric_scale,
+			c.is_nullable = 'YES' AS nullable,
+			c.column_default,
+			pgd.description,
+			EXISTS (
+				SELECT 1
+				FROM information_schema.table_constraints tc
+				JOIN information_schema.key_column_usage kcu
+				  ON tc.constraint_name = kcu.constraint_name
+				 AND tc.table_schema = kcu.table_schema
+				 AND tc.table_name = kcu.table_name
+				WHERE tc.table_schema = c.table_schema
+				  AND tc.table_name = c.table_name
+				  AND tc.constraint_type = 'PRIMARY KEY'
+				  AND kcu.column_name = c.column_name
+			) AS is_primary,
+			EXISTS (
+				SELECT 1
+				FROM information_schema.table_constraints tc
+				JOIN information_schema.key_column_usage kcu
+				  ON tc.constraint_name = kcu.constraint_name
+				 AND tc.table_schema = kcu.table_schema
+				 AND tc.table_name = kcu.table_name
+				WHERE tc.table_schema = c.table_schema
+				  AND tc.table_name = c.table_name
+				  AND tc.constraint_type = 'UNIQUE'
+				  AND kcu.column_name = c.column_name
+			) AS is_unique,
+			POSITION('nextval(' IN COALESCE(c.column_default, '')) > 0 AS auto_increment
+		FROM information_schema.columns c
+		LEFT JOIN pg_catalog.pg_statio_all_tables st
+		  ON st.schemaname = c.table_schema
+		 AND st.relname = c.table_name
+		LEFT JOIN pg_catalog.pg_description pgd
+		  ON pgd.objoid = st.relid
+		 AND pgd.objsubid = c.ordinal_position
+		WHERE c.table_schema = $1 AND c.table_name = $2
+		ORDER BY c.ordinal_position
 	`, schemaName, tableName)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询内置运行库表结构失败", err)
@@ -401,18 +448,139 @@ func (s *BuiltinRuntimeService) GetTableStructureInSchema(ctx context.Context, s
 	defer rows.Close()
 	columns := make([]RelationalTableColumn, 0)
 	for rows.Next() {
-		var column RelationalTableColumn
-		var defaultValue *string
-		if err := rows.Scan(&column.Name, &column.Type, &column.Nullable, &defaultValue); err != nil {
+		column := RelationalTableColumn{}
+		var (
+			maxLength sql.NullInt64
+			precision sql.NullInt64
+			scale     sql.NullInt64
+			nullable  bool
+			comment   sql.NullString
+			defValue  sql.NullString
+			isPrimary bool
+			isUnique  bool
+			autoIncr  bool
+		)
+		if err := rows.Scan(
+			&column.Name,
+			&column.Type,
+			&maxLength,
+			&precision,
+			&scale,
+			&nullable,
+			&defValue,
+			&comment,
+			&isPrimary,
+			&isUnique,
+			&autoIncr,
+		); err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取内置运行库表结构失败", err)
 		}
-		column.DefaultValue = defaultValue
+		column.MaxLength = nullInt64ToInt(maxLength)
+		column.NumericPrecision = nullInt64ToInt(precision)
+		column.NumericScale = nullInt64ToInt(scale)
+		column.Nullable = nullable
+		column.DefaultValue = nullStringPointer(defValue)
+		column.Comment = nullStringPointer(comment)
+		column.IsPrimary = isPrimary
+		column.IsUnique = isUnique
+		column.AutoIncrement = autoIncr
 		columns = append(columns, column)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历内置运行库表结构失败", err)
 	}
-	return &RelationalTableStructure{Columns: columns, Indexes: []RelationalIndex{}, ForeignKeys: []RelationalForeignKey{}}, nil
+	indexes, err := s.listPostgresIndexesInSchema(ctx, schemaName, tableName)
+	if err != nil {
+		return nil, err
+	}
+	return &RelationalTableStructure{Columns: columns, Indexes: indexes, ForeignKeys: []RelationalForeignKey{}}, nil
+}
+
+func (s *BuiltinRuntimeService) UpdateTableStructureInSchema(ctx context.Context, schemaName, tableName string, input UpdateRelationalTableInput) (*RelationalTableStructure, error) {
+	if s == nil || s.devPool == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开发态关系/时序运行库未初始化")
+	}
+	schemaName = sanitizeBuiltinIdentifier(schemaName, "")
+	tableName = sanitizeBuiltinIdentifier(tableName, "")
+	if schemaName == "" || tableName == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "内置运行库表名无效")
+	}
+	current, err := s.GetTableStructureInSchema(ctx, schemaName, tableName)
+	if err != nil {
+		return nil, err
+	}
+	statements, err := buildPostgresUpdateTableDDL(schemaName, tableName, current, input)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := s.devPool.Begin(ctx)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启内置运行库表结构事务失败", err)
+	}
+	defer rollbackBuiltinTxQuietly(ctx, tx)
+	for _, statement := range statements {
+		if _, err := tx.Exec(ctx, statement); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "修改内置运行库表结构失败", err)
+		}
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE if_table_metadata
+		SET updated_at = now()
+		WHERE schema_name = $1 AND table_name = $2
+	`, schemaName, tableName); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "更新内置运行库表元数据失败", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交内置运行库表结构事务失败", err)
+	}
+	return s.GetTableStructureInSchema(ctx, schemaName, tableName)
+}
+
+func (s *BuiltinRuntimeService) listPostgresIndexesInSchema(ctx context.Context, schemaName, tableName string) ([]RelationalIndex, error) {
+	rows, err := s.devPool.Query(ctx, `
+		SELECT indexname, indexdef
+		FROM pg_indexes
+		WHERE schemaname = $1
+		  AND tablename = $2
+		ORDER BY indexname
+	`, schemaName, tableName)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询内置运行库表索引失败", err)
+	}
+	defer rows.Close()
+
+	indexes := make([]RelationalIndex, 0)
+	for rows.Next() {
+		var name, indexDef string
+		if err := rows.Scan(&name, &indexDef); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取内置运行库表索引失败", err)
+		}
+		indexType := "INDEX"
+		if strings.Contains(indexDef, "PRIMARY KEY") {
+			indexType = "PRIMARY"
+		} else if strings.Contains(indexDef, "UNIQUE INDEX") {
+			indexType = "UNIQUE"
+		}
+		method := "btree"
+		if methodMatch := regexp.MustCompile(`USING ([a-zA-Z0-9_]+)`).FindStringSubmatch(indexDef); len(methodMatch) == 2 {
+			method = strings.ToLower(methodMatch[1])
+		}
+		columnPart := regexp.MustCompile(`\((.*)\)`).FindStringSubmatch(indexDef)
+		columns := []string{}
+		if len(columnPart) == 2 {
+			for _, item := range strings.Split(columnPart[1], ",") {
+				columnName := strings.Trim(strings.TrimSpace(item), `"`)
+				if columnName != "" {
+					columns = append(columns, columnName)
+				}
+			}
+		}
+		indexes = append(indexes, RelationalIndex{Name: name, Type: indexType, Method: method, Columns: columns})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历内置运行库表索引失败", err)
+	}
+	return indexes, nil
 }
 
 func (s *BuiltinRuntimeService) RenameTableInSchema(ctx context.Context, schemaName, oldName, newName string) error {
@@ -464,6 +632,12 @@ func (s *BuiltinRuntimeService) DeleteTableInSchema(ctx context.Context, schemaN
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "删除内置运行库表元数据失败", err)
 	}
 	return nil
+}
+
+func rollbackBuiltinTxQuietly(ctx context.Context, tx builtinRuntimeTx) {
+	if tx != nil {
+		_ = tx.Rollback(ctx)
+	}
 }
 
 func (s *BuiltinRuntimeService) WriteTimeseriesSample(ctx context.Context, projectID string, input BuiltinTimeseriesSampleInput) (*BuiltinSQLExecuteResult, error) {

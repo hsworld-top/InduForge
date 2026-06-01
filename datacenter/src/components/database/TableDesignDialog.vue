@@ -2,7 +2,7 @@
   <DcDialog
     ref="dialogRef"
     :model-value="modelValue"
-    title="新建表"
+    :title="dialogTitle"
     width="1120px"
     body-max-height="calc(100vh - 180px)"
     :dirty="isDirty"
@@ -13,7 +13,12 @@
       <section class="table-design__meta">
         <label>
           <span>表名</span>
-          <el-input v-model="draft.name" size="small" placeholder="例如 device_data" />
+          <el-input
+            v-model="draft.name"
+            size="small"
+            placeholder="例如 device_data"
+            :disabled="isEditMode"
+          />
         </label>
         <label>
           <span>表类型</span>
@@ -65,8 +70,17 @@
               <div class="table-design__head"></div>
 
               <template v-for="(column, index) in draft.columns" :key="column.localId">
-                <el-input v-model="column.name" size="small" placeholder="字段名" />
-                <el-select v-model="column.type" size="small">
+                <el-input
+                  v-model="column.name"
+                  size="small"
+                  placeholder="字段名"
+                  :disabled="isEditMode && column.persisted"
+                />
+                <el-select
+                  v-model="column.type"
+                  size="small"
+                  :disabled="isEditMode && column.persisted"
+                >
                   <el-option
                     v-for="item in columnTypeOptions"
                     :key="item.value"
@@ -81,7 +95,7 @@
                   :max="65535"
                   controls-position="right"
                   placeholder="-"
-                  :disabled="!supportsLength(column.type)"
+                  :disabled="!supportsLength(column.type) || (isEditMode && column.persisted)"
                 />
                 <div class="table-design__precision">
                   <el-input-number
@@ -91,7 +105,7 @@
                     :max="65"
                     controls-position="right"
                     placeholder="总位数"
-                    :disabled="!supportsPrecision(column.type)"
+                    :disabled="!supportsPrecision(column.type) || (isEditMode && column.persisted)"
                   />
                   <el-input-number
                     v-model="column.scale"
@@ -100,20 +114,29 @@
                     :max="30"
                     controls-position="right"
                     placeholder="小数位"
-                    :disabled="!supportsPrecision(column.type)"
+                    :disabled="!supportsPrecision(column.type) || (isEditMode && column.persisted)"
                   />
                 </div>
                 <div class="table-design__checks">
-                  <el-checkbox v-model="column.primary">主键</el-checkbox>
+                  <el-checkbox v-model="column.primary" :disabled="isEditMode && column.persisted">
+                    主键
+                  </el-checkbox>
                   <el-checkbox v-model="column.nullable">可空</el-checkbox>
                   <el-checkbox
                     v-model="column.autoIncrement"
-                    :disabled="!supportsAutoIncrement(column.type)"
+                    :disabled="
+                      !supportsAutoIncrement(column.type) || (isEditMode && column.persisted)
+                    "
                   >
                     自增
                   </el-checkbox>
                 </div>
-                <el-input v-model="column.defaultValue" size="small" placeholder="默认值" />
+                <el-input
+                  v-model="column.defaultValue"
+                  size="small"
+                  placeholder="默认值"
+                  :disabled="isEditMode && column.persisted"
+                />
                 <el-input v-model="column.comment" size="small" placeholder="备注" />
                 <button
                   type="button"
@@ -214,7 +237,7 @@
 
     <template #footer>
       <el-button @click="requestClose">取消</el-button>
-      <el-button type="primary" :loading="submitting" @click="submit">创建</el-button>
+      <el-button type="primary" :loading="submitting" @click="submit">{{ submitLabel }}</el-button>
     </template>
   </DcDialog>
 </template>
@@ -226,7 +249,7 @@ import IconTablerChevronDown from '~icons/tabler/chevron-down'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerTrash from '~icons/tabler/trash'
 import DcDialog from '@/components/shared/DcDialog.vue'
-import { createConnectionTable } from '@/api/data.api'
+import { createConnectionTable, updateConnectionTableStructure } from '@/api/data.api'
 import { getApiErrorMessage } from '@/utils/request'
 
 type DraftColumn = {
@@ -241,6 +264,7 @@ type DraftColumn = {
   autoIncrement: boolean
   defaultValue: string
   comment: string
+  persisted?: boolean
 }
 
 type DraftIndex = {
@@ -256,11 +280,15 @@ const props = defineProps<{
   connectionId: string
   dbType: string
   supportsSuperTable?: boolean
+  mode?: 'create' | 'edit'
+  tableName?: string
+  initialStructure?: Record<string, any> | null
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   created: [tableName: string]
+  updated: [tableName: string]
 }>()
 
 const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
@@ -268,13 +296,20 @@ const activeTab = ref('columns')
 const submitting = ref(false)
 const initialSnapshot = ref('')
 const draft = ref(createDraft())
+const isEditMode = computed(() => props.mode === 'edit')
+const dialogTitle = computed(() =>
+  isEditMode.value ? `修改表结构 - ${props.tableName || draft.value.name}` : '新建表',
+)
+const submitLabel = computed(() => (isEditMode.value ? '保存修改' : '创建'))
 
 const tableKindOptions = computed(() => {
   const options = [{ label: '普通表', value: 'table' }]
-  if (props.supportsSuperTable) options.push({ label: '超表', value: 'super_table' })
+  if (props.supportsSuperTable && !isEditMode.value) {
+    options.push({ label: '超表', value: 'super_table' })
+  }
   return options
 })
-const supportsTableKindDropdown = computed(() => props.supportsSuperTable)
+const supportsTableKindDropdown = computed(() => props.supportsSuperTable && !isEditMode.value)
 const tableKindLabel = computed(
   () => tableKindOptions.value.find((item) => item.value === draft.value.kind)?.label || '普通表',
 )
@@ -333,6 +368,50 @@ function createDraft() {
   }
 }
 
+function createDraftFromStructure() {
+  const structure = props.initialStructure || {}
+  return {
+    name: props.tableName || '',
+    kind: 'table',
+    columns: (structure.columns || []).map((column: Record<string, any>) =>
+      createColumn({
+        name: column.name || '',
+        type: normalizeStructureColumnType(column),
+        length: column.maxLength || undefined,
+        precision: column.numericPrecision || undefined,
+        scale: column.numericScale ?? undefined,
+        nullable: Boolean(column.nullable),
+        primary: Boolean(column.isPrimary),
+        autoIncrement: Boolean(column.autoIncrement),
+        defaultValue: column.defaultValue || '',
+        comment: column.comment || '',
+        persisted: true,
+      }),
+    ),
+    indexes: (structure.indexes || [])
+      .filter((index: Record<string, any>) => String(index.type || '').toUpperCase() !== 'PRIMARY')
+      .map((index: Record<string, any>) => ({
+        localId: `index-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: index.name || '',
+        type: String(index.type || '').toUpperCase() === 'UNIQUE' ? 'unique' : 'index',
+        columns: Array.isArray(index.columns) ? [...index.columns] : [],
+      })),
+    tags: [] as DraftColumn[],
+  }
+}
+
+function normalizeStructureColumnType(column: Record<string, any>) {
+  const type = String(column.type || '').toLowerCase()
+  if (type === 'character varying') return 'varchar'
+  if (type === 'integer') return 'int'
+  if (type === 'double precision') return 'double'
+  if (type === 'numeric') return 'decimal'
+  if (type === 'timestamp without time zone') return 'timestamp'
+  if (type === 'timestamp with time zone') return 'timestamptz'
+  if (type === 'jsonb') return 'json'
+  return type || 'varchar'
+}
+
 function createColumn(patch: Partial<DraftColumn> = {}): DraftColumn {
   return {
     localId: `column-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -360,7 +439,7 @@ function createIndex(): DraftIndex {
 }
 
 function resetDraft() {
-  draft.value = createDraft()
+  draft.value = isEditMode.value ? createDraftFromStructure() : createDraft()
   activeTab.value = 'columns'
   initialSnapshot.value = snapshot.value
 }
@@ -449,7 +528,7 @@ function buildPayload() {
       type: column.type,
       length: supportsLength(column.type) ? column.length || undefined : undefined,
       precision: supportsPrecision(column.type) ? column.precision || undefined : undefined,
-      scale: supportsPrecision(column.type) ? column.scale ?? undefined : undefined,
+      scale: supportsPrecision(column.type) ? (column.scale ?? undefined) : undefined,
       nullable: Boolean(column.nullable),
       primary: Boolean(column.primary),
       autoIncrement: supportsAutoIncrement(column.type) && Boolean(column.autoIncrement),
@@ -489,6 +568,17 @@ async function submit() {
   submitting.value = true
   try {
     const payload = buildPayload()
+    if (isEditMode.value) {
+      await updateConnectionTableStructure(props.projectId, props.connectionId, payload.name, {
+        columns: payload.columns,
+        indexes: payload.indexes,
+      })
+      ElMessage.success('表结构已修改')
+      initialSnapshot.value = snapshot.value
+      emit('updated', payload.name)
+      dialogRef.value?.closeSilently()
+      return
+    }
     await createConnectionTable(props.projectId, props.connectionId, payload)
     ElMessage.success('表已创建')
     initialSnapshot.value = snapshot.value

@@ -878,6 +878,37 @@ func (s *ConnectionService) GetTableStructure(ctx context.Context, projectID, co
 	}, nil
 }
 
+// UpdateTableStructure 仅允许修改 IF 内置关系/时序库中的用户表结构。
+// 输入是目标结构，服务端按当前结构计算低风险 DDL，拒绝字段改名、改类型、主键和自增变更。
+func (s *ConnectionService) UpdateTableStructure(ctx context.Context, projectID, connectionID, tableName string, input UpdateRelationalTableInput) (*RelationalTableStructure, error) {
+	connection, err := s.loadRelationalConnection(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	if connection.Type != "builtin.relation" && connection.Type != "builtin.timeseries" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "仅内置 IF 关系库和 IF 时序库支持修改表结构")
+	}
+	normalizedTableName, err := normalizeRuntimeIdentifier(tableName, "tableName")
+	if err != nil {
+		return nil, err
+	}
+	design, err := normalizeUpdateTableInput(input)
+	if err != nil {
+		return nil, err
+	}
+	schemaName, ok, err := builtinSQLSchemaFromRecord(connection)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "仅内置 IF 运行库支持修改表结构")
+	}
+	if s.builtinRuntime == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开发态内置运行库未初始化")
+	}
+	return s.builtinRuntime.UpdateTableStructureInSchema(ctx, schemaName, normalizedTableName, design)
+}
+
 // GetTableData 返回指定表数据预览。
 func (s *ConnectionService) GetTableData(ctx context.Context, projectID, connectionID, tableName string, page, limit int) (*RelationalTableData, error) {
 	connection, err := s.loadRelationalConnection(ctx, projectID, connectionID)
@@ -977,10 +1008,18 @@ func (s *ConnectionService) GetTableData(ctx context.Context, projectID, connect
 	}, nil
 }
 
-// ExecuteSQL 执行只读 SQL。
+// ExecuteSQL 执行 SQL 工作台语句。
+// 工作台不做表级 DDL/DML 限制，实际权限由数据库账号和内置库 schema 隔离决定。
 func (s *ConnectionService) ExecuteSQL(ctx context.Context, projectID, connectionID, sqlText string, parameters []any) (*RelationalQueryResult, error) {
 	connection, err := s.loadRelationalConnection(ctx, projectID, connectionID)
 	if err != nil {
+		return nil, err
+	}
+	sqlText = strings.TrimSpace(sqlText)
+	if sqlText == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "SQL 不能为空")
+	}
+	if err := ensureSQLWorkbenchDatabaseBoundary(sqlText); err != nil {
 		return nil, err
 	}
 	if schemaName, ok, err := builtinSQLSchemaFromRecord(connection); ok || err != nil {
@@ -996,9 +1035,6 @@ func (s *ConnectionService) ExecuteSQL(ctx context.Context, projectID, connectio
 		}
 		return builtinSQLResultToRelational(result), nil
 	}
-	if err := ensureReadOnlySQLText(sqlText); err != nil {
-		return nil, err
-	}
 
 	runtime, err := connectRelationalRuntime(ctx, connection.Config)
 	if err != nil {
@@ -1006,18 +1042,26 @@ func (s *ConnectionService) ExecuteSQL(ctx context.Context, projectID, connectio
 	}
 	defer runtime.Close()
 
-	tx, err := runtime.BeginReadOnlyTx(ctx)
-	if err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "创建只读事务失败", err)
-	}
-	defer func() {
-		_ = tx.Rollback(ctx)
-	}()
-
 	startTime := time.Now()
-	rows, err := tx.Query(ctx, sqlText, parameters...)
+	if isSQLWorkbenchQuery(sqlText) {
+		return executeRelationalQuerySQL(ctx, runtime, sqlText, parameters, startTime)
+	}
+	affected, err := runtime.ExecAffected(ctx, sqlText, parameters...)
 	if err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "执行 SQL 失败", err)
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "执行 SQL 失败", err)
+	}
+	return &RelationalQueryResult{
+		Columns:       []string{},
+		Rows:          [][]any{},
+		RowCount:      int(affected),
+		ExecutionTime: time.Since(startTime).Milliseconds(),
+	}, nil
+}
+
+func executeRelationalQuerySQL(ctx context.Context, runtime *relationalRuntime, sqlText string, parameters []any, startTime time.Time) (*RelationalQueryResult, error) {
+	rows, err := runtime.Query(ctx, sqlText, parameters...)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "执行 SQL 失败", err)
 	}
 	defer rows.Close()
 
@@ -1048,6 +1092,26 @@ func (s *ConnectionService) ExecuteSQL(ctx context.Context, projectID, connectio
 		RowCount:      len(resultRows),
 		ExecutionTime: time.Since(startTime).Milliseconds(),
 	}, nil
+}
+
+func isSQLWorkbenchQuery(sqlText string) bool {
+	normalized := strings.TrimSpace(strings.ToLower(sqlText))
+	return strings.HasPrefix(normalized, "select") || strings.HasPrefix(normalized, "with") || strings.HasPrefix(normalized, "show") || strings.HasPrefix(normalized, "describe") || strings.HasPrefix(normalized, "desc")
+}
+
+func ensureSQLWorkbenchDatabaseBoundary(sqlText string) error {
+	normalized := strings.ToLower(strings.Join(strings.Fields(sqlText), " "))
+	blockedPatterns := []*regexp.Regexp{
+		regexp.MustCompile(`\b(create|drop|alter)\s+database\b`),
+		regexp.MustCompile(`\b(create|drop|alter)\s+schema\b`),
+		regexp.MustCompile(`\buse\s+[a-zA-Z0-9_"'\[\]` + "`" + `.-]+`),
+	}
+	for _, pattern := range blockedPatterns {
+		if pattern.MatchString(normalized) {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "SQL 编辑器不允许执行数据库级创建、删除或切换操作")
+		}
+	}
+	return nil
 }
 
 func (s *ConnectionService) loadRelationalConnection(ctx context.Context, projectID, connectionID string) (*repository.ConnectionRecord, error) {

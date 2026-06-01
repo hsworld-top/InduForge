@@ -91,11 +91,7 @@
                   >
                     <IconTablerFileText />
                     <span>{{ query.name }}</span>
-                    <small
-                      class="sql-workbench__datapoint-pill"
-                    >
-                      数据点
-                    </small>
+                    <small class="sql-workbench__datapoint-pill"> 数据点 </small>
                   </button>
                   <div v-if="group.items.length === 0" class="sql-workbench__empty is-compact">
                     暂无查询
@@ -127,10 +123,7 @@
             <small>{{ filteredTables.length }}</small>
           </button>
 
-          <div
-            v-if="tablesExpanded"
-            class="sql-workbench__tree-body"
-          >
+          <div v-if="tablesExpanded" class="sql-workbench__tree-body">
             <div v-if="tablesLoading" class="sql-workbench__loading">
               <IconTablerLoader2 />
               <span>加载表结构...</span>
@@ -232,8 +225,9 @@
             </div>
           </div>
 
-          <div class="sql-workbench__editor">
+          <div class="sql-workbench__editor" :style="{ height: `${activeTab.editorHeight}px` }">
             <MonacoEditor
+              ref="sqlEditorRef"
               v-model="activeTab.sql"
               :language="editorLanguage"
               :theme="isDark ? 'vs-dark' : 'vs'"
@@ -243,38 +237,94 @@
             />
           </div>
 
-          <div v-if="activeTab.parameters.length > 0" class="sql-workbench__params">
-            <div v-for="(parameter, index) in activeTab.parameters" :key="parameter.name">
-              <span>?{{ index + 1 }}</span>
-              <el-input v-model="parameter.value" size="small" :placeholder="`参数 ${index + 1}`" />
+          <div class="sql-workbench__params">
+            <div class="sql-workbench__params-head">
+              <div>
+                <strong>模板参数</strong>
+                <span v-if="activeTab.parameters.length > 0">
+                  执行前按 ? 出现顺序任意替换；类型会随查询保存，测试值不会保存。
+                </span>
+                <span v-else>在 SQL 中插入 ? 后，可在这里填写本次执行使用的替换内容。</span>
+              </div>
+              <el-button size="small" @click="insertSqlParameter">插入参数</el-button>
+            </div>
+            <div v-if="activeTab.parameters.length > 0" class="sql-workbench__param-list">
+              <label v-for="(parameter, index) in activeTab.parameters" :key="parameter.name">
+                <span>参数 {{ index + 1 }}</span>
+                <el-select v-model="parameter.type" size="small" placeholder="类型">
+                  <el-option
+                    v-for="option in sqlParameterTypeOptions"
+                    :key="option.value"
+                    :label="option.label"
+                    :value="option.value"
+                  />
+                </el-select>
+                <el-input
+                  v-model="parameter.value"
+                  size="small"
+                  :placeholder="`对应第 ${index + 1} 个 ? 的测试值`"
+                />
+              </label>
+            </div>
+            <div v-else class="sql-workbench__param-empty">
+              示例：SELECT * FROM ? WHERE id = ?
             </div>
           </div>
 
           <section class="sql-workbench__result">
+            <div
+              class="sql-workbench__result-resizer"
+              role="separator"
+              aria-orientation="horizontal"
+              title="拖拽调整编辑器和结果区高度"
+              @mousedown.prevent="startResultResize($event, activeTab)"
+              @dblclick="resetEditorHeight(activeTab)"
+            />
             <div class="sql-workbench__result-head">
               <strong>结果</strong>
               <span v-if="activeTab.result">
-                {{ activeTab.result.rowCount }} 行，{{ activeTab.result.executionTime }}ms
+                {{
+                  activeTab.result.columns.length > 0
+                    ? `${activeTab.result.rowCount} 行，${activeTab.result.executionTime}ms`
+                    : `命令执行成功，${activeTab.result.executionTime}ms`
+                }}
               </span>
               <span v-else>尚未执行</span>
             </div>
             <div class="sql-workbench__result-table">
-              <el-table
-                v-if="activeTab.result"
-                :data="activeTab.displayRows"
-                size="small"
-                border
-                height="100%"
-              >
-                <el-table-column
-                  v-for="column in activeTab.result.columns"
-                  :key="column"
-                  :prop="column"
-                  :label="column"
-                  min-width="140"
-                  show-overflow-tooltip
-                />
-              </el-table>
+              <template v-if="activeTab.result && activeTab.result.columns.length > 0">
+                <el-table
+                  :data="activePagedRows"
+                  class="sql-workbench__result-data"
+                  size="small"
+                  border
+                  height="100%"
+                >
+                  <el-table-column
+                    v-for="column in activeTab.result.columns"
+                    :key="column"
+                    :prop="column"
+                    :label="column"
+                    min-width="140"
+                    show-overflow-tooltip
+                  />
+                </el-table>
+                <div class="sql-workbench__result-pagination">
+                  <el-pagination
+                    v-model:current-page="activeTab.resultPage"
+                    v-model:page-size="activeTab.resultPageSize"
+                    :page-sizes="resultPageSizes"
+                    :total="activeResultTotal"
+                    :pager-count="5"
+                    size="small"
+                    layout="total, sizes, prev, pager, next, jumper"
+                    @size-change="handleResultPageSizeChange(activeTab)"
+                  />
+                </div>
+              </template>
+              <div v-else-if="activeTab.result" class="sql-workbench__empty-result">
+                命令执行成功，未返回结果集。
+              </div>
               <div v-else class="sql-workbench__empty-result">
                 执行 SQL 后在这里查看结果集、耗时和行数。
               </div>
@@ -336,45 +386,59 @@
     </main>
 
     <aside class="sql-workbench__inspector">
-      <section>
-        <div class="sql-workbench__panel-title">当前上下文</div>
-        <dl class="sql-workbench__facts">
-          <div>
-            <dt>类型</dt>
-            <dd>{{ dbTypeLabel }}</dd>
-          </div>
-          <div>
-            <dt>库</dt>
-            <dd>{{ databaseLabel }}</dd>
-          </div>
-          <div>
-            <dt>表</dt>
-            <dd>{{ selectedTableName || activeTab?.table || '-' }}</dd>
-          </div>
-        </dl>
-      </section>
+      <div class="sql-workbench__inspector-main">
+        <section>
+          <div class="sql-workbench__panel-title">当前上下文</div>
+          <dl class="sql-workbench__facts">
+            <div>
+              <dt>类型</dt>
+              <dd>{{ dbTypeLabel }}</dd>
+            </div>
+            <div>
+              <dt>库</dt>
+              <dd>{{ databaseLabel }}</dd>
+            </div>
+            <div>
+              <dt>表</dt>
+              <dd>{{ selectedTableName || activeTab?.table || '-' }}</dd>
+            </div>
+          </dl>
+        </section>
 
-      <section v-if="activeQueryDataPoint">
-        <div class="sql-workbench__panel-title">自动数据点</div>
-        <button
-          type="button"
-          class="sql-workbench__datapoint-card"
-          @click="copyDataPointPath(activeQueryDataPoint.path)"
-        >
-          <span>{{ activeQueryDataPoint.name }}</span>
-          <small>{{ activeQueryDataPoint.path }}</small>
-        </button>
-      </section>
+        <section v-if="activeQueryDataPoint">
+          <div class="sql-workbench__panel-title">自动数据点</div>
+          <button
+            type="button"
+            class="sql-workbench__datapoint-card"
+            @click="copyDataPointPath(activeQueryDataPoint.path)"
+          >
+            <span>{{ activeQueryDataPoint.name }}</span>
+            <small>{{ activeQueryDataPoint.path }}</small>
+          </button>
+        </section>
 
-      <section v-else-if="activeTab?.type === 'query'">
-        <div class="sql-workbench__panel-title">自动数据点</div>
-        <div class="sql-workbench__empty">保存查询后会自动生成 db.query 数据点。</div>
-      </section>
+        <section v-else-if="activeTab?.type === 'query'">
+          <div class="sql-workbench__panel-title">自动数据点</div>
+          <div class="sql-workbench__empty">保存查询后会自动生成 db.query 数据点。</div>
+        </section>
 
-      <section>
+        <section v-if="activeTab?.type === 'structure'">
+          <div class="sql-workbench__panel-title">字段摘要</div>
+          <div
+            v-for="column in activeTab.structure.columns.slice(0, 12)"
+            :key="column.name"
+            class="sql-workbench__column-chip"
+          >
+            <span>{{ column.name }}</span>
+            <small>{{ column.type }}</small>
+          </div>
+        </section>
+      </div>
+
+      <section class="sql-workbench__history-panel">
         <div class="sql-workbench__panel-title">执行历史</div>
         <div v-if="executionHistory.length === 0" class="sql-workbench__empty">暂无执行记录</div>
-        <template v-else>
+        <div v-else class="sql-workbench__history-list">
           <button
             v-for="record in executionHistory"
             :key="record.id"
@@ -385,18 +449,6 @@
             <span>{{ record.title }}</span>
             <small>{{ record.rowCount }} 行 / {{ record.executionTime }}ms</small>
           </button>
-        </template>
-      </section>
-
-      <section v-if="activeTab?.type === 'structure'">
-        <div class="sql-workbench__panel-title">字段摘要</div>
-        <div
-          v-for="column in activeTab.structure.columns.slice(0, 12)"
-          :key="column.name"
-          class="sql-workbench__column-chip"
-        >
-          <span>{{ column.name }}</span>
-          <small>{{ column.type }}</small>
         </div>
       </section>
     </aside>
@@ -407,7 +459,20 @@
       :connection-id="connection.id"
       :db-type="dbType"
       :supports-super-table="supportsSuperTable"
+      :mode="tableDesignMode"
+      :table-name="editingTableName"
+      :initial-structure="editingTableStructure"
       @created="handleTableCreated"
+      @updated="handleTableUpdated"
+    />
+
+    <WorkbenchMoveGroupDialog
+      ref="moveGroupDialogRef"
+      v-model="moveGroupDialogVisible"
+      :groups="moveGroupOptions"
+      :current-group-id="moveGroupCurrentId"
+      :loading="moveGroupSubmitting"
+      @submit="submitMoveGroup"
     />
 
     <Teleport to="body">
@@ -504,9 +569,21 @@
             <IconTablerColumns />
             <span>查看表结构</span>
           </button>
+          <button
+            v-if="contextMenu.type === 'table' && supportsTableStructureEdit"
+            type="button"
+            @click="editContextTableStructure"
+          >
+            <IconTablerEdit />
+            <span>修改表结构</span>
+          </button>
           <button v-if="contextMenu.type === 'table'" type="button" @click="openContextData">
             <IconTablerTable />
             <span>查询数据</span>
+          </button>
+          <button v-if="contextMenu.type === 'table'" type="button" @click="openContextInsert">
+            <IconTablerPlus />
+            <span>插入数据</span>
           </button>
           <button v-if="contextMenu.type === 'table'" type="button" @click="renameContextTable">
             <IconTablerEdit />
@@ -527,7 +604,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { format as formatSql } from 'sql-formatter'
 import IconTablerChevronDown from '~icons/tabler/chevron-down'
@@ -551,6 +628,7 @@ import dataAPI from '@/api/data.api'
 import { getApiErrorMessage } from '@/utils/request'
 import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
 import TableDesignDialog from './TableDesignDialog.vue'
+import WorkbenchMoveGroupDialog from './WorkbenchMoveGroupDialog.vue'
 
 type SqlConnection = {
   id: string
@@ -567,6 +645,12 @@ type WorkbenchGroup = {
   scope: WorkbenchScope
   virtual?: boolean
   items?: any[]
+}
+type SqlTemplateParameterType = 'text' | 'table' | 'column' | 'condition' | 'order' | 'value'
+type SqlTemplateParameter = {
+  name: string
+  type: SqlTemplateParameterType
+  value: string
 }
 
 const props = defineProps<{
@@ -585,6 +669,7 @@ const tableGroups = ref<WorkbenchGroup[]>([])
 const tableGroupMembers = ref<any[]>([])
 const queryDataPoints = ref<any[]>([])
 const tabs = ref<any[]>([])
+const sqlEditorRef = ref<InstanceType<typeof MonacoEditor> | null>(null)
 const activeTabId = ref('')
 const filterText = ref('')
 const selectedTableName = ref('')
@@ -596,9 +681,23 @@ const queriesExpanded = ref(true)
 const expandedObjectGroups = ref<Record<string, boolean>>({})
 const executionHistory = ref<any[]>([])
 const tableDesignVisible = ref(false)
+const tableDesignMode = ref<'create' | 'edit'>('create')
+const editingTableName = ref('')
+const editingTableStructure = ref<Record<string, any> | null>(null)
+const moveGroupDialogVisible = ref(false)
+const moveGroupSubmitting = ref(false)
+const moveGroupTarget = ref<{ scope: WorkbenchScope; item: any | null }>({ scope: 'query', item: null })
+const moveGroupDialogRef = ref<InstanceType<typeof WorkbenchMoveGroupDialog> | null>(null)
 const contextMenu = ref<{
   visible: boolean
-  type: 'query-category' | 'query-group' | 'query' | 'table-category' | 'table-group' | 'table' | null
+  type:
+    | 'query-category'
+    | 'query-group'
+    | 'query'
+    | 'table-category'
+    | 'table-group'
+    | 'table'
+    | null
   x: number
   y: number
   table: any | null
@@ -614,6 +713,25 @@ const contextMenu = ref<{
   group: null,
 })
 let tabCounter = 0
+const defaultEditorHeight = 270
+const minEditorHeight = 120
+const maxEditorHeight = 560
+const resultPageSizes = [50, 100, 200, 500]
+const historyLimit = 50
+const historyStoragePrefix = 'datacenter:sql-workbench:history'
+const sqlParameterTypeOptions: Array<{ label: string; value: SqlTemplateParameterType }> = [
+  { label: 'SQL文本', value: 'text' },
+  { label: '表名', value: 'table' },
+  { label: '字段名', value: 'column' },
+  { label: '条件片段', value: 'condition' },
+  { label: '排序片段', value: 'order' },
+  { label: '值', value: 'value' },
+]
+let resultResizeState: {
+  tab: any
+  startY: number
+  startHeight: number
+} | null = null
 
 const dbConfig = computed(() => props.connection.relationalConfig || props.connection.config || {})
 const dbType = computed(() => {
@@ -624,6 +742,9 @@ const dbType = computed(() => {
 })
 const supportsSuperTable = computed(() =>
   ['builtin.timeseries', 'tdengine'].includes(props.connection.type || dbType.value),
+)
+const supportsTableStructureEdit = computed(() =>
+  ['builtin.relation', 'builtin.timeseries'].includes(props.connection.type || ''),
 )
 const dbTypeLabel = computed(() => {
   if (props.connection.type === 'builtin.relation') return 'IF关系库'
@@ -663,6 +784,15 @@ const formatterLanguage = computed(() => {
 })
 const isDark = computed(() => document.documentElement.classList.contains('dark'))
 const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId.value) || null)
+const activeResultTotal = computed(() => activeTab.value?.displayRows?.length || 0)
+const activePagedRows = computed(() => {
+  const tab = activeTab.value
+  if (!tab?.displayRows?.length) return []
+  const pageSize = Number(tab.resultPageSize || resultPageSizes[1])
+  const currentPage = Number(tab.resultPage || 1)
+  const start = (currentPage - 1) * pageSize
+  return tab.displayRows.slice(start, start + pageSize)
+})
 
 const queryDataPointBySourceId = computed(() =>
   queryDataPoints.value.reduce(
@@ -746,8 +876,12 @@ const buildTreeGroups = (scope: WorkbenchScope, groups: WorkbenchGroup[], items:
   return result
 }
 
-const queryTreeGroups = computed(() => buildTreeGroups('query', queryGroups.value, filteredQueries.value))
-const tableTreeGroups = computed(() => buildTreeGroups('table', tableGroups.value, filteredTables.value))
+const queryTreeGroups = computed(() =>
+  buildTreeGroups('query', queryGroups.value, filteredQueries.value),
+)
+const tableTreeGroups = computed(() =>
+  buildTreeGroups('table', tableGroups.value, filteredTables.value),
+)
 
 const resolveTableIcon = (table: any) => {
   if (table?.kind === 'super_table') return IconTablerStack2
@@ -760,11 +894,47 @@ const quoteTable = (tableName: string) => {
   return `"${tableName}"`
 }
 
+const quoteColumn = (columnName: string) => quoteTable(columnName)
+
 const buildSelectSql = (tableName: string) => {
   if (dbType.value === 'sqlserver') {
     return `SELECT * FROM ${quoteTable(tableName)} ORDER BY (SELECT NULL) OFFSET 0 ROWS FETCH NEXT 100 ROWS ONLY`
   }
   return `SELECT * FROM ${quoteTable(tableName)} LIMIT 100`
+}
+
+// 仅生成便于用户二次编辑的 INSERT 模板，不自动执行；自增字段默认排除，避免误导用户填写数据库生成值。
+const columnPlaceholderValue = (column: Record<string, any>) => {
+  const type = String(column.type || '').toLowerCase()
+  const isNumberType =
+    type.includes('int') ||
+    type.includes('double') ||
+    type.includes('numeric') ||
+    type.includes('decimal') ||
+    type.includes('float')
+  const isDateTimeType =
+    type.includes('timestamp') ||
+    type.includes('date') ||
+    column.name === 'create_time' ||
+    column.name === 'created_at'
+
+  if (isNumberType) {
+    return '0'
+  }
+  if (type.includes('bool')) return 'false'
+  if (isDateTimeType) {
+    return dbType.value === 'mysql' ? 'NOW()' : 'CURRENT_TIMESTAMP'
+  }
+  if (type.includes('json')) return `'{}'`
+  return `'<${column.name}>'`
+}
+
+const buildInsertSql = (tableName: string, columns: Array<Record<string, any>>) => {
+  const writableColumns = columns.filter((column) => !column.autoIncrement)
+  const targetColumns = writableColumns.length > 0 ? writableColumns : columns
+  const columnList = targetColumns.map((column) => quoteColumn(column.name)).join(', ')
+  const valueList = targetColumns.map((column) => columnPlaceholderValue(column)).join(', ')
+  return `INSERT INTO ${quoteTable(tableName)} (${columnList})\nVALUES (${valueList});`
 }
 
 const normalizeRows = (rows: any[], columns: string[]) =>
@@ -779,12 +949,103 @@ const normalizeRows = (rows: any[], columns: string[]) =>
     )
   })
 
-const extractParameters = (sql: string, oldParameters: any[] = []) => {
+const normalizeParameterType = (type: any): SqlTemplateParameterType => {
+  const value = String(type || '')
+  return sqlParameterTypeOptions.some((option) => option.value === value)
+    ? (value as SqlTemplateParameterType)
+    : 'text'
+}
+
+const extractParameters = (sql: string, oldParameters: any[] = []): SqlTemplateParameter[] => {
   const count = (sql.match(/\?/g) || []).length
   return Array.from({ length: count }, (_, index) => ({
     name: `param${index + 1}`,
+    type: normalizeParameterType(oldParameters[index]?.type),
     value: oldParameters[index]?.value || '',
   }))
+}
+
+// SQL 工作台的 ? 是执行前模板替换，允许用户替换表名、字段名和排序片段；后端仍只接收最终 SQL。
+const buildSqlWithWorkbenchParameters = (sql: string, parameters: SqlTemplateParameter[]) => {
+  let index = 0
+  return sql.replace(/\?/g, () => String(parameters[index++]?.value ?? ''))
+}
+
+const buildSavedParameterDefinitions = (parameters: SqlTemplateParameter[] = []) =>
+  parameters.map((parameter, index) => ({
+    name: parameter.name || `param${index + 1}`,
+    type: normalizeParameterType(parameter.type),
+    index: index + 1,
+  }))
+
+const clampEditorHeight = (height: number) =>
+  Math.min(maxEditorHeight, Math.max(minEditorHeight, Math.round(height)))
+
+// 拖拽结果区分隔线时只调整当前查询 Tab 的编辑器高度，结果区由 flex 自动占用剩余空间。
+const stopResultResize = () => {
+  if (!resultResizeState) return
+  resultResizeState = null
+  document.body.classList.remove('sql-workbench--resizing-result')
+  window.removeEventListener('mousemove', handleResultResize)
+  window.removeEventListener('mouseup', stopResultResize)
+}
+
+const handleResultResize = (event: MouseEvent) => {
+  if (!resultResizeState) return
+  const nextHeight = resultResizeState.startHeight + (event.clientY - resultResizeState.startY)
+  resultResizeState.tab.editorHeight = clampEditorHeight(nextHeight)
+}
+
+const startResultResize = (event: MouseEvent, tab: any) => {
+  resultResizeState = {
+    tab,
+    startY: event.clientY,
+    startHeight: Number(tab.editorHeight || defaultEditorHeight),
+  }
+  document.body.classList.add('sql-workbench--resizing-result')
+  window.addEventListener('mousemove', handleResultResize)
+  window.addEventListener('mouseup', stopResultResize)
+}
+
+const resetEditorHeight = (tab: any) => {
+  tab.editorHeight = defaultEditorHeight
+}
+
+const handleResultPageSizeChange = (tab: any) => {
+  tab.resultPage = 1
+}
+
+const executionHistoryStorageKey = () =>
+  `${historyStoragePrefix}:${props.projectId}:${props.connection.id}`
+
+const normalizeHistoryRecords = (records: any[]) =>
+  (Array.isArray(records) ? records : [])
+    .filter((record) => record && record.id && record.sql)
+    .slice(0, historyLimit)
+
+const loadExecutionHistory = () => {
+  try {
+    const raw = localStorage.getItem(executionHistoryStorageKey())
+    executionHistory.value = raw ? normalizeHistoryRecords(JSON.parse(raw)) : []
+  } catch {
+    executionHistory.value = []
+  }
+}
+
+const persistExecutionHistory = () => {
+  try {
+    localStorage.setItem(
+      executionHistoryStorageKey(),
+      JSON.stringify(normalizeHistoryRecords(executionHistory.value)),
+    )
+  } catch {
+    // 历史记录只是辅助信息，本地存储失败不影响 SQL 执行主流程。
+  }
+}
+
+const pushExecutionHistory = (record: Record<string, any>) => {
+  executionHistory.value = normalizeHistoryRecords([record, ...executionHistory.value])
+  persistExecutionHistory()
 }
 
 const loadTables = async () => {
@@ -853,14 +1114,25 @@ const reloadExplorer = async () => {
   await Promise.all([loadTables(), loadQueries(), loadWorkbenchGroups()])
 }
 
+const focusEditorEnd = async (retry = 0) => {
+  await nextTick()
+  if (sqlEditorRef.value?.revealEnd?.()) return
+  if (retry >= 20) return
+  window.setTimeout(() => {
+    void focusEditorEnd(retry + 1)
+  }, 80)
+}
+
 const createQueryTab = (initial: Record<string, any> = {}) => {
   tabCounter += 1
   const id = initial.id || `query-${props.connection.id}-${tabCounter}`
   const existing = tabs.value.find((tab) => tab.id === id)
   if (existing) {
     activeTabId.value = existing.id
+    void focusEditorEnd()
     return existing
   }
+  const initialSql = initial.sql || 'SELECT * FROM '
 
   const tab = {
     id,
@@ -869,16 +1141,20 @@ const createQueryTab = (initial: Record<string, any> = {}) => {
     title: initial.title || `查询 ${tabCounter}`,
     icon: IconTablerFileText,
     table: initial.table || '',
-    sql: initial.sql || 'SELECT * FROM ',
-    parameters: extractParameters(initial.sql || 'SELECT * FROM '),
+    sql: initialSql,
+    parameters: extractParameters(initialSql, initial.parameters || []),
     result: null,
     displayRows: [],
+    resultPage: 1,
+    resultPageSize: 100,
+    editorHeight: defaultEditorHeight,
     executing: false,
     saving: false,
     modified: false,
   }
   tabs.value.push(tab)
   activeTabId.value = tab.id
+  void focusEditorEnd()
   return tab
 }
 
@@ -900,6 +1176,7 @@ const openSavedQuery = (query: any) => {
     queryId: query.id,
     title: query.name,
     sql: query.config?.sql || '',
+    parameters: query.config?.parameters || [],
   })
 }
 
@@ -1006,7 +1283,10 @@ const openTableCategoryMenu = (event: MouseEvent) => {
 
 const openTableMenu = (event: MouseEvent, table: any) => {
   selectTableNode(table)
-  openExplorerMenu(event, 'table', { table, maxHeight: 190 })
+  openExplorerMenu(event, 'table', {
+    table,
+    maxHeight: supportsTableStructureEdit.value ? 220 : 190,
+  })
 }
 
 const closeContextMenu = () => {
@@ -1015,6 +1295,9 @@ const closeContextMenu = () => {
 
 const openTableDesign = () => {
   closeContextMenu()
+  tableDesignMode.value = 'create'
+  editingTableName.value = ''
+  editingTableStructure.value = null
   tableDesignVisible.value = true
 }
 
@@ -1079,9 +1362,7 @@ const deleteContextQuery = async () => {
       type: 'warning',
     })
     await dataAPI.deleteQuery(query.id)
-    tabs.value
-      .filter((tab) => tab.queryId === query.id)
-      .forEach((tab) => closeTab(tab.id))
+    tabs.value.filter((tab) => tab.queryId === query.id).forEach((tab) => closeTab(tab.id))
     await loadQueries()
     ElMessage.success('查询已删除')
   } catch (error) {
@@ -1108,6 +1389,14 @@ const toggleObjectGroup = (scope: WorkbenchScope, groupID: string) => {
 
 const groupsForScope = (scope: WorkbenchScope) =>
   scope === 'query' ? queryGroups.value : tableGroups.value
+
+const moveGroupOptions = computed(() => groupsForScope(moveGroupTarget.value.scope))
+const moveGroupCurrentId = computed(() => {
+  const target = moveGroupTarget.value
+  if (!target.item) return null
+  if (target.scope === 'query') return target.item.groupId || null
+  return tableGroupByName.value[target.item.name] || null
+})
 
 const createContextGroup = async () => {
   const group = contextMenu.value.group
@@ -1174,48 +1463,45 @@ const deleteContextGroup = async () => {
   }
 }
 
-const selectTargetGroup = async (scope: WorkbenchScope) => {
-  const groups = groupsForScope(scope)
-  const options = ['0. 未分组', ...groups.map((group, index) => `${index + 1}. ${group.name}`)]
-  const { value } = await ElMessageBox.prompt(options.join('\n'), '移动到分组', {
-    confirmButtonText: '移动',
-    cancelButtonText: '取消',
-    inputPlaceholder: '输入序号',
-    inputPattern: /^[0-9]+$/,
-    inputErrorMessage: '请输入分组序号',
-  })
-  const index = Number(value)
-  if (index === 0) return null
-  return groups[index - 1]?.id || null
-}
-
 const moveContextQuery = async () => {
   const query = contextMenu.value.query
   closeContextMenu()
   if (!query) return
-  try {
-    const groupID = await selectTargetGroup('query')
-    await dataAPI.moveQueryToWorkbenchGroup(props.projectId, query.id, groupID)
-    await loadQueries()
-  } catch (error) {
-    if (error !== 'cancel' && error !== 'close') {
-      ElMessage.error(getApiErrorMessage(error, '移动查询失败'))
-    }
-  }
+  moveGroupTarget.value = { scope: 'query', item: query }
+  moveGroupDialogVisible.value = true
 }
 
 const moveContextTable = async () => {
   const table = contextMenu.value.table
   closeContextMenu()
   if (!table) return
+  moveGroupTarget.value = { scope: 'table', item: table }
+  moveGroupDialogVisible.value = true
+}
+
+const submitMoveGroup = async (groupID: string | null) => {
+  const target = moveGroupTarget.value
+  if (!target.item) return
+  moveGroupSubmitting.value = true
   try {
-    const groupID = await selectTargetGroup('table')
-    await dataAPI.moveTableToWorkbenchGroup(props.projectId, props.connection.id, table.name, groupID)
-    await loadWorkbenchGroups()
-  } catch (error) {
-    if (error !== 'cancel' && error !== 'close') {
-      ElMessage.error(getApiErrorMessage(error, '移动表失败'))
+    if (target.scope === 'query') {
+      await dataAPI.moveQueryToWorkbenchGroup(props.projectId, target.item.id, groupID)
+      await loadQueries()
+    } else {
+      await dataAPI.moveTableToWorkbenchGroup(
+        props.projectId,
+        props.connection.id,
+        target.item.name,
+        groupID,
+      )
+      await loadWorkbenchGroups()
     }
+    moveGroupDialogRef.value?.closeSilently()
+    moveGroupTarget.value = { scope: 'query', item: null }
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, target.scope === 'query' ? '移动查询失败' : '移动表失败'))
+  } finally {
+    moveGroupSubmitting.value = false
   }
 }
 
@@ -1267,9 +1553,7 @@ const deleteContextTable = async () => {
       },
     )
     await dataAPI.deleteConnectionTable(props.projectId, props.connection.id, table.name)
-    tabs.value
-      .filter((tab) => tab.table === table.name)
-      .forEach((tab) => closeTab(tab.id))
+    tabs.value.filter((tab) => tab.table === table.name).forEach((tab) => closeTab(tab.id))
     if (selectedTableName.value === table.name) selectedTableName.value = ''
     if (selectedExplorerNode.value === `table:${table.name}`) selectedExplorerNode.value = 'tables'
     await Promise.all([loadTables(), loadWorkbenchGroups()])
@@ -1278,6 +1562,25 @@ const deleteContextTable = async () => {
     if (error !== 'cancel' && error !== 'close') {
       ElMessage.error(getApiErrorMessage(error, '删除表失败'))
     }
+  }
+}
+
+const editContextTableStructure = async () => {
+  const table = contextMenu.value.table
+  closeContextMenu()
+  if (!table) return
+  try {
+    const response = await dataAPI.getTableStructure(
+      props.projectId,
+      props.connection.id,
+      table.name,
+    )
+    tableDesignMode.value = 'edit'
+    editingTableName.value = table.name
+    editingTableStructure.value = response.data || { columns: [], indexes: [], foreignKeys: [] }
+    tableDesignVisible.value = true
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '加载表结构失败'))
   }
 }
 
@@ -1293,10 +1596,45 @@ const openContextData = () => {
   if (table) void openTableData(table)
 }
 
+const openContextInsert = async () => {
+  const table = contextMenu.value.table
+  closeContextMenu()
+  if (!table) return
+  try {
+    const response = await dataAPI.getTableStructure(
+      props.projectId,
+      props.connection.id,
+      table.name,
+    )
+    const columns = response.data?.columns || []
+    if (columns.length === 0) {
+      ElMessage.warning('未读取到表字段，无法生成插入模板')
+      return
+    }
+    createQueryTab({
+      title: `${table.name} / 插入`,
+      table: table.name,
+      sql: buildInsertSql(table.name, columns),
+    })
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '生成插入模板失败'))
+  }
+}
+
 const handleTableCreated = async (tableName: string) => {
   await loadTables()
   const table = tables.value.find((item) => item.name === tableName)
   if (table) selectedTableName.value = table.name
+}
+
+const handleTableUpdated = async (tableName: string) => {
+  await loadTables()
+  const structureTabId = `structure-${props.connection.id}-${tableName}`
+  const existing = tabs.value.find((item) => item.id === structureTabId)
+  if (existing) {
+    tabs.value = tabs.value.filter((item) => item.id !== structureTabId)
+    await openTableStructure({ name: tableName })
+  }
 }
 
 const closeTab = (tabId: string) => {
@@ -1312,6 +1650,10 @@ const handleSqlChange = () => {
   if (!activeTab.value || activeTab.value.type !== 'query') return
   activeTab.value.modified = true
   activeTab.value.parameters = extractParameters(activeTab.value.sql, activeTab.value.parameters)
+}
+
+const insertSqlParameter = () => {
+  sqlEditorRef.value?.insertText?.('?')
 }
 
 const formatActiveSql = () => {
@@ -1333,12 +1675,12 @@ const executeTab = async (tab: any) => {
   }
   tab.executing = true
   try {
-    const parameters = (tab.parameters || []).map((parameter) => parameter.value || '')
+    const sqlText = buildSqlWithWorkbenchParameters(tab.sql, tab.parameters || [])
     const response = await dataAPI.executeSql(
       props.projectId,
       props.connection.id,
-      tab.sql,
-      parameters,
+      sqlText,
+      [],
     )
     const result = {
       columns: response.data?.columns || [],
@@ -1348,14 +1690,14 @@ const executeTab = async (tab: any) => {
     }
     tab.result = result
     tab.displayRows = normalizeRows(result.rows, result.columns)
-    executionHistory.value.unshift({
+    tab.resultPage = 1
+    pushExecutionHistory({
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       title: tab.title,
-      sql: tab.sql,
+      sql: sqlText,
       rowCount: result.rowCount,
       executionTime: result.executionTime,
     })
-    executionHistory.value = executionHistory.value.slice(0, 12)
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '执行 SQL 失败'))
   } finally {
@@ -1378,7 +1720,7 @@ const saveActiveQuery = async () => {
         name: tab.title,
         connectionId: props.connection.id,
         queryType: 'sql',
-        config: { sql: tab.sql, parameters: [] },
+        config: { sql: tab.sql, parameters: buildSavedParameterDefinitions(tab.parameters) },
       })
       tab.modified = false
       await loadQueries()
@@ -1405,7 +1747,7 @@ const saveActiveQuery = async () => {
       name: value,
       connectionId: props.connection.id,
       queryType: 'sql',
-      config: { sql: tab.sql, parameters: [] },
+      config: { sql: tab.sql, parameters: buildSavedParameterDefinitions(tab.parameters) },
     })
     tab.title = value
     tab.queryId = response.data?.id
@@ -1446,15 +1788,20 @@ watch(
     selectedTableName.value = ''
     selectedExplorerNode.value = ''
     expandedObjectGroups.value = {}
-    executionHistory.value = []
+    loadExecutionHistory()
     await reloadExplorer()
     createQueryTab()
   },
 )
 
 onMounted(async () => {
+  loadExecutionHistory()
   await reloadExplorer()
   createQueryTab()
+})
+
+onBeforeUnmount(() => {
+  stopResultResize()
 })
 </script>
 
@@ -1469,6 +1816,11 @@ onMounted(async () => {
   background: var(--dc-surface-raised);
   box-shadow: var(--dc-shadow-surface);
   overflow: hidden;
+}
+
+:global(body.sql-workbench--resizing-result) {
+  cursor: row-resize;
+  user-select: none;
 }
 
 .sql-workbench__explorer,
@@ -1487,10 +1839,30 @@ onMounted(async () => {
 .sql-workbench__inspector {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 14px;
   border-left: 1px solid var(--dc-border);
+}
+
+.sql-workbench__inspector-main {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 16px;
+  padding: 14px 14px 10px;
+}
+
+.sql-workbench__history-panel {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0 14px 14px;
+}
+
+.sql-workbench__history-list {
+  min-height: 0;
+  flex: 1;
   overflow-y: auto;
+  padding-right: 2px;
 }
 
 .sql-workbench__search {
@@ -1749,32 +2121,102 @@ onMounted(async () => {
 }
 
 .sql-workbench__params {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 12px;
-  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
   border-bottom: 1px solid var(--dc-border);
-  background: var(--dc-surface-muted);
+  background: color-mix(in oklch, var(--dc-primary) 5%, var(--dc-surface-muted));
 }
 
-.sql-workbench__params div {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+.sql-workbench__params-head {
+  display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.sql-workbench__params span {
+.sql-workbench__params-head div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.sql-workbench__params-head strong {
+  color: var(--dc-text);
+  font-size: 13px;
+}
+
+.sql-workbench__params-head span,
+.sql-workbench__param-empty {
   color: var(--dc-text-muted);
   font-size: 12px;
 }
 
+.sql-workbench__param-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.sql-workbench__param-list label {
+  display: grid;
+  grid-template-columns: 72px 116px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+}
+
+.sql-workbench__param-list label > span {
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sql-workbench__param-empty {
+  padding: 9px 10px;
+  border: 1px dashed var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+}
+
 .sql-workbench__result {
-  min-height: 0;
+  position: relative;
+  min-height: 180px;
   flex: 1;
   display: flex;
   flex-direction: column;
+  border-top: 1px solid var(--dc-border);
   overflow: hidden;
+}
+
+.sql-workbench__result-resizer {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  z-index: 3;
+  width: 100%;
+  height: 8px;
+  cursor: row-resize;
+}
+
+.sql-workbench__result-resizer::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 52px;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--dc-text-muted) 42%, transparent);
+  transform: translateX(-50%);
+}
+
+.sql-workbench__result-resizer:hover::before {
+  background: var(--dc-primary);
 }
 
 .sql-workbench__result-head {
@@ -1793,6 +2235,22 @@ onMounted(async () => {
 .sql-workbench__result-table {
   min-height: 0;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.sql-workbench__result-data {
+  min-height: 0;
+  flex: 1;
+}
+
+.sql-workbench__result-pagination {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 40px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
 }
 
 .sql-workbench__structure {

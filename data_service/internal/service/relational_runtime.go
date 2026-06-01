@@ -69,6 +69,13 @@ type RelationalTableStructure struct {
 	ForeignKeys []RelationalForeignKey  `json:"foreignKeys"`
 }
 
+// UpdateRelationalTableInput 表示表结构修改的目标状态。
+// 服务端会与当前结构做差异比较，只执行低风险 DDL，避免前端直接拼接 ALTER SQL。
+type UpdateRelationalTableInput struct {
+	Columns []CreateRelationalTableColumnInput
+	Indexes []CreateRelationalTableIndexInput
+}
+
 // RelationalPagination 表示分页元信息。
 type RelationalPagination struct {
 	Page       int `json:"page"`
@@ -84,7 +91,7 @@ type RelationalTableData struct {
 	Pagination RelationalPagination `json:"pagination"`
 }
 
-// RelationalQueryResult 表示只读 SQL 执行结果。
+// RelationalQueryResult 表示 SQL 工作台执行结果。
 type RelationalQueryResult struct {
 	Columns       []string `json:"columns"`
 	Rows          [][]any  `json:"rows"`
@@ -504,15 +511,27 @@ func (r *relationalRuntime) QueryRow(ctx context.Context, query string, args ...
 }
 
 func (r *relationalRuntime) Exec(ctx context.Context, query string, args ...any) error {
+	_, err := r.ExecAffected(ctx, query, args...)
+	return err
+}
+
+func (r *relationalRuntime) ExecAffected(ctx context.Context, query string, args ...any) (int64, error) {
 	if r == nil {
-		return apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "关系库运行时未初始化")
+		return 0, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "关系库运行时未初始化")
 	}
 	if r.pgPool != nil {
-		_, err := r.pgPool.Exec(ctx, query, adaptRuntimeArgs(r.dbType, query, args)...)
-		return err
+		tag, err := r.pgPool.Exec(ctx, query, adaptRuntimeArgs(r.dbType, query, args)...)
+		return tag.RowsAffected(), err
 	}
-	_, err := r.sqlDB.ExecContext(ctx, query, adaptRuntimeArgs(r.dbType, query, args)...)
-	return err
+	result, err := r.sqlDB.ExecContext(ctx, query, adaptRuntimeArgs(r.dbType, query, args)...)
+	if err != nil {
+		return 0, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, nil
+	}
+	return affected, nil
 }
 
 func (r *relationalRuntime) BeginReadOnlyTx(ctx context.Context) (relationalTx, error) {
