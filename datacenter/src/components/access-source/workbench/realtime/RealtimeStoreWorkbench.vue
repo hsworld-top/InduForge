@@ -427,28 +427,45 @@
       </template>
     </el-dialog>
 
-    <div
-      v-if="keyContextMenu.visible"
-      class="realtime-store__context-menu"
-      :style="{ left: keyContextMenu.x + 'px', top: keyContextMenu.y + 'px' }"
-      @click.stop
-    >
-      <button v-if="keyContextMenu.kind === 'key'" type="button" @click="openContextKeyInNewTab">
-        打开 Key
-      </button>
-      <button v-if="keyContextMenu.kind === 'key'" type="button" @click="createContextKeyDatapoint">
-        创建数据点
-      </button>
-      <button v-if="keyContextMenu.kind === 'key'" type="button" @click="renameContextKey">
-        重命名 Key
-      </button>
-      <button v-if="keyContextMenu.kind === 'key'" type="button" @click="deleteContextKey">
-        删除 Key
-      </button>
-      <button v-if="keyContextMenu.kind === 'folder'" type="button" @click="batchCreateContextGroupDatapoints">
-        为该分组创建数据点
-      </button>
-    </div>
+    <Teleport to="body">
+      <div
+        v-if="keyContextMenu.visible"
+        class="realtime-store__menu-mask"
+        @click="closeKeyContextMenu"
+        @contextmenu.prevent="closeKeyContextMenu"
+      >
+        <div
+          class="realtime-store__context-menu"
+          :style="{ left: keyContextMenu.x + 'px', top: keyContextMenu.y + 'px' }"
+          @click.stop
+        >
+          <button v-if="keyContextMenu.kind === 'key'" type="button" @click="openContextKeyInNewTab">
+            <IconTablerKey />
+            <span>打开 Key</span>
+          </button>
+          <button v-if="keyContextMenu.kind === 'key'" type="button" @click="createContextKeyDatapoint">
+            <IconTablerDatabasePlus />
+            <span>创建数据点</span>
+          </button>
+          <button v-if="keyContextMenu.kind === 'key'" type="button" @click="renameContextKey">
+            <IconTablerEdit />
+            <span>重命名 Key</span>
+          </button>
+          <button v-if="keyContextMenu.kind === 'key'" type="button" @click="deleteContextKey">
+            <IconTablerTrash />
+            <span>删除 Key</span>
+          </button>
+          <button
+            v-if="keyContextMenu.kind === 'folder'"
+            type="button"
+            @click="batchCreateContextGroupDatapoints"
+          >
+            <IconTablerFolder />
+            <span>为该分组创建数据点</span>
+          </button>
+        </div>
+      </div>
+    </Teleport>
   </section>
 </template>
 
@@ -468,6 +485,7 @@ import IconTablerCircleCheck from '~icons/tabler/circle-check'
 import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerDatabasePlus from '~icons/tabler/database-plus'
 import IconTablerDeviceFloppy from '~icons/tabler/device-floppy'
+import IconTablerEdit from '~icons/tabler/edit'
 import IconTablerFile from '~icons/tabler/file'
 import IconTablerFolder from '~icons/tabler/folder'
 import IconTablerKey from '~icons/tabler/key'
@@ -1728,32 +1746,46 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
+.realtime-store__menu-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+}
+
 .realtime-store__context-menu {
   position: fixed;
-  z-index: 3000;
-  min-width: 132px;
+  min-width: 148px;
   padding: 4px;
-  border: 1px solid #d8e0eb;
-  border-radius: 6px;
-  background: #fff;
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-surface);
 }
 
 .realtime-store__context-menu button {
   width: 100%;
   height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--dc-radius-sm);
   background: transparent;
-  color: #263244;
-  font: inherit;
+  color: var(--dc-text-secondary);
   font-size: 13px;
   text-align: left;
   cursor: pointer;
 }
 
 .realtime-store__context-menu button:hover {
-  background: #eef2f7;
+  background: var(--dc-surface-muted);
+  color: var(--dc-primary);
+}
+
+.realtime-store__context-menu svg {
+  width: 15px;
+  height: 15px;
 }
 
 .realtime-store__dialog-tip {

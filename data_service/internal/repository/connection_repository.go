@@ -14,15 +14,16 @@ import (
 
 // ConnectionRecord 表示 data_connections 表在仓储层的投影结果。
 type ConnectionRecord struct {
-	ID        string
-	ProjectID string
-	Name      string
-	Type      string
-	Category  string `json:"-"`
-	Status    string
-	Config    map[string]any
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID           string
+	ProjectID    string
+	Name         string
+	Type         string
+	Category     string `json:"-"`
+	Status       string
+	Config       map[string]any
+	DisplayOrder int
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // ConnectionStatusRecord 表示连接状态更新后的返回结构。
@@ -67,14 +68,13 @@ func NewConnectionRepository(pool *pgxpool.Pool) *ConnectionRepository {
 }
 
 // ListByProject 按项目读取连接列表。
-// 查询路径固定为 project_id，对应 data_connections_project_type_idx / data_connections_project_status_idx 的前缀列。
-// 当前额外按 created_at 排序，连接数量极大时可能触发排序开销，后续可视热点再补复合索引。
+// 查询路径固定为 project_id；display_order 是用户在接入源面板拖拽后的持久化顺序。
 func (r *ConnectionRepository) ListByProject(ctx context.Context, projectID string) ([]ConnectionRecord, error) {
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, name, type, category, status, metadata, created_at, updated_at
+        SELECT id, project_id, name, type, category, status, metadata, display_order, created_at, updated_at
         FROM data_connections
         WHERE project_id = $1
-        ORDER BY created_at DESC
+        ORDER BY display_order ASC, created_at ASC
     `, projectID)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询连接列表失败", err)
@@ -102,7 +102,7 @@ func (r *ConnectionRepository) ListByProject(ctx context.Context, projectID stri
 // 如果后续频繁走 project_id + id 联合过滤，可再评估是否需要复合索引。
 func (r *ConnectionRepository) GetByProjectAndID(ctx context.Context, projectID, connectionID string) (*ConnectionRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-        SELECT id, project_id, name, type, category, status, metadata, created_at, updated_at
+        SELECT id, project_id, name, type, category, status, metadata, display_order, created_at, updated_at
         FROM data_connections
         WHERE project_id = $1 AND id = $2
     `, projectID, connectionID)
@@ -119,7 +119,7 @@ func (r *ConnectionRepository) GetByProjectAndID(ctx context.Context, projectID,
 // 用于校验工程级内置运行库唯一性；调用方只关心是否存在，不依赖排序。
 func (r *ConnectionRepository) GetByProjectAndType(ctx context.Context, projectID, connectionType string) (*ConnectionRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-        SELECT id, project_id, name, type, category, status, metadata, created_at, updated_at
+        SELECT id, project_id, name, type, category, status, metadata, display_order, created_at, updated_at
         FROM data_connections
         WHERE project_id = $1 AND type = $2
         LIMIT 1
@@ -134,8 +134,7 @@ func (r *ConnectionRepository) GetByProjectAndType(ctx context.Context, projectI
 }
 
 // Create 写入一条新的连接记录。
-// 写入时显式绑定 project_id/type/status，便于后续列表查询直接复用已有索引。
-// 该语句依赖默认列补齐其余运行参数，若未来写入字段增多，需要同步评估 INSERT RETURNING 体积。
+// 新连接追加到当前项目排序末尾，避免用户已拖拽好的接入源顺序被新建动作打乱。
 func (r *ConnectionRepository) Create(ctx context.Context, params CreateConnectionParams) (*ConnectionRecord, error) {
 	configBytes, err := marshalConfig(params.Config)
 	if err != nil {
@@ -150,11 +149,14 @@ func (r *ConnectionRepository) Create(ctx context.Context, params CreateConnecti
             category,
             status,
             metadata,
+            display_order,
             created_by,
             updated_by
         )
-        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $7)
-        RETURNING id, project_id, name, type, category, status, metadata, created_at, updated_at
+        VALUES ($1, $2, $3, $4, $5, $6::jsonb,
+            COALESCE((SELECT MAX(display_order) + 1 FROM data_connections WHERE project_id = $1), 0),
+            $7, $7)
+        RETURNING id, project_id, name, type, category, status, metadata, display_order, created_at, updated_at
     `, params.ProjectID, params.Name, params.Type, params.Category, params.Status, string(configBytes), params.UserID)
 
 	record, scanErr := scanConnection(row)
@@ -184,7 +186,7 @@ func (r *ConnectionRepository) Update(ctx context.Context, params UpdateConnecti
             updated_by = $8,
             updated_at = now()
         WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, name, type, category, status, metadata, created_at, updated_at
+        RETURNING id, project_id, name, type, category, status, metadata, display_order, created_at, updated_at
     `, params.ProjectID, params.ID, params.Name, params.Type, params.Category, params.Status, string(configBytes), params.UserID)
 
 	record, scanErr := scanConnection(row)
@@ -193,6 +195,36 @@ func (r *ConnectionRepository) Update(ctx context.Context, params UpdateConnecti
 	}
 
 	return &record, nil
+}
+
+// UpdateDisplayOrder 批量更新项目下连接展示顺序。
+// 输入必须覆盖调用方传入的每个 id，仓储层逐条带 project_id 更新，避免跨项目改动。
+func (r *ConnectionRepository) UpdateDisplayOrder(ctx context.Context, projectID string, connectionIDs []string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启连接排序事务失败", err)
+	}
+	defer tx.Rollback(ctx)
+
+	for index, connectionID := range connectionIDs {
+		commandTag, execErr := tx.Exec(ctx, `
+            UPDATE data_connections
+            SET display_order = $3,
+                updated_at = now()
+            WHERE project_id = $1 AND id = $2
+        `, projectID, connectionID, index)
+		if execErr != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "更新连接排序失败", execErr)
+		}
+		if commandTag.RowsAffected() == 0 {
+			return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "连接不存在")
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交连接排序失败", err)
+	}
+	return nil
 }
 
 // Delete 按项目删除连接。
@@ -251,6 +283,7 @@ func scanConnection(row scannable) (ConnectionRecord, error) {
 		&record.Category,
 		&record.Status,
 		&configBytes,
+		&record.DisplayOrder,
 		&record.CreatedAt,
 		&record.UpdatedAt,
 	); err != nil {

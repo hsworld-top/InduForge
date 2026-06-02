@@ -7,6 +7,7 @@
       >
         <component :is="resolveConnectionVisual(connection).icon" />
       </span>
+      <slot name="top-actions"></slot>
     </div>
 
     <div class="access-source-card__body">
@@ -270,7 +271,8 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
   min-width: 0;
   display: flex;
   align-items: flex-start;
-  justify-content: flex-start;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .access-source-card__icon {

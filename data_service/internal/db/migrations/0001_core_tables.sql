@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS data_connections (
     last_connected_at timestamptz,
     last_error_message text,
     metadata jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(metadata) = 'object'),
+    display_order integer NOT NULL DEFAULT 0,
     created_by uuid NOT NULL,
     updated_by uuid,
     created_at timestamptz NOT NULL DEFAULT now(),
@@ -26,6 +27,9 @@ CREATE INDEX IF NOT EXISTS data_connections_project_type_idx
 
 CREATE INDEX IF NOT EXISTS data_connections_project_status_idx
     ON data_connections (project_id, status);
+
+CREATE INDEX IF NOT EXISTS data_connections_project_order_idx
+    ON data_connections (project_id, display_order, created_at DESC);
 
 -- data_relational_configs: 保存关系型数据库连接配置。
 CREATE TABLE IF NOT EXISTS data_relational_configs (

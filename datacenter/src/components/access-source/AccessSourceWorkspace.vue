@@ -68,9 +68,11 @@
       <AccessSourceList
         :connections="filteredConnections"
         :selected-connection-id="activeConnectionId"
+        :draggable="canReorderConnections"
         @open="handleOpen"
         @edit="handleEdit"
         @delete-connection="handleDeleteConnection"
+        @reorder="handleReorderConnections"
         @create="$emit('create')"
       />
     </section>
@@ -85,7 +87,7 @@ import { Search } from '@element-plus/icons-vue'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerRefresh from '~icons/tabler/refresh'
 import dataAPI from '@/api/data.api'
-import { deleteAccessSource } from '@/api/access-source.api'
+import { deleteAccessSource, updateAccessSourceOrder } from '@/api/access-source.api'
 import { useConfirm } from '@/composables/useConfirm'
 import { getApiErrorMessage } from '@/utils/request'
 import AccessSourceList from './AccessSourceList.vue'
@@ -140,6 +142,7 @@ const { confirm } = useConfirm()
 /* ── URL 同步：从 query 读取初始筛选值 ── */
 const filterQ = ref(String(route.query.q || ''))
 const filterType = ref(String(route.query.type || 'all'))
+const connectionOrder = ref<string[]>([])
 
 /* 搜索框双向绑定值（防抖前的输入缓存） */
 const searchInputValue = ref(filterQ.value)
@@ -195,6 +198,8 @@ const selectType = (val: string) => {
   filterType.value = val
   syncQuery()
 }
+
+const canReorderConnections = computed(() => filterType.value === 'all' && !filterQ.value)
 
 /* ── 分类判断（与旧 resolveCategory 逻辑一致）── */
 const resolveCategory = (connection: AccessSourceConnection) => {
@@ -263,9 +268,30 @@ watch(
   { immediate: true },
 )
 
+watch(
+  () => props.connections.map((connection) => connection.id),
+  (ids) => {
+    const knownIds = new Set(ids)
+    const preserved = connectionOrder.value.filter((id) => knownIds.has(id))
+    const appended = ids.filter((id) => !preserved.includes(id))
+    connectionOrder.value = [...preserved, ...appended]
+  },
+  { immediate: true },
+)
+
 /* ── 前端过滤（基于 props.connections）── */
 const filteredConnections = computed(() => {
-  let list = props.connections.map((connection) => {
+  let list = [...props.connections]
+  if (connectionOrder.value.length > 0) {
+    const orderMap = new Map(connectionOrder.value.map((id, index) => [id, index]))
+    list.sort((left, right) => {
+      const leftOrder = orderMap.get(left.id) ?? Number.MAX_SAFE_INTEGER
+      const rightOrder = orderMap.get(right.id) ?? Number.MAX_SAFE_INTEGER
+      return leftOrder - rightOrder
+    })
+  }
+
+  list = list.map((connection) => {
     const count = localDatapointCounts.value[connection.id]
     if (typeof count !== 'number') return connection
     return { ...connection, datapointCount: count, dataPointCount: count }
@@ -298,6 +324,19 @@ const handleOpen = (connection: AccessSourceConnection) => {
 
 const handleEdit = (connection: AccessSourceConnection) => {
   emit('edit', connection)
+}
+
+const handleReorderConnections = async (connectionIds: string[]) => {
+  if (!props.projectId || !canReorderConnections.value) return
+  const previousOrder = [...connectionOrder.value]
+  connectionOrder.value = connectionIds
+  try {
+    await updateAccessSourceOrder(String(props.projectId), connectionIds)
+    ElMessage.success('接入源顺序已保存')
+  } catch (err) {
+    connectionOrder.value = previousOrder
+    ElMessage.error(getApiErrorMessage(err, '保存接入源顺序失败'))
+  }
 }
 
 /* 删除接入源：二次确认后调用 API，成功后通知父刷新 */

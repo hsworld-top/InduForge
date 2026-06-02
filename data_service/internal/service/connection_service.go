@@ -62,6 +62,7 @@ type Connection struct {
 	Config           map[string]any `json:"config"`
 	RelationalConfig map[string]any `json:"relationalConfig,omitempty"`
 	MqttConfig       map[string]any `json:"mqttConfig,omitempty"`
+	DisplayOrder     int            `json:"displayOrder"`
 	CreatedAt        time.Time      `json:"createdAt"`
 	UpdatedAt        time.Time      `json:"updatedAt"`
 }
@@ -146,6 +147,42 @@ func (s *ConnectionService) GetConnection(ctx context.Context, projectID, connec
 	}
 	connection := toConnection(*record, tenantID)
 	return &connection, nil
+}
+
+// UpdateConnectionOrder 持久化接入源卡片展示顺序。
+func (s *ConnectionService) UpdateConnectionOrder(ctx context.Context, projectID string, connectionIDs []string) error {
+	if err := validateProjectID(projectID); err != nil {
+		return err
+	}
+	if len(connectionIDs) == 0 {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "连接排序不能为空")
+	}
+
+	seen := make(map[string]struct{}, len(connectionIDs))
+	for _, connectionID := range connectionIDs {
+		if err := validateConnectionID(connectionID); err != nil {
+			return err
+		}
+		if _, exists := seen[connectionID]; exists {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "连接排序包含重复项")
+		}
+		seen[connectionID] = struct{}{}
+	}
+
+	current, err := s.repository.ListByProject(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if len(current) != len(connectionIDs) {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "连接排序必须包含当前项目全部接入源")
+	}
+	for _, connection := range current {
+		if _, exists := seen[connection.ID]; !exists {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "连接排序缺少当前项目接入源")
+		}
+	}
+
+	return s.repository.UpdateDisplayOrder(ctx, projectID, connectionIDs)
 }
 
 // CreateConnection 创建项目连接。
@@ -1347,6 +1384,7 @@ func toConnection(record repository.ConnectionRecord, tenantID string) Connectio
 		Config:           cloneMap(record.Config),
 		RelationalConfig: relationalConfig,
 		MqttConfig:       mqttConfig,
+		DisplayOrder:     record.DisplayOrder,
 		CreatedAt:        record.CreatedAt,
 		UpdatedAt:        record.UpdatedAt,
 	}

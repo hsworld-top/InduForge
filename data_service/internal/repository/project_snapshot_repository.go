@@ -844,10 +844,10 @@ func artifactConfigInt(config map[string]any, key string, defaultValue int) int 
 
 func (r *ProjectSnapshotRepository) listConnections(ctx context.Context, projectID string) ([]ConnectionRecord, error) {
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, name, type, category, status, metadata, created_at, updated_at
+        SELECT id, project_id, name, type, category, status, metadata, display_order, created_at, updated_at
         FROM data_connections
         WHERE project_id = $1
-        ORDER BY created_at ASC
+        ORDER BY display_order ASC, created_at ASC
     `, projectID)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询快照连接失败", err)
@@ -1391,10 +1391,10 @@ func (r *ProjectSnapshotRepository) insertConnections(ctx context.Context, tx pg
 		updatedAt := coalesceTime(connection.UpdatedAt)
 		if _, err := tx.Exec(ctx, `
             INSERT INTO data_connections (
-                id, project_id, name, type, category, status, metadata, created_by, updated_by, created_at, updated_at
+                id, project_id, name, type, category, status, metadata, display_order, created_by, updated_by, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11)
-        `, connection.ID, projectID, connection.Name, connection.Type, category, connection.Status, string(configBytes), actorID, actorID, createdAt, updatedAt); err != nil {
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12)
+        `, connection.ID, projectID, connection.Name, connection.Type, category, connection.Status, string(configBytes), connection.DisplayOrder, actorID, actorID, createdAt, updatedAt); err != nil {
 			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入快照连接失败", err)
 		}
 	}

@@ -23,6 +23,7 @@ type AccessSource struct {
 	DataPointCount int                        `json:"datapointCount"`
 	Capabilities   []string                   `json:"capabilities"`
 	RecentRecord   *AccessSourceRecordSummary `json:"recentRecord,omitempty"`
+	DisplayOrder   int                        `json:"displayOrder"`
 	CreatedAt      time.Time                  `json:"createdAt"`
 	UpdatedAt      time.Time                  `json:"updatedAt"`
 }
@@ -180,6 +181,7 @@ func (s *AccessSourceService) buildAccessSource(ctx context.Context, connection 
 		ConfigSummary:  s.connectionConfig(ctx, connection, true),
 		DataPointCount: dataPointCount,
 		Capabilities:   accessSourceCapabilities(connection.Type),
+		DisplayOrder:   connection.DisplayOrder,
 		CreatedAt:      connection.CreatedAt,
 		UpdatedAt:      connection.UpdatedAt,
 	}

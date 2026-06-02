@@ -81,6 +81,18 @@ export async function deleteAccessSource(projectId: string, sourceId: string): P
   })
 }
 
+/** 更新接入源卡片展示顺序 */
+export async function updateAccessSourceOrder(
+  projectId: string,
+  connectionIds: string[],
+): Promise<void> {
+  await request({
+    url: `/data/projects/${projectId}/connections/order`,
+    method: 'patch',
+    data: { connectionIds },
+  })
+}
+
 /** 测试接入源连通性 */
 export async function testAccessSource(
   projectId: string,

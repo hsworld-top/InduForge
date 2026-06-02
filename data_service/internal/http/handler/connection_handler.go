@@ -194,6 +194,27 @@ func (h *ConnectionHandler) UpdateStatus(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
+// UpdateOrder 持久化接入源卡片展示顺序。
+func (h *ConnectionHandler) UpdateOrder(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+
+	var request struct {
+		ConnectionIDs []string `json:"connectionIds"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+
+	if err := h.service.UpdateConnectionOrder(r.Context(), r.PathValue("projectId"), request.ConnectionIDs); err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"saved": true})
+	return nil
+}
+
 // ListTables 返回连接下的表列表。
 func (h *ConnectionHandler) ListTables(w http.ResponseWriter, r *http.Request) error {
 	if _, err := requireClaims(r); err != nil {
