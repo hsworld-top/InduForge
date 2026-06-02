@@ -378,13 +378,12 @@ type ArtifactBuiltinRelationStore struct {
 }
 
 type ArtifactBuiltinTimeseriesStore struct {
-	ID            string   `json:"id"`
-	RuntimeKey    string   `json:"runtimeKey"`
-	Name          string   `json:"name"`
-	Schema        string   `json:"schema"`
-	RetentionDays int      `json:"retentionDays"`
-	DDLVersion    string   `json:"ddlVersion"`
-	Tables        []string `json:"tables"`
+	ID         string   `json:"id"`
+	RuntimeKey string   `json:"runtimeKey"`
+	Name       string   `json:"name"`
+	Schema     string   `json:"schema"`
+	DDLVersion string   `json:"ddlVersion"`
+	Tables     []string `json:"tables"`
 }
 
 type ArtifactBuiltinRealtimeStore struct {
@@ -752,7 +751,6 @@ func buildArtifactConnectionConfig(connection ConnectionRecord) map[string]any {
 		"runtimeKey":        {},
 		"runtimeSchema":     {},
 		"ddlVersion":        {},
-		"retentionDays":     {},
 		"namespace":         {},
 		"defaultTtlSeconds": {},
 		"topicPrefix":       {},
@@ -786,13 +784,12 @@ func buildBuiltinStores(connections []ConnectionRecord) ArtifactBuiltinStoresPay
 			})
 		case "builtin.timeseries":
 			payload.Timeseries = append(payload.Timeseries, ArtifactBuiltinTimeseriesStore{
-				ID:            connection.ID,
-				RuntimeKey:    runtimeKey,
-				Name:          connection.Name,
-				Schema:        runtimeKey,
-				RetentionDays: artifactConfigInt(connection.Config, "retentionDays", 30),
-				DDLVersion:    artifactConfigString(connection.Config, "ddlVersion", "2026-05-24.1"),
-				Tables:        []string{},
+				ID:         connection.ID,
+				RuntimeKey: runtimeKey,
+				Name:       connection.Name,
+				Schema:     runtimeKey,
+				DDLVersion: artifactConfigString(connection.Config, "ddlVersion", "2026-05-24.1"),
+				Tables:     []string{},
 			})
 		case "builtin.realtime":
 			payload.RealtimeSpaces = append(payload.RealtimeSpaces, ArtifactBuiltinRealtimeStore{

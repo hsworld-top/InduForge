@@ -326,7 +326,7 @@ func (s *BuiltinRuntimeService) ListTablesInSchema(ctx context.Context, schemaNa
 		return nil, err
 	}
 	rows, err := s.devPool.Query(ctx, `
-		SELECT t.table_schema, t.table_name, t.table_type, COALESCE(m.kind, '')
+		SELECT t.table_schema, t.table_name, t.table_type, COALESCE(m.kind, ''), COALESCE(m.timeseries, '{}'::jsonb)
 		FROM information_schema.tables t
 		LEFT JOIN if_table_metadata m
 		  ON m.schema_name = t.table_schema
@@ -344,13 +344,15 @@ func (s *BuiltinRuntimeService) ListTablesInSchema(ctx context.Context, schemaNa
 	for rows.Next() {
 		table := RelationalTable{}
 		var storedKind string
-		if err := rows.Scan(&table.Schema, &table.Name, &table.Type, &storedKind); err != nil {
+		var timeseriesBytes []byte
+		if err := rows.Scan(&table.Schema, &table.Name, &table.Type, &storedKind, &timeseriesBytes); err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取内置运行库表列表失败", err)
 		}
 		table.Kind = relationalTableKind("builtin.relation", "postgresql", table.Type, table.Name)
 		if storedKind != "" {
 			table.Kind = storedKind
 		}
+		table.Timeseries = decodeRelationalTimeseriesMetadata(timeseriesBytes)
 		tables = append(tables, table)
 	}
 	if err := rows.Err(); err != nil {
@@ -370,22 +372,93 @@ func (s *BuiltinRuntimeService) CreateTableInSchema(ctx context.Context, schemaN
 	if err := s.ensureSchema(ctx, schemaName); err != nil {
 		return err
 	}
-	ddl, err := buildCreateTableDDL("postgresql", schemaName, input)
+	statements, err := buildBuiltinCreateTableStatements(schemaName, input)
 	if err != nil {
 		return err
 	}
-	if _, err := s.devPool.Exec(ctx, ddl); err != nil {
-		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "创建内置运行库表失败", err)
+	tx, err := s.devPool.Begin(ctx)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启内置运行库建表事务失败", err)
 	}
-	if _, err := s.devPool.Exec(ctx, `
-		INSERT INTO if_table_metadata (schema_name, table_name, kind)
-		VALUES ($1, $2, $3)
+	defer rollbackBuiltinTxQuietly(ctx, tx)
+	for _, statement := range statements {
+		if _, err := tx.Exec(ctx, statement); err != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "创建内置运行库表失败", err)
+		}
+	}
+	timeseriesPayload, err := json.Marshal(timeseriesMetadataFromCreateInput(input))
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "序列化时序表元数据失败", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO if_table_metadata (schema_name, table_name, kind, timeseries)
+		VALUES ($1, $2, $3, $4::jsonb)
 		ON CONFLICT (schema_name, table_name)
-		DO UPDATE SET kind = EXCLUDED.kind, updated_at = now()
-	`, schemaName, input.Name, input.Kind); err != nil {
+		DO UPDATE SET kind = EXCLUDED.kind, timeseries = EXCLUDED.timeseries, updated_at = now()
+	`, schemaName, input.Name, input.Kind, string(timeseriesPayload)); err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "记录内置运行库表元数据失败", err)
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交内置运行库建表事务失败", err)
+	}
 	return nil
+}
+
+func buildBuiltinCreateTableStatements(schemaName string, input CreateRelationalTableInput) ([]string, error) {
+	if input.Kind == "hypertable" {
+		return buildPostgresCreateHypertableStatements(schemaName, input)
+	}
+	ddl, err := buildCreateTableDDL("postgresql", schemaName, input)
+	if err != nil {
+		return nil, err
+	}
+	return []string{ddl}, nil
+}
+
+func timeseriesMetadataFromCreateInput(input CreateRelationalTableInput) *RelationalTimeseriesMetadata {
+	if input.Kind != "hypertable" || input.Timeseries == nil {
+		return nil
+	}
+	dimensions := make([]string, 0, len(input.Timeseries.DimensionColumns))
+	for _, column := range input.Timeseries.DimensionColumns {
+		dimensions = append(dimensions, column.Name)
+	}
+	return &RelationalTimeseriesMetadata{
+		TimeColumn:       input.Timeseries.TimeColumn,
+		DimensionColumns: dimensions,
+		ChunkInterval:    normalizeTimeseriesInterval(input.Timeseries.ChunkInterval, "1 day"),
+		RetentionDays:    normalizeRetentionDays(input.Timeseries.RetentionDays),
+	}
+}
+
+func decodeRelationalTimeseriesMetadata(payload []byte) *RelationalTimeseriesMetadata {
+	if len(payload) == 0 || string(payload) == "{}" || string(payload) == "null" {
+		return nil
+	}
+	var metadata RelationalTimeseriesMetadata
+	if err := json.Unmarshal(payload, &metadata); err != nil {
+		return nil
+	}
+	if metadata.TimeColumn == "" {
+		return nil
+	}
+	return &metadata
+}
+
+func (s *BuiltinRuntimeService) getTableTimeseriesMetadata(ctx context.Context, schemaName, tableName string) (*RelationalTimeseriesMetadata, error) {
+	var payload []byte
+	err := s.devPool.QueryRow(ctx, `
+		SELECT COALESCE(timeseries, '{}'::jsonb)
+		FROM if_table_metadata
+		WHERE schema_name = $1 AND table_name = $2
+	`, schemaName, tableName).Scan(&payload)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取时序表元数据失败", err)
+	}
+	return decodeRelationalTimeseriesMetadata(payload), nil
 }
 
 func (s *BuiltinRuntimeService) GetTableStructureInSchema(ctx context.Context, schemaName, tableName string) (*RelationalTableStructure, error) {
@@ -493,7 +566,11 @@ func (s *BuiltinRuntimeService) GetTableStructureInSchema(ctx context.Context, s
 	if err != nil {
 		return nil, err
 	}
-	return &RelationalTableStructure{Columns: columns, Indexes: indexes, ForeignKeys: []RelationalForeignKey{}}, nil
+	timeseries, err := s.getTableTimeseriesMetadata(ctx, schemaName, tableName)
+	if err != nil {
+		return nil, err
+	}
+	return &RelationalTableStructure{Columns: columns, Indexes: indexes, ForeignKeys: []RelationalForeignKey{}, Timeseries: timeseries}, nil
 }
 
 func (s *BuiltinRuntimeService) UpdateTableStructureInSchema(ctx context.Context, schemaName, tableName string, input UpdateRelationalTableInput) (*RelationalTableStructure, error) {
@@ -1122,11 +1199,15 @@ func (s *BuiltinRuntimeService) ensureSchema(ctx context.Context, schemaName str
 			schema_name text NOT NULL,
 			table_name text NOT NULL,
 			kind text NOT NULL DEFAULT 'table',
+			timeseries jsonb NOT NULL DEFAULT '{}'::jsonb,
 			updated_at timestamptz NOT NULL DEFAULT now(),
 			PRIMARY KEY (schema_name, table_name)
 		)
 	`); err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "创建开发态表元数据失败", err)
+	}
+	if _, err := s.devPool.Exec(ctx, `ALTER TABLE if_table_metadata ADD COLUMN IF NOT EXISTS timeseries jsonb NOT NULL DEFAULT '{}'::jsonb`); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "升级开发态表元数据失败", err)
 	}
 	return nil
 }

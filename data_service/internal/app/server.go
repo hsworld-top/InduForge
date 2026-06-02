@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -144,6 +145,10 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		return nil, nil, err
 	}
 	cleanupFns := []func(){pool.Close}
+	if err := validateDataServiceRequiredSchema(context.Background(), pool); err != nil {
+		joinCleanup(cleanupFns...)()
+		return nil, nil, err
+	}
 
 	var devPool *pgxpool.Pool
 	if strings.TrimSpace(cfg.DevDatabaseURL) != "" {
@@ -323,6 +328,25 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	logf("info: data_service 路由摘要 routeSummary=%s", strings.Join(routeSummaryParts, ","))
 
 	return routeOptions, joinCleanup(cleanupFns...), nil
+}
+
+func validateDataServiceRequiredSchema(ctx context.Context, pool *pgxpool.Pool) error {
+	rows, err := pool.Query(ctx, `
+		SELECT k.project_id, k.connection_id, k.provider, k.key_path,
+		       k.redis_type, k.value_type, k.default_ttl_seconds, k.description,
+		       dp.id, dp.path, k.created_at, k.updated_at
+		FROM data_realtime_keys k
+		LEFT JOIN data_points dp ON false
+		LIMIT 0
+	`)
+	if err != nil {
+		return fmt.Errorf("data_service 数据域库结构未初始化，缺少实时库工作台元数据结构: %w", err)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("data_service 数据域库结构校验失败: %w", err)
+	}
+	return nil
 }
 
 func joinCleanup(cleanups ...func()) func() {

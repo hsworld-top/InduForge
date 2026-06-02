@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -22,11 +23,17 @@ func normalizeCreateTableInput(connectionType string, input CreateRelationalTabl
 	if kind == "" {
 		kind = "table"
 	}
-	if kind != "table" && kind != "super_table" {
-		return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "表类型仅支持普通表或超表")
+	if kind != "table" && kind != "hypertable" {
+		return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "表类型仅支持普通表或时序超表")
 	}
-	if kind == "super_table" && connectionType != "builtin.timeseries" && connectionType != "tdengine" {
-		return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "仅时序库支持超表")
+	if kind == "hypertable" && connectionType != "builtin.timeseries" {
+		return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "仅 IF 时序库支持时序超表")
+	}
+	if kind == "hypertable" && input.Timeseries == nil {
+		return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "时序超表必须配置 TimescaleDB 参数")
+	}
+	if kind == "table" && input.Timeseries != nil {
+		return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "普通表不能配置 TimescaleDB 参数")
 	}
 	if len(input.Columns) == 0 {
 		return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "至少需要一个字段")
@@ -44,6 +51,52 @@ func normalizeCreateTableInput(connectionType string, input CreateRelationalTabl
 		columnNames[normalizedColumn.Name] = struct{}{}
 		columns = append(columns, normalizedColumn)
 	}
+	var timeseries *CreateRelationalTimeseriesInput
+	if kind == "hypertable" && input.Timeseries != nil {
+		dimensions := make([]CreateRelationalTableColumnInput, 0, len(input.Timeseries.DimensionColumns))
+		dimensionNames := map[string]struct{}{}
+		for _, dimension := range input.Timeseries.DimensionColumns {
+			normalizedDimension, err := normalizeTableColumnInput(dimension)
+			if err != nil {
+				return CreateRelationalTableInput{}, err
+			}
+			if _, exists := dimensionNames[normalizedDimension.Name]; exists {
+				return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "维度字段名重复: "+normalizedDimension.Name)
+			}
+			if _, exists := columnNames[normalizedDimension.Name]; exists {
+				return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "维度字段不能与数据字段重名: "+normalizedDimension.Name)
+			}
+			dimensionNames[normalizedDimension.Name] = struct{}{}
+			dimensions = append(dimensions, normalizedDimension)
+			columnNames[normalizedDimension.Name] = struct{}{}
+			columns = append(columns, normalizedDimension)
+		}
+		timeColumn := strings.TrimSpace(input.Timeseries.TimeColumn)
+		if kind == "hypertable" {
+			if timeColumn == "" {
+				return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "时序超表必须选择时间分区字段")
+			}
+			timeColumnExists := false
+			for _, column := range columns {
+				if column.Name == timeColumn {
+					timeColumnExists = true
+					if column.Type != "timestamp" && column.Type != "timestamptz" && column.Type != "datetime" {
+						return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "时间分区字段必须是 TIMESTAMP 或 TIMESTAMPTZ")
+					}
+					break
+				}
+			}
+			if !timeColumnExists {
+				return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "时间分区字段不存在: "+timeColumn)
+			}
+		}
+		timeseries = &CreateRelationalTimeseriesInput{
+			TimeColumn:       timeColumn,
+			DimensionColumns: dimensions,
+			ChunkInterval:    normalizeTimeseriesInterval(input.Timeseries.ChunkInterval, "1 day"),
+			RetentionDays:    normalizeRetentionDays(input.Timeseries.RetentionDays),
+		}
+	}
 	indexes := make([]CreateRelationalTableIndexInput, 0, len(input.Indexes))
 	indexNames := map[string]struct{}{}
 	for _, index := range input.Indexes {
@@ -56,26 +109,6 @@ func normalizeCreateTableInput(connectionType string, input CreateRelationalTabl
 		}
 		indexNames[normalizedIndex.Name] = struct{}{}
 		indexes = append(indexes, normalizedIndex)
-	}
-	var timeseries *CreateRelationalTimeseriesInput
-	if input.Timeseries != nil {
-		tags := make([]CreateRelationalTableColumnInput, 0, len(input.Timeseries.Tags))
-		tagNames := map[string]struct{}{}
-		for _, tag := range input.Timeseries.Tags {
-			normalizedTag, err := normalizeTableColumnInput(tag)
-			if err != nil {
-				return CreateRelationalTableInput{}, err
-			}
-			if _, exists := tagNames[normalizedTag.Name]; exists {
-				return CreateRelationalTableInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "标签名重复: "+normalizedTag.Name)
-			}
-			tagNames[normalizedTag.Name] = struct{}{}
-			tags = append(tags, normalizedTag)
-		}
-		timeseries = &CreateRelationalTimeseriesInput{
-			TimeColumn: strings.TrimSpace(input.Timeseries.TimeColumn),
-			Tags:       tags,
-		}
 	}
 	return CreateRelationalTableInput{
 		Name:       tableName,
@@ -117,6 +150,22 @@ func normalizeUpdateTableInput(input UpdateRelationalTableInput) (UpdateRelation
 		indexes = append(indexes, normalizedIndex)
 	}
 	return UpdateRelationalTableInput{Columns: columns, Indexes: indexes}, nil
+}
+
+func normalizeTimeseriesInterval(value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func normalizeRetentionDays(value *int) *int {
+	if value == nil || *value <= 0 {
+		return nil
+	}
+	next := *value
+	return &next
 }
 
 func normalizeTableColumnInput(input CreateRelationalTableColumnInput) (CreateRelationalTableColumnInput, error) {
@@ -243,6 +292,33 @@ func buildPostgresCreateTableDDL(schema string, input CreateRelationalTableInput
 		statements = append(statements, fmt.Sprintf("%s %s ON %s (%s)", prefix, pgx.Identifier{index.Name}.Sanitize(), tableName, strings.Join(columns, ", ")))
 	}
 	return strings.Join(statements, ";\n") + ";", nil
+}
+
+func buildPostgresCreateHypertableStatements(schema string, input CreateRelationalTableInput) ([]string, error) {
+	if input.Timeseries == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "时序超表缺少 TimescaleDB 配置")
+	}
+	createTableDDL, err := buildPostgresCreateTableDDL(schema, input)
+	if err != nil {
+		return nil, err
+	}
+	statements := []string{createTableDDL}
+	qualifiedName := pgx.Identifier{schema, input.Name}.Sanitize()
+	chunkInterval := normalizeTimeseriesInterval(input.Timeseries.ChunkInterval, "1 day")
+	statements = append(statements, fmt.Sprintf(
+		"SELECT create_hypertable(%s::regclass, %s, if_not_exists => TRUE, chunk_time_interval => INTERVAL %s)",
+		quotePostgresLiteral(qualifiedName),
+		quotePostgresLiteral(input.Timeseries.TimeColumn),
+		quotePostgresLiteral(chunkInterval),
+	))
+	if input.Timeseries.RetentionDays != nil {
+		statements = append(statements, fmt.Sprintf(
+			"SELECT add_retention_policy(%s::regclass, INTERVAL %s, if_not_exists => TRUE)",
+			quotePostgresLiteral(qualifiedName),
+			quotePostgresLiteral(strconv.Itoa(*input.Timeseries.RetentionDays)+" days"),
+		))
+	}
+	return statements, nil
 }
 
 func buildPostgresUpdateTableDDL(schema, tableName string, current *RelationalTableStructure, input UpdateRelationalTableInput) ([]string, error) {
@@ -618,6 +694,10 @@ func quotePostgresColumns(columns []string) []string {
 	return result
 }
 
+func quotePostgresLiteral(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+}
+
 func quoteMySQLColumns(columns []string) []string {
 	result := make([]string, 0, len(columns))
 	for _, column := range columns {
@@ -638,11 +718,6 @@ func relationalTableKind(connectionType, dbType, tableType, tableName string) st
 	normalizedType := strings.ToUpper(strings.TrimSpace(tableType))
 	if strings.Contains(normalizedType, "VIEW") {
 		return "view"
-	}
-	if dbType == "tdengine" {
-		if strings.Contains(normalizedType, "STABLE") || strings.Contains(normalizedType, "SUPER") {
-			return "super_table"
-		}
 	}
 	return "table"
 }

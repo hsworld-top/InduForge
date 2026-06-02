@@ -20,13 +20,56 @@ func TestNormalizeCreateTableInputRejectsInvalidIdentifier(t *testing.T) {
 func TestNormalizeCreateTableInputAllowsSuperTableOnlyForTimeseries(t *testing.T) {
 	_, err := normalizeCreateTableInput("postgresql", CreateRelationalTableInput{
 		Name: "metrics",
-		Kind: "super_table",
+		Kind: "hypertable",
 		Columns: []CreateRelationalTableColumnInput{
 			{Name: "ts", Type: "timestamptz", Primary: true},
 		},
+		Timeseries: &CreateRelationalTimeseriesInput{TimeColumn: "ts"},
 	})
 	if err == nil {
 		t.Fatalf("expected super table scope error")
+	}
+}
+
+func TestBuildPostgresCreateHypertableStatements(t *testing.T) {
+	retentionDays := 30
+	input, err := normalizeCreateTableInput("builtin.timeseries", CreateRelationalTableInput{
+		Name: "temperature_history",
+		Kind: "hypertable",
+		Columns: []CreateRelationalTableColumnInput{
+			{Name: "ts", Type: "timestamptz", Nullable: false},
+			{Name: "value", Type: "double", Nullable: true},
+		},
+		Indexes: []CreateRelationalTableIndexInput{
+			{Name: "idx_temperature_device", Type: "index", Columns: []string{"device_id"}},
+		},
+		Timeseries: &CreateRelationalTimeseriesInput{
+			TimeColumn:    "ts",
+			ChunkInterval: "1 day",
+			RetentionDays: &retentionDays,
+			DimensionColumns: []CreateRelationalTableColumnInput{
+				{Name: "device_id", Type: "varchar", Length: intPointer(64), Nullable: false},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("normalize failed: %v", err)
+	}
+	statements, err := buildPostgresCreateHypertableStatements("p_demo_ts", input)
+	if err != nil {
+		t.Fatalf("build hypertable ddl failed: %v", err)
+	}
+	joined := strings.Join(statements, ";\n")
+	for _, expected := range []string{
+		`CREATE TABLE "p_demo_ts"."temperature_history"`,
+		`"device_id" varchar(64) NOT NULL`,
+		`SELECT create_hypertable('"p_demo_ts"."temperature_history"'::regclass, 'ts', if_not_exists => TRUE, chunk_time_interval => INTERVAL '1 day')`,
+		`SELECT add_retention_policy('"p_demo_ts"."temperature_history"'::regclass, INTERVAL '30 days', if_not_exists => TRUE)`,
+		`CREATE INDEX "idx_temperature_device"`,
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("ddl missing %q: %s", expected, joined)
+		}
 	}
 }
 

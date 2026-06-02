@@ -69,6 +69,26 @@ type CreateRealtimeKeyDataPointInput struct {
 	DataType string `json:"dataType"`
 }
 
+type BatchCreateRealtimeKeyDataPointInput struct {
+	Keys     []string `json:"keys"`
+	DataType string   `json:"dataType"`
+}
+
+type BatchRealtimeKeyDataPointResult struct {
+	Key           string `json:"key"`
+	Status        string `json:"status"`
+	Message       string `json:"message,omitempty"`
+	DataPointID   string `json:"dataPointId,omitempty"`
+	DataPointPath string `json:"dataPointPath,omitempty"`
+}
+
+type BatchRealtimeKeyDataPointResponse struct {
+	List    []BatchRealtimeKeyDataPointResult `json:"list"`
+	Created int                               `json:"created"`
+	Exists  int                               `json:"exists"`
+	Failed  int                               `json:"failed"`
+}
+
 type RealtimeStoreService struct {
 	repository     *repository.RealtimeStoreRepository
 	connections    *repository.ConnectionRepository
@@ -315,6 +335,54 @@ func (s *RealtimeStoreService) CreateDataPoint(ctx context.Context, projectID, c
 		SourceConfig: config,
 		UserID:       userPtr,
 	})
+}
+
+func (s *RealtimeStoreService) BatchCreateDataPoints(ctx context.Context, projectID, connectionID, userID string, input BatchCreateRealtimeKeyDataPointInput) (*BatchRealtimeKeyDataPointResponse, error) {
+	keys := normalizeRealtimeBatchKeys(input.Keys)
+	if len(keys) == 0 {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "请选择需要创建数据点的 key")
+	}
+	if len(keys) > 500 {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "单次最多创建 500 个实时库 key 数据点")
+	}
+	_, provider, err := s.loadConnection(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	metadataByKey, err := s.metadataByKey(ctx, projectID, connectionID, provider)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &BatchRealtimeKeyDataPointResponse{
+		List: make([]BatchRealtimeKeyDataPointResult, 0, len(keys)),
+	}
+	for _, key := range keys {
+		if record, ok := metadataByKey[key]; ok && record.DataPointID != nil {
+			result.Exists += 1
+			result.List = append(result.List, BatchRealtimeKeyDataPointResult{
+				Key:           key,
+				Status:        "exists",
+				DataPointID:   derefString(record.DataPointID),
+				DataPointPath: derefString(record.DataPointPath),
+			})
+			continue
+		}
+		record, err := s.CreateDataPoint(ctx, projectID, connectionID, key, userID, CreateRealtimeKeyDataPointInput{DataType: input.DataType})
+		item := BatchRealtimeKeyDataPointResult{Key: key}
+		if err != nil {
+			item.Status = "failed"
+			item.Message = err.Error()
+			result.Failed += 1
+		} else {
+			item.Status = "created"
+			item.DataPointID = record.ID
+			item.DataPointPath = record.Path
+			result.Created += 1
+		}
+		result.List = append(result.List, item)
+	}
+	return result, nil
 }
 
 func (s *RealtimeStoreService) loadConnection(ctx context.Context, projectID, connectionID string) (*repository.ConnectionRecord, string, error) {
@@ -670,6 +738,20 @@ func normalizeRealtimeKey(key string) (string, error) {
 		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "key 不合法")
 	}
 	return key, nil
+}
+
+func normalizeRealtimeBatchKeys(keys []string) []string {
+	seen := map[string]bool{}
+	result := make([]string, 0, len(keys))
+	for _, key := range keys {
+		key = strings.TrimSpace(key)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		result = append(result, key)
+	}
+	return result
 }
 
 func normalizeRedisType(value string) string {

@@ -16,7 +16,7 @@
 
     <dl class="workbench-source-header__meta">
       <div v-for="row in meta" :key="row.label">
-        <dt>{{ row.label }}</dt>
+        <dt :title="row.label">{{ row.label }}</dt>
         <dd :title="row.value">{{ row.value }}</dd>
       </div>
     </dl>
@@ -122,7 +122,7 @@ defineEmits<{
 .workbench-source-header__meta div {
   min-width: 0;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: 56px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   min-height: 28px;
@@ -142,6 +142,7 @@ defineEmits<{
 }
 
 .workbench-source-header__meta dt {
+  max-width: 76px;
   color: var(--dc-text-muted);
   font-size: 11px;
 }

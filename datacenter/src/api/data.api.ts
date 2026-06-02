@@ -976,6 +976,14 @@ export const createRealtimeStoreKeyDatapoint = (projectId, connectionId, key, da
   })
 }
 
+export const batchCreateRealtimeStoreKeyDatapoints = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/realtime-stores/${connectionId}/keys/datapoints`,
+    method: 'post',
+    data,
+  })
+}
+
 export const getConnectionTables = (projectId, connectionId) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/tables`,
@@ -1877,6 +1885,7 @@ export default {
   renameRealtimeStoreKey,
   deleteRealtimeStoreKey,
   createRealtimeStoreKeyDatapoint,
+  batchCreateRealtimeStoreKeyDatapoints,
   createOpcuaConfig,
   createS7Config,
   createModbusConfig,

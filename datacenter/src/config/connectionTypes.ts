@@ -15,7 +15,7 @@ export const CONNECTION_TYPES = {
     label: 'IF时序库',
     category: 'builtin',
     icon: 'Timer',
-    defaultConfig: { retentionDays: 30, timeField: 'ts' },
+    defaultConfig: {},
   },
   'builtin.realtime': {
     label: 'IF实时库',

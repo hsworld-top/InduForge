@@ -20,7 +20,7 @@ export const BUILTIN_STORE_TYPES: Array<{
     type: 'builtin.timeseries',
     name: 'IF时序库',
     description: '数据点历史、趋势和聚合',
-    defaultConfig: { retentionDays: 30, timeField: 'ts' },
+    defaultConfig: {},
   },
   {
     type: 'builtin.realtime',

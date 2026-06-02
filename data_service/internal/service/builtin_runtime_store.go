@@ -20,21 +20,21 @@ type builtinStoreNormalizedInput struct {
 }
 
 var unsafeBuiltinConfigKeys = map[string]struct{}{
-	"host":        {},
-	"port":        {},
-	"username":    {},
-	"password":    {},
-	"broker":      {},
-	"brokerurl":   {},
-	"database":    {},
-	"db":          {},
-	"token":       {},
-	"secret":      {},
-	"runtimekey":  {},
-	"devschema":   {},
+	"host":          {},
+	"port":          {},
+	"username":      {},
+	"password":      {},
+	"broker":        {},
+	"brokerurl":     {},
+	"database":      {},
+	"db":            {},
+	"token":         {},
+	"secret":        {},
+	"runtimekey":    {},
+	"devschema":     {},
 	"runtimeschema": {},
-	"namespace":   {},
-	"topicprefix": {},
+	"namespace":     {},
+	"topicprefix":   {},
 }
 
 var schemaUnsafePattern = regexp.MustCompile(`[^a-z0-9_]+`)
@@ -69,7 +69,6 @@ func normalizeBuiltinStoreCreateInput(projectID string, input CreateConnectionIn
 		config["store"] = "timeseries"
 		config["devSchema"] = deriveBuiltinConnectionSchema(projectID, runtimeKey)
 		config["runtimeSchema"] = runtimeKey
-		config["retentionDays"] = intFromAny(config["retentionDays"], 30)
 		config["ddlVersion"] = builtinStoreDDLVersion
 	case "builtin.realtime":
 		config["store"] = "realtime"

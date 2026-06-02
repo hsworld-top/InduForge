@@ -305,14 +305,14 @@ func (r *RealtimeStoreRepository) CreateDataPoint(ctx context.Context, params Cr
 	record := DataPointRecord{}
 	err = tx.QueryRow(ctx, `
 		UPDATE data_points
-		SET path = COALESCE(NULLIF(path, ''), $4),
-		    name = $5,
-		    source_id = $6,
-		    source_config = $7::jsonb,
-		    data_type = $8,
+		SET path = COALESCE(NULLIF(path, ''), $3),
+		    name = $4,
+		    source_id = $5,
+		    source_config = $6::jsonb,
+		    data_type = $7,
 		    refresh_mode = 'manual',
 		    status = 'active',
-		    updated_by = COALESCE($9, updated_by),
+		    updated_by = COALESCE($8, updated_by),
 		    updated_at = now()
 		WHERE project_id = $1
 		  AND source_type = 'realtime.key'
@@ -320,7 +320,7 @@ func (r *RealtimeStoreRepository) CreateDataPoint(ctx context.Context, params Cr
 		RETURNING id, project_id, path, name, description, source_type, source_id, source_config, data_type,
 		          unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
 		          refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
-	`, params.ProjectID, params.KeyID, params.ConnectionID, basePath, params.KeyPath, params.ConnectionID, string(configBytes), params.DataType, params.UserID).Scan(
+	`, params.ProjectID, params.KeyID, basePath, params.KeyPath, params.ConnectionID, string(configBytes), params.DataType, params.UserID).Scan(
 		&record.ID,
 		&record.ProjectID,
 		&record.Path,
@@ -355,6 +355,60 @@ func (r *RealtimeStoreRepository) CreateDataPoint(ctx context.Context, params Cr
 	}
 	if err != pgx.ErrNoRows {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步实时库 key 数据点失败", err)
+	}
+
+	err = tx.QueryRow(ctx, `
+		UPDATE data_points
+		SET name = $3,
+		    source_id = $4,
+		    source_config = $5::jsonb,
+		    data_type = $6,
+		    refresh_mode = 'manual',
+		    status = 'active',
+		    updated_by = COALESCE($7, updated_by),
+		    updated_at = now()
+		WHERE project_id = $1
+		  AND source_type = 'realtime.key'
+		  AND path = $2
+		  AND status = 'invalid'
+		RETURNING id, project_id, path, name, description, source_type, source_id, source_config, data_type,
+		          unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
+		          refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+	`, params.ProjectID, basePath, params.KeyPath, params.ConnectionID, string(configBytes), params.DataType, params.UserID).Scan(
+		&record.ID,
+		&record.ProjectID,
+		&record.Path,
+		&record.Name,
+		&record.Description,
+		&record.SourceType,
+		&record.SourceID,
+		newJSONScanner(&record.SourceConfig),
+		&record.DataType,
+		&record.Unit,
+		&record.PrecisionNum,
+		&record.DefaultValue,
+		&record.MinValue,
+		&record.MaxValue,
+		&record.AlarmLow,
+		&record.AlarmHigh,
+		newJSONScanner(&record.Tags),
+		newJSONScanner(&record.RuntimePermissions),
+		&record.RefreshMode,
+		&record.RefreshIntervalMS,
+		&record.Status,
+		&record.CreatedBy,
+		&record.UpdatedBy,
+		&record.CreatedAt,
+		&record.UpdatedAt,
+	)
+	if err == nil {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交实时库 key 数据点事务失败", err)
+		}
+		return &record, nil
+	}
+	if err != pgx.ErrNoRows {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "复活实时库 key 失效数据点失败", err)
 	}
 
 	allocatedPath, err := allocateGeneratedDataPointPath(ctx, tx, params.ProjectID, basePath, "realtime.key", params.KeyID)

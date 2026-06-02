@@ -23,10 +23,11 @@ var readOnlySQLPrefixPattern = regexp.MustCompile(`(?is)^\s*(select|with)\b`)
 
 // RelationalTable 表示关系库表元信息。
 type RelationalTable struct {
-	Schema string `json:"schema"`
-	Name   string `json:"name"`
-	Type   string `json:"type"`
-	Kind   string `json:"kind"`
+	Schema     string                        `json:"schema"`
+	Name       string                        `json:"name"`
+	Type       string                        `json:"type"`
+	Kind       string                        `json:"kind"`
+	Timeseries *RelationalTimeseriesMetadata `json:"timeseries,omitempty"`
 }
 
 // RelationalTableColumn 表示表字段元信息。
@@ -64,9 +65,19 @@ type RelationalForeignKey struct {
 
 // RelationalTableStructure 表示表结构响应。
 type RelationalTableStructure struct {
-	Columns     []RelationalTableColumn `json:"columns"`
-	Indexes     []RelationalIndex       `json:"indexes"`
-	ForeignKeys []RelationalForeignKey  `json:"foreignKeys"`
+	Columns     []RelationalTableColumn       `json:"columns"`
+	Indexes     []RelationalIndex             `json:"indexes"`
+	ForeignKeys []RelationalForeignKey        `json:"foreignKeys"`
+	Timeseries  *RelationalTimeseriesMetadata `json:"timeseries,omitempty"`
+}
+
+// RelationalTimeseriesMetadata 描述 TimescaleDB hypertable 的平台配置。
+// 这些字段来自结构化建表，前端用它生成时序模板和展示真实时序策略。
+type RelationalTimeseriesMetadata struct {
+	TimeColumn       string   `json:"timeColumn"`
+	DimensionColumns []string `json:"dimensionColumns"`
+	ChunkInterval    string   `json:"chunkInterval"`
+	RetentionDays    *int     `json:"retentionDays,omitempty"`
 }
 
 // UpdateRelationalTableInput 表示表结构修改的目标状态。
@@ -132,11 +143,12 @@ type CreateRelationalTableIndexInput struct {
 	Columns []string
 }
 
-// CreateRelationalTimeseriesInput 为时序库建表扩展。
-// 当前内置时序库使用 PostgreSQL 承载，SuperTable 作为 UI/元数据概念保留；TDengine 暂缺运行时驱动。
+// CreateRelationalTimeseriesInput 为 TimescaleDB hypertable 建表扩展。
 type CreateRelationalTimeseriesInput struct {
-	TimeColumn string
-	Tags       []CreateRelationalTableColumnInput
+	TimeColumn       string
+	DimensionColumns []CreateRelationalTableColumnInput
+	ChunkInterval    string
+	RetentionDays    *int
 }
 
 type relationalRuntimeConfig struct {

@@ -440,12 +440,7 @@
                   placeholder="可选，描述该运行库在工程中的用途"
                 />
               </el-form-item>
-              <template v-if="connectionType === 'builtin.timeseries'">
-                <el-form-item label="默认保留天数">
-                  <el-input-number v-model="formData.retentionDays" :min="1" :max="3650" />
-                </el-form-item>
-              </template>
-              <template v-else-if="connectionType === 'builtin.realtime'">
+              <template v-if="connectionType === 'builtin.realtime'">
                 <el-form-item label="默认 TTL">
                   <el-input-number v-model="formData.defaultTtlSeconds" :min="0" :max="86400" />
                 </el-form-item>
@@ -1444,9 +1439,6 @@ const normalizeBuiltinFormData = (type, config) => {
 }
 
 const normalizeBuiltinSubmitConfig = (type, config) => {
-  if (type === 'builtin.timeseries') {
-    config.retentionDays = Number(config.retentionDays) || 30
-  }
   if (type === 'builtin.realtime') {
     config.defaultTtlSeconds = Number(config.defaultTtlSeconds) || 300
   }

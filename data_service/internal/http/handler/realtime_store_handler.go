@@ -115,6 +115,23 @@ func (h *RealtimeStoreHandler) CreateDataPoint(w http.ResponseWriter, r *http.Re
 	return nil
 }
 
+func (h *RealtimeStoreHandler) BatchCreateDataPoints(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request service.BatchCreateRealtimeKeyDataPointInput
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.BatchCreateDataPoints(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, request)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 func realtimeKeyFromRequest(r *http.Request) string {
 	return strings.TrimSpace(r.URL.Query().Get("key"))
 }

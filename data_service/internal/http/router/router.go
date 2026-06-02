@@ -318,6 +318,7 @@ func mountRealtimeStoreRoutes(mux *http.ServeMux, opts options) {
 	mux.Handle("PATCH /api/v1/data/projects/{projectId}/realtime-stores/{connectionId}/key/rename", write(opts.realtimeStoreHandler.RenameKey))
 	mux.Handle("DELETE /api/v1/data/projects/{projectId}/realtime-stores/{connectionId}/key", write(opts.realtimeStoreHandler.DeleteKey))
 	mux.Handle("POST /api/v1/data/projects/{projectId}/realtime-stores/{connectionId}/key/datapoint", write(opts.realtimeStoreHandler.CreateDataPoint))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/realtime-stores/{connectionId}/keys/datapoints", write(opts.realtimeStoreHandler.BatchCreateDataPoints))
 }
 
 func mountAlarmPolicyRoutes(mux *http.ServeMux, opts options) {

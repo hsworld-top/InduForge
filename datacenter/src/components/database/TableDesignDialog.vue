@@ -50,6 +50,14 @@
         </label>
       </section>
 
+      <section v-if="props.supportsHypertable && !isEditMode" class="table-design__template">
+        <div>
+          <strong>采集数据模板</strong>
+          <span>按 ts、point_name、quality、value 创建常见采集数据时序表。</span>
+        </div>
+        <el-button size="small" @click="applyCollectionTemplate">使用模板</el-button>
+      </section>
+
       <el-tabs v-model="activeTab" class="table-design__tabs">
         <el-tab-pane label="字段" name="columns">
           <div class="table-design__toolbar">
@@ -193,15 +201,15 @@
           <div v-if="draft.indexes.length === 0" class="table-design__empty">暂无索引</div>
         </el-tab-pane>
 
-        <el-tab-pane v-if="draft.kind === 'super_table'" label="标签" name="tags">
+        <el-tab-pane v-if="draft.kind === 'hypertable'" label="维度字段" name="dimensions">
           <div class="table-design__toolbar">
             <button type="button" @click="addTag">
               <IconTablerPlus />
-              <span>添加标签</span>
+              <span>添加维度字段</span>
             </button>
           </div>
-          <div class="table-design__grid is-tags">
-            <div class="table-design__head">标签名</div>
+          <div class="table-design__grid is-dimensions">
+            <div class="table-design__head">字段名</div>
             <div class="table-design__head">类型</div>
             <div class="table-design__head">长度</div>
             <div class="table-design__head">备注</div>
@@ -230,7 +238,61 @@
               </button>
             </template>
           </div>
-          <div v-if="draft.tags.length === 0" class="table-design__empty">暂无标签</div>
+          <div v-if="draft.tags.length === 0" class="table-design__empty">暂无维度字段</div>
+        </el-tab-pane>
+
+        <el-tab-pane v-if="draft.kind === 'hypertable'" label="时序策略" name="timeseries">
+          <div class="table-design__policy">
+            <label>
+              <span>时间分区字段</span>
+              <el-select v-model="draft.timeColumn" size="small" placeholder="选择时间字段">
+                <el-option
+                  v-for="column in timeColumnOptions"
+                  :key="column.name"
+                  :label="column.name"
+                  :value="column.name"
+                />
+              </el-select>
+            </label>
+            <label>
+              <span class="table-design__label-line">
+                Chunk 时间间隔
+                <el-tooltip
+                  content="建议按采集频率选择：高频数据可用 1 hour 或 6 hours，普通趋势推荐 1 day，低频长期数据可用 7 days。"
+                  placement="top"
+                >
+                  <IconTablerInfoCircle />
+                </el-tooltip>
+              </span>
+              <el-input v-model="draft.chunkInterval" size="small" placeholder="例如 1 day" />
+            </label>
+            <label class="table-design__policy-switch">
+              <span class="table-design__label-line">
+                <el-checkbox
+                  v-model="draft.retentionEnabled"
+                  class="table-design__policy-checkbox"
+                  aria-label="启用数据保留策略"
+                />
+                启用数据保留策略
+                <el-tooltip
+                  content="开启后 TimescaleDB 会自动清理超过保留天数的历史数据；关闭则长期保留，需要自行清理。"
+                  placement="top"
+                >
+                  <IconTablerInfoCircle />
+                </el-tooltip>
+              </span>
+            </label>
+            <label v-if="draft.retentionEnabled">
+              <span>保留天数</span>
+              <el-input-number
+                v-model="draft.retentionDays"
+                size="small"
+                :min="1"
+                :max="3650"
+                controls-position="right"
+              />
+            </label>
+          </div>
         </el-tab-pane>
       </el-tabs>
     </div>
@@ -244,8 +306,9 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import IconTablerChevronDown from '~icons/tabler/chevron-down'
+import IconTablerInfoCircle from '~icons/tabler/info-circle'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerTrash from '~icons/tabler/trash'
 import DcDialog from '@/components/shared/DcDialog.vue'
@@ -279,7 +342,7 @@ const props = defineProps<{
   projectId: string | number
   connectionId: string
   dbType: string
-  supportsSuperTable?: boolean
+  supportsHypertable?: boolean
   mode?: 'create' | 'edit'
   tableName?: string
   initialStructure?: Record<string, any> | null
@@ -304,12 +367,12 @@ const submitLabel = computed(() => (isEditMode.value ? '保存修改' : '创建'
 
 const tableKindOptions = computed(() => {
   const options = [{ label: '普通表', value: 'table' }]
-  if (props.supportsSuperTable && !isEditMode.value) {
-    options.push({ label: '超表', value: 'super_table' })
+  if (props.supportsHypertable && !isEditMode.value) {
+    options.push({ label: '时序超表', value: 'hypertable' })
   }
   return options
 })
-const supportsTableKindDropdown = computed(() => props.supportsSuperTable && !isEditMode.value)
+const supportsTableKindDropdown = computed(() => props.supportsHypertable && !isEditMode.value)
 const tableKindLabel = computed(
   () => tableKindOptions.value.find((item) => item.value === draft.value.kind)?.label || '普通表',
 )
@@ -346,7 +409,13 @@ const tagTypeOptions = computed(() => [
   { label: 'BOOLEAN', value: 'boolean' },
 ])
 
-const selectableColumns = computed(() => draft.value.columns.filter((column) => column.name.trim()))
+const selectableColumns = computed(() => allDraftColumns.value.filter((column) => column.name.trim()))
+const allDraftColumns = computed(() => [...draft.value.columns, ...draft.value.tags])
+const timeColumnOptions = computed(() =>
+  draft.value.columns.filter((column) =>
+    ['timestamp', 'timestamptz'].includes(String(column.type || '').toLowerCase()),
+  ),
+)
 const snapshot = computed(() => JSON.stringify(draft.value))
 const isDirty = computed(() => props.modelValue && snapshot.value !== initialSnapshot.value)
 
@@ -356,15 +425,19 @@ function createDraft() {
     kind: 'table',
     columns: [
       createColumn({
-        name: props?.supportsSuperTable && props?.dbType === 'tdengine' ? 'ts' : 'id',
-        type: props?.supportsSuperTable && props?.dbType === 'tdengine' ? 'timestamp' : 'bigint',
-        primary: !(props?.supportsSuperTable && props?.dbType === 'tdengine'),
-        autoIncrement: !(props?.supportsSuperTable && props?.dbType === 'tdengine'),
+        name: props?.supportsHypertable ? 'ts' : 'id',
+        type: props?.supportsHypertable ? 'timestamptz' : 'bigint',
+        primary: !props?.supportsHypertable,
+        autoIncrement: !props?.supportsHypertable,
         nullable: false,
       }),
     ],
     indexes: [] as DraftIndex[],
     tags: [] as DraftColumn[],
+    timeColumn: props?.supportsHypertable ? 'ts' : '',
+    chunkInterval: '1 day',
+    retentionEnabled: false,
+    retentionDays: 30,
   }
 }
 
@@ -397,6 +470,10 @@ function createDraftFromStructure() {
         columns: Array.isArray(index.columns) ? [...index.columns] : [],
       })),
     tags: [] as DraftColumn[],
+    timeColumn: structure.timeseries?.timeColumn || '',
+    chunkInterval: structure.timeseries?.chunkInterval || '1 day',
+    retentionEnabled: Boolean(structure.timeseries?.retentionDays),
+    retentionDays: structure.timeseries?.retentionDays || 30,
   }
 }
 
@@ -438,6 +515,71 @@ function createIndex(): DraftIndex {
   }
 }
 
+function isDefaultCreateDraft() {
+  if (draft.value.name.trim() || draft.value.tags.length > 0 || draft.value.indexes.length > 0) {
+    return false
+  }
+  if (draft.value.columns.length !== 1) return false
+  const column = draft.value.columns[0]
+  return (
+    column.name === 'ts' &&
+    column.type === 'timestamptz' &&
+    !column.nullable &&
+    draft.value.kind === 'table' &&
+    draft.value.timeColumn === 'ts' &&
+    draft.value.chunkInterval === '1 day' &&
+    !draft.value.retentionEnabled &&
+    draft.value.retentionDays === 30
+  )
+}
+
+async function applyCollectionTemplate() {
+  if (!isDefaultCreateDraft()) {
+    try {
+      await ElMessageBox.confirm('采集数据模板会替换当前字段、维度字段和时序策略，是否继续？', '使用采集数据模板', {
+        confirmButtonText: '使用模板',
+        cancelButtonText: '取消',
+        type: 'warning',
+      })
+    } catch {
+      return
+    }
+  }
+  const tableName = draft.value.name.trim() || 'point_samples'
+  draft.value = {
+    ...draft.value,
+    name: tableName,
+    kind: 'hypertable',
+    columns: [
+      createColumn({ name: 'ts', type: 'timestamptz', nullable: false }),
+      createColumn({ name: 'quality', type: 'int', nullable: false, comment: '质量码，常见约定 192=GOOD' }),
+      createColumn({ name: 'value', type: 'double', nullable: true, comment: '采集值' }),
+    ],
+    indexes: [
+      {
+        localId: `index-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: 'idx_point_samples_point_time',
+        type: 'index',
+        columns: ['point_name', 'ts'],
+      },
+    ],
+    tags: [
+      createColumn({
+        name: 'point_name',
+        type: 'varchar',
+        length: 128,
+        nullable: false,
+        comment: '变量名或点位标识',
+      }),
+    ],
+    timeColumn: 'ts',
+    chunkInterval: '1 day',
+    retentionEnabled: false,
+    retentionDays: 30,
+  }
+  activeTab.value = 'columns'
+}
+
 function resetDraft() {
   draft.value = isEditMode.value ? createDraftFromStructure() : createDraft()
   activeTab.value = 'columns'
@@ -446,9 +588,26 @@ function resetDraft() {
 
 function selectTableKind(kind: string | number | object) {
   draft.value.kind = String(kind)
-  if (draft.value.kind !== 'super_table' && activeTab.value === 'tags') {
+  if (draft.value.kind === 'hypertable') {
+    ensureHypertableDefaults()
+  }
+  if (draft.value.kind !== 'hypertable' && ['dimensions', 'timeseries'].includes(activeTab.value)) {
     activeTab.value = 'columns'
   }
+}
+
+function ensureHypertableDefaults() {
+  if (!draft.value.timeColumn) {
+    const timestampColumn = timeColumnOptions.value[0]
+    draft.value.timeColumn = timestampColumn?.name || ''
+  }
+  draft.value.columns.forEach((column) => {
+    if (column.name === draft.value.timeColumn) {
+      column.primary = false
+      column.autoIncrement = false
+      column.nullable = false
+    }
+  })
 }
 
 function supportsLength(type: string) {
@@ -469,6 +628,9 @@ function addColumn() {
 
 function removeColumn(index: number) {
   const [removed] = draft.value.columns.splice(index, 1)
+  if (draft.value.timeColumn === removed?.name) {
+    draft.value.timeColumn = timeColumnOptions.value[0]?.name || ''
+  }
   if (!removed?.name) return
   draft.value.indexes.forEach((item) => {
     item.columns = item.columns.filter((column) => column !== removed.name)
@@ -507,12 +669,15 @@ function validateDraft() {
     if (!index.name.trim()) return '索引名不能为空'
     if (index.columns.length === 0) return `索引 ${index.name || ''} 需要选择字段`
   }
-  if (draft.value.kind === 'super_table') {
+  if (draft.value.kind === 'hypertable') {
+    if (!draft.value.timeColumn) return '请选择时间分区字段'
+    if (!draft.value.chunkInterval.trim()) return '请输入 Chunk 时间间隔'
     const tagNames = new Set<string>()
     for (const tag of draft.value.tags) {
       const name = tag.name.trim()
-      if (!name) return '超表标签名不能为空'
-      if (tagNames.has(name)) return `标签名重复：${name}`
+      if (!name) return '维度字段名不能为空'
+      if (names.has(name)) return `维度字段不能与数据字段重名：${name}`
+      if (tagNames.has(name)) return `维度字段名重复：${name}`
       tagNames.add(name)
     }
   }
@@ -541,10 +706,10 @@ function buildPayload() {
       columns: [...index.columns],
     })),
     timeseries:
-      draft.value.kind === 'super_table'
+      draft.value.kind === 'hypertable'
         ? {
-            timeColumn: draft.value.columns[0]?.name || '',
-            tags: draft.value.tags.map((tag) => ({
+            timeColumn: draft.value.timeColumn,
+            dimensionColumns: draft.value.tags.map((tag) => ({
               name: tag.name.trim(),
               type: tag.type,
               length: tag.length || undefined,
@@ -554,6 +719,8 @@ function buildPayload() {
               defaultValue: '',
               comment: tag.comment.trim(),
             })),
+            chunkInterval: draft.value.chunkInterval.trim(),
+            retentionDays: draft.value.retentionEnabled ? draft.value.retentionDays || undefined : undefined,
           }
         : undefined,
   }
@@ -623,6 +790,32 @@ watch(
   font-weight: 700;
 }
 
+.table-design__template {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
+}
+
+.table-design__template div {
+  display: grid;
+  gap: 3px;
+}
+
+.table-design__template strong {
+  color: var(--dc-text);
+  font-size: 13px;
+}
+
+.table-design__template span {
+  color: var(--dc-text-muted);
+  font-size: 12px;
+}
+
 .table-design__kind-button {
   width: 100%;
   justify-content: space-between;
@@ -689,8 +882,52 @@ watch(
   grid-template-columns: 180px 140px minmax(220px, 1fr) 30px;
 }
 
-.table-design__grid.is-tags {
+.table-design__grid.is-dimensions {
   grid-template-columns: 180px 150px 120px minmax(180px, 1fr) 30px;
+}
+
+.table-design__policy {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.table-design__policy label {
+  display: grid;
+  gap: 6px;
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.table-design__policy-switch {
+  align-content: start;
+  padding-top: 22px;
+}
+
+.table-design__label-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.table-design__label-line svg {
+  width: 14px;
+  height: 14px;
+  color: var(--dc-text-muted);
+  cursor: help;
+}
+
+.table-design__label-line svg:hover {
+  color: var(--dc-primary);
+}
+
+.table-design__policy-checkbox {
+  height: 16px;
+}
+
+.table-design__policy-checkbox :deep(.el-checkbox__label) {
+  display: none;
 }
 
 .table-design__head {

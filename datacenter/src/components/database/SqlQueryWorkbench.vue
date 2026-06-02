@@ -164,9 +164,6 @@
                   >
                     <component :is="resolveTableIcon(table)" />
                     <span>{{ table.name }}</span>
-                    <small v-if="table.kind === 'super_table'" class="sql-workbench__kind-pill">
-                      超表
-                    </small>
                     <small v-if="table.rows !== undefined">{{ table.rows }}</small>
                   </div>
                   <div v-if="group.items.length === 0" class="sql-workbench__empty is-compact">
@@ -348,6 +345,40 @@
               <span>加载表结构...</span>
             </div>
             <el-tabs v-else v-model="activeTab.structureTab" class="sql-workbench__meta-tabs">
+              <el-tab-pane v-if="activeTab.structure.timeseries" label="时序信息" name="timeseries">
+                <dl class="sql-workbench__timeseries-facts">
+                  <div>
+                    <dt>类型</dt>
+                    <dd>TimescaleDB Hypertable</dd>
+                  </div>
+                  <div>
+                    <dt>时间分区字段</dt>
+                    <dd>{{ activeTab.structure.timeseries.timeColumn }}</dd>
+                  </div>
+                  <div>
+                    <dt>维度字段</dt>
+                    <dd>
+                      {{
+                        (activeTab.structure.timeseries.dimensionColumns || []).join(', ') || '-'
+                      }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Chunk 间隔</dt>
+                    <dd>{{ activeTab.structure.timeseries.chunkInterval || '-' }}</dd>
+                  </div>
+                  <div>
+                    <dt>保留策略</dt>
+                    <dd>
+                      {{
+                        activeTab.structure.timeseries.retentionDays
+                          ? `${activeTab.structure.timeseries.retentionDays} 天`
+                          : '未启用'
+                      }}
+                    </dd>
+                  </div>
+                </dl>
+              </el-tab-pane>
               <el-tab-pane label="字段" name="columns">
                 <el-table :data="activeTab.structure.columns" size="small" border height="100%">
                   <el-table-column prop="name" label="字段" min-width="160" />
@@ -405,6 +436,48 @@
           </dl>
         </section>
 
+        <section v-if="selectedTable">
+          <div class="sql-workbench__panel-title">表信息</div>
+          <dl class="sql-workbench__facts">
+            <div>
+              <dt>类型</dt>
+              <dd>
+                {{
+                  selectedTable.kind === 'hypertable'
+                    ? 'TimescaleDB Hypertable'
+                    : selectedTable.kind === 'view'
+                      ? '视图'
+                      : '普通表'
+                }}
+              </dd>
+            </div>
+            <template v-if="selectedTable.timeseries">
+              <div>
+                <dt>时间字段</dt>
+                <dd>{{ selectedTable.timeseries.timeColumn || '-' }}</dd>
+              </div>
+              <div>
+                <dt>维度字段</dt>
+                <dd>{{ (selectedTable.timeseries.dimensionColumns || []).join(', ') || '-' }}</dd>
+              </div>
+              <div>
+                <dt>Chunk</dt>
+                <dd>{{ selectedTable.timeseries.chunkInterval || '-' }}</dd>
+              </div>
+              <div>
+                <dt>保留</dt>
+                <dd>
+                  {{
+                    selectedTable.timeseries.retentionDays
+                      ? `${selectedTable.timeseries.retentionDays} 天`
+                      : '未启用'
+                  }}
+                </dd>
+              </div>
+            </template>
+          </dl>
+        </section>
+
         <section v-if="activeQueryDataPoint">
           <div class="sql-workbench__panel-title">自动数据点</div>
           <button
@@ -423,6 +496,19 @@
         </section>
 
         <section v-if="activeTab?.type === 'structure'">
+          <template v-if="activeTab.structure.timeseries">
+            <div class="sql-workbench__panel-title">时序策略</div>
+            <dl class="sql-workbench__facts">
+              <div>
+                <dt>时间字段</dt>
+                <dd>{{ activeTab.structure.timeseries.timeColumn }}</dd>
+              </div>
+              <div>
+                <dt>Chunk</dt>
+                <dd>{{ activeTab.structure.timeseries.chunkInterval || '-' }}</dd>
+              </div>
+            </dl>
+          </template>
           <div class="sql-workbench__panel-title">字段摘要</div>
           <div
             v-for="column in activeTab.structure.columns.slice(0, 12)"
@@ -458,7 +544,7 @@
       :project-id="projectId"
       :connection-id="connection.id"
       :db-type="dbType"
-      :supports-super-table="supportsSuperTable"
+      :supports-hypertable="supportsHypertable"
       :mode="tableDesignMode"
       :table-name="editingTableName"
       :initial-structure="editingTableStructure"
@@ -585,6 +671,30 @@
             <IconTablerPlus />
             <span>插入数据</span>
           </button>
+          <button
+            v-if="contextMenu.type === 'table' && contextMenu.table?.kind === 'hypertable'"
+            type="button"
+            @click="openContextRecentTimeseries"
+          >
+            <IconTablerClock />
+            <span>查询最近时序</span>
+          </button>
+          <button
+            v-if="contextMenu.type === 'table' && contextMenu.table?.kind === 'hypertable'"
+            type="button"
+            @click="openContextTimeseriesAggregate"
+          >
+            <IconTablerChartLine />
+            <span>按时间聚合</span>
+          </button>
+          <button
+            v-if="contextMenu.type === 'table' && contextMenu.table?.kind === 'hypertable'"
+            type="button"
+            @click="openContextTimeseriesQuality"
+          >
+            <IconTablerAlertTriangle />
+            <span>查询异常质量</span>
+          </button>
           <button v-if="contextMenu.type === 'table'" type="button" @click="renameContextTable">
             <IconTablerEdit />
             <span>重命名表</span>
@@ -607,8 +717,11 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { format as formatSql } from 'sql-formatter'
+import IconTablerAlertTriangle from '~icons/tabler/alert-triangle'
 import IconTablerChevronDown from '~icons/tabler/chevron-down'
 import IconTablerChevronRight from '~icons/tabler/chevron-right'
+import IconTablerChartLine from '~icons/tabler/chart-line'
+import IconTablerClock from '~icons/tabler/clock'
 import IconTablerColumns from '~icons/tabler/columns'
 import IconTablerDatabase from '~icons/tabler/database'
 import IconTablerEdit from '~icons/tabler/edit'
@@ -740,9 +853,7 @@ const dbType = computed(() => {
   }
   return props.connection.type || dbConfig.value.dbType || 'mysql'
 })
-const supportsSuperTable = computed(() =>
-  ['builtin.timeseries', 'tdengine'].includes(props.connection.type || dbType.value),
-)
+const supportsHypertable = computed(() => props.connection.type === 'builtin.timeseries')
 const supportsTableStructureEdit = computed(() =>
   ['builtin.relation', 'builtin.timeseries'].includes(props.connection.type || ''),
 )
@@ -784,6 +895,11 @@ const formatterLanguage = computed(() => {
 })
 const isDark = computed(() => document.documentElement.classList.contains('dark'))
 const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId.value) || null)
+const selectedTable = computed(() => {
+  const tableName = selectedTableName.value || activeTab.value?.table || ''
+  if (!tableName) return null
+  return tables.value.find((table) => table.name === tableName) || null
+})
 const activeResultTotal = computed(() => activeTab.value?.displayRows?.length || 0)
 const activePagedRows = computed(() => {
   const tab = activeTab.value
@@ -884,7 +1000,7 @@ const tableTreeGroups = computed(() =>
 )
 
 const resolveTableIcon = (table: any) => {
-  if (table?.kind === 'super_table') return IconTablerStack2
+  if (table?.kind === 'hypertable') return IconTablerStack2
   return IconTablerTable
 }
 
@@ -935,6 +1051,44 @@ const buildInsertSql = (tableName: string, columns: Array<Record<string, any>>) 
   const columnList = targetColumns.map((column) => quoteColumn(column.name)).join(', ')
   const valueList = targetColumns.map((column) => columnPlaceholderValue(column)).join(', ')
   return `INSERT INTO ${quoteTable(tableName)} (${columnList})\nVALUES (${valueList});`
+}
+
+const firstNumericColumn = (columns: Array<Record<string, any>>, excluded = new Set<string>()) =>
+  columns.find((column) => {
+    const type = String(column.type || '').toLowerCase()
+    return (
+      !excluded.has(column.name) &&
+      (type.includes('int') ||
+        type.includes('double') ||
+        type.includes('numeric') ||
+        type.includes('decimal') ||
+        type.includes('float'))
+    )
+  })
+
+const buildRecentTimeseriesSql = (tableName: string, structure: Record<string, any>) => {
+  const timeColumn = structure.timeseries?.timeColumn || 'ts'
+  return `SELECT *\nFROM ${quoteTable(tableName)}\nWHERE ${quoteColumn(timeColumn)} >= now() - INTERVAL '1 hour'\nORDER BY ${quoteColumn(timeColumn)} DESC\nLIMIT 100;`
+}
+
+const buildTimeseriesAggregateSql = (
+  tableName: string,
+  structure: Record<string, any>,
+  columns: Array<Record<string, any>>,
+) => {
+  const timeseries = structure.timeseries || {}
+  const timeColumn = timeseries.timeColumn || 'ts'
+  const dimensions = Array.isArray(timeseries.dimensionColumns) ? timeseries.dimensionColumns : []
+  const excluded = new Set([timeColumn, ...dimensions])
+  const valueColumn = firstNumericColumn(columns, excluded)?.name || columns.find((column) => !excluded.has(column.name))?.name || 'value'
+  const dimensionSelect = dimensions.length > 0 ? `,\n  ${dimensions.map(quoteColumn).join(', ')}` : ''
+  const dimensionGroup = dimensions.length > 0 ? `, ${dimensions.map(quoteColumn).join(', ')}` : ''
+  return `SELECT\n  time_bucket('5 minutes', ${quoteColumn(timeColumn)}) AS bucket${dimensionSelect},\n  avg(${quoteColumn(valueColumn)}) AS avg_${valueColumn}\nFROM ${quoteTable(tableName)}\nWHERE ${quoteColumn(timeColumn)} >= now() - INTERVAL '1 day'\nGROUP BY bucket${dimensionGroup}\nORDER BY bucket DESC;`
+}
+
+const buildTimeseriesQualitySql = (tableName: string, structure: Record<string, any>) => {
+  const timeColumn = structure.timeseries?.timeColumn || 'ts'
+  return `SELECT *\nFROM ${quoteTable(tableName)}\nWHERE ${quoteColumn('quality')} <> 192\n  AND ${quoteColumn(timeColumn)} >= now() - INTERVAL '1 day'\nORDER BY ${quoteColumn(timeColumn)} DESC\nLIMIT 100;`
 }
 
 const normalizeRows = (rows: any[], columns: string[]) =>
@@ -1621,6 +1775,67 @@ const openContextInsert = async () => {
   }
 }
 
+const openContextRecentTimeseries = async () => {
+  const table = contextMenu.value.table
+  closeContextMenu()
+  if (!table) return
+  try {
+    const response = await dataAPI.getTableStructure(
+      props.projectId,
+      props.connection.id,
+      table.name,
+    )
+    createQueryTab({
+      title: `${table.name} / 最近时序`,
+      table: table.name,
+      sql: buildRecentTimeseriesSql(table.name, response.data || {}),
+    })
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '生成时序查询模板失败'))
+  }
+}
+
+const openContextTimeseriesAggregate = async () => {
+  const table = contextMenu.value.table
+  closeContextMenu()
+  if (!table) return
+  try {
+    const response = await dataAPI.getTableStructure(
+      props.projectId,
+      props.connection.id,
+      table.name,
+    )
+    const structure = response.data || {}
+    createQueryTab({
+      title: `${table.name} / 时间聚合`,
+      table: table.name,
+      sql: buildTimeseriesAggregateSql(table.name, structure, structure.columns || []),
+    })
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '生成时序聚合模板失败'))
+  }
+}
+
+const openContextTimeseriesQuality = async () => {
+  const table = contextMenu.value.table
+  closeContextMenu()
+  if (!table) return
+  try {
+    const response = await dataAPI.getTableStructure(
+      props.projectId,
+      props.connection.id,
+      table.name,
+    )
+    createQueryTab({
+      title: `${table.name} / 异常质量`,
+      table: table.name,
+      sql: buildTimeseriesQualitySql(table.name, response.data || {}),
+    })
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '生成异常质量查询模板失败'))
+  }
+}
+
 const handleTableCreated = async (tableName: string) => {
   await loadTables()
   const table = tables.value.find((item) => item.name === tableName)
@@ -1963,7 +2178,7 @@ onBeforeUnmount(() => {
 
 .sql-workbench__tree-item {
   position: relative;
-  grid-template-columns: 20px minmax(0, 1fr) auto auto 30px;
+  grid-template-columns: 20px minmax(0, 1fr) auto 30px;
   gap: 6px;
   min-height: 30px;
   padding: 5px 4px 5px 8px;
@@ -1977,16 +2192,6 @@ onBeforeUnmount(() => {
   border-radius: var(--dc-radius-xs);
   background: var(--dc-success-soft);
   color: var(--dc-success) !important;
-  font-weight: 700;
-}
-
-.sql-workbench__kind-pill {
-  padding: 2px 6px;
-  border: 1px solid color-mix(in oklch, var(--dc-primary) 22%, var(--dc-border));
-  border-radius: var(--dc-radius-xs);
-  background: var(--dc-primary-soft);
-  color: var(--dc-primary) !important;
-  font-size: 11px;
   font-weight: 700;
 }
 
@@ -2324,6 +2529,34 @@ onBeforeUnmount(() => {
   font-size: 12px;
   font-weight: 700;
   text-align: right;
+  word-break: break-all;
+}
+
+.sql-workbench__timeseries-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.sql-workbench__timeseries-facts div {
+  padding: 10px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
+}
+
+.sql-workbench__timeseries-facts dt {
+  margin-bottom: 4px;
+  color: var(--dc-text-muted);
+  font-size: 11px;
+}
+
+.sql-workbench__timeseries-facts dd {
+  margin: 0;
+  color: var(--dc-text);
+  font-size: 13px;
+  font-weight: 700;
   word-break: break-all;
 }
 
