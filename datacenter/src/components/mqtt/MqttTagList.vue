@@ -442,6 +442,7 @@ const getParseTypeLabel = (parseType) => {
     regex: '正则',
     script: '脚本',
     fixed: '固定值',
+    batch_jsonpath: '批量映射',
   }
   return labels[parseType] || parseType || '-'
 }

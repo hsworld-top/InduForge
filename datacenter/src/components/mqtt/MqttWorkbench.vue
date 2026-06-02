@@ -157,6 +157,19 @@
               </div>
             </div>
 
+            <div
+              v-else-if="tab.type === 'batch'"
+              class="mqtt-workbench__tag-panel"
+              :class="{ 'is-config-only': !connectionStarted }"
+            >
+              <MqttBatchMappingPanel
+                :project-id="projectIdText"
+                :subscription="tab.subscription"
+                :preview-session-id="connectionStarted ? previewSessionId : ''"
+                @open-monitor="openTagMonitor(tab.subscription)"
+              />
+            </div>
+
             <MqttPublishTester
               v-else-if="tab.type === 'publish'"
               :project-id="projectIdText"
@@ -409,6 +422,7 @@ import { getApiErrorMessage } from '@/utils/request'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import MqttMessageViewer from './MqttMessageViewer.vue'
 import MqttPublishTester from './MqttPublishTester.vue'
+import MqttBatchMappingPanel from './MqttBatchMappingPanel.vue'
 import MqttSubscriptionDialog from './MqttSubscriptionDialog.vue'
 import MqttSubscriptionGroupDialog from './MqttSubscriptionGroupDialog.vue'
 import MqttSubscriptionMoveDialog from './MqttSubscriptionMoveDialog.vue'
@@ -770,6 +784,17 @@ const unsubscribeMessageTab = (subscription: MqttSubscription) => {
 const openTagManager = async (subscription: MqttSubscription) => {
   selectedSubscription.value = subscription
 
+  if (resolveSubscriptionUsageMode(subscription) === 'batch_variable') {
+    addTab({
+      id: `mqtt-batch-${subscription.id}`,
+      type: 'batch',
+      title: `${subscription.name || subscription.topic} / 映射`,
+      icon: IconTablerListTree,
+      subscription,
+    })
+    return
+  }
+
   addTab({
     id: `mqtt-tags-${subscription.id}`,
     type: 'tags',
@@ -825,6 +850,7 @@ const refreshSelectedAndTabs = (subscription: MqttSubscription) => {
 const tabTypeLabel = (type: string) => {
   if (type === 'messages') return '消息'
   if (type === 'publish') return '发布'
+  if (type === 'batch') return '映射'
   return '变量'
 }
 

@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS data_mqtt_tags (
     code text NOT NULL CHECK (char_length(code) <= 100),
     description text,
     data_type text NOT NULL DEFAULT 'string' CHECK (data_type IN ('string', 'number', 'boolean', 'object', 'array')),
-    parse_type text NOT NULL DEFAULT 'jsonpath' CHECK (parse_type IN ('jsonpath', 'regex', 'script', 'fixed')),
+    parse_type text NOT NULL DEFAULT 'jsonpath' CHECK (parse_type IN ('jsonpath', 'regex', 'script', 'fixed', 'batch_jsonpath')),
     parse_rule text NOT NULL,
     default_value text,
     unit text CHECK (unit IS NULL OR char_length(unit) <= 50),
