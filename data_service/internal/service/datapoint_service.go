@@ -739,18 +739,7 @@ func (s *DataPointService) isMqttTagDataPointValid(ctx context.Context, projectI
 	if err != nil {
 		return false, err
 	}
-	groupSegment := "默认分组"
-	if tag.GroupID != nil && strings.TrimSpace(*tag.GroupID) != "" {
-		group, err := s.mqtt.GetTagGroup(ctx, projectID, *tag.GroupID)
-		if isNotFoundError(err) {
-			return false, nil
-		}
-		if err != nil {
-			return false, err
-		}
-		groupSegment = group.Name
-	}
-	expectedPath := "mqtt." + normalizeDatapointSegment(connection.Name) + "." + normalizeDatapointSegment(groupSegment) + "." + normalizeDatapointSegment(tag.Name)
+	expectedPath := "mqtt." + normalizeDatapointSegment(connection.Name) + "." + mqttSubscriptionPathSegment(*subscription) + "." + normalizeDatapointSegment(tag.Name)
 	return record.Name == tag.Name && isGeneratedPathMatch(record.Path, expectedPath, tag.ID), nil
 }
 

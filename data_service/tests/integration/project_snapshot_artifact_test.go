@@ -88,8 +88,7 @@ func TestProjectArtifactV1Contract(t *testing.T) {
 		"port":      1883,
 	})
 	subscriptionID := insertTestMqttSubscription(t, ctx, fixture, projectID, mqttConnection.ID, userID)
-	groupID := insertTestMqttTagGroup(t, ctx, fixture, projectID, subscriptionID, userID)
-	tagID := insertTestMqttTag(t, ctx, fixture, projectID, subscriptionID, groupID, userID)
+	tagID := insertTestMqttTag(t, ctx, fixture, projectID, subscriptionID, userID)
 
 	kafkaConnection := mustCreateKafkaConfig(t, server.URL, token, projectID, map[string]any{
 		"name":          "kafka-main",
@@ -162,9 +161,6 @@ func TestProjectArtifactV1Contract(t *testing.T) {
 	if !artifactHasMqttID(artifact.Mqtt.Subscriptions, subscriptionID) {
 		t.Fatalf("expected mqtt.subscriptions include %q", subscriptionID)
 	}
-	if !artifactHasMqttID(artifact.Mqtt.TagGroups, groupID) {
-		t.Fatalf("expected mqtt.tagGroups include %q", groupID)
-	}
 	if !artifactHasMqttID(artifact.Mqtt.Tags, tagID) {
 		t.Fatalf("expected mqtt.tags include %q", tagID)
 	}
@@ -228,7 +224,6 @@ type projectArtifactDataPoint struct {
 type projectArtifactMqttPayload struct {
 	Connections   []projectArtifactMqttConnection `json:"connections"`
 	Subscriptions []projectArtifactNamedID        `json:"subscriptions"`
-	TagGroups     []projectArtifactNamedID        `json:"tagGroups"`
 	Tags          []projectArtifactNamedID        `json:"tags"`
 }
 
@@ -274,30 +269,7 @@ type projectArtifactBuiltinMessageStore struct {
 	TopicPrefix string `json:"topicPrefix"`
 }
 
-func insertTestMqttTagGroup(t *testing.T, ctx context.Context, fixture *testDatabase, projectID, subscriptionID, userID string) string {
-	t.Helper()
-
-	groupID := uuid.NewString()
-	_, err := fixture.pool.Exec(ctx, `
-		INSERT INTO data_mqtt_tag_groups (
-			id,
-			project_id,
-			subscription_id,
-			name,
-			code,
-			display_order,
-			created_by,
-			updated_by
-		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
-	`, groupID, projectID, subscriptionID, "group-main", "group_main", 1, userID)
-	if err != nil {
-		t.Fatalf("insert mqtt tag group failed: %v", err)
-	}
-	return groupID
-}
-
-func insertTestMqttTag(t *testing.T, ctx context.Context, fixture *testDatabase, projectID, subscriptionID, groupID, userID string) string {
+func insertTestMqttTag(t *testing.T, ctx context.Context, fixture *testDatabase, projectID, subscriptionID, userID string) string {
 	t.Helper()
 
 	tagID := uuid.NewString()
@@ -306,7 +278,6 @@ func insertTestMqttTag(t *testing.T, ctx context.Context, fixture *testDatabase,
 			id,
 			project_id,
 			subscription_id,
-			group_id,
 			name,
 			code,
 			data_type,
@@ -317,8 +288,8 @@ func insertTestMqttTag(t *testing.T, ctx context.Context, fixture *testDatabase,
 			created_by,
 			updated_by
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, '{}'::jsonb, $10, $11, $11)
-	`, tagID, projectID, subscriptionID, groupID, "tag-main", "tag_main", "number", "jsonpath", "$.value", 1, userID)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '{}'::jsonb, $9, $10, $10)
+	`, tagID, projectID, subscriptionID, "tag-main", "tag_main", "number", "jsonpath", "$.value", 1, userID)
 	if err != nil {
 		t.Fatalf("insert mqtt tag failed: %v", err)
 	}

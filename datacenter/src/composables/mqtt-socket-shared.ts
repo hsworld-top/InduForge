@@ -166,7 +166,6 @@ export function createMqttSocketSharedRegistry(options = {}) {
     socket.on('connect', () => {
       entry.connected = true
       logger.log?.('[MqttSocket] Connected:', socket.id)
-      notify('success', 'WebSocket已连接')
       replaySharedSubscriptions(entry)
       notifyStateChange(entry)
     })
@@ -186,7 +185,6 @@ export function createMqttSocketSharedRegistry(options = {}) {
 
     socket.on('reconnect', (attemptNumber) => {
       logger.log?.('[MqttSocket] Reconnected after', attemptNumber, 'attempts')
-      notify('success', 'WebSocket已重连')
     })
 
     socket.on('mqtt:message', (data) => {

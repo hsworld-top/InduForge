@@ -48,6 +48,12 @@ type MqttMessage struct {
 	ReceivedAt     time.Time `json:"receivedAt"`
 }
 
+// MqttMessageListResult 返回消息列表及后端实际采用的限制数。
+type MqttMessageListResult struct {
+	Messages []MqttMessage
+	Limit    int
+}
+
 type MqttPublishInput struct {
 	Topic   string
 	Payload any
@@ -85,6 +91,7 @@ type MqttService struct {
 	repository  *repository.MqttRepository
 	connections *repository.ConnectionRepository
 	datapoints  *repository.DataPointRepository
+	runtime     *MqttConnectionRuntimeManager
 }
 
 // NewMqttService 创建 MQTT 领域服务。
@@ -93,7 +100,15 @@ func NewMqttService(repo *repository.MqttRepository, connectionRepo *repository.
 		repository:  repo,
 		connections: connectionRepo,
 		datapoints:  datapointRepo,
+		runtime:     NewMqttConnectionRuntimeManager(),
 	}
+}
+
+func (s *MqttService) ConfigureBuiltinMessageHub(addr, username, password string) {
+	if s == nil || s.runtime == nil {
+		return
+	}
+	s.runtime.ConfigureBuiltinMessageHub(addr, username, password)
 }
 
 // CreateConnection 创建 MQTT 连接。
@@ -183,8 +198,31 @@ func (s *MqttService) StartConnection(ctx context.Context, projectID, connection
 		return nil, err
 	}
 
+	summary, err := s.repository.GetConnectionSummary(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	if s.runtime != nil {
+		if summary.Type == "builtin.message" {
+			if err := s.runtime.ConnectBuiltin(ctx, *summary); err != nil {
+				return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "连接 IF消息库失败", err)
+			}
+		} else {
+			connection, err := s.repository.GetConnectionDetail(ctx, projectID, connectionID)
+			if err != nil {
+				return nil, err
+			}
+			if err := s.runtime.ConnectExternal(ctx, *connection); err != nil {
+				return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "连接 MQTT Broker 失败", err)
+			}
+		}
+	}
+
 	record, err := s.repository.StartConnection(ctx, projectID, connectionID)
 	if err != nil {
+		if s.runtime != nil {
+			s.runtime.Disconnect(projectID, connectionID)
+		}
 		return nil, err
 	}
 
@@ -208,7 +246,7 @@ func (s *MqttService) GetConnectionStatus(ctx context.Context, projectID, connec
 }
 
 // ListMessages 查询指定订阅的消息列表。
-func (s *MqttService) ListMessages(ctx context.Context, projectID, subscriptionID string, limit int) ([]MqttMessage, error) {
+func (s *MqttService) ListMessages(ctx context.Context, projectID, subscriptionID string, limit int) (*MqttMessageListResult, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
@@ -220,8 +258,8 @@ func (s *MqttService) ListMessages(ctx context.Context, projectID, subscriptionI
 	if normalizedLimit <= 0 {
 		normalizedLimit = 100
 	}
-	if normalizedLimit > 500 {
-		normalizedLimit = 500
+	if normalizedLimit > 5000 {
+		normalizedLimit = 5000
 	}
 
 	records, err := s.repository.ListMessages(ctx, projectID, subscriptionID, normalizedLimit)
@@ -240,7 +278,18 @@ func (s *MqttService) ListMessages(ctx context.Context, projectID, subscriptionI
 			ReceivedAt:     record.ReceivedAt,
 		})
 	}
-	return messages, nil
+	return &MqttMessageListResult{Messages: messages, Limit: normalizedLimit}, nil
+}
+
+// ClearMessages 清空指定订阅的工作台消息缓存。
+func (s *MqttService) ClearMessages(ctx context.Context, projectID, subscriptionID string) error {
+	if err := validateProjectID(projectID); err != nil {
+		return err
+	}
+	if _, err := uuid.Parse(strings.TrimSpace(subscriptionID)); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "subscriptionId 格式无效", err)
+	}
+	return s.repository.ClearMessages(ctx, projectID, subscriptionID)
 }
 
 // PublishMessage 使用已保存的 MQTT 连接做一次发布测试。

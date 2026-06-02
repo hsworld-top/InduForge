@@ -6,7 +6,13 @@
         <strong>{{ title }}</strong>
         <span v-if="subtitle">{{ subtitle }}</span>
       </div>
-      <WorkbenchStatusPill :label="statusLabel" :tone="statusTone" />
+      <WorkbenchStatusPill
+        :label="statusLabel"
+        :tone="statusTone"
+        :clickable="statusClickable"
+        :disabled="statusActionLoading"
+        @click="$emit('status-click')"
+      />
     </div>
 
     <div class="workbench-stream-toolbar__actions">
@@ -28,7 +34,7 @@
         <el-input-number
           :model-value="limit"
           :min="10"
-          :max="1000"
+          :max="maxLimit"
           :step="10"
           size="small"
           controls-position="right"
@@ -105,8 +111,11 @@ withDefaults(
     icon?: any
     statusLabel: string
     statusTone?: 'neutral' | 'success' | 'warning' | 'danger' | 'info'
+    statusClickable?: boolean
+    statusActionLoading?: boolean
     search: string
     limit: number
+    maxLimit?: number
     loading?: boolean
     formatJson: boolean
     autoScroll: boolean
@@ -116,7 +125,10 @@ withDefaults(
     subtitle: '',
     icon: null,
     statusTone: 'neutral',
+    statusClickable: false,
+    statusActionLoading: false,
     loading: false,
+    maxLimit: 5000,
   },
 )
 
@@ -128,6 +140,7 @@ defineEmits<{
   (event: 'update:showTimestamp', value: boolean): void
   (event: 'refresh'): void
   (event: 'clear'): void
+  (event: 'status-click'): void
 }>()
 </script>
 

@@ -1,8 +1,15 @@
 <template>
-  <span class="workbench-status-pill" :class="`is-${tone}`">
+  <component
+    :is="clickable ? 'button' : 'span'"
+    class="workbench-status-pill"
+    :class="[`is-${tone}`, { 'is-clickable': clickable }]"
+    :type="clickable ? 'button' : undefined"
+    :disabled="clickable ? disabled : undefined"
+    @click="clickable && !disabled && $emit('click')"
+  >
     <span class="workbench-status-pill__dot" />
     <span class="workbench-status-pill__label">{{ label }}</span>
-  </span>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -10,11 +17,19 @@ withDefaults(
   defineProps<{
     label: string
     tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'info'
+    clickable?: boolean
+    disabled?: boolean
   }>(),
   {
     tone: 'neutral',
+    clickable: false,
+    disabled: false,
   },
 )
+
+defineEmits<{
+  (event: 'click'): void
+}>()
 </script>
 
 <style scoped>
@@ -37,6 +52,26 @@ withDefaults(
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
+}
+
+button.workbench-status-pill {
+  font-family: inherit;
+}
+
+.workbench-status-pill.is-clickable {
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    filter 0.15s ease;
+}
+
+.workbench-status-pill.is-clickable:hover {
+  filter: brightness(0.98);
+}
+
+.workbench-status-pill:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .workbench-status-pill__dot {

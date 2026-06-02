@@ -321,6 +321,7 @@ func (h *MqttHandler) CreateSubscription(w http.ResponseWriter, r *http.Request)
 		Name             string  `json:"name"`
 		Topic            string  `json:"topic"`
 		QOS              int     `json:"qos"`
+		UsageMode        string  `json:"usageMode"`
 		GroupID          *string `json:"groupId"`
 		Description      *string `json:"description"`
 		MessageRetention int     `json:"messageRetention"`
@@ -335,6 +336,7 @@ func (h *MqttHandler) CreateSubscription(w http.ResponseWriter, r *http.Request)
 		Name:             request.Name,
 		Topic:            request.Topic,
 		QOS:              request.QOS,
+		UsageMode:        request.UsageMode,
 		Description:      request.Description,
 		MessageRetention: request.MessageRetention,
 		Order:            request.Order,
@@ -356,6 +358,7 @@ func (h *MqttHandler) UpdateSubscription(w http.ResponseWriter, r *http.Request)
 		Name             string  `json:"name"`
 		Topic            string  `json:"topic"`
 		QOS              int     `json:"qos"`
+		UsageMode        string  `json:"usageMode"`
 		GroupID          *string `json:"groupId"`
 		HasGroupID       bool    `json:"hasGroupId"`
 		Description      *string `json:"description"`
@@ -371,6 +374,7 @@ func (h *MqttHandler) UpdateSubscription(w http.ResponseWriter, r *http.Request)
 		Name:             request.Name,
 		Topic:            request.Topic,
 		QOS:              request.QOS,
+		UsageMode:        request.UsageMode,
 		Description:      request.Description,
 		MessageRetention: request.MessageRetention,
 		Order:            request.Order,
@@ -395,155 +399,12 @@ func (h *MqttHandler) DeleteSubscription(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
-// ListTagGroups 返回变量组列表。
-func (h *MqttHandler) ListTagGroups(w http.ResponseWriter, r *http.Request) error {
-	if _, err := requireClaims(r); err != nil {
-		return err
-	}
-	groups, err := h.service.ListTagGroups(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"))
-	if err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{
-		"list": groups,
-		"pagination": map[string]int{
-			"page":       1,
-			"pageSize":   len(groups),
-			"total":      len(groups),
-			"totalPages": 1,
-		},
-	})
-	return nil
-}
-
-// GetTagGroup 返回单个变量组。
-func (h *MqttHandler) GetTagGroup(w http.ResponseWriter, r *http.Request) error {
-	if _, err := requireClaims(r); err != nil {
-		return err
-	}
-	result, err := h.service.GetTagGroup(r.Context(), r.PathValue("projectId"), r.PathValue("groupId"))
-	if err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"group": result})
-	return nil
-}
-
-// CreateTagGroup 创建变量组。
-func (h *MqttHandler) CreateTagGroup(w http.ResponseWriter, r *http.Request) error {
-	claims, err := requireClaims(r)
-	if err != nil {
-		return err
-	}
-	var request struct {
-		Name        string  `json:"name"`
-		Code        string  `json:"code"`
-		Description *string `json:"description"`
-		Color       *string `json:"color"`
-		Icon        *string `json:"icon"`
-		Order       int     `json:"order"`
-	}
-	if err := decodeJSONBody(r, &request); err != nil {
-		return err
-	}
-	result, err := h.service.CreateTagGroup(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), claims.UserID, repository.CreateMqttTagGroupParams{
-		Name:        request.Name,
-		Code:        request.Code,
-		Description: request.Description,
-		Color:       request.Color,
-		Icon:        request.Icon,
-		Order:       request.Order,
-	})
-	if err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"group": result})
-	return nil
-}
-
-// UpdateTagGroup 更新变量组。
-func (h *MqttHandler) UpdateTagGroup(w http.ResponseWriter, r *http.Request) error {
-	claims, err := requireClaims(r)
-	if err != nil {
-		return err
-	}
-	var request struct {
-		Name        string  `json:"name"`
-		Code        string  `json:"code"`
-		Description *string `json:"description"`
-		Color       *string `json:"color"`
-		Icon        *string `json:"icon"`
-		Order       int     `json:"order"`
-	}
-	if err := decodeJSONBody(r, &request); err != nil {
-		return err
-	}
-	result, err := h.service.UpdateTagGroup(r.Context(), r.PathValue("projectId"), r.PathValue("groupId"), claims.UserID, repository.UpdateMqttTagGroupParams{
-		Name:        request.Name,
-		Code:        request.Code,
-		Description: request.Description,
-		Color:       request.Color,
-		Icon:        request.Icon,
-		Order:       request.Order,
-	})
-	if err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"group": result})
-	return nil
-}
-
-// DeleteTagGroup 删除变量组。
-func (h *MqttHandler) DeleteTagGroup(w http.ResponseWriter, r *http.Request) error {
-	if _, err := requireClaims(r); err != nil {
-		return err
-	}
-	if err := h.service.DeleteTagGroup(r.Context(), r.PathValue("projectId"), r.PathValue("groupId")); err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"deleted": true})
-	return nil
-}
-
-// UpdateTagGroupsOrder 批量更新变量组顺序。
-func (h *MqttHandler) UpdateTagGroupsOrder(w http.ResponseWriter, r *http.Request) error {
-	claims, err := requireClaims(r)
-	if err != nil {
-		return err
-	}
-	var request struct {
-		Groups []struct {
-			ID    string `json:"id"`
-			Order int    `json:"order"`
-		} `json:"groups"`
-	}
-	if err := decodeJSONBody(r, &request); err != nil {
-		return err
-	}
-	groups := make([]service.MqttTagGroup, 0, len(request.Groups))
-	for _, group := range request.Groups {
-		groups = append(groups, service.MqttTagGroup{ID: group.ID, Order: group.Order})
-	}
-	if len(groups) == 0 {
-		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "groups 不能为空")
-	}
-	if err := h.service.UpdateTagGroupsOrder(r.Context(), r.PathValue("projectId"), claims.UserID, groups); err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"updated": true})
-	return nil
-}
-
 // ListTagsBySubscription 返回订阅下变量列表。
 func (h *MqttHandler) ListTagsBySubscription(w http.ResponseWriter, r *http.Request) error {
 	if _, err := requireClaims(r); err != nil {
 		return err
 	}
 	query := r.URL.Query()
-	var groupID *string
-	if value := query.Get("groupId"); value != "" {
-		groupID = &value
-	}
 	page, err := parseOptionalInt(query.Get("page"), 1, "page")
 	if err != nil {
 		return err
@@ -553,7 +414,9 @@ func (h *MqttHandler) ListTagsBySubscription(w http.ResponseWriter, r *http.Requ
 		return err
 	}
 	search := firstNonEmpty(query.Get("q"), query.Get("search"))
-	tags, total, err := h.service.ListTagsBySubscription(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), groupID, search, page, pageSize)
+	sortBy := firstNonEmpty(query.Get("sortBy"), query.Get("sort"))
+	sortOrder := firstNonEmpty(query.Get("sortOrder"), query.Get("order"))
+	tags, total, err := h.service.ListTagsBySubscription(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), search, page, pageSize, sortBy, sortOrder)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -780,7 +643,6 @@ func decodeMqttTagUpdatePayload(r *http.Request) (repository.UpdateMqttTagParams
 		return repository.UpdateMqttTagParams{}, err
 	}
 	return repository.UpdateMqttTagParams{
-		GroupID:      payload.GroupID,
 		Name:         payload.Name,
 		Code:         payload.Code,
 		Description:  payload.Description,
@@ -798,10 +660,6 @@ func decodeMqttTagUpdatePayload(r *http.Request) (repository.UpdateMqttTagParams
 func convertMqttTagPayload(raw map[string]any) (repository.CreateMqttTagParams, error) {
 	result := repository.CreateMqttTagParams{
 		Validation: map[string]any{},
-	}
-	if value, ok := raw["groupId"].(string); ok && strings.TrimSpace(value) != "" {
-		trimmed := strings.TrimSpace(value)
-		result.GroupID = &trimmed
 	}
 	if value, ok := raw["name"].(string); ok {
 		result.Name = value

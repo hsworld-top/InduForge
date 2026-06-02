@@ -230,7 +230,7 @@ func TestMqttSubscriptionDataPointValidWithoutMqttConfig(t *testing.T) {
 	}
 }
 
-func TestMqttTagsListSupportsGroupPagination(t *testing.T) {
+func TestMqttTagsListSupportsPaginationAndSearch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -273,18 +273,17 @@ func TestMqttTagsListSupportsGroupPagination(t *testing.T) {
 		"qos":       1,
 	})
 	subscriptionID := insertTestMqttSubscription(t, ctx, fixture, projectID, connection.ID, userID)
-	groupID := insertTestMqttTagGroup(t, ctx, fixture, projectID, subscriptionID, userID)
-	insertTestMqttTagWithName(t, ctx, fixture, projectID, subscriptionID, &groupID, userID, "tag-a", "tag_a", 1)
-	insertTestMqttTagWithName(t, ctx, fixture, projectID, subscriptionID, &groupID, userID, "tag-b", "tag_b", 2)
-	insertTestMqttTagWithName(t, ctx, fixture, projectID, subscriptionID, nil, userID, "tag-root", "tag_root", 3)
+	insertTestMqttTagWithName(t, ctx, fixture, projectID, subscriptionID, userID, "tag-a", "tag_a", 1)
+	insertTestMqttTagWithName(t, ctx, fixture, projectID, subscriptionID, userID, "tag-b", "tag_b", 2)
+	insertTestMqttTagWithName(t, ctx, fixture, projectID, subscriptionID, userID, "tag-root", "tag_root", 3)
 
-	grouped := mustListMqttTags(t, server.URL, token, projectID, subscriptionID, "groupId="+groupID+"&page=1&pageSize=1")
-	if grouped.Pagination.Total != 2 || len(grouped.List) != 1 || grouped.List[0].GroupID == nil || *grouped.List[0].GroupID != groupID {
-		t.Fatalf("expected paged mqtt tags inside group, got %#v", grouped)
+	paged := mustListMqttTags(t, server.URL, token, projectID, subscriptionID, "page=1&pageSize=2")
+	if paged.Pagination.Total != 3 || len(paged.List) != 2 {
+		t.Fatalf("expected paged mqtt tags, got %#v", paged)
 	}
-	ungrouped := mustListMqttTags(t, server.URL, token, projectID, subscriptionID, "groupId=__ungrouped&page=1&pageSize=20")
-	if ungrouped.Pagination.Total != 1 || len(ungrouped.List) != 1 || ungrouped.List[0].Code != "tag_root" {
-		t.Fatalf("expected ungrouped mqtt tag, got %#v", ungrouped)
+	filtered := mustListMqttTags(t, server.URL, token, projectID, subscriptionID, "search=tag_b&page=1&pageSize=20")
+	if filtered.Pagination.Total != 1 || len(filtered.List) != 1 || filtered.List[0].Code != "tag_b" {
+		t.Fatalf("expected searched mqtt tag, got %#v", filtered)
 	}
 }
 
@@ -315,10 +314,9 @@ type mqttMessagePayload struct {
 }
 
 type mqttTagPayload struct {
-	ID      string  `json:"id"`
-	GroupID *string `json:"groupId"`
-	Name    string  `json:"name"`
-	Code    string  `json:"code"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Code string `json:"code"`
 }
 
 type mqttListResponse[T any] struct {
@@ -442,7 +440,7 @@ func insertTestMqttSubscription(t *testing.T, ctx context.Context, fixture *test
 	return subscriptionID
 }
 
-func insertTestMqttTagWithName(t *testing.T, ctx context.Context, fixture *testDatabase, projectID, subscriptionID string, groupID *string, userID, name, code string, order int) string {
+func insertTestMqttTagWithName(t *testing.T, ctx context.Context, fixture *testDatabase, projectID, subscriptionID string, userID, name, code string, order int) string {
 	t.Helper()
 
 	tagID := uuid.NewString()
@@ -451,7 +449,6 @@ func insertTestMqttTagWithName(t *testing.T, ctx context.Context, fixture *testD
 			id,
 			project_id,
 			subscription_id,
-			group_id,
 			name,
 			code,
 			data_type,
@@ -462,8 +459,8 @@ func insertTestMqttTagWithName(t *testing.T, ctx context.Context, fixture *testD
 			created_by,
 			updated_by
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, 'number', 'jsonpath', '$.value', '{}'::jsonb, $7, $8, $8)
-	`, tagID, projectID, subscriptionID, groupID, name, code, order, userID)
+		VALUES ($1, $2, $3, $4, $5, 'number', 'jsonpath', '$.value', '{}'::jsonb, $6, $7, $7)
+	`, tagID, projectID, subscriptionID, name, code, order, userID)
 	if err != nil {
 		t.Fatalf("insert mqtt tag %s failed: %v", code, err)
 	}

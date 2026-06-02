@@ -95,6 +95,8 @@ const confirmDirtyClose = async () => {
 const completeClose = (done?: () => void) => {
   closeConfirmed.value = true
   dirtyWhileOpen.value = false
+  // 程序化关闭时也要同步内部可见状态，避免父组件 modelValue 已关闭但 el-dialog 仍停留。
+  internalVisible.value = false
 
   if (done) {
     done()

@@ -146,19 +146,33 @@ func (h *MqttHandler) ListMessages(w http.ResponseWriter, r *http.Request) error
 		limit = parsed
 	}
 
-	messages, err := h.service.ListMessages(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), limit)
+	result, err := h.service.ListMessages(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), limit)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{
-		"list": messages,
+		"list": result.Messages,
 		"pagination": map[string]int{
 			"page":       1,
-			"pageSize":   limit,
-			"total":      len(messages),
+			"pageSize":   result.Limit,
+			"total":      len(result.Messages),
 			"totalPages": 1,
 		},
 	})
+	return nil
+}
+
+// ClearMessages 清空指定订阅的消息缓存。
+func (h *MqttHandler) ClearMessages(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+
+	if err := h.service.ClearMessages(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId")); err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"cleared": true})
 	return nil
 }

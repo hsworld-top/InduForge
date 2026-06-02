@@ -9,9 +9,13 @@
       :icon="IconTablerRss"
       :title="subscriptionTitle"
       :subtitle="subscription?.topic || ''"
-      :status-label="isConnected ? '实时通道已连接' : '等待实时通道'"
-      :status-tone="isConnected ? 'success' : 'neutral'"
+      :status-label="isSubscribed ? '已订阅' : '未订阅'"
+      :status-tone="isSubscribed ? 'success' : 'neutral'"
+      :status-clickable="true"
+      :status-action-loading="subscriptionChanging"
       :loading="loading"
+      :max-limit="MESSAGE_WINDOW_LIMIT"
+      @status-click="handleToggleSubscription"
       @refresh="loadMessages"
       @clear="handleClear"
     />
@@ -36,7 +40,7 @@
         <template v-if="searchText"> · 筛选 {{ filteredMessages.length }} 条</template>
       </span>
       <span v-if="lastMessageTime">最后消息 {{ formatTimestamp(lastMessageTime) }}</span>
-      <span>{{ isConnected ? '实时订阅已启用' : '实时订阅已停止' }}</span>
+      <span>{{ isSubscribed ? '实时订阅已启用' : '实时订阅已停止' }}</span>
     </footer>
   </div>
 </template>
@@ -79,16 +83,20 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['message-select'])
+const emit = defineEmits(['message-select', 'subscribe', 'unsubscribe'])
+
+const MESSAGE_WINDOW_LIMIT = 5000
 
 const loading = ref(false)
+const clearing = ref(false)
 const messages = ref<MqttMessage[]>([])
 const searchText = ref('')
-const displayLimit = ref(100)
+const displayLimit = ref(500)
 const autoScroll = ref(true)
 const showTimestamp = ref(true)
 const formatJson = ref(true)
-const isConnected = ref(false)
+const isSubscribed = ref(false)
+const subscriptionChanging = ref(false)
 const messageListRef = ref<any>(null)
 
 const subscriptionTitle = computed(
@@ -115,7 +123,8 @@ const filteredMessages = computed(() => {
     })
   }
 
-  return displayLimit.value > 0 ? result.slice(0, displayLimit.value) : result
+  const limit = Math.min(displayLimit.value > 0 ? displayLimit.value : MESSAGE_WINDOW_LIMIT, MESSAGE_WINDOW_LIMIT)
+  return result.slice(0, limit)
 })
 
 const lastMessageTime = computed(() => messages.value[0]?.timestamp || null)
@@ -153,6 +162,26 @@ const normalizeIncomingMessage = (message) => {
   }
 }
 
+const messageFingerprint = (message: MqttMessage) => [
+  message.topic || '',
+  String(message.qos ?? 0),
+  String(message.timestamp || ''),
+  typeof message.payload === 'string' ? message.payload : JSON.stringify(message.payload ?? ''),
+].join('\u0001')
+
+// 订阅成功时后端会补发最近消息快照；它可能和历史列表最新一条相同，需要去重避免刷新后数量跳变。
+const uniqueMessages = (items: MqttMessage[]) => {
+  const seen = new Set<string>()
+  const result: MqttMessage[] = []
+  for (const item of items) {
+    const key = messageFingerprint(item)
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(item)
+  }
+  return result
+}
+
 /**
  * 历史消息只作为当前订阅的启动快照；实时消息仍由工作台 socket 追加。
  */
@@ -170,7 +199,8 @@ const loadMessages = async () => {
       props.subscription.id,
       { limit: displayLimit.value },
     )
-    messages.value = (response.data?.list || []).map(normalizeIncomingMessage)
+    messages.value = uniqueMessages((response.data?.list || []).map(normalizeIncomingMessage))
+      .slice(0, MESSAGE_WINDOW_LIMIT)
     await messageListRef.value?.scrollToTop?.()
   } catch (error) {
     ElMessage.error('加载消息失败：' + getApiErrorMessage(error, '加载消息失败'))
@@ -180,9 +210,9 @@ const loadMessages = async () => {
 }
 
 const addMessage = async (message) => {
-  messages.value.unshift(normalizeIncomingMessage(message))
-  if (messages.value.length > 1000) {
-    messages.value = messages.value.slice(0, 1000)
+  messages.value = uniqueMessages([normalizeIncomingMessage(message), ...messages.value])
+  if (messages.value.length > MESSAGE_WINDOW_LIMIT) {
+    messages.value = messages.value.slice(0, MESSAGE_WINDOW_LIMIT)
   }
   if (autoScroll.value) {
     await nextTick()
@@ -190,8 +220,18 @@ const addMessage = async (message) => {
   }
 }
 
-const setConnected = (connected) => {
-  isConnected.value = Boolean(connected)
+const setSubscribed = (subscribed) => {
+  isSubscribed.value = Boolean(subscribed)
+}
+
+const handleToggleSubscription = async () => {
+  if (!props.subscription?.id || subscriptionChanging.value) return
+  subscriptionChanging.value = true
+  try {
+    emit(isSubscribed.value ? 'unsubscribe' : 'subscribe', props.subscription)
+  } finally {
+    subscriptionChanging.value = false
+  }
 }
 
 const handleSelectMessage = (message) => {
@@ -207,8 +247,24 @@ const handleCopyMessage = async (message) => {
   }
 }
 
-const handleClear = () => {
-  messages.value = []
+const handleClear = async () => {
+  if (clearing.value) return
+  if (isBuiltinMessage.value) {
+    messages.value = []
+    return
+  }
+  if (!props.subscription?.id) return
+
+  clearing.value = true
+  try {
+    await dataAPI.clearMqttSubscriptionMessages(props.projectId, props.subscription.id)
+    messages.value = []
+    ElMessage.success('消息已清空')
+  } catch (error) {
+    ElMessage.error('清空消息失败：' + getApiErrorMessage(error, '清空消息失败'))
+  } finally {
+    clearing.value = false
+  }
 }
 
 watch(
@@ -216,7 +272,7 @@ watch(
   (subscription) => {
     messages.value = []
     searchText.value = ''
-    isConnected.value = false
+    isSubscribed.value = false
     if (subscription?.id) {
       loadMessages()
     }
@@ -226,7 +282,7 @@ watch(
 
 defineExpose({
   addMessage,
-  setConnected,
+  setSubscribed,
   loadMessages,
 })
 </script>

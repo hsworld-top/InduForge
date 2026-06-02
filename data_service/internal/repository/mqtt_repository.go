@@ -209,7 +209,7 @@ func (r *MqttRepository) StartConnection(ctx context.Context, projectID, connect
 			updated_at = now()
 		WHERE project_id = $1
 		  AND id = $2
-		  AND type = 'mqtt'
+		  AND type IN ('mqtt', 'builtin.message')
 		RETURNING status
 	`, projectID, connectionID).Scan(&status)
 	if err != nil {
@@ -290,19 +290,8 @@ func (r *MqttRepository) GetPublishConnection(ctx context.Context, projectID, co
 // ListMessages 按 subscription 读取消息缓存。
 // 查询路径说明：先校验 subscription 在当前项目内存在，再走 (project_id, subscription_id, received_at desc) 索引读取。
 func (r *MqttRepository) ListMessages(ctx context.Context, projectID, subscriptionID string, limit int) ([]MqttMessageRecord, error) {
-	var exists bool
-	if err := r.pool.QueryRow(ctx, `
-		SELECT EXISTS(
-			SELECT 1
-			FROM data_mqtt_subscriptions
-			WHERE project_id = $1
-			  AND id = $2
-		)
-	`, projectID, subscriptionID).Scan(&exists); err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "校验 MQTT 订阅失败", err)
-	}
-	if !exists {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "MQTT 订阅不存在")
+	if err := r.ensureSubscriptionExists(ctx, projectID, subscriptionID); err != nil {
+		return nil, err
 	}
 
 	rows, err := r.pool.Query(ctx, `
@@ -340,6 +329,39 @@ func (r *MqttRepository) ListMessages(ctx context.Context, projectID, subscripti
 	return messages, nil
 }
 
+// ClearMessages 清空指定订阅的工作台消息缓存。
+func (r *MqttRepository) ClearMessages(ctx context.Context, projectID, subscriptionID string) error {
+	if err := r.ensureSubscriptionExists(ctx, projectID, subscriptionID); err != nil {
+		return err
+	}
+	if _, err := r.pool.Exec(ctx, `
+		DELETE FROM data_mqtt_messages
+		WHERE project_id = $1
+		  AND subscription_id = $2
+	`, projectID, subscriptionID); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "清空 MQTT 消息失败", err)
+	}
+	return nil
+}
+
+func (r *MqttRepository) ensureSubscriptionExists(ctx context.Context, projectID, subscriptionID string) error {
+	var exists bool
+	if err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1
+			FROM data_mqtt_subscriptions
+			WHERE project_id = $1
+			  AND id = $2
+		)
+	`, projectID, subscriptionID).Scan(&exists); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "校验 MQTT 订阅失败", err)
+	}
+	if !exists {
+		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "MQTT 订阅不存在")
+	}
+	return nil
+}
+
 // CreatePublishedMessage 记录工作台发布测试产生的消息，便于消息查看窗口立即看到本次样本。
 func (r *MqttRepository) CreatePublishedMessage(ctx context.Context, params CreateMqttMessageParams) (*MqttMessageRecord, error) {
 	receivedAt := params.ReceivedAt.UTC()
@@ -350,60 +372,83 @@ func (r *MqttRepository) CreatePublishedMessage(ctx context.Context, params Crea
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "序列化 MQTT 发布元数据失败", err)
 	}
-	row := r.pool.QueryRow(ctx, `
-		INSERT INTO data_mqtt_messages (
-			project_id,
-			connection_id,
-			subscription_id,
-			topic,
-			payload,
-			qos,
-			received_at,
-			metadata
+	rows, err := r.pool.Query(ctx, `
+		WITH inserted AS (
+			INSERT INTO data_mqtt_messages (
+				project_id,
+				connection_id,
+				subscription_id,
+				topic,
+				payload,
+				qos,
+				received_at,
+				metadata
+			)
+			SELECT
+				sub.project_id,
+				sub.connection_id,
+				sub.id,
+				$3,
+				$4,
+				$5,
+				$6,
+				$7::jsonb
+			FROM data_mqtt_subscriptions sub
+			WHERE sub.project_id = $1
+			  AND sub.connection_id = $2
+			  AND sub.topic = $3
+			ORDER BY sub.created_at
+			RETURNING id, subscription_id, topic, payload, qos, received_at
 		)
-		SELECT
-			sub.project_id,
-			sub.connection_id,
-			sub.id,
-			$3,
-			$4,
-			$5,
-			$6,
-			$7::jsonb
-		FROM data_mqtt_subscriptions sub
-		WHERE sub.project_id = $1
-		  AND sub.connection_id = $2
-		  AND sub.topic = $3
-		ORDER BY sub.created_at
-		LIMIT 1
-		RETURNING id, subscription_id, topic, payload, qos, received_at
+		SELECT id, subscription_id, topic, payload, qos, received_at
+		FROM inserted
+		ORDER BY id
 	`, params.ProjectID, params.ConnectionID, params.Topic, params.Payload, params.QOS, receivedAt, string(payload))
-
-	record := MqttMessageRecord{}
-	if err := row.Scan(&record.ID, &record.SubscriptionID, &record.Topic, &record.Payload, &record.QOS, &record.ReceivedAt); err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, nil
-		}
+	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "记录 MQTT 发布消息失败", err)
+	}
+	defer rows.Close()
+
+	var firstRecord *MqttMessageRecord
+	subscriptionIDs := make([]string, 0)
+	for rows.Next() {
+		record := MqttMessageRecord{}
+		if err := rows.Scan(&record.ID, &record.SubscriptionID, &record.Topic, &record.Payload, &record.QOS, &record.ReceivedAt); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 MQTT 发布消息失败", err)
+		}
+		if firstRecord == nil {
+			firstRecord = &record
+		}
+		subscriptionIDs = append(subscriptionIDs, record.SubscriptionID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 MQTT 发布消息失败", err)
+	}
+	if firstRecord == nil {
+		return nil, nil
 	}
 
 	if params.RetentionLimit > 0 {
+		// 发布测试可能命中同 Topic 的多个订阅，需要按订阅分别保留最近消息。
 		_, _ = r.pool.Exec(ctx, `
 			DELETE FROM data_mqtt_messages
 			WHERE project_id = $1
-			  AND subscription_id = $2
+			  AND subscription_id::text = ANY($2)
 			  AND id NOT IN (
 				SELECT id
-				FROM data_mqtt_messages
-				WHERE project_id = $1
-				  AND subscription_id = $2
-				ORDER BY received_at DESC, id DESC
-				LIMIT $3
+				FROM (
+					SELECT id,
+					       row_number() OVER (PARTITION BY subscription_id ORDER BY received_at DESC, id DESC) AS rn
+					FROM data_mqtt_messages
+					WHERE project_id = $1
+					  AND subscription_id::text = ANY($2)
+				) ranked
+				WHERE rn <= $3
 			  )
-		`, params.ProjectID, record.SubscriptionID, params.RetentionLimit)
+		`, params.ProjectID, subscriptionIDs, params.RetentionLimit)
 	}
 
-	return &record, nil
+	return firstRecord, nil
 }
 
 func BuildMqttBrokerAddress(protocol, brokerURL string, port int) string {
@@ -474,7 +519,7 @@ func (r *MqttRepository) CreateMessage(ctx context.Context, params CreateMqttMes
 				  AND subscription_id = $2
 				ORDER BY received_at DESC, id DESC
 				OFFSET $3
-			)
+			  )
 		`, params.ProjectID, params.SubscriptionID, params.RetentionLimit); err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "瑁佸壀 MQTT 娑堟伅缂撳瓨澶辫触", err)
 		}

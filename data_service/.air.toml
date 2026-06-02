@@ -1,0 +1,28 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/data_service.exe ./cmd"
+bin = "./tmp/data_service.exe"
+delay = 1000
+exclude_dir = ["tmp", "vendor", "tests"]
+exclude_file = []
+exclude_regex = ["_test.go"]
+include_dir = ["cmd", "internal"]
+include_ext = ["go", "sql", "json", "yaml", "yml", "env"]
+kill_delay = "500ms"
+log = "tmp/air-build.log"
+poll = false
+poll_interval = 500
+rerun = false
+send_interrupt = true
+stop_on_error = true
+
+[log]
+time = true
+
+[misc]
+clean_on_exit = true
+
+[screen]
+clear_on_rebuild = false

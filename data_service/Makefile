@@ -1,4 +1,4 @@
-.PHONY: test build run fmt tidy
+.PHONY: test build run dev fmt tidy
 
 test:
 	go test ./...
@@ -8,6 +8,9 @@ build:
 
 run:
 	go run ./cmd
+
+dev:
+	air
 
 fmt:
 	gofmt -w ./cmd ./internal

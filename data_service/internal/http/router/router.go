@@ -978,50 +978,10 @@ func mountMqttRoutes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
-		"GET /api/v1/data/projects/{projectId}/mqtt/subscriptions/{subscriptionId}/tag-groups",
-		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:read")(
-				middleware.ErrorHandler(opts.mqttHandler.ListTagGroups),
-			),
-		),
-	)
-	mux.Handle(
-		"POST /api/v1/data/projects/{projectId}/mqtt/subscriptions/{subscriptionId}/tag-groups",
+		"DELETE /api/v1/data/projects/{projectId}/mqtt/subscriptions/{subscriptionId}/messages",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:write")(
-				middleware.ErrorHandler(opts.mqttHandler.CreateTagGroup),
-			),
-		),
-	)
-	mux.Handle(
-		"PUT /api/v1/data/projects/{projectId}/mqtt/tag-groups/order",
-		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:write")(
-				middleware.ErrorHandler(opts.mqttHandler.UpdateTagGroupsOrder),
-			),
-		),
-	)
-	mux.Handle(
-		"GET /api/v1/data/projects/{projectId}/mqtt/tag-groups/{groupId}",
-		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:read")(
-				middleware.ErrorHandler(opts.mqttHandler.GetTagGroup),
-			),
-		),
-	)
-	mux.Handle(
-		"PUT /api/v1/data/projects/{projectId}/mqtt/tag-groups/{groupId}",
-		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:write")(
-				middleware.ErrorHandler(opts.mqttHandler.UpdateTagGroup),
-			),
-		),
-	)
-	mux.Handle(
-		"DELETE /api/v1/data/projects/{projectId}/mqtt/tag-groups/{groupId}",
-		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:write")(
-				middleware.ErrorHandler(opts.mqttHandler.DeleteTagGroup),
+				middleware.ErrorHandler(opts.mqttHandler.ClearMessages),
 			),
 		),
 	)

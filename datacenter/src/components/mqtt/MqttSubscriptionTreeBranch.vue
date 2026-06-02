@@ -26,11 +26,14 @@
         class="mqtt-subscription-tree-branch__subscription"
         :class="{ 'is-active': String(subscription.id) === selectedSubscriptionId }"
         @click="$emit('selectSubscription', subscription)"
-        @dblclick="$emit('openTags', subscription)"
-        @keydown.enter="$emit('openTags', subscription)"
+        @dblclick="$emit('selectSubscription', subscription)"
+        @keydown.enter="$emit('selectSubscription', subscription)"
         @contextmenu.prevent.stop="$emit('subscriptionContextmenu', $event, subscription)"
       >
-        <IconTablerRss class="mqtt-subscription-tree-branch__subscription-icon" />
+        <component
+          :is="resolveSubscriptionIcon(subscription)"
+          class="mqtt-subscription-tree-branch__subscription-icon"
+        />
         <el-tooltip
           :content="subscription.name || subscription.topic || subscription.id"
           placement="top"
@@ -48,7 +51,6 @@
         :node="child"
         :selected-subscription-id="selectedSubscriptionId"
         @select-subscription="$emit('selectSubscription', $event)"
-        @open-tags="$emit('openTags', $event)"
         @group-contextmenu="(mouseEvent, group) => $emit('groupContextmenu', mouseEvent, group)"
         @subscription-contextmenu="
           (mouseEvent, subscription) => $emit('subscriptionContextmenu', mouseEvent, subscription)
@@ -61,9 +63,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import IconTablerChevronRight from '~icons/tabler/chevron-right'
+import IconTablerDatabase from '~icons/tabler/database'
 import IconTablerFolder from '~icons/tabler/folder'
 import IconTablerFolderOpen from '~icons/tabler/folder-open'
-import IconTablerRss from '~icons/tabler/rss'
+import IconTablerListTree from '~icons/tabler/list-tree'
+import IconTablerMessages from '~icons/tabler/messages'
 import type { MqttSubscription, MqttSubscriptionGroupNode } from './mqttSubscriptionTreeModel'
 
 defineOptions({ name: 'MqttSubscriptionTreeBranch' })
@@ -75,7 +79,6 @@ const props = defineProps<{
 
 defineEmits<{
   (event: 'selectSubscription', subscription: MqttSubscription): void
-  (event: 'openTags', subscription: MqttSubscription): void
   (event: 'subscriptionContextmenu', mouseEvent: MouseEvent, subscription: MqttSubscription): void
   (event: 'groupContextmenu', mouseEvent: MouseEvent, group: MqttSubscriptionGroupNode): void
 }>()
@@ -87,6 +90,12 @@ const countSubscriptions = (node: MqttSubscriptionGroupNode): number =>
   node.children.reduce((sum, child) => sum + countSubscriptions(child), 0)
 
 const totalCount = computed(() => countSubscriptions(props.node))
+
+const resolveSubscriptionIcon = (subscription: MqttSubscription) => {
+  if (subscription.usageMode === 'raw_datapoint') return IconTablerMessages
+  if (subscription.usageMode === 'batch_variable') return IconTablerListTree
+  return IconTablerDatabase
+}
 </script>
 
 <style scoped>

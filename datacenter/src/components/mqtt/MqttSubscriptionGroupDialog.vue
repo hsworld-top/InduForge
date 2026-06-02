@@ -1,12 +1,12 @@
 <template>
   <DcDialog
+    ref="dialogRef"
     v-model="visible"
     :title="mode === 'create' ? '新建分组' : '重命名分组'"
     width="460px"
     body-max-height="320px"
     :dirty="isDirty"
     :close-disabled="loading"
-    @close="resetForm"
   >
     <el-form label-position="top" class="mqtt-subscription-group-dialog">
       <el-form-item label="名称" required>
@@ -39,7 +39,7 @@
 
     <template #footer>
       <div class="mqtt-subscription-group-dialog__footer">
-        <el-button @click="visible = false">取消</el-button>
+        <el-button @click="requestClose">取消</el-button>
         <el-button type="primary" :loading="loading" :disabled="!canSubmit" @click="submit">
           {{ mode === 'create' ? '创建' : '保存' }}
         </el-button>
@@ -49,7 +49,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import type { MqttSubscriptionGroup, MqttSubscriptionGroupNode } from './mqttSubscriptionTreeModel'
 import { flattenMqttSubscriptionGroups } from './mqttSubscriptionTreeModel'
@@ -82,6 +82,7 @@ const form = reactive({
   name: '',
   parentId: null as string | null,
 })
+const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
 
 const groupOptions = computed(() => flattenMqttSubscriptionGroups(props.groups))
 const canSubmit = computed(() => {
@@ -111,10 +112,18 @@ function submit() {
   })
 }
 
+function requestClose() {
+  void dialogRef.value?.requestClose()
+}
+
+function closeSilently() {
+  dialogRef.value?.closeSilently()
+}
+
 watch(
   () => props.modelValue,
-  (open) => {
-    if (open) resetForm()
+  () => {
+    resetForm()
   },
 )
 
@@ -124,6 +133,8 @@ watch(
     if (props.modelValue) resetForm()
   },
 )
+
+defineExpose({ closeSilently })
 </script>
 
 <style scoped>

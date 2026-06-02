@@ -6,10 +6,6 @@
           <IconTablerPlus class="mqtt-tag-list__button-icon" />
           新建变量
         </el-button>
-        <el-button type="success" size="small" @click="handleCreateGroup">
-          <IconTablerFolderAdd class="mqtt-tag-list__button-icon" />
-          新建分组
-        </el-button>
         <el-button size="small" @click="handleBatchCreate">
           <IconTablerDocumentAdd class="mqtt-tag-list__button-icon" />
           批量导入
@@ -29,43 +25,11 @@
           <IconTablerActivity class="mqtt-tag-list__button-icon" />
           变量预览/监控
         </el-button>
-        <el-button
-          class="mqtt-tag-list__live-action"
-          :class="{ 'is-connected': liveActionConnected }"
-          size="small"
-          type="primary"
-          plain
-          @click="$emit('openPublish')"
-        >
-          <IconTablerSend class="mqtt-tag-list__button-icon" />
-          发布测试
-        </el-button>
       </div>
       <div class="mqtt-tag-list__filters">
-        <el-select v-model="selectedGroupId" size="small" class="mqtt-tag-list__group-filter">
-          <el-option label="全部变量" value="" />
-          <el-option label="未分组" value="__ungrouped" />
-          <el-option v-for="group in sortedGroups" :key="group.id" :label="group.name" :value="group.id" />
-        </el-select>
-        <el-tooltip content="编辑当前分组" placement="top">
-          <el-button
-            size="small"
-            :icon="IconTablerEdit"
-            :disabled="!currentGroup"
-            @click="currentGroup && handleEditGroup(currentGroup)"
-          />
-        </el-tooltip>
-        <el-tooltip content="删除当前分组" placement="top">
-          <el-button
-            size="small"
-            :icon="IconTablerTrash"
-            :disabled="!currentGroup"
-            @click="currentGroup && handleDeleteGroup(currentGroup)"
-          />
-        </el-tooltip>
         <el-input
           v-model="searchKeyword"
-          placeholder="搜索变量名称或标识符"
+          placeholder="搜索变量名称或解析规则"
           clearable
           size="small"
           @input="handleSearch"
@@ -74,6 +38,38 @@
             <IconTablerSearch class="mqtt-tag-list__input-icon" />
           </template>
         </el-input>
+        <el-popover
+          v-model:visible="sortFieldPopoverVisible"
+          placement="bottom-start"
+          :width="148"
+          trigger="click"
+        >
+          <template #reference>
+            <button type="button" class="mqtt-tag-list__sort-pill">
+              {{ currentSortFieldLabel }}
+            </button>
+          </template>
+          <div class="mqtt-tag-list__sort-menu">
+            <button
+              v-for="option in sortFieldOptions"
+              :key="option.value"
+              type="button"
+              class="mqtt-tag-list__sort-item"
+              :class="{ 'is-active': sortBy === option.value }"
+              @click="changeSortField(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </el-popover>
+        <button type="button" class="mqtt-tag-list__sort-pill" @click="toggleSortOrder">
+          <IconTablerSortDescending
+            v-if="sortOrder === 'desc'"
+            class="mqtt-tag-list__sort-icon"
+          />
+          <IconTablerSortAscending v-else class="mqtt-tag-list__sort-icon" />
+          {{ currentSortOrderLabel }}
+        </button>
         <el-button size="small" :loading="loading" @click="handleRefresh">
           <IconTablerRefresh class="mqtt-tag-list__button-icon" />
           刷新
@@ -98,10 +94,6 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="code" label="标识符" min-width="130" show-overflow-tooltip />
-        <el-table-column label="分组" min-width="120" show-overflow-tooltip>
-          <template #default="{ row }">{{ getGroupName(row.groupId) }}</template>
-        </el-table-column>
         <el-table-column label="类型" width="92">
           <template #default="{ row }">{{ getDataTypeLabel(row.dataType) }}</template>
         </el-table-column>
@@ -119,6 +111,9 @@
           <template #default="{ row }">
             <span class="mqtt-tag-list__value">{{ formatLastValue(row) }}</span>
           </template>
+        </el-table-column>
+        <el-table-column label="创建时间" width="168">
+          <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
         </el-table-column>
         <el-table-column label="状态" width="96">
           <template #default="{ row }">
@@ -170,22 +165,9 @@
       :tag="currentTag"
       :project-id="projectId"
       :subscription-id="subscriptionId"
-      :groups="groups"
       :mode="tagDialogMode"
-      :default-group-id="defaultTagGroupId"
       @close="tagDialogVisible = false"
       @success="handleTagDialogSuccess"
-    />
-
-    <MqttTagGroupDialog
-      v-if="groupDialogVisible"
-      :visible="groupDialogVisible"
-      :group="currentGroupForDialog"
-      :project-id="projectId"
-      :subscription-id="subscriptionId"
-      :mode="groupDialogMode"
-      @close="groupDialogVisible = false"
-      @success="handleGroupDialogSuccess"
     />
   </div>
 </template>
@@ -195,26 +177,25 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   deleteMqttTag,
-  deleteMqttTagGroup,
   getDataPoints,
-  getMqttTagGroups,
   getMqttTagValues,
   getMqttTags,
 } from '@/api/data.api'
 import { useMqttTagSync } from '@/composables/useMqttTagSync'
 import MqttTagDialog from './MqttTagDialog.vue'
-import MqttTagGroupDialog from './MqttTagGroupDialog.vue'
 import IconTablerActivity from '~icons/tabler/activity'
 import IconTablerDocumentAdd from '~icons/tabler/file-plus'
 import IconTablerDownload from '~icons/tabler/download'
 import IconTablerEdit from '~icons/tabler/edit'
 import IconTablerEye from '~icons/tabler/eye'
-import IconTablerFolderAdd from '~icons/tabler/folder-plus'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerSearch from '~icons/tabler/search'
-import IconTablerSend from '~icons/tabler/send'
+import IconTablerSortAscending from '~icons/tabler/sort-ascending'
+import IconTablerSortDescending from '~icons/tabler/sort-descending'
 import IconTablerTrash from '~icons/tabler/trash'
+import dayjs from 'dayjs'
+import { TIME_FORMAT } from '@/constants'
 import { getApiErrorMessage } from '@/utils/request'
 
 const props = defineProps({
@@ -232,44 +213,30 @@ const props = defineProps({
   },
 })
 
-defineEmits(['openMonitor', 'openPublish'])
+defineEmits(['openMonitor'])
 
 const loading = ref(false)
 const tags = ref<any[]>([])
-const groups = ref<any[]>([])
 const searchKeyword = ref('')
-const selectedGroupId = ref('')
 const pagination = ref({ page: 1, pageSize: 20, total: 0, totalPages: 0 })
+const sortBy = ref<'createdAt' | 'name'>('createdAt')
+const sortOrder = ref<'asc' | 'desc'>('desc')
+const sortFieldPopoverVisible = ref(false)
 
 const tagDialogVisible = ref(false)
 const tagDialogMode = ref('create')
 const currentTag = ref<any | null>(null)
 
-const groupDialogVisible = ref(false)
-const groupDialogMode = ref('create')
-const currentGroupForDialog = ref<any | null>(null)
-
 const { notify: notifyTagChange } = useMqttTagSync(props.subscriptionId)
 const liveActionConnected = computed(() => Boolean(props.previewSessionId))
-
-const sortedGroups = computed(() => [...groups.value].sort((a, b) => (a.order || 0) - (b.order || 0)))
-const currentGroup = computed(() => sortedGroups.value.find((group) => group.id === selectedGroupId.value) || null)
-const defaultTagGroupId = computed(() =>
-  selectedGroupId.value && selectedGroupId.value !== '__ungrouped' ? selectedGroupId.value : '',
+const sortFieldOptions = [
+  { label: '创建时间', value: 'createdAt' },
+  { label: '名称', value: 'name' },
+] as const
+const currentSortFieldLabel = computed(
+  () => sortFieldOptions.find((option) => option.value === sortBy.value)?.label || '创建时间',
 )
-
-const loadGroups = async () => {
-  try {
-    const response = await getMqttTagGroups(props.projectId, props.subscriptionId)
-    groups.value = response.data?.list || []
-    if (selectedGroupId.value && selectedGroupId.value !== '__ungrouped' && !currentGroup.value) {
-      selectedGroupId.value = ''
-    }
-  } catch (error) {
-    console.error('Failed to load tag groups:', error)
-    ElMessage.error(getApiErrorMessage(error, '加载变量组失败'))
-  }
-}
+const currentSortOrderLabel = computed(() => (sortOrder.value === 'desc' ? '降序' : '升序'))
 
 const loadTags = async () => {
   try {
@@ -277,8 +244,9 @@ const loadTags = async () => {
     const params = {
       page: pagination.value.page,
       pageSize: pagination.value.pageSize,
-      groupId: selectedGroupId.value || undefined,
       q: searchKeyword.value.trim() || undefined,
+      sortBy: sortBy.value,
+      sortOrder: sortOrder.value,
     }
     const response = await getMqttTags(props.projectId, props.subscriptionId, params)
     tags.value = response.data?.list || []
@@ -299,7 +267,7 @@ const loadTags = async () => {
 }
 
 const reloadAll = async () => {
-  await Promise.all([loadGroups(), loadTags()])
+  await loadTags()
 }
 
 const reloadFirstPage = async () => {
@@ -364,6 +332,17 @@ const handleSearch = () => {
   void reloadFirstPage()
 }
 
+const changeSortField = (value: 'createdAt' | 'name') => {
+  sortBy.value = value
+  sortFieldPopoverVisible.value = false
+  void reloadFirstPage()
+}
+
+const toggleSortOrder = () => {
+  sortOrder.value = sortOrder.value === 'desc' ? 'asc' : 'desc'
+  void reloadFirstPage()
+}
+
 const changePage = async (page) => {
   pagination.value.page = page
   await loadTags()
@@ -376,44 +355,6 @@ const changePageSize = async (pageSize) => {
 
 const handleBatchExport = () => {
   ElMessage.info('批量导出功能待实现')
-}
-
-const handleCreateGroup = () => {
-  currentGroupForDialog.value = null
-  groupDialogMode.value = 'create'
-  groupDialogVisible.value = true
-}
-
-const handleEditGroup = (group) => {
-  currentGroupForDialog.value = { ...group }
-  groupDialogMode.value = 'edit'
-  groupDialogVisible.value = true
-}
-
-const handleDeleteGroup = async (group) => {
-  try {
-    await ElMessageBox.confirm(`确定要删除分组“${group.name}”吗？该分组下的变量将移至未分组。`, '删除确认', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
-    })
-
-    await deleteMqttTagGroup(props.projectId, group.id)
-    if (selectedGroupId.value === group.id) selectedGroupId.value = ''
-    ElMessage.success('删除成功')
-    await reloadAll()
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('Failed to delete group:', error)
-      ElMessage.error(getApiErrorMessage(error, '删除失败'))
-    }
-  }
-}
-
-const handleGroupDialogSuccess = async () => {
-  groupDialogVisible.value = false
-  await loadGroups()
-  ElMessage.success(groupDialogMode.value === 'create' ? '创建成功' : '更新成功')
 }
 
 const handleCreateTag = () => {
@@ -484,11 +425,6 @@ const applyTagValueUpdate = (value) => {
   tag.currentValue = normalizeTagValue(value)
 }
 
-const getGroupName = (groupId) => {
-  if (!groupId) return '未分组'
-  return groups.value.find((group) => group.id === groupId)?.name || '未知分组'
-}
-
 const getDataTypeLabel = (dataType) => {
   const labels = {
     string: '字符串',
@@ -531,6 +467,12 @@ const formatLastValue = (tag) => {
   return tag.unit && text !== '-' ? `${text} ${tag.unit}` : text
 }
 
+const formatTime = (value) => {
+  if (!value) return '-'
+  const time = dayjs(value)
+  return time.isValid() ? time.format(TIME_FORMAT) : '-'
+}
+
 const statusLabel = (tag) => {
   if (tag.currentValue?.quality === 'bad') return '解析异常'
   if (tag.datapointStatus === 'invalid') return '失效'
@@ -545,14 +487,9 @@ const statusClass = (tag) => {
   return 'is-warning'
 }
 
-watch(selectedGroupId, () => {
-  void reloadFirstPage()
-})
-
 watch(
   () => props.subscriptionId,
   async () => {
-    selectedGroupId.value = ''
     searchKeyword.value = ''
     pagination.value.page = 1
     await reloadAll()
@@ -605,12 +542,57 @@ defineExpose({
   margin-right: 0;
 }
 
-.mqtt-tag-list__group-filter {
-  width: 160px;
-}
-
 .mqtt-tag-list__filters :deep(.el-input) {
   width: 220px;
+}
+
+.mqtt-tag-list__sort-pill {
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 9px;
+  border: 1px solid var(--dc-border);
+  border-radius: 999px;
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mqtt-tag-list__sort-pill:hover {
+  border-color: color-mix(in oklch, var(--dc-primary) 34%, var(--dc-border));
+  color: var(--dc-primary);
+}
+
+.mqtt-tag-list__sort-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.mqtt-tag-list__sort-menu {
+  display: grid;
+  gap: 4px;
+}
+
+.mqtt-tag-list__sort-item {
+  width: 100%;
+  height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: var(--dc-radius-sm);
+  background: transparent;
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.mqtt-tag-list__sort-item:hover,
+.mqtt-tag-list__sort-item.is-active {
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
 }
 
 .mqtt-tag-list__actions :deep(.mqtt-tag-list__live-action.el-button) {
@@ -626,6 +608,7 @@ defineExpose({
 }
 
 .mqtt-tag-list__body {
+  height: 0;
   min-height: 0;
   flex: 1;
   display: flex;

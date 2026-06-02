@@ -3,6 +3,7 @@ export type MqttSubscription = {
   name?: string
   topic?: string
   qos?: number
+  usageMode?: 'raw_datapoint' | 'single_variable' | 'batch_variable'
   groupId?: string | null
   description?: string | null
   messageRetention?: number

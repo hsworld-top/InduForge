@@ -1,6 +1,10 @@
 <template>
   <div ref="rootRef" class="workbench-stream-list">
-    <el-scrollbar ref="scrollbarRef" class="workbench-stream-list__scroll">
+    <el-scrollbar
+      ref="scrollbarRef"
+      class="workbench-stream-list__scroll"
+      @scroll="handleScroll"
+    >
       <div v-if="loading" class="workbench-stream-list__state">
         <IconTablerLoader2 class="workbench-stream-list__spinner" />
         <span>加载消息...</span>
@@ -12,41 +16,51 @@
         <small>{{ emptyHint }}</small>
       </div>
 
-      <div v-else class="workbench-stream-list__items">
-        <article
-          v-for="(message, index) in messages"
-          :key="message.id || `${message.topic || 'message'}-${index}`"
-          class="workbench-stream-list__item"
-          @click="$emit('select', message)"
+      <div
+        v-else
+        class="workbench-stream-list__items"
+        :style="{ height: `${virtualHeight}px` }"
+      >
+        <div
+          class="workbench-stream-list__window"
+          :style="{ transform: `translateY(${windowOffset}px)` }"
         >
-          <header class="workbench-stream-list__item-head">
-            <WorkbenchStatusPill :label="`QoS ${message.qos ?? 0}`" tone="info" />
-            <span class="workbench-stream-list__topic" :title="message.topic || '-'">
-              {{ message.topic || '-' }}
-            </span>
-            <time v-if="showTimestamp">
-              {{ formatTimestamp(message.timestamp) }}
-            </time>
-            <el-tooltip content="复制 Payload" placement="top">
-              <button
-                type="button"
-                class="workbench-stream-list__copy"
-                @click.stop="$emit('copy', message)"
-              >
-                <IconTablerCopy />
-              </button>
-            </el-tooltip>
-          </header>
+          <article
+            v-for="item in visibleItems"
+            :key="item.message.id || `${item.message.topic || 'message'}-${item.index}`"
+            :data-stream-index="item.index"
+            class="workbench-stream-list__item"
+            @click="$emit('select', item.message)"
+          >
+            <header class="workbench-stream-list__item-head">
+              <WorkbenchStatusPill :label="`QoS ${item.message.qos ?? 0}`" tone="info" />
+              <span class="workbench-stream-list__topic" :title="item.message.topic || '-'">
+                {{ item.message.topic || '-' }}
+              </span>
+              <time v-if="showTimestamp">
+                {{ formatTimestamp(item.message.timestamp) }}
+              </time>
+              <el-tooltip content="复制 Payload" placement="top">
+                <button
+                  type="button"
+                  class="workbench-stream-list__copy"
+                  @click.stop="$emit('copy', item.message)"
+                >
+                  <IconTablerCopy />
+                </button>
+              </el-tooltip>
+            </header>
 
-          <pre class="workbench-stream-list__payload">{{ formatPayload(message.payload) }}</pre>
-        </article>
+            <pre class="workbench-stream-list__payload">{{ formatPayload(item.message.payload) }}</pre>
+          </article>
+        </div>
       </div>
     </el-scrollbar>
   </div>
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import { TIME_FORMAT } from '@/constants'
 import WorkbenchStatusPill from './WorkbenchStatusPill.vue'
@@ -87,6 +101,57 @@ defineEmits<{
 
 const rootRef = ref<HTMLElement | null>(null)
 const scrollbarRef = ref<any>(null)
+const scrollTop = ref(0)
+const viewportHeight = ref(0)
+const itemHeights = ref<number[]>([])
+let resizeObserver: ResizeObserver | null = null
+
+const estimatedItemHeight = 170
+const bufferItems = 6
+// JSON 格式化内容不限制高度，虚拟列表需要记录真实行高来避免滚动位置错乱。
+const itemOffsets = computed(() => {
+  const offsets: number[] = []
+  let nextOffset = 0
+  for (let index = 0; index < props.messages.length; index += 1) {
+    offsets[index] = nextOffset
+    nextOffset += itemHeights.value[index] || estimatedItemHeight
+  }
+  return offsets
+})
+const virtualHeight = computed(() => {
+  if (props.messages.length === 0) return 0
+  const lastIndex = props.messages.length - 1
+  return itemOffsets.value[lastIndex] + (itemHeights.value[lastIndex] || estimatedItemHeight)
+})
+const visibleRange = computed(() => {
+  if (props.messages.length === 0) {
+    return { start: 0, end: 0 }
+  }
+  const offsets = itemOffsets.value
+  const viewportBottom = scrollTop.value + viewportHeight.value
+  let start = 0
+  while (
+    start < props.messages.length &&
+    offsets[start] + (itemHeights.value[start] || estimatedItemHeight) < scrollTop.value
+  ) {
+    start += 1
+  }
+  let end = start
+  while (end < props.messages.length && offsets[end] < viewportBottom) {
+    end += 1
+  }
+  return {
+    start: Math.max(0, start - bufferItems),
+    end: Math.min(props.messages.length, end + bufferItems),
+  }
+})
+const visibleItems = computed(() =>
+  props.messages.slice(visibleRange.value.start, visibleRange.value.end).map((message, offset) => ({
+    message,
+    index: visibleRange.value.start + offset,
+  })),
+)
+const windowOffset = computed(() => itemOffsets.value[visibleRange.value.start] || 0)
 
 const formatTimestamp = (timestamp?: string | number | Date) => {
   if (!timestamp) return '-'
@@ -116,7 +181,74 @@ const formatPayload = (payload: unknown) => {
 const scrollToTop = async () => {
   await nextTick()
   scrollbarRef.value?.setScrollTop?.(0)
+  scrollTop.value = 0
 }
+
+const handleScroll = ({ scrollTop: nextScrollTop }: { scrollTop: number }) => {
+  scrollTop.value = Number(nextScrollTop || 0)
+}
+
+const updateViewportHeight = () => {
+  viewportHeight.value = rootRef.value?.clientHeight || 0
+}
+
+const measureVisibleItems = async () => {
+  await nextTick()
+  const container = rootRef.value
+  if (!container) return
+
+  let changed = false
+  const nextHeights = itemHeights.value.slice(0, props.messages.length)
+  container
+    .querySelectorAll<HTMLElement>('.workbench-stream-list__item[data-stream-index]')
+    .forEach((element) => {
+      const index = Number(element.dataset.streamIndex)
+      if (!Number.isInteger(index) || index < 0) return
+      const height = Math.ceil(element.getBoundingClientRect().height)
+      if (height > 0 && nextHeights[index] !== height) {
+        nextHeights[index] = height
+        changed = true
+      }
+    })
+
+  if (changed) {
+    itemHeights.value = nextHeights
+  }
+}
+
+onMounted(() => {
+  updateViewportHeight()
+  if (rootRef.value && typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => {
+      updateViewportHeight()
+      measureVisibleItems()
+    })
+    resizeObserver.observe(rootRef.value)
+  }
+  measureVisibleItems()
+})
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  resizeObserver = null
+})
+
+watch(
+  () => props.messages,
+  () => {
+    itemHeights.value = []
+    updateViewportHeight()
+    measureVisibleItems()
+  },
+)
+
+watch(
+  [visibleItems, () => props.formatJson],
+  () => {
+    measureVisibleItems()
+  },
+  { flush: 'post' },
+)
 
 defineExpose({
   scrollToTop,
@@ -135,11 +267,17 @@ defineExpose({
 }
 
 .workbench-stream-list__items {
-  display: flex;
-  flex-direction: column;
+  position: relative;
+}
+
+.workbench-stream-list__window {
+  position: absolute;
+  inset: 0 0 auto 0;
+  will-change: transform;
 }
 
 .workbench-stream-list__item {
+  min-height: 170px;
   padding: 10px 12px;
   border-bottom: 1px solid var(--dc-border, #e2e8f0);
   cursor: pointer;
@@ -194,10 +332,9 @@ defineExpose({
 }
 
 .workbench-stream-list__payload {
-  max-height: 280px;
   margin: 0;
   padding: 9px 10px;
-  overflow: auto;
+  overflow: visible;
   border: 1px solid color-mix(in oklch, var(--dc-border, #e2e8f0) 78%, transparent);
   border-radius: var(--dc-radius-sm, 6px);
   background: var(--dc-surface-subtle, #f8fafc);

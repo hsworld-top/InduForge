@@ -48,6 +48,25 @@
         </el-radio-group>
       </el-form-item>
 
+      <el-form-item :label="t('subscription.usageMode')" prop="usageMode">
+        <el-select
+          v-model="formData.usageMode"
+          class="mqtt-subscription-dialog__usage-select"
+          :disabled="mode === 'edit'"
+          placeholder="请选择使用方式"
+        >
+          <el-option
+            v-for="option in usageModeOptions"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value"
+          />
+        </el-select>
+        <div v-if="mode === 'edit'" class="mqtt-subscription-dialog__hint">
+          {{ t('subscription.usageModeLockedHint') }}
+        </div>
+      </el-form-item>
+
       <el-form-item :label="t('subscription.remark')" prop="description">
         <el-input
           v-model="formData.description"
@@ -121,9 +140,16 @@ const formData = ref({
   name: '',
   topic: '',
   qos: 0,
+  usageMode: 'single_variable',
   description: '',
   groupId: null,
 })
+
+const usageModeOptions = computed(() => [
+  { label: t('subscription.usageRawDatapoint'), value: 'raw_datapoint' },
+  { label: t('subscription.usageSingleVariable'), value: 'single_variable' },
+  { label: t('subscription.usageBatchVariable'), value: 'batch_variable' },
+])
 
 // 验证规则
 const rules = {
@@ -153,6 +179,7 @@ const rules = {
     },
   ],
   qos: [{ required: true, message: t('subscription.qosLevel'), trigger: 'change' }],
+  usageMode: [{ required: true, message: t('subscription.usageMode'), trigger: 'change' }],
 }
 
 // 计算属性：对话框可见性
@@ -185,6 +212,7 @@ const initFormData = () => {
       name: props.subscription.name || '',
       topic: props.subscription.topic || '',
       qos: props.subscription.qos ?? 0,
+      usageMode: props.subscription.usageMode || 'single_variable',
       description: props.subscription.description || '',
       groupId: props.groupId ?? props.subscription.groupId ?? null,
     }
@@ -193,6 +221,7 @@ const initFormData = () => {
       name: '',
       topic: '',
       qos: 0,
+      usageMode: 'single_variable',
       description: '',
       groupId: props.groupId ?? null,
     }
@@ -220,6 +249,7 @@ const handleSubmit = async () => {
       name: formData.value.name,
       topic: formData.value.topic,
       qos: formData.value.qos,
+      usageMode: formData.value.usageMode,
       description: formData.value.description || null,
       groupId: formData.value.groupId || null,
     }
@@ -239,7 +269,7 @@ const handleSubmit = async () => {
     )
     initialFormSnapshot.value = formSnapshot.value
     emit('success', response.data)
-    requestClose()
+    dialogRef.value?.closeSilently()
   } catch (error) {
     if (error.errors) {
       // 表单验证错误
@@ -294,5 +324,16 @@ watch(
 <style scoped>
 :deep(.el-form-item__label) {
   font-weight: 500;
+}
+
+.mqtt-subscription-dialog__usage-select {
+  width: 100%;
+}
+
+.mqtt-subscription-dialog__hint {
+  margin-top: 6px;
+  color: var(--dc-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 </style>

@@ -4,7 +4,7 @@
       <div class="mqtt-tag-monitor__title">
         <span>变量实时监控</span>
         <WorkbenchStatusPill
-          :label="socketConnected ? '实时通道已连接' : '实时通道未连接'"
+          :label="socketConnected ? '变量已订阅' : '等待订阅'"
           :tone="socketConnected ? 'success' : 'neutral'"
         />
         <WorkbenchStatusPill v-if="tags.length > 0" :label="`${tags.length} 个变量`" tone="info" />
@@ -49,14 +49,9 @@
           class="tag-card"
           :class="`is-${tag.currentValue?.quality || 'unknown'}`"
         >
-          <div class="flex items-start justify-between mb-2">
-            <div class="flex-1 min-w-0">
-              <div class="tag-card__name">
-                {{ tag.name }}
-              </div>
-              <div class="tag-card__code">
-                {{ tag.code }}
-              </div>
+          <div class="tag-card__header">
+            <div class="tag-card__name" :title="tag.name">
+              {{ tag.name }}
             </div>
             <WorkbenchStatusPill
               :label="getQualityLabel(tag.currentValue?.quality || 'unknown')"
@@ -65,41 +60,12 @@
           </div>
 
           <div class="tag-value">
-            <div v-if="tag.currentValue" class="flex items-baseline justify-between">
-              <span class="tag-value__number">
-                {{ formatValue(tag.currentValue.parsedValue, tag.dataType) }}
-              </span>
-              <span v-if="tag.unit" class="tag-value__unit">
-                {{ tag.unit }}
-              </span>
-            </div>
-            <div v-else class="tag-value__waiting">
-              <IconTablerLoader class="mr-1 w-4 h-4 animate-spin" />
-              等待数据...
-            </div>
+            {{ tag.currentValue ? formatValue(tag.currentValue.parsedValue, tag.dataType) : '-' }}
           </div>
 
-          <div class="tag-card__meta">
-            <div class="flex justify-between">
-              <span>数据类型:</span>
-              <span>{{ getDataTypeLabel(tag.dataType) }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span>解析类型:</span>
-              <span>{{ getParseTypeLabel(tag.parseType) }}</span>
-            </div>
-            <div v-if="tag.currentValue" class="flex justify-between">
-              <span>数据质量:</span>
-              <span>{{ getQualityLabel(tag.currentValue.quality) }}</span>
-            </div>
-            <div v-if="tag.currentValue?.timestamp" class="flex justify-between">
-              <span>更新时间:</span>
-              <span>{{ formatTimestamp(tag.currentValue.timestamp) }}</span>
-            </div>
-            <div v-if="tag.currentValue?.error" class="tag-card__error">
-              <IconTablerAlertTriangle class="w-4 h-4" />
-              {{ tag.currentValue.error }}
-            </div>
+          <div class="tag-card__time">
+            <span>更新时间</span>
+            <strong>{{ tag.currentValue?.timestamp ? formatTimestamp(tag.currentValue.timestamp) : '-' }}</strong>
           </div>
         </div>
       </div>
@@ -141,8 +107,6 @@ import { useMqttTagSync } from '@/composables/useMqttTagSync'
 import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
 import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerFile from '~icons/tabler/file'
-import IconTablerLoader from '~icons/tabler/loader'
-import IconTablerAlertTriangle from '~icons/tabler/alert-triangle'
 import dayjs from 'dayjs'
 import { TIME_FORMAT } from '@/constants'
 
@@ -438,8 +402,8 @@ defineExpose({
 
 .tag-card-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .tag-row-list {
@@ -474,9 +438,9 @@ defineExpose({
 }
 
 .tag-card {
-  padding: 12px;
+  padding: 9px 10px;
   border: 1px solid var(--dc-border);
-  border-left: 4px solid var(--quality-color, var(--dc-border));
+  border-left: 3px solid var(--quality-color, var(--dc-border));
   border-radius: var(--dc-radius-sm);
   background: var(--dc-surface-raised);
   box-shadow: var(--dc-shadow-surface);
@@ -487,39 +451,38 @@ defineExpose({
   overflow: hidden;
 }
 
-.tag-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, transparent, currentColor, transparent);
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
 .tag-card:hover {
   border-color: color-mix(in oklch, var(--quality-color, var(--dc-primary)) 45%, var(--dc-border));
 }
 
-.tag-card:hover::before {
-  opacity: 0.3;
+.tag-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .tag-value {
-  min-height: 68px;
+  min-height: 38px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  margin-top: 10px;
-  padding: 12px;
+  margin-top: 8px;
+  padding: 6px 8px;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-sm);
   background: var(--dc-surface-subtle);
+  color: var(--dc-text);
+  font-family: var(--dc-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 16px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tag-card__name {
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
   color: var(--dc-text);
   font-size: 13px;
@@ -528,49 +491,23 @@ defineExpose({
   white-space: nowrap;
 }
 
-.tag-card__code {
-  margin-top: 3px;
-  color: var(--dc-text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
-}
-
-.tag-value__number {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--dc-text);
-  font-size: 22px;
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tag-value__unit {
-  margin-left: 8px;
-  color: var(--dc-text-muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.tag-value__waiting {
-  color: var(--dc-text-muted);
-  font-size: 12px;
-}
-
-.tag-card__meta {
-  margin-top: 10px;
-  display: grid;
-  gap: 6px;
-  color: var(--dc-text-muted);
-  font-size: 11px;
-}
-
-.tag-card__error {
+.tag-card__time {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-top: 6px;
-  color: #b91c1c;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 7px;
+  color: var(--dc-text-muted);
+  font-size: 11px;
+}
+
+.tag-card__time strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dc-text-secondary);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tag-card.is-good {
@@ -591,7 +528,7 @@ defineExpose({
 
 @media (min-width: 1920px) {
   .tag-card-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
 

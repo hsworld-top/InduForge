@@ -1584,6 +1584,18 @@ export const getMqttSubscriptionMessages = (projectId, subscriptionId, params = 
 }
 
 /**
+ * 清空MQTT订阅的消息缓存
+ * @param {string} projectId - 工程ID
+ * @param {string} subscriptionId - 订阅ID
+ */
+export const clearMqttSubscriptionMessages = (projectId, subscriptionId) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/messages`,
+    method: 'delete',
+  })
+}
+
+/**
  * 启动MQTT连接
  * @param {string} projectId - 工程ID
  * @param {string} connectionId - 连接ID
@@ -1604,88 +1616,6 @@ export const stopMqttConnection = (projectId, connectionId) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/connections/${connectionId}/stop`,
     method: 'post',
-  })
-}
-
-// ===========================================
-// MQTT 变量组相关API
-// ===========================================
-
-/**
- * 获取订阅的所有变量组
- * @param {string} projectId - 工程ID
- * @param {string} subscriptionId - 订阅ID
- * @param {object} params - 查询参数
- */
-export const getMqttTagGroups = (projectId, subscriptionId, params = {}) => {
-  return request({
-    url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/tag-groups`,
-    method: 'get',
-    params,
-  }).then((response) => ({
-    ...response,
-    data: normalizeMqttListPayload(response, 'groups'),
-  }))
-}
-
-/**
- * 获取单个变量组
- * @param {string} groupId - 变量组ID
- */
-export const getMqttTagGroup = (projectId, groupId) => {
-  return request({
-    url: `/data/projects/${projectId}/mqtt/tag-groups/${groupId}`,
-    method: 'get',
-  })
-}
-
-/**
- * 创建变量组
- * @param {string} projectId - 工程ID
- * @param {string} subscriptionId - 订阅ID
- * @param {object} data - 变量组数据
- */
-export const createMqttTagGroup = (projectId, subscriptionId, data) => {
-  return request({
-    url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/tag-groups`,
-    method: 'post',
-    data,
-  })
-}
-
-/**
- * 更新变量组
- * @param {string} groupId - 变量组ID
- * @param {object} data - 更新数据
- */
-export const updateMqttTagGroup = (projectId, groupId, data) => {
-  return request({
-    url: `/data/projects/${projectId}/mqtt/tag-groups/${groupId}`,
-    method: 'put',
-    data,
-  })
-}
-
-/**
- * 删除变量组
- * @param {string} groupId - 变量组ID
- */
-export const deleteMqttTagGroup = (projectId, groupId) => {
-  return request({
-    url: `/data/projects/${projectId}/mqtt/tag-groups/${groupId}`,
-    method: 'delete',
-  })
-}
-
-/**
- * 更新变量组顺序
- * @param {array} groups - 变量组数组，包含id和order
- */
-export const updateMqttTagGroupsOrder = (projectId, groups) => {
-  return request({
-    url: `/data/projects/${projectId}/mqtt/tag-groups/order`,
-    method: 'put',
-    data: { groups },
   })
 }
 
@@ -2037,15 +1967,9 @@ export default {
   updateMqttSubscription,
   deleteMqttSubscription,
   getMqttSubscriptionMessages,
+  clearMqttSubscriptionMessages,
   startMqttConnection,
   stopMqttConnection,
-  // MQTT 变量组相关
-  getMqttTagGroups,
-  getMqttTagGroup,
-  createMqttTagGroup,
-  updateMqttTagGroup,
-  deleteMqttTagGroup,
-  updateMqttTagGroupsOrder,
   // MQTT Tag相关
   getMqttTags,
   getProjectMqttTags,

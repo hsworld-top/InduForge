@@ -1,35 +1,8 @@
--- data_mqtt_tag_groups: 保存 MQTT 变量分组定义。
-CREATE TABLE IF NOT EXISTS data_mqtt_tag_groups (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id uuid NOT NULL,
-    subscription_id uuid NOT NULL,
-    name text NOT NULL CHECK (char_length(name) <= 100),
-    code text NOT NULL CHECK (char_length(code) <= 100),
-    description text,
-    color text CHECK (color IS NULL OR char_length(color) <= 20),
-    icon text CHECK (icon IS NULL OR char_length(icon) <= 100),
-    display_order integer NOT NULL DEFAULT 0,
-    created_by uuid NOT NULL,
-    updated_by uuid,
-    created_at timestamptz NOT NULL DEFAULT now(),
-    updated_at timestamptz NOT NULL DEFAULT now(),
-    CONSTRAINT data_mqtt_tag_groups_subscription_code_key UNIQUE (subscription_id, code),
-    CONSTRAINT data_mqtt_tag_groups_subscription_fkey
-        FOREIGN KEY (subscription_id) REFERENCES data_mqtt_subscriptions (id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS data_mqtt_tag_groups_project_subscription_idx
-    ON data_mqtt_tag_groups (project_id, subscription_id, display_order, created_at DESC);
-
-CREATE INDEX IF NOT EXISTS data_mqtt_tag_groups_subscription_idx
-    ON data_mqtt_tag_groups (subscription_id, display_order, created_at DESC);
-
 -- data_mqtt_tags: 保存 MQTT 变量定义。
 CREATE TABLE IF NOT EXISTS data_mqtt_tags (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id uuid NOT NULL,
     subscription_id uuid NOT NULL,
-    group_id uuid,
     name text NOT NULL CHECK (char_length(name) <= 100),
     code text NOT NULL CHECK (char_length(code) <= 100),
     description text,
@@ -47,9 +20,7 @@ CREATE TABLE IF NOT EXISTS data_mqtt_tags (
     updated_at timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT data_mqtt_tags_project_code_key UNIQUE (project_id, code),
     CONSTRAINT data_mqtt_tags_subscription_fkey
-        FOREIGN KEY (subscription_id) REFERENCES data_mqtt_subscriptions (id) ON DELETE CASCADE,
-    CONSTRAINT data_mqtt_tags_group_fkey
-        FOREIGN KEY (group_id) REFERENCES data_mqtt_tag_groups (id) ON DELETE SET NULL
+        FOREIGN KEY (subscription_id) REFERENCES data_mqtt_subscriptions (id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS data_mqtt_tags_subscription_order_idx
@@ -57,9 +28,6 @@ CREATE INDEX IF NOT EXISTS data_mqtt_tags_subscription_order_idx
 
 CREATE INDEX IF NOT EXISTS data_mqtt_tags_project_idx
     ON data_mqtt_tags (project_id, display_order, created_at DESC);
-
-CREATE INDEX IF NOT EXISTS data_mqtt_tags_group_idx
-    ON data_mqtt_tags (group_id, display_order, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS data_mqtt_tags_validation_gin_idx
     ON data_mqtt_tags USING GIN (validation);

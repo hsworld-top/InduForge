@@ -18,6 +18,13 @@ import (
 
 var datapointSegmentSanitizer = regexp.MustCompile(`[./\\\s]+|[^0-9A-Za-z_-]+`)
 
+const (
+	mqttSubscriptionUsageRawDatapoint   = "raw_datapoint"
+	mqttSubscriptionUsageSingleVariable = "single_variable"
+	mqttSubscriptionUsageBatchVariable  = "batch_variable"
+	defaultMqttMessageRetention         = 5000
+)
+
 // MqttRuntimeStatus 表示兼容旧前端的 MQTT 运行状态。
 type MqttRuntimeStatus struct {
 	Connected  bool   `json:"connected"`
@@ -63,6 +70,7 @@ type MqttSubscription struct {
 	Name             string    `json:"name"`
 	Topic            string    `json:"topic"`
 	QOS              int       `json:"qos"`
+	UsageMode        string    `json:"usageMode"`
 	Description      *string   `json:"description"`
 	MessageRetention int       `json:"messageRetention"`
 	Order            int       `json:"order"`
@@ -82,27 +90,11 @@ type MqttSubscriptionGroup struct {
 	UpdatedAt    time.Time                `json:"updatedAt"`
 }
 
-// MqttTagGroup 表示 MQTT 变量组响应。
-type MqttTagGroup struct {
-	ID             string    `json:"id"`
-	ProjectID      string    `json:"projectId"`
-	SubscriptionID string    `json:"subscriptionId"`
-	Name           string    `json:"name"`
-	Code           string    `json:"code"`
-	Description    *string   `json:"description"`
-	Color          *string   `json:"color"`
-	Icon           *string   `json:"icon"`
-	Order          int       `json:"order"`
-	CreatedAt      time.Time `json:"createdAt"`
-	UpdatedAt      time.Time `json:"updatedAt"`
-}
-
 // MqttTag 表示 MQTT 变量响应。
 type MqttTag struct {
 	ID             string         `json:"id"`
 	ProjectID      string         `json:"projectId"`
 	SubscriptionID string         `json:"subscriptionId"`
-	GroupID        *string        `json:"groupId"`
 	Name           string         `json:"name"`
 	Code           string         `json:"code"`
 	Description    *string        `json:"description"`
@@ -139,6 +131,7 @@ type CreateMqttSubscriptionInput struct {
 	Name             string
 	Topic            string
 	QOS              int
+	UsageMode        string
 	Description      *string
 	MessageRetention int
 	Order            int
@@ -151,6 +144,7 @@ type UpdateMqttSubscriptionInput struct {
 	Name             string
 	Topic            string
 	QOS              int
+	UsageMode        string
 	Description      *string
 	MessageRetention int
 	Order            int
@@ -417,6 +411,9 @@ func (s *MqttService) StopConnection(ctx context.Context, projectID, connectionI
 		return nil, err
 	}
 
+	if s.runtime != nil {
+		s.runtime.Disconnect(projectID, connectionID)
+	}
 	record, err := s.repository.StopConnection(ctx, projectID, connectionID)
 	if err != nil {
 		return nil, err
@@ -490,6 +487,7 @@ func (s *MqttService) CreateSubscription(ctx context.Context, projectID, userID 
 		Name:             strings.TrimSpace(input.Name),
 		Topic:            strings.TrimSpace(input.Topic),
 		QOS:              input.QOS,
+		UsageMode:        normalizeMqttSubscriptionUsageMode(input.UsageMode),
 		Description:      trimOptionalString(input.Description),
 		MessageRetention: input.MessageRetention,
 		Order:            input.Order,
@@ -498,7 +496,7 @@ func (s *MqttService) CreateSubscription(ctx context.Context, projectID, userID 
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "订阅名称和主题不能为空")
 	}
 	if params.MessageRetention <= 0 {
-		params.MessageRetention = 100
+		params.MessageRetention = defaultMqttMessageRetention
 	}
 	if err := s.ensureSubscriptionGroupInConnection(ctx, projectID, input.ConnectionID, params.GroupID); err != nil {
 		return nil, err
@@ -508,12 +506,39 @@ func (s *MqttService) CreateSubscription(ctx context.Context, projectID, userID 
 	if err != nil {
 		return nil, err
 	}
-	if err := s.syncSubscriptionDatapoint(ctx, *record, userID); err != nil {
-		return nil, err
+	if isMqttRawDatapointSubscription(*record) {
+		if err := s.syncSubscriptionDatapoint(ctx, *record, userID); err != nil {
+			return nil, err
+		}
 	}
 
 	result := toMqttSubscription(*record)
 	return &result, nil
+}
+
+func normalizeMqttSubscriptionUsageMode(value string) string {
+	switch strings.TrimSpace(value) {
+	case mqttSubscriptionUsageRawDatapoint:
+		return mqttSubscriptionUsageRawDatapoint
+	case mqttSubscriptionUsageBatchVariable:
+		return mqttSubscriptionUsageBatchVariable
+	default:
+		return mqttSubscriptionUsageSingleVariable
+	}
+}
+
+func isMqttRawDatapointSubscription(record repository.MqttSubscriptionRecord) bool {
+	return normalizeMqttSubscriptionUsageMode(record.UsageMode) == mqttSubscriptionUsageRawDatapoint
+}
+
+func (s *MqttService) syncRawSubscriptionDatapointIfNeeded(ctx context.Context, record repository.MqttSubscriptionRecord, userID string) error {
+	if !isMqttRawDatapointSubscription(record) {
+		return nil
+	}
+	if err := s.syncSubscriptionDatapoint(ctx, record, userID); err != nil {
+		return err
+	}
+	return nil
 }
 
 // UpdateSubscription 更新订阅并同步数据点。
@@ -534,14 +559,16 @@ func (s *MqttService) UpdateSubscription(ctx context.Context, projectID, subscri
 	}
 
 	params := repository.UpdateMqttSubscriptionParams{
-		ProjectID:        projectID,
-		SubscriptionID:   subscriptionID,
-		GroupID:          normalizeOptionalMqttID(input.GroupID),
-		HasGroupID:       input.HasGroupID,
-		UserID:           userID,
-		Name:             fallbackTrimmed(input.Name, current.Name),
-		Topic:            fallbackTrimmed(input.Topic, current.Topic),
-		QOS:              input.QOS,
+		ProjectID:      projectID,
+		SubscriptionID: subscriptionID,
+		GroupID:        normalizeOptionalMqttID(input.GroupID),
+		HasGroupID:     input.HasGroupID,
+		UserID:         userID,
+		Name:           fallbackTrimmed(input.Name, current.Name),
+		Topic:          fallbackTrimmed(input.Topic, current.Topic),
+		QOS:            input.QOS,
+		// 订阅使用方式决定数据点生成和默认打开行为，创建后不允许通过编辑订阅修改。
+		UsageMode:        current.UsageMode,
 		Description:      trimOptionalString(input.Description),
 		MessageRetention: input.MessageRetention,
 		Order:            input.Order,
@@ -567,7 +594,7 @@ func (s *MqttService) UpdateSubscription(ctx context.Context, projectID, subscri
 	if err != nil {
 		return nil, err
 	}
-	if err := s.syncSubscriptionDatapoint(ctx, *record, userID); err != nil {
+	if err := s.syncRawSubscriptionDatapointIfNeeded(ctx, *record, userID); err != nil {
 		return nil, err
 	}
 
@@ -714,138 +741,9 @@ func (s *MqttService) DeleteSubscriptionGroup(ctx context.Context, projectID, gr
 	return s.repository.DeleteSubscriptionGroup(ctx, projectID, groupID)
 }
 
-// ListTagGroups 查询变量组。
-func (s *MqttService) ListTagGroups(ctx context.Context, projectID, subscriptionID string) ([]MqttTagGroup, error) {
-	if err := validateProjectID(projectID); err != nil {
-		return nil, err
-	}
-	if _, err := uuid.Parse(strings.TrimSpace(subscriptionID)); err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "subscriptionId 格式无效", err)
-	}
-	records, err := s.repository.ListTagGroups(ctx, projectID, subscriptionID)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]MqttTagGroup, 0, len(records))
-	for _, record := range records {
-		result = append(result, toMqttTagGroup(record))
-	}
-	return result, nil
-}
-
-// GetTagGroup 读取单个变量组。
-func (s *MqttService) GetTagGroup(ctx context.Context, projectID, groupID string) (*MqttTagGroup, error) {
-	record, err := s.repository.GetTagGroup(ctx, projectID, groupID)
-	if err != nil {
-		return nil, err
-	}
-	result := toMqttTagGroup(*record)
-	return &result, nil
-}
-
-// CreateTagGroup 创建变量组。
-func (s *MqttService) CreateTagGroup(ctx context.Context, projectID, subscriptionID, userID string, input repository.CreateMqttTagGroupParams) (*MqttTagGroup, error) {
-	params := repository.CreateMqttTagGroupParams{
-		ProjectID:      projectID,
-		SubscriptionID: subscriptionID,
-		UserID:         userID,
-		Name:           strings.TrimSpace(input.Name),
-		Code:           strings.TrimSpace(input.Code),
-		Description:    trimOptionalString(input.Description),
-		Color:          trimOptionalString(input.Color),
-		Icon:           trimOptionalString(input.Icon),
-		Order:          input.Order,
-	}
-	if params.Name == "" || params.Code == "" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "变量组名称和标识不能为空")
-	}
-	record, err := s.repository.CreateTagGroup(ctx, params)
-	if err != nil {
-		return nil, err
-	}
-	result := toMqttTagGroup(*record)
-	return &result, nil
-}
-
-// UpdateTagGroup 更新变量组。
-func (s *MqttService) UpdateTagGroup(ctx context.Context, projectID, groupID, userID string, input repository.UpdateMqttTagGroupParams) (*MqttTagGroup, error) {
-	current, err := s.repository.GetTagGroup(ctx, projectID, groupID)
-	if err != nil {
-		return nil, err
-	}
-
-	params := repository.UpdateMqttTagGroupParams{
-		ProjectID:   projectID,
-		GroupID:     groupID,
-		UserID:      userID,
-		Name:        fallbackTrimmed(input.Name, current.Name),
-		Code:        fallbackTrimmed(input.Code, current.Code),
-		Description: coalesceOptionalString(trimOptionalString(input.Description), current.Description),
-		Color:       coalesceOptionalString(trimOptionalString(input.Color), current.Color),
-		Icon:        coalesceOptionalString(trimOptionalString(input.Icon), current.Icon),
-		Order:       input.Order,
-	}
-	if params.Order == 0 && current.Order != 0 {
-		params.Order = current.Order
-	}
-
-	record, err := s.repository.UpdateTagGroup(ctx, params)
-	if err != nil {
-		return nil, err
-	}
-	result := toMqttTagGroup(*record)
-	return &result, nil
-}
-
-// DeleteTagGroup 删除变量组并同步组内变量数据点路径。
-func (s *MqttService) DeleteTagGroup(ctx context.Context, projectID, groupID string) error {
-	group, err := s.repository.GetTagGroup(ctx, projectID, groupID)
-	if err != nil {
-		return err
-	}
-
-	tags, _, err := s.repository.ListTagsBySubscription(ctx, projectID, group.SubscriptionID, nil, "", 1, 500)
-	if err != nil {
-		return err
-	}
-
-	if err := s.repository.DeleteTagGroup(ctx, projectID, groupID); err != nil {
-		return err
-	}
-
-	for _, tag := range tags {
-		if tag.GroupID == nil || *tag.GroupID != groupID {
-			continue
-		}
-		tag.GroupID = nil
-		if err := s.syncTagDatapoint(ctx, tag, ""); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// UpdateTagGroupsOrder 批量更新变量组顺序。
-func (s *MqttService) UpdateTagGroupsOrder(ctx context.Context, projectID, userID string, groups []MqttTagGroup) error {
-	records := make([]repository.MqttTagGroupRecord, 0, len(groups))
-	for _, group := range groups {
-		records = append(records, repository.MqttTagGroupRecord{
-			ID:    group.ID,
-			Order: group.Order,
-		})
-	}
-	return s.repository.UpdateTagGroupsOrder(ctx, projectID, records, userID)
-}
-
-// ListTagsBySubscription 查询订阅下变量，groupID 为空表示全部，__ungrouped 表示未分组。
-func (s *MqttService) ListTagsBySubscription(ctx context.Context, projectID, subscriptionID string, groupID *string, search string, page, pageSize int) ([]MqttTag, int, error) {
-	groupID = normalizeOptionalText(groupID)
-	if groupID != nil && *groupID != "__ungrouped" {
-		if _, err := uuid.Parse(*groupID); err != nil {
-			return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "groupId 格式无效", err)
-		}
-	}
-	records, total, err := s.repository.ListTagsBySubscription(ctx, projectID, subscriptionID, groupID, search, page, pageSize)
+// ListTagsBySubscription 查询订阅下变量。
+func (s *MqttService) ListTagsBySubscription(ctx context.Context, projectID, subscriptionID string, search string, page, pageSize int, sortBy, sortOrder string) ([]MqttTag, int, error) {
+	records, total, err := s.repository.ListTagsBySubscription(ctx, projectID, subscriptionID, search, page, pageSize, sortBy, sortOrder)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -885,7 +783,6 @@ func (s *MqttService) CreateTag(ctx context.Context, projectID, subscriptionID, 
 		ProjectID:      projectID,
 		SubscriptionID: subscriptionID,
 		UserID:         userID,
-		GroupID:        input.GroupID,
 		Name:           strings.TrimSpace(input.Name),
 		Code:           strings.TrimSpace(input.Code),
 		Description:    trimOptionalString(input.Description),
@@ -940,7 +837,6 @@ func (s *MqttService) UpdateTag(ctx context.Context, projectID, tagID, userID st
 		ProjectID:    projectID,
 		TagID:        tagID,
 		UserID:       userID,
-		GroupID:      coalesceOptionalString(input.GroupID, current.GroupID),
 		Name:         fallbackTrimmed(input.Name, current.Name),
 		Code:         fallbackTrimmed(input.Code, current.Code),
 		Description:  coalesceOptionalString(trimOptionalString(input.Description), current.Description),
@@ -1076,15 +972,7 @@ func (s *MqttService) syncTagDatapoint(ctx context.Context, tag repository.MqttT
 		return err
 	}
 
-	groupSegment := "默认分组"
-	if tag.GroupID != nil && strings.TrimSpace(*tag.GroupID) != "" {
-		group, err := s.repository.GetTagGroup(ctx, tag.ProjectID, *tag.GroupID)
-		if err == nil {
-			groupSegment = group.Name
-		}
-	}
-
-	basePath := "mqtt." + normalizeDatapointSegment(connection.Name) + "." + normalizeDatapointSegment(groupSegment) + "." + normalizeDatapointSegment(tag.Name)
+	basePath := "mqtt." + normalizeDatapointSegment(connection.Name) + "." + mqttSubscriptionPathSegment(*subscription) + "." + normalizeDatapointSegment(tag.Name)
 	path := s.allocateDataPointPath(ctx, tag.ProjectID, basePath, tag.ID, "mqtt.tag")
 
 	return s.upsertMqttDataPoint(ctx, repository.CreateDataPointParams{
@@ -1198,6 +1086,7 @@ func toMqttSubscription(record repository.MqttSubscriptionRecord) MqttSubscripti
 		Name:             record.Name,
 		Topic:            record.Topic,
 		QOS:              record.QOS,
+		UsageMode:        normalizeMqttSubscriptionUsageMode(record.UsageMode),
 		Description:      cloneOptionalString(record.Description),
 		MessageRetention: record.MessageRetention,
 		Order:            record.Order,
@@ -1241,28 +1130,11 @@ func toMqttSubscriptionGroupTree(records []repository.MqttSubscriptionGroupRecor
 	return result
 }
 
-func toMqttTagGroup(record repository.MqttTagGroupRecord) MqttTagGroup {
-	return MqttTagGroup{
-		ID:             record.ID,
-		ProjectID:      record.ProjectID,
-		SubscriptionID: record.SubscriptionID,
-		Name:           record.Name,
-		Code:           record.Code,
-		Description:    cloneOptionalString(record.Description),
-		Color:          cloneOptionalString(record.Color),
-		Icon:           cloneOptionalString(record.Icon),
-		Order:          record.Order,
-		CreatedAt:      record.CreatedAt,
-		UpdatedAt:      record.UpdatedAt,
-	}
-}
-
 func toMqttTag(record repository.MqttTagRecord) MqttTag {
 	return MqttTag{
 		ID:             record.ID,
 		ProjectID:      record.ProjectID,
 		SubscriptionID: record.SubscriptionID,
-		GroupID:        cloneOptionalString(record.GroupID),
 		Name:           record.Name,
 		Code:           record.Code,
 		Description:    cloneOptionalString(record.Description),

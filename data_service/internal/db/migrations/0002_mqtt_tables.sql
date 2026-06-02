@@ -31,10 +31,12 @@ CREATE TABLE IF NOT EXISTS data_mqtt_subscriptions (
     name text NOT NULL CHECK (char_length(name) <= 100),
     topic text NOT NULL CHECK (char_length(topic) <= 500),
     qos smallint NOT NULL DEFAULT 0 CHECK (qos IN (0, 1, 2)),
+    usage_mode text NOT NULL DEFAULT 'single_variable'
+        CHECK (usage_mode IN ('raw_datapoint', 'single_variable', 'batch_variable')),
     group_id uuid,
     description text,
     display_order integer NOT NULL DEFAULT 0,
-    message_retention integer NOT NULL DEFAULT 100 CHECK (message_retention > 0),
+    message_retention integer NOT NULL DEFAULT 5000 CHECK (message_retention > 0),
     created_by uuid NOT NULL,
     updated_by uuid,
     created_at timestamptz NOT NULL DEFAULT now(),

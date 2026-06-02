@@ -122,7 +122,12 @@
         </div>
 
         <!-- 排序字段 pill -->
-        <el-popover placement="bottom-start" :width="150" trigger="click">
+        <el-popover
+          v-model:visible="sortFieldPopoverVisible"
+          placement="bottom-start"
+          :width="150"
+          trigger="click"
+        >
           <template #reference>
             <PillButton>
               {{ currentSortFieldLabel }}
@@ -134,8 +139,8 @@
               :key="option.value"
               type="button"
               class="datapoint-list__popover-item"
-              :class="{ 'is-active': sortField === option.value }"
-              @click="sortField = option.value"
+              :class="{ 'is-active': sortFieldValue === option.value }"
+              @click="changeSortField(option.value)"
             >
               {{ option.label }}
             </button>
@@ -145,7 +150,7 @@
         <!-- 排序方向 pill -->
         <PillButton @click="toggleSortOrder">
           <template #icon>
-            <SortDown v-if="sortOrder === 'desc'" />
+            <SortDown v-if="sortOrderValue === 'desc'" />
             <SortUp v-else />
           </template>
           {{ currentSortOrderLabel }}
@@ -619,6 +624,7 @@ const sortFieldValue = ref<SortField>(
     : 'updatedAt') as SortField,
 )
 const sortOrderValue = ref<SortOrder>((props.sortOrder === 'asc' ? 'asc' : 'desc') as SortOrder)
+const sortFieldPopoverVisible = ref(false)
 
 /* 分页 */
 const pagination = ref({
@@ -894,6 +900,12 @@ const handlePageSizeChange = (pageSize: number) => {
 }
 
 // ── 排序 ──────────────────────────────────────────────────────────────────
+
+const changeSortField = (value: SortField) => {
+  sortFieldValue.value = value
+  sortFieldPopoverVisible.value = false
+  pagination.value.page = 1
+}
 
 const toggleSortOrder = () => {
   sortOrderValue.value = sortOrderValue.value === 'desc' ? 'asc' : 'desc'

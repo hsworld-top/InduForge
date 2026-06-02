@@ -81,8 +81,7 @@ func TestProjectSnapshotGetAndReplaceRoundTrip(t *testing.T) {
 		"port":      1883,
 	})
 	subscriptionID := insertTestMqttSubscription(t, ctx, fixture, projectID, mqttConnection.ID, userID)
-	groupID := insertTestMqttTagGroup(t, ctx, fixture, projectID, subscriptionID, userID)
-	tagID := insertTestMqttTag(t, ctx, fixture, projectID, subscriptionID, groupID, userID)
+	tagID := insertTestMqttTag(t, ctx, fixture, projectID, subscriptionID, userID)
 
 	currentSnapshot := mustGetProjectSnapshot(t, server.URL, token, projectID)
 	if len(currentSnapshot.Connections) != 2 {
@@ -106,9 +105,6 @@ func TestProjectSnapshotGetAndReplaceRoundTrip(t *testing.T) {
 	if len(currentSnapshot.MqttSubscriptions) != 1 || currentSnapshot.MqttSubscriptions[0].ID != subscriptionID {
 		t.Fatalf("expected mqtt subscription %q in snapshot", subscriptionID)
 	}
-	if len(currentSnapshot.MqttTagGroups) != 1 || currentSnapshot.MqttTagGroups[0].ID != groupID {
-		t.Fatalf("expected mqtt tag group %q in snapshot", groupID)
-	}
 	if len(currentSnapshot.MqttTags) != 1 || currentSnapshot.MqttTags[0].ID != tagID {
 		t.Fatalf("expected mqtt tag %q in snapshot", tagID)
 	}
@@ -117,7 +113,6 @@ func TestProjectSnapshotGetAndReplaceRoundTrip(t *testing.T) {
 	replacementMqttID := uuid.NewString()
 	replacementQueryID := uuid.NewString()
 	replacementSubscriptionID := uuid.NewString()
-	replacementGroupID := uuid.NewString()
 	replacementTagID := uuid.NewString()
 	replacementSourceID := replacementQueryID
 	refreshInterval := 5000
@@ -190,22 +185,11 @@ func TestProjectSnapshotGetAndReplaceRoundTrip(t *testing.T) {
 				MessageRetention: 50,
 			},
 		},
-		MqttTagGroups: []repository.SnapshotMqttTagGroupRecord{
-			{
-				ID:             replacementGroupID,
-				ProjectID:      projectID,
-				SubscriptionID: replacementSubscriptionID,
-				Name:           "group-replaced",
-				Code:           "group_replaced",
-				Order:          1,
-			},
-		},
 		MqttTags: []repository.SnapshotMqttTagRecord{
 			{
 				ID:             replacementTagID,
 				ProjectID:      projectID,
 				SubscriptionID: replacementSubscriptionID,
-				GroupID:        &replacementGroupID,
 				Name:           "tag-replaced",
 				Code:           "tag_replaced",
 				DataType:       "number",
@@ -257,9 +241,6 @@ func TestProjectSnapshotGetAndReplaceRoundTrip(t *testing.T) {
 	}
 	if len(replacedSnapshot.MqttSubscriptions) != 1 || replacedSnapshot.MqttSubscriptions[0].ID != replacementSubscriptionID {
 		t.Fatalf("expected replaced mqtt subscription %q in snapshot", replacementSubscriptionID)
-	}
-	if len(replacedSnapshot.MqttTagGroups) != 1 || replacedSnapshot.MqttTagGroups[0].ID != replacementGroupID {
-		t.Fatalf("expected replaced mqtt tag group %q in snapshot", replacementGroupID)
 	}
 	if len(replacedSnapshot.MqttTags) != 1 || replacedSnapshot.MqttTags[0].ID != replacementTagID {
 		t.Fatalf("expected replaced mqtt tag %q in snapshot", replacementTagID)

@@ -22,20 +22,6 @@
         <el-input v-model="formData.description" type="textarea" :rows="2" placeholder="变量描述" />
       </el-form-item>
 
-      <el-form-item label="所属分组">
-        <el-select v-model="formData.groupId" placeholder="选择所属分组（可选）" clearable>
-          <el-option v-for="group in groups" :key="group.id" :label="group.name" :value="group.id">
-            <div class="flex items-center gap-2">
-              <el-icon :color="group.color">
-                <Folder />
-              </el-icon>
-              <span>{{ group.name }}</span>
-            </div>
-          </el-option>
-        </el-select>
-        <span class="text-xs text-gray-500"> 不选择则归入"未分组" </span>
-      </el-form-item>
-
       <el-form-item label="数据类型" prop="dataType">
         <el-select v-model="formData.dataType" placeholder="选择数据类型">
           <el-option label="字符串" value="string" />
@@ -113,9 +99,6 @@
         </span>
       </el-form-item>
 
-      <el-form-item label="显示顺序">
-        <el-input-number v-model="formData.order" :min="0" :max="9999" />
-      </el-form-item>
     </el-form>
 
     <template #footer>
@@ -141,7 +124,6 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import { createMqttTag, updateMqttTag } from '@/api/data.api'
-import { Folder } from '@element-plus/icons-vue'
 
 const props = defineProps({
   visible: {
@@ -159,14 +141,6 @@ const props = defineProps({
   subscriptionId: {
     type: String,
     required: true,
-  },
-  groups: {
-    type: Array,
-    default: () => [],
-  },
-  defaultGroupId: {
-    type: String,
-    default: '',
   },
   mode: {
     type: String,
@@ -186,7 +160,6 @@ const formData = ref({
   name: '',
   code: '',
   description: '',
-  groupId: null,
   dataType: 'string',
   parseType: 'jsonpath',
   parseRule: '',
@@ -253,7 +226,6 @@ const initForm = () => {
       name: '',
       code: '',
       description: '',
-      groupId: props.defaultGroupId || null,
       dataType: 'string',
       parseType: 'jsonpath',
       parseRule: '',

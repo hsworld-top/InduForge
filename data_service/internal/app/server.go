@@ -197,6 +197,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	dataPointService.SetGeneratedSourceRepositories(kafkaWorkbenchRepository, httpWorkbenchRepository, websocketWorkbenchRepository, realtimeStoreRepository, connectionRepository, builtinRuntimeService, opcuaModelingRepository, modbusModelingRepository, s7ModelingRepository)
 	modbusModelingService := service.NewModbusModelingService(modbusModelingRepository, connectionRepository, dataPointRepository)
 	mqttService := service.NewMqttService(mqttRepository, connectionRepository, dataPointRepository)
+	mqttService.ConfigureBuiltinMessageHub(cfg.MessageHubAddr, cfg.MessageHubUsername, cfg.MessageHubPassword)
 	opcuaModelingService := service.NewOpcuaModelingService(opcuaModelingRepository, connectionRepository, dataPointRepository)
 	s7ModelingService := service.NewS7ModelingService(s7ModelingRepository, connectionRepository, dataPointRepository)
 	protocolDevSessionService := service.NewProtocolDevSessionService(
