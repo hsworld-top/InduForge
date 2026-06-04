@@ -196,6 +196,16 @@ type CreateMqttTagParams struct {
 	Order          int
 }
 
+// BatchMqttTagDataPointParams 表示批量创建 MQTT 变量时需要同步的数据点信息。
+type BatchMqttTagDataPointParams struct {
+	Tag         CreateMqttTagParams
+	DataPath    string
+	DataName    string
+	SourceType  string
+	RefreshMode string
+	Status      string
+}
+
 // UpdateMqttTagParams 表示更新变量的仓储参数。
 type UpdateMqttTagParams struct {
 	ProjectID    string
@@ -682,13 +692,47 @@ func (r *MqttRepository) ListTagsBySubscription(ctx context.Context, projectID, 
 	return r.listTags(ctx, projectID, subscriptionID, search, page, pageSize, sortBy, sortOrder)
 }
 
+// ListTagIDsBySubscriptionFilter 返回当前订阅和搜索条件命中的变量 ID，用于后端执行“全部筛选结果”批量操作。
+func (r *MqttRepository) ListTagIDsBySubscriptionFilter(ctx context.Context, projectID, subscriptionID string, search string) ([]string, error) {
+	where := []string{"project_id = $1", "subscription_id = $2"}
+	args := []any{projectID, subscriptionID}
+	if keyword := strings.TrimSpace(search); keyword != "" {
+		args = append(args, "%"+keyword+"%")
+		where = append(where, fmt.Sprintf("(name ILIKE $%d OR code ILIKE $%d OR parse_rule ILIKE $%d)", len(args), len(args), len(args)))
+	}
+
+	rows, err := r.pool.Query(ctx, `
+        SELECT id
+        FROM data_mqtt_tags
+        WHERE `+strings.Join(where, " AND ")+`
+        ORDER BY created_at DESC, id DESC
+    `, args...)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 MQTT 变量筛选结果失败", err)
+	}
+	defer rows.Close()
+
+	result := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 MQTT 变量筛选结果失败", err)
+		}
+		result = append(result, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 MQTT 变量筛选结果失败", err)
+	}
+	return result, nil
+}
+
 // ListTagsByProject 查询项目下变量。
 func (r *MqttRepository) ListTagsByProject(ctx context.Context, projectID string, page, pageSize int, subscriptionID string) ([]MqttTagRecord, int, error) {
 	return r.listTags(ctx, projectID, subscriptionID, "", page, pageSize, "createdAt", "desc")
 }
 
 func (r *MqttRepository) listTags(ctx context.Context, projectID, subscriptionID string, search string, page, pageSize int, sortBy, sortOrder string) ([]MqttTagRecord, int, error) {
-	page, pageSize = normalizePageAndSize(page, pageSize, 50, 200)
+	page, pageSize = normalizePageAndSize(page, pageSize, 50, 5000)
 	where := []string{"project_id = $1"}
 	args := []any{projectID}
 	if strings.TrimSpace(subscriptionID) != "" {
@@ -742,9 +786,9 @@ func resolveMqttTagOrderSQL(sortBy, sortOrder string) string {
 	}
 	switch strings.TrimSpace(sortBy) {
 	case "name":
-		return "name " + direction + ", created_at DESC, id DESC"
+		return "regexp_replace(name, '\\d+$', '') " + direction + ", COALESCE(NULLIF(substring(name FROM '\\d+$'), '')::bigint, 0) " + direction + ", name " + direction + ", created_at DESC, id DESC"
 	default:
-		return "created_at " + direction + ", id " + direction
+		return "created_at " + direction + ", display_order " + direction + ", id " + direction
 	}
 }
 
@@ -784,6 +828,195 @@ func (r *MqttRepository) CreateTag(ctx context.Context, params CreateMqttTagPara
 		return nil, translateMqttWriteError("创建 MQTT 变量失败", err)
 	}
 	return &record, nil
+}
+
+// CreateTagsBatchWithDataPoints 在一个事务中批量创建 MQTT 变量并同步数据点。
+// 这里使用集合 SQL，避免 1000 条变量触发数千次数据库往返；唯一约束仍作为并发冲突的最终防线。
+func (r *MqttRepository) CreateTagsBatchWithDataPoints(ctx context.Context, params []BatchMqttTagDataPointParams) ([]MqttTagRecord, error) {
+	if len(params) == 0 {
+		return []MqttTagRecord{}, nil
+	}
+
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 MQTT 变量批量创建事务失败", err)
+	}
+	defer rollbackTxQuietly(ctx, tx)
+
+	projectIDs := make([]string, 0, len(params))
+	subscriptionIDs := make([]string, 0, len(params))
+	names := make([]string, 0, len(params))
+	codes := make([]string, 0, len(params))
+	descriptions := make([]*string, 0, len(params))
+	dataTypes := make([]string, 0, len(params))
+	parseTypes := make([]string, 0, len(params))
+	parseRules := make([]string, 0, len(params))
+	defaultValues := make([]*string, 0, len(params))
+	units := make([]*string, 0, len(params))
+	transforms := make([]*string, 0, len(params))
+	validations := make([]string, 0, len(params))
+	orders := make([]int, 0, len(params))
+	createdBy := make([]string, 0, len(params))
+
+	for _, item := range params {
+		validationBytes, marshalErr := marshalMqttJSONObject(item.Tag.Validation)
+		if marshalErr != nil {
+			return nil, marshalErr
+		}
+		projectIDs = append(projectIDs, item.Tag.ProjectID)
+		subscriptionIDs = append(subscriptionIDs, item.Tag.SubscriptionID)
+		names = append(names, item.Tag.Name)
+		codes = append(codes, item.Tag.Code)
+		descriptions = append(descriptions, item.Tag.Description)
+		dataTypes = append(dataTypes, item.Tag.DataType)
+		parseTypes = append(parseTypes, item.Tag.ParseType)
+		parseRules = append(parseRules, item.Tag.ParseRule)
+		defaultValues = append(defaultValues, item.Tag.DefaultValue)
+		units = append(units, item.Tag.Unit)
+		transforms = append(transforms, item.Tag.Transform)
+		validations = append(validations, string(validationBytes))
+		orders = append(orders, item.Tag.Order)
+		createdBy = append(createdBy, item.Tag.UserID)
+	}
+
+	rows, err := tx.Query(ctx, `
+        INSERT INTO data_mqtt_tags (
+            project_id, subscription_id, name, code, description, data_type, parse_type, parse_rule,
+            default_value, unit, transform, validation, display_order, created_by, updated_by
+        )
+        SELECT project_id, subscription_id, name, code, description, data_type, parse_type, parse_rule,
+               default_value, unit, transform,
+               NULLIF(validation, '')::jsonb,
+               display_order, created_by, created_by
+        FROM unnest(
+            $1::uuid[], $2::uuid[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[],
+            $9::text[], $10::text[], $11::text[], $12::text[], $13::int[], $14::uuid[]
+        ) AS input(project_id, subscription_id, name, code, description, data_type, parse_type, parse_rule,
+                   default_value, unit, transform, validation, display_order, created_by)
+        RETURNING id, project_id, subscription_id, name, code, description, data_type, parse_type, parse_rule,
+                  default_value, unit, transform, validation, display_order, created_at, updated_at
+    `, projectIDs, subscriptionIDs, names, codes, descriptions, dataTypes, parseTypes, parseRules, defaultValues, units, transforms, validations, orders, createdBy)
+	if err != nil {
+		return nil, translateMqttWriteError("批量创建 MQTT 变量失败", err)
+	}
+	defer rows.Close()
+
+	records := make([]MqttTagRecord, 0, len(params))
+	for rows.Next() {
+		record, scanErr := scanMqttTag(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 MQTT 变量批量创建结果失败", err)
+	}
+	rows.Close()
+
+	if len(records) != len(params) {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "MQTT 变量批量创建结果数量不一致")
+	}
+
+	if err := upsertMqttTagDataPointsInTx(ctx, tx, records, params); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 MQTT 变量批量创建事务失败", err)
+	}
+	return records, nil
+}
+
+func upsertMqttTagDataPointsInTx(ctx context.Context, tx pgx.Tx, tags []MqttTagRecord, params []BatchMqttTagDataPointParams) error {
+	paramsByCode := make(map[string]BatchMqttTagDataPointParams, len(params))
+	for _, item := range params {
+		paramsByCode[item.Tag.Code] = item
+	}
+
+	projectIDs := make([]string, 0, len(tags))
+	paths := make([]string, 0, len(tags))
+	names := make([]string, 0, len(tags))
+	sourceTypes := make([]string, 0, len(tags))
+	sourceIDs := make([]string, 0, len(tags))
+	sourceConfigs := make([]string, 0, len(tags))
+	dataTypes := make([]string, 0, len(tags))
+	units := make([]*string, 0, len(tags))
+	defaultValues := make([]*string, 0, len(tags))
+	tagsPayload := make([]string, 0, len(tags))
+	refreshModes := make([]string, 0, len(tags))
+	statuses := make([]string, 0, len(tags))
+	userIDs := make([]string, 0, len(tags))
+
+	for _, tag := range tags {
+		item, ok := paramsByCode[tag.Code]
+		if !ok {
+			return apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "MQTT 变量批量创建结果无法匹配输入")
+		}
+		projectIDs = append(projectIDs, tag.ProjectID)
+		paths = append(paths, item.DataPath)
+		names = append(names, item.DataName)
+		sourceTypes = append(sourceTypes, item.SourceType)
+		sourceIDs = append(sourceIDs, tag.ID)
+		sourceConfigs = append(sourceConfigs, "{}")
+		dataTypes = append(dataTypes, tag.DataType)
+		units = append(units, tag.Unit)
+		defaultValues = append(defaultValues, tag.DefaultValue)
+		tagsPayload = append(tagsPayload, "[]")
+		refreshModes = append(refreshModes, item.RefreshMode)
+		statuses = append(statuses, item.Status)
+		userIDs = append(userIDs, item.Tag.UserID)
+	}
+
+	rows, err := tx.Query(ctx, `
+        INSERT INTO data_points (
+            project_id, path, name, source_type, source_id, source_config, data_type,
+            unit, default_value, tags, refresh_mode, status, created_by, updated_by
+        )
+        SELECT project_id, path, name, source_type, source_id, source_config::jsonb, data_type,
+               unit, default_value, tags::jsonb, refresh_mode, status, user_id, user_id
+        FROM unnest(
+            $1::uuid[], $2::text[], $3::text[], $4::text[], $5::uuid[], $6::text[], $7::text[],
+            $8::text[], $9::text[], $10::text[], $11::text[], $12::text[], $13::uuid[]
+        ) AS input(project_id, path, name, source_type, source_id, source_config, data_type,
+                   unit, default_value, tags, refresh_mode, status, user_id)
+        ON CONFLICT (project_id, path) DO UPDATE
+        SET name = EXCLUDED.name,
+            source_type = EXCLUDED.source_type,
+            source_id = EXCLUDED.source_id,
+            source_config = EXCLUDED.source_config,
+            data_type = EXCLUDED.data_type,
+            unit = EXCLUDED.unit,
+            default_value = EXCLUDED.default_value,
+            tags = EXCLUDED.tags,
+            refresh_mode = EXCLUDED.refresh_mode,
+            status = EXCLUDED.status,
+            updated_by = EXCLUDED.updated_by,
+            updated_at = now()
+        WHERE data_points.status = 'invalid'
+          AND data_points.source_type = EXCLUDED.source_type
+        RETURNING id
+    `, projectIDs, paths, names, sourceTypes, sourceIDs, sourceConfigs, dataTypes, units, defaultValues, tagsPayload, refreshModes, statuses, userIDs)
+	if err != nil {
+		return translateDataPointWriteError(err)
+	}
+	defer rows.Close()
+
+	affected := 0
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 MQTT 变量数据点批量同步结果失败", err)
+		}
+		affected += 1
+	}
+	if err := rows.Err(); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 MQTT 变量数据点批量同步结果失败", err)
+	}
+	if affected != len(tags) {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "部分 MQTT 变量数据点路径已被占用")
+	}
+	return nil
 }
 
 // UpdateTag 更新变量。
@@ -832,6 +1065,51 @@ func (r *MqttRepository) DeleteTag(ctx context.Context, projectID, tagID string)
 		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "MQTT 变量不存在")
 	}
 	return nil
+}
+
+// DeleteTagsBatchWithDataPoints 在一个事务中批量删除变量并标记对应数据点失效。
+func (r *MqttRepository) DeleteTagsBatchWithDataPoints(ctx context.Context, projectID string, tagIDs []string, userID string) (int, error) {
+	if len(tagIDs) == 0 {
+		return 0, nil
+	}
+
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 MQTT 变量批量删除事务失败", err)
+	}
+	defer rollbackTxQuietly(ctx, tx)
+
+	commandTag, err := tx.Exec(ctx, `
+        UPDATE data_points
+        SET status = 'invalid',
+            updated_by = COALESCE($4, updated_by),
+            updated_at = now()
+        WHERE project_id = $1
+          AND source_type = $2
+          AND source_id = ANY($3::uuid[])
+          AND status <> 'invalid'
+    `, projectID, "mqtt.tag", tagIDs, userID)
+	if err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "批量标记 MQTT 变量数据点失效失败", err)
+	}
+	_ = commandTag
+
+	deleted, err := tx.Exec(ctx, `
+        DELETE FROM data_mqtt_tags
+        WHERE project_id = $1 AND id = ANY($2::uuid[])
+    `, projectID, tagIDs)
+	if err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "批量删除 MQTT 变量失败", err)
+	}
+	deletedCount := int(deleted.RowsAffected())
+	if deletedCount != len(tagIDs) {
+		return 0, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "部分 MQTT 变量不存在或不属于当前项目")
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 MQTT 变量批量删除事务失败", err)
+	}
+	return deletedCount, nil
 }
 
 // UpdateTagsOrder 批量更新变量顺序。

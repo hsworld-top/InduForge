@@ -17,6 +17,7 @@ import (
 // DataPointStatusInfo 表示设计器诊断面板使用的数据点状态摘要。
 type DataPointStatusInfo struct {
 	ID           string  `json:"id,omitempty"`
+	SourceID     *string `json:"sourceId,omitempty"`
 	Path         string  `json:"path"`
 	Status       string  `json:"status"`
 	DataType     string  `json:"dataType"`
@@ -31,21 +32,36 @@ type WriteDataPointResult struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// GetDataPointStatuses 按 id 或 path 批量返回数据点状态。
-func (s *DataPointService) GetDataPointStatuses(ctx context.Context, projectID string, ids, paths []string) ([]DataPointStatusInfo, error) {
+// GetDataPointStatuses 按 id、path 或 sourceId 批量返回数据点状态。
+func (s *DataPointService) GetDataPointStatuses(ctx context.Context, projectID string, ids, paths []string, sourceIDs ...[]string) ([]DataPointStatusInfo, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
 
 	uniqueIDs := uniqueStrings(ids)
 	uniquePaths := uniqueStrings(paths)
-	if len(uniqueIDs) == 0 && len(uniquePaths) == 0 {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "ids 或 paths 至少需要提供一个")
+	uniqueSourceIDs := []string{}
+	if len(sourceIDs) > 0 {
+		uniqueSourceIDs = uniqueStrings(sourceIDs[0])
+	}
+	if len(uniqueIDs) == 0 && len(uniquePaths) == 0 && len(uniqueSourceIDs) == 0 {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "ids、paths 或 sourceIds 至少需要提供一个")
 	}
 
-	records := make([]repository.DataPointRecord, 0, len(uniqueIDs)+len(uniquePaths))
+	records := make([]repository.DataPointRecord, 0, len(uniqueIDs)+len(uniquePaths)+len(uniqueSourceIDs))
 	if len(uniqueIDs) > 0 {
 		loaded, err := s.repository.GetByProjectAndIDs(ctx, projectID, uniqueIDs)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, loaded...)
+	}
+	if len(uniqueSourceIDs) > 0 {
+		loaded, _, err := s.repository.ListByProject(ctx, projectID, repository.DataPointListFilter{
+			Page:      1,
+			PageSize: 5000,
+			SourceIDs: uniqueSourceIDs,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -69,6 +85,7 @@ func (s *DataPointService) GetDataPointStatuses(ctx context.Context, projectID s
 
 		info := DataPointStatusInfo{
 			ID:       record.ID,
+			SourceID: cloneOptionalString(record.SourceID),
 			Path:     record.Path,
 			Status:   record.Status,
 			DataType: record.DataType,

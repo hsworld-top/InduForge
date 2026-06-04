@@ -16,6 +16,7 @@ func (h *DataPointHandler) BatchStatus(w http.ResponseWriter, r *http.Request) e
 	var request struct {
 		IDs          []string `json:"ids"`
 		DatapointIDs []string `json:"datapointIds"`
+		SourceIDs    []string `json:"sourceIds"`
 		Paths        []string `json:"paths"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
@@ -27,7 +28,7 @@ func (h *DataPointHandler) BatchStatus(w http.ResponseWriter, r *http.Request) e
 		ids = request.DatapointIDs
 	}
 
-	result, err := h.service.GetDataPointStatuses(r.Context(), r.PathValue("projectId"), ids, request.Paths)
+	result, err := h.service.GetDataPointStatuses(r.Context(), r.PathValue("projectId"), ids, request.Paths, request.SourceIDs)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}

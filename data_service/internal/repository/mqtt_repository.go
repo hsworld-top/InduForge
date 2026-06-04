@@ -329,6 +329,49 @@ func (r *MqttRepository) ListMessages(ctx context.Context, projectID, subscripti
 	return messages, nil
 }
 
+// ListMessagesAfter 按 subscription 读取指定时间之后的消息缓存。
+// 变量删除后重建时不能继承删除前的旧消息值，因此变量最近值只读取变量创建时间之后的新消息。
+func (r *MqttRepository) ListMessagesAfter(ctx context.Context, projectID, subscriptionID string, after time.Time, limit int) ([]MqttMessageRecord, error) {
+	if err := r.ensureSubscriptionExists(ctx, projectID, subscriptionID); err != nil {
+		return nil, err
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, subscription_id, topic, payload, qos, received_at
+		FROM data_mqtt_messages
+		WHERE project_id = $1
+		  AND subscription_id = $2
+		  AND received_at >= $3
+		ORDER BY received_at DESC, id DESC
+		LIMIT $4
+	`, projectID, subscriptionID, after, limit)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 MQTT 变量最新消息失败", err)
+	}
+	defer rows.Close()
+
+	messages := make([]MqttMessageRecord, 0)
+	for rows.Next() {
+		record := MqttMessageRecord{}
+		if err := rows.Scan(
+			&record.ID,
+			&record.SubscriptionID,
+			&record.Topic,
+			&record.Payload,
+			&record.QOS,
+			&record.ReceivedAt,
+		); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 MQTT 变量最新消息结果失败", err)
+		}
+		messages = append(messages, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 MQTT 变量最新消息结果失败", err)
+	}
+
+	return messages, nil
+}
+
 // ClearMessages 清空指定订阅的工作台消息缓存。
 func (r *MqttRepository) ClearMessages(ctx context.Context, projectID, subscriptionID string) error {
 	if err := r.ensureSubscriptionExists(ctx, projectID, subscriptionID); err != nil {

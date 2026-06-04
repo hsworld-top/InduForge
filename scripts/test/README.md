@@ -7,11 +7,13 @@
 ## MQTT 模拟发布
 
 ```bash
-node scripts/test/mqtt-publish-test.js
+node scripts/test/mqtt/mqtt-publish-test.js
 ```
 
 指定地址、主题和间隔：
 
 ```bash
-node scripts/test/mqtt-publish-test.js --broker mqtt://127.0.0.1:18883 --topic induforge/mock-data --interval 500
+node scripts/test/mqtt/mqtt-publish-test.js --broker mqtt://127.0.0.1:18883 --topic induforge/mock-data --interval 500
 ```
+
+详细说明见 `mqtt/README.md`。

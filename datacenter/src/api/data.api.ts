@@ -1327,6 +1327,14 @@ export const getDataPoints = (projectId, params = {}) => {
   })
 }
 
+export const getDataPointStatuses = (projectId, data = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/datapoints/status`,
+    method: 'post',
+    data,
+  })
+}
+
 /**
  * 更新数据点
  * @param {string} projectId - 工程ID
@@ -1720,6 +1728,33 @@ export const deleteMqttTag = (projectId, tagId) => {
 }
 
 /**
+ * 批量删除Tag
+ * @param {string} projectId - 工程ID
+ * @param {string[]} tagIds - Tag ID数组
+ */
+export const deleteMqttTagsBatch = (projectId, tagIds) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/tags/delete-batch`,
+    method: 'post',
+    data: { tagIds },
+  })
+}
+
+/**
+ * 按订阅筛选条件批量删除Tag
+ * @param {string} projectId - 工程ID
+ * @param {string} subscriptionId - 订阅ID
+ * @param {object} filters - 当前筛选条件
+ */
+export const deleteMqttTagsByFilter = (projectId, subscriptionId, filters = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/tags/delete-filtered`,
+    method: 'post',
+    data: filters,
+  })
+}
+
+/**
  * 更新Tags顺序
  * @param {array} tagIds - Tag ID数组
  */
@@ -1746,11 +1781,11 @@ export const getMqttTagValue = (projectId, tagId) => {
  * 获取多个Tag的当前值
  * @param {array} tagIds - Tag ID数组
  */
-export const getMqttTagValues = (projectId, tagIds) => {
+export const getMqttTagValues = (projectId, tagIds, options = {}) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/tags/values`,
     method: 'post',
-    data: { tagIds },
+    data: { tagIds, ...options },
   })
 }
 
@@ -1950,6 +1985,7 @@ export default {
   deleteQuery,
   // 数据点相关
   getDataPoints,
+  getDataPointStatuses,
   updateDatapointRuntimePermissions,
   deleteDataPoint,
   deleteDataPointsBatch,

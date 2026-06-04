@@ -530,7 +530,11 @@ func normalizeDataPointListFilter(filter DataPointListFilter) (DataPointListFilt
 			return DataPointListFilter{}, err
 		}
 	}
-	page, pageSize := normalizePageAndSize(normalized.Page, normalized.PageSize, 50, 200)
+	maxPageSize := 200
+	if len(normalized.SourceIDs) > 0 {
+		maxPageSize = 5000
+	}
+	page, pageSize := normalizePageAndSize(normalized.Page, normalized.PageSize, 50, maxPageSize)
 	normalized.Page = page
 	normalized.PageSize = pageSize
 	return normalized, nil

@@ -73,7 +73,11 @@ func NewDataPointRepository(pool *pgxpool.Pool) *DataPointRepository {
 // 查询路径：project_id + 可选过滤条件 + created_at 排序，主要命中 data_points_project_status_idx / data_points_source_idx / data_points_project_path_key。
 // 潜在性能风险：search 使用 ILIKE 会导致回表放大；如果数据点规模继续增长，应考虑额外的路径搜索索引或前缀查询策略。
 func (r *DataPointRepository) ListByProject(ctx context.Context, projectID string, filter DataPointListFilter) ([]DataPointRecord, int, error) {
-	page, pageSize := normalizePageAndSize(filter.Page, filter.PageSize, 50, 200)
+	maxPageSize := 200
+	if len(filter.SourceIDs) > 0 {
+		maxPageSize = 5000
+	}
+	page, pageSize := normalizePageAndSize(filter.Page, filter.PageSize, 50, maxPageSize)
 	whereSQL, args, err := buildDataPointWhereClause(projectID, filter)
 	if err != nil {
 		return nil, 0, err

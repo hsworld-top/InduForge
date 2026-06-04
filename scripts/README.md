@@ -86,7 +86,10 @@ scripts/offline/
 
 ```text
 scripts/test/
-  mqtt-publish-test.js          # MQTT 模拟数据发布脚本
+  industrial-sim/                # Modbus/OPC UA/S7 工业协议模拟设备（Python）
+  mqtt/                          # MQTT 模拟数据发布脚本（Node）
+    mqtt-publish-test.js
+    README.md
 ```
 
 `scripts/test/` 专门放模拟数据、协议接入和本地联调类脚本，不放自动化单元测试。

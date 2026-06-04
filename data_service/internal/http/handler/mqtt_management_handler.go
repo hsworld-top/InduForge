@@ -559,6 +559,48 @@ func (h *MqttHandler) DeleteTag(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// DeleteTagsBatch 批量删除变量。
+func (h *MqttHandler) DeleteTagsBatch(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		TagIDs []string `json:"tagIds"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	deletedCount, err := h.service.DeleteTagsBatch(r.Context(), r.PathValue("projectId"), request.TagIDs, claims.UserID)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]int{"deletedCount": deletedCount})
+	return nil
+}
+
+// DeleteTagsBySubscriptionFilter 删除当前订阅下符合筛选条件的全部变量。
+func (h *MqttHandler) DeleteTagsBySubscriptionFilter(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Search string `json:"search"`
+		Q      string `json:"q"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	search := firstNonEmpty(request.Search, request.Q)
+	deletedCount, err := h.service.DeleteTagsBySubscriptionFilter(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), search, claims.UserID)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]int{"deletedCount": deletedCount})
+	return nil
+}
+
 // UpdateTagsOrder 批量更新变量顺序。
 func (h *MqttHandler) UpdateTagsOrder(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
@@ -600,12 +642,13 @@ func (h *MqttHandler) GetTagValues(w http.ResponseWriter, r *http.Request) error
 		return err
 	}
 	var request struct {
-		TagIDs []string `json:"tagIds"`
+		TagIDs  []string `json:"tagIds"`
+		Compact bool     `json:"compact"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
 	}
-	result, err := h.service.GetTagValues(r.Context(), r.PathValue("projectId"), request.TagIDs)
+	result, err := h.service.GetTagValuesWithOptions(r.Context(), r.PathValue("projectId"), request.TagIDs, request.Compact)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}

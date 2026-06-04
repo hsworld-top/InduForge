@@ -24,12 +24,16 @@ import (
 
 const (
 	previewSocketMetadataKey      = "previewSessionMetadata"
+	previewSocketWriteLockKey     = "previewSocketWriteLock"
 	previewSocketRequestEvent     = "response"
 	previewSessionSweepInterval   = 15 * time.Second
 	previewDatapointPollInterval  = 2 * time.Second
 	previewSocketOpTimeout        = 10 * time.Second
 	previewSocketSessionCloseWait = 250
+	mqttLatestTagSnapshotScan     = 100
 )
+
+var previewSocketFallbackWriteMu sync.Mutex
 
 type socketSessionMetadata struct {
 	Claims         *auth.Claims
@@ -90,6 +94,7 @@ type previewMqttRepository interface {
 	GetSubscription(ctx context.Context, projectID, subscriptionID string) (*repository.MqttSubscriptionRecord, error)
 	GetTag(ctx context.Context, projectID, tagID string) (*repository.MqttTagRecord, error)
 	ListMessages(ctx context.Context, projectID, subscriptionID string, limit int) ([]repository.MqttMessageRecord, error)
+	ListMessagesAfter(ctx context.Context, projectID, subscriptionID string, after time.Time, limit int) ([]repository.MqttMessageRecord, error)
 	CreateMessage(ctx context.Context, params repository.CreateMqttMessageParams) (*repository.MqttMessageRecord, error)
 }
 
@@ -234,9 +239,11 @@ func (s *PreviewSocketServer) authorizeSocket(socket *socketio.Socket, params ma
 func (s *PreviewSocketServer) handleConnection(socket *socketio.Socket) {
 	metadata := socketMetadataFromSocket(socket)
 	if metadata == nil {
-		_ = socket.Disconnect()
+		_ = disconnectSocket(socket)
 		return
 	}
+
+	socket.Metadata(previewSocketWriteLockKey, &sync.Mutex{})
 
 	s.mu.Lock()
 	session := s.sessions[metadata.PreviewSession]
@@ -413,7 +420,7 @@ func (s *PreviewSocketServer) handleMqttSubscribe(socket *socketio.Socket, event
 	s.mu.Unlock()
 
 	if snapshot := s.loadLatestSubscriptionSnapshot(ctx, metadata.ProjectID, runtime); snapshot != nil {
-		_ = socket.Emit("mqtt:message", snapshot)
+		_ = emitSocket(socket, "mqtt:message", snapshot)
 	}
 	s.emitSessionEvent(metadata.PreviewSession, "mqtt:subscription:status", map[string]any{
 		"subscriptionId": subscriptionID,
@@ -507,7 +514,7 @@ func (s *PreviewSocketServer) handleMqttTagSubscribe(socket *socketio.Socket, ev
 	s.mu.Unlock()
 
 	if snapshot := s.loadLatestTagSnapshot(ctx, metadata.ProjectID, runtime, *tag); snapshot != nil {
-		_ = socket.Emit("mqtt:tag:value", snapshot)
+		_ = emitSocket(socket, "mqtt:tag:value", snapshot)
 	}
 	respondSocketRequest(socket, requestID, map[string]any{"tagId": tag.ID}, nil)
 }
@@ -538,6 +545,11 @@ func (s *PreviewSocketServer) handleMqttTagUnsubscribe(socket *socketio.Socket, 
 		subscriptionID := session.tagSubscriptionByID[tagID]
 		if !session.hasTagInterestLocked(tagID) {
 			delete(session.tagSubscriptionByID, tagID)
+			if subscriptionID != "" {
+				if runtime := session.mqttRuntimes[subscriptionID]; runtime != nil {
+					runtime.removeTag(tagID)
+				}
+			}
 		}
 		if subscriptionID != "" {
 			if runtime := session.mqttRuntimes[subscriptionID]; runtime != nil && !session.hasMqttInterestLocked(subscriptionID) {
@@ -613,7 +625,7 @@ func (s *PreviewSocketServer) handleBuiltinMessageSubscribe(socket *socketio.Soc
 	}
 	s.mu.Unlock()
 
-	_ = socket.Emit("builtin:message:status", map[string]any{
+	_ = emitSocket(socket, "builtin:message:status", map[string]any{
 		"topicId": subscription.ID,
 		"status":  "subscribed",
 	})
@@ -651,7 +663,7 @@ func (s *PreviewSocketServer) handleBuiltinMessageUnsubscribe(socket *socketio.S
 		stop()
 	}
 
-	_ = socket.Emit("builtin:message:status", map[string]any{
+	_ = emitSocket(socket, "builtin:message:status", map[string]any{
 		"topicId": topicID,
 		"status":  "unsubscribed",
 	})
@@ -683,7 +695,7 @@ func (s *PreviewSocketServer) handleDatapointSubscribe(socket *socketio.Socket, 
 	defer cancel()
 	value, err := s.dataPoints.GetDataPointValue(ctx, metadata.ProjectID, path)
 	if err != nil {
-		_ = socket.Emit("datapoint:status", map[string]any{
+		_ = emitSocket(socket, "datapoint:status", map[string]any{
 			"path":   path,
 			"status": "error",
 			"error":  socketErrorMessage(err),
@@ -694,8 +706,8 @@ func (s *PreviewSocketServer) handleDatapointSubscribe(socket *socketio.Socket, 
 
 	payloadValue := buildDatapointPayload(*value)
 	s.updateDatapointFingerprint(metadata.PreviewSession, path, payloadValue)
-	_ = socket.Emit("datapoint:value", payloadValue)
-	_ = socket.Emit("datapoint:status", map[string]any{
+	_ = emitSocket(socket, "datapoint:value", payloadValue)
+	_ = emitSocket(socket, "datapoint:status", map[string]any{
 		"path":   path,
 		"status": "subscribed",
 	})
@@ -751,7 +763,7 @@ func (s *PreviewSocketServer) handleDatapointBatchSubscribe(socket *socketio.Soc
 	for _, path := range paths {
 		value, err := s.dataPoints.GetDataPointValue(ctx, metadata.ProjectID, path)
 		if err != nil {
-			_ = socket.Emit("datapoint:status", map[string]any{
+			_ = emitSocket(socket, "datapoint:status", map[string]any{
 				"path":   path,
 				"status": "error",
 				"error":  socketErrorMessage(err),
@@ -764,7 +776,7 @@ func (s *PreviewSocketServer) handleDatapointBatchSubscribe(socket *socketio.Soc
 	}
 
 	if len(values) > 0 {
-		_ = socket.Emit("datapoint:values", values)
+		_ = emitSocket(socket, "datapoint:values", values)
 	}
 	respondSocketRequest(socket, requestID, map[string]any{"paths": paths}, nil)
 }
@@ -934,7 +946,7 @@ func (s *PreviewSocketServer) updateDatapointFingerprint(sessionID, path string,
 func (s *PreviewSocketServer) emitDatapointValue(sessionID, path string, payload map[string]any) {
 	recipients := s.datapointRecipients(sessionID, path)
 	for _, socket := range recipients {
-		_ = socket.Emit("datapoint:value", payload)
+		_ = emitSocket(socket, "datapoint:value", payload)
 	}
 }
 
@@ -948,7 +960,7 @@ func (s *PreviewSocketServer) emitDatapointStatus(sessionID, path, status, error
 		payload["error"] = errorMessage
 	}
 	for _, socket := range recipients {
-		_ = socket.Emit("datapoint:status", payload)
+		_ = emitSocket(socket, "datapoint:status", payload)
 	}
 }
 
@@ -1168,6 +1180,13 @@ func (r *mqttPreviewRuntime) addTag(tag repository.MqttTagRecord) {
 	r.tags[tag.ID] = tag
 }
 
+func (r *mqttPreviewRuntime) removeTag(tagID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.tags, tagID)
+	delete(r.lastTagValue, tagID)
+}
+
 func (r *mqttPreviewRuntime) latestMessageSnapshot() *service.MqttSubscriptionSnapshot {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -1226,7 +1245,10 @@ func (r *mqttPreviewRuntime) handleMessage(message mqtt.Message) {
 	}
 	tagSnapshots := make([]service.MqttTagValueSnapshot, 0, len(tags))
 	for _, tag := range tags {
-		snapshot := service.BuildMqttTagSnapshotFromMessage(tag, *record)
+		snapshot, ok := service.BuildMqttTagSnapshotUpdateFromMessage(tag, *record)
+		if !ok {
+			continue
+		}
 		r.lastTagValue[tag.ID] = snapshot
 		tagSnapshots = append(tagSnapshots, snapshot)
 	}
@@ -1266,7 +1288,7 @@ func (s *PreviewSocketServer) loadLatestTagSnapshot(ctx context.Context, project
 		}
 	}
 
-	messages, err := s.mqttRepository.ListMessages(ctx, projectID, tag.SubscriptionID, 1)
+	messages, err := s.mqttRepository.ListMessagesAfter(ctx, projectID, tag.SubscriptionID, tag.CreatedAt, mqttLatestTagSnapshotScan)
 	if err != nil {
 		return nil
 	}
@@ -1274,21 +1296,26 @@ func (s *PreviewSocketServer) loadLatestTagSnapshot(ctx context.Context, project
 		snapshot := service.BuildFallbackMqttTagSnapshot(tag, time.Now().UTC(), "")
 		return &snapshot
 	}
-	snapshot := service.BuildMqttTagSnapshotFromMessage(tag, messages[0])
-	return &snapshot
+	for _, message := range messages {
+		snapshot, ok := service.BuildMqttTagSnapshotUpdateFromMessage(tag, message)
+		if ok {
+			return &snapshot
+		}
+	}
+	return nil
 }
 
 func (s *PreviewSocketServer) emitMqttMessage(sessionID string, snapshot service.MqttSubscriptionSnapshot) {
 	recipients := s.mqttSubscriptionRecipients(sessionID, snapshot.SubscriptionID)
 	for _, socket := range recipients {
-		_ = socket.Emit("mqtt:message", snapshot)
+		_ = emitSocket(socket, "mqtt:message", snapshot)
 	}
 }
 
 func (s *PreviewSocketServer) emitMqttTagValue(sessionID string, snapshot service.MqttTagValueSnapshot) {
 	recipients := s.mqttTagRecipients(sessionID, snapshot.TagID)
 	for _, socket := range recipients {
-		_ = socket.Emit("mqtt:tag:value", snapshot)
+		_ = emitSocket(socket, "mqtt:tag:value", snapshot)
 	}
 }
 
@@ -1305,14 +1332,14 @@ func (s *PreviewSocketServer) emitBuiltinMessage(sessionID, topicID string, mess
 		"timestamp":    message.Timestamp,
 	}
 	for _, socket := range recipients {
-		_ = socket.Emit("builtin:message", payload)
+		_ = emitSocket(socket, "builtin:message", payload)
 	}
 }
 
 func (s *PreviewSocketServer) emitSessionEvent(sessionID, event string, payload any) {
 	recipients := s.sessionRecipients(sessionID)
 	for _, socket := range recipients {
-		_ = socket.Emit(event, payload)
+		_ = emitSocket(socket, event, payload)
 	}
 }
 
@@ -1432,12 +1459,12 @@ func (s *PreviewSocketServer) closeSessionInternal(sessionID, reason string) {
 	}
 	for _, socket := range sockets {
 		if reason != "" {
-			_ = socket.Emit("preview:session:closed", map[string]any{
+			_ = emitSocket(socket, "preview:session:closed", map[string]any{
 				"sessionId": sessionID,
 				"reason":    reason,
 			})
 		}
-		_ = socket.Disconnect()
+		_ = disconnectSocket(socket)
 	}
 }
 
@@ -1631,7 +1658,43 @@ func respondSocketRequest(socket *socketio.Socket, requestID string, result any,
 	} else if result != nil {
 		payload["result"] = result
 	}
-	_ = socket.Emit(previewSocketRequestEvent, payload)
+	_ = emitSocket(socket, previewSocketRequestEvent, payload)
+}
+
+func emitSocket(socket *socketio.Socket, event string, payload any) error {
+	if socket == nil {
+		return nil
+	}
+
+	writeMu, _ := socket.Metadata(previewSocketWriteLockKey).(*sync.Mutex)
+	if writeMu == nil {
+		// gorilla/websocket 不允许同一连接并发写；异常路径或测试桩没有初始化写锁时，
+		// 使用包级兜底锁保证错误响应、关闭通知这类写入也不会触发 panic。
+		previewSocketFallbackWriteMu.Lock()
+		defer previewSocketFallbackWriteMu.Unlock()
+		return socket.Emit(event, payload)
+	}
+
+	writeMu.Lock()
+	defer writeMu.Unlock()
+	return socket.Emit(event, payload)
+}
+
+func disconnectSocket(socket *socketio.Socket) error {
+	if socket == nil {
+		return nil
+	}
+
+	writeMu, _ := socket.Metadata(previewSocketWriteLockKey).(*sync.Mutex)
+	if writeMu == nil {
+		previewSocketFallbackWriteMu.Lock()
+		defer previewSocketFallbackWriteMu.Unlock()
+		return socket.Disconnect()
+	}
+
+	writeMu.Lock()
+	defer writeMu.Unlock()
+	return socket.Disconnect()
 }
 
 func socketErrorMessage(err error) string {

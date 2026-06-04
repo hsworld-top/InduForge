@@ -134,13 +134,14 @@ const formRef = ref(null)
 const submitting = ref(false)
 const initialFormSnapshot = ref('')
 const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
+const defaultSubscriptionUsageMode = 'batch_variable'
 
 // 表单数据
 const formData = ref({
   name: '',
   topic: '',
   qos: 0,
-  usageMode: 'single_variable',
+  usageMode: defaultSubscriptionUsageMode,
   description: '',
   groupId: null,
 })
@@ -221,7 +222,7 @@ const initFormData = () => {
       name: '',
       topic: '',
       qos: 0,
-      usageMode: 'single_variable',
+      usageMode: defaultSubscriptionUsageMode,
       description: '',
       groupId: props.groupId ?? null,
     }

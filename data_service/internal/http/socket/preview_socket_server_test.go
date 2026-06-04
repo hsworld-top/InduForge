@@ -781,6 +781,64 @@ func TestPreviewSocketServer_HandleMqttTagUnsubscribeClearsTagMappingAndRuntime(
 	}
 }
 
+func TestMqttPreviewRuntimeHandleMessageSkipsBatchTagWithoutCurrentPayloadValue(t *testing.T) {
+	server := newPreviewSocketServerForTests()
+	server.mqttRepository = &fakePreviewMqttRepository{}
+	runtime := &mqttPreviewRuntime{
+		server:       server,
+		sessionID:    "session-1",
+		projectID:    "project-1",
+		connection:   repository.MqttConnectionDetailRecord{ID: "conn-1"},
+		subscription: repository.MqttSubscriptionRecord{ID: "sub-1", ConnectionID: "conn-1"},
+		tags: map[string]repository.MqttTagRecord{
+			"tag-982-id": {
+				ID:             "tag-982-id",
+				SubscriptionID: "sub-1",
+				DataType:       "number",
+				ParseType:      "batch_jsonpath",
+				ParseRule:      `{"arrayPath":"$","namePath":"N","matchName":"tag982","valuePath":"V","qualityPath":"Q"}`,
+			},
+		},
+		lastTagValue: map[string]service.MqttTagValueSnapshot{},
+	}
+
+	runtime.handleMessage(fakeMqttMessage{
+		topic:   "device/demo",
+		payload: []byte(`[{"N":"tag6","V":51,"Q":192},{"N":"tag7","V":154587.47,"Q":192}]`),
+	})
+
+	if _, ok := runtime.lastTagValue["tag-982-id"]; ok {
+		t.Fatal("expected batch tag without matching payload value to keep previous value unchanged")
+	}
+}
+
+func TestPreviewSocketServerLoadLatestTagSnapshotSkipsBatchHistoryWithoutCurrentTag(t *testing.T) {
+	server := newPreviewSocketServerForTests()
+	server.mqttRepository = &fakePreviewMqttRepository{
+		messages: []repository.MqttMessageRecord{
+			{
+				SubscriptionID: "sub-1",
+				Topic:          "device/demo",
+				Payload:        `[{"N":"tag2","V":93,"Q":192}]`,
+				ReceivedAt:     time.Date(2026, 6, 3, 10, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+	tag := repository.MqttTagRecord{
+		ID:             "tag-982-id",
+		SubscriptionID: "sub-1",
+		DataType:       "number",
+		ParseType:      "batch_jsonpath",
+		ParseRule:      `{"arrayPath":"$","namePath":"N","matchName":"tag982","valuePath":"V","qualityPath":"Q"}`,
+		CreatedAt:      time.Date(2026, 6, 3, 9, 0, 0, 0, time.UTC),
+	}
+
+	snapshot := server.loadLatestTagSnapshot(context.Background(), "project-1", nil, tag)
+	if snapshot != nil {
+		t.Fatalf("expected missing batch tag history to be skipped, got %#v", snapshot)
+	}
+}
+
 type testStringer string
 
 func (s testStringer) String() string {
@@ -904,10 +962,55 @@ func (f *fakePreviewMqttRepository) ListMessages(_ context.Context, _ string, _ 
 	return append([]repository.MqttMessageRecord(nil), f.messages...), nil
 }
 
-func (f *fakePreviewMqttRepository) CreateMessage(_ context.Context, _ repository.CreateMqttMessageParams) (*repository.MqttMessageRecord, error) {
+func (f *fakePreviewMqttRepository) ListMessagesAfter(ctx context.Context, projectID, subscriptionID string, _ time.Time, limit int) ([]repository.MqttMessageRecord, error) {
+	return f.ListMessages(ctx, projectID, subscriptionID, limit)
+}
+
+func (f *fakePreviewMqttRepository) CreateMessage(_ context.Context, params repository.CreateMqttMessageParams) (*repository.MqttMessageRecord, error) {
 	f.createMessageCalls++
 	if f.createMessageErr != nil {
 		return nil, f.createMessageErr
 	}
-	return &repository.MqttMessageRecord{}, nil
+	return &repository.MqttMessageRecord{
+		SubscriptionID: params.SubscriptionID,
+		Topic:          params.Topic,
+		Payload:        params.Payload,
+		QOS:            params.QOS,
+		ReceivedAt:     params.ReceivedAt,
+	}, nil
 }
+
+type fakeMqttMessage struct {
+	topic     string
+	payload   []byte
+	qos       byte
+	retained  bool
+	duplicate bool
+	messageID uint16
+}
+
+func (m fakeMqttMessage) Duplicate() bool {
+	return m.duplicate
+}
+
+func (m fakeMqttMessage) Qos() byte {
+	return m.qos
+}
+
+func (m fakeMqttMessage) Retained() bool {
+	return m.retained
+}
+
+func (m fakeMqttMessage) Topic() string {
+	return m.topic
+}
+
+func (m fakeMqttMessage) MessageID() uint16 {
+	return m.messageID
+}
+
+func (m fakeMqttMessage) Payload() []byte {
+	return m.payload
+}
+
+func (m fakeMqttMessage) Ack() {}

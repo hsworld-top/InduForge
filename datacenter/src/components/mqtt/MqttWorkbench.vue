@@ -119,7 +119,7 @@
           type="button"
           class="mqtt-workbench__tab"
           :class="{ 'is-active': activeTabId === tab.id }"
-          @click="activeTabId = tab.id"
+          @click="activateTab(tab.id)"
         >
           <component :is="tab.icon" />
           <span>{{ tab.title }}</span>
@@ -132,6 +132,8 @@
           <template v-for="tab in activeContentTabs" :key="tab.id">
             <MqttMessageViewer
               v-if="tab.type === 'messages'"
+              class="mqtt-workbench__content-panel"
+              :class="{ 'is-active': activeTabId === tab.id }"
               :ref="(el) => setMessageViewerRef(tab.id, el)"
               :subscription="tab.subscription"
               :project-id="projectIdText"
@@ -144,7 +146,10 @@
             <div
               v-else-if="tab.type === 'tags'"
               class="mqtt-workbench__tag-panel"
-              :class="{ 'is-config-only': !connectionStarted }"
+              :class="{
+                'is-active': activeTabId === tab.id,
+                'is-config-only': !connectionStarted,
+              }"
             >
               <div class="mqtt-workbench__tag-list">
                 <MqttTagList
@@ -160,9 +165,13 @@
             <div
               v-else-if="tab.type === 'batch'"
               class="mqtt-workbench__tag-panel"
-              :class="{ 'is-config-only': !connectionStarted }"
+              :class="{
+                'is-active': activeTabId === tab.id,
+                'is-config-only': !connectionStarted,
+              }"
             >
               <MqttBatchMappingPanel
+                :ref="(el) => setTagListRef(tab.id, el)"
                 :project-id="projectIdText"
                 :subscription="tab.subscription"
                 :preview-session-id="connectionStarted ? previewSessionId : ''"
@@ -172,6 +181,8 @@
 
             <MqttPublishTester
               v-else-if="tab.type === 'publish'"
+              class="mqtt-workbench__content-panel"
+              :class="{ 'is-active': activeTabId === tab.id }"
               :project-id="projectIdText"
               :connection-id="connection.id"
               :subscription="tab.subscription"
@@ -220,21 +231,56 @@
 
     <DcDialog
       v-model="monitorDialogVisible"
-      title="变量预览/监控"
       width="960px"
+      body-max-height="calc(100vh - 180px)"
       class="mqtt-workbench__monitor-dialog"
       @close="closeMonitorDialog"
     >
-      <div class="mqtt-workbench__monitor-heading">
-        <strong>{{ monitorSubscription?.name || monitorSubscription?.topic }}</strong>
-        <span>{{ monitorSubscription?.topic }}</span>
-      </div>
+      <template #header>
+        <div class="mqtt-workbench__monitor-header">
+          <span class="dc-dialog__title">变量预览/监控</span>
+          <div class="mqtt-workbench__monitor-actions">
+            <el-tooltip content="列表显示" placement="top">
+              <button
+                type="button"
+                class="mqtt-workbench__monitor-action"
+                :class="{ 'is-active': monitorViewMode === 'list' }"
+                @click="setMonitorViewMode('list')"
+              >
+                <IconTablerList />
+              </button>
+            </el-tooltip>
+            <el-tooltip content="卡片显示" placement="top">
+              <button
+                type="button"
+                class="mqtt-workbench__monitor-action"
+                :class="{ 'is-active': monitorViewMode === 'card' }"
+                @click="setMonitorViewMode('card')"
+              >
+                <IconTablerLayoutGrid />
+              </button>
+            </el-tooltip>
+            <el-tooltip content="重新加载变量配置" placement="top">
+              <button
+                type="button"
+                class="mqtt-workbench__monitor-action"
+                @click="refreshMonitorTags"
+              >
+                <IconTablerRefresh />
+              </button>
+            </el-tooltip>
+          </div>
+        </div>
+      </template>
       <MqttTagMonitor
+        ref="monitorRef"
         v-if="monitorDialogVisible && monitorSubscription"
         :project-id="projectIdText"
         :subscription-id="monitorSubscription.id"
         :preview-session-id="previewSessionId"
+        :snapshot="monitorSnapshot"
         @tag-value="handleMonitorTagValue"
+        @latest-values="applyMonitorTagValues"
       />
     </DcDialog>
 
@@ -403,6 +449,8 @@ import IconTablerFolderPlus from '~icons/tabler/folder-plus'
 import IconTablerFolderSymlink from '~icons/tabler/folder-symlink'
 import IconTablerInfoCircle from '~icons/tabler/info-circle'
 import IconTablerDatabase from '~icons/tabler/database'
+import IconTablerLayoutGrid from '~icons/tabler/layout-grid'
+import IconTablerList from '~icons/tabler/list'
 import IconTablerListTree from '~icons/tabler/list-tree'
 import IconTablerLoader2 from '~icons/tabler/loader-2'
 import IconTablerMessages from '~icons/tabler/messages'
@@ -542,6 +590,9 @@ const moveTargetType = ref<'subscription' | 'group'>('subscription')
 const moveSaving = ref(false)
 const monitorDialogVisible = ref(false)
 const monitorSubscription = ref<MqttSubscription | null>(null)
+const monitorRef = ref<any>(null)
+const monitorSnapshot = ref<any>(null)
+const monitorViewMode = ref<'list' | 'card'>('list')
 const detailDialogVisible = ref(false)
 const detailSubscription = ref<MqttSubscription | null>(null)
 const contextSubscription = ref<MqttSubscription | null>(null)
@@ -584,10 +635,8 @@ const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId
 const hasActiveTab = computed(() =>
   Boolean(activeTabId.value && tabs.value.some((tab) => tab.id === activeTabId.value)),
 )
-const workbenchContentKey = computed(() => activeTab.value?.id || 'empty')
-const activeContentTabs = computed(() =>
-  hasActiveTab.value && activeTab.value ? [activeTab.value] : [],
-)
+const workbenchContentKey = computed(() => props.connection.id || 'empty')
+const activeContentTabs = computed(() => (hasActiveTab.value ? tabs.value : []))
 
 const subscriptionTree = computed(() =>
   buildMqttSubscriptionTree(subscriptionGroups.value, subscriptions.value),
@@ -707,12 +756,24 @@ const toggleMqttPreview = async () => {
 const addTab = (tab: any) => {
   const existing = tabs.value.find((item) => item.id === tab.id)
   if (existing) {
-    activeTabId.value = existing.id
+    activateTab(existing.id)
     return existing
   }
   tabs.value.push(tab)
-  activeTabId.value = tab.id
+  activateTab(tab.id, { refresh: false })
   return tab
+}
+
+const activateTab = (tabId: string, options: { refresh?: boolean } = {}) => {
+  activeTabId.value = tabId
+  if (options.refresh === false) return
+
+  nextTick(() => {
+    const tab = tabs.value.find((item) => item.id === tabId)
+    if (tab?.type === 'tags' || tab?.type === 'batch') {
+      tagListRefs.value.get(tabId)?.refreshQuietly?.()
+    }
+  })
 }
 
 const resolveSubscriptionUsageMode = (subscription: MqttSubscription) =>
@@ -810,8 +871,22 @@ const openTagMonitor = (subscription: MqttSubscription) => {
     ElMessage.warning('请先连接后再打开变量监控')
     return
   }
+  const activeRef = tagListRefs.value.get(activeTabId.value)
+  monitorSnapshot.value = activeRef?.getMonitorSnapshot?.() || null
   monitorSubscription.value = subscription
   monitorDialogVisible.value = true
+  void nextTick(() => {
+    monitorRef.value?.setViewMode?.(monitorViewMode.value)
+  })
+}
+
+const setMonitorViewMode = (mode: 'list' | 'card') => {
+  monitorViewMode.value = mode
+  monitorRef.value?.setViewMode?.(mode)
+}
+
+const refreshMonitorTags = () => {
+  void monitorRef.value?.refresh?.()
 }
 
 const openPublishTester = async (subscription: MqttSubscription) => {
@@ -829,6 +904,10 @@ const openPublishTester = async (subscription: MqttSubscription) => {
 }
 
 const closeMonitorDialog = () => {
+  const values = monitorRef.value?.getLatestValues?.() || []
+  applyMonitorTagValues(values)
+  monitorRef.value = null
+  monitorSnapshot.value = null
   monitorSubscription.value = null
 }
 
@@ -1173,11 +1252,21 @@ const setTagListRef = (tabId: string, el: any) => {
 }
 
 const handleMonitorTagValue = (value: any) => {
-  const subscriptionId = value?.subscriptionId || monitorSubscription.value?.id
+  applyMonitorTagValues([value])
+}
+
+const applyMonitorTagValues = (values: any[]) => {
+  if (!Array.isArray(values) || values.length === 0) {
+    return
+  }
+  const subscriptionId = values.find((value) => value?.subscriptionId)?.subscriptionId || monitorSubscription.value?.id
   if (!subscriptionId) {
     return
   }
-  tagListRefs.value.get(`mqtt-tags-${subscriptionId}`)?.applyTagValueUpdate?.(value)
+  const singleRef = tagListRefs.value.get(`mqtt-tags-${subscriptionId}`)
+  const batchRef = tagListRefs.value.get(`mqtt-batch-${subscriptionId}`)
+  values.forEach((value) => singleRef?.applyTagValueUpdate?.(value))
+  batchRef?.applyTagValueUpdates?.(values)
 }
 
 const cleanupMessageSubscriptions = () => {
@@ -1431,9 +1520,26 @@ onBeforeUnmount(() => {
 }
 
 .mqtt-workbench__content {
+  position: relative;
   min-height: 0;
   flex: 1;
   overflow: hidden;
+}
+
+.mqtt-workbench__content-panel,
+.mqtt-workbench__tag-panel {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.mqtt-workbench__content-panel.is-active,
+.mqtt-workbench__tag-panel.is-active {
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
 }
 
 .mqtt-workbench__placeholder {
@@ -1579,30 +1685,71 @@ onBeforeUnmount(() => {
   margin-top: 14px;
 }
 
-.mqtt-workbench__monitor-heading {
-  display: grid;
-  gap: 4px;
-  margin-bottom: 10px;
-  padding: 0 2px;
-}
-
-.mqtt-workbench__monitor-heading strong,
-.mqtt-workbench__monitor-heading span {
-  min-width: 0;
+:global(.mqtt-workbench__monitor-dialog .el-dialog__body) {
+  height: calc(100vh - 180px);
+  max-height: calc(100vh - 180px);
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.mqtt-workbench__monitor-heading strong {
-  color: var(--dc-text);
-  font-size: 14px;
+:deep(.mqtt-workbench__monitor-dialog .el-dialog__header) {
+  margin-right: 0;
 }
 
-.mqtt-workbench__monitor-heading span {
-  color: var(--dc-text-muted);
-  font-family: var(--dc-font-mono, monospace);
-  font-size: 12px;
+.mqtt-workbench__monitor-header {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: 34px;
+}
+
+.mqtt-workbench__monitor-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mqtt-workbench__monitor-action {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-secondary);
+}
+
+.mqtt-workbench__monitor-action:hover,
+.mqtt-workbench__monitor-action.is-active {
+  border-color: var(--dc-primary);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+}
+
+.mqtt-workbench__monitor-action svg {
+  width: 16px;
+  height: 16px;
+}
+
+:global(.mqtt-workbench__monitor-dialog .dc-dialog__body) {
+  height: 100%;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+:global(.mqtt-workbench__monitor-dialog .mqtt-tag-monitor) {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
 }
 
 .mqtt-workbench__detail-footer {

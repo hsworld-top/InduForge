@@ -31,6 +31,7 @@ defineEmits<{
   display: inline-flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
   padding: 8px 10px 8px 14px;
   border: 1px solid rgba(29, 78, 216, 0.2);
   border-radius: 12px;
@@ -53,6 +54,8 @@ defineEmits<{
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
 }
 
 .dc-bulk-action-bar__clear {

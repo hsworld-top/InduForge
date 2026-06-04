@@ -1,48 +1,13 @@
 <template>
   <div class="mqtt-tag-monitor">
-    <div class="mqtt-tag-monitor__toolbar">
-      <div class="mqtt-tag-monitor__title">
-        <span>变量实时监控</span>
-        <WorkbenchStatusPill
-          :label="socketConnected ? '变量已订阅' : '等待订阅'"
-          :tone="socketConnected ? 'success' : 'neutral'"
-        />
-        <WorkbenchStatusPill v-if="tags.length > 0" :label="`${tags.length} 个变量`" tone="info" />
-      </div>
-      <div class="mqtt-tag-monitor__actions">
-        <div class="view-toggle">
-          <el-button
-            size="small"
-            :type="viewMode === 'list' ? 'primary' : 'default'"
-            @click="viewMode = 'list'"
-          >
-            列表显示
-          </el-button>
-          <el-button
-            size="small"
-            :type="viewMode === 'card' ? 'primary' : 'default'"
-            @click="viewMode = 'card'"
-          >
-            卡片显示
-          </el-button>
-        </div>
-        <el-tooltip content="重新加载变量配置" placement="top">
-          <el-button size="small" @click="handleRefresh">
-            <IconTablerRefresh class="mr-1 w-4 h-4" />
-            重新加载
-          </el-button>
-        </el-tooltip>
-      </div>
-    </div>
-
     <div class="mqtt-tag-monitor__body">
-      <div v-if="tags.length === 0" class="mqtt-tag-monitor__empty">
+      <div v-if="totalTags === 0" class="mqtt-tag-monitor__empty">
         <IconTablerFile />
         <div>暂无变量</div>
         <small>请先在变量管理中创建变量</small>
       </div>
 
-      <div v-else-if="viewMode === 'card'" class="tag-card-grid">
+      <div v-else-if="viewMode === 'card'" v-loading="loading" class="tag-card-grid">
         <div
           v-for="tag in tags"
           :key="tag.id"
@@ -54,13 +19,13 @@
               {{ tag.name }}
             </div>
             <WorkbenchStatusPill
-              :label="getQualityLabel(tag.currentValue?.quality || 'unknown')"
+              :label="formatQualityLabel(tag.currentValue)"
               :tone="getQualityTone(tag.currentValue?.quality || 'unknown')"
             />
           </div>
 
           <div class="tag-value">
-            {{ tag.currentValue ? formatValue(tag.currentValue.parsedValue, tag.dataType) : '-' }}
+            {{ tag.currentValue ? formatTagValue(tag.currentValue, tag.dataType) : '-' }}
           </div>
 
           <div class="tag-card__time">
@@ -70,7 +35,7 @@
         </div>
       </div>
 
-      <div v-else class="tag-row-list">
+      <div v-else v-loading="loading" class="tag-row-list">
         <div class="tag-row tag-row-header">
           <span>变量名</span>
           <span>类型</span>
@@ -82,30 +47,43 @@
           <span class="truncate" :title="tag.name">{{ tag.name }}</span>
           <span>{{ getDataTypeLabel(tag.dataType) }}</span>
           <span class="truncate">
-            {{ tag.currentValue ? formatValue(tag.currentValue.parsedValue, tag.dataType) : '-' }}
+            {{ tag.currentValue ? formatTagValue(tag.currentValue, tag.dataType) : '-' }}
           </span>
           <span class="truncate">
             {{ tag.currentValue?.timestamp ? formatTimestamp(tag.currentValue.timestamp) : '-' }}
           </span>
           <span>
             <el-tag :type="getQualityColor(tag.currentValue?.quality || 'unknown')" size="small">
-              {{ getQualityLabel(tag.currentValue?.quality || 'unknown') }}
+              {{ formatQualityLabel(tag.currentValue) }}
             </el-tag>
           </span>
         </div>
       </div>
     </div>
+
+    <div v-if="totalTags > 0" class="mqtt-tag-monitor__pagination">
+      <el-pagination
+        v-model:current-page="pagination.page"
+        v-model:page-size="pagination.pageSize"
+        :page-sizes="pageSizes"
+        :total="totalTags"
+        background
+        layout="total, sizes, prev, pager, next, jumper"
+        small
+        @size-change="handlePageSizeChange"
+        @current-change="handlePageChange"
+      />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch, toRef } from 'vue'
+import { computed, reactive, ref, onMounted, onBeforeUnmount, watch, toRef } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getMqttTags } from '@/api/data.api'
 import { useMqttSocket } from '@/composables/useMqttSocket'
 import { useMqttTagSync } from '@/composables/useMqttTagSync'
 import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
-import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerFile from '~icons/tabler/file'
 import dayjs from 'dayjs'
 import { TIME_FORMAT } from '@/constants'
@@ -123,14 +101,34 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  snapshot: {
+    type: Object,
+    default: null,
+  },
 })
 
 const emit = defineEmits<{
   (event: 'tag-value', value: any): void
+  (event: 'latest-values', values: any[]): void
 }>()
 
 const tags = ref([])
+const loading = ref(false)
 const viewMode = ref('list')
+const pagination = reactive({
+  page: Number(props.snapshot?.page) || 1,
+  pageSize: Number(props.snapshot?.pageSize) || 50,
+  total: Number(props.snapshot?.total) || 0,
+})
+const latestValueMap = new Map()
+const totalTags = computed(() => pagination.total)
+const pageSizes = computed(() =>
+  props.snapshot?.mode === 'single' ? [20, 50, 100] : [50, 100, 200],
+)
+const subscriptionWindowTags = computed(() => {
+  // 监控弹窗按后端分页加载当前页；只订阅当前页变量，避免一次性订阅全部变量造成实时通道压力。
+  return tags.value
+})
 
 const {
   connected: socketConnected,
@@ -140,22 +138,72 @@ const {
 } = useMqttSocket(toRef(props, 'projectId'), toRef(props, 'previewSessionId'))
 
 const tagSubscriptionCleanups = new Map()
+const activeSubscribedTagIds = ref(new Set<string>())
 
 const { subscribe: subscribeTagSync, unsubscribe: unsubscribeTagSync } = useMqttTagSync(
   props.subscriptionId,
 )
 
 const fetchTags = async () => {
+  loading.value = true
   try {
-    const res = await getMqttTags(props.projectId, props.subscriptionId)
-    tags.value = res.data?.list || []
+    const res = await getMqttTags(props.projectId, props.subscriptionId, {
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      q: props.snapshot?.q || undefined,
+      sortBy: props.snapshot?.sortBy,
+      sortOrder: props.snapshot?.sortOrder,
+    })
+    tags.value = mergeTagRows(tags.value, res.data?.list || [])
+    const pageInfo = res.data?.pagination || {}
+    pagination.page = Number(pageInfo.page) || pagination.page
+    pagination.pageSize = Number(pageInfo.pageSize) || pagination.pageSize
+    pagination.total = Number(pageInfo.total) || 0
+    normalizePage()
   } catch (error) {
     ElMessage.error(`获取变量列表失败: ${error.message}`)
+  } finally {
+    loading.value = false
   }
 }
 
-const handleRefresh = () => {
-  fetchTags()
+const mergeTagRows = (currentRows, nextRows) => {
+  const currentValueMap = new Map(
+    (currentRows || []).map((tag) => [tag.id, tag.currentValue]).filter(([, value]) => value),
+  )
+  return (nextRows || []).map((tag) => ({
+    ...tag,
+    currentValue: latestValueMap.get(tag.id) || tag.currentValue || currentValueMap.get(tag.id),
+  }))
+}
+
+const handleRefresh = async () => {
+  await fetchTags()
+}
+
+const setViewMode = (mode: 'list' | 'card') => {
+  viewMode.value = mode
+}
+
+const normalizePage = () => {
+  const totalPages = Math.max(1, Math.ceil(totalTags.value / pagination.pageSize))
+  if (pagination.page > totalPages) {
+    pagination.page = totalPages
+  }
+}
+
+const handlePageSizeChange = async () => {
+  pagination.page = 1
+  releaseAllTagSubscriptions()
+  await fetchTags()
+  normalizePage()
+  syncSubscriptions()
+}
+
+const handlePageChange = async () => {
+  releaseAllTagSubscriptions()
+  await fetchTags()
+  syncSubscriptions()
 }
 
 const formatValue = (value, dataType) => {
@@ -163,7 +211,7 @@ const formatValue = (value, dataType) => {
 
   try {
     if (dataType === 'object' || dataType === 'array') {
-      const parsed = JSON.parse(value)
+      const parsed = typeof value === 'string' ? JSON.parse(value) : value
       return JSON.stringify(parsed, null, 2)
     }
     if (dataType === 'number') {
@@ -174,6 +222,17 @@ const formatValue = (value, dataType) => {
   } catch {
     return value
   }
+}
+
+const formatTagValue = (currentValue, dataType) => {
+  if (!hasReceivedTagValue(currentValue)) return '-'
+  return formatValue(currentValue?.parsedValue ?? currentValue?.value, dataType)
+}
+
+const hasReceivedTagValue = (currentValue) => {
+  if (!currentValue) return false
+  const raw = currentValue.parsedValue ?? currentValue.value
+  return raw !== null && raw !== undefined && raw !== ''
 }
 
 const formatTimestamp = (timestamp) => {
@@ -213,6 +272,17 @@ const getQualityLabel = (quality) => {
   return labels[quality] || quality
 }
 
+const formatQualityLabel = (currentValue) => {
+  if (!hasReceivedTagValue(currentValue)) return '-'
+  const quality = currentValue?.quality || 'unknown'
+  const label = getQualityLabel(quality)
+  const qualityCode = currentValue?.qualityCode
+  if (quality === 'bad' && qualityCode !== null && qualityCode !== undefined && qualityCode !== '') {
+    return `${label} ${qualityCode}`
+  }
+  return label
+}
+
 const getQualityColor = (quality) => {
   const colors = {
     good: 'success',
@@ -243,15 +313,15 @@ const handleTagValueUpdate = (data) => {
     parsedValue: data.parsedValue ?? data.value,
     value: data.value ?? data.parsedValue,
     quality: data.quality,
+    qualityCode: data.qualityCode,
     timestamp: data.timestamp,
     error: data.error,
   }
+  latestValueMap.set(tag.id, tag.currentValue)
   emit('tag-value', data)
 }
 
 const handleTagSyncEvent = async (event) => {
-  console.log('[MqttTagMonitor] Received sync event:', event)
-
   switch (event.type) {
     case 'created':
     case 'updated':
@@ -269,14 +339,10 @@ const syncSubscriptions = () => {
     return
   }
 
-  const desiredIds = new Set(tags.value.map((tag) => tag.id))
+  // 批量变量很多时，只订阅当前页变量，翻页时释放上一页订阅，避免实时通道持续推送无关变量。
+  const desiredIds = new Set(subscriptionWindowTags.value.map((tag) => tag.id).filter(Boolean))
 
-  desiredIds.forEach((tagId) => {
-    if (!tagSubscriptionCleanups.has(tagId)) {
-      tagSubscriptionCleanups.set(tagId, subscribeTag(tagId))
-    }
-  })
-
+  // 先释放已经不在当前页的订阅，避免翻页期间旧页变量继续推送到当前弹窗。
   Array.from(tagSubscriptionCleanups.entries()).forEach(([tagId, cleanup]) => {
     if (desiredIds.has(tagId)) {
       return
@@ -284,7 +350,30 @@ const syncSubscriptions = () => {
     cleanup?.()
     tagSubscriptionCleanups.delete(tagId)
   })
+
+  desiredIds.forEach((tagId) => {
+    if (!tagSubscriptionCleanups.has(tagId)) {
+      tagSubscriptionCleanups.set(tagId, subscribeTag(tagId))
+    }
+  })
+
+  activeSubscribedTagIds.value = new Set(tagSubscriptionCleanups.keys())
 }
+
+const releaseAllTagSubscriptions = () => {
+  Array.from(tagSubscriptionCleanups.values()).forEach((cleanup) => {
+    cleanup?.()
+  })
+  tagSubscriptionCleanups.clear()
+  activeSubscribedTagIds.value = new Set()
+}
+
+const getLatestValues = () =>
+  Array.from(latestValueMap.entries()).map(([tagId, currentValue]) => ({
+    tagId,
+    subscriptionId: props.subscriptionId,
+    ...currentValue,
+  }))
 
 let stopSocketWatch = null
 let unsubscribeMessage = null
@@ -294,14 +383,16 @@ onMounted(async () => {
   subscribeTagSync(handleTagSyncEvent)
 
   unsubscribeMessage = onMessage((data) => {
-    console.log('[MqttTagMonitor] Received message:', data)
-    if (data?.tagId) {
+    if (data?.tagId && activeSubscribedTagIds.value.has(data.tagId)) {
       handleTagValueUpdate(data)
     }
   })
 
   stopSocketWatch = watch(
-    () => [socketConnected.value, tags.value.map((tag) => tag.id).join(',')],
+    () => [
+      socketConnected.value,
+      subscriptionWindowTags.value.map((tag) => tag.id).join(','),
+    ],
     () => {
       if (!socketConnected.value) {
         return
@@ -312,19 +403,35 @@ onMounted(async () => {
   )
 })
 
+watch(
+  () => props.snapshot,
+  async () => {
+    pagination.page = Number(props.snapshot?.page) || 1
+    pagination.pageSize = Number(props.snapshot?.pageSize) || 50
+    pagination.total = Number(props.snapshot?.total) || 0
+    if (Array.isArray(props.snapshot?.rows)) {
+      tags.value = mergeTagRows(tags.value, props.snapshot.rows)
+    }
+    releaseAllTagSubscriptions()
+    await fetchTags()
+    syncSubscriptions()
+  },
+)
+
 onBeforeUnmount(() => {
+  emit('latest-values', getLatestValues())
   stopSocketWatch?.()
   unsubscribeMessage?.()
   unsubscribeTagSync(handleTagSyncEvent)
-  Array.from(tagSubscriptionCleanups.values()).forEach((cleanup) => {
-    cleanup?.()
-  })
-  tagSubscriptionCleanups.clear()
+  releaseAllTagSubscriptions()
   disconnect()
 })
 
 defineExpose({
   refresh: fetchTags,
+  viewMode,
+  setViewMode,
+  getLatestValues,
 })
 </script>
 
@@ -334,32 +441,8 @@ defineExpose({
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background: var(--dc-surface-raised);
-}
-
-.mqtt-tag-monitor__toolbar {
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--dc-border);
-  background: var(--dc-surface-subtle);
-}
-
-.mqtt-tag-monitor__title,
-.mqtt-tag-monitor__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.mqtt-tag-monitor__title > span:first-child {
-  color: var(--dc-text);
-  font-size: 13px;
-  font-weight: 700;
 }
 
 .mqtt-tag-monitor__body {
@@ -367,11 +450,18 @@ defineExpose({
   flex: 1;
   overflow: auto;
   padding: 10px;
+  overscroll-behavior: contain;
 }
 
-.view-toggle {
-  display: inline-flex;
-  gap: 6px;
+.mqtt-tag-monitor__pagination {
+  flex: none;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 8px 12px;
+  border-top: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
 }
 
 .mqtt-tag-monitor__empty {
@@ -402,12 +492,14 @@ defineExpose({
 }
 
 .tag-card-grid {
+  min-height: max-content;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
 .tag-row-list {
+  min-height: max-content;
   display: flex;
   flex-direction: column;
   gap: 8px;

@@ -1010,10 +1010,26 @@ func mountMqttRoutes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/mqtt/subscriptions/{subscriptionId}/tags/delete-filtered",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.mqttHandler.DeleteTagsBySubscriptionFilter),
+			),
+		),
+	)
+	mux.Handle(
 		"GET /api/v1/data/projects/{projectId}/mqtt/tags",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:read")(
 				middleware.ErrorHandler(opts.mqttHandler.ListTagsByProject),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/mqtt/tags/delete-batch",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.mqttHandler.DeleteTagsBatch),
 			),
 		),
 	)

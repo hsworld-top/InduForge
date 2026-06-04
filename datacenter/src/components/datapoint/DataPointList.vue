@@ -187,6 +187,7 @@
     <div class="datapoint-list__panel">
       <div class="datapoint-list__content">
         <el-table
+          ref="tableRef"
           v-loading="loading"
           :data="displayDataPoints"
           row-key="id"
@@ -197,7 +198,7 @@
           @selection-change="handleSelectionChange"
         >
           <!-- 选择列 -->
-          <el-table-column type="selection" width="56" fixed="left" align="center" />
+          <el-table-column type="selection" width="56" fixed="left" align="center" reserve-selection />
 
           <!-- 名称列 -->
           <el-table-column label="名称" width="220" fixed="left">
@@ -372,7 +373,23 @@
       </div>
 
       <!-- 批量操作条（选中 ≥ 1 时浮现，位于分页栏上方） -->
-      <BulkActionBar :selected-count="selectedRows.length" @clear="selectedRows = []">
+      <BulkActionBar :selected-count="selectedRows.length" @clear="clearSelection">
+        <button
+          v-if="isManagementMode"
+          type="button"
+          class="datapoint-list__bulk-action-btn"
+          @click="selectCurrentPage"
+        >
+          当前页
+        </button>
+        <button
+          v-if="isManagementMode"
+          type="button"
+          class="datapoint-list__bulk-action-btn"
+          @click="selectAllFilteredRows"
+        >
+          全部结果
+        </button>
         <button type="button" class="datapoint-list__bulk-action-btn" @click="openBatchTagDialog">
           打标签
         </button>
@@ -478,7 +495,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useConfirm } from '@/composables/useConfirm'
 import {
@@ -602,6 +619,8 @@ const { confirm } = useConfirm()
 
 const loading = ref(false)
 const datapoints = ref<DataPointRow[]>([])
+const tableRef = ref()
+const syncingSelection = ref(false)
 
 /* 搜索文本 */
 const searchText = ref(props.filterQ || '')
@@ -865,7 +884,7 @@ const loadDataPoints = async () => {
   try {
     const response = await dataAPI.getDataPoints(props.projectId, buildQueryParams())
     datapoints.value = response.data?.datapoints || []
-    selectedRows.value = []
+    clearSelection()
   } catch (error) {
     ElMessage.error('加载数据点失败：' + getApiErrorMessage(error, '加载数据点失败'))
   } finally {
@@ -881,22 +900,59 @@ const handleRefresh = async () => {
 // ── 分页 ──────────────────────────────────────────────────────────────────
 
 const handleSelectionChange = (selection: DataPointRow[]) => {
-  selectedRows.value = selection || []
+  if (syncingSelection.value) return
+  const visibleIds = new Set(displayDataPoints.value.map((row) => row.id))
+  const retainedRows = selectedRows.value.filter((row) => !visibleIds.has(row.id))
+  selectedRows.value = [...retainedRows, ...(selection || [])]
+}
+
+const clearSelection = () => {
+  selectedRows.value = []
+  void syncTableSelection()
+}
+
+const selectCurrentPage = async () => {
+  selectedRows.value = [...displayDataPoints.value]
+  await syncTableSelection()
+}
+
+const selectAllFilteredRows = async () => {
+  selectedRows.value = [...visibleDataPoints.value]
+  await syncTableSelection()
+}
+
+const syncTableSelection = async () => {
+  await nextTick()
+  const table = tableRef.value
+  if (!table) return
+  syncingSelection.value = true
+  table.clearSelection()
+  const selectedIds = new Set(selectedRows.value.map((row) => row.id))
+  displayDataPoints.value.forEach((row) => {
+    if (selectedIds.has(row.id)) {
+      table.toggleRowSelection(row, true)
+    }
+  })
+  await nextTick()
+  syncingSelection.value = false
 }
 
 const handlePrevPage = () => {
   if (!canPrevPage.value) return
   pagination.value.page = currentPage.value - 1
+  void syncTableSelection()
 }
 
 const handleNextPage = () => {
   if (!canNextPage.value) return
   pagination.value.page = currentPage.value + 1
+  void syncTableSelection()
 }
 
 const handlePageSizeChange = (pageSize: number) => {
   pagination.value.pageSize = pageSize
   pagination.value.page = 1
+  void syncTableSelection()
 }
 
 // ── 排序 ──────────────────────────────────────────────────────────────────
@@ -1206,6 +1262,7 @@ function emitFilterUpdate() {
 /* 搜索、状态、来源：300ms 防抖后重新拉数据 + 同步 URL */
 watch([searchText, statusFilter, sourceFilter], () => {
   pagination.value.page = 1
+  clearSelection()
   if (debounceTimer.value) window.clearTimeout(debounceTimer.value)
   debounceTimer.value = window.setTimeout(() => {
     void loadDataPoints()
@@ -1216,12 +1273,14 @@ watch([searchText, statusFilter, sourceFilter], () => {
 /* 排序变化：重新排序 + 同步 URL */
 watch([sortFieldValue, sortOrderValue], () => {
   pagination.value.page = 1
+  clearSelection()
   emitFilterUpdate()
 })
 
 /* 标签 / 分组：前端层，不触发请求，只同步 URL */
 watch([tagFilterValues, groupByTags], () => {
   pagination.value.page = 1
+  clearSelection()
   emitFilterUpdate()
 })
 
@@ -1229,6 +1288,7 @@ watch([tagFilterValues, groupByTags], () => {
 watch(
   () => pagination.value.page,
   () => {
+    void syncTableSelection()
     emitFilterUpdate()
   },
 )
@@ -1894,7 +1954,10 @@ defineExpose({
 /* ── 批量操作按钮 ── */
 
 .datapoint-list__bulk-action-btn {
+  max-width: 92px;
   height: 28px;
+  min-width: 0;
+  overflow: hidden;
   padding: 0 12px;
   border: 1px solid var(--dc-border);
   border-radius: 8px;
@@ -1904,6 +1967,9 @@ defineExpose({
   font-family: inherit;
   font-size: 13px;
   font-weight: 600;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   transition:
     background 0.18s ease,
     border-color 0.18s ease,

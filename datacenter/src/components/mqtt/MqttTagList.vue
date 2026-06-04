@@ -79,13 +79,16 @@
 
     <div class="mqtt-tag-list__body">
       <el-table
+        ref="tagTableRef"
         class="mqtt-tag-list__table"
         v-loading="loading"
         :data="tags"
         height="100%"
         row-key="id"
         empty-text="暂无变量"
+        @selection-change="handleSelectionChange"
       >
+        <el-table-column type="selection" width="42" reserve-selection />
         <el-table-column label="变量名" min-width="170" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="mqtt-tag-list__name">
@@ -144,6 +147,21 @@
           </template>
         </el-table-column>
       </el-table>
+      <BulkActionBar :selected-count="selectedTagCount" @clear="clearTagSelection">
+        <button type="button" class="mqtt-tag-list__bulk-action-btn" @click="selectCurrentPage">
+          当前页
+        </button>
+        <button type="button" class="mqtt-tag-list__bulk-action-btn" @click="selectAllResults">
+          全部结果
+        </button>
+        <button
+          type="button"
+          class="mqtt-tag-list__bulk-action-btn is-danger"
+          @click="handleBatchDeleteTags"
+        >
+          删除选中
+        </button>
+      </BulkActionBar>
       <div class="mqtt-tag-list__pagination">
         <el-pagination
           :current-page="pagination.page"
@@ -173,16 +191,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   deleteMqttTag,
-  getDataPoints,
+  deleteMqttTagsByFilter,
+  deleteMqttTagsBatch,
+  getDataPointStatuses,
   getMqttTagValues,
   getMqttTags,
 } from '@/api/data.api'
 import { useMqttTagSync } from '@/composables/useMqttTagSync'
 import MqttTagDialog from './MqttTagDialog.vue'
+import BulkActionBar from '@/components/shared/BulkActionBar.vue'
 import IconTablerActivity from '~icons/tabler/activity'
 import IconTablerDocumentAdd from '~icons/tabler/file-plus'
 import IconTablerDownload from '~icons/tabler/download'
@@ -217,6 +238,10 @@ defineEmits(['openMonitor'])
 
 const loading = ref(false)
 const tags = ref<any[]>([])
+const selectedTags = ref<any[]>([])
+const allTagResultsSelected = ref(false)
+const tagTableRef = ref()
+const syncingTagSelection = ref(false)
 const searchKeyword = ref('')
 const pagination = ref({ page: 1, pageSize: 20, total: 0, totalPages: 0 })
 const sortBy = ref<'createdAt' | 'name'>('createdAt')
@@ -233,14 +258,23 @@ const sortFieldOptions = [
   { label: '创建时间', value: 'createdAt' },
   { label: '名称', value: 'name' },
 ] as const
+const LOADING_DELAY_MS = 180
 const currentSortFieldLabel = computed(
   () => sortFieldOptions.find((option) => option.value === sortBy.value)?.label || '创建时间',
 )
 const currentSortOrderLabel = computed(() => (sortOrder.value === 'desc' ? '降序' : '升序'))
+const selectedTagCount = computed(() =>
+  allTagResultsSelected.value ? pagination.value.total : selectedTags.value.length,
+)
 
-const loadTags = async () => {
+const loadTags = async (options: { silent?: boolean } = {}) => {
+  let loadingTimer: ReturnType<typeof window.setTimeout> | null = null
   try {
-    loading.value = true
+    if (!options.silent) {
+      loadingTimer = window.setTimeout(() => {
+        loading.value = true
+      }, LOADING_DELAY_MS)
+    }
     const params = {
       page: pagination.value.page,
       pageSize: pagination.value.pageSize,
@@ -258,16 +292,26 @@ const loadTags = async () => {
       totalPages: pageInfo.totalPages || 0,
     }
     await Promise.all([loadTagDatapoints(tags.value), loadTagValues(tags.value)])
+    await syncTagSelection()
   } catch (error) {
     console.error('Failed to load tags:', error)
     ElMessage.error(getApiErrorMessage(error, '加载变量失败'))
   } finally {
-    loading.value = false
+    if (loadingTimer) {
+      window.clearTimeout(loadingTimer)
+    }
+    if (!options.silent) {
+      loading.value = false
+    }
   }
 }
 
 const reloadAll = async () => {
   await loadTags()
+}
+
+const reloadQuietly = async () => {
+  await loadTags({ silent: true })
 }
 
 const reloadFirstPage = async () => {
@@ -288,7 +332,7 @@ const loadTagValues = async (tagList) => {
   if (ids.length === 0) return
 
   try {
-    const response = await getMqttTagValues(props.projectId, ids)
+    const response = await getMqttTagValues(props.projectId, ids, { compact: true })
     const list = Array.isArray(response.data) ? response.data : response.data?.list || []
     const valueMap = new Map(list.map((item) => [item.tagId, item]))
     tags.value.forEach((tag) => {
@@ -305,11 +349,8 @@ const loadTagDatapoints = async (tagList) => {
   if (ids.length === 0) return
 
   try {
-    const response = await getDataPoints(props.projectId, {
-      type: 'mqtt.tag',
-      sourceIds: ids.join(','),
-      page: 1,
-      pageSize: 200,
+    const response = await getDataPointStatuses(props.projectId, {
+      sourceIds: ids,
     })
     const list = response.data?.datapoints || []
     const map = new Map(list.map((item) => [item.sourceId, item]))
@@ -329,17 +370,20 @@ const handleRefresh = async () => {
 }
 
 const handleSearch = () => {
+  clearTagSelection()
   void reloadFirstPage()
 }
 
 const changeSortField = (value: 'createdAt' | 'name') => {
   sortBy.value = value
   sortFieldPopoverVisible.value = false
+  clearTagSelection()
   void reloadFirstPage()
 }
 
 const toggleSortOrder = () => {
   sortOrder.value = sortOrder.value === 'desc' ? 'asc' : 'desc'
+  clearTagSelection()
   void reloadFirstPage()
 }
 
@@ -350,6 +394,9 @@ const changePage = async (page) => {
 
 const changePageSize = async (pageSize) => {
   pagination.value.pageSize = pageSize
+  if (!allTagResultsSelected.value) {
+    clearTagSelection()
+  }
   await reloadFirstPage()
 }
 
@@ -395,6 +442,97 @@ const handleDeleteTag = async (tag) => {
   }
 }
 
+const handleSelectionChange = (rows) => {
+  if (syncingTagSelection.value) return
+  allTagResultsSelected.value = false
+  const visibleIds = new Set(tags.value.map((tag) => tag.id))
+  const retainedRows = selectedTags.value.filter((tag) => !visibleIds.has(tag.id))
+  selectedTags.value = [...retainedRows, ...(rows || [])]
+}
+
+const clearTagSelection = () => {
+  allTagResultsSelected.value = false
+  selectedTags.value = []
+  void syncTagSelection()
+}
+
+const selectCurrentPage = async () => {
+  allTagResultsSelected.value = false
+  selectedTags.value = [...tags.value]
+  await syncTagSelection()
+}
+
+const selectAllResults = async () => {
+  allTagResultsSelected.value = true
+  selectedTags.value = [...tags.value]
+  await syncTagSelection()
+}
+
+const syncTagSelection = async () => {
+  await nextTick()
+  const table = tagTableRef.value
+  if (!table) return
+  syncingTagSelection.value = true
+  table.clearSelection()
+  const selectedIds = new Set(selectedTags.value.map((tag) => tag.id))
+  tags.value.forEach((tag) => {
+    if (allTagResultsSelected.value || selectedIds.has(tag.id)) {
+      table.toggleRowSelection(tag, true)
+    }
+  })
+  await nextTick()
+  syncingTagSelection.value = false
+}
+
+const handleBatchDeleteTags = async () => {
+  if (allTagResultsSelected.value) {
+    const deleteCount = pagination.value.total
+    if (deleteCount === 0) return
+    try {
+      await ElMessageBox.confirm(`确定要删除当前筛选结果中的 ${deleteCount} 个变量吗？`, '批量删除确认', {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+      })
+      const response = await deleteMqttTagsByFilter(props.projectId, props.subscriptionId, {
+        search: searchKeyword.value.trim(),
+      })
+      const deletedCount = response?.data?.deletedCount ?? 0
+      ElMessage.success(`已删除 ${deletedCount} 个变量`)
+      clearTagSelection()
+      await reloadAfterMutation()
+      notifyTagChange('deleted', { filtered: true, deletedCount })
+    } catch (error) {
+      if (error !== 'cancel') {
+        console.error('Failed to delete filtered tags:', error)
+        ElMessage.error(getApiErrorMessage(error, '批量删除失败'))
+      }
+    }
+    return
+  }
+  const tagIds = selectedTags.value.map((tag) => tag.id).filter(Boolean)
+  if (tagIds.length === 0) return
+
+  try {
+    await ElMessageBox.confirm(`确定要删除选中的 ${tagIds.length} 个变量吗？`, '批量删除确认', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    })
+
+    await deleteMqttTagsBatch(props.projectId, tagIds)
+    ElMessage.success('批量删除成功')
+    clearTagSelection()
+    await reloadAfterMutation()
+    notifyTagChange('deleted', { tagIds })
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('Failed to delete selected tags:', error)
+      ElMessage.error(getApiErrorMessage(error, '批量删除失败'))
+    }
+  }
+}
+
 const handleTagDialogSuccess = async () => {
   tagDialogVisible.value = false
   await reloadAfterMutation()
@@ -413,9 +551,16 @@ const normalizeTagValue = (value) => ({
   parsedValue: value?.parsedValue ?? value?.value,
   value: value?.value ?? value?.parsedValue,
   quality: value?.quality || 'unknown',
+  qualityCode: value?.qualityCode,
   timestamp: value?.timestamp || value?.receivedAt || '',
   error: value?.error || '',
 })
+
+const hasReceivedTagValue = (value) => {
+  if (!value) return false
+  const raw = value.parsedValue ?? value.value
+  return raw !== null && raw !== undefined && raw !== ''
+}
 
 const applyTagValueUpdate = (value) => {
   const tagId = value?.tagId
@@ -468,6 +613,23 @@ const formatLastValue = (tag) => {
   return tag.unit && text !== '-' ? `${text} ${tag.unit}` : text
 }
 
+const formatQualityLabel = (tag) => {
+  if (!hasReceivedTagValue(tag.currentValue)) return '-'
+  const quality = tag.currentValue?.quality || 'unknown'
+  const labels = {
+    good: '良好',
+    bad: '错误',
+    uncertain: '不确定',
+    unknown: '未知',
+  }
+  const label = labels[quality] || quality
+  const qualityCode = tag.currentValue?.qualityCode
+  if (quality === 'bad' && qualityCode !== null && qualityCode !== undefined && qualityCode !== '') {
+    return `${label} ${qualityCode}`
+  }
+  return label
+}
+
 const formatTime = (value) => {
   if (!value) return '-'
   const time = dayjs(value)
@@ -475,24 +637,43 @@ const formatTime = (value) => {
 }
 
 const statusLabel = (tag) => {
-  if (tag.currentValue?.quality === 'bad') return '解析异常'
   if (tag.datapointStatus === 'invalid') return '失效'
   if (tag.datapointPath) return '活跃'
   return '未生成'
 }
 
 const statusClass = (tag) => {
-  if (tag.currentValue?.quality === 'bad') return 'is-danger'
   if (tag.datapointStatus === 'invalid') return 'is-muted'
   if (tag.datapointPath) return 'is-success'
   return 'is-warning'
 }
+
+const toMonitorTagSnapshot = (tag) => ({
+  id: tag.id,
+  name: tag.name,
+  code: tag.code,
+  dataType: tag.dataType,
+  currentValue: tag.currentValue,
+  createdAt: tag.createdAt,
+})
+
+const getMonitorSnapshot = () => ({
+  mode: 'single',
+  page: pagination.value.page,
+  pageSize: pagination.value.pageSize,
+  total: pagination.value.total,
+  q: searchKeyword.value.trim(),
+  sortBy: sortBy.value,
+  sortOrder: sortOrder.value,
+  rows: tags.value.map(toMonitorTagSnapshot),
+})
 
 watch(
   () => props.subscriptionId,
   async () => {
     searchKeyword.value = ''
     pagination.value.page = 1
+    clearTagSelection()
     await reloadAll()
   },
 )
@@ -501,7 +682,9 @@ onMounted(reloadAll)
 
 defineExpose({
   applyTagValueUpdate,
+  getMonitorSnapshot,
   refresh: handleRefresh,
+  refreshQuietly: reloadQuietly,
 })
 </script>
 
@@ -609,11 +792,16 @@ defineExpose({
 }
 
 .mqtt-tag-list__body {
+  position: relative;
   height: 0;
   min-height: 0;
   flex: 1;
   display: flex;
   flex-direction: column;
+}
+
+.mqtt-tag-list__body :deep(.dc-bulk-action-bar) {
+  bottom: 58px;
 }
 
 .mqtt-tag-list__table {
@@ -729,6 +917,41 @@ defineExpose({
   padding: 6px 12px;
   border-top: 1px solid var(--dc-border);
   background: var(--dc-surface-raised);
+}
+
+.mqtt-tag-list__bulk-action-btn {
+  max-width: 92px;
+  height: 28px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 10px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.mqtt-tag-list__bulk-action-btn:hover {
+  border-color: rgba(29, 78, 216, 0.26);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+}
+
+.mqtt-tag-list__bulk-action-btn.is-danger:hover {
+  border-color: rgba(220, 38, 38, 0.26);
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--dc-danger);
 }
 
 @media (max-width: 980px) {
