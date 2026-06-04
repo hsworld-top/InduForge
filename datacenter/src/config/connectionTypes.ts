@@ -27,7 +27,7 @@ export const CONNECTION_TYPES = {
     label: 'IF消息库',
     category: 'builtin',
     icon: 'Radio',
-    defaultConfig: { topic: 'mock-data', samplePayload: { value: 1 } },
+    defaultConfig: {},
   },
 
   // MySQL

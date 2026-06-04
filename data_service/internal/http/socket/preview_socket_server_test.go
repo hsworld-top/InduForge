@@ -71,6 +71,29 @@ func TestNewPreviewSocketServer_RejectsMissingDependencies(t *testing.T) {
 	}
 }
 
+func TestResolvePreviewMqttBrokerUsesBuiltinHubForBuiltinMessage(t *testing.T) {
+	brokerURL, username, password, err := resolvePreviewMqttBroker(repository.MqttConnectionDetailRecord{
+		Type:      "builtin.message",
+		BrokerURL: "",
+	}, builtinMessageHubConfig{
+		Addr:     "127.0.0.1:18883",
+		Username: "user",
+		Password: "secret",
+	})
+	if err != nil {
+		t.Fatalf("resolve builtin broker failed: %v", err)
+	}
+	if brokerURL != "tcp://127.0.0.1:18883" {
+		t.Fatalf("unexpected broker url %q", brokerURL)
+	}
+	if username == nil || *username != "user" {
+		t.Fatalf("unexpected username %#v", username)
+	}
+	if password == nil || *password != "secret" {
+		t.Fatalf("unexpected password %#v", password)
+	}
+}
+
 func TestPreviewSocketServer_AuthorizeSocketRejectsInvalidHandshake(t *testing.T) {
 	server := &PreviewSocketServer{}
 
@@ -537,71 +560,6 @@ func TestPreviewSocketServer_HandleMqttSubscribeDoesNotPolluteSessionStateOnRunt
 	}
 }
 
-func TestPreviewSocketServer_HandleBuiltinMessageSubscribeUsesMqttSubscription(t *testing.T) {
-	server := newPreviewSocketServerForTests()
-	server.builtinRuntime = service.NewBuiltinRuntimeService(service.BuiltinRuntimeOptions{})
-	server.mqttRepository = &fakePreviewMqttRepository{
-		subscription: &repository.MqttSubscriptionRecord{
-			ID:           "sub-1",
-			ProjectID:    "project-1",
-			ConnectionID: "conn-1",
-			Topic:        "device/demo/1",
-		},
-	}
-
-	socket := newTestSocket("socket-1", "project-1", "session-1")
-	event := &socketio.EventPayload{
-		Data: []interface{}{
-			map[string]any{
-				"requestId":    "req-builtin-1",
-				"topicId":      "sub-1",
-				"connectionId": "conn-1",
-			},
-		},
-	}
-
-	server.handleBuiltinMessageSubscribe(socket, event)
-
-	session := server.sessions["session-1"]
-	if _, ok := session.socketSubscriptions["socket-1"].builtinMessages["sub-1"]; !ok {
-		t.Fatal("expected builtin message subscription to be keyed by MQTT subscription id")
-	}
-	if _, ok := session.builtinMessageStops["sub-1"]; !ok {
-		t.Fatal("expected builtin runtime stop handle to be keyed by MQTT subscription id")
-	}
-}
-
-func TestPreviewSocketServer_HandleBuiltinMessageSubscribeRejectsOtherConnection(t *testing.T) {
-	server := newPreviewSocketServerForTests()
-	server.builtinRuntime = service.NewBuiltinRuntimeService(service.BuiltinRuntimeOptions{})
-	server.mqttRepository = &fakePreviewMqttRepository{
-		subscription: &repository.MqttSubscriptionRecord{
-			ID:           "sub-1",
-			ProjectID:    "project-1",
-			ConnectionID: "conn-other",
-			Topic:        "device/demo/1",
-		},
-	}
-
-	socket := newTestSocket("socket-1", "project-1", "session-1")
-	event := &socketio.EventPayload{
-		Data: []interface{}{
-			map[string]any{
-				"requestId":    "req-builtin-2",
-				"topicId":      "sub-1",
-				"connectionId": "conn-1",
-			},
-		},
-	}
-
-	server.handleBuiltinMessageSubscribe(socket, event)
-
-	session := server.sessions["session-1"]
-	if _, ok := session.socketSubscriptions["socket-1"].builtinMessages["sub-1"]; ok {
-		t.Fatal("expected mismatched connection not to register builtin message subscription")
-	}
-}
-
 func TestPreviewSocketServer_HandleDatapointUnsubscribeClearsState(t *testing.T) {
 	cancelCount := 0
 	server := newPreviewSocketServerForTests()
@@ -836,6 +794,24 @@ func TestPreviewSocketServerLoadLatestTagSnapshotSkipsBatchHistoryWithoutCurrent
 	snapshot := server.loadLatestTagSnapshot(context.Background(), "project-1", nil, tag)
 	if snapshot != nil {
 		t.Fatalf("expected missing batch tag history to be skipped, got %#v", snapshot)
+	}
+}
+
+func TestPreviewSocketServerLoadLatestTagSnapshotSkipsEmptyHistory(t *testing.T) {
+	server := newPreviewSocketServerForTests()
+	server.mqttRepository = &fakePreviewMqttRepository{}
+	tag := repository.MqttTagRecord{
+		ID:             "tag-1",
+		SubscriptionID: "sub-1",
+		DataType:       "number",
+		ParseType:      "batch_jsonpath",
+		ParseRule:      `{"arrayPath":"$","namePath":"N","matchName":"tag1","valuePath":"V","qualityPath":"Q"}`,
+		CreatedAt:      time.Date(2026, 6, 4, 10, 0, 0, 0, time.UTC),
+	}
+
+	snapshot := server.loadLatestTagSnapshot(context.Background(), "project-1", nil, tag)
+	if snapshot != nil {
+		t.Fatalf("expected empty tag history to skip initial socket value, got %#v", snapshot)
 	}
 }
 

@@ -80,8 +80,6 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_alarm_policy_groups",
 		"data_alarm_policies",
 		"data_realtime_keys",
-		"data_builtin_message_topics",
-		"data_builtin_message_variables",
 		"data_workbench_object_groups",
 		"data_table_group_members",
 	} {
@@ -89,13 +87,21 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 			t.Fatalf("expected table %s to exist", tableName)
 		}
 	}
+	for _, tableName := range []string{
+		"data_builtin_message_topics",
+		"data_builtin_message_variables",
+	} {
+		if tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
+			t.Fatalf("expected legacy table %s to be removed", tableName)
+		}
+	}
 
 	var appliedCount int
 	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&appliedCount); err != nil {
 		t.Fatalf("鏌ヨ schema_migrations 澶辫触: %v", err)
 	}
-	if appliedCount != 35 {
-		t.Fatalf("expected 35 migration records, got %d", appliedCount)
+	if appliedCount != 44 {
+		t.Fatalf("expected 44 migration records, got %d", appliedCount)
 	}
 
 	if err := migrator.DownAll(ctx); err != nil {

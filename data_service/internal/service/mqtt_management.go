@@ -63,19 +63,20 @@ type MqttConnectionDetail struct {
 
 // MqttSubscription 表示 MQTT 订阅响应。
 type MqttSubscription struct {
-	ID               string    `json:"id"`
-	ProjectID        string    `json:"projectId"`
-	ConnectionID     string    `json:"connectionId"`
-	GroupID          *string   `json:"groupId,omitempty"`
-	Name             string    `json:"name"`
-	Topic            string    `json:"topic"`
-	QOS              int       `json:"qos"`
-	UsageMode        string    `json:"usageMode"`
-	Description      *string   `json:"description"`
-	MessageRetention int       `json:"messageRetention"`
-	Order            int       `json:"order"`
-	CreatedAt        time.Time `json:"createdAt"`
-	UpdatedAt        time.Time `json:"updatedAt"`
+	ID               string         `json:"id"`
+	ProjectID        string         `json:"projectId"`
+	ConnectionID     string         `json:"connectionId"`
+	GroupID          *string        `json:"groupId,omitempty"`
+	Name             string         `json:"name"`
+	Topic            string         `json:"topic"`
+	QOS              int            `json:"qos"`
+	UsageMode        string         `json:"usageMode"`
+	Description      *string        `json:"description"`
+	MessageRetention int            `json:"messageRetention"`
+	DefaultBatchRule map[string]any `json:"defaultBatchParseRule"`
+	Order            int            `json:"order"`
+	CreatedAt        time.Time      `json:"createdAt"`
+	UpdatedAt        time.Time      `json:"updatedAt"`
 }
 
 // MqttSubscriptionGroup 表示 MQTT 订阅树分组响应。
@@ -148,6 +149,11 @@ type UpdateMqttSubscriptionInput struct {
 	Description      *string
 	MessageRetention int
 	Order            int
+}
+
+// UpdateMqttSubscriptionDefaultBatchRuleInput 描述保存订阅默认批量解析规则的输入。
+type UpdateMqttSubscriptionDefaultBatchRuleInput struct {
+	Rule map[string]any
 }
 
 // ListMqttConnections 返回项目下 MQTT 连接列表。
@@ -531,6 +537,28 @@ func isMqttRawDatapointSubscription(record repository.MqttSubscriptionRecord) bo
 	return normalizeMqttSubscriptionUsageMode(record.UsageMode) == mqttSubscriptionUsageRawDatapoint
 }
 
+func normalizeMqttBatchParseRule(rule map[string]any) map[string]any {
+	normalized := map[string]any{
+		"arrayPath":   normalizeRulePath(rule["arrayPath"], "$"),
+		"namePath":    normalizeRulePath(rule["namePath"], "N"),
+		"valuePath":   normalizeRulePath(rule["valuePath"], "V"),
+		"qualityPath": normalizeRulePath(rule["qualityPath"], "Q"),
+		"timePath":    normalizeRulePath(rule["timePath"], "T"),
+	}
+	if matchName := strings.TrimSpace(fmt.Sprint(rule["matchName"])); matchName != "" && matchName != "<nil>" {
+		normalized["matchName"] = matchName
+	}
+	return normalized
+}
+
+func normalizeRulePath(value any, fallback string) string {
+	text := strings.TrimSpace(fmt.Sprint(value))
+	if text == "" || text == "<nil>" {
+		return fallback
+	}
+	return text
+}
+
 func (s *MqttService) syncRawSubscriptionDatapointIfNeeded(ctx context.Context, record repository.MqttSubscriptionRecord, userID string) error {
 	if !isMqttRawDatapointSubscription(record) {
 		return nil
@@ -598,6 +626,40 @@ func (s *MqttService) UpdateSubscription(ctx context.Context, projectID, subscri
 		return nil, err
 	}
 
+	result := toMqttSubscription(*record)
+	return &result, nil
+}
+
+// UpdateSubscriptionDefaultBatchRule 保存订阅默认批量解析规则。
+func (s *MqttService) UpdateSubscriptionDefaultBatchRule(ctx context.Context, projectID, subscriptionID, userID string, input UpdateMqttSubscriptionDefaultBatchRuleInput) (*MqttSubscription, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateUserID(userID); err != nil {
+		return nil, err
+	}
+	if _, err := uuid.Parse(strings.TrimSpace(subscriptionID)); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "subscriptionId 格式无效", err)
+	}
+
+	current, err := s.repository.GetSubscription(ctx, projectID, subscriptionID)
+	if err != nil {
+		return nil, err
+	}
+	if normalizeMqttSubscriptionUsageMode(current.UsageMode) != mqttSubscriptionUsageBatchVariable {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "只有批量变量订阅支持默认批量解析规则")
+	}
+
+	rule := normalizeMqttBatchParseRule(input.Rule)
+	record, err := s.repository.UpdateSubscriptionDefaultBatchRule(ctx, repository.UpdateMqttSubscriptionDefaultBatchRuleParams{
+		ProjectID:      projectID,
+		SubscriptionID: subscriptionID,
+		UserID:         userID,
+		Rule:           rule,
+	})
+	if err != nil {
+		return nil, err
+	}
 	result := toMqttSubscription(*record)
 	return &result, nil
 }
@@ -1017,7 +1079,7 @@ func (s *MqttService) resolveLatestTagValue(ctx context.Context, projectID strin
 		return MqttTagValueSnapshot{}, err
 	}
 
-	messages, err := s.repository.ListMessagesAfter(ctx, projectID, subscription.ID, tag.CreatedAt, 1)
+	messages, err := s.repository.ListMessagesAfter(ctx, projectID, subscription.ID, tag.CreatedAt, 100)
 	if err != nil {
 		return MqttTagValueSnapshot{}, err
 	}
@@ -1025,7 +1087,13 @@ func (s *MqttService) resolveLatestTagValue(ctx context.Context, projectID strin
 		return BuildFallbackMqttTagSnapshot(tag, tag.UpdatedAt, ""), nil
 	}
 
-	return BuildMqttTagSnapshotFromMessage(tag, messages[0]), nil
+	for _, message := range messages {
+		if snapshot, ok := BuildMqttTagSnapshotUpdateFromMessage(tag, message); ok {
+			return snapshot, nil
+		}
+	}
+
+	return BuildFallbackMqttTagSnapshot(tag, tag.UpdatedAt, ""), nil
 }
 
 func (s *MqttService) syncSubscriptionDatapoint(ctx context.Context, subscription repository.MqttSubscriptionRecord, userID string) error {
@@ -1192,6 +1260,7 @@ func toMqttSubscription(record repository.MqttSubscriptionRecord) MqttSubscripti
 		UsageMode:        normalizeMqttSubscriptionUsageMode(record.UsageMode),
 		Description:      cloneOptionalString(record.Description),
 		MessageRetention: record.MessageRetention,
+		DefaultBatchRule: cloneMap(record.DefaultBatchRule),
 		Order:            record.Order,
 		CreatedAt:        record.CreatedAt,
 		UpdatedAt:        record.UpdatedAt,

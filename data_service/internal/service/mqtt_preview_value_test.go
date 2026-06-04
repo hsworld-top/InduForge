@@ -1,11 +1,29 @@
 package service
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/indu-forge/data_service/internal/repository"
 )
+
+func TestExtractMqttJSONPathValueRootArray(t *testing.T) {
+	tag := repository.MqttTagRecord{
+		DataType:  "array",
+		ParseType: "jsonpath",
+		ParseRule: "$",
+	}
+
+	value, err := extractMqttTagValue(tag, `[{"N":"temperature","V":23.5,"Q":192}]`)
+	if err != nil {
+		t.Fatalf("extractMqttTagValue() error = %v", err)
+	}
+	expected := []any{map[string]any{"N": "temperature", "V": float64(23.5), "Q": float64(192)}}
+	if !reflect.DeepEqual(value, expected) {
+		t.Fatalf("extractMqttTagValue() = %#v, want %#v", value, expected)
+	}
+}
 
 func TestExtractMqttBatchJSONPathValueRootArray(t *testing.T) {
 	tag := repository.MqttTagRecord{
@@ -68,6 +86,48 @@ func TestBuildMqttTagSnapshotUpdateFromBatchJSONPathSkipsMissingName(t *testing.
 	_, ok := BuildMqttTagSnapshotUpdateFromMessage(tag, message)
 	if ok {
 		t.Fatal("expected missing batch variable to be skipped")
+	}
+}
+
+func TestBuildMqttTagSnapshotUpdateFromBatchJSONPathSkipsMissingArrayPath(t *testing.T) {
+	tag := repository.MqttTagRecord{
+		ID:             "nested-tag-id",
+		SubscriptionID: "sub-1",
+		DataType:       "number",
+		ParseType:      "batch_jsonpath",
+		ParseRule:      `{"arrayPath":"$.data.data","namePath":"N","matchName":"temperature","valuePath":"V","qualityPath":"Q"}`,
+	}
+	message := repository.MqttMessageRecord{
+		SubscriptionID: "sub-1",
+		Topic:          "device/demo",
+		Payload:        `[{"N":"temperature","V":23.5,"Q":192}]`,
+		ReceivedAt:     testTime(),
+	}
+
+	_, ok := BuildMqttTagSnapshotUpdateFromMessage(tag, message)
+	if ok {
+		t.Fatal("expected message with another batch array path to be skipped")
+	}
+}
+
+func TestBuildMqttTagSnapshotUpdateFromBatchJSONPathSkipsNonArrayPath(t *testing.T) {
+	tag := repository.MqttTagRecord{
+		ID:             "root-tag-id",
+		SubscriptionID: "sub-1",
+		DataType:       "number",
+		ParseType:      "batch_jsonpath",
+		ParseRule:      `{"arrayPath":"$","namePath":"N","matchName":"temperature","valuePath":"V","qualityPath":"Q"}`,
+	}
+	message := repository.MqttMessageRecord{
+		SubscriptionID: "sub-1",
+		Topic:          "device/demo",
+		Payload:        `{"data":{"data":[{"N":"temperature","V":23.5,"Q":192}]}}`,
+		ReceivedAt:     testTime(),
+	}
+
+	_, ok := BuildMqttTagSnapshotUpdateFromMessage(tag, message)
+	if ok {
+		t.Fatal("expected message with incompatible batch array path to be skipped")
 	}
 }
 

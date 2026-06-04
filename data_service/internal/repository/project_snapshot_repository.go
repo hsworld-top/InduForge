@@ -51,17 +51,18 @@ type SnapshotMqttConfigRecord struct {
 
 // SnapshotMqttSubscriptionRecord 表示导入导出使用的 MQTT 订阅投影。
 type SnapshotMqttSubscriptionRecord struct {
-	ID               string    `json:"id"`
-	ProjectID        string    `json:"projectId"`
-	ConnectionID     string    `json:"connectionId"`
-	Name             string    `json:"name"`
-	Topic            string    `json:"topic"`
-	QOS              int       `json:"qos"`
-	UsageMode        string    `json:"usageMode"`
-	Description      *string   `json:"description"`
-	MessageRetention int       `json:"messageRetention"`
-	CreatedAt        time.Time `json:"createdAt"`
-	UpdatedAt        time.Time `json:"updatedAt"`
+	ID               string         `json:"id"`
+	ProjectID        string         `json:"projectId"`
+	ConnectionID     string         `json:"connectionId"`
+	Name             string         `json:"name"`
+	Topic            string         `json:"topic"`
+	QOS              int            `json:"qos"`
+	UsageMode        string         `json:"usageMode"`
+	Description      *string        `json:"description"`
+	MessageRetention int            `json:"messageRetention"`
+	DefaultBatchRule map[string]any `json:"defaultBatchParseRule"`
+	CreatedAt        time.Time      `json:"createdAt"`
+	UpdatedAt        time.Time      `json:"updatedAt"`
 }
 
 // SnapshotMqttTagRecord 表示导入导出使用的 MQTT 变量投影。
@@ -348,7 +349,6 @@ type ArtifactBuiltinStoresPayload struct {
 	Relations      []ArtifactBuiltinRelationStore   `json:"relations"`
 	Timeseries     []ArtifactBuiltinTimeseriesStore `json:"timeseries"`
 	RealtimeSpaces []ArtifactBuiltinRealtimeStore   `json:"realtimeSpaces"`
-	MessageSpaces  []ArtifactBuiltinMessageStore    `json:"messageSpaces"`
 }
 
 type ArtifactBuiltinRelationStore struct {
@@ -377,16 +377,6 @@ type ArtifactBuiltinRealtimeStore struct {
 	Namespace         string   `json:"namespace"`
 	DefaultTtlSeconds int      `json:"defaultTtlSeconds"`
 	Keys              []string `json:"keys"`
-}
-
-type ArtifactBuiltinMessageStore struct {
-	ID          string   `json:"id"`
-	RuntimeKey  string   `json:"runtimeKey"`
-	Name        string   `json:"name"`
-	TopicPrefix string   `json:"topicPrefix"`
-	Topics      []string `json:"topics"`
-	Variables   []string `json:"variables"`
-	Bindings    []string `json:"bindings"`
 }
 
 // ProjectArtifactV1 表示 Phase 1 项目级数据产物。
@@ -775,16 +765,6 @@ func buildBuiltinStores(connections []ConnectionRecord) ArtifactBuiltinStoresPay
 				DefaultTtlSeconds: artifactConfigInt(connection.Config, "defaultTtlSeconds", 300),
 				Keys:              []string{},
 			})
-		case "builtin.message":
-			payload.MessageSpaces = append(payload.MessageSpaces, ArtifactBuiltinMessageStore{
-				ID:          connection.ID,
-				RuntimeKey:  runtimeKey,
-				Name:        connection.Name,
-				TopicPrefix: runtimeKey,
-				Topics:      []string{},
-				Variables:   []string{},
-				Bindings:    []string{},
-			})
 		}
 	}
 	return payload
@@ -1012,7 +992,7 @@ func (r *ProjectSnapshotRepository) listMqttConfigs(ctx context.Context, project
 
 func (r *ProjectSnapshotRepository) listMqttSubscriptions(ctx context.Context, projectID string) ([]SnapshotMqttSubscriptionRecord, error) {
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, connection_id, name, topic, qos, usage_mode, description, message_retention, created_at, updated_at
+        SELECT id, project_id, connection_id, name, topic, qos, usage_mode, description, message_retention, default_batch_parse_rule, created_at, updated_at
         FROM data_mqtt_subscriptions
         WHERE project_id = $1
         ORDER BY created_at ASC
@@ -1025,6 +1005,7 @@ func (r *ProjectSnapshotRepository) listMqttSubscriptions(ctx context.Context, p
 	result := make([]SnapshotMqttSubscriptionRecord, 0)
 	for rows.Next() {
 		record := SnapshotMqttSubscriptionRecord{}
+		var defaultBatchRuleBytes []byte
 		if err := rows.Scan(
 			&record.ID,
 			&record.ProjectID,
@@ -1035,11 +1016,13 @@ func (r *ProjectSnapshotRepository) listMqttSubscriptions(ctx context.Context, p
 			&record.UsageMode,
 			&record.Description,
 			&record.MessageRetention,
+			&defaultBatchRuleBytes,
 			&record.CreatedAt,
 			&record.UpdatedAt,
 		); err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取快照 MQTT 订阅失败", err)
 		}
+		record.DefaultBatchRule = mustJSONObject(defaultBatchRuleBytes)
 		result = append(result, record)
 	}
 	if err := rows.Err(); err != nil {
@@ -1385,13 +1368,17 @@ func (r *ProjectSnapshotRepository) insertMqttSubscriptions(ctx context.Context,
 		createdAt := coalesceTime(subscription.CreatedAt)
 		updatedAt := coalesceTime(subscription.UpdatedAt)
 		usageMode := normalizeSnapshotMqttSubscriptionUsageMode(subscription.UsageMode)
+		defaultBatchRuleBytes, err := marshalSnapshotObject(subscription.DefaultBatchRule)
+		if err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `
             INSERT INTO data_mqtt_subscriptions (
                 id, project_id, connection_id, name, topic, qos, usage_mode, description,
-                message_retention, created_by, updated_by, created_at, updated_at
+                message_retention, default_batch_parse_rule, created_by, updated_by, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-        `, subscription.ID, projectID, subscription.ConnectionID, subscription.Name, subscription.Topic, subscription.QOS, usageMode, subscription.Description, subscription.MessageRetention, actorID, actorID, createdAt, updatedAt); err != nil {
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        `, subscription.ID, projectID, subscription.ConnectionID, subscription.Name, subscription.Topic, subscription.QOS, usageMode, subscription.Description, subscription.MessageRetention, nullableJSONString(defaultBatchRuleBytes), actorID, actorID, createdAt, updatedAt); err != nil {
 			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入快照 MQTT 订阅失败", err)
 		}
 	}

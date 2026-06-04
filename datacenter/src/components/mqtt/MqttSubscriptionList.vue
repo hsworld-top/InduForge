@@ -39,7 +39,7 @@
           stripe
           class="subscription-table"
           @row-click="handleSelect"
-          @row-dblclick="handleManageTags"
+          @row-dblclick="handleView"
           @row-contextmenu="(row, column, event) => handleContextMenu(event, row)"
         >
           <el-table-column :label="t('subscription.name')" min-width="120">
@@ -76,16 +76,6 @@
                     @click.stop="handleView(row)"
                   >
                     {{ t('actions.viewMessages') }}
-                  </el-button>
-                </el-tooltip>
-                <el-tooltip :content="t('actions.manageVariables')" placement="top">
-                  <el-button
-                    class="action-link"
-                    link
-                    size="small"
-                    @click.stop="handleManageTags(row)"
-                  >
-                    {{ t('actions.manageVariables') }}
                   </el-button>
                 </el-tooltip>
                 <el-tooltip :content="t('actions.edit')" placement="top">
@@ -145,7 +135,6 @@ const props = defineProps({
 const emit = defineEmits([
   'view-messages',
   'subscription-select',
-  'manage-tags',
   'subscription-deleted',
 ])
 
@@ -199,13 +188,6 @@ const handleView = (subscription) => {
     return
   }
   emit('view-messages', subscription)
-}
-
-/**
- * 管理变量
- */
-const handleManageTags = (subscription) => {
-  emit('manage-tags', subscription)
 }
 
 /**
@@ -274,15 +256,6 @@ const handleContextMenu = (event, subscription) => {
     document.body.removeChild(menu)
   }
 
-  const manageItem = document.createElement('div')
-  manageItem.className =
-    'px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
-  manageItem.textContent = t('actions.manageVariables')
-  manageItem.onclick = () => {
-    handleManageTags(subscription)
-    document.body.removeChild(menu)
-  }
-
   const editItem = document.createElement('div')
   editItem.className =
     'px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
@@ -302,7 +275,6 @@ const handleContextMenu = (event, subscription) => {
   }
 
   menu.appendChild(openItem)
-  menu.appendChild(manageItem)
   menu.appendChild(editItem)
   menu.appendChild(deleteItem)
   document.body.appendChild(menu)

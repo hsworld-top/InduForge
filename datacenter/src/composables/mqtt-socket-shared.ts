@@ -97,14 +97,6 @@ export function createMqttSocketSharedRegistry(options = {}) {
         emitSharedEvent(entry, 'mqtt:tag:subscribe', { tagId })
       }
     })
-    entry.builtinMessageRefs.forEach((item, topicId) => {
-      if (item.count > 0) {
-        emitSharedEvent(entry, 'builtin:message:subscribe', {
-          topicId,
-          connectionId: item.connectionId,
-        })
-      }
-    })
   }
 
   const destroyEntry = (key) => {
@@ -118,7 +110,6 @@ export function createMqttSocketSharedRegistry(options = {}) {
     entry.messageHandlers.clear()
     entry.subscriptionRefs.clear()
     entry.tagRefs.clear()
-    entry.builtinMessageRefs.clear()
     entry.consumerCount = 0
     entry.connected = false
 
@@ -160,7 +151,6 @@ export function createMqttSocketSharedRegistry(options = {}) {
       messageHandlers: new Map(),
       subscriptionRefs: new Map(),
       tagRefs: new Map(),
-      builtinMessageRefs: new Map(),
     }
 
     socket.on('connect', () => {
@@ -195,20 +185,12 @@ export function createMqttSocketSharedRegistry(options = {}) {
       dispatchMessage(entry, data)
     })
 
-    socket.on('builtin:message', (data) => {
-      dispatchMessage(entry, data)
-    })
-
     socket.on('mqtt:subscription:status', (data) => {
       logger.log?.('[MqttSocket] Subscription status:', data)
     })
 
     socket.on('mqtt:connection:status', (data) => {
       logger.log?.('[MqttSocket] Connection status:', data)
-    })
-
-    socket.on('builtin:message:status', (data) => {
-      logger.log?.('[MqttSocket] Builtin message status:', data)
     })
 
     socket.onAny?.((event, ...args) => {
@@ -369,50 +351,6 @@ export function createMqttSocketSharedRegistry(options = {}) {
           tagId: normalizedTagId,
         })
       }
-    },
-
-    subscribeBuiltinMessage(key, topicId, connectionId) {
-      const entry = entries.get(key)
-      const normalizedTopicId = String(topicId || '').trim()
-      const normalizedConnectionId = String(connectionId || '').trim()
-      if (!entry || !normalizedTopicId || !normalizedConnectionId) {
-        return
-      }
-
-      const current = entry.builtinMessageRefs.get(normalizedTopicId) || {
-        count: 0,
-        connectionId: normalizedConnectionId,
-      }
-      current.count += 1
-      current.connectionId = normalizedConnectionId
-      entry.builtinMessageRefs.set(normalizedTopicId, current)
-
-      if (current.count === 1) {
-        emitSharedEvent(entry, 'builtin:message:subscribe', {
-          topicId: normalizedTopicId,
-          connectionId: normalizedConnectionId,
-        })
-      }
-    },
-
-    unsubscribeBuiltinMessage(key, topicId) {
-      const entry = entries.get(key)
-      const normalizedTopicId = String(topicId || '').trim()
-      if (!entry || !normalizedTopicId) {
-        return
-      }
-
-      const current = entry.builtinMessageRefs.get(normalizedTopicId)
-      if (!current || current.count <= 1) {
-        entry.builtinMessageRefs.delete(normalizedTopicId)
-        emitSharedEvent(entry, 'builtin:message:unsubscribe', {
-          topicId: normalizedTopicId,
-        })
-        return
-      }
-
-      current.count -= 1
-      entry.builtinMessageRefs.set(normalizedTopicId, current)
     },
 
     unsubscribeTag(key, tagId) {

@@ -285,12 +285,6 @@ func mountBuiltinRuntimeRoutes(mux *http.ServeMux, opts options) {
 	mux.Handle("POST /api/v1/data/projects/{projectId}/builtin/relation/sql/execute", read(opts.builtinRuntimeHandler.ExecuteRelationSQL))
 	mux.Handle("POST /api/v1/data/projects/{projectId}/builtin/timeseries/query", read(opts.builtinRuntimeHandler.QueryTimeseries))
 	mux.Handle("POST /api/v1/data/projects/{projectId}/builtin/timeseries/sample", write(opts.builtinRuntimeHandler.SampleTimeseries))
-	mux.Handle("POST /api/v1/data/projects/{projectId}/builtin/message/preview-session", write(opts.builtinRuntimeHandler.CreateMessagePreviewSession))
-	mux.Handle("GET /api/v1/data/projects/{projectId}/connections/{connectionId}/message/topics", read(opts.builtinRuntimeHandler.ListMessageTopics))
-	mux.Handle("POST /api/v1/data/projects/{projectId}/connections/{connectionId}/message/topics", write(opts.builtinRuntimeHandler.CreateMessageTopic))
-	mux.Handle("POST /api/v1/data/projects/{projectId}/connections/{connectionId}/message/publish", write(opts.builtinRuntimeHandler.PublishMessage))
-	mux.Handle("GET /api/v1/data/projects/{projectId}/connections/{connectionId}/message/topics/{topicId}/variables", read(opts.builtinRuntimeHandler.ListMessageVariables))
-	mux.Handle("POST /api/v1/data/projects/{projectId}/connections/{connectionId}/message/topics/{topicId}/variables", write(opts.builtinRuntimeHandler.CreateMessageVariable))
 }
 
 func mountRealtimeStoreRoutes(mux *http.ServeMux, opts options) {
@@ -942,6 +936,14 @@ func mountMqttRoutes(mux *http.ServeMux, opts options) {
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:write")(
 				middleware.ErrorHandler(opts.mqttHandler.UpdateSubscription),
+			),
+		),
+	)
+	mux.Handle(
+		"PUT /api/v1/data/projects/{projectId}/mqtt/subscriptions/{subscriptionId}/default-batch-parse-rule",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.mqttHandler.UpdateSubscriptionDefaultBatchRule),
 			),
 		),
 	)

@@ -126,11 +126,7 @@ const publishMessage = async () => {
       qos: qos.value,
       payload,
     }
-    if (props.source === 'builtin-message') {
-      await dataAPI.publishBuiltinMessage(props.projectId, props.connectionId, input)
-    } else {
-      await dataAPI.publishMqttMessage(props.projectId, props.connectionId, input)
-    }
+    await dataAPI.publishMqttMessage(props.projectId, props.connectionId, input)
     ElMessage.success('消息已发布')
   } catch (error) {
     errorMessage.value = getApiErrorMessage(

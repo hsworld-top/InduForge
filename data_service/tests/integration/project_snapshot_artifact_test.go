@@ -179,9 +179,6 @@ func TestProjectArtifactV1Contract(t *testing.T) {
 	if len(artifact.BuiltinStores.RealtimeSpaces) != 1 || artifact.BuiltinStores.RealtimeSpaces[0].Namespace != artifact.BuiltinStores.RealtimeSpaces[0].RuntimeKey {
 		t.Fatalf("expected realtime builtin store contract, got %#v", artifact.BuiltinStores.RealtimeSpaces)
 	}
-	if len(artifact.BuiltinStores.MessageSpaces) != 1 || artifact.BuiltinStores.MessageSpaces[0].TopicPrefix != artifact.BuiltinStores.MessageSpaces[0].RuntimeKey {
-		t.Fatalf("expected message builtin store contract, got %#v", artifact.BuiltinStores.MessageSpaces)
-	}
 	rawArtifact, err := json.Marshal(artifact)
 	if err != nil {
 		t.Fatalf("marshal artifact failed: %v", err)
@@ -246,7 +243,6 @@ type projectArtifactBuiltinStores struct {
 	Relations      []projectArtifactBuiltinRelationStore   `json:"relations"`
 	Timeseries     []projectArtifactBuiltinTimeseriesStore `json:"timeseries"`
 	RealtimeSpaces []projectArtifactBuiltinRealtimeStore   `json:"realtimeSpaces"`
-	MessageSpaces  []projectArtifactBuiltinMessageStore    `json:"messageSpaces"`
 }
 
 type projectArtifactBuiltinRelationStore struct {
@@ -262,11 +258,6 @@ type projectArtifactBuiltinTimeseriesStore struct {
 type projectArtifactBuiltinRealtimeStore struct {
 	RuntimeKey string `json:"runtimeKey"`
 	Namespace  string `json:"namespace"`
-}
-
-type projectArtifactBuiltinMessageStore struct {
-	RuntimeKey  string `json:"runtimeKey"`
-	TopicPrefix string `json:"topicPrefix"`
 }
 
 func insertTestMqttTag(t *testing.T, ctx context.Context, fixture *testDatabase, projectID, subscriptionID, userID string) string {

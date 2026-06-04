@@ -43,6 +43,7 @@ type MqttMessageRecord struct {
 // MqttPublishConnectionRecord 是发布测试所需的最小连接配置。
 type MqttPublishConnectionRecord struct {
 	ID               string
+	Type             string
 	BrokerURL        string
 	Protocol         string
 	Port             int
@@ -222,8 +223,8 @@ func (r *MqttRepository) StartConnection(ctx context.Context, projectID, connect
 	return &MqttConnectionStatusRecord{Status: status}, nil
 }
 
-// GetConnectionStatus 读取 MQTT 连接当前状态。
-// 查询路径说明：按 (project_id, id, type='mqtt') 精确读取，复用 data_connections 主键路径。
+// GetConnectionStatus 读取 MQTT/IF消息库连接当前状态。
+// 查询路径说明：IF消息库复用 MQTT 工作台能力，因此状态查询也允许 builtin.message。
 func (r *MqttRepository) GetConnectionStatus(ctx context.Context, projectID, connectionID string) (*MqttConnectionStatusRecord, error) {
 	var status string
 	err := r.pool.QueryRow(ctx, `
@@ -231,7 +232,7 @@ func (r *MqttRepository) GetConnectionStatus(ctx context.Context, projectID, con
 		FROM data_connections
 		WHERE project_id = $1
 		  AND id = $2
-		  AND type = 'mqtt'
+		  AND type IN ('mqtt', 'builtin.message')
 	`, projectID, connectionID).Scan(&status)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -248,26 +249,28 @@ func (r *MqttRepository) GetPublishConnection(ctx context.Context, projectID, co
 	row := r.pool.QueryRow(ctx, `
 		SELECT
 			conn.id,
-			cfg.broker_url,
-			cfg.protocol,
-			cfg.port,
+			conn.type,
+			COALESCE(cfg.broker_url, ''),
+			COALESCE(cfg.protocol, 'mqtt'),
+			COALESCE(cfg.port, 0),
 			cfg.client_id,
 			cfg.username,
 			cfg.password,
-			cfg.keepalive,
-			cfg.clean_session,
-			cfg.qos,
-			cfg.connect_timeout_ms
+			COALESCE(cfg.keepalive, 30),
+			COALESCE(cfg.clean_session, true),
+			COALESCE(cfg.qos, 0),
+			COALESCE(cfg.connect_timeout_ms, 5000)
 		FROM data_connections conn
-		JOIN data_mqtt_configs cfg ON cfg.connection_id = conn.id
+		LEFT JOIN data_mqtt_configs cfg ON cfg.connection_id = conn.id
 		WHERE conn.project_id = $1
 		  AND conn.id = $2
-		  AND conn.type = 'mqtt'
+		  AND conn.type IN ('mqtt', 'builtin.message')
 	`, projectID, connectionID)
 
 	record := MqttPublishConnectionRecord{}
 	if err := row.Scan(
 		&record.ID,
+		&record.Type,
 		&record.BrokerURL,
 		&record.Protocol,
 		&record.Port,

@@ -192,11 +192,24 @@
               <span class="mqtt-batch-mapping__mono">{{ formatDisplayTime(row.createdAt) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="92" fixed="right">
+          <el-table-column label="操作" width="124" fixed="right">
             <template #default="{ row }">
               <div class="mqtt-batch-mapping__row-actions">
+                <el-tooltip content="解析规则" placement="top">
+                  <button
+                    type="button"
+                    class="mqtt-batch-mapping__icon-action"
+                    @click="openRuleDialog(row)"
+                  >
+                    <IconTablerBraces />
+                  </button>
+                </el-tooltip>
                 <el-tooltip content="复制" placement="top">
-                  <button type="button" class="mqtt-batch-mapping__icon-action" @click="copyMappingRow(row)">
+                  <button
+                    type="button"
+                    class="mqtt-batch-mapping__icon-action"
+                    @click="copyMappingRow(row)"
+                  >
                     <IconTablerCopy />
                   </button>
                 </el-tooltip>
@@ -292,15 +305,26 @@
               <el-input v-model="ruleForm.timePath" placeholder="T" />
             </el-form-item>
           </el-form>
-          <el-tooltip
-            content="根据样例消息和拆分规则生成或更新右侧变量映射清单；这里只预览并整理清单，点击保存映射后才会创建或更新变量。"
-            placement="top"
-          >
-            <el-button type="primary" plain size="small" @click="parseSample">
-              <IconTablerWand class="mqtt-batch-mapping__button-icon" />
-              解析预览
-            </el-button>
-          </el-tooltip>
+          <div class="mqtt-batch-mapping__rule-actions">
+            <el-tooltip
+              content="根据样例消息和拆分规则生成或更新右侧变量映射清单；这里只预览并整理清单，点击保存映射后才会创建或更新变量。"
+              placement="top"
+            >
+              <el-button type="primary" plain size="small" @click="parseSample">
+                <IconTablerWand class="mqtt-batch-mapping__button-icon" />
+                解析预览
+              </el-button>
+            </el-tooltip>
+            <el-tooltip
+              content="保存当前拆分规则为本订阅的默认建点规则；之后新建的变量会按这套规则写入变量解析规则。"
+              placement="top"
+            >
+              <el-button size="small" :loading="defaultRuleSaving" @click="saveDefaultRule">
+                <IconTablerDeviceFloppy class="mqtt-batch-mapping__button-icon" />
+                保存规则
+              </el-button>
+            </el-tooltip>
+          </div>
         </div>
       </div>
     </section>
@@ -336,6 +360,50 @@
         <el-button type="primary" @click="applyBatchGenerate">生成</el-button>
       </template>
     </DcDialog>
+
+    <DcDialog
+      v-model="ruleDialogVisible"
+      :title="`编辑解析规则 - ${ruleDialogForm.name || '-'}`"
+      width="680px"
+      @close="resetRuleDialog"
+    >
+      <el-form label-position="top" class="mqtt-batch-mapping__rule-dialog-form">
+        <div class="mqtt-batch-mapping__rule-dialog-summary">
+          <span>变量名：{{ ruleDialogForm.name || '-' }}</span>
+          <span>解析类型：批量映射</span>
+        </div>
+        <div class="mqtt-batch-mapping__rule-dialog-grid">
+          <el-form-item label="变量数组路径">
+            <el-input v-model="ruleDialogForm.arrayPath" placeholder="$ 或 $.data.data" />
+          </el-form-item>
+          <el-form-item label="变量名字段路径">
+            <el-input v-model="ruleDialogForm.namePath" placeholder="N" />
+          </el-form-item>
+          <el-form-item label="匹配变量名">
+            <el-input v-model="ruleDialogForm.matchName" placeholder="例如 tag1" />
+          </el-form-item>
+          <el-form-item label="值字段路径">
+            <el-input v-model="ruleDialogForm.valuePath" placeholder="V" />
+          </el-form-item>
+          <el-form-item label="质量字段路径">
+            <el-input v-model="ruleDialogForm.qualityPath" placeholder="Q" />
+          </el-form-item>
+          <el-form-item label="时间字段路径">
+            <el-input v-model="ruleDialogForm.timePath" placeholder="T" />
+          </el-form-item>
+        </div>
+      </el-form>
+      <template #footer>
+        <el-button @click="ruleDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="ruleDialogSaving"
+          @click="saveRuleDialog"
+        >
+          保存规则
+        </el-button>
+      </template>
+    </DcDialog>
   </div>
 </template>
 
@@ -350,6 +418,7 @@ import {
   getDataPointStatuses,
   getMqttTagValues,
   getMqttTags,
+  updateMqttSubscriptionDefaultBatchParseRule,
   updateMqttTag,
 } from '@/api/data.api'
 import { useMqttTagSync } from '@/composables/useMqttTagSync'
@@ -360,6 +429,7 @@ import BulkActionBar from '@/components/shared/BulkActionBar.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 import dayjs from 'dayjs'
 import IconTablerActivity from '~icons/tabler/activity'
+import IconTablerBraces from '~icons/tabler/braces'
 import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerDeviceFloppy from '~icons/tabler/device-floppy'
 import IconTablerLayoutSidebarRight from '~icons/tabler/layout-sidebar-right'
@@ -375,6 +445,7 @@ type MqttSubscription = {
   id: string
   name?: string
   topic?: string
+  defaultBatchParseRule?: BatchParseRule | null
 }
 
 type BatchMappingRow = {
@@ -391,6 +462,16 @@ type BatchMappingRow = {
   createdAt?: string
   localPinned?: boolean
   existingTagId?: string
+  customRule?: BatchParseRule
+}
+
+type BatchParseRule = {
+  arrayPath?: string
+  namePath?: string
+  matchName?: string
+  valuePath?: string
+  qualityPath?: string
+  timePath?: string
 }
 
 type MonitorTagSnapshot = {
@@ -408,8 +489,9 @@ const props = defineProps<{
   previewSessionId?: string
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (event: 'openMonitor'): void
+  (event: 'subscriptionUpdated', subscription: MqttSubscription): void
 }>()
 
 const loading = ref(false)
@@ -434,6 +516,10 @@ const sortFieldPopoverVisible = ref(false)
 const editingMappingCell = ref<{ key: string; field: 'name' | 'dataType' } | null>(null)
 const samplePayload = ref('')
 const batchGenerateVisible = ref(false)
+const ruleDialogVisible = ref(false)
+const ruleDialogSaving = ref(false)
+const defaultRuleSaving = ref(false)
+const savedDefaultRule = ref<BatchParseRule | null>(null)
 const mappingPagination = reactive({
   page: 1,
   pageSize: 50,
@@ -453,9 +539,29 @@ const ruleForm = reactive({
   qualityPath: 'Q',
   timePath: 'T',
 })
-
+const runtimeRuleKeys: Array<keyof BatchParseRule> = [
+  'arrayPath',
+  'namePath',
+  'valuePath',
+  'qualityPath',
+  'timePath',
+]
+const ruleDialogForm = reactive({
+  rowKey: '',
+  tagId: '',
+  name: '',
+  code: '',
+  dataType: 'number' as BatchMappingRow['dataType'],
+  arrayPath: '$',
+  namePath: 'N',
+  matchName: '',
+  valuePath: 'V',
+  qualityPath: 'Q',
+  timePath: 'T',
+})
 const DATAPOINT_STATUS_QUERY_BATCH_SIZE = 100
 const LOADING_DELAY_MS = 180
+const SAMPLE_PAYLOAD_STORAGE_PREFIX = 'mqtt-batch-sample'
 const sampleEditorOptions = {
   minimap: { enabled: false },
   fontSize: 12,
@@ -467,6 +573,9 @@ const sampleEditorOptions = {
 }
 const { refresh: notifyTagRefresh } = useMqttTagSync(props.subscription.id)
 const { width: windowWidth } = useWindowSize()
+const samplePayloadStorageKey = computed(
+  () => `${SAMPLE_PAYLOAD_STORAGE_PREFIX}:${props.projectId}:${props.subscription.id}`,
+)
 const CONFIG_PANEL_MIN_WIDTH = 320
 const CONFIG_PANEL_MAX_WIDTH = 680
 const bodyGridStyle = computed(() => ({
@@ -637,6 +746,76 @@ const fillDefaultSample = () => {
   samplePayload.value = defaultSample.value
 }
 
+const loadSamplePayloadDraft = () => {
+  samplePayload.value = window.localStorage.getItem(samplePayloadStorageKey.value) || ''
+}
+
+const saveSamplePayloadDraft = (value: string) => {
+  if (value) {
+    window.localStorage.setItem(samplePayloadStorageKey.value, value)
+  } else {
+    window.localStorage.removeItem(samplePayloadStorageKey.value)
+  }
+}
+
+const buildDefaultRuleFromForm = (): BatchParseRule => ({
+  arrayPath: ruleForm.arrayPath.trim() || '$',
+  namePath: ruleForm.namePath.trim() || 'N',
+  valuePath: ruleForm.valuePath.trim() || 'V',
+  qualityPath: ruleForm.qualityPath.trim() || 'Q',
+  timePath: ruleForm.timePath.trim() || 'T',
+})
+
+const applyDefaultRuleToForm = (rule: BatchParseRule) => {
+  ruleForm.arrayPath = rule.arrayPath || '$'
+  ruleForm.namePath = rule.namePath || 'N'
+  ruleForm.valuePath = rule.valuePath || 'V'
+  ruleForm.qualityPath = rule.qualityPath || 'Q'
+  ruleForm.timePath = rule.timePath || 'T'
+}
+
+const loadDefaultRuleDraft = () => {
+  const rule = normalizeBatchRuleObject(props.subscription.defaultBatchParseRule)
+  savedDefaultRule.value = rule && Object.keys(rule).length > 0 ? rule : null
+  if (savedDefaultRule.value) {
+    applyDefaultRuleToForm(savedDefaultRule.value)
+  }
+}
+
+const saveDefaultRule = async () => {
+  const rule = buildDefaultRuleFromForm()
+  defaultRuleSaving.value = true
+  try {
+    const response = await updateMqttSubscriptionDefaultBatchParseRule(
+      props.projectId,
+      props.subscription.id,
+      rule,
+    )
+    const updatedSubscription = response.data || { ...props.subscription, defaultBatchParseRule: rule }
+    savedDefaultRule.value = updatedSubscription.defaultBatchParseRule || rule
+    emit('subscriptionUpdated', updatedSubscription)
+    ElMessage.success('拆分规则已保存，之后新建变量会使用这套规则')
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '保存拆分规则失败'))
+  } finally {
+    defaultRuleSaving.value = false
+  }
+}
+
+const resolveNewRowRule = (matchName: string): BatchParseRule => ({
+  ...(savedDefaultRule.value || buildDefaultRuleFromForm()),
+  matchName,
+})
+
+const normalizeBatchRuleObject = (value?: Record<string, unknown> | BatchParseRule | null): BatchParseRule => ({
+  arrayPath: String(value?.arrayPath || '').trim() || undefined,
+  namePath: String(value?.namePath || '').trim() || undefined,
+  valuePath: String(value?.valuePath || '').trim() || undefined,
+  qualityPath: String(value?.qualityPath || '').trim() || undefined,
+  timePath: String(value?.timePath || '').trim() || undefined,
+  matchName: String(value?.matchName || '').trim() || undefined,
+})
+
 const getDataTypeLabel = (dataType?: BatchMappingRow['dataType']) => {
   const labels = {
     string: '字符串',
@@ -739,6 +918,7 @@ const parseSample = () => {
         sampleTime: resolvePath(item, ruleForm.timePath),
         createdAt: new Date().toISOString(),
         localPinned: true,
+        customRule: resolveNewRowRule(matchName),
       }
     })
     .filter(Boolean) as BatchMappingRow[]
@@ -764,6 +944,7 @@ const mergeSampleRows = (rows: BatchMappingRow[]) => {
       code: current?.code || row.code,
       createdAt: current?.createdAt || row.createdAt,
       localPinned: current?.localPinned ?? row.localPinned,
+      customRule: current?.customRule || row.customRule,
     }
   })
   const parsedKeys = new Set(parsedRows.map((row) => row.matchName))
@@ -820,17 +1001,46 @@ const buildTagPayload = (row: BatchMappingRow, index: number) => ({
   code: row.code,
   dataType: row.dataType,
   parseType: 'batch_jsonpath',
-  parseRule: JSON.stringify({
+  parseRule: JSON.stringify(resolveRowRule(row)),
+  order: index,
+})
+
+const resolveRowRule = (row: BatchMappingRow): BatchParseRule => {
+  if (row.customRule && Object.keys(row.customRule).length > 0) {
+    return {
+      arrayPath: row.customRule.arrayPath || ruleForm.arrayPath,
+      namePath: row.customRule.namePath || ruleForm.namePath,
+      matchName: row.customRule.matchName || row.matchName,
+      valuePath: row.customRule.valuePath || ruleForm.valuePath,
+      qualityPath: row.customRule.qualityPath || ruleForm.qualityPath,
+      timePath: row.customRule.timePath || ruleForm.timePath,
+    }
+  }
+
+  if (row.existingTagId) {
+    const current = existingTags.value.find((tag) => tag.id === row.existingTagId)
+    const currentRule = parseBatchRule(current?.parseRule || '')
+    if (currentRule && Object.keys(currentRule).length > 0) {
+      return {
+        arrayPath: currentRule.arrayPath || ruleForm.arrayPath,
+        namePath: currentRule.namePath || ruleForm.namePath,
+        matchName: currentRule.matchName || row.matchName,
+        valuePath: currentRule.valuePath || ruleForm.valuePath,
+        qualityPath: currentRule.qualityPath || ruleForm.qualityPath,
+        timePath: currentRule.timePath || ruleForm.timePath,
+      }
+    }
+  }
+
+  return {
     arrayPath: ruleForm.arrayPath,
     namePath: ruleForm.namePath,
     matchName: row.matchName,
     valuePath: ruleForm.valuePath,
     qualityPath: ruleForm.qualityPath,
     timePath: ruleForm.timePath,
-    samplePayload: samplePayload.value,
-  }),
-  order: index,
-})
+  }
+}
 
 const shouldUpdateMappingRow = (row: BatchMappingRow, index: number) => {
   if (!row.existingTagId) return false
@@ -846,18 +1056,119 @@ const shouldUpdateMappingRow = (row: BatchMappingRow, index: number) => {
   if (currentRule.matchName !== nextRule.matchName) return true
   if (isRuntimeRuleChanged(currentRule, nextRule)) return true
 
-  // 样例消息只用于回到映射界面时恢复编辑器内容，不参与运行态解析；只更新一条记录即可避免 1000 行全量更新。
-  return isSamplePayloadHolder(row.existingTagId) && currentRule.samplePayload !== nextRule.samplePayload
+  return false
 }
 
-const isRuntimeRuleChanged = (currentRule, nextRule) =>
-  ['arrayPath', 'namePath', 'valuePath', 'qualityPath', 'timePath'].some(
+const isRuntimeRuleChanged = (currentRule: BatchParseRule, nextRule: BatchParseRule) =>
+  runtimeRuleKeys.some(
     (key) => String(currentRule?.[key] || '') !== String(nextRule?.[key] || ''),
   )
 
-const isSamplePayloadHolder = (tagId: string) => {
-  const firstBatchTag = existingTags.value.find((tag) => tag.parseType === 'batch_jsonpath')
-  return firstBatchTag?.id === tagId
+const openRuleDialog = (row: BatchMappingRow) => {
+  const current = row.existingTagId
+    ? existingTags.value.find((tag) => tag.id === row.existingTagId)
+    : null
+  const rule = parseBatchRule(current?.parseRule || JSON.stringify(resolveRowRule(row)))
+  ruleDialogForm.rowKey = row.matchName
+  ruleDialogForm.tagId = row.existingTagId || ''
+  ruleDialogForm.name = row.name || row.matchName
+  ruleDialogForm.code = row.code
+  ruleDialogForm.dataType = row.dataType
+  ruleDialogForm.arrayPath = rule.arrayPath || '$'
+  ruleDialogForm.namePath = rule.namePath || 'N'
+  ruleDialogForm.matchName = rule.matchName || row.matchName
+  ruleDialogForm.valuePath = rule.valuePath || 'V'
+  ruleDialogForm.qualityPath = rule.qualityPath || 'Q'
+  ruleDialogForm.timePath = rule.timePath || 'T'
+  ruleDialogVisible.value = true
+}
+
+const resetRuleDialog = () => {
+  ruleDialogForm.rowKey = ''
+  ruleDialogForm.tagId = ''
+  ruleDialogForm.name = ''
+  ruleDialogForm.code = ''
+  ruleDialogForm.dataType = 'number'
+  ruleDialogForm.arrayPath = '$'
+  ruleDialogForm.namePath = 'N'
+  ruleDialogForm.matchName = ''
+  ruleDialogForm.valuePath = 'V'
+  ruleDialogForm.qualityPath = 'Q'
+  ruleDialogForm.timePath = 'T'
+}
+
+const buildRuleDialogParseRule = (): BatchParseRule => ({
+  arrayPath: ruleDialogForm.arrayPath.trim() || '$',
+  namePath: ruleDialogForm.namePath.trim() || 'N',
+  matchName: ruleDialogForm.matchName.trim(),
+  valuePath: ruleDialogForm.valuePath.trim() || 'V',
+  qualityPath: ruleDialogForm.qualityPath.trim() || 'Q',
+  timePath: ruleDialogForm.timePath.trim() || 'T',
+})
+
+const saveRuleDialog = async () => {
+  const nextRule = buildRuleDialogParseRule()
+  if (!nextRule.matchName) {
+    ElMessage.warning('匹配变量名不能为空')
+    return
+  }
+
+  const duplicated = mappings.value.some(
+    (item) => item.matchName !== ruleDialogForm.rowKey && item.matchName === nextRule.matchName,
+  )
+  if (duplicated) {
+    ElMessage.warning(`变量 ${nextRule.matchName} 已存在，请更换匹配变量名`)
+    return
+  }
+
+  const row = mappings.value.find((item) => item.matchName === ruleDialogForm.rowKey)
+  if (!row) {
+    ElMessage.warning('变量行不存在，请刷新后重试')
+    return
+  }
+
+  const parseRule = JSON.stringify(nextRule)
+  if (!ruleDialogForm.tagId) {
+    row.matchName = nextRule.matchName
+    row.name = ruleDialogForm.name || nextRule.matchName
+    row.customRule = nextRule
+    ruleDialogVisible.value = false
+    ElMessage.success('解析规则已更新，保存映射后生效')
+    return
+  }
+
+  ruleDialogSaving.value = true
+  try {
+    await updateMqttTag(props.projectId, ruleDialogForm.tagId, {
+      name: ruleDialogForm.name,
+      code: ruleDialogForm.code,
+      dataType: ruleDialogForm.dataType,
+      parseType: 'batch_jsonpath',
+      parseRule,
+      order:
+        existingTags.value.find((tag) => tag.id === ruleDialogForm.tagId)?.order ??
+        visibleMappings.value.findIndex((item) => item.existingTagId === ruleDialogForm.tagId),
+    })
+    const current = existingTags.value.find((tag) => tag.id === ruleDialogForm.tagId)
+    if (current) {
+      current.parseRule = parseRule
+      current.name = ruleDialogForm.name
+      current.code = ruleDialogForm.code
+      current.dataType = ruleDialogForm.dataType
+    }
+    row.matchName = nextRule.matchName
+    row.name = ruleDialogForm.name || nextRule.matchName
+    row.code = ruleDialogForm.code
+    row.dataType = ruleDialogForm.dataType
+    row.customRule = nextRule
+    ruleDialogVisible.value = false
+    ElMessage.success('解析规则已保存')
+    notifyTagRefresh()
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '保存解析规则失败'))
+  } finally {
+    ruleDialogSaving.value = false
+  }
 }
 
 const createMappingRow = (
@@ -874,6 +1185,7 @@ const createMappingRow = (
   sampleTime: undefined,
   createdAt,
   localPinned: true,
+  customRule: resolveNewRowRule(matchName),
 })
 
 const addMappingRow = () => {
@@ -910,6 +1222,10 @@ const copyMappingRow = (row: BatchMappingRow) => {
       datapointStatus: '',
       createdAt: new Date().toISOString(),
       localPinned: true,
+      customRule: {
+        ...resolveRowRule(row),
+        matchName: nextName,
+      },
     },
     ...mappings.value,
   ]
@@ -1161,6 +1477,9 @@ const markExistingMappings = () => {
   mappings.value.forEach((row) => {
     const tag = codeMap.get(row.code)
     row.existingTagId = tag?.id || ''
+    if (tag) {
+      row.customRule = undefined
+    }
     if (!tag) {
       row.currentValue = undefined
       row.datapointPath = ''
@@ -1293,17 +1612,14 @@ const restoreMappingsFromExistingTags = () => {
     .filter(Boolean) as BatchMappingRow[]
 
   const firstRule = parseBatchRule(batchTags[0]?.parseRule)
-  ruleForm.arrayPath = firstRule.arrayPath || '$'
-  ruleForm.namePath = firstRule.namePath || 'N'
-  ruleForm.valuePath = firstRule.valuePath || 'V'
-  ruleForm.qualityPath = firstRule.qualityPath || 'Q'
-  ruleForm.timePath = firstRule.timePath || 'T'
-  samplePayload.value = firstRule.samplePayload || ''
+  if (!savedDefaultRule.value) {
+    applyDefaultRuleToForm(firstRule)
+  }
   mappings.value = rows
   normalizeMappingPage()
 }
 
-const parseBatchRule = (ruleText: string) => {
+const parseBatchRule = (ruleText?: string): BatchParseRule => {
   try {
     return JSON.parse(ruleText || '{}')
   } catch {
@@ -1450,12 +1766,28 @@ watch(
     mappingPagination.page = 1
     mappingPagination.total = 0
     mappingPagination.totalPages = 0
-    samplePayload.value = ''
+    loadSamplePayloadDraft()
+    loadDefaultRuleDraft()
     await loadTags()
   },
 )
 
-onMounted(loadTags)
+watch(
+  () => props.subscription.defaultBatchParseRule,
+  () => {
+    loadDefaultRuleDraft()
+  },
+)
+
+watch(samplePayload, (value) => {
+  saveSamplePayloadDraft(value)
+})
+
+onMounted(() => {
+  loadSamplePayloadDraft()
+  loadDefaultRuleDraft()
+  void loadTags()
+})
 
 onBeforeUnmount(stopConfigResize)
 
@@ -1631,9 +1963,20 @@ defineExpose({
   align-content: start;
 }
 
-.mqtt-batch-mapping__rules :deep(.el-button) {
+.mqtt-batch-mapping__rule-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mqtt-batch-mapping__rule-actions :deep(.el-tooltip__trigger) {
+  width: 100%;
+}
+
+.mqtt-batch-mapping__rule-actions :deep(.el-button) {
   width: 100%;
   justify-content: center;
+  margin-left: 0;
 }
 
 .mqtt-batch-mapping__section-title {
@@ -1859,6 +2202,48 @@ defineExpose({
 .mqtt-batch-mapping__generate-form :deep(.el-input-number),
 .mqtt-batch-mapping__generate-form :deep(.el-select) {
   width: 100%;
+}
+
+.mqtt-batch-mapping__rule-dialog-form {
+  display: grid;
+  gap: 14px;
+}
+
+.mqtt-batch-mapping__rule-dialog-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-subtle);
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mqtt-batch-mapping__rule-dialog-summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mqtt-batch-mapping__rule-dialog-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.mqtt-batch-mapping__rule-dialog-grid :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+.mqtt-batch-mapping__rule-dialog-grid :deep(.el-form-item__label) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mqtt-batch-mapping__button-icon {

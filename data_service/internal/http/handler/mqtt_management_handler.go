@@ -386,6 +386,28 @@ func (h *MqttHandler) UpdateSubscription(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
+// UpdateSubscriptionDefaultBatchRule 保存订阅默认批量解析规则。
+func (h *MqttHandler) UpdateSubscriptionDefaultBatchRule(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Rule map[string]any `json:"rule"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.UpdateSubscriptionDefaultBatchRule(r.Context(), r.PathValue("projectId"), r.PathValue("subscriptionId"), claims.UserID, service.UpdateMqttSubscriptionDefaultBatchRuleInput{
+		Rule: request.Rule,
+	})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 // DeleteSubscription 删除订阅。
 func (h *MqttHandler) DeleteSubscription(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)

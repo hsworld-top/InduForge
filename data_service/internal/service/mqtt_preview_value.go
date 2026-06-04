@@ -169,12 +169,16 @@ func extractMqttTagResult(tag repository.MqttTagRecord, payload string) (mqttTag
 
 	switch parseType {
 	case "jsonpath":
-		path := normalizeJSONPath(tag.ParseRule)
-		if path == "" {
+		rule := strings.TrimSpace(tag.ParseRule)
+		path := normalizeJSONPath(rule)
+		if path == "" && rule != "$" {
 			return mqttTagExtractResult{}, fmt.Errorf("jsonpath 解析规则不能为空")
 		}
 
-		result := gjson.Get(payload, path)
+		result := gjson.Parse(payload)
+		if path != "" {
+			result = gjson.Get(payload, path)
+		}
 		if !result.Exists() {
 			return mqttTagExtractResult{}, fmt.Errorf("jsonpath 未命中: %s", tag.ParseRule)
 		}
@@ -230,10 +234,10 @@ func extractMqttBatchJSONPathValue(tag repository.MqttTagRecord, payload string)
 		arrayResult = gjson.Get(payload, arrayPath)
 	}
 	if !arrayResult.Exists() {
-		return mqttTagExtractResult{}, fmt.Errorf("批量映射数组路径未命中: %s", rule.ArrayPath)
+		return mqttTagExtractResult{}, fmt.Errorf("%w: %s", errMqttTagNoUpdate, rule.ArrayPath)
 	}
 	if !arrayResult.IsArray() {
-		return mqttTagExtractResult{}, fmt.Errorf("批量映射数组路径不是数组: %s", rule.ArrayPath)
+		return mqttTagExtractResult{}, fmt.Errorf("%w: %s", errMqttTagNoUpdate, rule.ArrayPath)
 	}
 
 	for _, item := range arrayResult.Array() {

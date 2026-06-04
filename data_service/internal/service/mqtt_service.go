@@ -92,6 +92,10 @@ type MqttService struct {
 	connections *repository.ConnectionRepository
 	datapoints  *repository.DataPointRepository
 	runtime     *MqttConnectionRuntimeManager
+
+	builtinMessageHubAddr     string
+	builtinMessageHubUsername string
+	builtinMessageHubPassword string
 }
 
 // NewMqttService 创建 MQTT 领域服务。
@@ -105,10 +109,15 @@ func NewMqttService(repo *repository.MqttRepository, connectionRepo *repository.
 }
 
 func (s *MqttService) ConfigureBuiltinMessageHub(addr, username, password string) {
-	if s == nil || s.runtime == nil {
+	if s == nil {
 		return
 	}
-	s.runtime.ConfigureBuiltinMessageHub(addr, username, password)
+	s.builtinMessageHubAddr = strings.TrimSpace(addr)
+	s.builtinMessageHubUsername = strings.TrimSpace(username)
+	s.builtinMessageHubPassword = password
+	if s.runtime != nil {
+		s.runtime.ConfigureBuiltinMessageHub(addr, username, password)
+	}
 }
 
 // CreateConnection 创建 MQTT 连接。
@@ -316,6 +325,11 @@ func (s *MqttService) PublishMessage(ctx context.Context, projectID, connectionI
 	if input.QOS == nil {
 		qos = connection.QOS
 	}
+	if connection.Type == "builtin.message" {
+		if err := s.applyBuiltinMessagePublishConnection(connection); err != nil {
+			return nil, err
+		}
+	}
 
 	payload, err := json.Marshal(input.Payload)
 	if err != nil {
@@ -338,6 +352,30 @@ func (s *MqttService) PublishMessage(ctx context.Context, projectID, connectionI
 	})
 
 	return &MqttPublishResult{Topic: topic, QOS: qos}, nil
+}
+
+func (s *MqttService) applyBuiltinMessagePublishConnection(connection *repository.MqttPublishConnectionRecord) error {
+	if connection == nil {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "IF消息库连接不存在")
+	}
+	addr := strings.TrimSpace(s.builtinMessageHubAddr)
+	if addr == "" {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "IF消息库 message-hub 地址为空")
+	}
+	connection.BrokerURL = addr
+	connection.Protocol = "mqtt"
+	connection.Port = 0
+	connection.CleanSession = true
+	if s.builtinMessageHubUsername != "" {
+		username := s.builtinMessageHubUsername
+		password := s.builtinMessageHubPassword
+		connection.Username = &username
+		connection.Password = &password
+	} else {
+		connection.Username = nil
+		connection.Password = nil
+	}
+	return nil
 }
 
 func toMqttConnection(record repository.MqttConnectionRecord) MqttConnection {

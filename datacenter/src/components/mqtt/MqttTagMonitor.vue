@@ -4,7 +4,7 @@
       <div v-if="totalTags === 0" class="mqtt-tag-monitor__empty">
         <IconTablerFile />
         <div>暂无变量</div>
-        <small>请先在变量管理中创建变量</small>
+        <small>请先在订阅的变量配置中创建变量</small>
       </div>
 
       <div v-else-if="viewMode === 'card'" v-loading="loading" class="tag-card-grid">
@@ -19,6 +19,7 @@
               {{ tag.name }}
             </div>
             <WorkbenchStatusPill
+              v-if="showQualityFields"
               :label="formatQualityLabel(tag.currentValue)"
               :tone="getQualityTone(tag.currentValue?.quality || 'unknown')"
             />
@@ -28,7 +29,7 @@
             {{ tag.currentValue ? formatTagValue(tag.currentValue, tag.dataType) : '-' }}
           </div>
 
-          <div class="tag-card__time">
+          <div v-if="showQualityFields" class="tag-card__time">
             <span>更新时间</span>
             <strong>{{ tag.currentValue?.timestamp ? formatTimestamp(tag.currentValue.timestamp) : '-' }}</strong>
           </div>
@@ -36,23 +37,28 @@
       </div>
 
       <div v-else v-loading="loading" class="tag-row-list">
-        <div class="tag-row tag-row-header">
+        <div class="tag-row tag-row-header" :class="{ 'is-single': !showQualityFields }">
           <span>变量名</span>
           <span>类型</span>
           <span>当前值</span>
-          <span>时间戳</span>
-          <span>质量</span>
+          <span v-if="showQualityFields">时间戳</span>
+          <span v-if="showQualityFields">质量</span>
         </div>
-        <div v-for="tag in tags" :key="tag.id" class="tag-row">
+        <div
+          v-for="tag in tags"
+          :key="tag.id"
+          class="tag-row"
+          :class="{ 'is-single': !showQualityFields }"
+        >
           <span class="truncate" :title="tag.name">{{ tag.name }}</span>
           <span>{{ getDataTypeLabel(tag.dataType) }}</span>
           <span class="truncate">
             {{ tag.currentValue ? formatTagValue(tag.currentValue, tag.dataType) : '-' }}
           </span>
-          <span class="truncate">
+          <span v-if="showQualityFields" class="truncate">
             {{ tag.currentValue?.timestamp ? formatTimestamp(tag.currentValue.timestamp) : '-' }}
           </span>
-          <span>
+          <span v-if="showQualityFields">
             <el-tag :type="getQualityColor(tag.currentValue?.quality || 'unknown')" size="small">
               {{ formatQualityLabel(tag.currentValue) }}
             </el-tag>
@@ -122,6 +128,7 @@ const pagination = reactive({
 })
 const latestValueMap = new Map()
 const totalTags = computed(() => pagination.total)
+const showQualityFields = computed(() => props.snapshot?.mode === 'batch')
 const pageSizes = computed(() =>
   props.snapshot?.mode === 'single' ? [20, 50, 100] : [50, 100, 200],
 )
@@ -516,6 +523,10 @@ defineExpose({
   border-radius: var(--dc-radius-sm);
   font-size: 12px;
   color: var(--dc-text-secondary);
+}
+
+.tag-row.is-single {
+  grid-template-columns: 1.4fr 0.6fr 2fr;
 }
 
 .tag-row-header {

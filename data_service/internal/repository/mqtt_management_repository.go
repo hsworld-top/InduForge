@@ -67,6 +67,7 @@ type MqttSubscriptionRecord struct {
 	UsageMode        string
 	Description      *string
 	MessageRetention int
+	DefaultBatchRule map[string]any
 	Order            int
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
@@ -142,6 +143,14 @@ type CreateMqttSubscriptionParams struct {
 	Description      *string
 	MessageRetention int
 	Order            int
+}
+
+// UpdateMqttSubscriptionDefaultBatchRuleParams 表示更新订阅默认批量解析规则的仓储参数。
+type UpdateMqttSubscriptionDefaultBatchRuleParams struct {
+	ProjectID      string
+	SubscriptionID string
+	UserID         string
+	Rule           map[string]any
 }
 
 // UpdateMqttSubscriptionParams 表示更新 MQTT 订阅的仓储参数。
@@ -311,6 +320,7 @@ func (r *MqttRepository) GetConnectionSummary(ctx context.Context, projectID, co
 }
 
 // GetConnectionDetail 按项目与主键读取 MQTT 连接详情。
+// IF消息库没有外置 broker 配置行，这里用默认 MQTT 字段占位，真正连接地址由服务层内置 message-hub 配置覆盖。
 func (r *MqttRepository) GetConnectionDetail(ctx context.Context, projectID, connectionID string) (*MqttConnectionDetailRecord, error) {
 	row := r.pool.QueryRow(ctx, `
         SELECT
@@ -323,26 +333,26 @@ func (r *MqttRepository) GetConnectionDetail(ctx context.Context, projectID, con
             conn.retry_count,
             conn.retry_interval_ms,
             conn.health_check_interval_ms,
-            cfg.broker_url,
-            cfg.protocol,
-            cfg.port,
+            COALESCE(cfg.broker_url, ''),
+            COALESCE(cfg.protocol, 'mqtt'),
+            COALESCE(cfg.port, 0),
             cfg.client_id,
             cfg.username,
             cfg.password,
-            cfg.keepalive,
-            cfg.clean_session,
-            cfg.qos,
-            cfg.reconnect_period_ms,
-            cfg.connect_timeout_ms,
-            cfg.will,
-            cfg.ssl_config,
+            COALESCE(cfg.keepalive, 30),
+            COALESCE(cfg.clean_session, true),
+            COALESCE(cfg.qos, 0),
+            COALESCE(cfg.reconnect_period_ms, 5000),
+            COALESCE(cfg.connect_timeout_ms, 5000),
+            COALESCE(cfg.will, '{}'::jsonb),
+            COALESCE(cfg.ssl_config, '{}'::jsonb),
             conn.created_at,
             conn.updated_at
         FROM data_connections conn
-        JOIN data_mqtt_configs cfg ON cfg.connection_id = conn.id
+        LEFT JOIN data_mqtt_configs cfg ON cfg.connection_id = conn.id
         WHERE conn.project_id = $1
           AND conn.id = $2
-          AND conn.type = 'mqtt'
+          AND conn.type IN ('mqtt', 'builtin.message')
     `, projectID, connectionID)
 
 	record, err := scanMqttConnectionDetail(row)
@@ -494,7 +504,7 @@ func (r *MqttRepository) ListSubscriptions(ctx context.Context, projectID, conne
 
 	listArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, connection_id, group_id, name, topic, qos, usage_mode, description, message_retention, display_order, created_at, updated_at
+        SELECT id, project_id, connection_id, group_id, name, topic, qos, usage_mode, description, message_retention, default_batch_parse_rule, display_order, created_at, updated_at
         FROM data_mqtt_subscriptions
         WHERE `+whereSQL+`
         ORDER BY display_order ASC, created_at ASC
@@ -521,7 +531,7 @@ func (r *MqttRepository) ListSubscriptions(ctx context.Context, projectID, conne
 // GetSubscription 读取单个订阅。
 func (r *MqttRepository) GetSubscription(ctx context.Context, projectID, subscriptionID string) (*MqttSubscriptionRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-        SELECT id, project_id, connection_id, group_id, name, topic, qos, usage_mode, description, message_retention, display_order, created_at, updated_at
+        SELECT id, project_id, connection_id, group_id, name, topic, qos, usage_mode, description, message_retention, default_batch_parse_rule, display_order, created_at, updated_at
         FROM data_mqtt_subscriptions
         WHERE project_id = $1 AND id = $2
     `, projectID, subscriptionID)
@@ -539,7 +549,7 @@ func (r *MqttRepository) CreateSubscription(ctx context.Context, params CreateMq
             project_id, connection_id, group_id, name, topic, qos, usage_mode, description, message_retention, display_order, created_by, updated_by
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
-        RETURNING id, project_id, connection_id, group_id, name, topic, qos, usage_mode, description, message_retention, display_order, created_at, updated_at
+        RETURNING id, project_id, connection_id, group_id, name, topic, qos, usage_mode, description, message_retention, default_batch_parse_rule, display_order, created_at, updated_at
     `, params.ProjectID, params.ConnectionID, params.GroupID, params.Name, params.Topic, params.QOS, params.UsageMode, params.Description, params.MessageRetention, params.Order, params.UserID)
 	record, err := scanMqttSubscription(row)
 	if err != nil {
@@ -567,11 +577,32 @@ func (r *MqttRepository) UpdateSubscription(ctx context.Context, params UpdateMq
             updated_by = $11,
             updated_at = now()
         WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, connection_id, group_id, name, topic, qos, usage_mode, description, message_retention, display_order, created_at, updated_at
+        RETURNING id, project_id, connection_id, group_id, name, topic, qos, usage_mode, description, message_retention, default_batch_parse_rule, display_order, created_at, updated_at
     `, params.ProjectID, params.SubscriptionID, groupID, params.Name, params.Topic, params.QOS, params.UsageMode, params.Description, params.MessageRetention, params.Order, params.UserID)
 	record, err := scanMqttSubscription(row)
 	if err != nil {
 		return nil, translateMqttWriteError("更新 MQTT 订阅失败", err)
+	}
+	return &record, nil
+}
+
+// UpdateSubscriptionDefaultBatchRule 更新订阅默认批量解析规则。
+func (r *MqttRepository) UpdateSubscriptionDefaultBatchRule(ctx context.Context, params UpdateMqttSubscriptionDefaultBatchRuleParams) (*MqttSubscriptionRecord, error) {
+	ruleBytes, err := json.Marshal(params.Rule)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "默认批量解析规则不是合法 JSON", err)
+	}
+	row := r.pool.QueryRow(ctx, `
+        UPDATE data_mqtt_subscriptions
+        SET default_batch_parse_rule = $3,
+            updated_by = $4,
+            updated_at = now()
+        WHERE project_id = $1 AND id = $2
+        RETURNING id, project_id, connection_id, group_id, name, topic, qos, usage_mode, description, message_retention, default_batch_parse_rule, display_order, created_at, updated_at
+    `, params.ProjectID, params.SubscriptionID, nullableMqttJSON(ruleBytes), params.UserID)
+	record, err := scanMqttSubscription(row)
+	if err != nil {
+		return nil, translateMqttWriteError("保存 MQTT 订阅默认批量解析规则失败", err)
 	}
 	return &record, nil
 }
@@ -1187,9 +1218,10 @@ func scanMqttConnectionDetail(row scannable) (MqttConnectionDetailRecord, error)
 
 func scanMqttSubscription(row scannable) (MqttSubscriptionRecord, error) {
 	var (
-		record      MqttSubscriptionRecord
-		groupID     sql.NullString
-		description sql.NullString
+		record                MqttSubscriptionRecord
+		groupID               sql.NullString
+		description           sql.NullString
+		defaultBatchRuleBytes []byte
 	)
 	if err := row.Scan(
 		&record.ID,
@@ -1202,6 +1234,7 @@ func scanMqttSubscription(row scannable) (MqttSubscriptionRecord, error) {
 		&record.UsageMode,
 		&description,
 		&record.MessageRetention,
+		&defaultBatchRuleBytes,
 		&record.Order,
 		&record.CreatedAt,
 		&record.UpdatedAt,
@@ -1216,6 +1249,7 @@ func scanMqttSubscription(row scannable) (MqttSubscriptionRecord, error) {
 	}
 	record.GroupID = nullStringToPtr(groupID)
 	record.Description = nullStringToPtr(description)
+	record.DefaultBatchRule = mustJSONObject(defaultBatchRuleBytes)
 	return record, nil
 }
 
@@ -1295,6 +1329,10 @@ func translateMqttWriteError(message string, err error) error {
 			switch pgErr.ConstraintName {
 			case "data_mqtt_subscriptions_project_connection_name_key":
 				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前接入源内已存在同名订阅")
+			case "data_mqtt_tags_project_subscription_code_key":
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前订阅内已存在同标识变量")
+			case "data_mqtt_tags_project_code_key":
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前工程内已存在同标识变量")
 			default:
 				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "MQTT 配置存在重复名称或标识")
 			}

@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
@@ -78,59 +77,6 @@ func TestBuiltinRealtimeUsesProjectPrefix(t *testing.T) {
 	}
 }
 
-func TestBuiltinMessageTopicPrefix(t *testing.T) {
-	publisher := &fakeBuiltinMessagePublisher{}
-	svc := NewBuiltinRuntimeService(BuiltinRuntimeOptions{
-		MessagePublisher:   publisher,
-		MessageTopicPrefix: "ifdev",
-	})
-	projectID := "11111111-1111-1111-1111-111111111111"
-
-	_, err := svc.PublishMessage(context.Background(), projectID, BuiltinMessagePublishInput{
-		Topic:      "device/dev-1/telemetry",
-		Payload:    map[string]any{"value": 1},
-		QOS:        0,
-		RuntimeKey: "msg_test",
-	})
-	if err != nil {
-		t.Fatalf("publish failed: %v", err)
-	}
-	if publisher.topic != "ifdev/11111111-1111-1111-1111-111111111111/msg_test/device/dev-1/telemetry" {
-		t.Fatalf("unexpected topic %q", publisher.topic)
-	}
-}
-
-func TestBuiltinMessagePublishNotifiesTopicSubscribers(t *testing.T) {
-	publisher := &fakeBuiltinMessagePublisher{}
-	svc := NewBuiltinRuntimeService(BuiltinRuntimeOptions{
-		MessagePublisher:   publisher,
-		MessageTopicPrefix: "ifdev",
-	})
-	received := make(chan BuiltinMessageEvent, 1)
-	cancel := svc.SubscribeMessageTopic("topic-1", func(event BuiltinMessageEvent) {
-		received <- event
-	})
-	defer cancel()
-
-	svc.messageHub.publish("topic-1", BuiltinMessageEvent{
-		ConnectionID: "conn-1",
-		RuntimeKey:   "msg_test",
-		Topic:        "device/1/telemetry",
-		Payload:      map[string]any{"value": 1},
-		QOS:          0,
-		Timestamp:    time.Now().UTC(),
-	})
-
-	select {
-	case event := <-received:
-		if event.Topic != "device/1/telemetry" || event.RuntimeKey != "msg_test" {
-			t.Fatalf("unexpected event: %#v", event)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("expected builtin message event")
-	}
-}
-
 func TestDeriveBuiltinRealtimeKeyUsesRuntimeKey(t *testing.T) {
 	key, err := deriveBuiltinRealtimeKey("ifdev", "project-1", "rt_a1b2c3", "device/line1/status")
 	if err != nil {
@@ -140,26 +86,4 @@ func TestDeriveBuiltinRealtimeKeyUsesRuntimeKey(t *testing.T) {
 	if key != expected {
 		t.Fatalf("expected %q, got %q", expected, key)
 	}
-}
-
-func TestDeriveBuiltinMessageTopicUsesRuntimeKey(t *testing.T) {
-	topic, err := deriveBuiltinMessageTopic("ifdev", "project-1", "msg_a1b2c3", "device/1/telemetry")
-	if err != nil {
-		t.Fatalf("derive message topic failed: %v", err)
-	}
-	expected := "ifdev/project-1/msg_a1b2c3/device/1/telemetry"
-	if topic != expected {
-		t.Fatalf("expected %q, got %q", expected, topic)
-	}
-}
-
-type fakeBuiltinMessagePublisher struct {
-	topic   string
-	payload []byte
-}
-
-func (p *fakeBuiltinMessagePublisher) Publish(ctx context.Context, topic string, payload []byte, qos byte) error {
-	p.topic = topic
-	p.payload = append([]byte(nil), payload...)
-	return nil
 }

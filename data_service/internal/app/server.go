@@ -313,6 +313,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 				logf("warning: data_service preview socket 未启用 reason=%v", previewSocketErr)
 			}
 			if previewSocketServer != nil {
+				previewSocketServer.ConfigureBuiltinMessageHub(cfg.MessageHubAddr, cfg.MessageHubUsername, cfg.MessageHubPassword)
 				cleanupFns = append(cleanupFns, previewSocketServer.Close)
 				routeOptions = append(routeOptions, router.WithPreviewSocketHandler(previewSocketServer.Handler()))
 				routeSummaryParts[len(routeSummaryParts)-1] = "preview=http+socket"
@@ -380,23 +381,10 @@ func newBuiltinRuntimeServiceFromConfig(cfg config.Config, metaPool *pgxpool.Poo
 		}
 	}
 
-	var messagePublisher service.BuiltinMessagePublisher
-	if strings.TrimSpace(cfg.MessageHubAddr) != "" {
-		publisher, err := service.NewPahoBuiltinMessagePublisher(cfg.MessageHubAddr, cfg.MessageHubUsername, cfg.MessageHubPassword)
-		if err != nil {
-			logf("warning: IF消息库开发态发布器未启用 reason=%v", err)
-		} else {
-			messagePublisher = publisher
-			*cleanupFns = append(*cleanupFns, publisher.Close)
-		}
-	}
-
 	return service.NewBuiltinRuntimeService(service.BuiltinRuntimeOptions{
-		DevPool:            devPool,
-		MetaPool:           metaPool,
-		RealtimeClient:     realtimeClient,
-		RealtimeKeyPrefix:  cfg.DevCacheKeyPrefix,
-		MessagePublisher:   messagePublisher,
-		MessageTopicPrefix: cfg.MessageTopicPrefix,
+		DevPool:           devPool,
+		MetaPool:          metaPool,
+		RealtimeClient:    realtimeClient,
+		RealtimeKeyPrefix: cfg.DevCacheKeyPrefix,
 	})
 }

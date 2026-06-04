@@ -1121,55 +1121,9 @@ export const sampleBuiltinTimeseries = (projectId, data) => {
   })
 }
 
-export const publishBuiltinMessage = (projectId, connectionId, data) => {
-  return request({
-    url: `/data/projects/${projectId}/connections/${connectionId}/message/publish`,
-    method: 'post',
-    data,
-  })
-}
-
 export const publishMqttMessage = (projectId, connectionId, data) => {
   return request({
     url: `/data/projects/${projectId}/mqtt/connections/${connectionId}/publish`,
-    method: 'post',
-    data,
-  })
-}
-
-export const getBuiltinMessageTopics = (projectId, connectionId) => {
-  return request({
-    url: `/data/projects/${projectId}/connections/${connectionId}/message/topics`,
-    method: 'get',
-  })
-}
-
-export const createBuiltinMessageTopic = (projectId, connectionId, data) => {
-  return request({
-    url: `/data/projects/${projectId}/connections/${connectionId}/message/topics`,
-    method: 'post',
-    data,
-  })
-}
-
-export const getBuiltinMessageVariables = (projectId, connectionId, topicId) => {
-  return request({
-    url: `/data/projects/${projectId}/connections/${connectionId}/message/topics/${topicId}/variables`,
-    method: 'get',
-  })
-}
-
-export const createBuiltinMessageVariable = (projectId, connectionId, topicId, data) => {
-  return request({
-    url: `/data/projects/${projectId}/connections/${connectionId}/message/topics/${topicId}/variables`,
-    method: 'post',
-    data,
-  })
-}
-
-export const createBuiltinMessagePreviewSession = (projectId, data = {}) => {
-  return request({
-    url: `/data/projects/${projectId}/builtin/message/preview-session`,
     method: 'post',
     data,
   })
@@ -1560,6 +1514,20 @@ export const updateMqttSubscription = (projectId, subscriptionId, data) => {
     url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}`,
     method: 'put',
     data,
+  })
+}
+
+/**
+ * 保存MQTT订阅默认批量解析规则
+ * @param {string} projectId - 工程ID
+ * @param {string} subscriptionId - 订阅ID
+ * @param {object} rule - 默认批量解析规则
+ */
+export const updateMqttSubscriptionDefaultBatchParseRule = (projectId, subscriptionId, rule) => {
+  return request({
+    url: `/data/projects/${projectId}/mqtt/subscriptions/${subscriptionId}/default-batch-parse-rule`,
+    method: 'put',
+    data: { rule },
   })
 }
 
@@ -1966,13 +1934,7 @@ export default {
   executeBuiltinRelationSql,
   queryBuiltinTimeseries,
   sampleBuiltinTimeseries,
-  publishBuiltinMessage,
-  getBuiltinMessageTopics,
-  createBuiltinMessageTopic,
-  getBuiltinMessageVariables,
-  createBuiltinMessageVariable,
   publishMqttMessage,
-  createBuiltinMessagePreviewSession,
   updateConnection,
   deleteConnection,
   updateConnectionStatus,
@@ -2001,6 +1963,7 @@ export default {
   getMqttSubscription,
   createMqttSubscription,
   updateMqttSubscription,
+  updateMqttSubscriptionDefaultBatchParseRule,
   deleteMqttSubscription,
   getMqttSubscriptionMessages,
   clearMqttSubscriptionMessages,

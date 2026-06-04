@@ -101,36 +101,6 @@ func (h *BuiltinRuntimeHandler) DeleteRealtimeKey(w http.ResponseWriter, r *http
 	return nil
 }
 
-func (h *BuiltinRuntimeHandler) PublishMessage(w http.ResponseWriter, r *http.Request) error {
-	if _, err := requireClaims(r); err != nil {
-		return err
-	}
-	var request struct {
-		Topic   string `json:"topic"`
-		Payload any    `json:"payload"`
-		QOS     byte   `json:"qos"`
-	}
-	if err := decodeJSONBody(r, &request); err != nil {
-		return err
-	}
-	runtimeKey, err := h.runtimeKeyForConnection(r, "builtin.message")
-	if err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	result, err := h.service.PublishMessage(r.Context(), r.PathValue("projectId"), service.BuiltinMessagePublishInput{
-		ConnectionID: r.PathValue("connectionId"),
-		Topic:        request.Topic,
-		Payload:      request.Payload,
-		QOS:          request.QOS,
-		RuntimeKey:   runtimeKey,
-	})
-	if err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
-	return nil
-}
-
 func (h *BuiltinRuntimeHandler) ListRealtimeKeys(w http.ResponseWriter, r *http.Request) error {
 	if _, err := requireClaims(r); err != nil {
 		return err
@@ -143,97 +113,6 @@ func (h *BuiltinRuntimeHandler) ListRealtimeKeys(w http.ResponseWriter, r *http.
 		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"list": keys})
-	return nil
-}
-
-func (h *BuiltinRuntimeHandler) ListMessageTopics(w http.ResponseWriter, r *http.Request) error {
-	if _, err := requireClaims(r); err != nil {
-		return err
-	}
-	if _, err := h.runtimeKeyForConnection(r, "builtin.message"); err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	topics, err := h.service.ListMessageTopics(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"))
-	if err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"list": topics})
-	return nil
-}
-
-func (h *BuiltinRuntimeHandler) CreateMessageTopic(w http.ResponseWriter, r *http.Request) error {
-	if _, err := requireClaims(r); err != nil {
-		return err
-	}
-	if _, err := h.runtimeKeyForConnection(r, "builtin.message"); err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	var request struct {
-		Topic       string `json:"topic"`
-		Name        string `json:"name"`
-		Description string `json:"description"`
-	}
-	if err := decodeJSONBody(r, &request); err != nil {
-		return err
-	}
-	topic, err := h.service.CreateMessageTopic(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), request.Topic, request.Name, request.Description)
-	if err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), topic)
-	return nil
-}
-
-func (h *BuiltinRuntimeHandler) ListMessageVariables(w http.ResponseWriter, r *http.Request) error {
-	if _, err := requireClaims(r); err != nil {
-		return err
-	}
-	if _, err := h.runtimeKeyForConnection(r, "builtin.message"); err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	variables, err := h.service.ListMessageVariables(r.Context(), r.PathValue("projectId"), r.PathValue("topicId"))
-	if err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"list": variables})
-	return nil
-}
-
-func (h *BuiltinRuntimeHandler) CreateMessageVariable(w http.ResponseWriter, r *http.Request) error {
-	if _, err := requireClaims(r); err != nil {
-		return err
-	}
-	if _, err := h.runtimeKeyForConnection(r, "builtin.message"); err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	var request struct {
-		Name            string `json:"name"`
-		PayloadPath     string `json:"payloadPath"`
-		ValueType       string `json:"valueType"`
-		Unit            string `json:"unit"`
-		Description     string `json:"description"`
-		CreateDatapoint bool   `json:"createDatapoint"`
-	}
-	if err := decodeJSONBody(r, &request); err != nil {
-		return err
-	}
-	variable, err := h.service.CreateMessageVariable(r.Context(), r.PathValue("projectId"), r.PathValue("topicId"), request.Name, request.PayloadPath, request.ValueType, request.Unit, request.Description, request.CreateDatapoint)
-	if err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), variable)
-	return nil
-}
-
-func (h *BuiltinRuntimeHandler) CreateMessagePreviewSession(w http.ResponseWriter, r *http.Request) error {
-	if _, err := requireClaims(r); err != nil {
-		return err
-	}
-	result, err := h.service.CreateMessagePreviewSession(r.Context(), r.PathValue("projectId"))
-	if err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
 }
 

@@ -7,6 +7,7 @@ export type MqttSubscription = {
   groupId?: string | null
   description?: string | null
   messageRetention?: number
+  defaultBatchParseRule?: Record<string, unknown> | null
   order?: number
 }
 

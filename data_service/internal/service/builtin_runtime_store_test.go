@@ -78,6 +78,32 @@ func TestNormalizeBuiltinStoreCreateInputGeneratesRuntimeKey(t *testing.T) {
 	}
 }
 
+func TestNormalizeBuiltinMessageStoreDropsTopicDefaults(t *testing.T) {
+	input := CreateConnectionInput{
+		Name: "IF消息库",
+		Type: "builtin.message",
+		Config: map[string]any{
+			"topic":         "mock-data",
+			"defaultTopic":  "mock-data",
+			"samplePayload": map[string]any{"value": 1},
+			"topicPrefix":   "ifdev",
+		},
+	}
+
+	result, err := normalizeBuiltinStoreCreateInput("11111111-1111-1111-1111-111111111111", input)
+	if err != nil {
+		t.Fatalf("normalize builtin message input failed: %v", err)
+	}
+	if result.Config["store"] != "message" {
+		t.Fatalf("expected message store, got %#v", result.Config["store"])
+	}
+	for _, key := range []string{"topic", "defaultTopic", "samplePayload", "topicPrefix"} {
+		if _, ok := result.Config[key]; ok {
+			t.Fatalf("builtin message config must not keep %s", key)
+		}
+	}
+}
+
 func TestBuiltinStoreTypeGuards(t *testing.T) {
 	for _, storeType := range []string{
 		"builtin.relation",

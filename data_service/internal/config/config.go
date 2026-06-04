@@ -29,7 +29,6 @@ type Config struct {
 	MessageHubAddr     string
 	MessageHubUsername string
 	MessageHubPassword string
-	MessageTopicPrefix string
 }
 
 // Load 从环境变量读取服务配置，并在缺省时使用内置默认值。
@@ -68,7 +67,6 @@ func Load() (Config, error) {
 		MessageHubAddr:     buildMessageHubAddr(),
 		MessageHubUsername: strings.TrimSpace(firstEnv("IF_MESSAGE_HUB_USERNAME")),
 		MessageHubPassword: strings.TrimSpace(firstEnv("IF_MESSAGE_HUB_PASSWORD")),
-		MessageTopicPrefix: firstEnvWithDefault("IF_MESSAGE_HUB_TOPIC_PREFIX", "ifdev"),
 	}, nil
 }
 

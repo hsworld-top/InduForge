@@ -410,7 +410,6 @@ const emit = defineEmits([
   'query-deleted',
   'mqtt-subscription-dblclick',
   'mqtt-subscription-view',
-  'mqtt-subscription-manage',
   'mqtt-subscription-edit',
   'mqtt-subscription-delete',
   'datapoint-open',
@@ -631,15 +630,6 @@ const handleMqttSubscriptionContextMenu = (event, connection, subscription) => {
     document.body.removeChild(menu)
   }
 
-  const manageItem = document.createElement('div')
-  manageItem.className =
-    'px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
-  manageItem.textContent = t('actions.manageVariables')
-  manageItem.onclick = () => {
-    emit('mqtt-subscription-manage', connection, subscription)
-    document.body.removeChild(menu)
-  }
-
   const editItem = document.createElement('div')
   editItem.className =
     'px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
@@ -659,7 +649,6 @@ const handleMqttSubscriptionContextMenu = (event, connection, subscription) => {
   }
 
   menu.appendChild(viewItem)
-  menu.appendChild(manageItem)
   menu.appendChild(editItem)
   menu.appendChild(deleteItem)
   document.body.appendChild(menu)

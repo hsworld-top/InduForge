@@ -3,12 +3,35 @@
     ref="editorContainerRef"
     class="monaco-editor-container"
     :style="{ height: height, width: '100%' }"
+    @contextmenu.prevent="openEditorContextMenu"
   ></div>
+  <div
+    v-if="editorContextMenu.visible"
+    class="monaco-editor-context-menu"
+    :style="{ left: `${editorContextMenu.x}px`, top: `${editorContextMenu.y}px` }"
+    @mousedown.stop
+    @contextmenu.prevent
+  >
+    <button type="button" :disabled="!selectedText" @click="copySelection">复制</button>
+    <button
+      type="button"
+      :disabled="!selectedText || !editorContextMenu.canModify"
+      @click="cutSelection"
+    >
+      剪切
+    </button>
+    <button type="button" :disabled="!editorContextMenu.canModify" @click="pasteFromClipboard">
+      粘贴
+    </button>
+    <button type="button" @click="formatFromContextMenu">格式化文档</button>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import * as monaco from 'monaco-editor'
+import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
+import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
 
 type EditorDiagnostic = {
   severity?: string
@@ -26,27 +49,14 @@ type CursorChangePayload = {
   spaces: number
 }
 
-// 配置 Monaco Editor 的 worker
-// 使用内联 worker 避免 worker 文件加载问题
+// 配置 Monaco 官方 worker，恢复 JSON 等语言服务的格式化、校验能力。
 if (typeof window !== 'undefined' && !window.MonacoEnvironment) {
   window.MonacoEnvironment = {
-    getWorker: function (moduleId, label) {
-      // 创建一个简单的内联 worker，避免 worker 文件加载问题
-      // 这不会影响基本的编辑功能，只是某些高级功能可能不可用
-      const createInlineWorker = (code) => {
-        const blob = new Blob([code], { type: 'application/javascript' })
-        return new Worker(URL.createObjectURL(blob))
+    getWorker(_moduleId, label) {
+      if (label === 'json') {
+        return new JsonWorker()
       }
-
-      // 返回一个简单的 worker，只处理基本消息
-      return createInlineWorker(`
-        self.onmessage = function(e) {
-          // 简单的 worker，不做任何处理，只是避免错误
-          if (e.data && e.data.$type === 'ping') {
-            self.postMessage({ $type: 'pong' })
-          }
-        }
-      `)
+      return new EditorWorker()
     },
   }
 }
@@ -83,6 +93,13 @@ const emit = defineEmits(['update:modelValue', 'change', 'cursor-change', 'save'
 const editorContainerRef = ref(null)
 let editorInstance = null
 let isInternalUpdate = false
+const selectedText = ref('')
+const editorContextMenu = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  canModify: true,
+})
 
 const emitCursorChange = () => {
   if (!editorInstance) return
@@ -95,6 +112,106 @@ const emitCursorChange = () => {
     spaces: tabSize,
   }
   emit('cursor-change', payload)
+}
+
+const closeEditorContextMenu = () => {
+  editorContextMenu.value.visible = false
+}
+
+const updateSelectedText = () => {
+  const model = editorInstance?.getModel?.()
+  const selection = editorInstance?.getSelection?.()
+  if (!model || !selection || selection.isEmpty()) {
+    selectedText.value = ''
+    return
+  }
+  selectedText.value = model.getValueInRange(selection)
+}
+
+const moveCursorToContextTarget = (event?: any) => {
+  if (!editorInstance) return
+  const selection = editorInstance.getSelection()
+  if (selection && !selection.isEmpty()) return
+
+  const position =
+    event?.target?.position ||
+    editorInstance.getTargetAtClientPoint?.(
+      event?.event?.browserEvent?.clientX ?? event?.clientX ?? 0,
+      event?.event?.browserEvent?.clientY ?? event?.clientY ?? 0,
+    )?.position
+  if (position) {
+    editorInstance.setPosition(position)
+  }
+}
+
+const openEditorContextMenu = (event?: any) => {
+  const browserEvent = event?.event?.browserEvent || event?.browserEvent || event
+  browserEvent?.preventDefault?.()
+  browserEvent?.stopPropagation?.()
+
+  moveCursorToContextTarget(event)
+  updateSelectedText()
+  editorContextMenu.value = {
+    visible: true,
+    x: Number(browserEvent?.clientX) || 0,
+    y: Number(browserEvent?.clientY) || 0,
+    canModify: !editorInstance?.getOption?.(monaco.editor.EditorOption.readOnly),
+  }
+}
+
+const copySelection = async () => {
+  const text = selectedText.value
+  if (!text) return
+  try {
+    await navigator.clipboard?.writeText(text)
+  } finally {
+    closeEditorContextMenu()
+    editorInstance?.focus?.()
+  }
+}
+
+const cutSelection = async () => {
+  const model = editorInstance?.getModel?.()
+  const selection = editorInstance?.getSelection?.()
+  if (!editorInstance || !model || !selection || selection.isEmpty()) return
+
+  try {
+    await navigator.clipboard?.writeText(model.getValueInRange(selection))
+    editorInstance.executeEdits('context-cut', [{ range: selection, text: '' }])
+  } finally {
+    closeEditorContextMenu()
+    editorInstance?.focus?.()
+  }
+}
+
+const pasteFromClipboard = async () => {
+  if (!editorInstance || editorContextMenu.value.canModify === false) return
+
+  try {
+    const text = await navigator.clipboard?.readText?.()
+    if (!text) return
+
+    const selection = editorInstance.getSelection()
+    const position = editorInstance.getPosition()
+    const range =
+      selection ||
+      new monaco.Range(
+        position?.lineNumber || 1,
+        position?.column || 1,
+        position?.lineNumber || 1,
+        position?.column || 1,
+      )
+    editorInstance.executeEdits('context-paste', [{ range, text }])
+  } finally {
+    closeEditorContextMenu()
+    editorInstance?.focus?.()
+  }
+}
+
+const formatFromContextMenu = async () => {
+  await formatCode()
+  closeEditorContextMenu()
+  editorInstance?.focus?.()
 }
 
 // 获取编辑器选项
@@ -121,6 +238,7 @@ const getEditorOptions = () => {
     },
     scrollBeyondLastLine: false,
     wordWrap: 'on',
+    contextmenu: false,
     formatOnPaste: true,
     formatOnType: true,
     ...props.options,
@@ -182,6 +300,15 @@ const initEditor = () => {
 
     editorInstance.onDidChangeCursorPosition(() => {
       emitCursorChange()
+      closeEditorContextMenu()
+    })
+
+    editorInstance.onDidChangeCursorSelection(() => {
+      updateSelectedText()
+    })
+
+    editorInstance.onContextMenu((event) => {
+      openEditorContextMenu(event)
     })
 
     // Monaco 创建时已经传入 value；这里只处理被 options 覆盖后的补偿设置，避免初始化触发 change。
@@ -224,8 +351,9 @@ const updateLanguage = () => {
 // 格式化代码
 const formatCode = () => {
   if (editorInstance) {
-    editorInstance.getAction('editor.action.formatDocument').run()
+    return editorInstance.getAction('editor.action.formatDocument')?.run()
   }
+  return Promise.resolve()
 }
 
 const insertText = (text) => {
@@ -362,6 +490,9 @@ watch(
 
 // 组件挂载时初始化
 onMounted(() => {
+  window.addEventListener('mousedown', closeEditorContextMenu)
+  window.addEventListener('blur', closeEditorContextMenu)
+
   console.log('MonacoEditor onMounted 被调用', {
     containerRef: editorContainerRef.value,
     height: props.height,
@@ -444,6 +575,9 @@ onMounted(() => {
 
 // 组件卸载时清理
 onBeforeUnmount(() => {
+  window.removeEventListener('mousedown', closeEditorContextMenu)
+  window.removeEventListener('blur', closeEditorContextMenu)
+
   if (editorInstance) {
     editorInstance.dispose()
     editorInstance = null
@@ -483,5 +617,39 @@ onBeforeUnmount(() => {
 
 .monaco-editor-container :deep(.monaco-hover) {
   max-width: min(520px, calc(100vw - 48px));
+}
+
+.monaco-editor-context-menu {
+  position: fixed;
+  z-index: 3000;
+  min-width: 128px;
+  padding: 4px;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+}
+
+.monaco-editor-context-menu button {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #1f2937;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.monaco-editor-context-menu button:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.monaco-editor-context-menu button:disabled {
+  color: #a8abb2;
+  cursor: not-allowed;
 }
 </style>

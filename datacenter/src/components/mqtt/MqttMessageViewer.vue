@@ -187,10 +187,6 @@ const uniqueMessages = (items: MqttMessage[]) => {
  */
 const loadMessages = async () => {
   if (!props.subscription?.id) return
-  if (isBuiltinMessage.value) {
-    messages.value = []
-    return
-  }
 
   loading.value = true
   try {
@@ -249,10 +245,6 @@ const handleCopyMessage = async (message) => {
 
 const handleClear = async () => {
   if (clearing.value) return
-  if (isBuiltinMessage.value) {
-    messages.value = []
-    return
-  }
   if (!props.subscription?.id) return
 
   clearing.value = true

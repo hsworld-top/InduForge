@@ -32,7 +32,7 @@ export const BUILTIN_STORE_TYPES: Array<{
     type: 'builtin.message',
     name: 'IF消息库',
     description: '设备消息、模拟数据和订阅',
-    defaultConfig: { topic: 'mock-data', samplePayload: { value: 1 } },
+    defaultConfig: {},
   },
 ]
 

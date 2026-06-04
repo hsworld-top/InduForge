@@ -176,6 +176,7 @@
                 :subscription="tab.subscription"
                 :preview-session-id="connectionStarted ? previewSessionId : ''"
                 @open-monitor="openTagMonitor(tab.subscription)"
+                @subscription-updated="refreshSelectedAndTabs"
               />
             </div>
 
@@ -354,12 +355,6 @@
           </dl>
         </section>
 
-        <div class="mqtt-workbench__detail-footer">
-          <button type="button" @click="openDetailTagManager">
-            <IconTablerTags />
-            <span>变量管理</span>
-          </button>
-        </div>
       </template>
     </DcDialog>
 
@@ -539,8 +534,8 @@ const placeholderTitle = computed(() =>
 )
 const placeholderHint = computed(() =>
   isBuiltinMessageMode.value
-    ? '左键管理变量，右键查看消息或打开实时监控。'
-    : '从左侧订阅树进入变量管理；连接后可查看实时消息。',
+    ? '左键打开对应 Topic，右键查看详情、消息或发布测试。'
+    : '从左侧订阅树打开订阅；连接后可查看实时消息。',
 )
 const supportsSubscriptionGroups = computed(() => true)
 const sourceMetaRows = computed(() =>
@@ -561,7 +556,6 @@ const { sessionId: previewSessionId, ensureSession } = usePreviewSession(project
 const {
   connected: socketConnected,
   subscribeMessages,
-  subscribeBuiltinMessage,
 } = useMqttSocket(projectIdRef, previewSessionId)
 
 const loading = ref(false)
@@ -623,7 +617,7 @@ const contextPrimaryAction = computed<'messages' | 'variables'>(() =>
 const contextPrimaryLabel = computed(() => {
   if (contextSubscriptionMode.value === 'raw_datapoint') return '查看消息'
   if (contextSubscriptionMode.value === 'batch_variable') return '批量映射配置'
-  return '变量管理'
+  return '单变量配置'
 })
 const contextPrimaryIcon = computed(() => {
   if (contextSubscriptionMode.value === 'raw_datapoint') return IconTablerMessages
@@ -650,14 +644,6 @@ const filteredTree = computed(() =>
 )
 const filteredGroups = computed(() => filteredTree.value.groups)
 const filteredRootSubscriptions = computed(() => filteredTree.value.subscriptions)
-
-const normalizeBuiltinMessage = (subscription: MqttSubscription, message: any) => ({
-  id: String(message?.id || `${Date.now()}-${Math.random()}`),
-  topic: String(message?.topic || subscription.topic || ''),
-  payload: message?.payload,
-  qos: Number(message?.qos ?? 0),
-  timestamp: message?.timestamp || Date.now(),
-})
 
 const groupNameMap = computed(() => {
   const map = new Map<string, { name: string; parentId: string | null }>()
@@ -817,17 +803,11 @@ const subscribeMessageTab = async (subscription: MqttSubscription) => {
   if (!tab) return
 
   if (!messageCleanups.has(tab.id)) {
-    const cleanup = isBuiltinMessageMode.value
-      ? subscribeBuiltinMessage(subscription.id, props.connection.id, (data) => {
-          const viewer = messageViewerRefs.value.get(tab.id)
-          viewer?.addMessage?.(normalizeBuiltinMessage(subscription, data?.message || data || {}))
-          viewer?.setSubscribed?.(true)
-        })
-      : subscribeMessages(subscription.id, (data) => {
-          const viewer = messageViewerRefs.value.get(tab.id)
-          viewer?.addMessage?.(data?.message || data)
-          viewer?.setSubscribed?.(true)
-        })
+    const cleanup = subscribeMessages(subscription.id, (data) => {
+      const viewer = messageViewerRefs.value.get(tab.id)
+      viewer?.addMessage?.(data?.message || data)
+      viewer?.setSubscribed?.(true)
+    })
     messageCleanups.set(tab.id, cleanup)
   }
 
@@ -966,13 +946,6 @@ function openSubscriptionDetail(subscription: MqttSubscription) {
   selectedSubscription.value = subscription
   detailSubscription.value = subscription
   detailDialogVisible.value = true
-}
-
-function openDetailTagManager() {
-  const subscription = detailSubscription.value
-  if (!subscription) return
-  detailDialogVisible.value = false
-  void openTagManager(subscription)
 }
 
 function subscriptionPath(subscription: MqttSubscription) {
@@ -1750,31 +1723,6 @@ onBeforeUnmount(() => {
   flex: 1;
   height: 100%;
   min-height: 0;
-}
-
-.mqtt-workbench__detail-footer {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
-}
-
-.mqtt-workbench__detail-footer button {
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 12px;
-  border: 1px solid var(--dc-primary);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-primary);
-  color: var(--dc-surface-raised);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.mqtt-workbench__detail-footer svg {
-  width: 15px;
-  height: 15px;
 }
 
 .mqtt-workbench__empty,

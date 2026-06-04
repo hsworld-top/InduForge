@@ -1,6 +1,8 @@
 package service
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -56,6 +58,9 @@ func normalizeBuiltinStoreCreateInput(projectID string, input CreateConnectionIn
 
 	connectionType := strings.TrimSpace(strings.ToLower(input.Type))
 	config := sanitizeBuiltinConfig(input.Config)
+	if connectionType == "builtin.message" {
+		removeBuiltinMessageTopicConfig(config)
+	}
 	runtimeKey := newBuiltinRuntimeKey(connectionType)
 	config["runtimeKey"] = runtimeKey
 
@@ -76,7 +81,6 @@ func normalizeBuiltinStoreCreateInput(projectID string, input CreateConnectionIn
 		config["defaultTtlSeconds"] = intFromAny(config["defaultTtlSeconds"], 300)
 	case "builtin.message":
 		config["store"] = "message"
-		config["topicPrefix"] = runtimeKey
 	default:
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "内置运行库类型不受支持")
 	}
@@ -104,12 +108,21 @@ func sanitizeBuiltinConfig(input map[string]any) map[string]any {
 
 func mergeBuiltinConfigUpdate(current map[string]any, input map[string]any) map[string]any {
 	next := sanitizeBuiltinConfig(input)
-	for _, key := range []string{"runtimeKey", "devSchema", "runtimeSchema", "namespace", "topicPrefix", "store", "ddlVersion"} {
+	if strings.TrimSpace(fmt.Sprint(current["store"])) == "message" {
+		removeBuiltinMessageTopicConfig(next)
+	}
+	for _, key := range []string{"runtimeKey", "devSchema", "runtimeSchema", "namespace", "store", "ddlVersion"} {
 		if value, ok := current[key]; ok {
 			next[key] = value
 		}
 	}
 	return next
+}
+
+func removeBuiltinMessageTopicConfig(config map[string]any) {
+	for _, key := range []string{"topic", "defaultTopic", "samplePayload", "topicPrefix"} {
+		delete(config, key)
+	}
 }
 
 func newBuiltinRuntimeKey(connectionType string) string {
@@ -123,6 +136,17 @@ func newBuiltinRuntimeKey(connectionType string) string {
 		prefix = "store"
 	}
 	return fmt.Sprintf("%s_%s", prefix, randomHex(3))
+}
+
+func randomHex(byteCount int) string {
+	if byteCount <= 0 {
+		byteCount = 3
+	}
+	buffer := make([]byte, byteCount)
+	if _, err := rand.Read(buffer); err != nil {
+		return "000000"
+	}
+	return hex.EncodeToString(buffer)
 }
 
 func deriveBuiltinProjectSchema(projectID string, suffix string) string {

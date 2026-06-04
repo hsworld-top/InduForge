@@ -445,11 +445,6 @@
                   <el-input-number v-model="formData.defaultTtlSeconds" :min="0" :max="86400" />
                 </el-form-item>
               </template>
-              <template v-else-if="connectionType === 'builtin.message'">
-                <el-form-item label="默认 Topic">
-                  <el-input v-model="formData.topic" placeholder="mock-data" />
-                </el-form-item>
-              </template>
             </template>
           </el-form>
         </main>
@@ -1441,9 +1436,6 @@ const normalizeBuiltinFormData = (type, config) => {
 const normalizeBuiltinSubmitConfig = (type, config) => {
   if (type === 'builtin.realtime') {
     config.defaultTtlSeconds = Number(config.defaultTtlSeconds) || 300
-  }
-  if (type === 'builtin.message' && !config.topic) {
-    config.topic = 'mock-data'
   }
 }
 
