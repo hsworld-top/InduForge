@@ -584,7 +584,8 @@ func (s *QueryService) syncQueryDataPoint(ctx context.Context, record repository
 
 	path := "db." + normalizeDatapointSegment(connection.Name) + "." + normalizeDatapointSegment(record.Name)
 	sourceConfig := map[string]any{
-		"mode": "query",
+		"mode":         "query",
+		"connectionId": record.ConnectionID,
 	}
 	if parameters, ok := record.Config["parameters"]; ok {
 		sourceConfig["parameters"] = parameters

@@ -899,10 +899,14 @@ func (s *MqttService) CreateTagsBatch(ctx context.Context, projectID, subscripti
 		}
 		// 批量创建使用事务内集合 SQL；路径不再逐条追加后缀，冲突由数据库唯一约束统一拦截。
 		batchParams = append(batchParams, repository.BatchMqttTagDataPointParams{
-			Tag:         params,
-			DataPath:    datapointPathPrefix + normalizeDatapointSegment(params.Name),
-			DataName:    params.Name,
-			SourceType:  "mqtt.tag",
+			Tag:        params,
+			DataPath:   datapointPathPrefix + normalizeDatapointSegment(params.Name),
+			DataName:   params.Name,
+			SourceType: "mqtt.tag",
+			SourceConfig: map[string]any{
+				"connectionId":   subscription.ConnectionID,
+				"subscriptionId": subscriptionID,
+			},
 			RefreshMode: "subscription",
 			Status:      "active",
 		})
@@ -1111,11 +1115,12 @@ func (s *MqttService) syncSubscriptionDatapoint(ctx context.Context, subscriptio
 		Name:         subscription.Name,
 		SourceType:   "mqtt.subscription",
 		SourceID:     &subscription.ID,
-		SourceConfig: map[string]any{"mode": "subscription"},
+		SourceConfig: map[string]any{"mode": "subscription", "connectionId": subscription.ConnectionID},
 		DataType:     "object",
 		Tags:         []any{},
 		RefreshMode:  "subscription",
 		Status:       "active",
+		DisplayOrder: &subscription.Order,
 	})
 }
 
@@ -1134,23 +1139,31 @@ func (s *MqttService) syncTagDatapoint(ctx context.Context, tag repository.MqttT
 }
 
 func (s *MqttService) syncTagDatapointWithPrefix(ctx context.Context, tag repository.MqttTagRecord, userID string, prefix string) error {
+	subscription, err := s.repository.GetSubscription(ctx, tag.ProjectID, tag.SubscriptionID)
+	if err != nil {
+		return err
+	}
 	basePath := prefix + normalizeDatapointSegment(tag.Name)
 	path := s.allocateDataPointPath(ctx, tag.ProjectID, basePath, tag.ID, "mqtt.tag")
 
 	return s.upsertMqttDataPoint(ctx, repository.CreateDataPointParams{
-		ProjectID:    tag.ProjectID,
-		UserID:       stringPtr(userID),
-		Path:         path,
-		Name:         tag.Name,
-		SourceType:   "mqtt.tag",
-		SourceID:     &tag.ID,
-		SourceConfig: map[string]any{},
+		ProjectID:  tag.ProjectID,
+		UserID:     stringPtr(userID),
+		Path:       path,
+		Name:       tag.Name,
+		SourceType: "mqtt.tag",
+		SourceID:   &tag.ID,
+		SourceConfig: map[string]any{
+			"connectionId":   subscription.ConnectionID,
+			"subscriptionId": tag.SubscriptionID,
+		},
 		DataType:     tag.DataType,
 		Unit:         cloneOptionalString(tag.Unit),
 		DefaultValue: cloneOptionalString(tag.DefaultValue),
 		Tags:         []any{},
 		RefreshMode:  "subscription",
 		Status:       "active",
+		DisplayOrder: &tag.Order,
 	})
 }
 

@@ -903,6 +903,7 @@ func (s *S7ModelingService) syncVariableDatapoint(ctx context.Context, variable 
 		RefreshMode:       "auto",
 		RefreshIntervalMS: &refreshInterval,
 		Status:            "active",
+		DisplayOrder:      &variable.SortOrder,
 	})
 	return err
 }

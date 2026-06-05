@@ -32,14 +32,28 @@ type CreateDataPointParams struct {
 	RefreshMode       string
 	RefreshIntervalMS *int
 	Status            string
+	DisplayOrder      *int
+}
+
+func (r *DataPointRepository) resolveDataPointDisplayOrder(ctx context.Context, projectID string, explicit *int) (int, error) {
+	if explicit != nil {
+		return *explicit, nil
+	}
+	var next int
+	if err := r.pool.QueryRow(ctx, `
+        SELECT COALESCE(MAX(display_order) + 1, 0)
+        FROM data_points
+        WHERE project_id = $1
+    `, projectID).Scan(&next); err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "分配数据点展示顺序失败", err)
+	}
+	return next, nil
 }
 
 // GetByProjectAndSource 按来源读取单个数据点。
 func (r *DataPointRepository) GetByProjectAndSource(ctx context.Context, projectID, sourceType, sourceID string) (*DataPointRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-        SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-               unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-               refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+        SELECT `+dataPointSelectColumns+`
         FROM data_points
         WHERE project_id = $1 AND source_type = $2 AND source_id = $3
         ORDER BY created_at ASC
@@ -56,9 +70,7 @@ func (r *DataPointRepository) GetByProjectAndSource(ctx context.Context, project
 // ListByProjectAndSource 按来源读取数据点列表。
 func (r *DataPointRepository) ListByProjectAndSource(ctx context.Context, projectID, sourceType, sourceID string) ([]DataPointRecord, error) {
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-               unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-               refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+        SELECT `+dataPointSelectColumns+`
         FROM data_points
         WHERE project_id = $1 AND source_type = $2 AND source_id = $3
         ORDER BY created_at ASC
@@ -89,9 +101,7 @@ func (r *DataPointRepository) ListByProjectAndPaths(ctx context.Context, project
 	}
 
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-               unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-               refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+        SELECT `+dataPointSelectColumns+`
         FROM data_points
         WHERE project_id = $1 AND path = ANY($2::text[])
         ORDER BY path ASC
@@ -130,21 +140,23 @@ func (r *DataPointRepository) Create(ctx context.Context, params CreateDataPoint
 	if err != nil {
 		return nil, err
 	}
+	displayOrder, err := r.resolveDataPointDisplayOrder(ctx, params.ProjectID, params.DisplayOrder)
+	if err != nil {
+		return nil, err
+	}
 
 	row := r.pool.QueryRow(ctx, `
         INSERT INTO data_points (
             project_id, path, name, description, source_type, source_id, source_config, data_type,
             unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-            refresh_mode, refresh_interval_ms, status, created_by, updated_by
+            refresh_mode, refresh_interval_ms, status, display_order, created_by, updated_by
         )
         VALUES (
             $1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14, $15,
-            $16::jsonb, $17::jsonb, $18, $19, $20, $21, $21
+            $16::jsonb, $17::jsonb, $18, $19, $20, $21, $22, $22
         )
-        RETURNING id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-                  unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-                  refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
-    `, params.ProjectID, params.Path, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), string(runtimePermissionsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID)
+        RETURNING `+dataPointSelectColumns+`
+    `, params.ProjectID, params.Path, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), string(runtimePermissionsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, displayOrder, params.UserID)
 
 	record, err := scanDataPointRecord(row)
 	if err != nil {
@@ -187,15 +199,14 @@ func (r *DataPointRepository) UpsertBySource(ctx context.Context, params CreateD
             refresh_mode = $17,
             refresh_interval_ms = $18,
             status = $19,
+            display_order = COALESCE($21, display_order),
             updated_by = COALESCE($20, updated_by),
             updated_at = now()
         WHERE project_id = $1
           AND source_type = $2
           AND source_id = $3
-        RETURNING id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-                  unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-                  refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
-    `, params.ProjectID, params.SourceType, *params.SourceID, params.Path, params.Name, params.Description, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID)
+        RETURNING `+dataPointSelectColumns+`
+    `, params.ProjectID, params.SourceType, *params.SourceID, params.Path, params.Name, params.Description, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID, params.DisplayOrder)
 
 	record, err := scanDataPointRecord(row)
 	if err == nil {
@@ -239,14 +250,13 @@ func (r *DataPointRepository) UpsertByPath(ctx context.Context, params CreateDat
             refresh_mode = $17,
             refresh_interval_ms = $18,
             status = $19,
+            display_order = COALESCE($21, display_order),
             updated_by = COALESCE($20, updated_by),
             updated_at = now()
         WHERE project_id = $1
           AND path = $2
-        RETURNING id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-                  unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-                  refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
-    `, params.ProjectID, params.Path, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID)
+        RETURNING `+dataPointSelectColumns+`
+    `, params.ProjectID, params.Path, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID, params.DisplayOrder)
 
 	record, err := scanDataPointRecord(row)
 	if err == nil {
@@ -291,14 +301,13 @@ func (r *DataPointRepository) UpdateGeneratedOutput(ctx context.Context, id stri
             refresh_mode = $18,
             refresh_interval_ms = $19,
             status = $20,
+            display_order = COALESCE($22, display_order),
             updated_by = COALESCE($21, updated_by),
             updated_at = now()
         WHERE project_id = $1
           AND id = $2
-        RETURNING id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-                  unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-                  refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
-    `, params.ProjectID, id, params.Path, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID)
+        RETURNING `+dataPointSelectColumns+`
+    `, params.ProjectID, id, params.Path, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID, params.DisplayOrder)
 
 	record, err := scanDataPointRecord(row)
 	if err != nil {

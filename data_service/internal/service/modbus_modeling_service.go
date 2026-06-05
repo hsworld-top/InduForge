@@ -706,6 +706,7 @@ func (s *ModbusModelingService) syncRegisterDatapoint(ctx context.Context, regis
 		RefreshMode:       "auto",
 		RefreshIntervalMS: &refreshInterval,
 		Status:            "active",
+		DisplayOrder:      &register.SortOrder,
 	})
 	return err
 }

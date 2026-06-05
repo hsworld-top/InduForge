@@ -989,9 +989,13 @@ func upsertKafkaFieldDataPoint(ctx context.Context, tx pgx.Tx, field KafkaFieldR
 	err = tx.QueryRow(ctx, `
 		INSERT INTO data_points (
 			project_id, path, name, source_type, source_id, source_config,
-			data_type, refresh_mode, status, created_by, updated_by
+			data_type, refresh_mode, status, display_order, created_by, updated_by
 		)
-		VALUES ($1, $2, $3, 'kafka.field', $4, $5::jsonb, $6, 'subscription', $7, $8, $8)
+		VALUES (
+			$1, $2, $3, 'kafka.field', $4, $5::jsonb, $6, 'subscription', $7,
+			COALESCE((SELECT MAX(display_order) + 1 FROM data_points WHERE project_id = $1), 0),
+			$8, $8
+		)
 		RETURNING id, path
 	`, field.ProjectID, allocatedPath, field.Name, field.ConnectionID, string(sourceConfigPayload), field.DataType, status, userID).Scan(&dataPointID, &dataPointPath)
 	if err != nil {

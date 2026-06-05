@@ -59,6 +59,23 @@ type DataPoint struct {
 	UpdatedAt          time.Time                              `json:"updatedAt"`
 }
 
+// DataPointListItem 是数据点列表页的轻量投影。
+// 列表不返回 lastValue、runtimePermissions、完整 sourceConfig 等大字段，详情接口再按需读取完整数据。
+type DataPointListItem struct {
+	ID               string    `json:"id"`
+	ProjectID        string    `json:"projectId"`
+	Path             string    `json:"path"`
+	Name             string    `json:"name"`
+	SourceType       string    `json:"sourceType"`
+	AccessSourceID   string    `json:"accessSourceId,omitempty"`
+	AccessSourceName string    `json:"accessSourceName,omitempty"`
+	DataType         string    `json:"dataType"`
+	Tags             []any     `json:"tags"`
+	Status           string    `json:"status"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
+}
+
 // DataPointPagination 表示数据点列表分页信息。
 type DataPointPagination struct {
 	Page       int `json:"page"`
@@ -69,7 +86,7 @@ type DataPointPagination struct {
 
 // DataPointListResult 表示数据点列表与分页结果。
 type DataPointListResult struct {
-	DataPoints []DataPoint         `json:"datapoints"`
+	DataPoints []DataPointListItem `json:"datapoints"`
 	Pagination DataPointPagination `json:"pagination"`
 }
 
@@ -176,13 +193,17 @@ func (s *DataPointService) ListDataPoints(ctx context.Context, projectID string,
 	}
 
 	records, total, err := s.repository.ListByProject(ctx, projectID, repository.DataPointListFilter{
-		Type:      normalizedFilter.Type,
-		Status:    normalizedFilter.Status,
-		Search:    normalizedFilter.Search,
-		SourceID:  normalizedFilter.SourceID,
-		SourceIDs: normalizedFilter.SourceIDs,
-		Page:      normalizedFilter.Page,
-		PageSize:  normalizedFilter.PageSize,
+		Type:           normalizedFilter.Type,
+		Status:         normalizedFilter.Status,
+		Search:         normalizedFilter.Search,
+		AccessSourceID: normalizedFilter.AccessSourceID,
+		SourceID:       normalizedFilter.SourceID,
+		SourceIDs:      normalizedFilter.SourceIDs,
+		Tags:           normalizedFilter.Tags,
+		SortField:      normalizedFilter.SortField,
+		SortOrder:      normalizedFilter.SortOrder,
+		Page:           normalizedFilter.Page,
+		PageSize:       normalizedFilter.PageSize,
 	})
 	if err != nil {
 		return nil, err
@@ -191,14 +212,13 @@ func (s *DataPointService) ListDataPoints(ctx context.Context, projectID string,
 		return nil, err
 	}
 
-	items := make([]DataPoint, 0, len(records))
+	items := make([]DataPointListItem, 0, len(records))
 	for _, record := range records {
-		item := toDataPoint(record)
-		s.enrichDataPointPreview(ctx, projectID, record, &item)
+		item := s.toDataPointListItem(ctx, projectID, record)
 		items = append(items, item)
 	}
 
-	page, pageSize := normalizePageAndSize(normalizedFilter.Page, normalizedFilter.PageSize, 50, 200)
+	page, pageSize := normalizePageAndSize(normalizedFilter.Page, normalizedFilter.PageSize, 50, 500)
 	totalPages := 0
 	if total > 0 {
 		totalPages = (total + pageSize - 1) / pageSize
@@ -230,6 +250,7 @@ func (s *DataPointService) GetDataPoint(ctx context.Context, projectID, id strin
 	}
 
 	dataPoint := toDataPoint(*record)
+	s.enrichDataPointAccessSource(ctx, projectID, *record, &dataPoint)
 	s.enrichDataPointPreview(ctx, projectID, *record, &dataPoint)
 	return &dataPoint, nil
 }
@@ -498,16 +519,80 @@ func (s *DataPointService) DeleteDataPointsBatch(ctx context.Context, projectID 
 	return deleted, nil
 }
 
+// DeleteInvalidDataPointsByFilter 按当前列表筛选条件批量清理无效数据点。
+// 说明：用于跨页“选择全部结果”场景，service 固定 status=invalid，避免误删有效数据点。
+func (s *DataPointService) DeleteInvalidDataPointsByFilter(ctx context.Context, projectID string, filter DataPointListFilter) (int, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return 0, err
+	}
+	normalizedFilter, err := normalizeDataPointListFilter(filter)
+	if err != nil {
+		return 0, err
+	}
+	normalizedFilter.Status = "invalid"
+
+	deleted, err := s.repository.DeleteInvalidByFilter(ctx, projectID, repository.DataPointListFilter{
+		Type:           normalizedFilter.Type,
+		Status:         normalizedFilter.Status,
+		Search:         normalizedFilter.Search,
+		AccessSourceID: normalizedFilter.AccessSourceID,
+		SourceID:       normalizedFilter.SourceID,
+		SourceIDs:      normalizedFilter.SourceIDs,
+		Tags:           normalizedFilter.Tags,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return deleted, nil
+}
+
+// AppendDataPointTagsByFilter 按当前列表筛选条件批量追加标签。
+// 说明：标签只做追加与去重，不覆盖原有标签；筛选条件由后端执行，避免前端跨页拉取大批量数据。
+func (s *DataPointService) AppendDataPointTagsByFilter(ctx context.Context, projectID, userID string, filter DataPointListFilter, tags []string) (int, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return 0, err
+	}
+	if err := validateUserID(userID); err != nil {
+		return 0, err
+	}
+	normalizedFilter, err := normalizeDataPointListFilter(filter)
+	if err != nil {
+		return 0, err
+	}
+	normalizedTags := uniqueStrings(tags)
+	if len(normalizedTags) == 0 {
+		return 0, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "标签不能为空")
+	}
+
+	updated, err := s.repository.AppendTagsByFilter(ctx, projectID, repository.DataPointListFilter{
+		Type:           normalizedFilter.Type,
+		Status:         normalizedFilter.Status,
+		Search:         normalizedFilter.Search,
+		AccessSourceID: normalizedFilter.AccessSourceID,
+		SourceID:       normalizedFilter.SourceID,
+		SourceIDs:      normalizedFilter.SourceIDs,
+		Tags:           normalizedFilter.Tags,
+	}, normalizedTags, userID)
+	if err != nil {
+		return 0, err
+	}
+	return updated, nil
+}
+
 // normalizeDataPointListFilter 统一处理列表过滤参数。
 func normalizeDataPointListFilter(filter DataPointListFilter) (DataPointListFilter, error) {
 	normalized := DataPointListFilter{
-		Type:      strings.TrimSpace(filter.Type),
-		Status:    strings.TrimSpace(filter.Status),
-		Search:    strings.TrimSpace(filter.Search),
-		SourceID:  strings.TrimSpace(filter.SourceID),
-		SourceIDs: uniqueStrings(filter.SourceIDs),
-		Page:      filter.Page,
-		PageSize:  filter.PageSize,
+		Type:           strings.TrimSpace(filter.Type),
+		Status:         strings.TrimSpace(filter.Status),
+		Search:         strings.TrimSpace(filter.Search),
+		AccessSourceID: strings.TrimSpace(filter.AccessSourceID),
+		SourceID:       strings.TrimSpace(filter.SourceID),
+		SourceIDs:      uniqueStrings(filter.SourceIDs),
+		Tags:           uniqueStrings(filter.Tags),
+		SortField:      strings.TrimSpace(filter.SortField),
+		SortOrder:      strings.TrimSpace(filter.SortOrder),
+		Page:           filter.Page,
+		PageSize:       filter.PageSize,
 	}
 
 	if normalized.Type != "" {
@@ -525,12 +610,19 @@ func normalizeDataPointListFilter(filter DataPointListFilter) (DataPointListFilt
 			return DataPointListFilter{}, err
 		}
 	}
+	if normalized.AccessSourceID != "" {
+		if _, err := normalizeOptionalUUIDPtr(normalized.AccessSourceID); err != nil {
+			return DataPointListFilter{}, err
+		}
+	}
 	for _, id := range normalized.SourceIDs {
 		if _, err := normalizeOptionalUUIDPtr(id); err != nil {
 			return DataPointListFilter{}, err
 		}
 	}
-	maxPageSize := 200
+	normalized.SortField = normalizeDataPointSortField(normalized.SortField)
+	normalized.SortOrder = normalizeDataPointSortOrder(normalized.SortOrder)
+	maxPageSize := 500
 	if len(normalized.SourceIDs) > 0 {
 		maxPageSize = 5000
 	}
@@ -538,6 +630,24 @@ func normalizeDataPointListFilter(filter DataPointListFilter) (DataPointListFilt
 	normalized.Page = page
 	normalized.PageSize = pageSize
 	return normalized, nil
+}
+
+func normalizeDataPointSortField(value string) string {
+	switch strings.TrimSpace(value) {
+	case "name":
+		return "name"
+	case "path":
+		return "path"
+	default:
+		return "createdAt"
+	}
+}
+
+func normalizeDataPointSortOrder(value string) string {
+	if strings.EqualFold(strings.TrimSpace(value), "asc") {
+		return "asc"
+	}
+	return "desc"
 }
 
 // toDataPoint 将仓储记录映射为 HTTP 返回对象。
@@ -569,6 +679,24 @@ func toDataPoint(record repository.DataPointRecord) DataPoint {
 		ConsumeMode:        deriveDataPointConsumeMode(record),
 		CreatedAt:          record.CreatedAt,
 		UpdatedAt:          record.UpdatedAt,
+	}
+}
+
+func (s *DataPointService) toDataPointListItem(ctx context.Context, projectID string, record repository.DataPointRecord) DataPointListItem {
+	connectionID, connectionName := s.resolveDataPointAccessSource(ctx, projectID, record)
+	return DataPointListItem{
+		ID:               record.ID,
+		ProjectID:        record.ProjectID,
+		Path:             record.Path,
+		Name:             record.Name,
+		SourceType:       record.SourceType,
+		AccessSourceID:   connectionID,
+		AccessSourceName: connectionName,
+		DataType:         record.DataType,
+		Tags:             cloneJSONArray(record.Tags),
+		Status:           record.Status,
+		CreatedAt:        record.CreatedAt,
+		UpdatedAt:        record.UpdatedAt,
 	}
 }
 
@@ -1075,6 +1203,104 @@ func (s *DataPointService) enrichDataPointPreview(ctx context.Context, projectID
 	}
 }
 
+// enrichDataPointAccessSource 在返回数据点时补充接入源 ID。
+// source_id 对不同数据点含义不同：有的是查询/变量 ID，有的才是连接 ID；前端跳工作台统一读取 sourceConfig.connectionId。
+// 解析失败时静默保留原配置，避免列表接口因为单个来源缺失而不可用。
+func (s *DataPointService) enrichDataPointAccessSource(ctx context.Context, projectID string, record repository.DataPointRecord, target *DataPoint) {
+	if target == nil {
+		return
+	}
+	connectionID, connectionName := s.resolveDataPointAccessSource(ctx, projectID, record)
+	if connectionID == "" {
+		return
+	}
+	if target.SourceConfig == nil {
+		target.SourceConfig = map[string]any{}
+	}
+	target.SourceConfig["connectionId"] = connectionID
+	if connectionName != "" {
+		target.SourceConfig["accessSourceName"] = connectionName
+	}
+}
+
+func (s *DataPointService) resolveDataPointAccessSource(ctx context.Context, projectID string, record repository.DataPointRecord) (string, string) {
+	if connectionID := strings.TrimSpace(firstString(record.SourceConfig, "connectionId")); connectionID != "" {
+		return s.resolveConnectionName(ctx, projectID, connectionID)
+	}
+	if connectionID := strings.TrimSpace(firstString(record.SourceConfig, "sourceConnectionId")); connectionID != "" {
+		return s.resolveConnectionName(ctx, projectID, connectionID)
+	}
+
+	sourceID := ""
+	if record.SourceID != nil {
+		sourceID = strings.TrimSpace(*record.SourceID)
+	}
+	switch strings.TrimSpace(record.SourceType) {
+	case "db.query":
+		if s.queries == nil || s.queries.repository == nil || sourceID == "" {
+			return "", ""
+		}
+		query, err := s.queries.repository.GetByProjectAndID(ctx, projectID, sourceID)
+		if err != nil || query == nil {
+			return "", ""
+		}
+		return s.resolveConnectionName(ctx, projectID, query.ConnectionID)
+	case "mqtt.subscription":
+		if s.mqtt == nil || sourceID == "" {
+			return "", ""
+		}
+		subscription, err := s.mqtt.GetSubscription(ctx, projectID, sourceID)
+		if err != nil || subscription == nil {
+			return "", ""
+		}
+		return s.resolveConnectionName(ctx, projectID, subscription.ConnectionID)
+	case "mqtt.tag":
+		if s.mqtt == nil || sourceID == "" {
+			return "", ""
+		}
+		tag, err := s.mqtt.GetTag(ctx, projectID, sourceID)
+		if err != nil || tag == nil {
+			return "", ""
+		}
+		subscription, err := s.mqtt.GetSubscription(ctx, projectID, tag.SubscriptionID)
+		if err != nil || subscription == nil {
+			return "", ""
+		}
+		return s.resolveConnectionName(ctx, projectID, subscription.ConnectionID)
+	case "calc.output", "alarm.state":
+		return "", ""
+	default:
+		if sourceID != "" && sourceTypeUsesSourceIDAsConnection(record.SourceType) {
+			return s.resolveConnectionName(ctx, projectID, sourceID)
+		}
+		return "", ""
+	}
+}
+
+func (s *DataPointService) resolveConnectionName(ctx context.Context, projectID, connectionID string) (string, string) {
+	connectionID = strings.TrimSpace(connectionID)
+	if connectionID == "" {
+		return "", ""
+	}
+	if s.connections == nil {
+		return connectionID, ""
+	}
+	connection, err := s.connections.GetByProjectAndID(ctx, projectID, connectionID)
+	if err != nil || connection == nil {
+		return connectionID, ""
+	}
+	return connection.ID, connection.Name
+}
+
+func sourceTypeUsesSourceIDAsConnection(sourceType string) bool {
+	switch strings.TrimSpace(sourceType) {
+	case "http.request", "websocket.session", "realtime.key", "kafka.field":
+		return true
+	default:
+		return false
+	}
+}
+
 func deriveDataPointInvalidReason(record repository.DataPointRecord) string {
 	switch strings.TrimSpace(record.SourceType) {
 	case "calc.output":
@@ -1300,11 +1526,15 @@ func cloneOptionalFloat64(value *float64) *float64 {
 
 // DataPointListFilter 表示 service 层对数据点列表的入参封装，供 HTTP 层与仓储层之间转换。
 type DataPointListFilter struct {
-	Type      string
-	Status    string
-	Search    string
-	SourceID  string
-	SourceIDs []string
-	Page      int
-	PageSize  int
+	Type           string
+	Status         string
+	Search         string
+	AccessSourceID string
+	SourceID       string
+	SourceIDs      []string
+	Tags           []string
+	SortField      string
+	SortOrder      string
+	Page           int
+	PageSize       int
 }

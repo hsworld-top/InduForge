@@ -42,21 +42,30 @@ type DataPointRecord struct {
 	RefreshMode               string
 	RefreshIntervalMS         *int
 	Status                    string
+	DisplayOrder              int
 	CreatedBy                 *string
 	UpdatedBy                 *string
 	CreatedAt                 time.Time
 	UpdatedAt                 time.Time
 }
 
+const dataPointSelectColumns = `id, project_id, path, name, description, source_type, source_id, source_config, data_type,
+       unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
+       refresh_mode, refresh_interval_ms, status, display_order, created_by, updated_by, created_at, updated_at`
+
 // DataPointListFilter 表示数据点列表的过滤条件。
 type DataPointListFilter struct {
-	Type      string
-	Status    string
-	Search    string
-	SourceID  string
-	SourceIDs []string
-	Page      int
-	PageSize  int
+	Type           string
+	Status         string
+	Search         string
+	AccessSourceID string
+	SourceID       string
+	SourceIDs      []string
+	Tags           []string
+	SortField      string
+	SortOrder      string
+	Page           int
+	PageSize       int
 }
 
 // DataPointRepository 封装 data_points 的参数化 SQL 访问。
@@ -70,10 +79,10 @@ func NewDataPointRepository(pool *pgxpool.Pool) *DataPointRepository {
 }
 
 // ListByProject 按项目分页查询 data_points。
-// 查询路径：project_id + 可选过滤条件 + created_at 排序，主要命中 data_points_project_status_idx / data_points_source_idx / data_points_project_path_key。
+// 查询路径：project_id + 可选过滤条件 + created_at/display_order 排序，主要命中 data_points_project_status_idx / data_points_source_idx / data_points_project_path_key。
 // 潜在性能风险：search 使用 ILIKE 会导致回表放大；如果数据点规模继续增长，应考虑额外的路径搜索索引或前缀查询策略。
 func (r *DataPointRepository) ListByProject(ctx context.Context, projectID string, filter DataPointListFilter) ([]DataPointRecord, int, error) {
-	maxPageSize := 200
+	maxPageSize := 500
 	if len(filter.SourceIDs) > 0 {
 		maxPageSize = 5000
 	}
@@ -90,13 +99,12 @@ func (r *DataPointRepository) ListByProject(ctx context.Context, projectID strin
 	}
 
 	selectArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
+	orderSQL := resolveDataPointOrderSQL(filter.SortField, filter.SortOrder)
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-		       unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-		       refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
-        FROM data_points
+		SELECT `+dataPointSelectColumns+`
+		FROM data_points
         WHERE `+whereSQL+`
-        ORDER BY created_at DESC
+        ORDER BY `+orderSQL+`
         LIMIT $`+fmt.Sprint(len(args)+1)+` OFFSET $`+fmt.Sprint(len(args)+2)+`
     `, selectArgs...)
 	if err != nil {
@@ -124,9 +132,7 @@ func (r *DataPointRepository) ListByProject(ctx context.Context, projectID strin
 // 潜在性能风险：单条主键读取性能稳定，但高频调用 value 接口时应关注上游查询执行成本而非此处扫描成本。
 func (r *DataPointRepository) GetByProjectAndID(ctx context.Context, projectID, id string) (*DataPointRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-		       unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-		       refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+		SELECT `+dataPointSelectColumns+`
         FROM data_points
         WHERE project_id = $1 AND id = $2
     `, projectID, id)
@@ -143,9 +149,7 @@ func (r *DataPointRepository) GetByProjectAndID(ctx context.Context, projectID, 
 // 潜在性能风险：若 path 频繁被模糊搜索，不要把该唯一索引误当作搜索索引使用。
 func (r *DataPointRepository) GetByProjectAndPath(ctx context.Context, projectID, path string) (*DataPointRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-		       unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-		       refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+		SELECT `+dataPointSelectColumns+`
         FROM data_points
         WHERE project_id = $1 AND path = $2
     `, projectID, path)
@@ -166,9 +170,7 @@ func (r *DataPointRepository) GetByProjectAndIDs(ctx context.Context, projectID 
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-		       unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-		       refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+		SELECT `+dataPointSelectColumns+`
         FROM data_points
         WHERE project_id = $1 AND id = ANY($2::uuid[])
         ORDER BY id
@@ -228,9 +230,7 @@ func (r *DataPointRepository) Update(ctx context.Context, params UpdateDataPoint
             updated_by = $20,
             updated_at = now()
         WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-                  unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-                  refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+        RETURNING `+dataPointSelectColumns+`
     `, params.ProjectID, params.ID, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID)
 
 	record, err := scanDataPointRecord(row)
@@ -255,9 +255,7 @@ func (r *DataPointRepository) UpdateRuntimePermissions(ctx context.Context, para
             updated_by = $4,
             updated_at = now()
         WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-                  unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-                  refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+        RETURNING `+dataPointSelectColumns+`
     `, params.ProjectID, params.ID, string(runtimePermissionsBytes), params.UserID)
 
 	record, err := scanDataPointRecord(row)
@@ -300,6 +298,74 @@ func (r *DataPointRepository) DeleteInvalidBatch(ctx context.Context, projectID 
 		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "批量删除数据点失败", err)
 	}
 	return int(commandTag.RowsAffected()), nil
+}
+
+// DeleteInvalidByFilter 按筛选条件批量删除无效数据点。
+// 说明：用于前端“选择全部筛选结果”场景，where 条件与列表查询共用，避免前端拉取全量 ID。
+func (r *DataPointRepository) DeleteInvalidByFilter(ctx context.Context, projectID string, filter DataPointListFilter) (int, error) {
+	filter.Status = "invalid"
+	whereSQL, args, err := buildDataPointWhereClause(projectID, filter)
+	if err != nil {
+		return 0, err
+	}
+
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开始批量删除数据点事务失败", err)
+	}
+	defer rollbackDataPointTxQuietly(ctx, tx)
+
+	commandTag, err := tx.Exec(ctx, `DELETE FROM data_points WHERE `+whereSQL, args...)
+	if err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "按筛选条件批量删除数据点失败", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交批量删除数据点事务失败", err)
+	}
+	return int(commandTag.RowsAffected()), nil
+}
+
+// AppendTagsByFilter 按筛选条件批量追加标签。
+// 说明：JSONB 数组在 SQL 内合并去重，保证跨页批量操作只发起一次更新并保持事务一致。
+func (r *DataPointRepository) AppendTagsByFilter(ctx context.Context, projectID string, filter DataPointListFilter, tags []string, userID string) (int, error) {
+	whereSQL, args, err := buildDataPointWhereClause(projectID, filter)
+	if err != nil {
+		return 0, err
+	}
+	tagBytes, err := json.Marshal(tags)
+	if err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "标签格式无效", err)
+	}
+	args = append(args, string(tagBytes), userID)
+	tagsArgIndex := len(args) - 1
+	userArgIndex := len(args)
+
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开始批量更新标签事务失败", err)
+	}
+	defer rollbackDataPointTxQuietly(ctx, tx)
+
+	commandTag, err := tx.Exec(ctx, `
+        UPDATE data_points
+        SET tags = (
+                SELECT COALESCE(jsonb_agg(DISTINCT tag_item.value), '[]'::jsonb)
+                FROM jsonb_array_elements(tags || $`+fmt.Sprint(tagsArgIndex)+`::jsonb) AS tag_item(value)
+            ),
+            updated_by = NULLIF($`+fmt.Sprint(userArgIndex)+`, '')::uuid,
+            updated_at = now()
+        WHERE `+whereSQL, args...)
+	if err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "按筛选条件批量更新标签失败", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交批量更新标签事务失败", err)
+	}
+	return int(commandTag.RowsAffected()), nil
+}
+
+func rollbackDataPointTxQuietly(ctx context.Context, tx pgx.Tx) {
+	_ = tx.Rollback(ctx)
 }
 
 // DataPointUpdateParams 表示数据点更新时的仓储参数。
@@ -380,6 +446,7 @@ func scanDataPointRecord(row dataPointScannable) (DataPointRecord, error) {
 		&record.RefreshMode,
 		&refreshIntervalMS,
 		&record.Status,
+		&record.DisplayOrder,
 		&createdBy,
 		&updatedBy,
 		&record.CreatedAt,
@@ -450,6 +517,19 @@ func buildDataPointWhereClause(projectID string, filter DataPointListFilter) (st
 	if err := addStringClause("status", filter.Status); err != nil {
 		return "", nil, err
 	}
+	if strings.TrimSpace(filter.AccessSourceID) != "" {
+		args = append(args, strings.TrimSpace(filter.AccessSourceID))
+		argIndex := len(args)
+		// 接入源筛选是用户可见维度；不同来源数据点的连接 ID 可能存于 source_config 或 source_id。
+		clauses = append(clauses, fmt.Sprintf(`(
+            source_config->>'connectionId' = $%d
+            OR source_config->>'sourceConnectionId' = $%d
+            OR (
+                source_type IN ('http.request', 'websocket.session', 'realtime.key', 'kafka.field')
+                AND source_id = $%d::uuid
+            )
+        )`, argIndex, argIndex, argIndex))
+	}
 	if err := addStringClause("source_id", filter.SourceID); err != nil {
 		return "", nil, err
 	}
@@ -457,6 +537,19 @@ func buildDataPointWhereClause(projectID string, filter DataPointListFilter) (st
 	if len(filter.SourceIDs) > 0 {
 		args = append(args, filter.SourceIDs)
 		clauses = append(clauses, fmt.Sprintf("source_id = ANY($%d::uuid[])", len(args)))
+	}
+
+	for _, tag := range filter.Tags {
+		trimmed := strings.TrimSpace(tag)
+		if trimmed == "" {
+			continue
+		}
+		payload, err := json.Marshal([]string{trimmed})
+		if err != nil {
+			return "", nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "标签筛选格式无效", err)
+		}
+		args = append(args, string(payload))
+		clauses = append(clauses, fmt.Sprintf("tags @> $%d::jsonb", len(args)))
 	}
 
 	search := strings.TrimSpace(filter.Search)
@@ -467,6 +560,23 @@ func buildDataPointWhereClause(projectID string, filter DataPointListFilter) (st
 	}
 
 	return strings.Join(clauses, " AND "), args, nil
+}
+
+func resolveDataPointOrderSQL(sortField, sortOrder string) string {
+	direction := "DESC"
+	if strings.EqualFold(strings.TrimSpace(sortOrder), "asc") {
+		direction = "ASC"
+	}
+
+	switch strings.TrimSpace(sortField) {
+	case "name":
+		return "name " + direction + ", path " + direction + ", id " + direction
+	case "path":
+		return "path " + direction + ", id " + direction
+	default:
+		// 前端只暴露“创建时间”排序；display_order 仅作为同创建时间下的内部稳定顺序，方向跟随创建时间。
+		return "created_at " + direction + ", display_order " + direction + ", id " + direction
+	}
 }
 
 func marshalJSONArray(value []any) ([]byte, error) {

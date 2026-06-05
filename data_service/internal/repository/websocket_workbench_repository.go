@@ -531,9 +531,13 @@ func upsertWebSocketSessionDataPoint(ctx context.Context, tx pgx.Tx, record WebS
 	err = tx.QueryRow(ctx, `
 		INSERT INTO data_points (
 			project_id, path, name, source_type, source_id, source_config,
-			data_type, default_value, refresh_mode, status, created_by, updated_by
+			data_type, default_value, refresh_mode, status, display_order, created_by, updated_by
 		)
-		VALUES ($1, $2, $3, 'websocket.session', $4, $5::jsonb, 'object', $6, 'manual', $7, $8, $8)
+		VALUES (
+			$1, $2, $3, 'websocket.session', $4, $5::jsonb, 'object', $6, 'manual', $7,
+			COALESCE((SELECT MAX(display_order) + 1 FROM data_points WHERE project_id = $1), 0),
+			$8, $8
+		)
 		RETURNING id, path
 	`, record.ProjectID, allocatedPath, record.Name, record.ConnectionID, string(configPayload), defaultValue, status, userID).Scan(&dataPointID, &dataPointPath)
 	if err != nil {

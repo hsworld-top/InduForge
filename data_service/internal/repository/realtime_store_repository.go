@@ -303,7 +303,7 @@ func (r *RealtimeStoreRepository) CreateDataPoint(ctx context.Context, params Cr
 	}
 
 	record := DataPointRecord{}
-	err = tx.QueryRow(ctx, `
+	record, err = scanDataPointRecord(tx.QueryRow(ctx, `
 		UPDATE data_points
 		SET path = COALESCE(NULLIF(path, ''), $3),
 		    name = $4,
@@ -317,36 +317,8 @@ func (r *RealtimeStoreRepository) CreateDataPoint(ctx context.Context, params Cr
 		WHERE project_id = $1
 		  AND source_type = 'realtime.key'
 		  AND source_config->>'keyId' = $2
-		RETURNING id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-		          unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-		          refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
-	`, params.ProjectID, params.KeyID, basePath, params.KeyPath, params.ConnectionID, string(configBytes), params.DataType, params.UserID).Scan(
-		&record.ID,
-		&record.ProjectID,
-		&record.Path,
-		&record.Name,
-		&record.Description,
-		&record.SourceType,
-		&record.SourceID,
-		newJSONScanner(&record.SourceConfig),
-		&record.DataType,
-		&record.Unit,
-		&record.PrecisionNum,
-		&record.DefaultValue,
-		&record.MinValue,
-		&record.MaxValue,
-		&record.AlarmLow,
-		&record.AlarmHigh,
-		newJSONScanner(&record.Tags),
-		newJSONScanner(&record.RuntimePermissions),
-		&record.RefreshMode,
-		&record.RefreshIntervalMS,
-		&record.Status,
-		&record.CreatedBy,
-		&record.UpdatedBy,
-		&record.CreatedAt,
-		&record.UpdatedAt,
-	)
+		RETURNING `+dataPointSelectColumns+`
+	`, params.ProjectID, params.KeyID, basePath, params.KeyPath, params.ConnectionID, string(configBytes), params.DataType, params.UserID))
 	if err == nil {
 		if err := tx.Commit(ctx); err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交实时库 key 数据点事务失败", err)
@@ -357,7 +329,7 @@ func (r *RealtimeStoreRepository) CreateDataPoint(ctx context.Context, params Cr
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步实时库 key 数据点失败", err)
 	}
 
-	err = tx.QueryRow(ctx, `
+	record, err = scanDataPointRecord(tx.QueryRow(ctx, `
 		UPDATE data_points
 		SET name = $3,
 		    source_id = $4,
@@ -371,36 +343,8 @@ func (r *RealtimeStoreRepository) CreateDataPoint(ctx context.Context, params Cr
 		  AND source_type = 'realtime.key'
 		  AND path = $2
 		  AND status = 'invalid'
-		RETURNING id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-		          unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-		          refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
-	`, params.ProjectID, basePath, params.KeyPath, params.ConnectionID, string(configBytes), params.DataType, params.UserID).Scan(
-		&record.ID,
-		&record.ProjectID,
-		&record.Path,
-		&record.Name,
-		&record.Description,
-		&record.SourceType,
-		&record.SourceID,
-		newJSONScanner(&record.SourceConfig),
-		&record.DataType,
-		&record.Unit,
-		&record.PrecisionNum,
-		&record.DefaultValue,
-		&record.MinValue,
-		&record.MaxValue,
-		&record.AlarmLow,
-		&record.AlarmHigh,
-		newJSONScanner(&record.Tags),
-		newJSONScanner(&record.RuntimePermissions),
-		&record.RefreshMode,
-		&record.RefreshIntervalMS,
-		&record.Status,
-		&record.CreatedBy,
-		&record.UpdatedBy,
-		&record.CreatedAt,
-		&record.UpdatedAt,
-	)
+		RETURNING `+dataPointSelectColumns+`
+	`, params.ProjectID, basePath, params.KeyPath, params.ConnectionID, string(configBytes), params.DataType, params.UserID))
 	if err == nil {
 		if err := tx.Commit(ctx); err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交实时库 key 数据点事务失败", err)
@@ -415,42 +359,18 @@ func (r *RealtimeStoreRepository) CreateDataPoint(ctx context.Context, params Cr
 	if err != nil {
 		return nil, err
 	}
-	err = tx.QueryRow(ctx, `
+	record, err = scanDataPointRecord(tx.QueryRow(ctx, `
 		INSERT INTO data_points (
 			project_id, path, name, source_type, source_id, source_config,
-			data_type, refresh_mode, status, created_by, updated_by
+			data_type, refresh_mode, status, display_order, created_by, updated_by
 		)
-		VALUES ($1, $2, $3, 'realtime.key', $4, $5::jsonb, $6, 'manual', 'active', $7, $7)
-		RETURNING id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-		          unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-		          refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
-	`, params.ProjectID, allocatedPath, params.KeyPath, params.ConnectionID, string(configBytes), params.DataType, params.UserID).Scan(
-		&record.ID,
-		&record.ProjectID,
-		&record.Path,
-		&record.Name,
-		&record.Description,
-		&record.SourceType,
-		&record.SourceID,
-		newJSONScanner(&record.SourceConfig),
-		&record.DataType,
-		&record.Unit,
-		&record.PrecisionNum,
-		&record.DefaultValue,
-		&record.MinValue,
-		&record.MaxValue,
-		&record.AlarmLow,
-		&record.AlarmHigh,
-		newJSONScanner(&record.Tags),
-		newJSONScanner(&record.RuntimePermissions),
-		&record.RefreshMode,
-		&record.RefreshIntervalMS,
-		&record.Status,
-		&record.CreatedBy,
-		&record.UpdatedBy,
-		&record.CreatedAt,
-		&record.UpdatedAt,
-	)
+		VALUES (
+			$1, $2, $3, 'realtime.key', $4, $5::jsonb, $6, 'manual', 'active',
+			COALESCE((SELECT MAX(display_order) + 1 FROM data_points WHERE project_id = $1), 0),
+			$7, $7
+		)
+		RETURNING `+dataPointSelectColumns+`
+	`, params.ProjectID, allocatedPath, params.KeyPath, params.ConnectionID, string(configBytes), params.DataType, params.UserID))
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "创建实时库 key 数据点失败", err)
 	}

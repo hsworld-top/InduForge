@@ -166,6 +166,74 @@ func (h *DataPointHandler) DeleteBatch(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
+// DeleteBatchByFilter 按筛选条件批量删除无效数据点。
+func (h *DataPointHandler) DeleteBatchByFilter(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+
+	var request struct {
+		Filter dataPointFilterPayload `json:"filter"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+
+	deletedCount, err := h.service.DeleteInvalidDataPointsByFilter(r.Context(), r.PathValue("projectId"), request.Filter.toServiceFilter())
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]int{"deletedCount": deletedCount})
+	return nil
+}
+
+// AppendTagsByFilter 按筛选条件批量追加数据点标签。
+func (h *DataPointHandler) AppendTagsByFilter(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+
+	var request struct {
+		Filter dataPointFilterPayload `json:"filter"`
+		Tags   []string               `json:"tags"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+
+	updatedCount, err := h.service.AppendDataPointTagsByFilter(r.Context(), r.PathValue("projectId"), claims.UserID, request.Filter.toServiceFilter(), request.Tags)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]int{"updatedCount": updatedCount})
+	return nil
+}
+
+type dataPointFilterPayload struct {
+	Type           string   `json:"type"`
+	Status         string   `json:"status"`
+	Search         string   `json:"search"`
+	AccessSourceID string   `json:"accessSourceId"`
+	SourceID       string   `json:"sourceId"`
+	SourceIDs      []string `json:"sourceIds"`
+	Tags           []string `json:"tags"`
+}
+
+func (p dataPointFilterPayload) toServiceFilter() service.DataPointListFilter {
+	return service.DataPointListFilter{
+		Type:           strings.TrimSpace(p.Type),
+		Status:         strings.TrimSpace(p.Status),
+		Search:         strings.TrimSpace(p.Search),
+		AccessSourceID: strings.TrimSpace(p.AccessSourceID),
+		SourceID:       strings.TrimSpace(p.SourceID),
+		SourceIDs:      p.SourceIDs,
+		Tags:           p.Tags,
+	}
+}
+
 func parseDataPointListFilter(r *http.Request) (service.DataPointListFilter, error) {
 	query := r.URL.Query()
 
@@ -188,14 +256,28 @@ func parseDataPointListFilter(r *http.Request) (service.DataPointListFilter, err
 		}
 	}
 
+	var tags []string
+	if raw := strings.TrimSpace(query.Get("tags")); raw != "" {
+		for _, item := range strings.Split(raw, ",") {
+			trimmed := strings.TrimSpace(item)
+			if trimmed != "" {
+				tags = append(tags, trimmed)
+			}
+		}
+	}
+
 	return service.DataPointListFilter{
-		Type:      strings.TrimSpace(query.Get("type")),
-		Status:    strings.TrimSpace(query.Get("status")),
-		Search:    strings.TrimSpace(query.Get("search")),
-		SourceID:  strings.TrimSpace(query.Get("sourceId")),
-		SourceIDs: sourceIDs,
-		Page:      page,
-		PageSize:  pageSize,
+		Type:           strings.TrimSpace(query.Get("type")),
+		Status:         strings.TrimSpace(query.Get("status")),
+		Search:         strings.TrimSpace(query.Get("search")),
+		AccessSourceID: strings.TrimSpace(query.Get("accessSourceId")),
+		SourceID:       strings.TrimSpace(query.Get("sourceId")),
+		SourceIDs:      sourceIDs,
+		Tags:           tags,
+		SortField:      strings.TrimSpace(firstNonEmpty(query.Get("sortField"), query.Get("sort"))),
+		SortOrder:      strings.TrimSpace(firstNonEmpty(query.Get("sortOrder"), query.Get("order"))),
+		Page:           page,
+		PageSize:       pageSize,
 	}, nil
 }
 

@@ -124,6 +124,7 @@ CREATE TABLE IF NOT EXISTS data_points (
     refresh_mode text NOT NULL DEFAULT 'auto' CHECK (refresh_mode IN ('auto', 'manual', 'subscription')),
     refresh_interval_ms integer CHECK (refresh_interval_ms IS NULL OR refresh_interval_ms >= 0),
     status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'invalid')),
+    display_order integer NOT NULL DEFAULT 0,
     runtime_permissions jsonb NOT NULL DEFAULT '{"write":{"allowRoles":[],"denyRoles":[],"inherit":true}}'::jsonb
         CHECK (jsonb_typeof(runtime_permissions) = 'object'),
     created_by uuid,
@@ -150,3 +151,6 @@ CREATE INDEX IF NOT EXISTS data_points_source_config_gin_idx
 
 CREATE INDEX IF NOT EXISTS data_points_tags_gin_idx
     ON data_points USING GIN (tags);
+
+CREATE INDEX IF NOT EXISTS data_points_project_created_display_idx
+    ON data_points (project_id, created_at DESC, display_order ASC, id DESC);

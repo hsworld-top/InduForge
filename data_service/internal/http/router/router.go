@@ -735,6 +735,22 @@ func mountDataRoutes(mux *http.ServeMux, opts options) {
 			),
 		)
 		mux.Handle(
+			"POST /api/v1/data/projects/{projectId}/datapoints/delete-by-filter",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:write")(
+					middleware.ErrorHandler(opts.dataPointHandler.DeleteBatchByFilter),
+				),
+			),
+		)
+		mux.Handle(
+			"POST /api/v1/data/projects/{projectId}/datapoints/tags-by-filter",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:write")(
+					middleware.ErrorHandler(opts.dataPointHandler.AppendTagsByFilter),
+				),
+			),
+		)
+		mux.Handle(
 			"POST /api/v1/data/projects/{projectId}/datapoints/status",
 			middleware.Authenticate(opts.jwtValidator)(
 				middleware.RequireCapability("project:read")(

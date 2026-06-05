@@ -552,6 +552,7 @@ func (s *OpcuaModelingService) syncNodeDatapoint(ctx context.Context, node repos
 		Tags:         []any{},
 		RefreshMode:  "subscription",
 		Status:       "active",
+		DisplayOrder: &node.SortOrder,
 	})
 	return err
 }

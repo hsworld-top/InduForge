@@ -207,12 +207,13 @@ type CreateMqttTagParams struct {
 
 // BatchMqttTagDataPointParams 表示批量创建 MQTT 变量时需要同步的数据点信息。
 type BatchMqttTagDataPointParams struct {
-	Tag         CreateMqttTagParams
-	DataPath    string
-	DataName    string
-	SourceType  string
-	RefreshMode string
-	Status      string
+	Tag          CreateMqttTagParams
+	DataPath     string
+	DataName     string
+	SourceType   string
+	SourceConfig map[string]any
+	RefreshMode  string
+	Status       string
 }
 
 // UpdateMqttTagParams 表示更新变量的仓储参数。
@@ -874,6 +875,15 @@ func (r *MqttRepository) CreateTagsBatchWithDataPoints(ctx context.Context, para
 	}
 	defer rollbackTxQuietly(ctx, tx)
 
+	subscriptionID := strings.TrimSpace(params[0].Tag.SubscriptionID)
+	if err := lockMqttTagOrderAllocation(ctx, tx, subscriptionID); err != nil {
+		return nil, err
+	}
+	baseOrder, err := nextMqttTagDisplayOrder(ctx, tx, params[0].Tag.ProjectID, subscriptionID)
+	if err != nil {
+		return nil, err
+	}
+
 	projectIDs := make([]string, 0, len(params))
 	subscriptionIDs := make([]string, 0, len(params))
 	names := make([]string, 0, len(params))
@@ -889,7 +899,7 @@ func (r *MqttRepository) CreateTagsBatchWithDataPoints(ctx context.Context, para
 	orders := make([]int, 0, len(params))
 	createdBy := make([]string, 0, len(params))
 
-	for _, item := range params {
+	for index, item := range params {
 		validationBytes, marshalErr := marshalMqttJSONObject(item.Tag.Validation)
 		if marshalErr != nil {
 			return nil, marshalErr
@@ -906,7 +916,7 @@ func (r *MqttRepository) CreateTagsBatchWithDataPoints(ctx context.Context, para
 		units = append(units, item.Tag.Unit)
 		transforms = append(transforms, item.Tag.Transform)
 		validations = append(validations, string(validationBytes))
-		orders = append(orders, item.Tag.Order)
+		orders = append(orders, baseOrder+index)
 		createdBy = append(createdBy, item.Tag.UserID)
 	}
 
@@ -959,6 +969,29 @@ func (r *MqttRepository) CreateTagsBatchWithDataPoints(ctx context.Context, para
 	return records, nil
 }
 
+func lockMqttTagOrderAllocation(ctx context.Context, tx pgx.Tx, subscriptionID string) error {
+	if subscriptionID == "" {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "订阅 ID 不能为空")
+	}
+	// 同一订阅的批量建点需要串行分配 display_order，避免多用户同时保存时出现重复顺序。
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`, "mqtt-tags-order", subscriptionID); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "锁定 MQTT 变量排序失败", err)
+	}
+	return nil
+}
+
+func nextMqttTagDisplayOrder(ctx context.Context, tx pgx.Tx, projectID, subscriptionID string) (int, error) {
+	var next int
+	if err := tx.QueryRow(ctx, `
+        SELECT COALESCE(MAX(display_order) + 1, 0)
+        FROM data_mqtt_tags
+        WHERE project_id = $1 AND subscription_id = $2
+    `, projectID, subscriptionID).Scan(&next); err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "分配 MQTT 变量排序失败", err)
+	}
+	return next, nil
+}
+
 func upsertMqttTagDataPointsInTx(ctx context.Context, tx pgx.Tx, tags []MqttTagRecord, params []BatchMqttTagDataPointParams) error {
 	paramsByCode := make(map[string]BatchMqttTagDataPointParams, len(params))
 	for _, item := range params {
@@ -977,6 +1010,7 @@ func upsertMqttTagDataPointsInTx(ctx context.Context, tx pgx.Tx, tags []MqttTagR
 	tagsPayload := make([]string, 0, len(tags))
 	refreshModes := make([]string, 0, len(tags))
 	statuses := make([]string, 0, len(tags))
+	displayOrders := make([]int, 0, len(tags))
 	userIDs := make([]string, 0, len(tags))
 
 	for _, tag := range tags {
@@ -989,28 +1023,33 @@ func upsertMqttTagDataPointsInTx(ctx context.Context, tx pgx.Tx, tags []MqttTagR
 		names = append(names, item.DataName)
 		sourceTypes = append(sourceTypes, item.SourceType)
 		sourceIDs = append(sourceIDs, tag.ID)
-		sourceConfigs = append(sourceConfigs, "{}")
+		sourceConfigBytes, marshalErr := marshalMqttJSONObject(item.SourceConfig)
+		if marshalErr != nil {
+			return marshalErr
+		}
+		sourceConfigs = append(sourceConfigs, string(sourceConfigBytes))
 		dataTypes = append(dataTypes, tag.DataType)
 		units = append(units, tag.Unit)
 		defaultValues = append(defaultValues, tag.DefaultValue)
 		tagsPayload = append(tagsPayload, "[]")
 		refreshModes = append(refreshModes, item.RefreshMode)
 		statuses = append(statuses, item.Status)
+		displayOrders = append(displayOrders, tag.Order)
 		userIDs = append(userIDs, item.Tag.UserID)
 	}
 
 	rows, err := tx.Query(ctx, `
         INSERT INTO data_points (
             project_id, path, name, source_type, source_id, source_config, data_type,
-            unit, default_value, tags, refresh_mode, status, created_by, updated_by
+            unit, default_value, tags, refresh_mode, status, display_order, created_by, updated_by
         )
         SELECT project_id, path, name, source_type, source_id, source_config::jsonb, data_type,
-               unit, default_value, tags::jsonb, refresh_mode, status, user_id, user_id
+               unit, default_value, tags::jsonb, refresh_mode, status, display_order, user_id, user_id
         FROM unnest(
             $1::uuid[], $2::text[], $3::text[], $4::text[], $5::uuid[], $6::text[], $7::text[],
-            $8::text[], $9::text[], $10::text[], $11::text[], $12::text[], $13::uuid[]
+            $8::text[], $9::text[], $10::text[], $11::text[], $12::text[], $13::int[], $14::uuid[]
         ) AS input(project_id, path, name, source_type, source_id, source_config, data_type,
-                   unit, default_value, tags, refresh_mode, status, user_id)
+                   unit, default_value, tags, refresh_mode, status, display_order, user_id)
         ON CONFLICT (project_id, path) DO UPDATE
         SET name = EXCLUDED.name,
             source_type = EXCLUDED.source_type,
@@ -1022,12 +1061,13 @@ func upsertMqttTagDataPointsInTx(ctx context.Context, tx pgx.Tx, tags []MqttTagR
             tags = EXCLUDED.tags,
             refresh_mode = EXCLUDED.refresh_mode,
             status = EXCLUDED.status,
+            display_order = EXCLUDED.display_order,
             updated_by = EXCLUDED.updated_by,
             updated_at = now()
         WHERE data_points.status = 'invalid'
           AND data_points.source_type = EXCLUDED.source_type
         RETURNING id
-    `, projectIDs, paths, names, sourceTypes, sourceIDs, sourceConfigs, dataTypes, units, defaultValues, tagsPayload, refreshModes, statuses, userIDs)
+    `, projectIDs, paths, names, sourceTypes, sourceIDs, sourceConfigs, dataTypes, units, defaultValues, tagsPayload, refreshModes, statuses, displayOrders, userIDs)
 	if err != nil {
 		return translateDataPointWriteError(err)
 	}

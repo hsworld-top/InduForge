@@ -254,6 +254,7 @@ type ArtifactDataPointRecord struct {
 	RefreshMode        string                      `json:"refreshMode"`
 	RefreshIntervalMS  *int                        `json:"refreshIntervalMs,omitempty"`
 	Status             string                      `json:"status"`
+	DisplayOrder       int                         `json:"displayOrder"`
 	Unit               *string                     `json:"unit,omitempty"`
 	DefaultValue       *string                     `json:"defaultValue,omitempty"`
 	Tags               []any                       `json:"tags"`
@@ -568,6 +569,7 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 			RefreshMode:        dataPoint.RefreshMode,
 			RefreshIntervalMS:  dataPoint.RefreshIntervalMS,
 			Status:             dataPoint.Status,
+			DisplayOrder:       dataPoint.DisplayOrder,
 			Unit:               dataPoint.Unit,
 			DefaultValue:       dataPoint.DefaultValue,
 			Tags:               cloneSnapshotAnyArray(dataPoint.Tags),
@@ -851,9 +853,7 @@ func (r *ProjectSnapshotRepository) listQueries(ctx context.Context, projectID s
 
 func (r *ProjectSnapshotRepository) listDataPoints(ctx context.Context, projectID string) ([]DataPointRecord, error) {
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-               unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-               refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+        SELECT `+dataPointSelectColumns+`
         FROM data_points
         WHERE project_id = $1
         ORDER BY created_at ASC
@@ -1437,10 +1437,10 @@ func (r *ProjectSnapshotRepository) insertDataPoints(ctx context.Context, tx pgx
             INSERT INTO data_points (
                 id, project_id, path, name, description, source_type, source_id, source_config, data_type,
                 unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
-                refresh_mode, refresh_interval_ms, status, created_by, updated_by, created_at, updated_at
+                refresh_mode, refresh_interval_ms, status, display_order, created_by, updated_by, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19, $20, $21, $22, $23, $24, $25)
-        `, datapoint.ID, projectID, datapoint.Path, datapoint.Name, datapoint.Description, datapoint.SourceType, datapoint.SourceID, string(sourceConfigBytes), datapoint.DataType, datapoint.Unit, datapoint.PrecisionNum, datapoint.DefaultValue, datapoint.MinValue, datapoint.MaxValue, datapoint.AlarmLow, datapoint.AlarmHigh, string(tagsBytes), string(runtimePermissionsBytes), datapoint.RefreshMode, datapoint.RefreshIntervalMS, datapoint.Status, actorID, actorID, createdAt, updatedAt); err != nil {
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19, $20, $21, $22, $23, $24, $25, $26)
+        `, datapoint.ID, projectID, datapoint.Path, datapoint.Name, datapoint.Description, datapoint.SourceType, datapoint.SourceID, string(sourceConfigBytes), datapoint.DataType, datapoint.Unit, datapoint.PrecisionNum, datapoint.DefaultValue, datapoint.MinValue, datapoint.MaxValue, datapoint.AlarmLow, datapoint.AlarmHigh, string(tagsBytes), string(runtimePermissionsBytes), datapoint.RefreshMode, datapoint.RefreshIntervalMS, datapoint.Status, datapoint.DisplayOrder, actorID, actorID, createdAt, updatedAt); err != nil {
 			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入快照数据点失败", err)
 		}
 	}
