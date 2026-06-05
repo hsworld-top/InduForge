@@ -17,3 +17,19 @@ node scripts/test/mqtt/mqtt-publish-test.js --broker mqtt://127.0.0.1:18883 --to
 ```
 
 详细说明见 `mqtt/README.md`。
+
+## Kafka 模拟发布
+
+先在 WSL Ubuntu 中启动本地 Kafka 兼容容器：
+
+```bash
+bash scripts/test/kafka/start-redpanda.sh
+```
+
+持续推送 Kafka 模拟数据：
+
+```bash
+python scripts/test/kafka/kafka-produce-test.py
+```
+
+详细说明见 `kafka/README.md`。
