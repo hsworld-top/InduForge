@@ -313,3 +313,36 @@ test('嵌入正式入口即使已有缓存会话，只要携带新的 handoff �
   assert.equal(plan.shouldRedirectToIde, false)
   assert.equal(plan.shouldWaitForBootstrap, true)
 })
+
+test('嵌入正式入口会优先按当前 handoff 恢复工程，避免复用其它 iframe 的工程缓存', () => {
+  globalThis.localStorage.setItem('auth_token', 'cached-token')
+  globalThis.localStorage.setItem('project_id', JSON.stringify('project-old'))
+  globalThis.localStorage.setItem(
+    'embedded_app_handoff:handoff-project-new',
+    JSON.stringify({
+      handoffId: 'handoff-project-new',
+      appType: 'datacenter',
+      projectId: 'project-new',
+      tenantId: 'tenant-new',
+      issuedAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+    }),
+  )
+
+  const plan = initializeHostBootstrap({
+    currentUrl: 'http://datacenter.example/datacenter/?handoff=handoff-project-new',
+    isTopLevelWindow: false,
+    parentWindow: {
+      postMessage() {},
+    },
+    referrer: 'http://ide.example/dashboard',
+    selfWindow: globalThis.window,
+  })
+
+  assert.equal(plan.shouldRedirectToIde, false)
+  assert.equal(plan.shouldWaitForBootstrap, false)
+  assert.deepEqual(getCurrentHostContext(), {
+    projectId: 'project-new',
+    tenantId: 'tenant-new',
+  })
+})

@@ -61,6 +61,7 @@ export function registerDatacenterBeforeEachGuard(
     const isTopLevel = isTopLevelWindow()
     const restoredTopLevelHandoff =
       isTopLevel && Boolean(handoff) && restoreTopLevelHandoffRecord(handoff)
+    const currentHostContext = getCurrentHostContext()
     const allowReusableSession = hasReusableTopLevelSession({
       handoff: restoredTopLevelHandoff ? null : handoff,
     })
@@ -85,10 +86,12 @@ export function registerDatacenterBeforeEachGuard(
 
     let token = Storage.getToken()
     let bootstrapReady = true
-    if (handoff && !isTopLevel) {
+    if (handoff && !isTopLevel && !currentHostContext.projectId) {
       /**
        * handoff 表示宿主要求恢复新的工程上下文。
        * 等待 bootstrap 前先清掉旧工程与租户，避免超时时继续读到上一工程残留。
+       * 如果 main.ts 已经从当前 handoff 票据恢复到 iframe 内存上下文，就不能再清理，
+       * 否则同源多数据中心标签会重新落回其它 iframe 写入的 projectId。
        * 顶层独立打开时，main.ts 已经尝试从同源 handoff 票据恢复工程上下文，
        * 这里不能再清理，否则会再次触发回 IDE 恢复。
        */
@@ -96,7 +99,7 @@ export function registerDatacenterBeforeEachGuard(
       Storage.remove(STORAGE_KEYS.TENANT_ID)
     }
 
-    if (!token || handoff) {
+    if (!token || (handoff && !currentHostContext.projectId)) {
       bootstrapReady = await waitForBootstrap()
       token = Storage.getToken()
     }

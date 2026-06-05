@@ -32,6 +32,9 @@ const resolveWindowLike = () => globalThis.window ?? null
 
 const resolveDocumentLike = () => globalThis.document ?? null
 
+const resolveLocalStorageLike = () =>
+  resolveWindowLike()?.localStorage ?? globalThis.localStorage ?? null
+
 const resolveCurrentUrl = (url) => {
   const candidate = asNonEmptyString(url) ?? resolveWindowLike()?.location?.href
   if (!candidate) {
@@ -59,9 +62,7 @@ const readTopLevelHandoffRecord = (handoff) => {
   }
 
   try {
-    const rawValue = resolveWindowLike()?.localStorage?.getItem(
-      `${HANDOFF_STORAGE_PREFIX}${handoffValue}`,
-    )
+    const rawValue = resolveLocalStorageLike()?.getItem(`${HANDOFF_STORAGE_PREFIX}${handoffValue}`)
     if (!rawValue) {
       return null
     }
@@ -87,7 +88,7 @@ const readTopLevelHandoffRecord = (handoff) => {
   }
 }
 
-export const restoreTopLevelHandoffRecord = (handoff) => {
+export const restoreHandoffRecord = (handoff) => {
   const record = readTopLevelHandoffRecord(handoff)
   if (!record) {
     return false
@@ -124,6 +125,8 @@ export const restoreTopLevelHandoffRecord = (handoff) => {
 
   return true
 }
+
+export const restoreTopLevelHandoffRecord = restoreHandoffRecord
 
 const resolveMessagePayload = (value) => {
   if (!value || typeof value !== 'object') {
@@ -417,8 +420,12 @@ export function initializeHostBootstrap({
   const handoff = asNonEmptyString(resolvedUrl.searchParams.get('handoff'))
   const topLevelWindow =
     isTopLevelWindow ?? resolveWindowLike()?.parent === (selfWindow ?? resolveWindowLike())
-  const restoredTopLevelHandoff =
-    topLevelWindow && Boolean(handoff) && restoreTopLevelHandoffRecord(handoff)
+  /**
+   * 同源多 iframe 会共享 localStorage，不能等宿主消息失败后再回退到全局缓存。
+   * 入口 handoff 票据是当前 iframe 独有的工程边界，先恢复到模块内存，路由守卫再优先读取它。
+   */
+  const restoredHandoff = Boolean(handoff) && restoreHandoffRecord(handoff)
+  const restoredTopLevelHandoff = topLevelWindow && restoredHandoff
   const trustedReferrer = referrer ?? resolveDocumentLike()?.referrer ?? ''
   const shouldRedirectToIde = shouldRedirectTopLevelToIde(
     resolvedUrl.pathname,
@@ -427,7 +434,7 @@ export function initializeHostBootstrap({
       handoff: restoredTopLevelHandoff ? null : handoff,
     }),
   )
-  const shouldForceBootstrapByHandoff = Boolean(handoff) && !topLevelWindow
+  const shouldForceBootstrapByHandoff = Boolean(handoff) && !topLevelWindow && !restoredHandoff
   const shouldWaitForBootstrap =
     !shouldUseDebugMode(resolvedUrl.pathname) &&
     !shouldRedirectToIde &&
