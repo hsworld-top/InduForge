@@ -40,13 +40,16 @@ const filterTags = computed(() => {
   if (!raw) return []
   return (Array.isArray(raw) ? raw : [raw]).map(String)
 })
-const sortField = computed(() => String(route.query.sort || 'updatedAt'))
+const sortField = computed(() => String(route.query.sort || 'createdAt'))
 const sortOrder = computed(() => String(route.query.order || 'desc'))
 const page = computed(() => {
   const n = Number(route.query.page)
   return n > 0 ? n : 1
 })
-const detailObjectId = computed(() => String(route.params.objectId || ''))
+const detailObjectId = computed(() => {
+  if (route.params.module !== 'datapoint' || route.params.tab === 'workbench') return ''
+  return String(route.params.objectId || '')
+})
 
 /* 列表发出筛选变化时同步到 URL */
 function handleFilterUpdate(params: Record<string, unknown>) {
@@ -57,7 +60,7 @@ function handleFilterUpdate(params: Record<string, unknown>) {
   if (Array.isArray(params.tags) && params.tags.length > 0) {
     query.tags = params.tags as string[]
   }
-  if (params.sort && params.sort !== 'updatedAt') query.sort = String(params.sort)
+  if (params.sort && params.sort !== 'createdAt') query.sort = String(params.sort)
   if (params.order && params.order !== 'desc') query.order = String(params.order)
   if (params.page && Number(params.page) > 1) query.page = String(params.page)
   // 保留 objectId 参数（打开详情时）
@@ -83,11 +86,17 @@ function handleCloseDetail() {
 }
 
 /* LinkChip 跳转：切换到对应模块 + 打开目标对象 */
-function handleNavigate(payload: { module: string; objectId: string }) {
-  // 找到当前路由的 debug 前缀
-  const isDebug = route.path.startsWith('/debug/')
-  const base = isDebug ? '/debug' : ''
-  void router.push(`${base}/${payload.module}/${payload.objectId}`)
+function handleNavigate(payload: { module: string; objectId: string; tab?: string }) {
+  void router.push({
+    name: route.name || 'datacenter',
+    params: {
+      ...route.params,
+      module: payload.module,
+      objectId: payload.objectId,
+      tab: payload.tab || undefined,
+    },
+    query: route.query,
+  })
 }
 </script>
 

@@ -1281,6 +1281,13 @@ export const getDataPoints = (projectId, params = {}) => {
   })
 }
 
+export const getDataPoint = (projectId, datapointId) => {
+  return request({
+    url: `/data/projects/${projectId}/datapoints/${datapointId}`,
+    method: 'get',
+  })
+}
+
 export const getDataPointStatuses = (projectId, data = {}) => {
   return request({
     url: `/data/projects/${projectId}/datapoints/status`,
@@ -1341,6 +1348,22 @@ export const deleteDataPointsBatch = (projectId, datapointIds) => {
     data: {
       ids: datapointIds,
     },
+  })
+}
+
+export const deleteDataPointsByFilter = (projectId, filter = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/datapoints/delete-by-filter`,
+    method: 'post',
+    data: { filter },
+  })
+}
+
+export const appendDataPointTagsByFilter = (projectId, filter = {}, tags = []) => {
+  return request({
+    url: `/data/projects/${projectId}/datapoints/tags-by-filter`,
+    method: 'post',
+    data: { filter, tags },
   })
 }
 
@@ -1947,10 +1970,13 @@ export default {
   deleteQuery,
   // 数据点相关
   getDataPoints,
+  getDataPoint,
   getDataPointStatuses,
   updateDatapointRuntimePermissions,
   deleteDataPoint,
   deleteDataPointsBatch,
+  deleteDataPointsByFilter,
+  appendDataPointTagsByFilter,
   createPreviewSession,
   heartbeatPreviewSession,
   deletePreviewSession,

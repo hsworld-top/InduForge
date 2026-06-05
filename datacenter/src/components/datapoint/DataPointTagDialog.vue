@@ -27,7 +27,7 @@
     <div class="dp-tag-dialog__body">
       <!-- 批量模式说明 -->
       <p v-if="isBatch" class="dp-tag-dialog__batch-tip">
-        将为 {{ batchRows?.length ?? 0 }} 个数据点合并以下标签（已有标签保留，不覆盖）。
+        将为 {{ batchDisplayCount }} 个数据点合并以下标签（已有标签保留，不覆盖）。
       </p>
 
       <!-- 新建标签 -->
@@ -99,6 +99,8 @@ const props = defineProps<{
   tagOptions?: Array<{ value: string; name: string }>
   /** 批量操作时选中的数据点列表 */
   batchRows?: DataPointRow[]
+  /** 跨页批量选择时的真实数量 */
+  batchCount?: number
   /** 外部传入的 saving 状态 */
   saving?: boolean
 }>()
@@ -115,6 +117,7 @@ const initialSnapshot = ref('')
 const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
 
 const isBatch = computed(() => !props.datapoint && (props.batchRows?.length ?? 0) > 0)
+const batchDisplayCount = computed(() => props.batchCount ?? props.batchRows?.length ?? 0)
 const draftSnapshot = computed(() =>
   JSON.stringify({
     tags: [...tagDraft.value].sort(),
@@ -125,7 +128,7 @@ const isDirty = computed(() => props.visible && draftSnapshot.value !== initialS
 
 const dialogTitle = computed(() =>
   isBatch.value
-    ? `标签管理（${props.batchRows?.length ?? 0} 项）`
+    ? `标签管理（${batchDisplayCount.value} 项）`
     : `标签管理：${props.datapoint?.name || '-'}`,
 )
 

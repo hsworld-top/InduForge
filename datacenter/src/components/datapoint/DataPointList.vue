@@ -35,7 +35,7 @@
           </div>
         </el-popover>
 
-        <!-- 来源类型筛选 pill（动态来自当前列表） -->
+        <!-- 接入源筛选 pill（动态来自当前列表） -->
         <el-popover placement="bottom-start" :width="180" trigger="click">
           <template #reference>
             <PillButton :active="sourceFilter !== ''">
@@ -50,7 +50,7 @@
               :class="{ 'is-active': sourceFilter === '' }"
               @click="sourceFilter = ''"
             >
-              全部来源
+              全部接入源
             </button>
             <button
               v-for="option in dynamicSourceOptions"
@@ -172,8 +172,8 @@
           <button
             type="button"
             class="datapoint-list__icon-button is-danger"
-            :class="{ 'is-disabled': selectedInvalidRows.length === 0 }"
-            :disabled="selectedInvalidRows.length === 0"
+            :class="{ 'is-disabled': !canBatchDelete }"
+            :disabled="!canBatchDelete"
             aria-label="批量清理失效数据点"
             @click="handleBatchDelete"
           >
@@ -224,17 +224,12 @@
             </template>
           </el-table-column>
 
-          <!-- 来源列：图标 + 文字 -->
-          <el-table-column label="来源" width="130">
+          <!-- 接入源列 -->
+          <el-table-column label="接入源" width="160">
             <template #default="{ row }">
               <div class="datapoint-list__source-cell">
-                <component
-                  :is="getSourceIcon(row.sourceType)"
-                  class="datapoint-list__source-icon"
-                  aria-hidden="true"
-                />
                 <span class="datapoint-list__source-text">
-                  {{ formatSourceType(row.sourceType) }}
+                  {{ row.accessSourceName || '-' }}
                 </span>
               </div>
             </template>
@@ -295,11 +290,11 @@
             </template>
           </el-table-column>
 
-          <!-- 更新时间列 -->
-          <el-table-column label="更新时间" width="170">
+          <!-- 创建时间列 -->
+          <el-table-column label="创建时间" width="170">
             <template #default="{ row }">
               <span class="datapoint-list__time">
-                {{ formatTime(getUpdatedAt(row)) }}
+                {{ formatTime(getCreatedAt(row)) }}
               </span>
             </template>
           </el-table-column>
@@ -307,7 +302,7 @@
           <!-- 操作列（4 个按钮） -->
           <el-table-column
             label="操作"
-            width="200"
+            width="164"
             fixed="right"
             align="center"
             header-align="center"
@@ -325,12 +320,12 @@
                     <View />
                   </button>
                 </el-tooltip>
-                <!-- 跳转来源（D1 先做按钮，D2 完整实现 LinkChip 跳转） -->
-                <el-tooltip content="跳转来源" placement="top">
+                <!-- 打开接入源工作台 -->
+                <el-tooltip content="打开接入源" placement="top">
                   <button
                     type="button"
                     class="datapoint-list__table-action"
-                    aria-label="跳转来源"
+                    aria-label="打开接入源"
                     @click.stop="handleJumpToSource(row)"
                   >
                     <Connection />
@@ -373,11 +368,12 @@
       </div>
 
       <!-- 批量操作条（选中 ≥ 1 时浮现，位于分页栏上方） -->
-      <BulkActionBar :selected-count="selectedRows.length" @clear="clearSelection">
+      <BulkActionBar :selected-count="bulkSelectedCount" @clear="clearSelection">
         <button
           v-if="isManagementMode"
           type="button"
           class="datapoint-list__bulk-action-btn"
+          :class="{ 'is-active': selectionScope === 'page' }"
           @click="selectCurrentPage"
         >
           当前页
@@ -386,7 +382,9 @@
           v-if="isManagementMode"
           type="button"
           class="datapoint-list__bulk-action-btn"
-          @click="selectAllFilteredRows"
+          :class="{ 'is-active': selectionScope === 'all' }"
+          :disabled="totalVisibleCount === 0"
+          @click="selectAllFiltered"
         >
           全部结果
         </button>
@@ -396,7 +394,7 @@
         <button
           type="button"
           class="datapoint-list__bulk-action-btn is-danger"
-          :disabled="selectedInvalidRows.length === 0"
+          :disabled="!canBatchDelete"
           @click="handleBatchDelete"
         >
           清理失效
@@ -442,6 +440,17 @@
             >
               <ArrowLeft />
             </button>
+            <input
+              v-model="jumpPageInput"
+              class="datapoint-list__page-jump-input"
+              type="number"
+              min="1"
+              :max="Math.max(totalPages, 1)"
+              :disabled="totalPages === 0"
+              aria-label="跳转页码"
+              @blur="applyJumpPageInput"
+              @keydown.enter.prevent="applyJumpPageInput"
+            />
             <button
               type="button"
               class="datapoint-list__page-nav-button"
@@ -467,6 +476,7 @@
       :project-id="projectId"
       :tag-options="tagOptions"
       :batch-rows="tagEditMode === 'batch' ? selectedRows : undefined"
+      :batch-count="tagEditMode === 'batch' ? bulkSelectedCount : undefined"
       :saving="tagSaving"
       @submit="handleTagDialogSubmit"
       @cancel="tagDialogVisible = false"
@@ -502,12 +512,9 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
-  Bell,
   CollectionTag,
   Connection,
   CopyDocument,
-  Cpu,
-  DataLine,
   Delete,
   Filter,
   Refresh,
@@ -528,8 +535,9 @@ import RuntimePermissionDialog from './RuntimePermissionDialog.vue'
 import DataPointDetailDrawer from './DataPointDetailDrawer.vue'
 
 type DataPointListMode = 'embedded' | 'management'
-type SortField = 'updatedAt' | 'name' | 'path'
+type SortField = 'createdAt' | 'name' | 'path'
 type SortOrder = 'asc' | 'desc'
+type SelectionScope = 'page' | 'all' | null
 
 /** 批量打标签时，条目超过此数量才弹二次确认 */
 const BATCH_TAG_CONFIRM_THRESHOLD = 20
@@ -542,6 +550,8 @@ interface DataPointRow {
   description?: string | null
   sourceType?: string
   sourceId?: string | null
+  accessSourceId?: string
+  accessSourceName?: string
   sourceConfig?: Record<string, unknown>
   dataType?: string
   runtimePermissions?: Record<string, unknown>
@@ -559,6 +569,11 @@ interface DataPointRow {
   refCount?: number
 }
 
+interface AccessSourceOption {
+  id: string
+  name: string
+}
+
 const props = withDefaults(
   defineProps<{
     projectId: string
@@ -571,7 +586,7 @@ const props = withDefaults(
     filterQ?: string
     /** Workspace 通过 URL query 注入的状态筛选 */
     filterStatus?: string
-    /** Workspace 通过 URL query 注入的来源类型筛选 */
+    /** Workspace 通过 URL query 注入的接入源筛选 */
     filterSource?: string
     /** Workspace 通过 URL query 注入的标签筛选 */
     filterTags?: string[]
@@ -594,7 +609,7 @@ const props = withDefaults(
     filterStatus: '',
     filterSource: '',
     filterTags: () => [],
-    sortField: 'updatedAt',
+    sortField: 'createdAt',
     sortOrder: 'desc',
     page: 1,
     detailObjectId: '',
@@ -610,7 +625,7 @@ const emit = defineEmits<{
   /** 关闭详情抽屉，通知 Workspace 清除 URL objectId */
   'close-detail': []
   /** LinkChip 跳转，通知 Workspace 做路由跳转 */
-  navigate: [payload: { module: string; objectId: string }]
+  navigate: [payload: { module: string; objectId: string; tab?: string }]
 }>()
 
 const { confirm } = useConfirm()
@@ -619,6 +634,7 @@ const { confirm } = useConfirm()
 
 const loading = ref(false)
 const datapoints = ref<DataPointRow[]>([])
+const accessSources = ref<AccessSourceOption[]>([])
 const tableRef = ref()
 const syncingSelection = ref(false)
 
@@ -626,7 +642,7 @@ const syncingSelection = ref(false)
 const searchText = ref(props.filterQ || '')
 /* 状态筛选（'' = 全部） */
 const statusFilter = ref(props.filterStatus || '')
-/* 来源类型筛选 */
+/* 接入源筛选 */
 const sourceFilter = ref(props.filterSource || '')
 
 /* 标签筛选 */
@@ -638,9 +654,9 @@ const tagFilterRootRef = ref<HTMLElement | null>(null)
 
 /* 排序 */
 const sortFieldValue = ref<SortField>(
-  (['updatedAt', 'name', 'path'].includes(props.sortField || '')
+  (['createdAt', 'name', 'path'].includes(props.sortField || '')
     ? props.sortField
-    : 'updatedAt') as SortField,
+    : 'createdAt') as SortField,
 )
 const sortOrderValue = ref<SortOrder>((props.sortOrder === 'asc' ? 'asc' : 'desc') as SortOrder)
 const sortFieldPopoverVisible = ref(false)
@@ -648,12 +664,16 @@ const sortFieldPopoverVisible = ref(false)
 /* 分页 */
 const pagination = ref({
   page: props.page || 1,
-  pageSize: 50,
+  pageSize: 20,
+  total: 0,
+  totalPages: 0,
 })
+const jumpPageInput = ref(String(props.page || 1))
 const debounceTimer = ref<number | null>(null)
 
 /* 选中行 */
 const selectedRows = ref<DataPointRow[]>([])
+const selectionScope = ref<SelectionScope>(null)
 
 /* 写权限 dialog 状态 */
 const permissionDialogVisible = ref(false)
@@ -680,16 +700,16 @@ const statusOptions = [
   { label: '错误', value: 'error' },
 ]
 
-/** 排序字段选项（v2 规格：更新时间/名称/路径） */
+/** 排序字段选项（v2 规格：创建时间/名称/路径） */
 const sortFieldOptions: Array<{ label: string; value: SortField }> = [
-  { label: '更新时间', value: 'updatedAt' },
+  { label: '创建时间', value: 'createdAt' },
   { label: '名称', value: 'name' },
   { label: '路径', value: 'path' },
 ]
 
-const pageSizeOptions = [20, 50, 100]
+const pageSizeOptions = [20, 50, 100, 200, 500]
 
-/** 来源类型标签映射 */
+/** 来源类型标签映射：仅用于详情/内部类型展示，工具栏接入源筛选不使用它。 */
 const sourceTypeLabels: Record<string, string> = {
   'db.query': '数据库查询',
   'mqtt.tag': 'MQTT 变量',
@@ -698,29 +718,14 @@ const sourceTypeLabels: Record<string, string> = {
   'static.var': '静态变量',
 }
 
-// ── 来源图标映射 ──────────────────────────────────────────────────────────
-
-function getSourceIcon(sourceType?: string) {
-  if (!sourceType) return DataLine
-  if (sourceType.startsWith('mqtt')) return Connection
-  if (sourceType.startsWith('db')) return DataLine
-  if (sourceType.startsWith('calc')) return Cpu
-  if (sourceType.startsWith('alarm')) return Bell
-  return DataLine
-}
-
-// ── 动态来源类型（从当前列表提取，去重） ─────────────────────────────────
+// ── 接入源筛选选项 ──────────────────────────────────────────────────────
 
 const dynamicSourceOptions = computed(() => {
-  const seen = new Set<string>()
-  datapoints.value.forEach((item) => {
-    if (item.sourceType) seen.add(item.sourceType)
-  })
-  return Array.from(seen)
-    .sort()
-    .map((v) => ({
-      value: v,
-      label: sourceTypeLabels[v] || v,
+  return accessSources.value
+    .filter((item) => item.id)
+    .map((item) => ({
+      value: item.id,
+      label: item.name || item.id,
     }))
 })
 
@@ -760,12 +765,12 @@ const currentStatusLabel = computed(
 )
 
 const currentSourceLabel = computed(() => {
-  if (!sourceFilter.value) return '来源'
-  return sourceTypeLabels[sourceFilter.value] || sourceFilter.value
+  if (!sourceFilter.value) return '接入源'
+  return dynamicSourceOptions.value.find((option) => option.value === sourceFilter.value)?.label || sourceFilter.value
 })
 
 const currentSortFieldLabel = computed(
-  () => sortFieldOptions.find((o) => o.value === sortFieldValue.value)?.label || '更新时间',
+  () => sortFieldOptions.find((o) => o.value === sortFieldValue.value)?.label || '创建时间',
 )
 
 const currentSortOrderLabel = computed(() => (sortOrderValue.value === 'desc' ? '降序' : '升序'))
@@ -778,40 +783,26 @@ const selectedInvalidRows = computed(() =>
   selectedRows.value.filter((item) => item.status === 'invalid'),
 )
 
-// ── 数据过滤 / 排序 / 分页（前端层，补充标签 / 分组排序） ────────────────
+const effectiveStatusFilter = computed(() => props.status ?? statusFilter.value)
+
+const bulkSelectedCount = computed(() => {
+  if (selectionScope.value === 'all') return totalVisibleCount.value
+  return selectedRows.value.length
+})
+
+const canBatchDelete = computed(() => {
+  if (selectionScope.value === 'all') return totalVisibleCount.value > 0
+  return selectedInvalidRows.value.length > 0
+})
+
+// ── 数据过滤 / 分页展示 ─────────────────────────────────────────────────
 
 const visibleDataPoints = computed(() => {
   let list = datapoints.value
 
-  /* 标签过滤（前端层，后端只按搜索/状态/来源拉数据） */
-  if (tagFilterValues.value.length > 0) {
-    list = list.filter((item) =>
-      tagFilterValues.value.every((tag) => normalizeTags(item.tags).includes(tag)),
-    )
-  }
-
-  /* 来源筛选（前端二次过滤；后端已支持时可移除） */
-  if (sourceFilter.value) {
-    list = list.filter((item) => item.sourceType === sourceFilter.value)
-  }
-
-  /* 排序 */
-  list = [...list].sort((a, b) => {
-    let delta = 0
-    if (sortFieldValue.value === 'updatedAt') {
-      delta = dayjs(getUpdatedAt(a)).valueOf() - dayjs(getUpdatedAt(b)).valueOf()
-    } else {
-      delta = String(a[sortFieldValue.value] || '').localeCompare(
-        String(b[sortFieldValue.value] || ''),
-        'zh-Hans-CN',
-      )
-    }
-    return sortOrderValue.value === 'desc' ? -delta : delta
-  })
-
-  /* 按标签分组 */
+  /* 当前页内按标签分组，服务端分页总序仍由排序参数决定。 */
   if (groupByTags.value) {
-    list = list.sort((a, b) => {
+    list = [...list].sort((a, b) => {
       const ag = normalizeTags(a.tags)[0] || '未设置'
       const bg = normalizeTags(b.tags)[0] || '未设置'
       const gd = ag.localeCompare(bg, 'zh-Hans-CN')
@@ -826,11 +817,13 @@ const visibleDataPoints = computed(() => {
   return list
 })
 
-const totalVisibleCount = computed(() => visibleDataPoints.value.length)
+const totalVisibleCount = computed(() =>
+  isManagementMode.value ? pagination.value.total : visibleDataPoints.value.length,
+)
 
 const totalPages = computed(() => {
-  if (!isManagementMode.value || totalVisibleCount.value === 0) return 0
-  return Math.ceil(totalVisibleCount.value / pagination.value.pageSize)
+  if (!isManagementMode.value || pagination.value.total === 0) return 0
+  return pagination.value.totalPages || Math.ceil(pagination.value.total / pagination.value.pageSize)
 })
 
 const currentPage = computed(() => {
@@ -838,14 +831,7 @@ const currentPage = computed(() => {
   return Math.min(pagination.value.page, totalPages.value)
 })
 
-const pagedDataPoints = computed(() => {
-  const start = (currentPage.value - 1) * pagination.value.pageSize
-  return visibleDataPoints.value.slice(start, start + pagination.value.pageSize)
-})
-
-const displayDataPoints = computed(() =>
-  isManagementMode.value ? pagedDataPoints.value : visibleDataPoints.value,
-)
+const displayDataPoints = computed(() => visibleDataPoints.value)
 
 const paginationSummary = computed(() => {
   if (totalVisibleCount.value === 0) return '共 0 条'
@@ -866,16 +852,59 @@ const canNextPage = computed(() => totalPages.value > 0 && currentPage.value < t
 
 const buildQueryParams = () => {
   const params: Record<string, unknown> = {
-    page: 1,
-    pageSize: 500,
+    page: isManagementMode.value ? pagination.value.page : 1,
+    pageSize: isManagementMode.value ? pagination.value.pageSize : 200,
+    sortField: sortFieldValue.value,
+    sortOrder: sortOrderValue.value,
   }
   const q = props.search ?? searchText.value
   const st = props.status ?? statusFilter.value
-  const src = props.sourceType ?? sourceFilter.value
+  const sourceType = props.sourceType
+  const accessSourceId = sourceFilter.value
   if (q) params.search = q
   if (st) params.status = st
-  if (src) params.type = src
+  if (sourceType) params.type = sourceType
+  if (accessSourceId) params.accessSourceId = accessSourceId
+  if (tagFilterValues.value.length > 0) params.tags = tagFilterValues.value.join(',')
   return params
+}
+
+const buildSelectionFilterPayload = () => {
+  const q = props.search ?? searchText.value
+  const st = props.status ?? statusFilter.value
+  const sourceType = props.sourceType
+  const accessSourceId = sourceFilter.value
+  return {
+    search: q || '',
+    status: st || '',
+    type: sourceType || '',
+    accessSourceId: accessSourceId || '',
+    tags: [...tagFilterValues.value],
+  }
+}
+
+const loadAccessSources = async () => {
+  if (!props.projectId) {
+    accessSources.value = []
+    return
+  }
+  try {
+    const response = await dataAPI.getConnections(props.projectId)
+    const list = Array.isArray(response?.data?.connections)
+      ? response.data.connections
+      : Array.isArray(response?.data)
+        ? response.data
+        : []
+    accessSources.value = list
+      .map((item: Record<string, unknown>) => ({
+        id: String(item.id || '').trim(),
+        name: String(item.name || item.id || '').trim(),
+      }))
+      .filter((item: AccessSourceOption) => item.id)
+  } catch (error) {
+    console.error('加载接入源筛选项失败:', error)
+    accessSources.value = []
+  }
 }
 
 const loadDataPoints = async () => {
@@ -884,6 +913,16 @@ const loadDataPoints = async () => {
   try {
     const response = await dataAPI.getDataPoints(props.projectId, buildQueryParams())
     datapoints.value = response.data?.datapoints || []
+    const pageInfo = response.data?.pagination || {}
+    pagination.value.total = Number(pageInfo.total ?? datapoints.value.length)
+    pagination.value.totalPages = Number(
+      pageInfo.totalPages ??
+        (pagination.value.total > 0
+          ? Math.ceil(pagination.value.total / pagination.value.pageSize)
+          : 0),
+    )
+    pagination.value.page = Number(pageInfo.page ?? pagination.value.page)
+    pagination.value.pageSize = Number(pageInfo.pageSize ?? pagination.value.pageSize)
     clearSelection()
   } catch (error) {
     ElMessage.error('加载数据点失败：' + getApiErrorMessage(error, '加载数据点失败'))
@@ -904,20 +943,25 @@ const handleSelectionChange = (selection: DataPointRow[]) => {
   const visibleIds = new Set(displayDataPoints.value.map((row) => row.id))
   const retainedRows = selectedRows.value.filter((row) => !visibleIds.has(row.id))
   selectedRows.value = [...retainedRows, ...(selection || [])]
+  selectionScope.value = selectedRows.value.length > 0 ? 'page' : null
 }
 
 const clearSelection = () => {
   selectedRows.value = []
+  selectionScope.value = null
   void syncTableSelection()
 }
 
 const selectCurrentPage = async () => {
   selectedRows.value = [...displayDataPoints.value]
+  selectionScope.value = selectedRows.value.length > 0 ? 'page' : null
   await syncTableSelection()
 }
 
-const selectAllFilteredRows = async () => {
-  selectedRows.value = [...visibleDataPoints.value]
+const selectAllFiltered = async () => {
+  if (totalVisibleCount.value === 0) return
+  selectedRows.value = [...displayDataPoints.value]
+  selectionScope.value = 'all'
   await syncTableSelection()
 }
 
@@ -940,19 +984,31 @@ const syncTableSelection = async () => {
 const handlePrevPage = () => {
   if (!canPrevPage.value) return
   pagination.value.page = currentPage.value - 1
-  void syncTableSelection()
+  void loadDataPoints()
 }
 
 const handleNextPage = () => {
   if (!canNextPage.value) return
   pagination.value.page = currentPage.value + 1
-  void syncTableSelection()
+  void loadDataPoints()
 }
 
 const handlePageSizeChange = (pageSize: number) => {
   pagination.value.pageSize = pageSize
   pagination.value.page = 1
-  void syncTableSelection()
+  void loadDataPoints()
+}
+
+const applyJumpPageInput = () => {
+  if (totalPages.value === 0) return
+  const raw = Number(jumpPageInput.value)
+  const nextPage = Math.min(Math.max(Number.isFinite(raw) ? Math.trunc(raw) : 1, 1), totalPages.value)
+  if (nextPage === pagination.value.page) {
+    jumpPageInput.value = String(nextPage)
+    return
+  }
+  pagination.value.page = nextPage
+  void loadDataPoints()
 }
 
 // ── 排序 ──────────────────────────────────────────────────────────────────
@@ -992,27 +1048,26 @@ const handleDocumentClick = (event: MouseEvent) => {
 
 // ── 行操作 ────────────────────────────────────────────────────────────────
 
-const openDetailDrawer = (row: DataPointRow) => {
+const openDetailDrawer = async (row: DataPointRow) => {
   detailDatapoint.value = row
   detailDrawerVisible.value = true
   emit('select', row)
   emit('open-detail', row)
+  await loadDataPointDetail(row.id)
 }
 
 const handleRowClick = (row: DataPointRow) => {
   if (!isManagementMode.value) emit('select', row)
 }
 
-/** 跳转来源：根据 sourceType 切换到对应模块 */
+/** 打开数据点所属接入源工作台。 */
 const handleJumpToSource = (row: DataPointRow) => {
-  if (!row.sourceType || !row.sourceId) {
+  const connectionId = resolveAccessSourceId(row)
+  if (!connectionId) {
     ElMessage.info('该数据点暂无来源信息')
     return
   }
-  let module = 'access-source'
-  if (row.sourceType.startsWith('calc')) module = 'compute'
-  else if (row.sourceType.startsWith('alarm')) module = 'alarm'
-  emit('navigate', { module, objectId: String(row.sourceId) })
+  emit('navigate', { module: 'access-source', objectId: connectionId, tab: 'workbench' })
 }
 
 const handleDelete = async (datapoint: DataPointRow) => {
@@ -1031,21 +1086,30 @@ const handleDelete = async (datapoint: DataPointRow) => {
 }
 
 const handleBatchDelete = async () => {
+  const isAllSelection = selectionScope.value === 'all'
   const invalidCount = selectedInvalidRows.value.length
-  if (invalidCount === 0) return
+  if (isAllSelection && totalVisibleCount.value === 0) return
+  if (!isAllSelection && invalidCount === 0) return
   const ok = await confirm(
-    `将清理 ${invalidCount} 个失效数据点，此操作不可恢复。非失效行不受影响。`,
+    isAllSelection
+      ? '将清理当前筛选结果中的失效数据点，此操作不可恢复。有效数据点不会受影响。'
+      : `将清理 ${invalidCount} 个失效数据点，此操作不可恢复。非失效行不受影响。`,
     { title: '批量清理失效项', confirmText: '批量清理', type: 'warning' },
   )
   if (!ok) return
   try {
-    const response = await dataAPI.deleteDataPointsBatch(
-      props.projectId,
-      selectedInvalidRows.value.map((item) => item.id),
-    )
+    const response = isAllSelection
+      ? await dataAPI.deleteDataPointsByFilter(props.projectId, {
+          ...buildSelectionFilterPayload(),
+          status: 'invalid',
+        })
+      : await dataAPI.deleteDataPointsBatch(
+          props.projectId,
+          selectedInvalidRows.value.map((item) => item.id),
+        )
     const deletedCount = response?.data?.deletedCount ?? 0
     ElMessage.success(`已清理 ${deletedCount} 个失效数据点`)
-    selectedRows.value = []
+    clearSelection()
     await loadDataPoints()
   } catch (error) {
     ElMessage.error('批量删除数据点失败：' + getApiErrorMessage(error, '批量删除数据点失败'))
@@ -1061,11 +1125,11 @@ const openTagDialog = (row: DataPointRow) => {
 }
 
 const openBatchTagDialog = async () => {
-  if (selectedRows.value.length === 0) return
+  if (bulkSelectedCount.value === 0) return
   // 选中条目超过阈值时给二次确认，避免误操作
-  if (selectedRows.value.length >= BATCH_TAG_CONFIRM_THRESHOLD) {
+  if (bulkSelectedCount.value >= BATCH_TAG_CONFIRM_THRESHOLD) {
     const ok = await confirm(
-      `即将为 ${selectedRows.value.length} 个数据点批量添加标签，确认继续？`,
+      `即将为 ${bulkSelectedCount.value} 个数据点批量添加标签，确认继续？`,
       { title: '批量打标签', confirmText: '继续', type: 'warning' },
     )
     if (!ok) return
@@ -1112,15 +1176,26 @@ const handleTagDialogSubmit = async (tags: string[], mode: 'single' | 'batch') =
       await dataAPI.updateDataPoint(props.projectId, currentTagDatapoint.value.id, { tags })
       ElMessage.success('标签已保存')
     } else {
-      await Promise.all(
-        selectedRows.value.map((row) => {
-          const nextTags = Array.from(new Set([...normalizeTags(row.tags), ...tags]))
-          return dataAPI.updateDataPoint(props.projectId, row.id, { tags: nextTags })
-        }),
-      )
-      ElMessage.success(`已为 ${selectedRows.value.length} 个数据点更新标签`)
+      if (selectionScope.value === 'all') {
+        const response = await dataAPI.appendDataPointTagsByFilter(
+          props.projectId,
+          buildSelectionFilterPayload(),
+          tags,
+        )
+        const updatedCount = response?.data?.updatedCount ?? 0
+        ElMessage.success(`已为 ${updatedCount} 个数据点更新标签`)
+      } else {
+        await Promise.all(
+          selectedRows.value.map((row) => {
+            const nextTags = Array.from(new Set([...normalizeTags(row.tags), ...tags]))
+            return dataAPI.updateDataPoint(props.projectId, row.id, { tags: nextTags })
+          }),
+        )
+        ElMessage.success(`已为 ${selectedRows.value.length} 个数据点更新标签`)
+      }
     }
     tagDialogVisible.value = false
+    clearSelection()
     await loadDataPoints()
   } catch (error) {
     ElMessage.error('保存标签失败：' + getApiErrorMessage(error, '保存标签失败'))
@@ -1152,8 +1227,17 @@ const handlePermissionDialogSubmit = async (grant: Record<string, unknown>) => {
 
 // ── 抽屉 navigate 回调 ─────────────────────────────────────────────────────
 
-const handleDrawerNavigate = (payload: { module: string; objectId: string }) => {
+const handleDrawerNavigate = (payload: { module: string; objectId: string; tab?: string }) => {
   emit('navigate', payload)
+}
+
+const loadDataPointDetail = async (id: string) => {
+  try {
+    const response = await dataAPI.getDataPoint(props.projectId, id)
+    detailDatapoint.value = response.data || response
+  } catch (error) {
+    ElMessage.error('加载数据点详情失败：' + getApiErrorMessage(error, '加载数据点详情失败'))
+  }
 }
 
 const openPermissionDialog = (row: DataPointRow) => {
@@ -1178,8 +1262,8 @@ const formatTime = (value?: string) => {
   return dayjs(value).format(TIME_FORMAT)
 }
 
-const getUpdatedAt = (row: DataPointRow) =>
-  row.updatedAt || row.updated_at || row.createdAt || row.created_at || ''
+const getCreatedAt = (row: DataPointRow) =>
+  row.createdAt || row.created_at || row.updatedAt || row.updated_at || ''
 
 /** 状态 badge tone 映射（v2 规格） */
 function resolveStatusTone(status?: string): 'success' | 'danger' | 'warning' | 'muted' {
@@ -1213,6 +1297,22 @@ const formatStatus = (status?: string) => {
 const formatSourceType = (sourceType?: string) => {
   if (!sourceType) return '-'
   return sourceTypeLabels[sourceType] || sourceType
+}
+
+const resolveAccessSourceId = (row: DataPointRow) => {
+  if (row.accessSourceId) return String(row.accessSourceId)
+  const config = row.sourceConfig || {}
+  const connectionId = String(config.connectionId || config.sourceConnectionId || '').trim()
+  if (connectionId) return connectionId
+  if (
+    row.sourceId &&
+    ['http.request', 'websocket.session', 'realtime.key', 'kafka.field'].includes(
+      row.sourceType || '',
+    )
+  ) {
+    return String(row.sourceId)
+  }
+  return ''
 }
 
 /** 引用数（D2 完整实现；D1 全部显示 `-`） */
@@ -1259,7 +1359,7 @@ function emitFilterUpdate() {
 
 // ── Watch ─────────────────────────────────────────────────────────────────
 
-/* 搜索、状态、来源：300ms 防抖后重新拉数据 + 同步 URL */
+/* 搜索、状态、接入源：300ms 防抖后重新拉数据 + 同步 URL */
 watch([searchText, statusFilter, sourceFilter], () => {
   pagination.value.page = 1
   clearSelection()
@@ -1274,12 +1374,20 @@ watch([searchText, statusFilter, sourceFilter], () => {
 watch([sortFieldValue, sortOrderValue], () => {
   pagination.value.page = 1
   clearSelection()
+  void loadDataPoints()
   emitFilterUpdate()
 })
 
-/* 标签 / 分组：前端层，不触发请求，只同步 URL */
-watch([tagFilterValues, groupByTags], () => {
+/* 标签筛选由后端处理，保证跨页“全部结果”与列表计数一致。 */
+watch(tagFilterValues, () => {
   pagination.value.page = 1
+  clearSelection()
+  void loadDataPoints()
+  emitFilterUpdate()
+})
+
+/* 分组只影响当前页展示，不改变后端分页结果。 */
+watch(groupByTags, () => {
   clearSelection()
   emitFilterUpdate()
 })
@@ -1287,7 +1395,8 @@ watch([tagFilterValues, groupByTags], () => {
 /* 页码变化：同步 URL */
 watch(
   () => pagination.value.page,
-  () => {
+  (page) => {
+    jumpPageInput.value = String(page || 1)
     void syncTableSelection()
     emitFilterUpdate()
   },
@@ -1316,6 +1425,15 @@ watch(
   },
 )
 
+watch(
+  () => props.projectId,
+  () => {
+    accessSources.value = []
+    sourceFilter.value = ''
+    void loadAccessSources()
+  },
+)
+
 /**
  * URL 上有 objectId 时（直接进入 /datapoint/:id 或刷新），
  * 数据加载完成后自动匹配并打开详情抽屉。
@@ -1337,7 +1455,11 @@ watch(
     if (row) {
       detailDatapoint.value = row
       detailDrawerVisible.value = true
+      void loadDataPointDetail(row.id)
+      return
     }
+    detailDrawerVisible.value = true
+    void loadDataPointDetail(id)
   },
   { immediate: true },
 )
@@ -1346,6 +1468,7 @@ watch(
 
 onMounted(() => {
   document.addEventListener('click', handleDocumentClick)
+  void loadAccessSources()
   void loadDataPoints()
 })
 
@@ -1740,6 +1863,7 @@ defineExpose({
   position: relative;
   z-index: 1;
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -1755,6 +1879,7 @@ defineExpose({
 
 .datapoint-list__content {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
   background: var(--dc-surface-raised);
@@ -1767,7 +1892,6 @@ defineExpose({
 
 .datapoint-list__table {
   width: 100%;
-  min-width: 1400px;
 }
 
 /* ── 单元格 ── */
@@ -1805,19 +1929,11 @@ defineExpose({
   white-space: nowrap;
 }
 
-/* 来源：图标 + 文字 */
+/* 接入源名称 */
 .datapoint-list__source-cell {
   display: flex;
   align-items: center;
-  gap: 6px;
   min-width: 0;
-}
-
-.datapoint-list__source-icon {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 14px;
-  color: var(--dc-text-muted);
 }
 
 .datapoint-list__source-text {
@@ -1954,11 +2070,10 @@ defineExpose({
 /* ── 批量操作按钮 ── */
 
 .datapoint-list__bulk-action-btn {
-  max-width: 92px;
   height: 28px;
   min-width: 0;
   overflow: hidden;
-  padding: 0 12px;
+  padding: 0 10px;
   border: 1px solid var(--dc-border);
   border-radius: 8px;
   background: var(--dc-surface-raised);
@@ -1978,6 +2093,12 @@ defineExpose({
 
 .datapoint-list__bulk-action-btn:hover:not(:disabled) {
   border-color: rgba(29, 78, 216, 0.26);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+}
+
+.datapoint-list__bulk-action-btn.is-active {
+  border-color: rgba(29, 78, 216, 0.3);
   background: var(--dc-primary-soft);
   color: var(--dc-primary);
 }
@@ -2040,9 +2161,12 @@ defineExpose({
 }
 
 .datapoint-list__pagination-controls {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .datapoint-list__pagination-label,
@@ -2087,6 +2211,8 @@ defineExpose({
 
 .datapoint-list__page-nav {
   display: flex;
+  align-items: center;
+  gap: 3px;
   padding: 2px;
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.04);
@@ -2121,6 +2247,35 @@ defineExpose({
 .datapoint-list__page-nav-button svg {
   width: 14px;
   height: 14px;
+}
+
+.datapoint-list__page-jump-input {
+  width: 48px;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 8px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--dc-text);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: center;
+}
+
+.datapoint-list__page-jump-input:focus {
+  box-shadow: inset 0 0 0 1px rgba(29, 78, 216, 0.36);
+}
+
+.datapoint-list__page-jump-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.datapoint-list__page-jump-input::-webkit-outer-spin-button,
+.datapoint-list__page-jump-input::-webkit-inner-spin-button {
+  margin: 0;
+  appearance: none;
 }
 
 .datapoint-list__page-size-menu {

@@ -349,6 +349,7 @@ watch(
 /** 切换模块时更新 URL（由 NavRail 双向绑定触发） */
 watch(activeModule, (newModule, oldModule) => {
   if (newModule === oldModule) return
+  if (route.params.module === newModule) return
   // 切换模块时清空 objectId/tab，保留 query string
   router.replace({
     path: `/${newModule}`,
