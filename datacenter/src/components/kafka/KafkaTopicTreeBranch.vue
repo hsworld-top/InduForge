@@ -29,7 +29,7 @@
         @keydown.enter="$emit('openFields', mapping)"
       >
         <IconTablerMessages class="kafka-topic-branch__mapping-icon" />
-        <el-tooltip :content="mapping.topic" placement="top" :show-after="400">
+        <el-tooltip :content="mappingTooltip(mapping)" placement="top" :show-after="400">
           <span class="kafka-topic-branch__mapping-name">{{ mapping.name || mapping.topic }}</span>
         </el-tooltip>
       </button>
@@ -76,6 +76,10 @@ const countMappings = (node: KafkaTopicGroupNode): number =>
   node.mappings.length + node.children.reduce((sum, child) => sum + countMappings(child), 0)
 
 const totalCount = computed(() => countMappings(props.node))
+const mappingTooltip = (mapping: KafkaTopicMapping) => {
+  const output = mapping.outputMode === 'raw_message' ? '整包数据点' : '字段数据点'
+  return `Topic: ${mapping.topic}\n消费组: ${mapping.consumerGroup || '默认生成'}\n输出: ${output}`
+}
 </script>
 
 <style scoped>

@@ -41,3 +41,29 @@ func TestNormalizeKafkaTopicMappingClearsOffsetForNonOffsetStart(t *testing.T) {
 		t.Fatalf("expected start offset to be cleared, got %#v", result.StartOffset)
 	}
 }
+
+func TestNormalizeKafkaOutputModeDefaultsToFieldMapping(t *testing.T) {
+	mode, scope, err := normalizeKafkaOutputConfig("", "")
+	if err != nil {
+		t.Fatalf("expected default output config: %v", err)
+	}
+	if mode != "field_mapping" || scope != "value" {
+		t.Fatalf("unexpected output config: %s %s", mode, scope)
+	}
+}
+
+func TestNormalizeKafkaOutputModeAcceptsRawMessage(t *testing.T) {
+	mode, scope, err := normalizeKafkaOutputConfig("raw_message", "full_message")
+	if err != nil {
+		t.Fatalf("expected raw output config: %v", err)
+	}
+	if mode != "raw_message" || scope != "full_message" {
+		t.Fatalf("unexpected raw output config: %s %s", mode, scope)
+	}
+}
+
+func TestNormalizeKafkaOutputModeRejectsUnknownMode(t *testing.T) {
+	if _, _, err := normalizeKafkaOutputConfig("topic_value", "value"); err == nil {
+		t.Fatal("expected unknown output mode to fail")
+	}
+}

@@ -63,8 +63,12 @@ export function filterKafkaTopicTree(
     return { groups, rootMappings }
   }
 
-  const mappingMatches = (mapping: KafkaTopicMapping) =>
-    `${mapping.name} ${mapping.topic}`.toLowerCase().includes(normalized)
+  const mappingMatches = (mapping: KafkaTopicMapping) => {
+    const modeLabel = mapping.outputMode === 'raw_message' ? '整包数据点' : '字段数据点'
+    return [mapping.name, mapping.topic, mapping.consumerGroup, modeLabel]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(normalized))
+  }
 
   const filterNode = (node: KafkaTopicGroupNode): KafkaTopicGroupNode | null => {
     const children = node.children
@@ -104,7 +108,10 @@ export function flattenKafkaTopicGroups(
     }
   })
 
-  const visit = (group: KafkaTopicGroupNode, depth: number): Array<{ id: string; label: string }> => {
+  const visit = (
+    group: KafkaTopicGroupNode,
+    depth: number,
+  ): Array<{ id: string; label: string }> => {
     const id = String(group.id)
     const children = group.children.flatMap((child) => visit(child, depth + 1))
     if (blockedIds.has(id)) return children

@@ -26,6 +26,8 @@ var (
 	allowedKafkaPartitionModes  = map[string]struct{}{"all": {}, "single": {}}
 	allowedKafkaDecodes         = map[string]struct{}{"json": {}, "string": {}, "binary": {}}
 	allowedKafkaWorkbenchStarts = map[string]struct{}{"latest": {}, "earliest": {}, "offset": {}}
+	allowedKafkaOutputModes     = map[string]struct{}{"raw_message": {}, "field_mapping": {}}
+	allowedKafkaRawOutputScopes = map[string]struct{}{"value": {}, "full_message": {}}
 )
 
 // KafkaTopicGroup 表示 Kafka 工作台左侧 Topic 树分组。
@@ -42,24 +44,28 @@ type KafkaTopicGroup struct {
 
 // KafkaTopicMapping 表示一个项目内 Topic 映射配置，不代表真实 Kafka Topic 生命周期。
 type KafkaTopicMapping struct {
-	ID            string    `json:"id"`
-	ProjectID     string    `json:"projectId"`
-	ConnectionID  string    `json:"connectionId"`
-	GroupID       *string   `json:"groupId"`
-	Name          string    `json:"name"`
-	Topic         string    `json:"topic"`
-	Description   string    `json:"description"`
-	ConsumerGroup string    `json:"consumerGroup"`
-	PartitionMode string    `json:"partitionMode"`
-	Partition     *int      `json:"partition"`
-	StartPosition string    `json:"startPosition"`
-	StartOffset   *int64    `json:"startOffset"`
-	Decode        string    `json:"decode"`
-	SampleLimit   int       `json:"sampleLimit"`
-	TimeoutMS     int       `json:"timeoutMs"`
-	SortOrder     int       `json:"sortOrder"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	ID               string    `json:"id"`
+	ProjectID        string    `json:"projectId"`
+	ConnectionID     string    `json:"connectionId"`
+	GroupID          *string   `json:"groupId"`
+	Name             string    `json:"name"`
+	Topic            string    `json:"topic"`
+	Description      string    `json:"description"`
+	ConsumerGroup    string    `json:"consumerGroup"`
+	OutputMode       string    `json:"outputMode"`
+	RawOutputScope   string    `json:"rawOutputScope"`
+	RawDataPointID   string    `json:"rawDataPointId"`
+	RawDataPointPath string    `json:"rawDataPointPath"`
+	PartitionMode    string    `json:"partitionMode"`
+	Partition        *int      `json:"partition"`
+	StartPosition    string    `json:"startPosition"`
+	StartOffset      *int64    `json:"startOffset"`
+	Decode           string    `json:"decode"`
+	SampleLimit      int       `json:"sampleLimit"`
+	TimeoutMS        int       `json:"timeoutMs"`
+	SortOrder        int       `json:"sortOrder"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
 }
 
 // KafkaField 表示 Kafka 消息字段与平台数据点之间的映射。
@@ -146,37 +152,43 @@ type UpdateKafkaTopicGroupInput struct {
 
 // CreateKafkaTopicMappingInput 描述创建 Topic 映射的输入。
 type CreateKafkaTopicMappingInput struct {
-	GroupID       *string `json:"groupId"`
-	Name          string  `json:"name"`
-	Topic         string  `json:"topic"`
-	Description   string  `json:"description"`
-	ConsumerGroup string  `json:"consumerGroup"`
-	PartitionMode string  `json:"partitionMode"`
-	Partition     *int    `json:"partition"`
-	StartPosition string  `json:"startPosition"`
-	StartOffset   *int64  `json:"startOffset"`
-	Decode        string  `json:"decode"`
-	SampleLimit   int     `json:"sampleLimit"`
-	TimeoutMS     int     `json:"timeoutMs"`
-	SortOrder     int     `json:"sortOrder"`
+	GroupID          *string `json:"groupId"`
+	Name             string  `json:"name"`
+	Topic            string  `json:"topic"`
+	Description      string  `json:"description"`
+	ConsumerGroup    string  `json:"consumerGroup"`
+	OutputMode       string  `json:"outputMode"`
+	RawOutputScope   string  `json:"rawOutputScope"`
+	RawDataPointPath string  `json:"rawDataPointPath"`
+	PartitionMode    string  `json:"partitionMode"`
+	Partition        *int    `json:"partition"`
+	StartPosition    string  `json:"startPosition"`
+	StartOffset      *int64  `json:"startOffset"`
+	Decode           string  `json:"decode"`
+	SampleLimit      int     `json:"sampleLimit"`
+	TimeoutMS        int     `json:"timeoutMs"`
+	SortOrder        int     `json:"sortOrder"`
 }
 
 // UpdateKafkaTopicMappingInput 描述更新 Topic 映射的输入。
 type UpdateKafkaTopicMappingInput struct {
-	GroupID       *string `json:"groupId"`
-	HasGroupID    bool    `json:"-"`
-	Name          string  `json:"name"`
-	Topic         string  `json:"topic"`
-	Description   string  `json:"description"`
-	ConsumerGroup string  `json:"consumerGroup"`
-	PartitionMode string  `json:"partitionMode"`
-	Partition     *int    `json:"partition"`
-	StartPosition string  `json:"startPosition"`
-	StartOffset   *int64  `json:"startOffset"`
-	Decode        string  `json:"decode"`
-	SampleLimit   int     `json:"sampleLimit"`
-	TimeoutMS     int     `json:"timeoutMs"`
-	SortOrder     int     `json:"sortOrder"`
+	GroupID          *string `json:"groupId"`
+	HasGroupID       bool    `json:"-"`
+	Name             string  `json:"name"`
+	Topic            string  `json:"topic"`
+	Description      string  `json:"description"`
+	ConsumerGroup    string  `json:"consumerGroup"`
+	OutputMode       string  `json:"outputMode"`
+	RawOutputScope   string  `json:"rawOutputScope"`
+	RawDataPointPath string  `json:"rawDataPointPath"`
+	PartitionMode    string  `json:"partitionMode"`
+	Partition        *int    `json:"partition"`
+	StartPosition    string  `json:"startPosition"`
+	StartOffset      *int64  `json:"startOffset"`
+	Decode           string  `json:"decode"`
+	SampleLimit      int     `json:"sampleLimit"`
+	TimeoutMS        int     `json:"timeoutMs"`
+	SortOrder        int     `json:"sortOrder"`
 }
 
 // CreateKafkaFieldInput 描述创建字段映射的输入。
@@ -371,7 +383,7 @@ func (s *KafkaWorkbenchService) CreateTopicMapping(ctx context.Context, projectI
 	if err != nil {
 		return nil, err
 	}
-	record, err := s.repository.CreateTopicMapping(ctx, params)
+	record, err := s.repository.CreateTopicMappingWithDataPoint(ctx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +407,7 @@ func (s *KafkaWorkbenchService) UpdateTopicMapping(ctx context.Context, projectI
 	if err != nil {
 		return nil, err
 	}
-	record, err := s.repository.UpdateTopicMapping(ctx, params)
+	record, err := s.repository.UpdateTopicMappingWithDataPoint(ctx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -822,27 +834,40 @@ func (s *KafkaWorkbenchService) normalizeCreateTopicMapping(ctx context.Context,
 		return repository.CreateKafkaTopicMappingParams{}, err
 	}
 	decode := normalizeKafkaDecode(input.Decode)
+	outputMode, rawScope, err := normalizeKafkaOutputConfig(input.OutputMode, input.RawOutputScope)
+	if err != nil {
+		return repository.CreateKafkaTopicMappingParams{}, err
+	}
+	consumerGroup := strings.TrimSpace(input.ConsumerGroup)
 	groupID, err := s.normalizeKafkaMappingGroup(ctx, projectID, connectionID, input.GroupID)
 	if err != nil {
 		return repository.CreateKafkaTopicMappingParams{}, err
 	}
+	rawPath := strings.TrimSpace(input.RawDataPointPath)
+	if rawPath == "" {
+		rawPath = buildKafkaRawDataPointPath(name)
+	}
 	return repository.CreateKafkaTopicMappingParams{
-		ProjectID:     projectID,
-		ConnectionID:  connectionID,
-		GroupID:       groupID,
-		Name:          name,
-		Topic:         topic,
-		Description:   strings.TrimSpace(input.Description),
-		ConsumerGroup: strings.TrimSpace(input.ConsumerGroup),
-		PartitionMode: partitionMode,
-		Partition:     partition,
-		StartPosition: startPosition,
-		StartOffset:   runtimeStart.StartOffset,
-		Decode:        decode,
-		SampleLimit:   normalizeKafkaBoundedInt(input.SampleLimit, defaultKafkaSampleLimit, 1, maxKafkaSampleLimit),
-		TimeoutMS:     normalizeKafkaBoundedInt(input.TimeoutMS, defaultKafkaTimeoutMS, 1000, maxKafkaTimeoutMS),
-		SortOrder:     input.SortOrder,
-		UserID:        userID,
+		ProjectID:             projectID,
+		ConnectionID:          connectionID,
+		GroupID:               groupID,
+		Name:                  name,
+		Topic:                 topic,
+		Description:           strings.TrimSpace(input.Description),
+		ConsumerGroup:         consumerGroup,
+		OutputMode:            outputMode,
+		RawOutputScope:        rawScope,
+		RawDataPointPathInput: rawPath,
+		RawSourceConfig:       kafkaRawSourceConfig(connectionID, topic, consumerGroup, partitionMode, partition, startPosition, runtimeStart.StartOffset, decode, rawScope),
+		PartitionMode:         partitionMode,
+		Partition:             partition,
+		StartPosition:         startPosition,
+		StartOffset:           runtimeStart.StartOffset,
+		Decode:                decode,
+		SampleLimit:           normalizeKafkaBoundedInt(input.SampleLimit, defaultKafkaSampleLimit, 1, maxKafkaSampleLimit),
+		TimeoutMS:             normalizeKafkaBoundedInt(input.TimeoutMS, defaultKafkaTimeoutMS, 1000, maxKafkaTimeoutMS),
+		SortOrder:             input.SortOrder,
+		UserID:                userID,
 	}, nil
 }
 
@@ -870,6 +895,19 @@ func (s *KafkaWorkbenchService) normalizeUpdateTopicMapping(ctx context.Context,
 	if err != nil {
 		return repository.UpdateKafkaTopicMappingParams{}, err
 	}
+	decode := normalizeKafkaDecode(fallbackTrimmed(input.Decode, current.Decode))
+	outputMode, rawScope, err := normalizeKafkaOutputConfig(fallbackTrimmed(input.OutputMode, current.OutputMode), input.RawOutputScope)
+	if err != nil {
+		return repository.UpdateKafkaTopicMappingParams{}, err
+	}
+	consumerGroup := fallbackTrimmed(input.ConsumerGroup, current.ConsumerGroup)
+	rawPath := strings.TrimSpace(input.RawDataPointPath)
+	if rawPath == "" && current.RawDataPointPath != nil {
+		rawPath = *current.RawDataPointPath
+	}
+	if rawPath == "" {
+		rawPath = buildKafkaRawDataPointPath(name)
+	}
 	groupID := cloneOptionalString(current.GroupID)
 	if input.HasGroupID {
 		groupID, err = s.normalizeKafkaMappingGroup(ctx, projectID, current.ConnectionID, input.GroupID)
@@ -878,23 +916,27 @@ func (s *KafkaWorkbenchService) normalizeUpdateTopicMapping(ctx context.Context,
 		}
 	}
 	return repository.UpdateKafkaTopicMappingParams{
-		ID:            current.ID,
-		ProjectID:     projectID,
-		GroupID:       groupID,
-		HasGroupID:    true,
-		Name:          name,
-		Topic:         topic,
-		Description:   strings.TrimSpace(input.Description),
-		ConsumerGroup: strings.TrimSpace(input.ConsumerGroup),
-		PartitionMode: normalizedMode,
-		Partition:     normalizedPartition,
-		StartPosition: startPosition,
-		StartOffset:   runtimeStart.StartOffset,
-		Decode:        normalizeKafkaDecode(fallbackTrimmed(input.Decode, current.Decode)),
-		SampleLimit:   normalizeKafkaBoundedInt(input.SampleLimit, current.SampleLimit, 1, maxKafkaSampleLimit),
-		TimeoutMS:     normalizeKafkaBoundedInt(input.TimeoutMS, current.TimeoutMS, 1000, maxKafkaTimeoutMS),
-		SortOrder:     input.SortOrder,
-		UserID:        userID,
+		ID:                    current.ID,
+		ProjectID:             projectID,
+		GroupID:               groupID,
+		HasGroupID:            true,
+		Name:                  name,
+		Topic:                 topic,
+		Description:           strings.TrimSpace(input.Description),
+		ConsumerGroup:         consumerGroup,
+		OutputMode:            outputMode,
+		RawOutputScope:        rawScope,
+		RawDataPointPathInput: rawPath,
+		RawSourceConfig:       kafkaRawSourceConfig(current.ConnectionID, topic, consumerGroup, normalizedMode, normalizedPartition, startPosition, runtimeStart.StartOffset, decode, rawScope),
+		PartitionMode:         normalizedMode,
+		Partition:             normalizedPartition,
+		StartPosition:         startPosition,
+		StartOffset:           runtimeStart.StartOffset,
+		Decode:                decode,
+		SampleLimit:           normalizeKafkaBoundedInt(input.SampleLimit, current.SampleLimit, 1, maxKafkaSampleLimit),
+		TimeoutMS:             normalizeKafkaBoundedInt(input.TimeoutMS, current.TimeoutMS, 1000, maxKafkaTimeoutMS),
+		SortOrder:             input.SortOrder,
+		UserID:                userID,
 	}, nil
 }
 
@@ -1166,6 +1208,27 @@ func normalizeKafkaDecode(value string) string {
 	return "json"
 }
 
+func normalizeKafkaOutputConfig(mode, scope string) (string, string, error) {
+	normalizedMode := strings.ToLower(strings.TrimSpace(mode))
+	if normalizedMode == "" {
+		normalizedMode = "field_mapping"
+	}
+	if _, ok := allowedKafkaOutputModes[normalizedMode]; !ok {
+		return "", "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka 输出模式不合法")
+	}
+	normalizedScope := strings.ToLower(strings.TrimSpace(scope))
+	if normalizedScope == "" {
+		normalizedScope = "value"
+	}
+	if normalizedMode != "raw_message" {
+		return normalizedMode, "value", nil
+	}
+	if _, ok := allowedKafkaRawOutputScopes[normalizedScope]; !ok {
+		return "", "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka 整包输出内容不合法")
+	}
+	return normalizedMode, normalizedScope, nil
+}
+
 func normalizeKafkaBoundedInt(value, fallback, min, max int) int {
 	if value <= 0 {
 		value = fallback
@@ -1215,8 +1278,27 @@ func kafkaFieldSourceConfig(mapping repository.KafkaTopicMappingRecord, valuePat
 	}
 }
 
+func kafkaRawSourceConfig(connectionID, topic, consumerGroup, partitionMode string, partition *int, startPosition string, startOffset *int64, decode, scope string) map[string]any {
+	// sourceConfig 是节点侧运行态消费 Kafka 并写入整包数据点的完整配置快照。
+	return map[string]any{
+		"connectionId":   connectionID,
+		"topic":          topic,
+		"consumerGroup":  strings.TrimSpace(consumerGroup),
+		"partitionMode":  partitionMode,
+		"partition":      partition,
+		"startPosition":  startPosition,
+		"startOffset":    startOffset,
+		"decode":         decode,
+		"rawOutputScope": scope,
+	}
+}
+
 func buildKafkaDataPointPath(mappingName, fieldName string) string {
 	return "kafka." + normalizeDatapointSegment(mappingName) + "." + normalizeDatapointSegment(fieldName)
+}
+
+func buildKafkaRawDataPointPath(mappingName string) string {
+	return "kafka." + normalizeDatapointSegment(mappingName) + ".message"
 }
 
 func extractKafkaFieldValue(sample any, valuePath string) (any, bool) {
@@ -1314,24 +1396,28 @@ func toKafkaTopicGroup(record repository.KafkaTopicGroupRecord) KafkaTopicGroup 
 
 func toKafkaTopicMapping(record repository.KafkaTopicMappingRecord) KafkaTopicMapping {
 	return KafkaTopicMapping{
-		ID:            record.ID,
-		ProjectID:     record.ProjectID,
-		ConnectionID:  record.ConnectionID,
-		GroupID:       cloneOptionalString(record.GroupID),
-		Name:          record.Name,
-		Topic:         record.Topic,
-		Description:   record.Description,
-		ConsumerGroup: record.ConsumerGroup,
-		PartitionMode: record.PartitionMode,
-		Partition:     cloneOptionalInt(record.Partition),
-		StartPosition: record.StartPosition,
-		StartOffset:   cloneOptionalInt64(record.StartOffset),
-		Decode:        record.Decode,
-		SampleLimit:   record.SampleLimit,
-		TimeoutMS:     record.TimeoutMS,
-		SortOrder:     record.SortOrder,
-		CreatedAt:     record.CreatedAt,
-		UpdatedAt:     record.UpdatedAt,
+		ID:               record.ID,
+		ProjectID:        record.ProjectID,
+		ConnectionID:     record.ConnectionID,
+		GroupID:          cloneOptionalString(record.GroupID),
+		Name:             record.Name,
+		Topic:            record.Topic,
+		Description:      record.Description,
+		ConsumerGroup:    record.ConsumerGroup,
+		OutputMode:       record.OutputMode,
+		RawOutputScope:   record.RawOutputScope,
+		RawDataPointID:   kafkaStringValue(record.RawDataPointID),
+		RawDataPointPath: kafkaStringValue(record.RawDataPointPath),
+		PartitionMode:    record.PartitionMode,
+		Partition:        cloneOptionalInt(record.Partition),
+		StartPosition:    record.StartPosition,
+		StartOffset:      cloneOptionalInt64(record.StartOffset),
+		Decode:           record.Decode,
+		SampleLimit:      record.SampleLimit,
+		TimeoutMS:        record.TimeoutMS,
+		SortOrder:        record.SortOrder,
+		CreatedAt:        record.CreatedAt,
+		UpdatedAt:        record.UpdatedAt,
 	}
 }
 

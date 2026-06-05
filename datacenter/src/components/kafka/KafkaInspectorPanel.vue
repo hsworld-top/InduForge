@@ -19,7 +19,7 @@
     </section>
 
     <section class="kafka-inspector__section">
-      <h3>Topic 映射</h3>
+      <h3>消费规则</h3>
       <dl v-if="mapping">
         <div>
           <dt>名称</dt>
@@ -30,6 +30,18 @@
           <dd>{{ mapping.topic }}</dd>
         </div>
         <div>
+          <dt>消费组</dt>
+          <dd>{{ mapping.consumerGroup || '默认生成' }}</dd>
+        </div>
+        <div>
+          <dt>输出</dt>
+          <dd>{{ outputModeText }}</dd>
+        </div>
+        <div v-if="mapping.outputMode === 'raw_message'">
+          <dt>数据点</dt>
+          <dd>{{ mapping.rawDataPointPath || '-' }}</dd>
+        </div>
+        <div>
           <dt>分区</dt>
           <dd>{{ partitionText }}</dd>
         </div>
@@ -38,7 +50,7 @@
           <dd>{{ mapping.decode }}</dd>
         </div>
       </dl>
-      <p v-else>选择左侧 Topic 映射后查看配置。</p>
+      <p v-else>选择左侧消费规则后查看配置。</p>
     </section>
 
     <section class="kafka-inspector__section">
@@ -57,7 +69,7 @@
           <dd>{{ preview.durationMs || 0 }} ms</dd>
         </div>
       </dl>
-      <p v-else>执行一次短时预览后展示诊断摘要。</p>
+      <p v-else>拉取一次样本后展示诊断摘要。</p>
     </section>
   </aside>
 </template>
@@ -78,6 +90,10 @@ const partitionText = computed(() => {
   if (!props.mapping) return '-'
   if (props.mapping.partitionMode === 'single') return `partition ${props.mapping.partition ?? 0}`
   return '全部分区'
+})
+const outputModeText = computed(() => {
+  if (!props.mapping) return '-'
+  return props.mapping.outputMode === 'raw_message' ? '整包数据点' : '字段数据点'
 })
 </script>
 

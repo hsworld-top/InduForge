@@ -2,9 +2,19 @@
   <DcDialog v-model="visible" :title="title" width="420px" :close-disabled="loading">
     <el-form label-position="top">
       <el-form-item label="目标分组">
-        <el-select v-model="targetGroupId" class="kafka-topic-move-dialog__select" clearable placeholder="根目录">
+        <el-select
+          v-model="targetGroupId"
+          class="kafka-topic-move-dialog__select"
+          clearable
+          placeholder="根目录"
+        >
           <el-option label="根目录" :value="null" />
-          <el-option v-for="group in groupOptions" :key="group.id" :label="group.label" :value="group.id" />
+          <el-option
+            v-for="group in groupOptions"
+            :key="group.id"
+            :label="group.label"
+            :value="group.id"
+          />
         </el-select>
       </el-form-item>
     </el-form>
@@ -53,7 +63,7 @@ const blockedIds = computed(() =>
   props.targetType === 'group' && props.group ? collectGroupIds(props.group) : new Set<string>(),
 )
 const groupOptions = computed(() => flattenKafkaTopicGroups(props.groups, blockedIds.value))
-const title = computed(() => (props.targetType === 'group' ? '移动分组' : '移动 Topic 订阅'))
+const title = computed(() => (props.targetType === 'group' ? '移动分组' : '移动消费规则'))
 
 function submit() {
   emit('submit', targetGroupId.value || null)

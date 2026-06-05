@@ -1,18 +1,32 @@
 <template>
   <DcDialog
     v-model="visible"
-    :title="mode === 'create' ? '新建 Topic 订阅' : '编辑 Topic 订阅'"
+    :title="mode === 'create' ? '新建消费规则' : '编辑消费规则'"
     width="640px"
     :close-disabled="loading"
   >
     <el-form label-position="top" class="kafka-topic-dialog">
       <div class="kafka-topic-dialog__section">
         <div class="kafka-topic-dialog__section-title">基础信息</div>
+        <el-form-item>
+          <template #label>
+            <span class="kafka-topic-dialog__field-label">
+              输出模式
+              <el-tooltip
+                content="整包数据点会把最新消息写入一个数据点；字段数据点会把消息字段拆成多个数据点。"
+                placement="top"
+              >
+                <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
+              </el-tooltip>
+            </span>
+          </template>
+          <el-segmented v-model="form.outputMode" :options="outputModeOptions" />
+        </el-form-item>
         <el-form-item required>
           <template #label>
             <span class="kafka-topic-dialog__field-label">
               名称
-              <el-tooltip content="用于在工作台左侧展示，建议填写业务含义清晰的名称。" placement="top">
+              <el-tooltip content="消费规则会出现在左侧树中，建议使用业务流名称。" placement="top">
                 <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
               </el-tooltip>
             </span>
@@ -53,7 +67,10 @@
           <template #label>
             <span class="kafka-topic-dialog__field-label">
               所属分组
-              <el-tooltip content="为空时显示在根目录；需要调整层级时可选择已有分组。" placement="top">
+              <el-tooltip
+                content="为空时显示在根目录；也可以通过左侧规则树右键移动。"
+                placement="top"
+              >
                 <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
               </el-tooltip>
             </span>
@@ -70,14 +87,59 @@
         </el-form-item>
       </div>
 
+      <div v-if="form.outputMode === 'raw_message'" class="kafka-topic-dialog__section">
+        <div class="kafka-topic-dialog__section-title">数据点输出</div>
+        <el-form-item>
+          <template #label>
+            <span class="kafka-topic-dialog__field-label">
+              输出内容
+              <el-tooltip
+                content="消息体只写入 payload/value；完整消息会包含 key、headers、partition、offset 和 payload。"
+                placement="top"
+              >
+                <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
+              </el-tooltip>
+            </span>
+          </template>
+          <el-select v-model="form.rawOutputScope">
+            <el-option label="消息体 payload" value="value" />
+            <el-option label="完整消息" value="full_message" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <template #label>
+            <span class="kafka-topic-dialog__field-label">
+              目标数据点路径
+              <el-tooltip
+                content="留空时按规则名称自动生成；保存后设计中心可查询或订阅这个数据点。"
+                placement="top"
+              >
+                <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
+              </el-tooltip>
+            </span>
+          </template>
+          <el-input
+            v-model="form.rawDataPointPath"
+            clearable
+            placeholder="kafka.device_telemetry.message"
+          />
+        </el-form-item>
+      </div>
+      <div v-else class="kafka-topic-dialog__mode-note">
+        保存后进入字段映射面板，可粘贴 JSON 样本或临时拉取样本生成数据点映射。
+      </div>
+
       <div class="kafka-topic-dialog__section">
-        <div class="kafka-topic-dialog__section-title">读取参数</div>
+        <div class="kafka-topic-dialog__section-title">运行消费与样本参数</div>
         <div class="kafka-topic-dialog__grid">
           <el-form-item>
             <template #label>
               <span class="kafka-topic-dialog__field-label">
                 分区策略
-                <el-tooltip content="全部分区适合常规预览；单分区可用于定位指定 Partition 的消息。" placement="top">
+                <el-tooltip
+                  content="全部分区适合常规预览；单分区可用于定位指定 Partition 的消息。"
+                  placement="top"
+                >
                   <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
                 </el-tooltip>
               </span>
@@ -91,7 +153,10 @@
             <template #label>
               <span class="kafka-topic-dialog__field-label">
                 起始位置
-                <el-tooltip content="仅影响预览或首次读取样本的位置；运行态消费进度由订阅/消费组记录。" placement="top">
+                <el-tooltip
+                  content="用于节点侧首次运行或开发态拉取样本；已有消费进度由消费组记录。"
+                  placement="top"
+                >
                   <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
                 </el-tooltip>
               </span>
@@ -109,7 +174,10 @@
             <template #label>
               <span class="kafka-topic-dialog__field-label">
                 消息解码
-                <el-tooltip content="JSON 会尝试解析消息体；String 保留文本；Binary 用于二进制载荷预览。" placement="top">
+                <el-tooltip
+                  content="JSON 会尝试解析消息体；String 保留文本；Binary 用于二进制载荷预览。"
+                  placement="top"
+                >
                   <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
                 </el-tooltip>
               </span>
@@ -124,7 +192,10 @@
             <template #label>
               <span class="kafka-topic-dialog__field-label">
                 样本上限
-                <el-tooltip content="单次预览最多读取的消息条数，数值越大等待时间可能越长。" placement="top">
+                <el-tooltip
+                  content="单次预览最多读取的消息条数，数值越大等待时间可能越长。"
+                  placement="top"
+                >
                   <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
                 </el-tooltip>
               </span>
@@ -135,7 +206,7 @@
             <template #label>
               <span class="kafka-topic-dialog__field-label">
                 预览超时
-                <el-tooltip content="单次预览等待消息的最长时间，单位毫秒。" placement="top">
+                <el-tooltip content="单次拉取样本等待消息的最长时间，单位毫秒。" placement="top">
                   <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
                 </el-tooltip>
               </span>
@@ -207,6 +278,10 @@ const partitionModeOptions = [
   { label: '全部分区', value: 'all' },
   { label: '单分区', value: 'single' },
 ]
+const outputModeOptions = [
+  { label: '整包数据点', value: 'raw_message' },
+  { label: '字段数据点', value: 'field_mapping' },
+]
 const groupOptions = computed(() => flattenKafkaTopicGroups(props.groups))
 
 const form = reactive({
@@ -214,6 +289,9 @@ const form = reactive({
   topic: '',
   groupId: '',
   consumerGroup: '',
+  outputMode: 'raw_message',
+  rawOutputScope: 'value',
+  rawDataPointPath: '',
   partitionMode: 'all',
   partition: 0,
   startPosition: 'latest',
@@ -223,6 +301,16 @@ const form = reactive({
   timeoutMs: 5000,
   description: '',
 })
+
+const normalizePathSegment = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+
+const buildDefaultRawPath = (name: string) =>
+  `kafka.${normalizePathSegment(name) || 'message'}.message`
 
 const canSubmit = computed(() => {
   if (props.loading) return false
@@ -241,6 +329,9 @@ const resetForm = () => {
   form.topic = props.mapping?.topic || ''
   form.groupId = props.mapping?.groupId ? String(props.mapping.groupId) : ''
   form.consumerGroup = props.mapping?.consumerGroup || ''
+  form.outputMode = props.mapping?.outputMode || 'raw_message'
+  form.rawOutputScope = props.mapping?.rawOutputScope || 'value'
+  form.rawDataPointPath = props.mapping?.rawDataPointPath || buildDefaultRawPath(form.name)
   form.partitionMode = props.mapping?.partitionMode || 'all'
   form.partition = props.mapping?.partition ?? 0
   form.startPosition = props.mapping?.startPosition || 'latest'
@@ -258,6 +349,12 @@ const submit = () => {
     topic: form.topic.trim(),
     groupId: form.groupId || null,
     consumerGroup: form.consumerGroup.trim(),
+    outputMode: form.outputMode,
+    rawOutputScope: form.outputMode === 'raw_message' ? form.rawOutputScope : 'value',
+    rawDataPointPath:
+      form.outputMode === 'raw_message'
+        ? form.rawDataPointPath.trim() || buildDefaultRawPath(form.name)
+        : '',
     partitionMode: form.partitionMode,
     partition: form.partitionMode === 'single' ? form.partition : null,
     startPosition: form.startPosition,
@@ -285,6 +382,17 @@ watch(
       if (form.startOffset === null) form.startOffset = 0
     } else {
       form.startOffset = null
+    }
+  },
+)
+
+watch(
+  () => form.name,
+  (value, oldValue) => {
+    if (props.mapping?.rawDataPointPath) return
+    const previousDefault = buildDefaultRawPath(oldValue || '')
+    if (!form.rawDataPointPath || form.rawDataPointPath === previousDefault) {
+      form.rawDataPointPath = buildDefaultRawPath(value)
     }
   },
 )
@@ -336,6 +444,16 @@ watch(
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0 12px;
+}
+
+.kafka-topic-dialog__mode-note {
+  padding: 10px 12px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .kafka-topic-dialog__footer {

@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS data_kafka_topic_mappings (
     topic text NOT NULL CHECK (char_length(topic) <= 500),
     description text NOT NULL DEFAULT '',
     consumer_group text NOT NULL DEFAULT '' CHECK (char_length(consumer_group) <= 200),
+    output_mode text NOT NULL DEFAULT 'field_mapping' CHECK (output_mode IN ('raw_message', 'field_mapping')),
+    raw_output_scope text NOT NULL DEFAULT 'value' CHECK (raw_output_scope IN ('value', 'full_message')),
     partition_mode text NOT NULL DEFAULT 'all' CHECK (partition_mode IN ('all', 'single')),
     partition integer CHECK (partition IS NULL OR partition >= 0),
     start_position text NOT NULL DEFAULT 'latest' CHECK (start_position IN ('latest', 'earliest', 'offset')),
@@ -46,8 +48,8 @@ CREATE TABLE IF NOT EXISTS data_kafka_topic_mappings (
         CHECK (partition_mode <> 'single' OR partition IS NOT NULL),
     CONSTRAINT data_kafka_topic_mappings_offset_check
         CHECK (start_position <> 'offset' OR (partition_mode = 'single' AND partition IS NOT NULL AND start_offset IS NOT NULL)),
-    CONSTRAINT data_kafka_topic_mappings_topic_key
-        UNIQUE (project_id, connection_id, topic)
+    CONSTRAINT data_kafka_topic_mappings_name_key
+        UNIQUE (project_id, connection_id, name)
 );
 
 CREATE TABLE IF NOT EXISTS data_kafka_fields (

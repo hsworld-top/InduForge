@@ -2,25 +2,29 @@
   <section class="kafka-variable-panel">
     <header class="kafka-variable-panel__toolbar">
       <div class="kafka-variable-panel__title">
-        <strong>{{ mapping.name || mapping.topic }} 变量管理</strong>
+        <strong>{{ mapping.name || mapping.topic }} 字段映射</strong>
         <span>{{ mapping.topic }}</span>
       </div>
       <div class="kafka-variable-panel__actions">
         <el-button type="primary" size="small" @click="openCreateDialog">
           <IconTablerPlus class="kafka-variable-panel__button-icon" />
-          新建变量
+          新建映射
         </el-button>
         <el-button size="small" :loading="batchSaving" @click="createFromSamples">
           <IconTablerSparkles class="kafka-variable-panel__button-icon" />
-          从样本创建
+          从样本生成
         </el-button>
-        <el-button size="small" :loading="previewing" @click="runVariablePreview">
+        <el-button size="small" @click="openSampleDialog">
+          <IconTablerBraces class="kafka-variable-panel__button-icon" />
+          粘贴样本
+        </el-button>
+        <el-button size="small" :loading="previewing" @click="testMappings">
           <IconTablerActivity class="kafka-variable-panel__button-icon" />
-          变量预览
+          测试映射
         </el-button>
-        <el-button size="small" @click="openMessagePreview">
+        <el-button size="small" :loading="previewing" @click="pullSamples">
           <IconTablerMessages class="kafka-variable-panel__button-icon" />
-          消息预览
+          拉取样本
         </el-button>
         <el-button size="small" :loading="loading" @click="reloadAll">
           <IconTablerRefresh class="kafka-variable-panel__button-icon" />
@@ -30,19 +34,28 @@
     </header>
 
     <div class="kafka-variable-panel__meta">
-      <WorkbenchStatusPill :label="connected ? '已连接' : '未连接'" :tone="connected ? 'success' : 'neutral'" />
-      <WorkbenchStatusPill :label="`变量 ${pagination.total}`" tone="info" />
+      <WorkbenchStatusPill label="字段数据点" tone="info" />
+      <WorkbenchStatusPill :label="`映射 ${pagination.total}`" tone="info" />
       <span v-if="candidateCount > 0">样本候选 {{ candidateCount }} 个</span>
       <div class="kafka-variable-panel__group-tools">
-        <el-select v-model="selectedGroupId" size="small" class="kafka-variable-panel__group-filter">
-          <el-option label="全部变量" value="" />
+        <el-select
+          v-model="selectedGroupId"
+          size="small"
+          class="kafka-variable-panel__group-filter"
+        >
+          <el-option label="全部映射" value="" />
           <el-option label="未分组" value="__ungrouped" />
-          <el-option v-for="group in groups" :key="group.id" :label="group.name" :value="group.id" />
+          <el-option
+            v-for="group in groups"
+            :key="group.id"
+            :label="group.name"
+            :value="group.id"
+          />
         </el-select>
-        <el-tooltip content="新建变量组" placement="top">
+        <el-tooltip content="新建映射分组" placement="top">
           <el-button size="small" :icon="IconTablerFolderPlus" @click="openCreateGroup" />
         </el-tooltip>
-        <el-tooltip content="编辑当前变量组" placement="top">
+        <el-tooltip content="编辑当前映射分组" placement="top">
           <el-button
             size="small"
             :icon="IconTablerEdit"
@@ -50,7 +63,7 @@
             @click="currentGroup && openEditGroup(currentGroup)"
           />
         </el-tooltip>
-        <el-tooltip content="删除当前变量组" placement="top">
+        <el-tooltip content="删除当前映射分组" placement="top">
           <el-button
             size="small"
             :icon="IconTablerTrash"
@@ -62,23 +75,26 @@
     </div>
 
     <div class="kafka-variable-panel__body">
-      <el-table v-loading="loading" :data="fields" height="100%" empty-text="暂无变量">
-        <el-table-column prop="name" label="变量名" min-width="140" show-overflow-tooltip />
+      <el-table v-loading="loading" :data="fields" height="100%" empty-text="暂无字段映射">
+        <el-table-column prop="name" label="映射名称" min-width="140" show-overflow-tooltip />
         <el-table-column prop="valuePath" label="字段路径" min-width="170" show-overflow-tooltip />
         <el-table-column prop="dataType" label="类型" width="92" />
-        <el-table-column prop="dataPointPath" label="数据点" min-width="190" show-overflow-tooltip>
+        <el-table-column prop="dataPointPath" label="输出数据点" min-width="190" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.dataPointPath || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="最后值" min-width="140" show-overflow-tooltip>
+        <el-table-column label="最近测试值" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="kafka-variable-panel__mono">{{ formatLastValue(row.lastValue) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="质量" width="92">
           <template #default="{ row }">
-            <WorkbenchStatusPill :label="qualityLabel(row.quality)" :tone="qualityTone(row.quality)" />
+            <WorkbenchStatusPill
+              :label="qualityLabel(row.quality)"
+              :tone="qualityTone(row.quality)"
+            />
           </template>
         </el-table-column>
         <el-table-column label="更新时间" width="156">
@@ -88,25 +104,40 @@
         </el-table-column>
         <el-table-column label="状态" width="86">
           <template #default="{ row }">
-            <WorkbenchStatusPill :label="row.enabled ? '启用' : '停用'" :tone="row.enabled ? 'success' : 'neutral'" />
+            <WorkbenchStatusPill
+              :label="row.enabled ? '启用' : '停用'"
+              :tone="row.enabled ? 'success' : 'neutral'"
+            />
           </template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <div class="kafka-variable-panel__row-actions">
               <el-tooltip content="编辑" placement="top">
-                <button type="button" class="kafka-variable-panel__icon-action" @click="openEditDialog(row)">
+                <button
+                  type="button"
+                  class="kafka-variable-panel__icon-action"
+                  @click="openEditDialog(row)"
+                >
                   <IconTablerEdit />
                 </button>
               </el-tooltip>
               <el-tooltip :content="row.enabled ? '停用' : '启用'" placement="top">
-                <button type="button" class="kafka-variable-panel__icon-action" @click="toggleField(row)">
+                <button
+                  type="button"
+                  class="kafka-variable-panel__icon-action"
+                  @click="toggleField(row)"
+                >
                   <IconTablerPlayerPause v-if="row.enabled" />
                   <IconTablerPlayerPlay v-else />
                 </button>
               </el-tooltip>
               <el-tooltip content="删除" placement="top">
-                <button type="button" class="kafka-variable-panel__icon-action is-danger" @click="deleteField(row)">
+                <button
+                  type="button"
+                  class="kafka-variable-panel__icon-action is-danger"
+                  @click="deleteField(row)"
+                >
                   <IconTablerTrash />
                 </button>
               </el-tooltip>
@@ -131,16 +162,16 @@
 
     <DcDialog
       v-model="dialogVisible"
-      :title="editingField ? '编辑变量' : '新建变量'"
+      :title="editingField ? '编辑映射' : '新建映射'"
       width="560px"
       :close-disabled="fieldSaving"
     >
       <el-form class="kafka-variable-panel__form" label-position="top">
-        <el-form-item label="变量名">
+        <el-form-item label="映射名称">
           <el-input v-model="form.name" placeholder="temperature" />
         </el-form-item>
         <el-form-item label="字段路径">
-          <el-input v-model="form.valuePath" placeholder="payload.temperature" />
+          <el-input v-model="form.valuePath" placeholder="temperature" />
         </el-form-item>
         <div class="kafka-variable-panel__form-grid">
           <el-form-item label="类型">
@@ -158,7 +189,12 @@
         </div>
         <el-form-item label="所属分组">
           <el-select v-model="form.groupId" clearable placeholder="未分组">
-            <el-option v-for="group in groups" :key="group.id" :label="group.name" :value="group.id" />
+            <el-option
+              v-for="group in groups"
+              :key="group.id"
+              :label="group.name"
+              :value="group.id"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="描述">
@@ -175,15 +211,15 @@
 
     <DcDialog
       v-model="groupDialogVisible"
-      :title="editingGroup ? '编辑变量组' : '新建变量组'"
+      :title="editingGroup ? '编辑映射分组' : '新建映射分组'"
       width="440px"
       :close-disabled="groupSaving"
     >
       <el-form class="kafka-variable-panel__form" label-position="top">
-        <el-form-item label="变量组名称">
-          <el-input v-model="groupForm.name" placeholder="遥测变量" />
+        <el-form-item label="映射分组名称">
+          <el-input v-model="groupForm.name" placeholder="遥测字段" />
         </el-form-item>
-        <el-form-item label="父级变量组">
+        <el-form-item label="父级映射分组">
           <el-select v-model="groupForm.parentId" clearable placeholder="根目录">
             <el-option
               v-for="group in groupParentOptions"
@@ -199,9 +235,27 @@
       </el-form>
       <template #footer>
         <el-button :disabled="groupSaving" @click="groupDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="groupSaving" :disabled="!groupForm.name.trim()" @click="saveGroup">
+        <el-button
+          type="primary"
+          :loading="groupSaving"
+          :disabled="!groupForm.name.trim()"
+          @click="saveGroup"
+        >
           保存
         </el-button>
+      </template>
+    </DcDialog>
+
+    <DcDialog v-model="sampleDialogVisible" title="粘贴 JSON 样本" width="680px">
+      <el-input
+        v-model="sampleText"
+        type="textarea"
+        :rows="14"
+        placeholder='{"deviceId":"A001","temperature":26.5}'
+      />
+      <template #footer>
+        <el-button @click="sampleDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="applySampleText">解析样本</el-button>
       </template>
     </DcDialog>
   </section>
@@ -212,6 +266,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import IconTablerActivity from '~icons/tabler/activity'
+import IconTablerBraces from '~icons/tabler/braces'
 import IconTablerEdit from '~icons/tabler/edit'
 import IconTablerFolderPlus from '~icons/tabler/folder-plus'
 import IconTablerMessages from '~icons/tabler/messages'
@@ -226,7 +281,13 @@ import DcDialog from '@/components/shared/DcDialog.vue'
 import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
 import { TIME_FORMAT } from '@/constants'
 import { getApiErrorMessage } from '@/utils/request'
-import type { KafkaField, KafkaFieldGroup, KafkaPreview, KafkaPreviewSample, KafkaTopicMapping } from './types'
+import type {
+  KafkaField,
+  KafkaFieldGroup,
+  KafkaPreview,
+  KafkaPreviewSample,
+  KafkaTopicMapping,
+} from './types'
 
 type CandidateField = {
   path: string
@@ -234,15 +295,19 @@ type CandidateField = {
   exists: boolean
 }
 
-const props = defineProps<{
-  projectId: string
-  mapping: KafkaTopicMapping
-  samples: KafkaPreviewSample[]
-  connected: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    projectId: string
+    mapping: KafkaTopicMapping
+    samples: KafkaPreviewSample[]
+    pullRequestId?: number
+  }>(),
+  {
+    pullRequestId: 0,
+  },
+)
 
 const emit = defineEmits<{
-  (event: 'openPreview', mapping: KafkaTopicMapping): void
   (
     event: 'samples',
     payload: { mappingId: string; samples: KafkaPreviewSample[]; preview: KafkaPreview },
@@ -259,6 +324,8 @@ const fieldSaving = ref(false)
 const groupSaving = ref(false)
 const dialogVisible = ref(false)
 const groupDialogVisible = ref(false)
+const sampleDialogVisible = ref(false)
+const sampleText = ref('')
 const editingField = ref<KafkaField | null>(null)
 const editingGroup = ref<KafkaFieldGroup | null>(null)
 const selectedGroupId = ref('')
@@ -280,8 +347,12 @@ const groupForm = reactive({
 })
 
 const canSubmit = computed(() => form.name.trim().length > 0 && form.valuePath.trim().length > 0)
-const candidateCount = computed(() => candidates.value.filter((candidate) => !candidate.exists).length)
-const currentGroup = computed(() => groups.value.find((group) => group.id === selectedGroupId.value) || null)
+const candidateCount = computed(
+  () => candidates.value.filter((candidate) => !candidate.exists).length,
+)
+const currentGroup = computed(
+  () => groups.value.find((group) => group.id === selectedGroupId.value) || null,
+)
 const groupParentOptions = computed(() =>
   groups.value.filter((group) => !editingGroup.value || group.id !== editingGroup.value.id),
 )
@@ -303,7 +374,7 @@ const loadFields = async () => {
     }
     candidates.value = inferCandidateFields(props.samples, fields.value)
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载 Kafka 变量失败'))
+    ElMessage.error(getApiErrorMessage(error, '加载 Kafka 字段映射失败'))
   } finally {
     loading.value = false
   }
@@ -317,7 +388,7 @@ const loadGroups = async () => {
       selectedGroupId.value = ''
     }
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载 Kafka 变量组失败'))
+    ElMessage.error(getApiErrorMessage(error, '加载 Kafka 映射分组失败'))
   }
 }
 
@@ -351,7 +422,8 @@ const changePageSize = async (pageSize: number) => {
 const openCreateDialog = () => {
   editingField.value = null
   Object.assign(form, {
-    groupId: selectedGroupId.value && selectedGroupId.value !== '__ungrouped' ? selectedGroupId.value : '',
+    groupId:
+      selectedGroupId.value && selectedGroupId.value !== '__ungrouped' ? selectedGroupId.value : '',
     name: '',
     valuePath: '',
     dataType: 'string',
@@ -393,10 +465,10 @@ const saveField = async () => {
     }
     fieldSaving.value = false
     dialogVisible.value = false
-    ElMessage.success('变量已保存')
+    ElMessage.success('字段映射已保存')
     await reloadAfterMutation()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存 Kafka 变量失败'))
+    ElMessage.error(getApiErrorMessage(error, '保存 Kafka 字段映射失败'))
   } finally {
     fieldSaving.value = false
   }
@@ -407,7 +479,7 @@ const createFromSamples = async () => {
     (candidate) => !candidate.exists,
   )
   if (nextCandidates.length === 0) {
-    ElMessage.warning(props.samples.length > 0 ? '暂无可创建的样本变量' : '请先连接后执行变量预览')
+    ElMessage.warning(props.samples.length > 0 ? '暂无可生成的样本映射' : '请先粘贴样本或拉取样本后再生成映射')
     return
   }
   batchSaving.value = true
@@ -420,23 +492,22 @@ const createFromSamples = async () => {
         valuePath: candidate.path,
         dataType: candidate.dataType,
         enabled: true,
-        groupId: selectedGroupId.value && selectedGroupId.value !== '__ungrouped' ? selectedGroupId.value : null,
+        groupId:
+          selectedGroupId.value && selectedGroupId.value !== '__ungrouped'
+            ? selectedGroupId.value
+            : null,
       })),
     )
-    ElMessage.success('样本变量已创建')
+    ElMessage.success('样本映射已生成')
     await reloadAfterMutation()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '从样本创建变量失败'))
+    ElMessage.error(getApiErrorMessage(error, '从样本生成映射失败'))
   } finally {
     batchSaving.value = false
   }
 }
 
-const runVariablePreview = async () => {
-  if (!props.connected) {
-    ElMessage.warning('请先连接后再预览变量')
-    return
-  }
+const pullSamples = async () => {
   previewing.value = true
   try {
     const preview = await dataAPI.previewKafkaTopicMapping(props.projectId, props.mapping.id, {
@@ -449,46 +520,90 @@ const runVariablePreview = async () => {
       samples: preview.samples || [],
       preview,
     })
-    ElMessage.success('变量预览已刷新')
-    await loadFields()
+    ElMessage.success('样本已拉取')
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, 'Kafka 变量预览失败'))
+    ElMessage.error(getApiErrorMessage(error, 'Kafka 样本拉取失败'))
   } finally {
     previewing.value = false
   }
 }
 
-const openMessagePreview = () => {
-  if (!props.connected) {
-    ElMessage.warning('请先连接后再预览消息')
-    return
+const testMappings = async () => {
+  previewing.value = true
+  try {
+    const preview = await dataAPI.previewKafkaTopicMapping(props.projectId, props.mapping.id, {
+      limit: 1,
+      timeoutMs: props.mapping.timeoutMs,
+      decode: props.mapping.decode,
+    })
+    emit('samples', {
+      mappingId: String(props.mapping.id),
+      samples: preview.samples || [],
+      preview,
+    })
+    ElMessage.success('映射测试已完成')
+    await loadFields()
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '测试映射失败'))
+  } finally {
+    previewing.value = false
   }
-  emit('openPreview', props.mapping)
+}
+
+const openSampleDialog = () => {
+  sampleText.value = ''
+  sampleDialogVisible.value = true
+}
+
+const applySampleText = () => {
+  try {
+    const parsed = JSON.parse(sampleText.value)
+    const sample = {
+      topic: props.mapping.topic,
+      value: parsed,
+      timestamp: dayjs().format(TIME_FORMAT),
+    }
+    emit('samples', {
+      mappingId: String(props.mapping.id),
+      samples: [sample],
+      preview: {
+        status: 'success',
+        topic: props.mapping.topic,
+        samples: [sample],
+        schema: [],
+        diagnostics: { source: 'manual' },
+      },
+    })
+    sampleDialogVisible.value = false
+    ElMessage.success('样本已解析')
+  } catch {
+    ElMessage.error('JSON 样本格式无效')
+  }
 }
 
 const toggleField = async (field: KafkaField) => {
   try {
     await dataAPI.toggleKafkaField(props.projectId, field.id, !field.enabled)
-    ElMessage.success(field.enabled ? '变量已停用' : '变量已启用')
+    ElMessage.success(field.enabled ? '映射已停用' : '映射已启用')
     await loadFields()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '更新变量状态失败'))
+    ElMessage.error(getApiErrorMessage(error, '更新映射状态失败'))
   }
 }
 
 const deleteField = async (field: KafkaField) => {
   try {
-    await ElMessageBox.confirm(`删除变量“${field.name}”？对应数据点将标记为失效。`, '删除变量', {
+    await ElMessageBox.confirm(`删除映射“${field.name}”？对应数据点将标记为失效。`, '删除映射', {
       confirmButtonText: '删除',
       cancelButtonText: '取消',
       type: 'warning',
     })
     await dataAPI.deleteKafkaField(props.projectId, field.id)
-    ElMessage.success('变量已删除')
+    ElMessage.success('映射已删除')
     await reloadAfterMutation()
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
-    ElMessage.error(getApiErrorMessage(error, '删除 Kafka 变量失败'))
+    ElMessage.error(getApiErrorMessage(error, '删除 Kafka 字段映射失败'))
   }
 }
 
@@ -523,10 +638,10 @@ const saveGroup = async () => {
       await dataAPI.createKafkaFieldGroup(props.projectId, props.mapping.id, payload)
     }
     groupDialogVisible.value = false
-    ElMessage.success(editingGroup.value ? '变量组已更新' : '变量组已创建')
+    ElMessage.success(editingGroup.value ? '映射分组已更新' : '映射分组已创建')
     await loadGroups()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存 Kafka 变量组失败'))
+    ElMessage.error(getApiErrorMessage(error, '保存 Kafka 映射分组失败'))
   } finally {
     groupSaving.value = false
   }
@@ -534,18 +649,22 @@ const saveGroup = async () => {
 
 const deleteGroup = async (group: KafkaFieldGroup) => {
   try {
-    await ElMessageBox.confirm(`删除变量组“${group.name}”？组内变量会移动到未分组。`, '删除变量组', {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
-      type: 'warning',
-    })
+    await ElMessageBox.confirm(
+      `删除映射分组“${group.name}”？组内映射会移动到未分组。`,
+      '删除映射分组',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
     await dataAPI.deleteKafkaFieldGroup(props.projectId, group.id)
     if (selectedGroupId.value === group.id) selectedGroupId.value = ''
-    ElMessage.success('变量组已删除')
+    ElMessage.success('映射分组已删除')
     await reloadAll()
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
-    ElMessage.error(getApiErrorMessage(error, '删除 Kafka 变量组失败'))
+    ElMessage.error(getApiErrorMessage(error, '删除 Kafka 映射分组失败'))
   }
 }
 
@@ -553,7 +672,7 @@ const inferCandidateFields = (samples: KafkaPreviewSample[], existing: KafkaFiel
   const seen = new Map<string, CandidateField>()
   const existingPaths = new Set(existing.map((field) => field.valuePath))
 
-  // 样本推断只辅助创建变量，真实变量仍以用户保存的字段映射为准。
+  // 样本推断只辅助创建映射，真实数据点输出仍以用户保存的字段映射为准。
   const visit = (prefix: string, value: unknown) => {
     if (value && typeof value === 'object' && !Array.isArray(value)) {
       Object.entries(value as Record<string, unknown>).forEach(([key, child]) => {
@@ -637,6 +756,13 @@ watch(
   () => props.samples,
   () => {
     void loadFields()
+  },
+)
+
+watch(
+  () => props.pullRequestId,
+  (value, oldValue) => {
+    if (value !== oldValue && value > 0) void pullSamples()
   },
 )
 </script>

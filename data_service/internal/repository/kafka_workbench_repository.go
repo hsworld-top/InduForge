@@ -28,24 +28,28 @@ type KafkaTopicGroupRecord struct {
 
 // KafkaTopicMappingRecord 表示 Kafka 工作台中的项目内 Topic 映射。
 type KafkaTopicMappingRecord struct {
-	ID            string
-	ProjectID     string
-	ConnectionID  string
-	GroupID       *string
-	Name          string
-	Topic         string
-	Description   string
-	ConsumerGroup string
-	PartitionMode string
-	Partition     *int
-	StartPosition string
-	StartOffset   *int64
-	Decode        string
-	SampleLimit   int
-	TimeoutMS     int
-	SortOrder     int
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID               string
+	ProjectID        string
+	ConnectionID     string
+	GroupID          *string
+	Name             string
+	Topic            string
+	Description      string
+	ConsumerGroup    string
+	OutputMode       string
+	RawOutputScope   string
+	RawDataPointID   *string
+	RawDataPointPath *string
+	PartitionMode    string
+	Partition        *int
+	StartPosition    string
+	StartOffset      *int64
+	Decode           string
+	SampleLimit      int
+	TimeoutMS        int
+	SortOrder        int
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // KafkaFieldRecord 表示 Kafka 消息字段与数据点之间的映射。
@@ -108,43 +112,51 @@ type UpdateKafkaTopicGroupParams struct {
 
 // CreateKafkaTopicMappingParams 描述 Kafka Topic 映射创建参数。
 type CreateKafkaTopicMappingParams struct {
-	ProjectID     string
-	ConnectionID  string
-	GroupID       *string
-	Name          string
-	Topic         string
-	Description   string
-	ConsumerGroup string
-	PartitionMode string
-	Partition     *int
-	StartPosition string
-	StartOffset   *int64
-	Decode        string
-	SampleLimit   int
-	TimeoutMS     int
-	SortOrder     int
-	UserID        string
+	ProjectID             string
+	ConnectionID          string
+	GroupID               *string
+	Name                  string
+	Topic                 string
+	Description           string
+	ConsumerGroup         string
+	OutputMode            string
+	RawOutputScope        string
+	RawDataPointPathInput string
+	RawSourceConfig       map[string]any
+	PartitionMode         string
+	Partition             *int
+	StartPosition         string
+	StartOffset           *int64
+	Decode                string
+	SampleLimit           int
+	TimeoutMS             int
+	SortOrder             int
+	UserID                string
 }
 
 // UpdateKafkaTopicMappingParams 描述 Kafka Topic 映射更新参数。
 type UpdateKafkaTopicMappingParams struct {
-	ID            string
-	ProjectID     string
-	GroupID       *string
-	HasGroupID    bool
-	Name          string
-	Topic         string
-	Description   string
-	ConsumerGroup string
-	PartitionMode string
-	Partition     *int
-	StartPosition string
-	StartOffset   *int64
-	Decode        string
-	SampleLimit   int
-	TimeoutMS     int
-	SortOrder     int
-	UserID        string
+	ID                    string
+	ProjectID             string
+	GroupID               *string
+	HasGroupID            bool
+	Name                  string
+	Topic                 string
+	Description           string
+	ConsumerGroup         string
+	OutputMode            string
+	RawOutputScope        string
+	RawDataPointPathInput string
+	RawSourceConfig       map[string]any
+	PartitionMode         string
+	Partition             *int
+	StartPosition         string
+	StartOffset           *int64
+	Decode                string
+	SampleLimit           int
+	TimeoutMS             int
+	SortOrder             int
+	UserID                string
 }
 
 // CreateKafkaFieldParams 描述 Kafka 字段映射创建参数。
@@ -337,12 +349,17 @@ func (r *KafkaWorkbenchRepository) DeleteTopicGroup(ctx context.Context, project
 // ListTopicMappings 返回连接下的 Topic 映射。
 func (r *KafkaWorkbenchRepository) ListTopicMappings(ctx context.Context, projectID, connectionID string) ([]KafkaTopicMappingRecord, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, project_id, connection_id, group_id, name, topic, description,
-		       consumer_group, partition_mode, partition, start_position, start_offset, decode, sample_limit,
-		       timeout_ms, sort_order, created_at, updated_at
-		FROM data_kafka_topic_mappings
-		WHERE project_id = $1 AND connection_id = $2
-		ORDER BY sort_order ASC, created_at ASC
+		SELECT m.id, m.project_id, m.connection_id, m.group_id, m.name, m.topic, m.description,
+		       m.consumer_group, m.output_mode, m.raw_output_scope, dp.id, dp.path,
+		       m.partition_mode, m.partition, m.start_position, m.start_offset, m.decode, m.sample_limit,
+		       m.timeout_ms, m.sort_order, m.created_at, m.updated_at
+		FROM data_kafka_topic_mappings m
+		LEFT JOIN data_points dp
+		  ON dp.project_id = m.project_id
+		 AND dp.source_type = 'kafka.raw'
+		 AND dp.source_config->>'topicMappingId' = m.id::text
+		WHERE m.project_id = $1 AND m.connection_id = $2
+		ORDER BY m.sort_order ASC, m.created_at ASC
 	`, projectID, connectionID)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 Kafka Topic 映射失败", err)
@@ -366,11 +383,16 @@ func (r *KafkaWorkbenchRepository) ListTopicMappings(ctx context.Context, projec
 // GetTopicMapping 返回单个 Topic 映射。
 func (r *KafkaWorkbenchRepository) GetTopicMapping(ctx context.Context, projectID, mappingID string) (*KafkaTopicMappingRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, project_id, connection_id, group_id, name, topic, description,
-		       consumer_group, partition_mode, partition, start_position, start_offset, decode, sample_limit,
-		       timeout_ms, sort_order, created_at, updated_at
-		FROM data_kafka_topic_mappings
-		WHERE project_id = $1 AND id = $2
+		SELECT m.id, m.project_id, m.connection_id, m.group_id, m.name, m.topic, m.description,
+		       m.consumer_group, m.output_mode, m.raw_output_scope, dp.id, dp.path,
+		       m.partition_mode, m.partition, m.start_position, m.start_offset, m.decode, m.sample_limit,
+		       m.timeout_ms, m.sort_order, m.created_at, m.updated_at
+		FROM data_kafka_topic_mappings m
+		LEFT JOIN data_points dp
+		  ON dp.project_id = m.project_id
+		 AND dp.source_type = 'kafka.raw'
+		 AND dp.source_config->>'topicMappingId' = m.id::text
+		WHERE m.project_id = $1 AND m.id = $2
 	`, projectID, mappingID)
 	record, err := scanKafkaTopicMappingRecord(row)
 	if err != nil {
@@ -387,20 +409,42 @@ func (r *KafkaWorkbenchRepository) CreateTopicMapping(ctx context.Context, param
 	row := r.pool.QueryRow(ctx, `
 		INSERT INTO data_kafka_topic_mappings (
 			project_id, connection_id, group_id, name, topic, description,
-			consumer_group, partition_mode, partition, start_position, start_offset, decode,
+			consumer_group, output_mode, raw_output_scope, partition_mode, partition, start_position, start_offset, decode,
 			sample_limit, timeout_ms, sort_order, created_by, updated_by
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $18)
 		RETURNING id, project_id, connection_id, group_id, name, topic, description,
-		          consumer_group, partition_mode, partition, start_position, start_offset, decode, sample_limit,
+		          consumer_group, output_mode, raw_output_scope, NULL::uuid, NULL::text,
+		          partition_mode, partition, start_position, start_offset, decode, sample_limit,
 		          timeout_ms, sort_order, created_at, updated_at
-	`, params.ProjectID, params.ConnectionID, params.GroupID, params.Name, params.Topic, params.Description, params.ConsumerGroup, params.PartitionMode, params.Partition, params.StartPosition, params.StartOffset, params.Decode, params.SampleLimit, params.TimeoutMS, params.SortOrder, params.UserID)
+	`, params.ProjectID, params.ConnectionID, params.GroupID, params.Name, params.Topic, params.Description, params.ConsumerGroup, params.OutputMode, params.RawOutputScope, params.PartitionMode, params.Partition, params.StartPosition, params.StartOffset, params.Decode, params.SampleLimit, params.TimeoutMS, params.SortOrder, params.UserID)
 
 	record, err := scanKafkaTopicMappingRecord(row)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "创建 Kafka Topic 映射失败", err)
 	}
 	return &record, nil
+}
+
+// CreateTopicMappingWithDataPoint 创建消费规则，并按输出模式同步整包数据点。
+func (r *KafkaWorkbenchRepository) CreateTopicMappingWithDataPoint(ctx context.Context, params CreateKafkaTopicMappingParams) (*KafkaTopicMappingRecord, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 Kafka 消费规则创建事务失败", err)
+	}
+	defer rollbackProtocolTxQuietly(ctx, tx)
+
+	record, err := createKafkaTopicMappingTx(ctx, tx, params)
+	if err != nil {
+		return nil, err
+	}
+	if err := syncKafkaRawDataPointForMapping(ctx, tx, record, params.RawDataPointPathInput, params.RawSourceConfig, params.UserID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 Kafka 消费规则创建事务失败", err)
+	}
+	return record, nil
 }
 
 // UpdateTopicMapping 更新 Topic 映射。
@@ -412,21 +456,24 @@ func (r *KafkaWorkbenchRepository) UpdateTopicMapping(ctx context.Context, param
 		    topic = $6,
 		    description = $7,
 		    consumer_group = $8,
-		    partition_mode = $9,
-		    partition = $10,
-		    start_position = $11,
-		    start_offset = $12,
-		    decode = $13,
-		    sample_limit = $14,
-		    timeout_ms = $15,
-		    sort_order = $16,
-		    updated_by = $17,
+		    output_mode = $9,
+		    raw_output_scope = $10,
+		    partition_mode = $11,
+		    partition = $12,
+		    start_position = $13,
+		    start_offset = $14,
+		    decode = $15,
+		    sample_limit = $16,
+		    timeout_ms = $17,
+		    sort_order = $18,
+		    updated_by = $19,
 		    updated_at = now()
 		WHERE project_id = $1 AND id = $2
 		RETURNING id, project_id, connection_id, group_id, name, topic, description,
-		          consumer_group, partition_mode, partition, start_position, start_offset, decode, sample_limit,
+		          consumer_group, output_mode, raw_output_scope, NULL::uuid, NULL::text,
+		          partition_mode, partition, start_position, start_offset, decode, sample_limit,
 		          timeout_ms, sort_order, created_at, updated_at
-	`, params.ProjectID, params.ID, params.HasGroupID, params.GroupID, params.Name, params.Topic, params.Description, params.ConsumerGroup, params.PartitionMode, params.Partition, params.StartPosition, params.StartOffset, params.Decode, params.SampleLimit, params.TimeoutMS, params.SortOrder, params.UserID)
+	`, params.ProjectID, params.ID, params.HasGroupID, params.GroupID, params.Name, params.Topic, params.Description, params.ConsumerGroup, params.OutputMode, params.RawOutputScope, params.PartitionMode, params.Partition, params.StartPosition, params.StartOffset, params.Decode, params.SampleLimit, params.TimeoutMS, params.SortOrder, params.UserID)
 
 	record, err := scanKafkaTopicMappingRecord(row)
 	if err != nil {
@@ -436,6 +483,27 @@ func (r *KafkaWorkbenchRepository) UpdateTopicMapping(ctx context.Context, param
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "更新 Kafka Topic 映射失败", err)
 	}
 	return &record, nil
+}
+
+// UpdateTopicMappingWithDataPoint 更新消费规则，并按输出模式同步整包数据点状态。
+func (r *KafkaWorkbenchRepository) UpdateTopicMappingWithDataPoint(ctx context.Context, params UpdateKafkaTopicMappingParams) (*KafkaTopicMappingRecord, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 Kafka 消费规则更新事务失败", err)
+	}
+	defer rollbackProtocolTxQuietly(ctx, tx)
+
+	record, err := updateKafkaTopicMappingTx(ctx, tx, params)
+	if err != nil {
+		return nil, err
+	}
+	if err := syncKafkaRawDataPointForMapping(ctx, tx, record, params.RawDataPointPathInput, params.RawSourceConfig, params.UserID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 Kafka 消费规则更新事务失败", err)
+	}
+	return record, nil
 }
 
 // DeleteTopicMapping 删除 Topic 映射，并将其生成的数据点标记为失效。
@@ -455,6 +523,15 @@ func (r *KafkaWorkbenchRepository) DeleteTopicMapping(ctx context.Context, proje
 	`, projectID, mappingID); err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "标记 Kafka 字段数据点失效失败", err)
 	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE data_points
+		SET status = 'invalid', updated_at = now()
+		WHERE project_id = $1
+		  AND source_type = 'kafka.raw'
+		  AND source_config->>'topicMappingId' = $2
+	`, projectID, mappingID); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "标记 Kafka 整包数据点失效失败", err)
+	}
 	tag, err := tx.Exec(ctx, `DELETE FROM data_kafka_topic_mappings WHERE project_id = $1 AND id = $2`, projectID, mappingID)
 	if err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "删除 Kafka Topic 映射失败", err)
@@ -465,6 +542,87 @@ func (r *KafkaWorkbenchRepository) DeleteTopicMapping(ctx context.Context, proje
 	if err := tx.Commit(ctx); err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 Kafka Topic 映射删除事务失败", err)
 	}
+	return nil
+}
+
+func createKafkaTopicMappingTx(ctx context.Context, tx pgx.Tx, params CreateKafkaTopicMappingParams) (*KafkaTopicMappingRecord, error) {
+	row := tx.QueryRow(ctx, `
+		INSERT INTO data_kafka_topic_mappings (
+			project_id, connection_id, group_id, name, topic, description,
+			consumer_group, output_mode, raw_output_scope, partition_mode, partition, start_position, start_offset, decode,
+			sample_limit, timeout_ms, sort_order, created_by, updated_by
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $18)
+		RETURNING id, project_id, connection_id, group_id, name, topic, description,
+		          consumer_group, output_mode, raw_output_scope, NULL::uuid, NULL::text,
+		          partition_mode, partition, start_position, start_offset, decode, sample_limit,
+		          timeout_ms, sort_order, created_at, updated_at
+	`, params.ProjectID, params.ConnectionID, params.GroupID, params.Name, params.Topic, params.Description, params.ConsumerGroup, params.OutputMode, params.RawOutputScope, params.PartitionMode, params.Partition, params.StartPosition, params.StartOffset, params.Decode, params.SampleLimit, params.TimeoutMS, params.SortOrder, params.UserID)
+	record, err := scanKafkaTopicMappingRecord(row)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "创建 Kafka 消费规则失败", err)
+	}
+	return &record, nil
+}
+
+func updateKafkaTopicMappingTx(ctx context.Context, tx pgx.Tx, params UpdateKafkaTopicMappingParams) (*KafkaTopicMappingRecord, error) {
+	row := tx.QueryRow(ctx, `
+		UPDATE data_kafka_topic_mappings
+		SET group_id = CASE WHEN $3 THEN $4 ELSE group_id END,
+		    name = $5,
+		    topic = $6,
+		    description = $7,
+		    consumer_group = $8,
+		    output_mode = $9,
+		    raw_output_scope = $10,
+		    partition_mode = $11,
+		    partition = $12,
+		    start_position = $13,
+		    start_offset = $14,
+		    decode = $15,
+		    sample_limit = $16,
+		    timeout_ms = $17,
+		    sort_order = $18,
+		    updated_by = $19,
+		    updated_at = now()
+		WHERE project_id = $1 AND id = $2
+		RETURNING id, project_id, connection_id, group_id, name, topic, description,
+		          consumer_group, output_mode, raw_output_scope, NULL::uuid, NULL::text,
+		          partition_mode, partition, start_position, start_offset, decode, sample_limit,
+		          timeout_ms, sort_order, created_at, updated_at
+	`, params.ProjectID, params.ID, params.HasGroupID, params.GroupID, params.Name, params.Topic, params.Description, params.ConsumerGroup, params.OutputMode, params.RawOutputScope, params.PartitionMode, params.Partition, params.StartPosition, params.StartOffset, params.Decode, params.SampleLimit, params.TimeoutMS, params.SortOrder, params.UserID)
+	record, err := scanKafkaTopicMappingRecord(row)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "Kafka 消费规则不存在")
+		}
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "更新 Kafka 消费规则失败", err)
+	}
+	return &record, nil
+}
+
+func syncKafkaRawDataPointForMapping(ctx context.Context, tx pgx.Tx, record *KafkaTopicMappingRecord, path string, sourceConfig map[string]any, userID string) error {
+	if record.OutputMode != "raw_message" {
+		_, err := tx.Exec(ctx, `
+			UPDATE data_points
+			SET status = 'invalid', updated_at = now()
+			WHERE project_id = $1
+			  AND source_type = 'kafka.raw'
+			  AND source_config->>'topicMappingId' = $2
+		`, record.ProjectID, record.ID)
+		if err != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "标记 Kafka 整包数据点失效失败", err)
+		}
+		record.RawDataPointID = nil
+		record.RawDataPointPath = nil
+		return nil
+	}
+	dataPointID, dataPointPath, err := upsertKafkaRawDataPoint(ctx, tx, *record, path, sourceConfig, userID)
+	if err != nil {
+		return err
+	}
+	record.RawDataPointID = &dataPointID
+	record.RawDataPointPath = &dataPointPath
 	return nil
 }
 
@@ -1012,6 +1170,64 @@ func upsertKafkaFieldDataPoint(ctx context.Context, tx pgx.Tx, field KafkaFieldR
 	return dataPointID, dataPointPath, nil
 }
 
+func upsertKafkaRawDataPoint(ctx context.Context, tx pgx.Tx, mapping KafkaTopicMappingRecord, path string, sourceConfig map[string]any, userID string) (string, string, error) {
+	sourceConfigWithMapping := cloneProtocolMap(sourceConfig)
+	sourceConfigWithMapping["topicMappingId"] = mapping.ID
+	sourceConfigPayload, err := json.Marshal(sourceConfigWithMapping)
+	if err != nil {
+		return "", "", apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka 整包数据点 sourceConfig 格式无效", err)
+	}
+	dataType := "object"
+	if mapping.Decode != "json" {
+		dataType = "string"
+	}
+	allocatedPath, err := allocateGeneratedDataPointPath(ctx, tx, mapping.ProjectID, path, "kafka.raw", mapping.ID)
+	if err != nil {
+		return "", "", err
+	}
+
+	var dataPointID, dataPointPath string
+	err = tx.QueryRow(ctx, `
+		UPDATE data_points
+		SET path = $2,
+		    name = $3,
+		    source_id = $4,
+		    source_config = $5::jsonb,
+		    data_type = $6,
+		    refresh_mode = 'subscription',
+		    status = 'active',
+		    updated_by = $7,
+		    updated_at = now()
+		WHERE project_id = $1
+		  AND source_type = 'kafka.raw'
+		  AND source_config->>'topicMappingId' = $8
+		RETURNING id, path
+	`, mapping.ProjectID, path, mapping.Name, mapping.ConnectionID, string(sourceConfigPayload), dataType, userID, mapping.ID).Scan(&dataPointID, &dataPointPath)
+	if err == nil {
+		return dataPointID, dataPointPath, nil
+	}
+	if err != pgx.ErrNoRows {
+		return "", "", apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步 Kafka 整包数据点失败", err)
+	}
+
+	err = tx.QueryRow(ctx, `
+		INSERT INTO data_points (
+			project_id, path, name, source_type, source_id, source_config,
+			data_type, refresh_mode, status, display_order, created_by, updated_by
+		)
+		VALUES (
+			$1, $2, $3, 'kafka.raw', $4, $5::jsonb, $6, 'subscription', 'active',
+			COALESCE((SELECT MAX(display_order) + 1 FROM data_points WHERE project_id = $1), 0),
+			$7, $7
+		)
+		RETURNING id, path
+	`, mapping.ProjectID, allocatedPath, mapping.Name, mapping.ConnectionID, string(sourceConfigPayload), dataType, userID).Scan(&dataPointID, &dataPointPath)
+	if err != nil {
+		return "", "", apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步 Kafka 整包数据点失败", err)
+	}
+	return dataPointID, dataPointPath, nil
+}
+
 func scanKafkaTopicGroupRecord(row pgx.Row) (KafkaTopicGroupRecord, error) {
 	record := KafkaTopicGroupRecord{}
 	if err := row.Scan(&record.ID, &record.ProjectID, &record.ConnectionID, &record.ParentID, &record.Name, &record.SortOrder, &record.CreatedAt, &record.UpdatedAt); err != nil {
@@ -1031,6 +1247,10 @@ func scanKafkaTopicMappingRecord(row pgx.Row) (KafkaTopicMappingRecord, error) {
 		&record.Topic,
 		&record.Description,
 		&record.ConsumerGroup,
+		&record.OutputMode,
+		&record.RawOutputScope,
+		&record.RawDataPointID,
+		&record.RawDataPointPath,
 		&record.PartitionMode,
 		&record.Partition,
 		&record.StartPosition,

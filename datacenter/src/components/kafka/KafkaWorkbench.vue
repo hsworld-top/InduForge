@@ -11,12 +11,11 @@
           <button
             type="button"
             class="kafka-workbench__connect-action"
-            :class="{ 'is-connected': connected }"
-            :title="connected ? '断开' : '连接'"
-            @click="toggleConnection"
+            title="测试 Broker 连通性"
+            @click="testBroker"
           >
-            <IconTablerLoader2 v-if="connecting" />
-            <span>{{ connecting ? '连接中' : connected ? '已连接' : '连接' }}</span>
+            <IconTablerLoader2 v-if="testingBroker" />
+            <span>{{ testingBroker ? '测试中' : '测试 Broker' }}</span>
           </button>
         </template>
         <template #actions>
@@ -25,13 +24,13 @@
             class="kafka-workbench__search"
             size="small"
             clearable
-            placeholder="筛选 Topic"
+            placeholder="筛选消费规则"
           />
           <button
             type="button"
             class="workbench-source-header__icon-action is-primary"
-            title="新建 Topic 映射"
-            aria-label="新建 Topic 映射"
+            title="新建消费规则"
+            aria-label="新建消费规则"
             @click="openCreateMapping"
           >
             <IconTablerPlus />
@@ -60,7 +59,7 @@
       <div class="kafka-workbench__tree">
         <div v-if="loading" class="kafka-workbench__loading">
           <IconTablerLoader2 />
-          <span>加载 Topic...</span>
+          <span>加载消费规则...</span>
         </div>
         <template v-else>
           <KafkaTopicTreeBranch
@@ -68,8 +67,8 @@
             :key="String(group.id)"
             :node="group"
             :selected-mapping-id="selectedMapping ? String(selectedMapping.id) : ''"
-            @select-mapping="openVariables"
-            @open-fields="openVariables"
+            @select-mapping="selectMapping"
+            @open-fields="selectMapping"
             @group-contextmenu="openGroupMenu"
             @mapping-contextmenu="openMappingMenu"
           />
@@ -80,13 +79,13 @@
             type="button"
             class="kafka-workbench__tree-item"
             :class="{ 'is-active': selectedMapping?.id === mapping.id }"
-            @click="openVariables(mapping)"
-            @dblclick="openVariables(mapping)"
+            @click="selectMapping(mapping)"
+            @dblclick="selectMapping(mapping)"
             @contextmenu.prevent.stop="openMappingMenu($event, mapping)"
-            @keydown.enter="openVariables(mapping)"
+            @keydown.enter="selectMapping(mapping)"
           >
             <IconTablerMessages class="kafka-workbench__tree-item-icon" />
-            <el-tooltip :content="mapping.topic" placement="top" :show-after="400">
+            <el-tooltip :content="mappingTooltip(mapping)" placement="top" :show-after="400">
               <span class="kafka-workbench__tree-item-name">{{
                 mapping.name || mapping.topic
               }}</span>
@@ -97,49 +96,33 @@
             v-if="filteredTree.groups.length === 0 && filteredTree.rootMappings.length === 0"
             class="kafka-workbench__empty"
           >
-            {{ filterText ? '没有匹配的 Topic' : '暂无 Topic 映射' }}
+            {{ filterText ? '没有匹配的消费规则' : '暂无消费规则' }}
           </div>
         </template>
       </div>
     </aside>
 
     <main class="kafka-workbench__main">
-      <div class="kafka-workbench__tabbar">
-        <button
-          v-for="tab in tabs"
-          :key="tab.id"
-          type="button"
-          class="kafka-workbench__tab"
-          :class="{ 'is-active': tab.id === activeTabId }"
-          @click="activateTab(tab)"
-        >
-          <component :is="tab.icon" />
-          <span>{{ tab.title }}</span>
-          <IconTablerX class="kafka-workbench__tab-close" @click.stop="closeTab(tab.id)" />
-        </button>
-      </div>
-
       <div class="kafka-workbench__content">
-        <KafkaPreviewPanel
-          v-if="activeTab?.type === 'preview'"
+        <KafkaRawOutputPanel
+          v-if="activeMapping?.outputMode === 'raw_message'"
           :project-id="projectId"
-          :mapping="activeTab.mapping"
-          :connected="connected"
+          :mapping="activeMapping"
+          :pull-request-id="samplePullRequestId"
           @samples="handlePreviewSamples"
         />
         <KafkaFieldMappingPanel
-          v-else-if="activeTab?.type === 'fields'"
+          v-else-if="activeMapping?.outputMode === 'field_mapping'"
           :project-id="projectId"
-          :mapping="activeTab.mapping"
-          :samples="getPreviewSamples(activeTab.mapping.id)"
-          :connected="connected"
-          @open-preview="openPreview"
+          :mapping="activeMapping"
+          :samples="getPreviewSamples(activeMapping.id)"
+          :pull-request-id="samplePullRequestId"
           @samples="handlePreviewSamples"
         />
         <div v-else class="kafka-workbench__placeholder">
           <IconTablerMessages />
-          <strong>选择 Topic 管理变量</strong>
-          <span>从左侧 Topic 映射进入变量管理。</span>
+          <strong>选择消费规则</strong>
+          <span>整包规则可手动拉取样本，字段规则可配置字段到数据点的映射。</span>
         </div>
       </div>
     </main>
@@ -189,19 +172,35 @@
           :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
           @click.stop
         >
-          <button v-if="contextMenu.type === 'mapping'" type="button" @click="emitContextAction('preview')">
-            <IconTablerMessages class="kafka-workbench__menu-icon" />
-            <span>消息预览</span>
-          </button>
-          <button v-if="contextMenu.type === 'mapping'" type="button" @click="emitContextAction('fields')">
+          <button
+            v-if="contextMenu.type === 'mapping'"
+            type="button"
+            @click="emitContextAction('open')"
+          >
             <IconTablerSchema class="kafka-workbench__menu-icon" />
-            <span>变量管理</span>
+            <span>{{ contextMenu.mapping?.outputMode === 'raw_message' ? '打开输出配置' : '打开字段映射' }}</span>
           </button>
-          <button v-if="contextMenu.type === 'mapping'" type="button" @click="emitContextAction('edit')">
+          <button
+            v-if="contextMenu.type === 'mapping'"
+            type="button"
+            @click="emitContextAction('pullSamples')"
+          >
+            <IconTablerMessages class="kafka-workbench__menu-icon" />
+            <span>拉取样本</span>
+          </button>
+          <button
+            v-if="contextMenu.type === 'mapping'"
+            type="button"
+            @click="emitContextAction('edit')"
+          >
             <IconTablerPencil class="kafka-workbench__menu-icon" />
-            <span>编辑订阅</span>
+            <span>编辑规则</span>
           </button>
-          <button v-if="contextMenu.type === 'mapping'" type="button" @click="emitContextAction('copyTopic')">
+          <button
+            v-if="contextMenu.type === 'mapping'"
+            type="button"
+            @click="emitContextAction('copyTopic')"
+          >
             <IconTablerCopy class="kafka-workbench__menu-icon" />
             <span>复制 Topic</span>
           </button>
@@ -209,23 +208,45 @@
             <IconTablerFolderSymlink class="kafka-workbench__menu-icon" />
             <span>移动到分组</span>
           </button>
-          <button v-if="contextMenu.type === 'group'" type="button" @click="emitContextAction('createChildGroup')">
+          <button
+            v-if="contextMenu.type === 'group'"
+            type="button"
+            @click="emitContextAction('createChildGroup')"
+          >
             <IconTablerFolderPlus class="kafka-workbench__menu-icon" />
             <span>新建子分组</span>
           </button>
-          <button v-if="contextMenu.type === 'group'" type="button" @click="emitContextAction('renameGroup')">
+          <button
+            v-if="contextMenu.type === 'group'"
+            type="button"
+            @click="emitContextAction('renameGroup')"
+          >
             <IconTablerPencil class="kafka-workbench__menu-icon" />
             <span>编辑分组</span>
           </button>
-          <button v-if="contextMenu.type === 'group'" type="button" @click="emitContextAction('move')">
+          <button
+            v-if="contextMenu.type === 'group'"
+            type="button"
+            @click="emitContextAction('move')"
+          >
             <IconTablerFolderSymlink class="kafka-workbench__menu-icon" />
             <span>移动分组</span>
           </button>
-          <button v-if="contextMenu.type === 'group'" type="button" class="is-danger" @click="emitContextAction('deleteGroup')">
+          <button
+            v-if="contextMenu.type === 'group'"
+            type="button"
+            class="is-danger"
+            @click="emitContextAction('deleteGroup')"
+          >
             <IconTablerTrash class="kafka-workbench__menu-icon" />
             <span>删除分组</span>
           </button>
-          <button v-if="contextMenu.type === 'mapping'" type="button" class="is-danger" @click="emitContextAction('delete')">
+          <button
+            v-if="contextMenu.type === 'mapping'"
+            type="button"
+            class="is-danger"
+            @click="emitContextAction('delete')"
+          >
             <IconTablerTrash class="kafka-workbench__menu-icon" />
             <span>删除</span>
           </button>
@@ -236,7 +257,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, markRaw, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerFolderPlus from '~icons/tabler/folder-plus'
@@ -248,14 +269,13 @@ import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerSchema from '~icons/tabler/schema'
 import IconTablerTrash from '~icons/tabler/trash'
-import IconTablerX from '~icons/tabler/x'
 import dataAPI from '@/api/data.api'
 import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
 import { getApiErrorMessage } from '@/utils/request'
 import { buildKafkaTopicTree, filterKafkaTopicTree } from './kafkaTopicTreeModel'
 import KafkaFieldMappingPanel from './KafkaFieldMappingPanel.vue'
 import KafkaInspectorPanel from './KafkaInspectorPanel.vue'
-import KafkaPreviewPanel from './KafkaPreviewPanel.vue'
+import KafkaRawOutputPanel from './KafkaRawOutputPanel.vue'
 import KafkaTopicGroupDialog from './KafkaTopicGroupDialog.vue'
 import KafkaTopicMappingDialog from './KafkaTopicMappingDialog.vue'
 import KafkaTopicMoveDialog from './KafkaTopicMoveDialog.vue'
@@ -278,23 +298,14 @@ defineEmits<{
   (event: 'back'): void
 }>()
 
-type KafkaWorkbenchTab = {
-  id: string
-  type: 'preview' | 'fields'
-  title: string
-  icon: any
-  mapping: KafkaTopicMapping
-}
-
 const groups = ref<KafkaTopicGroup[]>([])
 const mappings = ref<KafkaTopicMapping[]>([])
 const loading = ref(false)
 const filterText = ref('')
-const connected = ref(false)
-const connecting = ref(false)
+const testingBroker = ref(false)
 const selectedMapping = ref<KafkaTopicMapping | null>(null)
-const activeTabId = ref('')
-const tabs = ref<KafkaWorkbenchTab[]>([])
+const activeMapping = ref<KafkaTopicMapping | null>(null)
+const samplePullRequestId = ref(0)
 const previewSamplesByMapping = shallowRef(new Map<string, KafkaPreviewSample[]>())
 const activePreview = ref<KafkaPreview | null>(null)
 const groupDialogVisible = ref(false)
@@ -336,10 +347,9 @@ const tree = computed(() => buildKafkaTopicTree(groups.value, mappings.value))
 const filteredTree = computed(() =>
   filterKafkaTopicTree(tree.value.groups, tree.value.rootMappings, filterText.value),
 )
-const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId.value) || null)
 const inspectorConnection = computed(() => ({
   ...props.connection,
-  status: connected.value ? 'connected' : 'disconnected',
+  status: props.connection.status || 'unknown',
 }))
 
 const loadWorkbench = async () => {
@@ -358,34 +368,20 @@ const loadWorkbench = async () => {
   }
 }
 
-const toggleConnection = async () => {
-  if (connecting.value) return
-  if (connected.value) {
-    connected.value = false
-    tabs.value = tabs.value.filter((tab) => tab.type !== 'preview')
-    activePreview.value = null
-    previewSamplesByMapping.value = new Map()
-    if (!tabs.value.some((tab) => tab.id === activeTabId.value)) {
-      activeTabId.value = tabs.value[0]?.id || ''
-    }
-    ElMessage.success('Kafka 已断开')
-    return
-  }
-
-  connecting.value = true
+const testBroker = async () => {
+  if (testingBroker.value) return
+  testingBroker.value = true
   try {
     await dataAPI.previewKafkaConnection(props.projectId, props.connection.id, {
       limit: 1,
       timeoutMs: 1000,
       probe: true,
     })
-    connected.value = true
-    ElMessage.success('Kafka 已连接到 Broker')
+    ElMessage.success('Kafka Broker 可连接')
   } catch (error) {
-    connected.value = false
-    ElMessage.error(getApiErrorMessage(error, 'Kafka 连接失败'))
+    ElMessage.error(getApiErrorMessage(error, 'Kafka Broker 测试失败'))
   } finally {
-    connecting.value = false
+    testingBroker.value = false
   }
 }
 
@@ -410,18 +406,18 @@ const saveGroup = async (payload: { name: string; parentId: string | null }) => 
         name: payload.name,
         parentId: payload.parentId,
       })
-      ElMessage.success('Topic 分组已更新')
+      ElMessage.success('规则分组已更新')
     } else {
       await dataAPI.createKafkaTopicGroup(props.projectId, props.connection.id, {
         name: payload.name,
         parentId: pendingParentGroupId.value || payload.parentId,
       })
-      ElMessage.success('Topic 分组已创建')
+      ElMessage.success('规则分组已创建')
     }
     groupDialogVisible.value = false
     await loadWorkbench()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存 Topic 分组失败'))
+    ElMessage.error(getApiErrorMessage(error, '保存规则分组失败'))
   } finally {
     groupSaving.value = false
   }
@@ -436,50 +432,21 @@ const saveMapping = async (payload: Record<string, unknown>) => {
         : await dataAPI.createKafkaTopicMapping(props.projectId, props.connection.id, payload)
     mappingSaving.value = false
     mappingDialogVisible.value = false
-    ElMessage.success('Topic 映射已保存')
+    ElMessage.success('消费规则已保存')
     await loadWorkbench()
     if (saved?.id) {
-      openVariables(saved)
+      selectMapping(saved)
     }
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存 Topic 映射失败'))
+    ElMessage.error(getApiErrorMessage(error, '保存消费规则失败'))
   } finally {
     mappingSaving.value = false
   }
 }
 
-const openPreview = (mapping: KafkaTopicMapping) => {
-  if (!connected.value) {
-    ElMessage.warning('请先点击左上角连接，再执行 Kafka 消息预览')
-    return
-  }
+const selectMapping = (mapping: KafkaTopicMapping) => {
   selectedMapping.value = mapping
-  const id = `kafka-preview-${mapping.id}`
-  if (!tabs.value.some((tab) => tab.id === id)) {
-    tabs.value.push({
-      id,
-      type: 'preview',
-      title: `${mapping.name || mapping.topic} / 消息预览`,
-      icon: markRaw(IconTablerMessages),
-      mapping,
-    })
-  }
-  activeTabId.value = id
-}
-
-const openVariables = (mapping: KafkaTopicMapping) => {
-  selectedMapping.value = mapping
-  const id = `kafka-fields-${mapping.id}`
-  if (!tabs.value.some((tab) => tab.id === id)) {
-    tabs.value.push({
-      id,
-      type: 'fields',
-      title: `${mapping.name || mapping.topic} / 变量`,
-      icon: markRaw(IconTablerSchema),
-      mapping,
-    })
-  }
-  activeTabId.value = id
+  activeMapping.value = mapping
 }
 
 const openMappingMenu = (event: MouseEvent, mapping: KafkaTopicMapping) => {
@@ -510,8 +477,8 @@ const closeContextMenu = () => {
 
 const emitContextAction = async (
   action:
-    | 'preview'
-    | 'fields'
+    | 'open'
+    | 'pullSamples'
     | 'edit'
     | 'copyTopic'
     | 'move'
@@ -523,12 +490,13 @@ const emitContextAction = async (
   const { type, mapping, group } = contextMenu.value
   closeContextMenu()
   if (type === 'mapping' && mapping) {
-    if (action === 'preview') {
-      openPreview(mapping)
+    if (action === 'open') {
+      selectMapping(mapping)
       return
     }
-    if (action === 'fields') {
-      openVariables(mapping)
+    if (action === 'pullSamples') {
+      selectMapping(mapping)
+      samplePullRequestId.value += 1
       return
     }
     if (action === 'edit') {
@@ -575,6 +543,9 @@ const buildMappingPayload = (mapping: KafkaTopicMapping) => ({
   topic: mapping.topic,
   groupId: mapping.groupId || null,
   consumerGroup: mapping.consumerGroup || '',
+  outputMode: mapping.outputMode || 'field_mapping',
+  rawOutputScope: mapping.rawOutputScope || 'value',
+  rawDataPointPath: mapping.rawDataPointPath || '',
   partitionMode: mapping.partitionMode,
   partition: mapping.partition ?? null,
   startPosition: mapping.startPosition,
@@ -622,13 +593,13 @@ const handleMoveSubmit = async (groupId: string | null) => {
         ...buildMappingPayload(movingMapping.value),
         groupId,
       })
-      ElMessage.success('Topic 订阅已移动')
+      ElMessage.success('消费规则已移动')
     } else if (moveTargetType.value === 'group' && movingGroup.value) {
       await dataAPI.updateKafkaTopicGroup(props.projectId, movingGroup.value.id, {
         name: movingGroup.value.name,
         parentId: groupId,
       })
-      ElMessage.success('Topic 分组已移动')
+      ElMessage.success('规则分组已移动')
     }
     moving.value = false
     moveDialogVisible.value = false
@@ -642,8 +613,8 @@ const handleMoveSubmit = async (groupId: string | null) => {
 
 const deleteMapping = async (mapping: KafkaTopicMapping) => {
   const ok = await ElMessageBox.confirm(
-    `删除 Topic 订阅“${mapping.name || mapping.topic}”？相关变量配置会一并删除。`,
-    '删除 Topic 订阅',
+    `删除消费规则“${mapping.name || mapping.topic}”？相关数据点配置会一并标记为失效。`,
+    '删除消费规则',
     {
       confirmButtonText: '删除',
       cancelButtonText: '取消',
@@ -656,26 +627,25 @@ const deleteMapping = async (mapping: KafkaTopicMapping) => {
 
   try {
     await dataAPI.deleteKafkaTopicMapping(props.projectId, mapping.id)
-    tabs.value = tabs.value.filter((tab) => tab.mapping.id !== mapping.id)
-    if (!tabs.value.some((tab) => tab.id === activeTabId.value)) {
-      activeTabId.value = tabs.value[0]?.id || ''
-    }
     if (selectedMapping.value?.id === mapping.id) {
       selectedMapping.value = null
+    }
+    if (activeMapping.value?.id === mapping.id) {
+      activeMapping.value = null
     }
     const nextSamples = new Map(previewSamplesByMapping.value)
     nextSamples.delete(String(mapping.id))
     previewSamplesByMapping.value = nextSamples
-    ElMessage.success('Topic 订阅已删除')
+    ElMessage.success('消费规则已删除')
     await loadWorkbench()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '删除 Topic 订阅失败'))
+    ElMessage.error(getApiErrorMessage(error, '删除消费规则失败'))
   }
 }
 
 const deleteGroup = async (group: KafkaTopicGroupNode) => {
   const ok = await ElMessageBox.confirm(
-    `确认删除分组「${group.name}」？组内 Topic 订阅会回到根目录。`,
+    `确认删除分组「${group.name}」？组内消费规则会回到根目录。`,
     '删除分组',
     {
       confirmButtonText: '删除',
@@ -689,23 +659,10 @@ const deleteGroup = async (group: KafkaTopicGroupNode) => {
 
   try {
     await dataAPI.deleteKafkaTopicGroup(props.projectId, group.id)
-    ElMessage.success('Topic 分组已删除')
+    ElMessage.success('规则分组已删除')
     await loadWorkbench()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '删除 Topic 分组失败'))
-  }
-}
-
-const activateTab = (tab: KafkaWorkbenchTab) => {
-  activeTabId.value = tab.id
-  selectedMapping.value = tab.mapping
-}
-
-const closeTab = (tabId: string) => {
-  const nextTabs = tabs.value.filter((tab) => tab.id !== tabId)
-  tabs.value = nextTabs
-  if (activeTabId.value === tabId) {
-    activeTabId.value = nextTabs[0]?.id || ''
+    ElMessage.error(getApiErrorMessage(error, '删除规则分组失败'))
   }
 }
 
@@ -724,16 +681,19 @@ const getPreviewSamples = (mappingId: string | number) => {
   return previewSamplesByMapping.value.get(String(mappingId)) || []
 }
 
+const mappingTooltip = (mapping: KafkaTopicMapping) => {
+  const output = mapping.outputMode === 'raw_message' ? '整包数据点' : '字段数据点'
+  return `Topic: ${mapping.topic}\n消费组: ${mapping.consumerGroup || '默认生成'}\n输出: ${output}`
+}
+
 onMounted(loadWorkbench)
 
 watch(
   () => props.connection.id,
   async () => {
-    connected.value = false
-    connecting.value = false
-    tabs.value = []
-    activeTabId.value = ''
+    testingBroker.value = false
     selectedMapping.value = null
+    activeMapping.value = null
     activePreview.value = null
     previewSamplesByMapping.value = new Map()
     await loadWorkbench()
@@ -788,12 +748,6 @@ defineExpose({ handlePreviewSamples })
   border-radius: 999px;
   background: currentColor;
   content: '';
-}
-
-.kafka-workbench__connect-action.is-connected {
-  border-color: color-mix(in oklch, var(--dc-success) 32%, var(--dc-border));
-  background: color-mix(in oklch, var(--dc-success) 12%, var(--dc-surface-raised));
-  color: var(--dc-success);
 }
 
 .kafka-workbench__search {
@@ -859,56 +813,6 @@ defineExpose({ handlePreviewSamples })
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.kafka-workbench__tabbar {
-  display: flex;
-  min-height: 38px;
-  overflow-x: auto;
-  border-bottom: 1px solid var(--dc-border);
-  background: var(--dc-surface-subtle);
-}
-
-.kafka-workbench__tabbar:empty {
-  display: none;
-}
-
-.kafka-workbench__tab {
-  min-width: 130px;
-  max-width: 260px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 10px;
-  border: 0;
-  border-right: 1px solid var(--dc-border);
-  background: transparent;
-  color: var(--dc-text-secondary);
-  font-size: 12px;
-}
-
-.kafka-workbench__tab.is-active {
-  background: var(--dc-surface-raised);
-  color: var(--dc-primary);
-  font-weight: 700;
-}
-
-.kafka-workbench__tab span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.kafka-workbench__tab svg {
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
-}
-
-.kafka-workbench__tab-close {
-  margin-left: auto;
-  color: var(--dc-text-muted);
 }
 
 .kafka-workbench__content {
