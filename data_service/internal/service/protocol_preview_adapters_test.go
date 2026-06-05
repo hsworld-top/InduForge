@@ -162,6 +162,55 @@ func (r *fakeKafkaPreviewReader) Close() error {
 	return nil
 }
 
+type fakeKafkaProbeConn struct {
+	closed bool
+}
+
+func (c *fakeKafkaProbeConn) Close() error {
+	c.closed = true
+	return nil
+}
+
+func TestKafkaPreviewAdapter_ProbeDoesNotRequireTopic(t *testing.T) {
+	probeConn := &fakeKafkaProbeConn{}
+	var capturedNetwork string
+	var capturedAddress string
+	adapter := KafkaPreviewAdapter{
+		ProbeFactory: func(ctx context.Context, network, address string) (kafkaProbeConn, error) {
+			capturedNetwork = network
+			capturedAddress = address
+			return probeConn, nil
+		},
+	}
+
+	result, err := adapter.Preview(context.Background(), ProtocolPreviewAdapterInput{
+		Connection: repository.ProtocolPreviewConnectionRecord{
+			ID:   "conn-kafka",
+			Type: "kafka",
+			Config: map[string]any{
+				"brokers": "127.0.0.1:9092",
+			},
+		},
+		Limit:   1,
+		Timeout: time.Second,
+		Options: map[string]any{
+			"probe": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("kafka probe failed: %v", err)
+	}
+	if capturedNetwork != "tcp" || capturedAddress != "127.0.0.1:9092" {
+		t.Fatalf("unexpected probe target: %s %s", capturedNetwork, capturedAddress)
+	}
+	if !probeConn.closed {
+		t.Fatal("expected probe connection to be closed")
+	}
+	if result.Status != "ok" || result.Diagnostics["probe"] != true {
+		t.Fatalf("unexpected probe result: %#v", result)
+	}
+}
+
 func TestKafkaPreviewAdapter_UsesTemporaryReaderAndReturnsSamples(t *testing.T) {
 	reader := &fakeKafkaPreviewReader{
 		messages: []kafka.Message{

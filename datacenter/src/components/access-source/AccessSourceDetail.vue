@@ -299,7 +299,7 @@ const endpointText = computed(() => {
     return [config.brokers, config.topic].filter(Boolean).join(' / ') || '未配置'
   }
   if (connection.type === 'http') {
-    return [config.method || 'GET', config.baseUrl].filter(Boolean).join(' ') || '未配置'
+    return '请求在工作台配置'
   }
   if (connection.type === 'websocket') {
     return [config.url, config.topic].filter(Boolean).join(' / ') || '未配置'
@@ -457,12 +457,8 @@ const configRows = computed(() => {
 
   if (connection.type === 'http') {
     return [
-      { label: 'Method', value: config.method || 'GET' },
-      { label: 'URL', value: config.baseUrl || '-' },
-      {
-        label: 'Timeout',
-        value: config.timeoutMs ? `${config.timeoutMs}ms` : '-',
-      },
+      { label: '配置方式', value: '请求在工作台维护' },
+      { label: 'URL', value: '每个请求独立配置完整地址' },
     ]
   }
 

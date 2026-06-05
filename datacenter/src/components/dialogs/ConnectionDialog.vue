@@ -98,121 +98,204 @@
             </el-form-item>
 
             <template v-if="connectionType === 'kafka'">
-              <el-form-item prop="brokers">
-                <template #label>
-                  <span class="connection-dialog__field-label">
-                    服务器地址
-                    <el-tooltip
-                      content="保持 IP:端口 格式；支持配置多个地址，用英文逗号分隔。"
-                      placement="top"
-                    >
-                      <IconTablerHelpCircle class="connection-dialog__field-help" />
-                    </el-tooltip>
-                  </span>
-                </template>
-                <el-input
-                  v-model="formData.brokers"
-                  placeholder="127.0.0.1:9092,127.0.0.2:9092"
-                />
-              </el-form-item>
-              <el-form-item prop="topic">
-                <template #label>
-                  <span class="connection-dialog__field-label">
-                    主题名称
-                    <el-tooltip content="填写要消费的 Kafka 主题名称。" placement="top">
-                      <IconTablerHelpCircle class="connection-dialog__field-help" />
-                    </el-tooltip>
-                  </span>
-                </template>
-                <el-input v-model="formData.topic" placeholder="请输入主题名称" />
-              </el-form-item>
-              <el-form-item prop="consumerGroup">
-                <template #label>
-                  <span class="connection-dialog__field-label">
-                    消费组名称
-                    <el-tooltip content="请输入消费组名称，用于记录消费进度。" placement="top">
-                      <IconTablerHelpCircle class="connection-dialog__field-help" />
-                    </el-tooltip>
-                  </span>
-                </template>
-                <el-input
-                  v-model="formData.consumerGroup"
-                  placeholder="请输入消费组名称，用于记录消费进度"
-                />
-              </el-form-item>
-              <el-form-item>
-                <template #label>
-                  <span class="connection-dialog__field-label">
-                    起始位置
-                    <el-tooltip content="新消费组首次读取消息时使用的位置。" placement="top">
-                      <IconTablerHelpCircle class="connection-dialog__field-help" />
-                    </el-tooltip>
-                  </span>
-                </template>
-                <el-segmented v-model="formData.startPosition" :options="kafkaStartOptions" />
-              </el-form-item>
-              <el-form-item>
-                <template #label>
-                  <span class="connection-dialog__field-label">
-                    扩展参数
-                    <el-tooltip
-                      content="可选 JSON 配置，用于传入安全协议等 Kafka 客户端参数。"
-                      placement="top"
-                    >
-                      <IconTablerHelpCircle class="connection-dialog__field-help" />
-                    </el-tooltip>
-                  </span>
-                </template>
-                <el-input
-                  v-model="formData.optionsText"
-                  type="textarea"
-                  :rows="4"
-                  placeholder='{"securityProtocol":"PLAINTEXT"}'
-                />
-              </el-form-item>
-            </template>
-
-            <template v-else-if="connectionType === 'http'">
-              <el-form-item label="请求地址" prop="baseUrl">
-                <el-input v-model="formData.baseUrl" placeholder="https://api.example.com/data" />
-              </el-form-item>
-              <div class="connection-dialog__form-grid">
-                <el-form-item label="方法">
-                  <el-select v-model="formData.method" class="w-full">
-                    <el-option
-                      v-for="method in httpMethods"
-                      :key="method"
-                      :label="method"
-                      :value="method"
-                    />
-                  </el-select>
-                </el-form-item>
-                <el-form-item label="超时">
+              <div class="connection-dialog__form-section">
+                <div class="connection-dialog__form-section-title">基础信息</div>
+                <el-form-item prop="brokers">
+                  <template #label>
+                    <span class="connection-dialog__field-label">
+                      服务器地址
+                      <el-tooltip
+                        content="保持 IP:端口 格式；支持配置多个地址，用英文逗号分隔。"
+                        placement="top"
+                      >
+                        <IconTablerHelpCircle class="connection-dialog__field-help" />
+                      </el-tooltip>
+                    </span>
+                  </template>
                   <el-input
-                    v-model.number="formData.timeoutMs"
-                    inputmode="numeric"
-                    placeholder="5000"
-                  >
-                    <template #append>ms</template>
-                  </el-input>
+                    v-model="formData.brokers"
+                    placeholder="127.0.0.1:9092,127.0.0.2:9092"
+                  />
+                  <p class="connection-dialog__field-tip">支持配置多个地址，用英文逗号分隔。</p>
                 </el-form-item>
               </div>
-              <el-form-item label="请求头">
-                <el-input
-                  v-model="formData.headersText"
-                  type="textarea"
-                  :rows="4"
-                  placeholder='{"Authorization":"Bearer token"}'
-                />
-              </el-form-item>
-              <el-form-item label="请求体模板">
-                <el-input
-                  v-model="formData.bodyTemplateText"
-                  type="textarea"
-                  :rows="5"
-                  placeholder='{"deviceId":"demo"}'
-                />
-              </el-form-item>
+
+              <div class="connection-dialog__form-section">
+                <div class="connection-dialog__form-section-title">认证信息</div>
+                <div class="connection-dialog__form-grid">
+                  <el-form-item>
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        安全协议
+                        <el-tooltip
+                          content="本地测试通常选择 PLAINTEXT；启用 TLS 或 SASL 时按 Broker 要求选择。"
+                          placement="top"
+                        >
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
+                    <el-select v-model="formData.securityProtocol" class="w-full">
+                      <el-option
+                        v-for="option in kafkaSecurityProtocolOptions"
+                        :key="option.value"
+                        :label="option.label"
+                        :value="option.value"
+                      />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item v-if="isKafkaSaslEnabled">
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        SASL 机制
+                        <el-tooltip content="需与 Broker 开启的认证机制一致。" placement="top">
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
+                    <el-select v-model="formData.saslMechanism" class="w-full">
+                      <el-option
+                        v-for="option in kafkaSaslMechanismOptions"
+                        :key="option.value"
+                        :label="option.label"
+                        :value="option.value"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </div>
+                <div v-if="isKafkaSaslEnabled" class="connection-dialog__form-grid">
+                  <el-form-item>
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        用户名
+                        <el-tooltip content="Kafka SASL 认证用户名。" placement="top">
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
+                    <el-input v-model="formData.username" placeholder="请输入 SASL 用户名" clearable />
+                  </el-form-item>
+                  <el-form-item>
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        密码
+                        <el-tooltip
+                          content="Kafka SASL 认证密码，保存后按接入源配置加密/脱敏策略处理。"
+                          placement="top"
+                        >
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
+                    <el-input
+                      v-model="formData.password"
+                      type="password"
+                      show-password
+                      clearable
+                      placeholder="请输入 SASL 密码"
+                    />
+                  </el-form-item>
+                </div>
+              </div>
+
+              <div class="connection-dialog__form-section">
+                <div class="connection-dialog__form-section-title">连接参数</div>
+                <el-form-item>
+                  <template #label>
+                    <span class="connection-dialog__field-label">
+                      客户端 ID
+                      <el-tooltip
+                        content="用于 Broker 日志和监控识别当前接入源；留空时系统会自动生成。"
+                        placement="top"
+                      >
+                        <IconTablerHelpCircle class="connection-dialog__field-help" />
+                      </el-tooltip>
+                    </span>
+                  </template>
+                  <el-input v-model="formData.clientId" placeholder="自动生成" clearable>
+                    <template #append>
+                      <el-button @click="generateKafkaClientId" icon="Refresh">生成</el-button>
+                    </template>
+                  </el-input>
+                </el-form-item>
+                <div class="connection-dialog__form-grid">
+                  <el-form-item>
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        连接超时
+                        <el-tooltip content="建立 TCP/TLS/SASL 连接的最大等待时间，单位毫秒。" placement="top">
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
+                    <el-input-number
+                      v-model="formData.dialTimeoutMs"
+                      :min="1000"
+                      :step="1000"
+                      class="w-full"
+                    />
+                  </el-form-item>
+                  <el-form-item>
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        请求超时
+                        <el-tooltip content="测试连接和读取元信息时的最大等待时间，单位毫秒。" placement="top">
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
+                    <el-input-number
+                      v-model="formData.requestTimeoutMs"
+                      :min="1000"
+                      :step="1000"
+                      class="w-full"
+                    />
+                  </el-form-item>
+                </div>
+              </div>
+
+              <el-collapse v-model="kafkaActiveCollapse" class="connection-dialog__collapse">
+                <el-collapse-item title="SSL/TLS 配置" name="ssl">
+                  <el-form-item label="CA 证书">
+                    <el-input
+                      v-model="formData.sslConfig.ca"
+                      type="textarea"
+                      :rows="4"
+                      placeholder="PEM，可选"
+                    />
+                  </el-form-item>
+                  <el-form-item label="客户端证书">
+                    <el-input
+                      v-model="formData.sslConfig.cert"
+                      type="textarea"
+                      :rows="4"
+                      placeholder="PEM，可选"
+                    />
+                  </el-form-item>
+                  <el-form-item label="客户端私钥">
+                    <el-input
+                      v-model="formData.sslConfig.key"
+                      type="textarea"
+                      :rows="4"
+                      placeholder="PEM，可选"
+                    />
+                  </el-form-item>
+                  <el-form-item>
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        验证服务器证书
+                        <el-tooltip content="生产环境建议开启；使用自签名证书调试时可按需关闭。" placement="top">
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
+                    <el-switch v-model="formData.sslConfig.rejectUnauthorized" />
+                    <span class="connection-dialog__field-inline-tip">
+                      {{ formData.sslConfig.rejectUnauthorized ? '校验证书链与主机名' : '跳过证书校验' }}
+                    </span>
+                  </el-form-item>
+                </el-collapse-item>
+              </el-collapse>
             </template>
 
             <template v-else-if="connectionType === 'websocket'">
@@ -483,13 +566,13 @@
               </el-form-item>
             </template>
 
-            <template v-else-if="isBuiltinStoreSelected">
+            <template v-else-if="isSimpleMetadataSource">
               <el-form-item label="说明">
                 <el-input
                   v-model="formData.description"
                   type="textarea"
                   :rows="3"
-                  placeholder="可选，描述该运行库在工程中的用途"
+                  placeholder="可选，描述该接入源在工程中的用途"
                 />
               </el-form-item>
               <template v-if="connectionType === 'builtin.realtime'">
@@ -512,7 +595,7 @@
             </dl>
           </section>
 
-          <section v-if="!isBuiltinStoreSelected" class="connection-dialog__test">
+          <section v-if="showTestButton" class="connection-dialog__test">
             <div class="connection-dialog__section-title">连接测试</div>
             <div class="connection-dialog__test-state" :class="`is-${testState.status}`">
               <component :is="testState.icon" class="connection-dialog__test-icon" />
@@ -560,7 +643,7 @@
             <!-- 返回上一步：仅 create 模式可见 -->
             <el-button v-if="mode === 'create'" @click="goBackToStep1"> ← 返回上一步 </el-button>
             <el-button @click="requestClose">{{ t('actions.cancel') }}</el-button>
-            <el-button v-if="!isBuiltinStoreSelected" @click="handleTest" :loading="testing">
+            <el-button v-if="showTestButton" @click="handleTest" :loading="testing">
               {{ t('actions.testConnection') }}
             </el-button>
             <el-button type="primary" @click="handleSubmit" :loading="submitting">
@@ -657,6 +740,7 @@ const testing = ref(false)
 const submitting = ref(false)
 const lastTestSignature = ref('')
 const emptyFormSignature = ref('')
+const kafkaActiveCollapse = ref([])
 const testResult = ref({
   status: 'idle',
   title: '尚未测试',
@@ -708,7 +792,7 @@ const externalSourceOptions = [
   {
     value: 'kafka',
     label: 'Kafka',
-    description: 'Topic 消息短时抓样',
+    description: 'Broker 地址与客户端参数',
     icon: markRaw(IconTablerServer),
   },
   {
@@ -760,10 +844,16 @@ const previewProtocolTypes = ['kafka', 'http', 'websocket', 'redis']
 const industrialProtocolTypes = ['opcua', 's7', 'modbus', 'tdengine']
 const relationalSourceTypes = ['mysql', 'postgresql', 'sqlserver']
 const specializedProtocolTypes = [...previewProtocolTypes, ...industrialProtocolTypes]
-const httpMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
-const kafkaStartOptions = [
-  { label: '最新位置', value: 'latest' },
-  { label: '最早位置', value: 'earliest' },
+const kafkaSecurityProtocolOptions = [
+  { label: 'PLAINTEXT', value: 'PLAINTEXT' },
+  { label: 'SSL', value: 'SSL' },
+  { label: 'SASL_PLAINTEXT', value: 'SASL_PLAINTEXT' },
+  { label: 'SASL_SSL', value: 'SASL_SSL' },
+]
+const kafkaSaslMechanismOptions = [
+  { label: 'PLAIN', value: 'PLAIN' },
+  { label: 'SCRAM-SHA-256', value: 'SCRAM-SHA-256' },
+  { label: 'SCRAM-SHA-512', value: 'SCRAM-SHA-512' },
 ]
 const redisModeOptions = [
   { label: 'Standalone', value: 'standalone' },
@@ -787,9 +877,6 @@ const modbusModeOptions = [
 const protocolRules = {
   name: [{ required: true, message: '连接名称不能为空', trigger: 'blur' }],
   brokers: [{ required: true, message: '服务器地址不能为空', trigger: 'blur' }],
-  topic: [{ required: true, message: '主题名称不能为空', trigger: 'blur' }],
-  consumerGroup: [{ required: true, message: '消费组名称不能为空', trigger: 'blur' }],
-  baseUrl: [{ required: true, message: '请求地址不能为空', trigger: 'blur' }],
   url: [{ required: true, message: '连接地址不能为空', trigger: 'blur' }],
   address: [{ required: true, message: 'Redis 地址不能为空', trigger: 'blur' }],
   ip: [{ required: true, message: 'IP 地址不能为空', trigger: 'blur' }],
@@ -809,7 +896,7 @@ const activeFormTitle = computed(() => {
   if (connectionType.value === 'mqtt') {
     return 'MQTT Broker'
   }
-  if (connectionType.value === 'kafka') return 'Kafka 主题'
+  if (connectionType.value === 'kafka') return 'Kafka 接入源'
   if (connectionType.value === 'http') return 'HTTP Source'
   if (connectionType.value === 'websocket') return 'WebSocket Source'
   if (connectionType.value === 'redis') return 'Redis Source'
@@ -836,6 +923,11 @@ const formComponent = computed(() => {
 })
 
 const isBuiltinStoreSelected = computed(() => isBuiltinStoreType(connectionType.value))
+const isSimpleMetadataSource = computed(() => isBuiltinStoreSelected.value || connectionType.value === 'http')
+const showTestButton = computed(() => !isSimpleMetadataSource.value)
+const isKafkaSaslEnabled = computed(() =>
+  String(formData.value.securityProtocol || '').includes('SASL'),
+)
 
 const configSignature = computed(() => {
   return JSON.stringify({
@@ -920,16 +1012,12 @@ const summaryRows = computed(() => {
   } else if (connectionType.value === 'kafka') {
     rows.push(
       { label: '服务器地址', value: data.brokers || '未填写' },
-      { label: '主题名称', value: data.topic || '未填写' },
-      { label: '消费组', value: data.consumerGroup || '未填写' },
-      { label: '起始位置', value: data.startPosition === 'earliest' ? '最早位置' : '最新位置' },
+      { label: '安全协议', value: data.securityProtocol || 'PLAINTEXT' },
+      { label: 'SASL', value: String(data.securityProtocol || '').includes('SASL') ? data.saslMechanism || 'PLAIN' : '未启用' },
+      { label: '超时', value: formatTimeout(data.requestTimeoutMs || data.dialTimeoutMs) },
     )
   } else if (connectionType.value === 'http') {
-    rows.push(
-      { label: '方法', value: data.method || 'GET' },
-      { label: 'URL', value: data.baseUrl || '未填写' },
-      { label: '超时', value: formatTimeout(data.timeoutMs) },
-    )
+    rows.push({ label: '配置方式', value: '请求在工作台维护' })
   } else if (connectionType.value === 'websocket') {
     rows.push(
       { label: 'URL', value: data.url || '未填写' },
@@ -1005,7 +1093,7 @@ const checklist = computed(() => {
       : connectionType.value === 'kafka'
         ? Boolean(data.brokers)
         : connectionType.value === 'http'
-          ? Boolean(data.baseUrl)
+          ? true
           : connectionType.value === 'websocket'
             ? Boolean(data.url)
             : connectionType.value === 'redis'
@@ -1022,7 +1110,7 @@ const checklist = computed(() => {
   const hasTarget = ['mqtt', 'http', 'websocket', 'redis', 'opcua'].includes(connectionType.value)
     ? true
     : connectionType.value === 'kafka'
-      ? Boolean(data.topic && data.consumerGroup)
+      ? true
       : connectionType.value === 's7'
         ? data.rack !== undefined && data.slot !== undefined
         : connectionType.value === 'modbus'
@@ -1034,16 +1122,27 @@ const checklist = computed(() => {
 
   return [
     { label: '基础名称已填写', ready: hasName },
-    { label: '网络地址已填写', ready: hasEndpoint },
-    { label: '目标资源已明确', ready: hasTarget },
     {
-      label: previewProtocolTypes.includes(connectionType.value)
-        ? '保存后可短时预览'
+      label: connectionType.value === 'http' ? '工作台内配置请求' : '网络地址已填写',
+      ready: hasEndpoint,
+    },
+    {
+      label: connectionType.value === 'http' ? '保存后创建请求项' : '目标资源已明确',
+      ready: hasTarget,
+    },
+    {
+      label: connectionType.value === 'http'
+        ? '无需测试连接'
+        : previewProtocolTypes.includes(connectionType.value)
+        ? connectionType.value === 'kafka'
+          ? '可先测试 Broker 连通'
+          : '保存后可短时预览'
         : industrialProtocolTypes.includes(connectionType.value)
           ? '保存为节点侧运行配置'
           : '连接测试可选完成',
       ready:
-        previewProtocolTypes.includes(connectionType.value) ||
+        connectionType.value === 'http' ||
+        (previewProtocolTypes.includes(connectionType.value) && connectionType.value !== 'kafka') ||
         industrialProtocolTypes.includes(connectionType.value) ||
         (testResult.value.status === 'success' && !isTestStale.value),
     },
@@ -1264,6 +1363,11 @@ const handleMqttConnectionTest = async () => {
   }
 }
 
+const generateKafkaClientId = () => {
+  const randomStr = Math.random().toString(36).substring(2, 10)
+  formData.value.clientId = `induforge_kafka_${randomStr}`
+}
+
 const handleTest = async () => {
   const valid = await validateCurrentForm()
   if (!valid) {
@@ -1303,22 +1407,6 @@ const handleTest = async () => {
         durationMs: 0,
       }
       ElMessage.info('工业协议保存后进入节点侧运行联调')
-      return
-    }
-
-    if (connectionType.value === 'kafka') {
-      if (props.mode === 'edit' && props.connection?.id) {
-        await handleProtocolPreviewTest()
-        return
-      }
-      testResult.value = {
-        status: 'idle',
-        title: '保存后预览',
-        message: 'Kafka 需要先保存配置，再通过统一协议预览读取真实样本。',
-        detail: '',
-        durationMs: 0,
-      }
-      ElMessage.info('保存 Kafka 接入源后可执行短时真实预览')
       return
     }
   }
@@ -1399,18 +1487,23 @@ const getProtocolDefaultConfig = (type) => {
     kafka: {
       name: '',
       brokers: '',
-      topic: '',
-      consumerGroup: 'datacenter-preview',
-      startPosition: 'latest',
-      optionsText: '{}',
+      securityProtocol: 'PLAINTEXT',
+      saslMechanism: 'PLAIN',
+      username: '',
+      password: '',
+      clientId: '',
+      dialTimeoutMs: 5000,
+      requestTimeoutMs: 5000,
+      sslConfig: {
+        ca: '',
+        cert: '',
+        key: '',
+        rejectUnauthorized: true,
+      },
     },
     http: {
       name: '',
-      baseUrl: '',
-      method: 'GET',
-      headersText: '{}',
-      timeoutMs: 5000,
-      bodyTemplateText: '',
+      description: '',
     },
     websocket: {
       name: '',
@@ -1492,8 +1585,76 @@ const normalizeBuiltinSubmitConfig = (type, config) => {
   }
 }
 
+const normalizeKafkaOptionsForForm = (options) => {
+  const sslConfig = options.sslConfig && typeof options.sslConfig === 'object' ? options.sslConfig : {}
+  return {
+    securityProtocol: String(options.securityProtocol || 'PLAINTEXT').toUpperCase(),
+    saslMechanism: String(options.saslMechanism || 'PLAIN').toUpperCase(),
+    username: options.username || '',
+    password: options.password || '',
+    clientId: options.clientId || '',
+    dialTimeoutMs: Number(options.dialTimeoutMs) || 5000,
+    requestTimeoutMs: Number(options.requestTimeoutMs) || 5000,
+    sslConfig: {
+      ca: sslConfig.ca || '',
+      cert: sslConfig.cert || '',
+      key: sslConfig.key || '',
+      rejectUnauthorized:
+        typeof sslConfig.rejectUnauthorized === 'boolean'
+          ? sslConfig.rejectUnauthorized
+          : !Boolean(options.tlsInsecureSkipVerify),
+    },
+  }
+}
+
+const buildKafkaOptions = (config) => {
+  const options = {
+    securityProtocol: String(config.securityProtocol || 'PLAINTEXT').toUpperCase(),
+  }
+  if (String(options.securityProtocol).includes('SASL')) {
+    options.saslMechanism = String(config.saslMechanism || 'PLAIN').toUpperCase()
+    if (String(config.username || '').trim()) {
+      options.username = String(config.username).trim()
+    }
+    if (String(config.password || '').trim()) {
+      options.password = String(config.password)
+    }
+  }
+  if (String(config.clientId || '').trim()) {
+    options.clientId = String(config.clientId).trim()
+  }
+  const dialTimeoutMs = Number(config.dialTimeoutMs)
+  if (Number.isFinite(dialTimeoutMs) && dialTimeoutMs > 0) {
+    options.dialTimeoutMs = dialTimeoutMs
+  }
+  const requestTimeoutMs = Number(config.requestTimeoutMs)
+  if (Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0) {
+    options.requestTimeoutMs = requestTimeoutMs
+  }
+  if (String(options.securityProtocol).includes('SSL')) {
+    const sslConfig = config.sslConfig || {}
+    const normalizedSSLConfig = {
+      rejectUnauthorized: sslConfig.rejectUnauthorized !== false,
+    }
+    if (String(sslConfig.ca || '').trim()) {
+      normalizedSSLConfig.ca = String(sslConfig.ca)
+    }
+    if (String(sslConfig.cert || '').trim()) {
+      normalizedSSLConfig.cert = String(sslConfig.cert)
+    }
+    if (String(sslConfig.key || '').trim()) {
+      normalizedSSLConfig.key = String(sslConfig.key)
+    }
+    options.sslConfig = normalizedSSLConfig
+  }
+  return options
+}
+
 const normalizeProtocolFormData = (type, config) => {
   const data = { ...getProtocolDefaultConfig(type), ...config }
+  if (type === 'kafka' && config.options && typeof config.options === 'object') {
+    Object.assign(data, normalizeKafkaOptionsForForm(config.options))
+  }
   if (type === 'opcua' && config.endpoint) {
     Object.assign(data, parseOpcuaEndpoint(config.endpoint))
   }
@@ -1507,7 +1668,9 @@ const normalizeProtocolFormData = (type, config) => {
     data.headersText = JSON.stringify(data.headers, null, 2)
   }
   if (data.options && typeof data.options === 'object') {
-    data.optionsText = JSON.stringify(data.options, null, 2)
+    if (type !== 'kafka') {
+      data.optionsText = JSON.stringify(data.options, null, 2)
+    }
     data.masterName = data.options.masterName || data.masterName
   }
   if (data.serialConfig && typeof data.serialConfig === 'object') {
@@ -1521,17 +1684,27 @@ const normalizeProtocolFormData = (type, config) => {
 
 const normalizeProtocolSubmitConfig = (type, config) => {
   if (type === 'kafka') {
-    config.options = parseOptionalJsonObject(config.optionsText, '扩展参数')
-    delete config.optionsText
+    config.options = buildKafkaOptions(config)
+    delete config.securityProtocol
+    delete config.saslMechanism
+    delete config.username
+    delete config.password
+    delete config.clientId
+    delete config.dialTimeoutMs
+    delete config.requestTimeoutMs
+    delete config.sslConfig
+    delete config.topic
+    delete config.consumerGroup
+    delete config.startPosition
     return
   }
   if (type === 'http') {
-    config.method = (config.method || 'GET').toUpperCase()
-    config.headers = parseOptionalJsonObject(config.headersText, '请求头')
-    if (String(config.bodyTemplateText || '').trim()) {
-      config.bodyTemplate = parseOptionalJsonObject(config.bodyTemplateText, '请求体模板')
-    }
+    delete config.baseUrl
+    delete config.method
+    delete config.headers
     delete config.headersText
+    delete config.timeoutMs
+    delete config.bodyTemplate
     delete config.bodyTemplateText
     return
   }
@@ -2166,6 +2339,68 @@ const formatTimeout = (timeout) => {
 
 .connection-dialog__field-help:hover {
   color: var(--dc-primary);
+}
+
+.connection-dialog__form-section {
+  margin-bottom: 18px;
+}
+
+.connection-dialog__form-section-title {
+  margin-bottom: 12px;
+  padding-left: 8px;
+  border-left: 3px solid var(--dc-primary);
+  color: var(--dc-text);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.connection-dialog__empty-config {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  border: 1px dashed var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-muted);
+  color: var(--dc-text);
+}
+
+.connection-dialog__empty-config-icon {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  color: var(--dc-primary);
+}
+
+.connection-dialog__empty-config strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+.connection-dialog__empty-config p {
+  margin: 0;
+  color: var(--dc-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.connection-dialog__field-tip,
+.connection-dialog__field-inline-tip {
+  color: var(--dc-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.connection-dialog__field-tip {
+  margin: 6px 0 0;
+}
+
+.connection-dialog__field-inline-tip {
+  margin-left: 8px;
+}
+
+.connection-dialog__collapse {
+  margin-top: 4px;
 }
 
 .connection-dialog__form-grid {

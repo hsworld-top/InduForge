@@ -151,8 +151,8 @@ const protocolConfigRows = computed(() => {
       ]
     case 'http':
       return [
-        { label: 'Method', value: config.method || 'GET' },
-        { label: 'URL', value: config.baseUrl || '-' },
+        { label: '配置方式', value: '请求在工作台维护' },
+        { label: 'URL', value: '每个请求独立配置完整地址' },
       ]
     case 'websocket':
       return [

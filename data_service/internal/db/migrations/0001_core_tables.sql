@@ -28,6 +28,9 @@ CREATE INDEX IF NOT EXISTS data_connections_project_type_idx
 CREATE INDEX IF NOT EXISTS data_connections_project_status_idx
     ON data_connections (project_id, status);
 
+CREATE UNIQUE INDEX IF NOT EXISTS data_connections_project_name_key
+    ON data_connections (project_id, name);
+
 CREATE INDEX IF NOT EXISTS data_connections_project_order_idx
     ON data_connections (project_id, display_order, created_at DESC);
 

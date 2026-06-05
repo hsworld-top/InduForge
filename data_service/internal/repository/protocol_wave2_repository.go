@@ -326,6 +326,13 @@ func (r *ProtocolWave2Repository) createConnectionTx(ctx context.Context, tx pgx
 	}
 
 	record := ProtocolConnectionRecord{}
+	if err := lockProjectConnectionOrder(ctx, tx, params.ProjectID); err != nil {
+		return nil, err
+	}
+	if err := normalizeProjectConnectionDisplayOrder(ctx, tx, params.ProjectID); err != nil {
+		return nil, err
+	}
+
 	err = tx.QueryRow(ctx, `
 		INSERT INTO data_connections (
 			project_id,
@@ -334,10 +341,13 @@ func (r *ProtocolWave2Repository) createConnectionTx(ctx context.Context, tx pgx
 			category,
 			status,
 			metadata,
+			display_order,
 			created_by,
 			updated_by
 		)
-		VALUES ($1, $2, $3, 'protocol', $4, $5::jsonb, $6, $6)
+		VALUES ($1, $2, $3, 'protocol', $4, $5::jsonb,
+			COALESCE((SELECT MAX(display_order) + 1 FROM data_connections WHERE project_id = $1), 0),
+			$6, $6)
 		RETURNING id, project_id, name, type, status, created_at, updated_at
 	`, params.ProjectID, params.Name, params.Type, params.Status, string(metadataPayload), params.UserID).Scan(
 		&record.ID,
@@ -349,7 +359,7 @@ func (r *ProtocolWave2Repository) createConnectionTx(ctx context.Context, tx pgx
 		&record.UpdatedAt,
 	)
 	if err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入 wave2 连接失败", err)
+		return nil, translateConnectionWriteError("写入 wave2 连接失败", err)
 	}
 
 	return &record, nil

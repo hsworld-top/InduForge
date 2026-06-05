@@ -216,6 +216,7 @@
       :mode="groupDialogMode"
       :groups="subscriptionGroups"
       :group="contextGroup"
+      :initial-parent-id="groupDialogMode === 'create' ? contextGroup?.id || null : null"
       :loading="groupSaving"
       @submit="handleGroupDialogSubmit"
     />
@@ -415,12 +416,45 @@
             <span>发布测试</span>
           </button>
           <button
-            v-if="supportsSubscriptionGroups"
+            v-if="contextMenu.type === 'subscription' && supportsSubscriptionGroups"
             type="button"
             @click="emitContextAction('move')"
           >
             <IconTablerFolderSymlink class="mqtt-workbench__menu-icon" />
             <span>移动到分组</span>
+          </button>
+          <button
+            v-if="contextMenu.type === 'group' && supportsSubscriptionGroups"
+            type="button"
+            @click="emitContextAction('createChildGroup')"
+          >
+            <IconTablerFolderPlus class="mqtt-workbench__menu-icon" />
+            <span>新建子分组</span>
+          </button>
+          <button
+            v-if="contextMenu.type === 'group' && supportsSubscriptionGroups"
+            type="button"
+            @click="emitContextAction('rename')"
+          >
+            <IconTablerPencil class="mqtt-workbench__menu-icon" />
+            <span>编辑分组</span>
+          </button>
+          <button
+            v-if="contextMenu.type === 'group' && supportsSubscriptionGroups"
+            type="button"
+            @click="emitContextAction('move')"
+          >
+            <IconTablerFolderSymlink class="mqtt-workbench__menu-icon" />
+            <span>移动分组</span>
+          </button>
+          <button
+            v-if="contextMenu.type === 'group' && supportsSubscriptionGroups"
+            type="button"
+            class="is-danger"
+            @click="emitContextAction('delete')"
+          >
+            <IconTablerTrash class="mqtt-workbench__menu-icon" />
+            <span>删除分组</span>
           </button>
           <button
             v-if="contextMenu.type === 'subscription'"
@@ -970,11 +1004,11 @@ async function handleSubscriptionSaved(data?: any) {
   await loadWorkbenchTree()
 }
 
-function openCreateGroupDialog() {
+function openCreateGroupDialog(parentGroup?: MqttSubscriptionGroupNode | null) {
   if (!supportsSubscriptionGroups.value) {
     return
   }
-  contextGroup.value = null
+  contextGroup.value = parentGroup || null
   groupDialogMode.value = 'create'
   groupDialogVisible.value = true
 }
@@ -994,6 +1028,8 @@ async function handleGroupDialogSubmit(data: { name: string; parentId: string | 
     } else if (contextGroup.value) {
       await dataAPI.updateMqttSubscriptionGroup(projectIdText.value, contextGroup.value.id, {
         name: data.name,
+        parentId: data.parentId,
+        hasParentId: true,
       })
       ElMessage.success('分组已重命名')
     }
@@ -1142,7 +1178,15 @@ function closeContextMenu() {
 }
 
 function emitContextAction(
-  action: 'rename' | 'move' | 'delete' | 'messages' | 'variables' | 'detail' | 'publish',
+  action:
+    | 'rename'
+    | 'move'
+    | 'delete'
+    | 'messages'
+    | 'variables'
+    | 'detail'
+    | 'publish'
+    | 'createChildGroup',
 ) {
   const { type, subscription, group } = contextMenu.value
   closeContextMenu()
@@ -1176,6 +1220,10 @@ function emitContextAction(
   }
   if (type === 'group' && group) {
     if (!supportsSubscriptionGroups.value) {
+      return
+    }
+    if (action === 'createChildGroup') {
+      openCreateGroupDialog(group)
       return
     }
     if (action === 'rename') {

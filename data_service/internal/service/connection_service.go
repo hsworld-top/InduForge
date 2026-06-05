@@ -1,13 +1,11 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,6 +16,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/jackc/pgx/v5"
+	"github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/sasl"
+	"github.com/segmentio/kafka-go/sasl/plain"
+	"github.com/segmentio/kafka-go/sasl/scram"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
 	"github.com/indu-forge/data_service/internal/repository"
@@ -49,6 +51,19 @@ var allowedConnectionStatus = map[string]struct{}{
 	"disconnected": {},
 	"error":        {},
 	"unknown":      {},
+}
+
+var allowedKafkaSecurityProtocols = map[string]struct{}{
+	"PLAINTEXT":      {},
+	"SSL":            {},
+	"SASL_PLAINTEXT": {},
+	"SASL_SSL":       {},
+}
+
+var allowedKafkaSaslMechanisms = map[string]struct{}{
+	"PLAIN":         {},
+	"SCRAM-SHA-256": {},
+	"SCRAM-SHA-512": {},
 }
 
 // Connection 表示面向 HTTP 层返回的连接对象。
@@ -288,9 +303,15 @@ func (s *ConnectionService) UpdateConnection(ctx context.Context, projectID, con
 		nextCategory = deriveStoredConnectionCategory(current.Type)
 	}
 	if input.Type != nil {
-		nextType, nextCategory, err = normalizeConnectionType(*input.Type)
-		if err != nil {
-			return nil, err
+		requestedType := strings.TrimSpace(strings.ToLower(*input.Type))
+		if isStoredProtocolConnectionType(current.Type) && requestedType == current.Type {
+			nextType = current.Type
+			nextCategory = deriveStoredConnectionCategory(current.Type)
+		} else {
+			nextType, nextCategory, err = normalizeConnectionType(*input.Type)
+			if err != nil {
+				return nil, err
+			}
 		}
 		if isBuiltinStoreType(current.Type) && nextType != current.Type {
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "内置运行库类型不允许修改")
@@ -321,6 +342,35 @@ func (s *ConnectionService) UpdateConnection(ctx context.Context, projectID, con
 		if input.HasConfig {
 			nextConfig = mergeBuiltinConfigUpdate(current.Config, input.Config)
 		}
+	}
+	if current.Type == "kafka" || nextType == "kafka" {
+		if current.Type != "kafka" || nextType != "kafka" {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka 接入源不支持从其他类型改入或改出")
+		}
+		nextConfig, err = normalizeKafkaConnectionConfig(nextConfig)
+		if err != nil {
+			return nil, err
+		}
+		record, err := s.repository.UpdateKafka(ctx, repository.UpdateKafkaConnectionParams{
+			UpdateConnectionParams: repository.UpdateConnectionParams{
+				ID:        connectionID,
+				ProjectID: projectID,
+				UserID:    userID,
+				Name:      nextName,
+				Type:      nextType,
+				Category:  nextCategory,
+				Status:    nextStatus,
+				Config:    nextConfig,
+			},
+			Brokers: toString(nextConfig["brokers"]),
+			Options: mapFromAny(nextConfig["options"]),
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		connection := toConnection(*record, tenantID)
+		return &connection, nil
 	}
 
 	record, err := s.repository.Update(ctx, repository.UpdateConnectionParams{
@@ -366,6 +416,8 @@ func (s *ConnectionService) TestConnection(ctx context.Context, projectID string
 	switch connectionType {
 	case "relational":
 		return testRelationalConnection(ctx, input.Config)
+	case "kafka":
+		return testKafkaConnection(ctx, input.Config)
 	case "http":
 		return testHTTPConnection(ctx, input.Config)
 	case "websocket":
@@ -384,7 +436,7 @@ func (s *ConnectionService) TestConnection(ctx context.Context, projectID string
 func normalizeConnectionTestType(connectionType string) (string, error) {
 	connectionType = strings.TrimSpace(strings.ToLower(connectionType))
 	switch connectionType {
-	case "relational", "http", "websocket", "redis", "opcua", "modbus":
+	case "relational", "kafka", "http", "websocket", "redis", "opcua", "modbus":
 		return connectionType, nil
 	default:
 		if displayName, ok := reservedPhase2ConnectionTypes[connectionType]; ok {
@@ -418,65 +470,58 @@ func testRelationalConnection(ctx context.Context, config map[string]any) (*Conn
 	}, nil
 }
 
-// testHTTPConnection 对 HTTP Source 发起一次短请求。
-// 输入为接入源配置，输出为统一连接测试结果；网络、状态码、请求构造异常均转换成业务失败。
-func testHTTPConnection(ctx context.Context, config map[string]any) (*ConnectionTestResult, error) {
+// testKafkaConnection 使用 Kafka 协议短连接验证 Broker、TLS 与 SASL 基础配置。
+// 输入为接入源配置，输出为统一测试结果；不读取 Topic 消息，也不依赖消费组。
+// 异常会转成业务失败，便于前端直接展示给配置人员。
+func testKafkaConnection(ctx context.Context, config map[string]any) (*ConnectionTestResult, error) {
 	startedAt := time.Now()
-	baseURL := strings.TrimSpace(toString(config["baseUrl"]))
-	if baseURL == "" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP 请求地址不能为空")
-	}
-	method := strings.ToUpper(strings.TrimSpace(toString(config["method"])))
-	if method == "" {
-		method = http.MethodGet
-	}
-	if _, ok := allowedHTTPMethods[method]; !ok {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP method 不受支持")
-	}
-
-	var body io.Reader
-	if rawBody, ok := config["bodyTemplate"]; ok && rawBody != nil {
-		payload, err := json.Marshal(rawBody)
-		if err != nil {
-			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP 请求体模板格式无效", err)
-		}
-		body = bytes.NewReader(payload)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, baseURL, body)
+	normalized, err := normalizeKafkaConnectionConfig(config)
 	if err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "创建 HTTP 测试请求失败", err)
+		return nil, err
 	}
-	for key, value := range mapFromAny(config["headers"]) {
-		if strings.TrimSpace(key) == "" {
-			continue
-		}
-		req.Header.Set(key, toString(value))
+	brokers := splitCSV(strings.TrimSpace(toString(normalized["brokers"])))
+	if len(brokers) == 0 || strings.TrimSpace(brokers[0]) == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka 服务器地址不能为空")
 	}
-	if body != nil && req.Header.Get("Content-Type") == "" {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	timeout := time.Duration(intFromAny(config["timeoutMs"], 5000)) * time.Millisecond
-	if timeout <= 0 {
-		timeout = 5 * time.Second
-	}
-	client := &http.Client{Timeout: timeout}
-	resp, err := client.Do(req)
+	options := mapFromAny(normalized["options"])
+	dialer, err := buildKafkaDialer(options)
 	if err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP 连接测试失败", err)
+		return nil, err
 	}
-	defer resp.Body.Close()
-	_, _ = io.CopyN(io.Discard, resp.Body, 512)
-	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("HTTP 连接测试失败，状态码 %d", resp.StatusCode))
+	requestTimeout := time.Duration(intFromAny(options["requestTimeoutMs"], 5000)) * time.Millisecond
+	if requestTimeout <= 0 {
+		requestTimeout = 5 * time.Second
+	}
+	testCtx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+
+	conn, err := dialer.DialContext(testCtx, "tcp", brokers[0])
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka Broker 连接失败", err)
+	}
+	defer conn.Close()
+
+	partitions, err := conn.ReadPartitions()
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka 元信息读取失败", err)
+	}
+	topicSet := make(map[string]struct{})
+	for _, partition := range partitions {
+		topicSet[partition.Topic] = struct{}{}
 	}
 
 	return &ConnectionTestResult{
 		Connected: true,
-		Type:      "http",
-		Detail:    fmt.Sprintf("HTTP %d，耗时 %dms", resp.StatusCode, time.Since(startedAt).Milliseconds()),
-		Message:   "HTTP 接入源请求成功",
+		Type:      "kafka",
+		Detail:    fmt.Sprintf("Broker 可达，Topic 数 %d，耗时 %dms", len(topicSet), time.Since(startedAt).Milliseconds()),
+		Message:   "Kafka 接入源连接成功",
 	}, nil
+}
+
+// testHTTPConnection 不再执行接入源级连接测试。
+// HTTP 没有稳定连接概念，真实 URL、方法、Header 和 Body 均由工作台请求项决定。
+func testHTTPConnection(ctx context.Context, config map[string]any) (*ConnectionTestResult, error) {
+	return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP 接入源无需测试连接，请在 HTTP 工作台请求项中发送测试")
 }
 
 // testWebSocketConnection 只验证握手链路，不长期读取消息，避免测试连接变成运行态订阅。
@@ -656,6 +701,118 @@ func firstNonEmptyString(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func normalizeKafkaConnectionConfig(config map[string]any) (map[string]any, error) {
+	normalized := cloneMap(config)
+	brokers := strings.TrimSpace(toString(normalized["brokers"]))
+	if brokers == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka 服务器地址不能为空")
+	}
+	options := cloneMap(mapFromAny(normalized["options"]))
+	securityProtocol := strings.ToUpper(strings.TrimSpace(toString(options["securityProtocol"])))
+	if securityProtocol == "" {
+		securityProtocol = "PLAINTEXT"
+	}
+	if _, ok := allowedKafkaSecurityProtocols[securityProtocol]; !ok {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka securityProtocol 仅支持 PLAINTEXT/SSL/SASL_PLAINTEXT/SASL_SSL")
+	}
+	options["securityProtocol"] = securityProtocol
+	if strings.Contains(securityProtocol, "SASL") {
+		mechanism := strings.ToUpper(strings.TrimSpace(toString(options["saslMechanism"])))
+		if mechanism == "" {
+			mechanism = "PLAIN"
+		}
+		if _, ok := allowedKafkaSaslMechanisms[mechanism]; !ok {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka saslMechanism 仅支持 PLAIN/SCRAM-SHA-256/SCRAM-SHA-512")
+		}
+		if strings.TrimSpace(toString(options["username"])) == "" {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka SASL 用户名不能为空")
+		}
+		if strings.TrimSpace(toString(options["password"])) == "" {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka SASL 密码不能为空")
+		}
+		options["saslMechanism"] = mechanism
+	} else {
+		delete(options, "saslMechanism")
+		delete(options, "username")
+		delete(options, "password")
+	}
+	normalized["brokers"] = brokers
+	normalized["options"] = options
+	return normalized, nil
+}
+
+func buildKafkaDialer(options map[string]any) (*kafka.Dialer, error) {
+	dialTimeout := time.Duration(intFromAny(options["dialTimeoutMs"], 5000)) * time.Millisecond
+	if dialTimeout <= 0 {
+		dialTimeout = 5 * time.Second
+	}
+	dialer := &kafka.Dialer{
+		Timeout:  dialTimeout,
+		ClientID: strings.TrimSpace(toString(options["clientId"])),
+	}
+	securityProtocol := strings.ToUpper(strings.TrimSpace(toString(options["securityProtocol"])))
+	if strings.Contains(securityProtocol, "SSL") {
+		tlsConfig, err := kafkaTLSConfig(mapFromAny(options["sslConfig"]))
+		if err != nil {
+			return nil, err
+		}
+		dialer.TLS = tlsConfig
+	}
+	if strings.Contains(securityProtocol, "SASL") {
+		mechanism, err := kafkaSaslMechanism(options)
+		if err != nil {
+			return nil, err
+		}
+		dialer.SASLMechanism = mechanism
+	}
+	return dialer, nil
+}
+
+func kafkaTLSConfig(sslConfig map[string]any) (*tls.Config, error) {
+	config := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+	if rejectUnauthorized, ok := sslConfig["rejectUnauthorized"].(bool); ok && !rejectUnauthorized {
+		// 开发态连接测试允许跳过证书校验，便于调试自签名 Kafka Broker。
+		config.InsecureSkipVerify = true //nolint:gosec
+	}
+	if ca := strings.TrimSpace(toString(sslConfig["ca"])); ca != "" {
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM([]byte(ca)) {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka CA 证书格式无效")
+		}
+		config.RootCAs = pool
+	}
+	cert := strings.TrimSpace(toString(sslConfig["cert"]))
+	key := strings.TrimSpace(toString(sslConfig["key"]))
+	if cert != "" || key != "" {
+		if cert == "" || key == "" {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka 客户端证书和私钥需要同时填写")
+		}
+		certificate, err := tls.X509KeyPair([]byte(cert), []byte(key))
+		if err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka 客户端证书或私钥格式无效", err)
+		}
+		config.Certificates = []tls.Certificate{certificate}
+	}
+	return config, nil
+}
+
+func kafkaSaslMechanism(options map[string]any) (sasl.Mechanism, error) {
+	username := strings.TrimSpace(toString(options["username"]))
+	password := toString(options["password"])
+	switch strings.ToUpper(strings.TrimSpace(toString(options["saslMechanism"]))) {
+	case "", "PLAIN":
+		return plain.Mechanism{Username: username, Password: password}, nil
+	case "SCRAM-SHA-256":
+		return scram.Mechanism(scram.SHA256, username, password)
+	case "SCRAM-SHA-512":
+		return scram.Mechanism(scram.SHA512, username, password)
+	default:
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka saslMechanism 仅支持 PLAIN/SCRAM-SHA-256/SCRAM-SHA-512")
+	}
 }
 
 // UpdateConnectionStatus 更新连接状态。
@@ -1446,6 +1603,15 @@ func deriveStoredConnectionCategory(connectionType string) string {
 		return "protocol"
 	default:
 		return ""
+	}
+}
+
+func isStoredProtocolConnectionType(connectionType string) bool {
+	switch strings.TrimSpace(strings.ToLower(connectionType)) {
+	case "kafka", "http", "websocket", "redis":
+		return true
+	default:
+		return false
 	}
 }
 

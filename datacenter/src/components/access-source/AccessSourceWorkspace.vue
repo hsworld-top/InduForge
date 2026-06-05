@@ -143,6 +143,7 @@ const { confirm } = useConfirm()
 const filterQ = ref(String(route.query.q || ''))
 const filterType = ref(String(route.query.type || 'all'))
 const connectionOrder = ref<string[]>([])
+const hasLocalConnectionOrder = ref(false)
 
 /* 搜索框双向绑定值（防抖前的输入缓存） */
 const searchInputValue = ref(filterQ.value)
@@ -271,6 +272,7 @@ watch(
 watch(
   () => props.connections.map((connection) => connection.id),
   (ids) => {
+    if (!hasLocalConnectionOrder.value) return
     const knownIds = new Set(ids)
     const preserved = connectionOrder.value.filter((id) => knownIds.has(id))
     const appended = ids.filter((id) => !preserved.includes(id))
@@ -282,7 +284,7 @@ watch(
 /* ── 前端过滤（基于 props.connections）── */
 const filteredConnections = computed(() => {
   let list = [...props.connections]
-  if (connectionOrder.value.length > 0) {
+  if (hasLocalConnectionOrder.value && connectionOrder.value.length > 0) {
     const orderMap = new Map(connectionOrder.value.map((id, index) => [id, index]))
     list.sort((left, right) => {
       const leftOrder = orderMap.get(left.id) ?? Number.MAX_SAFE_INTEGER
@@ -329,12 +331,15 @@ const handleEdit = (connection: AccessSourceConnection) => {
 const handleReorderConnections = async (connectionIds: string[]) => {
   if (!props.projectId || !canReorderConnections.value) return
   const previousOrder = [...connectionOrder.value]
+  const previousHasLocalOrder = hasLocalConnectionOrder.value
   connectionOrder.value = connectionIds
+  hasLocalConnectionOrder.value = true
   try {
     await updateAccessSourceOrder(String(props.projectId), connectionIds)
     ElMessage.success('接入源顺序已保存')
   } catch (err) {
     connectionOrder.value = previousOrder
+    hasLocalConnectionOrder.value = previousHasLocalOrder
     ElMessage.error(getApiErrorMessage(err, '保存接入源顺序失败'))
   }
 }

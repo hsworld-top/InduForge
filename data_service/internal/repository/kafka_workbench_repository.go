@@ -35,9 +35,11 @@ type KafkaTopicMappingRecord struct {
 	Name          string
 	Topic         string
 	Description   string
+	ConsumerGroup string
 	PartitionMode string
 	Partition     *int
 	StartPosition string
+	StartOffset   *int64
 	Decode        string
 	SampleLimit   int
 	TimeoutMS     int
@@ -112,9 +114,11 @@ type CreateKafkaTopicMappingParams struct {
 	Name          string
 	Topic         string
 	Description   string
+	ConsumerGroup string
 	PartitionMode string
 	Partition     *int
 	StartPosition string
+	StartOffset   *int64
 	Decode        string
 	SampleLimit   int
 	TimeoutMS     int
@@ -131,9 +135,11 @@ type UpdateKafkaTopicMappingParams struct {
 	Name          string
 	Topic         string
 	Description   string
+	ConsumerGroup string
 	PartitionMode string
 	Partition     *int
 	StartPosition string
+	StartOffset   *int64
 	Decode        string
 	SampleLimit   int
 	TimeoutMS     int
@@ -332,7 +338,7 @@ func (r *KafkaWorkbenchRepository) DeleteTopicGroup(ctx context.Context, project
 func (r *KafkaWorkbenchRepository) ListTopicMappings(ctx context.Context, projectID, connectionID string) ([]KafkaTopicMappingRecord, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, project_id, connection_id, group_id, name, topic, description,
-		       partition_mode, partition, start_position, decode, sample_limit,
+		       consumer_group, partition_mode, partition, start_position, start_offset, decode, sample_limit,
 		       timeout_ms, sort_order, created_at, updated_at
 		FROM data_kafka_topic_mappings
 		WHERE project_id = $1 AND connection_id = $2
@@ -361,7 +367,7 @@ func (r *KafkaWorkbenchRepository) ListTopicMappings(ctx context.Context, projec
 func (r *KafkaWorkbenchRepository) GetTopicMapping(ctx context.Context, projectID, mappingID string) (*KafkaTopicMappingRecord, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, project_id, connection_id, group_id, name, topic, description,
-		       partition_mode, partition, start_position, decode, sample_limit,
+		       consumer_group, partition_mode, partition, start_position, start_offset, decode, sample_limit,
 		       timeout_ms, sort_order, created_at, updated_at
 		FROM data_kafka_topic_mappings
 		WHERE project_id = $1 AND id = $2
@@ -381,14 +387,14 @@ func (r *KafkaWorkbenchRepository) CreateTopicMapping(ctx context.Context, param
 	row := r.pool.QueryRow(ctx, `
 		INSERT INTO data_kafka_topic_mappings (
 			project_id, connection_id, group_id, name, topic, description,
-			partition_mode, partition, start_position, decode, sample_limit,
-			timeout_ms, sort_order, created_by, updated_by
+			consumer_group, partition_mode, partition, start_position, start_offset, decode,
+			sample_limit, timeout_ms, sort_order, created_by, updated_by
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16)
 		RETURNING id, project_id, connection_id, group_id, name, topic, description,
-		          partition_mode, partition, start_position, decode, sample_limit,
+		          consumer_group, partition_mode, partition, start_position, start_offset, decode, sample_limit,
 		          timeout_ms, sort_order, created_at, updated_at
-	`, params.ProjectID, params.ConnectionID, params.GroupID, params.Name, params.Topic, params.Description, params.PartitionMode, params.Partition, params.StartPosition, params.Decode, params.SampleLimit, params.TimeoutMS, params.SortOrder, params.UserID)
+	`, params.ProjectID, params.ConnectionID, params.GroupID, params.Name, params.Topic, params.Description, params.ConsumerGroup, params.PartitionMode, params.Partition, params.StartPosition, params.StartOffset, params.Decode, params.SampleLimit, params.TimeoutMS, params.SortOrder, params.UserID)
 
 	record, err := scanKafkaTopicMappingRecord(row)
 	if err != nil {
@@ -405,20 +411,22 @@ func (r *KafkaWorkbenchRepository) UpdateTopicMapping(ctx context.Context, param
 		    name = $5,
 		    topic = $6,
 		    description = $7,
-		    partition_mode = $8,
-		    partition = $9,
-		    start_position = $10,
-		    decode = $11,
-		    sample_limit = $12,
-		    timeout_ms = $13,
-		    sort_order = $14,
-		    updated_by = $15,
+		    consumer_group = $8,
+		    partition_mode = $9,
+		    partition = $10,
+		    start_position = $11,
+		    start_offset = $12,
+		    decode = $13,
+		    sample_limit = $14,
+		    timeout_ms = $15,
+		    sort_order = $16,
+		    updated_by = $17,
 		    updated_at = now()
 		WHERE project_id = $1 AND id = $2
 		RETURNING id, project_id, connection_id, group_id, name, topic, description,
-		          partition_mode, partition, start_position, decode, sample_limit,
+		          consumer_group, partition_mode, partition, start_position, start_offset, decode, sample_limit,
 		          timeout_ms, sort_order, created_at, updated_at
-	`, params.ProjectID, params.ID, params.HasGroupID, params.GroupID, params.Name, params.Topic, params.Description, params.PartitionMode, params.Partition, params.StartPosition, params.Decode, params.SampleLimit, params.TimeoutMS, params.SortOrder, params.UserID)
+	`, params.ProjectID, params.ID, params.HasGroupID, params.GroupID, params.Name, params.Topic, params.Description, params.ConsumerGroup, params.PartitionMode, params.Partition, params.StartPosition, params.StartOffset, params.Decode, params.SampleLimit, params.TimeoutMS, params.SortOrder, params.UserID)
 
 	record, err := scanKafkaTopicMappingRecord(row)
 	if err != nil {
@@ -900,11 +908,11 @@ func (r *KafkaWorkbenchRepository) GetPreviewConnection(ctx context.Context, pro
 	err := r.pool.QueryRow(ctx, `
 		SELECT conn.id::text, conn.project_id, conn.name, conn.type, conn.status,
 		       jsonb_build_object(
-		         'brokers', kafka.brokers,
+		         'brokers', COALESCE(NULLIF(conn.metadata->>'brokers', ''), kafka.brokers),
 		         'topic', kafka.topic,
 		         'consumerGroup', kafka.consumer_group,
 		         'startPosition', kafka.start_position,
-		         'options', kafka.options
+		         'options', COALESCE(conn.metadata->'options', kafka.options, '{}'::jsonb)
 		       ) AS config
 		FROM data_connections conn
 		JOIN data_kafka_configs kafka ON kafka.connection_id = conn.id
@@ -1022,9 +1030,11 @@ func scanKafkaTopicMappingRecord(row pgx.Row) (KafkaTopicMappingRecord, error) {
 		&record.Name,
 		&record.Topic,
 		&record.Description,
+		&record.ConsumerGroup,
 		&record.PartitionMode,
 		&record.Partition,
 		&record.StartPosition,
+		&record.StartOffset,
 		&record.Decode,
 		&record.SampleLimit,
 		&record.TimeoutMS,

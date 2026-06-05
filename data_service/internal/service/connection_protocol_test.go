@@ -13,30 +13,8 @@ import (
 )
 
 func TestConnectionProtocolTest_HTTP(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Fatalf("expected POST, got %s", r.Method)
-		}
-		if got := r.Header.Get("X-Test"); got != "ok" {
-			t.Fatalf("expected header X-Test=ok, got %q", got)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	defer server.Close()
-
-	result, err := testHTTPConnection(context.Background(), map[string]any{
-		"baseUrl":      server.URL,
-		"method":       "post",
-		"headers":      map[string]any{"X-Test": "ok"},
-		"bodyTemplate": map[string]any{"probe": true},
-		"timeoutMs":    1000,
-	})
-	if err != nil {
-		t.Fatalf("HTTP test failed: %v", err)
-	}
-	if !result.Connected || result.Type != "http" {
-		t.Fatalf("unexpected HTTP result: %#v", result)
+	if _, err := testHTTPConnection(context.Background(), map[string]any{}); err == nil {
+		t.Fatal("expected HTTP source-level connection test to be disabled")
 	}
 }
 
@@ -78,20 +56,6 @@ func TestConnectionProtocolTest_Redis(t *testing.T) {
 	}
 	if !result.Connected || result.Type != "redis" {
 		t.Fatalf("unexpected Redis result: %#v", result)
-	}
-}
-
-func TestConnectionProtocolTest_HTTPRejectsBadStatus(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "bad gateway", http.StatusBadGateway)
-	}))
-	defer server.Close()
-
-	if _, err := testHTTPConnection(context.Background(), map[string]any{
-		"baseUrl": server.URL,
-		"method":  "GET",
-	}); err == nil {
-		t.Fatal("expected HTTP bad status to fail")
 	}
 }
 

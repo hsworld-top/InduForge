@@ -1,6 +1,11 @@
 <template>
   <section class="kafka-topic-branch">
-    <button type="button" class="kafka-topic-branch__group" @click="expanded = !expanded">
+    <button
+      type="button"
+      class="kafka-topic-branch__group"
+      @click="expanded = !expanded"
+      @contextmenu.prevent.stop="$emit('groupContextmenu', $event, node)"
+    >
       <IconTablerChevronRight
         class="kafka-topic-branch__chevron"
         :class="{ 'is-open': expanded }"
@@ -20,6 +25,7 @@
         :class="{ 'is-active': String(mapping.id) === selectedMappingId }"
         @click="$emit('selectMapping', mapping)"
         @dblclick="$emit('openFields', mapping)"
+        @contextmenu.prevent.stop="$emit('mappingContextmenu', $event, mapping)"
         @keydown.enter="$emit('openFields', mapping)"
       >
         <IconTablerMessages class="kafka-topic-branch__mapping-icon" />
@@ -35,6 +41,8 @@
         :selected-mapping-id="selectedMappingId"
         @select-mapping="$emit('selectMapping', $event)"
         @open-fields="$emit('openFields', $event)"
+        @group-contextmenu="(event, group) => $emit('groupContextmenu', event, group)"
+        @mapping-contextmenu="(event, mapping) => $emit('mappingContextmenu', event, mapping)"
       />
     </div>
   </section>
@@ -58,6 +66,8 @@ const props = defineProps<{
 defineEmits<{
   (event: 'selectMapping', mapping: KafkaTopicMapping): void
   (event: 'openFields', mapping: KafkaTopicMapping): void
+  (event: 'groupContextmenu', mouseEvent: MouseEvent, group: KafkaTopicGroupNode): void
+  (event: 'mappingContextmenu', mouseEvent: MouseEvent, mapping: KafkaTopicMapping): void
 }>()
 
 const expanded = ref(true)

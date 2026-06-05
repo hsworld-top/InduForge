@@ -128,26 +128,18 @@ func (h *ProtocolWave1Handler) CreateHTTPConfig(w http.ResponseWriter, r *http.R
 	}
 
 	var request struct {
-		Name         string         `json:"name"`
-		Status       string         `json:"status"`
-		BaseURL      string         `json:"baseUrl"`
-		Method       string         `json:"method"`
-		Headers      map[string]any `json:"headers"`
-		TimeoutMS    *int           `json:"timeoutMs"`
-		BodyTemplate map[string]any `json:"bodyTemplate"`
+		Name        string `json:"name"`
+		Status      string `json:"status"`
+		Description string `json:"description"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
 	}
 
 	connection, err := h.service.CreateHTTPConfig(r.Context(), r.PathValue("projectId"), claims.UserID, service.CreateHTTPConfigInput{
-		Name:         request.Name,
-		Status:       request.Status,
-		BaseURL:      request.BaseURL,
-		Method:       request.Method,
-		Headers:      request.Headers,
-		TimeoutMS:    request.TimeoutMS,
-		BodyTemplate: request.BodyTemplate,
+		Name:        request.Name,
+		Status:      request.Status,
+		Description: request.Description,
 	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)

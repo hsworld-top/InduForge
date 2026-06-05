@@ -46,11 +46,11 @@ func (r *ProtocolWave1Repository) GetPreviewConnection(ctx context.Context, proj
 		SELECT conn.id::text, conn.project_id, conn.name, conn.type, conn.status,
 		       CASE conn.type
 		         WHEN 'kafka' THEN jsonb_build_object(
-		           'brokers', kafka.brokers,
+		           'brokers', COALESCE(NULLIF(conn.metadata->>'brokers', ''), kafka.brokers),
 		           'topic', kafka.topic,
 		           'consumerGroup', kafka.consumer_group,
 		           'startPosition', kafka.start_position,
-		           'options', kafka.options
+		           'options', COALESCE(conn.metadata->'options', kafka.options, '{}'::jsonb)
 		         )
 		         WHEN 'http' THEN jsonb_build_object(
 		           'baseUrl', http_cfg.base_url,

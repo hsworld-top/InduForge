@@ -83,3 +83,44 @@ export function filterKafkaTopicTree(
     rootMappings: rootMappings.filter(mappingMatches),
   }
 }
+
+export function flattenKafkaTopicGroups(
+  groups: KafkaTopicGroup[],
+  blockedIds: Set<string> = new Set(),
+): Array<{ id: string; label: string }> {
+  const nodes = new Map<string, KafkaTopicGroupNode>()
+  groups.forEach((group) => {
+    nodes.set(String(group.id), { ...group, children: [], mappings: [] })
+  })
+
+  const roots: KafkaTopicGroupNode[] = []
+  nodes.forEach((node) => {
+    const parentId = node.parentId ? String(node.parentId) : ''
+    const parent = parentId ? nodes.get(parentId) : null
+    if (parent) {
+      parent.children.push(node)
+    } else {
+      roots.push(node)
+    }
+  })
+
+  const visit = (group: KafkaTopicGroupNode, depth: number): Array<{ id: string; label: string }> => {
+    const id = String(group.id)
+    const children = group.children.flatMap((child) => visit(child, depth + 1))
+    if (blockedIds.has(id)) return children
+    return [{ id, label: `${'　'.repeat(depth)}${group.name}` }, ...children]
+  }
+
+  return roots.flatMap((group) => visit(group, 0))
+}
+
+export function collectKafkaTopicGroupIds(group?: KafkaTopicGroupNode | null) {
+  const result = new Set<string>()
+  const visit = (node?: KafkaTopicGroupNode | null) => {
+    if (!node) return
+    result.add(String(node.id))
+    node.children.forEach(visit)
+  }
+  visit(group)
+  return result
+}

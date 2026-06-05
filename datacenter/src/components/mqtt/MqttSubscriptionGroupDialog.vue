@@ -1,58 +1,26 @@
 <template>
-  <DcDialog
+  <WorkbenchGroupDialog
     ref="dialogRef"
     v-model="visible"
-    :title="mode === 'create' ? '新建分组' : '重命名分组'"
-    width="460px"
-    body-max-height="320px"
-    :dirty="isDirty"
-    :close-disabled="loading"
-  >
-    <el-form label-position="top" class="mqtt-subscription-group-dialog">
-      <el-form-item label="名称" required>
-        <el-input
-          v-model="form.name"
-          maxlength="60"
-          show-word-limit
-          placeholder="输入分组名称"
-          @keyup.enter="submit"
-        />
-      </el-form-item>
-
-      <el-form-item v-if="mode === 'create'" label="上级分组">
-        <el-select
-          v-model="form.parentId"
-          class="mqtt-subscription-group-dialog__select"
-          clearable
-          placeholder="根目录"
-        >
-          <el-option label="根目录" :value="null" />
-          <el-option
-            v-for="group in groupOptions"
-            :key="group.id"
-            :label="group.label"
-            :value="group.id"
-          />
-        </el-select>
-      </el-form-item>
-    </el-form>
-
-    <template #footer>
-      <div class="mqtt-subscription-group-dialog__footer">
-        <el-button @click="requestClose">取消</el-button>
-        <el-button type="primary" :loading="loading" :disabled="!canSubmit" @click="submit">
-          {{ mode === 'create' ? '创建' : '保存' }}
-        </el-button>
-      </div>
-    </template>
-  </DcDialog>
+    :mode="mode"
+    :title="mode === 'create' ? '新建分组' : '编辑分组'"
+    :group="group"
+    :group-options="groupOptions"
+    :initial-parent-id="initialParentId"
+    :loading="loading"
+    :max-name-length="60"
+    @submit="$emit('submit', $event)"
+  />
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
-import DcDialog from '@/components/shared/DcDialog.vue'
+import { computed, ref } from 'vue'
+import WorkbenchGroupDialog from '@/components/workbench/WorkbenchGroupDialog.vue'
 import type { MqttSubscriptionGroup, MqttSubscriptionGroupNode } from './mqttSubscriptionTreeModel'
-import { flattenMqttSubscriptionGroups } from './mqttSubscriptionTreeModel'
+import {
+  collectMqttSubscriptionGroupIds,
+  flattenMqttSubscriptionGroups,
+} from './mqttSubscriptionTreeModel'
 
 const props = withDefaults(
   defineProps<{
@@ -60,10 +28,12 @@ const props = withDefaults(
     mode: 'create' | 'rename'
     groups: MqttSubscriptionGroup[]
     group?: MqttSubscriptionGroupNode | null
+    initialParentId?: string | null
     loading?: boolean
   }>(),
   {
     group: null,
+    initialParentId: null,
     loading: false,
   },
 )
@@ -78,78 +48,15 @@ const visible = computed({
   set: (value: boolean) => emit('update:modelValue', value),
 })
 
-const form = reactive({
-  name: '',
-  parentId: null as string | null,
-})
-const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
-
-const groupOptions = computed(() => flattenMqttSubscriptionGroups(props.groups))
-const canSubmit = computed(() => {
-  const name = form.name.trim()
-  if (!name || props.loading) return false
-  if (props.mode === 'rename') return name !== props.group?.name
-  return true
-})
-const isDirty = computed(() => {
-  if (!visible.value) return false
-  if (props.mode === 'rename') {
-    return form.name.trim() !== (props.group?.name || '')
-  }
-  return form.name.trim().length > 0 || Boolean(form.parentId)
-})
-
-function resetForm() {
-  form.name = props.mode === 'rename' ? props.group?.name || '' : ''
-  form.parentId = null
-}
-
-function submit() {
-  if (!canSubmit.value) return
-  emit('submit', {
-    name: form.name.trim(),
-    parentId: form.parentId || null,
-  })
-}
-
-function requestClose() {
-  void dialogRef.value?.requestClose()
-}
+const dialogRef = ref<InstanceType<typeof WorkbenchGroupDialog> | null>(null)
+const blockedIds = computed(() =>
+  props.mode === 'rename' ? collectMqttSubscriptionGroupIds(props.group) : new Set<string>(),
+)
+const groupOptions = computed(() => flattenMqttSubscriptionGroups(props.groups, blockedIds.value))
 
 function closeSilently() {
   dialogRef.value?.closeSilently()
 }
 
-watch(
-  () => props.modelValue,
-  () => {
-    resetForm()
-  },
-)
-
-watch(
-  () => props.group?.id,
-  () => {
-    if (props.modelValue) resetForm()
-  },
-)
-
 defineExpose({ closeSilently })
 </script>
-
-<style scoped>
-.mqtt-subscription-group-dialog {
-  display: grid;
-  gap: 2px;
-}
-
-.mqtt-subscription-group-dialog__select {
-  width: 100%;
-}
-
-.mqtt-subscription-group-dialog__footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-</style>

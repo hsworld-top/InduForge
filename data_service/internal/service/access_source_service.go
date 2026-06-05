@@ -274,7 +274,7 @@ func compactConfigSummary(connectionType string, config map[string]any) map[stri
 	case "kafka":
 		return pickConfigKeys(config, "brokers", "topic")
 	case "http":
-		return pickConfigKeys(config, "baseUrl", "method")
+		return map[string]any{"mode": "workbench"}
 	case "websocket":
 		return pickConfigKeys(config, "url", "topic")
 	case "redis":

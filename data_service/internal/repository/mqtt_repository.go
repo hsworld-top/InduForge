@@ -129,6 +129,13 @@ func (r *MqttRepository) CreateConnection(ctx context.Context, params CreateMqtt
 	}
 	defer rollbackTxQuietly(ctx, tx)
 
+	if err := lockProjectConnectionOrder(ctx, tx, params.ProjectID); err != nil {
+		return nil, err
+	}
+	if err := normalizeProjectConnectionDisplayOrder(ctx, tx, params.ProjectID); err != nil {
+		return nil, err
+	}
+
 	record := MqttConnectionRecord{}
 	err = tx.QueryRow(ctx, `
 		INSERT INTO data_connections (
@@ -138,10 +145,13 @@ func (r *MqttRepository) CreateConnection(ctx context.Context, params CreateMqtt
 			category,
 			status,
 			metadata,
+			display_order,
 			created_by,
 			updated_by
 		)
-		VALUES ($1, $2, 'mqtt', 'message', $3, $4::jsonb, $5, $5)
+		VALUES ($1, $2, 'mqtt', 'message', $3, $4::jsonb,
+			COALESCE((SELECT MAX(display_order) + 1 FROM data_connections WHERE project_id = $1), 0),
+			$5, $5)
 		RETURNING id, project_id, name, type, status, created_at, updated_at
 	`, params.ProjectID, params.Name, params.Status, string(metadataBytes), params.UserID).Scan(
 		&record.ID,
@@ -153,7 +163,7 @@ func (r *MqttRepository) CreateConnection(ctx context.Context, params CreateMqtt
 		&record.UpdatedAt,
 	)
 	if err != nil {
-		return nil, wrapMqttWriteError("写入 MQTT 连接失败", err)
+		return nil, translateConnectionWriteError("写入 MQTT 连接失败", err)
 	}
 
 	var willSQL any

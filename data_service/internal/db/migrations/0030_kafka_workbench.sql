@@ -25,9 +25,11 @@ CREATE TABLE IF NOT EXISTS data_kafka_topic_mappings (
     name text NOT NULL CHECK (char_length(name) <= 100),
     topic text NOT NULL CHECK (char_length(topic) <= 500),
     description text NOT NULL DEFAULT '',
+    consumer_group text NOT NULL DEFAULT '' CHECK (char_length(consumer_group) <= 200),
     partition_mode text NOT NULL DEFAULT 'all' CHECK (partition_mode IN ('all', 'single')),
     partition integer CHECK (partition IS NULL OR partition >= 0),
     start_position text NOT NULL DEFAULT 'latest' CHECK (start_position IN ('latest', 'earliest', 'offset')),
+    start_offset bigint,
     decode text NOT NULL DEFAULT 'json' CHECK (decode IN ('json', 'string', 'binary')),
     sample_limit integer NOT NULL DEFAULT 100 CHECK (sample_limit >= 1 AND sample_limit <= 1000),
     timeout_ms integer NOT NULL DEFAULT 5000 CHECK (timeout_ms >= 1000 AND timeout_ms <= 30000),
@@ -42,6 +44,8 @@ CREATE TABLE IF NOT EXISTS data_kafka_topic_mappings (
         FOREIGN KEY (group_id) REFERENCES data_kafka_topic_groups (id) ON DELETE SET NULL,
     CONSTRAINT data_kafka_topic_mappings_single_partition_check
         CHECK (partition_mode <> 'single' OR partition IS NOT NULL),
+    CONSTRAINT data_kafka_topic_mappings_offset_check
+        CHECK (start_position <> 'offset' OR (partition_mode = 'single' AND partition IS NOT NULL AND start_offset IS NOT NULL)),
     CONSTRAINT data_kafka_topic_mappings_topic_key
         UNIQUE (project_id, connection_id, topic)
 );

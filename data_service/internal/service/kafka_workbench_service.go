@@ -49,9 +49,11 @@ type KafkaTopicMapping struct {
 	Name          string    `json:"name"`
 	Topic         string    `json:"topic"`
 	Description   string    `json:"description"`
+	ConsumerGroup string    `json:"consumerGroup"`
 	PartitionMode string    `json:"partitionMode"`
 	Partition     *int      `json:"partition"`
 	StartPosition string    `json:"startPosition"`
+	StartOffset   *int64    `json:"startOffset"`
 	Decode        string    `json:"decode"`
 	SampleLimit   int       `json:"sampleLimit"`
 	TimeoutMS     int       `json:"timeoutMs"`
@@ -148,9 +150,11 @@ type CreateKafkaTopicMappingInput struct {
 	Name          string  `json:"name"`
 	Topic         string  `json:"topic"`
 	Description   string  `json:"description"`
+	ConsumerGroup string  `json:"consumerGroup"`
 	PartitionMode string  `json:"partitionMode"`
 	Partition     *int    `json:"partition"`
 	StartPosition string  `json:"startPosition"`
+	StartOffset   *int64  `json:"startOffset"`
 	Decode        string  `json:"decode"`
 	SampleLimit   int     `json:"sampleLimit"`
 	TimeoutMS     int     `json:"timeoutMs"`
@@ -164,9 +168,11 @@ type UpdateKafkaTopicMappingInput struct {
 	Name          string  `json:"name"`
 	Topic         string  `json:"topic"`
 	Description   string  `json:"description"`
+	ConsumerGroup string  `json:"consumerGroup"`
 	PartitionMode string  `json:"partitionMode"`
 	Partition     *int    `json:"partition"`
 	StartPosition string  `json:"startPosition"`
+	StartOffset   *int64  `json:"startOffset"`
 	Decode        string  `json:"decode"`
 	SampleLimit   int     `json:"sampleLimit"`
 	TimeoutMS     int     `json:"timeoutMs"`
@@ -811,6 +817,10 @@ func (s *KafkaWorkbenchService) normalizeCreateTopicMapping(ctx context.Context,
 	if err != nil {
 		return repository.CreateKafkaTopicMappingParams{}, err
 	}
+	runtimeStart, err := normalizeKafkaTopicMappingRuntimeFields(startPosition, partitionMode, partition, input.StartOffset)
+	if err != nil {
+		return repository.CreateKafkaTopicMappingParams{}, err
+	}
 	decode := normalizeKafkaDecode(input.Decode)
 	groupID, err := s.normalizeKafkaMappingGroup(ctx, projectID, connectionID, input.GroupID)
 	if err != nil {
@@ -823,9 +833,11 @@ func (s *KafkaWorkbenchService) normalizeCreateTopicMapping(ctx context.Context,
 		Name:          name,
 		Topic:         topic,
 		Description:   strings.TrimSpace(input.Description),
+		ConsumerGroup: strings.TrimSpace(input.ConsumerGroup),
 		PartitionMode: partitionMode,
 		Partition:     partition,
 		StartPosition: startPosition,
+		StartOffset:   runtimeStart.StartOffset,
 		Decode:        decode,
 		SampleLimit:   normalizeKafkaBoundedInt(input.SampleLimit, defaultKafkaSampleLimit, 1, maxKafkaSampleLimit),
 		TimeoutMS:     normalizeKafkaBoundedInt(input.TimeoutMS, defaultKafkaTimeoutMS, 1000, maxKafkaTimeoutMS),
@@ -850,6 +862,14 @@ func (s *KafkaWorkbenchService) normalizeUpdateTopicMapping(ctx context.Context,
 	if err != nil {
 		return repository.UpdateKafkaTopicMappingParams{}, err
 	}
+	startOffset := input.StartOffset
+	if startOffset == nil {
+		startOffset = cloneOptionalInt64(current.StartOffset)
+	}
+	runtimeStart, err := normalizeKafkaTopicMappingRuntimeFields(startPosition, normalizedMode, normalizedPartition, startOffset)
+	if err != nil {
+		return repository.UpdateKafkaTopicMappingParams{}, err
+	}
 	groupID := cloneOptionalString(current.GroupID)
 	if input.HasGroupID {
 		groupID, err = s.normalizeKafkaMappingGroup(ctx, projectID, current.ConnectionID, input.GroupID)
@@ -865,9 +885,11 @@ func (s *KafkaWorkbenchService) normalizeUpdateTopicMapping(ctx context.Context,
 		Name:          name,
 		Topic:         topic,
 		Description:   strings.TrimSpace(input.Description),
+		ConsumerGroup: strings.TrimSpace(input.ConsumerGroup),
 		PartitionMode: normalizedMode,
 		Partition:     normalizedPartition,
 		StartPosition: startPosition,
+		StartOffset:   runtimeStart.StartOffset,
 		Decode:        normalizeKafkaDecode(fallbackTrimmed(input.Decode, current.Decode)),
 		SampleLimit:   normalizeKafkaBoundedInt(input.SampleLimit, current.SampleLimit, 1, maxKafkaSampleLimit),
 		TimeoutMS:     normalizeKafkaBoundedInt(input.TimeoutMS, current.TimeoutMS, 1000, maxKafkaTimeoutMS),
@@ -1119,6 +1141,23 @@ func normalizeKafkaStartPosition(value string) (string, error) {
 	return normalized, nil
 }
 
+type kafkaRuntimeStartConfig struct {
+	StartOffset *int64
+}
+
+func normalizeKafkaTopicMappingRuntimeFields(startPosition, partitionMode string, partition *int, startOffset *int64) (kafkaRuntimeStartConfig, error) {
+	if startPosition != "offset" {
+		return kafkaRuntimeStartConfig{StartOffset: nil}, nil
+	}
+	if partitionMode != "single" || partition == nil {
+		return kafkaRuntimeStartConfig{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "指定 Offset 必须选择单分区并填写分区编号")
+	}
+	if startOffset == nil || *startOffset < 0 {
+		return kafkaRuntimeStartConfig{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "指定 Offset 必须填写非负 offset")
+	}
+	return kafkaRuntimeStartConfig{StartOffset: cloneOptionalInt64(startOffset)}, nil
+}
+
 func normalizeKafkaDecode(value string) string {
 	normalized := strings.ToLower(strings.TrimSpace(value))
 	if _, ok := allowedKafkaDecodes[normalized]; ok {
@@ -1252,6 +1291,14 @@ func resolveKafkaSampleTimestamp(sample any, fallback time.Time) time.Time {
 	return fallback
 }
 
+func cloneOptionalInt64(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	copied := *value
+	return &copied
+}
+
 func toKafkaTopicGroup(record repository.KafkaTopicGroupRecord) KafkaTopicGroup {
 	return KafkaTopicGroup{
 		ID:           record.ID,
@@ -1274,9 +1321,11 @@ func toKafkaTopicMapping(record repository.KafkaTopicMappingRecord) KafkaTopicMa
 		Name:          record.Name,
 		Topic:         record.Topic,
 		Description:   record.Description,
+		ConsumerGroup: record.ConsumerGroup,
 		PartitionMode: record.PartitionMode,
 		Partition:     cloneOptionalInt(record.Partition),
 		StartPosition: record.StartPosition,
+		StartOffset:   cloneOptionalInt64(record.StartOffset),
 		Decode:        record.Decode,
 		SampleLimit:   record.SampleLimit,
 		TimeoutMS:     record.TimeoutMS,

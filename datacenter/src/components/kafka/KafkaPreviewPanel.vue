@@ -43,6 +43,7 @@ import type { KafkaPreview, KafkaPreviewSample, KafkaTopicMapping } from './type
 const props = defineProps<{
   projectId: string
   mapping: KafkaTopicMapping
+  connected: boolean
 }>()
 
 const emit = defineEmits<{
@@ -96,6 +97,10 @@ const displayMessages = computed(() => {
 })
 
 const runPreview = async () => {
+  if (!props.connected) {
+    ElMessage.warning('请先连接 Kafka 后再预览消息')
+    return
+  }
   loading.value = true
   lastError.value = ''
   try {
@@ -136,8 +141,26 @@ const formatPayload = (value: unknown) => {
   }
 }
 
-onMounted(runPreview)
-watch(() => props.mapping.id, runPreview)
+onMounted(() => {
+  if (props.connected) void runPreview()
+})
+
+watch(
+  () => props.mapping.id,
+  () => {
+    clearSamples()
+    if (props.connected) void runPreview()
+  },
+)
+
+watch(
+  () => props.connected,
+  (connected) => {
+    if (!connected) {
+      clearSamples()
+    }
+  },
+)
 </script>
 
 <style scoped>

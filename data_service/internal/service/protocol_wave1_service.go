@@ -61,13 +61,9 @@ type CreateKafkaConfigInput struct {
 
 // CreateHTTPConfigInput 表示创建 HTTP 配置的业务输入。
 type CreateHTTPConfigInput struct {
-	Name         string
-	Status       string
-	BaseURL      string
-	Method       string
-	Headers      map[string]any
-	TimeoutMS    *int
-	BodyTemplate map[string]any
+	Name        string
+	Status      string
+	Description string
 }
 
 // CreateWebSocketConfigInput 表示创建 WebSocket 配置的业务输入。
@@ -127,13 +123,7 @@ func (s *ProtocolWave1Service) CreateKafkaConfig(ctx context.Context, projectID,
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "brokers 不能为空")
 	}
 	topic := strings.TrimSpace(input.Topic)
-	if topic == "" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "topic 不能为空")
-	}
 	consumerGroup := strings.TrimSpace(input.ConsumerGroup)
-	if consumerGroup == "" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "consumerGroup 不能为空")
-	}
 	startPosition := strings.TrimSpace(strings.ToLower(input.StartPosition))
 	if startPosition == "" {
 		startPosition = "latest"
@@ -141,6 +131,14 @@ func (s *ProtocolWave1Service) CreateKafkaConfig(ctx context.Context, projectID,
 	if _, ok := allowedKafkaStartPositions[startPosition]; !ok {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "startPosition 仅支持 latest/earliest")
 	}
+	normalizedConfig, err := normalizeKafkaConnectionConfig(map[string]any{
+		"brokers": brokers,
+		"options": cloneMap(input.Options),
+	})
+	if err != nil {
+		return nil, err
+	}
+	options := mapFromAny(normalizedConfig["options"])
 
 	record, err := s.repository.CreateKafkaConfig(ctx, repository.CreateKafkaConfigParams{
 		ProjectID:     projectID,
@@ -151,7 +149,7 @@ func (s *ProtocolWave1Service) CreateKafkaConfig(ctx context.Context, projectID,
 		Topic:         topic,
 		ConsumerGroup: consumerGroup,
 		StartPosition: startPosition,
-		Options:       cloneMap(input.Options),
+		Options:       options,
 	})
 	if err != nil {
 		return nil, err
@@ -202,37 +200,13 @@ func (s *ProtocolWave1Service) CreateHTTPConfig(ctx context.Context, projectID, 
 	if err != nil {
 		return nil, err
 	}
-	baseURL := strings.TrimSpace(input.BaseURL)
-	if baseURL == "" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "baseUrl 不能为空")
-	}
-	method := strings.ToUpper(strings.TrimSpace(input.Method))
-	if method == "" {
-		method = "GET"
-	}
-	if _, ok := allowedHTTPMethods[method]; !ok {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP method 不受支持")
-	}
-
-	timeoutMS := 30000
-	if input.TimeoutMS != nil {
-		if *input.TimeoutMS < 0 {
-			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "timeoutMs 不能小于 0")
-		}
-		timeoutMS = *input.TimeoutMS
-	}
 
 	record, err := s.repository.CreateHTTPConfig(ctx, repository.CreateHTTPConfigParams{
-		ProjectID:     projectID,
-		UserID:        userID,
-		Name:          name,
-		Status:        status,
-		BaseURL:       baseURL,
-		Method:        method,
-		Headers:       cloneMap(input.Headers),
-		TimeoutMS:     timeoutMS,
-		BodyTemplate:  cloneMap(input.BodyTemplate),
-		HasBodyObject: input.BodyTemplate != nil,
+		ProjectID:   projectID,
+		UserID:      userID,
+		Name:        name,
+		Status:      status,
+		Description: strings.TrimSpace(input.Description),
 	})
 	if err != nil {
 		return nil, err

@@ -2,8 +2,8 @@
 CREATE TABLE IF NOT EXISTS data_kafka_configs (
     connection_id uuid PRIMARY KEY,
     brokers text NOT NULL CHECK (char_length(brokers) <= 500),
-    topic text NOT NULL CHECK (char_length(topic) <= 500),
-    consumer_group text NOT NULL CHECK (char_length(consumer_group) <= 200),
+    topic text CHECK (topic IS NULL OR char_length(topic) <= 500),
+    consumer_group text CHECK (consumer_group IS NULL OR char_length(consumer_group) <= 200),
     start_position text NOT NULL DEFAULT 'latest' CHECK (start_position IN ('latest', 'earliest')),
     options jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(options) = 'object'),
     created_at timestamptz NOT NULL DEFAULT now(),

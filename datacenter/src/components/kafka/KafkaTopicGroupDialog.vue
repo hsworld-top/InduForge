@@ -1,54 +1,43 @@
 <template>
-  <DcDialog
+  <WorkbenchGroupDialog
+    ref="dialogRef"
     v-model="visible"
+    :mode="mode"
     :title="mode === 'create' ? '新建 Topic 分组' : '编辑 Topic 分组'"
-    width="420px"
-    :close-disabled="loading"
-  >
-    <el-form label-position="top" class="kafka-topic-group-dialog">
-      <el-form-item label="分组名称" required>
-        <el-input
-          v-model="form.name"
-          maxlength="100"
-          show-word-limit
-          placeholder="输入分组名称"
-          @keyup.enter="submit"
-        />
-      </el-form-item>
-    </el-form>
-
-    <template #footer>
-      <div class="kafka-topic-group-dialog__footer">
-        <el-button @click="visible = false">取消</el-button>
-        <el-button type="primary" :loading="loading" :disabled="!form.name.trim()" @click="submit">
-          保存
-        </el-button>
-      </div>
-    </template>
-  </DcDialog>
+    :group="group"
+    :group-options="groupOptions"
+    :initial-parent-id="initialParentId"
+    :loading="loading"
+    @submit="$emit('submit', $event)"
+  />
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
-import DcDialog from '@/components/shared/DcDialog.vue'
+import { computed, ref } from 'vue'
+import WorkbenchGroupDialog from '@/components/workbench/WorkbenchGroupDialog.vue'
 import type { KafkaTopicGroup } from './types'
+import { collectKafkaTopicGroupIds, flattenKafkaTopicGroups } from './kafkaTopicTreeModel'
 
 const props = withDefaults(
   defineProps<{
     modelValue: boolean
     mode: 'create' | 'edit'
+    groups?: KafkaTopicGroup[]
     group?: KafkaTopicGroup | null
+    initialParentId?: string | null
     loading?: boolean
   }>(),
   {
+    groups: () => [],
     group: null,
+    initialParentId: null,
     loading: false,
   },
 )
 
 const emit = defineEmits<{
   (event: 'update:modelValue', value: boolean): void
-  (event: 'submit', value: { name: string }): void
+  (event: 'submit', value: { name: string; parentId: string | null }): void
 }>()
 
 const visible = computed({
@@ -56,36 +45,15 @@ const visible = computed({
   set: (value: boolean) => emit('update:modelValue', value),
 })
 
-const form = reactive({ name: '' })
-
-const resetForm = () => {
-  form.name = props.group?.name || ''
-}
-
-const submit = () => {
-  const name = form.name.trim()
-  if (!name || props.loading) return
-  emit('submit', { name })
-}
-
-watch(
-  () => [props.modelValue, props.group?.id] as const,
-  () => {
-    if (props.modelValue) resetForm()
-  },
-  { immediate: true },
+const dialogRef = ref<InstanceType<typeof WorkbenchGroupDialog> | null>(null)
+const blockedIds = computed(() =>
+  props.mode === 'edit' ? collectKafkaTopicGroupIds(props.group as any) : new Set<string>(),
 )
+const groupOptions = computed(() => flattenKafkaTopicGroups(props.groups, blockedIds.value))
+
+function closeSilently() {
+  dialogRef.value?.closeSilently()
+}
+
+defineExpose({ closeSilently })
 </script>
-
-<style scoped>
-.kafka-topic-group-dialog {
-  display: grid;
-  gap: 2px;
-}
-
-.kafka-topic-group-dialog__footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-</style>

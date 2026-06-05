@@ -203,7 +203,7 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
     return [config['brokers'], config['topic']].filter(Boolean).join(' / ') || '未配置 Topic'
   }
   if (connection.type === 'http') {
-    return [config['method'] || 'GET', config['baseUrl']].filter(Boolean).join(' ') || '未配置 URL'
+    return '请求在工作台配置'
   }
   if (connection.type === 'websocket') {
     return [config['url'], config['topic']].filter(Boolean).join(' / ') || '未配置 WebSocket'

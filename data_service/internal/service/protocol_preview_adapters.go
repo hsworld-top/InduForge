@@ -214,9 +214,14 @@ type kafkaPreviewReader interface {
 	Close() error
 }
 
+type kafkaProbeConn interface {
+	Close() error
+}
+
 // KafkaPreviewAdapter 使用 kafka-go 临时 reader 抓取有限条消息，不复用运行态 consumerGroup。
 type KafkaPreviewAdapter struct {
 	ReaderFactory func(config kafka.ReaderConfig) kafkaPreviewReader
+	ProbeFactory  func(ctx context.Context, network, address string) (kafkaProbeConn, error)
 }
 
 func (a KafkaPreviewAdapter) Preview(ctx context.Context, input ProtocolPreviewAdapterInput) (*ProtocolPreviewResult, error) {
@@ -226,22 +231,18 @@ func (a KafkaPreviewAdapter) Preview(ctx context.Context, input ProtocolPreviewA
 	if len(brokers) == 0 || strings.TrimSpace(brokers[0]) == "" {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka preview brokers 不能为空")
 	}
-	topic := strings.TrimSpace(toString(input.Options["topic"]))
-	if topic == "" {
-		topic = strings.TrimSpace(toString(config["topic"]))
-	}
-	if topic == "" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka preview topic 不能为空")
-	}
 	if boolFromAny(input.Options["probe"]) {
-		conn, err := (&kafka.Dialer{}).DialContext(ctx, "tcp", brokers[0])
+		probeFactory := a.ProbeFactory
+		if probeFactory == nil {
+			probeFactory = func(ctx context.Context, network, address string) (kafkaProbeConn, error) {
+				return (&kafka.Dialer{}).DialContext(ctx, network, address)
+			}
+		}
+		conn, err := probeFactory(ctx, "tcp", brokers[0])
 		if err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka preview 连接失败", err)
 		}
 		defer conn.Close()
-		if _, err := conn.ReadPartitions(topic); err != nil {
-			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka preview Topic 探测失败", err)
-		}
 		return &ProtocolPreviewResult{
 			Protocol:     "kafka",
 			ConnectionID: input.Connection.ID,
@@ -249,13 +250,20 @@ func (a KafkaPreviewAdapter) Preview(ctx context.Context, input ProtocolPreviewA
 			Schema:       map[string]any{},
 			Samples:      []any{},
 			Diagnostics: map[string]any{
-				"topic":       topic,
+				"broker":      brokers[0],
 				"brokerCount": len(brokers),
 				"probe":       true,
 			},
 			DurationMS: time.Since(startedAt).Milliseconds(),
 			Truncated:  false,
 		}, nil
+	}
+	topic := strings.TrimSpace(toString(input.Options["topic"]))
+	if topic == "" {
+		topic = strings.TrimSpace(toString(config["topic"]))
+	}
+	if topic == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka preview topic 不能为空")
 	}
 	startPosition := strings.ToLower(strings.TrimSpace(toString(input.Options["startPosition"])))
 	if startPosition == "" {

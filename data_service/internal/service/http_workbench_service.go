@@ -625,19 +625,7 @@ func resolveHTTPRequestURL(config map[string]any, record repository.HTTPRequestR
 	if err == nil && parsed.IsAbs() {
 		return applyQueryParams(parsed, record.Params).String(), nil
 	}
-	baseURL := strings.TrimSpace(toString(config["baseUrl"]))
-	if baseURL == "" {
-		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP 接入源 baseUrl 不能为空")
-	}
-	base, err := url.Parse(baseURL)
-	if err != nil || !base.IsAbs() {
-		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP 接入源 baseUrl 格式无效")
-	}
-	relative, err := url.Parse(raw)
-	if err != nil {
-		return "", apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP 请求 URL 格式无效", err)
-	}
-	return applyQueryParams(base.ResolveReference(relative), record.Params).String(), nil
+	return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP 请求 URL 需填写完整地址，例如 https://api.example.com/data")
 }
 
 func applyQueryParams(target *url.URL, rows []any) *url.URL {

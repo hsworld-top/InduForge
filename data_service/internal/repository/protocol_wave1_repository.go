@@ -44,16 +44,11 @@ type CreateKafkaConfigParams struct {
 
 // CreateHTTPConfigParams 描述 HTTP 配置落库参数。
 type CreateHTTPConfigParams struct {
-	ProjectID     string
-	UserID        string
-	Name          string
-	Status        string
-	BaseURL       string
-	Method        string
-	Headers       map[string]any
-	TimeoutMS     int
-	BodyTemplate  map[string]any
-	HasBodyObject bool
+	ProjectID   string
+	UserID      string
+	Name        string
+	Status      string
+	Description string
 }
 
 // CreateWebSocketConfigParams 描述 WebSocket 配置落库参数。
@@ -115,11 +110,8 @@ func (r *ProtocolWave1Repository) CreateKafkaConfig(ctx context.Context, params 
 		Type:      "kafka",
 		Status:    params.Status,
 		Metadata: map[string]any{
-			"brokers":       params.Brokers,
-			"topic":         params.Topic,
-			"consumerGroup": params.ConsumerGroup,
-			"startPosition": params.StartPosition,
-			"options":       cloneProtocolMap(params.Options),
+			"brokers": params.Brokers,
+			"options": cloneProtocolMap(params.Options),
 		},
 	})
 	if err != nil {
@@ -136,7 +128,7 @@ func (r *ProtocolWave1Repository) CreateKafkaConfig(ctx context.Context, params 
 			options
 		)
 		VALUES ($1, $2, $3, $4, $5, $6::jsonb)
-	`, record.ID, params.Brokers, params.Topic, params.ConsumerGroup, params.StartPosition, optionsPayload)
+	`, record.ID, params.Brokers, nullIfBlank(params.Topic), nullIfBlank(params.ConsumerGroup), params.StartPosition, optionsPayload)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入 Kafka 配置失败", err)
 	}
@@ -176,15 +168,6 @@ func (r *ProtocolWave1Repository) PreviewKafkaTopic(ctx context.Context, project
 
 // CreateHTTPConfig 创建 HTTP 配置。
 func (r *ProtocolWave1Repository) CreateHTTPConfig(ctx context.Context, params CreateHTTPConfigParams) (*ProtocolConnectionRecord, error) {
-	headersPayload, err := marshalProtocolJSONObject(params.Headers, true)
-	if err != nil {
-		return nil, err
-	}
-	bodyPayload, err := marshalProtocolJSONObject(params.BodyTemplate, !params.HasBodyObject)
-	if err != nil {
-		return nil, err
-	}
-
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 HTTP 配置事务失败", err)
@@ -198,30 +181,12 @@ func (r *ProtocolWave1Repository) CreateHTTPConfig(ctx context.Context, params C
 		Type:      "http",
 		Status:    params.Status,
 		Metadata: map[string]any{
-			"baseUrl":      params.BaseURL,
-			"method":       params.Method,
-			"headers":      cloneProtocolMap(params.Headers),
-			"timeoutMs":    params.TimeoutMS,
-			"bodyTemplate": cloneProtocolMap(params.BodyTemplate),
+			"mode":        "workbench",
+			"description": params.Description,
 		},
 	})
 	if err != nil {
 		return nil, err
-	}
-
-	_, err = tx.Exec(ctx, `
-		INSERT INTO data_http_configs (
-			connection_id,
-			base_url,
-			method,
-			headers,
-			timeout_ms,
-			body_template
-		)
-		VALUES ($1, $2, $3, $4::jsonb, $5, $6::jsonb)
-	`, record.ID, params.BaseURL, params.Method, headersPayload, params.TimeoutMS, bodyPayload)
-	if err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入 HTTP 配置失败", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -354,6 +319,13 @@ func (r *ProtocolWave1Repository) createConnectionTx(ctx context.Context, tx pgx
 	}
 
 	record := ProtocolConnectionRecord{}
+	if err := lockProjectConnectionOrder(ctx, tx, params.ProjectID); err != nil {
+		return nil, err
+	}
+	if err := normalizeProjectConnectionDisplayOrder(ctx, tx, params.ProjectID); err != nil {
+		return nil, err
+	}
+
 	err = tx.QueryRow(ctx, `
 		INSERT INTO data_connections (
 			project_id,
@@ -362,10 +334,13 @@ func (r *ProtocolWave1Repository) createConnectionTx(ctx context.Context, tx pgx
 			category,
 			status,
 			metadata,
+			display_order,
 			created_by,
 			updated_by
 		)
-		VALUES ($1, $2, $3, 'protocol', $4, $5::jsonb, $6, $6)
+		VALUES ($1, $2, $3, 'protocol', $4, $5::jsonb,
+			COALESCE((SELECT MAX(display_order) + 1 FROM data_connections WHERE project_id = $1), 0),
+			$6, $6)
 		RETURNING id, project_id, name, type, status, created_at, updated_at
 	`, params.ProjectID, params.Name, params.Type, params.Status, string(metadataPayload), params.UserID).Scan(
 		&record.ID,
@@ -377,7 +352,7 @@ func (r *ProtocolWave1Repository) createConnectionTx(ctx context.Context, tx pgx
 		&record.UpdatedAt,
 	)
 	if err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入协议连接失败", err)
+		return nil, translateConnectionWriteError("写入协议连接失败", err)
 	}
 
 	return &record, nil
@@ -407,6 +382,13 @@ func cloneProtocolMap(input map[string]any) map[string]any {
 		result[key] = value
 	}
 	return result
+}
+
+func nullIfBlank(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
 }
 
 func rollbackProtocolTxQuietly(ctx context.Context, tx pgx.Tx) {

@@ -3,10 +3,12 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -57,14 +59,64 @@ type UpdateConnectionParams struct {
 	Config    map[string]any
 }
 
+// UpdateKafkaConnectionParams 描述 Kafka 接入源编辑时需要同步的连接与专用配置表字段。
+type UpdateKafkaConnectionParams struct {
+	UpdateConnectionParams
+	Brokers string
+	Options map[string]any
+}
+
 // ConnectionRepository 封装 data_connections 的参数化 SQL 访问。
 type ConnectionRepository struct {
 	pool *pgxpool.Pool
 }
 
+type connectionOrderExecutor interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+}
+
 // NewConnectionRepository 创建连接仓储。
 func NewConnectionRepository(pool *pgxpool.Pool) *ConnectionRepository {
 	return &ConnectionRepository{pool: pool}
+}
+
+func lockProjectConnectionOrder(ctx context.Context, tx pgx.Tx, projectID string) error {
+	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, projectID)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "锁定连接排序失败", err)
+	}
+	return nil
+}
+
+func normalizeProjectConnectionDisplayOrder(ctx context.Context, executor connectionOrderExecutor, projectID string) error {
+	_, err := executor.Exec(ctx, `
+        WITH ordered AS (
+            SELECT
+                id,
+                row_number() OVER (ORDER BY display_order ASC, created_at ASC, id ASC) - 1 AS next_order
+            FROM data_connections
+            WHERE project_id = $1
+        )
+        UPDATE data_connections AS conn
+        SET display_order = ordered.next_order
+        FROM ordered
+        WHERE conn.id = ordered.id
+          AND conn.display_order <> ordered.next_order
+    `, projectID)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "归一化连接排序失败", err)
+	}
+	return nil
+}
+
+func translateConnectionWriteError(message string, err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if pgErr.ConstraintName == "data_connections_project_name_key" {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "接入源名称已存在")
+		}
+	}
+	return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, message, err)
 }
 
 // ListByProject 按项目读取连接列表。
@@ -141,7 +193,20 @@ func (r *ConnectionRepository) Create(ctx context.Context, params CreateConnecti
 		return nil, err
 	}
 
-	row := r.pool.QueryRow(ctx, `
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启连接创建事务失败", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err := lockProjectConnectionOrder(ctx, tx, params.ProjectID); err != nil {
+		return nil, err
+	}
+	if err := normalizeProjectConnectionDisplayOrder(ctx, tx, params.ProjectID); err != nil {
+		return nil, err
+	}
+
+	row := tx.QueryRow(ctx, `
         INSERT INTO data_connections (
             project_id,
             name,
@@ -161,7 +226,10 @@ func (r *ConnectionRepository) Create(ctx context.Context, params CreateConnecti
 
 	record, scanErr := scanConnection(row)
 	if scanErr != nil {
-		return nil, scanErr
+		return nil, translateConnectionWriteError("写入连接失败", scanErr)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交连接创建事务失败", err)
 	}
 
 	return &record, nil
@@ -191,7 +259,70 @@ func (r *ConnectionRepository) Update(ctx context.Context, params UpdateConnecti
 
 	record, scanErr := scanConnection(row)
 	if scanErr != nil {
-		return nil, scanErr
+		return nil, translateConnectionWriteError("更新连接失败", scanErr)
+	}
+
+	return &record, nil
+}
+
+// UpdateKafka 更新 Kafka 接入源并同步 data_kafka_configs。
+// 输入来自通用连接编辑接口；输出为更新后的 data_connections 记录。
+// 失败时事务回滚，避免 metadata 与专用 Kafka 配置表不一致。
+func (r *ConnectionRepository) UpdateKafka(ctx context.Context, params UpdateKafkaConnectionParams) (*ConnectionRecord, error) {
+	configBytes, err := marshalConfig(params.Config)
+	if err != nil {
+		return nil, err
+	}
+	optionsBytes, err := marshalConfig(params.Options)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 Kafka 连接更新事务失败", err)
+	}
+	defer tx.Rollback(ctx)
+
+	row := tx.QueryRow(ctx, `
+        UPDATE data_connections
+        SET name = $3,
+            type = $4,
+            category = $5,
+            status = $6,
+            metadata = $7::jsonb,
+            updated_by = $8,
+            updated_at = now()
+        WHERE project_id = $1 AND id = $2
+        RETURNING id, project_id, name, type, category, status, metadata, display_order, created_at, updated_at
+    `, params.ProjectID, params.ID, params.Name, params.Type, params.Category, params.Status, string(configBytes), params.UserID)
+
+	record, scanErr := scanConnection(row)
+	if scanErr != nil {
+		return nil, translateConnectionWriteError("更新 Kafka 连接失败", scanErr)
+	}
+
+	_, err = tx.Exec(ctx, `
+        INSERT INTO data_kafka_configs (
+            connection_id,
+            brokers,
+            topic,
+            consumer_group,
+            start_position,
+            options
+        )
+        VALUES ($1, $2, NULL, NULL, 'latest', $3::jsonb)
+        ON CONFLICT (connection_id) DO UPDATE
+        SET brokers = EXCLUDED.brokers,
+            options = EXCLUDED.options,
+            updated_at = now()
+    `, params.ID, params.Brokers, string(optionsBytes))
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步 Kafka 配置失败", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 Kafka 连接更新事务失败", err)
 	}
 
 	return &record, nil
@@ -205,6 +336,10 @@ func (r *ConnectionRepository) UpdateDisplayOrder(ctx context.Context, projectID
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启连接排序事务失败", err)
 	}
 	defer tx.Rollback(ctx)
+
+	if err := lockProjectConnectionOrder(ctx, tx, projectID); err != nil {
+		return err
+	}
 
 	for index, connectionID := range connectionIDs {
 		commandTag, execErr := tx.Exec(ctx, `

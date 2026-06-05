@@ -70,6 +70,8 @@
             :selected-mapping-id="selectedMapping ? String(selectedMapping.id) : ''"
             @select-mapping="openVariables"
             @open-fields="openVariables"
+            @group-contextmenu="openGroupMenu"
+            @mapping-contextmenu="openMappingMenu"
           />
 
           <button
@@ -80,6 +82,7 @@
             :class="{ 'is-active': selectedMapping?.id === mapping.id }"
             @click="openVariables(mapping)"
             @dblclick="openVariables(mapping)"
+            @contextmenu.prevent.stop="openMappingMenu($event, mapping)"
             @keydown.enter="openVariables(mapping)"
           >
             <IconTablerMessages class="kafka-workbench__tree-item-icon" />
@@ -121,6 +124,7 @@
           v-if="activeTab?.type === 'preview'"
           :project-id="projectId"
           :mapping="activeTab.mapping"
+          :connected="connected"
           @samples="handlePreviewSamples"
         />
         <KafkaFieldMappingPanel
@@ -148,7 +152,10 @@
 
     <KafkaTopicGroupDialog
       v-model="groupDialogVisible"
-      mode="create"
+      :mode="groupDialogMode"
+      :groups="groups"
+      :group="editingGroup"
+      :initial-parent-id="pendingParentGroupId"
       :loading="groupSaving"
       @submit="saveGroup"
     />
@@ -160,18 +167,87 @@
       :loading="mappingSaving"
       @submit="saveMapping"
     />
+    <KafkaTopicMoveDialog
+      v-model="moveDialogVisible"
+      :target-type="moveTargetType"
+      :groups="groups"
+      :mapping="movingMapping"
+      :group="movingGroup"
+      :loading="moving"
+      @submit="handleMoveSubmit"
+    />
+
+    <Teleport to="body">
+      <div
+        v-if="contextMenu.visible"
+        class="kafka-workbench__menu-mask"
+        @click="closeContextMenu"
+        @contextmenu.prevent="closeContextMenu"
+      >
+        <div
+          class="kafka-workbench__context-menu"
+          :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
+          @click.stop
+        >
+          <button v-if="contextMenu.type === 'mapping'" type="button" @click="emitContextAction('preview')">
+            <IconTablerMessages class="kafka-workbench__menu-icon" />
+            <span>消息预览</span>
+          </button>
+          <button v-if="contextMenu.type === 'mapping'" type="button" @click="emitContextAction('fields')">
+            <IconTablerSchema class="kafka-workbench__menu-icon" />
+            <span>变量管理</span>
+          </button>
+          <button v-if="contextMenu.type === 'mapping'" type="button" @click="emitContextAction('edit')">
+            <IconTablerPencil class="kafka-workbench__menu-icon" />
+            <span>编辑订阅</span>
+          </button>
+          <button v-if="contextMenu.type === 'mapping'" type="button" @click="emitContextAction('copyTopic')">
+            <IconTablerCopy class="kafka-workbench__menu-icon" />
+            <span>复制 Topic</span>
+          </button>
+          <button type="button" @click="emitContextAction('move')">
+            <IconTablerFolderSymlink class="kafka-workbench__menu-icon" />
+            <span>移动到分组</span>
+          </button>
+          <button v-if="contextMenu.type === 'group'" type="button" @click="emitContextAction('createChildGroup')">
+            <IconTablerFolderPlus class="kafka-workbench__menu-icon" />
+            <span>新建子分组</span>
+          </button>
+          <button v-if="contextMenu.type === 'group'" type="button" @click="emitContextAction('renameGroup')">
+            <IconTablerPencil class="kafka-workbench__menu-icon" />
+            <span>编辑分组</span>
+          </button>
+          <button v-if="contextMenu.type === 'group'" type="button" @click="emitContextAction('move')">
+            <IconTablerFolderSymlink class="kafka-workbench__menu-icon" />
+            <span>移动分组</span>
+          </button>
+          <button v-if="contextMenu.type === 'group'" type="button" class="is-danger" @click="emitContextAction('deleteGroup')">
+            <IconTablerTrash class="kafka-workbench__menu-icon" />
+            <span>删除分组</span>
+          </button>
+          <button v-if="contextMenu.type === 'mapping'" type="button" class="is-danger" @click="emitContextAction('delete')">
+            <IconTablerTrash class="kafka-workbench__menu-icon" />
+            <span>删除</span>
+          </button>
+        </div>
+      </div>
+    </Teleport>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, markRaw, onMounted, ref, shallowRef, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerFolderPlus from '~icons/tabler/folder-plus'
+import IconTablerFolderSymlink from '~icons/tabler/folder-symlink'
 import IconTablerLoader2 from '~icons/tabler/loader-2'
 import IconTablerMessages from '~icons/tabler/messages'
+import IconTablerPencil from '~icons/tabler/pencil'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerSchema from '~icons/tabler/schema'
+import IconTablerTrash from '~icons/tabler/trash'
 import IconTablerX from '~icons/tabler/x'
 import dataAPI from '@/api/data.api'
 import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
@@ -182,11 +258,13 @@ import KafkaInspectorPanel from './KafkaInspectorPanel.vue'
 import KafkaPreviewPanel from './KafkaPreviewPanel.vue'
 import KafkaTopicGroupDialog from './KafkaTopicGroupDialog.vue'
 import KafkaTopicMappingDialog from './KafkaTopicMappingDialog.vue'
+import KafkaTopicMoveDialog from './KafkaTopicMoveDialog.vue'
 import KafkaTopicTreeBranch from './KafkaTopicTreeBranch.vue'
 import type {
   KafkaPreview,
   KafkaPreviewSample,
   KafkaTopicGroup,
+  KafkaTopicGroupNode,
   KafkaTopicMapping,
   KafkaWorkbenchConnection,
 } from './types'
@@ -220,11 +298,34 @@ const tabs = ref<KafkaWorkbenchTab[]>([])
 const previewSamplesByMapping = shallowRef(new Map<string, KafkaPreviewSample[]>())
 const activePreview = ref<KafkaPreview | null>(null)
 const groupDialogVisible = ref(false)
+const groupDialogMode = ref<'create' | 'edit'>('create')
+const editingGroup = ref<KafkaTopicGroupNode | null>(null)
+const pendingParentGroupId = ref<string | null>(null)
 const groupSaving = ref(false)
 const mappingDialogVisible = ref(false)
 const mappingDialogMode = ref<'create' | 'edit'>('create')
 const mappingSaving = ref(false)
 const editingMapping = ref<KafkaTopicMapping | null>(null)
+const moveDialogVisible = ref(false)
+const moveTargetType = ref<'mapping' | 'group'>('mapping')
+const movingMapping = ref<KafkaTopicMapping | null>(null)
+const movingGroup = ref<KafkaTopicGroupNode | null>(null)
+const moving = ref(false)
+const contextMenu = ref<{
+  visible: boolean
+  type: 'mapping' | 'group' | null
+  x: number
+  y: number
+  mapping: KafkaTopicMapping | null
+  group: KafkaTopicGroupNode | null
+}>({
+  visible: false,
+  type: null,
+  x: 0,
+  y: 0,
+  mapping: null,
+  group: null,
+})
 
 const config = computed(() => props.connection.config || {})
 const sourceMetaRows = computed(() => [
@@ -262,6 +363,8 @@ const toggleConnection = async () => {
   if (connected.value) {
     connected.value = false
     tabs.value = tabs.value.filter((tab) => tab.type !== 'preview')
+    activePreview.value = null
+    previewSamplesByMapping.value = new Map()
     if (!tabs.value.some((tab) => tab.id === activeTabId.value)) {
       activeTabId.value = tabs.value[0]?.id || ''
     }
@@ -277,7 +380,7 @@ const toggleConnection = async () => {
       probe: true,
     })
     connected.value = true
-    ElMessage.success('Kafka 已连接')
+    ElMessage.success('Kafka 已连接到 Broker')
   } catch (error) {
     connected.value = false
     ElMessage.error(getApiErrorMessage(error, 'Kafka 连接失败'))
@@ -293,16 +396,29 @@ const openCreateMapping = () => {
 }
 
 const openCreateGroup = () => {
+  groupDialogMode.value = 'create'
+  editingGroup.value = null
+  pendingParentGroupId.value = null
   groupDialogVisible.value = true
 }
 
-const saveGroup = async (payload: { name: string }) => {
+const saveGroup = async (payload: { name: string; parentId: string | null }) => {
   groupSaving.value = true
   try {
-    await dataAPI.createKafkaTopicGroup(props.projectId, props.connection.id, payload)
-    groupSaving.value = false
+    if (groupDialogMode.value === 'edit' && editingGroup.value) {
+      await dataAPI.updateKafkaTopicGroup(props.projectId, editingGroup.value.id, {
+        name: payload.name,
+        parentId: payload.parentId,
+      })
+      ElMessage.success('Topic 分组已更新')
+    } else {
+      await dataAPI.createKafkaTopicGroup(props.projectId, props.connection.id, {
+        name: payload.name,
+        parentId: pendingParentGroupId.value || payload.parentId,
+      })
+      ElMessage.success('Topic 分组已创建')
+    }
     groupDialogVisible.value = false
-    ElMessage.success('Topic 分组已创建')
     await loadWorkbench()
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '保存 Topic 分组失败'))
@@ -333,6 +449,10 @@ const saveMapping = async (payload: Record<string, unknown>) => {
 }
 
 const openPreview = (mapping: KafkaTopicMapping) => {
+  if (!connected.value) {
+    ElMessage.warning('请先点击左上角连接，再执行 Kafka 消息预览')
+    return
+  }
   selectedMapping.value = mapping
   const id = `kafka-preview-${mapping.id}`
   if (!tabs.value.some((tab) => tab.id === id)) {
@@ -360,6 +480,219 @@ const openVariables = (mapping: KafkaTopicMapping) => {
     })
   }
   activeTabId.value = id
+}
+
+const openMappingMenu = (event: MouseEvent, mapping: KafkaTopicMapping) => {
+  contextMenu.value = {
+    visible: true,
+    type: 'mapping',
+    x: Math.min(event.clientX, window.innerWidth - 180),
+    y: Math.min(event.clientY, window.innerHeight - 240),
+    mapping,
+    group: null,
+  }
+}
+
+const openGroupMenu = (event: MouseEvent, group: KafkaTopicGroupNode) => {
+  contextMenu.value = {
+    visible: true,
+    type: 'group',
+    x: Math.min(event.clientX, window.innerWidth - 180),
+    y: Math.min(event.clientY, window.innerHeight - 160),
+    mapping: null,
+    group,
+  }
+}
+
+const closeContextMenu = () => {
+  contextMenu.value.visible = false
+}
+
+const emitContextAction = async (
+  action:
+    | 'preview'
+    | 'fields'
+    | 'edit'
+    | 'copyTopic'
+    | 'move'
+    | 'delete'
+    | 'createChildGroup'
+    | 'renameGroup'
+    | 'deleteGroup',
+) => {
+  const { type, mapping, group } = contextMenu.value
+  closeContextMenu()
+  if (type === 'mapping' && mapping) {
+    if (action === 'preview') {
+      openPreview(mapping)
+      return
+    }
+    if (action === 'fields') {
+      openVariables(mapping)
+      return
+    }
+    if (action === 'edit') {
+      mappingDialogMode.value = 'edit'
+      editingMapping.value = mapping
+      mappingDialogVisible.value = true
+      return
+    }
+    if (action === 'copyTopic') {
+      await navigator.clipboard.writeText(mapping.topic)
+      ElMessage.success('Topic 已复制')
+      return
+    }
+    if (action === 'move') {
+      openMoveMappingDialog(mapping)
+      return
+    }
+    if (action === 'delete') {
+      await deleteMapping(mapping)
+      return
+    }
+  }
+  if (type === 'group' && group) {
+    if (action === 'createChildGroup') {
+      openCreateChildGroup(group)
+      return
+    }
+    if (action === 'renameGroup') {
+      openRenameGroup(group)
+      return
+    }
+    if (action === 'move') {
+      openMoveGroupDialog(group)
+      return
+    }
+    if (action === 'deleteGroup') {
+      await deleteGroup(group)
+    }
+  }
+}
+
+const buildMappingPayload = (mapping: KafkaTopicMapping) => ({
+  name: mapping.name,
+  topic: mapping.topic,
+  groupId: mapping.groupId || null,
+  consumerGroup: mapping.consumerGroup || '',
+  partitionMode: mapping.partitionMode,
+  partition: mapping.partition ?? null,
+  startPosition: mapping.startPosition,
+  startOffset: mapping.startOffset ?? null,
+  decode: mapping.decode,
+  sampleLimit: mapping.sampleLimit,
+  timeoutMs: mapping.timeoutMs,
+  description: mapping.description || '',
+  sortOrder: mapping.sortOrder || 0,
+})
+
+const openMoveMappingDialog = (mapping: KafkaTopicMapping) => {
+  moveTargetType.value = 'mapping'
+  movingMapping.value = mapping
+  movingGroup.value = null
+  moveDialogVisible.value = true
+}
+
+const openCreateChildGroup = (group: KafkaTopicGroupNode) => {
+  groupDialogMode.value = 'create'
+  editingGroup.value = null
+  pendingParentGroupId.value = String(group.id)
+  groupDialogVisible.value = true
+}
+
+const openRenameGroup = (group: KafkaTopicGroupNode) => {
+  groupDialogMode.value = 'edit'
+  editingGroup.value = group
+  pendingParentGroupId.value = null
+  groupDialogVisible.value = true
+}
+
+const openMoveGroupDialog = (group: KafkaTopicGroupNode) => {
+  moveTargetType.value = 'group'
+  movingMapping.value = null
+  movingGroup.value = group
+  moveDialogVisible.value = true
+}
+
+const handleMoveSubmit = async (groupId: string | null) => {
+  moving.value = true
+  try {
+    if (moveTargetType.value === 'mapping' && movingMapping.value) {
+      await dataAPI.updateKafkaTopicMapping(props.projectId, movingMapping.value.id, {
+        ...buildMappingPayload(movingMapping.value),
+        groupId,
+      })
+      ElMessage.success('Topic 订阅已移动')
+    } else if (moveTargetType.value === 'group' && movingGroup.value) {
+      await dataAPI.updateKafkaTopicGroup(props.projectId, movingGroup.value.id, {
+        name: movingGroup.value.name,
+        parentId: groupId,
+      })
+      ElMessage.success('Topic 分组已移动')
+    }
+    moveDialogVisible.value = false
+    await loadWorkbench()
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '移动失败'))
+  } finally {
+    moving.value = false
+  }
+}
+
+const deleteMapping = async (mapping: KafkaTopicMapping) => {
+  const ok = await ElMessageBox.confirm(
+    `删除 Topic 订阅“${mapping.name || mapping.topic}”？相关变量配置会一并删除。`,
+    '删除 Topic 订阅',
+    {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    },
+  )
+    .then(() => true)
+    .catch(() => false)
+  if (!ok) return
+
+  try {
+    await dataAPI.deleteKafkaTopicMapping(props.projectId, mapping.id)
+    tabs.value = tabs.value.filter((tab) => tab.mapping.id !== mapping.id)
+    if (!tabs.value.some((tab) => tab.id === activeTabId.value)) {
+      activeTabId.value = tabs.value[0]?.id || ''
+    }
+    if (selectedMapping.value?.id === mapping.id) {
+      selectedMapping.value = null
+    }
+    const nextSamples = new Map(previewSamplesByMapping.value)
+    nextSamples.delete(String(mapping.id))
+    previewSamplesByMapping.value = nextSamples
+    ElMessage.success('Topic 订阅已删除')
+    await loadWorkbench()
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '删除 Topic 订阅失败'))
+  }
+}
+
+const deleteGroup = async (group: KafkaTopicGroupNode) => {
+  const ok = await ElMessageBox.confirm(
+    `确认删除分组「${group.name}」？组内 Topic 订阅会回到根目录。`,
+    '删除分组',
+    {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    },
+  )
+    .then(() => true)
+    .catch(() => false)
+  if (!ok) return
+
+  try {
+    await dataAPI.deleteKafkaTopicGroup(props.projectId, group.id)
+    ElMessage.success('Topic 分组已删除')
+    await loadWorkbench()
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '删除 Topic 分组失败'))
+  }
 }
 
 const activateTab = (tab: KafkaWorkbenchTab) => {
@@ -395,6 +728,8 @@ onMounted(loadWorkbench)
 watch(
   () => props.connection.id,
   async () => {
+    connected.value = false
+    connecting.value = false
     tabs.value = []
     activeTabId.value = ''
     selectedMapping.value = null
@@ -629,6 +964,53 @@ defineExpose({ handlePreviewSamples })
   width: 14px;
   height: 14px;
   animation: kafka-workbench-spin 0.9s linear infinite;
+}
+
+.kafka-workbench__menu-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+}
+
+.kafka-workbench__context-menu {
+  position: fixed;
+  min-width: 148px;
+  padding: 4px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-surface);
+}
+
+.kafka-workbench__context-menu button {
+  width: 100%;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--dc-radius-sm);
+  background: transparent;
+  color: var(--dc-text-secondary);
+  font-size: 13px;
+  text-align: left;
+}
+
+.kafka-workbench__context-menu button:hover {
+  background: var(--dc-surface-muted);
+  color: var(--dc-primary);
+}
+
+.kafka-workbench__context-menu button.is-danger:hover {
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
+}
+
+.kafka-workbench__menu-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
 }
 
 @keyframes kafka-workbench-spin {
