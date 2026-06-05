@@ -313,7 +313,9 @@ func (s *DataPointService) buildHTTPRequestValue(ctx context.Context, projectID 
 			value.Timestamp = *request.LastSentAt
 		}
 		if request.Quality == "bad" {
-			value.Value = request.LastResponse
+			// 旧版本会写入 LastResponse 作为数据点 value；新版不再持久化响应，
+			// quality 已经是"bad"时让 value 保持空，避免数据点误用错误响应作为值。
+			value.Value = nil
 			return &value, nil
 		}
 	}

@@ -45,7 +45,6 @@ type HTTPRequestRecord struct {
 	Settings      map[string]any
 	Enabled       bool
 	SortOrder     int
-	LastResponse  any
 	Quality       string
 	LastSentAt    *time.Time
 	DataPointID   *string
@@ -118,10 +117,9 @@ type UpdateHTTPRequestParams struct {
 	UserID          string
 }
 
-// HTTPRequestSendSnapshot 描述一次发送后要保存的最后响应快照。
+// HTTPRequestSendSnapshot 描述一次发送后要保存的状态（不含响应内容，前端不展示历史）。
 type HTTPRequestSendSnapshot struct {
 	RequestID       string
-	LastResponse    any
 	Quality         string
 	LastSentAt      time.Time
 	DefaultValue    *string
@@ -278,7 +276,7 @@ func (r *HTTPWorkbenchRepository) ListRequestsPage(ctx context.Context, projectI
 	rows, err := r.pool.Query(ctx, `
 		SELECT req.id, req.project_id, req.connection_id, req.group_id, req.name, req.method, req.url,
 		       req.params, req.headers, req.auth, req.body_type, req.body, req.settings, req.enabled,
-		       req.sort_order, req.last_response, req.quality, req.last_sent_at, dp.id, dp.path,
+		       req.sort_order, req.quality, req.last_sent_at, dp.id, dp.path,
 		       req.created_at, req.updated_at
 		FROM data_http_requests req
 		LEFT JOIN data_points dp
@@ -312,7 +310,7 @@ func (r *HTTPWorkbenchRepository) GetRequest(ctx context.Context, projectID, req
 	row := r.pool.QueryRow(ctx, `
 		SELECT req.id, req.project_id, req.connection_id, req.group_id, req.name, req.method, req.url,
 		       req.params, req.headers, req.auth, req.body_type, req.body, req.settings, req.enabled,
-		       req.sort_order, req.last_response, req.quality, req.last_sent_at, dp.id, dp.path,
+		       req.sort_order, req.quality, req.last_sent_at, dp.id, dp.path,
 		       req.created_at, req.updated_at
 		FROM data_http_requests req
 		LEFT JOIN data_points dp
@@ -347,13 +345,13 @@ func (r *HTTPWorkbenchRepository) CreateRequestWithDataPoint(ctx context.Context
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11::jsonb, $12::jsonb, $13, $14, $15, $15)
 		RETURNING id, project_id, connection_id, group_id, name, method, url, params, headers,
-		          auth, body_type, body, settings, enabled, sort_order, last_response,
+		          auth, body_type, body, settings, enabled, sort_order,
 		          quality, last_sent_at, created_at, updated_at
 	`, params.ProjectID, params.ConnectionID, params.GroupID, params.Name, params.Method, params.URL, mustMarshalJSONArray(params.Params), mustMarshalJSONArray(params.Headers), mustMarshalJSONObject(params.Auth), params.BodyType, mustMarshalJSONObject(params.Body), mustMarshalJSONObject(params.Settings), params.Enabled, params.SortOrder, params.UserID).Scan(
 		&record.ID, &record.ProjectID, &record.ConnectionID, &record.GroupID, &record.Name, &record.Method, &record.URL,
 		newJSONScanner(&record.Params), newJSONScanner(&record.Headers), newJSONScanner(&record.Auth), &record.BodyType,
 		newJSONScanner(&record.Body), newJSONScanner(&record.Settings), &record.Enabled, &record.SortOrder,
-		newJSONScanner(&record.LastResponse), &record.Quality, &record.LastSentAt, &record.CreatedAt, &record.UpdatedAt,
+		&record.Quality, &record.LastSentAt, &record.CreatedAt, &record.UpdatedAt,
 	)
 	if err != nil {
 		return nil, translateHTTPWorkbenchWriteError(err, "创建 HTTP 请求失败")
@@ -399,13 +397,13 @@ func (r *HTTPWorkbenchRepository) UpdateRequestWithDataPoint(ctx context.Context
 		    updated_at = now()
 		WHERE project_id = $1 AND id = $2
 		RETURNING id, project_id, connection_id, group_id, name, method, url, params, headers,
-		          auth, body_type, body, settings, enabled, sort_order, last_response,
+		          auth, body_type, body, settings, enabled, sort_order,
 		          quality, last_sent_at, created_at, updated_at
 	`, params.ProjectID, params.ID, params.GroupID, params.Name, params.Method, params.URL, mustMarshalJSONArray(params.Params), mustMarshalJSONArray(params.Headers), mustMarshalJSONObject(params.Auth), params.BodyType, mustMarshalJSONObject(params.Body), mustMarshalJSONObject(params.Settings), params.Enabled, params.SortOrder, params.UserID).Scan(
 		&record.ID, &record.ProjectID, &record.ConnectionID, &record.GroupID, &record.Name, &record.Method, &record.URL,
 		newJSONScanner(&record.Params), newJSONScanner(&record.Headers), newJSONScanner(&record.Auth), &record.BodyType,
 		newJSONScanner(&record.Body), newJSONScanner(&record.Settings), &record.Enabled, &record.SortOrder,
-		newJSONScanner(&record.LastResponse), &record.Quality, &record.LastSentAt, &record.CreatedAt, &record.UpdatedAt,
+		&record.Quality, &record.LastSentAt, &record.CreatedAt, &record.UpdatedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -457,12 +455,8 @@ func (r *HTTPWorkbenchRepository) DeleteRequestWithDataPoint(ctx context.Context
 	return nil
 }
 
-// SaveRequestSendSnapshot 保存一次 Send 结果，并把成功响应写入对应数据点默认值。
+// SaveRequestSendSnapshot 保存一次 Send 结果（只更新 quality/last_sent_at/default_value，不持久化响应内容）。
 func (r *HTTPWorkbenchRepository) SaveRequestSendSnapshot(ctx context.Context, projectID string, snapshot HTTPRequestSendSnapshot) error {
-	responsePayload, err := json.Marshal(snapshot.LastResponse)
-	if err != nil {
-		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP 响应快照格式无效", err)
-	}
 	configPayload, err := json.Marshal(snapshot.DataPointConfig)
 	if err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "HTTP 数据点 sourceConfig 格式无效", err)
@@ -475,13 +469,12 @@ func (r *HTTPWorkbenchRepository) SaveRequestSendSnapshot(ctx context.Context, p
 
 	tag, err := tx.Exec(ctx, `
 		UPDATE data_http_requests
-		SET last_response = $3::jsonb,
-		    quality = $4,
-		    last_sent_at = $5,
-		    updated_by = $6,
+		SET quality = $3,
+		    last_sent_at = $4,
+		    updated_by = $5,
 		    updated_at = now()
 		WHERE project_id = $1 AND id = $2
-	`, projectID, snapshot.RequestID, string(responsePayload), snapshot.Quality, snapshot.LastSentAt, snapshot.UserID)
+	`, projectID, snapshot.RequestID, snapshot.Quality, snapshot.LastSentAt, snapshot.UserID)
 	if err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "保存 HTTP 响应快照失败", err)
 	}
@@ -595,7 +588,6 @@ func scanHTTPRequestRecord(row pgx.Row) (HTTPRequestRecord, error) {
 		newJSONScanner(&record.Settings),
 		&record.Enabled,
 		&record.SortOrder,
-		newJSONScanner(&record.LastResponse),
 		&record.Quality,
 		&record.LastSentAt,
 		&record.DataPointID,

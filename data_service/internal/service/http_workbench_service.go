@@ -72,7 +72,6 @@ type HTTPRequest struct {
 	SourceType    string         `json:"sourceType"`
 	DataPointID   string         `json:"dataPointId"`
 	DataPointPath string         `json:"dataPointPath"`
-	LastResponse  any            `json:"lastResponse"`
 	Quality       string         `json:"quality"`
 	LastSentAt    *time.Time     `json:"lastSentAt"`
 	CreatedAt     time.Time      `json:"createdAt"`
@@ -374,12 +373,11 @@ func (s *HTTPWorkbenchService) SendRequest(ctx context.Context, projectID, reque
 	response, sendErr := s.executeHTTPRequest(ctx, *connection, *record)
 	quality := "good"
 	var defaultValue *string
-	var responseForStore any
 	if sendErr != nil {
 		quality = "bad"
 		response = &HTTPSendResponse{
 			Status:     0,
-			StatusText: "REQUEST_FAILED",
+			StatusText: "请求失败",
 			Headers:    map[string]string{},
 			Body: map[string]any{
 				"error": sendErr.Error(),
@@ -389,15 +387,12 @@ func (s *HTTPWorkbenchService) SendRequest(ctx context.Context, projectID, reque
 			SizeBytes:  len([]byte(sendErr.Error())),
 			ReceivedAt: time.Now().UTC(),
 		}
-		responseForStore = response
 	} else {
-		responseForStore = response
 		value := stringifyJSONValue(response)
 		defaultValue = &value
 	}
 	if saveErr := s.repository.SaveRequestSendSnapshot(ctx, projectID, repository.HTTPRequestSendSnapshot{
 		RequestID:       record.ID,
-		LastResponse:    responseForStore,
 		Quality:         quality,
 		LastSentAt:      time.Now().UTC(),
 		DefaultValue:    defaultValue,
@@ -561,7 +556,7 @@ func (s *HTTPWorkbenchService) normalizeUpdateRequest(ctx context.Context, proje
 		SortOrder:       input.SortOrder,
 		DataPointPath:   buildHTTPDataPointPath(connection.Name, name),
 		DataPointConfig: httpRequestSourceConfig(connection, record),
-		DefaultValue:    defaultValueFromLastResponse(current.LastResponse),
+		DefaultValue:    nil,
 		UserID:          userID,
 	}, nil
 }
@@ -870,13 +865,6 @@ func buildHTTPDataPointPath(connectionName, requestName string) string {
 	return "http." + normalizeDatapointSegment(connectionName) + "." + normalizeDatapointSegment(requestName)
 }
 
-func defaultValueFromLastResponse(value any) *string {
-	if value == nil {
-		return nil
-	}
-	encoded := stringifyJSONValue(value)
-	return &encoded
-}
 
 func stringifyJSONValue(value any) string {
 	payload, err := json.Marshal(value)
@@ -884,6 +872,16 @@ func stringifyJSONValue(value any) string {
 		return fmt.Sprintf("%v", value)
 	}
 	return string(payload)
+}
+
+// defaultValueFromSnapshot 把"上次抓到的消息"序列化为数据点默认值；
+// HTTP/WS 工作台都可用作"未抓到时的初始值"推导。输入 nil 返回 nil。
+func defaultValueFromSnapshot(value any) *string {
+	if value == nil {
+		return nil
+	}
+	encoded := stringifyJSONValue(value)
+	return &encoded
 }
 
 func boolFromAnyWithDefault(value any, fallback bool) bool {
@@ -926,7 +924,6 @@ func toHTTPRequest(record repository.HTTPRequestRecord) HTTPRequest {
 		SourceType:    "http.request",
 		DataPointID:   httpStringValue(record.DataPointID),
 		DataPointPath: httpStringValue(record.DataPointPath),
-		LastResponse:  record.LastResponse,
 		Quality:       fallbackTrimmed(record.Quality, "unknown"),
 		LastSentAt:    record.LastSentAt,
 		CreatedAt:     record.CreatedAt,

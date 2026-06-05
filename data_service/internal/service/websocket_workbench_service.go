@@ -488,7 +488,7 @@ func (s *WebSocketWorkbenchService) normalizeUpdateSession(ctx context.Context, 
 		Enabled:   input.Enabled, SortOrder: input.SortOrder,
 		DataPointPath:   buildWebSocketDataPointPath(connection.Name, name),
 		DataPointConfig: webSocketSessionSourceConfig(connection, record),
-		DefaultValue:    defaultValueFromLastResponse(current.LastMessage),
+		DefaultValue:    defaultValueFromSnapshot(current.LastMessage),
 		UserID:          userID,
 	}, nil
 }

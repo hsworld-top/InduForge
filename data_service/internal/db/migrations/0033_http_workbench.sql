@@ -33,7 +33,6 @@ CREATE TABLE IF NOT EXISTS data_http_requests (
     settings jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(settings) = 'object'),
     enabled boolean NOT NULL DEFAULT true,
     sort_order integer NOT NULL DEFAULT 0,
-    last_response jsonb,
     quality text NOT NULL DEFAULT 'unknown' CHECK (quality IN ('good', 'bad', 'unknown')),
     last_sent_at timestamptz,
     created_by uuid NOT NULL,
