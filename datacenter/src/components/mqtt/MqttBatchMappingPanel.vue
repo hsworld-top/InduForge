@@ -395,11 +395,7 @@
       </el-form>
       <template #footer>
         <el-button @click="ruleDialogVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="ruleDialogSaving"
-          @click="saveRuleDialog"
-        >
+        <el-button type="primary" :loading="ruleDialogSaving" @click="saveRuleDialog">
           保存规则
         </el-button>
       </template>
@@ -791,7 +787,10 @@ const saveDefaultRule = async () => {
       props.subscription.id,
       rule,
     )
-    const updatedSubscription = response.data || { ...props.subscription, defaultBatchParseRule: rule }
+    const updatedSubscription = response.data || {
+      ...props.subscription,
+      defaultBatchParseRule: rule,
+    }
     savedDefaultRule.value = updatedSubscription.defaultBatchParseRule || rule
     emit('subscriptionUpdated', updatedSubscription)
     ElMessage.success('拆分规则已保存，之后新建变量会使用这套规则')
@@ -807,7 +806,9 @@ const resolveNewRowRule = (matchName: string): BatchParseRule => ({
   matchName,
 })
 
-const normalizeBatchRuleObject = (value?: Record<string, unknown> | BatchParseRule | null): BatchParseRule => ({
+const normalizeBatchRuleObject = (
+  value?: Record<string, unknown> | BatchParseRule | null,
+): BatchParseRule => ({
   arrayPath: String(value?.arrayPath || '').trim() || undefined,
   namePath: String(value?.namePath || '').trim() || undefined,
   valuePath: String(value?.valuePath || '').trim() || undefined,
@@ -1060,9 +1061,7 @@ const shouldUpdateMappingRow = (row: BatchMappingRow, index: number) => {
 }
 
 const isRuntimeRuleChanged = (currentRule: BatchParseRule, nextRule: BatchParseRule) =>
-  runtimeRuleKeys.some(
-    (key) => String(currentRule?.[key] || '') !== String(nextRule?.[key] || ''),
-  )
+  runtimeRuleKeys.some((key) => String(currentRule?.[key] || '') !== String(nextRule?.[key] || ''))
 
 const openRuleDialog = (row: BatchMappingRow) => {
   const current = row.existingTagId
@@ -1315,11 +1314,15 @@ const removeSelectedMappings = async () => {
     const deleteCount = mappingDisplayTotal.value
     if (deleteCount === 0) return
     try {
-      await ElMessageBox.confirm(`确定要删除当前筛选结果中的 ${deleteCount} 个变量吗？`, '批量删除确认', {
-        type: 'warning',
-        confirmButtonText: '删除',
-        cancelButtonText: '取消',
-      })
+      await ElMessageBox.confirm(
+        `确定要删除当前筛选结果中的 ${deleteCount} 个变量吗？`,
+        '批量删除确认',
+        {
+          type: 'warning',
+          confirmButtonText: '删除',
+          cancelButtonText: '取消',
+        },
+      )
       const response = await deleteMqttTagsByFilter(props.projectId, props.subscription.id, {
         search: searchKeyword.value.trim(),
       })
@@ -1488,7 +1491,10 @@ const markExistingMappings = () => {
   })
 }
 
-const loadMappingRuntimeInfo = async (options: { loadValues?: boolean } = {}, requestSeq = loadRequestSeq.value) => {
+const loadMappingRuntimeInfo = async (
+  options: { loadValues?: boolean } = {},
+  requestSeq = loadRequestSeq.value,
+) => {
   const tagIDs = existingTags.value.map((tag) => tag.id).filter(Boolean)
   if (tagIDs.length === 0) {
     if (requestSeq === loadRequestSeq.value) {
@@ -1708,14 +1714,21 @@ const formatQualityLabel = (row: BatchMappingRow) => {
   }
   const label = labels[quality] || quality
   const qualityCode = row.currentValue?.qualityCode
-  if (quality === 'bad' && qualityCode !== null && qualityCode !== undefined && qualityCode !== '') {
+  if (
+    quality === 'bad' &&
+    qualityCode !== null &&
+    qualityCode !== undefined &&
+    qualityCode !== ''
+  ) {
     return `${label} ${qualityCode}`
   }
   return label
 }
 
 const formatLastTime = (row: BatchMappingRow) => {
-  return hasReceivedTagValue(row.currentValue) ? formatDisplayTime(row.currentValue?.timestamp) : '-'
+  return hasReceivedTagValue(row.currentValue)
+    ? formatDisplayTime(row.currentValue?.timestamp)
+    : '-'
 }
 
 const formatDisplayTime = (value: unknown) => {

@@ -173,7 +173,11 @@
                         </el-tooltip>
                       </span>
                     </template>
-                    <el-input v-model="formData.username" placeholder="请输入 SASL 用户名" clearable />
+                    <el-input
+                      v-model="formData.username"
+                      placeholder="请输入 SASL 用户名"
+                      clearable
+                    />
                   </el-form-item>
                   <el-form-item>
                     <template #label>
@@ -223,7 +227,10 @@
                     <template #label>
                       <span class="connection-dialog__field-label">
                         连接超时
-                        <el-tooltip content="建立 TCP/TLS/SASL 连接的最大等待时间，单位毫秒。" placement="top">
+                        <el-tooltip
+                          content="建立 TCP/TLS/SASL 连接的最大等待时间，单位毫秒。"
+                          placement="top"
+                        >
                           <IconTablerHelpCircle class="connection-dialog__field-help" />
                         </el-tooltip>
                       </span>
@@ -239,7 +246,10 @@
                     <template #label>
                       <span class="connection-dialog__field-label">
                         请求超时
-                        <el-tooltip content="测试连接和读取元信息时的最大等待时间，单位毫秒。" placement="top">
+                        <el-tooltip
+                          content="测试连接和读取元信息时的最大等待时间，单位毫秒。"
+                          placement="top"
+                        >
                           <IconTablerHelpCircle class="connection-dialog__field-help" />
                         </el-tooltip>
                       </span>
@@ -284,14 +294,21 @@
                     <template #label>
                       <span class="connection-dialog__field-label">
                         验证服务器证书
-                        <el-tooltip content="生产环境建议开启；使用自签名证书调试时可按需关闭。" placement="top">
+                        <el-tooltip
+                          content="生产环境建议开启；使用自签名证书调试时可按需关闭。"
+                          placement="top"
+                        >
                           <IconTablerHelpCircle class="connection-dialog__field-help" />
                         </el-tooltip>
                       </span>
                     </template>
                     <el-switch v-model="formData.sslConfig.rejectUnauthorized" />
                     <span class="connection-dialog__field-inline-tip">
-                      {{ formData.sslConfig.rejectUnauthorized ? '校验证书链与主机名' : '跳过证书校验' }}
+                      {{
+                        formData.sslConfig.rejectUnauthorized
+                          ? '校验证书链与主机名'
+                          : '跳过证书校验'
+                      }}
                     </span>
                   </el-form-item>
                 </el-collapse-item>
@@ -923,7 +940,9 @@ const formComponent = computed(() => {
 })
 
 const isBuiltinStoreSelected = computed(() => isBuiltinStoreType(connectionType.value))
-const isSimpleMetadataSource = computed(() => isBuiltinStoreSelected.value || connectionType.value === 'http')
+const isSimpleMetadataSource = computed(
+  () => isBuiltinStoreSelected.value || connectionType.value === 'http',
+)
 const showTestButton = computed(() => !isSimpleMetadataSource.value)
 const isKafkaSaslEnabled = computed(() =>
   String(formData.value.securityProtocol || '').includes('SASL'),
@@ -1013,7 +1032,12 @@ const summaryRows = computed(() => {
     rows.push(
       { label: '服务器地址', value: data.brokers || '未填写' },
       { label: '安全协议', value: data.securityProtocol || 'PLAINTEXT' },
-      { label: 'SASL', value: String(data.securityProtocol || '').includes('SASL') ? data.saslMechanism || 'PLAIN' : '未启用' },
+      {
+        label: 'SASL',
+        value: String(data.securityProtocol || '').includes('SASL')
+          ? data.saslMechanism || 'PLAIN'
+          : '未启用',
+      },
       { label: '超时', value: formatTimeout(data.requestTimeoutMs || data.dialTimeoutMs) },
     )
   } else if (connectionType.value === 'http') {
@@ -1131,15 +1155,16 @@ const checklist = computed(() => {
       ready: hasTarget,
     },
     {
-      label: connectionType.value === 'http'
-        ? '无需测试连接'
-        : previewProtocolTypes.includes(connectionType.value)
-        ? connectionType.value === 'kafka'
-          ? '可先测试 Broker 连通'
-          : '保存后可短时预览'
-        : industrialProtocolTypes.includes(connectionType.value)
-          ? '保存为节点侧运行配置'
-          : '连接测试可选完成',
+      label:
+        connectionType.value === 'http'
+          ? '无需测试连接'
+          : previewProtocolTypes.includes(connectionType.value)
+            ? connectionType.value === 'kafka'
+              ? '可先测试 Broker 连通'
+              : '保存后可短时预览'
+            : industrialProtocolTypes.includes(connectionType.value)
+              ? '保存为节点侧运行配置'
+              : '连接测试可选完成',
       ready:
         connectionType.value === 'http' ||
         (previewProtocolTypes.includes(connectionType.value) && connectionType.value !== 'kafka') ||
@@ -1586,7 +1611,8 @@ const normalizeBuiltinSubmitConfig = (type, config) => {
 }
 
 const normalizeKafkaOptionsForForm = (options) => {
-  const sslConfig = options.sslConfig && typeof options.sslConfig === 'object' ? options.sslConfig : {}
+  const sslConfig =
+    options.sslConfig && typeof options.sslConfig === 'object' ? options.sslConfig : {}
   return {
     securityProtocol: String(options.securityProtocol || 'PLAINTEXT').toUpperCase(),
     saslMechanism: String(options.saslMechanism || 'PLAIN').toUpperCase(),
@@ -1602,7 +1628,7 @@ const normalizeKafkaOptionsForForm = (options) => {
       rejectUnauthorized:
         typeof sslConfig.rejectUnauthorized === 'boolean'
           ? sslConfig.rejectUnauthorized
-          : !Boolean(options.tlsInsecureSkipVerify),
+          : !options.tlsInsecureSkipVerify,
     },
   }
 }

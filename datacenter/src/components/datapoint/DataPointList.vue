@@ -198,7 +198,13 @@
           @selection-change="handleSelectionChange"
         >
           <!-- 选择列 -->
-          <el-table-column type="selection" width="56" fixed="left" align="center" reserve-selection />
+          <el-table-column
+            type="selection"
+            width="56"
+            fixed="left"
+            align="center"
+            reserve-selection
+          />
 
           <!-- 名称列 -->
           <el-table-column label="名称" width="220" fixed="left">
@@ -766,7 +772,10 @@ const currentStatusLabel = computed(
 
 const currentSourceLabel = computed(() => {
   if (!sourceFilter.value) return '接入源'
-  return dynamicSourceOptions.value.find((option) => option.value === sourceFilter.value)?.label || sourceFilter.value
+  return (
+    dynamicSourceOptions.value.find((option) => option.value === sourceFilter.value)?.label ||
+    sourceFilter.value
+  )
 })
 
 const currentSortFieldLabel = computed(
@@ -823,7 +832,9 @@ const totalVisibleCount = computed(() =>
 
 const totalPages = computed(() => {
   if (!isManagementMode.value || pagination.value.total === 0) return 0
-  return pagination.value.totalPages || Math.ceil(pagination.value.total / pagination.value.pageSize)
+  return (
+    pagination.value.totalPages || Math.ceil(pagination.value.total / pagination.value.pageSize)
+  )
 })
 
 const currentPage = computed(() => {
@@ -1002,7 +1013,10 @@ const handlePageSizeChange = (pageSize: number) => {
 const applyJumpPageInput = () => {
   if (totalPages.value === 0) return
   const raw = Number(jumpPageInput.value)
-  const nextPage = Math.min(Math.max(Number.isFinite(raw) ? Math.trunc(raw) : 1, 1), totalPages.value)
+  const nextPage = Math.min(
+    Math.max(Number.isFinite(raw) ? Math.trunc(raw) : 1, 1),
+    totalPages.value,
+  )
   if (nextPage === pagination.value.page) {
     jumpPageInput.value = String(nextPage)
     return
@@ -1128,10 +1142,11 @@ const openBatchTagDialog = async () => {
   if (bulkSelectedCount.value === 0) return
   // 选中条目超过阈值时给二次确认，避免误操作
   if (bulkSelectedCount.value >= BATCH_TAG_CONFIRM_THRESHOLD) {
-    const ok = await confirm(
-      `即将为 ${bulkSelectedCount.value} 个数据点批量添加标签，确认继续？`,
-      { title: '批量打标签', confirmText: '继续', type: 'warning' },
-    )
+    const ok = await confirm(`即将为 ${bulkSelectedCount.value} 个数据点批量添加标签，确认继续？`, {
+      title: '批量打标签',
+      confirmText: '继续',
+      type: 'warning',
+    })
     if (!ok) return
   }
   currentTagDatapoint.value = null

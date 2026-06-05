@@ -1,5 +1,10 @@
 <template>
-  <el-dialog :model-value="modelValue" :title="mode === 'edit' ? '编辑变量组' : '新建变量组'" width="420px" @close="$emit('update:modelValue', false)">
+  <el-dialog
+    :model-value="modelValue"
+    :title="mode === 'edit' ? '编辑变量组' : '新建变量组'"
+    width="420px"
+    @close="$emit('update:modelValue', false)"
+  >
     <el-form class="opcua-group-form" label-width="86px">
       <el-form-item label="变量组名称" required>
         <el-input v-model="form.name" maxlength="100" />
@@ -40,7 +45,10 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: 'update:modelValue', value: boolean): void
-  (event: 'submit', value: { name: string; parentId: string | null; description: string | null }): void
+  (
+    event: 'submit',
+    value: { name: string; parentId: string | null; description: string | null },
+  ): void
 }>()
 
 const form = reactive({

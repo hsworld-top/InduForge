@@ -409,7 +409,9 @@ const tagTypeOptions = computed(() => [
   { label: 'BOOLEAN', value: 'boolean' },
 ])
 
-const selectableColumns = computed(() => allDraftColumns.value.filter((column) => column.name.trim()))
+const selectableColumns = computed(() =>
+  allDraftColumns.value.filter((column) => column.name.trim()),
+)
 const allDraftColumns = computed(() => [...draft.value.columns, ...draft.value.tags])
 const timeColumnOptions = computed(() =>
   draft.value.columns.filter((column) =>
@@ -536,11 +538,15 @@ function isDefaultCreateDraft() {
 async function applyCollectionTemplate() {
   if (!isDefaultCreateDraft()) {
     try {
-      await ElMessageBox.confirm('采集数据模板会替换当前字段、维度字段和时序策略，是否继续？', '使用采集数据模板', {
-        confirmButtonText: '使用模板',
-        cancelButtonText: '取消',
-        type: 'warning',
-      })
+      await ElMessageBox.confirm(
+        '采集数据模板会替换当前字段、维度字段和时序策略，是否继续？',
+        '使用采集数据模板',
+        {
+          confirmButtonText: '使用模板',
+          cancelButtonText: '取消',
+          type: 'warning',
+        },
+      )
     } catch {
       return
     }
@@ -552,7 +558,12 @@ async function applyCollectionTemplate() {
     kind: 'hypertable',
     columns: [
       createColumn({ name: 'ts', type: 'timestamptz', nullable: false }),
-      createColumn({ name: 'quality', type: 'int', nullable: false, comment: '质量码，常见约定 192=GOOD' }),
+      createColumn({
+        name: 'quality',
+        type: 'int',
+        nullable: false,
+        comment: '质量码，常见约定 192=GOOD',
+      }),
       createColumn({ name: 'value', type: 'double', nullable: true, comment: '采集值' }),
     ],
     indexes: [
@@ -720,7 +731,9 @@ function buildPayload() {
               comment: tag.comment.trim(),
             })),
             chunkInterval: draft.value.chunkInterval.trim(),
-            retentionDays: draft.value.retentionEnabled ? draft.value.retentionDays || undefined : undefined,
+            retentionDays: draft.value.retentionEnabled
+              ? draft.value.retentionDays || undefined
+              : undefined,
           }
         : undefined,
   }

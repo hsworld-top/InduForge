@@ -31,7 +31,9 @@
 
           <div v-if="showQualityFields" class="tag-card__time">
             <span>更新时间</span>
-            <strong>{{ tag.currentValue?.timestamp ? formatTimestamp(tag.currentValue.timestamp) : '-' }}</strong>
+            <strong>{{
+              tag.currentValue?.timestamp ? formatTimestamp(tag.currentValue.timestamp) : '-'
+            }}</strong>
           </div>
         </div>
       </div>
@@ -284,7 +286,12 @@ const formatQualityLabel = (currentValue) => {
   const quality = currentValue?.quality || 'unknown'
   const label = getQualityLabel(quality)
   const qualityCode = currentValue?.qualityCode
-  if (quality === 'bad' && qualityCode !== null && qualityCode !== undefined && qualityCode !== '') {
+  if (
+    quality === 'bad' &&
+    qualityCode !== null &&
+    qualityCode !== undefined &&
+    qualityCode !== ''
+  ) {
     return `${label} ${qualityCode}`
   }
   return label
@@ -396,10 +403,7 @@ onMounted(async () => {
   })
 
   stopSocketWatch = watch(
-    () => [
-      socketConnected.value,
-      subscriptionWindowTags.value.map((tag) => tag.id).join(','),
-    ],
+    () => [socketConnected.value, subscriptionWindowTags.value.map((tag) => tag.id).join(',')],
     () => {
       if (!socketConnected.value) {
         return

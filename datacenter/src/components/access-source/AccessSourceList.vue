@@ -6,10 +6,7 @@
     @drop.prevent="handleDrop"
   >
     <template v-for="item in displayItems" :key="item.key">
-      <div
-        v-if="item.kind === 'placeholder'"
-        class="access-source-list__placeholder"
-      >
+      <div v-if="item.kind === 'placeholder'" class="access-source-list__placeholder">
         <span>放到这里</span>
       </div>
       <AccessSourceCard
@@ -173,21 +170,32 @@ const handleDrop = () => {
   clearDragState()
   if (targetIndex === null) return
 
-  const sourceConnection = props.connections.find((connection) => connection.id === sourceConnectionId)
+  const sourceConnection = props.connections.find(
+    (connection) => connection.id === sourceConnectionId,
+  )
   if (!sourceConnection) return
 
   const boundedTargetIndex = Math.min(Math.max(targetIndex, 0), props.connections.length)
-  const sourceIndex = props.connections.findIndex((connection) => connection.id === sourceConnectionId)
+  const sourceIndex = props.connections.findIndex(
+    (connection) => connection.id === sourceConnectionId,
+  )
   const insertionIndex =
-    sourceIndex >= 0 && sourceIndex < boundedTargetIndex ? boundedTargetIndex - 1 : boundedTargetIndex
-  const nextConnections = props.connections.filter((connection) => connection.id !== sourceConnectionId)
-  nextConnections.splice(Math.min(Math.max(insertionIndex, 0), nextConnections.length), 0, sourceConnection)
+    sourceIndex >= 0 && sourceIndex < boundedTargetIndex
+      ? boundedTargetIndex - 1
+      : boundedTargetIndex
+  const nextConnections = props.connections.filter(
+    (connection) => connection.id !== sourceConnectionId,
+  )
+  nextConnections.splice(
+    Math.min(Math.max(insertionIndex, 0), nextConnections.length),
+    0,
+    sourceConnection,
+  )
   emit(
     'reorder',
     nextConnections.map((connection) => connection.id),
   )
 }
-
 </script>
 
 <style scoped>
@@ -245,12 +253,11 @@ const handleDrop = () => {
   justify-content: center;
   border: 1px dashed color-mix(in oklch, var(--dc-primary) 52%, var(--dc-border));
   border-radius: var(--dc-radius-md);
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in oklch, var(--dc-primary-soft) 70%, transparent),
-      color-mix(in oklch, var(--dc-surface-raised) 86%, transparent)
-    );
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklch, var(--dc-primary-soft) 70%, transparent),
+    color-mix(in oklch, var(--dc-surface-raised) 86%, transparent)
+  );
   color: var(--dc-primary);
   font-size: 13px;
   font-weight: 700;

@@ -63,10 +63,7 @@
           </div>
         </el-popover>
         <button type="button" class="mqtt-tag-list__sort-pill" @click="toggleSortOrder">
-          <IconTablerSortDescending
-            v-if="sortOrder === 'desc'"
-            class="mqtt-tag-list__sort-icon"
-          />
+          <IconTablerSortDescending v-if="sortOrder === 'desc'" class="mqtt-tag-list__sort-icon" />
           <IconTablerSortAscending v-else class="mqtt-tag-list__sort-icon" />
           {{ currentSortOrderLabel }}
         </button>
@@ -129,17 +126,29 @@
           <template #default="{ row }">
             <div class="mqtt-tag-list__row-actions">
               <el-tooltip content="查看" placement="top">
-                <button type="button" class="mqtt-tag-list__icon-action" @click="handleViewTag(row)">
+                <button
+                  type="button"
+                  class="mqtt-tag-list__icon-action"
+                  @click="handleViewTag(row)"
+                >
                   <IconTablerEye />
                 </button>
               </el-tooltip>
               <el-tooltip content="编辑" placement="top">
-                <button type="button" class="mqtt-tag-list__icon-action" @click="handleEditTag(row)">
+                <button
+                  type="button"
+                  class="mqtt-tag-list__icon-action"
+                  @click="handleEditTag(row)"
+                >
                   <IconTablerEdit />
                 </button>
               </el-tooltip>
               <el-tooltip content="删除" placement="top">
-                <button type="button" class="mqtt-tag-list__icon-action is-danger" @click="handleDeleteTag(row)">
+                <button
+                  type="button"
+                  class="mqtt-tag-list__icon-action is-danger"
+                  @click="handleDeleteTag(row)"
+                >
                   <IconTablerTrash />
                 </button>
               </el-tooltip>
@@ -489,11 +498,15 @@ const handleBatchDeleteTags = async () => {
     const deleteCount = pagination.value.total
     if (deleteCount === 0) return
     try {
-      await ElMessageBox.confirm(`确定要删除当前筛选结果中的 ${deleteCount} 个变量吗？`, '批量删除确认', {
-        type: 'warning',
-        confirmButtonText: '删除',
-        cancelButtonText: '取消',
-      })
+      await ElMessageBox.confirm(
+        `确定要删除当前筛选结果中的 ${deleteCount} 个变量吗？`,
+        '批量删除确认',
+        {
+          type: 'warning',
+          confirmButtonText: '删除',
+          cancelButtonText: '取消',
+        },
+      )
       const response = await deleteMqttTagsByFilter(props.projectId, props.subscriptionId, {
         search: searchKeyword.value.trim(),
       })
@@ -624,7 +637,12 @@ const formatQualityLabel = (tag) => {
   }
   const label = labels[quality] || quality
   const qualityCode = tag.currentValue?.qualityCode
-  if (quality === 'bad' && qualityCode !== null && qualityCode !== undefined && qualityCode !== '') {
+  if (
+    quality === 'bad' &&
+    qualityCode !== null &&
+    qualityCode !== undefined &&
+    qualityCode !== ''
+  ) {
     return `${label} ${qualityCode}`
   }
   return label

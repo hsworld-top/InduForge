@@ -8,29 +8,42 @@
       <section>
         <h3><IconTablerInfoCircle />变量信息</h3>
         <dl>
-          <dt>名称</dt><dd>{{ variable.name }}</dd>
-          <dt>Code</dt><dd>{{ variable.code }}</dd>
-          <dt>状态</dt><dd>{{ variable.status }}</dd>
+          <dt>名称</dt>
+          <dd>{{ variable.name }}</dd>
+          <dt>Code</dt>
+          <dd>{{ variable.code }}</dd>
+          <dt>状态</dt>
+          <dd>{{ variable.status }}</dd>
         </dl>
       </section>
       <section>
         <h3><IconTablerMapPin />S7 地址</h3>
         <dl>
-          <dt>地址区</dt><dd>{{ variable.area }}</dd>
-          <dt>DB 号</dt><dd>{{ variable.dbNumber ?? '-' }}</dd>
-          <dt>字节</dt><dd>{{ variable.byteOffset }}-{{ variable.byteOffset + variable.readLength - 1 }}</dd>
-          <dt>Bit</dt><dd>{{ variable.bitOffset ?? '-' }}</dd>
+          <dt>地址区</dt>
+          <dd>{{ variable.area }}</dd>
+          <dt>DB 号</dt>
+          <dd>{{ variable.dbNumber ?? '-' }}</dd>
+          <dt>字节</dt>
+          <dd>{{ variable.byteOffset }}-{{ variable.byteOffset + variable.readLength - 1 }}</dd>
+          <dt>Bit</dt>
+          <dd>{{ variable.bitOffset ?? '-' }}</dd>
         </dl>
       </section>
       <section>
         <h3><IconTablerBinaryTree />数据解释</h3>
         <dl>
-          <dt>类型</dt><dd>{{ variable.dataType }}</dd>
-          <dt>字节序</dt><dd>{{ variable.byteOrder }}</dd>
-          <dt>字序</dt><dd>{{ variable.wordOrder }}</dd>
-          <dt>倍率</dt><dd>{{ variable.scale }}</dd>
-          <dt>偏移</dt><dd>{{ variable.offset }}</dd>
-          <dt>单位</dt><dd>{{ variable.unit || '-' }}</dd>
+          <dt>类型</dt>
+          <dd>{{ variable.dataType }}</dd>
+          <dt>字节序</dt>
+          <dd>{{ variable.byteOrder }}</dd>
+          <dt>字序</dt>
+          <dd>{{ variable.wordOrder }}</dd>
+          <dt>倍率</dt>
+          <dd>{{ variable.scale }}</dd>
+          <dt>偏移</dt>
+          <dd>{{ variable.offset }}</dd>
+          <dt>单位</dt>
+          <dd>{{ variable.unit || '-' }}</dd>
         </dl>
       </section>
       <section>
@@ -40,14 +53,19 @@
       <section>
         <h3><IconTablerActivityHeartbeat />最近读取</h3>
         <dl>
-          <dt>最近值</dt><dd>{{ formatValue(variable.lastValue) }}</dd>
-          <dt>质量</dt><dd>{{ variable.quality || 'unknown' }}</dd>
-          <dt>时间</dt><dd>{{ variable.lastUpdatedAt || '-' }}</dd>
+          <dt>最近值</dt>
+          <dd>{{ formatValue(variable.lastValue) }}</dd>
+          <dt>质量</dt>
+          <dd>{{ variable.quality || 'unknown' }}</dd>
+          <dt>时间</dt>
+          <dd>{{ variable.lastUpdatedAt || '-' }}</dd>
         </dl>
       </section>
       <section>
         <h3><IconTablerAlertTriangle />校验问题</h3>
-        <p :class="{ 'is-warning': variableIssues.length }">{{ variableIssues.length ? `${variableIssues.length} 个问题` : '无' }}</p>
+        <p :class="{ 'is-warning': variableIssues.length }">
+          {{ variableIssues.length ? `${variableIssues.length} 个问题` : '无' }}
+        </p>
       </section>
     </template>
     <template v-else>
@@ -58,28 +76,43 @@
       <section>
         <h3><IconTablerCpu />PLC 档案</h3>
         <dl>
-          <dt>系列</dt><dd>{{ profile?.plcFamily || '-' }}</dd>
-          <dt>端点</dt><dd>{{ profile ? `${profile.host}:${profile.port}` : '-' }}</dd>
-          <dt>Rack/Slot</dt><dd>{{ profile ? `${profile.rack}/${profile.slot}` : '-' }}</dd>
-          <dt>合并间隙</dt><dd>{{ profile?.maxGapBytes ?? '-' }} bytes</dd>
+          <dt>系列</dt>
+          <dd>{{ profile?.plcFamily || '-' }}</dd>
+          <dt>端点</dt>
+          <dd>{{ profile ? `${profile.host}:${profile.port}` : '-' }}</dd>
+          <dt>Rack/Slot</dt>
+          <dd>{{ profile ? `${profile.rack}/${profile.slot}` : '-' }}</dd>
+          <dt>合并间隙</dt>
+          <dd>{{ profile?.maxGapBytes ?? '-' }} bytes</dd>
         </dl>
       </section>
       <section>
         <h3><IconTablerChartBar />地址分布</h3>
         <dl>
-          <dt>DB</dt><dd>{{ countByArea.DB || 0 }}</dd>
-          <dt>M</dt><dd>{{ countByArea.M || 0 }}</dd>
-          <dt>I</dt><dd>{{ countByArea.I || 0 }}</dd>
-          <dt>Q</dt><dd>{{ countByArea.Q || 0 }}</dd>
+          <dt>DB</dt>
+          <dd>{{ countByArea.DB || 0 }}</dd>
+          <dt>M</dt>
+          <dd>{{ countByArea.M || 0 }}</dd>
+          <dt>I</dt>
+          <dd>{{ countByArea.I || 0 }}</dd>
+          <dt>Q</dt>
+          <dd>{{ countByArea.Q || 0 }}</dd>
         </dl>
       </section>
       <section>
         <h3><IconTablerRoute />读取计划摘要</h3>
-        <p>{{ estimate.variableCount }} 个变量，预计合并为 {{ estimate.blockCount }} 个读取块，{{ estimate.readsPerSecond.toFixed(2) }} reads/s。</p>
+        <p>
+          {{ estimate.variableCount }} 个变量，预计合并为 {{ estimate.blockCount }} 个读取块，{{
+            estimate.readsPerSecond.toFixed(2)
+          }}
+          reads/s。
+        </p>
       </section>
       <section>
         <h3><IconTablerAlertTriangle />风险提示</h3>
-        <p :class="{ 'is-warning': issues.length }">{{ issues.length ? `${issues.length} 个校验问题` : '暂无明显风险' }}</p>
+        <p :class="{ 'is-warning': issues.length }">
+          {{ issues.length ? `${issues.length} 个校验问题` : '暂无明显风险' }}
+        </p>
       </section>
     </template>
   </aside>
@@ -87,7 +120,13 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { S7Profile, S7ReadPlanEstimate, S7ValidationIssue, S7Variable, S7VariableGroup } from './types'
+import type {
+  S7Profile,
+  S7ReadPlanEstimate,
+  S7ValidationIssue,
+  S7Variable,
+  S7VariableGroup,
+} from './types'
 import IconTablerActivityHeartbeat from '~icons/tabler/activity-heartbeat'
 import IconTablerAlertTriangle from '~icons/tabler/alert-triangle'
 import IconTablerBinaryTree from '~icons/tabler/binary-tree'
@@ -108,7 +147,9 @@ const props = defineProps<{
 }>()
 
 const scopedVariables = computed(() =>
-  props.group ? props.variables.filter((item) => item.groupId === props.group?.id) : props.variables,
+  props.group
+    ? props.variables.filter((item) => item.groupId === props.group?.id)
+    : props.variables,
 )
 const countByArea = computed(() => {
   const result: Record<string, number> = {}

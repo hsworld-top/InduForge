@@ -15,13 +15,28 @@
             placeholder="搜索会话"
             @keyup.enter="loadSessions(1)"
           />
-          <button class="workbench-source-header__icon-action is-primary" title="新建会话" type="button" @click="createDraftSession">
+          <button
+            class="workbench-source-header__icon-action is-primary"
+            title="新建会话"
+            type="button"
+            @click="createDraftSession"
+          >
             <IconTablerPlus />
           </button>
-          <button class="workbench-source-header__icon-action" title="新建分组" type="button" @click="openGroupDialog()">
+          <button
+            class="workbench-source-header__icon-action"
+            title="新建分组"
+            type="button"
+            @click="openGroupDialog()"
+          >
             <IconTablerFolderPlus />
           </button>
-          <button class="workbench-source-header__icon-action" title="刷新" type="button" @click="reloadWorkbench">
+          <button
+            class="workbench-source-header__icon-action"
+            title="刷新"
+            type="button"
+            @click="reloadWorkbench"
+          >
             <IconTablerRefresh />
           </button>
         </template>
@@ -31,7 +46,12 @@
         <el-select v-model="activeGroupId" size="small" @change="handleGroupChange">
           <el-option label="全部会话" value="" />
           <el-option label="未分组" value="__ungrouped" />
-          <el-option v-for="group in groups" :key="group.id" :label="group.name" :value="group.id" />
+          <el-option
+            v-for="group in groups"
+            :key="group.id"
+            :label="group.name"
+            :value="group.id"
+          />
         </el-select>
       </div>
 
@@ -56,7 +76,11 @@
               >
                 <span class="ws-workbench__badge">WS</span>
                 <span>{{ session.name }}</span>
-                <el-tag v-if="session.quality !== 'unknown'" size="small" :type="session.quality === 'good' ? 'success' : 'danger'">
+                <el-tag
+                  v-if="session.quality !== 'unknown'"
+                  size="small"
+                  :type="session.quality === 'good' ? 'success' : 'danger'"
+                >
                   {{ session.quality }}
                 </el-tag>
               </button>
@@ -109,20 +133,41 @@
           <div class="ws-workbench__actions">
             <el-switch v-model="activeTab.draft.enabled" size="small" @change="markDirty" />
             <el-button size="small" :loading="saving" @click="saveActive">Save</el-button>
-            <el-button size="small" type="danger" plain :disabled="activeTab.isNew" @click="deleteActive">删除</el-button>
+            <el-button
+              size="small"
+              type="danger"
+              plain
+              :disabled="activeTab.isNew"
+              @click="deleteActive"
+              >删除</el-button
+            >
           </div>
         </div>
 
         <div class="ws-workbench__name-row">
           <el-input v-model="activeTab.draft.name" placeholder="会话名称" @input="markDirty" />
-          <el-select v-model="activeTab.draft.groupId" placeholder="分组" clearable @change="markDirty">
-            <el-option v-for="group in groups" :key="group.id" :label="group.name" :value="group.id" />
+          <el-select
+            v-model="activeTab.draft.groupId"
+            placeholder="分组"
+            clearable
+            @change="markDirty"
+          >
+            <el-option
+              v-for="group in groups"
+              :key="group.id"
+              :label="group.name"
+              :value="group.id"
+            />
           </el-select>
         </div>
 
         <div class="ws-workbench__request-line">
           <span class="ws-workbench__method">CONNECT</span>
-          <el-input v-model="activeTab.draft.url" placeholder="/stream 或 ws://example.com/stream" @input="markDirty" />
+          <el-input
+            v-model="activeTab.draft.url"
+            placeholder="/stream 或 ws://example.com/stream"
+            @input="markDirty"
+          />
           <el-button type="primary" :loading="connecting" @click="connectActive">Connect</el-button>
         </div>
 
@@ -137,10 +182,24 @@
                 <el-option label="Bearer Token" value="bearer" />
                 <el-option label="Basic Auth" value="basic" />
               </el-select>
-              <el-input v-if="activeTab.draft.auth.type === 'bearer'" v-model="activeTab.draft.auth.token" placeholder="Token" @input="markDirty" />
+              <el-input
+                v-if="activeTab.draft.auth.type === 'bearer'"
+                v-model="activeTab.draft.auth.token"
+                placeholder="Token"
+                @input="markDirty"
+              />
               <template v-if="activeTab.draft.auth.type === 'basic'">
-                <el-input v-model="activeTab.draft.auth.username" placeholder="Username" @input="markDirty" />
-                <el-input v-model="activeTab.draft.auth.password" placeholder="Password" show-password @input="markDirty" />
+                <el-input
+                  v-model="activeTab.draft.auth.username"
+                  placeholder="Username"
+                  @input="markDirty"
+                />
+                <el-input
+                  v-model="activeTab.draft.auth.password"
+                  placeholder="Password"
+                  show-password
+                  @input="markDirty"
+                />
               </template>
             </div>
           </el-tab-pane>
@@ -153,10 +212,23 @@
           <el-tab-pane label="Settings" name="settings">
             <div class="ws-workbench__settings">
               <label>超时 ms</label>
-              <el-input-number v-model="activeTab.draft.settings.timeoutMs" :min="1000" :max="30000" :step="500" @change="markDirty" />
+              <el-input-number
+                v-model="activeTab.draft.settings.timeoutMs"
+                :min="1000"
+                :max="30000"
+                :step="500"
+                @change="markDirty"
+              />
               <label>读取条数</label>
-              <el-input-number v-model="activeTab.draft.settings.messageLimit" :min="1" :max="50" @change="markDirty" />
-              <el-checkbox v-model="activeTab.draft.settings.tlsVerify" @change="markDirty">校验 TLS 证书</el-checkbox>
+              <el-input-number
+                v-model="activeTab.draft.settings.messageLimit"
+                :min="1"
+                :max="50"
+                @change="markDirty"
+              />
+              <el-checkbox v-model="activeTab.draft.settings.tlsVerify" @change="markDirty"
+                >校验 TLS 证书</el-checkbox
+              >
             </div>
           </el-tab-pane>
         </el-tabs>
@@ -165,21 +237,36 @@
           <header>
             <div>
               <strong>消息流</strong>
-              <span v-if="activeTab.preview">{{ activeTab.preview.status }} · {{ activeTab.preview.durationMs }} ms</span>
+              <span v-if="activeTab.preview"
+                >{{ activeTab.preview.status }} · {{ activeTab.preview.durationMs }} ms</span
+              >
             </div>
-            <el-tag v-if="activeTab.draft.dataPointPath" size="small">{{ activeTab.draft.dataPointPath }}</el-tag>
+            <el-tag v-if="activeTab.draft.dataPointPath" size="small">{{
+              activeTab.draft.dataPointPath
+            }}</el-tag>
           </header>
-          <div v-if="!activeTab.preview" class="ws-workbench__empty-response">短连接预览后显示收发消息</div>
+          <div v-if="!activeTab.preview" class="ws-workbench__empty-response">
+            短连接预览后显示收发消息
+          </div>
           <div v-else class="ws-workbench__messages">
-            <article v-for="(message, index) in activeTab.preview.messages" :key="index" class="ws-workbench__message" :class="`is-${message.direction}`">
+            <article
+              v-for="(message, index) in activeTab.preview.messages"
+              :key="index"
+              class="ws-workbench__message"
+              :class="`is-${message.direction}`"
+            >
               <div>
-                <el-tag size="small" :type="message.direction === 'in' ? 'success' : 'info'">{{ message.direction }}</el-tag>
+                <el-tag size="small" :type="message.direction === 'in' ? 'success' : 'info'">{{
+                  message.direction
+                }}</el-tag>
                 <span>{{ message.type }}</span>
                 <small>{{ message.sizeBytes }} bytes</small>
               </div>
               <pre>{{ formatJSON(message.payload ?? message.rawPayload) }}</pre>
             </article>
-            <pre v-if="activeTab.preview.status === 'error'" class="ws-workbench__diagnostic">{{ formatJSON(activeTab.preview.diagnostics) }}</pre>
+            <pre v-if="activeTab.preview.status === 'error'" class="ws-workbench__diagnostic">{{
+              formatJSON(activeTab.preview.diagnostics)
+            }}</pre>
           </div>
         </section>
       </div>
@@ -190,14 +277,23 @@
       </div>
     </main>
 
-    <el-dialog v-model="groupDialog.visible" :title="groupDialog.id ? '编辑分组' : '新建分组'" width="420px">
+    <el-dialog
+      v-model="groupDialog.visible"
+      :title="groupDialog.id ? '编辑分组' : '新建分组'"
+      width="420px"
+    >
       <el-form label-width="80px">
         <el-form-item label="名称">
           <el-input v-model="groupDialog.name" placeholder="分组名称" />
         </el-form-item>
         <el-form-item label="上级">
           <el-select v-model="groupDialog.parentId" clearable placeholder="根集合">
-            <el-option v-for="group in groups" :key="group.id" :label="group.name" :value="group.id" />
+            <el-option
+              v-for="group in groups"
+              :key="group.id"
+              :label="group.name"
+              :value="group.id"
+            />
           </el-select>
         </el-form-item>
       </el-form>
@@ -271,13 +367,17 @@ const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId
 const groupedSessions = computed(() => {
   const buckets = new Map<string, { id: string; name: string; sessions: WebSocketSession[] }>()
   buckets.set('__ungrouped', { id: '__ungrouped', name: '未分组', sessions: [] })
-  groups.value.forEach((group) => buckets.set(group.id, { id: group.id, name: group.name, sessions: [] }))
+  groups.value.forEach((group) =>
+    buckets.set(group.id, { id: group.id, name: group.name, sessions: [] }),
+  )
   sessions.value.forEach((session) => {
     const id = session.groupId || '__ungrouped'
     if (!buckets.has(id)) buckets.set(id, { id, name: groupName(id), sessions: [] })
     buckets.get(id)?.sessions.push(session)
   })
-  return Array.from(buckets.values()).filter((group) => group.sessions.length > 0 || group.id !== '__ungrouped')
+  return Array.from(buckets.values()).filter(
+    (group) => group.sessions.length > 0 || group.id !== '__ungrouped',
+  )
 })
 
 onMounted(() => {
@@ -297,7 +397,11 @@ async function loadGroups() {
 async function loadSessions(page = pagination.page) {
   loading.value = true
   try {
-    const params: Record<string, any> = { page, pageSize: pagination.pageSize, q: search.value || undefined }
+    const params: Record<string, any> = {
+      page,
+      pageSize: pagination.pageSize,
+      q: search.value || undefined,
+    }
     if (activeGroupId.value) params.groupId = activeGroupId.value
     const result = await dataAPI.getWebSocketSessions(props.projectId, props.connection.id, params)
     sessions.value = result.list
@@ -326,7 +430,8 @@ function createDraftSession() {
   const draft = normalizeDraft({
     id,
     connectionId: props.connection.id,
-    groupId: activeGroupId.value && activeGroupId.value !== '__ungrouped' ? activeGroupId.value : null,
+    groupId:
+      activeGroupId.value && activeGroupId.value !== '__ungrouped' ? activeGroupId.value : null,
     name: '新建会话',
     url: props.connection.config?.url || '',
   })
@@ -406,7 +511,9 @@ async function connectActive() {
 async function deleteActive() {
   const tab = activeTab.value
   if (!tab || tab.isNew) return
-  await ElMessageBox.confirm('删除会话后对应数据点会标记失效，确认删除？', '删除会话', { type: 'warning' })
+  await ElMessageBox.confirm('删除会话后对应数据点会标记失效，确认删除？', '删除会话', {
+    type: 'warning',
+  })
   await dataAPI.deleteWebSocketSession(props.projectId, String(tab.draft.id))
   tabs.value = tabs.value.filter((item) => item.id !== tab.id)
   activeTabId.value = tabs.value[0]?.id || ''
@@ -423,7 +530,8 @@ function openGroupDialog(group?: WebSocketSessionGroup) {
 
 async function saveGroup() {
   const payload = { name: groupDialog.name, parentId: groupDialog.parentId || null }
-  if (groupDialog.id) await dataAPI.updateWebSocketSessionGroup(props.projectId, groupDialog.id, payload)
+  if (groupDialog.id)
+    await dataAPI.updateWebSocketSessionGroup(props.projectId, groupDialog.id, payload)
   else await dataAPI.createWebSocketSessionGroup(props.projectId, props.connection.id, payload)
   groupDialog.visible = false
   await loadGroups()
@@ -507,9 +615,30 @@ const WebSocketKeyValueEditor = defineComponent({
           { class: 'ws-workbench__rows' },
           rows.value.map((row, index) =>
             h('div', { class: 'ws-workbench__row' }, [
-              h('input', { type: 'checkbox', checked: row.enabled, onChange: (event: Event) => ((row.enabled = (event.target as HTMLInputElement).checked), update()) }),
-              h('input', { value: row.key, placeholder: 'Key', onInput: (event: Event) => ((row.key = (event.target as HTMLInputElement).value), update()) }),
-              h('input', { value: row.value, placeholder: 'Value', onInput: (event: Event) => ((row.value = (event.target as HTMLInputElement).value), update()) }),
+              h('input', {
+                type: 'checkbox',
+                checked: row.enabled,
+                onChange: (event: Event) => (
+                  (row.enabled = (event.target as HTMLInputElement).checked),
+                  update()
+                ),
+              }),
+              h('input', {
+                value: row.key,
+                placeholder: 'Key',
+                onInput: (event: Event) => (
+                  (row.key = (event.target as HTMLInputElement).value),
+                  update()
+                ),
+              }),
+              h('input', {
+                value: row.value,
+                placeholder: 'Value',
+                onInput: (event: Event) => (
+                  (row.value = (event.target as HTMLInputElement).value),
+                  update()
+                ),
+              }),
               h('button', { type: 'button', onClick: () => remove(index) }, '删除'),
             ]),
           ),
@@ -532,12 +661,40 @@ const WebSocketProtocolEditor = defineComponent({
     }
     return () =>
       h('div', { class: 'ws-workbench__table-editor' }, [
-        h('button', { type: 'button', class: 'ws-workbench__mini-add', onClick: add }, '新增 Protocol'),
+        h(
+          'button',
+          { type: 'button', class: 'ws-workbench__mini-add', onClick: add },
+          '新增 Protocol',
+        ),
         ...rows.value.map((row, index) =>
           h('div', { class: 'ws-workbench__row' }, [
-            h('input', { type: 'checkbox', checked: row.enabled, onChange: (event: Event) => ((row.enabled = (event.target as HTMLInputElement).checked), emit('change')) }),
-            h('input', { value: row.value, placeholder: 'chat.v1', onInput: (event: Event) => ((row.value = (event.target as HTMLInputElement).value), emit('change')) }),
-            h('button', { type: 'button', onClick: () => ((rows.value = rows.value.filter((_, i) => i !== index)), emit('change')) }, '删除'),
+            h('input', {
+              type: 'checkbox',
+              checked: row.enabled,
+              onChange: (event: Event) => (
+                (row.enabled = (event.target as HTMLInputElement).checked),
+                emit('change')
+              ),
+            }),
+            h('input', {
+              value: row.value,
+              placeholder: 'chat.v1',
+              onInput: (event: Event) => (
+                (row.value = (event.target as HTMLInputElement).value),
+                emit('change')
+              ),
+            }),
+            h(
+              'button',
+              {
+                type: 'button',
+                onClick: () => (
+                  (rows.value = rows.value.filter((_, i) => i !== index)),
+                  emit('change')
+                ),
+              },
+              '删除',
+            ),
           ]),
         ),
       ])
@@ -553,18 +710,56 @@ const WebSocketMessageEditor = defineComponent({
       set: (value) => emit('update:modelValue', value),
     })
     const add = () => {
-      rows.value = [...rows.value, { enabled: true, name: '订阅消息', payload: '{}', description: '' }]
+      rows.value = [
+        ...rows.value,
+        { enabled: true, name: '订阅消息', payload: '{}', description: '' },
+      ]
       emit('change')
     }
     return () =>
       h('div', { class: 'ws-workbench__table-editor is-message' }, [
-        h('button', { type: 'button', class: 'ws-workbench__mini-add', onClick: add }, '新增订阅消息'),
+        h(
+          'button',
+          { type: 'button', class: 'ws-workbench__mini-add', onClick: add },
+          '新增订阅消息',
+        ),
         ...rows.value.map((row, index) =>
           h('div', { class: 'ws-workbench__message-row' }, [
-            h('input', { type: 'checkbox', checked: row.enabled, onChange: (event: Event) => ((row.enabled = (event.target as HTMLInputElement).checked), emit('change')) }),
-            h('input', { value: row.name, placeholder: '名称', onInput: (event: Event) => ((row.name = (event.target as HTMLInputElement).value), emit('change')) }),
-            h('textarea', { value: row.payload, placeholder: '消息内容', onInput: (event: Event) => ((row.payload = (event.target as HTMLTextAreaElement).value), emit('change')) }),
-            h('button', { type: 'button', onClick: () => ((rows.value = rows.value.filter((_, i) => i !== index)), emit('change')) }, '删除'),
+            h('input', {
+              type: 'checkbox',
+              checked: row.enabled,
+              onChange: (event: Event) => (
+                (row.enabled = (event.target as HTMLInputElement).checked),
+                emit('change')
+              ),
+            }),
+            h('input', {
+              value: row.name,
+              placeholder: '名称',
+              onInput: (event: Event) => (
+                (row.name = (event.target as HTMLInputElement).value),
+                emit('change')
+              ),
+            }),
+            h('textarea', {
+              value: row.payload,
+              placeholder: '消息内容',
+              onInput: (event: Event) => (
+                (row.payload = (event.target as HTMLTextAreaElement).value),
+                emit('change')
+              ),
+            }),
+            h(
+              'button',
+              {
+                type: 'button',
+                onClick: () => (
+                  (rows.value = rows.value.filter((_, i) => i !== index)),
+                  emit('change')
+                ),
+              },
+              '删除',
+            ),
           ]),
         ),
       ])

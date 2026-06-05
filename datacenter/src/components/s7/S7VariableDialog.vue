@@ -1,5 +1,9 @@
 <template>
-  <DcDialog v-model="visible" :title="mode === 'edit' ? '编辑 S7 变量' : '新建 S7 变量'" width="820px">
+  <DcDialog
+    v-model="visible"
+    :title="mode === 'edit' ? '编辑 S7 变量' : '新建 S7 变量'"
+    width="820px"
+  >
     <el-form class="s7-variable-dialog" label-position="top">
       <section>
         <h3><span>01</span>基础信息</h3>
@@ -8,7 +12,12 @@
           <el-form-item label="Code"><el-input v-model="form.code" /></el-form-item>
           <el-form-item label="变量组">
             <el-select v-model="form.groupId" clearable>
-              <el-option v-for="group in groups" :key="group.id" :label="group.name" :value="group.id" />
+              <el-option
+                v-for="group in groups"
+                :key="group.id"
+                :label="group.name"
+                :value="group.id"
+              />
             </el-select>
           </el-form-item>
         </div>
@@ -16,34 +25,63 @@
       <section>
         <h3><span>02</span>S7 地址</h3>
         <div class="s7-variable-dialog__grid">
-          <el-form-item label="地址"><el-input v-model="form.addressText" placeholder="DB1.DBD4 / M0.0" /></el-form-item>
+          <el-form-item label="地址"
+            ><el-input v-model="form.addressText" placeholder="DB1.DBD4 / M0.0"
+          /></el-form-item>
           <el-form-item label="数据类型">
             <el-select v-model="form.dataType">
               <el-option v-for="type in dataTypes" :key="type" :label="type" :value="type" />
             </el-select>
           </el-form-item>
-          <el-form-item label="String 长度"><el-input-number v-model="form.length" :min="0" /></el-form-item>
+          <el-form-item label="String 长度"
+            ><el-input-number v-model="form.length" :min="0"
+          /></el-form-item>
         </div>
         <p class="s7-variable-dialog__preview">{{ addressPreview }}</p>
       </section>
       <section>
         <h3><span>03</span>数据解释</h3>
         <div class="s7-variable-dialog__grid">
-          <el-form-item label="字节序"><el-select v-model="form.byteOrder"><el-option label="Big Endian" value="big_endian" /><el-option label="Little Endian" value="little_endian" /></el-select></el-form-item>
-          <el-form-item label="字序"><el-select v-model="form.wordOrder"><el-option label="Big Endian" value="big_endian" /><el-option label="Little Endian" value="little_endian" /></el-select></el-form-item>
-          <el-form-item label="数组长度"><el-input-number v-model="form.arrayLength" :min="0" /></el-form-item>
-          <el-form-item label="倍率"><el-input-number v-model="form.scale" :precision="3" /></el-form-item>
-          <el-form-item label="偏移"><el-input-number v-model="form.offset" :precision="3" /></el-form-item>
+          <el-form-item label="字节序"
+            ><el-select v-model="form.byteOrder"
+              ><el-option label="Big Endian" value="big_endian" /><el-option
+                label="Little Endian"
+                value="little_endian" /></el-select
+          ></el-form-item>
+          <el-form-item label="字序"
+            ><el-select v-model="form.wordOrder"
+              ><el-option label="Big Endian" value="big_endian" /><el-option
+                label="Little Endian"
+                value="little_endian" /></el-select
+          ></el-form-item>
+          <el-form-item label="数组长度"
+            ><el-input-number v-model="form.arrayLength" :min="0"
+          /></el-form-item>
+          <el-form-item label="倍率"
+            ><el-input-number v-model="form.scale" :precision="3"
+          /></el-form-item>
+          <el-form-item label="偏移"
+            ><el-input-number v-model="form.offset" :precision="3"
+          /></el-form-item>
           <el-form-item label="单位"><el-input v-model="form.unit" /></el-form-item>
         </div>
       </section>
       <section>
         <h3><span>04</span>采样</h3>
         <div class="s7-variable-dialog__grid">
-          <el-form-item label="采集周期 ms"><el-input-number v-model="form.pollIntervalMs" :min="100" /></el-form-item>
-          <el-form-item label="状态"><el-select v-model="form.status"><el-option label="active" value="active" /><el-option label="inactive" value="inactive" /></el-select></el-form-item>
+          <el-form-item label="采集周期 ms"
+            ><el-input-number v-model="form.pollIntervalMs" :min="100"
+          /></el-form-item>
+          <el-form-item label="状态"
+            ><el-select v-model="form.status"
+              ><el-option label="active" value="active" /><el-option
+                label="inactive"
+                value="inactive" /></el-select
+          ></el-form-item>
         </div>
-        <el-form-item label="说明"><el-input v-model="form.description" type="textarea" :rows="2" /></el-form-item>
+        <el-form-item label="说明"
+          ><el-input v-model="form.description" type="textarea" :rows="2"
+        /></el-form-item>
       </section>
     </el-form>
     <template #footer>
@@ -58,8 +96,18 @@ import { computed, reactive, watch } from 'vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import type { S7Variable, S7VariableGroup } from './types'
 
-const props = defineProps<{ modelValue: boolean; mode: 'create' | 'edit'; groups: S7VariableGroup[]; variable?: S7Variable | null; defaultGroupId?: string; loading?: boolean }>()
-const emit = defineEmits<{ (event: 'update:modelValue', value: boolean): void; (event: 'submit', payload: Record<string, unknown>): void }>()
+const props = defineProps<{
+  modelValue: boolean
+  mode: 'create' | 'edit'
+  groups: S7VariableGroup[]
+  variable?: S7Variable | null
+  defaultGroupId?: string
+  loading?: boolean
+}>()
+const emit = defineEmits<{
+  (event: 'update:modelValue', value: boolean): void
+  (event: 'submit', payload: Record<string, unknown>): void
+}>()
 const visible = computed({
   get: () => props.modelValue,
   set: (value: boolean) => emit('update:modelValue', value),
@@ -106,7 +154,9 @@ watch(
   },
   { immediate: true },
 )
-const addressPreview = computed(() => `标准地址将由后端解析保存：${form.addressText || '-'} · 类型 ${form.dataType}`)
+const addressPreview = computed(
+  () => `标准地址将由后端解析保存：${form.addressText || '-'} · 类型 ${form.dataType}`,
+)
 const submit = () => {
   emit('submit', {
     groupId: form.groupId || null,

@@ -3,7 +3,9 @@
     <el-table :data="values" height="360" empty-text="暂无预览值">
       <el-table-column prop="variableId" label="变量" min-width="160" show-overflow-tooltip />
       <el-table-column prop="address" label="地址" min-width="140" show-overflow-tooltip />
-      <el-table-column label="当前值" min-width="120" show-overflow-tooltip><template #default="{ row }">{{ formatValue(row.value) }}</template></el-table-column>
+      <el-table-column label="当前值" min-width="120" show-overflow-tooltip
+        ><template #default="{ row }">{{ formatValue(row.value) }}</template></el-table-column
+      >
       <el-table-column prop="quality" label="质量" width="90" />
       <el-table-column prop="timestamp" label="更新时间" min-width="150" />
     </el-table>
@@ -23,7 +25,8 @@ const visible = computed({
   get: () => props.modelValue,
   set: (value: boolean) => emit('update:modelValue', value),
 })
-const formatValue = (value: unknown) => (typeof value === 'object' ? JSON.stringify(value) : String(value ?? '-'))
+const formatValue = (value: unknown) =>
+  typeof value === 'object' ? JSON.stringify(value) : String(value ?? '-')
 </script>
 
 <style scoped>

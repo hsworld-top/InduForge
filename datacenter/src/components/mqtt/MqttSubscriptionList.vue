@@ -132,11 +132,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits([
-  'view-messages',
-  'subscription-select',
-  'subscription-deleted',
-])
+const emit = defineEmits(['view-messages', 'subscription-select', 'subscription-deleted'])
 
 const loading = ref(false)
 const subscriptions = ref([])

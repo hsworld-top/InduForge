@@ -143,12 +143,7 @@
               :disabled="activeTab.draft.type === 'stream'"
               @change="handleTypeChange"
             >
-              <el-option
-                v-for="type in editableTypes"
-                :key="type"
-                :label="type"
-                :value="type"
-              />
+              <el-option v-for="type in editableTypes" :key="type" :label="type" :value="type" />
               <el-option v-if="activeTab.draft.type === 'stream'" label="stream" value="stream" />
             </el-select>
             <el-input-number
@@ -181,7 +176,9 @@
         <div class="realtime-store__meta">
           <span>{{ providerLabel }}</span>
           <span>TTL {{ formatTTL(activeTab.draft.ttlSeconds) }}</span>
-          <span v-if="activeTab.draft.dataPointPath">数据点 {{ activeTab.draft.dataPointPath }}</span>
+          <span v-if="activeTab.draft.dataPointPath"
+            >数据点 {{ activeTab.draft.dataPointPath }}</span
+          >
           <span v-else>未创建数据点</span>
         </div>
 
@@ -209,7 +206,11 @@
                 <span>{{ stringSizeLabel }}</span>
               </div>
               <div class="realtime-store__panel-actions">
-                <el-button size="small" :disabled="!activeStringCanFormat" @click="formatActiveString">
+                <el-button
+                  size="small"
+                  :disabled="!activeStringCanFormat"
+                  @click="formatActiveString"
+                >
                   格式化
                 </el-button>
                 <el-button size="small" title="复制" @click="copyText(activeTab.draft.stringValue)">
@@ -229,10 +230,7 @@
             />
           </section>
 
-          <section
-            v-else-if="activeTab.draft.type === 'hash'"
-            class="realtime-store__value-panel"
-          >
+          <section v-else-if="activeTab.draft.type === 'hash'" class="realtime-store__value-panel">
             <header class="realtime-store__panel-header">
               <div>
                 <strong>Hash Fields</strong>
@@ -286,7 +284,9 @@
           >
             <header class="realtime-store__panel-header">
               <div>
-                <strong>{{ activeTab.draft.type === 'list' ? 'List Items' : 'Set Members' }}</strong>
+                <strong>{{
+                  activeTab.draft.type === 'list' ? 'List Items' : 'Set Members'
+                }}</strong>
                 <span>{{ activeTab.draft.rows.length }} 项</span>
               </div>
               <div class="realtime-store__panel-actions">
@@ -329,10 +329,7 @@
             </el-table>
           </section>
 
-          <section
-            v-else-if="activeTab.draft.type === 'zset'"
-            class="realtime-store__value-panel"
-          >
+          <section v-else-if="activeTab.draft.type === 'zset'" class="realtime-store__value-panel">
             <header class="realtime-store__panel-header">
               <div>
                 <strong>ZSet Members</strong>
@@ -401,7 +398,9 @@
     </el-dialog>
 
     <el-dialog v-model="datapointDialog.visible" title="创建数据点" width="420px">
-      <p class="realtime-store__dialog-tip">实时库 Key 数据点统一按 object 创建，使用时再解析内部字段。</p>
+      <p class="realtime-store__dialog-tip">
+        实时库 Key 数据点统一按 object 创建，使用时再解析内部字段。
+      </p>
       <template #footer>
         <el-button @click="datapointDialog.visible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="confirmCreateDatapoint">
@@ -439,11 +438,19 @@
           :style="{ left: keyContextMenu.x + 'px', top: keyContextMenu.y + 'px' }"
           @click.stop
         >
-          <button v-if="keyContextMenu.kind === 'key'" type="button" @click="openContextKeyInNewTab">
+          <button
+            v-if="keyContextMenu.kind === 'key'"
+            type="button"
+            @click="openContextKeyInNewTab"
+          >
             <IconTablerKey />
             <span>打开 Key</span>
           </button>
-          <button v-if="keyContextMenu.kind === 'key'" type="button" @click="createContextKeyDatapoint">
+          <button
+            v-if="keyContextMenu.kind === 'key'"
+            type="button"
+            @click="createContextKeyDatapoint"
+          >
             <IconTablerDatabasePlus />
             <span>创建数据点</span>
           </button>
@@ -641,16 +648,24 @@ const filteredKeys = computed(() => {
 })
 const keyTree = computed(() => buildKeyTree(filteredKeys.value))
 const visibleTreeNodes = computed(() => flattenKeyTree(keyTree.value, expandedTreeNodeIds.value))
-const showBatchCreateFilteredButton = computed(() => keyword.value.trim() !== '' && filteredKeys.value.length > 0)
+const showBatchCreateFilteredButton = computed(
+  () => keyword.value.trim() !== '' && filteredKeys.value.length > 0,
+)
 
 const activeTab = computed(() => tabs.value.find((tab) => tab.key === activeTabKey.value) || null)
-const formattedReadonlyValue = computed(() => JSON.stringify(activeTab.value?.draft.readonlyValue ?? null, null, 2))
+const formattedReadonlyValue = computed(() =>
+  JSON.stringify(activeTab.value?.draft.readonlyValue ?? null, null, 2),
+)
 const activeStringIsJson = computed(() => isJsonText(activeTab.value?.draft.stringValue || ''))
 const activeStringViewMode = computed(() =>
   activeTab.value?.draft.valueType === 'json' ? 'json' : 'text',
 )
-const activeStringLanguage = computed(() => (activeStringViewMode.value === 'json' ? 'json' : 'plaintext'))
-const activeStringCanFormat = computed(() => activeStringViewMode.value === 'json' && activeStringIsJson.value)
+const activeStringLanguage = computed(() =>
+  activeStringViewMode.value === 'json' ? 'json' : 'plaintext',
+)
+const activeStringCanFormat = computed(
+  () => activeStringViewMode.value === 'json' && activeStringIsJson.value,
+)
 const stringSizeLabel = computed(() => formatByteSize(activeTab.value?.draft.stringValue || ''))
 const visibleEditorRows = computed(() => {
   const rows = activeTab.value?.draft.rows || []
@@ -752,7 +767,10 @@ const batchCreateContextGroupDatapoints = async () => {
 }
 
 const batchCreateFilteredDatapoints = async () => {
-  await batchCreateDatapoints(filteredKeys.value.map((item) => item.key), '筛选结果')
+  await batchCreateDatapoints(
+    filteredKeys.value.map((item) => item.key),
+    '筛选结果',
+  )
 }
 
 const isTreeNodeExpanded = (id: string) => expandedTreeNodeIds.value.has(id)
@@ -856,7 +874,11 @@ const saveActive = async () => {
       valueType: tab.draft.valueType || 'object',
       value: buildSaveValue(tab.draft),
     }
-    const response = await dataAPI.saveRealtimeStoreKey(props.projectId, props.connection.id, payload)
+    const response = await dataAPI.saveRealtimeStoreKey(
+      props.projectId,
+      props.connection.id,
+      payload,
+    )
     const draft = createDraftFromResponse(response?.data || {})
     tab.draft = draft
     tab.key = draft.key
@@ -902,9 +924,14 @@ const confirmRename = async () => {
   if (!key) return
   saving.value = true
   try {
-    const response = await dataAPI.renameRealtimeStoreKey(props.projectId, props.connection.id, key, {
-      newKey: renameDialog.newKey,
-    })
+    const response = await dataAPI.renameRealtimeStoreKey(
+      props.projectId,
+      props.connection.id,
+      key,
+      {
+        newKey: renameDialog.newKey,
+      },
+    )
     const draft = createDraftFromResponse(response?.data || {})
     const tab = tabs.value.find((item) => item.draft.originalKey === key || item.draft.key === key)
     if (tab) {
@@ -960,10 +987,14 @@ const batchCreateDatapoints = async (targetKeys: string[], label: string) => {
   }
   saving.value = true
   try {
-    const response = await dataAPI.batchCreateRealtimeStoreKeyDatapoints(props.projectId, props.connection.id, {
-      keys: dedupedKeys,
-      dataType: 'object',
-    })
+    const response = await dataAPI.batchCreateRealtimeStoreKeyDatapoints(
+      props.projectId,
+      props.connection.id,
+      {
+        keys: dedupedKeys,
+        dataType: 'object',
+      },
+    )
     const data = response?.data || {}
     await loadKeys()
     ElMessage.success(
@@ -983,7 +1014,9 @@ const deleteActive = async () => {
 }
 
 const deleteKey = async (key: string, tabKey?: string) => {
-  await ElMessageBox.confirm('删除 Key 后，对应数据点会标记为失效。', '删除 Key', { type: 'warning' })
+  await ElMessageBox.confirm('删除 Key 后，对应数据点会标记为失效。', '删除 Key', {
+    type: 'warning',
+  })
   saving.value = true
   try {
     await dataAPI.deleteRealtimeStoreKey(props.projectId, props.connection.id, key)
@@ -1134,7 +1167,10 @@ const createDraftFromResponse = (data: any): KeyDraft => {
 
 const rowsFromValue = (type: string, value: any): EditorRow[] => {
   if (type === 'hash' && value && typeof value === 'object' && !Array.isArray(value)) {
-    return Object.entries(value).map(([key, rowValue]) => ({ key, value: stringifyEditorValue(rowValue) }))
+    return Object.entries(value).map(([key, rowValue]) => ({
+      key,
+      value: stringifyEditorValue(rowValue),
+    }))
   }
   if (['list', 'set'].includes(type) && Array.isArray(value)) {
     return value.map((item) => ({ value: stringifyEditorValue(item) }))
@@ -1250,14 +1286,24 @@ const buildKeyTree = (items: KeySummary[]) => {
     }
 
     currentChildren.push(
-      createKeyTreeLeaf(item, segments[segments.length - 1], 'key:' + item.key, segments.length - 1),
+      createKeyTreeLeaf(
+        item,
+        segments[segments.length - 1],
+        'key:' + item.key,
+        segments.length - 1,
+      ),
     )
   }
 
   return sortKeyTreeNodes(roots)
 }
 
-const createKeyTreeLeaf = (item: KeySummary, label: string, id: string, depth: number): KeyTreeNode => ({
+const createKeyTreeLeaf = (
+  item: KeySummary,
+  label: string,
+  id: string,
+  depth: number,
+): KeyTreeNode => ({
   id,
   label,
   kind: 'key',

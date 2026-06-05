@@ -1,16 +1,30 @@
 <template>
-  <DcDialog v-model="visible" title="配置 PLC 类型" width="820px" body-max-height="calc(100vh - 180px)">
+  <DcDialog
+    v-model="visible"
+    title="配置 PLC 类型"
+    width="820px"
+    body-max-height="calc(100vh - 180px)"
+  >
     <el-form class="s7-profile-dialog" label-position="top">
       <section>
         <h3><span>01</span>PLC 类型</h3>
         <div class="s7-profile-dialog__grid">
           <el-form-item label="PLC 系列">
             <el-select v-model="form.plcFamily" @change="applyFamilyDefaults">
-              <el-option v-for="family in familyOptions" :key="family" :label="family" :value="family" />
+              <el-option
+                v-for="family in familyOptions"
+                :key="family"
+                :label="family"
+                :value="family"
+              />
             </el-select>
           </el-form-item>
           <el-form-item label="优化块访问">
-            <el-switch v-model="form.optimizedBlockAccess" active-text="提示风险" inactive-text="关闭" />
+            <el-switch
+              v-model="form.optimizedBlockAccess"
+              active-text="提示风险"
+              inactive-text="关闭"
+            />
           </el-form-item>
         </div>
       </section>
@@ -18,7 +32,9 @@
         <h3><span>02</span>连接参数</h3>
         <div class="s7-profile-dialog__grid">
           <el-form-item label="Host"><el-input v-model="form.host" /></el-form-item>
-          <el-form-item label="Port"><el-input-number v-model="form.port" :min="1" :max="65535" /></el-form-item>
+          <el-form-item label="Port"
+            ><el-input-number v-model="form.port" :min="1" :max="65535"
+          /></el-form-item>
           <el-form-item label="通信方式">
             <el-select v-model="form.communicationMode">
               <el-option label="Rack / Slot" value="rack_slot" />
@@ -34,13 +50,27 @@
       <section>
         <h3><span>03</span>读取能力</h3>
         <div class="s7-profile-dialog__grid">
-          <el-form-item label="默认周期 ms"><el-input-number v-model="form.pollIntervalMs" :min="100" /></el-form-item>
-          <el-form-item label="连接超时 ms"><el-input-number v-model="form.connectTimeoutMs" :min="100" /></el-form-item>
-          <el-form-item label="读取超时 ms"><el-input-number v-model="form.readTimeoutMs" :min="100" /></el-form-item>
-          <el-form-item label="PDU Size"><el-input-number v-model="form.pduSize" :min="0" /></el-form-item>
-          <el-form-item label="最大读取 bytes"><el-input-number v-model="form.maxReadBytes" :min="0" /></el-form-item>
-          <el-form-item label="合并间隙 bytes"><el-input-number v-model="form.maxGapBytes" :min="0" /></el-form-item>
-          <el-form-item label="并发读取"><el-input-number v-model="form.maxConcurrentReads" :min="1" /></el-form-item>
+          <el-form-item label="默认周期 ms"
+            ><el-input-number v-model="form.pollIntervalMs" :min="100"
+          /></el-form-item>
+          <el-form-item label="连接超时 ms"
+            ><el-input-number v-model="form.connectTimeoutMs" :min="100"
+          /></el-form-item>
+          <el-form-item label="读取超时 ms"
+            ><el-input-number v-model="form.readTimeoutMs" :min="100"
+          /></el-form-item>
+          <el-form-item label="PDU Size"
+            ><el-input-number v-model="form.pduSize" :min="0"
+          /></el-form-item>
+          <el-form-item label="最大读取 bytes"
+            ><el-input-number v-model="form.maxReadBytes" :min="0"
+          /></el-form-item>
+          <el-form-item label="合并间隙 bytes"
+            ><el-input-number v-model="form.maxGapBytes" :min="0"
+          /></el-form-item>
+          <el-form-item label="并发读取"
+            ><el-input-number v-model="form.maxConcurrentReads" :min="1"
+          /></el-form-item>
         </div>
       </section>
       <section>
@@ -67,12 +97,23 @@ import DcDialog from '@/components/shared/DcDialog.vue'
 import type { S7Profile } from './types'
 
 const props = defineProps<{ modelValue: boolean; profile?: S7Profile | null; loading?: boolean }>()
-const emit = defineEmits<{ (event: 'update:modelValue', value: boolean): void; (event: 'submit', payload: Record<string, unknown>): void }>()
+const emit = defineEmits<{
+  (event: 'update:modelValue', value: boolean): void
+  (event: 'submit', payload: Record<string, unknown>): void
+}>()
 const visible = computed({
   get: () => props.modelValue,
   set: (value: boolean) => emit('update:modelValue', value),
 })
-const familyOptions = ['S7-200', 'S7-200 SMART', 'S7-300', 'S7-400', 'S7-1200', 'S7-1500', 'S7 Compatible']
+const familyOptions = [
+  'S7-200',
+  'S7-200 SMART',
+  'S7-300',
+  'S7-400',
+  'S7-1200',
+  'S7-1500',
+  'S7 Compatible',
+]
 const areaOptions = ['DB', 'M', 'I', 'Q']
 const form = reactive({
   plcFamily: 'S7 Compatible',
@@ -98,13 +139,31 @@ const form = reactive({
 
 const applyFamilyDefaults = () => {
   if (form.plcFamily === 'S7-300' || form.plcFamily === 'S7-400') {
-    Object.assign(form, { communicationMode: 'rack_slot', rack: 0, slot: 2, maxGapBytes: 8, optimizedBlockAccess: false })
+    Object.assign(form, {
+      communicationMode: 'rack_slot',
+      rack: 0,
+      slot: 2,
+      maxGapBytes: 8,
+      optimizedBlockAccess: false,
+    })
   } else if (form.plcFamily === 'S7-1200' || form.plcFamily === 'S7-1500') {
-    Object.assign(form, { communicationMode: 'rack_slot', rack: 0, slot: 1, maxGapBytes: 16, optimizedBlockAccess: true })
+    Object.assign(form, {
+      communicationMode: 'rack_slot',
+      rack: 0,
+      slot: 1,
+      maxGapBytes: 16,
+      optimizedBlockAccess: true,
+    })
   } else if (form.plcFamily === 'S7-200' || form.plcFamily === 'S7-200 SMART') {
     Object.assign(form, { communicationMode: 'tsap', maxGapBytes: 8, optimizedBlockAccess: false })
   } else {
-    Object.assign(form, { communicationMode: 'rack_slot', rack: 0, slot: 1, maxGapBytes: 8, optimizedBlockAccess: false })
+    Object.assign(form, {
+      communicationMode: 'rack_slot',
+      rack: 0,
+      slot: 1,
+      maxGapBytes: 8,
+      optimizedBlockAccess: false,
+    })
   }
 }
 
@@ -118,7 +177,9 @@ watch(
       remoteTsap: props.profile.remoteTsap || '',
       pduSize: props.profile.pduSize || 0,
       maxReadBytes: props.profile.maxReadBytes || 0,
-      supportedAreas: props.profile.supportedAreas?.length ? [...props.profile.supportedAreas] : ['DB', 'M', 'I', 'Q'],
+      supportedAreas: props.profile.supportedAreas?.length
+        ? [...props.profile.supportedAreas]
+        : ['DB', 'M', 'I', 'Q'],
     })
   },
   { immediate: true },

@@ -123,7 +123,10 @@ const filteredMessages = computed(() => {
     })
   }
 
-  const limit = Math.min(displayLimit.value > 0 ? displayLimit.value : MESSAGE_WINDOW_LIMIT, MESSAGE_WINDOW_LIMIT)
+  const limit = Math.min(
+    displayLimit.value > 0 ? displayLimit.value : MESSAGE_WINDOW_LIMIT,
+    MESSAGE_WINDOW_LIMIT,
+  )
   return result.slice(0, limit)
 })
 
@@ -162,12 +165,13 @@ const normalizeIncomingMessage = (message) => {
   }
 }
 
-const messageFingerprint = (message: MqttMessage) => [
-  message.topic || '',
-  String(message.qos ?? 0),
-  String(message.timestamp || ''),
-  typeof message.payload === 'string' ? message.payload : JSON.stringify(message.payload ?? ''),
-].join('\u0001')
+const messageFingerprint = (message: MqttMessage) =>
+  [
+    message.topic || '',
+    String(message.qos ?? 0),
+    String(message.timestamp || ''),
+    typeof message.payload === 'string' ? message.payload : JSON.stringify(message.payload ?? ''),
+  ].join('\u0001')
 
 // 订阅成功时后端会补发最近消息快照；它可能和历史列表最新一条相同，需要去重避免刷新后数量跳变。
 const uniqueMessages = (items: MqttMessage[]) => {
@@ -195,8 +199,9 @@ const loadMessages = async () => {
       props.subscription.id,
       { limit: displayLimit.value },
     )
-    messages.value = uniqueMessages((response.data?.list || []).map(normalizeIncomingMessage))
-      .slice(0, MESSAGE_WINDOW_LIMIT)
+    messages.value = uniqueMessages(
+      (response.data?.list || []).map(normalizeIncomingMessage),
+    ).slice(0, MESSAGE_WINDOW_LIMIT)
     await messageListRef.value?.scrollToTop?.()
   } catch (error) {
     ElMessage.error('加载消息失败：' + getApiErrorMessage(error, '加载消息失败'))

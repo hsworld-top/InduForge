@@ -655,7 +655,7 @@ function runDetailConfigLocal(node: AnyRecord, content: string) {
   const methodName = getDslMethodName(normalizedType || '')
   const safeContent = normalizedType === 'Menu' ? buildMenuDslContent(content, methodName) : content
   let lastMenuConfig: AnyRecord | null = null
-  // eslint-disable-next-line no-new-func
+
   const runner = new Function(`"use strict";\nreturn (function() {\n${safeContent}\n}).call(this);`)
   const context = {
     menu: (config: AnyRecord) => {
@@ -6016,7 +6016,6 @@ const bindingCompletions = computed<AnyArray>(() => {
       prefix: '$global.',
     })
   })
-
   ;(Array.isArray(globalScripts.value?.custom?.items)
     ? globalScripts.value.custom.items
     : []
@@ -6091,7 +6090,6 @@ const detailCompletions = computed<AnyArray>(() => {
       prefix: '$global.',
     })
   })
-
   ;(Array.isArray(globalScripts.value?.custom?.items)
     ? globalScripts.value.custom.items
     : []
@@ -6291,7 +6289,7 @@ function validateDetailConfig(content: string): { valid: boolean; message?: stri
   if (!text) return { valid: true }
   try {
     // 仅做语法检查，不执行
-    // eslint-disable-next-line no-new-func
+
     const validator = new Function(text)
     void validator
     return { valid: true }

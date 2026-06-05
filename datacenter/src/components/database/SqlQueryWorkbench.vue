@@ -263,9 +263,7 @@
                 />
               </label>
             </div>
-            <div v-else class="sql-workbench__param-empty">
-              示例：SELECT * FROM ? WHERE id = ?
-            </div>
+            <div v-else class="sql-workbench__param-empty">示例：SELECT * FROM ? WHERE id = ?</div>
           </div>
 
           <section class="sql-workbench__result">
@@ -799,7 +797,10 @@ const editingTableName = ref('')
 const editingTableStructure = ref<Record<string, any> | null>(null)
 const moveGroupDialogVisible = ref(false)
 const moveGroupSubmitting = ref(false)
-const moveGroupTarget = ref<{ scope: WorkbenchScope; item: any | null }>({ scope: 'query', item: null })
+const moveGroupTarget = ref<{ scope: WorkbenchScope; item: any | null }>({
+  scope: 'query',
+  item: null,
+})
 const moveGroupDialogRef = ref<InstanceType<typeof WorkbenchMoveGroupDialog> | null>(null)
 const contextMenu = ref<{
   visible: boolean
@@ -1080,8 +1081,12 @@ const buildTimeseriesAggregateSql = (
   const timeColumn = timeseries.timeColumn || 'ts'
   const dimensions = Array.isArray(timeseries.dimensionColumns) ? timeseries.dimensionColumns : []
   const excluded = new Set([timeColumn, ...dimensions])
-  const valueColumn = firstNumericColumn(columns, excluded)?.name || columns.find((column) => !excluded.has(column.name))?.name || 'value'
-  const dimensionSelect = dimensions.length > 0 ? `,\n  ${dimensions.map(quoteColumn).join(', ')}` : ''
+  const valueColumn =
+    firstNumericColumn(columns, excluded)?.name ||
+    columns.find((column) => !excluded.has(column.name))?.name ||
+    'value'
+  const dimensionSelect =
+    dimensions.length > 0 ? `,\n  ${dimensions.map(quoteColumn).join(', ')}` : ''
   const dimensionGroup = dimensions.length > 0 ? `, ${dimensions.map(quoteColumn).join(', ')}` : ''
   return `SELECT\n  time_bucket('5 minutes', ${quoteColumn(timeColumn)}) AS bucket${dimensionSelect},\n  avg(${quoteColumn(valueColumn)}) AS avg_${valueColumn}\nFROM ${quoteTable(tableName)}\nWHERE ${quoteColumn(timeColumn)} >= now() - INTERVAL '1 day'\nGROUP BY bucket${dimensionGroup}\nORDER BY bucket DESC;`
 }
@@ -1653,7 +1658,9 @@ const submitMoveGroup = async (groupID: string | null) => {
     moveGroupDialogRef.value?.closeSilently()
     moveGroupTarget.value = { scope: 'query', item: null }
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, target.scope === 'query' ? '移动查询失败' : '移动表失败'))
+    ElMessage.error(
+      getApiErrorMessage(error, target.scope === 'query' ? '移动查询失败' : '移动表失败'),
+    )
   } finally {
     moveGroupSubmitting.value = false
   }
@@ -1891,12 +1898,7 @@ const executeTab = async (tab: any) => {
   tab.executing = true
   try {
     const sqlText = buildSqlWithWorkbenchParameters(tab.sql, tab.parameters || [])
-    const response = await dataAPI.executeSql(
-      props.projectId,
-      props.connection.id,
-      sqlText,
-      [],
-    )
+    const response = await dataAPI.executeSql(props.projectId, props.connection.id, sqlText, [])
     const result = {
       columns: response.data?.columns || [],
       rows: response.data?.rows || [],

@@ -89,7 +89,10 @@
             @keydown.enter="selectSubscription(subscription)"
             @contextmenu.prevent.stop="openSubscriptionMenu($event, subscription)"
           >
-            <component :is="resolveSubscriptionIcon(subscription)" class="mqtt-workbench__tree-item-icon" />
+            <component
+              :is="resolveSubscriptionIcon(subscription)"
+              class="mqtt-workbench__tree-item-icon"
+            />
             <el-tooltip
               :content="subscription.name || subscription.topic || subscription.id"
               placement="top"
@@ -355,7 +358,6 @@
             </div>
           </dl>
         </section>
-
       </template>
     </DcDialog>
 
@@ -587,10 +589,10 @@ const sourceMetaRows = computed(() =>
 const { sessionId: previewSessionId, ensureSession } = usePreviewSession(projectIdRef, {
   autoStart: false,
 })
-const {
-  connected: socketConnected,
-  subscribeMessages,
-} = useMqttSocket(projectIdRef, previewSessionId)
+const { connected: socketConnected, subscribeMessages } = useMqttSocket(
+  projectIdRef,
+  previewSessionId,
+)
 
 const loading = ref(false)
 const subscriptions = ref<MqttSubscription[]>([])
@@ -1281,7 +1283,8 @@ const applyMonitorTagValues = (values: any[]) => {
   if (!Array.isArray(values) || values.length === 0) {
     return
   }
-  const subscriptionId = values.find((value) => value?.subscriptionId)?.subscriptionId || monitorSubscription.value?.id
+  const subscriptionId =
+    values.find((value) => value?.subscriptionId)?.subscriptionId || monitorSubscription.value?.id
   if (!subscriptionId) {
     return
   }

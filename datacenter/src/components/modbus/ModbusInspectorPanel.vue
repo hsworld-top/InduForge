@@ -8,29 +8,42 @@
       <section>
         <h3><IconTablerInfoCircle />变量信息</h3>
         <dl>
-          <dt>名称</dt><dd>{{ register.name }}</dd>
-          <dt>Code</dt><dd>{{ register.code }}</dd>
-          <dt>状态</dt><dd>{{ register.status }}</dd>
+          <dt>名称</dt>
+          <dd>{{ register.name }}</dd>
+          <dt>Code</dt>
+          <dd>{{ register.code }}</dd>
+          <dt>状态</dt>
+          <dd>{{ register.status }}</dd>
         </dl>
       </section>
       <section>
         <h3><IconTablerMapPin />Modbus 地址</h3>
         <dl>
-          <dt>从站地址</dt><dd>{{ register.unitId }}</dd>
-          <dt>区域</dt><dd>{{ formatArea(register.area) }}</dd>
-          <dt>用户地址</dt><dd>{{ register.address }}</dd>
-          <dt>协议地址</dt><dd>{{ register.protocolAddress }}</dd>
+          <dt>从站地址</dt>
+          <dd>{{ register.unitId }}</dd>
+          <dt>区域</dt>
+          <dd>{{ formatArea(register.area) }}</dd>
+          <dt>用户地址</dt>
+          <dd>{{ register.address }}</dd>
+          <dt>协议地址</dt>
+          <dd>{{ register.protocolAddress }}</dd>
         </dl>
       </section>
       <section>
         <h3><IconTablerBinaryTree />解析规则</h3>
         <dl>
-          <dt>类型</dt><dd>{{ register.dataType }}</dd>
-          <dt>字节序</dt><dd>{{ register.byteOrder }}</dd>
-          <dt>字序</dt><dd>{{ register.wordOrder }}</dd>
-          <dt>倍率</dt><dd>{{ register.scale }}</dd>
-          <dt>偏移</dt><dd>{{ register.offset }}</dd>
-          <dt>单位</dt><dd>{{ register.unit || '-' }}</dd>
+          <dt>类型</dt>
+          <dd>{{ register.dataType }}</dd>
+          <dt>字节序</dt>
+          <dd>{{ register.byteOrder }}</dd>
+          <dt>字序</dt>
+          <dd>{{ register.wordOrder }}</dd>
+          <dt>倍率</dt>
+          <dd>{{ register.scale }}</dd>
+          <dt>偏移</dt>
+          <dd>{{ register.offset }}</dd>
+          <dt>单位</dt>
+          <dd>{{ register.unit || '-' }}</dd>
         </dl>
       </section>
       <section>
@@ -39,7 +52,9 @@
       </section>
       <section>
         <h3><IconTablerAlertTriangle />校验问题</h3>
-        <p :class="{ 'is-warning': registerIssues.length }">{{ registerIssues.length ? `${registerIssues.length} 个问题` : '无' }}</p>
+        <p :class="{ 'is-warning': registerIssues.length }">
+          {{ registerIssues.length ? `${registerIssues.length} 个问题` : '无' }}
+        </p>
       </section>
     </template>
     <template v-else>
@@ -50,20 +65,29 @@
       <section>
         <h3><IconTablerStack2 />寄存器组信息</h3>
         <dl>
-          <dt>名称</dt><dd>{{ group?.name || '全部变量' }}</dd>
-          <dt>变量数</dt><dd>{{ scopedRegisters.length }}</dd>
-          <dt>从站地址数</dt><dd>{{ unitCount }}</dd>
-          <dt>预计读取次数</dt><dd>{{ estimate.readCount }}</dd>
-          <dt>预计 reads/s</dt><dd>{{ estimate.readsPerSecond.toFixed(2) }}</dd>
+          <dt>名称</dt>
+          <dd>{{ group?.name || '全部变量' }}</dd>
+          <dt>变量数</dt>
+          <dd>{{ scopedRegisters.length }}</dd>
+          <dt>从站地址数</dt>
+          <dd>{{ unitCount }}</dd>
+          <dt>预计读取次数</dt>
+          <dd>{{ estimate.readCount }}</dd>
+          <dt>预计 reads/s</dt>
+          <dd>{{ estimate.readsPerSecond.toFixed(2) }}</dd>
         </dl>
       </section>
       <section>
         <h3><IconTablerChartBar />地址分布</h3>
         <dl>
-          <dt>Holding Register</dt><dd>{{ countByArea.holding_register || 0 }}</dd>
-          <dt>Input Register</dt><dd>{{ countByArea.input_register || 0 }}</dd>
-          <dt>Coil</dt><dd>{{ countByArea.coil || 0 }}</dd>
-          <dt>Discrete Input</dt><dd>{{ countByArea.discrete_input || 0 }}</dd>
+          <dt>Holding Register</dt>
+          <dd>{{ countByArea.holding_register || 0 }}</dd>
+          <dt>Input Register</dt>
+          <dd>{{ countByArea.input_register || 0 }}</dd>
+          <dt>Coil</dt>
+          <dd>{{ countByArea.coil || 0 }}</dd>
+          <dt>Discrete Input</dt>
+          <dd>{{ countByArea.discrete_input || 0 }}</dd>
         </dl>
       </section>
       <section>
@@ -76,7 +100,12 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ModbusReadPlanEstimate, ModbusRegister, ModbusRegisterGroup, ModbusValidationIssue } from './types'
+import type {
+  ModbusReadPlanEstimate,
+  ModbusRegister,
+  ModbusRegisterGroup,
+  ModbusValidationIssue,
+} from './types'
 import IconTablerAlertTriangle from '~icons/tabler/alert-triangle'
 import IconTablerBinaryTree from '~icons/tabler/binary-tree'
 import IconTablerChartBar from '~icons/tabler/chart-bar'
@@ -95,7 +124,9 @@ const props = defineProps<{
 }>()
 
 const scopedRegisters = computed(() =>
-  props.group ? props.registers.filter((item) => item.groupId === props.group?.id) : props.registers,
+  props.group
+    ? props.registers.filter((item) => item.groupId === props.group?.id)
+    : props.registers,
 )
 const unitCount = computed(() => new Set(scopedRegisters.value.map((item) => item.unitId)).size)
 const countByArea = computed(() => {
