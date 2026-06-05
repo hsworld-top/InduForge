@@ -9,7 +9,12 @@
       </el-form-item>
       <el-form-item label="父级变量组">
         <el-select v-model="form.parentId" clearable style="width: 100%">
-          <el-option v-for="group in groups" :key="group.id" :label="group.name" :value="group.id" />
+          <el-option
+            v-for="group in groups"
+            :key="group.id"
+            :label="group.name"
+            :value="group.id"
+          />
         </el-select>
       </el-form-item>
       <el-form-item label="说明">

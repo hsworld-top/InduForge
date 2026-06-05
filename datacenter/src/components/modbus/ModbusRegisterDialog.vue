@@ -1,5 +1,9 @@
 <template>
-  <DcDialog v-model="visible" :title="mode === 'edit' ? '编辑 Modbus 变量' : '新建 Modbus 变量'" width="820px">
+  <DcDialog
+    v-model="visible"
+    :title="mode === 'edit' ? '编辑 Modbus 变量' : '新建 Modbus 变量'"
+    width="820px"
+  >
     <el-form class="modbus-register-dialog" label-position="top">
       <section>
         <h3><span>01</span>基础信息</h3>
@@ -8,7 +12,12 @@
           <el-form-item label="Code"><el-input v-model="form.code" /></el-form-item>
           <el-form-item label="寄存器组">
             <el-select v-model="form.groupId" clearable>
-              <el-option v-for="group in groups" :key="group.id" :label="group.name" :value="group.id" />
+              <el-option
+                v-for="group in groups"
+                :key="group.id"
+                :label="group.name"
+                :value="group.id"
+              />
             </el-select>
           </el-form-item>
         </div>
@@ -16,7 +25,9 @@
       <section>
         <h3><span>02</span>Modbus 地址</h3>
         <div class="modbus-register-dialog__grid">
-          <el-form-item label="从站地址"><el-input-number v-model="form.unitId" :min="0" :max="247" /></el-form-item>
+          <el-form-item label="从站地址"
+            ><el-input-number v-model="form.unitId" :min="0" :max="247"
+          /></el-form-item>
           <el-form-item label="区域">
             <el-select v-model="form.area">
               <el-option label="Holding Register" value="holding_register" />
@@ -25,7 +36,9 @@
               <el-option label="Discrete Input" value="discrete_input" />
             </el-select>
           </el-form-item>
-          <el-form-item label="用户地址"><el-input-number v-model="form.address" :min="0" /></el-form-item>
+          <el-form-item label="用户地址"
+            ><el-input-number v-model="form.address" :min="0"
+          /></el-form-item>
           <el-form-item label="地址基准">
             <el-select v-model="form.addressBase">
               <el-option label="Modicon 4xxxx/3xxxx" value="modicon" />
@@ -49,7 +62,9 @@
               <el-option label="float64" value="float64" />
             </el-select>
           </el-form-item>
-          <el-form-item label="寄存器数量"><el-input-number v-model="form.quantity" :min="1" /></el-form-item>
+          <el-form-item label="寄存器数量"
+            ><el-input-number v-model="form.quantity" :min="1"
+          /></el-form-item>
           <el-form-item label="字节序">
             <el-select v-model="form.byteOrder">
               <el-option label="ABCD" value="ABCD" />
@@ -64,7 +79,9 @@
               <el-option label="Low Word First" value="low_first" />
             </el-select>
           </el-form-item>
-          <el-form-item label="Bit 位"><el-input-number v-model="form.bitIndex" :min="0" :max="15" /></el-form-item>
+          <el-form-item label="Bit 位"
+            ><el-input-number v-model="form.bitIndex" :min="0" :max="15"
+          /></el-form-item>
           <el-form-item label="倍率"><el-input-number v-model="form.scale" /></el-form-item>
           <el-form-item label="偏移"><el-input-number v-model="form.offset" /></el-form-item>
           <el-form-item label="单位"><el-input v-model="form.unit" /></el-form-item>
@@ -73,9 +90,15 @@
       <section>
         <h3><span>04</span>采样与权限</h3>
         <div class="modbus-register-dialog__grid">
-          <el-form-item label="轮询周期(ms)"><el-input-number v-model="form.pollIntervalMs" :min="100" /></el-form-item>
-          <el-form-item label="超时(ms)"><el-input-number v-model="form.timeoutMs" :min="1" /></el-form-item>
-          <el-form-item label="重试次数"><el-input-number v-model="form.retryCount" :min="0" /></el-form-item>
+          <el-form-item label="轮询周期(ms)"
+            ><el-input-number v-model="form.pollIntervalMs" :min="100"
+          /></el-form-item>
+          <el-form-item label="超时(ms)"
+            ><el-input-number v-model="form.timeoutMs" :min="1"
+          /></el-form-item>
+          <el-form-item label="重试次数"
+            ><el-input-number v-model="form.retryCount" :min="0"
+          /></el-form-item>
           <el-form-item label="读写权限">
             <el-select v-model="form.accessLevel">
               <el-option label="Read" value="Read" />
@@ -85,7 +108,9 @@
           </el-form-item>
         </div>
       </section>
-      <el-form-item label="说明"><el-input v-model="form.description" type="textarea" :rows="2" /></el-form-item>
+      <el-form-item label="说明"
+        ><el-input v-model="form.description" type="textarea" :rows="2"
+      /></el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="$emit('update:modelValue', false)">取消</el-button>

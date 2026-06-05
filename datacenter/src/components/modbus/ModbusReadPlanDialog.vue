@@ -1,9 +1,23 @@
 <template>
-  <el-dialog :model-value="modelValue" title="运行态读取预估" width="760px" @close="$emit('update:modelValue', false)">
+  <el-dialog
+    :model-value="modelValue"
+    title="运行态读取预估"
+    width="760px"
+    @close="$emit('update:modelValue', false)"
+  >
     <div class="modbus-read-plan-dialog__summary">
-      <span><strong>{{ estimate.registerCount }}</strong>变量</span>
-      <span><strong>{{ estimate.readCount }}</strong>次读取</span>
-      <span><strong>{{ estimate.readsPerSecond.toFixed(2) }}</strong>reads/s</span>
+      <span
+        ><strong>{{ estimate.registerCount }}</strong
+        >变量</span
+      >
+      <span
+        ><strong>{{ estimate.readCount }}</strong
+        >次读取</span
+      >
+      <span
+        ><strong>{{ estimate.readsPerSecond.toFixed(2) }}</strong
+        >reads/s</span
+      >
     </div>
     <el-table :data="estimate.plans" height="300px">
       <el-table-column prop="unitId" label="从站地址" width="88" />

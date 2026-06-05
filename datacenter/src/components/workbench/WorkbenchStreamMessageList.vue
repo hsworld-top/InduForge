@@ -1,10 +1,6 @@
 <template>
   <div ref="rootRef" class="workbench-stream-list">
-    <el-scrollbar
-      ref="scrollbarRef"
-      class="workbench-stream-list__scroll"
-      @scroll="handleScroll"
-    >
+    <el-scrollbar ref="scrollbarRef" class="workbench-stream-list__scroll" @scroll="handleScroll">
       <div v-if="loading" class="workbench-stream-list__state">
         <IconTablerLoader2 class="workbench-stream-list__spinner" />
         <span>加载消息...</span>
@@ -16,11 +12,7 @@
         <small>{{ emptyHint }}</small>
       </div>
 
-      <div
-        v-else
-        class="workbench-stream-list__items"
-        :style="{ height: `${virtualHeight}px` }"
-      >
+      <div v-else class="workbench-stream-list__items" :style="{ height: `${virtualHeight}px` }">
         <div
           class="workbench-stream-list__window"
           :style="{ transform: `translateY(${windowOffset}px)` }"
@@ -51,7 +43,9 @@
               </el-tooltip>
             </header>
 
-            <pre class="workbench-stream-list__payload">{{ formatPayload(item.message.payload) }}</pre>
+            <pre class="workbench-stream-list__payload">{{
+              formatPayload(item.message.payload)
+            }}</pre>
           </article>
         </div>
       </div>

@@ -1,5 +1,10 @@
 <template>
-  <el-dialog :model-value="modelValue" title="导入 Modbus 变量" width="760px" @close="$emit('update:modelValue', false)">
+  <el-dialog
+    :model-value="modelValue"
+    title="导入 Modbus 变量"
+    width="760px"
+    @close="$emit('update:modelValue', false)"
+  >
     <div class="modbus-import-dialog__summary">
       <strong>{{ previewRows.length }}</strong>
       <span>待导入变量</span>
@@ -7,7 +12,12 @@
     </div>
     <el-tabs v-model="mode">
       <el-tab-pane label="粘贴表格" name="paste">
-        <el-input v-model="pasteText" type="textarea" :rows="9" placeholder="变量名,Code,从站地址,区域,地址,地址基准,类型,倍率,单位" />
+        <el-input
+          v-model="pasteText"
+          type="textarea"
+          :rows="9"
+          placeholder="变量名,Code,从站地址,区域,地址,地址基准,类型,倍率,单位"
+        />
       </el-tab-pane>
       <el-tab-pane label="地址段生成" name="range">
         <div class="modbus-import-dialog__range">
@@ -39,7 +49,9 @@
     </el-table>
     <template #footer>
       <el-button @click="$emit('update:modelValue', false)">取消</el-button>
-      <el-button type="primary" :loading="loading" @click="$emit('submit', previewRows)">导入 {{ previewRows.length }} 个变量</el-button>
+      <el-button type="primary" :loading="loading" @click="$emit('submit', previewRows)"
+        >导入 {{ previewRows.length }} 个变量</el-button
+      >
     </template>
   </el-dialog>
 </template>
@@ -85,7 +97,9 @@ const previewRows = computed(() => {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const [name, code, unitId, area, address, addressBase, dataType, scale, unit] = line.split(',').map((item) => item.trim())
+      const [name, code, unitId, area, address, addressBase, dataType, scale, unit] = line
+        .split(',')
+        .map((item) => item.trim())
       return {
         name,
         code,

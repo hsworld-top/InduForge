@@ -1,12 +1,25 @@
 <template>
-  <el-drawer :model-value="modelValue" title="建模校验" size="360px" @close="$emit('update:modelValue', false)">
+  <el-drawer
+    :model-value="modelValue"
+    title="建模校验"
+    size="360px"
+    @close="$emit('update:modelValue', false)"
+  >
     <div class="modbus-validation-drawer">
       <p>{{ scopeLabel }}：{{ issues.length }} 个问题</p>
       <article v-for="issue in issues" :key="`${issue.code}-${issue.registerId}`">
-        <el-tag size="small" :type="issue.severity === 'error' ? 'danger' : 'warning'">{{ issue.severity }}</el-tag>
+        <el-tag size="small" :type="issue.severity === 'error' ? 'danger' : 'warning'">{{
+          issue.severity
+        }}</el-tag>
         <strong>{{ issue.registerName || '寄存器组' }}</strong>
         <span>{{ issue.message }}</span>
-        <el-button v-if="issue.registerId" size="small" link @click="$emit('locate', issue.registerId)">定位变量</el-button>
+        <el-button
+          v-if="issue.registerId"
+          size="small"
+          link
+          @click="$emit('locate', issue.registerId)"
+          >定位变量</el-button
+        >
       </article>
     </div>
   </el-drawer>

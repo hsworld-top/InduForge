@@ -71,7 +71,11 @@
     <section class="opcua-inspector__section opcua-inspector__issues">
       <div class="opcua-inspector__section-title">校验问题</div>
       <div v-if="visibleIssues.length === 0" class="opcua-inspector__ok">当前无问题</div>
-      <div v-for="issue in visibleIssues" :key="`${issue.code}-${issue.nodeId || issue.groupId}`" class="opcua-inspector__issue">
+      <div
+        v-for="issue in visibleIssues"
+        :key="`${issue.code}-${issue.nodeId || issue.groupId}`"
+        class="opcua-inspector__issue"
+      >
         <el-tag size="small" :type="issue.severity === 'error' ? 'danger' : 'warning'">
           {{ issue.severity }}
         </el-tag>

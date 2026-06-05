@@ -98,7 +98,6 @@
           JSON格式，支持 min/max (数值), minLength/maxLength/pattern (字符串), enum (枚举值)
         </span>
       </el-form-item>
-
     </el-form>
 
     <template #footer>

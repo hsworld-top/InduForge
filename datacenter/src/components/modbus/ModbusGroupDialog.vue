@@ -1,12 +1,22 @@
 <template>
-  <el-dialog :model-value="modelValue" :title="mode === 'edit' ? '编辑寄存器组' : '新建寄存器组'" width="420px" @close="$emit('update:modelValue', false)">
+  <el-dialog
+    :model-value="modelValue"
+    :title="mode === 'edit' ? '编辑寄存器组' : '新建寄存器组'"
+    width="420px"
+    @close="$emit('update:modelValue', false)"
+  >
     <el-form label-position="top">
       <el-form-item label="寄存器组名称">
         <el-input v-model="form.name" />
       </el-form-item>
       <el-form-item label="父级寄存器组">
         <el-select v-model="form.parentId" clearable style="width: 100%">
-          <el-option v-for="group in groups" :key="group.id" :label="group.name" :value="group.id" />
+          <el-option
+            v-for="group in groups"
+            :key="group.id"
+            :label="group.name"
+            :value="group.id"
+          />
         </el-select>
       </el-form-item>
       <el-form-item label="说明">

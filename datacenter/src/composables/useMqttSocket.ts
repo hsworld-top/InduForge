@@ -111,7 +111,6 @@ export function useMqttSocket(projectIdSource, previewSessionIdSource = null) {
     localTagHandles.forEach((tagId) => {
       sharedRegistry.subscribeTag(connectionKey, tagId)
     })
-
   }
 
   const detachLocalResources = (connectionKey) => {
@@ -130,7 +129,6 @@ export function useMqttSocket(projectIdSource, previewSessionIdSource = null) {
     localTagHandles.forEach((tagId) => {
       sharedRegistry.unsubscribeTag(connectionKey, tagId)
     })
-
   }
 
   const releaseCurrentConnection = () => {

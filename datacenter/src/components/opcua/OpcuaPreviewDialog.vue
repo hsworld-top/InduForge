@@ -1,5 +1,10 @@
 <template>
-  <el-dialog :model-value="modelValue" title="变量预览" width="820px" @close="$emit('update:modelValue', false)">
+  <el-dialog
+    :model-value="modelValue"
+    title="变量预览"
+    width="820px"
+    @close="$emit('update:modelValue', false)"
+  >
     <div class="opcua-preview__summary">
       <strong>{{ nodes.length }} 个变量</strong>
       <span>{{ diagnostics.join('；') || '真实采集由运行态执行，当前用于核对建模变量。' }}</span>

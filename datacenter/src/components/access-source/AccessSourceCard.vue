@@ -319,7 +319,8 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
   line-height: 1.45;
 }
 
-.access-source-card__type span:not(.access-source-card__divider):not(.access-source-card__endpoint) {
+.access-source-card__type
+  span:not(.access-source-card__divider):not(.access-source-card__endpoint) {
   min-width: 0;
   flex: 0 1 auto;
   overflow: hidden;

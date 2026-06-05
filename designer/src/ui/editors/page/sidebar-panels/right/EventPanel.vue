@@ -375,7 +375,6 @@ const jsCompletions = computed<any[]>(() => {
       prefix: '$global.',
     })
   })
-
   ;((globalScripts.value?.custom?.items || []) as any[]).forEach((script) => {
     if (!script?.name) return
     const params =

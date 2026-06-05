@@ -1,5 +1,10 @@
 <template>
-  <el-dialog :model-value="modelValue" title="从 OPC UA 导入变量" width="860px" @close="$emit('update:modelValue', false)">
+  <el-dialog
+    :model-value="modelValue"
+    title="从 OPC UA 导入变量"
+    width="860px"
+    @close="$emit('update:modelValue', false)"
+  >
     <div class="opcua-import">
       <section>
         <div class="opcua-import__section-head">
@@ -27,7 +32,9 @@
             <template #default="{ row }"><el-input v-model="row.dataType" size="small" /></template>
           </el-table-column>
           <el-table-column label="采样" width="110">
-            <template #default="{ row }"><el-input-number v-model="row.samplingMs" size="small" :min="1" /></template>
+            <template #default="{ row }"
+              ><el-input-number v-model="row.samplingMs" size="small" :min="1"
+            /></template>
           </el-table-column>
         </el-table>
       </section>
@@ -63,7 +70,13 @@ const rows = computed(() =>
     .map((line) => {
       const [nodeId, dataType = 'Double', name = ''] = line.split(',').map((part) => part.trim())
       return {
-        name: name || nodeId.split(/[.;=:/]/).filter(Boolean).at(-1) || nodeId,
+        name:
+          name ||
+          nodeId
+            .split(/[.;=:/]/)
+            .filter(Boolean)
+            .at(-1) ||
+          nodeId,
         code: '',
         nodeId,
         dataType,

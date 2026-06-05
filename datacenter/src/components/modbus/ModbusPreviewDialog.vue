@@ -1,12 +1,19 @@
 <template>
-  <el-dialog :model-value="modelValue" title="变量预览" width="860px" @close="$emit('update:modelValue', false)">
+  <el-dialog
+    :model-value="modelValue"
+    title="变量预览"
+    width="860px"
+    @close="$emit('update:modelValue', false)"
+  >
     <el-table :data="registers" height="320px">
       <el-table-column prop="registerId" label="变量 ID" min-width="130" show-overflow-tooltip />
       <el-table-column prop="slaveId" label="从站" width="70" />
       <el-table-column prop="area" label="区域" width="130" />
       <el-table-column prop="address" label="地址" width="90" />
       <el-table-column label="原始值" min-width="110">
-        <template #default="{ row }">{{ Array.isArray(row.rawValue) ? row.rawValue.join(', ') : '-' }}</template>
+        <template #default="{ row }">{{
+          Array.isArray(row.rawValue) ? row.rawValue.join(', ') : '-'
+        }}</template>
       </el-table-column>
       <el-table-column label="解析值" min-width="110">
         <template #default="{ row }">{{ row.value ?? '-' }}</template>

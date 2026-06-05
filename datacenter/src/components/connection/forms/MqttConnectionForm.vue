@@ -57,11 +57,7 @@
               </el-tooltip>
             </span>
           </template>
-          <el-input
-            v-model.number="formData.port"
-            inputmode="numeric"
-            placeholder="请输入端口"
-          />
+          <el-input v-model.number="formData.port" inputmode="numeric" placeholder="请输入端口" />
         </el-form-item>
       </div>
 
@@ -69,10 +65,7 @@
         <template #label>
           <span class="mqtt-connection-form__field-label">
             客户端 ID
-            <el-tooltip
-              content="用于标识 MQTT 客户端；留空时系统会自动生成。"
-              placement="top"
-            >
+            <el-tooltip content="用于标识 MQTT 客户端；留空时系统会自动生成。" placement="top">
               <IconTablerHelpCircle class="mqtt-connection-form__field-help" />
             </el-tooltip>
           </span>
@@ -208,7 +201,10 @@
           <template #label>
             <span class="mqtt-connection-form__field-label">
               遗嘱主题
-              <el-tooltip content="客户端异常离线时，Broker 将向该主题发布遗嘱消息。" placement="top">
+              <el-tooltip
+                content="客户端异常离线时，Broker 将向该主题发布遗嘱消息。"
+                placement="top"
+              >
                 <IconTablerHelpCircle class="mqtt-connection-form__field-help" />
               </el-tooltip>
             </span>
@@ -238,7 +234,10 @@
           <template #label>
             <span class="mqtt-connection-form__field-label">
               保留遗嘱消息
-              <el-tooltip content="开启后 Broker 会保留最后一条遗嘱消息，供新订阅者读取。" placement="top">
+              <el-tooltip
+                content="开启后 Broker 会保留最后一条遗嘱消息，供新订阅者读取。"
+                placement="top"
+              >
                 <IconTablerHelpCircle class="mqtt-connection-form__field-help" />
               </el-tooltip>
             </span>
@@ -264,7 +263,10 @@
           <template #label>
             <span class="mqtt-connection-form__field-label">
               验证服务器证书
-              <el-tooltip content="生产环境建议开启；使用自签名证书调试时可按需关闭。" placement="top">
+              <el-tooltip
+                content="生产环境建议开启；使用自签名证书调试时可按需关闭。"
+                placement="top"
+              >
                 <IconTablerHelpCircle class="mqtt-connection-form__field-help" />
               </el-tooltip>
             </span>
@@ -598,9 +600,11 @@ defineExpose({
   border-radius: 0 var(--el-border-radius-base) var(--el-border-radius-base) 0;
 }
 
-.mqtt-connection-form__protocol-select:hover + .mqtt-connection-form__broker-input
+.mqtt-connection-form__protocol-select:hover
+  + .mqtt-connection-form__broker-input
   :deep(.el-input__wrapper),
-.mqtt-connection-form__protocol-select.is-focused + .mqtt-connection-form__broker-input
+.mqtt-connection-form__protocol-select.is-focused
+  + .mqtt-connection-form__broker-input
   :deep(.el-input__wrapper) {
   position: relative;
   z-index: 0;
