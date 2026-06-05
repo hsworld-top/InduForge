@@ -98,19 +98,71 @@
             </el-form-item>
 
             <template v-if="connectionType === 'kafka'">
-              <el-form-item label="Broker" prop="brokers">
-                <el-input v-model="formData.brokers" placeholder="127.0.0.1:9092,127.0.0.2:9092" />
+              <el-form-item prop="brokers">
+                <template #label>
+                  <span class="connection-dialog__field-label">
+                    服务器地址
+                    <el-tooltip
+                      content="保持 IP:端口 格式；支持配置多个地址，用英文逗号分隔。"
+                      placement="top"
+                    >
+                      <IconTablerHelpCircle class="connection-dialog__field-help" />
+                    </el-tooltip>
+                  </span>
+                </template>
+                <el-input
+                  v-model="formData.brokers"
+                  placeholder="127.0.0.1:9092,127.0.0.2:9092"
+                />
               </el-form-item>
-              <el-form-item label="Topic" prop="topic">
-                <el-input v-model="formData.topic" placeholder="device.telemetry" />
+              <el-form-item prop="topic">
+                <template #label>
+                  <span class="connection-dialog__field-label">
+                    主题名称
+                    <el-tooltip content="填写要消费的 Kafka 主题名称。" placement="top">
+                      <IconTablerHelpCircle class="connection-dialog__field-help" />
+                    </el-tooltip>
+                  </span>
+                </template>
+                <el-input v-model="formData.topic" placeholder="请输入主题名称" />
               </el-form-item>
-              <el-form-item label="Consumer Group" prop="consumerGroup">
-                <el-input v-model="formData.consumerGroup" placeholder="datacenter-preview" />
+              <el-form-item prop="consumerGroup">
+                <template #label>
+                  <span class="connection-dialog__field-label">
+                    消费组名称
+                    <el-tooltip content="请输入消费组名称，用于记录消费进度。" placement="top">
+                      <IconTablerHelpCircle class="connection-dialog__field-help" />
+                    </el-tooltip>
+                  </span>
+                </template>
+                <el-input
+                  v-model="formData.consumerGroup"
+                  placeholder="请输入消费组名称，用于记录消费进度"
+                />
               </el-form-item>
-              <el-form-item label="起始位置">
+              <el-form-item>
+                <template #label>
+                  <span class="connection-dialog__field-label">
+                    起始位置
+                    <el-tooltip content="新消费组首次读取消息时使用的位置。" placement="top">
+                      <IconTablerHelpCircle class="connection-dialog__field-help" />
+                    </el-tooltip>
+                  </span>
+                </template>
                 <el-segmented v-model="formData.startPosition" :options="kafkaStartOptions" />
               </el-form-item>
-              <el-form-item label="扩展参数">
+              <el-form-item>
+                <template #label>
+                  <span class="connection-dialog__field-label">
+                    扩展参数
+                    <el-tooltip
+                      content="可选 JSON 配置，用于传入安全协议等 Kafka 客户端参数。"
+                      placement="top"
+                    >
+                      <IconTablerHelpCircle class="connection-dialog__field-help" />
+                    </el-tooltip>
+                  </span>
+                </template>
                 <el-input
                   v-model="formData.optionsText"
                   type="textarea"
@@ -531,6 +583,7 @@ import { getApiErrorMessage } from '@/utils/request'
 import IconTablerAlertTriangle from '~icons/tabler/alert-triangle'
 import IconTablerCircleCheck from '~icons/tabler/circle-check'
 import IconTablerDatabase from '~icons/tabler/database'
+import IconTablerHelpCircle from '~icons/tabler/help-circle'
 import IconTablerLoader2 from '~icons/tabler/loader-2'
 import IconTablerMessageCircle from '~icons/tabler/message-circle'
 import IconTablerPlugConnected from '~icons/tabler/plug-connected'
@@ -709,8 +762,8 @@ const relationalSourceTypes = ['mysql', 'postgresql', 'sqlserver']
 const specializedProtocolTypes = [...previewProtocolTypes, ...industrialProtocolTypes]
 const httpMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 const kafkaStartOptions = [
-  { label: 'Latest', value: 'latest' },
-  { label: 'Earliest', value: 'earliest' },
+  { label: '最新位置', value: 'latest' },
+  { label: '最早位置', value: 'earliest' },
 ]
 const redisModeOptions = [
   { label: 'Standalone', value: 'standalone' },
@@ -733,9 +786,9 @@ const modbusModeOptions = [
 
 const protocolRules = {
   name: [{ required: true, message: '连接名称不能为空', trigger: 'blur' }],
-  brokers: [{ required: true, message: 'Broker 不能为空', trigger: 'blur' }],
-  topic: [{ required: true, message: 'Topic 不能为空', trigger: 'blur' }],
-  consumerGroup: [{ required: true, message: 'Consumer Group 不能为空', trigger: 'blur' }],
+  brokers: [{ required: true, message: '服务器地址不能为空', trigger: 'blur' }],
+  topic: [{ required: true, message: '主题名称不能为空', trigger: 'blur' }],
+  consumerGroup: [{ required: true, message: '消费组名称不能为空', trigger: 'blur' }],
   baseUrl: [{ required: true, message: '请求地址不能为空', trigger: 'blur' }],
   url: [{ required: true, message: '连接地址不能为空', trigger: 'blur' }],
   address: [{ required: true, message: 'Redis 地址不能为空', trigger: 'blur' }],
@@ -756,7 +809,7 @@ const activeFormTitle = computed(() => {
   if (connectionType.value === 'mqtt') {
     return 'MQTT Broker'
   }
-  if (connectionType.value === 'kafka') return 'Kafka Topic'
+  if (connectionType.value === 'kafka') return 'Kafka 主题'
   if (connectionType.value === 'http') return 'HTTP Source'
   if (connectionType.value === 'websocket') return 'WebSocket Source'
   if (connectionType.value === 'redis') return 'Redis Source'
@@ -866,10 +919,10 @@ const summaryRows = computed(() => {
     )
   } else if (connectionType.value === 'kafka') {
     rows.push(
-      { label: 'Broker', value: data.brokers || '未填写' },
-      { label: 'Topic', value: data.topic || '未填写' },
-      { label: 'Group', value: data.consumerGroup || '未填写' },
-      { label: 'Offset', value: data.startPosition || 'latest' },
+      { label: '服务器地址', value: data.brokers || '未填写' },
+      { label: '主题名称', value: data.topic || '未填写' },
+      { label: '消费组', value: data.consumerGroup || '未填写' },
+      { label: '起始位置', value: data.startPosition === 'earliest' ? '最早位置' : '最新位置' },
     )
   } else if (connectionType.value === 'http') {
     rows.push(
@@ -2096,6 +2149,23 @@ const formatTimeout = (timeout) => {
 
 .connection-dialog__protocol-form {
   max-width: 620px;
+}
+
+.connection-dialog__field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.connection-dialog__field-help {
+  width: 14px;
+  height: 14px;
+  color: var(--dc-text-muted);
+  cursor: help;
+}
+
+.connection-dialog__field-help:hover {
+  color: var(--dc-primary);
 }
 
 .connection-dialog__form-grid {
