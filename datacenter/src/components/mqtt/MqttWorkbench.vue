@@ -1084,6 +1084,7 @@ async function handleMoveSubmit(groupId: string | null) {
       })
       ElMessage.success('分组已移动')
     }
+    moveSaving.value = false
     moveDialogVisible.value = false
     await loadWorkbenchTree()
   } catch (error) {

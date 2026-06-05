@@ -973,6 +973,7 @@ const moveRequest = async () => {
       openTab.draft = toDraft(saved)
       openTab.dirty = false
     }
+    moveSaving.value = false
     moveDialogVisible.value = false
     movingRequest.value = null
     await loadRequests()
@@ -993,6 +994,7 @@ const moveGroup = async () => {
       name: group.name,
       parentId: moveTargetGroupId.value || null,
     })
+    moveSaving.value = false
     moveDialogVisible.value = false
     movingGroup.value = null
     const res = await dataAPI.getHttpRequestGroups(props.projectId, props.connection.id)

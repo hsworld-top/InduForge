@@ -4,7 +4,6 @@
     :title="targetType === 'group' ? '移动分组' : '移动订阅'"
     width="460px"
     body-max-height="260px"
-    :dirty="isDirty"
     :close-disabled="loading"
     @close="resetForm"
   >
@@ -95,13 +94,6 @@ const canSubmit = computed(
     Boolean(props.targetType === 'group' ? props.group : props.subscription) &&
     targetGroupId.value !== currentGroupId.value,
 )
-const isDirty = computed(
-  () =>
-    visible.value &&
-    Boolean(props.targetType === 'group' ? props.group : props.subscription) &&
-    targetGroupId.value !== currentGroupId.value,
-)
-
 function resetForm() {
   targetGroupId.value = currentGroupId.value
 }

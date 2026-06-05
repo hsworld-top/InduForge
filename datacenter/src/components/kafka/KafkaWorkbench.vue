@@ -630,6 +630,7 @@ const handleMoveSubmit = async (groupId: string | null) => {
       })
       ElMessage.success('Topic 分组已移动')
     }
+    moving.value = false
     moveDialogVisible.value = false
     await loadWorkbench()
   } catch (error) {
