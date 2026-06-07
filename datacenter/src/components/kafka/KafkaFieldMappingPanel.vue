@@ -14,9 +14,9 @@
           <IconTablerSparkles class="kafka-variable-panel__button-icon" />
           从样本生成
         </el-button>
-        <el-button size="small" @click="openSampleDialog">
+        <el-button size="small" @click="sampleEditorVisible = !sampleEditorVisible">
           <IconTablerBraces class="kafka-variable-panel__button-icon" />
-          粘贴样本
+          样例编辑器
         </el-button>
         <el-button size="small" :loading="previewing" @click="testMappings">
           <IconTablerActivity class="kafka-variable-panel__button-icon" />
@@ -74,88 +74,141 @@
       </div>
     </div>
 
-    <div class="kafka-variable-panel__body">
-      <el-table v-loading="loading" :data="fields" height="100%" empty-text="暂无字段映射">
-        <el-table-column prop="name" label="映射名称" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="valuePath" label="字段路径" min-width="170" show-overflow-tooltip />
-        <el-table-column prop="dataType" label="类型" width="92" />
-        <el-table-column prop="dataPointPath" label="输出数据点" min-width="190" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ row.dataPointPath || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="最近测试值" min-width="140" show-overflow-tooltip>
-          <template #default="{ row }">
-            <span class="kafka-variable-panel__mono">{{ formatLastValue(row.lastValue) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="质量" width="92">
-          <template #default="{ row }">
-            <WorkbenchStatusPill
-              :label="qualityLabel(row.quality)"
-              :tone="qualityTone(row.quality)"
-            />
-          </template>
-        </el-table-column>
-        <el-table-column label="更新时间" width="156">
-          <template #default="{ row }">
-            {{ formatTime(row.lastUpdatedAt) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="86">
-          <template #default="{ row }">
-            <WorkbenchStatusPill
-              :label="row.enabled ? '启用' : '停用'"
-              :tone="row.enabled ? 'success' : 'neutral'"
-            />
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
-          <template #default="{ row }">
-            <div class="kafka-variable-panel__row-actions">
-              <el-tooltip content="编辑" placement="top">
-                <button
-                  type="button"
-                  class="kafka-variable-panel__icon-action"
-                  @click="openEditDialog(row)"
-                >
-                  <IconTablerEdit />
-                </button>
-              </el-tooltip>
-              <el-tooltip :content="row.enabled ? '停用' : '启用'" placement="top">
-                <button
-                  type="button"
-                  class="kafka-variable-panel__icon-action"
-                  @click="toggleField(row)"
-                >
-                  <IconTablerPlayerPause v-if="row.enabled" />
-                  <IconTablerPlayerPlay v-else />
-                </button>
-              </el-tooltip>
-              <el-tooltip content="删除" placement="top">
-                <button
-                  type="button"
-                  class="kafka-variable-panel__icon-action is-danger"
-                  @click="deleteField(row)"
-                >
-                  <IconTablerTrash />
-                </button>
-              </el-tooltip>
-            </div>
-          </template>
-        </el-table-column>
-      </el-table>
-      <div class="kafka-variable-panel__pagination">
-        <el-pagination
-          :current-page="pagination.page"
-          :page-size="pagination.pageSize"
-          :page-sizes="[20, 50, 100]"
-          :total="pagination.total"
-          background
-          layout="total, sizes, prev, pager, next, jumper"
-          small
-          @current-change="changePage"
-          @size-change="changePageSize"
+    <div class="kafka-variable-panel__body" :class="{ 'has-editor': sampleEditorVisible }">
+      <div class="kafka-variable-panel__result">
+        <el-table
+          v-if="candidateRows.length > 0"
+          class="kafka-variable-panel__candidate-table"
+          :data="candidateRows"
+          max-height="220"
+          row-key="path"
+        >
+          <el-table-column label="" width="42">
+            <template #default="{ row }">
+              <el-checkbox
+                :model-value="selectedCandidatePaths.has(row.path)"
+                :disabled="row.exists"
+                @update:model-value="toggleCandidateSelection(row, Boolean($event))"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column prop="name" label="映射名称" min-width="120" />
+          <el-table-column prop="path" label="字段路径" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="dataType" label="类型" width="88" />
+          <el-table-column label="样例值" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span class="kafka-variable-panel__mono">{{ formatLastValue(row.sampleValue) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="88">
+            <template #default="{ row }">
+              <WorkbenchStatusPill
+                :label="row.exists ? '已存在' : '候选'"
+                :tone="row.exists ? 'neutral' : 'info'"
+              />
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <el-table v-loading="loading" :data="fields" height="100%" empty-text="暂无字段映射">
+          <el-table-column prop="name" label="映射名称" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="valuePath" label="字段路径" min-width="170" show-overflow-tooltip />
+          <el-table-column prop="dataType" label="类型" width="92" />
+          <el-table-column prop="dataPointPath" label="输出数据点" min-width="190" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ row.dataPointPath || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="最近测试值" min-width="140" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span class="kafka-variable-panel__mono">{{ formatLastValue(row.lastValue) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="质量" width="92">
+            <template #default="{ row }">
+              <WorkbenchStatusPill
+                :label="qualityLabel(row.quality)"
+                :tone="qualityTone(row.quality)"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="更新时间" width="156">
+            <template #default="{ row }">
+              {{ formatTime(row.lastUpdatedAt) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="86">
+            <template #default="{ row }">
+              <WorkbenchStatusPill
+                :label="row.enabled ? '启用' : '停用'"
+                :tone="row.enabled ? 'success' : 'neutral'"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="150" fixed="right">
+            <template #default="{ row }">
+              <div class="kafka-variable-panel__row-actions">
+                <el-tooltip content="编辑" placement="top">
+                  <button
+                    type="button"
+                    class="kafka-variable-panel__icon-action"
+                    @click="openEditDialog(row)"
+                  >
+                    <IconTablerEdit />
+                  </button>
+                </el-tooltip>
+                <el-tooltip :content="row.enabled ? '停用' : '启用'" placement="top">
+                  <button
+                    type="button"
+                    class="kafka-variable-panel__icon-action"
+                    @click="toggleField(row)"
+                  >
+                    <IconTablerPlayerPause v-if="row.enabled" />
+                    <IconTablerPlayerPlay v-else />
+                  </button>
+                </el-tooltip>
+                <el-tooltip content="删除" placement="top">
+                  <button
+                    type="button"
+                    class="kafka-variable-panel__icon-action is-danger"
+                    @click="deleteField(row)"
+                  >
+                    <IconTablerTrash />
+                  </button>
+                </el-tooltip>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div class="kafka-variable-panel__pagination">
+          <el-pagination
+            :current-page="pagination.page"
+            :page-size="pagination.pageSize"
+            :page-sizes="[20, 50, 100]"
+            :total="pagination.total"
+            background
+            layout="total, sizes, prev, pager, next, jumper"
+            small
+            @current-change="changePage"
+            @size-change="changePageSize"
+          />
+        </div>
+
+        <BulkActionBar :selected-count="selectedCandidateCount" @clear="clearCandidateSelection">
+          <el-button type="primary" size="small" :loading="batchSaving" @click="createFromSamples">
+            保存候选字段
+          </el-button>
+        </BulkActionBar>
+      </div>
+
+      <div v-if="sampleEditorVisible" class="kafka-variable-panel__editor">
+        <WorkbenchJsonSampleEditor
+          ref="sampleEditorRef"
+          v-model="sampleEditorText"
+          :fill-latest-disabled="props.samples.length === 0"
+          :error="sampleParseError"
+          @fill-latest="fillEditorFromLatestSample"
+          @parse="parseEditorFields"
         />
       </div>
     </div>
@@ -246,18 +299,6 @@
       </template>
     </DcDialog>
 
-    <DcDialog v-model="sampleDialogVisible" title="粘贴 JSON 样本" width="680px">
-      <el-input
-        v-model="sampleText"
-        type="textarea"
-        :rows="14"
-        placeholder='{"deviceId":"A001","temperature":26.5}'
-      />
-      <template #footer>
-        <el-button @click="sampleDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="applySampleText">解析样本</el-button>
-      </template>
-    </DcDialog>
   </section>
 </template>
 
@@ -277,10 +318,17 @@ import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerSparkles from '~icons/tabler/sparkles'
 import IconTablerTrash from '~icons/tabler/trash'
 import dataAPI from '@/api/data.api'
+import BulkActionBar from '@/components/shared/BulkActionBar.vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
+import WorkbenchJsonSampleEditor from '@/components/workbench/WorkbenchJsonSampleEditor.vue'
 import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
 import { TIME_FORMAT } from '@/constants'
 import { getApiErrorMessage } from '@/utils/request'
+import {
+  inferKafkaSampleFields,
+  normalizeKafkaSampleEditorText,
+  type KafkaSampleFieldCandidate,
+} from './kafkaSampleFields'
 import type {
   KafkaField,
   KafkaFieldGroup,
@@ -288,12 +336,6 @@ import type {
   KafkaPreviewSample,
   KafkaTopicMapping,
 } from './types'
-
-type CandidateField = {
-  path: string
-  dataType: string
-  exists: boolean
-}
 
 const props = withDefaults(
   defineProps<{
@@ -316,7 +358,6 @@ const emit = defineEmits<{
 
 const fields = ref<KafkaField[]>([])
 const groups = ref<KafkaFieldGroup[]>([])
-const candidates = ref<CandidateField[]>([])
 const loading = ref(false)
 const previewing = ref(false)
 const batchSaving = ref(false)
@@ -324,12 +365,16 @@ const fieldSaving = ref(false)
 const groupSaving = ref(false)
 const dialogVisible = ref(false)
 const groupDialogVisible = ref(false)
-const sampleDialogVisible = ref(false)
-const sampleText = ref('')
 const editingField = ref<KafkaField | null>(null)
 const editingGroup = ref<KafkaFieldGroup | null>(null)
 const selectedGroupId = ref('')
 const pagination = ref({ page: 1, pageSize: 20, total: 0, totalPages: 0 })
+const sampleEditorRef = ref<InstanceType<typeof WorkbenchJsonSampleEditor> | null>(null)
+const sampleEditorVisible = ref(true)
+const sampleEditorText = ref('')
+const sampleParseError = ref('')
+const selectedCandidatePaths = ref<Set<string>>(new Set())
+const candidateRows = ref<KafkaSampleFieldCandidate[]>([])
 
 const form = reactive({
   groupId: '',
@@ -348,14 +393,25 @@ const groupForm = reactive({
 
 const canSubmit = computed(() => form.name.trim().length > 0 && form.valuePath.trim().length > 0)
 const candidateCount = computed(
-  () => candidates.value.filter((candidate) => !candidate.exists).length,
+  () => candidateRows.value.filter((candidate) => !candidate.exists).length,
 )
+const selectedCandidateCount = computed(() => selectedCandidatePaths.value.size)
 const currentGroup = computed(
   () => groups.value.find((group) => group.id === selectedGroupId.value) || null,
 )
 const groupParentOptions = computed(() =>
   groups.value.filter((group) => !editingGroup.value || group.id !== editingGroup.value.id),
 )
+
+const refreshCandidates = (samples: KafkaPreviewSample[] = props.samples) => {
+  candidateRows.value = inferKafkaSampleFields(
+    samples,
+    fields.value.map((field) => field.valuePath),
+  )
+  selectedCandidatePaths.value = new Set(
+    candidateRows.value.filter((candidate) => !candidate.exists).map((candidate) => candidate.path),
+  )
+}
 
 const loadFields = async () => {
   loading.value = true
@@ -372,7 +428,7 @@ const loadFields = async () => {
       total: res.pagination?.total || 0,
       totalPages: res.pagination?.totalPages || 0,
     }
-    candidates.value = inferCandidateFields(props.samples, fields.value)
+    refreshCandidates()
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '加载 Kafka 字段映射失败'))
   } finally {
@@ -475,11 +531,20 @@ const saveField = async () => {
 }
 
 const createFromSamples = async () => {
-  const nextCandidates = inferCandidateFields(props.samples, fields.value).filter(
-    (candidate) => !candidate.exists,
+  const sourceCandidates =
+    candidateRows.value.length > 0
+      ? candidateRows.value
+      : inferKafkaSampleFields(props.samples, fields.value.map((field) => field.valuePath))
+  const selectedPaths = selectedCandidatePaths.value
+  if (candidateRows.value.length > 0 && selectedPaths.size === 0) {
+    ElMessage.warning('请先选择要保存的字段候选')
+    return
+  }
+  const nextCandidates = sourceCandidates.filter(
+    (candidate) => !candidate.exists && (selectedPaths.size === 0 || selectedPaths.has(candidate.path)),
   )
   if (nextCandidates.length === 0) {
-    ElMessage.warning(props.samples.length > 0 ? '暂无可生成的样本映射' : '请先粘贴样本或拉取样本后再生成映射')
+    ElMessage.warning('暂无可保存的字段候选，请先解析 JSON 样例或测试拉取样本')
     return
   }
   batchSaving.value = true
@@ -488,7 +553,7 @@ const createFromSamples = async () => {
       props.projectId,
       props.mapping.id,
       nextCandidates.map((candidate) => ({
-        name: candidate.path.split('.').pop() || candidate.path,
+        name: candidate.name,
         valuePath: candidate.path,
         dataType: candidate.dataType,
         enabled: true,
@@ -498,10 +563,10 @@ const createFromSamples = async () => {
             : null,
       })),
     )
-    ElMessage.success('样本映射已生成')
+    ElMessage.success('字段映射已保存')
     await reloadAfterMutation()
   } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '从样本生成映射失败'))
+    ElMessage.error(getApiErrorMessage(error, '保存字段映射失败'))
   } finally {
     batchSaving.value = false
   }
@@ -515,9 +580,15 @@ const pullSamples = async () => {
       timeoutMs: props.mapping.timeoutMs,
       decode: props.mapping.decode,
     })
+    const samples = preview.samples || []
+    const firstSample = samples[0]
+    if (firstSample) {
+      sampleEditorText.value = normalizeKafkaSampleEditorText(firstSample)
+      refreshCandidates(samples)
+    }
     emit('samples', {
       mappingId: String(props.mapping.id),
-      samples: preview.samples || [],
+      samples,
       preview,
     })
     ElMessage.success('样本已拉取')
@@ -550,35 +621,44 @@ const testMappings = async () => {
   }
 }
 
-const openSampleDialog = () => {
-  sampleText.value = ''
-  sampleDialogVisible.value = true
+const fillEditorFromLatestSample = () => {
+  const sample = props.samples[0]
+  if (!sample) {
+    ElMessage.warning('暂无最近样本，请先测试拉取或手动粘贴 JSON')
+    return
+  }
+  sampleEditorText.value = normalizeKafkaSampleEditorText(sample)
 }
 
-const applySampleText = () => {
+const parseEditorFields = () => {
+  sampleParseError.value = ''
   try {
-    const parsed = JSON.parse(sampleText.value)
-    const sample = {
-      topic: props.mapping.topic,
-      value: parsed,
-      timestamp: dayjs().format(TIME_FORMAT),
-    }
-    emit('samples', {
-      mappingId: String(props.mapping.id),
-      samples: [sample],
-      preview: {
-        status: 'success',
-        topic: props.mapping.topic,
-        samples: [sample],
-        schema: [],
-        diagnostics: { source: 'manual' },
-      },
-    })
-    sampleDialogVisible.value = false
-    ElMessage.success('样本已解析')
+    const parsed = JSON.parse(sampleEditorText.value)
+    candidateRows.value = inferKafkaSampleFields(
+      [{ value: parsed }],
+      fields.value.map((field) => field.valuePath),
+    )
+    selectedCandidatePaths.value = new Set(
+      candidateRows.value.filter((candidate) => !candidate.exists).map((candidate) => candidate.path),
+    )
+    ElMessage.success(`已解析 ${candidateRows.value.length} 个字段候选`)
   } catch {
-    ElMessage.error('JSON 样本格式无效')
+    sampleParseError.value = 'JSON 样例格式无效'
   }
+}
+
+const toggleCandidateSelection = (candidate: KafkaSampleFieldCandidate, checked: boolean) => {
+  const next = new Set(selectedCandidatePaths.value)
+  if (checked) {
+    next.add(candidate.path)
+  } else {
+    next.delete(candidate.path)
+  }
+  selectedCandidatePaths.value = next
+}
+
+const clearCandidateSelection = () => {
+  selectedCandidatePaths.value = new Set()
 }
 
 const toggleField = async (field: KafkaField) => {
@@ -666,47 +746,6 @@ const deleteGroup = async (group: KafkaFieldGroup) => {
     if (error === 'cancel' || error === 'close') return
     ElMessage.error(getApiErrorMessage(error, '删除 Kafka 映射分组失败'))
   }
-}
-
-const inferCandidateFields = (samples: KafkaPreviewSample[], existing: KafkaField[]) => {
-  const seen = new Map<string, CandidateField>()
-  const existingPaths = new Set(existing.map((field) => field.valuePath))
-
-  // 样本推断只辅助创建映射，真实数据点输出仍以用户保存的字段映射为准。
-  const visit = (prefix: string, value: unknown) => {
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      Object.entries(value as Record<string, unknown>).forEach(([key, child]) => {
-        visit(prefix ? `${prefix}.${key}` : key, child)
-      })
-      return
-    }
-    if (!prefix || seen.has(prefix)) return
-    seen.set(prefix, {
-      path: prefix,
-      dataType: resolveDataType(value),
-      exists: existingPaths.has(prefix),
-    })
-  }
-
-  samples.forEach((sample) => visit('', normalizeSampleValue(sample.value)))
-  return Array.from(seen.values())
-}
-
-const normalizeSampleValue = (value: unknown) => {
-  if (typeof value !== 'string') return value
-  try {
-    return JSON.parse(value)
-  } catch {
-    return value
-  }
-}
-
-const resolveDataType = (value: unknown) => {
-  if (typeof value === 'number') return 'number'
-  if (typeof value === 'boolean') return 'boolean'
-  if (typeof value === 'string') return 'string'
-  if (Array.isArray(value)) return 'array'
-  return 'object'
 }
 
 const formatLastValue = (value: unknown) => {
@@ -851,13 +890,44 @@ watch(
 .kafka-variable-panel__body {
   min-height: 0;
   flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.kafka-variable-panel__body.has-editor {
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+}
+
+.kafka-variable-panel__result,
+.kafka-variable-panel__editor {
+  min-height: 0;
+  min-width: 0;
+}
+
+.kafka-variable-panel__result {
+  position: relative;
   display: flex;
   flex-direction: column;
 }
 
-.kafka-variable-panel__body :deep(.el-table) {
+.kafka-variable-panel__result > :deep(.el-table) {
   flex: 1;
   min-height: 0;
+}
+
+.kafka-variable-panel__candidate-table {
+  flex: 0 0 auto;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--dc-border);
+}
+
+.kafka-variable-panel__editor {
+  display: grid;
+  grid-template-rows: minmax(220px, 1fr);
+  gap: 8px;
+  padding: 10px;
+  border-left: 1px solid var(--dc-border);
+  background: var(--dc-surface-subtle);
 }
 
 .kafka-variable-panel__row-actions {
@@ -936,6 +1006,16 @@ watch(
   .kafka-variable-panel__group-tools {
     margin-left: 0;
     flex-wrap: wrap;
+  }
+
+  .kafka-variable-panel__body.has-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .kafka-variable-panel__editor {
+    min-height: 360px;
+    border-left: 0;
+    border-top: 1px solid var(--dc-border);
   }
 }
 </style>
