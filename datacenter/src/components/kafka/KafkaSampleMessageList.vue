@@ -28,7 +28,7 @@
                 {{ item.message.topic || '-' }}
               </span>
               <span class="kafka-sample-list__meta">
-                p{{ item.message.partition ?? '-' }} / o{{ item.message.offset ?? '-' }}
+                分区 {{ item.message.partition ?? '-' }} / Offset {{ item.message.offset ?? '-' }}
               </span>
               <span v-if="item.message.key" class="kafka-sample-list__key">
                 key {{ item.message.key }}

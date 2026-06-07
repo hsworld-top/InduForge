@@ -10,7 +10,7 @@
           :tone="networkStatusTone"
           clickable
           :disabled="testingNetwork"
-          @click="testNetwork"
+          @click="() => testNetwork(true)"
         />
       </el-tooltip>
       <div class="kafka-raw-output-panel__pullbar-actions">
@@ -69,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import IconTablerBraces from '~icons/tabler/braces'
 import IconTablerDownload from '~icons/tabler/download'
@@ -148,13 +148,31 @@ const pullSamples = async () => {
       timeoutMs: props.mapping.timeoutMs,
       decode: props.mapping.decode,
     })
-    samples.value = preview.samples || []
+    const nextSamples = preview.samples || []
+    const seen = new Set(
+      samples.value.map(
+        (sample) =>
+          `${sample.topic || props.mapping.topic}-${sample.partition ?? '-'}-${sample.offset ?? '-'}`,
+      ),
+    )
+    const uniqueNextSamples = nextSamples.filter((sample) => {
+      const key = `${sample.topic || props.mapping.topic}-${sample.partition ?? '-'}-${sample.offset ?? '-'}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    samples.value = [
+      ...samples.value,
+      ...uniqueNextSamples,
+    ]
     emit('samples', { mappingId: String(props.mapping.id), samples: samples.value, preview })
-    if (samples.value.length === 0) {
+    if (nextSamples.length === 0) {
       ElMessage.warning('本次未拉取到样本，可调整起始位置、样本上限或超时后重试')
       return
     }
-    ElMessage.success(`已拉取 ${samples.value.length} 条样本`)
+    ElMessage.success(
+      `本次拉取 ${nextSamples.length} 条样本，新增 ${uniqueNextSamples.length} 条，当前共 ${samples.value.length} 条`,
+    )
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, 'Kafka 样本拉取失败'))
   } finally {
@@ -162,7 +180,7 @@ const pullSamples = async () => {
   }
 }
 
-const testNetwork = async () => {
+const testNetwork = async (notify = true) => {
   if (testingNetwork.value) return
   testingNetwork.value = true
   networkStatus.value = 'testing'
@@ -173,10 +191,10 @@ const testNetwork = async () => {
       probe: true,
     })
     networkStatus.value = 'available'
-    ElMessage.success('Kafka Broker 网络可用')
+    if (notify) ElMessage.success('Kafka Broker 网络可用')
   } catch (error) {
     networkStatus.value = 'unavailable'
-    ElMessage.error(getApiErrorMessage(error, 'Kafka Broker 网络不可用'))
+    if (notify) ElMessage.error(getApiErrorMessage(error, 'Kafka Broker 网络不可用'))
   } finally {
     testingNetwork.value = false
   }
@@ -200,12 +218,17 @@ const formatPayload = (value: unknown) => {
   }
 }
 
+onMounted(() => {
+  void testNetwork(false)
+})
+
 watch(
-  () => props.mapping.id,
+  () => [props.mapping.id, props.connectionId] as const,
   () => {
     pullLimit.value = 1
     networkStatus.value = 'unknown'
     clearSamples()
+    void testNetwork(false)
   },
 )
 
