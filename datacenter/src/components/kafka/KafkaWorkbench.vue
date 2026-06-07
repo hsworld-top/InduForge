@@ -103,35 +103,49 @@
     </aside>
 
     <main class="kafka-workbench__main">
+      <WorkbenchTabBar
+        v-if="modeTabs.length > 0"
+        v-model:active-id="activeModeTabId"
+        :tabs="
+          modeTabs.map((tab) => ({
+            id: tab.id,
+            title: tab.title,
+            icon: tab.type === 'raw' ? IconTablerMessages : IconTablerBraces,
+          }))
+        "
+        @close="closeModeTab"
+      />
       <div class="kafka-workbench__content">
-        <KafkaRawOutputPanel
-          v-if="activeMapping?.outputMode === 'raw_message'"
-          :project-id="projectId"
-          :mapping="activeMapping"
-          :pull-request-id="samplePullRequestId"
-          @samples="handlePreviewSamples"
-        />
-        <KafkaFieldMappingPanel
-          v-else-if="activeMapping?.outputMode === 'field_mapping'"
-          :project-id="projectId"
-          :mapping="activeMapping"
-          :samples="getPreviewSamples(activeMapping.id)"
-          :pull-request-id="samplePullRequestId"
-          @samples="handlePreviewSamples"
-        />
+        <template v-if="modeTabs.length > 0">
+          <template v-for="tab in modeTabs" :key="tab.id">
+            <KafkaRawOutputPanel
+              v-if="tab.type === 'raw' && getMappingById(tab.mappingId)"
+              class="kafka-workbench__content-panel"
+              :class="{ 'is-active': activeModeTabId === tab.id }"
+              :project-id="projectId"
+              :mapping="getMappingById(tab.mappingId)!"
+              :pull-request-id="samplePullRequestId"
+              @samples="handlePreviewSamples"
+            />
+            <KafkaFieldMappingPanel
+              v-else-if="tab.type === 'fields' && getMappingById(tab.mappingId)"
+              class="kafka-workbench__content-panel"
+              :class="{ 'is-active': activeModeTabId === tab.id }"
+              :project-id="projectId"
+              :mapping="getMappingById(tab.mappingId)!"
+              :samples="getPreviewSamples(tab.mappingId)"
+              :pull-request-id="samplePullRequestId"
+              @samples="handlePreviewSamples"
+            />
+          </template>
+        </template>
         <div v-else class="kafka-workbench__placeholder">
           <IconTablerMessages />
           <strong>选择消费规则</strong>
-          <span>整包规则可手动拉取样本，字段规则可配置字段到数据点的映射。</span>
+          <span>整包规则可测试拉取样本，字段规则可通过 JSON 样例生成字段映射。</span>
         </div>
       </div>
     </main>
-
-    <KafkaInspectorPanel
-      :connection="inspectorConnection"
-      :mapping="selectedMapping"
-      :preview="activePreview"
-    />
 
     <KafkaTopicGroupDialog
       v-model="groupDialogVisible"
@@ -259,6 +273,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import IconTablerBraces from '~icons/tabler/braces'
 import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerFolderPlus from '~icons/tabler/folder-plus'
 import IconTablerFolderSymlink from '~icons/tabler/folder-symlink'
@@ -271,10 +286,10 @@ import IconTablerSchema from '~icons/tabler/schema'
 import IconTablerTrash from '~icons/tabler/trash'
 import dataAPI from '@/api/data.api'
 import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
+import WorkbenchTabBar from '@/components/workbench/WorkbenchTabBar.vue'
 import { getApiErrorMessage } from '@/utils/request'
 import { buildKafkaTopicTree, filterKafkaTopicTree } from './kafkaTopicTreeModel'
 import KafkaFieldMappingPanel from './KafkaFieldMappingPanel.vue'
-import KafkaInspectorPanel from './KafkaInspectorPanel.vue'
 import KafkaRawOutputPanel from './KafkaRawOutputPanel.vue'
 import KafkaTopicGroupDialog from './KafkaTopicGroupDialog.vue'
 import KafkaTopicMappingDialog from './KafkaTopicMappingDialog.vue'
@@ -288,6 +303,13 @@ import type {
   KafkaTopicMapping,
   KafkaWorkbenchConnection,
 } from './types'
+
+type KafkaModeTab = {
+  id: string
+  type: 'raw' | 'fields'
+  title: string
+  mappingId: string
+}
 
 const props = defineProps<{
   projectId: string
@@ -305,9 +327,10 @@ const filterText = ref('')
 const testingBroker = ref(false)
 const selectedMapping = ref<KafkaTopicMapping | null>(null)
 const activeMapping = ref<KafkaTopicMapping | null>(null)
+const modeTabs = ref<KafkaModeTab[]>([])
+const activeModeTabId = ref('')
 const samplePullRequestId = ref(0)
 const previewSamplesByMapping = shallowRef(new Map<string, KafkaPreviewSample[]>())
-const activePreview = ref<KafkaPreview | null>(null)
 const groupDialogVisible = ref(false)
 const groupDialogMode = ref<'create' | 'edit'>('create')
 const editingGroup = ref<KafkaTopicGroupNode | null>(null)
@@ -347,10 +370,6 @@ const tree = computed(() => buildKafkaTopicTree(groups.value, mappings.value))
 const filteredTree = computed(() =>
   filterKafkaTopicTree(tree.value.groups, tree.value.rootMappings, filterText.value),
 )
-const inspectorConnection = computed(() => ({
-  ...props.connection,
-  status: props.connection.status || 'unknown',
-}))
 
 const loadWorkbench = async () => {
   loading.value = true
@@ -445,8 +464,52 @@ const saveMapping = async (payload: Record<string, unknown>) => {
 }
 
 const selectMapping = (mapping: KafkaTopicMapping) => {
+  openModeTab(mapping)
+}
+
+const modeTabId = (mapping: KafkaTopicMapping) =>
+  mapping.outputMode === 'raw_message' ? `kafka-raw-${mapping.id}` : `kafka-fields-${mapping.id}`
+
+const modeTabType = (mapping: KafkaTopicMapping): KafkaModeTab['type'] =>
+  mapping.outputMode === 'raw_message' ? 'raw' : 'fields'
+
+const openModeTab = (mapping: KafkaTopicMapping) => {
+  const id = modeTabId(mapping)
+  const existing = modeTabs.value.find((tab) => tab.id === id)
+  if (existing) {
+    existing.title = mapping.name || mapping.topic
+    existing.mappingId = String(mapping.id)
+  } else {
+    modeTabs.value.push({
+      id,
+      type: modeTabType(mapping),
+      title: mapping.name || mapping.topic,
+      mappingId: String(mapping.id),
+    })
+  }
   selectedMapping.value = mapping
   activeMapping.value = mapping
+  activeModeTabId.value = id
+}
+
+const closeModeTab = (tabId: string) => {
+  const index = modeTabs.value.findIndex((tab) => tab.id === tabId)
+  if (index < 0) return
+  modeTabs.value = modeTabs.value.filter((tab) => tab.id !== tabId)
+  if (activeModeTabId.value === tabId) {
+    activeModeTabId.value = modeTabs.value[index - 1]?.id || modeTabs.value[index]?.id || ''
+  }
+  if (!activeModeTabId.value) {
+    selectedMapping.value = null
+    activeMapping.value = null
+  }
+}
+
+const getMappingById = (mappingId: string | number) =>
+  mappings.value.find((mapping) => String(mapping.id) === String(mappingId)) ||
+  (activeMapping.value && String(activeMapping.value.id) === String(mappingId)
+    ? activeMapping.value
+    : null)
 }
 
 const openMappingMenu = (event: MouseEvent, mapping: KafkaTopicMapping) => {
@@ -633,6 +696,10 @@ const deleteMapping = async (mapping: KafkaTopicMapping) => {
     if (activeMapping.value?.id === mapping.id) {
       activeMapping.value = null
     }
+    modeTabs.value = modeTabs.value.filter((tab) => tab.mappingId !== String(mapping.id))
+    if (!modeTabs.value.some((tab) => tab.id === activeModeTabId.value)) {
+      activeModeTabId.value = modeTabs.value[0]?.id || ''
+    }
     const nextSamples = new Map(previewSamplesByMapping.value)
     nextSamples.delete(String(mapping.id))
     previewSamplesByMapping.value = nextSamples
@@ -674,7 +741,6 @@ const handlePreviewSamples = (payload: {
   const next = new Map(previewSamplesByMapping.value)
   next.set(payload.mappingId, payload.samples)
   previewSamplesByMapping.value = next
-  activePreview.value = payload.preview
 }
 
 const getPreviewSamples = (mappingId: string | number) => {
@@ -694,11 +760,19 @@ watch(
     testingBroker.value = false
     selectedMapping.value = null
     activeMapping.value = null
-    activePreview.value = null
+    modeTabs.value = []
+    activeModeTabId.value = ''
     previewSamplesByMapping.value = new Map()
     await loadWorkbench()
   },
 )
+
+watch(activeModeTabId, (tabId) => {
+  const tab = modeTabs.value.find((item) => item.id === tabId)
+  const mapping = tab ? getMappingById(tab.mappingId) : null
+  selectedMapping.value = mapping
+  activeMapping.value = mapping
+})
 
 defineExpose({ handlePreviewSamples })
 </script>
@@ -708,7 +782,7 @@ defineExpose({ handlePreviewSamples })
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 280px;
+  grid-template-columns: 260px minmax(0, 1fr);
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-md);
   background: var(--dc-surface-raised);
@@ -816,9 +890,24 @@ defineExpose({ handlePreviewSamples })
 }
 
 .kafka-workbench__content {
+  position: relative;
   min-height: 0;
   flex: 1;
   overflow: hidden;
+}
+
+.kafka-workbench__content-panel {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.kafka-workbench__content-panel.is-active {
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
 }
 
 .kafka-workbench__placeholder {
@@ -927,10 +1016,6 @@ defineExpose({ handlePreviewSamples })
 @media (max-width: 1180px) {
   .kafka-workbench {
     grid-template-columns: 240px minmax(0, 1fr);
-  }
-
-  .kafka-workbench :deep(.kafka-inspector) {
-    display: none;
   }
 }
 
