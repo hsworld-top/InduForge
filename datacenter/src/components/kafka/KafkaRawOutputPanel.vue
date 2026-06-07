@@ -1,49 +1,68 @@
 <template>
   <section class="kafka-raw-output-panel">
-    <header class="kafka-raw-output-panel__summary">
-      <div class="kafka-raw-output-panel__title">
-        <strong>{{ mapping.name || mapping.topic }}</strong>
-        <span>{{ mapping.topic }}</span>
+    <section class="kafka-raw-output-panel__pullbar">
+      <div class="kafka-raw-output-panel__pullbar-title">
+        <span>{{ mapping.rawDataPointPath || '未生成数据点' }}</span>
       </div>
-      <div class="kafka-raw-output-panel__chips">
-        <WorkbenchStatusPill label="整包数据点" tone="info" />
+      <el-tooltip content="点击测试 Broker 网络连通性" placement="top">
         <WorkbenchStatusPill
-          :label="mapping.rawOutputScope === 'full_message' ? '完整消息' : '消息体'"
-          tone="info"
+          :label="networkStatusLabel"
+          :tone="networkStatusTone"
+          clickable
+          :disabled="testingNetwork"
+          @click="testNetwork"
         />
-        <WorkbenchStatusPill :label="partitionLabel" tone="info" />
-        <WorkbenchStatusPill
-          :label="mapping.rawDataPointPath || '未生成数据点'"
-          :tone="mapping.rawDataPointPath ? 'success' : 'neutral'"
-        />
+      </el-tooltip>
+      <div class="kafka-raw-output-panel__pullbar-actions">
+        <el-input
+          v-model="search"
+          class="kafka-raw-output-panel__search"
+          size="small"
+          clearable
+          placeholder="搜索 Topic、Key 或 Payload"
+        >
+          <template #prefix>
+            <IconTablerSearch />
+          </template>
+        </el-input>
+        <label class="kafka-raw-output-panel__limit">
+          <span>拉取条数</span>
+          <el-input-number
+            v-model="pullLimit"
+            :min="1"
+            :max="1000"
+            :step="10"
+            size="small"
+            controls-position="right"
+          />
+        </label>
+        <el-button type="primary" size="small" :loading="loading" @click="pullSamples">
+          <IconTablerDownload class="kafka-raw-output-panel__button-icon" />
+          拉取样本
+        </el-button>
+        <el-tooltip :content="formatJson ? '关闭 JSON 格式化' : '开启 JSON 格式化'" placement="top">
+          <button
+            type="button"
+            class="kafka-raw-output-panel__icon-btn"
+            :class="{ 'is-active': formatJson }"
+            @click="formatJson = !formatJson"
+          >
+            <IconTablerBraces />
+          </button>
+        </el-tooltip>
+        <el-tooltip content="清空样本" placement="top">
+          <button type="button" class="kafka-raw-output-panel__icon-btn" @click="clearSamples">
+            <IconTablerTrash />
+          </button>
+        </el-tooltip>
       </div>
-    </header>
-
-    <WorkbenchStreamToolbar
-      title="整包样本测试"
-      :subtitle="toolbarSubtitle"
-      :loading="loading"
-      :status-label="statusLabel"
-      :status-tone="statusTone"
-      :search="search"
-      :limit="displayLimit"
-      :format-json="formatJson"
-      :auto-scroll="false"
-      :show-timestamp="showTimestamp"
-      @update:search="search = $event"
-      @update:limit="displayLimit = $event"
-      @update:format-json="formatJson = $event"
-      @update:show-timestamp="showTimestamp = $event"
-      @refresh="pullSamples"
-      @clear="clearSamples"
-    />
-    <WorkbenchStreamMessageList
+    </section>
+    <KafkaSampleMessageList
       :messages="displayMessages"
       :loading="loading"
       :format-json="formatJson"
-      :show-timestamp="showTimestamp"
       empty-text="暂无 Kafka 样本"
-      empty-hint="点击拉取样本执行一次临时读取"
+      empty-hint="设置拉取条数后点击拉取样本"
       @copy="copyMessage"
     />
   </section>
@@ -52,16 +71,20 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import IconTablerBraces from '~icons/tabler/braces'
+import IconTablerDownload from '~icons/tabler/download'
+import IconTablerSearch from '~icons/tabler/search'
+import IconTablerTrash from '~icons/tabler/trash'
 import dataAPI from '@/api/data.api'
-import WorkbenchStreamMessageList from '@/components/workbench/WorkbenchStreamMessageList.vue'
-import WorkbenchStreamToolbar from '@/components/workbench/WorkbenchStreamToolbar.vue'
 import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
 import { getApiErrorMessage } from '@/utils/request'
+import KafkaSampleMessageList from './KafkaSampleMessageList.vue'
 import type { KafkaPreview, KafkaPreviewSample, KafkaTopicMapping } from './types'
 
 const props = withDefaults(
   defineProps<{
     projectId: string
+    connectionId: string
     mapping: KafkaTopicMapping
     pullRequestId?: number
   }>(),
@@ -78,58 +101,50 @@ const emit = defineEmits<{
 }>()
 
 const loading = ref(false)
+const testingNetwork = ref(false)
 const search = ref('')
-const displayLimit = ref(100)
+const pullLimit = ref(1)
 const formatJson = ref(true)
-const showTimestamp = ref(true)
 const samples = ref<KafkaPreviewSample[]>([])
-const lastError = ref('')
+const networkStatus = ref<'unknown' | 'testing' | 'available' | 'unavailable'>('unknown')
 
-const toolbarSubtitle = computed(() => {
-  const group = props.mapping.consumerGroup || '默认消费组'
-  return `${props.mapping.topic} / ${group}`
+const networkStatusLabel = computed(() => {
+  if (networkStatus.value === 'testing') return '测试中'
+  if (networkStatus.value === 'available') return '可用'
+  if (networkStatus.value === 'unavailable') return '不可用'
+  return '未测试'
 })
-const partitionLabel = computed(() =>
-  props.mapping.partitionMode === 'single'
-    ? `partition ${props.mapping.partition ?? 0}`
-    : '全部分区',
-)
-const statusLabel = computed(() => {
-  if (loading.value) return '拉取中'
-  if (lastError.value) return '拉取失败'
-  if (samples.value.length > 0) return `样本 ${samples.value.length}`
-  return '待拉取'
-})
-const statusTone = computed(() => {
-  if (lastError.value) return 'danger'
-  if (samples.value.length > 0) return 'success'
-  return 'info'
+const networkStatusTone = computed(() => {
+  if (networkStatus.value === 'available') return 'success'
+  if (networkStatus.value === 'unavailable') return 'danger'
+  if (networkStatus.value === 'testing') return 'info'
+  return 'neutral'
 })
 const displayMessages = computed(() => {
   const keyword = search.value.trim().toLowerCase()
   return samples.value
     .filter((sample) => {
       if (!keyword) return true
-      return `${sample.topic || ''} ${sample.key || ''} ${formatPayload(sample.value)}`
+      return `${sample.topic || ''} ${sample.key || ''} ${sample.partition ?? ''} ${sample.offset ?? ''} ${formatPayload(sample.value)}`
         .toLowerCase()
         .includes(keyword)
     })
-    .slice(0, displayLimit.value)
     .map((sample) => ({
       id: `${sample.topic || props.mapping.topic}-${sample.partition ?? '-'}-${sample.offset ?? '-'}`,
-      topic: `${sample.topic || props.mapping.topic} / p${sample.partition ?? '-'} / o${sample.offset ?? '-'}`,
+      topic: sample.topic || props.mapping.topic,
+      partition: sample.partition,
+      offset: sample.offset,
+      key: sample.key,
       payload: sample.value,
       timestamp: sample.timestamp,
-      qos: 0,
     }))
 })
 
 const pullSamples = async () => {
   loading.value = true
-  lastError.value = ''
   try {
     const preview = await dataAPI.previewKafkaTopicMapping(props.projectId, props.mapping.id, {
-      limit: displayLimit.value,
+      limit: pullLimit.value,
       timeoutMs: props.mapping.timeoutMs,
       decode: props.mapping.decode,
     })
@@ -141,16 +156,34 @@ const pullSamples = async () => {
     }
     ElMessage.success(`已拉取 ${samples.value.length} 条样本`)
   } catch (error) {
-    lastError.value = getApiErrorMessage(error, 'Kafka 样本拉取失败')
-    ElMessage.error(lastError.value)
+    ElMessage.error(getApiErrorMessage(error, 'Kafka 样本拉取失败'))
   } finally {
     loading.value = false
   }
 }
 
+const testNetwork = async () => {
+  if (testingNetwork.value) return
+  testingNetwork.value = true
+  networkStatus.value = 'testing'
+  try {
+    await dataAPI.previewKafkaConnection(props.projectId, props.connectionId, {
+      limit: 1,
+      timeoutMs: 1000,
+      probe: true,
+    })
+    networkStatus.value = 'available'
+    ElMessage.success('Kafka Broker 网络可用')
+  } catch (error) {
+    networkStatus.value = 'unavailable'
+    ElMessage.error(getApiErrorMessage(error, 'Kafka Broker 网络不可用'))
+  } finally {
+    testingNetwork.value = false
+  }
+}
+
 const clearSamples = () => {
   samples.value = []
-  lastError.value = ''
 }
 
 const copyMessage = async (message: { payload?: unknown }) => {
@@ -170,6 +203,8 @@ const formatPayload = (value: unknown) => {
 watch(
   () => props.mapping.id,
   () => {
+    pullLimit.value = 1
+    networkStatus.value = 'unknown'
     clearSamples()
   },
 )
@@ -191,47 +226,106 @@ watch(
   background: var(--dc-surface-raised);
 }
 
-.kafka-raw-output-panel__summary {
-  min-height: 52px;
+.kafka-raw-output-panel__pullbar {
+  min-height: 54px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 9px 12px;
+  gap: 10px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--dc-border);
-  background: var(--dc-surface-raised);
+  background: var(--dc-surface-subtle);
 }
 
-.kafka-raw-output-panel__title {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
+.kafka-raw-output-panel__pullbar-title {
+  min-width: 180px;
 }
 
-.kafka-raw-output-panel__title strong,
-.kafka-raw-output-panel__title span {
+.kafka-raw-output-panel__pullbar-title span {
   min-width: 0;
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.kafka-raw-output-panel__title strong {
-  color: var(--dc-text);
-  font-size: 13px;
-}
-
-.kafka-raw-output-panel__title span {
-  color: var(--dc-text-muted);
+.kafka-raw-output-panel__pullbar-title span {
+  color: var(--dc-text-secondary);
   font-family: var(--dc-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.kafka-raw-output-panel__chips {
+.kafka-raw-output-panel__pullbar-actions {
   min-width: 0;
+  margin-left: auto;
   display: inline-flex;
+  align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 7px;
   flex-wrap: wrap;
+}
+
+.kafka-raw-output-panel__search {
+  width: 240px;
+}
+
+.kafka-raw-output-panel__limit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--dc-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.kafka-raw-output-panel__limit :deep(.el-input-number) {
+  width: 108px;
+}
+
+.kafka-raw-output-panel__button-icon {
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+}
+
+.kafka-raw-output-panel__icon-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-secondary);
+}
+
+.kafka-raw-output-panel__icon-btn:hover,
+.kafka-raw-output-panel__icon-btn.is-active {
+  border-color: color-mix(in oklch, var(--dc-primary) 30%, var(--dc-border));
+  color: var(--dc-primary);
+}
+
+.kafka-raw-output-panel__icon-btn svg,
+.kafka-raw-output-panel :deep(.el-input__prefix svg) {
+  width: 14px;
+  height: 14px;
+}
+
+@media (max-width: 980px) {
+  .kafka-raw-output-panel__pullbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .kafka-raw-output-panel__pullbar-actions {
+    justify-content: flex-start;
+  }
+
+  .kafka-raw-output-panel__pullbar-title,
+  .kafka-raw-output-panel__search {
+    width: 100%;
+  }
 }
 </style>

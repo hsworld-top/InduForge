@@ -84,28 +84,6 @@
             placeholder="留空时由节点侧默认策略生成"
           />
         </el-form-item>
-        <el-form-item v-if="mode === 'edit'">
-          <template #label>
-            <span class="kafka-topic-dialog__field-label">
-              所属分组
-              <el-tooltip
-                content="为空时显示在根目录；也可以通过左侧规则树右键移动。"
-                placement="top"
-              >
-                <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
-              </el-tooltip>
-            </span>
-          </template>
-          <el-select v-model="form.groupId" clearable placeholder="根目录">
-            <el-option label="根目录" value="" />
-            <el-option
-              v-for="group in groupOptions"
-              :key="group.id"
-              :label="group.label"
-              :value="group.id"
-            />
-          </el-select>
-        </el-form-item>
       </div>
 
       <div v-if="form.outputMode === 'raw_message'" class="kafka-topic-dialog__section">
@@ -127,24 +105,9 @@
             <el-option label="完整消息" value="full_message" />
           </el-select>
         </el-form-item>
-        <el-form-item>
-          <template #label>
-            <span class="kafka-topic-dialog__field-label">
-              目标数据点路径
-              <el-tooltip
-                content="留空时按规则名称自动生成；保存后设计中心可查询或订阅这个数据点。"
-                placement="top"
-              >
-                <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
-              </el-tooltip>
-            </span>
-          </template>
-          <el-input
-            v-model="form.rawDataPointPath"
-            clearable
-            placeholder="kafka.device_telemetry.message"
-          />
-        </el-form-item>
+        <p class="kafka-topic-dialog__hint">
+          整包数据点路径按规则名称自动生成，例如规则名 test1 对应 kafka.test1。
+        </p>
       </div>
       <div v-else class="kafka-topic-dialog__mode-note">
         保存后进入字段映射面板，可粘贴 JSON 样本或临时拉取样本生成数据点映射。
@@ -271,7 +234,6 @@ import { computed, reactive, ref, watch } from 'vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import IconTablerHelpCircle from '~icons/tabler/help-circle'
 import type { KafkaTopicGroup, KafkaTopicMapping } from './types'
-import { flattenKafkaTopicGroups } from './kafkaTopicTreeModel'
 
 const props = withDefaults(
   defineProps<{
@@ -314,17 +276,14 @@ const outputModeOptions = [
     description: '从 JSON 消息字段生成多个映射数据点，适合结构化业务数据。',
   },
 ]
-const groupOptions = computed(() => flattenKafkaTopicGroups(props.groups))
 const advancedSections = ref<string[]>([])
 
 const form = reactive({
   name: '',
   topic: '',
-  groupId: '',
   consumerGroup: '',
   outputMode: 'raw_message',
   rawOutputScope: 'value',
-  rawDataPointPath: '',
   partitionMode: 'all',
   partition: 0,
   startPosition: 'latest',
@@ -334,16 +293,6 @@ const form = reactive({
   timeoutMs: 5000,
   description: '',
 })
-
-const normalizePathSegment = (value: string) =>
-  value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-
-const buildDefaultRawPath = (name: string) =>
-  `kafka.${normalizePathSegment(name) || 'message'}.message`
 
 const canSubmit = computed(() => {
   if (props.loading) return false
@@ -360,11 +309,9 @@ const canSubmit = computed(() => {
 const resetForm = () => {
   form.name = props.mapping?.name || ''
   form.topic = props.mapping?.topic || ''
-  form.groupId = props.mapping?.groupId ? String(props.mapping.groupId) : ''
   form.consumerGroup = props.mapping?.consumerGroup || ''
   form.outputMode = props.mapping?.outputMode || 'raw_message'
   form.rawOutputScope = props.mapping?.rawOutputScope || 'value'
-  form.rawDataPointPath = props.mapping?.rawDataPointPath || buildDefaultRawPath(form.name)
   form.partitionMode = props.mapping?.partitionMode || 'all'
   form.partition = props.mapping?.partition ?? 0
   form.startPosition = props.mapping?.startPosition || 'latest'
@@ -380,14 +327,9 @@ const submit = () => {
   emit('submit', {
     name: form.name.trim(),
     topic: form.topic.trim(),
-    groupId: form.groupId || null,
     consumerGroup: form.consumerGroup.trim(),
     outputMode: form.outputMode,
     rawOutputScope: form.outputMode === 'raw_message' ? form.rawOutputScope : 'value',
-    rawDataPointPath:
-      form.outputMode === 'raw_message'
-        ? form.rawDataPointPath.trim() || buildDefaultRawPath(form.name)
-        : '',
     partitionMode: form.partitionMode,
     partition: form.partitionMode === 'single' ? form.partition : null,
     startPosition: form.startPosition,
@@ -419,16 +361,6 @@ watch(
   },
 )
 
-watch(
-  () => form.name,
-  (value, oldValue) => {
-    if (props.mapping?.rawDataPointPath) return
-    const previousDefault = buildDefaultRawPath(oldValue || '')
-    if (!form.rawDataPointPath || form.rawDataPointPath === previousDefault) {
-      form.rawDataPointPath = buildDefaultRawPath(value)
-    }
-  },
-)
 </script>
 
 <style scoped>

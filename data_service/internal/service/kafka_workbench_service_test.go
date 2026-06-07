@@ -74,6 +74,56 @@ func TestNormalizeKafkaOutputModeRejectsUnknownMode(t *testing.T) {
 	}
 }
 
+func TestBuildKafkaRawDataPointPathUsesMappingName(t *testing.T) {
+	path := buildKafkaRawDataPointPath("test1")
+	if path != "kafka.test1" {
+		t.Fatalf("unexpected raw data point path: %s", path)
+	}
+}
+
+func TestNormalizeUpdateTopicMappingRebuildsRawPathFromName(t *testing.T) {
+	service := &KafkaWorkbenchService{}
+	oldPath := "kafka.old.message"
+	current := repository.KafkaTopicMappingRecord{
+		ID:               "mapping-1",
+		ProjectID:        "project-1",
+		ConnectionID:     "connection-1",
+		Name:             "old",
+		Topic:            "device.telemetry",
+		OutputMode:       "raw_message",
+		RawOutputScope:   "value",
+		RawDataPointPath: &oldPath,
+		PartitionMode:    "all",
+		StartPosition:    "latest",
+		Decode:           "json",
+		SampleLimit:      100,
+		TimeoutMS:        5000,
+	}
+
+	params, err := service.normalizeUpdateTopicMapping(
+		context.Background(),
+		"project-1",
+		"user-1",
+		current,
+		UpdateKafkaTopicMappingInput{
+			Name:           "test1",
+			Topic:          "device.telemetry",
+			RawOutputScope: "value",
+			PartitionMode:  "all",
+			StartPosition:  "latest",
+			Decode:         "json",
+			SampleLimit:    100,
+			TimeoutMS:      5000,
+		},
+	)
+	if err != nil {
+		t.Fatalf("normalize update failed: %v", err)
+	}
+	if params.RawDataPointPathInput != "kafka.test1" {
+		t.Fatalf("unexpected raw path: %s", params.RawDataPointPathInput)
+	}
+}
+
 func TestNormalizeUpdateTopicMappingRejectsOutputModeChange(t *testing.T) {
 	service := &KafkaWorkbenchService{}
 	current := repository.KafkaTopicMappingRecord{

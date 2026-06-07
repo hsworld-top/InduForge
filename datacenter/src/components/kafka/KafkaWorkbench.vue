@@ -123,6 +123,7 @@
               class="kafka-workbench__content-panel"
               :class="{ 'is-active': activeModeTabId === tab.id }"
               :project-id="projectId"
+              :connection-id="connection.id"
               :mapping="getMappingById(tab.mappingId)!"
               :pull-request-id="samplePullRequestId"
               @samples="handlePreviewSamples"
@@ -148,6 +149,7 @@
     </main>
 
     <KafkaTopicGroupDialog
+      ref="groupDialogRef"
       v-model="groupDialogVisible"
       :mode="groupDialogMode"
       :groups="groups"
@@ -332,6 +334,7 @@ const activeModeTabId = ref('')
 const samplePullRequestId = ref(0)
 const previewSamplesByMapping = shallowRef(new Map<string, KafkaPreviewSample[]>())
 const groupDialogVisible = ref(false)
+const groupDialogRef = ref<InstanceType<typeof KafkaTopicGroupDialog> | null>(null)
 const groupDialogMode = ref<'create' | 'edit'>('create')
 const editingGroup = ref<KafkaTopicGroupNode | null>(null)
 const pendingParentGroupId = ref<string | null>(null)
@@ -433,6 +436,7 @@ const saveGroup = async (payload: { name: string; parentId: string | null }) => 
       })
       ElMessage.success('规则分组已创建')
     }
+    groupDialogRef.value?.closeSilently()
     groupDialogVisible.value = false
     await loadWorkbench()
   } catch (error) {
@@ -607,7 +611,6 @@ const buildMappingPayload = (mapping: KafkaTopicMapping) => ({
   consumerGroup: mapping.consumerGroup || '',
   outputMode: mapping.outputMode || 'field_mapping',
   rawOutputScope: mapping.rawOutputScope || 'value',
-  rawDataPointPath: mapping.rawDataPointPath || '',
   partitionMode: mapping.partitionMode,
   partition: mapping.partition ?? null,
   startPosition: mapping.startPosition,

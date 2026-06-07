@@ -843,10 +843,7 @@ func (s *KafkaWorkbenchService) normalizeCreateTopicMapping(ctx context.Context,
 	if err != nil {
 		return repository.CreateKafkaTopicMappingParams{}, err
 	}
-	rawPath := strings.TrimSpace(input.RawDataPointPath)
-	if rawPath == "" {
-		rawPath = buildKafkaRawDataPointPath(name)
-	}
+	rawPath := buildKafkaRawDataPointPath(name)
 	return repository.CreateKafkaTopicMappingParams{
 		ProjectID:             projectID,
 		ConnectionID:          connectionID,
@@ -909,13 +906,7 @@ func (s *KafkaWorkbenchService) normalizeUpdateTopicMapping(ctx context.Context,
 		return repository.UpdateKafkaTopicMappingParams{}, err
 	}
 	consumerGroup := fallbackTrimmed(input.ConsumerGroup, current.ConsumerGroup)
-	rawPath := strings.TrimSpace(input.RawDataPointPath)
-	if rawPath == "" && current.RawDataPointPath != nil {
-		rawPath = *current.RawDataPointPath
-	}
-	if rawPath == "" {
-		rawPath = buildKafkaRawDataPointPath(name)
-	}
+	rawPath := buildKafkaRawDataPointPath(name)
 	groupID := cloneOptionalString(current.GroupID)
 	if input.HasGroupID {
 		groupID, err = s.normalizeKafkaMappingGroup(ctx, projectID, current.ConnectionID, input.GroupID)
@@ -1306,7 +1297,7 @@ func buildKafkaDataPointPath(mappingName, fieldName string) string {
 }
 
 func buildKafkaRawDataPointPath(mappingName string) string {
-	return "kafka." + normalizeDatapointSegment(mappingName) + ".message"
+	return "kafka." + normalizeDatapointSegment(mappingName)
 }
 
 func extractKafkaFieldValue(sample any, valuePath string) (any, bool) {
