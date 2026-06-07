@@ -896,7 +896,15 @@ func (s *KafkaWorkbenchService) normalizeUpdateTopicMapping(ctx context.Context,
 		return repository.UpdateKafkaTopicMappingParams{}, err
 	}
 	decode := normalizeKafkaDecode(fallbackTrimmed(input.Decode, current.Decode))
-	outputMode, rawScope, err := normalizeKafkaOutputConfig(fallbackTrimmed(input.OutputMode, current.OutputMode), input.RawOutputScope)
+	requestedOutputMode := strings.ToLower(strings.TrimSpace(input.OutputMode))
+	if requestedOutputMode != "" && requestedOutputMode != current.OutputMode {
+		return repository.UpdateKafkaTopicMappingParams{}, apperrors.NewAppError(
+			apperrors.ErrorCodeBadRequest,
+			http.StatusBadRequest,
+			"Kafka 输出模式创建后不可修改",
+		)
+	}
+	outputMode, rawScope, err := normalizeKafkaOutputConfig(current.OutputMode, input.RawOutputScope)
 	if err != nil {
 		return repository.UpdateKafkaTopicMappingParams{}, err
 	}

@@ -1,6 +1,12 @@
 package service
 
-import "testing"
+import (
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/indu-forge/data_service/internal/repository"
+)
 
 func TestNormalizeKafkaTopicMappingRequiresOffsetForOffsetStart(t *testing.T) {
 	partition := 0
@@ -65,5 +71,49 @@ func TestNormalizeKafkaOutputModeAcceptsRawMessage(t *testing.T) {
 func TestNormalizeKafkaOutputModeRejectsUnknownMode(t *testing.T) {
 	if _, _, err := normalizeKafkaOutputConfig("topic_value", "value"); err == nil {
 		t.Fatal("expected unknown output mode to fail")
+	}
+}
+
+func TestNormalizeUpdateTopicMappingRejectsOutputModeChange(t *testing.T) {
+	service := &KafkaWorkbenchService{}
+	current := repository.KafkaTopicMappingRecord{
+		ID:             "mapping-1",
+		ProjectID:      "project-1",
+		ConnectionID:   "connection-1",
+		Name:           "设备遥测",
+		Topic:          "device.telemetry",
+		ConsumerGroup:  "",
+		OutputMode:     "raw_message",
+		RawOutputScope: "value",
+		PartitionMode:  "all",
+		StartPosition:  "latest",
+		Decode:         "json",
+		SampleLimit:    100,
+		TimeoutMS:      5000,
+	}
+
+	_, err := service.normalizeUpdateTopicMapping(
+		context.Background(),
+		"project-1",
+		"user-1",
+		current,
+		UpdateKafkaTopicMappingInput{
+			Name:           "设备遥测",
+			Topic:          "device.telemetry",
+			OutputMode:     "field_mapping",
+			RawOutputScope: "value",
+			PartitionMode:  "all",
+			StartPosition:  "latest",
+			Decode:         "json",
+			SampleLimit:    100,
+			TimeoutMS:      5000,
+		},
+	)
+
+	if err == nil {
+		t.Fatal("expected output mode change to fail")
+	}
+	if !strings.Contains(err.Error(), "输出模式创建后不可修改") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
