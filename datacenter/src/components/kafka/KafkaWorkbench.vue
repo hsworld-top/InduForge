@@ -510,7 +510,6 @@ const getMappingById = (mappingId: string | number) =>
   (activeMapping.value && String(activeMapping.value.id) === String(mappingId)
     ? activeMapping.value
     : null)
-}
 
 const openMappingMenu = (event: MouseEvent, mapping: KafkaTopicMapping) => {
   contextMenu.value = {
