@@ -162,8 +162,8 @@ const pullSamples = async () => {
       return true
     })
     samples.value = [
-      ...samples.value,
       ...uniqueNextSamples,
+      ...samples.value,
     ]
     emit('samples', { mappingId: String(props.mapping.id), samples: samples.value, preview })
     if (nextSamples.length === 0) {
