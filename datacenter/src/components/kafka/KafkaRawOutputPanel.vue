@@ -8,6 +8,11 @@
       <div class="kafka-raw-output-panel__chips">
         <WorkbenchStatusPill label="整包数据点" tone="info" />
         <WorkbenchStatusPill
+          :label="mapping.rawOutputScope === 'full_message' ? '完整消息' : '消息体'"
+          tone="info"
+        />
+        <WorkbenchStatusPill :label="partitionLabel" tone="info" />
+        <WorkbenchStatusPill
           :label="mapping.rawDataPointPath || '未生成数据点'"
           :tone="mapping.rawDataPointPath ? 'success' : 'neutral'"
         />
@@ -15,7 +20,7 @@
     </header>
 
     <WorkbenchStreamToolbar
-      title="样本测试"
+      title="整包样本测试"
       :subtitle="toolbarSubtitle"
       :loading="loading"
       :status-label="statusLabel"
@@ -84,6 +89,11 @@ const toolbarSubtitle = computed(() => {
   const group = props.mapping.consumerGroup || '默认消费组'
   return `${props.mapping.topic} / ${group}`
 })
+const partitionLabel = computed(() =>
+  props.mapping.partitionMode === 'single'
+    ? `partition ${props.mapping.partition ?? 0}`
+    : '全部分区',
+)
 const statusLabel = computed(() => {
   if (loading.value) return '拉取中'
   if (lastError.value) return '拉取失败'
@@ -125,6 +135,11 @@ const pullSamples = async () => {
     })
     samples.value = preview.samples || []
     emit('samples', { mappingId: String(props.mapping.id), samples: samples.value, preview })
+    if (samples.value.length === 0) {
+      ElMessage.warning('本次未拉取到样本，可调整起始位置、样本上限或超时后重试')
+      return
+    }
+    ElMessage.success(`已拉取 ${samples.value.length} 条样本`)
   } catch (error) {
     lastError.value = getApiErrorMessage(error, 'Kafka 样本拉取失败')
     ElMessage.error(lastError.value)
