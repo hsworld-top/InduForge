@@ -20,7 +20,28 @@
               </el-tooltip>
             </span>
           </template>
-          <el-segmented v-model="form.outputMode" :options="outputModeOptions" />
+          <div class="kafka-topic-dialog__mode-options" :class="{ 'is-readonly': mode === 'edit' }">
+            <button
+              v-for="option in outputModeOptions"
+              :key="option.value"
+              type="button"
+              class="kafka-topic-dialog__mode-option"
+              :class="{ 'is-active': form.outputMode === option.value }"
+              :disabled="mode === 'edit'"
+              @click="form.outputMode = option.value"
+            >
+              <span class="kafka-topic-dialog__mode-radio">
+                {{ form.outputMode === option.value ? '●' : '○' }}
+              </span>
+              <span>
+                <strong>{{ option.label }}</strong>
+                <em>{{ option.description }}</em>
+              </span>
+            </button>
+          </div>
+          <p v-if="mode === 'edit'" class="kafka-topic-dialog__hint">
+            输出模式创建后不可修改。如需切换模式，请新建另一条消费规则。
+          </p>
         </el-form-item>
         <el-form-item required>
           <template #label>
@@ -130,90 +151,93 @@
       </div>
 
       <div class="kafka-topic-dialog__section">
-        <div class="kafka-topic-dialog__section-title">运行消费与样本参数</div>
-        <div class="kafka-topic-dialog__grid">
-          <el-form-item>
-            <template #label>
-              <span class="kafka-topic-dialog__field-label">
-                分区策略
-                <el-tooltip
-                  content="全部分区适合常规预览；单分区可用于定位指定 Partition 的消息。"
-                  placement="top"
-                >
-                  <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
-                </el-tooltip>
-              </span>
-            </template>
-            <el-segmented v-model="form.partitionMode" :options="partitionModeOptions" />
-          </el-form-item>
-          <el-form-item v-if="form.partitionMode === 'single'" label="分区编号" required>
-            <el-input-number v-model="form.partition" :min="0" :step="1" />
-          </el-form-item>
-          <el-form-item>
-            <template #label>
-              <span class="kafka-topic-dialog__field-label">
-                起始位置
-                <el-tooltip
-                  content="用于节点侧首次运行或开发态拉取样本；已有消费进度由消费组记录。"
-                  placement="top"
-                >
-                  <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
-                </el-tooltip>
-              </span>
-            </template>
-            <el-select v-model="form.startPosition">
-              <el-option label="最新位置" value="latest" />
-              <el-option label="最早位置" value="earliest" />
-              <el-option label="指定 Offset" value="offset" />
-            </el-select>
-          </el-form-item>
-          <el-form-item v-if="form.startPosition === 'offset'" label="起始 Offset" required>
-            <el-input-number v-model="form.startOffset" :min="0" :step="1" />
-          </el-form-item>
-          <el-form-item>
-            <template #label>
-              <span class="kafka-topic-dialog__field-label">
-                消息解码
-                <el-tooltip
-                  content="JSON 会尝试解析消息体；String 保留文本；Binary 用于二进制载荷预览。"
-                  placement="top"
-                >
-                  <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
-                </el-tooltip>
-              </span>
-            </template>
-            <el-select v-model="form.decode">
-              <el-option label="JSON" value="json" />
-              <el-option label="文本" value="string" />
-              <el-option label="二进制" value="binary" />
-            </el-select>
-          </el-form-item>
-          <el-form-item>
-            <template #label>
-              <span class="kafka-topic-dialog__field-label">
-                样本上限
-                <el-tooltip
-                  content="单次预览最多读取的消息条数，数值越大等待时间可能越长。"
-                  placement="top"
-                >
-                  <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
-                </el-tooltip>
-              </span>
-            </template>
-            <el-input-number v-model="form.sampleLimit" :min="1" :max="1000" :step="10" />
-          </el-form-item>
-          <el-form-item>
-            <template #label>
-              <span class="kafka-topic-dialog__field-label">
-                预览超时
-                <el-tooltip content="单次拉取样本等待消息的最长时间，单位毫秒。" placement="top">
-                  <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
-                </el-tooltip>
-              </span>
-            </template>
-            <el-input-number v-model="form.timeoutMs" :min="1000" :max="30000" :step="1000" />
-          </el-form-item>
-        </div>
+        <el-collapse v-model="advancedSections" class="kafka-topic-dialog__advanced">
+          <el-collapse-item title="高级配置：运行消费与样本参数" name="runtime">
+            <div class="kafka-topic-dialog__grid">
+              <el-form-item>
+                <template #label>
+                  <span class="kafka-topic-dialog__field-label">
+                    分区策略
+                    <el-tooltip
+                      content="全部分区适合常规预览；单分区可用于定位指定 Partition 的消息。"
+                      placement="top"
+                    >
+                      <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
+                    </el-tooltip>
+                  </span>
+                </template>
+                <el-segmented v-model="form.partitionMode" :options="partitionModeOptions" />
+              </el-form-item>
+              <el-form-item v-if="form.partitionMode === 'single'" label="分区编号" required>
+                <el-input-number v-model="form.partition" :min="0" :step="1" />
+              </el-form-item>
+              <el-form-item>
+                <template #label>
+                  <span class="kafka-topic-dialog__field-label">
+                    起始位置
+                    <el-tooltip
+                      content="用于节点侧首次运行或开发态拉取样本；已有消费进度由消费组记录。"
+                      placement="top"
+                    >
+                      <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
+                    </el-tooltip>
+                  </span>
+                </template>
+                <el-select v-model="form.startPosition">
+                  <el-option label="最新位置" value="latest" />
+                  <el-option label="最早位置" value="earliest" />
+                  <el-option label="指定 Offset" value="offset" />
+                </el-select>
+              </el-form-item>
+              <el-form-item v-if="form.startPosition === 'offset'" label="起始 Offset" required>
+                <el-input-number v-model="form.startOffset" :min="0" :step="1" />
+              </el-form-item>
+              <el-form-item>
+                <template #label>
+                  <span class="kafka-topic-dialog__field-label">
+                    消息解码
+                    <el-tooltip
+                      content="JSON 会尝试解析消息体；String 保留文本；Binary 用于二进制载荷预览。"
+                      placement="top"
+                    >
+                      <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
+                    </el-tooltip>
+                  </span>
+                </template>
+                <el-select v-model="form.decode">
+                  <el-option label="JSON" value="json" />
+                  <el-option label="文本" value="string" />
+                  <el-option label="二进制" value="binary" />
+                </el-select>
+              </el-form-item>
+              <el-form-item>
+                <template #label>
+                  <span class="kafka-topic-dialog__field-label">
+                    样本上限
+                    <el-tooltip
+                      content="单次预览最多读取的消息条数，数值越大等待时间可能越长。"
+                      placement="top"
+                    >
+                      <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
+                    </el-tooltip>
+                  </span>
+                </template>
+                <el-input-number v-model="form.sampleLimit" :min="1" :max="1000" :step="10" />
+              </el-form-item>
+              <el-form-item>
+                <template #label>
+                  <span class="kafka-topic-dialog__field-label">
+                    预览超时
+                    <el-tooltip content="单次拉取样本等待消息的最长时间，单位毫秒。" placement="top">
+                      <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
+                    </el-tooltip>
+                  </span>
+                </template>
+                <el-input-number v-model="form.timeoutMs" :min="1000" :max="30000" :step="1000" />
+              </el-form-item>
+            </div>
+          </el-collapse-item>
+        </el-collapse>
       </div>
 
       <div class="kafka-topic-dialog__section">
@@ -243,7 +267,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import IconTablerHelpCircle from '~icons/tabler/help-circle'
 import type { KafkaTopicGroup, KafkaTopicMapping } from './types'
@@ -279,10 +303,19 @@ const partitionModeOptions = [
   { label: '单分区', value: 'single' },
 ]
 const outputModeOptions = [
-  { label: '整包数据点', value: 'raw_message' },
-  { label: '字段数据点', value: 'field_mapping' },
+  {
+    label: '整包数据点',
+    value: 'raw_message',
+    description: '把一条 Kafka 消息作为一个数据点，数据点名称跟随消费规则。',
+  },
+  {
+    label: '字段映射',
+    value: 'field_mapping',
+    description: '从 JSON 消息字段生成多个映射数据点，适合结构化业务数据。',
+  },
 ]
 const groupOptions = computed(() => flattenKafkaTopicGroups(props.groups))
+const advancedSections = ref<string[]>([])
 
 const form = reactive({
   name: '',
@@ -446,6 +479,80 @@ watch(
   gap: 0 12px;
 }
 
+.kafka-topic-dialog__mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kafka-topic-dialog__mode-option {
+  min-height: 86px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-secondary);
+  text-align: left;
+}
+
+.kafka-topic-dialog__mode-option.is-active {
+  border-color: color-mix(in oklch, var(--dc-primary) 44%, var(--dc-border));
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+}
+
+.kafka-topic-dialog__mode-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.78;
+}
+
+.kafka-topic-dialog__mode-radio {
+  line-height: 20px;
+}
+
+.kafka-topic-dialog__mode-option strong,
+.kafka-topic-dialog__mode-option em {
+  display: block;
+}
+
+.kafka-topic-dialog__mode-option em {
+  margin-top: 4px;
+  color: var(--dc-text-muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.5;
+}
+
+.kafka-topic-dialog__hint {
+  margin: 6px 0 0;
+  color: var(--dc-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.kafka-topic-dialog__advanced {
+  border-top: 0;
+  border-bottom: 0;
+}
+
+.kafka-topic-dialog__advanced :deep(.el-collapse-item__header) {
+  height: 36px;
+  border-bottom-color: var(--dc-border);
+  color: var(--dc-text);
+  font-weight: 650;
+}
+
+.kafka-topic-dialog__advanced :deep(.el-collapse-item__wrap) {
+  border-bottom: 0;
+}
+
+.kafka-topic-dialog__advanced :deep(.el-collapse-item__content) {
+  padding: 10px 0 0;
+}
+
 .kafka-topic-dialog__mode-note {
   padding: 10px 12px;
   border: 1px solid var(--dc-border);
@@ -463,7 +570,8 @@ watch(
 }
 
 @media (max-width: 640px) {
-  .kafka-topic-dialog__grid {
+  .kafka-topic-dialog__grid,
+  .kafka-topic-dialog__mode-options {
     grid-template-columns: 1fr;
   }
 }
