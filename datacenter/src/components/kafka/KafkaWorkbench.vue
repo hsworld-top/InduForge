@@ -175,6 +175,45 @@
       :loading="moving"
       @submit="handleMoveSubmit"
     />
+    <el-dialog
+      v-model="detailDialogVisible"
+      title="消费规则详情"
+      width="620px"
+      class="kafka-workbench__detail-dialog"
+    >
+      <div v-if="detailMapping" class="kafka-workbench__detail">
+        <section class="kafka-workbench__detail-section">
+          <h3>基础信息</h3>
+          <dl class="kafka-workbench__detail-grid">
+            <template v-for="row in basicDetailRows" :key="row.label">
+              <dt>{{ row.label }}</dt>
+              <dd>{{ row.value }}</dd>
+            </template>
+          </dl>
+        </section>
+        <section class="kafka-workbench__detail-section">
+          <h3>消费配置</h3>
+          <dl class="kafka-workbench__detail-grid">
+            <template v-for="row in consumeDetailRows" :key="row.label">
+              <dt>{{ row.label }}</dt>
+              <dd>{{ row.value }}</dd>
+            </template>
+          </dl>
+        </section>
+        <section class="kafka-workbench__detail-section">
+          <h3>输出配置</h3>
+          <dl class="kafka-workbench__detail-grid">
+            <template v-for="row in outputDetailRows" :key="row.label">
+              <dt>{{ row.label }}</dt>
+              <dd>{{ row.value }}</dd>
+            </template>
+          </dl>
+        </section>
+      </div>
+      <template #footer>
+        <el-button @click="detailDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
 
     <Teleport to="body">
       <div
@@ -191,18 +230,10 @@
           <button
             v-if="contextMenu.type === 'mapping'"
             type="button"
-            @click="emitContextAction('open')"
+            @click="emitContextAction('details')"
           >
-            <IconTablerSchema class="kafka-workbench__menu-icon" />
-            <span>{{ contextMenu.mapping?.outputMode === 'raw_message' ? '打开输出配置' : '打开字段映射' }}</span>
-          </button>
-          <button
-            v-if="contextMenu.type === 'mapping'"
-            type="button"
-            @click="emitContextAction('pullSamples')"
-          >
-            <IconTablerMessages class="kafka-workbench__menu-icon" />
-            <span>拉取样本</span>
+            <IconTablerInfoCircle class="kafka-workbench__menu-icon" />
+            <span>查看详情</span>
           </button>
           <button
             v-if="contextMenu.type === 'mapping'"
@@ -274,21 +305,23 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, shallowRef, watch } from 'vue'
+import dayjs from 'dayjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import IconTablerBraces from '~icons/tabler/braces'
 import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerFolderPlus from '~icons/tabler/folder-plus'
 import IconTablerFolderSymlink from '~icons/tabler/folder-symlink'
+import IconTablerInfoCircle from '~icons/tabler/info-circle'
 import IconTablerLoader2 from '~icons/tabler/loader-2'
 import IconTablerMessages from '~icons/tabler/messages'
 import IconTablerPencil from '~icons/tabler/pencil'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerRefresh from '~icons/tabler/refresh'
-import IconTablerSchema from '~icons/tabler/schema'
 import IconTablerTrash from '~icons/tabler/trash'
 import dataAPI from '@/api/data.api'
 import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
 import WorkbenchTabBar from '@/components/workbench/WorkbenchTabBar.vue'
+import { TIME_FORMAT } from '@/constants'
 import { getApiErrorMessage } from '@/utils/request'
 import { buildKafkaTopicTree, filterKafkaTopicTree } from './kafkaTopicTreeModel'
 import KafkaFieldMappingPanel from './KafkaFieldMappingPanel.vue'
@@ -348,6 +381,8 @@ const moveTargetType = ref<'mapping' | 'group'>('mapping')
 const movingMapping = ref<KafkaTopicMapping | null>(null)
 const movingGroup = ref<KafkaTopicGroupNode | null>(null)
 const moving = ref(false)
+const detailDialogVisible = ref(false)
+const detailMapping = ref<KafkaTopicMapping | null>(null)
 const contextMenu = ref<{
   visible: boolean
   type: 'mapping' | 'group' | null
@@ -373,6 +408,43 @@ const tree = computed(() => buildKafkaTopicTree(groups.value, mappings.value))
 const filteredTree = computed(() =>
   filterKafkaTopicTree(tree.value.groups, tree.value.rootMappings, filterText.value),
 )
+const basicDetailRows = computed(() => {
+  const mapping = detailMapping.value
+  if (!mapping) return []
+  return [
+    { label: '规则名称', value: mapping.name || '-' },
+    { label: '所属分组', value: getGroupName(mapping.groupId) },
+    { label: 'Topic', value: mapping.topic || '-' },
+    { label: '描述', value: mapping.description || '-' },
+    { label: '创建时间', value: formatTime(mapping.createdAt) },
+    { label: '更新时间', value: formatTime(mapping.updatedAt) },
+  ]
+})
+const consumeDetailRows = computed(() => {
+  const mapping = detailMapping.value
+  if (!mapping) return []
+  return [
+    { label: '消费组', value: mapping.consumerGroup || '默认生成' },
+    { label: '分区', value: formatPartition(mapping) },
+    { label: '起始位置', value: formatStartPosition(mapping) },
+    { label: '解码方式', value: formatDecode(mapping.decode) },
+    { label: '样本上限', value: String(mapping.sampleLimit ?? 100) },
+    { label: '拉取超时', value: `${mapping.timeoutMs ?? 5000} ms` },
+  ]
+})
+const outputDetailRows = computed(() => {
+  const mapping = detailMapping.value
+  if (!mapping) return []
+  const rows = [
+    { label: '输出模式', value: formatOutputMode(mapping.outputMode) },
+    { label: '整包范围', value: formatRawOutputScope(mapping) },
+    { label: '数据点路径', value: mapping.rawDataPointPath || '-' },
+  ]
+  if (mapping.outputMode === 'field_mapping') {
+    return rows.filter((row) => row.label !== '整包范围')
+  }
+  return rows
+})
 
 const loadWorkbench = async () => {
   loading.value = true
@@ -543,8 +615,7 @@ const closeContextMenu = () => {
 
 const emitContextAction = async (
   action:
-    | 'open'
-    | 'pullSamples'
+    | 'details'
     | 'edit'
     | 'copyTopic'
     | 'move'
@@ -556,13 +627,8 @@ const emitContextAction = async (
   const { type, mapping, group } = contextMenu.value
   closeContextMenu()
   if (type === 'mapping' && mapping) {
-    if (action === 'open') {
-      selectMapping(mapping)
-      return
-    }
-    if (action === 'pullSamples') {
-      selectMapping(mapping)
-      samplePullRequestId.value += 1
+    if (action === 'details') {
+      openMappingDetail(mapping)
       return
     }
     if (action === 'edit') {
@@ -602,6 +668,11 @@ const emitContextAction = async (
       await deleteGroup(group)
     }
   }
+}
+
+const openMappingDetail = (mapping: KafkaTopicMapping) => {
+  detailMapping.value = mapping
+  detailDialogVisible.value = true
 }
 
 const buildMappingPayload = (mapping: KafkaTopicMapping) => ({
@@ -747,6 +818,46 @@ const handlePreviewSamples = (payload: {
 
 const getPreviewSamples = (mappingId: string | number) => {
   return previewSamplesByMapping.value.get(String(mappingId)) || []
+}
+
+const getGroupName = (groupId?: string | number | null) => {
+  if (!groupId) return '根目录'
+  return groups.value.find((group) => String(group.id) === String(groupId))?.name || '未知分组'
+}
+
+const formatTime = (value?: string | number | Date | null) => {
+  if (!value) return '-'
+  const date = dayjs(value)
+  return date.isValid() ? date.format(TIME_FORMAT) : '-'
+}
+
+const formatOutputMode = (mode?: string) => {
+  if (mode === 'raw_message') return '整包数据点'
+  if (mode === 'field_mapping') return '字段数据点'
+  return '-'
+}
+
+const formatRawOutputScope = (mapping: KafkaTopicMapping) => {
+  if (mapping.outputMode !== 'raw_message') return '-'
+  return mapping.rawOutputScope === 'full_message' ? '完整 Kafka 消息' : '仅消息 Value'
+}
+
+const formatPartition = (mapping: KafkaTopicMapping) => {
+  if (mapping.partitionMode === 'single') return `分区 ${mapping.partition ?? '-'}`
+  return '全部分区'
+}
+
+const formatStartPosition = (mapping: KafkaTopicMapping) => {
+  if (mapping.startPosition === 'earliest') return '最早消息'
+  if (mapping.startPosition === 'offset') return `指定 Offset ${mapping.startOffset ?? '-'}`
+  return '最新消息'
+}
+
+const formatDecode = (decode?: string) => {
+  if (decode === 'json') return 'JSON'
+  if (decode === 'string') return '字符串'
+  if (decode === 'binary') return '二进制'
+  return '-'
 }
 
 const mappingTooltip = (mapping: KafkaTopicMapping) => {
@@ -1007,6 +1118,48 @@ defineExpose({ handlePreviewSamples })
   width: 15px;
   height: 15px;
   flex: 0 0 auto;
+}
+
+.kafka-workbench__detail {
+  display: grid;
+  gap: 14px;
+}
+
+.kafka-workbench__detail-section {
+  display: grid;
+  gap: 8px;
+}
+
+.kafka-workbench__detail-section h3 {
+  margin: 0;
+  color: var(--dc-text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.kafka-workbench__detail-grid {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 8px 12px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
+}
+
+.kafka-workbench__detail-grid dt {
+  color: var(--dc-text-muted);
+  font-size: 12px;
+}
+
+.kafka-workbench__detail-grid dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--dc-text);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 @keyframes kafka-workbench-spin {
