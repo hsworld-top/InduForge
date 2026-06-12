@@ -21,46 +21,6 @@
       </div>
     </header>
 
-    <div class="kafka-variable-panel__meta">
-      <WorkbenchStatusPill label="字段数据点" tone="info" />
-      <WorkbenchStatusPill :label="`映射 ${pagination.total}`" tone="info" />
-      <div class="kafka-variable-panel__group-tools">
-        <el-select
-          v-model="selectedGroupId"
-          size="small"
-          class="kafka-variable-panel__group-filter"
-        >
-          <el-option label="全部映射" value="" />
-          <el-option label="未分组" value="__ungrouped" />
-          <el-option
-            v-for="group in groups"
-            :key="group.id"
-            :label="group.name"
-            :value="group.id"
-          />
-        </el-select>
-        <el-tooltip content="新建映射分组" placement="top">
-          <el-button size="small" :icon="IconTablerFolderPlus" @click="openCreateGroup" />
-        </el-tooltip>
-        <el-tooltip content="编辑当前映射分组" placement="top">
-          <el-button
-            size="small"
-            :icon="IconTablerEdit"
-            :disabled="!currentGroup"
-            @click="currentGroup && openEditGroup(currentGroup)"
-          />
-        </el-tooltip>
-        <el-tooltip content="删除当前映射分组" placement="top">
-          <el-button
-            size="small"
-            :icon="IconTablerTrash"
-            :disabled="!currentGroup"
-            @click="currentGroup && deleteGroup(currentGroup)"
-          />
-        </el-tooltip>
-      </div>
-    </div>
-
     <div class="kafka-variable-panel__body" :class="{ 'has-editor': sampleEditorVisible }">
       <div class="kafka-variable-panel__result">
         <el-table v-loading="loading" :data="fields" height="100%" empty-text="暂无字段映射">
@@ -189,16 +149,6 @@
             <el-switch v-model="form.enabled" active-text="启用" inactive-text="停用" />
           </el-form-item>
         </div>
-        <el-form-item label="所属分组">
-          <el-select v-model="form.groupId" clearable placeholder="未分组">
-            <el-option
-              v-for="group in groups"
-              :key="group.id"
-              :label="group.name"
-              :value="group.id"
-            />
-          </el-select>
-        </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="form.description" type="textarea" :rows="3" placeholder="可选" />
         </el-form-item>
@@ -206,43 +156,6 @@
       <template #footer>
         <el-button :disabled="fieldSaving" @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="fieldSaving" :disabled="!canSubmit" @click="saveField">
-          保存
-        </el-button>
-      </template>
-    </DcDialog>
-
-    <DcDialog
-      v-model="groupDialogVisible"
-      :title="editingGroup ? '编辑映射分组' : '新建映射分组'"
-      width="440px"
-      :close-disabled="groupSaving"
-    >
-      <el-form class="kafka-variable-panel__form" label-position="top">
-        <el-form-item label="映射分组名称">
-          <el-input v-model="groupForm.name" placeholder="遥测字段" />
-        </el-form-item>
-        <el-form-item label="父级映射分组">
-          <el-select v-model="groupForm.parentId" clearable placeholder="根目录">
-            <el-option
-              v-for="group in groupParentOptions"
-              :key="group.id"
-              :label="group.name"
-              :value="group.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="说明">
-          <el-input v-model="groupForm.description" type="textarea" :rows="3" placeholder="可选" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button :disabled="groupSaving" @click="groupDialogVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="groupSaving"
-          :disabled="!groupForm.name.trim()"
-          @click="saveGroup"
-        >
           保存
         </el-button>
       </template>
@@ -309,7 +222,6 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import IconTablerBraces from '~icons/tabler/braces'
 import IconTablerEdit from '~icons/tabler/edit'
-import IconTablerFolderPlus from '~icons/tabler/folder-plus'
 import IconTablerPlayerPause from '~icons/tabler/player-pause'
 import IconTablerPlayerPlay from '~icons/tabler/player-play'
 import IconTablerPlus from '~icons/tabler/plus'
@@ -326,13 +238,7 @@ import {
   normalizeKafkaSampleEditorText,
   type KafkaSampleFieldCandidate,
 } from './kafkaSampleFields'
-import type {
-  KafkaField,
-  KafkaFieldGroup,
-  KafkaPreview,
-  KafkaPreviewSample,
-  KafkaTopicMapping,
-} from './types'
+import type { KafkaField, KafkaPreview, KafkaPreviewSample, KafkaTopicMapping } from './types'
 
 const props = defineProps<{
   projectId: string
@@ -348,18 +254,13 @@ const emit = defineEmits<{
 }>()
 
 const fields = ref<KafkaField[]>([])
-const groups = ref<KafkaFieldGroup[]>([])
 const loading = ref(false)
 const previewing = ref(false)
 const batchSaving = ref(false)
 const fieldSaving = ref(false)
-const groupSaving = ref(false)
 const dialogVisible = ref(false)
-const groupDialogVisible = ref(false)
 const candidateDialogVisible = ref(false)
 const editingField = ref<KafkaField | null>(null)
-const editingGroup = ref<KafkaFieldGroup | null>(null)
-const selectedGroupId = ref('')
 const pagination = ref({ page: 1, pageSize: 20, total: 0, totalPages: 0 })
 const sampleEditorRef = ref<InstanceType<typeof WorkbenchJsonSampleEditor> | null>(null)
 const sampleEditorVisible = ref(true)
@@ -369,7 +270,6 @@ const selectedCandidatePaths = ref<Set<string>>(new Set())
 const candidateRows = ref<KafkaSampleFieldCandidate[]>([])
 
 const form = reactive({
-  groupId: '',
   name: '',
   valuePath: '',
   dataType: 'string',
@@ -377,19 +277,10 @@ const form = reactive({
   description: '',
 })
 
-const groupForm = reactive({
-  name: '',
-  parentId: '',
-  description: '',
-})
-
 const canSubmit = computed(() => form.name.trim().length > 0 && form.valuePath.trim().length > 0)
 const selectedCandidateCount = computed(() => selectedCandidatePaths.value.size)
-const currentGroup = computed(
-  () => groups.value.find((group) => group.id === selectedGroupId.value) || null,
-)
-const groupParentOptions = computed(() =>
-  groups.value.filter((group) => !editingGroup.value || group.id !== editingGroup.value.id),
+const sampleEditorStorageKey = computed(
+  () => `datacenter:kafka-field-sample:${props.projectId}:${props.mapping.id}`,
 )
 
 const loadFields = async () => {
@@ -398,7 +289,6 @@ const loadFields = async () => {
     const res = await dataAPI.getKafkaFields(props.projectId, props.mapping.id, {
       page: pagination.value.page,
       pageSize: pagination.value.pageSize,
-      groupId: selectedGroupId.value || undefined,
     })
     fields.value = res.list || []
     pagination.value = {
@@ -414,24 +304,7 @@ const loadFields = async () => {
   }
 }
 
-const loadGroups = async () => {
-  try {
-    const res = await dataAPI.getKafkaFieldGroups(props.projectId, props.mapping.id)
-    groups.value = res.list || []
-    if (selectedGroupId.value && selectedGroupId.value !== '__ungrouped' && !currentGroup.value) {
-      selectedGroupId.value = ''
-    }
-  } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '加载 Kafka 映射分组失败'))
-  }
-}
-
 const reloadAll = async () => {
-  await Promise.all([loadGroups(), loadFields()])
-}
-
-const reloadFirstPage = async () => {
-  pagination.value.page = 1
   await loadFields()
 }
 
@@ -450,14 +323,13 @@ const changePage = async (page: number) => {
 
 const changePageSize = async (pageSize: number) => {
   pagination.value.pageSize = pageSize
-  await reloadFirstPage()
+  pagination.value.page = 1
+  await loadFields()
 }
 
 const openCreateDialog = () => {
   editingField.value = null
   Object.assign(form, {
-    groupId:
-      selectedGroupId.value && selectedGroupId.value !== '__ungrouped' ? selectedGroupId.value : '',
     name: '',
     valuePath: '',
     dataType: 'string',
@@ -470,7 +342,6 @@ const openCreateDialog = () => {
 const openEditDialog = (field: KafkaField) => {
   editingField.value = field
   Object.assign(form, {
-    groupId: field.groupId || '',
     name: field.name,
     valuePath: field.valuePath,
     dataType: field.dataType || 'string',
@@ -485,7 +356,7 @@ const saveField = async () => {
   fieldSaving.value = true
   try {
     const payload = {
-      groupId: form.groupId || null,
+      groupId: null,
       name: form.name.trim(),
       valuePath: form.valuePath.trim(),
       dataType: form.dataType,
@@ -533,10 +404,7 @@ const createFromSamples = async () => {
         valuePath: candidate.path,
         dataType: candidate.dataType,
         enabled: true,
-        groupId:
-          selectedGroupId.value && selectedGroupId.value !== '__ungrouped'
-            ? selectedGroupId.value
-            : null,
+        groupId: null,
       })),
     )
     ElMessage.success('字段映射已保存')
@@ -561,6 +429,7 @@ const pullSamples = async () => {
     const firstSample = samples[0]
     if (firstSample) {
       sampleEditorText.value = normalizeKafkaSampleEditorText(firstSample)
+      saveSampleEditorDraft()
     }
     emit('samples', {
       mappingId: String(props.mapping.id),
@@ -577,6 +446,7 @@ const pullSamples = async () => {
 
 const parseEditorFields = () => {
   sampleParseError.value = ''
+  saveSampleEditorDraft()
   try {
     const parsed = JSON.parse(sampleEditorText.value)
     candidateRows.value = inferKafkaSampleFields(
@@ -603,6 +473,19 @@ const toggleCandidateSelection = (candidate: KafkaSampleFieldCandidate, checked:
   selectedCandidatePaths.value = next
 }
 
+const loadSampleEditorDraft = () => {
+  sampleEditorText.value = window.localStorage.getItem(sampleEditorStorageKey.value) || ''
+}
+
+const saveSampleEditorDraft = () => {
+  const value = sampleEditorText.value
+  if (value) {
+    window.localStorage.setItem(sampleEditorStorageKey.value, value)
+  } else {
+    window.localStorage.removeItem(sampleEditorStorageKey.value)
+  }
+}
+
 const toggleField = async (field: KafkaField) => {
   try {
     await dataAPI.toggleKafkaField(props.projectId, field.id, !field.enabled)
@@ -626,67 +509,6 @@ const deleteField = async (field: KafkaField) => {
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
     ElMessage.error(getApiErrorMessage(error, '删除 Kafka 字段映射失败'))
-  }
-}
-
-const openCreateGroup = () => {
-  editingGroup.value = null
-  Object.assign(groupForm, { name: '', parentId: '', description: '' })
-  groupDialogVisible.value = true
-}
-
-const openEditGroup = (group: KafkaFieldGroup) => {
-  editingGroup.value = group
-  Object.assign(groupForm, {
-    name: group.name,
-    parentId: group.parentId || '',
-    description: group.description || '',
-  })
-  groupDialogVisible.value = true
-}
-
-const saveGroup = async () => {
-  groupSaving.value = true
-  try {
-    const payload = {
-      name: groupForm.name.trim(),
-      parentId: groupForm.parentId || null,
-      description: groupForm.description.trim() || null,
-      sortOrder: editingGroup.value?.sortOrder || 0,
-    }
-    if (editingGroup.value) {
-      await dataAPI.updateKafkaFieldGroup(props.projectId, editingGroup.value.id, payload)
-    } else {
-      await dataAPI.createKafkaFieldGroup(props.projectId, props.mapping.id, payload)
-    }
-    groupDialogVisible.value = false
-    ElMessage.success(editingGroup.value ? '映射分组已更新' : '映射分组已创建')
-    await loadGroups()
-  } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存 Kafka 映射分组失败'))
-  } finally {
-    groupSaving.value = false
-  }
-}
-
-const deleteGroup = async (group: KafkaFieldGroup) => {
-  try {
-    await ElMessageBox.confirm(
-      `删除映射分组“${group.name}”？组内映射会移动到未分组。`,
-      '删除映射分组',
-      {
-        confirmButtonText: '删除',
-        cancelButtonText: '取消',
-        type: 'warning',
-      },
-    )
-    await dataAPI.deleteKafkaFieldGroup(props.projectId, group.id)
-    if (selectedGroupId.value === group.id) selectedGroupId.value = ''
-    ElMessage.success('映射分组已删除')
-    await reloadAll()
-  } catch (error) {
-    if (error === 'cancel' || error === 'close') return
-    ElMessage.error(getApiErrorMessage(error, '删除 Kafka 映射分组失败'))
   }
 }
 
@@ -718,17 +540,16 @@ const qualityTone = (quality?: string) => {
   return 'neutral'
 }
 
-onMounted(reloadAll)
-
-watch(selectedGroupId, () => {
-  void reloadFirstPage()
+onMounted(() => {
+  loadSampleEditorDraft()
+  void reloadAll()
 })
 
 watch(
   () => props.mapping.id,
   () => {
-    selectedGroupId.value = ''
     pagination.value.page = 1
+    loadSampleEditorDraft()
     void reloadAll()
   },
 )
@@ -792,28 +613,6 @@ watch(
   width: 14px;
   height: 14px;
   margin-right: 4px;
-}
-
-.kafka-variable-panel__meta {
-  min-height: 34px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--dc-border);
-  color: var(--dc-text-muted);
-  font-size: 12px;
-}
-
-.kafka-variable-panel__group-tools {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.kafka-variable-panel__group-filter {
-  width: 160px;
 }
 
 .kafka-variable-panel__body {
@@ -918,16 +717,6 @@ watch(
   }
 
   .kafka-variable-panel__actions {
-    flex-wrap: wrap;
-  }
-
-  .kafka-variable-panel__meta {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .kafka-variable-panel__group-tools {
-    margin-left: 0;
     flex-wrap: wrap;
   }
 
