@@ -10,21 +10,9 @@
           <IconTablerPlus class="kafka-variable-panel__button-icon" />
           新建映射
         </el-button>
-        <el-button size="small" :loading="batchSaving" @click="createFromSamples">
-          <IconTablerSparkles class="kafka-variable-panel__button-icon" />
-          从样本生成
-        </el-button>
         <el-button size="small" @click="sampleEditorVisible = !sampleEditorVisible">
           <IconTablerBraces class="kafka-variable-panel__button-icon" />
           样例编辑器
-        </el-button>
-        <el-button size="small" :loading="previewing" @click="testMappings">
-          <IconTablerActivity class="kafka-variable-panel__button-icon" />
-          测试映射
-        </el-button>
-        <el-button size="small" :loading="previewing" @click="pullSamples">
-          <IconTablerMessages class="kafka-variable-panel__button-icon" />
-          拉取样本
         </el-button>
         <el-button size="small" :loading="loading" @click="reloadAll">
           <IconTablerRefresh class="kafka-variable-panel__button-icon" />
@@ -36,7 +24,6 @@
     <div class="kafka-variable-panel__meta">
       <WorkbenchStatusPill label="字段数据点" tone="info" />
       <WorkbenchStatusPill :label="`映射 ${pagination.total}`" tone="info" />
-      <span v-if="candidateCount > 0">样本候选 {{ candidateCount }} 个</span>
       <div class="kafka-variable-panel__group-tools">
         <el-select
           v-model="selectedGroupId"
@@ -76,40 +63,6 @@
 
     <div class="kafka-variable-panel__body" :class="{ 'has-editor': sampleEditorVisible }">
       <div class="kafka-variable-panel__result">
-        <el-table
-          v-if="candidateRows.length > 0"
-          class="kafka-variable-panel__candidate-table"
-          :data="candidateRows"
-          max-height="220"
-          row-key="path"
-        >
-          <el-table-column label="" width="42">
-            <template #default="{ row }">
-              <el-checkbox
-                :model-value="selectedCandidatePaths.has(row.path)"
-                :disabled="row.exists"
-                @update:model-value="toggleCandidateSelection(row, Boolean($event))"
-              />
-            </template>
-          </el-table-column>
-          <el-table-column prop="name" label="映射名称" min-width="120" />
-          <el-table-column prop="path" label="字段路径" min-width="150" show-overflow-tooltip />
-          <el-table-column prop="dataType" label="类型" width="88" />
-          <el-table-column label="样例值" min-width="120" show-overflow-tooltip>
-            <template #default="{ row }">
-              <span class="kafka-variable-panel__mono">{{ formatLastValue(row.sampleValue) }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="状态" width="88">
-            <template #default="{ row }">
-              <WorkbenchStatusPill
-                :label="row.exists ? '已存在' : '候选'"
-                :tone="row.exists ? 'neutral' : 'info'"
-              />
-            </template>
-          </el-table-column>
-        </el-table>
-
         <el-table v-loading="loading" :data="fields" height="100%" empty-text="暂无字段映射">
           <el-table-column prop="name" label="映射名称" min-width="140" show-overflow-tooltip />
           <el-table-column prop="valuePath" label="字段路径" min-width="170" show-overflow-tooltip />
@@ -194,20 +147,16 @@
           />
         </div>
 
-        <BulkActionBar :selected-count="selectedCandidateCount" @clear="clearCandidateSelection">
-          <el-button type="primary" size="small" :loading="batchSaving" @click="createFromSamples">
-            保存候选字段
-          </el-button>
-        </BulkActionBar>
       </div>
 
       <div v-if="sampleEditorVisible" class="kafka-variable-panel__editor">
         <WorkbenchJsonSampleEditor
           ref="sampleEditorRef"
           v-model="sampleEditorText"
-          :fill-latest-disabled="props.samples.length === 0"
+          fill-latest-text="拉取样本"
+          :fill-latest-disabled="previewing"
           :error="sampleParseError"
-          @fill-latest="fillEditorFromLatestSample"
+          @fill-latest="pullSamples"
           @parse="parseEditorFields"
         />
       </div>
@@ -299,6 +248,58 @@
       </template>
     </DcDialog>
 
+    <DcDialog
+      v-model="candidateDialogVisible"
+      title="解析字段候选"
+      width="760px"
+      :close-disabled="batchSaving"
+    >
+      <el-table
+        class="kafka-variable-panel__candidate-table"
+        :data="candidateRows"
+        max-height="420"
+        row-key="path"
+        empty-text="暂无字段候选"
+      >
+        <el-table-column label="" width="42">
+          <template #default="{ row }">
+            <el-checkbox
+              :model-value="selectedCandidatePaths.has(row.path)"
+              :disabled="row.exists"
+              @update:model-value="toggleCandidateSelection(row, Boolean($event))"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column prop="name" label="映射名称" min-width="120" />
+        <el-table-column prop="path" label="字段路径" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="dataType" label="类型" width="88" />
+        <el-table-column label="样例值" min-width="120" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="kafka-variable-panel__mono">{{ formatLastValue(row.sampleValue) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="88">
+          <template #default="{ row }">
+            <WorkbenchStatusPill
+              :label="row.exists ? '已存在' : '候选'"
+              :tone="row.exists ? 'neutral' : 'info'"
+            />
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button :disabled="batchSaving" @click="candidateDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="batchSaving"
+          :disabled="selectedCandidateCount === 0"
+          @click="createFromSamples"
+        >
+          保存选中字段
+        </el-button>
+      </template>
+    </DcDialog>
+
   </section>
 </template>
 
@@ -306,19 +307,15 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
-import IconTablerActivity from '~icons/tabler/activity'
 import IconTablerBraces from '~icons/tabler/braces'
 import IconTablerEdit from '~icons/tabler/edit'
 import IconTablerFolderPlus from '~icons/tabler/folder-plus'
-import IconTablerMessages from '~icons/tabler/messages'
 import IconTablerPlayerPause from '~icons/tabler/player-pause'
 import IconTablerPlayerPlay from '~icons/tabler/player-play'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerRefresh from '~icons/tabler/refresh'
-import IconTablerSparkles from '~icons/tabler/sparkles'
 import IconTablerTrash from '~icons/tabler/trash'
 import dataAPI from '@/api/data.api'
-import BulkActionBar from '@/components/shared/BulkActionBar.vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import WorkbenchJsonSampleEditor from '@/components/workbench/WorkbenchJsonSampleEditor.vue'
 import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
@@ -337,17 +334,11 @@ import type {
   KafkaTopicMapping,
 } from './types'
 
-const props = withDefaults(
-  defineProps<{
-    projectId: string
-    mapping: KafkaTopicMapping
-    samples: KafkaPreviewSample[]
-    pullRequestId?: number
-  }>(),
-  {
-    pullRequestId: 0,
-  },
-)
+const props = defineProps<{
+  projectId: string
+  mapping: KafkaTopicMapping
+  samples: KafkaPreviewSample[]
+}>()
 
 const emit = defineEmits<{
   (
@@ -365,6 +356,7 @@ const fieldSaving = ref(false)
 const groupSaving = ref(false)
 const dialogVisible = ref(false)
 const groupDialogVisible = ref(false)
+const candidateDialogVisible = ref(false)
 const editingField = ref<KafkaField | null>(null)
 const editingGroup = ref<KafkaFieldGroup | null>(null)
 const selectedGroupId = ref('')
@@ -392,9 +384,6 @@ const groupForm = reactive({
 })
 
 const canSubmit = computed(() => form.name.trim().length > 0 && form.valuePath.trim().length > 0)
-const candidateCount = computed(
-  () => candidateRows.value.filter((candidate) => !candidate.exists).length,
-)
 const selectedCandidateCount = computed(() => selectedCandidatePaths.value.size)
 const currentGroup = computed(
   () => groups.value.find((group) => group.id === selectedGroupId.value) || null,
@@ -402,16 +391,6 @@ const currentGroup = computed(
 const groupParentOptions = computed(() =>
   groups.value.filter((group) => !editingGroup.value || group.id !== editingGroup.value.id),
 )
-
-const refreshCandidates = (samples: KafkaPreviewSample[] = props.samples) => {
-  candidateRows.value = inferKafkaSampleFields(
-    samples,
-    fields.value.map((field) => field.valuePath),
-  )
-  selectedCandidatePaths.value = new Set(
-    candidateRows.value.filter((candidate) => !candidate.exists).map((candidate) => candidate.path),
-  )
-}
 
 const loadFields = async () => {
   loading.value = true
@@ -428,7 +407,6 @@ const loadFields = async () => {
       total: res.pagination?.total || 0,
       totalPages: res.pagination?.totalPages || 0,
     }
-    refreshCandidates()
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '加载 Kafka 字段映射失败'))
   } finally {
@@ -522,6 +500,7 @@ const saveField = async () => {
     fieldSaving.value = false
     dialogVisible.value = false
     ElMessage.success('字段映射已保存')
+    candidateDialogVisible.value = false
     await reloadAfterMutation()
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '保存 Kafka 字段映射失败'))
@@ -531,20 +510,17 @@ const saveField = async () => {
 }
 
 const createFromSamples = async () => {
-  const sourceCandidates =
-    candidateRows.value.length > 0
-      ? candidateRows.value
-      : inferKafkaSampleFields(props.samples, fields.value.map((field) => field.valuePath))
+  const sourceCandidates = candidateRows.value
   const selectedPaths = selectedCandidatePaths.value
-  if (candidateRows.value.length > 0 && selectedPaths.size === 0) {
+  if (selectedPaths.size === 0) {
     ElMessage.warning('请先选择要保存的字段候选')
     return
   }
   const nextCandidates = sourceCandidates.filter(
-    (candidate) => !candidate.exists && (selectedPaths.size === 0 || selectedPaths.has(candidate.path)),
+    (candidate) => !candidate.exists && selectedPaths.has(candidate.path),
   )
   if (nextCandidates.length === 0) {
-    ElMessage.warning('暂无可保存的字段候选，请先解析 JSON 样例或测试拉取样本')
+    ElMessage.warning('暂无可保存的字段候选，请先解析 JSON 样例')
     return
   }
   batchSaving.value = true
@@ -564,6 +540,7 @@ const createFromSamples = async () => {
       })),
     )
     ElMessage.success('字段映射已保存')
+    candidateDialogVisible.value = false
     await reloadAfterMutation()
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '保存字段映射失败'))
@@ -584,50 +561,18 @@ const pullSamples = async () => {
     const firstSample = samples[0]
     if (firstSample) {
       sampleEditorText.value = normalizeKafkaSampleEditorText(firstSample)
-      refreshCandidates(samples)
     }
     emit('samples', {
       mappingId: String(props.mapping.id),
       samples,
       preview,
     })
-    ElMessage.success('样本已拉取')
+    ElMessage.success(firstSample ? '样本已拉取并填入编辑器' : '本次未拉取到样本')
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, 'Kafka 样本拉取失败'))
   } finally {
     previewing.value = false
   }
-}
-
-const testMappings = async () => {
-  previewing.value = true
-  try {
-    const preview = await dataAPI.previewKafkaTopicMapping(props.projectId, props.mapping.id, {
-      limit: 1,
-      timeoutMs: props.mapping.timeoutMs,
-      decode: props.mapping.decode,
-    })
-    emit('samples', {
-      mappingId: String(props.mapping.id),
-      samples: preview.samples || [],
-      preview,
-    })
-    ElMessage.success('映射测试已完成')
-    await loadFields()
-  } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '测试映射失败'))
-  } finally {
-    previewing.value = false
-  }
-}
-
-const fillEditorFromLatestSample = () => {
-  const sample = props.samples[0]
-  if (!sample) {
-    ElMessage.warning('暂无最近样本，请先测试拉取或手动粘贴 JSON')
-    return
-  }
-  sampleEditorText.value = normalizeKafkaSampleEditorText(sample)
 }
 
 const parseEditorFields = () => {
@@ -641,6 +586,7 @@ const parseEditorFields = () => {
     selectedCandidatePaths.value = new Set(
       candidateRows.value.filter((candidate) => !candidate.exists).map((candidate) => candidate.path),
     )
+    candidateDialogVisible.value = true
     ElMessage.success(`已解析 ${candidateRows.value.length} 个字段候选`)
   } catch {
     sampleParseError.value = 'JSON 样例格式无效'
@@ -655,10 +601,6 @@ const toggleCandidateSelection = (candidate: KafkaSampleFieldCandidate, checked:
     next.delete(candidate.path)
   }
   selectedCandidatePaths.value = next
-}
-
-const clearCandidateSelection = () => {
-  selectedCandidatePaths.value = new Set()
 }
 
 const toggleField = async (field: KafkaField) => {
@@ -791,19 +733,6 @@ watch(
   },
 )
 
-watch(
-  () => props.samples,
-  () => {
-    void loadFields()
-  },
-)
-
-watch(
-  () => props.pullRequestId,
-  (value, oldValue) => {
-    if (value !== oldValue && value > 0) void pullSamples()
-  },
-)
 </script>
 
 <style scoped>
@@ -913,12 +842,6 @@ watch(
 .kafka-variable-panel__result > :deep(.el-table) {
   flex: 1;
   min-height: 0;
-}
-
-.kafka-variable-panel__candidate-table {
-  flex: 0 0 auto;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--dc-border);
 }
 
 .kafka-variable-panel__editor {

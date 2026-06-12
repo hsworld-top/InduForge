@@ -135,7 +135,6 @@
               :project-id="projectId"
               :mapping="getMappingById(tab.mappingId)!"
               :samples="getPreviewSamples(tab.mappingId)"
-              :pull-request-id="samplePullRequestId"
               @samples="handlePreviewSamples"
             />
           </template>
