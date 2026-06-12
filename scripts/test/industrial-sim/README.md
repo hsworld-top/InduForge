@@ -6,7 +6,16 @@
 
 ## 安装
 
-在仓库根目录执行：
+WSL Ubuntu 中默认无需手动安装依赖；`run.sh` 首次启动时会自动在仓库根目录创建 `.venv-industrial-sim` 并安装 `requirements.txt`。
+
+如需提前安装，或要配合 `--python` 使用自定义解释器，可从仓库根目录执行：
+
+```bash
+python3 -m venv .venv-industrial-sim
+./.venv-industrial-sim/bin/python -m pip install -r scripts/test/industrial-sim/requirements.txt
+```
+
+Windows PowerShell 也可使用：
 
 ```powershell
 python -m venv .venv-industrial-sim
@@ -15,13 +24,27 @@ python -m venv .venv-industrial-sim
 
 ## 启动
 
-一键启动三种协议：
+在 WSL Ubuntu 中分别启动需要的协议：
+
+```bash
+bash scripts/test/industrial-sim/run.sh modbus --scenario normal
+bash scripts/test/industrial-sim/run.sh opcua --scenario normal
+bash scripts/test/industrial-sim/run.sh s7 --scenario normal
+```
+
+需要同时启动三种协议时：
+
+```bash
+bash scripts/test/industrial-sim/run.sh all --scenario normal
+```
+
+Windows PowerShell 中一键启动三种协议：
 
 ```powershell
 .\scripts\test\industrial-sim\run-all.ps1 -Python .\.venv-industrial-sim\Scripts\python.exe -Scenario normal
 ```
 
-单独启动：
+Windows PowerShell 中单独启动：
 
 ```powershell
 .\.venv-industrial-sim\Scripts\python scripts\test\industrial-sim\industrial_sim\modbus_sim.py --scenario normal
@@ -163,4 +186,3 @@ S7 服务端暴露 `DB1`、`M`、`I`、`Q` 区。推荐先用 `DB1` 验证。
 4. 读取预览值，观察质量码、时间戳、报警码是否能表达。
 5. 写启动命令，确认状态从 `starting` 过渡到 `running`。
 6. 切换 `alarm`、`noisy`、`intermittent` 场景，检查诊断和错误提示是否足够。
-

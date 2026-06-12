@@ -65,6 +65,7 @@ runtime/node_agent_front/dist/
 # Go / 运行时构建产物
 # ============================================
 data_service/*.exe
+data_service/tmp/
 runtime/node_agent/build/
 runtime/node_agent/data/
 runtime/node_agent/logs/
@@ -78,10 +79,13 @@ runtime/node_agent/runtime/
 .superpowers/
 .worktrees/
 .venv/
+.venv-industrial-sim/
 
 # ============================================
 # 调试与测试产物
 # ============================================
+__pycache__/
+*.pyc
 .playwright-cli/
 .playwright-cli/output/
 .playwright-mcp/

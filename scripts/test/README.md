@@ -33,3 +33,21 @@ python scripts/test/kafka/kafka-produce-test.py
 ```
 
 详细说明见 `kafka/README.md`。
+
+## 工业协议模拟设备
+
+在 WSL Ubuntu 中可直接启动；首次启动会自动在仓库根目录创建 `.venv-industrial-sim` 并安装 Python 依赖：
+
+```bash
+bash scripts/test/industrial-sim/run.sh modbus
+bash scripts/test/industrial-sim/run.sh opcua
+bash scripts/test/industrial-sim/run.sh s7
+```
+
+需要同时启动三种协议：
+
+```bash
+bash scripts/test/industrial-sim/run.sh all
+```
+
+详细说明见 `industrial-sim/README.md`。
