@@ -2,8 +2,11 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 
+	"github.com/indu-forge/data_service/internal/auth"
 	apperrors "github.com/indu-forge/data_service/internal/errors"
 	"github.com/indu-forge/data_service/internal/http/middleware"
 	"github.com/indu-forge/data_service/internal/http/response"
@@ -165,6 +168,66 @@ func (h *WebSocketWorkbenchHandler) ConnectPreview(w http.ResponseWriter, r *htt
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
+}
+
+func (h *WebSocketWorkbenchHandler) StreamSession(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	if err := h.service.StreamSession(r.Context(), w, r.PathValue("projectId"), r.PathValue("sessionId"), claims.UserID); err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	return nil
+}
+
+func (h *WebSocketWorkbenchHandler) StreamSessionWithQueryToken(validator *auth.JWTValidator) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if validator == nil {
+			response.WriteAppError(w, http.StatusInternalServerError, middleware.RequestID(r.Context()), apperrors.ErrorCodeAuthSecretRequired, "JWT 校验器未初始化")
+			return
+		}
+		token := normalizeWorkbenchStreamToken(r.URL.Query().Get("token"))
+		if token == "" {
+			response.WriteAppError(w, http.StatusUnauthorized, middleware.RequestID(r.Context()), apperrors.ErrorCodeAuthTokenRequired, "请提供 Bearer JWT")
+			return
+		}
+		claims, err := validator.Validate(token)
+		if err != nil {
+			response.WriteAppError(w, http.StatusUnauthorized, middleware.RequestID(r.Context()), apperrors.ErrorCodeAuthTokenInvalid, "JWT 校验失败")
+			return
+		}
+		if !claims.HasCapability("project:read") {
+			response.WriteAppError(w, http.StatusForbidden, middleware.RequestID(r.Context()), apperrors.ErrorCodePermissionInsufficient, "缺少 project:read 权限")
+			return
+		}
+		if err := h.service.StreamSession(auth.WithClaims(r.Context(), claims), w, r.PathValue("projectId"), r.PathValue("sessionId"), claims.UserID); err != nil {
+			writeWorkbenchStreamError(w, r, normalizeRepresentativeHandlerError(err))
+		}
+	})
+}
+
+func writeWorkbenchStreamError(w http.ResponseWriter, r *http.Request, err error) {
+	if err == nil {
+		return
+	}
+	var appErr *apperrors.AppError
+	if errors.As(err, &appErr) && appErr != nil {
+		response.WriteAppError(w, appErr.StatusCode, middleware.RequestID(r.Context()), appErr.Code, appErr.Message)
+		return
+	}
+	response.WriteAppError(w, http.StatusInternalServerError, middleware.RequestID(r.Context()), apperrors.ErrorCodeInternal, "WebSocket 工作台连接失败")
+}
+
+func normalizeWorkbenchStreamToken(token string) string {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return ""
+	}
+	if parts := strings.Fields(token); len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+		return strings.TrimSpace(parts[1])
+	}
+	return token
 }
 
 func decodeWebSocketWorkbenchBody(r *http.Request, target any) (map[string]json.RawMessage, error) {

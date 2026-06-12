@@ -68,12 +68,9 @@ type CreateHTTPConfigInput struct {
 
 // CreateWebSocketConfigInput 表示创建 WebSocket 配置的业务输入。
 type CreateWebSocketConfigInput struct {
-	Name                string
-	Status              string
-	URL                 string
-	Topic               *string
-	Headers             map[string]any
-	HeartbeatIntervalMS *int
+	Name        string
+	Status      string
+	Description string
 }
 
 // CreateRedisConfigInput 表示创建 Redis 配置的业务输入。
@@ -233,34 +230,12 @@ func (s *ProtocolWave1Service) CreateWebSocketConfig(ctx context.Context, projec
 	if err != nil {
 		return nil, err
 	}
-	url := strings.TrimSpace(input.URL)
-	if url == "" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "url 不能为空")
-	}
-	heartbeatIntervalMS := 30000
-	if input.HeartbeatIntervalMS != nil {
-		if *input.HeartbeatIntervalMS < 0 {
-			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "heartbeatIntervalMs 不能小于 0")
-		}
-		heartbeatIntervalMS = *input.HeartbeatIntervalMS
-	}
-	var topic *string
-	if input.Topic != nil {
-		value := strings.TrimSpace(*input.Topic)
-		if value != "" {
-			topic = &value
-		}
-	}
-
 	record, err := s.repository.CreateWebSocketConfig(ctx, repository.CreateWebSocketConfigParams{
-		ProjectID:           projectID,
-		UserID:              userID,
-		Name:                name,
-		Status:              status,
-		URL:                 url,
-		Topic:               topic,
-		Headers:             cloneMap(input.Headers),
-		HeartbeatIntervalMS: heartbeatIntervalMS,
+		ProjectID:   projectID,
+		UserID:      userID,
+		Name:        name,
+		Status:      status,
+		Description: strings.TrimSpace(input.Description),
 	})
 	if err != nil {
 		return nil, err

@@ -1225,6 +1225,7 @@ func mountWebSocketWorkbenchRoutes(mux *http.ServeMux, opts options) {
 	mux.Handle("PUT "+sessionBase, write(opts.websocketWorkbenchHandler.UpdateSession))
 	mux.Handle("DELETE "+sessionBase, write(opts.websocketWorkbenchHandler.DeleteSession))
 	mux.Handle("POST "+sessionBase+"/connect-preview", write(opts.websocketWorkbenchHandler.ConnectPreview))
+	mux.Handle("GET "+sessionBase+"/stream", opts.websocketWorkbenchHandler.StreamSessionWithQueryToken(opts.jwtValidator))
 }
 
 func mountOpcuaModelingRoutes(mux *http.ServeMux, opts options) {

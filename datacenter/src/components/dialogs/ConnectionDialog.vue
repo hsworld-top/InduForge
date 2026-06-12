@@ -315,42 +315,6 @@
               </el-collapse>
             </template>
 
-            <template v-else-if="connectionType === 'websocket'">
-              <el-form-item label="连接地址" prop="url">
-                <el-input v-model="formData.url" placeholder="wss://example.com/realtime" />
-              </el-form-item>
-              <div class="connection-dialog__form-grid">
-                <el-form-item label="主题/通道">
-                  <el-input v-model="formData.topic" placeholder="可选" />
-                </el-form-item>
-                <el-form-item label="心跳间隔">
-                  <el-input
-                    v-model.number="formData.heartbeatIntervalMs"
-                    inputmode="numeric"
-                    placeholder="30000"
-                  >
-                    <template #append>ms</template>
-                  </el-input>
-                </el-form-item>
-              </div>
-              <el-form-item label="握手 Header">
-                <el-input
-                  v-model="formData.headersText"
-                  type="textarea"
-                  :rows="4"
-                  placeholder='{"Authorization":"Bearer token"}'
-                />
-              </el-form-item>
-              <el-form-item label="订阅消息">
-                <el-input
-                  v-model="formData.subscribeMessage"
-                  type="textarea"
-                  :rows="4"
-                  placeholder='{"type":"subscribe","topic":"device.telemetry"}'
-                />
-              </el-form-item>
-            </template>
-
             <template v-else-if="connectionType === 'redis'">
               <el-form-item label="部署模式">
                 <el-segmented v-model="formData.mode" :options="redisModeOptions" />
@@ -654,17 +618,17 @@
       <div class="connection-dialog__footer">
         <div class="connection-dialog__footer-actions">
           <template v-if="step === 1">
-            <el-button @click="requestClose">{{ t('actions.cancel') }}</el-button>
+            <el-button @click="requestClose">{{ tc('actions.cancel') }}</el-button>
           </template>
           <template v-else>
             <!-- 返回上一步：仅 create 模式可见 -->
             <el-button v-if="mode === 'create'" @click="goBackToStep1"> ← 返回上一步 </el-button>
-            <el-button @click="requestClose">{{ t('actions.cancel') }}</el-button>
+            <el-button @click="requestClose">{{ tc('actions.cancel') }}</el-button>
             <el-button v-if="showTestButton" @click="handleTest" :loading="testing">
-              {{ t('actions.testConnection') }}
+              {{ tc('actions.testConnection') }}
             </el-button>
             <el-button type="primary" @click="handleSubmit" :loading="submitting">
-              {{ mode === 'create' ? t('actions.createConnection') : t('actions.saveChanges') }}
+              {{ mode === 'create' ? tc('actions.createConnection') : tc('actions.saveChanges') }}
             </el-button>
           </template>
         </div>
@@ -711,7 +675,7 @@ const props = defineProps({
   mode: {
     type: String,
     default: 'create', // 'create' | 'edit'
-    validator: (value) => ['create', 'edit'].includes(value),
+    validator: (value: string) => ['create', 'edit'].includes(value),
   },
   connection: {
     type: Object,
@@ -724,6 +688,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue', 'submit'])
+const tc = (key: string, params?: Record<string, any>) => t(key, params)
 
 const visible = computed({
   get: () => props.modelValue,
@@ -750,7 +715,7 @@ const goBackToStep1 = () => {
 
 const connectionType = ref('mysql')
 const dbType = ref('mysql')
-const formData = ref({})
+const formData = ref<Record<string, any>>({})
 const formRef = ref(null)
 const protocolFormRef = ref(null)
 const testing = ref(false)
@@ -941,7 +906,7 @@ const formComponent = computed(() => {
 
 const isBuiltinStoreSelected = computed(() => isBuiltinStoreType(connectionType.value))
 const isSimpleMetadataSource = computed(
-  () => isBuiltinStoreSelected.value || connectionType.value === 'http',
+  () => isBuiltinStoreSelected.value || ['http', 'websocket'].includes(connectionType.value),
 )
 const showTestButton = computed(() => !isSimpleMetadataSource.value)
 const isKafkaSaslEnabled = computed(() =>
@@ -1043,11 +1008,7 @@ const summaryRows = computed(() => {
   } else if (connectionType.value === 'http') {
     rows.push({ label: '配置方式', value: '请求在工作台维护' })
   } else if (connectionType.value === 'websocket') {
-    rows.push(
-      { label: 'URL', value: data.url || '未填写' },
-      { label: 'Topic', value: data.topic || '可选' },
-      { label: '心跳', value: formatTimeout(data.heartbeatIntervalMs) },
-    )
+    rows.push({ label: '配置方式', value: '会话在工作台维护' })
   } else if (connectionType.value === 'redis') {
     rows.push(
       { label: '模式', value: data.mode || 'standalone' },
@@ -1116,21 +1077,19 @@ const checklist = computed(() => {
       ? Boolean(data.brokerUrl && data.port)
       : connectionType.value === 'kafka'
         ? Boolean(data.brokers)
-        : connectionType.value === 'http'
+        : ['http', 'websocket'].includes(connectionType.value)
           ? true
-          : connectionType.value === 'websocket'
-            ? Boolean(data.url)
-            : connectionType.value === 'redis'
-              ? Boolean(data.address)
-              : connectionType.value === 'opcua'
-                ? Boolean(data.ip && data.port)
-                : connectionType.value === 'modbus' && data.mode === 'rtu'
-                  ? Boolean(data.serialConfigText)
-                  : connectionType.value === 'tdengine'
-                    ? Boolean(data.ip && data.port)
-                    : relationalSourceTypes.includes(connectionType.value)
-                      ? Boolean(data.host && data.port)
-                      : Boolean(data.ip && data.port)
+          : connectionType.value === 'redis'
+            ? Boolean(data.address)
+            : connectionType.value === 'opcua'
+              ? Boolean(data.ip && data.port)
+              : connectionType.value === 'modbus' && data.mode === 'rtu'
+                ? Boolean(data.serialConfigText)
+                : connectionType.value === 'tdengine'
+                  ? Boolean(data.ip && data.port)
+                  : relationalSourceTypes.includes(connectionType.value)
+                    ? Boolean(data.host && data.port)
+                    : Boolean(data.ip && data.port)
   const hasTarget = ['mqtt', 'http', 'websocket', 'redis', 'opcua'].includes(connectionType.value)
     ? true
     : connectionType.value === 'kafka'
@@ -1147,26 +1106,33 @@ const checklist = computed(() => {
   return [
     { label: '基础名称已填写', ready: hasName },
     {
-      label: connectionType.value === 'http' ? '工作台内配置请求' : '网络地址已填写',
+      label: ['http', 'websocket'].includes(connectionType.value)
+        ? connectionType.value === 'http'
+          ? '工作台内配置请求'
+          : '工作台内配置会话'
+        : '网络地址已填写',
       ready: hasEndpoint,
     },
     {
-      label: connectionType.value === 'http' ? '保存后创建请求项' : '目标资源已明确',
+      label: ['http', 'websocket'].includes(connectionType.value)
+        ? connectionType.value === 'http'
+          ? '保存后创建请求项'
+          : '保存后创建会话'
+        : '目标资源已明确',
       ready: hasTarget,
     },
     {
-      label:
-        connectionType.value === 'http'
-          ? '无需测试连接'
-          : previewProtocolTypes.includes(connectionType.value)
-            ? connectionType.value === 'kafka'
-              ? '可先测试 Broker 连通'
-              : '保存后可短时预览'
-            : industrialProtocolTypes.includes(connectionType.value)
-              ? '保存为节点侧运行配置'
-              : '连接测试可选完成',
+      label: ['http', 'websocket'].includes(connectionType.value)
+        ? '无需测试连接'
+        : previewProtocolTypes.includes(connectionType.value)
+          ? connectionType.value === 'kafka'
+            ? '可先测试 Broker 连通'
+            : '保存后可短时预览'
+          : industrialProtocolTypes.includes(connectionType.value)
+            ? '保存为节点侧运行配置'
+            : '连接测试可选完成',
       ready:
-        connectionType.value === 'http' ||
+        ['http', 'websocket'].includes(connectionType.value) ||
         (previewProtocolTypes.includes(connectionType.value) && connectionType.value !== 'kafka') ||
         industrialProtocolTypes.includes(connectionType.value) ||
         (testResult.value.status === 'success' && !isTestStale.value),
@@ -1318,41 +1284,6 @@ const buildConnectionPayload = () => {
   }
 }
 
-const handleProtocolPreviewTest = async () => {
-  testing.value = true
-  const startAt = performance.now()
-  try {
-    const response = await dataAPI.previewProtocol(props.projectId, props.connection.id, {
-      limit: 5,
-      timeoutMs: 5000,
-      options: buildProtocolPreviewOptions(),
-    })
-    const payload = response?.data || {}
-    const durationMs = payload.durationMs ?? Math.round(performance.now() - startAt)
-    lastTestSignature.value = configSignature.value
-    testResult.value = {
-      status: payload.status === 'failed' ? 'error' : 'success',
-      title: payload.status === 'failed' ? '预览失败' : '预览完成',
-      message: `读取到 ${payload.samples?.length || 0} 条样本，耗时 ${durationMs}ms。`,
-      detail: payload.diagnostics?.error || '',
-      durationMs,
-    }
-    ElMessage.success('短时预览完成')
-  } catch (error) {
-    const durationMs = Math.round(performance.now() - startAt)
-    testResult.value = {
-      status: 'error',
-      title: '预览失败',
-      message: '短时预览未完成，请检查协议配置或网络连通性。',
-      detail: getApiErrorMessage(error, '短时预览失败'),
-      durationMs,
-    }
-    ElMessage.error(getApiErrorMessage(error, '短时预览失败'))
-  } finally {
-    testing.value = false
-  }
-}
-
 const handleMqttConnectionTest = async () => {
   testing.value = true
   const startAt = performance.now()
@@ -1372,7 +1303,7 @@ const handleMqttConnectionTest = async () => {
       detail: '',
       durationMs,
     }
-    ElMessage.success(t('query.connectionTestSuccess'))
+    ElMessage.success(tc('query.connectionTestSuccess'))
   } catch (error) {
     const durationMs = Math.round(performance.now() - startAt)
     testResult.value = {
@@ -1396,7 +1327,7 @@ const generateKafkaClientId = () => {
 const handleTest = async () => {
   const valid = await validateCurrentForm()
   if (!valid) {
-    ElMessage.warning(t('connection.incompleteInfoWarning'))
+    ElMessage.warning(tc('connection.incompleteInfoWarning'))
     return
   }
 
@@ -1455,7 +1386,7 @@ const handleTest = async () => {
       detail: result.detail || '',
       durationMs,
     }
-    ElMessage.success(t('query.connectionTestSuccess'))
+    ElMessage.success(tc('query.connectionTestSuccess'))
   } catch (error) {
     const durationMs = Math.round(performance.now() - startAt)
     testResult.value = {
@@ -1474,7 +1405,7 @@ const handleTest = async () => {
 const handleSubmit = async () => {
   const valid = await validateCurrentForm()
   if (!valid) {
-    ElMessage.warning(t('connection.incompleteInfoWarning'))
+    ElMessage.warning(tc('connection.incompleteInfoWarning'))
     return
   }
 
@@ -1532,11 +1463,7 @@ const getProtocolDefaultConfig = (type) => {
     },
     websocket: {
       name: '',
-      url: '',
-      topic: '',
-      headersText: '{}',
-      heartbeatIntervalMs: 30000,
-      subscribeMessage: '',
+      description: '',
     },
     redis: {
       name: '',
@@ -1634,7 +1561,7 @@ const normalizeKafkaOptionsForForm = (options) => {
 }
 
 const buildKafkaOptions = (config) => {
-  const options = {
+  const options: Record<string, any> = {
     securityProtocol: String(config.securityProtocol || 'PLAINTEXT').toUpperCase(),
   }
   if (String(options.securityProtocol).includes('SASL')) {
@@ -1659,7 +1586,7 @@ const buildKafkaOptions = (config) => {
   }
   if (String(options.securityProtocol).includes('SSL')) {
     const sslConfig = config.sslConfig || {}
-    const normalizedSSLConfig = {
+    const normalizedSSLConfig: Record<string, any> = {
       rejectUnauthorized: sslConfig.rejectUnauthorized !== false,
     }
     if (String(sslConfig.ca || '').trim()) {
@@ -1735,14 +1662,16 @@ const normalizeProtocolSubmitConfig = (type, config) => {
     return
   }
   if (type === 'websocket') {
-    config.headers = parseOptionalJsonObject(config.headersText, '握手 Header')
+    delete config.url
+    delete config.topic
+    delete config.headers
     delete config.headersText
+    delete config.heartbeatIntervalMs
     delete config.subscribeMessage
-    if (!config.topic) delete config.topic
     return
   }
   if (type === 'redis') {
-    const options = {}
+    const options: Record<string, any> = {}
     if (config.masterName) {
       options.masterName = config.masterName
     }
@@ -1796,18 +1725,6 @@ const normalizeProtocolSubmitConfig = (type, config) => {
   }
 }
 
-const buildProtocolPreviewOptions = () => {
-  if (connectionType.value === 'websocket' && formData.value.subscribeMessage) {
-    return {
-      subscribeMessage: parseJsonOrString(formData.value.subscribeMessage),
-    }
-  }
-  if (connectionType.value === 'redis' && formData.value.masterName) {
-    return { masterName: formData.value.masterName }
-  }
-  return {}
-}
-
 const buildOpcuaEndpoint = (ip, port) => {
   const safeIp = String(ip || '').trim()
   const safePort = Number(port) || 4840
@@ -1856,16 +1773,6 @@ const parseOptionalJsonObject = (value, label) => {
     // 统一在下方返回带字段名的可读错误。
   }
   throw new Error(`${label} 必须是 JSON 对象`)
-}
-
-const parseJsonOrString = (value) => {
-  const text = String(value || '').trim()
-  if (!text) return ''
-  try {
-    return JSON.parse(text)
-  } catch {
-    return text
-  }
 }
 
 const formatEndpoint = (host, port) => {

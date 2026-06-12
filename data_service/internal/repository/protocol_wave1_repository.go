@@ -53,14 +53,11 @@ type CreateHTTPConfigParams struct {
 
 // CreateWebSocketConfigParams 描述 WebSocket 配置落库参数。
 type CreateWebSocketConfigParams struct {
-	ProjectID           string
-	UserID              string
-	Name                string
-	Status              string
-	URL                 string
-	Topic               *string
-	Headers             map[string]any
-	HeartbeatIntervalMS int
+	ProjectID   string
+	UserID      string
+	Name        string
+	Status      string
+	Description string
 }
 
 // CreateRedisConfigParams 描述 Redis 配置落库参数。
@@ -197,11 +194,6 @@ func (r *ProtocolWave1Repository) CreateHTTPConfig(ctx context.Context, params C
 
 // CreateWebSocketConfig 创建 WebSocket 配置。
 func (r *ProtocolWave1Repository) CreateWebSocketConfig(ctx context.Context, params CreateWebSocketConfigParams) (*ProtocolConnectionRecord, error) {
-	headersPayload, err := marshalProtocolJSONObject(params.Headers, true)
-	if err != nil {
-		return nil, err
-	}
-
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 WebSocket 配置事务失败", err)
@@ -215,28 +207,12 @@ func (r *ProtocolWave1Repository) CreateWebSocketConfig(ctx context.Context, par
 		Type:      "websocket",
 		Status:    params.Status,
 		Metadata: map[string]any{
-			"url":                 params.URL,
-			"topic":               params.Topic,
-			"headers":             cloneProtocolMap(params.Headers),
-			"heartbeatIntervalMs": params.HeartbeatIntervalMS,
+			"mode":        "workbench",
+			"description": params.Description,
 		},
 	})
 	if err != nil {
 		return nil, err
-	}
-
-	_, err = tx.Exec(ctx, `
-		INSERT INTO data_websocket_configs (
-			connection_id,
-			url,
-			topic,
-			headers,
-			heartbeat_interval_ms
-		)
-		VALUES ($1, $2, $3, $4::jsonb, $5)
-	`, record.ID, params.URL, params.Topic, headersPayload, params.HeartbeatIntervalMS)
-	if err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入 WebSocket 配置失败", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

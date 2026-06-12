@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -119,6 +120,13 @@ type WebSocketPreviewResponse struct {
 	Diagnostics map[string]any            `json:"diagnostics"`
 	DurationMS  int64                     `json:"durationMs"`
 	Truncated   bool                      `json:"truncated"`
+}
+
+type WebSocketStreamEnvelope struct {
+	Type    string                   `json:"type"`
+	Status  string                   `json:"status,omitempty"`
+	Message string                   `json:"message,omitempty"`
+	Data    *WebSocketPreviewMessage `json:"data,omitempty"`
 }
 
 type WebSocketWorkbenchService struct {
@@ -362,37 +370,124 @@ func (s *WebSocketWorkbenchService) ConnectPreview(ctx context.Context, projectI
 	return result, nil
 }
 
+func (s *WebSocketWorkbenchService) StreamSession(ctx context.Context, w http.ResponseWriter, projectID, sessionID, userID string) error {
+	if err := validateProjectAndUser(projectID, userID); err != nil {
+		return err
+	}
+	if err := validateUUIDText(sessionID, "sessionId 格式无效"); err != nil {
+		return err
+	}
+	record, err := s.repository.GetSession(ctx, projectID, sessionID)
+	if err != nil {
+		return err
+	}
+	connection, err := s.loadWebSocketConnection(ctx, projectID, record.ConnectionID)
+	if err != nil {
+		return err
+	}
+
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+	clientConn, err := upgrader.Upgrade(w, nil, nil)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "WebSocket 工作台连接升级失败", err)
+	}
+	defer clientConn.Close()
+
+	targetConn, targetResp, err := dialWebSocketTarget(ctx, *connection, *record)
+	if err != nil {
+		_ = clientConn.WriteJSON(WebSocketStreamEnvelope{Type: "error", Message: err.Error()})
+		return nil
+	}
+	defer targetConn.Close()
+	done := make(chan struct{})
+	var closeOnce sync.Once
+	var clientWriteMu sync.Mutex
+	var targetWriteMu sync.Mutex
+	closeDone := func() {
+		closeOnce.Do(func() {
+			close(done)
+			_ = targetConn.Close()
+		})
+	}
+	// 浏览器断开或请求上下文取消时，立即关闭目标连接，避免目标端无消息时读循环长期阻塞。
+	go func() {
+		defer closeDone()
+		for {
+			messageType, payload, err := clientConn.ReadMessage()
+			if err != nil {
+				return
+			}
+			targetWriteMu.Lock()
+			err = targetConn.WriteMessage(messageType, payload)
+			targetWriteMu.Unlock()
+			if err != nil {
+				writeWebSocketStreamEnvelope(clientConn, &clientWriteMu, WebSocketStreamEnvelope{Type: "error", Message: "WebSocket 发送消息失败: " + err.Error()})
+				return
+			}
+			message := buildWebSocketPreviewMessage("out", messageType, payload)
+			writeWebSocketStreamEnvelope(clientConn, &clientWriteMu, WebSocketStreamEnvelope{Type: "message", Data: &message})
+		}
+	}()
+	go func() {
+		select {
+		case <-ctx.Done():
+			closeDone()
+		case <-done:
+		}
+	}()
+
+	writeWebSocketStreamEnvelope(clientConn, &clientWriteMu, WebSocketStreamEnvelope{
+		Type:    "status",
+		Status:  "connected",
+		Message: fmt.Sprintf("已连接，状态码 %d", responseStatusCode(targetResp)),
+	})
+
+	for {
+		select {
+		case <-done:
+			return nil
+		case <-ctx.Done():
+			closeDone()
+			return nil
+		default:
+		}
+		messageType, payload, readErr := targetConn.ReadMessage()
+		if readErr != nil {
+			_ = clientConn.WriteJSON(WebSocketStreamEnvelope{Type: "error", Message: "WebSocket 读取消息失败: " + readErr.Error()})
+			return nil
+		}
+		if len(payload) > maxWebSocketMessageBytes {
+			payload = payload[:maxWebSocketMessageBytes]
+		}
+		message := buildWebSocketPreviewMessage("in", messageType, payload)
+		if err := writeWebSocketStreamEnvelope(clientConn, &clientWriteMu, WebSocketStreamEnvelope{Type: "message", Data: &message}); err != nil {
+			return nil
+		}
+	}
+}
+
+func writeWebSocketStreamEnvelope(conn *websocket.Conn, mu *sync.Mutex, envelope WebSocketStreamEnvelope) error {
+	if conn == nil || mu == nil {
+		return nil
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	return conn.WriteJSON(envelope)
+}
+
 func (s *WebSocketWorkbenchService) executePreview(ctx context.Context, connection repository.ConnectionRecord, record repository.WebSocketSessionRecord) (*WebSocketPreviewResponse, error) {
 	timeoutMS := webSocketTimeoutMS(record.Settings, connection.Config)
 	previewCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
 	defer cancel()
 
-	targetURL, err := resolveWebSocketURL(connection.Config, record.URL)
-	if err != nil {
-		return nil, err
-	}
-	headers := http.Header{}
-	for key, value := range enabledKeyValuePairs(record.Headers) {
-		headers.Set(key, value)
-	}
-	if err := applyWebSocketAuth(headers, record.Auth); err != nil {
-		return nil, err
-	}
-	protocols := enabledProtocolValues(record.Protocols)
-	dialer := websocket.Dialer{
-		HandshakeTimeout: time.Duration(timeoutMS) * time.Millisecond,
-		Subprotocols:     protocols,
-		TLSClientConfig:  webSocketTLSConfig(record.Settings), //nolint:gosec
-	}
-
 	startedAt := time.Now()
-	conn, resp, err := dialer.DialContext(previewCtx, targetURL, headers)
+	conn, resp, err := dialWebSocketTarget(previewCtx, connection, record)
 	if err != nil {
-		statusCode := 0
-		if resp != nil {
-			statusCode = resp.StatusCode
-		}
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "WebSocket preview 连接失败", errWithStatus(err, statusCode))
+		return nil, err
 	}
 	defer conn.Close()
 
@@ -433,7 +528,7 @@ func (s *WebSocketWorkbenchService) executePreview(ctx context.Context, connecti
 		Status:   "ok",
 		Messages: messages,
 		Diagnostics: map[string]any{
-			"url":          targetURL,
+			"url":          conn.RemoteAddr().String(),
 			"protocol":     conn.Subprotocol(),
 			"statusCode":   responseStatusCode(resp),
 			"messageLimit": limit,
@@ -441,6 +536,31 @@ func (s *WebSocketWorkbenchService) executePreview(ctx context.Context, connecti
 		DurationMS: time.Since(startedAt).Milliseconds(),
 		Truncated:  truncated,
 	}, nil
+}
+
+func dialWebSocketTarget(ctx context.Context, connection repository.ConnectionRecord, record repository.WebSocketSessionRecord) (*websocket.Conn, *http.Response, error) {
+	timeoutMS := webSocketTimeoutMS(record.Settings, connection.Config)
+	targetURL, err := resolveWebSocketURL(connection.Config, record.URL)
+	if err != nil {
+		return nil, nil, err
+	}
+	headers := http.Header{}
+	for key, value := range enabledKeyValuePairs(record.Headers) {
+		headers.Set(key, value)
+	}
+	if err := applyWebSocketAuth(headers, record.Auth); err != nil {
+		return nil, nil, err
+	}
+	dialer := websocket.Dialer{
+		HandshakeTimeout: time.Duration(timeoutMS) * time.Millisecond,
+		Subprotocols:     enabledProtocolValues(record.Protocols),
+		TLSClientConfig:  webSocketTLSConfig(record.Settings), //nolint:gosec
+	}
+	conn, resp, err := dialer.DialContext(ctx, targetURL, headers)
+	if err != nil {
+		return nil, resp, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "WebSocket 连接失败", errWithStatus(err, responseStatusCode(resp)))
+	}
+	return conn, resp, nil
 }
 
 func (s *WebSocketWorkbenchService) normalizeCreateSession(ctx context.Context, projectID, userID string, connection repository.ConnectionRecord, input CreateWebSocketSessionInput) (repository.CreateWebSocketSessionParams, error) {

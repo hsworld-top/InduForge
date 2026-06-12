@@ -82,17 +82,6 @@
           </div>
         </template>
       </div>
-
-      <el-pagination
-        v-if="pagination.total"
-        class="http-workbench__pager"
-        small
-        layout="prev, pager, next"
-        :current-page="pagination.page"
-        :page-size="pagination.pageSize"
-        :total="pagination.total"
-        @current-change="loadRequests"
-      />
     </aside>
 
     <main class="http-workbench__main">
@@ -138,6 +127,9 @@
             />
           </div>
           <div class="http-workbench__actions">
+            <span v-if="activeTab.draft.dataPointPath" class="http-workbench__datapoint-path">
+              数据点：{{ activeTab.draft.dataPointPath }}
+            </span>
             <el-tooltip content="保存当前接口" placement="top" :show-after="400">
               <el-button
                 size="small"
@@ -160,6 +152,14 @@
             @change="markDirty"
           >
             <el-option v-for="method in methods" :key="method" :label="method" :value="method" />
+          </el-select>
+          <el-select
+            v-model="activeHttpScheme"
+            class="http-workbench__protocol-select"
+            @change="markDirty"
+          >
+            <el-option label="http://" value="http" />
+            <el-option label="https://" value="https" />
           </el-select>
           <el-input
             v-model="activeTab.draft.url"
@@ -185,12 +185,7 @@
             <HttpKeyValueEditor v-model="activeTab.draft.params" @change="markDirty" />
           </el-tab-pane>
           <el-tab-pane label="认证" name="auth">
-            <el-form
-              class="http-workbench__form"
-              label-position="top"
-              size="small"
-              @submit.prevent
-            >
+            <el-form class="http-workbench__form" label-position="top" size="small" @submit.prevent>
               <el-form-item label="认证方式">
                 <el-select
                   v-model="activeTab.draft.auth.type"
@@ -202,10 +197,7 @@
                   <el-option label="Basic Auth" value="basic" />
                 </el-select>
               </el-form-item>
-              <el-form-item
-                v-if="activeTab.draft.auth.type === 'bearer'"
-                label="Token"
-              >
+              <el-form-item v-if="activeTab.draft.auth.type === 'bearer'" label="Token">
                 <el-input
                   v-model="activeTab.draft.auth.token"
                   class="http-workbench__form-control"
@@ -243,18 +235,13 @@
                 <el-radio-button label="none">无</el-radio-button>
                 <el-radio-button label="json"> <IconTablerBraces />json </el-radio-button>
                 <el-radio-button label="raw"> <IconTablerCode />原始 </el-radio-button>
-                <el-radio-button label="form-data">
-                  <IconTablerForms />表单
-                </el-radio-button>
+                <el-radio-button label="form-data"> <IconTablerForms />表单 </el-radio-button>
                 <el-radio-button label="x-www-form-urlencoded">
                   <IconTablerBraces />表单编码
                 </el-radio-button>
               </el-radio-group>
             </div>
-            <div
-              v-if="activeTab.draft.bodyType === 'json'"
-              class="http-workbench__monaco"
-            >
+            <div v-if="activeTab.draft.bodyType === 'json'" class="http-workbench__monaco">
               <MonacoEditor
                 v-model="jsonBodyText"
                 language="json"
@@ -264,10 +251,7 @@
                 @change="handleJsonBodyInput"
               />
             </div>
-            <div
-              v-else-if="activeTab.draft.bodyType === 'raw'"
-              class="http-workbench__monaco"
-            >
+            <div v-else-if="activeTab.draft.bodyType === 'raw'" class="http-workbench__monaco">
               <MonacoEditor
                 v-model="activeTab.draft.body.raw"
                 language="plaintext"
@@ -285,12 +269,7 @@
             <el-empty v-else description="该请求不发送 Body" />
           </el-tab-pane>
           <el-tab-pane label="设置" name="settings">
-            <el-form
-              class="http-workbench__form"
-              label-position="top"
-              size="small"
-              @submit.prevent
-            >
+            <el-form class="http-workbench__form" label-position="top" size="small" @submit.prevent>
               <el-form-item label="超时（毫秒）">
                 <el-input-number
                   v-model="activeTab.draft.settings.timeoutMs"
@@ -309,10 +288,7 @@
                   >
                     跟随重定向
                   </el-checkbox>
-                  <el-checkbox
-                    v-model="activeTab.draft.settings.tlsVerify"
-                    @change="markDirty"
-                  >
+                  <el-checkbox v-model="activeTab.draft.settings.tlsVerify" @change="markDirty">
                     TLS 校验
                   </el-checkbox>
                 </div>
@@ -550,6 +526,7 @@ type RequestDraft = {
   settings: Record<string, any>
   enabled: boolean
   sortOrder: number
+  dataPointPath: string
 }
 
 type HttpTab = {
@@ -595,7 +572,7 @@ const loading = ref(false)
 const saving = ref(false)
 const sending = ref(false)
 const expandedGroups = ref(new Set<string>())
-const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
+const pagination = reactive({ page: 1, pageSize: 1000, total: 0 })
 const groupDialogVisible = ref(false)
 const groupSaving = ref(false)
 const groupForm = reactive({ id: '', name: '', parentId: null as string | null })
@@ -624,7 +601,6 @@ const contextMenu = ref<{
 let searchTimer: number | undefined
 
 const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId.value) || null)
-const config = computed(() => props.connection.config || {})
 const sourceMetaRows = computed(() => [
   { label: '类型', value: 'HTTP' },
   { label: '接口', value: `${pagination.total || 0} 个` },
@@ -695,6 +671,17 @@ const formattedResponseBody = computed(() => {
 const responseHeaders = computed(() =>
   Object.entries(activeTab.value?.response?.headers || {}).map(([key, value]) => ({ key, value })),
 )
+const activeHttpScheme = computed({
+  get() {
+    const url = activeTab.value?.draft.url || ''
+    return url.toLowerCase().startsWith('http://') ? 'http' : 'https'
+  },
+  set(value: 'http' | 'https') {
+    const tab = activeTab.value
+    if (!tab) return
+    tab.draft.url = replaceURLScheme(tab.draft.url, value)
+  },
+})
 
 onMounted(() => {
   reloadWorkbench()
@@ -727,7 +714,7 @@ const loadRequests = async (page = pagination.page) => {
   const res = await dataAPI.getHttpRequests(props.projectId, props.connection.id, params)
   requests.value = res.list || []
   pagination.page = res.pagination?.page || page
-  pagination.pageSize = res.pagination?.pageSize || 20
+  pagination.pageSize = res.pagination?.pageSize || 1000
   pagination.total = res.pagination?.total || 0
 }
 
@@ -1162,6 +1149,14 @@ const DEFAULT_REQUEST_HEADERS: HttpKeyValueRow[] = [
   { enabled: true, key: 'Cache-Control', value: 'no-cache', description: '缓存策略' },
 ]
 
+const replaceURLScheme = (rawUrl: string, scheme: string) => {
+  const url = rawUrl.trim()
+  if (/^[a-z][a-z\d+\-.]*:\/\//i.test(url)) {
+    return url.replace(/^[a-z][a-z\d+\-.]*:\/\//i, `${scheme}://`)
+  }
+  return `${scheme}://${url}`
+}
+
 const createEmptyDraft = (name = 'New Request'): RequestDraft => ({
   name,
   method: 'GET',
@@ -1304,6 +1299,7 @@ const toDraft = (request: HttpRequest): RequestDraft => ({
   },
   enabled: request.enabled,
   sortOrder: request.sortOrder || 0,
+  dataPointPath: request.dataPointPath || '',
 })
 
 const cloneRows = (rows: HttpKeyValueRow[]) => rows.map((row) => ({ ...row }))
@@ -1875,9 +1871,19 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
 }
 
 .http-workbench__actions {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.http-workbench__datapoint-path {
+  max-width: min(360px, 34vw);
+  color: #64748b;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .http-workbench__icon-btn {
@@ -1904,6 +1910,11 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
 
 .http-workbench__method-select {
   width: 118px;
+}
+
+.http-workbench__protocol-select {
+  width: 92px;
+  flex: 0 0 92px;
 }
 
 .http-workbench__config-tabs {

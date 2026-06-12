@@ -70,9 +70,8 @@ func TestProtocolWave1(t *testing.T) {
 	}
 
 	wsConn := mustCreateWebSocketConfig(t, server.URL, token, projectID, map[string]any{
-		"name":  "ws-source-main",
-		"url":   "ws://localhost:8080/ws",
-		"topic": "factory/ws/events",
+		"name":        "ws-source-main",
+		"description": "WebSocket 会话在工作台维护",
 	})
 	if wsConn.Type != "websocket" {
 		t.Fatalf("expected websocket type, got %q", wsConn.Type)

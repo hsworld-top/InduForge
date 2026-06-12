@@ -157,24 +157,18 @@ func (h *ProtocolWave1Handler) CreateWebSocketConfig(w http.ResponseWriter, r *h
 	}
 
 	var request struct {
-		Name                string         `json:"name"`
-		Status              string         `json:"status"`
-		URL                 string         `json:"url"`
-		Topic               *string        `json:"topic"`
-		Headers             map[string]any `json:"headers"`
-		HeartbeatIntervalMS *int           `json:"heartbeatIntervalMs"`
+		Name        string `json:"name"`
+		Status      string `json:"status"`
+		Description string `json:"description"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
 	}
 
 	connection, err := h.service.CreateWebSocketConfig(r.Context(), r.PathValue("projectId"), claims.UserID, service.CreateWebSocketConfigInput{
-		Name:                request.Name,
-		Status:              request.Status,
-		URL:                 request.URL,
-		Topic:               request.Topic,
-		Headers:             request.Headers,
-		HeartbeatIntervalMS: request.HeartbeatIntervalMS,
+		Name:        request.Name,
+		Status:      request.Status,
+		Description: request.Description,
 	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
