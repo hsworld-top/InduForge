@@ -352,65 +352,116 @@
             </template>
 
             <template v-else-if="connectionType === 'opcua'">
-              <div class="connection-dialog__form-grid">
-                <el-form-item label="IP 地址" prop="ip">
-                  <el-input v-model="formData.ip" placeholder="127.0.0.1" />
-                </el-form-item>
-                <el-form-item label="端口">
-                  <el-input v-model.number="formData.port" inputmode="numeric" placeholder="4840" />
-                </el-form-item>
+              <!-- 基础连接配置 -->
+              <div class="connection-dialog__form-section">
+                <div class="connection-dialog__form-section-title">基础连接配置</div>
+                <div class="connection-dialog__form-grid">
+                  <el-form-item label="IP 地址" prop="ip">
+                    <el-input v-model="formData.ip" placeholder="127.0.0.1" />
+                  </el-form-item>
+                  <el-form-item label="端口">
+                    <el-input v-model.number="formData.port" inputmode="numeric" placeholder="4840" />
+                  </el-form-item>
+                </div>
               </div>
-              <div class="connection-dialog__form-grid">
-                <el-form-item label="安全策略">
-                  <el-select v-model="formData.securityPolicy" class="w-full">
-                    <el-option label="None" value="None" />
-                    <el-option label="Basic256Sha256" value="Basic256Sha256" />
-                    <el-option label="Basic256" value="Basic256" />
-                  </el-select>
+
+              <!-- 安全与认证配置 -->
+              <div class="connection-dialog__form-section">
+                <div class="connection-dialog__form-section-title">安全与认证配置</div>
+                <div class="connection-dialog__form-grid">
+                  <el-form-item label="安全策略">
+                    <el-select v-model="formData.securityPolicy" class="w-full">
+                      <el-option label="None" value="None" />
+                      <el-option label="Basic256Sha256" value="Basic256Sha256" />
+                      <el-option label="Basic256" value="Basic256" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="安全模式">
+                    <el-segmented
+                      v-model="formData.securityMode"
+                      :options="opcuaSecurityModeOptions"
+                    />
+                  </el-form-item>
+                </div>
+                <el-form-item label="认证方式">
+                  <el-segmented v-model="formData.authType" :options="opcuaAuthOptions" />
                 </el-form-item>
-                <el-form-item label="安全模式">
-                  <el-segmented
-                    v-model="formData.securityMode"
-                    :options="opcuaSecurityModeOptions"
-                  />
-                </el-form-item>
-              </div>
-              <el-form-item label="认证方式">
-                <el-segmented v-model="formData.authType" :options="opcuaAuthOptions" />
-              </el-form-item>
-              <div
-                v-if="formData.authType === 'username_password'"
-                class="connection-dialog__form-grid"
-              >
-                <el-form-item label="用户名" prop="username">
-                  <el-input v-model="formData.username" placeholder="OPC UA 用户名" />
-                </el-form-item>
-                <el-form-item label="密码">
-                  <el-input
-                    v-model="formData.password"
-                    type="password"
-                    show-password
-                    placeholder="OPC UA 密码"
-                  />
-                </el-form-item>
-              </div>
-              <el-form-item label="采样周期">
-                <el-input
-                  v-model.number="formData.samplingMs"
-                  inputmode="numeric"
-                  placeholder="1000"
+                <div
+                  v-if="formData.authType === 'username_password'"
+                  class="connection-dialog__form-grid"
                 >
-                  <template #append>ms</template>
-                </el-input>
-              </el-form-item>
-              <el-form-item label="扩展参数">
-                <el-input
-                  v-model="formData.optionsText"
-                  type="textarea"
-                  :rows="4"
-                  placeholder='{"namespace":"urn:demo"}'
-                />
-              </el-form-item>
+                  <el-form-item label="用户名" prop="username">
+                    <el-input v-model="formData.username" placeholder="OPC UA 用户名" />
+                  </el-form-item>
+                  <el-form-item label="密码">
+                    <el-input
+                      v-model="formData.password"
+                      type="password"
+                      show-password
+                      placeholder="OPC UA 密码"
+                    />
+                  </el-form-item>
+                </div>
+              </div>
+
+              <!-- SSL/TLS 及高级参数配置 -->
+              <el-collapse v-model="opcuaActiveCollapse" class="connection-dialog__collapse mt-4">
+                <el-collapse-item title="高级参数配置 (含超时与证书)" name="ssl">
+                  <div class="connection-dialog__form-grid mb-4">
+                    <el-form-item label="连接超时">
+                      <el-input v-model.number="formData.connectionTimeoutMs" inputmode="numeric" placeholder="5000">
+                        <template #append>ms</template>
+                      </el-input>
+                    </el-form-item>
+                    <el-form-item label="请求超时">
+                      <el-input v-model.number="formData.requestTimeoutMs" inputmode="numeric" placeholder="5000">
+                        <template #append>ms</template>
+                      </el-input>
+                    </el-form-item>
+                  </div>
+                  <el-form-item label="CA 证书 (服务器)">
+                    <el-input
+                      v-model="formData.sslConfig.ca"
+                      type="textarea"
+                      :rows="4"
+                      placeholder="PEM格式公钥，用于校验 OPC UA 服务器 of 身份"
+                    />
+                  </el-form-item>
+                  <el-form-item label="客户端证书">
+                    <el-input
+                      v-model="formData.sslConfig.cert"
+                      type="textarea"
+                      :rows="4"
+                      placeholder="PEM格式公钥证书，用于双向 SSL 认证时的客户端声明"
+                    />
+                  </el-form-item>
+                  <el-form-item label="客户端私钥">
+                    <el-input
+                      v-model="formData.sslConfig.key"
+                      type="textarea"
+                      :rows="4"
+                      placeholder="PEM格式私钥，与客户端证书成对使用"
+                    />
+                  </el-form-item>
+                  <el-form-item>
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        验证服务器证书
+                        <el-tooltip
+                          content="启用后会校验证书合法性及主机名；自签名证书调试时建议关闭。"
+                          placement="top"
+                        >
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
+                    <el-switch v-model="formData.sslConfig.rejectUnauthorized" />
+                    <span class="connection-dialog__field-inline-tip">
+                      {{ formData.sslConfig.rejectUnauthorized ? '校验证书链与主机名' : '跳过证书校验' }}
+                    </span>
+                  </el-form-item>
+                </el-collapse-item>
+              </el-collapse>
             </template>
 
             <template v-else-if="connectionType === 's7'">
@@ -723,6 +774,7 @@ const submitting = ref(false)
 const lastTestSignature = ref('')
 const emptyFormSignature = ref('')
 const kafkaActiveCollapse = ref([])
+const opcuaActiveCollapse = ref([])
 const testResult = ref({
   status: 'idle',
   title: '尚未测试',
@@ -1140,39 +1192,50 @@ const checklist = computed(() => {
   ]
 })
 
-// 监听连接数据变化（编辑模式）
+
+
+// 监听 OPC UA 的安全模式/安全策略/证书联动
 watch(
-  () => props.connection,
-  (newConnection) => {
-    if (newConnection && props.mode === 'edit') {
-      connectionType.value = newConnection.type
-      if (isBuiltinStoreType(newConnection.type)) {
-        formData.value = normalizeBuiltinFormData(newConnection.type, {
-          name: newConnection.name,
-          ...(newConnection.config || {}),
-        })
-      } else if (newConnection.type === 'relational' && newConnection.relationalConfig) {
-        dbType.value = newConnection.relationalConfig.dbType
-        connectionType.value = dbType.value
-        formData.value = {
-          name: newConnection.name,
-          ...newConnection.relationalConfig,
+  () => [
+    connectionType.value,
+    formData.value?.securityMode,
+    formData.value?.securityPolicy,
+  ] as const,
+  ([type, secMode, secPolicy], oldVal) => {
+    if (type !== 'opcua' || !formData.value) return
+    const [_, oldSecMode, oldSecPolicy] = oldVal || []
+
+    // 1. 安全模式与安全策略的互斥与推导
+    if (secMode !== oldSecMode) {
+      if (secMode === 'none') {
+        if (formData.value.securityPolicy !== 'None') {
+          formData.value.securityPolicy = 'None'
         }
-      } else if (newConnection.type === 'mqtt' && newConnection.mqttConfig) {
-        formData.value = {
-          name: newConnection.name,
-          ...newConnection.mqttConfig,
+      } else if (secMode === 'sign' || secMode === 'signandencrypt') {
+        if (formData.value.securityPolicy === 'None') {
+          formData.value.securityPolicy = 'Basic256Sha256'
         }
-      } else {
-        formData.value = normalizeProtocolFormData(newConnection.type, {
-          name: newConnection.name,
-          ...(newConnection.config || {}),
-        })
       }
-      resetTestState()
+    } else if (secPolicy !== oldSecPolicy) {
+      if (secPolicy === 'None') {
+        if (formData.value.securityMode !== 'none') {
+          formData.value.securityMode = 'none'
+        }
+      } else if (secPolicy === 'Basic256Sha256' || secPolicy === 'Basic256') {
+        if (formData.value.securityMode === 'none') {
+          formData.value.securityMode = 'signandencrypt'
+        }
+      }
+    }
+
+    // 2. 安全模式与证书折叠面板的展开联动
+    if (secMode === 'sign' || secMode === 'signandencrypt') {
+      if (!opcuaActiveCollapse.value.includes('ssl')) {
+        opcuaActiveCollapse.value = [...opcuaActiveCollapse.value, 'ssl']
+      }
     }
   },
-  { immediate: true },
+  { deep: true },
 )
 
 // 监听对话框打开
@@ -1485,7 +1548,16 @@ const getProtocolDefaultConfig = (type) => {
       username: '',
       password: '',
       samplingMs: 1000,
-      optionsText: '{}',
+      sessionName: 'InduForge_Session',
+      namespaceUrl: '',
+      connectionTimeoutMs: 5000,
+      requestTimeoutMs: 5000,
+      sslConfig: {
+        ca: '',
+        cert: '',
+        key: '',
+        rejectUnauthorized: false,
+      },
     },
     s7: {
       name: '',
@@ -1608,8 +1680,23 @@ const normalizeProtocolFormData = (type, config) => {
   if (type === 'kafka' && config.options && typeof config.options === 'object') {
     Object.assign(data, normalizeKafkaOptionsForForm(config.options))
   }
-  if (type === 'opcua' && config.endpoint) {
-    Object.assign(data, parseOpcuaEndpoint(config.endpoint))
+  if (type === 'opcua') {
+    if (config.endpoint) {
+      Object.assign(data, parseOpcuaEndpoint(config.endpoint))
+    }
+    const options = config.options || {}
+    data.sessionName = options.sessionName || 'InduForge_Session'
+    data.namespaceUrl = options.namespaceUrl || ''
+    data.connectionTimeoutMs = options.connectionTimeoutMs || 5000
+    data.requestTimeoutMs = options.requestTimeoutMs || 5000
+    
+    const ssl = options.sslConfig || {}
+    data.sslConfig = {
+      ca: ssl.ca || '',
+      cert: ssl.cert || '',
+      key: ssl.key || '',
+      rejectUnauthorized: ssl.rejectUnauthorized === true,
+    }
   }
   if (['s7', 'modbus'].includes(type) && config.host) {
     data.ip = config.host
@@ -1680,7 +1767,19 @@ const normalizeProtocolSubmitConfig = (type, config) => {
     return
   }
   if (type === 'opcua') {
-    config.options = parseOptionalJsonObject(config.optionsText, '扩展参数')
+    const defaultSessionName = `InduForge-Client-${config.name || 'OPCUA'}`
+    config.options = {
+      sessionName: config.sessionName === 'InduForge_Session' || !config.sessionName ? defaultSessionName : config.sessionName,
+      namespaceUrl: config.namespaceUrl || '',
+      connectionTimeoutMs: Number(config.connectionTimeoutMs) || 5000,
+      requestTimeoutMs: Number(config.requestTimeoutMs) || 5000,
+      sslConfig: {
+        ca: config.sslConfig?.ca || '',
+        cert: config.sslConfig?.cert || '',
+        key: config.sslConfig?.key || '',
+        rejectUnauthorized: config.sslConfig?.rejectUnauthorized === true,
+      },
+    }
     config.endpoint = buildOpcuaEndpoint(config.ip, config.port)
     if (config.authType !== 'username_password') {
       delete config.username
@@ -1688,7 +1787,11 @@ const normalizeProtocolSubmitConfig = (type, config) => {
     }
     delete config.ip
     delete config.port
-    delete config.optionsText
+    delete config.sessionName
+    delete config.namespaceUrl
+    delete config.connectionTimeoutMs
+    delete config.requestTimeoutMs
+    delete config.sslConfig
     return
   }
   if (type === 's7') {
@@ -1784,6 +1887,41 @@ const formatTimeout = (timeout) => {
   if (!timeout) return '未设置'
   return `${timeout}ms`
 }
+
+// 监听连接数据变化（编辑模式）
+watch(
+  () => props.connection,
+  (newConnection) => {
+    if (newConnection && props.mode === 'edit') {
+      connectionType.value = newConnection.type
+      if (isBuiltinStoreType(newConnection.type)) {
+        formData.value = normalizeBuiltinFormData(newConnection.type, {
+          name: newConnection.name,
+          ...(newConnection.config || {}),
+        })
+      } else if (newConnection.type === 'relational' && newConnection.relationalConfig) {
+        dbType.value = newConnection.relationalConfig.dbType
+        connectionType.value = dbType.value
+        formData.value = {
+          name: newConnection.name,
+          ...newConnection.relationalConfig,
+        }
+      } else if (newConnection.type === 'mqtt' && newConnection.mqttConfig) {
+        formData.value = {
+          name: newConnection.name,
+          ...newConnection.mqttConfig,
+        }
+      } else {
+        formData.value = normalizeProtocolFormData(newConnection.type, {
+          name: newConnection.name,
+          ...(newConnection.config || {}),
+        })
+      }
+      resetTestState()
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>

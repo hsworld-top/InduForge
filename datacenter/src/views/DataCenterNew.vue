@@ -24,6 +24,7 @@
         :connection="activeWorkbenchConnection"
         :project-id="String(projectId)"
         @back="handleWorkbenchBack"
+        @update-connection="loadConnections"
       />
 
       <AccessSourceWorkspace

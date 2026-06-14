@@ -2,7 +2,7 @@
   <section class="opcua-workbench">
     <aside class="opcua-workbench__side">
       <WorkbenchSourceHeader
-        :title="connection.name || '未命名 OPC UA 接入源'"
+        :title="localConnection.name || '未命名 OPC UA 接入源'"
         fallback-title="未命名 OPC UA 接入源"
         :meta="sourceMetaRows"
         @back="$emit('back')"
@@ -84,6 +84,15 @@
           >
             <IconTablerRefresh />
           </button>
+          <button
+            type="button"
+            class="opcua-workbench__icon-action"
+            title="连接与会话配置"
+            aria-label="连接与会话配置"
+            @click="showEditDialog = true"
+          >
+            <IconTablerSettings />
+          </button>
         </div>
         <el-input
           v-model="nodeKeyword"
@@ -144,11 +153,18 @@
       :scope-label="validationScopeLabel"
       @locate="locateNode"
     />
+    <ConnectionDialog
+      v-model="showEditDialog"
+      mode="edit"
+      :connection="localConnection"
+      :project-id="projectId"
+      @submit="handleEditConnectionSubmit"
+    />
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dataAPI from '@/api/data.api'
 import { getApiErrorMessage } from '@/utils/request'
@@ -173,6 +189,8 @@ import IconTablerChecklist from '~icons/tabler/checklist'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerUpload from '~icons/tabler/upload'
+import IconTablerSettings from '~icons/tabler/settings'
+import ConnectionDialog from '@/components/dialogs/ConnectionDialog.vue'
 
 type AccessSourceConnection = {
   id: string
@@ -187,9 +205,77 @@ const props = defineProps<{
   projectId: string
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (event: 'back'): void
+  (event: 'update-connection'): void
 }>()
+
+const localConnection = ref<AccessSourceConnection>({ ...props.connection })
+
+watch(
+  () => props.connection,
+  (newVal) => {
+    if (newVal) {
+      localConnection.value = { ...newVal }
+    }
+  },
+  { deep: true }
+)
+
+const showEditDialog = ref(false)
+const isSavingConnection = ref(false)
+
+const handleEditConnectionSubmit = async (data: any) => {
+  isSavingConnection.value = true
+  try {
+    await dataAPI.updateConnection(props.projectId, props.connection.id, {
+      name: data.name,
+      type: data.type,
+      config: data.config,
+    })
+    ElMessage.success('连接配置更新成功')
+    showEditDialog.value = false
+    
+    // 原地更新本地状态，实现 UI 的即时零延迟刷新
+    const buildOpcuaEndpoint = (ip: any, port: any) => {
+      const safeIp = String(ip || '').trim()
+      const safePort = Number(port) || 4840
+      return `opc.tcp://${safeIp}:${safePort}`
+    }
+    localConnection.value = {
+      ...localConnection.value,
+      name: data.name,
+      config: {
+        ...localConnection.value.config,
+        ...data.config,
+        endpoint: buildOpcuaEndpoint(data.config.ip, data.config.port),
+      },
+    }
+
+    emit('update-connection')
+
+    if (session.connected.value) {
+      ElMessage.info('检测到当前开发态会话已连接，正在自动重连...')
+      try {
+        await session.disconnect()
+      } catch (err) {
+        console.error('断开旧会话失败:', err)
+      }
+      setTimeout(async () => {
+        try {
+          await session.connect()
+          ElMessage.success('自动重连成功')
+        } catch (err) {
+          ElMessage.error(getApiErrorMessage(err, '自动重连失败，请手动重新连接'))
+        }
+      }, 500)
+    }
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '更新连接配置失败'))
+  } finally {
+    isSavingConnection.value = false
+  }
+}
 
 const groups = ref<OpcuaNodeGroup[]>([])
 const nodes = ref<OpcuaNode[]>([])
@@ -218,7 +304,7 @@ const session = useProtocolDevSession({
     dataAPI.closeOpcuaDevSession(props.projectId, props.connection.id, sessionId),
 })
 
-const config = computed(() => props.connection.config || {})
+const config = computed(() => localConnection.value.config || {})
 const endpointText = computed(() =>
   String(config.value.endpoint || config.value.url || '未配置 endpoint'),
 )

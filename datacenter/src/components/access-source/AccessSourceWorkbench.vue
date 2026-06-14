@@ -7,6 +7,7 @@
         :connection="connection"
         :project-id="projectId"
         @back="$emit('back')"
+        @update-connection="$emit('update-connection')"
       />
     </div>
   </div>
@@ -46,6 +47,7 @@ const props = defineProps<{
 
 defineEmits<{
   (event: 'back'): void
+  (event: 'update-connection'): void
 }>()
 
 /* 按协议类型选对应子壳 */
