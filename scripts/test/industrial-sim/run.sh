@@ -191,8 +191,28 @@ create_default_venv() {
   fi
 }
 
+ensure_default_venv_pip() {
+  if "${DEFAULT_VENV_PYTHON}" -m pip --version >/dev/null 2>&1; then
+    return
+  fi
+
+  echo "默认虚拟环境缺少 pip，正在尝试修复：${DEFAULT_VENV_DIR}"
+  # Ubuntu 的最小 Python 环境可能创建出不含 pip 的 venv；优先用标准 ensurepip 补齐。
+  if ! "${DEFAULT_VENV_PYTHON}" -m ensurepip --upgrade >/dev/null 2>&1; then
+    echo "默认虚拟环境缺少 pip，且 ensurepip 不可用。" >&2
+    echo "WSL Ubuntu 可先执行：sudo apt install -y python3-venv python3-pip，然后删除 ${DEFAULT_VENV_DIR} 后重试。" >&2
+    exit 1
+  fi
+
+  if ! "${DEFAULT_VENV_PYTHON}" -m pip --version >/dev/null 2>&1; then
+    echo "默认虚拟环境 pip 修复后仍不可用，请删除 ${DEFAULT_VENV_DIR} 后重试。" >&2
+    exit 1
+  fi
+}
+
 install_requirements() {
   echo "正在安装工业协议模拟依赖：${REQUIREMENTS_FILE}"
+  ensure_default_venv_pip
   if ! "${DEFAULT_VENV_PYTHON}" -m pip install -r "${REQUIREMENTS_FILE}"; then
     echo "依赖安装失败，请检查 WSL 网络或 pip 源，然后重试。" >&2
     exit 1
