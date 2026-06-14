@@ -907,36 +907,40 @@ async function connectActive() {
     return
   }
 
-  closeStream(tab)
-  tab.streamMessages = []
-  tab.streamError = ''
-  tab.streamStatus = 'connecting'
+  beginConnect(tab)
+  const epoch = tab.streamEpoch
   const timeoutMs = Math.max(1000, Math.min(30000, tab.draft.settings.timeoutMs || 5000))
   const socket = new WebSocket(buildStreamURL(props.projectId, sessionId, token))
   tab.socket = socket
   tab.connectTimer = setTimeout(() => {
-    if (tab.socket !== socket || tab.streamStatus !== 'connecting') return
+    if (tab.streamEpoch !== epoch || tab.socket !== socket || tab.streamStatus !== 'connecting') {
+      return
+    }
     setStreamFailure(tab, `连接超时（${timeoutMs} ms）`)
+    detachStreamSocket(tab, socket)
     socket.close()
   }, timeoutMs)
-  socket.onmessage = (event) => handleStreamMessage(tab, event.data)
+  socket.onmessage = (event) => {
+    if (tab.streamEpoch !== epoch) return
+    handleStreamMessage(tab, event.data)
+  }
   socket.onerror = () => {
-    if (tab.streamStatus !== 'connecting') return
+    if (tab.streamEpoch !== epoch || tab.streamStatus !== 'connecting') return
     setStreamFailure(tab, tab.streamError || 'WebSocket 连接异常')
   }
   socket.onclose = (event) => {
+    if (tab.streamEpoch !== epoch) return
     clearConnectTimer(tab)
-    if (tab.socket === socket) {
-      tab.socket = null
-      if (tab.streamStatus === 'connecting') {
-        const reason =
-          tab.streamError ||
-          normalizeCloseReason(event) ||
-          `连接失败（code ${event.code || 1006}）`
-        setStreamFailure(tab, reason)
-      } else if (tab.streamStatus !== 'error') {
-        tab.streamStatus = 'idle'
-      }
+    if (tab.socket !== socket) return
+    tab.socket = null
+    if (tab.streamStatus === 'connecting') {
+      const reason =
+        tab.streamError ||
+        normalizeCloseReason(event) ||
+        `连接失败（code ${event.code || 1006}）`
+      setStreamFailure(tab, reason, !tab.streamError)
+    } else if (tab.streamStatus !== 'error') {
+      tab.streamStatus = 'idle'
     }
   }
 }
@@ -1029,8 +1033,9 @@ function beginConnect(tab: SessionTab) {
   tab.streamEpoch += 1
   clearConnectTimer(tab)
   if (tab.socket) {
-    detachStreamSocket(tab, tab.socket)
-    tab.socket.close()
+    const stale = tab.socket
+    detachStreamSocket(tab, stale)
+    stale.close()
   }
   tab.streamMessages = []
   tab.streamError = ''
@@ -1041,8 +1046,9 @@ function closeStream(tab: SessionTab) {
   tab.streamEpoch += 1
   clearConnectTimer(tab)
   if (tab.socket) {
-    detachStreamSocket(tab, tab.socket)
-    tab.socket.close()
+    const stale = tab.socket
+    detachStreamSocket(tab, stale)
+    stale.close()
   }
   if (tab.streamStatus === 'connected' || tab.streamStatus === 'connecting') {
     tab.streamStatus = 'idle'
@@ -1119,6 +1125,11 @@ function setStreamFailure(tab: SessionTab, message: string, notify = true) {
   const shouldNotify = notify && (tab.streamStatus !== 'error' || tab.streamError !== reason)
   tab.streamStatus = 'error'
   tab.streamError = reason
+  if (tab.socket) {
+    const stale = tab.socket
+    detachStreamSocket(tab, stale)
+    stale.close()
+  }
   if (shouldNotify) ElMessage.error(reason)
 }
 
