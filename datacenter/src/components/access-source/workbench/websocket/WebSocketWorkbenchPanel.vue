@@ -68,7 +68,7 @@
             :key="session.id"
             type="button"
             class="ws-workbench__session-node"
-            :class="{ 'is-active': activeTabId === session.id }"
+            :class="{ 'is-active': activeTabId === String(session.id) }"
             @click="openSession(session)"
             @contextmenu.prevent.stop="openSessionMenu($event, session)"
           >
@@ -163,18 +163,20 @@
             @input="markDirty"
           />
           <el-tooltip
-            :content="isActiveConnected ? '断开连接' : '连接并监听消息'"
+            :content="connectButtonTooltip"
             placement="top"
             :show-after="400"
           >
             <el-button
-              type="primary"
+              :type="connectButtonType"
               :loading="activeTab.streamStatus === 'connecting'"
-              class="ws-workbench__icon-btn"
+              class="ws-workbench__icon-btn ws-workbench__connect-btn"
+              :class="`is-${activeTab.streamStatus}`"
               :aria-label="isActiveConnected ? '断开连接' : '连接'"
               @click="connectActive"
             >
-              <IconTablerPlugConnected />
+              <IconTablerPlugConnected v-if="isActiveConnected" />
+              <IconTablerPlugConnectedX v-else-if="activeTab.streamStatus !== 'connecting'" />
             </el-button>
           </el-tooltip>
         </div>
@@ -284,17 +286,43 @@
           </el-tab-pane>
         </el-tabs>
 
-        <section class="ws-workbench__response">
+        <section class="ws-workbench__response" :style="responsePanelStyle">
+          <div
+            class="ws-workbench__response-resizer"
+            role="separator"
+            aria-orientation="horizontal"
+            title="拖拽调整消息流高度，双击恢复默认"
+            @mousedown.prevent="startResponseResize"
+            @dblclick="resetResponseHeight"
+          />
           <header>
             <div>
               <strong>消息流</strong>
-              <span>{{ streamStatusText(activeTab) }}</span>
+              <WorkbenchStatusPill :label="streamStatusLabel" :tone="streamStatusTone" />
             </div>
           </header>
-          <div v-if="activeTab.streamMessages.length === 0" class="ws-workbench__empty-response">
-            连接后持续显示 WebSocket 消息
-          </div>
-          <div v-else class="ws-workbench__messages">
+          <div class="ws-workbench__response-body">
+            <div
+              v-show="activeTab.streamStatus === 'error'"
+              class="ws-workbench__error-response"
+            >
+              <IconTablerAlertTriangle />
+              <strong>连接失败</strong>
+              <span>{{ activeTab.streamError || '未知错误' }}</span>
+            </div>
+            <div
+              v-show="activeTab.streamStatus !== 'error' && activeTab.streamMessages.length === 0"
+              class="ws-workbench__empty-response"
+            >
+              {{
+                activeTab.streamStatus === 'connected'
+                  ? '已连接，等待消息...'
+                  : activeTab.streamStatus === 'connecting'
+                    ? '连接中...'
+                    : '连接后持续显示 WebSocket 消息'
+              }}
+            </div>
+            <div v-show="activeTab.streamMessages.length > 0" class="ws-workbench__messages">
             <article
               v-for="(message, index) in activeTab.streamMessages"
               :key="index"
@@ -313,6 +341,7 @@
             <pre v-if="activeTab.streamError" class="ws-workbench__diagnostic">{{
               activeTab.streamError
             }}</pre>
+            </div>
           </div>
         </section>
       </div>
@@ -336,6 +365,45 @@
       @submit="saveGroup"
     />
 
+    <DcDialog
+      v-model="moveDialogVisible"
+      :title="moveTargetType === 'group' ? '移动分组' : '移动会话'"
+      width="420px"
+      :close-disabled="moveSaving"
+    >
+      <el-form label-position="top" class="ws-workbench__move-form" @submit.prevent>
+        <el-form-item label="目标分组">
+          <el-select
+            v-model="moveTargetGroupId"
+            class="ws-workbench__move-select"
+            clearable
+            placeholder="根目录"
+          >
+            <el-option label="根目录" :value="null" />
+            <el-option
+              v-for="group in allGroupOptions"
+              :key="group.id"
+              :label="group.label"
+              :value="group.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="ws-workbench__move-footer">
+          <el-button @click="moveDialogVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="moveSaving"
+            :disabled="!canMoveTarget"
+            @click="moveTarget"
+          >
+            移动
+          </el-button>
+        </div>
+      </template>
+    </DcDialog>
+
     <Teleport to="body">
       <div
         v-if="contextMenu.visible"
@@ -357,6 +425,22 @@
             <span>打开会话</span>
           </button>
           <button
+            v-if="contextMenu.type === 'session'"
+            type="button"
+            @click="emitContextAction('duplicate')"
+          >
+            <IconTablerCopy class="ws-workbench__menu-icon" />
+            <span>复制会话</span>
+          </button>
+          <button
+            v-if="contextMenu.type === 'session'"
+            type="button"
+            @click="emitContextAction('move')"
+          >
+            <IconTablerFolderSymlink class="ws-workbench__menu-icon" />
+            <span>移动到分组</span>
+          </button>
+          <button
             v-if="contextMenu.type === 'group'"
             type="button"
             @click="emitContextAction('create-child')"
@@ -372,9 +456,31 @@
             <IconTablerPencil class="ws-workbench__menu-icon" />
             <span>编辑分组</span>
           </button>
-          <button type="button" class="is-danger" @click="emitContextAction('delete')">
+          <button
+            v-if="contextMenu.type === 'group'"
+            type="button"
+            @click="emitContextAction('move')"
+          >
+            <IconTablerFolderSymlink class="ws-workbench__menu-icon" />
+            <span>移动分组</span>
+          </button>
+          <button
+            v-if="contextMenu.type === 'group'"
+            type="button"
+            class="is-danger"
+            @click="emitContextAction('delete')"
+          >
             <IconTablerTrash class="ws-workbench__menu-icon" />
-            <span>{{ contextMenu.type === 'group' ? '删除分组' : '删除会话' }}</span>
+            <span>删除分组</span>
+          </button>
+          <button
+            v-if="contextMenu.type === 'session'"
+            type="button"
+            class="is-danger"
+            @click="emitContextAction('delete')"
+          >
+            <IconTablerTrash class="ws-workbench__menu-icon" />
+            <span>删除</span>
           </button>
         </div>
       </div>
@@ -391,6 +497,7 @@ import {
   onMounted,
   reactive,
   ref,
+  watch,
   type PropType,
 } from 'vue'
 import {
@@ -402,20 +509,26 @@ import {
   ElTable,
   ElTableColumn,
 } from 'element-plus'
+import IconTablerAlertTriangle from '~icons/tabler/alert-triangle'
 import IconTablerChevronRight from '~icons/tabler/chevron-right'
+import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerDeviceFloppy from '~icons/tabler/device-floppy'
 import IconTablerFolder from '~icons/tabler/folder'
 import IconTablerFolderPlus from '~icons/tabler/folder-plus'
+import IconTablerFolderSymlink from '~icons/tabler/folder-symlink'
 import IconTablerLoader2 from '~icons/tabler/loader-2'
 import IconTablerPencil from '~icons/tabler/pencil'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerPlugConnected from '~icons/tabler/plug-connected'
+import IconTablerPlugConnectedX from '~icons/tabler/plug-connected-x'
 import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerTrash from '~icons/tabler/trash'
 import IconTablerWebhook from '~icons/tabler/webhook'
 import IconTablerX from '~icons/tabler/x'
 import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
 import WorkbenchGroupDialog from '@/components/workbench/WorkbenchGroupDialog.vue'
+import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
+import DcDialog from '@/components/shared/DcDialog.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 import * as dataAPI from '@/api/data.api'
 import type {
@@ -428,6 +541,7 @@ import type {
 } from '@/api/schemas/websocket-workbench.schema'
 import { Storage } from '@/utils/storage'
 import { getApiErrorMessage } from '@/utils/request'
+import { useWorkbenchBottomPanelResize } from '@/composables/useWorkbenchBottomPanelResize'
 
 type AccessSourceConnection = {
   id: string
@@ -478,6 +592,8 @@ type SessionTab = {
   dirty: boolean
   draft: SessionDraft
   socket: WebSocket | null
+  streamEpoch: number
+  connectTimer: ReturnType<typeof setTimeout> | null
   streamMessages: WebSocketPreviewMessage[]
   streamStatus: 'idle' | 'connecting' | 'connected' | 'error'
   streamError: string
@@ -495,6 +611,15 @@ type WebSocketSessionGroupNode = WebSocketSessionGroup & {
 const props = defineProps<{ connection: AccessSourceConnection; projectId: string }>()
 defineEmits<{ (event: 'back'): void }>()
 
+const {
+  panelStyle: responsePanelStyle,
+  startResize: startResponseResize,
+  resetHeight: resetResponseHeight,
+} = useWorkbenchBottomPanelResize({
+  defaultHeight: 320,
+  bodyClass: 'ws-workbench--resizing-panel',
+})
+
 const loading = ref(false)
 const saving = ref(false)
 const groupSaving = ref(false)
@@ -510,12 +635,18 @@ const messageEditorOptions = {
 }
 const groups = ref<WebSocketSessionGroup[]>([])
 const sessions = ref<WebSocketSession[]>([])
-const expandedGroups = reactive(new Set<string>(['__ungrouped']))
+const expandedGroups = ref(new Set<string>())
 const pagination = reactive({ page: 1, pageSize: 1000, total: 0, totalPages: 0 })
 const tabs = ref<SessionTab[]>([])
 const activeTabId = ref('')
 const groupDialog = reactive({ visible: false, id: '', name: '', parentId: '' })
 const groupDialogRef = ref<InstanceType<typeof WorkbenchGroupDialog> | null>(null)
+const moveDialogVisible = ref(false)
+const moveSaving = ref(false)
+const moveTargetType = ref<'session' | 'group'>('session')
+const movingSession = ref<WebSocketSession | null>(null)
+const movingGroup = ref<WebSocketSessionGroupNode | null>(null)
+const moveTargetGroupId = ref<string | null>(null)
 const contextMenu = ref<{
   visible: boolean
   type: 'session' | 'group' | null
@@ -531,6 +662,7 @@ const contextMenu = ref<{
   session: null,
   group: null,
 })
+let searchTimer: number | undefined
 
 const sourceMetaRows = computed(() => [
   { label: '类型', value: 'WebSocket' },
@@ -538,6 +670,32 @@ const sourceMetaRows = computed(() => [
 ])
 const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId.value))
 const isActiveConnected = computed(() => activeTab.value?.streamStatus === 'connected')
+const connectButtonType = computed(() => {
+  const status = activeTab.value?.streamStatus
+  if (status === 'connected') return 'success'
+  if (status === 'error') return 'danger'
+  return 'primary'
+})
+const connectButtonTooltip = computed(() => {
+  const tab = activeTab.value
+  if (!tab) return '连接'
+  if (tab.streamStatus === 'connected') return '断开连接'
+  if (tab.streamStatus === 'connecting') return '连接中...'
+  if (tab.streamStatus === 'error') return tab.streamError || '连接失败，点击重试'
+  return '连接'
+})
+const streamStatusLabel = computed(() => {
+  const tab = activeTab.value
+  if (!tab) return '未连接'
+  return streamStatusText(tab)
+})
+const streamStatusTone = computed<'neutral' | 'success' | 'warning' | 'danger' | 'info'>(() => {
+  const status = activeTab.value?.streamStatus
+  if (status === 'connected') return 'success'
+  if (status === 'connecting') return 'info'
+  if (status === 'error') return 'danger'
+  return 'neutral'
+})
 const activeUrlScheme = computed({
   get() {
     const url = activeTab.value?.draft.url || ''
@@ -550,11 +708,30 @@ const activeUrlScheme = computed({
   },
 })
 const sessionTree = computed(() => buildWebSocketSessionTree(groups.value, sessions.value))
+const allGroupOptions = computed(() =>
+  flattenWebSocketGroups(
+    groups.value,
+    moveTargetType.value === 'group' ? collectWebSocketGroupIds(movingGroup.value) : new Set(),
+  ),
+)
 const groupOptions = computed(() =>
-  flattenWebSocketGroups(sessionTree.value.groups).map((group) => ({
-    id: String(group.id),
-    label: group.label,
-  })),
+  flattenWebSocketGroups(
+    groups.value,
+    groupDialog.id ? collectWebSocketGroupIds(findWebSocketGroupNode(groupDialog.id)) : new Set(),
+  ),
+)
+const movingSessionGroupId = computed(() =>
+  movingSession.value?.groupId ? String(movingSession.value.groupId) : null,
+)
+const movingGroupParentId = computed(() =>
+  movingGroup.value?.parentId ? String(movingGroup.value.parentId) : null,
+)
+const canMoveTarget = computed(
+  () =>
+    !moveSaving.value &&
+    (moveTargetType.value === 'session'
+      ? Boolean(movingSession.value) && moveTargetGroupId.value !== movingSessionGroupId.value
+      : Boolean(movingGroup.value) && moveTargetGroupId.value !== movingGroupParentId.value),
 )
 const editingGroup = computed(() =>
   groupDialog.id
@@ -570,6 +747,11 @@ onMounted(() => {
   reloadWorkbench()
 })
 
+watch(search, () => {
+  window.clearTimeout(searchTimer)
+  searchTimer = window.setTimeout(() => loadSessions(1), 250)
+})
+
 onBeforeUnmount(() => {
   tabs.value.forEach(closeStream)
 })
@@ -581,7 +763,9 @@ async function reloadWorkbench() {
 async function loadGroups() {
   const result = await dataAPI.getWebSocketSessionGroups(props.projectId, props.connection.id)
   groups.value = result.list
-  groups.value.forEach((group) => expandedGroups.add(String(group.id)))
+  const next = new Set(expandedGroups.value)
+  groups.value.forEach((group) => next.add(String(group.id)))
+  expandedGroups.value = next
 }
 
 async function loadSessions(page = pagination.page) {
@@ -602,8 +786,10 @@ async function loadSessions(page = pagination.page) {
 }
 
 function toggleGroup(id: string) {
-  if (expandedGroups.has(id)) expandedGroups.delete(id)
-  else expandedGroups.add(id)
+  const next = new Set(expandedGroups.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  expandedGroups.value = next
 }
 
 function groupName(id?: string | null) {
@@ -617,7 +803,7 @@ function createDraftSession() {
     id,
     connectionId: props.connection.id,
     groupId: null,
-    name: '新建会话',
+    name: generateUniqueDraftName(),
     url: '',
   })
   tabs.value.push(createSessionTab(id, true, true, draft))
@@ -639,15 +825,39 @@ function activateTab(id: string) {
   activeTabId.value = id
 }
 
+const isPristineNewDraft = (draft: SessionDraft): boolean => {
+  if (draft.id && !String(draft.id).startsWith('draft-')) return false
+  if (draft.name && !/^新建会话\s+\d+$/.test(draft.name)) return false
+  if (draft.url) return false
+  if (draft.headers.length > 0) return false
+  if (draft.auth.type !== 'none') return false
+  if (draft.protocols.length > 0) return false
+  if (draft.messages.some((row) => String(row.payload || '').trim())) return false
+  if (draft.settings.timeoutMs !== 5000) return false
+  if (draft.settings.tlsVerify !== true) return false
+  return true
+}
+
 async function closeTab(id: string) {
-  const tab = tabs.value.find((item) => item.id === id)
-  if (!tab) return
-  if (tab.dirty) {
-    await ElMessageBox.confirm('当前会话有未保存改动，确认关闭？', '关闭会话', { type: 'warning' })
+  const index = tabs.value.findIndex((item) => item.id === id)
+  if (index < 0) return
+  const tab = tabs.value[index]
+  if (tab.dirty && !isPristineNewDraft(tab.draft)) {
+    try {
+      await ElMessageBox.confirm('当前会话有未保存改动，关闭后会丢失。', '关闭会话', {
+        confirmButtonText: '放弃',
+        cancelButtonText: '取消',
+        type: 'warning',
+      })
+    } catch {
+      return
+    }
   }
   closeStream(tab)
-  tabs.value = tabs.value.filter((item) => item.id !== id)
-  if (activeTabId.value === id) activeTabId.value = tabs.value[0]?.id || ''
+  tabs.value.splice(index, 1)
+  if (activeTabId.value === id) {
+    activeTabId.value = tabs.value[Math.max(0, index - 1)]?.id || ''
+  }
 }
 
 function markDirty() {
@@ -701,20 +911,32 @@ async function connectActive() {
   tab.streamMessages = []
   tab.streamError = ''
   tab.streamStatus = 'connecting'
+  const timeoutMs = Math.max(1000, Math.min(30000, tab.draft.settings.timeoutMs || 5000))
   const socket = new WebSocket(buildStreamURL(props.projectId, sessionId, token))
   tab.socket = socket
-  socket.onopen = () => {
-    tab.streamStatus = 'connected'
-  }
+  tab.connectTimer = setTimeout(() => {
+    if (tab.socket !== socket || tab.streamStatus !== 'connecting') return
+    setStreamFailure(tab, `连接超时（${timeoutMs} ms）`)
+    socket.close()
+  }, timeoutMs)
   socket.onmessage = (event) => handleStreamMessage(tab, event.data)
   socket.onerror = () => {
-    tab.streamStatus = 'error'
-    tab.streamError = 'WebSocket 工作台连接异常'
+    if (tab.streamStatus !== 'connecting') return
+    setStreamFailure(tab, tab.streamError || 'WebSocket 连接异常')
   }
-  socket.onclose = () => {
+  socket.onclose = (event) => {
+    clearConnectTimer(tab)
     if (tab.socket === socket) {
       tab.socket = null
-      if (tab.streamStatus !== 'error') tab.streamStatus = 'idle'
+      if (tab.streamStatus === 'connecting') {
+        const reason =
+          tab.streamError ||
+          normalizeCloseReason(event) ||
+          `连接失败（code ${event.code || 1006}）`
+        setStreamFailure(tab, reason)
+      } else if (tab.streamStatus !== 'error') {
+        tab.streamStatus = 'idle'
+      }
     }
   }
 }
@@ -737,12 +959,29 @@ async function saveGroup(value: { name: string; parentId: string | null }) {
   groupSaving.value = true
   try {
     const payload = { name: value.name, parentId: value.parentId || null }
-    if (groupDialog.id)
-      await dataAPI.updateWebSocketSessionGroup(props.projectId, groupDialog.id, payload)
-    else await dataAPI.createWebSocketSessionGroup(props.projectId, props.connection.id, payload)
+    let savedGroup: WebSocketSessionGroup | null = null
+    if (groupDialog.id) {
+      savedGroup = await dataAPI.updateWebSocketSessionGroup(
+        props.projectId,
+        groupDialog.id,
+        payload,
+      )
+    } else {
+      savedGroup = await dataAPI.createWebSocketSessionGroup(
+        props.projectId,
+        props.connection.id,
+        payload,
+      )
+    }
     groupDialogRef.value?.closeSilently()
     groupDialog.visible = false
     await loadGroups()
+    if (savedGroup?.id) {
+      const next = new Set(expandedGroups.value)
+      next.add(String(savedGroup.id))
+      if (savedGroup.parentId) next.add(String(savedGroup.parentId))
+      expandedGroups.value = next
+    }
   } finally {
     groupSaving.value = false
   }
@@ -760,6 +999,8 @@ function createSessionTab(
     dirty,
     draft,
     socket: null,
+    streamEpoch: 0,
+    connectTimer: null,
     streamMessages: [],
     streamStatus: 'idle',
     streamError: '',
@@ -768,10 +1009,40 @@ function createSessionTab(
   }
 }
 
-function closeStream(tab: SessionTab) {
+function clearConnectTimer(tab: SessionTab) {
+  if (tab.connectTimer) {
+    clearTimeout(tab.connectTimer)
+    tab.connectTimer = null
+  }
+}
+
+function detachStreamSocket(tab: SessionTab, socket: WebSocket) {
+  if (tab.socket !== socket) return
+  tab.socket = null
+  socket.onopen = null
+  socket.onmessage = null
+  socket.onerror = null
+  socket.onclose = null
+}
+
+function beginConnect(tab: SessionTab) {
+  tab.streamEpoch += 1
+  clearConnectTimer(tab)
   if (tab.socket) {
+    detachStreamSocket(tab, tab.socket)
     tab.socket.close()
-    tab.socket = null
+  }
+  tab.streamMessages = []
+  tab.streamError = ''
+  tab.streamStatus = 'connecting'
+}
+
+function closeStream(tab: SessionTab) {
+  tab.streamEpoch += 1
+  clearConnectTimer(tab)
+  if (tab.socket) {
+    detachStreamSocket(tab, tab.socket)
+    tab.socket.close()
   }
   if (tab.streamStatus === 'connected' || tab.streamStatus === 'connecting') {
     tab.streamStatus = 'idle'
@@ -799,12 +1070,13 @@ function handleStreamMessage(tab: SessionTab, rawData: string) {
       return
     }
     if (envelope.type === 'error') {
-      tab.streamStatus = 'error'
-      tab.streamError = envelope.message || 'WebSocket 监听失败'
+      setStreamFailure(tab, envelope.message || 'WebSocket 连接失败')
       return
     }
     if (envelope.type === 'status' && envelope.status === 'connected') {
+      clearConnectTimer(tab)
       tab.streamStatus = 'connected'
+      tab.streamError = ''
     }
   } catch {
     tab.streamMessages.push({
@@ -837,9 +1109,27 @@ function sendActiveMessage() {
   try {
     tab.socket.send(payload)
   } catch (error) {
-    tab.streamStatus = 'error'
-    tab.streamError = error instanceof Error ? error.message : 'WebSocket 发送消息失败'
+    setStreamFailure(tab, error instanceof Error ? error.message : 'WebSocket 发送消息失败')
   }
+}
+
+function setStreamFailure(tab: SessionTab, message: string, notify = true) {
+  clearConnectTimer(tab)
+  const reason = message.trim() || 'WebSocket 连接失败'
+  const shouldNotify = notify && (tab.streamStatus !== 'error' || tab.streamError !== reason)
+  tab.streamStatus = 'error'
+  tab.streamError = reason
+  if (shouldNotify) ElMessage.error(reason)
+}
+
+function normalizeCloseReason(event: CloseEvent) {
+  const reason = event.reason?.trim()
+  if (reason) return reason
+  if (event.code === 1000) return ''
+  if (event.code === 1006) return '连接异常关闭'
+  if (event.code === 1008) return '连接被拒绝'
+  if (event.code === 1011) return '服务端内部错误'
+  return ''
 }
 
 function streamStatusText(tab: SessionTab) {
@@ -847,6 +1137,14 @@ function streamStatusText(tab: SessionTab) {
   if (tab.streamStatus === 'connected') return `监听中 · ${tab.streamMessages.length} 条`
   if (tab.streamStatus === 'error') return tab.streamError || '连接异常'
   return '未连接'
+}
+
+function duplicateSession(session: WebSocketSession) {
+  const draft = normalizeDraft(session)
+  draft.id = undefined
+  draft.name = `${draft.name} Copy`
+  tabs.value.push(createSessionTab(`copy-${Date.now()}`, true, true, draft))
+  activeTabId.value = tabs.value[tabs.value.length - 1].id
 }
 
 function openSessionMenu(event: MouseEvent, session: WebSocketSession) {
@@ -875,12 +1173,22 @@ function closeContextMenu() {
   contextMenu.value.visible = false
 }
 
-function emitContextAction(action: 'open' | 'delete' | 'create-child' | 'edit') {
+function emitContextAction(
+  action: 'open' | 'duplicate' | 'move' | 'delete' | 'create-child' | 'edit',
+) {
   const { type, session, group } = contextMenu.value
   closeContextMenu()
   if (type === 'session' && session) {
     if (action === 'open') {
       openSession(session)
+      return
+    }
+    if (action === 'duplicate') {
+      duplicateSession(session)
+      return
+    }
+    if (action === 'move') {
+      openMoveSessionDialog(session)
       return
     }
     if (action === 'delete') {
@@ -897,9 +1205,94 @@ function emitContextAction(action: 'open' | 'delete' | 'create-child' | 'edit') 
       openGroupDialog(group)
       return
     }
+    if (action === 'move') {
+      openMoveGroupDialog(group)
+      return
+    }
     if (action === 'delete') {
       void deleteGroup(group)
     }
+  }
+}
+
+const openMoveSessionDialog = (session: WebSocketSession) => {
+  moveTargetType.value = 'session'
+  movingSession.value = session
+  movingGroup.value = null
+  moveTargetGroupId.value = session.groupId ? String(session.groupId) : null
+  moveDialogVisible.value = true
+}
+
+const openMoveGroupDialog = (group: WebSocketSessionGroupNode) => {
+  moveTargetType.value = 'group'
+  movingSession.value = null
+  movingGroup.value = group
+  moveTargetGroupId.value = group.parentId ? String(group.parentId) : null
+  moveDialogVisible.value = true
+}
+
+const moveTarget = async () => {
+  if (moveTargetType.value === 'group') {
+    await moveGroup()
+    return
+  }
+  await moveSession()
+}
+
+const moveSession = async () => {
+  const session = movingSession.value
+  if (!session || !canMoveTarget.value) return
+  const sessionId = String(session.id)
+  const openTab = tabs.value.find((tab) => tab.draft.id === sessionId)
+  if (openTab?.dirty) {
+    openTab.draft.groupId = moveTargetGroupId.value || null
+    activeTabId.value = openTab.id
+    moveDialogVisible.value = false
+    ElMessage.info('已在未保存的会话中调整分组，保存会话后生效')
+    return
+  }
+
+  moveSaving.value = true
+  try {
+    const draft = normalizeDraft(session)
+    draft.groupId = moveTargetGroupId.value || null
+    const saved = await dataAPI.updateWebSocketSession(
+      props.projectId,
+      sessionId,
+      buildPayload(draft),
+    )
+    if (openTab) {
+      openTab.draft = normalizeDraft(saved)
+      openTab.dirty = false
+    }
+    moveDialogVisible.value = false
+    movingSession.value = null
+    await loadSessions()
+    ElMessage.success('会话已移动')
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '移动会话失败'))
+  } finally {
+    moveSaving.value = false
+  }
+}
+
+const moveGroup = async () => {
+  const group = movingGroup.value
+  if (!group || !canMoveTarget.value) return
+  moveSaving.value = true
+  try {
+    await dataAPI.updateWebSocketSessionGroup(props.projectId, String(group.id), {
+      name: group.name,
+      parentId: moveTargetGroupId.value || null,
+    })
+    moveDialogVisible.value = false
+    movingGroup.value = null
+    await loadGroups()
+    ElMessage.success('分组已移动')
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '移动分组失败'))
+  } finally {
+    moveSaving.value = false
   }
 }
 
@@ -1052,6 +1445,27 @@ function formatJSON(value: unknown) {
   }
 }
 
+function generateUniqueDraftName(): string {
+  const taken = new Set<string>()
+  for (const session of sessions.value) {
+    if (session.name) taken.add(session.name)
+  }
+  for (const tab of tabs.value) {
+    if (tab.draft.name) taken.add(tab.draft.name)
+  }
+  let maxIndex = 0
+  for (const name of taken) {
+    const match = /^新建会话\s+(\d+)$/.exec(name)
+    if (match) {
+      const n = Number(match[1])
+      if (Number.isFinite(n) && n > maxIndex) maxIndex = n
+    }
+  }
+  let next = maxIndex + 1
+  while (taken.has(`新建会话 ${next}`)) next += 1
+  return `新建会话 ${next}`
+}
+
 function buildWebSocketSessionTree(
   groupList: WebSocketSessionGroup[],
   sessionList: WebSocketSession[],
@@ -1084,17 +1498,65 @@ function buildWebSocketSessionTree(
     else rootSessions.push(session)
   })
 
+  const sortSessions = (items: WebSocketSession[]) =>
+    items.sort(
+      (left, right) =>
+        (left.sortOrder || 0) - (right.sortOrder || 0) || left.name.localeCompare(right.name),
+    )
+  const sortGroups = (items: WebSocketSessionGroupNode[]) => {
+    items.sort(
+      (left, right) =>
+        (left.sortOrder || 0) - (right.sortOrder || 0) || left.name.localeCompare(right.name),
+    )
+    items.forEach((item) => {
+      sortGroups(item.children)
+      sortSessions(item.sessions)
+    })
+  }
+
+  sortGroups(roots)
+  sortSessions(rootSessions)
   return { groups: roots, rootSessions }
 }
 
 function flattenWebSocketGroups(
-  nodes: WebSocketSessionGroupNode[],
-  depth = 0,
+  groupList: WebSocketSessionGroup[],
+  blockedIds: Set<string> = new Set(),
 ): Array<{ id: string; label: string }> {
-  return nodes.flatMap((node) => [
-    { id: node.id, label: `${'　'.repeat(depth)}${node.name}` },
-    ...flattenWebSocketGroups(node.children, depth + 1),
-  ])
+  const roots = buildWebSocketSessionTree(groupList, []).groups
+  const visit = (
+    group: WebSocketSessionGroupNode,
+    depth: number,
+  ): Array<{ id: string; label: string }> => {
+    const id = String(group.id)
+    const children = group.children.flatMap((child) => visit(child, depth + 1))
+    if (blockedIds.has(id)) return children
+    return [{ id, label: `${'　'.repeat(depth)}${group.name}` }, ...children]
+  }
+  return roots.flatMap((group) => visit(group, 0))
+}
+
+function collectWebSocketGroupIds(group?: WebSocketSessionGroupNode | null) {
+  const result = new Set<string>()
+  const visit = (node?: WebSocketSessionGroupNode | null) => {
+    if (!node) return
+    result.add(String(node.id))
+    node.children.forEach(visit)
+  }
+  visit(group)
+  return result
+}
+
+function findWebSocketGroupNode(groupId?: string | null) {
+  if (!groupId) return null
+  const stack = [...sessionTree.value.groups]
+  while (stack.length) {
+    const group = stack.shift()
+    if (!group) continue
+    if (String(group.id) === String(groupId)) return group
+    stack.push(...group.children)
+  }
+  return null
 }
 
 function countWebSocketGroupSessions(node: WebSocketSessionGroupNode): number {
@@ -1145,7 +1607,7 @@ const WebSocketTreeNode = defineComponent({
                     type: 'button',
                     class: [
                       'ws-workbench__session-node',
-                      { 'is-active': componentProps.activeTabId === session.id },
+                      { 'is-active': componentProps.activeTabId === String(session.id) },
                     ],
                     onClick: () => emit('open-session', session),
                     onContextmenu: (event: MouseEvent) => {
@@ -1398,72 +1860,130 @@ const WebSocketProtocolEditor = defineComponent({
   font: inherit;
 }
 
-.ws-workbench__group-head {
-  width: 100%;
-  height: 32px;
+.ws-workbench__tree :deep(.ws-workbench__group) {
+  min-width: 0;
   display: grid;
-  grid-template-columns: 16px 18px 1fr auto;
-  align-items: center;
-  gap: 6px;
-  padding: 0 8px;
+  gap: 2px;
+}
+
+.ws-workbench__tree :deep(.ws-workbench__group-list) {
+  display: grid;
+  gap: 2px;
+  margin-left: 10px;
+  padding-left: 6px;
+}
+
+.ws-workbench__tree :deep(.ws-workbench__group-head),
+.ws-workbench__tree :deep(.ws-workbench__session-node) {
+  width: 100%;
+  border: 1px solid transparent;
   border-radius: 6px;
-  cursor: pointer;
+  background: transparent;
+  color: inherit;
   text-align: left;
 }
 
-.ws-workbench__group-head:hover,
-.ws-workbench__session-node:hover {
-  background: #eef5ff;
-}
-
-.ws-workbench__group-head svg {
-  width: 16px;
-  height: 16px;
-}
-
-.ws-workbench__group-head svg:first-child {
-  color: #94a3b8;
-  transition: transform 0.15s ease;
-}
-
-.ws-workbench__group-head svg:first-child.is-open {
-  transform: rotate(90deg);
-}
-
-.ws-workbench__group-head svg:nth-child(2) {
-  color: #64748b;
-}
-
-.ws-workbench__group-head small {
-  min-width: 22px;
-  height: 20px;
-  display: inline-flex;
+.ws-workbench__tree :deep(.ws-workbench__group-head) {
+  min-height: 28px;
+  display: grid;
+  grid-template-columns: 16px 18px minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  background: #f1f5f9;
-  color: #64748b;
-  font-size: 12px;
+  gap: 5px;
+  padding: 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
-.ws-workbench__group-list {
-  padding: 2px 0 8px 14px;
-}
-
-.ws-workbench__session-node {
-  width: 100%;
-  min-height: 34px;
+.ws-workbench__tree :deep(.ws-workbench__session-node) {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  padding: 0 8px;
+  min-height: 30px;
+  padding: 3px 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ws-workbench__tree :deep(.ws-workbench__group-head:hover),
+.ws-workbench__tree :deep(.ws-workbench__session-node:hover) {
+  border-color: #dfe3ea;
+  background: #eef5ff;
+  color: #1f2937;
+}
+
+.ws-workbench__tree :deep(.ws-workbench__session-node.is-active) {
+  background: #e9f5f3;
+  color: #035f59;
+}
+
+.ws-workbench__tree :deep(.ws-workbench__group-head svg) {
+  width: 16px;
+  height: 16px;
+}
+
+.ws-workbench__tree :deep(.ws-workbench__group-head svg:first-child) {
+  width: 14px;
+  height: 14px;
+  color: #94a3b8;
+  transition: transform 0.16s ease;
+}
+
+.ws-workbench__tree :deep(.ws-workbench__group-head svg:first-child.is-open) {
+  transform: rotate(90deg);
+}
+
+.ws-workbench__tree :deep(.ws-workbench__group-head svg:nth-child(2)) {
+  color: #04756f;
+}
+
+.ws-workbench__tree :deep(.ws-workbench__group-head small) {
+  min-width: 20px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 11px;
+  text-align: center;
+}
+
+.ws-workbench__tree :deep(.ws-workbench__group-name),
+.ws-workbench__tree :deep(.ws-workbench__session-name) {
+  min-width: 0;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ws-workbench__tree > .ws-workbench__session-node {
+  width: 100%;
+  border: 1px solid transparent;
   border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 3px 6px;
+  font-size: 12px;
   cursor: pointer;
   text-align: left;
 }
 
-.ws-workbench__session-node.is-active {
+.ws-workbench__tree > .ws-workbench__session-node:hover {
+  border-color: #dfe3ea;
+  background: #eef5ff;
+  color: #1f2937;
+}
+
+.ws-workbench__tree > .ws-workbench__session-node.is-active {
   background: #e9f5f3;
   color: #035f59;
 }
@@ -1522,6 +2042,7 @@ const WebSocketProtocolEditor = defineComponent({
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .ws-workbench__tabs {
@@ -1567,6 +2088,7 @@ const WebSocketProtocolEditor = defineComponent({
   flex: 1;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .ws-workbench__crumb-row,
@@ -1649,9 +2171,14 @@ const WebSocketProtocolEditor = defineComponent({
 
 .ws-workbench__config-tabs {
   flex: 1;
-  min-height: 220px;
+  min-height: 0;
   background: #fff;
   padding: 0 14px;
+  overflow: hidden;
+}
+
+.ws-workbench__config-tabs :deep(.el-tabs__content) {
+  min-height: 0;
   overflow: auto;
 }
 
@@ -1728,15 +2255,48 @@ const WebSocketProtocolEditor = defineComponent({
 }
 
 .ws-workbench__response {
-  height: 320px;
-  min-height: 240px;
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 160px;
   border-top: 1px solid #dfe3ea;
   background: #fbfcfe;
   display: flex;
   flex-direction: column;
 }
 
+.ws-workbench__response-resizer {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  z-index: 3;
+  width: 100%;
+  height: 8px;
+  cursor: row-resize;
+}
+
+.ws-workbench__response-resizer::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 52px;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in oklch, #64748b 42%, transparent);
+  transform: translateX(-50%);
+}
+
+.ws-workbench__response-resizer:hover::before {
+  background: #04756f;
+}
+
+:global(body.ws-workbench--resizing-panel) {
+  cursor: row-resize;
+  user-select: none;
+}
+
 .ws-workbench__response header {
+  flex: 0 0 auto;
   min-height: 42px;
   padding: 8px 14px;
   display: flex;
@@ -1756,11 +2316,24 @@ const WebSocketProtocolEditor = defineComponent({
   font-size: 12px;
 }
 
-.ws-workbench__messages {
+.ws-workbench__response-body {
+  position: relative;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+}
+
+.ws-workbench__error-response,
+.ws-workbench__empty-response,
+.ws-workbench__messages {
+  position: absolute;
+  inset: 0;
   overflow: auto;
+}
+
+.ws-workbench__messages {
   padding: 12px 14px;
+  box-sizing: border-box;
 }
 
 .ws-workbench__message {
@@ -1812,8 +2385,48 @@ const WebSocketProtocolEditor = defineComponent({
   animation: ws-spin 0.9s linear infinite;
 }
 
+.ws-workbench__connect-btn.is-connected :deep(svg) {
+  color: #fff;
+}
+
+.ws-workbench__connect-btn.is-error:not(.is-loading) {
+  --el-button-bg-color: #fee2e2;
+  --el-button-border-color: #fecaca;
+  --el-button-text-color: #b91c1c;
+}
+
+.ws-workbench__error-response {
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #b91c1c;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.ws-workbench__error-response svg {
+  width: 28px;
+  height: 28px;
+}
+
+.ws-workbench__error-response strong {
+  color: #991b1b;
+  font-size: 14px;
+}
+
+.ws-workbench__error-response span {
+  max-width: min(560px, 90%);
+  color: #7f1d1d;
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
 .ws-workbench__empty-response {
-  flex: 1;
+  box-sizing: border-box;
 }
 
 .ws-workbench__blank {
@@ -1830,6 +2443,68 @@ const WebSocketProtocolEditor = defineComponent({
 
 .ws-workbench__blank strong {
   color: #334155;
+}
+
+.ws-workbench__move-form {
+  display: grid;
+  gap: 2px;
+}
+
+.ws-workbench__move-select {
+  width: 100%;
+}
+
+.ws-workbench__move-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ws-workbench__menu-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+}
+
+.ws-workbench__context-menu {
+  position: fixed;
+  min-width: 148px;
+  padding: 4px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-surface);
+}
+
+.ws-workbench__context-menu button {
+  width: 100%;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--dc-radius-sm);
+  background: transparent;
+  color: var(--dc-text-secondary);
+  font-size: 13px;
+  text-align: left;
+}
+
+.ws-workbench__context-menu button:hover {
+  background: var(--dc-surface-muted);
+  color: var(--dc-primary);
+}
+
+.ws-workbench__context-menu button.is-danger:hover {
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
+}
+
+.ws-workbench__menu-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
 }
 
 @keyframes ws-spin {

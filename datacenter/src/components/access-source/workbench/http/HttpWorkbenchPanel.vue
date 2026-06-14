@@ -297,7 +297,15 @@
           </el-tab-pane>
         </el-tabs>
 
-        <section class="http-workbench__response">
+        <section class="http-workbench__response" :style="responsePanelStyle">
+          <div
+            class="http-workbench__response-resizer"
+            role="separator"
+            aria-orientation="horizontal"
+            title="拖拽调整响应区高度，双击恢复默认"
+            @mousedown.prevent="startResponseResize"
+            @dblclick="resetResponseHeight"
+          />
           <div class="http-workbench__response-head">
             <strong>响应</strong>
             <div v-if="activeTab.response" class="http-workbench__response-meta">
@@ -312,7 +320,7 @@
               <pre>{{ formattedResponseBody }}</pre>
             </el-tab-pane>
             <el-tab-pane label="响应头" name="headers">
-              <el-table :data="responseHeaders" size="small" height="220">
+              <el-table :data="responseHeaders" size="small" class="http-workbench__response-table">
                 <el-table-column prop="key" label="Header" min-width="160" />
                 <el-table-column prop="value" label="Value" min-width="240" />
               </el-table>
@@ -503,6 +511,7 @@ import WorkbenchGroupDialog from '@/components/workbench/WorkbenchGroupDialog.vu
 import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
 import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
 import { getApiErrorMessage } from '@/utils/request'
+import { useWorkbenchBottomPanelResize } from '@/composables/useWorkbenchBottomPanelResize'
 
 type AccessSourceConnection = {
   id: string
@@ -549,6 +558,15 @@ const props = defineProps<{
 defineEmits<{
   (event: 'back'): void
 }>()
+
+const {
+  panelStyle: responsePanelStyle,
+  startResize: startResponseResize,
+  resetHeight: resetResponseHeight,
+} = useWorkbenchBottomPanelResize({
+  defaultHeight: 320,
+  bodyClass: 'http-workbench--resizing-panel',
+})
 
 const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
 // 请求体编辑器的 Monaco 通用配置：关 minimap、关行号装饰，给工作台更紧凑的视觉
@@ -1996,14 +2014,48 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
 }
 
 .http-workbench__response {
-  height: 320px;
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 160px;
   display: flex;
   flex-direction: column;
   border-top: 1px solid #dfe3ea;
   background: #fbfcfe;
 }
 
+.http-workbench__response-resizer {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  z-index: 3;
+  width: 100%;
+  height: 8px;
+  cursor: row-resize;
+}
+
+.http-workbench__response-resizer::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 52px;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in oklch, #64748b 42%, transparent);
+  transform: translateX(-50%);
+}
+
+.http-workbench__response-resizer:hover::before {
+  background: #04756f;
+}
+
+:global(body.http-workbench--resizing-panel) {
+  cursor: row-resize;
+  user-select: none;
+}
+
 .http-workbench__response-head {
+  flex: 0 0 auto;
   height: 40px;
   display: flex;
   align-items: center;
@@ -2035,11 +2087,24 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
 .http-workbench__response :deep(.el-tabs) {
   min-height: 0;
   flex: 1;
+  display: flex;
+  flex-direction: column;
   padding: 0 14px;
 }
 
+.http-workbench__response :deep(.el-tabs__content) {
+  min-height: 0;
+  flex: 1;
+}
+
+.http-workbench__response :deep(.el-tab-pane) {
+  height: 100%;
+  overflow: auto;
+}
+
 .http-workbench__response pre {
-  height: 238px;
+  min-height: 120px;
+  height: 100%;
   margin: 0;
   padding: 12px;
   overflow: auto;
@@ -2049,13 +2114,20 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
   color: #dbeafe;
   font-size: 12px;
   line-height: 1.55;
+  box-sizing: border-box;
+}
+
+.http-workbench__response-table {
+  min-height: 120px;
+  height: 100%;
 }
 
 .http-workbench__response-empty,
 .http-workbench__placeholder,
 .http-workbench__empty,
 .http-workbench__loading {
-  min-height: 120px;
+  min-height: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;

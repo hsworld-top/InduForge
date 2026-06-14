@@ -4,3 +4,10 @@ packages:
   - datacenter
   - designer
   - runtime/node_agent_front
+
+onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - '@scarf/scarf'
+  - esbuild
+  - sharp
+  - vue-demi
