@@ -29,6 +29,9 @@ ENV_FILE="$REPO_ROOT/.env"
 DEV_ENV_TEMPLATE="$REPO_ROOT/.env.development.example"
 COMPOSE_FILE="$REPO_ROOT/scripts/docker/docker-compose.dev.yml"
 META_CONTAINER="induforge-meta-store"
+META_STORE_RETRY_COUNT=5
+META_STORE_RETRY_DELAY_SEC=3
+META_STORE_SETTLE_DELAY_SEC=3
 
 usage() {
   cat <<'USAGE'
@@ -116,16 +119,48 @@ read_env() {
   fi
 }
 
-wait_for_meta_store() {
-  local user password admin_db
+meta_store_psql() {
+  local user password admin_db database
   user="$(read_env IF_META_STORE_USER postgres)"
   password="$(read_env IF_META_STORE_PASSWORD postgres)"
   admin_db="$(read_env IF_META_STORE_ADMIN_DATABASE postgres)"
+  database="$admin_db"
 
+  if [ $# -gt 0 ] && [[ ! "$1" =~ ^- ]]; then
+    database="$1"
+    shift
+  fi
+
+  docker exec -e PGPASSWORD="$password" "$META_CONTAINER" \
+    psql -U "$user" -d "$database" "$@"
+}
+
+with_meta_store_retry() {
+  local label attempt
+  label="${1:-元数据操作}"
+  shift
+
+  for attempt in $(seq 1 "$META_STORE_RETRY_COUNT"); do
+    if "$@"; then
+      return 0
+    fi
+    if [ "$attempt" -lt "$META_STORE_RETRY_COUNT" ]; then
+      echo "warning: ${label}失败，${META_STORE_RETRY_DELAY_SEC} 秒后重试 (${attempt}/${META_STORE_RETRY_COUNT})..." >&2
+      sleep "$META_STORE_RETRY_DELAY_SEC"
+    fi
+  done
+
+  echo "error: ${label}在 ${META_STORE_RETRY_COUNT} 次尝试后仍然失败" >&2
+  return 1
+}
+
+wait_for_meta_store() {
   echo "等待元数据能力就绪..."
   for _ in $(seq 1 60); do
-    if docker exec -e PGPASSWORD="$password" "$META_CONTAINER" \
-      psql -U "$user" -d "$admin_db" -tAc "SELECT 1" >/dev/null 2>&1; then
+    if meta_store_psql -tAc "SELECT 1" >/dev/null 2>&1 \
+      && meta_store_psql -tAc "SELECT count(*) FROM pg_database" >/dev/null 2>&1; then
+      echo "元数据能力已就绪，等待服务稳定..."
+      sleep "$META_STORE_SETTLE_DELAY_SEC"
       return
     fi
     sleep 2
@@ -161,36 +196,42 @@ init_databases() {
 
 create_database_if_needed() {
   local database="$1"
-  local user password admin_db exists quoted
+  local exists quoted
 
-  user="$(read_env IF_META_STORE_USER postgres)"
-  password="$(read_env IF_META_STORE_PASSWORD postgres)"
-  admin_db="$(read_env IF_META_STORE_ADMIN_DATABASE postgres)"
   quoted="$(quote_sql_ident "$database")"
 
-  exists="$(docker exec -e PGPASSWORD="$password" "$META_CONTAINER" \
-    psql -U "$user" -d "$admin_db" -tAc "SELECT 1 FROM pg_database WHERE datname = '$database';" | tr -d '[:space:]')"
+  with_meta_store_retry "检查或创建数据库 ${database}" create_database_once "$database" "$quoted"
+}
+
+create_database_once() {
+  local database="$1"
+  local quoted="$2"
+  local exists
+
+  exists="$(meta_store_psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$database';" | tr -d '[:space:]')"
 
   if [ "$exists" = "1" ]; then
     echo "✓ 数据库已存在: $database"
-    return
+    return 0
   fi
 
-  docker exec -e PGPASSWORD="$password" "$META_CONTAINER" \
-    psql -U "$user" -d "$admin_db" -c "CREATE DATABASE $quoted;" >/dev/null
+  meta_store_psql -c "CREATE DATABASE $quoted;" >/dev/null
   echo "✓ 数据库已创建: $database"
 }
 
 enable_timeseries_extension() {
   local database="$1"
-  local user password extension_name
+  local extension_name
 
-  user="$(read_env IF_META_STORE_USER postgres)"
-  password="$(read_env IF_META_STORE_PASSWORD postgres)"
   extension_name="time""scaledb"
+  with_meta_store_retry "启用 ${database} 时序扩展" enable_timeseries_extension_once "$database" "$extension_name"
+}
 
-  docker exec -e PGPASSWORD="$password" "$META_CONTAINER" \
-    psql -U "$user" -d "$database" -c "CREATE EXTENSION IF NOT EXISTS $extension_name;" >/dev/null
+enable_timeseries_extension_once() {
+  local database="$1"
+  local extension_name="$2"
+
+  meta_store_psql "$database" -c "CREATE EXTENSION IF NOT EXISTS $extension_name;" >/dev/null
   echo "✓ ${database} 已启用扩展: $extension_name"
 }
 

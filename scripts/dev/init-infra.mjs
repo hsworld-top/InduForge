@@ -30,6 +30,9 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "../..");
 const envPath = path.join(repoRoot, ".env");
 const checkOnly = process.argv.includes("--check-only");
+const META_STORE_RETRY_COUNT = 5;
+const META_STORE_RETRY_DELAY_MS = 3000;
+const META_STORE_SETTLE_DELAY_MS = 3000;
 
 // 读取简单 KEY=VALUE 形式的 .env 文件。
 // 这里不覆盖进程中已经存在的同名变量，方便 CI/CD 或命令行临时覆盖配置。
@@ -63,6 +66,47 @@ function quoteIdent(value) {
 
 // 轻量 TCP 检查用于确认依赖能力是否启动。
 // 返回布尔值而不是抛错，避免单个可选能力未启动时阻断整个本地初始化流程。
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withRetry(label, fn, maxAttempts = META_STORE_RETRY_COUNT, delayMs = META_STORE_RETRY_DELAY_MS) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxAttempts) break;
+      console.warn(`${label}失败，${delayMs / 1000} 秒后重试 (${attempt}/${maxAttempts}): ${error.message}`);
+      await sleep(delayMs);
+    }
+  }
+  throw lastError;
+}
+
+async function waitForMetaStore(maxAttempts = 30, delayMs = 2000) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const client = new Client(metaStoreConfig);
+    try {
+      await client.connect();
+      await client.query("SELECT 1");
+      await client.query("SELECT count(*) FROM pg_database");
+      await client.end();
+      console.log("元数据能力已就绪，等待服务稳定...");
+      await sleep(META_STORE_SETTLE_DELAY_MS);
+      return;
+    } catch (error) {
+      await client.end().catch(() => {});
+      if (attempt === maxAttempts) {
+        throw error;
+      }
+      console.warn(`等待元数据能力就绪 (${attempt}/${maxAttempts})...`);
+      await sleep(delayMs);
+    }
+  }
+}
+
 function tcpCheck(host, port, label) {
   return new Promise((resolve) => {
     const socket = net.createConnection({ host, port: Number(port), timeout: 3000 });
@@ -106,32 +150,42 @@ const requiredDatabases = [
 
 // 幂等创建数据库。
 // PostgreSQL 不支持 CREATE DATABASE IF NOT EXISTS，因此先查 pg_database 再创建。
-async function createDatabaseIfNeeded(client, database) {
-  const exists = await client.query("SELECT 1 FROM pg_database WHERE datname = $1", [database]);
-  if (exists.rowCount > 0) {
-    console.log(`✓ 数据库已存在: ${database}`);
-    return;
-  }
-  if (checkOnly) {
-    console.warn(`! 数据库不存在: ${database}`);
-    return;
-  }
-  await client.query(`CREATE DATABASE ${quoteIdent(database)}`);
-  console.log(`✓ 数据库已创建: ${database}`);
+async function createDatabaseIfNeeded(database) {
+  await withRetry(`检查或创建数据库 ${database}`, async () => {
+    const client = new Client(metaStoreConfig);
+    await client.connect();
+    try {
+      const exists = await client.query("SELECT 1 FROM pg_database WHERE datname = $1", [database]);
+      if (exists.rowCount > 0) {
+        console.log(`✓ 数据库已存在: ${database}`);
+        return;
+      }
+      if (checkOnly) {
+        console.warn(`! 数据库不存在: ${database}`);
+        return;
+      }
+      await client.query(`CREATE DATABASE ${quoteIdent(database)}`);
+      console.log(`✓ 数据库已创建: ${database}`);
+    } finally {
+      await client.end();
+    }
+  });
 }
 
 // 在指定数据库内启用扩展。
 // 扩展名同样先经过 quoteIdent 白名单校验，避免拼接 SQL 带来注入风险。
 async function enableExtension(database, extension) {
   if (checkOnly) return;
-  const client = new Client({ ...metaStoreConfig, database });
-  await client.connect();
-  try {
-    await client.query(`CREATE EXTENSION IF NOT EXISTS ${quoteIdent(extension)}`);
-    console.log(`✓ ${database} 已启用扩展: ${extension}`);
-  } finally {
-    await client.end();
-  }
+  await withRetry(`启用 ${database} 时序扩展`, async () => {
+    const client = new Client({ ...metaStoreConfig, database });
+    await client.connect();
+    try {
+      await client.query(`CREATE EXTENSION IF NOT EXISTS ${quoteIdent(extension)}`);
+      console.log(`✓ ${database} 已启用扩展: ${extension}`);
+    } finally {
+      await client.end();
+    }
+  });
 }
 
 // 初始化元数据能力：
@@ -139,14 +193,10 @@ async function enableExtension(database, extension) {
 // 2. 创建平台需要的业务库。
 // 3. 在开发态时序库中启用 timescaledb 扩展。
 async function initMetaStore() {
-  const client = new Client(metaStoreConfig);
-  await client.connect();
-  try {
-    for (const database of requiredDatabases) {
-      await createDatabaseIfNeeded(client, database);
-    }
-  } finally {
-    await client.end();
+  await waitForMetaStore();
+
+  for (const database of requiredDatabases) {
+    await createDatabaseIfNeeded(database);
   }
 
   const devDatabase = env("IF_META_STORE_DEV_DATA_DB", "if_dev_data");
