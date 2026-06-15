@@ -30,6 +30,7 @@
         :total="registerPagination.total"
         @select="selectGroup"
         @create="openCreateGroup"
+        @create-child="openCreateChildGroup"
         @edit="openEditGroup"
         @delete="removeGroup"
       />
@@ -108,6 +109,15 @@
           <button
             type="button"
             class="modbus-workbench__icon-action"
+            title="运行契约预览"
+            aria-label="运行契约预览"
+            @click="contractVisible = true"
+          >
+            <IconTablerFileDescription />
+          </button>
+          <button
+            type="button"
+            class="modbus-workbench__icon-action"
             title="刷新"
             aria-label="刷新"
             @click="reloadAll"
@@ -165,6 +175,7 @@
       :mode="groupDialogMode"
       :groups="groups"
       :group-value="editingGroup"
+      :default-parent-id="defaultGroupParentId"
       :loading="saving"
       @submit="saveGroup"
     />
@@ -190,6 +201,13 @@
       @locate="locateRegister"
     />
     <ModbusReadPlanDialog v-model="readPlanVisible" :estimate="readPlanEstimate" />
+    <ProtocolContractDrawer
+      v-model="contractVisible"
+      title="Modbus 运行契约预览"
+      :subtitle="contractSubtitle"
+      :sections="contractSections"
+      :issues="contractIssues"
+    />
     <Teleport to="body">
       <div
         v-if="registerMenu.visible"
@@ -249,6 +267,7 @@ import ModbusReadPlanDialog from '@/components/modbus/ModbusReadPlanDialog.vue'
 import ModbusRegisterDialog from '@/components/modbus/ModbusRegisterDialog.vue'
 import ModbusRegisterTable from '@/components/modbus/ModbusRegisterTable.vue'
 import ModbusValidationDrawer from '@/components/modbus/ModbusValidationDrawer.vue'
+import ProtocolContractDrawer from './ProtocolContractDrawer.vue'
 import type {
   ModbusReadPlanEstimate,
   ModbusReadValue,
@@ -262,6 +281,7 @@ import IconTablerClipboard from '~icons/tabler/clipboard'
 import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerDownload from '~icons/tabler/download'
 import IconTablerExternalLink from '~icons/tabler/external-link'
+import IconTablerFileDescription from '~icons/tabler/file-description'
 import IconTablerPencil from '~icons/tabler/pencil'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerRefresh from '~icons/tabler/refresh'
@@ -305,6 +325,7 @@ const registerKeyword = ref('')
 const groupDialogVisible = ref(false)
 const groupDialogMode = ref<'create' | 'edit'>('create')
 const editingGroup = ref<ModbusRegisterGroup | null>(null)
+const defaultGroupParentId = ref('')
 const registerDialogVisible = ref(false)
 const registerDialogMode = ref<'create' | 'edit'>('create')
 const editingRegister = ref<ModbusRegister | null>(null)
@@ -315,6 +336,7 @@ const previewDiagnostics = ref<string[]>([])
 const validationVisible = ref(false)
 const validationIssues = ref<ModbusValidationIssue[]>([])
 const readPlanVisible = ref(false)
+const contractVisible = ref(false)
 const quickFilter = ref('all')
 const registerMenu = ref({
   visible: false,
@@ -464,6 +486,50 @@ const issueExportRows = computed(() =>
     }
   }),
 )
+const contractSubtitle = computed(() =>
+  selectedRegister.value
+    ? `当前变量：${selectedRegister.value.name}`
+    : currentGroup.value
+      ? `当前范围：${currentGroup.value.name}`
+      : '当前范围：全部变量',
+)
+const contractIssues = computed(() => [
+  ...scopedValidationIssues.value.map((issue) => ({
+    severity: issue.severity,
+    message: issue.message,
+  })),
+  ...readPlanEstimate.value.diagnostics.map((message) => ({ severity: 'warning', message })),
+])
+const contractSections = computed(() => [
+  {
+    title: '协议建模',
+    rows: [
+      { label: '端点', value: endpointText.value },
+      { label: '变量数', value: filteredRegisters.value.length },
+      { label: '从站数', value: unitCount.value },
+      { label: '发布能力', value: '寄存器区约束，只配置读写权限，不提供写值' },
+    ],
+  },
+  {
+    title: '读取计划',
+    rows: [
+      { label: '读取次数', value: readPlanEstimate.value.readCount },
+      { label: '预计 reads/s', value: readPlanEstimate.value.readsPerSecond.toFixed(2) },
+      { label: '开发态位置', value: '平台侧 data_service' },
+      { label: 'RTU 策略', value: config.value.mode === 'rtu' ? 'Linux 环境优先级较低，建议节点侧验证' : 'TCP 优先' },
+    ],
+  },
+  {
+    title: '冗余与存储',
+    rows: [
+      { label: '当前值', value: 'IF 实时库', tone: 'ok' as const },
+      { label: '历史归档', value: '由存储策略菜单配置' },
+      { label: '设备冗余', value: deviceRedundancyText.value },
+      { label: '采集冗余', value: '运行部署策略统一配置' },
+    ],
+    notes: ['读取计划由系统按从站、寄存器区、地址和周期估算，工作台不提供手工编辑 readPlan。'],
+  },
+])
 
 const unwrapList = <T,>(response: any): T[] =>
   response?.data?.list || response?.data?.data?.list || []
@@ -527,12 +593,21 @@ const selectRegister = (register: ModbusRegister) => {
 
 const openCreateGroup = () => {
   editingGroup.value = null
+  defaultGroupParentId.value = ''
+  groupDialogMode.value = 'create'
+  groupDialogVisible.value = true
+}
+
+const openCreateChildGroup = (group: ModbusRegisterGroup | null) => {
+  editingGroup.value = null
+  defaultGroupParentId.value = group?.id || ''
   groupDialogMode.value = 'create'
   groupDialogVisible.value = true
 }
 
 const openEditGroup = (group: ModbusRegisterGroup) => {
   editingGroup.value = group
+  defaultGroupParentId.value = ''
   groupDialogMode.value = 'edit'
   groupDialogVisible.value = true
 }
@@ -803,6 +878,15 @@ function matchQuickFilter(register: ModbusRegister) {
 function formatModbusAddress(register: ModbusRegister) {
   return `${register.unitId}/${register.area}/${register.address} (protocol ${register.protocolAddress})`
 }
+
+const unitCount = computed(() => new Set(filteredRegisters.value.map((item) => item.unitId)).size)
+
+const deviceRedundancyText = computed(() => {
+  const redundancy = config.value.redundancy
+  if (!redundancy || redundancy.enabled === false) return '未配置'
+  const count = Array.isArray(redundancy.endpoints) ? redundancy.endpoints.length : 0
+  return count > 1 ? `主备优先级 · ${count} endpoint` : '待补备用路径'
+})
 
 async function copyText(text: string, successMessage: string) {
   await navigator.clipboard.writeText(text)

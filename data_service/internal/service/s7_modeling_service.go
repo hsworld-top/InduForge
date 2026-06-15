@@ -93,6 +93,7 @@ type S7Variable struct {
 	Offset            float64    `json:"offset"`
 	Unit              *string    `json:"unit"`
 	PollIntervalMS    int        `json:"pollIntervalMs"`
+	AccessLevel       string     `json:"accessLevel"`
 	LastValue         any        `json:"lastValue,omitempty"`
 	Quality           string     `json:"quality"`
 	LastUpdatedAt     *time.Time `json:"lastUpdatedAt,omitempty"`
@@ -162,6 +163,7 @@ type CreateS7VariableInput struct {
 	Offset         *float64
 	Unit           *string
 	PollIntervalMS *int
+	AccessLevel    string
 	QualityRule    map[string]any
 	Metadata       map[string]any
 	SortOrder      int
@@ -183,6 +185,7 @@ type UpdateS7VariableInput struct {
 	Offset         *float64
 	Unit           *string
 	PollIntervalMS *int
+	AccessLevel    string
 	QualityRule    map[string]any
 	Metadata       map[string]any
 	SortOrder      int
@@ -203,6 +206,7 @@ type ImportS7VariableInput struct {
 	Offset         *float64       `json:"offset"`
 	Unit           *string        `json:"unit"`
 	PollIntervalMS *int           `json:"pollIntervalMs"`
+	AccessLevel    string         `json:"accessLevel"`
 	Description    *string        `json:"description"`
 	Metadata       map[string]any `json:"metadata"`
 }
@@ -495,6 +499,7 @@ func (s *S7ModelingService) BatchImportVariables(ctx context.Context, projectID,
 			Offset:         item.Offset,
 			Unit:           item.Unit,
 			PollIntervalMS: item.PollIntervalMS,
+			AccessLevel:    item.AccessLevel,
 			Metadata:       item.Metadata,
 			SortOrder:      index,
 		})
@@ -797,6 +802,7 @@ func (s *S7ModelingService) normalizeCreateVariableInput(ctx context.Context, pr
 		Offset:            floatOrDefault(input.Offset, 0),
 		Unit:              normalizeOptionalText(input.Unit),
 		PollIntervalMS:    intOrDefault(input.PollIntervalMS, 1000),
+		AccessLevel:       normalizeS7AccessLevel(input.AccessLevel),
 		QualityRule:       normalizeMap(input.QualityRule),
 		Metadata:          normalizeMap(input.Metadata),
 		SortOrder:         input.SortOrder,
@@ -848,6 +854,7 @@ func (s *S7ModelingService) normalizeUpdateVariableInput(projectID, userID strin
 		Offset:            floatOrDefault(input.Offset, current.Offset),
 		Unit:              optionalTextOrCurrent(input.Unit, current.Unit),
 		PollIntervalMS:    intOrDefault(input.PollIntervalMS, current.PollIntervalMS),
+		AccessLevel:       normalizeS7AccessLevel(firstNonEmpty(input.AccessLevel, current.AccessLevel)),
 		QualityRule:       normalizeMap(input.QualityRule),
 		Metadata:          normalizeMap(input.Metadata),
 		SortOrder:         input.SortOrder,
@@ -894,6 +901,7 @@ func (s *S7ModelingService) syncVariableDatapoint(ctx context.Context, variable 
 			"scale":              variable.Scale,
 			"offset":             variable.Offset,
 			"pollIntervalMs":     variable.PollIntervalMS,
+			"accessLevel":        variable.AccessLevel,
 			"runtimeOwnerHint":   "readPlan",
 			"optimizedDBWarning": variable.Area == "DB",
 		},
@@ -1270,6 +1278,17 @@ func normalizeS7Endian(value string) string {
 	}
 }
 
+func normalizeS7AccessLevel(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "write":
+		return "Write"
+	case "readwrite", "read_write":
+		return "ReadWrite"
+	default:
+		return "Read"
+	}
+}
+
 func normalizeS7SupportedAreas(values []string) []string {
 	result := make([]string, 0, len(values))
 	seen := map[string]struct{}{}
@@ -1460,6 +1479,7 @@ func toS7Variable(record repository.S7VariableRecord) S7Variable {
 		Offset:            record.Offset,
 		Unit:              cloneOptionalString(record.Unit),
 		PollIntervalMS:    record.PollIntervalMS,
+		AccessLevel:       record.AccessLevel,
 		LastValue:         bytesToAny(record.LastValue),
 		Quality:           record.Quality,
 		LastUpdatedAt:     cloneOptionalTime(record.LastUpdatedAt),

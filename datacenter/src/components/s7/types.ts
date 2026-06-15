@@ -59,6 +59,7 @@ export type S7Variable = {
   offset: number
   unit?: string | null
   pollIntervalMs: number
+  accessLevel: string
   lastValue?: unknown
   quality?: string
   lastUpdatedAt?: string | null

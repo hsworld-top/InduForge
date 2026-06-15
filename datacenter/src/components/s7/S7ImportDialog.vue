@@ -25,6 +25,11 @@
         <IconTablerFileSpreadsheet />
         XLSX模板
       </el-button>
+      <el-checkbox v-model="onlyIssues" size="small">只看错误</el-checkbox>
+      <el-button size="small" :disabled="issueRows.length === 0" @click="downloadIssueReport">
+        <IconTablerAlertTriangle />
+        错误报告
+      </el-button>
       <span v-if="fileName" class="s7-import-dialog__file" :title="fileName">{{ fileName }}</span>
     </div>
     <el-input
@@ -36,7 +41,7 @@
     />
     <el-table
       class="s7-import-dialog__table"
-      :data="rows"
+      :data="displayRows"
       height="260"
       empty-text="选择文件或粘贴表格文本后预览"
     >
@@ -59,6 +64,7 @@
       <el-table-column prop="area" label="区域" width="72" />
       <el-table-column prop="byteRange" label="字节范围" width="96" />
       <el-table-column prop="dataType" label="类型" width="90" />
+      <el-table-column prop="accessLevel" label="权限" width="92" />
       <el-table-column prop="issue" label="问题" min-width="160" show-overflow-tooltip />
     </el-table>
     <template #footer>
@@ -87,6 +93,7 @@ import {
   parseTabularText,
   readTabularFile,
 } from '@/utils/tabular-file'
+import IconTablerAlertTriangle from '~icons/tabler/alert-triangle'
 import IconTablerFileImport from '~icons/tabler/file-import'
 import IconTablerFileSpreadsheet from '~icons/tabler/file-spreadsheet'
 import IconTablerFileTypeCsv from '~icons/tabler/file-type-csv'
@@ -103,6 +110,7 @@ const visible = computed({
 const text = ref('')
 const fileRows = ref<Record<string, string>[]>([])
 const fileName = ref('')
+const onlyIssues = ref(false)
 watch(
   () => props.modelValue,
   (visible) => {
@@ -110,6 +118,7 @@ watch(
       text.value = ''
       fileRows.value = []
       fileName.value = ''
+      onlyIssues.value = false
     }
   },
 )
@@ -129,7 +138,7 @@ type S7ImportPreviewRow = {
   scale: number
   offset: number
   pollIntervalMs: number
-  publishAccess: string
+  accessLevel: string
   description: string | null
   metadata: Record<string, unknown>
   sortOrder: number
@@ -146,7 +155,7 @@ const headerAliases = {
   scale: ['倍率', '系数', 'scale'],
   offset: ['偏移', 'offset'],
   pollIntervalMs: ['采集周期', '周期', 'pollIntervalMs', 'interval'],
-  publishAccess: ['发布能力', '读写能力', 'accessLevel', 'publishAccess'],
+  accessLevel: ['发布能力', '读写能力', 'accessLevel', 'publishAccess'],
   description: ['描述', '说明', 'description'],
 }
 
@@ -174,7 +183,7 @@ const templateRows = [
     倍率: 1,
     偏移: 0,
     采集周期: 1000,
-    发布能力: 'read',
+    发布能力: 'Read',
     描述: '主电机转速',
   },
   {
@@ -187,7 +196,7 @@ const templateRows = [
     倍率: 1,
     偏移: 0,
     采集周期: 500,
-    发布能力: 'read',
+    发布能力: 'Read',
     描述: '现场急停输入',
   },
 ]
@@ -200,6 +209,10 @@ const sourceRows = computed(() => {
 const rows = computed<S7ImportPreviewRow[]>(() =>
   sourceRows.value.map((row, index) => buildPreviewRow(row, index)),
 )
+const displayRows = computed(() =>
+  onlyIssues.value ? rows.value.filter((row) => row.issue) : rows.value,
+)
+const issueRows = computed(() => rows.value.filter((row) => row.issue))
 const validRows = computed(() =>
   rows.value
     .filter((row) => !row.issue)
@@ -209,7 +222,6 @@ const validRows = computed(() =>
         metadata: {
           ...row.metadata,
           importGroupPath: groupPath || undefined,
-          publishAccess: row.publishAccess || 'read',
           normalizedPreview: normalizedAddress,
           addressPreview: {
             area,
@@ -248,6 +260,23 @@ const downloadTemplate = (type: 'csv' | 'xlsx') => {
   downloadXlsx('s7-variable-import-template.xlsx', [
     { name: 'S7变量模板', headers: templateHeaders, rows: templateRows },
   ])
+}
+
+const downloadIssueReport = () => {
+  downloadCsv(
+    's7-import-issues.csv',
+    ['行号', '变量名', 'Code', '分组', '原始地址', '标准地址', '类型', '问题'],
+    issueRows.value.map((row) => ({
+      行号: row.sortOrder + 1,
+      变量名: row.name,
+      Code: row.code,
+      分组: row.groupPath,
+      原始地址: row.addressText,
+      标准地址: row.normalizedAddress,
+      类型: row.dataType,
+      问题: row.issue,
+    })),
+  )
 }
 
 function parsePasteRows(value: string) {
@@ -295,7 +324,7 @@ function buildPreviewRow(row: Record<string, string>, index: number): S7ImportPr
     scale: toNumber(normalized.scale, 1),
     offset: toNumber(normalized.offset, 0),
     pollIntervalMs: toInteger(normalized.pollIntervalMs, 1000),
-    publishAccess: normalized.publishAccess || 'read',
+    accessLevel: normalizeAccessLevel(normalized.accessLevel),
     description: normalized.description || null,
     metadata: { importSource: fileName.value ? 'file' : 'paste' },
     sortOrder: index,
@@ -387,6 +416,13 @@ function estimateDataTypeBytes(dataType: string) {
     String: 254,
   }
   return map[dataType] || 1
+}
+
+function normalizeAccessLevel(value: string) {
+  const text = value.trim().toLowerCase()
+  if (['write', '写'].includes(text)) return 'Write'
+  if (['readwrite', 'read_write', '读写'].includes(text)) return 'ReadWrite'
+  return 'Read'
 }
 
 function toNumber(value: string, fallback: number) {

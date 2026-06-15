@@ -215,7 +215,7 @@ func (r *OpcuaModelingRepository) DeleteGroup(ctx context.Context, projectID, co
 
 	if _, err := tx.Exec(ctx, `
 		UPDATE data_opcua_nodes
-		SET group_id = NULL, updated_by = $3, updated_at = now()
+		SET group_id = NULL, updated_by = $4, updated_at = now()
 		WHERE project_id = $1 AND connection_id = $2 AND group_id = $3
 	`, projectID, connectionID, groupID, userID); err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "移动 OPC UA 变量失败", err)

@@ -14,6 +14,8 @@
           <dd>{{ variable.code }}</dd>
           <dt>状态</dt>
           <dd>{{ variable.status }}</dd>
+          <dt>读写权限</dt>
+          <dd>{{ variable.accessLevel || 'Read' }}</dd>
         </dl>
       </section>
       <section>

@@ -39,6 +39,7 @@ const props = defineProps<{
   mode: 'create' | 'edit'
   groups: ModbusRegisterGroup[]
   groupValue?: ModbusRegisterGroup | null
+  defaultParentId?: string
   loading?: boolean
 }>()
 
@@ -53,7 +54,8 @@ watch(
   () => [props.modelValue, props.groupValue],
   () => {
     form.name = props.groupValue?.name || ''
-    form.parentId = props.groupValue?.parentId || ''
+    form.parentId =
+      props.mode === 'create' ? props.defaultParentId || '' : props.groupValue?.parentId || ''
     form.description = props.groupValue?.description || ''
   },
   { immediate: true },

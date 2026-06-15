@@ -66,6 +66,13 @@
       <el-table-column label="周期" width="82">
         <template #default="{ row }">{{ row.pollIntervalMs }}ms</template>
       </el-table-column>
+      <el-table-column label="权限" width="92">
+        <template #default="{ row }">
+          <el-tag size="small" :type="row.accessLevel === 'Read' ? 'info' : 'warning'">
+            {{ row.accessLevel || 'Read' }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="状态" width="86">
         <template #default="{ row }">
           <el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{

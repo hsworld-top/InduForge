@@ -86,6 +86,7 @@ type S7VariableRecord struct {
 	Offset            float64
 	Unit              *string
 	PollIntervalMS    int
+	AccessLevel       string
 	QualityRule       []byte
 	Metadata          []byte
 	LastValue         []byte
@@ -180,6 +181,7 @@ type CreateS7VariableParams struct {
 	Offset            float64
 	Unit              *string
 	PollIntervalMS    int
+	AccessLevel       string
 	QualityRule       map[string]any
 	Metadata          map[string]any
 	SortOrder         int
@@ -213,6 +215,7 @@ type UpdateS7VariableParams struct {
 	Offset            float64
 	Unit              *string
 	PollIntervalMS    int
+	AccessLevel       string
 	QualityRule       map[string]any
 	Metadata          map[string]any
 	SortOrder         int
@@ -449,8 +452,8 @@ func (r *S7ModelingRepository) ListVariables(ctx context.Context, projectID, con
 		SELECT v.id, v.project_id, v.connection_id, v.group_id, v.name, v.code, v.description,
 		       v.area, v.db_number, v.byte_offset, v.bit_offset, v.address_text, v.normalized_address,
 		       v.address_type, v.read_length, v.data_type, v.length, v.array_length, v.byte_order,
-		       v.word_order, v.scale, v.offset_value, v.unit, v.poll_interval_ms, v.quality_rule,
-		       v.metadata, v.last_value, v.quality, v.last_updated_at, v.sort_order, v.status,
+		       v.word_order, v.scale, v.offset_value, v.unit, v.poll_interval_ms, v.access_level,
+		       v.quality_rule, v.metadata, v.last_value, v.quality, v.last_updated_at, v.sort_order, v.status,
 		       dp.id, dp.path, dp.status, v.created_at, v.updated_at
 		FROM data_s7_variables v
 		LEFT JOIN data_points dp
@@ -500,8 +503,8 @@ func (r *S7ModelingRepository) ListVariablesPage(ctx context.Context, projectID,
 		SELECT v.id, v.project_id, v.connection_id, v.group_id, v.name, v.code, v.description,
 		       v.area, v.db_number, v.byte_offset, v.bit_offset, v.address_text, v.normalized_address,
 		       v.address_type, v.read_length, v.data_type, v.length, v.array_length, v.byte_order,
-		       v.word_order, v.scale, v.offset_value, v.unit, v.poll_interval_ms, v.quality_rule,
-		       v.metadata, v.last_value, v.quality, v.last_updated_at, v.sort_order, v.status,
+		       v.word_order, v.scale, v.offset_value, v.unit, v.poll_interval_ms, v.access_level,
+		       v.quality_rule, v.metadata, v.last_value, v.quality, v.last_updated_at, v.sort_order, v.status,
 		       dp.id, dp.path, dp.status, v.created_at, v.updated_at
 		FROM data_s7_variables v
 		LEFT JOIN data_points dp
@@ -537,8 +540,8 @@ func (r *S7ModelingRepository) GetVariable(ctx context.Context, projectID, conne
 		SELECT v.id, v.project_id, v.connection_id, v.group_id, v.name, v.code, v.description,
 		       v.area, v.db_number, v.byte_offset, v.bit_offset, v.address_text, v.normalized_address,
 		       v.address_type, v.read_length, v.data_type, v.length, v.array_length, v.byte_order,
-		       v.word_order, v.scale, v.offset_value, v.unit, v.poll_interval_ms, v.quality_rule,
-		       v.metadata, v.last_value, v.quality, v.last_updated_at, v.sort_order, v.status,
+		       v.word_order, v.scale, v.offset_value, v.unit, v.poll_interval_ms, v.access_level,
+		       v.quality_rule, v.metadata, v.last_value, v.quality, v.last_updated_at, v.sort_order, v.status,
 		       dp.id, dp.path, dp.status, v.created_at, v.updated_at
 		FROM data_s7_variables v
 		LEFT JOIN data_points dp
@@ -573,23 +576,23 @@ func (r *S7ModelingRepository) CreateVariable(ctx context.Context, params Create
 			project_id, connection_id, group_id, name, code, description, area, db_number,
 			byte_offset, bit_offset, address_text, normalized_address, address_type, read_length,
 			data_type, length, array_length, byte_order, word_order, scale, offset_value, unit,
-			poll_interval_ms, quality_rule, metadata, sort_order, created_by, updated_by
+			poll_interval_ms, access_level, quality_rule, metadata, sort_order, created_by, updated_by
 		)
 		VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-			$17, $18, $19, $20, $21, $22, $23, $24::jsonb, $25::jsonb, $26, $27, $27
+			$17, $18, $19, $20, $21, $22, $23, $24, $25::jsonb, $26::jsonb, $27, $28, $28
 		)
 		RETURNING id, project_id, connection_id, group_id, name, code, description, area,
 		          db_number, byte_offset, bit_offset, address_text, normalized_address,
 		          address_type, read_length, data_type, length, array_length, byte_order,
-		          word_order, scale, offset_value, unit, poll_interval_ms, quality_rule,
+		          word_order, scale, offset_value, unit, poll_interval_ms, access_level, quality_rule,
 		          metadata, last_value, quality, last_updated_at, sort_order, status,
 		          NULL::uuid, NULL::text, NULL::text, created_at, updated_at
 	`, params.ProjectID, params.ConnectionID, params.GroupID, params.Name, params.Code, params.Description, params.Area,
 		params.DBNumber, params.ByteOffset, params.BitOffset, params.AddressText, params.NormalizedAddress,
 		params.AddressType, params.ReadLength, params.DataType, params.Length, params.ArrayLength, params.ByteOrder,
-		params.WordOrder, params.Scale, params.Offset, params.Unit, params.PollIntervalMS, string(qualityRuleBytes),
-		string(metadataBytes), params.SortOrder, params.UserID)
+		params.WordOrder, params.Scale, params.Offset, params.Unit, params.PollIntervalMS, params.AccessLevel,
+		string(qualityRuleBytes), string(metadataBytes), params.SortOrder, params.UserID)
 
 	record, scanErr := scanS7VariableRecord(row)
 	if scanErr != nil {
@@ -614,11 +617,11 @@ func (r *S7ModelingRepository) UpdateVariable(ctx context.Context, params Update
 		params.Area, params.DBNumber, params.ByteOffset, params.BitOffset, params.AddressText,
 		params.NormalizedAddress, params.AddressType, params.ReadLength, params.DataType, params.Length,
 		params.ArrayLength, params.ByteOrder, params.WordOrder, params.Scale, params.Offset, params.Unit,
-		params.PollIntervalMS, string(qualityRuleBytes), string(metadataBytes), params.SortOrder, params.Status,
-		params.UserID,
+		params.PollIntervalMS, params.AccessLevel, string(qualityRuleBytes), string(metadataBytes), params.SortOrder,
+		params.Status, params.UserID,
 	}
 	if params.HasGroupID {
-		groupSQL = "$29"
+		groupSQL = "$30"
 		args = append(args, params.GroupID)
 	}
 
@@ -644,18 +647,19 @@ func (r *S7ModelingRepository) UpdateVariable(ctx context.Context, params Update
 		    offset_value = $21,
 		    unit = $22,
 		    poll_interval_ms = $23,
-		    quality_rule = $24::jsonb,
-		    metadata = $25::jsonb,
-		    sort_order = $26,
-		    status = $27,
-		    updated_by = $28,
+		    access_level = $24,
+		    quality_rule = $25::jsonb,
+		    metadata = $26::jsonb,
+		    sort_order = $27,
+		    status = $28,
+		    updated_by = $29,
 		    updated_at = now(),
 		    group_id = `+groupSQL+`
 		WHERE project_id = $1 AND connection_id = $2 AND id = $3
 		RETURNING id, project_id, connection_id, group_id, name, code, description, area,
 		          db_number, byte_offset, bit_offset, address_text, normalized_address,
 		          address_type, read_length, data_type, length, array_length, byte_order,
-		          word_order, scale, offset_value, unit, poll_interval_ms, quality_rule,
+		          word_order, scale, offset_value, unit, poll_interval_ms, access_level, quality_rule,
 		          metadata, last_value, quality, last_updated_at, sort_order, status,
 		          NULL::uuid, NULL::text, NULL::text, created_at, updated_at
 	`, args...)
@@ -794,6 +798,7 @@ func scanS7VariableRecord(row pgx.Row) (S7VariableRecord, error) {
 		&record.Offset,
 		&record.Unit,
 		&record.PollIntervalMS,
+		&record.AccessLevel,
 		&record.QualityRule,
 		&record.Metadata,
 		&record.LastValue,

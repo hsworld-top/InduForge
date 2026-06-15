@@ -55,6 +55,7 @@ export type OpcuaBrowseNode = {
   nodeId: string
   nodeType: 'folder' | 'variable'
   dataType?: string
+  modeled?: boolean
 }
 
 export type OpcuaReadValue = {

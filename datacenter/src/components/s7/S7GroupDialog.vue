@@ -38,6 +38,7 @@ const props = defineProps<{
   mode: 'create' | 'edit'
   groups: S7VariableGroup[]
   groupValue?: S7VariableGroup | null
+  defaultParentId?: string
   loading?: boolean
 }>()
 
@@ -58,7 +59,8 @@ watch(
   () => {
     form.name = props.groupValue?.name || ''
     form.code = props.groupValue?.code || ''
-    form.parentId = props.groupValue?.parentId || ''
+    form.parentId =
+      props.mode === 'create' ? props.defaultParentId || '' : props.groupValue?.parentId || ''
     form.description = props.groupValue?.description || ''
   },
   { immediate: true },

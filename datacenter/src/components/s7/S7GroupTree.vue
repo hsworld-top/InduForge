@@ -21,6 +21,7 @@
       class="s7-group-tree__item s7-group-tree__all"
       :class="{ 'is-active': !selectedGroupId }"
       @click="$emit('select', '')"
+      @contextmenu.prevent="openRootMenu"
     >
       <IconTablerStack2 />
       <span>全部变量</span>
@@ -37,6 +38,7 @@
           :class="{ 'is-active': selectedGroupId === group.id }"
           :style="{ paddingLeft: `${12 + group.depth * 16}px` }"
           @click="$emit('select', group.id)"
+          @contextmenu.prevent="openGroupMenu($event, group)"
         >
           <IconTablerFolder />
           <span>{{ group.name }}</span>
@@ -52,6 +54,38 @@
         </div>
       </div>
     </div>
+    <Teleport to="body">
+      <div
+        v-if="menu.visible"
+        class="s7-group-tree__menu-mask"
+        @click="closeMenu"
+        @contextmenu.prevent="closeMenu"
+      >
+        <div
+          class="s7-group-tree__context-menu"
+          :style="{ left: `${menu.x}px`, top: `${menu.y}px` }"
+          @click.stop
+        >
+          <button type="button" @click="runMenuAction('create-child')">
+            <IconTablerFolderPlus />
+            <span>{{ menu.group ? '新建子分组' : '新建变量组' }}</span>
+          </button>
+          <button v-if="menu.group" type="button" @click="runMenuAction('edit')">
+            <IconTablerEdit />
+            <span>重命名</span>
+          </button>
+          <button
+            v-if="menu.group"
+            type="button"
+            class="is-danger"
+            @click="runMenuAction('delete')"
+          >
+            <IconTablerTrash />
+            <span>删除</span>
+          </button>
+        </div>
+      </div>
+    </Teleport>
   </aside>
 </template>
 
@@ -70,14 +104,21 @@ const props = defineProps<{
   total?: number
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (event: 'select', groupId: string): void
   (event: 'create'): void
+  (event: 'create-child', group: S7VariableGroup | null): void
   (event: 'edit', group: S7VariableGroup): void
   (event: 'delete', group: S7VariableGroup): void
 }>()
 
 const keyword = ref('')
+const menu = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  group: null as S7VariableGroup | null,
+})
 const treeGroups = computed(() => {
   const children = new Map<string, S7VariableGroup[]>()
   props.groups.forEach((group) => {
@@ -98,6 +139,29 @@ const filteredGroups = computed(() => {
     [group.name, group.code].some((value) => value.toLowerCase().includes(text)),
   )
 })
+
+function openRootMenu(event: MouseEvent) {
+  menu.value = { visible: true, x: event.clientX, y: event.clientY, group: null }
+}
+
+function openGroupMenu(event: MouseEvent, group: S7VariableGroup) {
+  menu.value = { visible: true, x: event.clientX, y: event.clientY, group }
+}
+
+function closeMenu() {
+  menu.value.visible = false
+}
+
+function runMenuAction(action: 'create-child' | 'edit' | 'delete') {
+  const group = menu.value.group
+  closeMenu()
+  if (action === 'create-child') {
+    emit('create-child', group)
+    return
+  }
+  if (!group) return
+  emit(action, group)
+}
 </script>
 
 <style scoped>
@@ -229,5 +293,52 @@ const filteredGroups = computed(() => {
 .s7-group-tree__empty {
   padding: 22px 8px;
   text-align: center;
+}
+
+.s7-group-tree__menu-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+}
+
+.s7-group-tree__context-menu {
+  position: fixed;
+  min-width: 138px;
+  padding: 4px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-surface);
+}
+
+.s7-group-tree__context-menu button {
+  width: 100%;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--dc-radius-sm);
+  background: transparent;
+  color: var(--dc-text-secondary);
+  font-size: 13px;
+  text-align: left;
+}
+
+.s7-group-tree__context-menu button:hover {
+  background: var(--dc-surface-muted);
+  color: var(--dc-primary);
+}
+
+.s7-group-tree__context-menu button.is-danger:hover {
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
+}
+
+.s7-group-tree__context-menu svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
 }
 </style>

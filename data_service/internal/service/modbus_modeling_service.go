@@ -198,6 +198,7 @@ type ImportModbusRegisterInput struct {
 	Offset         *float64 `json:"offset"`
 	Unit           *string  `json:"unit"`
 	PollIntervalMS *int     `json:"pollIntervalMs"`
+	AccessLevel    string   `json:"accessLevel"`
 	Description    *string  `json:"description"`
 }
 
@@ -386,7 +387,7 @@ func (s *ModbusModelingService) BatchImportRegisters(ctx context.Context, projec
 			Offset:         item.Offset,
 			Unit:           item.Unit,
 			PollIntervalMS: item.PollIntervalMS,
-			AccessLevel:    "Read",
+			AccessLevel:    item.AccessLevel,
 			Description:    item.Description,
 			SortOrder:      index,
 		}

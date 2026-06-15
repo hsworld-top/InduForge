@@ -25,6 +25,7 @@
         :total="variablePagination.total"
         @select="selectGroup"
         @create="openCreateGroup"
+        @create-child="openCreateChildGroup"
         @edit="openEditGroup"
         @delete="removeGroup"
       />
@@ -121,6 +122,15 @@
           <button
             type="button"
             class="s7-workbench__icon-action"
+            title="运行契约预览"
+            aria-label="运行契约预览"
+            @click="contractVisible = true"
+          >
+            <IconTablerFileDescription />
+          </button>
+          <button
+            type="button"
+            class="s7-workbench__icon-action"
             title="刷新"
             aria-label="刷新"
             @click="reloadAll"
@@ -184,6 +194,7 @@
       :mode="groupMode"
       :groups="groups"
       :group-value="editingGroup"
+      :default-parent-id="defaultGroupParentId"
       :loading="saving"
       @submit="saveGroup"
     />
@@ -209,6 +220,13 @@
       @locate="locateVariable"
     />
     <S7ReadPlanDialog v-model="readPlanVisible" :estimate="readPlanEstimate" />
+    <ProtocolContractDrawer
+      v-model="contractVisible"
+      title="S7 运行契约预览"
+      :subtitle="contractSubtitle"
+      :sections="contractSections"
+      :issues="contractIssues"
+    />
     <Teleport to="body">
       <div
         v-if="variableMenu.visible"
@@ -269,6 +287,7 @@ import S7ReadPlanDialog from '@/components/s7/S7ReadPlanDialog.vue'
 import S7ValidationDrawer from '@/components/s7/S7ValidationDrawer.vue'
 import S7VariableDialog from '@/components/s7/S7VariableDialog.vue'
 import S7VariableTable from '@/components/s7/S7VariableTable.vue'
+import ProtocolContractDrawer from './ProtocolContractDrawer.vue'
 import type {
   S7Profile,
   S7ReadPlanEstimate,
@@ -285,6 +304,7 @@ import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerCpu from '~icons/tabler/cpu'
 import IconTablerDownload from '~icons/tabler/download'
 import IconTablerExternalLink from '~icons/tabler/external-link'
+import IconTablerFileDescription from '~icons/tabler/file-description'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerRoute from '~icons/tabler/route'
@@ -328,6 +348,7 @@ const profileVisible = ref(false)
 const groupVisible = ref(false)
 const groupMode = ref<'create' | 'edit'>('create')
 const editingGroup = ref<S7VariableGroup | null>(null)
+const defaultGroupParentId = ref('')
 const variableVisible = ref(false)
 const variableMode = ref<'create' | 'edit'>('create')
 const editingVariable = ref<S7Variable | null>(null)
@@ -337,6 +358,7 @@ const previewValues = ref<S7ReadValue[]>([])
 const previewDiagnostics = ref<string[]>([])
 const validationVisible = ref(false)
 const readPlanVisible = ref(false)
+const contractVisible = ref(false)
 const quickFilter = ref('all')
 const variableMenu = ref({
   visible: false,
@@ -359,13 +381,16 @@ const session = useProtocolDevSession({
 })
 
 const config = computed(() => props.connection.config || {})
+const endpointText = computed(() =>
+  profile.value
+    ? `${profile.value.host}:${profile.value.port}`
+    : `${config.value.host || '未配置 host'}:${config.value.port || 102}`,
+)
 const sourceMetaRows = computed(() => [
   { label: '类型', value: 'Siemens S7' },
   {
     label: '端点',
-    value: profile.value
-      ? `${profile.value.host}:${profile.value.port}`
-      : `${config.value.host || '未配置 host'}:${config.value.port || 102}`,
+    value: endpointText.value,
   },
   { label: 'PLC', value: profile.value?.plcFamily || '未确认' },
   {
@@ -479,7 +504,7 @@ const variableExportRows = computed(() =>
     '协议地址 / NodeId': variable.normalizedAddress || variable.addressText,
     数据类型: variable.dataType,
     采集周期: `${variable.pollIntervalMs}ms`,
-    发布能力: 'read',
+    发布能力: variable.accessLevel || 'Read',
     '数据点 path': variable.datapointPath || '',
     状态: variable.status || '',
     最近开发态读取值: formatExportValue(variable.lastValue),
@@ -504,6 +529,51 @@ const issueExportRows = computed(() =>
     }
   }),
 )
+const contractSubtitle = computed(() =>
+  selectedVariable.value
+    ? `当前变量：${selectedVariable.value.name}`
+    : currentGroup.value
+      ? `当前范围：${currentGroup.value.name}`
+      : '当前范围：全部变量',
+)
+const contractIssues = computed(() => [
+  ...scopedValidationIssues.value.map((issue) => ({
+    severity: issue.severity,
+    message: issue.message,
+  })),
+  ...readPlanEstimate.value.diagnostics.map((message) => ({ severity: 'warning', message })),
+])
+const contractSections = computed(() => [
+  {
+    title: 'PLC 档案',
+    rows: [
+      { label: 'PLC 系列', value: profile.value?.plcFamily || '未确认' },
+      { label: '端点', value: endpointText.value },
+      { label: 'Rack / Slot', value: profile.value ? `${profile.value.rack}/${profile.value.slot}` : '-' },
+      { label: '优化 DB', value: profile.value?.optimizedBlockAccess ? '需确认绝对地址风险' : '未启用' },
+    ],
+  },
+  {
+    title: '读取计划',
+    rows: [
+      { label: '变量数', value: filteredVariables.value.length },
+      { label: '可写变量', value: filteredVariables.value.filter((item) => item.accessLevel !== 'Read').length },
+      { label: '读取块', value: readPlanEstimate.value.blockCount },
+      { label: '总字节', value: readPlanEstimate.value.totalReadBytes },
+      { label: '预计 reads/s', value: readPlanEstimate.value.readsPerSecond.toFixed(2) },
+    ],
+  },
+  {
+    title: '冗余与存储',
+    rows: [
+      { label: '当前值', value: 'IF 实时库', tone: 'ok' as const },
+      { label: '历史归档', value: '由存储策略菜单配置' },
+      { label: '设备冗余', value: deviceRedundancyText.value },
+      { label: '采集冗余', value: '运行部署策略统一配置' },
+    ],
+    notes: ['S7 工作台只配置协议侧读写权限，不提供写当前值、强制置位或批量控制。'],
+  },
+])
 
 const unwrapList = <T,>(response: any): T[] =>
   response?.data?.list || response?.data?.data?.list || []
@@ -568,11 +638,19 @@ const selectVariable = (variable: S7Variable) => {
 }
 const openCreateGroup = () => {
   editingGroup.value = null
+  defaultGroupParentId.value = ''
+  groupMode.value = 'create'
+  groupVisible.value = true
+}
+const openCreateChildGroup = (group: S7VariableGroup | null) => {
+  editingGroup.value = null
+  defaultGroupParentId.value = group?.id || ''
   groupMode.value = 'create'
   groupVisible.value = true
 }
 const openEditGroup = (group: S7VariableGroup) => {
   editingGroup.value = group
+  defaultGroupParentId.value = ''
   groupMode.value = 'edit'
   groupVisible.value = true
 }
@@ -833,8 +911,7 @@ function matchQuickFilter(variable: S7Variable) {
     return validationIssues.value.some((issue) => issue.variableId === variable.id)
   if (quickFilter.value === 'datapoint')
     return !variable.datapointPath || ['invalid', 'error'].includes(variable.datapointStatus || '')
-  if (quickFilter.value === 'writable')
-    return variable.area === 'Q' || variable.area === 'M' || variable.area === 'DB'
+  if (quickFilter.value === 'writable') return variable.accessLevel !== 'Read'
   if (quickFilter.value === 'disabled') return variable.status !== 'active'
   return true
 }
@@ -856,6 +933,13 @@ function formatExportValue(value: unknown) {
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
 }
+
+const deviceRedundancyText = computed(() => {
+  const redundancy = config.value.redundancy
+  if (!redundancy || redundancy.enabled === false) return '未配置'
+  const count = Array.isArray(redundancy.endpoints) ? redundancy.endpoints.length : 0
+  return count > 1 ? `主备优先级 · ${count} endpoint` : '待补备用路径'
+})
 
 onMounted(reloadAll)
 </script>

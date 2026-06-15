@@ -101,6 +101,7 @@ type ProtocolDevBrowseNode struct {
 	NodeID   string  `json:"nodeId"`
 	NodeType string  `json:"nodeType"`
 	DataType string  `json:"dataType,omitempty"`
+	Modeled  bool    `json:"modeled"`
 }
 
 // ProtocolDevOpcuaBrowseResult 表示 OPC UA 开发态浏览结果。
@@ -396,6 +397,7 @@ func (s *ProtocolDevSessionService) BrowseOpcua(ctx context.Context, projectID, 
 			Name:     group.Name,
 			NodeID:   group.ID,
 			NodeType: "folder",
+			Modeled:  true,
 		})
 	}
 	for _, node := range nodes {
@@ -406,6 +408,7 @@ func (s *ProtocolDevSessionService) BrowseOpcua(ctx context.Context, projectID, 
 			NodeID:   node.NodeID,
 			NodeType: "variable",
 			DataType: node.DataType,
+			Modeled:  true,
 		})
 	}
 	return result, nil

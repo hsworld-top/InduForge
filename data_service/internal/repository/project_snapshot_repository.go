@@ -179,6 +179,7 @@ type SnapshotS7VariableRecord struct {
 	Offset            float64 `json:"offset"`
 	Unit              *string `json:"unit,omitempty"`
 	PollIntervalMS    int     `json:"pollIntervalMs"`
+	AccessLevel       string  `json:"accessLevel"`
 	DataPointPath     *string `json:"datapointPath,omitempty"`
 }
 
@@ -1231,7 +1232,7 @@ func (r *ProjectSnapshotRepository) listS7Variables(ctx context.Context, project
         SELECT v.id, v.connection_id, v.group_id, v.name, v.code, v.address_text,
                v.normalized_address, v.area, v.db_number, v.byte_offset, v.bit_offset,
                v.read_length, v.data_type, v.byte_order, v.word_order, v.scale,
-               v.offset_value, v.unit, v.poll_interval_ms, dp.path
+               v.offset_value, v.unit, v.poll_interval_ms, v.access_level, dp.path
         FROM data_s7_variables v
         LEFT JOIN data_points dp
           ON dp.project_id = v.project_id
@@ -1269,6 +1270,7 @@ func (r *ProjectSnapshotRepository) listS7Variables(ctx context.Context, project
 			&record.Offset,
 			&record.Unit,
 			&record.PollIntervalMS,
+			&record.AccessLevel,
 			&record.DataPointPath,
 		); err != nil {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取快照 S7 变量失败", err)

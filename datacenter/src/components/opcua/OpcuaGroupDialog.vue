@@ -40,6 +40,7 @@ const props = defineProps<{
   mode: 'create' | 'edit'
   groups: OpcuaNodeGroup[]
   groupValue?: OpcuaNodeGroup | null
+  defaultParentId?: string
   loading?: boolean
 }>()
 
@@ -62,7 +63,8 @@ watch(
   () => {
     if (!props.modelValue) return
     form.name = props.groupValue?.name || ''
-    form.parentId = props.groupValue?.parentId || ''
+    form.parentId =
+      props.mode === 'create' ? props.defaultParentId || '' : props.groupValue?.parentId || ''
     form.description = props.groupValue?.description || ''
   },
   { immediate: true },

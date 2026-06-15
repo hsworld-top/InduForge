@@ -30,6 +30,7 @@
         :total="nodePagination.total"
         @select="selectGroup"
         @create="openCreateGroup"
+        @create-child="openCreateChildGroup"
         @edit="openEditGroup"
         @delete="removeGroup"
       />
@@ -43,7 +44,7 @@
             class="opcua-workbench__icon-action"
             :title="importActionTitle"
             :aria-label="importActionTitle"
-            @click="importVisible = true"
+            @click="openImportDialog"
           >
             <IconTablerUpload />
           </button>
@@ -95,6 +96,15 @@
             @click="runValidation"
           >
             <IconTablerChecklist />
+          </button>
+          <button
+            type="button"
+            class="opcua-workbench__icon-action"
+            title="运行契约预览"
+            aria-label="运行契约预览"
+            @click="contractVisible = true"
+          >
+            <IconTablerFileDescription />
           </button>
           <button
             type="button"
@@ -164,6 +174,7 @@
       :mode="groupDialogMode"
       :groups="groups"
       :group-value="editingGroup"
+      :default-parent-id="defaultGroupParentId"
       :loading="saving"
       @submit="saveGroup"
     />
@@ -176,7 +187,16 @@
       :loading="saving"
       @submit="saveNode"
     />
-    <OpcuaImportDialog v-model="importVisible" :loading="saving" @submit="importNodes" />
+    <OpcuaImportDialog
+      v-model="importVisible"
+      :loading="saving"
+      :connected="session.connected.value"
+      :browse-loading="browsing"
+      :browse-nodes="browseNodes"
+      :browse-diagnostics="browseDiagnostics"
+      @browse="loadBrowseNodes"
+      @submit="importNodes"
+    />
     <OpcuaPreviewDialog
       v-model="previewVisible"
       :nodes="previewNodes"
@@ -187,6 +207,13 @@
       :issues="scopedValidationIssues"
       :scope-label="validationScopeLabel"
       @locate="locateNode"
+    />
+    <ProtocolContractDrawer
+      v-model="contractVisible"
+      title="OPC UA 运行契约预览"
+      :subtitle="contractSubtitle"
+      :sections="contractSections"
+      :issues="contractIssues"
     />
     <ConnectionDialog
       v-model="showEditDialog"
@@ -253,7 +280,9 @@ import OpcuaNodeDialog from '@/components/opcua/OpcuaNodeDialog.vue'
 import OpcuaNodeTable from '@/components/opcua/OpcuaNodeTable.vue'
 import OpcuaPreviewDialog from '@/components/opcua/OpcuaPreviewDialog.vue'
 import OpcuaValidationDrawer from '@/components/opcua/OpcuaValidationDrawer.vue'
+import ProtocolContractDrawer from './ProtocolContractDrawer.vue'
 import type {
+  OpcuaBrowseNode,
   OpcuaNode,
   OpcuaNodeGroup,
   OpcuaReadValue,
@@ -265,6 +294,7 @@ import IconTablerClipboard from '~icons/tabler/clipboard'
 import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerDownload from '~icons/tabler/download'
 import IconTablerExternalLink from '~icons/tabler/external-link'
+import IconTablerFileDescription from '~icons/tabler/file-description'
 import IconTablerPencil from '~icons/tabler/pencil'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerRefresh from '~icons/tabler/refresh'
@@ -370,15 +400,20 @@ const nodeKeyword = ref('')
 const groupDialogVisible = ref(false)
 const groupDialogMode = ref<'create' | 'edit'>('create')
 const editingGroup = ref<OpcuaNodeGroup | null>(null)
+const defaultGroupParentId = ref('')
 const nodeDialogVisible = ref(false)
 const nodeDialogMode = ref<'create' | 'edit'>('create')
 const editingNode = ref<OpcuaNode | null>(null)
 const importVisible = ref(false)
+const browsing = ref(false)
+const browseNodes = ref<OpcuaBrowseNode[]>([])
+const browseDiagnostics = ref<string[]>([])
 const previewVisible = ref(false)
 const previewNodes = ref<OpcuaReadValue[]>([])
 const previewDiagnostics = ref<string[]>([])
 const validationVisible = ref(false)
 const validationIssues = ref<OpcuaValidationIssue[]>([])
+const contractVisible = ref(false)
 const quickFilter = ref('all')
 const nodeMenu = ref({
   visible: false,
@@ -518,6 +553,49 @@ const issueExportRows = computed(() =>
     }
   }),
 )
+const contractSubtitle = computed(() =>
+  currentGroup.value
+    ? `当前范围：${currentGroup.value.name}`
+    : selectedNode.value
+      ? `当前变量：${selectedNode.value.name}`
+      : '当前范围：全部变量',
+)
+const contractIssues = computed(() =>
+  scopedValidationIssues.value.map((issue) => ({
+    severity: issue.severity,
+    message: issue.message,
+  })),
+)
+const contractSections = computed(() => [
+  {
+    title: '协议建模',
+    rows: [
+      { label: 'Endpoint', value: endpointText.value },
+      { label: '变量数', value: filteredNodes.value.length },
+      { label: '启用变量', value: filteredNodes.value.filter((node) => node.status === 'active').length },
+      { label: '发布能力', value: '按服务器能力收窄，不提供工作台写值' },
+    ],
+  },
+  {
+    title: '订阅策略',
+    rows: [
+      { label: '默认采样', value: samplingSummary.value },
+      { label: '开发态位置', value: '平台侧 data_service' },
+      { label: '运行态位置', value: '发布后的采集节点 / 数据引擎' },
+      { label: '预览语义', value: '短时读取快照，不写历史、不触发报警计算' },
+    ],
+  },
+  {
+    title: '冗余与存储',
+    rows: [
+      { label: '当前值', value: 'IF 实时库', tone: 'ok' as const },
+      { label: '历史归档', value: '由存储策略菜单配置' },
+      { label: '设备冗余', value: deviceRedundancyText.value },
+      { label: '采集冗余', value: '运行部署策略统一配置' },
+    ],
+    notes: ['同一 connection 同一时刻只有一个采集 Owner；设备 endpoint 故障时由该 Owner 按主备策略切换。'],
+  },
+])
 
 const unwrapList = <T,>(response: any): T[] =>
   response?.data?.list || response?.data?.data?.list || []
@@ -546,6 +624,35 @@ const reloadAll = async () => {
   }
 }
 
+const openImportDialog = async () => {
+  importVisible.value = true
+  if (session.connected.value && browseNodes.value.length === 0) {
+    await loadBrowseNodes()
+  }
+}
+
+const loadBrowseNodes = async () => {
+  if (!session.connected.value || !session.sessionId.value) {
+    ElMessage.warning('请先连接 OPC UA 开发态会话')
+    return
+  }
+  browsing.value = true
+  try {
+    const response = await dataAPI.browseOpcuaDevSession(
+      props.projectId,
+      props.connection.id,
+      session.sessionId.value,
+    )
+    const data = unwrapData(response)
+    browseNodes.value = data.nodes || []
+    browseDiagnostics.value = data.diagnostics || []
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '浏览 OPC UA 节点失败'))
+  } finally {
+    browsing.value = false
+  }
+}
+
 const selectGroup = async (groupId: string) => {
   selectedGroupId.value = groupId
   selectedNodeId.value = ''
@@ -570,12 +677,21 @@ const selectNode = (node: OpcuaNode) => {
 
 const openCreateGroup = () => {
   editingGroup.value = null
+  defaultGroupParentId.value = ''
+  groupDialogMode.value = 'create'
+  groupDialogVisible.value = true
+}
+
+const openCreateChildGroup = (group: OpcuaNodeGroup | null) => {
+  editingGroup.value = null
+  defaultGroupParentId.value = group?.id || ''
   groupDialogMode.value = 'create'
   groupDialogVisible.value = true
 }
 
 const openEditGroup = (group: OpcuaNodeGroup) => {
   editingGroup.value = group
+  defaultGroupParentId.value = ''
   groupDialogMode.value = 'edit'
   groupDialogVisible.value = true
 }
@@ -839,6 +955,21 @@ function issueSummaryForNode(nodeId: string) {
     .map((issue) => `${issue.severity}:${issue.message}`)
     .join('; ')
 }
+
+const samplingSummary = computed(() => {
+  const values = filteredNodes.value.map((node) => Number(node.samplingMs || 0)).filter(Boolean)
+  if (values.length === 0) return '-'
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  return min === max ? `${min}ms` : `${min}-${max}ms`
+})
+
+const deviceRedundancyText = computed(() => {
+  const redundancy = config.value.redundancy
+  if (!redundancy || redundancy.enabled === false) return '未配置'
+  const count = Array.isArray(redundancy.endpoints) ? redundancy.endpoints.length : 0
+  return count > 1 ? `主备优先级 · ${count} endpoint` : '待补备用路径'
+})
 
 async function copyText(text: string, successMessage: string) {
   await navigator.clipboard.writeText(text)

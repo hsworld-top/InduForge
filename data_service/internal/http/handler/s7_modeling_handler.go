@@ -323,6 +323,7 @@ type s7VariableRequest struct {
 	Offset         *float64       `json:"offset"`
 	Unit           *string        `json:"unit"`
 	PollIntervalMS *int           `json:"pollIntervalMs"`
+	AccessLevel    string         `json:"accessLevel"`
 	QualityRule    map[string]any `json:"qualityRule"`
 	Metadata       map[string]any `json:"metadata"`
 	SortOrder      int            `json:"sortOrder"`
@@ -334,7 +335,8 @@ func (r s7VariableRequest) toCreateInput() service.CreateS7VariableInput {
 		GroupID: r.GroupID, Name: r.Name, Code: r.Code, Description: r.Description, AddressText: r.AddressText,
 		DataType: r.DataType, Length: r.Length, ArrayLength: r.ArrayLength, ByteOrder: r.ByteOrder,
 		WordOrder: r.WordOrder, Scale: r.Scale, Offset: r.Offset, Unit: r.Unit,
-		PollIntervalMS: r.PollIntervalMS, QualityRule: r.QualityRule, Metadata: r.Metadata, SortOrder: r.SortOrder,
+		PollIntervalMS: r.PollIntervalMS, AccessLevel: r.AccessLevel, QualityRule: r.QualityRule,
+		Metadata: r.Metadata, SortOrder: r.SortOrder,
 	}
 }
 
@@ -343,6 +345,7 @@ func (r s7VariableRequest) toUpdateInput() service.UpdateS7VariableInput {
 		GroupID: r.GroupID, HasGroupID: r.HasGroupID, Name: r.Name, Code: r.Code, Description: r.Description, AddressText: r.AddressText,
 		DataType: r.DataType, Length: r.Length, ArrayLength: r.ArrayLength, ByteOrder: r.ByteOrder,
 		WordOrder: r.WordOrder, Scale: r.Scale, Offset: r.Offset, Unit: r.Unit,
-		PollIntervalMS: r.PollIntervalMS, QualityRule: r.QualityRule, Metadata: r.Metadata, SortOrder: r.SortOrder, Status: r.Status,
+		PollIntervalMS: r.PollIntervalMS, AccessLevel: r.AccessLevel, QualityRule: r.QualityRule,
+		Metadata: r.Metadata, SortOrder: r.SortOrder, Status: r.Status,
 	}
 }

@@ -67,11 +67,18 @@
         </div>
       </section>
       <section>
-        <h3><span>04</span>采样</h3>
+        <h3><span>04</span>采样与权限</h3>
         <div class="s7-variable-dialog__grid">
           <el-form-item label="采集周期 ms"
             ><el-input-number v-model="form.pollIntervalMs" :min="100"
           /></el-form-item>
+          <el-form-item label="读写权限">
+            <el-select v-model="form.accessLevel">
+              <el-option label="Read" value="Read" />
+              <el-option label="Write" value="Write" />
+              <el-option label="ReadWrite" value="ReadWrite" />
+            </el-select>
+          </el-form-item>
           <el-form-item label="状态"
             ><el-select v-model="form.status"
               ><el-option label="active" value="active" /><el-option
@@ -127,6 +134,7 @@ const form = reactive({
   offset: 0,
   unit: '',
   pollIntervalMs: 1000,
+  accessLevel: 'Read',
   status: 'active',
   description: '',
 })
@@ -148,6 +156,7 @@ watch(
       offset: variable?.offset ?? 0,
       unit: variable?.unit || '',
       pollIntervalMs: variable?.pollIntervalMs || 1000,
+      accessLevel: variable?.accessLevel || 'Read',
       status: variable?.status || 'active',
       description: variable?.description || '',
     })
@@ -173,6 +182,7 @@ const submit = () => {
     offset: form.offset,
     unit: form.unit.trim() || null,
     pollIntervalMs: form.pollIntervalMs,
+    accessLevel: form.accessLevel,
     status: form.status,
     description: form.description.trim() || null,
     sortOrder: props.variable?.sortOrder || 0,
