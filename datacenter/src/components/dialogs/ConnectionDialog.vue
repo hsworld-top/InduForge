@@ -360,7 +360,11 @@
                     <el-input v-model="formData.ip" placeholder="127.0.0.1" />
                   </el-form-item>
                   <el-form-item label="端口">
-                    <el-input v-model.number="formData.port" inputmode="numeric" placeholder="4840" />
+                    <el-input
+                      v-model.number="formData.port"
+                      inputmode="numeric"
+                      placeholder="4840"
+                    />
                   </el-form-item>
                 </div>
               </div>
@@ -409,12 +413,20 @@
                 <el-collapse-item title="高级参数配置 (含超时与证书)" name="ssl">
                   <div class="connection-dialog__form-grid mb-4">
                     <el-form-item label="连接超时">
-                      <el-input v-model.number="formData.connectionTimeoutMs" inputmode="numeric" placeholder="5000">
+                      <el-input
+                        v-model.number="formData.connectionTimeoutMs"
+                        inputmode="numeric"
+                        placeholder="5000"
+                      >
                         <template #append>ms</template>
                       </el-input>
                     </el-form-item>
                     <el-form-item label="请求超时">
-                      <el-input v-model.number="formData.requestTimeoutMs" inputmode="numeric" placeholder="5000">
+                      <el-input
+                        v-model.number="formData.requestTimeoutMs"
+                        inputmode="numeric"
+                        placeholder="5000"
+                      >
                         <template #append>ms</template>
                       </el-input>
                     </el-form-item>
@@ -457,11 +469,59 @@
                     </template>
                     <el-switch v-model="formData.sslConfig.rejectUnauthorized" />
                     <span class="connection-dialog__field-inline-tip">
-                      {{ formData.sslConfig.rejectUnauthorized ? '校验证书链与主机名' : '跳过证书校验' }}
+                      {{
+                        formData.sslConfig.rejectUnauthorized
+                          ? '校验证书链与主机名'
+                          : '跳过证书校验'
+                      }}
                     </span>
                   </el-form-item>
                 </el-collapse-item>
               </el-collapse>
+              <div class="connection-dialog__form-section">
+                <div class="connection-dialog__form-section-title">设备冗余</div>
+                <el-switch
+                  v-model="formData.redundancy.enabled"
+                  active-text="启用主备 endpoint"
+                  inactive-text="不启用"
+                />
+                <div v-if="formData.redundancy.enabled" class="connection-dialog__redundancy-grid">
+                  <el-form-item
+                    v-for="endpoint in formData.redundancy.endpoints"
+                    :key="endpoint.role"
+                    :label="endpoint.role === 'primary' ? '主 endpoint' : '备 endpoint'"
+                  >
+                    <div class="connection-dialog__endpoint-row">
+                      <el-input
+                        v-model="endpoint.host"
+                        :placeholder="endpoint.role === 'primary' ? formData.ip : '备用 IP'"
+                      />
+                      <el-input-number v-model="endpoint.port" :min="1" class="w-full" />
+                    </div>
+                  </el-form-item>
+                </div>
+                <div v-if="formData.redundancy.enabled" class="connection-dialog__redundancy-grid">
+                  <el-form-item label="故障超时">
+                    <el-input-number
+                      v-model="formData.redundancy.failoverPolicy.timeoutMs"
+                      :min="1000"
+                      :step="1000"
+                      class="w-full"
+                    />
+                  </el-form-item>
+                  <el-form-item label="冷却时间">
+                    <el-input-number
+                      v-model="formData.redundancy.failoverPolicy.cooldownMs"
+                      :min="1000"
+                      :step="1000"
+                      class="w-full"
+                    />
+                  </el-form-item>
+                  <el-form-item label="自动回切">
+                    <el-switch v-model="formData.redundancy.failoverPolicy.autoFailback" />
+                  </el-form-item>
+                </div>
+              </div>
             </template>
 
             <template v-else-if="connectionType === 's7'">
@@ -498,6 +558,50 @@
                   placeholder='{"pduSize":480}'
                 />
               </el-form-item>
+              <div class="connection-dialog__form-section">
+                <div class="connection-dialog__form-section-title">设备冗余</div>
+                <el-switch
+                  v-model="formData.redundancy.enabled"
+                  active-text="启用主备 PLC"
+                  inactive-text="不启用"
+                />
+                <div v-if="formData.redundancy.enabled" class="connection-dialog__redundancy-grid">
+                  <el-form-item
+                    v-for="endpoint in formData.redundancy.endpoints"
+                    :key="endpoint.role"
+                    :label="endpoint.role === 'primary' ? '主 PLC' : '备 PLC'"
+                  >
+                    <div class="connection-dialog__endpoint-row">
+                      <el-input
+                        v-model="endpoint.host"
+                        :placeholder="endpoint.role === 'primary' ? formData.ip : '备用 PLC IP'"
+                      />
+                      <el-input-number v-model="endpoint.port" :min="1" class="w-full" />
+                    </div>
+                  </el-form-item>
+                </div>
+                <div v-if="formData.redundancy.enabled" class="connection-dialog__redundancy-grid">
+                  <el-form-item label="故障超时">
+                    <el-input-number
+                      v-model="formData.redundancy.failoverPolicy.timeoutMs"
+                      :min="1000"
+                      :step="1000"
+                      class="w-full"
+                    />
+                  </el-form-item>
+                  <el-form-item label="冷却时间">
+                    <el-input-number
+                      v-model="formData.redundancy.failoverPolicy.cooldownMs"
+                      :min="1000"
+                      :step="1000"
+                      class="w-full"
+                    />
+                  </el-form-item>
+                  <el-form-item label="自动回切">
+                    <el-switch v-model="formData.redundancy.failoverPolicy.autoFailback" />
+                  </el-form-item>
+                </div>
+              </div>
             </template>
 
             <template v-else-if="connectionType === 'modbus'">
@@ -556,6 +660,60 @@
                   placeholder='{"functionCode":3}'
                 />
               </el-form-item>
+              <div class="connection-dialog__form-section">
+                <div class="connection-dialog__form-section-title">设备冗余</div>
+                <el-switch
+                  v-model="formData.redundancy.enabled"
+                  :disabled="formData.mode === 'rtu'"
+                  active-text="启用主备 TCP 网关"
+                  inactive-text="不启用"
+                />
+                <p v-if="formData.mode === 'rtu'" class="connection-dialog__field-tip">
+                  当前 Linux 目标环境下 RTU 优先级较低，串口冗余后续在采集节点侧配置。
+                </p>
+                <div
+                  v-if="formData.redundancy.enabled && formData.mode !== 'rtu'"
+                  class="connection-dialog__redundancy-grid"
+                >
+                  <el-form-item
+                    v-for="endpoint in formData.redundancy.endpoints"
+                    :key="endpoint.role"
+                    :label="endpoint.role === 'primary' ? '主网关' : '备网关'"
+                  >
+                    <div class="connection-dialog__endpoint-row">
+                      <el-input
+                        v-model="endpoint.host"
+                        :placeholder="endpoint.role === 'primary' ? formData.ip : '备用网关 IP'"
+                      />
+                      <el-input-number v-model="endpoint.port" :min="1" class="w-full" />
+                    </div>
+                  </el-form-item>
+                </div>
+                <div
+                  v-if="formData.redundancy.enabled && formData.mode !== 'rtu'"
+                  class="connection-dialog__redundancy-grid"
+                >
+                  <el-form-item label="故障超时">
+                    <el-input-number
+                      v-model="formData.redundancy.failoverPolicy.timeoutMs"
+                      :min="1000"
+                      :step="1000"
+                      class="w-full"
+                    />
+                  </el-form-item>
+                  <el-form-item label="冷却时间">
+                    <el-input-number
+                      v-model="formData.redundancy.failoverPolicy.cooldownMs"
+                      :min="1000"
+                      :step="1000"
+                      class="w-full"
+                    />
+                  </el-form-item>
+                  <el-form-item label="自动回切">
+                    <el-switch v-model="formData.redundancy.failoverPolicy.autoFailback" />
+                  </el-form-item>
+                </div>
+              </div>
             </template>
 
             <template v-else-if="connectionType === 'tdengine'">
@@ -1071,6 +1229,7 @@ const summaryRows = computed(() => {
   } else if (connectionType.value === 'opcua') {
     rows.push(
       { label: '地址', value: formatEndpoint(data.ip, data.port) },
+      { label: '设备冗余', value: formatRedundancySummary(data.redundancy) },
       {
         label: '安全',
         value: `${data.securityPolicy || 'None'} / ${data.securityMode || 'none'}`,
@@ -1084,6 +1243,7 @@ const summaryRows = computed(() => {
   } else if (connectionType.value === 's7') {
     rows.push(
       { label: '地址', value: formatEndpoint(data.ip, data.port) },
+      { label: '设备冗余', value: formatRedundancySummary(data.redundancy) },
       { label: 'Rack', value: String(data.rack ?? 0) },
       { label: 'Slot', value: String(data.slot ?? 1) },
       { label: '周期', value: formatTimeout(data.pollIntervalMs) },
@@ -1095,6 +1255,7 @@ const summaryRows = computed(() => {
         label: '地址',
         value: data.mode === 'rtu' ? '串口 RTU' : formatEndpoint(data.ip, data.port),
       },
+      { label: '设备冗余', value: formatRedundancySummary(data.redundancy) },
       { label: '站号', value: String(data.slaveId ?? 1) },
       {
         label: '范围',
@@ -1192,15 +1353,10 @@ const checklist = computed(() => {
   ]
 })
 
-
-
 // 监听 OPC UA 的安全模式/安全策略/证书联动
 watch(
-  () => [
-    connectionType.value,
-    formData.value?.securityMode,
-    formData.value?.securityPolicy,
-  ] as const,
+  () =>
+    [connectionType.value, formData.value?.securityMode, formData.value?.securityPolicy] as const,
   ([type, secMode, secPolicy], oldVal) => {
     if (type !== 'opcua' || !formData.value) return
     const [_, oldSecMode, oldSecPolicy] = oldVal || []
@@ -1558,6 +1714,7 @@ const getProtocolDefaultConfig = (type) => {
         key: '',
         rejectUnauthorized: false,
       },
+      redundancy: defaultRedundancyConfig(4840),
     },
     s7: {
       name: '',
@@ -1567,6 +1724,7 @@ const getProtocolDefaultConfig = (type) => {
       slot: 1,
       pollIntervalMs: 1000,
       optionsText: '{}',
+      redundancy: defaultRedundancyConfig(102),
     },
     modbus: {
       name: '',
@@ -1579,6 +1737,7 @@ const getProtocolDefaultConfig = (type) => {
       quantity: 1,
       pollIntervalMs: 1000,
       optionsText: '{}',
+      redundancy: defaultRedundancyConfig(502),
     },
     tdengine: {
       name: '',
@@ -1689,7 +1848,7 @@ const normalizeProtocolFormData = (type, config) => {
     data.namespaceUrl = options.namespaceUrl || ''
     data.connectionTimeoutMs = options.connectionTimeoutMs || 5000
     data.requestTimeoutMs = options.requestTimeoutMs || 5000
-    
+
     const ssl = options.sslConfig || {}
     data.sslConfig = {
       ca: ssl.ca || '',
@@ -1697,6 +1856,9 @@ const normalizeProtocolFormData = (type, config) => {
       key: ssl.key || '',
       rejectUnauthorized: ssl.rejectUnauthorized === true,
     }
+  }
+  if (industrialProtocolTypes.includes(type)) {
+    data.redundancy = normalizeRedundancyForForm(type, data, config.redundancy)
   }
   if (['s7', 'modbus'].includes(type) && config.host) {
     data.ip = config.host
@@ -1769,7 +1931,10 @@ const normalizeProtocolSubmitConfig = (type, config) => {
   if (type === 'opcua') {
     const defaultSessionName = `InduForge-Client-${config.name || 'OPCUA'}`
     config.options = {
-      sessionName: config.sessionName === 'InduForge_Session' || !config.sessionName ? defaultSessionName : config.sessionName,
+      sessionName:
+        config.sessionName === 'InduForge_Session' || !config.sessionName
+          ? defaultSessionName
+          : config.sessionName,
       namespaceUrl: config.namespaceUrl || '',
       connectionTimeoutMs: Number(config.connectionTimeoutMs) || 5000,
       requestTimeoutMs: Number(config.requestTimeoutMs) || 5000,
@@ -1781,6 +1946,7 @@ const normalizeProtocolSubmitConfig = (type, config) => {
       },
     }
     config.endpoint = buildOpcuaEndpoint(config.ip, config.port)
+    config.redundancy = normalizeRedundancyForSubmit('opcua', config)
     if (config.authType !== 'username_password') {
       delete config.username
       delete config.password
@@ -1796,6 +1962,7 @@ const normalizeProtocolSubmitConfig = (type, config) => {
   }
   if (type === 's7') {
     config.options = parseOptionalJsonObject(config.optionsText, '扩展参数')
+    config.redundancy = normalizeRedundancyForSubmit('s7', config)
     config.host = config.ip
     delete config.ip
     delete config.optionsText
@@ -1803,8 +1970,15 @@ const normalizeProtocolSubmitConfig = (type, config) => {
   }
   if (type === 'modbus') {
     config.options = parseOptionalJsonObject(config.optionsText, '扩展参数')
+    config.redundancy = normalizeRedundancyForSubmit('modbus', config)
     if (config.mode === 'rtu') {
       config.serialConfig = parseOptionalJsonObject(config.serialConfigText, '串口配置')
+      config.redundancy = {
+        enabled: false,
+        mode: 'none',
+        endpoints: [],
+        failoverPolicy: defaultFailoverPolicy(),
+      }
       delete config.ip
       delete config.port
     } else {
@@ -1878,9 +2052,117 @@ const parseOptionalJsonObject = (value, label) => {
   throw new Error(`${label} 必须是 JSON 对象`)
 }
 
+function defaultFailoverPolicy() {
+  return {
+    timeoutMs: 3000,
+    cooldownMs: 10000,
+    autoFailback: false,
+    stableDurationMs: 30000,
+  }
+}
+
+function defaultRedundancyConfig(defaultPort = 0) {
+  return {
+    enabled: false,
+    mode: 'priority_failover',
+    endpoints: [
+      {
+        id: 'primary',
+        name: '主路径',
+        role: 'primary',
+        host: '',
+        port: defaultPort,
+        priority: 1,
+        enabled: true,
+        healthCheck: true,
+      },
+      {
+        id: 'standby',
+        name: '备用路径',
+        role: 'standby',
+        host: '',
+        port: defaultPort,
+        priority: 2,
+        enabled: true,
+        healthCheck: true,
+      },
+    ],
+    failoverPolicy: defaultFailoverPolicy(),
+  }
+}
+
+function normalizeRedundancyForForm(type: string, data: Record<string, any>, source: any) {
+  const fallbackPort = type === 'opcua' ? 4840 : type === 's7' ? 102 : 502
+  const base = defaultRedundancyConfig(Number(data.port) || fallbackPort)
+  const sourceEndpoints = Array.isArray(source?.endpoints) ? source.endpoints : []
+  const primary = sourceEndpoints.find((endpoint) => endpoint?.role === 'primary')
+  const standby = sourceEndpoints.find((endpoint) => endpoint?.role === 'standby')
+  const endpoints = base.endpoints.map((endpoint) => {
+    const matched = endpoint.role === 'primary' ? primary : standby
+    const fallbackHost = endpoint.role === 'primary' ? data.host || data.ip || '' : ''
+    return {
+      ...endpoint,
+      ...(matched || {}),
+      host: matched?.host || matched?.endpoint || fallbackHost,
+      port: Number(matched?.port || data.port || endpoint.port || fallbackPort),
+    }
+  })
+  return {
+    ...base,
+    ...(source || {}),
+    enabled: source?.enabled === true,
+    mode: source?.mode || 'priority_failover',
+    endpoints,
+    failoverPolicy: {
+      ...base.failoverPolicy,
+      ...(source?.failoverPolicy || {}),
+    },
+  }
+}
+
+function normalizeRedundancyForSubmit(type: string, config: Record<string, any>) {
+  const redundancy = normalizeRedundancyForForm(type, config, config.redundancy)
+  if (!redundancy.enabled) {
+    return {
+      enabled: false,
+      mode: 'none',
+      endpoints: [],
+      failoverPolicy: defaultFailoverPolicy(),
+    }
+  }
+  const endpoints = redundancy.endpoints
+    .map((endpoint, index) => ({
+      id: endpoint.id || endpoint.role || `endpoint-${index + 1}`,
+      name: endpoint.name || (endpoint.role === 'primary' ? '主路径' : '备用路径'),
+      role: endpoint.role || (index === 0 ? 'primary' : 'standby'),
+      host: String(endpoint.host || '').trim(),
+      port: Number(endpoint.port || config.port || 0),
+      priority: Number(endpoint.priority || index + 1),
+      enabled: endpoint.enabled !== false,
+      healthCheck: endpoint.healthCheck !== false,
+    }))
+    .filter((endpoint) => endpoint.host)
+  return {
+    enabled: endpoints.length > 1,
+    mode: endpoints.length > 1 ? 'priority_failover' : 'none',
+    endpoints: endpoints.length > 1 ? endpoints : [],
+    failoverPolicy: {
+      ...defaultFailoverPolicy(),
+      ...(redundancy.failoverPolicy || {}),
+    },
+  }
+}
+
 const formatEndpoint = (host, port) => {
   const safeHost = host || '未填写'
   return port ? `${safeHost}:${port}` : safeHost
+}
+
+const formatRedundancySummary = (redundancy: any) => {
+  if (!redundancy?.enabled) return '无'
+  const endpoints = Array.isArray(redundancy.endpoints) ? redundancy.endpoints : []
+  const enabledCount = endpoints.filter((endpoint) => endpoint?.enabled !== false).length
+  return enabledCount > 1 ? `主备已配置(${enabledCount})` : '待补备用路径'
 }
 
 const formatTimeout = (timeout) => {

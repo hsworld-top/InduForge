@@ -21,6 +21,12 @@
           {{ resolveConnectionEndpoint(connection) }}
         </span>
       </div>
+      <div v-if="isIndustrialConnection" class="access-source-card__health">
+        <span>{{ variableSummary }}</span>
+        <span>{{ redundancySummary }}</span>
+        <span>{{ collectionRedundancySummary }}</span>
+        <span>{{ historyStorageSummary }}</span>
+      </div>
     </div>
 
     <div class="access-source-card__bottom">
@@ -67,6 +73,9 @@ type AccessSourceConnection = {
   type?: string
   datapointCount?: number
   dataPointCount?: number
+  variableCount?: number
+  issueCount?: number
+  historyPolicyCount?: number
   relationalConfig?: {
     dbType?: string
     host?: string
@@ -234,6 +243,46 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
   }
   return '等待接入配置'
 }
+
+const isIndustrialConnection = computed(
+  () => resolveConnectionCategory(props.connection) === 'industrial',
+)
+
+const variableSummary = computed(() => {
+  const variableCount = Number(props.connection.variableCount ?? 0)
+  const dataPointCount = Number(
+    props.connection.datapointCount ?? props.connection.dataPointCount ?? 0,
+  )
+  const issueCount = Number(props.connection.issueCount ?? 0)
+  const issueText = issueCount > 0 ? ` / 问题${issueCount}` : ''
+  return `变量${variableCount} / 点${dataPointCount}${issueText}`
+})
+
+const redundancySummary = computed(() => {
+  const redundancy = props.connection.config?.['redundancy'] as Record<string, any> | undefined
+  if (!redundancy?.enabled) return '设备冗余：无'
+  const endpoints = Array.isArray(redundancy.endpoints) ? redundancy.endpoints : []
+  const enabledCount = endpoints.filter((endpoint) => endpoint?.enabled !== false).length
+  return enabledCount > 1 ? '设备冗余：主备' : '设备冗余：待补'
+})
+
+const collectionRedundancySummary = computed(() => {
+  const redundancy = props.connection.config?.['collectionRedundancy'] as
+    | Record<string, any>
+    | undefined
+  const mode = String(redundancy?.mode || 'none')
+  const labelMap: Record<string, string> = {
+    none: '无',
+    standby_failover: '主备接管',
+    sharded: '分片',
+  }
+  return `采集冗余：${labelMap[mode] || mode}`
+})
+
+const historyStorageSummary = computed(() => {
+  const count = Number(props.connection.historyPolicyCount ?? 0)
+  return count > 0 ? `历史归档：${count}条` : '历史归档：未配置'
+})
 </script>
 
 <style scoped>
@@ -337,6 +386,27 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.access-source-card__health {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.access-source-card__health span {
+  max-width: 100%;
+  min-height: 20px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-subtle);
+  color: var(--dc-text-muted);
+  font-size: 11px;
   white-space: nowrap;
 }
 
