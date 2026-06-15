@@ -51,6 +51,23 @@
         <p :title="variable.datapointPath || ''">{{ variable.datapointPath || '未生成' }}</p>
       </section>
       <section>
+        <h3><IconTablerArchive />运行契约摘要</h3>
+        <dl>
+          <dt>当前值</dt>
+          <dd>IF 实时库</dd>
+          <dt>历史归档</dt>
+          <dd>
+            <button type="button" class="s7-inspector__link" @click="openStoragePolicy">
+              查看存储策略
+            </button>
+          </dd>
+          <dt>设备冗余</dt>
+          <dd>{{ deviceRedundancyText }}</dd>
+          <dt>采集冗余</dt>
+          <dd>{{ collectionRedundancyText }}</dd>
+        </dl>
+      </section>
+      <section>
         <h3><IconTablerActivityHeartbeat />最近读取</h3>
         <dl>
           <dt>最近值</dt>
@@ -120,6 +137,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import type {
   S7Profile,
   S7ReadPlanEstimate,
@@ -129,6 +147,7 @@ import type {
 } from './types'
 import IconTablerActivityHeartbeat from '~icons/tabler/activity-heartbeat'
 import IconTablerAlertTriangle from '~icons/tabler/alert-triangle'
+import IconTablerArchive from '~icons/tabler/archive'
 import IconTablerBinaryTree from '~icons/tabler/binary-tree'
 import IconTablerChartBar from '~icons/tabler/chart-bar'
 import IconTablerCpu from '~icons/tabler/cpu'
@@ -144,7 +163,12 @@ const props = defineProps<{
   variables: S7Variable[]
   issues: S7ValidationIssue[]
   estimate: S7ReadPlanEstimate
+  connection: { id?: string; config?: Record<string, any> }
+  projectId: string
 }>()
+
+const route = useRoute()
+const router = useRouter()
 
 const scopedVariables = computed(() =>
   props.group
@@ -159,10 +183,28 @@ const countByArea = computed(() => {
 const variableIssues = computed(() =>
   props.variable ? props.issues.filter((issue) => issue.variableId === props.variable?.id) : [],
 )
+const deviceRedundancyText = computed(() => {
+  const redundancy = props.connection?.config?.redundancy
+  if (!redundancy || redundancy.enabled === false) return '未配置'
+  const count = Array.isArray(redundancy.endpoints) ? redundancy.endpoints.length : 0
+  return count > 1 ? `主备优先级 · ${count} endpoint` : '主备优先级'
+})
+const collectionRedundancyText = computed(() => '运行部署策略统一配置')
 const formatValue = (value: unknown) => {
   if (value === null || value === undefined || value === '') return '-'
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
+}
+const openStoragePolicy = () => {
+  const base = route.path.startsWith('/debug/') ? '/debug' : ''
+  void router.push({
+    path: `${base}/storage-policy`,
+    query: {
+      ...route.query,
+      accessSourceId: props.connection?.id || '',
+      datapointPath: props.variable?.datapointPath || '',
+    },
+  })
 }
 </script>
 
@@ -240,5 +282,14 @@ const formatValue = (value: unknown) => {
 .s7-inspector p.is-warning {
   color: var(--el-color-warning);
   font-weight: 700;
+}
+.s7-inspector__link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dc-primary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
 }
 </style>

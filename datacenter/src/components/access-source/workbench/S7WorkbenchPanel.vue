@@ -136,6 +136,8 @@
       :variables="variables"
       :issues="scopedValidationIssues"
       :estimate="readPlanEstimate"
+      :connection="connection"
+      :project-id="projectId"
     />
 
     <S7ProfileDialog

@@ -123,6 +123,8 @@
       :registers="registers"
       :issues="scopedValidationIssues"
       :estimate="readPlanEstimate"
+      :connection="connection"
+      :project-id="projectId"
     />
 
     <ModbusGroupDialog

@@ -122,6 +122,8 @@
       :node="selectedNode"
       :nodes="nodes"
       :issues="scopedValidationIssues"
+      :connection="localConnection"
+      :project-id="projectId"
     />
 
     <OpcuaGroupDialog

@@ -194,6 +194,10 @@
       </div>
     </template>
 
+    <div v-else-if="activeModule === 'storage-policy'" class="h-full overflow-hidden">
+      <StoragePolicyWorkspace v-if="projectId" :project-id="projectId" />
+    </div>
+
     <div v-else-if="activeModule === 'compute'" class="h-full overflow-hidden">
       <ComputeWorkspace
         v-if="projectId"
@@ -294,6 +298,7 @@ import DataPointWorkspace from '@/components/datapoint/DataPointWorkspace.vue'
 import AlarmWorkspace from '@/components/alarm/AlarmWorkspace.vue'
 import ComputeUnitPanel from '@/components/compute/ComputeUnitPanel.vue'
 import ComputeWorkspace from '@/components/compute/ComputeWorkspace.vue'
+import StoragePolicyWorkspace from '@/views/storage-policy/StoragePolicyWorkspace.vue'
 import DataContractCheckDialog from '@/components/contract/DataContractCheckDialog.vue'
 import DataCenterShell from '@/components/layout/DataCenterShell.vue'
 import { useConnection } from '@/composables/useConnection'
@@ -317,7 +322,13 @@ const projectStore = useProjectStore()
 
 // ---- 路由同步：从 URL 读 module/objectId/tab ----
 // 有效的 v2 模块 ID 集合，用于安全降级
-const VALID_MODULES = new Set<V2ModuleId>(['datapoint', 'access-source', 'compute', 'alarm'])
+const VALID_MODULES = new Set<V2ModuleId>([
+  'datapoint',
+  'access-source',
+  'storage-policy',
+  'compute',
+  'alarm',
+])
 
 /** 从路由 params 解析当前模块，无效时回退默认值 */
 const resolveModuleFromRoute = (): DatacenterModuleId => {

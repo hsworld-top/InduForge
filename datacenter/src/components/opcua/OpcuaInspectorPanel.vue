@@ -39,6 +39,23 @@
           <dd>{{ node.datapointStatus || '-' }}</dd>
         </dl>
       </section>
+      <section class="opcua-inspector__section">
+        <div class="opcua-inspector__section-title">运行契约摘要</div>
+        <dl>
+          <dt>当前值</dt>
+          <dd>IF 实时库</dd>
+          <dt>历史归档</dt>
+          <dd>
+            <button type="button" class="opcua-inspector__link" @click="openStoragePolicy">
+              查看存储策略
+            </button>
+          </dd>
+          <dt>设备冗余</dt>
+          <dd>{{ deviceRedundancyText }}</dd>
+          <dt>采集冗余</dt>
+          <dd>{{ collectionRedundancyText }}</dd>
+        </dl>
+      </section>
     </template>
 
     <template v-else-if="group">
@@ -87,6 +104,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import IconTablerLayoutSidebarRight from '~icons/tabler/layout-sidebar-right'
 import type { OpcuaNode, OpcuaNodeGroup, OpcuaValidationIssue } from './types'
 
@@ -95,7 +113,12 @@ const props = defineProps<{
   node?: OpcuaNode | null
   nodes: OpcuaNode[]
   issues: OpcuaValidationIssue[]
+  connection?: { id?: string; config?: Record<string, any> } | null
+  projectId: string
 }>()
+
+const route = useRoute()
+const router = useRouter()
 
 const groupNodes = computed(() =>
   props.group ? props.nodes.filter((node) => node.groupId === props.group?.id) : [],
@@ -106,6 +129,27 @@ const visibleIssues = computed(() => {
   if (props.group) return props.issues.filter((issue) => issue.groupId === props.group?.id)
   return props.issues.slice(0, 8)
 })
+
+const deviceRedundancyText = computed(() => {
+  const redundancy = props.connection?.config?.redundancy
+  if (!redundancy || redundancy.enabled === false) return '未配置'
+  const count = Array.isArray(redundancy.endpoints) ? redundancy.endpoints.length : 0
+  return count > 1 ? `主备优先级 · ${count} endpoint` : '主备优先级'
+})
+
+const collectionRedundancyText = computed(() => '运行部署策略统一配置')
+
+const openStoragePolicy = () => {
+  const base = route.path.startsWith('/debug/') ? '/debug' : ''
+  void router.push({
+    path: `${base}/storage-policy`,
+    query: {
+      ...route.query,
+      accessSourceId: props.connection?.id || '',
+      datapointPath: props.node?.datapointPath || '',
+    },
+  })
+}
 </script>
 
 <style scoped>
@@ -219,5 +263,15 @@ const visibleIssues = computed(() => {
   padding: 8px 0;
   border-top: 1px solid var(--dc-border);
   font-size: 13px;
+}
+
+.opcua-inspector__link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dc-primary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
 }
 </style>

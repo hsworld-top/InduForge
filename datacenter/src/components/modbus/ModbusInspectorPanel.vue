@@ -51,6 +51,23 @@
         <p>{{ register.datapointPath || '未生成' }}</p>
       </section>
       <section>
+        <h3><IconTablerArchive />运行契约摘要</h3>
+        <dl>
+          <dt>当前值</dt>
+          <dd>IF 实时库</dd>
+          <dt>历史归档</dt>
+          <dd>
+            <button type="button" class="modbus-inspector__link" @click="openStoragePolicy">
+              查看存储策略
+            </button>
+          </dd>
+          <dt>设备冗余</dt>
+          <dd>{{ deviceRedundancyText }}</dd>
+          <dt>采集冗余</dt>
+          <dd>{{ collectionRedundancyText }}</dd>
+        </dl>
+      </section>
+      <section>
         <h3><IconTablerAlertTriangle />校验问题</h3>
         <p :class="{ 'is-warning': registerIssues.length }">
           {{ registerIssues.length ? `${registerIssues.length} 个问题` : '无' }}
@@ -100,6 +117,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import type {
   ModbusReadPlanEstimate,
   ModbusRegister,
@@ -107,6 +125,7 @@ import type {
   ModbusValidationIssue,
 } from './types'
 import IconTablerAlertTriangle from '~icons/tabler/alert-triangle'
+import IconTablerArchive from '~icons/tabler/archive'
 import IconTablerBinaryTree from '~icons/tabler/binary-tree'
 import IconTablerChartBar from '~icons/tabler/chart-bar'
 import IconTablerDatabase from '~icons/tabler/database'
@@ -121,7 +140,12 @@ const props = defineProps<{
   registers: ModbusRegister[]
   issues: ModbusValidationIssue[]
   estimate: ModbusReadPlanEstimate
+  connection: { id?: string; config?: Record<string, any> }
+  projectId: string
 }>()
+
+const route = useRoute()
+const router = useRouter()
 
 const scopedRegisters = computed(() =>
   props.group
@@ -137,6 +161,13 @@ const countByArea = computed(() => {
 const registerIssues = computed(() =>
   props.register ? props.issues.filter((issue) => issue.registerId === props.register?.id) : [],
 )
+const deviceRedundancyText = computed(() => {
+  const redundancy = props.connection?.config?.redundancy
+  if (!redundancy || redundancy.enabled === false) return '未配置'
+  const count = Array.isArray(redundancy.endpoints) ? redundancy.endpoints.length : 0
+  return count > 1 ? `主备优先级 · ${count} endpoint` : '主备优先级'
+})
+const collectionRedundancyText = computed(() => '运行部署策略统一配置')
 
 const formatArea = (area: string) => {
   const map: Record<string, string> = {
@@ -146,6 +177,18 @@ const formatArea = (area: string) => {
     holding_register: 'Holding Register',
   }
   return map[area] || area
+}
+
+const openStoragePolicy = () => {
+  const base = route.path.startsWith('/debug/') ? '/debug' : ''
+  void router.push({
+    path: `${base}/storage-policy`,
+    query: {
+      ...route.query,
+      accessSourceId: props.connection?.id || '',
+      datapointPath: props.register?.datapointPath || '',
+    },
+  })
 }
 </script>
 
@@ -243,5 +286,15 @@ const formatArea = (area: string) => {
 .modbus-inspector p.is-warning {
   color: var(--el-color-warning);
   font-weight: 700;
+}
+
+.modbus-inspector__link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dc-primary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
 }
 </style>

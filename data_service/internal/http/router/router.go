@@ -15,6 +15,7 @@ type options struct {
 	builtinRuntimeHandler     *handler.BuiltinRuntimeHandler
 	connectionHandler         *handler.ConnectionHandler
 	contractCheckHandler      *handler.ContractCheckHandler
+	storagePolicyHandler      *handler.StoragePolicyHandler
 	queryHandler              *handler.QueryHandler
 	workbenchGroupHandler     *handler.WorkbenchGroupHandler
 	realtimeStoreHandler      *handler.RealtimeStoreHandler
@@ -59,6 +60,14 @@ func WithAlarmRuleRoutes(alarmRuleHandler *handler.AlarmRuleHandler, jwtValidato
 func WithAlarmPolicyRoutes(alarmPolicyHandler *handler.AlarmPolicyHandler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
 		opts.alarmPolicyHandler = alarmPolicyHandler
+		opts.jwtValidator = jwtValidator
+	}
+}
+
+// WithStoragePolicyRoutes wires data storage policy routes.
+func WithStoragePolicyRoutes(storagePolicyHandler *handler.StoragePolicyHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.storagePolicyHandler = storagePolicyHandler
 		opts.jwtValidator = jwtValidator
 	}
 }
@@ -238,6 +247,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 
 	mountAlarmRuleRoutes(mux, opts)
 	mountAlarmPolicyRoutes(mux, opts)
+	mountStoragePolicyRoutes(mux, opts)
 	mountBuiltinRuntimeRoutes(mux, opts)
 	mountAccessSourceRoutes(mux, opts)
 	mountContractCheckRoutes(mux, opts)
@@ -260,6 +270,37 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountComputeRoutes(mux, opts)
 	mountProjectSnapshotRoutes(mux, opts)
 	return mux
+}
+
+func mountStoragePolicyRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.storagePolicyHandler == nil || opts.jwtValidator == nil {
+		return
+	}
+
+	read := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+	write := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+
+	base := "/api/v1/data/projects/{projectId}/data-storage-policies"
+	mux.Handle("GET "+base, read(opts.storagePolicyHandler.List))
+	mux.Handle("POST "+base, write(opts.storagePolicyHandler.Create))
+	mux.Handle("GET "+base+"/targets", read(opts.storagePolicyHandler.Targets))
+	mux.Handle("POST "+base+"/estimate", read(opts.storagePolicyHandler.Estimate))
+	mux.Handle("GET "+base+"/coverage", read(opts.storagePolicyHandler.Coverage))
+	mux.Handle("GET "+base+"/{id}", read(opts.storagePolicyHandler.Get))
+	mux.Handle("PUT "+base+"/{id}", write(opts.storagePolicyHandler.Update))
+	mux.Handle("DELETE "+base+"/{id}", write(opts.storagePolicyHandler.Delete))
 }
 
 func mountBuiltinRuntimeRoutes(mux *http.ServeMux, opts options) {

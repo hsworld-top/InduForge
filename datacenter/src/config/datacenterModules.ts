@@ -25,6 +25,11 @@ export const datacenterModules: DatacenterModuleMeta[] = [
     description: '维护数据库与 MQTT 连接，并承载接入源二级工作台。',
   },
   {
+    id: 'storage-policy',
+    label: '存储策略',
+    description: '配置统一数据点的历史归档目标、写入模式、保留策略和容量预估。',
+  },
+  {
     id: 'compute',
     label: '计算单元',
     description: '构建可调度脚本任务，支持输出数据点或执行写库、发布、请求等动作。',

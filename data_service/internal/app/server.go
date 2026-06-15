@@ -166,6 +166,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	accessSourceRepository := repository.NewAccessSourceRepository(pool)
 	alarmRuleRepository := repository.NewAlarmRuleRepository(pool)
 	alarmPolicyRepository := repository.NewAlarmPolicyRepository(pool)
+	storagePolicyRepository := repository.NewStoragePolicyRepository(pool)
 	contractCheckRepository := repository.NewContractCheckRepository(pool)
 	queryRepository := repository.NewQueryRepository(pool)
 	workbenchGroupRepository := repository.NewWorkbenchGroupRepository(pool)
@@ -186,6 +187,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	accessSourceService := service.NewAccessSourceService(connectionRepository, mqttRepository, accessSourceRepository)
 	alarmRuleService := service.NewAlarmRuleService(alarmRuleRepository, dataPointRepository)
 	alarmPolicyService := service.NewAlarmPolicyService(alarmPolicyRepository, dataPointRepository)
+	storagePolicyService := service.NewStoragePolicyService(storagePolicyRepository, dataPointRepository)
 	contractCheckService := service.NewContractCheckService(dataPointRepository, computeRepository, alarmRuleRepository, queryRepository, contractCheckRepository)
 	builtinRuntimeService := newBuiltinRuntimeServiceFromConfig(cfg, pool, devPool, &cleanupFns)
 	connectionService := service.NewConnectionService(connectionRepository, builtinRuntimeService)
@@ -227,6 +229,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	accessSourceHandler := handler.NewAccessSourceHandler(accessSourceService)
 	alarmRuleHandler := handler.NewAlarmRuleHandler(alarmRuleService)
 	alarmPolicyHandler := handler.NewAlarmPolicyHandler(alarmPolicyService)
+	storagePolicyHandler := handler.NewStoragePolicyHandler(storagePolicyService)
 	contractCheckHandler := handler.NewContractCheckHandler(contractCheckService)
 	connectionHandler := handler.NewConnectionHandler(connectionService)
 	builtinRuntimeHandler := handler.NewBuiltinRuntimeHandler(builtinRuntimeService, connectionService)
@@ -250,6 +253,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	routeOptions := []router.Option{
 		router.WithAlarmRuleRoutes(alarmRuleHandler, jwtValidator),
 		router.WithAlarmPolicyRoutes(alarmPolicyHandler, jwtValidator),
+		router.WithStoragePolicyRoutes(storagePolicyHandler, jwtValidator),
 		router.WithBuiltinRuntimeRoutes(builtinRuntimeHandler, jwtValidator),
 		router.WithAccessSourceRoutes(accessSourceHandler, jwtValidator),
 		router.WithContractCheckRoutes(contractCheckHandler, jwtValidator),
@@ -288,6 +292,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		"websocketWorkbench=enabled",
 		"realtimeStore=enabled",
 		"compute=enabled",
+		"storagePolicy=enabled",
 		"preview=disabled",
 	}
 
