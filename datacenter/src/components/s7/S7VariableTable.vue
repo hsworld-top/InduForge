@@ -10,6 +10,7 @@
       :row-class-name="rowClassName"
       empty-text="暂无 S7 变量"
       @row-click="(row) => $emit('select', row)"
+      @row-contextmenu="(row, _column, event) => $emit('row-contextmenu', event, row)"
     >
       <el-table-column label="变量名" min-width="150">
         <template #default="{ row }">
@@ -119,6 +120,7 @@ defineEmits<{
   (event: 'select', variable: S7Variable): void
   (event: 'edit', variable: S7Variable): void
   (event: 'delete', variable: S7Variable): void
+  (event: 'row-contextmenu', mouseEvent: MouseEvent, variable: S7Variable): void
   (event: 'page-change', page: number): void
   (event: 'page-size-change', pageSize: number): void
 }>()

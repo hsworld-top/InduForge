@@ -10,6 +10,7 @@
       highlight-current-row
       :current-row-key="selectedNodeId"
       @row-click="(row) => $emit('select', row)"
+      @row-contextmenu="(row, _column, event) => $emit('row-contextmenu', event, row)"
     >
       <el-table-column label="变量名" min-width="170" show-overflow-tooltip>
         <template #default="{ row }">
@@ -110,6 +111,7 @@ defineEmits<{
   (event: 'select', node: OpcuaNode): void
   (event: 'edit', node: OpcuaNode): void
   (event: 'delete', node: OpcuaNode): void
+  (event: 'row-contextmenu', mouseEvent: MouseEvent, node: OpcuaNode): void
   (event: 'page-change', page: number): void
   (event: 'page-size-change', pageSize: number): void
 }>()

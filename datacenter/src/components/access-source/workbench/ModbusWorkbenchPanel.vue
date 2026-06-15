@@ -47,6 +47,27 @@
           >
             <IconTablerUpload />
           </button>
+          <el-dropdown
+            trigger="click"
+            :disabled="filteredRegisters.length === 0"
+            @command="exportRegisters"
+          >
+            <button
+              type="button"
+              class="modbus-workbench__icon-action"
+              :disabled="filteredRegisters.length === 0"
+              title="导出当前页变量"
+              aria-label="导出当前页变量"
+            >
+              <IconTablerDownload />
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="csv">导出 CSV</el-dropdown-item>
+                <el-dropdown-item command="xlsx">导出 XLSX</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <button
             type="button"
             class="modbus-workbench__icon-action is-primary"
@@ -112,9 +133,21 @@
         @select="selectRegister"
         @edit="openEditRegister"
         @delete="removeRegister"
+        @row-contextmenu="openRegisterMenu"
         @page-change="changeRegisterPage"
         @page-size-change="changeRegisterPageSize"
       />
+      <div class="modbus-workbench__filters">
+        <button
+          v-for="item in quickFilters"
+          :key="item.value"
+          type="button"
+          :class="{ 'is-active': quickFilter === item.value }"
+          @click="quickFilter = item.value"
+        >
+          {{ item.label }}
+        </button>
+      </div>
     </main>
 
     <ModbusInspectorPanel
@@ -157,6 +190,45 @@
       @locate="locateRegister"
     />
     <ModbusReadPlanDialog v-model="readPlanVisible" :estimate="readPlanEstimate" />
+    <Teleport to="body">
+      <div
+        v-if="registerMenu.visible"
+        class="modbus-workbench__menu-mask"
+        @click="closeRegisterMenu"
+        @contextmenu.prevent="closeRegisterMenu"
+      >
+        <div
+          class="modbus-workbench__context-menu"
+          :style="{ left: `${registerMenu.x}px`, top: `${registerMenu.y}px` }"
+          @click.stop
+        >
+          <button type="button" @click="runRegisterMenuAction('edit')">
+            <IconTablerPencil class="modbus-workbench__menu-icon" />
+            <span>编辑</span>
+          </button>
+          <button type="button" @click="runRegisterMenuAction('duplicate')">
+            <IconTablerCopy class="modbus-workbench__menu-icon" />
+            <span>复制为新变量</span>
+          </button>
+          <button type="button" @click="runRegisterMenuAction('copy-info')">
+            <IconTablerClipboard class="modbus-workbench__menu-icon" />
+            <span>复制变量信息</span>
+          </button>
+          <button type="button" @click="runRegisterMenuAction('copy-path')">
+            <IconTablerRoute class="modbus-workbench__menu-icon" />
+            <span>复制数据点路径</span>
+          </button>
+          <button type="button" @click="runRegisterMenuAction('datapoint')">
+            <IconTablerExternalLink class="modbus-workbench__menu-icon" />
+            <span>查看数据点详情</span>
+          </button>
+          <button type="button" class="is-danger" @click="runRegisterMenuAction('delete')">
+            <IconTablerTrash class="modbus-workbench__menu-icon" />
+            <span>删除变量</span>
+          </button>
+        </div>
+      </div>
+    </Teleport>
   </section>
 </template>
 
@@ -165,6 +237,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dataAPI from '@/api/data.api'
 import { getApiErrorMessage } from '@/utils/request'
+import { downloadCsv, downloadXlsx } from '@/utils/tabular-file'
 import { useProtocolDevSession } from './useProtocolDevSession'
 import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
 import ModbusGroupDialog from '@/components/modbus/ModbusGroupDialog.vue'
@@ -185,9 +258,15 @@ import type {
 } from '@/components/modbus/types'
 import IconTablerActivityHeartbeat from '~icons/tabler/activity-heartbeat'
 import IconTablerChecklist from '~icons/tabler/checklist'
+import IconTablerClipboard from '~icons/tabler/clipboard'
+import IconTablerCopy from '~icons/tabler/copy'
+import IconTablerDownload from '~icons/tabler/download'
+import IconTablerExternalLink from '~icons/tabler/external-link'
+import IconTablerPencil from '~icons/tabler/pencil'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerRoute from '~icons/tabler/route'
+import IconTablerTrash from '~icons/tabler/trash'
 import IconTablerUpload from '~icons/tabler/upload'
 
 type AccessSourceConnection = {
@@ -236,6 +315,20 @@ const previewDiagnostics = ref<string[]>([])
 const validationVisible = ref(false)
 const validationIssues = ref<ModbusValidationIssue[]>([])
 const readPlanVisible = ref(false)
+const quickFilter = ref('all')
+const registerMenu = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  register: null as ModbusRegister | null,
+})
+const quickFilters = [
+  { label: '全部', value: 'all' },
+  { label: '异常', value: 'issue' },
+  { label: '未同步', value: 'datapoint' },
+  { label: '可写', value: 'writable' },
+  { label: '已停用', value: 'disabled' },
+]
 
 const session = useProtocolDevSession({
   create: () => dataAPI.createModbusDevSession(props.projectId, props.connection.id),
@@ -303,6 +396,7 @@ const filteredRegisters = computed(() => {
   const text = registerKeyword.value.trim().toLowerCase()
   return registers.value.filter((item) => {
     const inGroup = !selectedGroupId.value || item.groupId === selectedGroupId.value
+    const matchedFilter = matchQuickFilter(item)
     const matched =
       !text ||
       [item.name, item.code, item.datapointPath || '', item.area, item.address].some((value) =>
@@ -310,9 +404,66 @@ const filteredRegisters = computed(() => {
           .toLowerCase()
           .includes(text),
       )
-    return inGroup && matched
+    return inGroup && matchedFilter && matched
   })
 })
+const registerExportHeaders = [
+  '变量名',
+  'Code',
+  '分组',
+  '协议地址 / NodeId',
+  '数据类型',
+  '采集周期',
+  '发布能力',
+  '数据点 path',
+  '状态',
+  '最近开发态读取值',
+  '质量',
+  '诊断问题摘要',
+]
+const issueExportHeaders = [
+  '严重级别',
+  '问题类型',
+  '变量名',
+  'Code',
+  '分组',
+  '定位字段',
+  '问题说明',
+  '建议处理',
+]
+const registerExportRows = computed(() =>
+  filteredRegisters.value.map((register) => ({
+    变量名: register.name,
+    Code: register.code,
+    分组: groupPathOf(register.groupId),
+    '协议地址 / NodeId': formatModbusAddress(register),
+    数据类型: register.dataType,
+    采集周期: `${register.pollIntervalMs}ms`,
+    发布能力: register.accessLevel || 'read',
+    '数据点 path': register.datapointPath || '',
+    状态: register.status || '',
+    最近开发态读取值: formatExportValue(register.lastValue),
+    质量: register.quality || '',
+    诊断问题摘要: issueSummaryForRegister(register.id),
+  })),
+)
+const issueExportRows = computed(() =>
+  scopedValidationIssues.value.map((issue) => {
+    const register = issue.registerId
+      ? registers.value.find((item) => item.id === issue.registerId)
+      : null
+    return {
+      严重级别: issue.severity,
+      问题类型: issue.code,
+      变量名: issue.registerName || register?.name || '',
+      Code: register?.code || '',
+      分组: groupPathOf(issue.groupId || register?.groupId),
+      定位字段: issue.registerId ? '变量' : issue.groupId ? '分组' : '连接',
+      问题说明: issue.message,
+      建议处理: '按诊断提示修正建模后重新校验',
+    }
+  }),
+)
 
 const unwrapList = <T,>(response: any): T[] =>
   response?.data?.list || response?.data?.data?.list || []
@@ -427,6 +578,23 @@ const openCreateRegister = () => {
   registerDialogVisible.value = true
 }
 
+const openDuplicateRegister = (register: ModbusRegister) => {
+  editingRegister.value = {
+    ...register,
+    id: '',
+    name: `${register.name} 副本`,
+    code: `${register.code}_copy`,
+    datapointId: null,
+    datapointPath: null,
+    datapointStatus: null,
+    lastValue: undefined,
+    quality: undefined,
+    lastUpdatedAt: null,
+  }
+  registerDialogMode.value = 'create'
+  registerDialogVisible.value = true
+}
+
 const openEditRegister = (register: ModbusRegister) => {
   editingRegister.value = register
   registerDialogMode.value = 'edit'
@@ -478,6 +646,23 @@ const importRegisters = async (rows: Array<Record<string, unknown>>) => {
   }
 }
 
+const exportRegisters = (format: string | number | object) => {
+  if (registerExportRows.value.length === 0) {
+    ElMessage.warning('当前页没有可导出的变量')
+    return
+  }
+  const suffix = format === 'xlsx' ? 'xlsx' : 'csv'
+  const filename = `modbus-variables-current-page.${suffix}`
+  if (suffix === 'xlsx') {
+    downloadXlsx(filename, [
+      { name: '变量清单', headers: registerExportHeaders, rows: registerExportRows.value },
+      { name: '问题清单', headers: issueExportHeaders, rows: issueExportRows.value },
+    ])
+    return
+  }
+  downloadCsv(filename, registerExportHeaders, registerExportRows.value)
+}
+
 const toggleSession = () => {
   if (session.connected.value) void session.disconnect()
   else void session.connect()
@@ -527,6 +712,114 @@ const locateRegister = (registerId: string) => {
   const register = registers.value.find((item) => item.id === registerId)
   selectedGroupId.value = register?.groupId || ''
   validationVisible.value = false
+}
+
+const openRegisterMenu = (event: MouseEvent, register: ModbusRegister) => {
+  event.preventDefault()
+  selectedRegisterId.value = register.id
+  registerMenu.value = {
+    visible: true,
+    x: Math.min(event.clientX, window.innerWidth - 180),
+    y: Math.min(event.clientY, window.innerHeight - 210),
+    register,
+  }
+}
+
+const closeRegisterMenu = () => {
+  registerMenu.value.visible = false
+}
+
+const runRegisterMenuAction = async (
+  action: 'edit' | 'duplicate' | 'copy-info' | 'copy-path' | 'datapoint' | 'delete',
+) => {
+  const register = registerMenu.value.register
+  closeRegisterMenu()
+  if (!register) return
+  if (action === 'edit') {
+    openEditRegister(register)
+    return
+  }
+  if (action === 'duplicate') {
+    openDuplicateRegister(register)
+    return
+  }
+  if (action === 'copy-info') {
+    await copyText(
+      [
+        `name=${register.name}`,
+        `code=${register.code}`,
+        `address=${formatModbusAddress(register)}`,
+        `type=${register.dataType}`,
+        `datapoint=${register.datapointPath || ''}`,
+      ].join('\n'),
+      '变量信息已复制',
+    )
+    return
+  }
+  if (action === 'copy-path') {
+    if (!register.datapointPath) {
+      ElMessage.warning('当前变量还没有数据点 path')
+      return
+    }
+    await copyText(register.datapointPath, '数据点 path 已复制')
+    return
+  }
+  if (action === 'datapoint') {
+    ElMessage.info(
+      register.datapointPath ? `数据点：${register.datapointPath}` : '当前变量还没有数据点',
+    )
+    return
+  }
+  await removeRegister(register)
+}
+
+function groupPathOf(groupId?: string | null) {
+  if (!groupId) return '未分组'
+  const byId = new Map(groups.value.map((group) => [group.id, group]))
+  const segments: string[] = []
+  const visited = new Set<string>()
+  let currentId = groupId
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId)
+    const group = byId.get(currentId)
+    if (!group) break
+    segments.unshift(group.name)
+    currentId = group.parentId || ''
+  }
+  return segments.join('/') || '未分组'
+}
+
+function matchQuickFilter(register: ModbusRegister) {
+  if (quickFilter.value === 'issue')
+    return validationIssues.value.some((issue) => issue.registerId === register.id)
+  if (quickFilter.value === 'datapoint')
+    return !register.datapointPath || ['invalid', 'error'].includes(register.datapointStatus || '')
+  if (quickFilter.value === 'writable')
+    return ['coil', 'holding_register'].includes(register.area) && register.accessLevel !== 'Read'
+  if (quickFilter.value === 'disabled') return register.status !== 'active'
+  return true
+}
+
+function formatModbusAddress(register: ModbusRegister) {
+  return `${register.unitId}/${register.area}/${register.address} (protocol ${register.protocolAddress})`
+}
+
+async function copyText(text: string, successMessage: string) {
+  await navigator.clipboard.writeText(text)
+  ElMessage.success(successMessage)
+}
+
+function issueSummaryForRegister(registerId: string) {
+  return validationIssues.value
+    .filter((issue) => issue.registerId === registerId)
+    .map((issue) => `${issue.severity}:${issue.message}`)
+    .join('; ')
+}
+
+function formatExportValue(value: unknown) {
+  if (value === null || value === undefined || value === '') return ''
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
 }
 
 onMounted(reloadAll)
@@ -671,6 +964,70 @@ onMounted(reloadAll)
 
 .modbus-workbench__search {
   min-width: 0;
+}
+.modbus-workbench__filters {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-top: 1px solid var(--dc-border);
+  background: var(--dc-surface-subtle);
+}
+.modbus-workbench__filters button {
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+}
+.modbus-workbench__filters button.is-active,
+.modbus-workbench__filters button:hover {
+  border-color: color-mix(in oklch, var(--dc-primary) 32%, var(--dc-border));
+  color: var(--dc-primary);
+}
+.modbus-workbench__menu-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+}
+.modbus-workbench__context-menu {
+  position: fixed;
+  min-width: 154px;
+  padding: 4px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-surface);
+}
+.modbus-workbench__context-menu button {
+  width: 100%;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--dc-radius-sm);
+  background: transparent;
+  color: var(--dc-text-secondary);
+  font-size: 13px;
+  text-align: left;
+}
+.modbus-workbench__context-menu button:hover {
+  background: var(--dc-surface-muted);
+  color: var(--dc-primary);
+}
+.modbus-workbench__context-menu button.is-danger:hover {
+  background: var(--dc-danger-soft);
+  color: var(--dc-danger);
+}
+.modbus-workbench__menu-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
 }
 
 @media (max-width: 1100px) {

@@ -10,6 +10,7 @@
       :row-class-name="rowClassName"
       empty-text="暂无 Modbus 变量"
       @row-click="(row) => $emit('select', row)"
+      @row-contextmenu="(row, _column, event) => $emit('row-contextmenu', event, row)"
     >
       <el-table-column label="变量名" min-width="150">
         <template #default="{ row }">
@@ -116,6 +117,7 @@ defineEmits<{
   (event: 'select', register: ModbusRegister): void
   (event: 'edit', register: ModbusRegister): void
   (event: 'delete', register: ModbusRegister): void
+  (event: 'row-contextmenu', mouseEvent: MouseEvent, register: ModbusRegister): void
   (event: 'page-change', page: number): void
   (event: 'page-size-change', pageSize: number): void
 }>()
