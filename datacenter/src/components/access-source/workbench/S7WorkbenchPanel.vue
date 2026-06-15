@@ -53,15 +53,15 @@
           </button>
           <el-dropdown
             trigger="click"
-            :disabled="filteredVariables.length === 0"
+            :disabled="variables.length === 0"
             @command="exportVariables"
           >
             <button
               type="button"
               class="s7-workbench__icon-action"
-              :disabled="filteredVariables.length === 0"
-              title="导出当前页变量"
-              aria-label="导出当前页变量"
+              :disabled="variables.length === 0"
+              title="导出当前筛选结果"
+              aria-label="导出当前筛选结果"
             >
               <IconTablerDownload />
             </button>
@@ -147,7 +147,7 @@
         />
       </div>
       <S7VariableTable
-        :variables="filteredVariables"
+        :variables="variables"
         :loading="loading"
         :selected-variable-id="selectedVariableId"
         :page="variablePagination.page"
@@ -159,6 +159,7 @@
         @row-contextmenu="openVariableMenu"
         @page-change="changeVariablePage"
         @page-size-change="changeVariablePageSize"
+        @sort-change="changeVariableSort"
       />
       <div class="s7-workbench__filters">
         <button
@@ -270,9 +271,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dataAPI from '@/api/data.api'
+import { listStoragePolicies, type StoragePolicySummary } from '@/api/storage-policy.api'
 import { getApiErrorMessage } from '@/utils/request'
 import { downloadCsv, downloadXlsx } from '@/utils/tabular-file'
 import { useProtocolDevSession } from './useProtocolDevSession'
@@ -360,6 +362,9 @@ const validationVisible = ref(false)
 const readPlanVisible = ref(false)
 const contractVisible = ref(false)
 const quickFilter = ref('all')
+const storageSummary = ref<StoragePolicySummary | null>(null)
+const variableSort = ref<{ sortBy?: string; sortOrder?: string }>({})
+let searchTimer: ReturnType<typeof window.setTimeout> | undefined
 const variableMenu = ref({
   visible: false,
   x: 0,
@@ -431,27 +436,6 @@ const validationActionTitle = computed(() =>
 const readPlanActionTitle = computed(() =>
   currentGroup.value ? `当前分组读取计划：${currentGroup.value.name}` : '全部变量读取计划',
 )
-const filteredVariables = computed(() => {
-  const text = keyword.value.trim().toLowerCase()
-  return variables.value.filter((item) => {
-    const inGroup = !selectedGroupId.value || item.groupId === selectedGroupId.value
-    const matchedFilter = matchQuickFilter(item)
-    const matched =
-      !text ||
-      [
-        item.name,
-        item.code,
-        item.normalizedAddress,
-        item.addressText,
-        item.datapointPath || '',
-      ].some((value) =>
-        String(value || '')
-          .toLowerCase()
-          .includes(text),
-      )
-    return inGroup && matchedFilter && matched
-  })
-})
 const validationScopeLabel = computed(() =>
   selectedVariable.value
     ? `当前变量：${selectedVariable.value.name}`
@@ -496,8 +480,8 @@ const issueExportHeaders = [
   '问题说明',
   '建议处理',
 ]
-const variableExportRows = computed(() =>
-  filteredVariables.value.map((variable) => ({
+const buildVariableExportRows = (items: S7Variable[]) =>
+  items.map((variable) => ({
     变量名: variable.name,
     Code: variable.code,
     分组: groupPathOf(variable.groupId),
@@ -510,25 +494,29 @@ const variableExportRows = computed(() =>
     最近开发态读取值: formatExportValue(variable.lastValue),
     质量: variable.quality || '',
     诊断问题摘要: issueSummaryForVariable(variable.id),
-  })),
-)
+  }))
+const variableExportRows = computed(() => buildVariableExportRows(variables.value))
 const issueExportRows = computed(() =>
-  scopedValidationIssues.value.map((issue) => {
-    const variable = issue.variableId
-      ? variables.value.find((item) => item.id === issue.variableId)
-      : null
-    return {
-      严重级别: issue.severity,
-      问题类型: issue.code,
-      变量名: issue.variableName || variable?.name || '',
-      Code: variable?.code || '',
-      分组: groupPathOf(issue.groupId || variable?.groupId),
-      定位字段: issue.variableId ? '变量' : issue.groupId ? '分组' : '连接',
-      问题说明: issue.message,
-      建议处理: '按诊断提示修正建模后重新校验',
-    }
-  }),
+  buildIssueExportRows(variables.value, scopedValidationIssues.value),
 )
+const buildIssueExportRows = (items: S7Variable[], issues: S7ValidationIssue[]) => {
+  const variableByID = new Map(items.map((item) => [item.id, item]))
+  return issues
+    .filter((issue) => !issue.variableId || variableByID.has(issue.variableId))
+    .map((issue) => {
+      const variable = issue.variableId ? variableByID.get(issue.variableId) : null
+      return {
+        严重级别: issue.severity,
+        问题类型: issue.code,
+        变量名: issue.variableName || variable?.name || '',
+        Code: variable?.code || '',
+        分组: groupPathOf(issue.groupId || variable?.groupId),
+        定位字段: issue.variableId ? '变量' : issue.groupId ? '分组' : '连接',
+        问题说明: issue.message,
+        建议处理: '按诊断提示修正建模后重新校验',
+      }
+    })
+}
 const contractSubtitle = computed(() =>
   selectedVariable.value
     ? `当前变量：${selectedVariable.value.name}`
@@ -556,8 +544,8 @@ const contractSections = computed(() => [
   {
     title: '读取计划',
     rows: [
-      { label: '变量数', value: filteredVariables.value.length },
-      { label: '可写变量', value: filteredVariables.value.filter((item) => item.accessLevel !== 'Read').length },
+      { label: '变量数', value: variablePagination.value.total },
+      { label: '当前页可写', value: variables.value.filter((item) => item.accessLevel !== 'Read').length },
       { label: '读取块', value: readPlanEstimate.value.blockCount },
       { label: '总字节', value: readPlanEstimate.value.totalReadBytes },
       { label: '预计 reads/s', value: readPlanEstimate.value.readsPerSecond.toFixed(2) },
@@ -567,7 +555,8 @@ const contractSections = computed(() => [
     title: '冗余与存储',
     rows: [
       { label: '当前值', value: 'IF 实时库', tone: 'ok' as const },
-      { label: '历史归档', value: '由存储策略菜单配置' },
+      { label: '历史归档', value: storageSummaryText.value },
+      { label: '异常策略', value: storageSummary.value?.errorCount ?? 0 },
       { label: '设备冗余', value: deviceRedundancyText.value },
       { label: '采集冗余', value: '运行部署策略统一配置' },
     ],
@@ -599,6 +588,10 @@ const reloadAll = async () => {
       dataAPI.getS7VariableGroups(props.projectId, props.connection.id),
       dataAPI.getS7Variables(props.projectId, props.connection.id, {
         groupId: selectedGroupId.value || undefined,
+        q: keyword.value.trim() || undefined,
+        filter: quickFilter.value === 'all' ? undefined : quickFilter.value,
+        sortBy: variableSort.value.sortBy,
+        sortOrder: variableSort.value.sortOrder,
         page: variablePagination.value.page,
         pageSize: variablePagination.value.pageSize,
       }),
@@ -618,6 +611,45 @@ const reloadAll = async () => {
     loading.value = false
   }
 }
+const reloadStorageSummary = async () => {
+  try {
+    const result = await listStoragePolicies(props.projectId, { page: 1, pageSize: 1 })
+    storageSummary.value = result.summary || null
+  } catch {
+    storageSummary.value = null
+  }
+}
+const loadExportVariables = async () => {
+  const pageSize = 100
+  const firstResponse = await dataAPI.getS7Variables(props.projectId, props.connection.id, {
+    groupId: selectedGroupId.value || undefined,
+    q: keyword.value.trim() || undefined,
+    filter: quickFilter.value === 'all' ? undefined : quickFilter.value,
+    sortBy: variableSort.value.sortBy,
+    sortOrder: variableSort.value.sortOrder,
+    page: 1,
+    pageSize,
+  })
+  const firstPage = unwrapList<S7Variable>(firstResponse)
+  const pagination = unwrapPagination(firstResponse) || {}
+  const totalPages = Number(
+    pagination.totalPages || Math.ceil(Number(pagination.total || firstPage.length) / pageSize) || 1,
+  )
+  const result = [...firstPage]
+  for (let page = 2; page <= totalPages; page += 1) {
+    const response = await dataAPI.getS7Variables(props.projectId, props.connection.id, {
+      groupId: selectedGroupId.value || undefined,
+      q: keyword.value.trim() || undefined,
+      filter: quickFilter.value === 'all' ? undefined : quickFilter.value,
+      sortBy: variableSort.value.sortBy,
+      sortOrder: variableSort.value.sortOrder,
+      page,
+      pageSize,
+    })
+    result.push(...unwrapList<S7Variable>(response))
+  }
+  return result
+}
 const selectGroup = async (groupId: string) => {
   selectedGroupId.value = groupId
   selectedVariableId.value = ''
@@ -631,6 +663,14 @@ const changeVariablePage = async (page: number) => {
 const changeVariablePageSize = async (pageSize: number) => {
   variablePagination.value.page = 1
   variablePagination.value.pageSize = pageSize
+  await reloadAll()
+}
+const changeVariableSort = async (payload: { prop?: string; order?: string | null }) => {
+  variableSort.value = {
+    sortBy: payload.prop || undefined,
+    sortOrder: payload.order === 'descending' ? 'desc' : payload.order === 'ascending' ? 'asc' : undefined,
+  }
+  variablePagination.value.page = 1
   await reloadAll()
 }
 const selectVariable = (variable: S7Variable) => {
@@ -760,21 +800,30 @@ const importVariables = async (rows: Array<Record<string, unknown>>) => {
     saving.value = false
   }
 }
-const exportVariables = (format: string | number | object) => {
-  if (variableExportRows.value.length === 0) {
-    ElMessage.warning('当前页没有可导出的变量')
-    return
+const exportVariables = async (format: string | number | object) => {
+  loading.value = true
+  try {
+    const exportItems = await loadExportVariables()
+    const rows = buildVariableExportRows(exportItems)
+    if (rows.length === 0) {
+      ElMessage.warning('当前筛选结果没有可导出的变量')
+      return
+    }
+    const suffix = format === 'xlsx' ? 'xlsx' : 'csv'
+    const filename = `s7-variables-filtered.${suffix}`
+    if (suffix === 'xlsx') {
+      downloadXlsx(filename, [
+        { name: '变量清单', headers: variableExportHeaders, rows },
+        { name: '问题清单', headers: issueExportHeaders, rows: buildIssueExportRows(exportItems, validationIssues.value) },
+      ])
+      return
+    }
+    downloadCsv(filename, variableExportHeaders, rows)
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '导出变量失败'))
+  } finally {
+    loading.value = false
   }
-  const suffix = format === 'xlsx' ? 'xlsx' : 'csv'
-  const filename = `s7-variables-current-page.${suffix}`
-  if (suffix === 'xlsx') {
-    downloadXlsx(filename, [
-      { name: '变量清单', headers: variableExportHeaders, rows: variableExportRows.value },
-      { name: '问题清单', headers: issueExportHeaders, rows: issueExportRows.value },
-    ])
-    return
-  }
-  downloadCsv(filename, variableExportHeaders, variableExportRows.value)
 }
 const toggleSession = () => {
   if (session.connected.value) void session.disconnect()
@@ -906,16 +955,6 @@ function groupPathOf(groupId?: string | null) {
   return segments.join('/') || '未分组'
 }
 
-function matchQuickFilter(variable: S7Variable) {
-  if (quickFilter.value === 'issue')
-    return validationIssues.value.some((issue) => issue.variableId === variable.id)
-  if (quickFilter.value === 'datapoint')
-    return !variable.datapointPath || ['invalid', 'error'].includes(variable.datapointStatus || '')
-  if (quickFilter.value === 'writable') return variable.accessLevel !== 'Read'
-  if (quickFilter.value === 'disabled') return variable.status !== 'active'
-  return true
-}
-
 async function copyText(text: string, successMessage: string) {
   await navigator.clipboard.writeText(text)
   ElMessage.success(successMessage)
@@ -941,7 +980,33 @@ const deviceRedundancyText = computed(() => {
   return count > 1 ? `主备优先级 · ${count} endpoint` : '待补备用路径'
 })
 
-onMounted(reloadAll)
+const storageSummaryText = computed(() => {
+  if (!storageSummary.value) return '未加载'
+  if (storageSummary.value.enabledCount === 0) return '项目未配置历史归档'
+  return `项目 ${storageSummary.value.enabledCount} 条启用策略，约 ${storageSummary.value.estimatedRowsPerDay} rows/day`
+})
+
+watch(keyword, () => {
+  if (searchTimer) window.clearTimeout(searchTimer)
+  searchTimer = window.setTimeout(() => {
+    variablePagination.value.page = 1
+    void reloadAll()
+  }, 250)
+})
+
+watch(quickFilter, () => {
+  variablePagination.value.page = 1
+  void reloadAll()
+})
+
+onBeforeUnmount(() => {
+  if (searchTimer) window.clearTimeout(searchTimer)
+})
+
+onMounted(() => {
+  void reloadAll()
+  void reloadStorageSummary()
+})
 </script>
 
 <style scoped>

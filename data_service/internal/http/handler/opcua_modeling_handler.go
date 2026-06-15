@@ -120,7 +120,19 @@ func (h *OpcuaModelingHandler) ListNodes(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		return err
 	}
-	result, err := h.service.ListNodesPage(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), groupID, page, pageSize)
+	result, err := h.service.ListNodesPage(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), service.OpcuaNodeListFilter{
+		GroupID:     groupID,
+		Search:      firstNonEmpty(query.Get("q"), query.Get("search")),
+		QuickFilter: query.Get("filter"),
+		NodeID:      query.Get("nodeId"),
+		BrowseName:  query.Get("browseName"),
+		AccessLevel: query.Get("accessLevel"),
+		DataType:    query.Get("dataType"),
+		SortBy:      firstNonEmpty(query.Get("sortBy"), query.Get("sort")),
+		SortOrder:   firstNonEmpty(query.Get("sortOrder"), query.Get("order")),
+		Page:        page,
+		PageSize:    pageSize,
+	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}

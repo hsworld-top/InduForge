@@ -11,8 +11,9 @@
       empty-text="暂无 S7 变量"
       @row-click="(row) => $emit('select', row)"
       @row-contextmenu="(row, _column, event) => $emit('row-contextmenu', event, row)"
+      @sort-change="(payload) => $emit('sort-change', payload)"
     >
-      <el-table-column label="变量名" min-width="150">
+      <el-table-column label="变量名" min-width="150" prop="name" sortable="custom">
         <template #default="{ row }">
           <div class="s7-variable-table__name">
             <strong :title="row.name">{{ row.name }}</strong>
@@ -20,7 +21,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="地址" min-width="138">
+      <el-table-column label="地址" min-width="138" prop="normalizedAddress" sortable="custom">
         <template #default="{ row }">
           <div class="s7-variable-table__address">
             <strong :title="row.normalizedAddress || row.addressText">{{
@@ -32,7 +33,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="类型" width="84">
+      <el-table-column label="类型" width="84" prop="dataType" sortable="custom">
         <template #default="{ row }">
           <span class="s7-variable-table__pill">{{ row.dataType }}</span>
         </template>
@@ -63,17 +64,17 @@
           >
         </template>
       </el-table-column>
-      <el-table-column label="周期" width="82">
+      <el-table-column label="周期" width="82" prop="pollIntervalMs" sortable="custom">
         <template #default="{ row }">{{ row.pollIntervalMs }}ms</template>
       </el-table-column>
-      <el-table-column label="权限" width="92">
+      <el-table-column label="权限" width="92" prop="accessLevel" sortable="custom">
         <template #default="{ row }">
           <el-tag size="small" :type="row.accessLevel === 'Read' ? 'info' : 'warning'">
             {{ row.accessLevel || 'Read' }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="86">
+      <el-table-column label="状态" width="86" prop="status" sortable="custom">
         <template #default="{ row }">
           <el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{
             row.status
@@ -130,6 +131,7 @@ defineEmits<{
   (event: 'row-contextmenu', mouseEvent: MouseEvent, variable: S7Variable): void
   (event: 'page-change', page: number): void
   (event: 'page-size-change', pageSize: number): void
+  (event: 'sort-change', payload: { prop?: string; order?: string | null }): void
 }>()
 
 const formatByteRange = (row: S7Variable) => {

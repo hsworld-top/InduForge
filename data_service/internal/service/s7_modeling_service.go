@@ -427,13 +427,36 @@ type S7VariableListResult struct {
 	Pagination ProtocolModelingPagination `json:"pagination"`
 }
 
+// S7VariableListFilter 是 S7 变量列表的查询条件。
+type S7VariableListFilter struct {
+	GroupID     *string
+	Search      string
+	QuickFilter string
+	Area        string
+	DBNumber    *int
+	DataType    string
+	SortBy      string
+	SortOrder   string
+	Page        int
+	PageSize    int
+}
+
 // ListVariablesPage 返回当前分组下的一页变量，分页条件只影响列表展示，不影响预览和校验等全量流程。
-func (s *S7ModelingService) ListVariablesPage(ctx context.Context, projectID, connectionID string, groupID *string, page, pageSize int) (*S7VariableListResult, error) {
+func (s *S7ModelingService) ListVariablesPage(ctx context.Context, projectID, connectionID string, filter S7VariableListFilter) (*S7VariableListResult, error) {
 	if _, err := s.validateAndLoadConnection(ctx, projectID, connectionID); err != nil {
 		return nil, err
 	}
-	page, pageSize = normalizePageAndSize(page, pageSize, 1, 100)
-	records, total, err := s.repository.ListVariablesPage(ctx, projectID, connectionID, normalizeOptionalText(groupID), page, pageSize)
+	page, pageSize := normalizePageAndSize(filter.Page, filter.PageSize, 1, 100)
+	records, total, err := s.repository.ListVariablesPage(ctx, projectID, connectionID, repository.S7VariableListFilter{
+		GroupID:     normalizeOptionalText(filter.GroupID),
+		Search:      strings.TrimSpace(filter.Search),
+		QuickFilter: strings.TrimSpace(filter.QuickFilter),
+		Area:        strings.TrimSpace(filter.Area),
+		DBNumber:    filter.DBNumber,
+		DataType:    strings.TrimSpace(filter.DataType),
+		SortBy:      strings.TrimSpace(filter.SortBy),
+		SortOrder:   strings.TrimSpace(filter.SortOrder),
+	}, page, pageSize)
 	if err != nil {
 		return nil, err
 	}

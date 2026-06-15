@@ -126,7 +126,26 @@ func (h *S7ModelingHandler) ListVariables(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		return err
 	}
-	result, err := h.service.ListVariablesPage(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), groupID, page, pageSize)
+	var dbNumber *int
+	if value := query.Get("dbNumber"); value != "" {
+		parsed, parseErr := parseOptionalInt(value, 0, "dbNumber")
+		if parseErr != nil {
+			return parseErr
+		}
+		dbNumber = &parsed
+	}
+	result, err := h.service.ListVariablesPage(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), service.S7VariableListFilter{
+		GroupID:     groupID,
+		Search:      firstNonEmpty(query.Get("q"), query.Get("search")),
+		QuickFilter: query.Get("filter"),
+		Area:        query.Get("area"),
+		DBNumber:    dbNumber,
+		DataType:    query.Get("dataType"),
+		SortBy:      firstNonEmpty(query.Get("sortBy"), query.Get("sort")),
+		SortOrder:   firstNonEmpty(query.Get("sortOrder"), query.Get("order")),
+		Page:        page,
+		PageSize:    pageSize,
+	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}

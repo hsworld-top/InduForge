@@ -50,15 +50,15 @@
           </button>
           <el-dropdown
             trigger="click"
-            :disabled="filteredRegisters.length === 0"
+            :disabled="registers.length === 0"
             @command="exportRegisters"
           >
             <button
               type="button"
               class="modbus-workbench__icon-action"
-              :disabled="filteredRegisters.length === 0"
-              title="导出当前页变量"
-              aria-label="导出当前页变量"
+              :disabled="registers.length === 0"
+              title="导出当前筛选结果"
+              aria-label="导出当前筛选结果"
             >
               <IconTablerDownload />
             </button>
@@ -134,7 +134,7 @@
         />
       </div>
       <ModbusRegisterTable
-        :registers="filteredRegisters"
+        :registers="registers"
         :loading="loading"
         :selected-register-id="selectedRegisterId"
         :page="registerPagination.page"
@@ -146,6 +146,7 @@
         @row-contextmenu="openRegisterMenu"
         @page-change="changeRegisterPage"
         @page-size-change="changeRegisterPageSize"
+        @sort-change="changeRegisterSort"
       />
       <div class="modbus-workbench__filters">
         <button
@@ -251,9 +252,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dataAPI from '@/api/data.api'
+import { listStoragePolicies, type StoragePolicySummary } from '@/api/storage-policy.api'
 import { getApiErrorMessage } from '@/utils/request'
 import { downloadCsv, downloadXlsx } from '@/utils/tabular-file'
 import { useProtocolDevSession } from './useProtocolDevSession'
@@ -338,6 +340,9 @@ const validationIssues = ref<ModbusValidationIssue[]>([])
 const readPlanVisible = ref(false)
 const contractVisible = ref(false)
 const quickFilter = ref('all')
+const storageSummary = ref<StoragePolicySummary | null>(null)
+const registerSort = ref<{ sortBy?: string; sortOrder?: string }>({})
+let searchTimer: ReturnType<typeof window.setTimeout> | undefined
 const registerMenu = ref({
   visible: false,
   x: 0,
@@ -414,21 +419,6 @@ const scopedValidationIssues = computed(() => {
   }
   return validationIssues.value
 })
-const filteredRegisters = computed(() => {
-  const text = registerKeyword.value.trim().toLowerCase()
-  return registers.value.filter((item) => {
-    const inGroup = !selectedGroupId.value || item.groupId === selectedGroupId.value
-    const matchedFilter = matchQuickFilter(item)
-    const matched =
-      !text ||
-      [item.name, item.code, item.datapointPath || '', item.area, item.address].some((value) =>
-        String(value || '')
-          .toLowerCase()
-          .includes(text),
-      )
-    return inGroup && matchedFilter && matched
-  })
-})
 const registerExportHeaders = [
   '变量名',
   'Code',
@@ -453,8 +443,8 @@ const issueExportHeaders = [
   '问题说明',
   '建议处理',
 ]
-const registerExportRows = computed(() =>
-  filteredRegisters.value.map((register) => ({
+const buildRegisterExportRows = (items: ModbusRegister[]) =>
+  items.map((register) => ({
     变量名: register.name,
     Code: register.code,
     分组: groupPathOf(register.groupId),
@@ -467,25 +457,29 @@ const registerExportRows = computed(() =>
     最近开发态读取值: formatExportValue(register.lastValue),
     质量: register.quality || '',
     诊断问题摘要: issueSummaryForRegister(register.id),
-  })),
-)
+  }))
+const registerExportRows = computed(() => buildRegisterExportRows(registers.value))
 const issueExportRows = computed(() =>
-  scopedValidationIssues.value.map((issue) => {
-    const register = issue.registerId
-      ? registers.value.find((item) => item.id === issue.registerId)
-      : null
-    return {
-      严重级别: issue.severity,
-      问题类型: issue.code,
-      变量名: issue.registerName || register?.name || '',
-      Code: register?.code || '',
-      分组: groupPathOf(issue.groupId || register?.groupId),
-      定位字段: issue.registerId ? '变量' : issue.groupId ? '分组' : '连接',
-      问题说明: issue.message,
-      建议处理: '按诊断提示修正建模后重新校验',
-    }
-  }),
+  buildIssueExportRows(registers.value, scopedValidationIssues.value),
 )
+const buildIssueExportRows = (items: ModbusRegister[], issues: ModbusValidationIssue[]) => {
+  const registerByID = new Map(items.map((item) => [item.id, item]))
+  return issues
+    .filter((issue) => !issue.registerId || registerByID.has(issue.registerId))
+    .map((issue) => {
+      const register = issue.registerId ? registerByID.get(issue.registerId) : null
+      return {
+        严重级别: issue.severity,
+        问题类型: issue.code,
+        变量名: issue.registerName || register?.name || '',
+        Code: register?.code || '',
+        分组: groupPathOf(issue.groupId || register?.groupId),
+        定位字段: issue.registerId ? '变量' : issue.groupId ? '分组' : '连接',
+        问题说明: issue.message,
+        建议处理: '按诊断提示修正建模后重新校验',
+      }
+    })
+}
 const contractSubtitle = computed(() =>
   selectedRegister.value
     ? `当前变量：${selectedRegister.value.name}`
@@ -505,7 +499,7 @@ const contractSections = computed(() => [
     title: '协议建模',
     rows: [
       { label: '端点', value: endpointText.value },
-      { label: '变量数', value: filteredRegisters.value.length },
+      { label: '变量数', value: registerPagination.value.total },
       { label: '从站数', value: unitCount.value },
       { label: '发布能力', value: '寄存器区约束，只配置读写权限，不提供写值' },
     ],
@@ -523,7 +517,8 @@ const contractSections = computed(() => [
     title: '冗余与存储',
     rows: [
       { label: '当前值', value: 'IF 实时库', tone: 'ok' as const },
-      { label: '历史归档', value: '由存储策略菜单配置' },
+      { label: '历史归档', value: storageSummaryText.value },
+      { label: '异常策略', value: storageSummary.value?.errorCount ?? 0 },
       { label: '设备冗余', value: deviceRedundancyText.value },
       { label: '采集冗余', value: '运行部署策略统一配置' },
     ],
@@ -551,6 +546,10 @@ const reloadAll = async () => {
       dataAPI.getModbusRegisterGroups(props.projectId, props.connection.id),
       dataAPI.getModbusRegisters(props.projectId, props.connection.id, {
         groupId: selectedGroupId.value || undefined,
+        q: registerKeyword.value.trim() || undefined,
+        filter: quickFilter.value === 'all' ? undefined : quickFilter.value,
+        sortBy: registerSort.value.sortBy,
+        sortOrder: registerSort.value.sortOrder,
         page: registerPagination.value.page,
         pageSize: registerPagination.value.pageSize,
       }),
@@ -569,6 +568,47 @@ const reloadAll = async () => {
   }
 }
 
+const reloadStorageSummary = async () => {
+  try {
+    const result = await listStoragePolicies(props.projectId, { page: 1, pageSize: 1 })
+    storageSummary.value = result.summary || null
+  } catch {
+    storageSummary.value = null
+  }
+}
+
+const loadExportRegisters = async () => {
+  const pageSize = 100
+  const firstResponse = await dataAPI.getModbusRegisters(props.projectId, props.connection.id, {
+    groupId: selectedGroupId.value || undefined,
+    q: registerKeyword.value.trim() || undefined,
+    filter: quickFilter.value === 'all' ? undefined : quickFilter.value,
+    sortBy: registerSort.value.sortBy,
+    sortOrder: registerSort.value.sortOrder,
+    page: 1,
+    pageSize,
+  })
+  const firstPage = unwrapList<ModbusRegister>(firstResponse)
+  const pagination = unwrapPagination(firstResponse) || {}
+  const totalPages = Number(
+    pagination.totalPages || Math.ceil(Number(pagination.total || firstPage.length) / pageSize) || 1,
+  )
+  const result = [...firstPage]
+  for (let page = 2; page <= totalPages; page += 1) {
+    const response = await dataAPI.getModbusRegisters(props.projectId, props.connection.id, {
+      groupId: selectedGroupId.value || undefined,
+      q: registerKeyword.value.trim() || undefined,
+      filter: quickFilter.value === 'all' ? undefined : quickFilter.value,
+      sortBy: registerSort.value.sortBy,
+      sortOrder: registerSort.value.sortOrder,
+      page,
+      pageSize,
+    })
+    result.push(...unwrapList<ModbusRegister>(response))
+  }
+  return result
+}
+
 const selectGroup = async (groupId: string) => {
   selectedGroupId.value = groupId
   selectedRegisterId.value = ''
@@ -584,6 +624,15 @@ const changeRegisterPage = async (page: number) => {
 const changeRegisterPageSize = async (pageSize: number) => {
   registerPagination.value.page = 1
   registerPagination.value.pageSize = pageSize
+  await reloadAll()
+}
+
+const changeRegisterSort = async (payload: { prop?: string; order?: string | null }) => {
+  registerSort.value = {
+    sortBy: payload.prop || undefined,
+    sortOrder: payload.order === 'descending' ? 'desc' : payload.order === 'ascending' ? 'asc' : undefined,
+  }
+  registerPagination.value.page = 1
   await reloadAll()
 }
 
@@ -721,21 +770,30 @@ const importRegisters = async (rows: Array<Record<string, unknown>>) => {
   }
 }
 
-const exportRegisters = (format: string | number | object) => {
-  if (registerExportRows.value.length === 0) {
-    ElMessage.warning('当前页没有可导出的变量')
-    return
+const exportRegisters = async (format: string | number | object) => {
+  loading.value = true
+  try {
+    const exportItems = await loadExportRegisters()
+    const rows = buildRegisterExportRows(exportItems)
+    if (rows.length === 0) {
+      ElMessage.warning('当前筛选结果没有可导出的变量')
+      return
+    }
+    const suffix = format === 'xlsx' ? 'xlsx' : 'csv'
+    const filename = `modbus-variables-filtered.${suffix}`
+    if (suffix === 'xlsx') {
+      downloadXlsx(filename, [
+        { name: '变量清单', headers: registerExportHeaders, rows },
+        { name: '问题清单', headers: issueExportHeaders, rows: buildIssueExportRows(exportItems, validationIssues.value) },
+      ])
+      return
+    }
+    downloadCsv(filename, registerExportHeaders, rows)
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '导出变量失败'))
+  } finally {
+    loading.value = false
   }
-  const suffix = format === 'xlsx' ? 'xlsx' : 'csv'
-  const filename = `modbus-variables-current-page.${suffix}`
-  if (suffix === 'xlsx') {
-    downloadXlsx(filename, [
-      { name: '变量清单', headers: registerExportHeaders, rows: registerExportRows.value },
-      { name: '问题清单', headers: issueExportHeaders, rows: issueExportRows.value },
-    ])
-    return
-  }
-  downloadCsv(filename, registerExportHeaders, registerExportRows.value)
 }
 
 const toggleSession = () => {
@@ -864,28 +922,23 @@ function groupPathOf(groupId?: string | null) {
   return segments.join('/') || '未分组'
 }
 
-function matchQuickFilter(register: ModbusRegister) {
-  if (quickFilter.value === 'issue')
-    return validationIssues.value.some((issue) => issue.registerId === register.id)
-  if (quickFilter.value === 'datapoint')
-    return !register.datapointPath || ['invalid', 'error'].includes(register.datapointStatus || '')
-  if (quickFilter.value === 'writable')
-    return ['coil', 'holding_register'].includes(register.area) && register.accessLevel !== 'Read'
-  if (quickFilter.value === 'disabled') return register.status !== 'active'
-  return true
-}
-
 function formatModbusAddress(register: ModbusRegister) {
   return `${register.unitId}/${register.area}/${register.address} (protocol ${register.protocolAddress})`
 }
 
-const unitCount = computed(() => new Set(filteredRegisters.value.map((item) => item.unitId)).size)
+const unitCount = computed(() => new Set(registers.value.map((item) => item.unitId)).size)
 
 const deviceRedundancyText = computed(() => {
   const redundancy = config.value.redundancy
   if (!redundancy || redundancy.enabled === false) return '未配置'
   const count = Array.isArray(redundancy.endpoints) ? redundancy.endpoints.length : 0
   return count > 1 ? `主备优先级 · ${count} endpoint` : '待补备用路径'
+})
+
+const storageSummaryText = computed(() => {
+  if (!storageSummary.value) return '未加载'
+  if (storageSummary.value.enabledCount === 0) return '项目未配置历史归档'
+  return `项目 ${storageSummary.value.enabledCount} 条启用策略，约 ${storageSummary.value.estimatedRowsPerDay} rows/day`
 })
 
 async function copyText(text: string, successMessage: string) {
@@ -906,7 +959,27 @@ function formatExportValue(value: unknown) {
   return String(value)
 }
 
-onMounted(reloadAll)
+watch(registerKeyword, () => {
+  if (searchTimer) window.clearTimeout(searchTimer)
+  searchTimer = window.setTimeout(() => {
+    registerPagination.value.page = 1
+    void reloadAll()
+  }, 250)
+})
+
+watch(quickFilter, () => {
+  registerPagination.value.page = 1
+  void reloadAll()
+})
+
+onBeforeUnmount(() => {
+  if (searchTimer) window.clearTimeout(searchTimer)
+})
+
+onMounted(() => {
+  void reloadAll()
+  void reloadStorageSummary()
+})
 </script>
 
 <style scoped>

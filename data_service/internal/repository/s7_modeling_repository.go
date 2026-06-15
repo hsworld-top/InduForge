@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -99,6 +100,18 @@ type S7VariableRecord struct {
 	DataPointStatus   *string
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
+}
+
+// S7VariableListFilter 描述变量列表的服务端筛选、搜索和排序条件。
+type S7VariableListFilter struct {
+	GroupID     *string
+	Search      string
+	QuickFilter string
+	Area        string
+	DBNumber    *int
+	DataType    string
+	SortBy      string
+	SortOrder   string
 }
 
 // UpsertS7ProfileParams 描述 PLC 档案写入参数。
@@ -482,17 +495,19 @@ func (r *S7ModelingRepository) ListVariables(ctx context.Context, projectID, con
 	return result, nil
 }
 
-// ListVariablesPage 返回当前分组下的一页 S7 变量，并同时返回匹配总数。
-func (r *S7ModelingRepository) ListVariablesPage(ctx context.Context, projectID, connectionID string, groupID *string, page, pageSize int) ([]S7VariableRecord, int, error) {
-	where := "v.project_id = $1 AND v.connection_id = $2"
-	args := []any{projectID, connectionID}
-	if groupID != nil {
-		where += " AND v.group_id = $3"
-		args = append(args, groupID)
-	}
+// ListVariablesPage 返回当前条件下的一页 S7 变量，并同时返回匹配总数。
+func (r *S7ModelingRepository) ListVariablesPage(ctx context.Context, projectID, connectionID string, filter S7VariableListFilter, page, pageSize int) ([]S7VariableRecord, int, error) {
+	where, args := buildS7VariableListWhere(projectID, connectionID, filter)
 
 	var total int
-	if err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM data_s7_variables v WHERE "+where, args...).Scan(&total); err != nil {
+	if err := r.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM data_s7_variables v
+		LEFT JOIN data_points dp
+		  ON dp.project_id = v.project_id
+		 AND dp.source_type = 's7.variable'
+		 AND dp.source_id = v.id
+		WHERE `+where, args...).Scan(&total); err != nil {
 		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "统计 S7 变量失败", err)
 	}
 
@@ -512,9 +527,9 @@ func (r *S7ModelingRepository) ListVariablesPage(ctx context.Context, projectID,
 		 AND dp.source_type = 's7.variable'
 		 AND dp.source_id = v.id
 		WHERE %s
-		ORDER BY v.sort_order ASC, v.created_at ASC
+		ORDER BY %s
 		LIMIT $%d OFFSET $%d
-	`, where, limitIndex, offsetIndex), queryArgs...)
+	`, where, s7VariableOrderSQL(filter.SortBy, filter.SortOrder), limitIndex, offsetIndex), queryArgs...)
 	if err != nil {
 		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 S7 变量分页失败", err)
 	}
@@ -532,6 +547,75 @@ func (r *S7ModelingRepository) ListVariablesPage(ctx context.Context, projectID,
 		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 S7 变量分页失败", err)
 	}
 	return result, total, nil
+}
+
+func buildS7VariableListWhere(projectID, connectionID string, filter S7VariableListFilter) (string, []any) {
+	clauses := []string{"v.project_id = $1", "v.connection_id = $2"}
+	args := []any{projectID, connectionID}
+	addEqual := func(column, value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		args = append(args, value)
+		clauses = append(clauses, fmt.Sprintf("%s = $%d", column, len(args)))
+	}
+	if filter.GroupID != nil {
+		groupID := strings.TrimSpace(*filter.GroupID)
+		if groupID == "__ungrouped__" {
+			clauses = append(clauses, "v.group_id IS NULL")
+		} else if groupID != "" {
+			args = append(args, groupID)
+			clauses = append(clauses, fmt.Sprintf("v.group_id = $%d", len(args)))
+		}
+	}
+	if search := strings.TrimSpace(filter.Search); search != "" {
+		args = append(args, "%"+search+"%")
+		idx := len(args)
+		clauses = append(clauses, fmt.Sprintf("(v.name ILIKE $%d OR v.code ILIKE $%d OR v.address_text ILIKE $%d OR v.normalized_address ILIKE $%d OR COALESCE(dp.path, '') ILIKE $%d)", idx, idx, idx, idx, idx))
+	}
+	addEqual("v.area", filter.Area)
+	addEqual("v.data_type", filter.DataType)
+	if filter.DBNumber != nil {
+		args = append(args, *filter.DBNumber)
+		clauses = append(clauses, fmt.Sprintf("v.db_number = $%d", len(args)))
+	}
+	switch strings.TrimSpace(filter.QuickFilter) {
+	case "issue":
+		clauses = append(clauses, "(v.status <> 'active' OR dp.id IS NULL OR COALESCE(dp.status, '') <> 'active')")
+	case "datapoint":
+		clauses = append(clauses, "(dp.id IS NULL OR COALESCE(dp.status, '') <> 'active')")
+	case "writable":
+		clauses = append(clauses, "LOWER(v.access_level) LIKE '%write%'")
+	case "disabled":
+		clauses = append(clauses, "v.status <> 'active'")
+	}
+	return strings.Join(clauses, " AND "), args
+}
+
+func s7VariableOrderSQL(sortBy, sortOrder string) string {
+	direction := "ASC"
+	if strings.EqualFold(strings.TrimSpace(sortOrder), "desc") || strings.EqualFold(strings.TrimSpace(sortOrder), "descending") {
+		direction = "DESC"
+	}
+	columns := map[string]string{
+		"name":              "v.name",
+		"code":              "v.code",
+		"area":              "v.area",
+		"dbNumber":          "v.db_number",
+		"byteOffset":        "v.byte_offset",
+		"normalizedAddress": "v.normalized_address",
+		"dataType":          "v.data_type",
+		"pollIntervalMs":    "v.poll_interval_ms",
+		"accessLevel":       "v.access_level",
+		"status":            "v.status",
+		"updatedAt":         "v.updated_at",
+		"sortOrder":         "v.sort_order",
+	}
+	if column, ok := columns[strings.TrimSpace(sortBy)]; ok {
+		return column + " " + direction + ", v.sort_order ASC, v.created_at ASC"
+	}
+	return "v.sort_order ASC, v.created_at ASC"
 }
 
 // GetVariable 按连接和变量 ID 读取 S7 变量。

@@ -120,7 +120,44 @@ func (h *ModbusModelingHandler) ListRegisters(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		return err
 	}
-	result, err := h.service.ListRegistersPage(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), groupID, page, pageSize)
+	var unitID *int
+	if value := query.Get("unitId"); value != "" {
+		parsed, parseErr := parseOptionalInt(value, 0, "unitId")
+		if parseErr != nil {
+			return parseErr
+		}
+		unitID = &parsed
+	}
+	var addressStart *int
+	if value := query.Get("addressStart"); value != "" {
+		parsed, parseErr := parseOptionalInt(value, 0, "addressStart")
+		if parseErr != nil {
+			return parseErr
+		}
+		addressStart = &parsed
+	}
+	var addressEnd *int
+	if value := query.Get("addressEnd"); value != "" {
+		parsed, parseErr := parseOptionalInt(value, 0, "addressEnd")
+		if parseErr != nil {
+			return parseErr
+		}
+		addressEnd = &parsed
+	}
+	result, err := h.service.ListRegistersPage(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), service.ModbusRegisterListFilter{
+		GroupID:      groupID,
+		Search:       firstNonEmpty(query.Get("q"), query.Get("search")),
+		QuickFilter:  query.Get("filter"),
+		UnitID:       unitID,
+		Area:         query.Get("area"),
+		AddressStart: addressStart,
+		AddressEnd:   addressEnd,
+		DataType:     query.Get("dataType"),
+		SortBy:       firstNonEmpty(query.Get("sortBy"), query.Get("sort")),
+		SortOrder:    firstNonEmpty(query.Get("sortOrder"), query.Get("order")),
+		Page:         page,
+		PageSize:     pageSize,
+	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}

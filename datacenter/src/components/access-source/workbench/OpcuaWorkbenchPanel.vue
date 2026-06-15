@@ -50,15 +50,15 @@
           </button>
           <el-dropdown
             trigger="click"
-            :disabled="filteredNodes.length === 0"
+            :disabled="nodes.length === 0"
             @command="exportNodes"
           >
             <button
               type="button"
               class="opcua-workbench__icon-action"
-              :disabled="filteredNodes.length === 0"
-              title="导出当前页变量"
-              aria-label="导出当前页变量"
+              :disabled="nodes.length === 0"
+              title="导出当前筛选结果"
+              aria-label="导出当前筛选结果"
             >
               <IconTablerDownload />
             </button>
@@ -134,7 +134,7 @@
         />
       </div>
       <OpcuaNodeTable
-        :nodes="filteredNodes"
+        :nodes="nodes"
         :loading="loading"
         :selected-node-id="selectedNodeId"
         :page="nodePagination.page"
@@ -146,6 +146,7 @@
         @row-contextmenu="openNodeMenu"
         @page-change="changeNodePage"
         @page-size-change="changeNodePageSize"
+        @sort-change="changeNodeSort"
       />
       <div class="opcua-workbench__filters">
         <button
@@ -265,9 +266,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dataAPI from '@/api/data.api'
+import { listStoragePolicies, type StoragePolicySummary } from '@/api/storage-policy.api'
 import { getApiErrorMessage } from '@/utils/request'
 import { downloadCsv, downloadXlsx } from '@/utils/tabular-file'
 import { useProtocolDevSession } from './useProtocolDevSession'
@@ -415,6 +417,9 @@ const validationVisible = ref(false)
 const validationIssues = ref<OpcuaValidationIssue[]>([])
 const contractVisible = ref(false)
 const quickFilter = ref('all')
+const storageSummary = ref<StoragePolicySummary | null>(null)
+const nodeSort = ref<{ sortBy?: string; sortOrder?: string }>({})
+let searchTimer: ReturnType<typeof window.setTimeout> | undefined
 const nodeMenu = ref({
   visible: false,
   x: 0,
@@ -483,21 +488,6 @@ const scopedValidationIssues = computed(() => {
   }
   return validationIssues.value
 })
-const filteredNodes = computed(() => {
-  const text = nodeKeyword.value.trim().toLowerCase()
-  return nodes.value.filter((node) => {
-    const inGroup = !selectedGroupId.value || node.groupId === selectedGroupId.value
-    const matchedFilter = matchQuickFilter(node)
-    const matched =
-      !text ||
-      [node.name, node.nodeId, node.code, node.datapointPath || ''].some((value) =>
-        String(value || '')
-          .toLowerCase()
-          .includes(text),
-      )
-    return inGroup && matchedFilter && matched
-  })
-})
 const nodeExportHeaders = [
   '变量名',
   'Code',
@@ -522,8 +512,8 @@ const issueExportHeaders = [
   '问题说明',
   '建议处理',
 ]
-const nodeExportRows = computed(() =>
-  filteredNodes.value.map((node) => ({
+const buildNodeExportRows = (items: OpcuaNode[]) =>
+  items.map((node) => ({
     变量名: node.name,
     Code: node.code,
     分组: groupPathOf(node.groupId),
@@ -536,23 +526,29 @@ const nodeExportRows = computed(() =>
     最近开发态读取值: formatExportValue(node.lastValue),
     质量: node.quality || '',
     诊断问题摘要: issueSummaryForNode(node.id),
-  })),
-)
+  }))
+const nodeExportRows = computed(() => buildNodeExportRows(nodes.value))
 const issueExportRows = computed(() =>
-  scopedValidationIssues.value.map((issue) => {
-    const node = issue.nodeId ? nodes.value.find((item) => item.id === issue.nodeId) : null
-    return {
-      严重级别: issue.severity,
-      问题类型: issue.code,
-      变量名: issue.nodeName || node?.name || '',
-      Code: node?.code || '',
-      分组: groupPathOf(issue.groupId || node?.groupId),
-      定位字段: issue.nodeId ? '变量' : issue.groupId ? '分组' : '连接',
-      问题说明: issue.message,
-      建议处理: '按诊断提示修正建模后重新校验',
-    }
-  }),
+  buildIssueExportRows(nodes.value, scopedValidationIssues.value),
 )
+const buildIssueExportRows = (items: OpcuaNode[], issues: OpcuaValidationIssue[]) => {
+  const nodeByID = new Map(items.map((item) => [item.id, item]))
+  return issues
+    .filter((issue) => !issue.nodeId || nodeByID.has(issue.nodeId))
+    .map((issue) => {
+      const node = issue.nodeId ? nodeByID.get(issue.nodeId) : null
+      return {
+        严重级别: issue.severity,
+        问题类型: issue.code,
+        变量名: issue.nodeName || node?.name || '',
+        Code: node?.code || '',
+        分组: groupPathOf(issue.groupId || node?.groupId),
+        定位字段: issue.nodeId ? '变量' : issue.groupId ? '分组' : '连接',
+        问题说明: issue.message,
+        建议处理: '按诊断提示修正建模后重新校验',
+      }
+    })
+}
 const contractSubtitle = computed(() =>
   currentGroup.value
     ? `当前范围：${currentGroup.value.name}`
@@ -571,8 +567,8 @@ const contractSections = computed(() => [
     title: '协议建模',
     rows: [
       { label: 'Endpoint', value: endpointText.value },
-      { label: '变量数', value: filteredNodes.value.length },
-      { label: '启用变量', value: filteredNodes.value.filter((node) => node.status === 'active').length },
+      { label: '变量数', value: nodePagination.value.total },
+      { label: '当前页启用', value: nodes.value.filter((node) => node.status === 'active').length },
       { label: '发布能力', value: '按服务器能力收窄，不提供工作台写值' },
     ],
   },
@@ -589,7 +585,8 @@ const contractSections = computed(() => [
     title: '冗余与存储',
     rows: [
       { label: '当前值', value: 'IF 实时库', tone: 'ok' as const },
-      { label: '历史归档', value: '由存储策略菜单配置' },
+      { label: '历史归档', value: storageSummaryText.value },
+      { label: '异常策略', value: storageSummary.value?.errorCount ?? 0 },
       { label: '设备冗余', value: deviceRedundancyText.value },
       { label: '采集冗余', value: '运行部署策略统一配置' },
     ],
@@ -610,6 +607,10 @@ const reloadAll = async () => {
       dataAPI.getOpcuaNodeGroups(props.projectId, props.connection.id),
       dataAPI.getOpcuaNodes(props.projectId, props.connection.id, {
         groupId: selectedGroupId.value || undefined,
+        q: nodeKeyword.value.trim() || undefined,
+        filter: quickFilter.value === 'all' ? undefined : quickFilter.value,
+        sortBy: nodeSort.value.sortBy,
+        sortOrder: nodeSort.value.sortOrder,
         page: nodePagination.value.page,
         pageSize: nodePagination.value.pageSize,
       }),
@@ -622,6 +623,45 @@ const reloadAll = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const reloadStorageSummary = async () => {
+  try {
+    const result = await listStoragePolicies(props.projectId, { page: 1, pageSize: 1 })
+    storageSummary.value = result.summary || null
+  } catch {
+    storageSummary.value = null
+  }
+}
+
+const loadExportNodes = async () => {
+  const pageSize = 100
+  const firstResponse = await dataAPI.getOpcuaNodes(props.projectId, props.connection.id, {
+    groupId: selectedGroupId.value || undefined,
+    q: nodeKeyword.value.trim() || undefined,
+    filter: quickFilter.value === 'all' ? undefined : quickFilter.value,
+    sortBy: nodeSort.value.sortBy,
+    sortOrder: nodeSort.value.sortOrder,
+    page: 1,
+    pageSize,
+  })
+  const firstPage = unwrapList<OpcuaNode>(firstResponse)
+  const pagination = unwrapPagination(firstResponse) || {}
+  const totalPages = Number(pagination.totalPages || Math.ceil(Number(pagination.total || firstPage.length) / pageSize) || 1)
+  const result = [...firstPage]
+  for (let page = 2; page <= totalPages; page += 1) {
+    const response = await dataAPI.getOpcuaNodes(props.projectId, props.connection.id, {
+      groupId: selectedGroupId.value || undefined,
+      q: nodeKeyword.value.trim() || undefined,
+      filter: quickFilter.value === 'all' ? undefined : quickFilter.value,
+      sortBy: nodeSort.value.sortBy,
+      sortOrder: nodeSort.value.sortOrder,
+      page,
+      pageSize,
+    })
+    result.push(...unwrapList<OpcuaNode>(response))
+  }
+  return result
 }
 
 const openImportDialog = async () => {
@@ -668,6 +708,15 @@ const changeNodePage = async (page: number) => {
 const changeNodePageSize = async (pageSize: number) => {
   nodePagination.value.page = 1
   nodePagination.value.pageSize = pageSize
+  await reloadAll()
+}
+
+const changeNodeSort = async (payload: { prop?: string; order?: string | null }) => {
+  nodeSort.value = {
+    sortBy: payload.prop || undefined,
+    sortOrder: payload.order === 'descending' ? 'desc' : payload.order === 'ascending' ? 'asc' : undefined,
+  }
+  nodePagination.value.page = 1
   await reloadAll()
 }
 
@@ -802,21 +851,30 @@ const importNodes = async (rows: Array<Record<string, unknown>>) => {
   }
 }
 
-const exportNodes = (format: string | number | object) => {
-  if (nodeExportRows.value.length === 0) {
-    ElMessage.warning('当前页没有可导出的变量')
-    return
+const exportNodes = async (format: string | number | object) => {
+  loading.value = true
+  try {
+    const exportItems = await loadExportNodes()
+    const rows = buildNodeExportRows(exportItems)
+    if (rows.length === 0) {
+      ElMessage.warning('当前筛选结果没有可导出的变量')
+      return
+    }
+    const suffix = format === 'xlsx' ? 'xlsx' : 'csv'
+    const filename = `opcua-variables-filtered.${suffix}`
+    if (suffix === 'xlsx') {
+      downloadXlsx(filename, [
+        { name: '变量清单', headers: nodeExportHeaders, rows },
+        { name: '问题清单', headers: issueExportHeaders, rows: buildIssueExportRows(exportItems, validationIssues.value) },
+      ])
+      return
+    }
+    downloadCsv(filename, nodeExportHeaders, rows)
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '导出变量失败'))
+  } finally {
+    loading.value = false
   }
-  const suffix = format === 'xlsx' ? 'xlsx' : 'csv'
-  const filename = `opcua-variables-current-page.${suffix}`
-  if (suffix === 'xlsx') {
-    downloadXlsx(filename, [
-      { name: '变量清单', headers: nodeExportHeaders, rows: nodeExportRows.value },
-      { name: '问题清单', headers: issueExportHeaders, rows: issueExportRows.value },
-    ])
-    return
-  }
-  downloadCsv(filename, nodeExportHeaders, nodeExportRows.value)
 }
 
 const toggleSession = () => {
@@ -939,16 +997,6 @@ function groupPathOf(groupId?: string | null) {
   return segments.join('/') || '未分组'
 }
 
-function matchQuickFilter(node: OpcuaNode) {
-  if (quickFilter.value === 'issue')
-    return validationIssues.value.some((issue) => issue.nodeId === node.id)
-  if (quickFilter.value === 'datapoint')
-    return !node.datapointPath || ['invalid', 'error'].includes(node.datapointStatus || '')
-  if (quickFilter.value === 'writable') return node.accessLevel !== 'Read'
-  if (quickFilter.value === 'disabled') return node.status !== 'active'
-  return true
-}
-
 function issueSummaryForNode(nodeId: string) {
   return validationIssues.value
     .filter((issue) => issue.nodeId === nodeId)
@@ -957,11 +1005,17 @@ function issueSummaryForNode(nodeId: string) {
 }
 
 const samplingSummary = computed(() => {
-  const values = filteredNodes.value.map((node) => Number(node.samplingMs || 0)).filter(Boolean)
+  const values = nodes.value.map((node) => Number(node.samplingMs || 0)).filter(Boolean)
   if (values.length === 0) return '-'
   const min = Math.min(...values)
   const max = Math.max(...values)
   return min === max ? `${min}ms` : `${min}-${max}ms`
+})
+
+const storageSummaryText = computed(() => {
+  if (!storageSummary.value) return '未加载'
+  if (storageSummary.value.enabledCount === 0) return '项目未配置历史归档'
+  return `项目 ${storageSummary.value.enabledCount} 条启用策略，约 ${storageSummary.value.estimatedRowsPerDay} rows/day`
 })
 
 const deviceRedundancyText = computed(() => {
@@ -969,6 +1023,23 @@ const deviceRedundancyText = computed(() => {
   if (!redundancy || redundancy.enabled === false) return '未配置'
   const count = Array.isArray(redundancy.endpoints) ? redundancy.endpoints.length : 0
   return count > 1 ? `主备优先级 · ${count} endpoint` : '待补备用路径'
+})
+
+watch(nodeKeyword, () => {
+  if (searchTimer) window.clearTimeout(searchTimer)
+  searchTimer = window.setTimeout(() => {
+    nodePagination.value.page = 1
+    void reloadAll()
+  }, 250)
+})
+
+watch(quickFilter, () => {
+  nodePagination.value.page = 1
+  void reloadAll()
+})
+
+onBeforeUnmount(() => {
+  if (searchTimer) window.clearTimeout(searchTimer)
 })
 
 async function copyText(text: string, successMessage: string) {
@@ -982,7 +1053,10 @@ function formatExportValue(value: unknown) {
   return String(value)
 }
 
-onMounted(reloadAll)
+onMounted(() => {
+  void reloadAll()
+  void reloadStorageSummary()
+})
 </script>
 
 <style scoped>

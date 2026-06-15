@@ -47,7 +47,7 @@
           <dt>历史归档</dt>
           <dd>
             <button type="button" class="opcua-inspector__link" @click="openStoragePolicy">
-              查看存储策略
+              {{ storageCoverageText }}
             </button>
           </dd>
           <dt>设备冗余</dt>
@@ -103,9 +103,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import IconTablerLayoutSidebarRight from '~icons/tabler/layout-sidebar-right'
+import { getStoragePolicyCoverage } from '@/api/storage-policy.api'
 import type { OpcuaNode, OpcuaNodeGroup, OpcuaValidationIssue } from './types'
 
 const props = defineProps<{
@@ -119,6 +120,9 @@ const props = defineProps<{
 
 const route = useRoute()
 const router = useRouter()
+const storagePolicyCount = ref<number | null>(null)
+const storageCoverageLoading = ref(false)
+const storageCoverageFailed = ref(false)
 
 const groupNodes = computed(() =>
   props.group ? props.nodes.filter((node) => node.groupId === props.group?.id) : [],
@@ -138,6 +142,13 @@ const deviceRedundancyText = computed(() => {
 })
 
 const collectionRedundancyText = computed(() => '运行部署策略统一配置')
+const storageCoverageText = computed(() => {
+  if (!props.node?.datapointPath) return '未生成数据点'
+  if (storageCoverageLoading.value) return '历史归档检查中'
+  if (storageCoverageFailed.value) return '历史归档检查失败'
+  if (!storagePolicyCount.value) return '未配置历史归档'
+  return `已命中 ${storagePolicyCount.value} 条历史策略`
+})
 
 const openStoragePolicy = () => {
   const base = route.path.startsWith('/debug/') ? '/debug' : ''
@@ -150,6 +161,29 @@ const openStoragePolicy = () => {
     },
   })
 }
+
+watch(
+  () => [props.projectId, props.node?.datapointId, props.node?.datapointPath] as const,
+  async ([projectId, datapointId, datapointPath]) => {
+    storagePolicyCount.value = null
+    storageCoverageFailed.value = false
+    if (!projectId || (!datapointId && !datapointPath)) return
+    storageCoverageLoading.value = true
+    try {
+      const coverage = await getStoragePolicyCoverage(projectId, {
+        datapointId: datapointId || undefined,
+        path: datapointPath || undefined,
+      })
+      storagePolicyCount.value = coverage.matchedPolicyCount
+    } catch {
+      storagePolicyCount.value = 0
+      storageCoverageFailed.value = true
+    } finally {
+      storageCoverageLoading.value = false
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>

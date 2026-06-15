@@ -11,8 +11,9 @@
       empty-text="暂无 Modbus 变量"
       @row-click="(row) => $emit('select', row)"
       @row-contextmenu="(row, _column, event) => $emit('row-contextmenu', event, row)"
+      @sort-change="(payload) => $emit('sort-change', payload)"
     >
-      <el-table-column label="变量名" min-width="150">
+      <el-table-column label="变量名" min-width="150" prop="name" sortable="custom">
         <template #default="{ row }">
           <div class="modbus-register-table__name">
             <strong>{{ row.name }}</strong>
@@ -20,19 +21,19 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="从站" width="76">
+      <el-table-column label="从站" width="76" prop="unitId" sortable="custom">
         <template #default="{ row }">
           <span class="modbus-register-table__unit">{{ row.unitId }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="区域" min-width="128">
+      <el-table-column label="区域" min-width="128" prop="area" sortable="custom">
         <template #default="{ row }">
           <span class="modbus-register-table__area" :data-area="row.area">{{
             formatArea(row.area)
           }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="地址" width="126">
+      <el-table-column label="地址" width="126" prop="address" sortable="custom">
         <template #default="{ row }">
           <div class="modbus-register-table__address">
             <strong>{{ row.address }}</strong>
@@ -40,7 +41,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="类型" width="92">
+      <el-table-column label="类型" width="92" prop="dataType" sortable="custom">
         <template #default="{ row }">
           <span class="modbus-register-table__type">{{ row.dataType }}</span>
         </template>
@@ -63,7 +64,7 @@
           }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="86">
+      <el-table-column label="状态" width="86" prop="status" sortable="custom">
         <template #default="{ row }">
           <el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{
             row.status
@@ -120,6 +121,7 @@ defineEmits<{
   (event: 'row-contextmenu', mouseEvent: MouseEvent, register: ModbusRegister): void
   (event: 'page-change', page: number): void
   (event: 'page-size-change', pageSize: number): void
+  (event: 'sort-change', payload: { prop?: string; order?: string | null }): void
 }>()
 
 const formatArea = (area: string) => {

@@ -175,6 +175,24 @@ func (r *StoragePolicyRepository) ListPolicies(ctx context.Context, projectID st
 	return records, total, nil
 }
 
+func (r *StoragePolicyRepository) ListPoliciesForSummary(ctx context.Context, projectID string, filter StoragePolicyListFilter) ([]StoragePolicyRecord, error) {
+	whereSQL, args := buildStoragePolicyWhereClause(projectID, filter)
+	rows, err := r.pool.Query(ctx, storagePolicySelectSQL()+`
+        WHERE `+whereSQL+`
+        ORDER BY sp.updated_at DESC, sp.created_at DESC
+    `, args...)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询存储策略汇总失败", err)
+	}
+	defer rows.Close()
+
+	records, err := scanStoragePolicyRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
 func (r *StoragePolicyRepository) GetPolicyByProjectAndID(ctx context.Context, projectID, id string) (*StoragePolicyRecord, error) {
 	record, err := scanStoragePolicy(r.pool.QueryRow(ctx, storagePolicySelectSQL()+`
         WHERE sp.project_id = $1 AND sp.id = $2
@@ -321,29 +339,74 @@ func (r *StoragePolicyRepository) CountDataPointsByFilter(ctx context.Context, p
 }
 
 func (r *StoragePolicyRepository) CountPoliciesForDataPoint(ctx context.Context, projectID, datapointID, datapointPath string) (int, error) {
-	conditions := []string{"sp.project_id = $1", "sp.status = 'enabled'"}
-	args := []any{projectID}
-	if strings.TrimSpace(datapointID) != "" {
-		args = append(args, strings.TrimSpace(datapointID))
-		conditions = append(conditions, fmt.Sprintf(`(
-            EXISTS (
-                SELECT 1 FROM data_storage_policy_bindings b
-                WHERE b.policy_id = sp.id AND b.datapoint_id = $%d::uuid
-            )
-            OR sp.binding_mode = 'dynamic'
-        )`, len(args)))
-	} else if strings.TrimSpace(datapointPath) != "" {
-		args = append(args, strings.TrimSpace(datapointPath))
-		conditions = append(conditions, fmt.Sprintf(`(
-            EXISTS (
-                SELECT 1 FROM data_storage_policy_bindings b
-                WHERE b.policy_id = sp.id AND b.datapoint_path = $%d
-            )
-            OR sp.binding_mode = 'dynamic'
-        )`, len(args)))
-	}
+	datapointID = strings.TrimSpace(datapointID)
+	datapointPath = strings.TrimSpace(datapointPath)
+	args := []any{projectID, datapointID, datapointPath}
 	var total int
-	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM data_storage_policies sp WHERE `+strings.Join(conditions, " AND "), args...).Scan(&total); err != nil {
+	if err := r.pool.QueryRow(ctx, `
+        WITH target_dp AS (
+            SELECT id, path, name, source_type, source_id, source_config, status, tags
+            FROM data_points
+            WHERE project_id = $1
+              AND ((NULLIF($2, '')::uuid IS NOT NULL AND id = NULLIF($2, '')::uuid) OR ($2 = '' AND path = $3))
+            LIMIT 1
+        )
+        SELECT COUNT(*)
+        FROM data_storage_policies sp
+        CROSS JOIN target_dp dp
+        WHERE sp.project_id = $1
+          AND sp.status = 'enabled'
+          AND (
+              EXISTS (
+                  SELECT 1
+                  FROM data_storage_policy_bindings b
+                  WHERE b.project_id = sp.project_id
+                    AND b.policy_id = sp.id
+                    AND b.datapoint_id = dp.id
+              )
+              OR (
+                  sp.binding_mode = 'dynamic'
+                  AND (
+                      COALESCE(sp.binding_filter->>'type', '') = ''
+                      OR dp.source_type = sp.binding_filter->>'type'
+                  )
+                  AND (
+                      COALESCE(sp.binding_filter->>'status', '') = ''
+                      OR dp.status = sp.binding_filter->>'status'
+                  )
+                  AND (
+                      COALESCE(sp.binding_filter->>'search', '') = ''
+                      OR dp.name ILIKE '%' || (sp.binding_filter->>'search') || '%'
+                      OR dp.path ILIKE '%' || (sp.binding_filter->>'search') || '%'
+                  )
+                  AND (
+                      COALESCE(sp.binding_filter->>'accessSourceId', '') = ''
+                      OR dp.source_config->>'connectionId' = sp.binding_filter->>'accessSourceId'
+                      OR dp.source_config->>'sourceConnectionId' = sp.binding_filter->>'accessSourceId'
+                      OR (
+                          dp.source_type IN ('http.request', 'websocket.session', 'realtime.key', 'kafka.field')
+                          AND dp.source_id::text = sp.binding_filter->>'accessSourceId'
+                      )
+                  )
+                  AND (
+                      COALESCE(sp.binding_filter->>'sourceId', '') = ''
+                      OR dp.source_id::text = sp.binding_filter->>'sourceId'
+                  )
+                  AND (
+                      jsonb_typeof(sp.binding_filter->'sourceIds') IS DISTINCT FROM 'array'
+                      OR jsonb_array_length(sp.binding_filter->'sourceIds') = 0
+                      OR dp.source_id::text IN (
+                          SELECT jsonb_array_elements_text(sp.binding_filter->'sourceIds')
+                      )
+                  )
+                  AND (
+                      jsonb_typeof(sp.binding_filter->'tags') IS DISTINCT FROM 'array'
+                      OR jsonb_array_length(sp.binding_filter->'tags') = 0
+                      OR dp.tags @> sp.binding_filter->'tags'
+                  )
+              )
+          )
+    `, args...).Scan(&total); err != nil {
 		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "统计数据点命中存储策略失败", err)
 	}
 	return total, nil

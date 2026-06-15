@@ -11,8 +11,9 @@
       :current-row-key="selectedNodeId"
       @row-click="(row) => $emit('select', row)"
       @row-contextmenu="(row, _column, event) => $emit('row-contextmenu', event, row)"
+      @sort-change="(payload) => $emit('sort-change', payload)"
     >
-      <el-table-column label="变量名" min-width="170" show-overflow-tooltip>
+      <el-table-column label="变量名" min-width="170" show-overflow-tooltip prop="name" sortable="custom">
         <template #default="{ row }">
           <div class="opcua-table__name">
             <strong>{{ row.name }}</strong>
@@ -20,12 +21,12 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="NodeId" min-width="250" show-overflow-tooltip>
+      <el-table-column label="NodeId" min-width="250" show-overflow-tooltip prop="nodeId" sortable="custom">
         <template #default="{ row }">
           <code class="opcua-table__node-id">{{ row.nodeId }}</code>
         </template>
       </el-table-column>
-      <el-table-column label="类型" width="104">
+      <el-table-column label="类型" width="104" prop="dataType" sortable="custom">
         <template #default="{ row }">
           <span class="opcua-table__type">{{ row.dataType }}</span>
         </template>
@@ -52,7 +53,7 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="86">
+      <el-table-column label="状态" width="86" prop="status" sortable="custom">
         <template #default="{ row }">
           <el-tag
             class="opcua-table__tag"
@@ -114,6 +115,7 @@ defineEmits<{
   (event: 'row-contextmenu', mouseEvent: MouseEvent, node: OpcuaNode): void
   (event: 'page-change', page: number): void
   (event: 'page-size-change', pageSize: number): void
+  (event: 'sort-change', payload: { prop?: string; order?: string | null }): void
 }>()
 
 const formatValue = (value: unknown) => {

@@ -254,13 +254,38 @@ type OpcuaNodeListResult struct {
 	Pagination ProtocolModelingPagination `json:"pagination"`
 }
 
+// OpcuaNodeListFilter 是 OPC UA 变量列表的查询条件。
+type OpcuaNodeListFilter struct {
+	GroupID     *string
+	Search      string
+	QuickFilter string
+	NodeID      string
+	BrowseName  string
+	AccessLevel string
+	DataType    string
+	SortBy      string
+	SortOrder   string
+	Page        int
+	PageSize    int
+}
+
 // ListNodesPage 返回当前分组下的一页变量，分页条件只影响列表展示，不影响预览和校验等全量流程。
-func (s *OpcuaModelingService) ListNodesPage(ctx context.Context, projectID, connectionID string, groupID *string, page, pageSize int) (*OpcuaNodeListResult, error) {
+func (s *OpcuaModelingService) ListNodesPage(ctx context.Context, projectID, connectionID string, filter OpcuaNodeListFilter) (*OpcuaNodeListResult, error) {
 	if err := s.validateProjectConnection(ctx, projectID, connectionID); err != nil {
 		return nil, err
 	}
-	page, pageSize = normalizePageAndSize(page, pageSize, 1, 100)
-	records, total, err := s.repository.ListNodesPage(ctx, projectID, connectionID, normalizeOptionalText(groupID), page, pageSize)
+	page, pageSize := normalizePageAndSize(filter.Page, filter.PageSize, 1, 100)
+	records, total, err := s.repository.ListNodesPage(ctx, projectID, connectionID, repository.OpcuaNodeListFilter{
+		GroupID:     normalizeOptionalText(filter.GroupID),
+		Search:      strings.TrimSpace(filter.Search),
+		QuickFilter: strings.TrimSpace(filter.QuickFilter),
+		NodeID:      strings.TrimSpace(filter.NodeID),
+		BrowseName:  strings.TrimSpace(filter.BrowseName),
+		AccessLevel: strings.TrimSpace(filter.AccessLevel),
+		DataType:    strings.TrimSpace(filter.DataType),
+		SortBy:      strings.TrimSpace(filter.SortBy),
+		SortOrder:   strings.TrimSpace(filter.SortOrder),
+	}, page, pageSize)
 	if err != nil {
 		return nil, err
 	}

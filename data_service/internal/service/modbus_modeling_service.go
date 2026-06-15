@@ -317,13 +317,40 @@ type ModbusRegisterListResult struct {
 	Pagination ProtocolModelingPagination `json:"pagination"`
 }
 
+// ModbusRegisterListFilter 是 Modbus 变量列表的查询条件。
+type ModbusRegisterListFilter struct {
+	GroupID      *string
+	Search       string
+	QuickFilter  string
+	UnitID       *int
+	Area         string
+	AddressStart *int
+	AddressEnd   *int
+	DataType     string
+	SortBy       string
+	SortOrder    string
+	Page         int
+	PageSize     int
+}
+
 // ListRegistersPage 返回当前分组下的一页变量，分页条件只影响列表展示，不影响预览和校验等全量流程。
-func (s *ModbusModelingService) ListRegistersPage(ctx context.Context, projectID, connectionID string, groupID *string, page, pageSize int) (*ModbusRegisterListResult, error) {
+func (s *ModbusModelingService) ListRegistersPage(ctx context.Context, projectID, connectionID string, filter ModbusRegisterListFilter) (*ModbusRegisterListResult, error) {
 	if err := s.validateProjectConnection(ctx, projectID, connectionID); err != nil {
 		return nil, err
 	}
-	page, pageSize = normalizePageAndSize(page, pageSize, 1, 100)
-	records, total, err := s.repository.ListRegistersPage(ctx, projectID, connectionID, normalizeOptionalText(groupID), page, pageSize)
+	page, pageSize := normalizePageAndSize(filter.Page, filter.PageSize, 1, 100)
+	records, total, err := s.repository.ListRegistersPage(ctx, projectID, connectionID, repository.ModbusRegisterListFilter{
+		GroupID:      normalizeOptionalText(filter.GroupID),
+		Search:       strings.TrimSpace(filter.Search),
+		QuickFilter:  strings.TrimSpace(filter.QuickFilter),
+		UnitID:       filter.UnitID,
+		Area:         strings.TrimSpace(filter.Area),
+		AddressStart: filter.AddressStart,
+		AddressEnd:   filter.AddressEnd,
+		DataType:     strings.TrimSpace(filter.DataType),
+		SortBy:       strings.TrimSpace(filter.SortBy),
+		SortOrder:    strings.TrimSpace(filter.SortOrder),
+	}, page, pageSize)
 	if err != nil {
 		return nil, err
 	}

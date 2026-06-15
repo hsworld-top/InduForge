@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -51,6 +52,19 @@ type OpcuaNodeRecord struct {
 	DataPointStatus *string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+}
+
+// OpcuaNodeListFilter 描述变量列表的服务端筛选、搜索和排序条件。
+type OpcuaNodeListFilter struct {
+	GroupID     *string
+	Search      string
+	QuickFilter string
+	NodeID      string
+	BrowseName  string
+	AccessLevel string
+	DataType    string
+	SortBy      string
+	SortOrder   string
 }
 
 // CreateOpcuaNodeGroupParams 描述创建 OPC UA 变量组的仓储参数。
@@ -279,17 +293,19 @@ func (r *OpcuaModelingRepository) ListNodes(ctx context.Context, projectID, conn
 	return result, nil
 }
 
-// ListNodesPage 返回当前分组下的一页 OPC UA 变量，并同时返回匹配总数。
-func (r *OpcuaModelingRepository) ListNodesPage(ctx context.Context, projectID, connectionID string, groupID *string, page, pageSize int) ([]OpcuaNodeRecord, int, error) {
-	where := "n.project_id = $1 AND n.connection_id = $2"
-	args := []any{projectID, connectionID}
-	if groupID != nil {
-		where += " AND n.group_id = $3"
-		args = append(args, groupID)
-	}
+// ListNodesPage 返回当前条件下的一页 OPC UA 变量，并同时返回匹配总数。
+func (r *OpcuaModelingRepository) ListNodesPage(ctx context.Context, projectID, connectionID string, filter OpcuaNodeListFilter, page, pageSize int) ([]OpcuaNodeRecord, int, error) {
+	where, args := buildOpcuaNodeListWhere(projectID, connectionID, filter)
 
 	var total int
-	if err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM data_opcua_nodes n WHERE "+where, args...).Scan(&total); err != nil {
+	if err := r.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM data_opcua_nodes n
+		LEFT JOIN data_points dp
+		  ON dp.project_id = n.project_id
+		 AND dp.source_type = 'opcua.node'
+		 AND dp.source_id = n.id
+		WHERE `+where, args...).Scan(&total); err != nil {
 		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "统计 OPC UA 变量失败", err)
 	}
 
@@ -308,9 +324,9 @@ func (r *OpcuaModelingRepository) ListNodesPage(ctx context.Context, projectID, 
 		 AND dp.source_type = 'opcua.node'
 		 AND dp.source_id = n.id
 		WHERE %s
-		ORDER BY n.sort_order ASC, n.created_at ASC
+		ORDER BY %s
 		LIMIT $%d OFFSET $%d
-	`, where, limitIndex, offsetIndex), queryArgs...)
+	`, where, opcuaNodeOrderSQL(filter.SortBy, filter.SortOrder), limitIndex, offsetIndex), queryArgs...)
 	if err != nil {
 		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 OPC UA 变量分页失败", err)
 	}
@@ -328,6 +344,76 @@ func (r *OpcuaModelingRepository) ListNodesPage(ctx context.Context, projectID, 
 		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 OPC UA 变量分页失败", err)
 	}
 	return result, total, nil
+}
+
+func buildOpcuaNodeListWhere(projectID, connectionID string, filter OpcuaNodeListFilter) (string, []any) {
+	clauses := []string{"n.project_id = $1", "n.connection_id = $2"}
+	args := []any{projectID, connectionID}
+	addEqual := func(column, value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		args = append(args, value)
+		clauses = append(clauses, fmt.Sprintf("%s = $%d", column, len(args)))
+	}
+	if filter.GroupID != nil {
+		groupID := strings.TrimSpace(*filter.GroupID)
+		if groupID == "__ungrouped__" {
+			clauses = append(clauses, "n.group_id IS NULL")
+		} else if groupID != "" {
+			args = append(args, groupID)
+			clauses = append(clauses, fmt.Sprintf("n.group_id = $%d", len(args)))
+		}
+	}
+	if search := strings.TrimSpace(filter.Search); search != "" {
+		args = append(args, "%"+search+"%")
+		idx := len(args)
+		clauses = append(clauses, fmt.Sprintf("(n.name ILIKE $%d OR n.code ILIKE $%d OR n.node_id ILIKE $%d OR COALESCE(n.browse_name, '') ILIKE $%d OR COALESCE(n.display_name, '') ILIKE $%d OR COALESCE(dp.path, '') ILIKE $%d)", idx, idx, idx, idx, idx, idx))
+	}
+	if nodeID := strings.TrimSpace(filter.NodeID); nodeID != "" {
+		args = append(args, "%"+nodeID+"%")
+		clauses = append(clauses, fmt.Sprintf("n.node_id ILIKE $%d", len(args)))
+	}
+	if browseName := strings.TrimSpace(filter.BrowseName); browseName != "" {
+		args = append(args, "%"+browseName+"%")
+		clauses = append(clauses, fmt.Sprintf("COALESCE(n.browse_name, '') ILIKE $%d", len(args)))
+	}
+	addEqual("n.access_level", filter.AccessLevel)
+	addEqual("n.data_type", filter.DataType)
+	switch strings.TrimSpace(filter.QuickFilter) {
+	case "issue":
+		clauses = append(clauses, "(n.status <> 'active' OR dp.id IS NULL OR COALESCE(dp.status, '') <> 'active')")
+	case "datapoint":
+		clauses = append(clauses, "(dp.id IS NULL OR COALESCE(dp.status, '') <> 'active')")
+	case "writable":
+		clauses = append(clauses, "LOWER(n.access_level) LIKE '%write%'")
+	case "disabled":
+		clauses = append(clauses, "n.status <> 'active'")
+	}
+	return strings.Join(clauses, " AND "), args
+}
+
+func opcuaNodeOrderSQL(sortBy, sortOrder string) string {
+	direction := "ASC"
+	if strings.EqualFold(strings.TrimSpace(sortOrder), "desc") || strings.EqualFold(strings.TrimSpace(sortOrder), "descending") {
+		direction = "DESC"
+	}
+	columns := map[string]string{
+		"name":        "n.name",
+		"code":        "n.code",
+		"nodeId":      "n.node_id",
+		"dataType":    "n.data_type",
+		"samplingMs":  "n.sampling_ms",
+		"accessLevel": "n.access_level",
+		"status":      "n.status",
+		"updatedAt":   "n.updated_at",
+		"sortOrder":   "n.sort_order",
+	}
+	if column, ok := columns[strings.TrimSpace(sortBy)]; ok {
+		return column + " " + direction + ", n.sort_order ASC, n.created_at ASC"
+	}
+	return "n.sort_order ASC, n.created_at ASC"
 }
 
 // GetNode 按项目和变量 ID 读取 OPC UA 变量。

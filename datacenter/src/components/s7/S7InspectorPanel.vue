@@ -60,7 +60,7 @@
           <dt>历史归档</dt>
           <dd>
             <button type="button" class="s7-inspector__link" @click="openStoragePolicy">
-              查看存储策略
+              {{ storageCoverageText }}
             </button>
           </dd>
           <dt>设备冗余</dt>
@@ -138,8 +138,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { getStoragePolicyCoverage } from '@/api/storage-policy.api'
 import type {
   S7Profile,
   S7ReadPlanEstimate,
@@ -171,6 +172,9 @@ const props = defineProps<{
 
 const route = useRoute()
 const router = useRouter()
+const storagePolicyCount = ref<number | null>(null)
+const storageCoverageLoading = ref(false)
+const storageCoverageFailed = ref(false)
 
 const scopedVariables = computed(() =>
   props.group
@@ -192,6 +196,13 @@ const deviceRedundancyText = computed(() => {
   return count > 1 ? `主备优先级 · ${count} endpoint` : '主备优先级'
 })
 const collectionRedundancyText = computed(() => '运行部署策略统一配置')
+const storageCoverageText = computed(() => {
+  if (!props.variable?.datapointPath) return '未生成数据点'
+  if (storageCoverageLoading.value) return '历史归档检查中'
+  if (storageCoverageFailed.value) return '历史归档检查失败'
+  if (!storagePolicyCount.value) return '未配置历史归档'
+  return `已命中 ${storagePolicyCount.value} 条历史策略`
+})
 const formatValue = (value: unknown) => {
   if (value === null || value === undefined || value === '') return '-'
   if (typeof value === 'object') return JSON.stringify(value)
@@ -208,6 +219,29 @@ const openStoragePolicy = () => {
     },
   })
 }
+
+watch(
+  () => [props.projectId, props.variable?.datapointId, props.variable?.datapointPath] as const,
+  async ([projectId, datapointId, datapointPath]) => {
+    storagePolicyCount.value = null
+    storageCoverageFailed.value = false
+    if (!projectId || (!datapointId && !datapointPath)) return
+    storageCoverageLoading.value = true
+    try {
+      const coverage = await getStoragePolicyCoverage(projectId, {
+        datapointId: datapointId || undefined,
+        path: datapointPath || undefined,
+      })
+      storagePolicyCount.value = coverage.matchedPolicyCount
+    } catch {
+      storagePolicyCount.value = 0
+      storageCoverageFailed.value = true
+    } finally {
+      storageCoverageLoading.value = false
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>

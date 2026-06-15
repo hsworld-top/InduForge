@@ -236,20 +236,14 @@ func (s *StoragePolicyService) List(ctx context.Context, claims *auth.Claims, pr
 		return nil, err
 	}
 	policies := make([]StoragePolicy, 0, len(records))
-	summary := StoragePolicySummary{}
 	for _, record := range records {
 		policy := toStoragePolicy(record)
 		policy.Estimate, _ = s.estimateRecord(ctx, projectID, record)
 		policies = append(policies, policy)
-		if policy.Status == "enabled" {
-			summary.EnabledCount++
-		}
-		if policy.Status == "error" {
-			summary.ErrorCount++
-		}
-		summary.TotalBindingCount += policy.BindingCount
-		summary.EstimatedRowsPerDay += policy.Estimate.RowsPerDay
-		summary.EstimatedEventsSecond += policy.Estimate.EventsPerSecond
+	}
+	summary, err := s.summaryByFilter(ctx, projectID, normalized)
+	if err != nil {
+		return nil, err
 	}
 	page, pageSize := normalizePageAndSize(filter.Page, filter.PageSize, defaultStoragePolicyPageSize, 100)
 	return &StoragePolicyListResult{
@@ -257,6 +251,37 @@ func (s *StoragePolicyService) List(ctx context.Context, claims *auth.Claims, pr
 		Pagination: StoragePolicyPagination{Page: page, PageSize: pageSize, Total: total, TotalPages: totalPages(total, pageSize)},
 		Summary:    summary,
 	}, nil
+}
+
+func (s *StoragePolicyService) summaryByFilter(ctx context.Context, projectID string, filter StoragePolicyListFilter) (StoragePolicySummary, error) {
+	records, err := s.repository.ListPoliciesForSummary(ctx, projectID, repository.StoragePolicyListFilter{
+		Search:             filter.Search,
+		Status:             filter.Status,
+		TargetConnectionID: filter.TargetConnectionID,
+		WriteMode:          filter.WriteMode,
+		BindingMode:        filter.BindingMode,
+	})
+	if err != nil {
+		return StoragePolicySummary{}, err
+	}
+	summary := StoragePolicySummary{}
+	for _, record := range records {
+		policy := toStoragePolicy(record)
+		estimate, err := s.estimateRecord(ctx, projectID, record)
+		if err != nil {
+			return StoragePolicySummary{}, err
+		}
+		if policy.Status == "enabled" {
+			summary.EnabledCount++
+		}
+		if policy.Status == "error" {
+			summary.ErrorCount++
+		}
+		summary.TotalBindingCount += policy.BindingCount
+		summary.EstimatedRowsPerDay += estimate.RowsPerDay
+		summary.EstimatedEventsSecond += estimate.EventsPerSecond
+	}
+	return summary, nil
 }
 
 func (s *StoragePolicyService) Get(ctx context.Context, claims *auth.Claims, projectID, policyID string) (*StoragePolicyDetail, error) {
