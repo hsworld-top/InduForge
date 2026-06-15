@@ -42,6 +42,7 @@ defineEmits<{
 const moduleIcons: Record<string, unknown> = {
   datapoint: IconTablerDatabase,
   'access-source': IconTablerPlugConnected,
+  'storage-policy': IconTablerDatabase,
   compute: IconTablerCalculator,
   alarm: IconTablerBell,
 }

@@ -60,6 +60,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import IconTablerArrowRight from '~icons/tabler/arrow-right'
 import IconTablerBuildingFactory2 from '~icons/tabler/building-factory-2'
 import IconTablerDatabase from '~icons/tabler/database'
