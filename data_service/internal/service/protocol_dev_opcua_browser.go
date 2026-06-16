@@ -246,19 +246,21 @@ func (o opcuaBrowseOptions) clientOptions(ctx context.Context) ([]opcua.Option, 
 	} else {
 		result = append(result, opcua.AuthAnonymous())
 	}
-	if strings.TrimSpace(o.CertificatePEM) != "" {
-		cert, err := parseOpcuaCertificate(o.CertificatePEM)
-		if err != nil {
-			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 客户端证书无效: %v", err))
+	if o.usesClientCertificate() {
+		if strings.TrimSpace(o.CertificatePEM) != "" {
+			cert, err := parseOpcuaCertificate(o.CertificatePEM)
+			if err != nil {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 客户端证书无效: %v", err))
+			}
+			result = append(result, opcua.Certificate(cert))
 		}
-		result = append(result, opcua.Certificate(cert))
-	}
-	if strings.TrimSpace(o.PrivateKeyPEM) != "" {
-		key, err := parseOpcuaPrivateKey(o.PrivateKeyPEM)
-		if err != nil {
-			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 客户端私钥无效: %v", err))
+		if strings.TrimSpace(o.PrivateKeyPEM) != "" {
+			key, err := parseOpcuaPrivateKey(o.PrivateKeyPEM)
+			if err != nil {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 客户端私钥无效: %v", err))
+			}
+			result = append(result, opcua.PrivateKey(key))
 		}
-		result = append(result, opcua.PrivateKey(key))
 	}
 	// 安全连接必须根据服务端 EndpointDescription 注入远端证书和用户 token policy，否则 Sign/SignAndEncrypt 容易在握手阶段失败。
 	endpoints, err := opcua.GetEndpoints(ctx, o.Endpoint, opcua.DialTimeout(o.ConnectTimeout), opcua.RequestTimeout(o.RequestTimeout))
@@ -272,6 +274,10 @@ func (o opcuaBrowseOptions) clientOptions(ctx context.Context) ([]opcua.Option, 
 	}
 	result = append(result, opcua.SecurityFromEndpoint(endpoint, authMode))
 	return result, nil
+}
+
+func (o opcuaBrowseOptions) usesClientCertificate() bool {
+	return !strings.EqualFold(strings.TrimSpace(o.SecurityPolicy), "None") || !strings.EqualFold(strings.TrimSpace(o.SecurityMode), "None")
 }
 
 func opcuaNodeClassFromAttributes(attrs []*ua.DataValue) (ua.NodeClass, error) {

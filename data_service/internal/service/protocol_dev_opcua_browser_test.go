@@ -71,6 +71,17 @@ func TestOpcuaBrowseOptionsClientOptionsRequiresUsername(t *testing.T) {
 	}
 }
 
+func TestOpcuaBrowseOptionsUsesClientCertificateOnlyForSecureMode(t *testing.T) {
+	noneOptions := opcuaBrowseOptions{SecurityPolicy: "None", SecurityMode: "None", CertificatePEM: "bad-cert", PrivateKeyPEM: "bad-key"}
+	if noneOptions.usesClientCertificate() {
+		t.Fatal("None/None should ignore configured certificate material")
+	}
+	secureOptions := opcuaBrowseOptions{SecurityPolicy: "Basic256Sha256", SecurityMode: "Sign"}
+	if !secureOptions.usesClientCertificate() {
+		t.Fatal("secure endpoint should use configured certificate material")
+	}
+}
+
 func TestOpcuaDataTypeName(t *testing.T) {
 	cases := map[*ua.NodeID]string{
 		ua.NewNumericNodeID(0, id.Boolean):  "Boolean",
