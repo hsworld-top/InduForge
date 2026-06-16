@@ -239,7 +239,6 @@
       v-model="bulkMoveVisible"
       title="移动变量分组"
       width="420px"
-      :close-disabled="saving"
       :confirm-on-dirty-close="false"
       class="opcua-workbench__move-dialog"
     >
