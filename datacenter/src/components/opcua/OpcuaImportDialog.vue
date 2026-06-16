@@ -208,6 +208,7 @@
         v-if="step === 'pick'"
         type="primary"
         :disabled="candidateCount === 0"
+        :loading="confirmPreparing"
         @click="goConfirm"
       >
         下一步，确认 {{ candidateCount }} 个候选变量
@@ -299,6 +300,7 @@ const subtreeLoadingNodeId = ref('')
 const onlyIssues = ref(false)
 const confirmPage = ref(1)
 const confirmPageSize = ref(50)
+const confirmPreparing = ref(false)
 const defaults = reactive({
   samplingMs: '1000',
   accessLevel: 'Read',
@@ -329,6 +331,7 @@ watch(
     onlyIssues.value = false
     confirmPage.value = 1
     confirmPageSize.value = 50
+    confirmPreparing.value = false
     defaults.samplingMs = '1000'
     defaults.accessLevel = 'Read'
     defaults.deadband = ''
@@ -597,16 +600,26 @@ function submit() {
   runSubmit()
 }
 
-function goConfirm() {
+async function goConfirm() {
   if (candidateCount.value === 0) {
     ElMessage.warning(mode.value === 'browse' ? '请先选择要导入的 OPC UA 变量' : '请先输入 NodeId')
     return
   }
-  if (mode.value === 'browse') {
-    browseDraftRows.value = buildBrowseRows(selectedBrowseIds.value)
+  confirmPreparing.value = true
+  await nextTick()
+  try {
+    if (mode.value === 'browse') {
+      browseDraftRows.value = buildBrowseRows(selectedBrowseIds.value)
+      if (browseDraftRows.value.length === 0) {
+        ElMessage.warning('候选变量数据已失效，请重新展开或刷新浏览树')
+        return
+      }
+    }
+    confirmPage.value = 1
+    step.value = 'confirm'
+  } finally {
+    confirmPreparing.value = false
   }
-  confirmPage.value = 1
-  step.value = 'confirm'
 }
 
 function applyDefaults() {
@@ -694,6 +707,11 @@ function loadBrowseTreeNode(node: { level: number; data?: OpcuaBrowseRow }, reso
     return
   }
   const parentNodeId = node.level === 0 ? '' : node.data?.nodeId || ''
+  const cachedChildren = childrenOf(parentNodeId)
+  if (cachedChildren.length > 0) {
+    resolve(cachedChildren)
+    return
+  }
   const key = browsePendingKey(parentNodeId)
   pendingBrowseResolvers.set(key, resolve)
   emit('browse', parentNodeId || undefined)

@@ -768,7 +768,7 @@ const mergeBrowseNodes = (incoming: OpcuaBrowseNode[], parentNodeId?: string) =>
   const parentId = parent?.id || null
   const next = parentNodeId
     ? browseNodes.value.filter((node) => node.parentId !== parentId)
-    : []
+    : browseNodes.value.filter((node) => node.parentId)
   const byId = new Map(next.map((node) => [node.id, node]))
   incoming.forEach((node) => {
     byId.set(node.id, {
