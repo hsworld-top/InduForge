@@ -581,14 +581,12 @@ function submit() {
   }
   const skipped = previewRows.value.length - readyRows.value.length
   const runSubmit = () => {
-    emit(
-      'submit',
-      readyRows.value.map(({ state: _state, issue: _issue, key: _key, source: _source, rowNo: _rowNo, ...row }) => ({
-        ...row,
-        samplingMs: Number(row.samplingMs),
-        deadband: row.deadband === '' ? null : Number(row.deadband),
-      })),
-    )
+    const rows = readyRows.value.map((row) => buildSubmitRow(row))
+    if (rows.some((row) => row === null)) {
+      ElMessage.warning('请先修正采样周期或死区后再导入')
+      return
+    }
+    emit('submit', rows.filter((row): row is Record<string, unknown> => row !== null))
   }
   if (skipped > 0) {
     void ElMessageBox.confirm(
@@ -598,6 +596,29 @@ function submit() {
     return
   }
   runSubmit()
+}
+
+function buildSubmitRow(row: OpcuaImportPreviewRow): Record<string, unknown> | null {
+  const samplingMs = Number(row.samplingMs)
+  const deadbandText = String(row.deadband || '').trim()
+  const deadband = deadbandText === '' ? null : Number(deadbandText)
+  if (!Number.isFinite(samplingMs) || samplingMs <= 0 || !Number.isInteger(samplingMs)) return null
+  if (deadband !== null && (!Number.isFinite(deadband) || deadband < 0)) return null
+
+  // 批量导入接口使用严格 JSON 解码，只提交后端声明支持的字段，避免 UI 状态字段进入请求体。
+  return {
+    name: row.name,
+    code: row.code,
+    nodeId: row.nodeId,
+    browseName: row.browseName || null,
+    displayName: row.displayName || null,
+    dataType: row.dataType,
+    unit: row.unit || null,
+    samplingMs,
+    deadband,
+    accessLevel: normalizeAccessLevel(row.accessLevel),
+    description: row.description || null,
+  }
 }
 
 async function goConfirm() {

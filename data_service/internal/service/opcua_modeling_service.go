@@ -138,6 +138,7 @@ type ImportOpcuaNodeInput struct {
 	Unit        *string  `json:"unit"`
 	SamplingMS  *int     `json:"samplingMs"`
 	Deadband    *float64 `json:"deadband"`
+	AccessLevel string   `json:"accessLevel"`
 	Description *string  `json:"description"`
 }
 
@@ -808,7 +809,7 @@ func normalizeOpcuaImportRows(nodes []ImportOpcuaNodeInput, existingCodes map[st
 				Unit:        item.Unit,
 				SamplingMS:  &samplingMS,
 				Deadband:    item.Deadband,
-				AccessLevel: "Read",
+				AccessLevel: normalizeOpcuaAccessLevel(item.AccessLevel),
 				Description: item.Description,
 				SortOrder:   index,
 			},

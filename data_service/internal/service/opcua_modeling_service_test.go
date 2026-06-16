@@ -40,6 +40,20 @@ func TestNormalizeOpcuaImportRowsRejectsDuplicateNodeID(t *testing.T) {
 	}
 }
 
+func TestNormalizeOpcuaImportRowsKeepsAccessLevel(t *testing.T) {
+	input := []ImportOpcuaNodeInput{
+		{Name: "Speed", NodeID: "ns=2;s=Line1.Speed", DataType: "Double", AccessLevel: "ReadWrite"},
+	}
+
+	rows, err := normalizeOpcuaImportRows(input, nil)
+	if err != nil {
+		t.Fatalf("normalize import rows: %v", err)
+	}
+	if got := rows[0].AccessLevel; got != "ReadWrite" {
+		t.Fatalf("accessLevel = %q, want ReadWrite", got)
+	}
+}
+
 func TestNormalizeOpcuaImportRowsRejectsTooManyRows(t *testing.T) {
 	input := make([]ImportOpcuaNodeInput, maxOpcuaBatchImportNodes+1)
 	for index := range input {
