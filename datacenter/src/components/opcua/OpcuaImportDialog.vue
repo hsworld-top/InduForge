@@ -132,13 +132,13 @@
           <span>应用后会重新检查候选行</span>
         </div>
         <div class="opcua-import__default-grid">
-          <el-input-number v-model="defaults.samplingMs" size="small" :min="1" />
+          <el-input v-model="defaults.samplingMs" size="small" placeholder="采样周期 ms" />
           <el-select v-model="defaults.accessLevel" size="small">
             <el-option label="Read" value="Read" />
             <el-option label="Write" value="Write" />
             <el-option label="ReadWrite" value="ReadWrite" />
           </el-select>
-          <el-input-number v-model="defaults.deadband" size="small" :min="0" />
+          <el-input v-model="defaults.deadband" size="small" placeholder="死区" />
           <el-input v-model="defaults.unit" size="small" clearable placeholder="单位" />
           <el-button size="small" @click="applyDefaults">应用到候选行</el-button>
         </div>
@@ -149,28 +149,28 @@
           <strong>导入确认</strong>
           <span>导入前可逐行调整关键字段</span>
         </div>
-        <el-table :data="pagedDisplayRows" height="260" size="small" row-key="key">
-          <el-table-column label="状态" width="82">
+        <el-table :data="pagedDisplayRows" height="300" size="small" row-key="key" class="opcua-import__confirm-table">
+          <el-table-column label="状态" width="74" fixed>
             <template #default="{ row }">
               <el-tag size="small" :type="rowTagType(row.state)">
                 {{ rowStateText(row.state) }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="变量名" min-width="140">
+          <el-table-column label="变量名" min-width="160">
             <template #default="{ row }"><el-input v-model="row.name" size="small" /></template>
           </el-table-column>
-          <el-table-column prop="code" label="Code" min-width="130" show-overflow-tooltip />
-          <el-table-column prop="nodeId" label="NodeId" min-width="220" show-overflow-tooltip />
-          <el-table-column label="类型" width="118">
+          <el-table-column prop="code" label="Code" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="nodeId" label="NodeId" min-width="180" show-overflow-tooltip />
+          <el-table-column label="类型" width="124">
             <template #default="{ row }"><el-input v-model="row.dataType" size="small" /></template>
           </el-table-column>
-          <el-table-column label="采样" width="116">
+          <el-table-column label="采样" width="104">
             <template #default="{ row }">
-              <el-input-number v-model="row.samplingMs" size="small" :min="1" />
+              <el-input v-model="row.samplingMs" size="small" />
             </template>
           </el-table-column>
-          <el-table-column label="权限" width="118">
+          <el-table-column label="权限" width="112">
             <template #default="{ row }">
               <el-select v-model="row.accessLevel" size="small">
                 <el-option label="Read" value="Read" />
@@ -179,15 +179,15 @@
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="死区" width="106">
+          <el-table-column label="死区" width="92">
             <template #default="{ row }">
-              <el-input-number v-model="row.deadband" size="small" :min="0" />
+              <el-input v-model="row.deadband" size="small" />
             </template>
           </el-table-column>
-          <el-table-column label="单位" width="90">
+          <el-table-column label="单位" width="88">
             <template #default="{ row }"><el-input v-model="row.unit" size="small" /></template>
           </el-table-column>
-          <el-table-column prop="issue" label="问题" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="issue" label="问题" min-width="160" show-overflow-tooltip />
         </el-table>
         <div class="opcua-import__pager">
           <el-pagination
@@ -254,9 +254,9 @@ type OpcuaImportPreviewRow = {
   browseName?: string | null
   displayName?: string | null
   dataType: string
-  samplingMs: number
+  samplingMs: string
   accessLevel: string
-  deadband: number | null
+  deadband: string
   unit: string | null
   description: string | null
   state: OpcuaImportState
@@ -300,9 +300,9 @@ const onlyIssues = ref(false)
 const confirmPage = ref(1)
 const confirmPageSize = ref(50)
 const defaults = reactive({
-  samplingMs: 1000,
+  samplingMs: '1000',
   accessLevel: 'Read',
-  deadband: null as number | null,
+  deadband: '',
   unit: '',
 })
 
@@ -329,9 +329,9 @@ watch(
     onlyIssues.value = false
     confirmPage.value = 1
     confirmPageSize.value = 50
-    defaults.samplingMs = 1000
+    defaults.samplingMs = '1000'
     defaults.accessLevel = 'Read'
-    defaults.deadband = null
+    defaults.deadband = ''
     defaults.unit = ''
     mode.value = props.connected ? 'browse' : 'manual'
   },
@@ -411,11 +411,11 @@ function buildManualRows(value: string): OpcuaImportPreviewRow[] {
       rowNo: index + 1,
       name,
       nodeId,
-      dataType: row.dataType.trim() || 'Double',
+      dataType: normalizeOpcuaDataType(row.dataType.trim() || 'Double'),
       unit: row.unit.trim() || null,
-      samplingMs: toInteger(row.samplingMs, defaults.samplingMs),
+      samplingMs: String(toInteger(row.samplingMs, Number(defaults.samplingMs) || 1000)),
       accessLevel: normalizeAccessLevel(row.accessLevel || defaults.accessLevel),
-      deadband: toNullableNumber(row.deadband, defaults.deadband),
+      deadband: normalizeNullableNumberText(row.deadband, defaults.deadband),
       description: row.description.trim() || null,
     })
   })
@@ -434,7 +434,7 @@ function buildBrowseRows(ids: string[]): OpcuaImportPreviewRow[] {
         nodeId: node.nodeId,
         browseName: node.browseName || node.name,
         displayName: node.displayName || node.name,
-        dataType: node.dataType || 'Double',
+        dataType: normalizeOpcuaDataType(node.dataType || 'Double'),
         unit: defaults.unit || null,
         samplingMs: defaults.samplingMs,
         accessLevel: defaults.accessLevel,
@@ -457,10 +457,10 @@ function createPreviewRow(row: Partial<OpcuaImportPreviewRow> & { source: OpcuaI
     code: row.code || '',
     browseName: row.browseName || null,
     displayName: row.displayName || null,
-    dataType: row.dataType || 'Double',
-    samplingMs: row.samplingMs || defaults.samplingMs,
+    dataType: normalizeOpcuaDataType(row.dataType || 'Double'),
+    samplingMs: String(row.samplingMs || defaults.samplingMs),
     accessLevel: normalizeAccessLevel(row.accessLevel || defaults.accessLevel),
-    deadband: row.deadband ?? null,
+    deadband: String(row.deadband ?? ''),
     unit: row.unit || null,
     description: row.description || null,
     state: 'ready' as OpcuaImportState,
@@ -475,12 +475,15 @@ function validateRows(rows: OpcuaImportPreviewRow[]) {
   return rows.map((row) => {
     const next = row
     const nodeId = next.nodeId.trim()
+    const samplingMs = Number(next.samplingMs)
+    const deadband = next.deadband === '' ? null : Number(next.deadband)
     const issues = [
       !nodeId ? 'NodeId 为空' : '',
       !next.dataType.trim() ? '数据类型为空' : '',
-      !Number.isFinite(Number(next.samplingMs)) || Number(next.samplingMs) <= 0
-        ? '采样周期必须大于 0'
+      !Number.isFinite(samplingMs) || samplingMs <= 0 || !Number.isInteger(samplingMs)
+        ? '采样周期必须为正整数'
         : '',
+      deadband !== null && (!Number.isFinite(deadband) || deadband < 0) ? '死区必须大于等于 0' : '',
     ].filter(Boolean)
     next.code = allocateUniqueCode(normalizeCode(next.code || next.name || nameFromNodeId(nodeId)), usedCodes)
     usedCodes.add(next.code)
@@ -577,7 +580,11 @@ function submit() {
   const runSubmit = () => {
     emit(
       'submit',
-      readyRows.value.map(({ state: _state, issue: _issue, key: _key, source: _source, rowNo: _rowNo, ...row }) => row),
+      readyRows.value.map(({ state: _state, issue: _issue, key: _key, source: _source, rowNo: _rowNo, ...row }) => ({
+        ...row,
+        samplingMs: Number(row.samplingMs),
+        deadband: row.deadband === '' ? null : Number(row.deadband),
+      })),
     )
   }
   if (skipped > 0) {
@@ -801,10 +808,39 @@ function toInteger(value: string, fallback: number) {
   return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback
 }
 
-function toNullableNumber(value: string, fallback: number | null) {
+function normalizeNullableNumberText(value: string, fallback: string) {
   if (value === '') return fallback
   const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : fallback
+  return Number.isFinite(parsed) ? String(parsed) : fallback
+}
+
+function normalizeOpcuaDataType(value: string) {
+  const text = String(value || '').trim()
+  const aliases: Record<string, string> = {
+    'i=1': 'Boolean',
+    'i=2': 'SByte',
+    'i=3': 'Byte',
+    'i=4': 'Int16',
+    'i=5': 'UInt16',
+    'i=6': 'Int32',
+    'i=7': 'UInt32',
+    'i=8': 'Int64',
+    'i=9': 'UInt64',
+    'i=10': 'Float',
+    'i=11': 'Double',
+    'i=12': 'String',
+    'i=13': 'DateTime',
+    'i=17': 'NodeID',
+    'i=20': 'QualifiedName',
+    'i=21': 'LocalizedText',
+    'i=24': 'BaseDataType',
+    'i=26': 'Number',
+    'i=27': 'Integer',
+    'i=28': 'UInteger',
+    'i=290': 'Duration',
+    'i=295': 'LocaleID',
+  }
+  return aliases[text] || text
 }
 
 defineExpose({ closeSilently })
@@ -995,13 +1031,13 @@ defineExpose({ closeSilently })
 
 .opcua-import__default-grid {
   display: grid;
-  grid-template-columns: 130px 130px 130px minmax(100px, 1fr) auto;
+  grid-template-columns: minmax(110px, 140px) minmax(110px, 140px) minmax(90px, 120px) minmax(90px, 1fr) auto;
   align-items: center;
   gap: 8px;
 }
 
 .opcua-import__default-grid :deep(.el-select),
-.opcua-import__default-grid :deep(.el-input-number) {
+.opcua-import__default-grid :deep(.el-input) {
   width: 100%;
 }
 
@@ -1010,7 +1046,26 @@ defineExpose({ closeSilently })
   --el-table-border-color: var(--dc-border);
 }
 
-.opcua-import__confirm-section :deep(.el-table__body-wrapper) {
+.opcua-import__confirm-table {
+  width: 100%;
+}
+
+.opcua-import__confirm-table :deep(.el-table__inner-wrapper) {
+  min-width: 1220px;
+}
+
+.opcua-import__confirm-table :deep(.cell) {
+  padding-left: 7px;
+  padding-right: 7px;
+}
+
+.opcua-import__confirm-table :deep(.el-input__wrapper),
+.opcua-import__confirm-table :deep(.el-select__wrapper) {
+  min-height: 30px;
+  box-shadow: 0 0 0 1px var(--dc-border) inset;
+}
+
+.opcua-import__confirm-table :deep(.el-table__body-wrapper) {
   overflow: auto;
 }
 
@@ -1018,6 +1073,8 @@ defineExpose({ closeSilently })
   display: flex;
   justify-content: flex-end;
   padding-top: 8px;
+  border-top: 1px solid var(--dc-border);
+  margin-top: 8px;
 }
 </style>
 

@@ -564,6 +564,22 @@ func opcuaDataTypeName(nodeID *ua.NodeID) string {
 			return "DateTime"
 		case id.BaseDataType:
 			return "BaseDataType"
+		case id.Number:
+			return "Number"
+		case id.Integer:
+			return "Integer"
+		case id.UInteger:
+			return "UInteger"
+		case id.Duration:
+			return "Duration"
+		case id.LocaleID:
+			return "LocaleID"
+		case id.LocalizedText:
+			return "LocalizedText"
+		case id.QualifiedName:
+			return "QualifiedName"
+		case id.NodeID:
+			return "NodeID"
 		}
 	}
 	return nodeID.String()
