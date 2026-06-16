@@ -17,7 +17,6 @@
         <template #default="{ row }">
           <div class="s7-variable-table__name">
             <strong :title="row.name">{{ row.name }}</strong>
-            <span :title="row.code">{{ row.code }}</span>
           </div>
         </template>
       </el-table-column>
@@ -81,7 +80,7 @@
           }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="92" fixed="right">
+      <el-table-column label="操作" width="160" fixed="right">
         <template #default="{ row }">
           <div class="s7-variable-table__actions">
             <el-tooltip content="查看详情" placement="top">
@@ -215,6 +214,10 @@ const rowClassName = ({ row }: { row: S7Variable }) =>
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
+}
+.s7-variable-table__name strong {
+  font-size: 13px;
+  line-height: 18px;
 }
 .s7-variable-table__name span,
 .s7-variable-table__address span,

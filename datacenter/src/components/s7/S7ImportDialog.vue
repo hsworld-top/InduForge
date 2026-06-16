@@ -1,5 +1,13 @@
 <template>
-  <DcDialog v-model="visible" title="导入 S7 地址表" width="860px">
+  <DcDialog
+    ref="dialogRef"
+    v-model="visible"
+    title="导入 S7 地址表"
+    width="860px"
+    body-max-height="calc(100vh - 180px)"
+    :dirty="isDirty"
+    :close-disabled="loading"
+  >
     <div class="s7-import-dialog__summary">
       <strong>{{ rows.length }}</strong>
       <span>待导入变量</span>
@@ -68,12 +76,12 @@
       <el-table-column prop="issue" label="问题" min-width="160" show-overflow-tooltip />
     </el-table>
     <template #footer>
-      <el-button @click="$emit('update:modelValue', false)">取消</el-button>
+      <el-button @click="requestClose">取消</el-button>
       <el-button
         type="primary"
         :disabled="validRows.length === 0"
         :loading="loading"
-        @click="$emit('submit', validRows)"
+        @click="submit"
         >导入 {{ validRows.length }} 个变量</el-button
       >
     </template>
@@ -107,6 +115,7 @@ const visible = computed({
   get: () => props.modelValue,
   set: (value: boolean) => emit('update:modelValue', value),
 })
+const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
 const text = ref('')
 const fileRows = ref<Record<string, string>[]>([])
 const fileName = ref('')
@@ -202,6 +211,11 @@ const templateRows = [
 ]
 
 const importModeText = computed(() => (fileName.value ? '文件地址表' : '粘贴地址表'))
+const isDirty = computed(
+  () =>
+    props.modelValue &&
+    (text.value.trim().length > 0 || fileRows.value.length > 0 || Boolean(fileName.value)),
+)
 const sourceRows = computed(() => {
   if (fileRows.value.length > 0) return fileRows.value
   return parsePasteRows(text.value)
@@ -286,6 +300,18 @@ const downloadIssueReport = () => {
       问题: row.issue,
     })),
   )
+}
+
+function submit() {
+  emit('submit', validRows.value)
+}
+
+function requestClose() {
+  void dialogRef.value?.requestClose()
+}
+
+function closeSilently() {
+  dialogRef.value?.closeSilently()
 }
 
 function parsePasteRows(value: string) {
@@ -446,6 +472,8 @@ function toInteger(value: string, fallback: number) {
 function firstIssue(issues: string[]) {
   return issues.find(Boolean) || ''
 }
+
+defineExpose({ closeSilently })
 </script>
 
 <style scoped>

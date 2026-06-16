@@ -1,5 +1,13 @@
 <template>
-  <DcDialog v-model="visible" :title="mode === 'edit' ? '编辑变量组' : '新建变量组'" width="420px">
+  <DcDialog
+    ref="dialogRef"
+    v-model="visible"
+    :title="mode === 'edit' ? '编辑变量组' : '新建变量组'"
+    width="420px"
+    body-max-height="320px"
+    :dirty="isDirty"
+    :close-disabled="loading"
+  >
     <el-form label-position="top">
       <el-form-item label="变量组名称">
         <el-input v-model="form.name" />
@@ -22,14 +30,14 @@
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="$emit('update:modelValue', false)">取消</el-button>
+      <el-button @click="requestClose">取消</el-button>
       <el-button type="primary" :loading="loading" @click="submit">保存</el-button>
     </template>
   </DcDialog>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import type { S7VariableGroup } from './types'
 
@@ -51,20 +59,26 @@ const visible = computed({
   get: () => props.modelValue,
   set: (value: boolean) => emit('update:modelValue', value),
 })
+const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
+const initialSnapshot = ref('')
 
 const form = reactive({ name: '', code: '', parentId: '', description: '' })
 
 watch(
   () => [props.modelValue, props.groupValue],
   () => {
+    if (!props.modelValue) return
     form.name = props.groupValue?.name || ''
     form.code = props.groupValue?.code || ''
     form.parentId =
       props.mode === 'create' ? props.defaultParentId || '' : props.groupValue?.parentId || ''
     form.description = props.groupValue?.description || ''
+    initialSnapshot.value = snapshotForm()
   },
   { immediate: true },
 )
+
+const isDirty = computed(() => props.modelValue && snapshotForm() !== initialSnapshot.value)
 
 const submit = () => {
   emit('submit', {
@@ -75,4 +89,18 @@ const submit = () => {
     sortOrder: props.groupValue?.sortOrder || 0,
   })
 }
+
+function requestClose() {
+  void dialogRef.value?.requestClose()
+}
+
+function closeSilently() {
+  dialogRef.value?.closeSilently()
+}
+
+function snapshotForm() {
+  return JSON.stringify({ ...form })
+}
+
+defineExpose({ closeSilently })
 </script>

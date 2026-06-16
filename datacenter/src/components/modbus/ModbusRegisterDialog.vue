@@ -1,25 +1,42 @@
 <template>
   <DcDialog
+    ref="dialogRef"
     v-model="visible"
     :title="mode === 'edit' ? '编辑 Modbus 变量' : '新建 Modbus 变量'"
     width="820px"
+    body-max-height="calc(100vh - 180px)"
+    :dirty="isDirty"
+    :close-disabled="loading"
   >
     <el-form class="modbus-register-dialog" label-position="top">
       <section>
         <h3><span>01</span>基础信息</h3>
         <div class="modbus-register-dialog__grid">
-          <el-form-item label="变量名"><el-input v-model="form.name" /></el-form-item>
-          <el-form-item label="Code">
-            <el-input v-model="form.code" placeholder="留空时按变量名自动生成" />
+          <el-form-item label="变量名" required>
+            <el-input
+              v-model="form.name"
+              maxlength="100"
+              show-word-limit
+              placeholder="例如：1 号线电机转速"
+              @input="sanitizeName"
+            />
           </el-form-item>
-          <el-form-item label="寄存器组">
-            <el-select v-model="form.groupId" clearable>
+          <el-form-item label="变量组">
+            <el-select v-model="form.groupId" clearable filterable placeholder="未分组">
               <el-option
-                v-for="group in groups"
+                v-for="group in groupOptions"
                 :key="group.id"
-                :label="group.name"
+                :label="group.label"
                 :value="group.id"
-              />
+              >
+                <span
+                  class="modbus-register-dialog__group-option"
+                  :style="{ paddingLeft: `${group.depth * 14}px` }"
+                >
+                  <span v-if="group.depth > 0" class="modbus-register-dialog__group-guide" />
+                  {{ group.label }}
+                </span>
+              </el-option>
             </el-select>
           </el-form-item>
         </div>
@@ -114,14 +131,15 @@
       /></el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="$emit('update:modelValue', false)">取消</el-button>
+      <el-button @click="requestClose">取消</el-button>
       <el-button type="primary" :loading="loading" @click="submit">保存</el-button>
     </template>
   </DcDialog>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import type { ModbusRegister, ModbusRegisterGroup } from './types'
 
@@ -143,6 +161,13 @@ const visible = computed({
   get: () => props.modelValue,
   set: (value: boolean) => emit('update:modelValue', value),
 })
+const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
+const initialSnapshot = ref('')
+const invalidVariableNamePattern = /[^\u4e00-\u9fa5A-Za-z0-9_$#%@+()[\]&-]/g
+const validVariableNamePattern = /^[\u4e00-\u9fa5A-Za-z0-9_$#%@+()[\]&-]+$/
+type ModbusGroupOptionNode = ModbusRegisterGroup & {
+  children: ModbusGroupOptionNode[]
+}
 
 const form = reactive({
   groupId: '',
@@ -168,9 +193,36 @@ const form = reactive({
   status: 'active',
 })
 
+const groupOptions = computed(() => {
+  const nodes = new Map<string, ModbusGroupOptionNode>()
+  props.groups.forEach((group) => {
+    nodes.set(group.id, { ...group, children: [] })
+  })
+  const roots: ModbusGroupOptionNode[] = []
+  nodes.forEach((node) => {
+    const parent = node.parentId ? nodes.get(node.parentId) : null
+    if (parent) parent.children.push(node)
+    else roots.push(node)
+  })
+  const sortNodes = (items: ModbusGroupOptionNode[]) => {
+    items.sort(
+      (left, right) =>
+        (left.sortOrder || 0) - (right.sortOrder || 0) || left.name.localeCompare(right.name),
+    )
+    items.forEach((item) => sortNodes(item.children))
+  }
+  sortNodes(roots)
+  const visit = (group: ModbusGroupOptionNode, depth: number) => [
+    { id: group.id, label: group.name, depth },
+    ...group.children.flatMap((child) => visit(child, depth + 1)),
+  ]
+  return roots.flatMap((group) => visit(group, 0))
+})
+
 watch(
   () => [props.modelValue, props.register, props.defaultGroupId],
   () => {
+    if (!props.modelValue) return
     const item = props.register
     form.groupId = item?.groupId || props.defaultGroupId || ''
     form.name = item?.name || ''
@@ -193,11 +245,23 @@ watch(
     form.accessLevel = normalizeAccessLevel(item?.accessLevel)
     form.description = item?.description || ''
     form.status = item?.status || 'active'
+    initialSnapshot.value = snapshotForm()
   },
   { immediate: true },
 )
 
+const isDirty = computed(() => props.modelValue && snapshotForm() !== initialSnapshot.value)
+
 const submit = () => {
+  sanitizeName()
+  if (!form.name.trim()) {
+    ElMessage.warning('请填写变量名')
+    return
+  }
+  if (!validVariableNamePattern.test(form.name)) {
+    ElMessage.warning('变量名称包含不支持的字符')
+    return
+  }
   emit('submit', {
     ...form,
     code: form.code.trim() || toVariableCode(form.name),
@@ -206,6 +270,19 @@ const submit = () => {
     description: form.description.trim() || null,
     hasGroupId: true,
   })
+}
+
+function requestClose() {
+  void dialogRef.value?.requestClose()
+}
+
+function closeSilently() {
+  dialogRef.value?.closeSilently()
+}
+
+function sanitizeName() {
+  const next = form.name.replace(invalidVariableNamePattern, '')
+  if (next !== form.name) form.name = next
 }
 
 function normalizeAccessLevel(value?: string | null) {
@@ -222,6 +299,12 @@ function toVariableCode(value: string) {
     .replace(/^_+|_+$/g, '')
   return normalized || 'register'
 }
+
+function snapshotForm() {
+  return JSON.stringify({ ...form })
+}
+
+defineExpose({ closeSilently })
 </script>
 
 <style scoped>
@@ -268,5 +351,17 @@ function toVariableCode(value: string) {
 .modbus-register-dialog :deep(.el-select),
 .modbus-register-dialog :deep(.el-input-number) {
   width: 100%;
+}
+.modbus-register-dialog__group-option {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.modbus-register-dialog__group-guide {
+  width: 10px;
+  height: 1px;
+  flex: 0 0 auto;
+  background: var(--dc-border);
 }
 </style>

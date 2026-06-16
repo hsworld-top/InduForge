@@ -207,6 +207,7 @@
     </el-drawer>
 
     <ModbusGroupDialog
+      ref="groupDialogRef"
       v-model="groupDialogVisible"
       :mode="groupDialogMode"
       :groups="groups"
@@ -216,6 +217,7 @@
       @submit="saveGroup"
     />
     <ModbusRegisterDialog
+      ref="registerDialogRef"
       v-model="registerDialogVisible"
       :mode="registerDialogMode"
       :groups="groups"
@@ -224,7 +226,12 @@
       :loading="saving"
       @submit="saveRegister"
     />
-    <ModbusImportDialog v-model="importVisible" :loading="saving" @submit="importRegisters" />
+    <ModbusImportDialog
+      ref="importDialogRef"
+      v-model="importVisible"
+      :loading="saving"
+      @submit="importRegisters"
+    />
     <ModbusPreviewDialog
       v-model="previewVisible"
       :registers="previewRegisters"
@@ -269,10 +276,6 @@
             <IconTablerCopy class="modbus-workbench__menu-icon" />
             <span>复制为新变量</span>
           </button>
-          <button type="button" @click="runRegisterMenuAction('copy-path')">
-            <IconTablerClipboard class="modbus-workbench__menu-icon" />
-            <span>复制数据点 path</span>
-          </button>
           <button type="button" class="is-danger" @click="runRegisterMenuAction('delete')">
             <IconTablerTrash class="modbus-workbench__menu-icon" />
             <span>删除变量</span>
@@ -313,7 +316,6 @@ import type {
 import IconTablerActivityHeartbeat from '~icons/tabler/activity-heartbeat'
 import IconTablerChevronRight from '~icons/tabler/chevron-right'
 import IconTablerChecklist from '~icons/tabler/checklist'
-import IconTablerClipboard from '~icons/tabler/clipboard'
 import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerDownload from '~icons/tabler/download'
 import IconTablerEye from '~icons/tabler/eye'
@@ -360,13 +362,16 @@ const selectedGroupId = ref('')
 const selectedRegisterId = ref('')
 const registerKeyword = ref('')
 const groupDialogVisible = ref(false)
+const groupDialogRef = ref<InstanceType<typeof ModbusGroupDialog> | null>(null)
 const groupDialogMode = ref<'create' | 'edit'>('create')
 const editingGroup = ref<ModbusRegisterGroup | null>(null)
 const defaultGroupParentId = ref('')
 const registerDialogVisible = ref(false)
+const registerDialogRef = ref<InstanceType<typeof ModbusRegisterDialog> | null>(null)
 const registerDialogMode = ref<'create' | 'edit'>('create')
 const editingRegister = ref<ModbusRegister | null>(null)
 const importVisible = ref(false)
+const importDialogRef = ref<InstanceType<typeof ModbusImportDialog> | null>(null)
 const previewVisible = ref(false)
 const previewRegisters = ref<ModbusReadValue[]>([])
 const previewDiagnostics = ref<string[]>([])
@@ -393,7 +398,7 @@ const quickFilters = [
   { label: '已停用', value: 'disabled' },
 ]
 const currentQuickFilterLabel = computed(
-  () => quickFilters.find((item) => item.value === quickFilter.value)?.label || '筛选',
+  () => quickFilters.find((item) => item.value === quickFilter.value)?.label || '全部',
 )
 
 const session = useProtocolDevSession({
@@ -718,6 +723,7 @@ const saveGroup = async (payload: Record<string, unknown>) => {
     } else {
       await dataAPI.createModbusRegisterGroup(props.projectId, props.connection.id, payload)
     }
+    groupDialogRef.value?.closeSilently()
     groupDialogVisible.value = false
     await reloadAll()
   } catch (error) {
@@ -747,8 +753,14 @@ const openDuplicateRegister = (register: ModbusRegister) => {
   editingRegister.value = {
     ...register,
     id: '',
-    name: `${register.name} 副本`,
-    code: `${register.code}_copy`,
+    name: nextCopyName(
+      register.name,
+      registers.value.map((item) => item.name),
+    ),
+    code: nextCopyName(
+      register.code || toVariableCode(register.name),
+      registers.value.map((item) => item.code),
+    ),
     datapointId: null,
     datapointPath: null,
     datapointStatus: null,
@@ -778,6 +790,7 @@ const saveRegister = async (payload: Record<string, unknown>) => {
             payload,
           )
         : await dataAPI.createModbusRegister(props.projectId, props.connection.id, payload)
+    registerDialogRef.value?.closeSilently()
     registerDialogVisible.value = false
     await reloadAll()
     selectedRegisterId.value = saved?.data?.id || saved?.data?.data?.id || ''
@@ -802,6 +815,7 @@ const importRegisters = async (rows: Array<Record<string, unknown>>) => {
       groupId: selectedGroupId.value || null,
       registers: rows,
     })
+    importDialogRef.value?.closeSilently()
     importVisible.value = false
     await reloadAll()
   } catch (error) {
@@ -914,7 +928,7 @@ const openRegisterMenu = (event: MouseEvent, register: ModbusRegister) => {
   registerMenu.value = {
     visible: true,
     x: Math.min(event.clientX, window.innerWidth - 180),
-    y: Math.min(event.clientY, window.innerHeight - 210),
+    y: Math.min(event.clientY, window.innerHeight - 150),
     register,
   }
 }
@@ -923,9 +937,7 @@ const closeRegisterMenu = () => {
   registerMenu.value.visible = false
 }
 
-const runRegisterMenuAction = async (
-  action: 'detail' | 'edit' | 'duplicate' | 'copy-path' | 'delete',
-) => {
+const runRegisterMenuAction = async (action: 'detail' | 'edit' | 'duplicate' | 'delete') => {
   const register = registerMenu.value.register
   closeRegisterMenu()
   if (!register) return
@@ -939,14 +951,6 @@ const runRegisterMenuAction = async (
   }
   if (action === 'duplicate') {
     openDuplicateRegister(register)
-    return
-  }
-  if (action === 'copy-path') {
-    if (!register.datapointPath) {
-      ElMessage.warning('当前变量还没有数据点 path')
-      return
-    }
-    await copyText(register.datapointPath, '数据点 path 已复制')
     return
   }
   await removeRegister(register)
@@ -987,11 +991,6 @@ const storageSummaryText = computed(() => {
   return `项目 ${storageSummary.value.enabledCount} 条启用策略，约 ${storageSummary.value.estimatedRowsPerDay} rows/day`
 })
 
-async function copyText(text: string, successMessage: string) {
-  await navigator.clipboard.writeText(text)
-  ElMessage.success(successMessage)
-}
-
 function issueSummaryForRegister(registerId: string) {
   return validationIssues.value
     .filter((issue) => issue.registerId === registerId)
@@ -1003,6 +1002,25 @@ function formatExportValue(value: unknown) {
   if (value === null || value === undefined || value === '') return ''
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
+}
+
+function nextCopyName(baseName: string, existingNames: Array<string | undefined>) {
+  const base = String(baseName || 'register').replace(/_copy\d+$/i, '')
+  const existing = new Set(existingNames.filter(Boolean).map((item) => String(item)))
+  for (let index = 1; index < 10000; index += 1) {
+    const candidate = `${base}_copy${index}`
+    if (!existing.has(candidate)) return candidate
+  }
+  return `${base}_copy${Date.now()}`
+}
+
+function toVariableCode(value: string) {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  return normalized || 'register'
 }
 
 watch(registerKeyword, () => {

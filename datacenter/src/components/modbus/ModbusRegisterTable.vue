@@ -17,7 +17,6 @@
         <template #default="{ row }">
           <div class="modbus-register-table__name">
             <strong>{{ row.name }}</strong>
-            <span>{{ row.code }}</span>
           </div>
         </template>
       </el-table-column>
@@ -71,7 +70,7 @@
           }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="92" fixed="right">
+      <el-table-column label="操作" width="160" fixed="right">
         <template #default="{ row }">
           <div class="modbus-register-table__actions">
             <el-tooltip content="查看详情" placement="top">
@@ -204,10 +203,10 @@ const rowClassName = ({ row }: { row: ModbusRegister }) =>
   color: var(--dc-text);
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 18px;
 }
 
-.modbus-register-table__name span,
 .modbus-register-table__path {
   overflow: hidden;
   color: var(--dc-text-muted);

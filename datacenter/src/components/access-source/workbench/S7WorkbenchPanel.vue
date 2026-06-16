@@ -15,7 +15,12 @@
             :title="session.connected.value ? '断开 S7 开发态会话' : '连接 S7 开发态会话'"
             @click="toggleSession"
           >
-            <span>{{ session.connected.value ? '已连接' : '连接' }}</span>
+            <span class="s7-workbench__connect-label is-default">
+              {{ session.connected.value ? '已连接' : '连接' }}
+            </span>
+            <span v-if="session.connected.value" class="s7-workbench__connect-label is-hover">
+              断开
+            </span>
           </button>
         </template>
       </WorkbenchSourceHeader>
@@ -227,6 +232,7 @@
       @submit="saveProfile"
     />
     <S7GroupDialog
+      ref="groupDialogRef"
       v-model="groupVisible"
       :mode="groupMode"
       :groups="groups"
@@ -236,6 +242,7 @@
       @submit="saveGroup"
     />
     <S7VariableDialog
+      ref="variableDialogRef"
       v-model="variableVisible"
       :mode="variableMode"
       :groups="groups"
@@ -244,7 +251,12 @@
       :loading="saving"
       @submit="saveVariable"
     />
-    <S7ImportDialog v-model="importVisible" :loading="saving" @submit="importVariables" />
+    <S7ImportDialog
+      ref="importDialogRef"
+      v-model="importVisible"
+      :loading="saving"
+      @submit="importVariables"
+    />
     <S7PreviewDialog
       v-model="previewVisible"
       :values="previewValues"
@@ -289,10 +301,6 @@
             <IconTablerCopy class="s7-workbench__menu-icon" />
             <span>复制为新变量</span>
           </button>
-          <button type="button" @click="runVariableMenuAction('copy-path')">
-            <IconTablerClipboard class="s7-workbench__menu-icon" />
-            <span>复制数据点 path</span>
-          </button>
           <button type="button" class="is-danger" @click="runVariableMenuAction('delete')">
             <IconTablerTrash class="s7-workbench__menu-icon" />
             <span>删除变量</span>
@@ -336,7 +344,6 @@ import IconTablerActivityHeartbeat from '~icons/tabler/activity-heartbeat'
 import IconTablerBolt from '~icons/tabler/bolt'
 import IconTablerChevronRight from '~icons/tabler/chevron-right'
 import IconTablerChecklist from '~icons/tabler/checklist'
-import IconTablerClipboard from '~icons/tabler/clipboard'
 import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerCpu from '~icons/tabler/cpu'
 import IconTablerDownload from '~icons/tabler/download'
@@ -384,13 +391,16 @@ const selectedVariableId = ref('')
 const keyword = ref('')
 const profileVisible = ref(false)
 const groupVisible = ref(false)
+const groupDialogRef = ref<InstanceType<typeof S7GroupDialog> | null>(null)
 const groupMode = ref<'create' | 'edit'>('create')
 const editingGroup = ref<S7VariableGroup | null>(null)
 const defaultGroupParentId = ref('')
 const variableVisible = ref(false)
+const variableDialogRef = ref<InstanceType<typeof S7VariableDialog> | null>(null)
 const variableMode = ref<'create' | 'edit'>('create')
 const editingVariable = ref<S7Variable | null>(null)
 const importVisible = ref(false)
+const importDialogRef = ref<InstanceType<typeof S7ImportDialog> | null>(null)
 const previewVisible = ref(false)
 const previewValues = ref<S7ReadValue[]>([])
 const previewDiagnostics = ref<string[]>([])
@@ -416,7 +426,7 @@ const quickFilters = [
   { label: '已停用', value: 'disabled' },
 ]
 const currentQuickFilterLabel = computed(
-  () => quickFilters.find((item) => item.value === quickFilter.value)?.label || '筛选',
+  () => quickFilters.find((item) => item.value === quickFilter.value)?.label || '全部',
 )
 
 const session = useProtocolDevSession({
@@ -766,6 +776,7 @@ const saveGroup = async (payload: Record<string, unknown>) => {
         { ...payload, hasParentId: true },
       )
     else await dataAPI.createS7VariableGroup(props.projectId, props.connection.id, payload)
+    groupDialogRef.value?.closeSilently()
     groupVisible.value = false
     await reloadAll()
   } catch (error) {
@@ -789,8 +800,14 @@ const openDuplicateVariable = (variable: S7Variable) => {
   editingVariable.value = {
     ...variable,
     id: '',
-    name: `${variable.name} 副本`,
-    code: `${variable.code}_copy`,
+    name: nextCopyName(
+      variable.name,
+      variables.value.map((item) => item.name),
+    ),
+    code: nextCopyName(
+      variable.code || toVariableCode(variable.name),
+      variables.value.map((item) => item.code),
+    ),
     datapointId: null,
     datapointPath: null,
     datapointStatus: null,
@@ -818,6 +835,7 @@ const saveVariable = async (payload: Record<string, unknown>) => {
             payload,
           )
         : await dataAPI.createS7Variable(props.projectId, props.connection.id, payload)
+    variableDialogRef.value?.closeSilently()
     variableVisible.value = false
     await reloadAll()
     selectedVariableId.value = saved?.data?.id || saved?.data?.data?.id || ''
@@ -840,6 +858,7 @@ const importVariables = async (rows: Array<Record<string, unknown>>) => {
       groupId: selectedGroupId.value || null,
       variables: rows,
     })
+    importDialogRef.value?.closeSilently()
     importVisible.value = false
     await reloadAll()
   } catch (error) {
@@ -938,7 +957,7 @@ const openVariableMenu = (event: MouseEvent, variable: S7Variable) => {
   variableMenu.value = {
     visible: true,
     x: Math.min(event.clientX, window.innerWidth - 180),
-    y: Math.min(event.clientY, window.innerHeight - 210),
+    y: Math.min(event.clientY, window.innerHeight - 150),
     variable,
   }
 }
@@ -947,9 +966,7 @@ const closeVariableMenu = () => {
   variableMenu.value.visible = false
 }
 
-const runVariableMenuAction = async (
-  action: 'detail' | 'edit' | 'duplicate' | 'copy-path' | 'delete',
-) => {
+const runVariableMenuAction = async (action: 'detail' | 'edit' | 'duplicate' | 'delete') => {
   const variable = variableMenu.value.variable
   closeVariableMenu()
   if (!variable) return
@@ -963,14 +980,6 @@ const runVariableMenuAction = async (
   }
   if (action === 'duplicate') {
     openDuplicateVariable(variable)
-    return
-  }
-  if (action === 'copy-path') {
-    if (!variable.datapointPath) {
-      ElMessage.warning('当前变量还没有数据点 path')
-      return
-    }
-    await copyText(variable.datapointPath, '数据点 path 已复制')
     return
   }
   await removeVariable(variable)
@@ -992,11 +1001,6 @@ function groupPathOf(groupId?: string | null) {
   return segments.join('/') || '未分组'
 }
 
-async function copyText(text: string, successMessage: string) {
-  await navigator.clipboard.writeText(text)
-  ElMessage.success(successMessage)
-}
-
 function issueSummaryForVariable(variableId: string) {
   return validationIssues.value
     .filter((issue) => issue.variableId === variableId)
@@ -1008,6 +1012,25 @@ function formatExportValue(value: unknown) {
   if (value === null || value === undefined || value === '') return ''
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
+}
+
+function nextCopyName(baseName: string, existingNames: Array<string | undefined>) {
+  const base = String(baseName || 'variable').replace(/_copy\d+$/i, '')
+  const existing = new Set(existingNames.filter(Boolean).map((item) => String(item)))
+  for (let index = 1; index < 10000; index += 1) {
+    const candidate = `${base}_copy${index}`
+    if (!existing.has(candidate)) return candidate
+  }
+  return `${base}_copy${Date.now()}`
+}
+
+function toVariableCode(value: string) {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  return normalized || 'variable'
 }
 
 const deviceRedundancyText = computed(() => {
@@ -1084,6 +1107,16 @@ onMounted(() => {
   color: var(--dc-primary);
   font-size: 11px;
   font-weight: 700;
+  white-space: nowrap;
+}
+.s7-workbench__connect-label.is-hover {
+  display: none;
+}
+.s7-workbench__connect-action.is-connected:hover .s7-workbench__connect-label.is-default {
+  display: none;
+}
+.s7-workbench__connect-action.is-connected:hover .s7-workbench__connect-label.is-hover {
+  display: inline;
 }
 .s7-workbench__connect-action::before {
   width: 6px;
@@ -1096,6 +1129,11 @@ onMounted(() => {
   border-color: color-mix(in oklch, var(--dc-success) 32%, var(--dc-border));
   background: color-mix(in oklch, var(--dc-success) 12%, var(--dc-surface-raised));
   color: var(--dc-success);
+}
+.s7-workbench__connect-action.is-connected:hover {
+  border-color: rgba(220, 38, 38, 0.22);
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
 }
 .s7-workbench__main {
   min-width: 0;

@@ -1,9 +1,12 @@
 <template>
-  <el-dialog
-    :model-value="modelValue"
+  <DcDialog
+    ref="dialogRef"
+    v-model="visible"
     title="导入 Modbus 变量"
-    width="760px"
-    @close="$emit('update:modelValue', false)"
+    width="860px"
+    body-max-height="calc(100vh - 180px)"
+    :dirty="isDirty"
+    :close-disabled="loading"
   >
     <div class="modbus-import-dialog__summary">
       <strong>{{ previewRows.length }}</strong>
@@ -87,22 +90,23 @@
       <el-table-column prop="issue" label="问题" min-width="150" show-overflow-tooltip />
     </el-table>
     <template #footer>
-      <el-button @click="$emit('update:modelValue', false)">取消</el-button>
+      <el-button @click="requestClose">取消</el-button>
       <el-button
         type="primary"
         :disabled="validRows.length === 0"
         :loading="loading"
-        @click="$emit('submit', validRows)"
+        @click="submit"
         >导入 {{ validRows.length }} 个变量</el-button
       >
     </template>
-  </el-dialog>
+  </DcDialog>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import type { UploadFile } from 'element-plus'
 import { ElMessage } from 'element-plus'
+import DcDialog from '@/components/shared/DcDialog.vue'
 import {
   downloadCsv,
   downloadXlsx,
@@ -117,11 +121,16 @@ import IconTablerFileSpreadsheet from '~icons/tabler/file-spreadsheet'
 import IconTablerFileTypeCsv from '~icons/tabler/file-type-csv'
 
 const props = defineProps<{ modelValue: boolean; loading?: boolean }>()
-defineEmits<{
+const emit = defineEmits<{
   (event: 'update:modelValue', value: boolean): void
   (event: 'submit', rows: Array<Record<string, unknown>>): void
 }>()
 
+const visible = computed({
+  get: () => props.modelValue,
+  set: (value: boolean) => emit('update:modelValue', value),
+})
+const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
 const mode = ref('paste')
 const pasteText = ref('')
 const fileRows = ref<Record<string, string>[]>([])
@@ -135,6 +144,16 @@ const range = reactive({
   dataType: 'uint16',
   prefix: 'modbus_reg_',
 })
+
+const initialRangeSnapshot = JSON.stringify({ ...range })
+const isDirty = computed(
+  () =>
+    props.modelValue &&
+    (pasteText.value.trim().length > 0 ||
+      fileRows.value.length > 0 ||
+      Boolean(fileName.value) ||
+      (mode.value === 'range' && JSON.stringify({ ...range }) !== initialRangeSnapshot)),
+)
 
 const previewRows = computed(() => {
   if (mode.value === 'range') {
@@ -366,6 +385,18 @@ function downloadIssueReport() {
   )
 }
 
+function submit() {
+  emit('submit', validRows.value)
+}
+
+function requestClose() {
+  void dialogRef.value?.requestClose()
+}
+
+function closeSilently() {
+  dialogRef.value?.closeSilently()
+}
+
 function normalizeArea(value: string) {
   const text = value.trim().toLowerCase()
   if (['coil', 'coils', '0x', '00001'].includes(text)) return 'coil'
@@ -419,6 +450,8 @@ function toInteger(value: string, fallback: number) {
 function firstIssue(issues: string[]) {
   return issues.find(Boolean) || ''
 }
+
+defineExpose({ closeSilently })
 </script>
 
 <style scoped>
