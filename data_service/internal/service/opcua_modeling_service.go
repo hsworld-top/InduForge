@@ -449,12 +449,9 @@ func (s *OpcuaModelingService) DeleteNodesBatch(ctx context.Context, projectID, 
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	deletedIDs, err := s.repository.DeleteNodesBatch(ctx, projectID, connectionID, ids)
+	deletedIDs, err := s.repository.DeleteNodesBatch(ctx, projectID, connectionID, ids, userID)
 	if err != nil {
 		return 0, err
-	}
-	for _, id := range deletedIDs {
-		_, _ = s.datapoints.MarkInvalidBySource(ctx, projectID, "opcua.node", id, stringPtr(userID))
 	}
 	return len(deletedIDs), nil
 }

@@ -679,13 +679,19 @@ func (r *OpcuaModelingRepository) ListNodeIDsByFilter(ctx context.Context, proje
 	return result, nil
 }
 
-// DeleteNodesBatch 批量删除 OPC UA 变量定义，返回实际删除的变量 ID。
-func (r *OpcuaModelingRepository) DeleteNodesBatch(ctx context.Context, projectID, connectionID string, ids []string) ([]string, error) {
+// DeleteNodesBatch 批量删除 OPC UA 变量定义，并在同一事务中标记关联数据点失效。
+func (r *OpcuaModelingRepository) DeleteNodesBatch(ctx context.Context, projectID, connectionID string, ids []string, userID string) ([]string, error) {
 	ids = uniqueTrimmedOpcuaIDs(ids)
 	if len(ids) == 0 {
 		return []string{}, nil
 	}
-	rows, err := r.pool.Query(ctx, `
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 OPC UA 批量删除事务失败", err)
+	}
+	defer rollbackTxQuietly(ctx, tx)
+
+	rows, err := tx.Query(ctx, `
 		DELETE FROM data_opcua_nodes
 		WHERE project_id = $1 AND connection_id = $2 AND id = ANY($3::uuid[])
 		RETURNING id
@@ -693,7 +699,6 @@ func (r *OpcuaModelingRepository) DeleteNodesBatch(ctx context.Context, projectI
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "批量删除 OPC UA 变量失败", err)
 	}
-	defer rows.Close()
 
 	deleted := make([]string, 0, len(ids))
 	for rows.Next() {
@@ -705,6 +710,23 @@ func (r *OpcuaModelingRepository) DeleteNodesBatch(ctx context.Context, projectI
 	}
 	if err := rows.Err(); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 OPC UA 批量删除结果失败", err)
+	}
+	rows.Close()
+	if len(deleted) > 0 {
+		if _, err := tx.Exec(ctx, `
+			UPDATE data_points
+			SET status = 'invalid',
+			    updated_by = COALESCE($3, updated_by),
+			    updated_at = now()
+			WHERE project_id = $1
+			  AND source_type = 'opcua.node'
+			  AND source_id = ANY($2::uuid[])
+		`, projectID, deleted, userID); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "批量标记 OPC UA 数据点失效失败", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 OPC UA 批量删除事务失败", err)
 	}
 	return deleted, nil
 }
