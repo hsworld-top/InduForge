@@ -125,7 +125,24 @@ Windows PowerShell 中单独启动：
 
 ## OPC UA 点表
 
-根节点：`Objects/InduForgeSim/PumpA`
+根节点：
+
+- 兼容点表：`Objects/InduForgeSim/PumpA`
+- 树形浏览导入测试：`Objects/InduForgeSim/Plant01`
+
+`Plant01` 按常见工业层级组织：厂站、工艺区、产线、设备撬、设备、状态/遥测/命令/诊断。变量使用稳定字符串 NodeId，便于导入后重复验证。示例 NodeId：
+
+```text
+ns=2;s=industrial-sim.Plant01.Area-Water.Line-01.Skid-Pump-01.Pump-P101.Telemetry.PressureBar
+ns=2;s=industrial-sim.Plant01.Area-Water.Line-01.Tank-T101.Telemetry.LevelPercent
+ns=2;s=industrial-sim.Plant01.Area-Water.Line-01.Valve-XV101.Command.OpenCommand
+ns=2;s=industrial-sim.Plant01.Area-Water.Line-01.Instruments.PIT-101.PV
+ns=2;s=industrial-sim.Plant01.Area-Utilities.Power.BusVoltageV
+```
+
+浏览导入建议从 `Objects/InduForgeSim/Plant01/Area-Water/Line-01` 开始，检查工作台是否能展示对象层级、变量 NodeId、数据类型、描述和单位属性。多数过程量带 `DataTypeName`、`EngineeringUnit`、`EURange` 属性，用于模拟真实设备常见元数据。
+
+兼容点表：
 
 | 路径 | 类型 | 读写 |
 | --- | --- | --- |
@@ -149,6 +166,23 @@ Windows PowerShell 中单独启动：
 | `Command/MaintenanceMode` | Boolean | RW |
 | `Command/TargetPressureBar` | Double | RW |
 | `Command/TargetSpeedRPM` | Double | RW |
+
+树形浏览代表点：
+
+| 路径 | 类型 | 读写 |
+| --- | --- | --- |
+| `Plant01/Area-Water/Line-01/Skid-Pump-01/Pump-P101/Status/State` | String | R |
+| `Plant01/Area-Water/Line-01/Skid-Pump-01/Pump-P101/Telemetry/PressureBar` | Double | R |
+| `Plant01/Area-Water/Line-01/Skid-Pump-01/Pump-P101/Telemetry/FlowM3H` | Double | R |
+| `Plant01/Area-Water/Line-01/Skid-Pump-01/Pump-P101/Command/RunCommand` | Boolean | RW |
+| `Plant01/Area-Water/Line-01/Skid-Pump-01/Pump-P101/Command/TargetPressureBar` | Double | RW |
+| `Plant01/Area-Water/Line-01/Skid-Pump-01/Pump-P102/Status/Ready` | Boolean | R |
+| `Plant01/Area-Water/Line-01/Tank-T101/Telemetry/LevelPercent` | Double | R |
+| `Plant01/Area-Water/Line-01/Valve-XV101/Telemetry/PositionPercent` | Double | R |
+| `Plant01/Area-Water/Line-01/Valve-XV101/Command/OpenCommand` | Boolean | RW |
+| `Plant01/Area-Water/Line-01/Instruments/PIT-101/PV` | Double | R |
+| `Plant01/Area-Utilities/Power/BusVoltageV` | Double | R |
+| `Plant01/Area-Utilities/InstrumentAir/HeaderPressureBar` | Double | R |
 
 ## S7 点表
 
@@ -181,7 +215,7 @@ S7 服务端暴露 `DB1`、`M`、`I`、`Q` 区。推荐先用 `DB1` 验证。
 建议按以下路径验收接入源体验：
 
 1. 新建连接，验证连接参数是否直观。
-2. OPC UA 浏览节点树，检查节点元数据是否可见。
+2. OPC UA 从 `Objects/InduForgeSim/Plant01` 浏览节点树，检查层级、NodeId、描述、单位和量程元数据是否可见。
 3. Modbus/S7 手工录入点表，检查地址、类型、缩放是否容易配置。
 4. 读取预览值，观察质量码、时间戳、报警码是否能表达。
 5. 写启动命令，确认状态从 `starting` 过渡到 `running`。
