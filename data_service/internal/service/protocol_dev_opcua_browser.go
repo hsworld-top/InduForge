@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gopcua/opcua"
@@ -28,15 +29,21 @@ const (
 
 // ProtocolDevOpcuaBrowser 表示开发态 OPC UA 地址空间浏览适配器。
 type ProtocolDevOpcuaBrowser interface {
+	Open(ctx context.Context, session ProtocolDevSession) error
+	Close(sessionID string)
 	Browse(ctx context.Context, session ProtocolDevSession, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error)
+	BrowseSubtree(ctx context.Context, session ProtocolDevSession, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error)
 }
 
 // ProtocolDevOpcuaRealBrowser 连接真实 OPC UA Server 并浏览地址空间。
-type ProtocolDevOpcuaRealBrowser struct{}
+type ProtocolDevOpcuaRealBrowser struct {
+	mu      sync.Mutex
+	clients map[string]*opcuaBrowseClient
+}
 
 // NewProtocolDevOpcuaRealBrowser 创建真实 OPC UA 浏览适配器。
 func NewProtocolDevOpcuaRealBrowser() *ProtocolDevOpcuaRealBrowser {
-	return &ProtocolDevOpcuaRealBrowser{}
+	return &ProtocolDevOpcuaRealBrowser{clients: map[string]*opcuaBrowseClient{}}
 }
 
 type opcuaBrowseOptions struct {
@@ -63,31 +70,85 @@ type opcuaBrowseState struct {
 	dataTypeWarn bool
 }
 
-// Browse 返回指定父节点的一层真实 OPC UA 地址空间子节点。失败时直接返回错误，避免前端误以为看到的是现场地址空间。
-func (b *ProtocolDevOpcuaRealBrowser) Browse(ctx context.Context, session ProtocolDevSession, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error) {
+type opcuaBrowseClient struct {
+	mu      sync.Mutex
+	client  *opcua.Client
+	options opcuaBrowseOptions
+}
+
+// Open 在工作台连接阶段建立真实 OPC UA 客户端，后续浏览复用该连接，避免每次展开树节点都重新握手。
+func (b *ProtocolDevOpcuaRealBrowser) Open(ctx context.Context, session ProtocolDevSession) error {
 	if b == nil {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "OPC UA 真实浏览适配器未初始化")
+		return apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "OPC UA 真实浏览适配器未初始化")
 	}
 	options, err := parseOpcuaBrowseOptions(session.Config)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	browseCtx, cancel := context.WithTimeout(ctx, options.RequestTimeout)
+	connectCtx, cancel := context.WithTimeout(ctx, options.ConnectTimeout+options.RequestTimeout)
 	defer cancel()
-	clientOptions, err := options.clientOptions(browseCtx)
+	clientOptions, err := options.clientOptions(connectCtx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	client, err := opcua.NewClient(options.Endpoint, clientOptions...)
 	if err != nil {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 客户端初始化失败: %v", err))
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 客户端初始化失败: %v", err))
 	}
-
-	if err := client.Connect(browseCtx); err != nil {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 连接失败: %v", err))
+	if err := client.Connect(connectCtx); err != nil {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 连接失败: %v", err))
 	}
-	defer client.Close(context.Background())
+	b.mu.Lock()
+	old := b.clients[session.SessionID]
+	b.clients[session.SessionID] = &opcuaBrowseClient{client: client, options: options}
+	b.mu.Unlock()
+	if old != nil && old.client != nil {
+		old.client.Close(context.Background())
+	}
+	return nil
+}
 
+// Close 释放工作台会话持有的 OPC UA 客户端。
+func (b *ProtocolDevOpcuaRealBrowser) Close(sessionID string) {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	entry := b.clients[sessionID]
+	delete(b.clients, sessionID)
+	b.mu.Unlock()
+	if entry != nil && entry.client != nil {
+		entry.client.Close(context.Background())
+	}
+}
+
+// Browse 返回指定父节点的一层真实 OPC UA 地址空间子节点。失败时直接返回错误，避免前端误以为看到的是现场地址空间。
+func (b *ProtocolDevOpcuaRealBrowser) Browse(ctx context.Context, session ProtocolDevSession, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error) {
+	entry, err := b.requireClient(session.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	browseCtx, cancel := context.WithTimeout(ctx, entry.options.RequestTimeout)
+	defer cancel()
+	return b.browseWithClient(browseCtx, entry.client, entry.options, parentNodeID)
+}
+
+// BrowseSubtree 递归收集指定节点子树下的变量。该操作只在用户明确选择“导入子树变量”时触发。
+func (b *ProtocolDevOpcuaRealBrowser) BrowseSubtree(ctx context.Context, session ProtocolDevSession, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error) {
+	entry, err := b.requireClient(session.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	browseCtx, cancel := context.WithTimeout(ctx, entry.options.RequestTimeout)
+	defer cancel()
+	return b.browseSubtreeWithClient(browseCtx, entry.client, entry.options, parentNodeID)
+}
+
+func (b *ProtocolDevOpcuaRealBrowser) browseWithClient(ctx context.Context, client *opcua.Client, options opcuaBrowseOptions, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error) {
 	rootIDText := strings.TrimSpace(parentNodeID)
 	if rootIDText == "" {
 		rootIDText = options.RootNodeID
@@ -104,11 +165,40 @@ func (b *ProtocolDevOpcuaRealBrowser) Browse(ctx context.Context, session Protoc
 	if strings.TrimSpace(parentNodeID) != "" {
 		parentID = opcuaBrowseNodeID(rootID.String())
 	}
-	if err := b.browseChildren(browseCtx, client.Node(rootID), parentID, options, state); err != nil {
+	if err := b.browseChildren(ctx, client.Node(rootID), parentID, options, state); err != nil {
 		return nil, err
 	}
 	if state.limitHit {
 		state.result.Diagnostics = append(state.result.Diagnostics, fmt.Sprintf("OPC UA 当前节点子节点数超过限制，已截断到 %d 个节点。", options.MaxNodes))
+	}
+	if state.dataTypeWarn {
+		state.result.Diagnostics = append(state.result.Diagnostics, "部分变量 DataType 属性读取失败，已保留节点并留空数据类型。")
+	}
+	return &state.result, nil
+}
+
+func (b *ProtocolDevOpcuaRealBrowser) browseSubtreeWithClient(ctx context.Context, client *opcua.Client, options opcuaBrowseOptions, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error) {
+	rootIDText := strings.TrimSpace(parentNodeID)
+	if rootIDText == "" {
+		rootIDText = options.RootNodeID
+	}
+	rootID, err := ua.ParseNodeID(rootIDText)
+	if err != nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 浏览父节点无效: %v", err))
+	}
+	state := &opcuaBrowseState{
+		result:  ProtocolDevOpcuaBrowseResult{Nodes: []ProtocolDevBrowseNode{}, Diagnostics: []string{}},
+		visited: map[string]bool{},
+	}
+	parentID := ""
+	if strings.TrimSpace(parentNodeID) != "" {
+		parentID = opcuaBrowseNodeID(rootID.String())
+	}
+	if err := b.collectVariableSubtree(ctx, client, client.Node(rootID), parentID, options, state); err != nil {
+		return nil, err
+	}
+	if state.limitHit {
+		state.result.Diagnostics = append(state.result.Diagnostics, fmt.Sprintf("OPC UA 子树变量数超过限制，已截断到 %d 个节点。", options.MaxNodes))
 	}
 	if state.dataTypeWarn {
 		state.result.Diagnostics = append(state.result.Diagnostics, "部分变量 DataType 属性读取失败，已保留节点并留空数据类型。")
@@ -149,6 +239,40 @@ func (b *ProtocolDevOpcuaRealBrowser) browseChildren(ctx context.Context, parent
 			}
 		}
 	}
+	return nil
+}
+
+func (b *ProtocolDevOpcuaRealBrowser) collectVariableSubtree(ctx context.Context, client *opcua.Client, parent *opcua.Node, parentID string, options opcuaBrowseOptions, state *opcuaBrowseState) error {
+	if parent == nil || parent.ID == nil || state.limitHit {
+		return nil
+	}
+	before := len(state.result.Nodes)
+	if err := b.browseChildren(ctx, parent, parentID, options, state); err != nil {
+		return err
+	}
+	children := append([]ProtocolDevBrowseNode{}, state.result.Nodes[before:]...)
+	for _, child := range children {
+		if state.limitHit {
+			return nil
+		}
+		if child.NodeType == "variable" {
+			continue
+		}
+		nodeID, err := ua.ParseNodeID(child.NodeID)
+		if err != nil {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 子树节点无效 nodeId=%s: %v", child.NodeID, err))
+		}
+		if err := b.collectVariableSubtree(ctx, client, client.Node(nodeID), child.ID, options, state); err != nil {
+			return err
+		}
+	}
+	result := state.result.Nodes[:0]
+	for _, node := range state.result.Nodes {
+		if node.NodeType == "variable" {
+			result = append(result, node)
+		}
+	}
+	state.result.Nodes = result
 	return nil
 }
 
@@ -240,6 +364,19 @@ func stringPtrIfNotEmpty(value string) *string {
 		return nil
 	}
 	return &text
+}
+
+func (b *ProtocolDevOpcuaRealBrowser) requireClient(sessionID string) (*opcuaBrowseClient, error) {
+	if b == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "OPC UA 真实浏览适配器未初始化")
+	}
+	b.mu.Lock()
+	entry := b.clients[sessionID]
+	b.mu.Unlock()
+	if entry == nil || entry.client == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "OPC UA 开发态连接未建立，请重新连接工作台")
+	}
+	return entry, nil
 }
 
 func (o opcuaBrowseOptions) clientOptions(ctx context.Context) ([]opcua.Option, error) {

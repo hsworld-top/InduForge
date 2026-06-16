@@ -24,10 +24,14 @@ type fakeProtocolDevOpcuaReader struct {
 }
 
 type fakeProtocolDevOpcuaBrowser struct {
-	result       *ProtocolDevOpcuaBrowseResult
-	session      ProtocolDevSession
-	parentNodeID string
-	err          error
+	result              *ProtocolDevOpcuaBrowseResult
+	subtreeResult       *ProtocolDevOpcuaBrowseResult
+	session             ProtocolDevSession
+	parentNodeID        string
+	subtreeParentNodeID string
+	openCount           int
+	closeCount          int
+	err                 error
 }
 
 type fakeProtocolDevModbusReader struct {
@@ -75,6 +79,16 @@ func (r *fakeProtocolDevOpcuaReader) UpdateNodeLastValue(_ context.Context, _, _
 	return nil
 }
 
+func (b *fakeProtocolDevOpcuaBrowser) Open(_ context.Context, session ProtocolDevSession) error {
+	b.session = session
+	b.openCount += 1
+	return b.err
+}
+
+func (b *fakeProtocolDevOpcuaBrowser) Close(_ string) {
+	b.closeCount += 1
+}
+
 func (b *fakeProtocolDevOpcuaBrowser) Browse(_ context.Context, session ProtocolDevSession, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error) {
 	b.session = session
 	b.parentNodeID = parentNodeID
@@ -87,6 +101,22 @@ func (b *fakeProtocolDevOpcuaBrowser) Browse(_ context.Context, session Protocol
 	clone := &ProtocolDevOpcuaBrowseResult{
 		Nodes:       append([]ProtocolDevBrowseNode{}, b.result.Nodes...),
 		Diagnostics: append([]string{}, b.result.Diagnostics...),
+	}
+	return clone, nil
+}
+
+func (b *fakeProtocolDevOpcuaBrowser) BrowseSubtree(_ context.Context, session ProtocolDevSession, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error) {
+	b.session = session
+	b.subtreeParentNodeID = parentNodeID
+	if b.err != nil {
+		return nil, b.err
+	}
+	if b.subtreeResult == nil {
+		return &ProtocolDevOpcuaBrowseResult{Nodes: []ProtocolDevBrowseNode{}, Diagnostics: []string{}}, nil
+	}
+	clone := &ProtocolDevOpcuaBrowseResult{
+		Nodes:       append([]ProtocolDevBrowseNode{}, b.subtreeResult.Nodes...),
+		Diagnostics: append([]string{}, b.subtreeResult.Diagnostics...),
 	}
 	return clone, nil
 }
@@ -200,8 +230,25 @@ func TestProtocolDevSessionService_BrowseAndReadOpcuaNodes(t *testing.T) {
 	if browser.parentNodeID != "ns=2;s=Furnace01" {
 		t.Fatalf("browser did not receive parent node id: %q", browser.parentNodeID)
 	}
+	if browser.openCount != 1 {
+		t.Fatalf("expected browser opened once, got %d", browser.openCount)
+	}
 	if len(browse.Nodes) != 2 || browse.Nodes[1].NodeID != "ns=2;s=Furnace01.Temp" || !browse.Nodes[1].Modeled || browse.Nodes[0].Modeled {
 		t.Fatalf("unexpected browse result: %#v", browse)
+	}
+
+	browser.subtreeResult = &ProtocolDevOpcuaBrowseResult{
+		Nodes: []ProtocolDevBrowseNode{
+			{ID: "opcua-ns=2;s=Furnace01.Temp", Name: "Temp", NodeID: "ns=2;s=Furnace01.Temp", NodeType: "variable", DataType: "Double"},
+			{ID: "opcua-ns=2;s=Furnace01.Pressure", Name: "Pressure", NodeID: "ns=2;s=Furnace01.Pressure", NodeType: "variable", DataType: "Double"},
+		},
+	}
+	subtree, err := service.BrowseOpcuaSubtree(context.Background(), "project-1", "conn-1", session.SessionID, "user-1", "ns=2;s=Furnace01")
+	if err != nil {
+		t.Fatalf("browse subtree failed: %v", err)
+	}
+	if browser.subtreeParentNodeID != "ns=2;s=Furnace01" || len(subtree.Nodes) != 2 || !subtree.Nodes[0].Modeled || subtree.Nodes[1].Modeled {
+		t.Fatalf("unexpected subtree result: parent=%q result=%#v", browser.subtreeParentNodeID, subtree)
 	}
 
 	read, err := service.ReadOpcua(context.Background(), "project-1", "conn-1", session.SessionID, "user-1", []string{"n-1"}, nil)
@@ -210,6 +257,13 @@ func TestProtocolDevSessionService_BrowseAndReadOpcuaNodes(t *testing.T) {
 	}
 	if len(read.Values) != 1 || read.Values[0].Quality != "Good" || read.Values[0].Value == nil || opcua.updated["n-1"] == nil {
 		t.Fatalf("unexpected read result: %#v updated=%#v", read, opcua.updated)
+	}
+
+	if _, err := service.CloseSession(context.Background(), "project-1", "conn-1", session.SessionID, "user-1", "opcua"); err != nil {
+		t.Fatalf("close session failed: %v", err)
+	}
+	if browser.closeCount != 1 {
+		t.Fatalf("expected browser closed once, got %d", browser.closeCount)
 	}
 }
 

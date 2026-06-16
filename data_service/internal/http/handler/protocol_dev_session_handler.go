@@ -60,6 +60,20 @@ func (h *ProtocolDevSessionHandler) BrowseOpcua(w http.ResponseWriter, r *http.R
 	return nil
 }
 
+// BrowseOpcuaSubtree 返回 OPC UA 开发态指定父节点子树下的变量节点。
+func (h *ProtocolDevSessionHandler) BrowseOpcuaSubtree(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	result, err := h.service.BrowseOpcuaSubtree(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), r.PathValue("sessionId"), claims.UserID, r.URL.Query().Get("nodeId"))
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 // ReadOpcua 读取 OPC UA 开发态变量当前值。
 func (h *ProtocolDevSessionHandler) ReadOpcua(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)

@@ -27,10 +27,10 @@
           <strong>{{ issueRows.length }}</strong>
           <span>需检查</span>
         </div>
-        <em>{{ mode === 'browse' ? '浏览导入' : '批量 NodeId' }}</em>
+        <em>{{ step === 'pick' ? '选择变量' : '导入确认' }}</em>
       </div>
 
-      <div class="opcua-import__tools">
+      <div v-if="step === 'confirm'" class="opcua-import__tools">
         <el-checkbox v-model="onlyIssues" size="small">只看问题</el-checkbox>
         <el-button size="small" :disabled="issueRows.length === 0" @click="downloadIssueReport">
           <IconTablerAlertTriangle />
@@ -38,7 +38,7 @@
         </el-button>
       </div>
 
-      <el-tabs v-model="mode">
+      <el-tabs v-if="step === 'pick'" v-model="mode">
         <el-tab-pane label="浏览导入" name="browse">
           <section class="opcua-import__browse-section">
             <div class="opcua-import__section-head">
@@ -90,6 +90,15 @@
                       <el-tag size="small" :type="browseStateTagType(data)">
                         {{ browseStateText(data) }}
                       </el-tag>
+                      <el-button
+                        v-if="data.nodeType === 'folder'"
+                        size="small"
+                        link
+                        :loading="subtreeLoadingNodeId === data.nodeId"
+                        @click.stop="importBrowseSubtree(data)"
+                      >
+                        导入子树变量
+                      </el-button>
                     </span>
                     <span class="opcua-import__tree-meta">
                       <span>{{ data.nodeId }}</span>
@@ -117,7 +126,7 @@
         </el-tab-pane>
       </el-tabs>
 
-      <section class="opcua-import__defaults">
+      <section v-if="step === 'confirm'" class="opcua-import__defaults">
         <div class="opcua-import__section-head">
           <strong>批量默认值</strong>
           <span>应用后会重新检查候选行</span>
@@ -135,7 +144,7 @@
         </div>
       </section>
 
-      <section class="opcua-import__confirm-section">
+      <section v-if="step === 'confirm'" class="opcua-import__confirm-section">
         <div class="opcua-import__section-head">
           <strong>导入确认</strong>
           <span>导入前可逐行调整关键字段</span>
@@ -184,7 +193,17 @@
     </div>
     <template #footer>
       <el-button @click="requestClose">取消</el-button>
+      <el-button v-if="step === 'confirm'" @click="step = 'pick'">上一步</el-button>
       <el-button
+        v-if="step === 'pick'"
+        type="primary"
+        :disabled="draftRows.length === 0"
+        @click="goConfirm"
+      >
+        下一步，确认 {{ draftRows.length }} 个候选变量
+      </el-button>
+      <el-button
+        v-else
         type="primary"
         :disabled="readyRows.length === 0"
         :loading="loading"
@@ -247,6 +266,7 @@ const emit = defineEmits<{
   (event: 'update:modelValue', value: boolean): void
   (event: 'submit', rows: Array<Record<string, unknown>>): void
   (event: 'browse', nodeId?: string): void
+  (event: 'browse-subtree', nodeId: string, done: (nodes: OpcuaBrowseNode[]) => void): void
 }>()
 
 const visible = computed({
@@ -257,6 +277,7 @@ const visible = computed({
 const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
 const rawText = ref('')
 const mode = ref<'browse' | 'manual'>('browse')
+const step = ref<'pick' | 'confirm'>('pick')
 const browseKeyword = ref('')
 const selectedBrowseIds = ref<string[]>([])
 const manualDraftRows = ref<OpcuaImportPreviewRow[]>([])
@@ -264,6 +285,7 @@ const browseDraftRows = ref<OpcuaImportPreviewRow[]>([])
 const treeRef = ref<TreeInstance | null>(null)
 const treeVersion = ref(0)
 const pendingBrowseResolvers = new Map<string, (nodes: OpcuaBrowseRow[]) => void>()
+const subtreeLoadingNodeId = ref('')
 const onlyIssues = ref(false)
 const defaults = reactive({
   samplingMs: 1000,
@@ -286,10 +308,12 @@ watch(
   (visible) => {
     if (!visible) return
     rawText.value = ''
+    step.value = 'pick'
     browseKeyword.value = ''
     selectedBrowseIds.value = []
     manualDraftRows.value = []
     browseDraftRows.value = []
+    subtreeLoadingNodeId.value = ''
     onlyIssues.value = false
     defaults.samplingMs = 1000
     defaults.accessLevel = 'Read'
@@ -342,7 +366,7 @@ const browseTreeProps = {
   label: 'name',
   children: 'children',
   isLeaf: (data: OpcuaBrowseRow) => data.nodeType === 'variable' || data.hasChildren === false,
-  disabled: (data: OpcuaBrowseRow) => !isBrowseRowSelectable(data),
+  disabled: (data: OpcuaBrowseRow) => data.nodeType === 'variable' && !isBrowseRowSelectable(data),
 }
 
 const draftRows = computed(() => (mode.value === 'browse' ? browseDraftRows.value : manualDraftRows.value))
@@ -397,6 +421,13 @@ function buildBrowseRows(ids: string[]): OpcuaImportPreviewRow[] {
         description: null,
       }),
     )
+}
+
+function mergeBrowseDraftRows(nodes: OpcuaBrowseNode[]) {
+  const candidates = nodes
+    .filter((node) => node.nodeType === 'variable' && node.modeled !== true)
+    .map((node) => node.id)
+  selectedBrowseIds.value = Array.from(new Set([...selectedBrowseIds.value, ...candidates]))
 }
 
 function createPreviewRow(row: Partial<OpcuaImportPreviewRow> & { source: OpcuaImportSource; rowNo: number; key: string; nodeId: string }) {
@@ -538,6 +569,14 @@ function submit() {
   runSubmit()
 }
 
+function goConfirm() {
+  if (draftRows.value.length === 0) {
+    ElMessage.warning(mode.value === 'browse' ? '请先选择要导入的 OPC UA 变量' : '请先输入 NodeId')
+    return
+  }
+  step.value = 'confirm'
+}
+
 function applyDefaults() {
   const target = mode.value === 'browse' ? browseDraftRows.value : manualDraftRows.value
   target.forEach((row) => {
@@ -583,13 +622,34 @@ function refreshBrowseTree() {
   emit('browse')
 }
 
+function importBrowseSubtree(row: OpcuaBrowseRow) {
+  if (subtreeLoadingNodeId.value) return
+  subtreeLoadingNodeId.value = row.nodeId
+  emit('browse-subtree', row.nodeId, (nodes) => {
+    subtreeLoadingNodeId.value = ''
+    mergeBrowseDraftRows(nodes)
+    nextTick(() => treeRef.value?.setCheckedKeys(selectedBrowseIds.value))
+    if (nodes.length === 0) {
+      ElMessage.info('当前目录下没有可导入变量')
+      return
+    }
+    ElMessage.success(`已加入 ${nodes.filter((node) => node.nodeType === 'variable' && node.modeled !== true).length} 个子树变量`)
+  })
+}
+
 function handleBrowseCheck(_: OpcuaBrowseRow, checked: { checkedKeys: Array<string | number> }) {
   const ids = checked.checkedKeys.map(String)
+  const checkedFolders = ids
+    .map((id) => browseRowsById.value.get(id))
+    .filter((row): row is OpcuaBrowseRow => Boolean(row) && row.nodeType === 'folder')
   selectedBrowseIds.value = ids.filter((id) => {
     const row = browseRowsById.value.get(id)
     return row && isBrowseRowSelectable(row)
   })
   nextTick(() => treeRef.value?.setCheckedKeys(selectedBrowseIds.value))
+  if (checkedFolders.length > 0) {
+    importBrowseSubtree(checkedFolders[0])
+  }
 }
 
 function isBrowseRowSelectable(row: OpcuaBrowseRow) {

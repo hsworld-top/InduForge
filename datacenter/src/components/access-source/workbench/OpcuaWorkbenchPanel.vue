@@ -233,6 +233,7 @@
       :browse-nodes="browseNodes"
       :browse-diagnostics="browseDiagnostics"
       @browse="loadBrowseNodes"
+      @browse-subtree="loadBrowseSubtreeNodes"
       @submit="importNodes"
     />
     <OpcuaPreviewDialog
@@ -727,6 +728,34 @@ const loadBrowseNodes = async (nodeId?: string) => {
     browseDiagnostics.value = data.diagnostics || []
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '浏览 OPC UA 节点失败'))
+  } finally {
+    browsing.value = false
+  }
+}
+
+const loadBrowseSubtreeNodes = async (nodeId: string, done?: (nodes: OpcuaBrowseNode[]) => void) => {
+  if (!session.connected.value || !session.sessionId.value) {
+    ElMessage.warning('请先连接 OPC UA 开发态会话')
+    done?.([])
+    return []
+  }
+  browsing.value = true
+  try {
+    const response = await dataAPI.browseOpcuaDevSessionSubtree(
+      props.projectId,
+      props.connection.id,
+      session.sessionId.value,
+      { nodeId },
+    )
+    const data = unwrapData(response)
+    mergeBrowseNodes(data.nodes || [], nodeId)
+    browseDiagnostics.value = data.diagnostics || []
+    done?.(data.nodes || [])
+    return data.nodes || []
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '导入子树变量失败'))
+    done?.([])
+    return []
   } finally {
     browsing.value = false
   }

@@ -362,6 +362,11 @@ func (s *ProtocolDevSessionService) CreateSession(ctx context.Context, projectID
 		UserID:       userID,
 		lastUsedAt:   now,
 	}
+	if protocol == "opcua" && s.opcuaBrowser != nil {
+		if err := s.opcuaBrowser.Open(ctx, session); err != nil {
+			return nil, err
+		}
+	}
 	s.mu.Lock()
 	s.sessions[session.SessionID] = session
 	s.mu.Unlock()
@@ -378,6 +383,9 @@ func (s *ProtocolDevSessionService) CloseSession(ctx context.Context, projectID,
 	s.mu.Lock()
 	delete(s.sessions, sessionID)
 	s.mu.Unlock()
+	if protocol == "opcua" && s.opcuaBrowser != nil {
+		s.opcuaBrowser.Close(sessionID)
+	}
 	return &session, nil
 }
 
@@ -393,6 +401,41 @@ func (s *ProtocolDevSessionService) BrowseOpcua(ctx context.Context, projectID, 
 	if s.opcuaBrowser == nil {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "OPC UA 真实浏览适配器未初始化")
 	}
+	modeledNodeIDs, err := s.modeledOpcuaNodeIDSet(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	result, err := s.opcuaBrowser.Browse(ctx, session, parentNodeID)
+	if err != nil {
+		return nil, err
+	}
+	return markModeledBrowseNodes(result, modeledNodeIDs), nil
+}
+
+// BrowseOpcuaSubtree 基于当前会话递归收集指定目录下的变量，用于用户主动选择“导入子树变量”。
+func (s *ProtocolDevSessionService) BrowseOpcuaSubtree(ctx context.Context, projectID, connectionID, sessionID, userID, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error) {
+	session, err := s.requireSession(projectID, connectionID, sessionID, userID, "opcua")
+	if err != nil {
+		return nil, err
+	}
+	if s.opcua == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "OPC UA 开发态模型读取器未初始化")
+	}
+	if s.opcuaBrowser == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "OPC UA 真实浏览适配器未初始化")
+	}
+	modeledNodeIDs, err := s.modeledOpcuaNodeIDSet(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	result, err := s.opcuaBrowser.BrowseSubtree(ctx, session, parentNodeID)
+	if err != nil {
+		return nil, err
+	}
+	return markModeledBrowseNodes(result, modeledNodeIDs), nil
+}
+
+func (s *ProtocolDevSessionService) modeledOpcuaNodeIDSet(ctx context.Context, projectID, connectionID string) (map[string]bool, error) {
 	// 建模数据只用于标记真实地址空间中已导入的变量，不再参与生成浏览树，避免误导用户。
 	nodes, err := s.opcua.ListDevSessionOpcuaNodes(ctx, projectID, connectionID, nil)
 	if err != nil {
@@ -404,19 +447,19 @@ func (s *ProtocolDevSessionService) BrowseOpcua(ctx context.Context, projectID, 
 			modeledNodeIDs[text] = true
 		}
 	}
-	result, err := s.opcuaBrowser.Browse(ctx, session, parentNodeID)
-	if err != nil {
-		return nil, err
-	}
+	return modeledNodeIDs, nil
+}
+
+func markModeledBrowseNodes(result *ProtocolDevOpcuaBrowseResult, modeledNodeIDs map[string]bool) *ProtocolDevOpcuaBrowseResult {
 	if result == nil {
-		return &ProtocolDevOpcuaBrowseResult{Nodes: []ProtocolDevBrowseNode{}, Diagnostics: []string{}}, nil
+		return &ProtocolDevOpcuaBrowseResult{Nodes: []ProtocolDevBrowseNode{}, Diagnostics: []string{}}
 	}
 	for index := range result.Nodes {
 		if modeledNodeIDs[strings.TrimSpace(result.Nodes[index].NodeID)] {
 			result.Nodes[index].Modeled = true
 		}
 	}
-	return result, nil
+	return result
 }
 
 // ReadOpcua 读取会话内 OPC UA 变量当前值，第一版生成可预测的开发态样例值。

@@ -1399,6 +1399,7 @@ func mountProtocolDevSessionRoutes(mux *http.ServeMux, opts options) {
 	mux.Handle("POST "+opcuaBase, read(opts.protocolDevSessionHandler.CreateOpcua))
 	mux.Handle("DELETE "+opcuaBase+"/{sessionId}", write(opts.protocolDevSessionHandler.CloseOpcua))
 	mux.Handle("GET "+opcuaBase+"/{sessionId}/browse", read(opts.protocolDevSessionHandler.BrowseOpcua))
+	mux.Handle("GET "+opcuaBase+"/{sessionId}/browse-subtree", read(opts.protocolDevSessionHandler.BrowseOpcuaSubtree))
 	mux.Handle("POST "+opcuaBase+"/{sessionId}/read", read(opts.protocolDevSessionHandler.ReadOpcua))
 	mux.Handle("POST "+opcuaBase+"/{sessionId}/subscribe", read(opts.protocolDevSessionHandler.SubscribeOpcua))
 	mux.Handle("DELETE "+opcuaBase+"/{sessionId}/subscribe", write(opts.protocolDevSessionHandler.StopSubscribeOpcua))

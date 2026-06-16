@@ -736,6 +736,14 @@ export const browseOpcuaDevSession = (projectId, connectionId, sessionId, params
   })
 }
 
+export const browseOpcuaDevSessionSubtree = (projectId, connectionId, sessionId, params = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/sessions/${sessionId}/browse-subtree`,
+    method: 'get',
+    params,
+  })
+}
+
 export const readOpcuaDevSession = (projectId, connectionId, sessionId, data = {}) => {
   return request({
     url: `/data/projects/${projectId}/opcua/${connectionId}/sessions/${sessionId}/read`,
