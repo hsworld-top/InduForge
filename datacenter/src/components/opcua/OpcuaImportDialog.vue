@@ -131,6 +131,18 @@
           <strong>批量默认值</strong>
           <span>应用后会重新检查候选行</span>
         </div>
+        <div class="opcua-import__target-group">
+          <span>导入到分组</span>
+          <el-select v-model="targetGroupId" size="small" filterable clearable placeholder="未分组">
+            <el-option label="未分组" value="" />
+            <el-option
+              v-for="option in groupOptions"
+              :key="option.id"
+              :label="option.label"
+              :value="option.id"
+            />
+          </el-select>
+        </div>
         <div class="opcua-import__default-grid">
           <el-input v-model="defaults.samplingMs" size="small" placeholder="采样周期 ms" />
           <el-select v-model="defaults.accessLevel" size="small">
@@ -232,7 +244,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { TreeInstance } from 'element-plus'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import { downloadCsv, normalizeHeaderRow, parseDelimitedRows, parseTabularText } from '@/utils/tabular-file'
-import type { OpcuaBrowseNode } from './types'
+import type { OpcuaBrowseNode, OpcuaNodeGroup } from './types'
 import IconTablerAlertTriangle from '~icons/tabler/alert-triangle'
 import IconTablerFolder from '~icons/tabler/folder'
 import IconTablerRefresh from '~icons/tabler/refresh'
@@ -271,11 +283,13 @@ const props = defineProps<{
   browseLoading?: boolean
   browseNodes?: OpcuaBrowseNode[]
   browseDiagnostics?: string[]
+  groups?: OpcuaNodeGroup[]
+  defaultGroupId?: string
 }>()
 
 const emit = defineEmits<{
   (event: 'update:modelValue', value: boolean): void
-  (event: 'submit', rows: Array<Record<string, unknown>>): void
+  (event: 'submit', payload: { rows: Array<Record<string, unknown>>; groupId: string | null }): void
   (event: 'browse', nodeId?: string): void
   (event: 'browse-subtree', nodeId: string, done: (nodes: OpcuaBrowseNode[]) => void): void
 }>()
@@ -301,6 +315,7 @@ const onlyIssues = ref(false)
 const confirmPage = ref(1)
 const confirmPageSize = ref(50)
 const confirmPreparing = ref(false)
+const targetGroupId = ref('')
 const defaults = reactive({
   samplingMs: '1000',
   accessLevel: 'Read',
@@ -332,6 +347,7 @@ watch(
     confirmPage.value = 1
     confirmPageSize.value = 50
     confirmPreparing.value = false
+    targetGroupId.value = props.defaultGroupId || ''
     defaults.samplingMs = '1000'
     defaults.accessLevel = 'Read'
     defaults.deadband = ''
@@ -374,6 +390,7 @@ const browseRows = computed<OpcuaBrowseRow[]>(() =>
   (props.browseNodes || []).map((node) => ({ ...node, modeled: node.modeled === true })),
 )
 const browseRowsById = computed(() => new Map(browseRows.value.map((node) => [node.id, node])))
+const groupOptions = computed(() => flattenGroupOptions(props.groups || []))
 const browseSummary = computed(() => {
   const variables = browseRows.value.filter((row) => row.nodeType === 'variable')
   const importable = variables.filter((row) => !row.modeled).length
@@ -403,6 +420,25 @@ const skippedRows = computed(() => previewRows.value.filter((row) => row.state =
 const issueRows = computed(() =>
   previewRows.value.filter((row) => row.state === 'duplicate' || row.state === 'error'),
 )
+
+function flattenGroupOptions(groups: OpcuaNodeGroup[]) {
+  const childrenByParent = new Map<string, OpcuaNodeGroup[]>()
+  groups.forEach((group) => {
+    const parentId = group.parentId || ''
+    childrenByParent.set(parentId, [...(childrenByParent.get(parentId) || []), group])
+  })
+  const visit = (parentId: string, depth: number): Array<{ id: string; label: string }> => {
+    const children = [...(childrenByParent.get(parentId) || [])].sort(
+      (left, right) =>
+        (left.sortOrder || 0) - (right.sortOrder || 0) || left.name.localeCompare(right.name),
+    )
+    return children.flatMap((group) => [
+      { id: group.id, label: `${'　'.repeat(depth)}${group.name}` },
+      ...visit(group.id, depth + 1),
+    ])
+  }
+  return visit('', 0)
+}
 
 function buildManualRows(value: string): OpcuaImportPreviewRow[] {
   return parseManualSourceRows(value).map((row, index) => {
@@ -586,7 +622,10 @@ function submit() {
       ElMessage.warning('请先修正采样周期或死区后再导入')
       return
     }
-    emit('submit', rows.filter((row): row is Record<string, unknown> => row !== null))
+    emit('submit', {
+      rows: rows.filter((row): row is Record<string, unknown> => row !== null),
+      groupId: targetGroupId.value || null,
+    })
   }
   if (skipped > 0) {
     void ElMessageBox.confirm(
@@ -1080,6 +1119,24 @@ defineExpose({ closeSilently })
   grid-template-columns: minmax(110px, 140px) minmax(110px, 140px) minmax(90px, 120px) minmax(90px, 1fr) auto;
   align-items: center;
   gap: 8px;
+}
+
+.opcua-import__target-group {
+  display: grid;
+  grid-template-columns: 82px minmax(180px, 280px);
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.opcua-import__target-group span {
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.opcua-import__target-group :deep(.el-select) {
+  width: 100%;
 }
 
 .opcua-import__default-grid :deep(.el-select),

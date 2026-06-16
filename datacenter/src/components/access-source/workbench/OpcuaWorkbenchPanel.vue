@@ -276,6 +276,8 @@
       :browse-loading="browsing"
       :browse-nodes="browseNodes"
       :browse-diagnostics="browseDiagnostics"
+      :groups="groups"
+      :default-group-id="selectedGroupId"
       @browse="loadBrowseNodes"
       @browse-subtree="loadBrowseSubtreeNodes"
       @submit="importNodes"
@@ -1109,11 +1111,15 @@ const moveSelectedNodes = async () => {
   }
 }
 
-const importNodes = async (rows: Array<Record<string, unknown>>) => {
+const importNodes = async (
+  payload: Array<Record<string, unknown>> | { rows: Array<Record<string, unknown>>; groupId: string | null },
+) => {
+  const rows = Array.isArray(payload) ? payload : payload.rows
+  const groupId = Array.isArray(payload) ? selectedGroupId.value || null : payload.groupId
   saving.value = true
   try {
     await dataAPI.batchImportOpcuaNodes(props.projectId, props.connection.id, {
-      groupId: selectedGroupId.value || null,
+      groupId,
       nodes: rows,
     })
     importDialogRef.value?.closeSilently()
