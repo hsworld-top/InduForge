@@ -14,6 +14,8 @@ import (
 
 var opcuaCodeSanitizer = regexp.MustCompile(`[^a-zA-Z0-9_]+`)
 
+const maxOpcuaBatchImportNodes = 1000
+
 // OpcuaNodeGroup 表示前端工作台使用的 OPC UA 变量组。
 type OpcuaNodeGroup struct {
 	ID           string    `json:"id"`
@@ -137,6 +139,11 @@ type ImportOpcuaNodeInput struct {
 	SamplingMS  *int     `json:"samplingMs"`
 	Deadband    *float64 `json:"deadband"`
 	Description *string  `json:"description"`
+}
+
+type normalizedOpcuaImportRow struct {
+	CreateOpcuaNodeInput
+	SortOrder int
 }
 
 // OpcuaPreviewResult 表示开发态辅助预览结果。
@@ -325,35 +332,49 @@ func (s *OpcuaModelingService) CreateNode(ctx context.Context, projectID, connec
 
 // BatchImportNodes 批量导入变量，变量名可由前端确认后传入。
 func (s *OpcuaModelingService) BatchImportNodes(ctx context.Context, projectID, connectionID, userID string, groupID *string, nodes []ImportOpcuaNodeInput) ([]OpcuaNode, error) {
-	if len(nodes) == 0 {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "导入变量不能为空")
+	if err := s.validateProjectConnectionAndUser(ctx, projectID, connectionID, userID); err != nil {
+		return nil, err
 	}
-	result := make([]OpcuaNode, 0, len(nodes))
-	for index, item := range nodes {
-		name := strings.TrimSpace(item.Name)
-		if name == "" {
-			name = normalizeOpcuaNodeName(valueOrDefault(item.DisplayName, nil), valueOrDefault(item.BrowseName, nil), item.NodeID)
+	existingNodeIDs, existingCodes, err := s.repository.ListNodeIdentityMap(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range nodes {
+		nodeID := strings.TrimSpace(item.NodeID)
+		if nodeID == "" {
+			continue
 		}
-		input := CreateOpcuaNodeInput{
-			GroupID:     groupID,
-			Name:        name,
-			Code:        item.Code,
-			NodeID:      item.NodeID,
-			BrowseName:  item.BrowseName,
-			DisplayName: item.DisplayName,
-			DataType:    item.DataType,
-			Unit:        item.Unit,
-			SamplingMS:  item.SamplingMS,
-			Deadband:    item.Deadband,
-			AccessLevel: "Read",
-			Description: item.Description,
-			SortOrder:   index,
+		if _, ok := existingNodeIDs[nodeID]; ok {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusConflict, "导入变量包含已存在 NodeId："+nodeID)
 		}
-		created, err := s.CreateNode(ctx, projectID, connectionID, userID, input)
+	}
+	normalizedRows, err := normalizeOpcuaImportRows(nodes, stringKeySet(existingCodes))
+	if err != nil {
+		return nil, err
+	}
+	params := repository.BatchCreateOpcuaNodesParams{
+		ProjectID:    projectID,
+		ConnectionID: connectionID,
+		GroupID:      normalizeOptionalText(groupID),
+		UserID:       userID,
+		Nodes:        make([]repository.CreateOpcuaNodeParams, 0, len(normalizedRows)),
+	}
+	for _, row := range normalizedRows {
+		createParams, err := s.normalizeCreateNodeInput(projectID, connectionID, userID, row.CreateOpcuaNodeInput)
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, *created)
+		createParams.GroupID = normalizeOptionalText(groupID)
+		createParams.SortOrder = row.SortOrder
+		params.Nodes = append(params.Nodes, createParams)
+	}
+	records, err := s.repository.BatchCreateNodesWithDataPoints(ctx, params, s.buildOpcuaDataPointSyncPayload)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]OpcuaNode, 0, len(records))
+	for _, record := range records {
+		result = append(result, toOpcuaNode(record))
 	}
 	return result, nil
 }
@@ -562,9 +583,18 @@ func (s *OpcuaModelingService) normalizeUpdateNodeInput(projectID, userID string
 }
 
 func (s *OpcuaModelingService) syncNodeDatapoint(ctx context.Context, node repository.OpcuaNodeRecord, userID string) error {
-	connection, err := s.connections.GetByProjectAndID(ctx, node.ProjectID, node.ConnectionID)
+	params, err := s.buildOpcuaDataPointSyncPayload(ctx, node, userID)
 	if err != nil {
 		return err
+	}
+	_, err = s.datapoints.UpsertBySource(ctx, params)
+	return err
+}
+
+func (s *OpcuaModelingService) buildOpcuaDataPointSyncPayload(ctx context.Context, node repository.OpcuaNodeRecord, userID string) (repository.CreateDataPointParams, error) {
+	connection, err := s.connections.GetByProjectAndID(ctx, node.ProjectID, node.ConnectionID)
+	if err != nil {
+		return repository.CreateDataPointParams{}, err
 	}
 	basePath := "opcua." + normalizeDatapointSegment(connection.Name)
 	groups, _ := s.repository.ListGroups(ctx, node.ProjectID, node.ConnectionID)
@@ -575,7 +605,7 @@ func (s *OpcuaModelingService) syncNodeDatapoint(ctx context.Context, node repos
 	basePath += "." + normalizeDatapointSegment(node.Code)
 	path := s.allocateDataPointPath(ctx, node.ProjectID, basePath, node.ID, "opcua.node")
 	sourceID := node.ID
-	_, err = s.datapoints.UpsertBySource(ctx, repository.CreateDataPointParams{
+	return repository.CreateDataPointParams{
 		ProjectID:    node.ProjectID,
 		UserID:       stringPtr(userID),
 		Path:         path,
@@ -590,8 +620,7 @@ func (s *OpcuaModelingService) syncNodeDatapoint(ctx context.Context, node repos
 		RefreshMode:  "subscription",
 		Status:       "active",
 		DisplayOrder: &node.SortOrder,
-	})
-	return err
+	}, nil
 }
 
 func (s *OpcuaModelingService) allocateDataPointPath(ctx context.Context, projectID, basePath, sourceID, sourceType string) string {
@@ -718,6 +747,100 @@ func normalizeOpcuaNodeCode(code, name, nodeID string) string {
 		return "node"
 	}
 	return normalized
+}
+
+func normalizeOpcuaImportRows(nodes []ImportOpcuaNodeInput, existingCodes map[string]struct{}) ([]normalizedOpcuaImportRow, error) {
+	if len(nodes) == 0 {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "导入变量不能为空")
+	}
+	if len(nodes) > maxOpcuaBatchImportNodes {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("单次最多导入 %d 个 OPC UA 变量", maxOpcuaBatchImportNodes))
+	}
+	if existingCodes == nil {
+		existingCodes = map[string]struct{}{}
+	}
+	usedCodes := make(map[string]struct{}, len(existingCodes)+len(nodes))
+	for code := range existingCodes {
+		usedCodes[code] = struct{}{}
+	}
+	seenNodeIDs := map[string]int{}
+	result := make([]normalizedOpcuaImportRow, 0, len(nodes))
+	for index, item := range nodes {
+		nodeID, err := normalizeOpcuaRequiredText(item.NodeID, "NodeId 不能为空")
+		if err != nil {
+			return nil, err
+		}
+		if previous, ok := seenNodeIDs[nodeID]; ok {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("批量导入包含重复 NodeId：第 %d 行与第 %d 行重复", previous+1, index+1))
+		}
+		seenNodeIDs[nodeID] = index
+
+		name := strings.TrimSpace(item.Name)
+		if name == "" {
+			name = normalizeOpcuaNodeName(valueOrDefault(item.DisplayName, nil), valueOrDefault(item.BrowseName, nil), nodeID)
+		}
+		name, err = normalizeOpcuaRequiredText(name, "变量名不能为空")
+		if err != nil {
+			return nil, err
+		}
+		dataType, err := normalizeOpcuaRequiredText(item.DataType, "数据类型不能为空")
+		if err != nil {
+			return nil, err
+		}
+		samplingMS, err := normalizePositiveInt(item.SamplingMS, 1000, "采样周期必须大于 0")
+		if err != nil {
+			return nil, err
+		}
+		baseCode := normalizeOpcuaNodeCode(item.Code, name, nodeID)
+		code, err := allocateOpcuaUniqueCode(baseCode, usedCodes)
+		if err != nil {
+			return nil, err
+		}
+		usedCodes[code] = struct{}{}
+		result = append(result, normalizedOpcuaImportRow{
+			CreateOpcuaNodeInput: CreateOpcuaNodeInput{
+				Name:        name,
+				Code:        code,
+				NodeID:      nodeID,
+				BrowseName:  item.BrowseName,
+				DisplayName: item.DisplayName,
+				DataType:    dataType,
+				Unit:        item.Unit,
+				SamplingMS:  &samplingMS,
+				Deadband:    item.Deadband,
+				AccessLevel: "Read",
+				Description: item.Description,
+				SortOrder:   index,
+			},
+			SortOrder: index,
+		})
+	}
+	return result, nil
+}
+
+func allocateOpcuaUniqueCode(base string, used map[string]struct{}) (string, error) {
+	candidate := strings.TrimSpace(base)
+	if candidate == "" {
+		candidate = "node"
+	}
+	if _, ok := used[candidate]; !ok {
+		return candidate, nil
+	}
+	for index := 2; index <= 10000; index += 1 {
+		next := fmt.Sprintf("%s_%d", candidate, index)
+		if _, ok := used[next]; !ok {
+			return next, nil
+		}
+	}
+	return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "无法生成唯一变量 Code")
+}
+
+func stringKeySet(values map[string]string) map[string]struct{} {
+	result := make(map[string]struct{}, len(values))
+	for key := range values {
+		result[key] = struct{}{}
+	}
+	return result
 }
 
 func normalizeOpcuaAccessLevel(value string) string {
