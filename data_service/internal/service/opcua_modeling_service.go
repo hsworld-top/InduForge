@@ -277,6 +277,13 @@ type OpcuaNodeListFilter struct {
 	PageSize    int
 }
 
+// OpcuaNodeBulkSelection 描述批量操作选择范围；IDs 用于显式勾选，Filter 用于“全部结果”。
+type OpcuaNodeBulkSelection struct {
+	IDs       []string
+	Filter    OpcuaNodeListFilter
+	UseFilter bool
+}
+
 // ListNodesPage 返回当前分组下的一页变量，分页条件只影响列表展示，不影响预览和校验等全量流程。
 func (s *OpcuaModelingService) ListNodesPage(ctx context.Context, projectID, connectionID string, filter OpcuaNodeListFilter) (*OpcuaNodeListResult, error) {
 	if err := s.validateProjectConnection(ctx, projectID, connectionID); err != nil {
@@ -428,6 +435,67 @@ func (s *OpcuaModelingService) DeleteNode(ctx context.Context, projectID, connec
 	}
 	_, _ = s.datapoints.MarkInvalidBySource(ctx, projectID, "opcua.node", nodeID, stringPtr(userID))
 	return nil
+}
+
+// DeleteNodesBatch 批量删除变量并将关联数据点标记失效。
+func (s *OpcuaModelingService) DeleteNodesBatch(ctx context.Context, projectID, connectionID, userID string, selection OpcuaNodeBulkSelection) (int, error) {
+	if err := s.validateProjectConnectionAndUser(ctx, projectID, connectionID, userID); err != nil {
+		return 0, err
+	}
+	ids, err := s.resolveBulkNodeIDs(ctx, projectID, connectionID, selection)
+	if err != nil {
+		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	deletedIDs, err := s.repository.DeleteNodesBatch(ctx, projectID, connectionID, ids)
+	if err != nil {
+		return 0, err
+	}
+	for _, id := range deletedIDs {
+		_, _ = s.datapoints.MarkInvalidBySource(ctx, projectID, "opcua.node", id, stringPtr(userID))
+	}
+	return len(deletedIDs), nil
+}
+
+// MoveNodesBatch 批量移动变量分组，并同步变量对应的数据点路径。
+func (s *OpcuaModelingService) MoveNodesBatch(ctx context.Context, projectID, connectionID, userID string, selection OpcuaNodeBulkSelection, groupID *string) (int, error) {
+	if err := s.validateProjectConnectionAndUser(ctx, projectID, connectionID, userID); err != nil {
+		return 0, err
+	}
+	normalizedGroupID, err := s.normalizeBulkTargetGroup(ctx, projectID, connectionID, groupID)
+	if err != nil {
+		return 0, err
+	}
+	records, err := s.repository.MoveNodesBatch(ctx, repository.BatchMoveOpcuaNodesParams{
+		ProjectID:    projectID,
+		ConnectionID: connectionID,
+		GroupID:      normalizedGroupID,
+		UserID:       userID,
+		IDs:          selection.IDs,
+		Filter: repository.OpcuaNodeListFilter{
+			GroupID:     normalizeOptionalText(selection.Filter.GroupID),
+			Search:      strings.TrimSpace(selection.Filter.Search),
+			QuickFilter: strings.TrimSpace(selection.Filter.QuickFilter),
+			NodeID:      strings.TrimSpace(selection.Filter.NodeID),
+			BrowseName:  strings.TrimSpace(selection.Filter.BrowseName),
+			AccessLevel: strings.TrimSpace(selection.Filter.AccessLevel),
+			DataType:    strings.TrimSpace(selection.Filter.DataType),
+			SortBy:      strings.TrimSpace(selection.Filter.SortBy),
+			SortOrder:   strings.TrimSpace(selection.Filter.SortOrder),
+		},
+		UseFilter: selection.UseFilter,
+	})
+	if err != nil {
+		return 0, err
+	}
+	for _, record := range records {
+		if err := s.syncNodeDatapoint(ctx, record, userID); err != nil {
+			return 0, err
+		}
+	}
+	return len(records), nil
 }
 
 // UpdateNodeLastValue 保存开发态读取后的变量最近值快照。
@@ -690,6 +758,42 @@ func (s *OpcuaModelingService) validateProjectConnectionAndUser(ctx context.Cont
 		return err
 	}
 	return s.validateProjectConnection(ctx, projectID, connectionID)
+}
+
+func (s *OpcuaModelingService) resolveBulkNodeIDs(ctx context.Context, projectID, connectionID string, selection OpcuaNodeBulkSelection) ([]string, error) {
+	ids := uniqueStrings(selection.IDs)
+	if len(ids) > 0 {
+		return ids, nil
+	}
+	if !selection.UseFilter {
+		return []string{}, nil
+	}
+	return s.repository.ListNodeIDsByFilter(ctx, projectID, connectionID, repository.OpcuaNodeListFilter{
+		GroupID:     normalizeOptionalText(selection.Filter.GroupID),
+		Search:      strings.TrimSpace(selection.Filter.Search),
+		QuickFilter: strings.TrimSpace(selection.Filter.QuickFilter),
+		NodeID:      strings.TrimSpace(selection.Filter.NodeID),
+		BrowseName:  strings.TrimSpace(selection.Filter.BrowseName),
+		AccessLevel: strings.TrimSpace(selection.Filter.AccessLevel),
+		DataType:    strings.TrimSpace(selection.Filter.DataType),
+		SortBy:      strings.TrimSpace(selection.Filter.SortBy),
+		SortOrder:   strings.TrimSpace(selection.Filter.SortOrder),
+	})
+}
+
+func (s *OpcuaModelingService) normalizeBulkTargetGroup(ctx context.Context, projectID, connectionID string, groupID *string) (*string, error) {
+	normalized := normalizeOptionalText(groupID)
+	if normalized == nil {
+		return nil, nil
+	}
+	group, err := s.repository.GetGroup(ctx, projectID, *normalized)
+	if err != nil {
+		return nil, err
+	}
+	if group.ConnectionID != connectionID {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "变量组不属于当前 OPC UA 接入源")
+	}
+	return normalized, nil
 }
 
 func normalizeOpcuaRequiredText(value string, message string) (string, error) {

@@ -155,13 +155,16 @@
         </div>
       </div>
       <OpcuaNodeTable
+        ref="nodeTableRef"
         :nodes="nodes"
         :loading="loading"
         :selected-node-id="selectedNodeId"
+        :selected-ids="selectedNodeIds"
         :page="nodePagination.page"
         :page-size="nodePagination.pageSize"
         :total="nodePagination.total"
         @select="openNodeDetail"
+        @selection-change="handleNodeSelectionChange"
         @detail="openNodeDetail"
         @duplicate="openDuplicateNode"
         @edit="openEditNode"
@@ -171,6 +174,24 @@
         @page-size-change="changeNodePageSize"
         @sort-change="changeNodeSort"
       />
+      <BulkActionBar :selected-count="selectedNodeCount" @clear="clearNodeSelection">
+        <button type="button" class="opcua-workbench__bulk-action-btn" @click="selectCurrentPage">
+          当前页
+        </button>
+        <button type="button" class="opcua-workbench__bulk-action-btn" @click="selectAllResults">
+          全部结果
+        </button>
+        <button type="button" class="opcua-workbench__bulk-action-btn" @click="openBulkMoveDialog">
+          移动分组
+        </button>
+        <button
+          type="button"
+          class="opcua-workbench__bulk-action-btn is-danger"
+          @click="deleteSelectedNodes"
+        >
+          删除选中
+        </button>
+      </BulkActionBar>
     </main>
 
     <el-drawer
@@ -214,6 +235,31 @@
       :loading="saving"
       @submit="saveGroup"
     />
+    <DcDialog
+      v-model="bulkMoveVisible"
+      title="移动变量分组"
+      width="420px"
+      :close-disabled="saving"
+      :confirm-on-dirty-close="false"
+      class="opcua-workbench__move-dialog"
+    >
+      <div class="opcua-workbench__move-form">
+        <div class="opcua-workbench__move-summary">将移动 {{ selectedNodeCount }} 个变量</div>
+        <el-select v-model="bulkMoveGroupId" filterable clearable placeholder="未分组">
+          <el-option label="未分组" value="" />
+          <el-option
+            v-for="option in groupSelectOptions"
+            :key="option.id"
+            :label="option.label"
+            :value="option.id"
+          />
+        </el-select>
+      </div>
+      <template #footer>
+        <el-button :disabled="saving" @click="bulkMoveVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="moveSelectedNodes">移动</el-button>
+      </template>
+    </DcDialog>
     <OpcuaNodeDialog
       ref="nodeDialogRef"
       v-model="nodeDialogVisible"
@@ -307,6 +353,8 @@ import { downloadCsv, downloadXlsx } from '@/utils/tabular-file'
 import { useProtocolDevSession } from './useProtocolDevSession'
 import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
 import PillButton from '@/components/shared/PillButton.vue'
+import BulkActionBar from '@/components/shared/BulkActionBar.vue'
+import DcDialog from '@/components/shared/DcDialog.vue'
 import OpcuaGroupDialog from '@/components/opcua/OpcuaGroupDialog.vue'
 import OpcuaGroupTree from '@/components/opcua/OpcuaGroupTree.vue'
 import OpcuaImportDialog from '@/components/opcua/OpcuaImportDialog.vue'
@@ -436,6 +484,11 @@ const nodeDialogVisible = ref(false)
 const nodeDialogRef = ref<InstanceType<typeof OpcuaNodeDialog> | null>(null)
 const nodeDialogMode = ref<'create' | 'edit'>('create')
 const editingNode = ref<OpcuaNode | null>(null)
+const nodeTableRef = ref<InstanceType<typeof OpcuaNodeTable> | null>(null)
+const selectedNodes = ref<OpcuaNode[]>([])
+const allNodeResultsSelected = ref(false)
+const bulkMoveVisible = ref(false)
+const bulkMoveGroupId = ref('')
 const importVisible = ref(false)
 const importDialogRef = ref<InstanceType<typeof OpcuaImportDialog> | null>(null)
 const browsing = ref(false)
@@ -468,6 +521,11 @@ const quickFilters = [
 const currentQuickFilterLabel = computed(
   () => quickFilters.find((item) => item.value === quickFilter.value)?.label || '全部',
 )
+const selectedNodeIds = computed(() => selectedNodes.value.map((node) => node.id).filter(Boolean))
+const selectedNodeCount = computed(() =>
+  allNodeResultsSelected.value ? nodePagination.value.total : selectedNodeIds.value.length,
+)
+const groupSelectOptions = computed(() => flattenNodeGroupOptions(groups.value))
 
 const session = useProtocolDevSession({
   create: () => dataAPI.createOpcuaDevSession(props.projectId, props.connection.id),
@@ -782,6 +840,7 @@ const mergeBrowseNodes = (incoming: OpcuaBrowseNode[], parentNodeId?: string) =>
 const selectGroup = async (groupId: string) => {
   selectedGroupId.value = groupId
   selectedNodeId.value = ''
+  clearNodeSelection()
   nodePagination.value.page = 1
   await reloadAll()
 }
@@ -794,6 +853,9 @@ const changeNodePage = async (page: number) => {
 const changeNodePageSize = async (pageSize: number) => {
   nodePagination.value.page = 1
   nodePagination.value.pageSize = pageSize
+  if (!allNodeResultsSelected.value) {
+    clearNodeSelection()
+  }
   await reloadAll()
 }
 
@@ -804,6 +866,7 @@ const changeNodeSort = async (payload: { prop?: string; order?: string | null })
       payload.order === 'descending' ? 'desc' : payload.order === 'ascending' ? 'asc' : undefined,
   }
   nodePagination.value.page = 1
+  clearNodeSelection()
   await reloadAll()
 }
 
@@ -929,6 +992,123 @@ const removeNode = async (node: OpcuaNode) => {
   await dataAPI.deleteOpcuaNode(props.projectId, props.connection.id, node.id)
   if (selectedNodeId.value === node.id) selectedNodeId.value = ''
   await reloadAll()
+}
+
+const handleNodeSelectionChange = (rows: OpcuaNode[]) => {
+  if (allNodeResultsSelected.value) {
+    allNodeResultsSelected.value = false
+  }
+  const visibleIds = new Set(nodes.value.map((node) => node.id))
+  const retainedRows = selectedNodes.value.filter((node) => !visibleIds.has(node.id))
+  selectedNodes.value = [...retainedRows, ...(rows || [])]
+}
+
+const clearNodeSelection = () => {
+  allNodeResultsSelected.value = false
+  selectedNodes.value = []
+  nodeTableRef.value?.clearSelection()
+}
+
+const selectCurrentPage = async () => {
+  allNodeResultsSelected.value = false
+  selectedNodes.value = [...nodes.value]
+  await nodeTableRef.value?.syncSelection()
+}
+
+const selectAllResults = async () => {
+  allNodeResultsSelected.value = true
+  selectedNodes.value = [...nodes.value]
+  await nodeTableRef.value?.syncSelection()
+}
+
+const currentNodeFilterPayload = () => ({
+  groupId: selectedGroupId.value || undefined,
+  search: nodeKeyword.value.trim(),
+  filter: quickFilter.value === 'all' ? '' : quickFilter.value,
+  sortBy: nodeSort.value.sortBy || '',
+  sortOrder: nodeSort.value.sortOrder || '',
+})
+
+const reloadAfterNodeBatchMutation = async () => {
+  await reloadAll()
+  if (nodePagination.value.page > 1 && nodes.value.length === 0 && nodePagination.value.total > 0) {
+    nodePagination.value.page -= 1
+    await reloadAll()
+  }
+}
+
+const deleteSelectedNodes = async () => {
+  if (selectedNodeCount.value === 0) return
+  const deleteCount = selectedNodeCount.value
+  try {
+    await ElMessageBox.confirm(
+      allNodeResultsSelected.value
+        ? `确定要删除当前筛选结果中的 ${deleteCount} 个变量吗？`
+        : `确定要删除选中的 ${deleteCount} 个变量吗？`,
+      '批量删除确认',
+      {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+      },
+    )
+  } catch {
+    return
+  }
+  saving.value = true
+  try {
+    const response = allNodeResultsSelected.value
+      ? await dataAPI.deleteOpcuaNodesByFilter(
+          props.projectId,
+          props.connection.id,
+          currentNodeFilterPayload(),
+        )
+      : await dataAPI.deleteOpcuaNodesBatch(props.projectId, props.connection.id, selectedNodeIds.value)
+    const deletedCount = Number(response?.data?.deletedCount ?? response?.data?.data?.deletedCount ?? 0)
+    ElMessage.success(`已删除 ${deletedCount} 个变量`)
+    clearNodeSelection()
+    await reloadAfterNodeBatchMutation()
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '批量删除失败'))
+  } finally {
+    saving.value = false
+  }
+}
+
+const openBulkMoveDialog = () => {
+  if (selectedNodeCount.value === 0) return
+  bulkMoveGroupId.value = selectedGroupId.value || ''
+  bulkMoveVisible.value = true
+}
+
+const moveSelectedNodes = async () => {
+  if (selectedNodeCount.value === 0) return
+  saving.value = true
+  try {
+    const groupId = bulkMoveGroupId.value || null
+    const response = allNodeResultsSelected.value
+      ? await dataAPI.moveOpcuaNodesByFilter(
+          props.projectId,
+          props.connection.id,
+          currentNodeFilterPayload(),
+          groupId,
+        )
+      : await dataAPI.moveOpcuaNodesBatch(
+          props.projectId,
+          props.connection.id,
+          selectedNodeIds.value,
+          groupId,
+        )
+    const movedCount = Number(response?.data?.movedCount ?? response?.data?.data?.movedCount ?? 0)
+    ElMessage.success(`已移动 ${movedCount} 个变量`)
+    bulkMoveVisible.value = false
+    clearNodeSelection()
+    await reloadAll()
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '批量移动失败'))
+  } finally {
+    saving.value = false
+  }
 }
 
 const importNodes = async (rows: Array<Record<string, unknown>>) => {
@@ -1076,6 +1256,25 @@ function groupPathOf(groupId?: string | null) {
   return segments.join('/') || '未分组'
 }
 
+function flattenNodeGroupOptions(sourceGroups: OpcuaNodeGroup[]) {
+  const childrenByParent = new Map<string, OpcuaNodeGroup[]>()
+  sourceGroups.forEach((group) => {
+    const parentId = group.parentId || ''
+    childrenByParent.set(parentId, [...(childrenByParent.get(parentId) || []), group])
+  })
+  const visit = (parentId: string, depth: number): Array<{ id: string; label: string }> => {
+    const children = [...(childrenByParent.get(parentId) || [])].sort(
+      (left, right) =>
+        (left.sortOrder || 0) - (right.sortOrder || 0) || left.name.localeCompare(right.name),
+    )
+    return children.flatMap((group) => [
+      { id: group.id, label: `${'　'.repeat(depth)}${group.name}` },
+      ...visit(group.id, depth + 1),
+    ])
+  }
+  return visit('', 0)
+}
+
 function issueSummaryForNode(nodeId: string) {
   return validationIssues.value
     .filter((issue) => issue.nodeId === nodeId)
@@ -1107,12 +1306,14 @@ const deviceRedundancyText = computed(() => {
 watch(nodeKeyword, () => {
   if (searchTimer) window.clearTimeout(searchTimer)
   searchTimer = window.setTimeout(() => {
+    clearNodeSelection()
     nodePagination.value.page = 1
     void reloadAll()
   }, 250)
 })
 
 watch(quickFilter, () => {
+  clearNodeSelection()
   nodePagination.value.page = 1
   void reloadAll()
 })
@@ -1272,6 +1473,7 @@ onMounted(() => {
 }
 
 .opcua-workbench__main {
+  position: relative;
   min-width: 0;
   min-height: 0;
   background: var(--dc-surface-raised);
@@ -1392,6 +1594,61 @@ onMounted(() => {
   color: var(--dc-primary);
   font-weight: 600;
 }
+
+.opcua-workbench__bulk-action-btn {
+  max-width: 96px;
+  height: 28px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 10px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.opcua-workbench__bulk-action-btn:hover {
+  border-color: rgba(29, 78, 216, 0.26);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+}
+
+.opcua-workbench__bulk-action-btn.is-danger:hover {
+  border-color: rgba(220, 38, 38, 0.26);
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--dc-danger);
+}
+
+.opcua-workbench__move-form {
+  display: grid;
+  gap: 12px;
+}
+
+.opcua-workbench__move-summary {
+  padding: 8px 10px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-subtle);
+  color: var(--dc-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.opcua-workbench__move-form :deep(.el-select) {
+  width: 100%;
+}
+
 .opcua-workbench__menu-mask {
   position: fixed;
   inset: 0;

@@ -1,6 +1,7 @@
 <template>
   <div class="opcua-table">
     <el-table
+      ref="tableRef"
       class="opcua-table__grid"
       :data="nodes"
       :loading="loading"
@@ -11,8 +12,10 @@
       :current-row-key="selectedNodeId"
       @row-click="(row) => $emit('select', row)"
       @row-contextmenu="(row, _column, event) => $emit('row-contextmenu', event, row)"
+      @selection-change="handleSelectionChange"
       @sort-change="(payload) => $emit('sort-change', payload)"
     >
+      <el-table-column type="selection" width="42" reserve-selection />
       <el-table-column
         label="变量名"
         min-width="170"
@@ -135,32 +138,74 @@
 </template>
 
 <script setup lang="ts">
+import { nextTick, ref, watch } from 'vue'
+import type { TableInstance } from 'element-plus'
 import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerEdit from '~icons/tabler/edit'
 import IconTablerEye from '~icons/tabler/eye'
 import IconTablerTrash from '~icons/tabler/trash'
 import type { OpcuaNode } from './types'
 
-defineProps<{
+const props = defineProps<{
   nodes: OpcuaNode[]
   loading: boolean
   selectedNodeId: string
+  selectedIds: string[]
   page: number
   pageSize: number
   total: number
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (event: 'select', node: OpcuaNode): void
   (event: 'detail', node: OpcuaNode): void
   (event: 'duplicate', node: OpcuaNode): void
   (event: 'edit', node: OpcuaNode): void
   (event: 'delete', node: OpcuaNode): void
+  (event: 'selection-change', nodes: OpcuaNode[]): void
   (event: 'row-contextmenu', mouseEvent: MouseEvent, node: OpcuaNode): void
   (event: 'page-change', page: number): void
   (event: 'page-size-change', pageSize: number): void
   (event: 'sort-change', payload: { prop?: string; order?: string | null }): void
 }>()
+
+const tableRef = ref<TableInstance | null>(null)
+const syncingSelection = ref(false)
+
+watch(
+  () => [props.nodes, props.selectedIds] as const,
+  () => {
+    void syncSelection()
+  },
+  { deep: true },
+)
+
+async function syncSelection() {
+  await nextTick()
+  const table = tableRef.value
+  if (!table) return
+  syncingSelection.value = true
+  table.clearSelection()
+  const selected = new Set(props.selectedIds)
+  props.nodes.forEach((node) => {
+    if (selected.has(node.id)) {
+      table.toggleRowSelection(node, true)
+    }
+  })
+  await nextTick()
+  syncingSelection.value = false
+}
+
+function handleSelectionChange(rows: OpcuaNode[]) {
+  if (syncingSelection.value) return
+  emit('selection-change', rows || [])
+}
+
+function clearSelection() {
+  tableRef.value?.clearSelection()
+}
+
+defineExpose({ clearSelection, syncSelection })
 
 const formatValue = (value: unknown) => {
   if (value === null || value === undefined || value === '') return '-'

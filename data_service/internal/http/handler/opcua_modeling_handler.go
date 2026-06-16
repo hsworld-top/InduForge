@@ -210,6 +210,86 @@ func (h *OpcuaModelingHandler) DeleteNode(w http.ResponseWriter, r *http.Request
 	return nil
 }
 
+// DeleteNodesBatch 批量删除用户显式勾选的 OPC UA 变量。
+func (h *OpcuaModelingHandler) DeleteNodesBatch(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		IDs []string `json:"ids"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	deletedCount, err := h.service.DeleteNodesBatch(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.OpcuaNodeBulkSelection{IDs: request.IDs})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]int{"deletedCount": deletedCount})
+	return nil
+}
+
+// DeleteNodesByFilter 按当前搜索/筛选条件批量删除 OPC UA 变量。
+func (h *OpcuaModelingHandler) DeleteNodesByFilter(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	selection, err := decodeOpcuaBulkSelection(r)
+	if err != nil {
+		return err
+	}
+	deletedCount, err := h.service.DeleteNodesBatch(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, selection)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]int{"deletedCount": deletedCount})
+	return nil
+}
+
+// MoveNodesBatch 批量移动用户显式勾选的 OPC UA 变量。
+func (h *OpcuaModelingHandler) MoveNodesBatch(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		IDs     []string `json:"ids"`
+		GroupID *string  `json:"groupId"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	movedCount, err := h.service.MoveNodesBatch(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.OpcuaNodeBulkSelection{IDs: request.IDs}, request.GroupID)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]int{"movedCount": movedCount})
+	return nil
+}
+
+// MoveNodesByFilter 按当前搜索/筛选条件批量移动 OPC UA 变量。
+func (h *OpcuaModelingHandler) MoveNodesByFilter(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Filter  opcuaNodeFilterRequest `json:"filter"`
+		GroupID *string                `json:"groupId"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	movedCount, err := h.service.MoveNodesBatch(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.OpcuaNodeBulkSelection{Filter: request.Filter.toServiceFilter(), UseFilter: true}, request.GroupID)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]int{"movedCount": movedCount})
+	return nil
+}
+
 // ValidateModel 执行建模校验。
 func (h *OpcuaModelingHandler) ValidateModel(w http.ResponseWriter, r *http.Request) error {
 	if _, err := requireClaims(r); err != nil {
@@ -240,6 +320,42 @@ func (h *OpcuaModelingHandler) PreviewNodes(w http.ResponseWriter, r *http.Reque
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
+}
+
+type opcuaNodeFilterRequest struct {
+	GroupID     *string `json:"groupId"`
+	Search      string  `json:"search"`
+	QuickFilter string  `json:"filter"`
+	NodeID      string  `json:"nodeId"`
+	BrowseName  string  `json:"browseName"`
+	AccessLevel string  `json:"accessLevel"`
+	DataType    string  `json:"dataType"`
+	SortBy      string  `json:"sortBy"`
+	SortOrder   string  `json:"sortOrder"`
+}
+
+func (r opcuaNodeFilterRequest) toServiceFilter() service.OpcuaNodeListFilter {
+	return service.OpcuaNodeListFilter{
+		GroupID:     r.GroupID,
+		Search:      r.Search,
+		QuickFilter: r.QuickFilter,
+		NodeID:      r.NodeID,
+		BrowseName:  r.BrowseName,
+		AccessLevel: r.AccessLevel,
+		DataType:    r.DataType,
+		SortBy:      r.SortBy,
+		SortOrder:   r.SortOrder,
+	}
+}
+
+func decodeOpcuaBulkSelection(r *http.Request) (service.OpcuaNodeBulkSelection, error) {
+	var request struct {
+		Filter opcuaNodeFilterRequest `json:"filter"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return service.OpcuaNodeBulkSelection{}, err
+	}
+	return service.OpcuaNodeBulkSelection{Filter: request.Filter.toServiceFilter(), UseFilter: true}, nil
 }
 
 type opcuaNodeRequest struct {

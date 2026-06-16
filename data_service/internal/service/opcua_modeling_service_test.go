@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"reflect"
 	"strings"
 	"testing"
@@ -70,5 +71,17 @@ func TestNormalizeOpcuaImportRowsRejectsTooManyRows(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "单次最多导入") {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestResolveBulkNodeIDsKeepsEmptyExplicitSelectionEmpty(t *testing.T) {
+	service := &OpcuaModelingService{}
+
+	ids, err := service.resolveBulkNodeIDs(context.Background(), "project", "connection", OpcuaNodeBulkSelection{})
+	if err != nil {
+		t.Fatalf("resolve bulk ids: %v", err)
+	}
+	if len(ids) != 0 {
+		t.Fatalf("ids = %#v, want empty", ids)
 	}
 }

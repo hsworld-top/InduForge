@@ -157,6 +157,17 @@ type BatchCreateOpcuaNodesParams struct {
 	Nodes        []CreateOpcuaNodeParams
 }
 
+// BatchMoveOpcuaNodesParams 描述批量移动 OPC UA 变量分组的参数。
+type BatchMoveOpcuaNodesParams struct {
+	ProjectID    string
+	ConnectionID string
+	GroupID      *string
+	UserID       string
+	IDs          []string
+	Filter       OpcuaNodeListFilter
+	UseFilter    bool
+}
+
 // BuildOpcuaDataPointParamsFunc 根据已插入变量构造数据点同步参数。
 type BuildOpcuaDataPointParamsFunc func(context.Context, OpcuaNodeRecord, string) (CreateDataPointParams, error)
 
@@ -210,6 +221,20 @@ func (r *OpcuaModelingRepository) CreateGroup(ctx context.Context, params Create
 	record, err := scanOpcuaNodeGroupRecord(row)
 	if err != nil {
 		return nil, translateOpcuaModelingWriteError(err)
+	}
+	return &record, nil
+}
+
+// GetGroup 返回单个 OPC UA 变量组，用于跨连接写入前校验归属。
+func (r *OpcuaModelingRepository) GetGroup(ctx context.Context, projectID, groupID string) (*OpcuaNodeGroupRecord, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT id, project_id, connection_id, parent_id, name, description, sort_order, created_at, updated_at
+		FROM data_opcua_node_groups
+		WHERE project_id = $1 AND id = $2
+	`, projectID, groupID)
+	record, err := scanOpcuaNodeGroupRecord(row)
+	if err != nil {
+		return nil, err
 	}
 	return &record, nil
 }
@@ -622,6 +647,111 @@ func (r *OpcuaModelingRepository) DeleteNode(ctx context.Context, projectID, con
 	return nil
 }
 
+// ListNodeIDsByFilter 返回当前筛选条件匹配的 OPC UA 变量 ID，用于“全部结果”批量操作。
+func (r *OpcuaModelingRepository) ListNodeIDsByFilter(ctx context.Context, projectID, connectionID string, filter OpcuaNodeListFilter) ([]string, error) {
+	where, args := buildOpcuaNodeListWhere(projectID, connectionID, filter)
+	rows, err := r.pool.Query(ctx, `
+		SELECT n.id
+		FROM data_opcua_nodes n
+		LEFT JOIN data_points dp
+		  ON dp.project_id = n.project_id
+		 AND dp.source_type = 'opcua.node'
+		 AND dp.source_id = n.id
+		WHERE `+where+`
+		ORDER BY n.sort_order ASC, n.created_at ASC
+	`, args...)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 OPC UA 批量变量 ID 失败", err)
+	}
+	defer rows.Close()
+
+	result := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if scanErr := rows.Scan(&id); scanErr != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 OPC UA 批量变量 ID 失败", scanErr)
+		}
+		result = append(result, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 OPC UA 批量变量 ID 失败", err)
+	}
+	return result, nil
+}
+
+// DeleteNodesBatch 批量删除 OPC UA 变量定义，返回实际删除的变量 ID。
+func (r *OpcuaModelingRepository) DeleteNodesBatch(ctx context.Context, projectID, connectionID string, ids []string) ([]string, error) {
+	ids = uniqueTrimmedOpcuaIDs(ids)
+	if len(ids) == 0 {
+		return []string{}, nil
+	}
+	rows, err := r.pool.Query(ctx, `
+		DELETE FROM data_opcua_nodes
+		WHERE project_id = $1 AND connection_id = $2 AND id = ANY($3::uuid[])
+		RETURNING id
+	`, projectID, connectionID, ids)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "批量删除 OPC UA 变量失败", err)
+	}
+	defer rows.Close()
+
+	deleted := make([]string, 0, len(ids))
+	for rows.Next() {
+		var id string
+		if scanErr := rows.Scan(&id); scanErr != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 OPC UA 批量删除结果失败", scanErr)
+		}
+		deleted = append(deleted, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 OPC UA 批量删除结果失败", err)
+	}
+	return deleted, nil
+}
+
+// MoveNodesBatch 批量移动 OPC UA 变量到目标分组，并返回移动后的变量记录。
+func (r *OpcuaModelingRepository) MoveNodesBatch(ctx context.Context, params BatchMoveOpcuaNodesParams) ([]OpcuaNodeRecord, error) {
+	ids := uniqueTrimmedOpcuaIDs(params.IDs)
+	if params.UseFilter {
+		matched, err := r.ListNodeIDsByFilter(ctx, params.ProjectID, params.ConnectionID, params.Filter)
+		if err != nil {
+			return nil, err
+		}
+		ids = matched
+	}
+	if len(ids) == 0 {
+		return []OpcuaNodeRecord{}, nil
+	}
+	rows, err := r.pool.Query(ctx, `
+		UPDATE data_opcua_nodes
+		SET group_id = $4,
+		    updated_by = $5,
+		    updated_at = now()
+		WHERE project_id = $1 AND connection_id = $2 AND id = ANY($3::uuid[])
+		RETURNING id, project_id, connection_id, group_id, name, code, node_id, browse_name,
+		          display_name, data_type, unit, sampling_ms, deadband, access_level, description,
+		          sort_order, status, NULL::uuid, NULL::text, NULL::text,
+		          last_value, quality, last_updated_at, created_at, updated_at
+	`, params.ProjectID, params.ConnectionID, ids, params.GroupID, params.UserID)
+	if err != nil {
+		return nil, translateOpcuaModelingWriteError(err)
+	}
+	defer rows.Close()
+
+	result := make([]OpcuaNodeRecord, 0, len(ids))
+	for rows.Next() {
+		record, scanErr := scanOpcuaNodeRecord(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		result = append(result, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 OPC UA 批量移动结果失败", err)
+	}
+	return result, nil
+}
+
 // UpdateNodeLastValue 写回开发态读取得到的最近值快照。
 func (r *OpcuaModelingRepository) UpdateNodeLastValue(ctx context.Context, params UpdateOpcuaNodeLastValueParams) error {
 	valueBytes, err := marshalOpcuaJSONValue(params.LastValue)
@@ -829,6 +959,23 @@ func scanOpcuaNodeRecord(row pgx.Row) (OpcuaNodeRecord, error) {
 		return record, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 OPC UA 变量失败", err)
 	}
 	return record, nil
+}
+
+func uniqueTrimmedOpcuaIDs(values []string) []string {
+	seen := map[string]struct{}{}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		result = append(result, trimmed)
+	}
+	return result
 }
 
 func translateOpcuaModelingWriteError(err error) error {

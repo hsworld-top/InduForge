@@ -684,6 +684,38 @@ export const batchImportOpcuaNodes = (projectId, connectionId, data) => {
   })
 }
 
+export const deleteOpcuaNodesBatch = (projectId, connectionId, ids) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/nodes/batch-delete`,
+    method: 'post',
+    data: { ids },
+  })
+}
+
+export const deleteOpcuaNodesByFilter = (projectId, connectionId, filter = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/nodes/delete-filtered`,
+    method: 'post',
+    data: { filter },
+  })
+}
+
+export const moveOpcuaNodesBatch = (projectId, connectionId, ids, groupId) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/nodes/batch-move`,
+    method: 'post',
+    data: { ids, groupId },
+  })
+}
+
+export const moveOpcuaNodesByFilter = (projectId, connectionId, filter = {}, groupId = null) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/${connectionId}/nodes/move-filtered`,
+    method: 'post',
+    data: { filter, groupId },
+  })
+}
+
 export const updateOpcuaNode = (projectId, connectionId, nodeId, data) => {
   return request({
     url: `/data/projects/${projectId}/opcua/${connectionId}/nodes/${nodeId}`,
@@ -2011,6 +2043,10 @@ export default {
   getOpcuaNodes,
   createOpcuaNode,
   batchImportOpcuaNodes,
+  deleteOpcuaNodesBatch,
+  deleteOpcuaNodesByFilter,
+  moveOpcuaNodesBatch,
+  moveOpcuaNodesByFilter,
   updateOpcuaNode,
   deleteOpcuaNode,
   validateOpcuaModel,
