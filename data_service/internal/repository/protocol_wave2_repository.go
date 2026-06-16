@@ -36,17 +36,39 @@ type UpdateOpcuaConfigParams struct {
 
 // CreateS7ConfigParams 描述 S7 配置落库参数。
 type CreateS7ConfigParams struct {
-	ProjectID      string
-	UserID         string
-	Name           string
-	Status         string
-	Host           string
-	Port           int
-	Rack           int
-	Slot           int
-	PollIntervalMS int
-	Options        map[string]any
-	Redundancy     map[string]any
+	ProjectID            string
+	UserID               string
+	Name                 string
+	Status               string
+	Host                 string
+	Port                 int
+	Rack                 int
+	Slot                 int
+	PollIntervalMS       int
+	PlcFamily            string
+	CommunicationMode    string
+	LocalTSAP            *string
+	RemoteTSAP           *string
+	ConnectTimeoutMS     int
+	ReadTimeoutMS        int
+	PDUSize              *int
+	MaxReadBytes         *int
+	MaxGapBytes          int
+	MaxConcurrentReads   int
+	ByteOrder            string
+	WordOrder            string
+	OptimizedBlockAccess bool
+	AllowAbsoluteAddress bool
+	AllowSymbolAddress   bool
+	SupportedAreas       []any
+	Options              map[string]any
+	Redundancy           map[string]any
+}
+
+// UpdateS7ConfigParams 描述 S7 配置更新落库参数。
+type UpdateS7ConfigParams struct {
+	ConnectionID string
+	CreateS7ConfigParams
 }
 
 // CreateModbusConfigParams 描述 Modbus 配置落库参数。
@@ -66,6 +88,12 @@ type CreateModbusConfigParams struct {
 	PollIntervalMS int
 	Options        map[string]any
 	Redundancy     map[string]any
+}
+
+// UpdateModbusConfigParams 描述 Modbus 配置更新落库参数。
+type UpdateModbusConfigParams struct {
+	ConnectionID string
+	CreateModbusConfigParams
 }
 
 // CreateTdengineConfigParams 描述 TDengine 配置落库参数。
@@ -260,13 +288,15 @@ func (r *ProtocolWave2Repository) CreateS7Config(ctx context.Context, params Cre
 		Type:      "s7",
 		Status:    params.Status,
 		Metadata: map[string]any{
-			"host":           params.Host,
-			"port":           params.Port,
-			"rack":           params.Rack,
-			"slot":           params.Slot,
-			"pollIntervalMs": params.PollIntervalMS,
-			"options":        cloneWave2Map(params.Options),
-			"redundancy":     cloneWave2Map(params.Redundancy),
+			"host":              params.Host,
+			"port":              params.Port,
+			"rack":              params.Rack,
+			"slot":              params.Slot,
+			"pollIntervalMs":    params.PollIntervalMS,
+			"plcFamily":         params.PlcFamily,
+			"communicationMode": params.CommunicationMode,
+			"options":           cloneWave2Map(params.Options),
+			"redundancy":        cloneWave2Map(params.Redundancy),
 		},
 	})
 	if err != nil {
@@ -289,10 +319,160 @@ func (r *ProtocolWave2Repository) CreateS7Config(ctx context.Context, params Cre
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入 S7 配置失败", err)
 	}
 
+	if err := upsertS7ProfileTx(ctx, tx, record.ID, params); err != nil {
+		return nil, err
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 S7 配置事务失败", err)
 	}
 	return record, nil
+}
+
+// UpdateS7Config 更新 S7 配置，并同步 PLC 档案。
+func (r *ProtocolWave2Repository) UpdateS7Config(ctx context.Context, params UpdateS7ConfigParams) (*ProtocolConnectionRecord, error) {
+	optionsPayload, err := marshalWave2JSONObject(params.Options, true)
+	if err != nil {
+		return nil, err
+	}
+	metadataPayload, err := json.Marshal(map[string]any{
+		"host":              params.Host,
+		"port":              params.Port,
+		"rack":              params.Rack,
+		"slot":              params.Slot,
+		"pollIntervalMs":    params.PollIntervalMS,
+		"plcFamily":         params.PlcFamily,
+		"communicationMode": params.CommunicationMode,
+		"options":           cloneWave2Map(params.Options),
+		"redundancy":        cloneWave2Map(params.Redundancy),
+	})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "序列化 S7 连接元数据失败", err)
+	}
+
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 S7 配置更新事务失败", err)
+	}
+	defer rollbackWave2TxQuietly(ctx, tx)
+
+	record := ProtocolConnectionRecord{}
+	err = tx.QueryRow(ctx, `
+		UPDATE data_connections
+		SET name = $3,
+			type = 's7',
+			category = 'protocol',
+			status = $4,
+			metadata = $5::jsonb,
+			updated_by = $6,
+			updated_at = now()
+		WHERE project_id = $1 AND id = $2 AND type = 's7'
+		RETURNING id, project_id, name, type, status, created_at, updated_at
+	`, params.ProjectID, params.ConnectionID, params.Name, params.Status, string(metadataPayload), params.UserID).Scan(
+		&record.ID,
+		&record.ProjectID,
+		&record.Name,
+		&record.Type,
+		&record.Status,
+		&record.CreatedAt,
+		&record.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "S7 连接不存在")
+		}
+		return nil, translateConnectionWriteError("更新 S7 连接失败", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO data_s7_configs (
+			connection_id,
+			host,
+			port,
+			rack,
+			slot,
+			poll_interval_ms,
+			options
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+		ON CONFLICT (connection_id) DO UPDATE
+		SET host = EXCLUDED.host,
+			port = EXCLUDED.port,
+			rack = EXCLUDED.rack,
+			slot = EXCLUDED.slot,
+			poll_interval_ms = EXCLUDED.poll_interval_ms,
+			options = EXCLUDED.options,
+			updated_at = now()
+	`, params.ConnectionID, params.Host, params.Port, params.Rack, params.Slot, params.PollIntervalMS, optionsPayload)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步 S7 配置失败", err)
+	}
+
+	if err := upsertS7ProfileTx(ctx, tx, params.ConnectionID, params.CreateS7ConfigParams); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 S7 配置更新事务失败", err)
+	}
+	return &record, nil
+}
+
+func upsertS7ProfileTx(ctx context.Context, tx pgx.Tx, connectionID string, params CreateS7ConfigParams) error {
+	supportedAreasPayload, err := json.Marshal(params.SupportedAreas)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "S7 支持地址区格式无效", err)
+	}
+	optionsPayload, err := marshalWave2JSONObject(params.Options, true)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO data_s7_plc_profiles (
+			project_id, connection_id, plc_family, communication_mode, host, port,
+			rack, slot, local_tsap, remote_tsap, poll_interval_ms, connect_timeout_ms,
+			read_timeout_ms, pdu_size, max_read_bytes, max_gap_bytes, max_concurrent_reads,
+			byte_order, word_order, optimized_block_access, allow_absolute_address,
+			allow_symbol_address, supported_areas, options, created_by, updated_by
+		)
+		VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+			$17, $18, $19, $20, $21, $22, $23::jsonb, $24::jsonb, $25, $25
+		)
+		ON CONFLICT (project_id, connection_id) DO UPDATE
+		SET plc_family = EXCLUDED.plc_family,
+		    communication_mode = EXCLUDED.communication_mode,
+		    host = EXCLUDED.host,
+		    port = EXCLUDED.port,
+		    rack = EXCLUDED.rack,
+		    slot = EXCLUDED.slot,
+		    local_tsap = EXCLUDED.local_tsap,
+		    remote_tsap = EXCLUDED.remote_tsap,
+		    poll_interval_ms = EXCLUDED.poll_interval_ms,
+		    connect_timeout_ms = EXCLUDED.connect_timeout_ms,
+		    read_timeout_ms = EXCLUDED.read_timeout_ms,
+		    pdu_size = EXCLUDED.pdu_size,
+		    max_read_bytes = EXCLUDED.max_read_bytes,
+		    max_gap_bytes = EXCLUDED.max_gap_bytes,
+		    max_concurrent_reads = EXCLUDED.max_concurrent_reads,
+		    byte_order = EXCLUDED.byte_order,
+		    word_order = EXCLUDED.word_order,
+		    optimized_block_access = EXCLUDED.optimized_block_access,
+		    allow_absolute_address = EXCLUDED.allow_absolute_address,
+		    allow_symbol_address = EXCLUDED.allow_symbol_address,
+		    supported_areas = EXCLUDED.supported_areas,
+		    options = EXCLUDED.options,
+		    updated_by = EXCLUDED.updated_by,
+		    updated_at = now()
+	`, params.ProjectID, connectionID, params.PlcFamily, params.CommunicationMode, params.Host, params.Port,
+		params.Rack, params.Slot, params.LocalTSAP, params.RemoteTSAP, params.PollIntervalMS, params.ConnectTimeoutMS,
+		params.ReadTimeoutMS, params.PDUSize, params.MaxReadBytes, params.MaxGapBytes, params.MaxConcurrentReads,
+		params.ByteOrder, params.WordOrder, params.OptimizedBlockAccess, params.AllowAbsoluteAddress,
+		params.AllowSymbolAddress, string(supportedAreasPayload), optionsPayload, params.UserID)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步 S7 PLC 档案失败", err)
+	}
+	return nil
 }
 
 // CreateModbusConfig 创建 Modbus 配置。
@@ -358,6 +538,102 @@ func (r *ProtocolWave2Repository) CreateModbusConfig(ctx context.Context, params
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 Modbus 配置事务失败", err)
 	}
 	return record, nil
+}
+
+// UpdateModbusConfig 更新 Modbus 配置。
+func (r *ProtocolWave2Repository) UpdateModbusConfig(ctx context.Context, params UpdateModbusConfigParams) (*ProtocolConnectionRecord, error) {
+	optionsPayload, err := marshalWave2JSONObject(params.Options, true)
+	if err != nil {
+		return nil, err
+	}
+	serialPayload, err := marshalWave2JSONObject(params.SerialConfig, !params.HasSerial)
+	if err != nil {
+		return nil, err
+	}
+	metadataPayload, err := json.Marshal(map[string]any{
+		"mode":           params.Mode,
+		"host":           params.Host,
+		"port":           params.Port,
+		"serialConfig":   cloneWave2Map(params.SerialConfig),
+		"slaveId":        params.SlaveID,
+		"startAddress":   params.StartAddress,
+		"quantity":       params.Quantity,
+		"pollIntervalMs": params.PollIntervalMS,
+		"options":        cloneWave2Map(params.Options),
+		"redundancy":     cloneWave2Map(params.Redundancy),
+	})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "序列化 Modbus 连接元数据失败", err)
+	}
+
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 Modbus 配置更新事务失败", err)
+	}
+	defer rollbackWave2TxQuietly(ctx, tx)
+
+	record := ProtocolConnectionRecord{}
+	err = tx.QueryRow(ctx, `
+		UPDATE data_connections
+		SET name = $3,
+			type = 'modbus',
+			category = 'protocol',
+			status = $4,
+			metadata = $5::jsonb,
+			updated_by = $6,
+			updated_at = now()
+		WHERE project_id = $1 AND id = $2 AND type = 'modbus'
+		RETURNING id, project_id, name, type, status, created_at, updated_at
+	`, params.ProjectID, params.ConnectionID, params.Name, params.Status, string(metadataPayload), params.UserID).Scan(
+		&record.ID,
+		&record.ProjectID,
+		&record.Name,
+		&record.Type,
+		&record.Status,
+		&record.CreatedAt,
+		&record.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "Modbus 连接不存在")
+		}
+		return nil, translateConnectionWriteError("更新 Modbus 连接失败", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO data_modbus_configs (
+			connection_id,
+			mode,
+			host,
+			port,
+			serial_config,
+			slave_id,
+			start_address,
+			quantity,
+			poll_interval_ms,
+			options
+		)
+		VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10::jsonb)
+		ON CONFLICT (connection_id) DO UPDATE
+		SET mode = EXCLUDED.mode,
+			host = EXCLUDED.host,
+			port = EXCLUDED.port,
+			serial_config = EXCLUDED.serial_config,
+			slave_id = EXCLUDED.slave_id,
+			start_address = EXCLUDED.start_address,
+			quantity = EXCLUDED.quantity,
+			poll_interval_ms = EXCLUDED.poll_interval_ms,
+			options = EXCLUDED.options,
+			updated_at = now()
+	`, params.ConnectionID, params.Mode, params.Host, params.Port, serialPayload, params.SlaveID, params.StartAddress, params.Quantity, params.PollIntervalMS, optionsPayload)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步 Modbus 配置失败", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 Modbus 配置更新事务失败", err)
+	}
+	return &record, nil
 }
 
 // CreateTdengineConfig 创建 TDengine 配置。

@@ -580,23 +580,71 @@
                   <el-input v-model.number="formData.port" inputmode="numeric" placeholder="102" />
                 </el-form-item>
               </div>
-              <div class="connection-dialog__form-grid">
-                <el-form-item label="Rack">
-                  <el-input v-model.number="formData.rack" inputmode="numeric" placeholder="0" />
-                </el-form-item>
-                <el-form-item label="Slot">
-                  <el-input v-model.number="formData.slot" inputmode="numeric" placeholder="1" />
-                </el-form-item>
+              <div class="connection-dialog__form-section">
+                <div class="connection-dialog__form-section-title">PLC 类型</div>
+                <div class="connection-dialog__form-grid">
+                  <el-form-item label="PLC 系列">
+                    <el-select
+                      v-model="formData.plcFamily"
+                      class="w-full"
+                      @change="applyS7FamilyDefaults"
+                    >
+                      <el-option
+                        v-for="family in s7FamilyOptions"
+                        :key="family"
+                        :label="family"
+                        :value="family"
+                      />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="通信方式">
+                    <el-select v-model="formData.communicationMode" class="w-full">
+                      <el-option label="机架/槽位" value="rack_slot" />
+                      <el-option label="TSAP" value="tsap" />
+                    </el-select>
+                  </el-form-item>
+                </div>
+                <div class="connection-dialog__form-grid">
+                  <el-form-item>
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        机架号（Rack）
+                        <el-tooltip
+                          content="S7-300/400 常见为 0；不同 PLC 或网关请按设备手册填写。"
+                          placement="top"
+                        >
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
+                    <el-input-number v-model="formData.rack" :min="0" :step="1" class="w-full" />
+                  </el-form-item>
+                  <el-form-item>
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        槽位号（Slot）
+                        <el-tooltip
+                          content="S7-1200/1500 常见为 1，S7-300/400 常见为 2。"
+                          placement="top"
+                        >
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
+                    <el-input-number v-model="formData.slot" :min="0" :step="1" class="w-full" />
+                  </el-form-item>
+                </div>
+                <div class="connection-dialog__switch-line">
+                  <el-switch v-model="formData.optimizedBlockAccess" />
+                  <span class="connection-dialog__switch-text">启用优化块访问提示</span>
+                  <el-tooltip
+                    content="S7-1200/1500 使用优化 DB 时，绝对地址读取可能需要在 PLC 工程里额外确认。"
+                    placement="top"
+                  >
+                    <IconTablerHelpCircle class="connection-dialog__field-help" />
+                  </el-tooltip>
+                </div>
               </div>
-              <el-form-item label="轮询周期">
-                <el-input
-                  v-model.number="formData.pollIntervalMs"
-                  inputmode="numeric"
-                  placeholder="1000"
-                >
-                  <template #append>ms</template>
-                </el-input>
-              </el-form-item>
               <div class="connection-dialog__form-section">
                 <div class="connection-dialog__form-section-title">设备冗余</div>
                 <div class="connection-dialog__switch-line">
@@ -711,21 +759,56 @@
                     </el-form-item>
                     <el-form-item label="连接超时">
                       <el-input-number
-                        v-model="formData.connectionTimeoutMs"
+                        v-model="formData.connectTimeoutMs"
                         :min="1000"
                         :step="1000"
                         class="w-full"
                       />
                     </el-form-item>
-                    <el-form-item label="请求超时">
+                    <el-form-item label="读取超时">
                       <el-input-number
-                        v-model="formData.requestTimeoutMs"
+                        v-model="formData.readTimeoutMs"
                         :min="1000"
                         :step="1000"
                         class="w-full"
                       />
                     </el-form-item>
                   </div>
+                  <div class="connection-dialog__form-grid">
+                    <el-form-item label="最大读取字节">
+                      <el-input-number
+                        v-model="formData.maxReadBytes"
+                        :min="0"
+                        :step="16"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                    <el-form-item label="合并间隙字节">
+                      <el-input-number
+                        v-model="formData.maxGapBytes"
+                        :min="0"
+                        :step="1"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                    <el-form-item label="并发读取数">
+                      <el-input-number
+                        v-model="formData.maxConcurrentReads"
+                        :min="1"
+                        :step="1"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                  </div>
+                  <div class="connection-dialog__checkbox-line">
+                    <el-checkbox v-model="formData.allowAbsoluteAddress">允许绝对地址</el-checkbox>
+                    <el-checkbox v-model="formData.allowSymbolAddress">允许符号地址</el-checkbox>
+                  </div>
+                  <el-form-item label="支持地址区">
+                    <el-checkbox-group v-model="formData.supportedAreas">
+                      <el-checkbox-button v-for="area in s7AreaOptions" :key="area" :label="area" />
+                    </el-checkbox-group>
+                  </el-form-item>
                 </el-collapse-item>
               </el-collapse>
             </template>
@@ -778,34 +861,6 @@
                   </el-form-item>
                 </div>
               </div>
-              <div class="connection-dialog__form-grid">
-                <el-form-item label="站号">
-                  <el-input v-model.number="formData.slaveId" inputmode="numeric" placeholder="1" />
-                </el-form-item>
-                <el-form-item label="起始地址">
-                  <el-input
-                    v-model.number="formData.startAddress"
-                    inputmode="numeric"
-                    placeholder="0"
-                  />
-                </el-form-item>
-                <el-form-item label="数量">
-                  <el-input
-                    v-model.number="formData.quantity"
-                    inputmode="numeric"
-                    placeholder="1"
-                  />
-                </el-form-item>
-              </div>
-              <el-form-item label="轮询周期">
-                <el-input
-                  v-model.number="formData.pollIntervalMs"
-                  inputmode="numeric"
-                  placeholder="1000"
-                >
-                  <template #append>ms</template>
-                </el-input>
-              </el-form-item>
               <div class="connection-dialog__form-section">
                 <div class="connection-dialog__form-section-title">设备冗余</div>
                 <div class="connection-dialog__switch-line">
@@ -1256,13 +1311,13 @@ const externalSourceOptions = [
   {
     value: 's7',
     label: 'Siemens S7',
-    description: 'PLC Rack/Slot 配置',
+    description: 'PLC 类型与通信参数',
     icon: markRaw(IconTablerServer),
   },
   {
     value: 'modbus',
     label: 'Modbus',
-    description: 'TCP/RTU 站号与寄存器',
+    description: 'TCP/RTU 网关连接',
     icon: markRaw(IconTablerWebhook),
   },
   {
@@ -1307,6 +1362,16 @@ const modbusModeOptions = [
   { label: 'TCP', value: 'tcp' },
   { label: 'RTU', value: 'rtu' },
 ]
+const s7FamilyOptions = [
+  'S7-200',
+  'S7-200 SMART',
+  'S7-300',
+  'S7-400',
+  'S7-1200',
+  'S7-1500',
+  'S7 Compatible',
+]
+const s7AreaOptions = ['DB', 'M', 'I', 'Q']
 
 const protocolRules = {
   name: [{ required: true, message: '连接名称不能为空', trigger: 'blur' }],
@@ -1487,9 +1552,8 @@ const summaryRows = computed(() => {
     rows.push(
       { label: '地址', value: formatEndpoint(data.ip, data.port) },
       { label: '设备冗余', value: formatRedundancySummary(data.redundancy) },
-      { label: 'Rack', value: String(data.rack ?? 0) },
-      { label: 'Slot', value: String(data.slot ?? 1) },
-      { label: '周期', value: formatTimeout(data.pollIntervalMs) },
+      { label: 'PLC 系列', value: data.plcFamily || 'S7 Compatible' },
+      { label: '机架/槽位', value: `${data.rack ?? 0}/${data.slot ?? 1}` },
     )
   } else if (connectionType.value === 'modbus') {
     rows.push(
@@ -1499,11 +1563,7 @@ const summaryRows = computed(() => {
         value: data.mode === 'rtu' ? '串口 RTU' : formatEndpoint(data.ip, data.port),
       },
       { label: '设备冗余', value: formatRedundancySummary(data.redundancy) },
-      { label: '站号', value: String(data.slaveId ?? 1) },
-      {
-        label: '范围',
-        value: `${data.startAddress ?? 0} / ${data.quantity ?? 1}`,
-      },
+      { label: '从站与寄存器', value: '进入工作台维护' },
     )
   } else if (connectionType.value === 'tdengine') {
     rows.push(
@@ -1551,9 +1611,9 @@ const checklist = computed(() => {
     : connectionType.value === 'kafka'
       ? true
       : connectionType.value === 's7'
-        ? data.rack !== undefined && data.slot !== undefined
+        ? data.rack !== undefined && data.slot !== undefined && Boolean(data.plcFamily)
         : connectionType.value === 'modbus'
-          ? Boolean(data.quantity)
+          ? true
           : relationalSourceTypes.includes(connectionType.value) ||
               connectionType.value === 'tdengine'
             ? Boolean(data.database)
@@ -2026,14 +2086,25 @@ const getProtocolDefaultConfig = (type) => {
       name: '',
       ip: '',
       port: 102,
+      plcFamily: 'S7 Compatible',
+      communicationMode: 'rack_slot',
       rack: 0,
       slot: 1,
       pollIntervalMs: 1000,
       pduSize: 480,
+      maxReadBytes: 0,
+      maxGapBytes: 8,
+      maxConcurrentReads: 1,
       localTsap: '',
       remoteTsap: '',
-      connectionTimeoutMs: 5000,
-      requestTimeoutMs: 5000,
+      connectTimeoutMs: 3000,
+      readTimeoutMs: 3000,
+      byteOrder: 'big_endian',
+      wordOrder: 'big_endian',
+      optimizedBlockAccess: false,
+      allowAbsoluteAddress: true,
+      allowSymbolAddress: false,
+      supportedAreas: ['DB', 'M', 'I', 'Q'],
       redundancy: defaultRedundancyConfig(102),
     },
     modbus: {
@@ -2046,10 +2117,6 @@ const getProtocolDefaultConfig = (type) => {
       dataBits: 8,
       parity: 'N',
       stopBits: 1,
-      slaveId: 1,
-      startAddress: 0,
-      quantity: 1,
-      pollIntervalMs: 1000,
       functionCode: 3,
       connectTimeoutMs: 5000,
       requestTimeoutMs: 5000,
@@ -2155,15 +2222,39 @@ const normalizeS7OptionsForForm = (options = {}) => ({
   pduSize: Number(options.pduSize) || 480,
   localTsap: options.localTsap || '',
   remoteTsap: options.remoteTsap || '',
-  connectionTimeoutMs: Number(options.connectionTimeoutMs) || 5000,
-  requestTimeoutMs: Number(options.requestTimeoutMs) || 5000,
+  connectTimeoutMs: Number(options.connectTimeoutMs || options.connectionTimeoutMs) || 3000,
+  readTimeoutMs: Number(options.readTimeoutMs || options.requestTimeoutMs) || 3000,
+  maxReadBytes: Number(options.maxReadBytes) || 0,
+  maxGapBytes: Number(options.maxGapBytes) || 8,
+  maxConcurrentReads: Number(options.maxConcurrentReads) || 1,
+  byteOrder: options.byteOrder || 'big_endian',
+  wordOrder: options.wordOrder || 'big_endian',
+  optimizedBlockAccess: options.optimizedBlockAccess === true,
+  allowAbsoluteAddress: options.allowAbsoluteAddress !== false,
+  allowSymbolAddress: options.allowSymbolAddress === true,
+  supportedAreas:
+    Array.isArray(options.supportedAreas) && options.supportedAreas.length
+      ? [...options.supportedAreas]
+      : ['DB', 'M', 'I', 'Q'],
 })
 
 const buildS7Options = (config) => {
   const options: Record<string, any> = {
     pduSize: Number(config.pduSize) || 480,
-    connectionTimeoutMs: Number(config.connectionTimeoutMs) || 5000,
-    requestTimeoutMs: Number(config.requestTimeoutMs) || 5000,
+    connectTimeoutMs: Number(config.connectTimeoutMs) || 3000,
+    readTimeoutMs: Number(config.readTimeoutMs) || 3000,
+    maxReadBytes: Number(config.maxReadBytes) || null,
+    maxGapBytes: Number(config.maxGapBytes) || 8,
+    maxConcurrentReads: Number(config.maxConcurrentReads) || 1,
+    byteOrder: config.byteOrder || 'big_endian',
+    wordOrder: config.wordOrder || 'big_endian',
+    optimizedBlockAccess: config.optimizedBlockAccess === true,
+    allowAbsoluteAddress: config.allowAbsoluteAddress !== false,
+    allowSymbolAddress: config.allowSymbolAddress === true,
+    supportedAreas:
+      Array.isArray(config.supportedAreas) && config.supportedAreas.length
+        ? [...config.supportedAreas]
+        : ['DB', 'M', 'I', 'Q'],
   }
   if (String(config.localTsap || '').trim()) {
     options.localTsap = String(config.localTsap).trim()
@@ -2172,6 +2263,42 @@ const buildS7Options = (config) => {
     options.remoteTsap = String(config.remoteTsap).trim()
   }
   return options
+}
+
+const applyS7FamilyDefaults = () => {
+  if (!formData.value) return
+  const family = formData.value.plcFamily
+  if (family === 'S7-300' || family === 'S7-400') {
+    Object.assign(formData.value, {
+      communicationMode: 'rack_slot',
+      rack: 0,
+      slot: 2,
+      maxGapBytes: 8,
+      optimizedBlockAccess: false,
+    })
+  } else if (family === 'S7-1200' || family === 'S7-1500') {
+    Object.assign(formData.value, {
+      communicationMode: 'rack_slot',
+      rack: 0,
+      slot: 1,
+      maxGapBytes: 16,
+      optimizedBlockAccess: true,
+    })
+  } else if (family === 'S7-200' || family === 'S7-200 SMART') {
+    Object.assign(formData.value, {
+      communicationMode: 'tsap',
+      maxGapBytes: 8,
+      optimizedBlockAccess: false,
+    })
+  } else {
+    Object.assign(formData.value, {
+      communicationMode: 'rack_slot',
+      rack: 0,
+      slot: 1,
+      maxGapBytes: 8,
+      optimizedBlockAccess: false,
+    })
+  }
 }
 
 const normalizeModbusOptionsForForm = (options = {}) => ({
@@ -2353,10 +2480,19 @@ const normalizeProtocolSubmitConfig = (type, config) => {
     config.host = config.ip
     delete config.ip
     delete config.pduSize
+    delete config.maxReadBytes
+    delete config.maxGapBytes
+    delete config.maxConcurrentReads
     delete config.localTsap
     delete config.remoteTsap
-    delete config.connectionTimeoutMs
-    delete config.requestTimeoutMs
+    delete config.connectTimeoutMs
+    delete config.readTimeoutMs
+    delete config.byteOrder
+    delete config.wordOrder
+    delete config.optimizedBlockAccess
+    delete config.allowAbsoluteAddress
+    delete config.allowSymbolAddress
+    delete config.supportedAreas
     return
   }
   if (type === 'modbus') {

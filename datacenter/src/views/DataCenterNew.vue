@@ -1044,8 +1044,8 @@ const handleConnectionSubmit = async (data) => {
           config: data.config,
         })
       }
-    } else if (data.type === 'opcua') {
-      await dataAPI.updateOpcuaConfig(projectId.value, currentConnection.value.id, {
+    } else if (protocolUpdateHandlers[data.type]) {
+      await protocolUpdateHandlers[data.type](projectId.value, currentConnection.value.id, {
         name: data.name,
         status: currentConnection.value.status || 'disconnected',
         ...data.config,
@@ -1081,6 +1081,12 @@ const protocolCreateHandlers = {
   s7: dataAPI.createS7Config,
   modbus: dataAPI.createModbusConfig,
   tdengine: dataAPI.createTdengineConfig,
+}
+
+const protocolUpdateHandlers = {
+  opcua: dataAPI.updateOpcuaConfig,
+  s7: dataAPI.updateS7Config,
+  modbus: dataAPI.updateModbusConfig,
 }
 
 /**

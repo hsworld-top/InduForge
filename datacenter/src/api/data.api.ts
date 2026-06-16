@@ -177,6 +177,8 @@ const normalizeS7ConfigPayload = (data = {}) => ({
   rack: Number(data.rack) || 0,
   slot: Number(data.slot) || 1,
   pollIntervalMs: Number(data.pollIntervalMs) || 1000,
+  plcFamily: data.plcFamily || data.options?.plcFamily || 'S7 Compatible',
+  communicationMode: data.communicationMode || data.options?.communicationMode || 'rack_slot',
   options: data.options && typeof data.options === 'object' ? data.options : {},
   redundancy: normalizeRedundancyPayload(data.redundancy),
 })
@@ -187,6 +189,7 @@ const normalizeModbusConfigPayload = (data = {}) => {
     name: data.name,
     status: data.status || 'disconnected',
     mode,
+    // 连接表单不再暴露默认从站/范围；后端仍保留连接表历史字段，默认值仅用于兼容存储结构。
     slaveId: Number(data.slaveId) || 1,
     startAddress: Number(data.startAddress) || 0,
     quantity: Number(data.quantity) || 1,
@@ -212,10 +215,26 @@ export const createS7Config = (projectId, data) => {
   })
 }
 
+export const updateS7Config = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/s7/configs/${connectionId}`,
+    method: 'put',
+    data: normalizeS7ConfigPayload(data),
+  })
+}
+
 export const createModbusConfig = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/modbus/configs`,
     method: 'post',
+    data: normalizeModbusConfigPayload(data),
+  })
+}
+
+export const updateModbusConfig = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/configs/${connectionId}`,
+    method: 'put',
     data: normalizeModbusConfigPayload(data),
   })
 }
@@ -1929,7 +1948,9 @@ export default {
   createOpcuaConfig,
   updateOpcuaConfig,
   createS7Config,
+  updateS7Config,
   createModbusConfig,
+  updateModbusConfig,
   createTdengineConfig,
   validateOpcdaContract,
   previewProtocol,

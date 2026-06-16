@@ -105,38 +105,69 @@ func (h *ProtocolWave2Handler) CreateS7Config(w http.ResponseWriter, r *http.Req
 		return err
 	}
 
-	var request struct {
-		Name           string         `json:"name"`
-		Status         string         `json:"status"`
-		Host           string         `json:"host"`
-		Port           *int           `json:"port"`
-		Rack           *int           `json:"rack"`
-		Slot           *int           `json:"slot"`
-		PollIntervalMS *int           `json:"pollIntervalMs"`
-		Options        map[string]any `json:"options"`
-		Redundancy     map[string]any `json:"redundancy"`
-	}
+	var request s7ConfigRequest
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
 	}
 
-	connection, err := h.service.CreateS7Config(r.Context(), r.PathValue("projectId"), claims.UserID, service.CreateS7ConfigInput{
-		Name:           request.Name,
-		Status:         request.Status,
-		Host:           request.Host,
-		Port:           request.Port,
-		Rack:           request.Rack,
-		Slot:           request.Slot,
-		PollIntervalMS: request.PollIntervalMS,
-		Options:        request.Options,
-		Redundancy:     request.Redundancy,
-	})
+	connection, err := h.service.CreateS7Config(r.Context(), r.PathValue("projectId"), claims.UserID, request.toInput())
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)
 	return nil
+}
+
+// UpdateS7Config 更新 S7 配置。
+func (h *ProtocolWave2Handler) UpdateS7Config(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+
+	var request s7ConfigRequest
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+
+	connection, err := h.service.UpdateS7Config(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, request.toInput())
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)
+	return nil
+}
+
+type s7ConfigRequest struct {
+	Name              string         `json:"name"`
+	Status            string         `json:"status"`
+	Host              string         `json:"host"`
+	Port              *int           `json:"port"`
+	Rack              *int           `json:"rack"`
+	Slot              *int           `json:"slot"`
+	PollIntervalMS    *int           `json:"pollIntervalMs"`
+	PlcFamily         string         `json:"plcFamily"`
+	CommunicationMode string         `json:"communicationMode"`
+	Options           map[string]any `json:"options"`
+	Redundancy        map[string]any `json:"redundancy"`
+}
+
+func (r s7ConfigRequest) toInput() service.CreateS7ConfigInput {
+	return service.CreateS7ConfigInput{
+		Name:              r.Name,
+		Status:            r.Status,
+		Host:              r.Host,
+		Port:              r.Port,
+		Rack:              r.Rack,
+		Slot:              r.Slot,
+		PollIntervalMS:    r.PollIntervalMS,
+		PlcFamily:         r.PlcFamily,
+		CommunicationMode: r.CommunicationMode,
+		Options:           r.Options,
+		Redundancy:        r.Redundancy,
+	}
 }
 
 // CreateModbusConfig 创建 Modbus 配置。
@@ -146,44 +177,71 @@ func (h *ProtocolWave2Handler) CreateModbusConfig(w http.ResponseWriter, r *http
 		return err
 	}
 
-	var request struct {
-		Name           string         `json:"name"`
-		Status         string         `json:"status"`
-		Mode           string         `json:"mode"`
-		Host           *string        `json:"host"`
-		Port           *int           `json:"port"`
-		SerialConfig   map[string]any `json:"serialConfig"`
-		SlaveID        *int           `json:"slaveId"`
-		StartAddress   *int           `json:"startAddress"`
-		Quantity       *int           `json:"quantity"`
-		PollIntervalMS *int           `json:"pollIntervalMs"`
-		Options        map[string]any `json:"options"`
-		Redundancy     map[string]any `json:"redundancy"`
-	}
+	var request modbusConfigRequest
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
 	}
 
-	connection, err := h.service.CreateModbusConfig(r.Context(), r.PathValue("projectId"), claims.UserID, service.CreateModbusConfigInput{
-		Name:           request.Name,
-		Status:         request.Status,
-		Mode:           request.Mode,
-		Host:           request.Host,
-		Port:           request.Port,
-		SerialConfig:   request.SerialConfig,
-		SlaveID:        request.SlaveID,
-		StartAddress:   request.StartAddress,
-		Quantity:       request.Quantity,
-		PollIntervalMS: request.PollIntervalMS,
-		Options:        request.Options,
-		Redundancy:     request.Redundancy,
-	})
+	connection, err := h.service.CreateModbusConfig(r.Context(), r.PathValue("projectId"), claims.UserID, request.toInput())
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)
 	return nil
+}
+
+// UpdateModbusConfig 更新 Modbus 配置。
+func (h *ProtocolWave2Handler) UpdateModbusConfig(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+
+	var request modbusConfigRequest
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+
+	connection, err := h.service.UpdateModbusConfig(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, request.toInput())
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)
+	return nil
+}
+
+type modbusConfigRequest struct {
+	Name           string         `json:"name"`
+	Status         string         `json:"status"`
+	Mode           string         `json:"mode"`
+	Host           *string        `json:"host"`
+	Port           *int           `json:"port"`
+	SerialConfig   map[string]any `json:"serialConfig"`
+	SlaveID        *int           `json:"slaveId"`
+	StartAddress   *int           `json:"startAddress"`
+	Quantity       *int           `json:"quantity"`
+	PollIntervalMS *int           `json:"pollIntervalMs"`
+	Options        map[string]any `json:"options"`
+	Redundancy     map[string]any `json:"redundancy"`
+}
+
+func (r modbusConfigRequest) toInput() service.CreateModbusConfigInput {
+	return service.CreateModbusConfigInput{
+		Name:           r.Name,
+		Status:         r.Status,
+		Mode:           r.Mode,
+		Host:           r.Host,
+		Port:           r.Port,
+		SerialConfig:   r.SerialConfig,
+		SlaveID:        r.SlaveID,
+		StartAddress:   r.StartAddress,
+		Quantity:       r.Quantity,
+		PollIntervalMS: r.PollIntervalMS,
+		Options:        r.Options,
+		Redundancy:     r.Redundancy,
+	}
 }
 
 // CreateTdengineConfig 创建 TDengine 配置。

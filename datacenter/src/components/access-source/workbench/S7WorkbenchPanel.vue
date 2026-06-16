@@ -119,15 +119,6 @@
           <button
             type="button"
             class="s7-workbench__icon-action"
-            title="配置 PLC 类型"
-            aria-label="配置 PLC 类型"
-            @click="profileVisible = true"
-          >
-            <IconTablerCpu />
-          </button>
-          <button
-            type="button"
-            class="s7-workbench__icon-action"
             :disabled="!session.connected.value"
             :title="readActionTitle"
             :aria-label="readActionTitle"
@@ -225,12 +216,6 @@
       />
     </el-drawer>
 
-    <S7ProfileDialog
-      v-model="profileVisible"
-      :profile="profile"
-      :loading="saving"
-      @submit="saveProfile"
-    />
     <S7GroupDialog
       ref="groupDialogRef"
       v-model="groupVisible"
@@ -326,7 +311,6 @@ import S7GroupTree from '@/components/s7/S7GroupTree.vue'
 import S7ImportDialog from '@/components/s7/S7ImportDialog.vue'
 import S7InspectorPanel from '@/components/s7/S7InspectorPanel.vue'
 import S7PreviewDialog from '@/components/s7/S7PreviewDialog.vue'
-import S7ProfileDialog from '@/components/s7/S7ProfileDialog.vue'
 import S7ReadPlanDialog from '@/components/s7/S7ReadPlanDialog.vue'
 import S7ValidationDrawer from '@/components/s7/S7ValidationDrawer.vue'
 import S7VariableDialog from '@/components/s7/S7VariableDialog.vue'
@@ -345,7 +329,6 @@ import IconTablerBolt from '~icons/tabler/bolt'
 import IconTablerChevronRight from '~icons/tabler/chevron-right'
 import IconTablerChecklist from '~icons/tabler/checklist'
 import IconTablerCopy from '~icons/tabler/copy'
-import IconTablerCpu from '~icons/tabler/cpu'
 import IconTablerDownload from '~icons/tabler/download'
 import IconTablerEye from '~icons/tabler/eye'
 import IconTablerFilter from '~icons/tabler/filter'
@@ -389,7 +372,6 @@ const saving = ref(false)
 const selectedGroupId = ref('')
 const selectedVariableId = ref('')
 const keyword = ref('')
-const profileVisible = ref(false)
 const groupVisible = ref(false)
 const groupDialogRef = ref<InstanceType<typeof S7GroupDialog> | null>(null)
 const groupMode = ref<'create' | 'edit'>('create')
@@ -449,7 +431,7 @@ const sourceMetaRows = computed(() => [
   },
   { label: 'PLC', value: profile.value?.plcFamily || '未确认' },
   {
-    label: 'Rack/Slot',
+    label: '机架/槽位',
     value: profile.value ? `${profile.value.rack}/${profile.value.slot}` : '-',
   },
 ])
@@ -584,7 +566,7 @@ const contractSections = computed(() => [
       { label: 'PLC 系列', value: profile.value?.plcFamily || '未确认' },
       { label: '连接地址', value: endpointText.value },
       {
-        label: 'Rack / Slot',
+        label: '机架/槽位',
         value: profile.value ? `${profile.value.rack}/${profile.value.slot}` : '-',
       },
       {
@@ -623,11 +605,6 @@ const unwrapList = <T,>(response: any): T[] =>
 const unwrapData = (response: any) => response?.data?.data || response?.data || {}
 const unwrapPagination = (response: any) =>
   response?.data?.pagination || response?.data?.data?.pagination
-const loadProfile = async () => {
-  const response = await dataAPI.getS7Profile(props.projectId, props.connection.id)
-  profile.value = unwrapData(response) as S7Profile
-  if (!profile.value?.configured) profileVisible.value = true
-}
 const reloadEstimate = async () => {
   const response = await dataAPI.getS7ReadPlanEstimate(props.projectId, props.connection.id, {
     groupId: selectedGroupId.value || undefined,
@@ -658,7 +635,6 @@ const reloadAll = async () => {
       ...unwrapPagination(variableResponse),
     }
     await reloadEstimate()
-    if (!profile.value?.configured) profileVisible.value = true
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '加载 S7 建模数据失败'))
   } finally {
@@ -751,19 +727,6 @@ const openEditGroup = (group: S7VariableGroup) => {
   defaultGroupParentId.value = ''
   groupMode.value = 'edit'
   groupVisible.value = true
-}
-const saveProfile = async (payload: Record<string, unknown>) => {
-  saving.value = true
-  try {
-    await dataAPI.updateS7Profile(props.projectId, props.connection.id, payload)
-    profileVisible.value = false
-    await loadProfile()
-    await reloadEstimate()
-  } catch (error) {
-    ElMessage.error(getApiErrorMessage(error, '保存 PLC 档案失败'))
-  } finally {
-    saving.value = false
-  }
 }
 const saveGroup = async (payload: Record<string, unknown>) => {
   saving.value = true
@@ -1163,7 +1126,7 @@ onMounted(() => {
 .s7-workbench__right-tools {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(74px, auto) minmax(180px, 260px) repeat(5, 28px);
+  grid-template-columns: minmax(74px, auto) minmax(180px, 260px) repeat(4, 28px);
   justify-content: end;
   align-items: center;
   gap: 6px;
@@ -1327,7 +1290,7 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
   .s7-workbench__right-tools {
-    grid-template-columns: minmax(74px, auto) minmax(140px, 1fr) repeat(5, 28px);
+    grid-template-columns: minmax(74px, auto) minmax(140px, 1fr) repeat(4, 28px);
     justify-content: stretch;
   }
 }

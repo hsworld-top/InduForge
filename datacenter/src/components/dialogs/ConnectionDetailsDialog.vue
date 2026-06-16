@@ -178,29 +178,23 @@ const protocolConfigRows = computed(() => {
       ]
     case 's7':
       return [
-        { label: 'Host', value: config.host || '-' },
-        { label: 'Port', value: config.port || 102 },
-        { label: 'Rack', value: config.rack ?? 0 },
-        { label: 'Slot', value: config.slot ?? 1 },
-        {
-          label: 'Poll Interval',
-          value: config.pollIntervalMs ? `${config.pollIntervalMs}ms` : '-',
-        },
+        { label: 'PLC 地址', value: config.host || '-' },
+        { label: '端口', value: config.port || 102 },
+        { label: 'PLC 系列', value: config.plcFamily || 'S7 Compatible' },
+        { label: '机架/槽位', value: `${config.rack ?? 0}/${config.slot ?? 1}` },
       ]
     case 'modbus':
       return [
-        { label: 'Mode', value: config.mode || 'tcp' },
+        { label: '模式', value: (config.mode || 'tcp').toUpperCase() },
         {
-          label: 'Host',
+          label: '地址',
           value: config.mode === 'rtu' ? 'RTU 串口' : config.host || '-',
         },
         {
-          label: 'Port',
+          label: '端口',
           value: config.mode === 'rtu' ? '-' : config.port || 502,
         },
-        { label: 'Slave ID', value: config.slaveId ?? 1 },
-        { label: 'Address', value: config.startAddress ?? 0 },
-        { label: 'Quantity', value: config.quantity ?? 1 },
+        { label: '从站与寄存器', value: '进入工作台维护' },
       ]
     case 'tdengine':
       return [
