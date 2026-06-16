@@ -3,16 +3,44 @@
     ref="dialogRef"
     v-model="visible"
     title="从 OPC UA 导入变量"
-    width="940px"
+    width="1040px"
     class="opcua-import-dialog"
     body-max-height="calc(100vh - 180px)"
     :dirty="isDirty"
     :close-disabled="loading"
   >
     <div class="opcua-import">
+      <div class="opcua-import__summary">
+        <div>
+          <strong>{{ previewRows.length }}</strong>
+          <span>候选变量</span>
+        </div>
+        <div>
+          <strong>{{ readyRows.length }}</strong>
+          <span>可导入</span>
+        </div>
+        <div>
+          <strong>{{ skippedRows.length }}</strong>
+          <span>将跳过</span>
+        </div>
+        <div>
+          <strong>{{ issueRows.length }}</strong>
+          <span>需检查</span>
+        </div>
+        <em>{{ mode === 'browse' ? '浏览导入' : '批量 NodeId' }}</em>
+      </div>
+
+      <div class="opcua-import__tools">
+        <el-checkbox v-model="onlyIssues" size="small">只看问题</el-checkbox>
+        <el-button size="small" :disabled="issueRows.length === 0" @click="downloadIssueReport">
+          <IconTablerAlertTriangle />
+          错误报告
+        </el-button>
+      </div>
+
       <el-tabs v-model="mode">
         <el-tab-pane label="浏览导入" name="browse">
-          <section>
+          <section class="opcua-import__browse-section">
             <div class="opcua-import__section-head">
               <strong>服务器节点浏览</strong>
               <span>{{ browseSummary }}</span>
@@ -22,7 +50,7 @@
                 v-model="browseKeyword"
                 size="small"
                 clearable
-                placeholder="搜索 NodeId / BrowseName / 路径"
+                placeholder="搜索 NodeId / 节点名称 / 路径 / 类型"
               />
               <el-button
                 size="small"
@@ -42,16 +70,20 @@
             </div>
             <el-table
               :data="filteredBrowseRows"
-              height="300"
+              height="270"
               size="small"
               row-key="id"
               @selection-change="handleBrowseSelection"
             >
               <el-table-column type="selection" width="42" :selectable="isBrowseRowSelectable" />
-              <el-table-column label="节点" min-width="180" show-overflow-tooltip>
+              <el-table-column label="节点" min-width="220" show-overflow-tooltip>
                 <template #default="{ row }">
-                  <div class="opcua-import__node-name">
-                    <strong>{{ row.name }}</strong>
+                  <div class="opcua-import__node-name" :style="{ paddingLeft: `${row.depth * 14}px` }">
+                    <strong>
+                      <IconTablerFolder v-if="row.nodeType === 'folder'" />
+                      <IconTablerVariable v-else />
+                      {{ row.name }}
+                    </strong>
                     <span>{{ row.path }}</span>
                   </div>
                 </template>
@@ -60,8 +92,8 @@
               <el-table-column prop="dataType" label="类型" width="110" />
               <el-table-column label="状态" width="104">
                 <template #default="{ row }">
-                  <el-tag size="small" :type="row.modeled ? 'info' : 'success'">
-                    {{ row.modeled ? '已建模' : '可导入' }}
+                  <el-tag size="small" :type="browseStateTagType(row)">
+                    {{ browseStateText(row) }}
                   </el-tag>
                 </template>
               </el-table-column>
@@ -69,55 +101,138 @@
           </section>
         </el-tab-pane>
         <el-tab-pane label="批量 NodeId" name="manual">
-          <section>
+          <section class="opcua-import__manual-section">
             <div class="opcua-import__section-head">
               <strong>批量 NodeId</strong>
-              <span>每行一个变量，导入前可改变量名</span>
+              <span>支持 NodeId、CSV、TSV 和 Excel 粘贴</span>
             </div>
             <el-input
               v-model="rawText"
               type="textarea"
-              :rows="8"
-              placeholder="每行一个 NodeId，可用逗号补充类型与变量名：ns=2;s=Line1.Motor01.Speed,Double,电机转速"
+              :rows="9"
+              placeholder="每行一个 NodeId；或：ns=2;s=Line1.Motor01.Speed,Double,电机转速；也可粘贴含表头的表格"
             />
           </section>
         </el-tab-pane>
       </el-tabs>
 
-      <section>
+      <section class="opcua-import__defaults">
+        <div class="opcua-import__section-head">
+          <strong>批量默认值</strong>
+          <span>应用后会重新检查候选行</span>
+        </div>
+        <div class="opcua-import__default-grid">
+          <el-input-number v-model="defaults.samplingMs" size="small" :min="1" />
+          <el-select v-model="defaults.accessLevel" size="small">
+            <el-option label="Read" value="Read" />
+            <el-option label="Write" value="Write" />
+            <el-option label="ReadWrite" value="ReadWrite" />
+          </el-select>
+          <el-input-number v-model="defaults.deadband" size="small" :min="0" />
+          <el-input v-model="defaults.unit" size="small" clearable placeholder="单位" />
+          <el-button size="small" @click="applyDefaults">应用到候选行</el-button>
+        </div>
+      </section>
+
+      <section class="opcua-import__confirm-section">
         <div class="opcua-import__section-head">
           <strong>导入确认</strong>
-          <span>{{ rows.length }} 个候选变量</span>
+          <span>导入前可逐行调整关键字段</span>
         </div>
-        <el-table :data="rows" height="220" size="small">
-          <el-table-column label="变量名" min-width="150">
+        <el-table :data="displayRows" height="260" size="small" row-key="key">
+          <el-table-column label="状态" width="82">
+            <template #default="{ row }">
+              <el-tag size="small" :type="rowTagType(row.state)">
+                {{ rowStateText(row.state) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="变量名" min-width="140">
             <template #default="{ row }"><el-input v-model="row.name" size="small" /></template>
           </el-table-column>
-          <el-table-column prop="nodeId" label="NodeId" min-width="230" show-overflow-tooltip />
-          <el-table-column label="类型" width="120">
+          <el-table-column prop="code" label="Code" min-width="130" show-overflow-tooltip />
+          <el-table-column prop="nodeId" label="NodeId" min-width="220" show-overflow-tooltip />
+          <el-table-column label="类型" width="118">
             <template #default="{ row }"><el-input v-model="row.dataType" size="small" /></template>
           </el-table-column>
-          <el-table-column label="采样" width="110">
-            <template #default="{ row }"
-              ><el-input-number v-model="row.samplingMs" size="small" :min="1"
-            /></template>
+          <el-table-column label="采样" width="116">
+            <template #default="{ row }">
+              <el-input-number v-model="row.samplingMs" size="small" :min="1" />
+            </template>
           </el-table-column>
+          <el-table-column label="权限" width="118">
+            <template #default="{ row }">
+              <el-select v-model="row.accessLevel" size="small">
+                <el-option label="Read" value="Read" />
+                <el-option label="Write" value="Write" />
+                <el-option label="ReadWrite" value="ReadWrite" />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="死区" width="106">
+            <template #default="{ row }">
+              <el-input-number v-model="row.deadband" size="small" :min="0" />
+            </template>
+          </el-table-column>
+          <el-table-column label="单位" width="90">
+            <template #default="{ row }"><el-input v-model="row.unit" size="small" /></template>
+          </el-table-column>
+          <el-table-column prop="issue" label="问题" min-width="180" show-overflow-tooltip />
         </el-table>
       </section>
     </div>
     <template #footer>
       <el-button @click="requestClose">取消</el-button>
-      <el-button type="primary" :loading="loading" @click="submit">导入</el-button>
+      <el-button
+        type="primary"
+        :disabled="readyRows.length === 0"
+        :loading="loading"
+        @click="submit"
+      >
+        导入 {{ readyRows.length }} 个变量
+      </el-button>
     </template>
   </DcDialog>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, reactive, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import DcDialog from '@/components/shared/DcDialog.vue'
+import { downloadCsv, normalizeHeaderRow, parseDelimitedRows, parseTabularText } from '@/utils/tabular-file'
 import type { OpcuaBrowseNode } from './types'
+import IconTablerAlertTriangle from '~icons/tabler/alert-triangle'
+import IconTablerFolder from '~icons/tabler/folder'
 import IconTablerRefresh from '~icons/tabler/refresh'
+import IconTablerVariable from '~icons/tabler/variable'
+
+type OpcuaImportState = 'ready' | 'existing' | 'duplicate' | 'error'
+type OpcuaImportSource = 'browse' | 'manual'
+
+type OpcuaBrowseRow = OpcuaBrowseNode & {
+  path: string
+  depth: number
+  modeled: boolean
+}
+
+type OpcuaImportPreviewRow = {
+  key: string
+  source: OpcuaImportSource
+  rowNo: number
+  name: string
+  code: string
+  nodeId: string
+  browseName?: string | null
+  displayName?: string | null
+  dataType: string
+  samplingMs: number
+  accessLevel: string
+  deadband: number | null
+  unit: string | null
+  description: string | null
+  state: OpcuaImportState
+  issue: string
+}
 
 const props = defineProps<{
   modelValue: boolean
@@ -144,8 +259,23 @@ const rawText = ref('')
 const mode = ref<'browse' | 'manual'>('browse')
 const browseKeyword = ref('')
 const selectedBrowseIds = ref<string[]>([])
+const manualDraftRows = ref<OpcuaImportPreviewRow[]>([])
+const browseDraftRows = ref<OpcuaImportPreviewRow[]>([])
+const onlyIssues = ref(false)
+const defaults = reactive({
+  samplingMs: 1000,
+  accessLevel: 'Read',
+  deadband: null as number | null,
+  unit: '',
+})
+
 const isDirty = computed(
-  () => props.modelValue && (rawText.value.trim().length > 0 || selectedBrowseIds.value.length > 0),
+  () =>
+    props.modelValue &&
+    (rawText.value.trim().length > 0 ||
+      selectedBrowseIds.value.length > 0 ||
+      manualDraftRows.value.length > 0 ||
+      browseDraftRows.value.length > 0),
 )
 
 watch(
@@ -155,85 +285,283 @@ watch(
     rawText.value = ''
     browseKeyword.value = ''
     selectedBrowseIds.value = []
+    manualDraftRows.value = []
+    browseDraftRows.value = []
+    onlyIssues.value = false
+    defaults.samplingMs = 1000
+    defaults.accessLevel = 'Read'
+    defaults.deadband = null
+    defaults.unit = ''
     mode.value = props.connected ? 'browse' : 'manual'
   },
 )
 
+watch(rawText, () => {
+  manualDraftRows.value = buildManualRows(rawText.value)
+})
+
+watch(selectedBrowseIds, () => {
+  browseDraftRows.value = buildBrowseRows(selectedBrowseIds.value)
+})
+
 const browseDiagnostics = computed(() => props.browseDiagnostics || [])
-const browseNodeById = computed(
-  () => new Map((props.browseNodes || []).map((node) => [node.id, node])),
+const browseNodeById = computed(() => new Map((props.browseNodes || []).map((node) => [node.id, node])))
+const existingNodeIds = computed(
+  () =>
+    new Set(
+      (props.browseNodes || [])
+        .filter((node) => node.nodeType === 'variable' && node.modeled === true)
+        .map((node) => node.nodeId.trim())
+        .filter(Boolean),
+    ),
 )
-const browseRows = computed(() =>
-  (props.browseNodes || [])
-    .filter((node) => node.nodeType === 'variable')
-    .map((node) => ({
+const browseRows = computed<OpcuaBrowseRow[]>(() =>
+  (props.browseNodes || []).map((node) => {
+    const path = browsePathOf(node)
+    return {
       ...node,
-      path: browsePathOf(node),
+      path,
+      depth: Math.max(path.split('/').length - 1, 0),
       modeled: node.modeled === true,
-    })),
+    }
+  }),
 )
 const filteredBrowseRows = computed(() => {
   const text = browseKeyword.value.trim().toLowerCase()
-  if (!text) return browseRows.value
-  return browseRows.value.filter((row) =>
+  const rows = browseRows.value
+  if (!text) return rows
+  return rows.filter((row) =>
     [row.name, row.nodeId, row.dataType || '', row.path].some((value) =>
       String(value).toLowerCase().includes(text),
     ),
   )
 })
 const browseSummary = computed(() => {
-  const importable = browseRows.value.filter((row) => !row.modeled).length
-  return `${browseRows.value.length} 个变量节点 · ${importable} 个可导入`
+  const variables = browseRows.value.filter((row) => row.nodeType === 'variable')
+  const importable = variables.filter((row) => !row.modeled).length
+  return `${variables.length} 个变量节点 · ${importable} 个可导入`
 })
 
-const manualRows = computed(() =>
-  rawText.value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [nodeId, dataType = 'Double', name = ''] = line.split(',').map((part) => part.trim())
-      return {
-        name:
-          name ||
-          nodeId
-            .split(/[.;=:/]/)
-            .filter(Boolean)
-            .at(-1) ||
-          nodeId,
-        code: '',
-        nodeId,
-        dataType,
-        samplingMs: 1000,
-      }
-    }),
+const draftRows = computed(() => (mode.value === 'browse' ? browseDraftRows.value : manualDraftRows.value))
+const previewRows = computed(() => validateRows(draftRows.value))
+const displayRows = computed(() =>
+  onlyIssues.value ? previewRows.value.filter((row) => row.state !== 'ready') : previewRows.value,
+)
+const readyRows = computed(() => previewRows.value.filter((row) => row.state === 'ready'))
+const skippedRows = computed(() => previewRows.value.filter((row) => row.state === 'existing'))
+const issueRows = computed(() =>
+  previewRows.value.filter((row) => row.state === 'duplicate' || row.state === 'error'),
 )
 
-const browseImportRows = computed(() =>
-  selectedBrowseIds.value
-    .map((id) => browseRows.value.find((row) => row.id === id))
-    .filter((row): row is (typeof browseRows.value)[number] => Boolean(row) && !row.modeled)
-    .map((row) => ({
-      name: row.name,
-      code: '',
-      nodeId: row.nodeId,
-      browseName: row.name,
-      displayName: row.name,
-      dataType: row.dataType || 'Double',
-      samplingMs: 1000,
-    })),
-)
+function buildManualRows(value: string): OpcuaImportPreviewRow[] {
+  return parseManualSourceRows(value).map((row, index) => {
+    const nodeId = row.nodeId.trim()
+    const name = row.name.trim() || nameFromNodeId(nodeId) || `变量${index + 1}`
+    return createPreviewRow({
+      key: `manual-${index}-${nodeId || row.raw}`,
+      source: 'manual',
+      rowNo: index + 1,
+      name,
+      nodeId,
+      dataType: row.dataType.trim() || 'Double',
+      unit: row.unit.trim() || null,
+      samplingMs: toInteger(row.samplingMs, defaults.samplingMs),
+      accessLevel: normalizeAccessLevel(row.accessLevel || defaults.accessLevel),
+      deadband: toNullableNumber(row.deadband, defaults.deadband),
+      description: row.description.trim() || null,
+    })
+  })
+}
 
-const rows = computed(() => (mode.value === 'browse' ? browseImportRows.value : manualRows.value))
-
-const submit = () => {
-  if (rows.value.length === 0) {
-    ElMessage.warning(
-      mode.value === 'browse' ? '请选择可导入的 OPC UA 变量节点' : '请至少输入一个 NodeId',
+function buildBrowseRows(ids: string[]): OpcuaImportPreviewRow[] {
+  return ids
+    .map((id, index) => ({ node: browseRows.value.find((row) => row.id === id), index }))
+    .filter((item): item is { node: OpcuaBrowseRow; index: number } => Boolean(item.node))
+    .map(({ node, index }) =>
+      createPreviewRow({
+        key: `browse-${node.id}`,
+        source: 'browse',
+        rowNo: index + 1,
+        name: node.displayName || node.browseName || node.name || nameFromNodeId(node.nodeId),
+        nodeId: node.nodeId,
+        browseName: node.browseName || node.name,
+        displayName: node.displayName || node.name,
+        dataType: node.dataType || 'Double',
+        unit: defaults.unit || null,
+        samplingMs: defaults.samplingMs,
+        accessLevel: defaults.accessLevel,
+        deadband: defaults.deadband,
+        description: null,
+      }),
     )
+}
+
+function createPreviewRow(row: Partial<OpcuaImportPreviewRow> & { source: OpcuaImportSource; rowNo: number; key: string; nodeId: string }) {
+  return {
+    name: row.name || nameFromNodeId(row.nodeId),
+    code: row.code || '',
+    browseName: row.browseName || null,
+    displayName: row.displayName || null,
+    dataType: row.dataType || 'Double',
+    samplingMs: row.samplingMs || defaults.samplingMs,
+    accessLevel: normalizeAccessLevel(row.accessLevel || defaults.accessLevel),
+    deadband: row.deadband ?? null,
+    unit: row.unit || null,
+    description: row.description || null,
+    state: 'ready' as OpcuaImportState,
+    issue: '',
+    ...row,
+  }
+}
+
+function validateRows(rows: OpcuaImportPreviewRow[]) {
+  const nodeIdCounts = countBy(rows.map((row) => row.nodeId.trim()).filter(Boolean))
+  const usedCodes = new Set<string>()
+  return rows.map((row) => {
+    const next = row
+    const nodeId = next.nodeId.trim()
+    const issues = [
+      !nodeId ? 'NodeId 为空' : '',
+      !next.dataType.trim() ? '数据类型为空' : '',
+      !Number.isFinite(Number(next.samplingMs)) || Number(next.samplingMs) <= 0
+        ? '采样周期必须大于 0'
+        : '',
+    ].filter(Boolean)
+    next.code = allocateUniqueCode(normalizeCode(next.code || next.name || nameFromNodeId(nodeId)), usedCodes)
+    usedCodes.add(next.code)
+    if (issues.length > 0) {
+      next.state = 'error'
+      next.issue = issues.join('；')
+      return next
+    }
+    if (existingNodeIds.value.has(nodeId)) {
+      next.state = 'existing'
+      next.issue = 'NodeId 已建模，本次将跳过'
+      return next
+    }
+    if ((nodeIdCounts.get(nodeId) || 0) > 1) {
+      next.state = 'duplicate'
+      next.issue = '本批次 NodeId 重复'
+      return next
+    }
+    next.state = 'ready'
+    next.issue = ''
+    return next
+  })
+}
+
+function parseManualSourceRows(value: string) {
+  const text = value.trim()
+  if (!text) return []
+  const parsed = parseTabularText(text)
+  const headerMatched = parsed.some((row) =>
+    Object.keys(row).some((header) =>
+      Object.values(headerAliases).some((aliases) =>
+        aliases.map((alias) => alias.toLowerCase()).includes(header.trim().toLowerCase()),
+      ),
+    ),
+  )
+  if (headerMatched) {
+    return parsed.map((row) => normalizeManualRow(normalizeHeaderRow(row, headerAliases)))
+  }
+  return parseDelimitedRows(text)
+    .filter((row) => row.some((cell) => cell.trim() !== ''))
+    .map((row) => normalizeHeaderlessRow(row.map((cell) => cell.trim())))
+}
+
+const headerAliases = {
+  name: ['变量名', '名称', 'name', 'displayName'],
+  code: ['Code', '编码', 'code'],
+  nodeId: ['NodeId', '节点ID', 'nodeId'],
+  dataType: ['数据类型', '类型', 'dataType', 'type'],
+  unit: ['单位', 'unit'],
+  samplingMs: ['采样周期', '周期', 'samplingMs', 'interval'],
+  accessLevel: ['访问级别', '发布能力', 'accessLevel'],
+  deadband: ['死区', 'deadband'],
+  description: ['描述', '说明', 'description'],
+}
+
+function normalizeManualRow(row: Record<string, string>) {
+  return {
+    raw: Object.values(row).join(','),
+    name: row.name || '',
+    code: row.code || '',
+    nodeId: row.nodeId || '',
+    dataType: row.dataType || 'Double',
+    unit: row.unit || '',
+    samplingMs: row.samplingMs || '',
+    accessLevel: row.accessLevel || '',
+    deadband: row.deadband || '',
+    description: row.description || '',
+  }
+}
+
+function normalizeHeaderlessRow(cells: string[]) {
+  const nodeIdIndex = cells.findIndex((cell) => looksLikeNodeId(cell))
+  if (nodeIdIndex >= 0 && nodeIdIndex !== 0) {
+    return normalizeManualRow({
+      name: cells.slice(0, nodeIdIndex).join(' '),
+      nodeId: cells[nodeIdIndex] || '',
+      dataType: cells[nodeIdIndex + 1] || 'Double',
+    })
+  }
+  return normalizeManualRow({
+    nodeId: cells[0] || '',
+    dataType: cells[1] || 'Double',
+    name: cells[2] || '',
+    code: cells[3] || '',
+  })
+}
+
+function submit() {
+  if (readyRows.value.length === 0) {
+    ElMessage.warning('没有可导入的 OPC UA 变量')
     return
   }
-  emit('submit', rows.value)
+  const skipped = previewRows.value.length - readyRows.value.length
+  const runSubmit = () => {
+    emit(
+      'submit',
+      readyRows.value.map(({ state: _state, issue: _issue, key: _key, source: _source, rowNo: _rowNo, ...row }) => row),
+    )
+  }
+  if (skipped > 0) {
+    void ElMessageBox.confirm(
+      `本次将导入 ${readyRows.value.length} 个变量，跳过 ${skipped} 行问题数据。是否继续？`,
+      '确认导入',
+    ).then(runSubmit)
+    return
+  }
+  runSubmit()
+}
+
+function applyDefaults() {
+  const target = mode.value === 'browse' ? browseDraftRows.value : manualDraftRows.value
+  target.forEach((row) => {
+    row.samplingMs = defaults.samplingMs
+    row.accessLevel = defaults.accessLevel
+    row.deadband = defaults.deadband
+    row.unit = defaults.unit || null
+  })
+}
+
+function downloadIssueReport() {
+  downloadCsv(
+    'opcua-import-issues.csv',
+    ['行号', '来源', '状态', '变量名', 'Code', 'NodeId', '数据类型', '问题'],
+    previewRows.value
+      .filter((row) => row.state !== 'ready')
+      .map((row) => ({
+        行号: row.rowNo,
+        来源: row.source === 'browse' ? '浏览导入' : '批量NodeId',
+        状态: rowStateText(row.state),
+        变量名: row.name,
+        Code: row.code,
+        NodeId: row.nodeId,
+        数据类型: row.dataType,
+        问题: row.issue,
+      })),
+  )
 }
 
 function requestClose() {
@@ -248,8 +576,8 @@ function handleBrowseSelection(selection: Array<{ id: string }>) {
   selectedBrowseIds.value = selection.map((row) => row.id)
 }
 
-function isBrowseRowSelectable(row: { modeled?: boolean }) {
-  return row.modeled !== true
+function isBrowseRowSelectable(row: OpcuaBrowseRow) {
+  return row.nodeType === 'variable' && row.modeled !== true
 }
 
 function browsePathOf(node: OpcuaBrowseNode) {
@@ -266,6 +594,86 @@ function browsePathOf(node: OpcuaBrowseNode) {
   return segments.join('/')
 }
 
+function rowStateText(state: OpcuaImportState) {
+  if (state === 'existing') return '已存在'
+  if (state === 'duplicate') return '重复'
+  if (state === 'error') return '错误'
+  return '可导入'
+}
+
+function rowTagType(state: OpcuaImportState) {
+  if (state === 'ready') return 'success'
+  if (state === 'existing') return 'info'
+  return 'warning'
+}
+
+function browseStateText(row: OpcuaBrowseRow) {
+  if (row.nodeType === 'folder') return '目录'
+  return row.modeled ? '已建模' : '可导入'
+}
+
+function browseStateTagType(row: OpcuaBrowseRow) {
+  if (row.nodeType === 'folder') return 'info'
+  return row.modeled ? 'info' : 'success'
+}
+
+function looksLikeNodeId(value: string) {
+  return /(^|\b)ns=\d+;[isgb]=/i.test(value) || /^[isgb]=/i.test(value)
+}
+
+function nameFromNodeId(nodeId: string) {
+  return (
+    nodeId
+      .split(/[.;=:/]/)
+      .filter(Boolean)
+      .at(-1) || nodeId
+  )
+}
+
+function normalizeCode(value: string) {
+  return (
+    String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'node'
+  )
+}
+
+function allocateUniqueCode(base: string, used: Set<string>) {
+  if (!used.has(base)) return base
+  for (let index = 2; index < 10000; index += 1) {
+    const candidate = `${base}_${index}`
+    if (!used.has(candidate)) return candidate
+  }
+  return `${base}_${Date.now()}`
+}
+
+function countBy(values: string[]) {
+  const result = new Map<string, number>()
+  values.forEach((value) => result.set(value, (result.get(value) || 0) + 1))
+  return result
+}
+
+function normalizeAccessLevel(value: string) {
+  const text = String(value || '').trim().toLowerCase()
+  if (['write', '写'].includes(text)) return 'Write'
+  if (['readwrite', 'read_write', '读写'].includes(text)) return 'ReadWrite'
+  return 'Read'
+}
+
+function toInteger(value: string, fallback: number) {
+  if (value === '') return fallback
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback
+}
+
+function toNullableNumber(value: string, fallback: number | null) {
+  if (value === '') return fallback
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
 defineExpose({ closeSilently })
 </script>
 
@@ -278,16 +686,55 @@ defineExpose({ closeSilently })
   padding-right: 2px;
 }
 
-.opcua-import :deep(.el-tabs) {
-  min-height: 0;
+.opcua-import__summary {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklch, var(--dc-primary) 18%, var(--dc-border));
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-subtle);
+  display: flex;
+  align-items: center;
+  gap: 18px;
 }
 
-.opcua-import :deep(.el-tabs__content) {
-  min-height: 0;
+.opcua-import__summary div {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
 }
 
-.opcua-import :deep(.el-tab-pane) {
-  min-height: 0;
+.opcua-import__summary strong {
+  color: var(--dc-primary);
+  font-size: 18px;
+}
+
+.opcua-import__summary span {
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.opcua-import__summary em {
+  margin-left: auto;
+  color: var(--dc-text-muted);
+  font-style: normal;
+  font-size: 12px;
+}
+
+.opcua-import__tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.opcua-import__tools :deep(.el-button),
+.opcua-import__toolbar :deep(.el-button) {
+  gap: 5px;
+}
+
+.opcua-import__tools svg,
+.opcua-import__toolbar svg {
+  width: 14px;
+  height: 14px;
 }
 
 .opcua-import section {
@@ -295,13 +742,6 @@ defineExpose({ closeSilently })
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-sm);
   background: var(--dc-surface-subtle);
-}
-
-.opcua-import__browse-section,
-.opcua-import__manual-section,
-.opcua-import__confirm-section {
-  min-height: 0;
-  overflow: hidden;
 }
 
 .opcua-import__section-head {
@@ -329,15 +769,6 @@ defineExpose({ closeSilently })
   margin-bottom: 8px;
 }
 
-.opcua-import__toolbar :deep(.el-button) {
-  gap: 5px;
-}
-
-.opcua-import__toolbar svg {
-  width: 14px;
-  height: 14px;
-}
-
 .opcua-import__hint {
   margin-bottom: 8px;
   padding: 7px 9px;
@@ -360,22 +791,44 @@ defineExpose({ closeSilently })
   gap: 2px;
 }
 
-.opcua-import__node-name strong,
-.opcua-import__node-name span {
+.opcua-import__node-name strong {
   min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   overflow: hidden;
+  color: var(--dc-text);
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.opcua-import__node-name strong {
-  color: var(--dc-text);
-  font-size: 12px;
+.opcua-import__node-name strong svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  color: var(--dc-text-muted);
 }
 
 .opcua-import__node-name span {
+  min-width: 0;
+  overflow: hidden;
   color: var(--dc-text-muted);
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opcua-import__default-grid {
+  display: grid;
+  grid-template-columns: 130px 130px 130px minmax(100px, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.opcua-import__default-grid :deep(.el-select),
+.opcua-import__default-grid :deep(.el-input-number) {
+  width: 100%;
 }
 
 .opcua-import :deep(.el-table) {

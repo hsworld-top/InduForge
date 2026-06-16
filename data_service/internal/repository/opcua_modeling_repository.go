@@ -148,6 +148,18 @@ type UpdateOpcuaNodeLastValueParams struct {
 	UserID       string
 }
 
+// BatchCreateOpcuaNodesParams 描述事务化批量创建 OPC UA 变量的参数。
+type BatchCreateOpcuaNodesParams struct {
+	ProjectID    string
+	ConnectionID string
+	GroupID      *string
+	UserID       string
+	Nodes        []CreateOpcuaNodeParams
+}
+
+// BuildOpcuaDataPointParamsFunc 根据已插入变量构造数据点同步参数。
+type BuildOpcuaDataPointParamsFunc func(context.Context, OpcuaNodeRecord, string) (CreateDataPointParams, error)
+
 // OpcuaModelingRepository 封装 OPC UA 点位建模的参数化 SQL。
 type OpcuaModelingRepository struct {
 	pool *pgxpool.Pool
@@ -432,6 +444,34 @@ func opcuaNodeOrderSQL(sortBy, sortOrder string) string {
 	return "n.sort_order ASC, n.created_at ASC"
 }
 
+// ListNodeIdentityMap 返回当前连接下已占用的 NodeId 和 Code，用于批量导入前整体预检。
+func (r *OpcuaModelingRepository) ListNodeIdentityMap(ctx context.Context, projectID, connectionID string) (map[string]string, map[string]string, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, node_id, code
+		FROM data_opcua_nodes
+		WHERE project_id = $1 AND connection_id = $2
+	`, projectID, connectionID)
+	if err != nil {
+		return nil, nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 OPC UA 变量标识失败", err)
+	}
+	defer rows.Close()
+
+	nodeIDs := map[string]string{}
+	codes := map[string]string{}
+	for rows.Next() {
+		var id, nodeID, code string
+		if err := rows.Scan(&id, &nodeID, &code); err != nil {
+			return nil, nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 OPC UA 变量标识失败", err)
+		}
+		nodeIDs[nodeID] = id
+		codes[code] = id
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 OPC UA 变量标识失败", err)
+	}
+	return nodeIDs, codes, nil
+}
+
 // GetNode 按项目和变量 ID 读取 OPC UA 变量。
 func (r *OpcuaModelingRepository) GetNode(ctx context.Context, projectID, nodeID string) (*OpcuaNodeRecord, error) {
 	row := r.pool.QueryRow(ctx, `
@@ -457,6 +497,45 @@ func (r *OpcuaModelingRepository) GetNode(ctx context.Context, projectID, nodeID
 		return nil, err
 	}
 	return &record, nil
+}
+
+// BatchCreateNodesWithDataPoints 在同一事务内创建变量并同步数据点，避免批量导入半成功。
+func (r *OpcuaModelingRepository) BatchCreateNodesWithDataPoints(ctx context.Context, params BatchCreateOpcuaNodesParams, buildDataPoint BuildOpcuaDataPointParamsFunc) ([]OpcuaNodeRecord, error) {
+	if len(params.Nodes) == 0 {
+		return []OpcuaNodeRecord{}, nil
+	}
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 OPC UA 批量导入事务失败", err)
+	}
+	defer rollbackTxQuietly(ctx, tx)
+
+	createdIDs := make([]string, 0, len(params.Nodes))
+	for _, node := range params.Nodes {
+		record, err := createOpcuaNodeTx(ctx, tx, node)
+		if err != nil {
+			return nil, err
+		}
+		if buildDataPoint != nil {
+			dataPointParams, err := buildDataPoint(ctx, *record, params.UserID)
+			if err != nil {
+				return nil, err
+			}
+			if err := upsertDataPointBySourceTx(ctx, tx, dataPointParams); err != nil {
+				return nil, err
+			}
+		}
+		createdIDs = append(createdIDs, record.ID)
+	}
+
+	records, err := listOpcuaNodesByIDsTx(ctx, tx, params.ProjectID, createdIDs)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 OPC UA 批量导入事务失败", err)
+	}
+	return records, nil
 }
 
 // CreateNode 创建 OPC UA 变量。
@@ -565,6 +644,133 @@ func (r *OpcuaModelingRepository) UpdateNodeLastValue(ctx context.Context, param
 		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "OPC UA 变量不存在")
 	}
 	return nil
+}
+
+func createOpcuaNodeTx(ctx context.Context, tx pgx.Tx, params CreateOpcuaNodeParams) (*OpcuaNodeRecord, error) {
+	row := tx.QueryRow(ctx, `
+		INSERT INTO data_opcua_nodes (
+			project_id, connection_id, group_id, name, code, node_id, browse_name, display_name,
+			data_type, unit, sampling_ms, deadband, access_level, description, sort_order, created_by, updated_by
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16)
+		RETURNING id, project_id, connection_id, group_id, name, code, node_id, browse_name,
+		          display_name, data_type, unit, sampling_ms, deadband, access_level, description,
+		          sort_order, status, NULL::uuid, NULL::text, NULL::text,
+		          last_value, quality, last_updated_at, created_at, updated_at
+	`, params.ProjectID, params.ConnectionID, params.GroupID, params.Name, params.Code, params.NodeID, params.BrowseName, params.DisplayName, params.DataType, params.Unit, params.SamplingMS, params.Deadband, params.AccessLevel, params.Description, params.SortOrder, params.UserID)
+
+	record, err := scanOpcuaNodeRecord(row)
+	if err != nil {
+		return nil, translateOpcuaModelingWriteError(err)
+	}
+	return &record, nil
+}
+
+func upsertDataPointBySourceTx(ctx context.Context, tx pgx.Tx, params CreateDataPointParams) error {
+	if params.SourceID == nil || *params.SourceID == "" {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "sourceId 不能为空")
+	}
+	sourceConfigBytes, err := marshalJSONObject(params.SourceConfig)
+	if err != nil {
+		return err
+	}
+	tagsBytes, err := marshalJSONArray(params.Tags)
+	if err != nil {
+		return err
+	}
+	commandTag, err := tx.Exec(ctx, `
+		UPDATE data_points
+		SET path = $4,
+		    name = $5,
+		    description = $6,
+		    source_config = $7::jsonb,
+		    data_type = $8,
+		    unit = $9,
+		    precision_num = $10,
+		    default_value = $11,
+		    min_value = $12,
+		    max_value = $13,
+		    alarm_low = $14,
+		    alarm_high = $15,
+		    tags = $16::jsonb,
+		    refresh_mode = $17,
+		    refresh_interval_ms = $18,
+		    status = $19,
+		    display_order = COALESCE($21, display_order),
+		    updated_by = COALESCE($20, updated_by),
+		    updated_at = now()
+		WHERE project_id = $1
+		  AND source_type = $2
+		  AND source_id = $3
+	`, params.ProjectID, params.SourceType, *params.SourceID, params.Path, params.Name, params.Description, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, params.UserID, params.DisplayOrder)
+	if err != nil {
+		return translateDataPointWriteError(err)
+	}
+	if commandTag.RowsAffected() > 0 {
+		return nil
+	}
+
+	runtimePermissionsBytes, err := marshalDataPointRuntimePermissions(DefaultDataPointRuntimePermissions())
+	if err != nil {
+		return err
+	}
+	displayOrder := 0
+	if params.DisplayOrder != nil {
+		displayOrder = *params.DisplayOrder
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO data_points (
+			project_id, path, name, description, source_type, source_id, source_config, data_type,
+			unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
+			refresh_mode, refresh_interval_ms, status, display_order, created_by, updated_by
+		)
+		VALUES (
+			$1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14, $15,
+			$16::jsonb, $17::jsonb, $18, $19, $20, $21, $22, $22
+		)
+	`, params.ProjectID, params.Path, params.Name, params.Description, params.SourceType, params.SourceID, string(sourceConfigBytes), params.DataType, params.Unit, params.PrecisionNum, params.DefaultValue, params.MinValue, params.MaxValue, params.AlarmLow, params.AlarmHigh, string(tagsBytes), string(runtimePermissionsBytes), params.RefreshMode, params.RefreshIntervalMS, params.Status, displayOrder, params.UserID)
+	if err != nil {
+		return translateDataPointWriteError(err)
+	}
+	return nil
+}
+
+func listOpcuaNodesByIDsTx(ctx context.Context, tx pgx.Tx, projectID string, ids []string) ([]OpcuaNodeRecord, error) {
+	if len(ids) == 0 {
+		return []OpcuaNodeRecord{}, nil
+	}
+	rows, err := tx.Query(ctx, `
+		SELECT n.id, n.project_id, n.connection_id, n.group_id, n.name, n.code, n.node_id,
+		       n.browse_name, n.display_name, n.data_type, n.unit, n.sampling_ms, n.deadband,
+		       n.access_level, n.description, n.sort_order, n.status,
+		       dp.id, dp.path, dp.status,
+		       n.last_value, n.quality, n.last_updated_at,
+		       n.created_at, n.updated_at
+		FROM data_opcua_nodes n
+		LEFT JOIN data_points dp
+		  ON dp.project_id = n.project_id
+		 AND dp.source_type = 'opcua.node'
+		 AND dp.source_id = n.id
+		WHERE n.project_id = $1 AND n.id = ANY($2::uuid[])
+		ORDER BY n.sort_order ASC, n.created_at ASC
+	`, projectID, ids)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 OPC UA 批量导入结果失败", err)
+	}
+	defer rows.Close()
+
+	result := make([]OpcuaNodeRecord, 0, len(ids))
+	for rows.Next() {
+		record, scanErr := scanOpcuaNodeRecord(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		result = append(result, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 OPC UA 批量导入结果失败", err)
+	}
+	return result, nil
 }
 
 func scanOpcuaNodeGroupRecord(row pgx.Row) (OpcuaNodeGroupRecord, error) {
