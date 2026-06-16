@@ -39,7 +39,6 @@
       <OpcuaGroupTree
         :groups="groups"
         :selected-group-id="selectedGroupId"
-        :total="nodePagination.total"
         @select="selectGroup"
         @create="openCreateGroup"
         @create-child="openCreateChildGroup"

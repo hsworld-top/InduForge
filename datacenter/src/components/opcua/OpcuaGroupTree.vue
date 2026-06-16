@@ -23,7 +23,6 @@
       >
         <IconTablerStack2 class="opcua-groups__root-icon" />
         <span class="opcua-groups__root-name">全部变量</span>
-        <span class="opcua-groups__root-count">{{ total || 0 }}</span>
       </button>
 
       <template v-if="filteredGroups.length > 0">
@@ -91,7 +90,6 @@ type OpcuaGroupTreeNode = OpcuaNodeGroup & {
 const props = defineProps<{
   groups: OpcuaNodeGroup[]
   selectedGroupId: string
-  total?: number
 }>()
 
 const emit = defineEmits<{
@@ -234,7 +232,7 @@ function runMenuAction(action: 'create-child' | 'edit' | 'delete') {
   width: 100%;
   min-height: 32px;
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+  grid-template-columns: 18px minmax(0, 1fr);
   align-items: center;
   gap: 6px;
   padding: 0 6px;
@@ -275,16 +273,6 @@ function runMenuAction(action: 'create-child' | 'edit' | 'delete') {
 
 .opcua-groups__root.is-active .opcua-groups__root-name {
   color: var(--dc-primary);
-}
-
-.opcua-groups__root-count {
-  min-width: 20px;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: var(--dc-surface-muted);
-  color: var(--dc-text-muted);
-  font-size: 11px;
-  text-align: center;
 }
 
 .opcua-groups__empty {
