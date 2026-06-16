@@ -18,7 +18,6 @@ import (
 )
 
 const (
-	defaultOpcuaBrowseMaxDepth        = 8
 	defaultOpcuaBrowseMaxNodes        = 2000
 	defaultOpcuaBrowseConnectTimeout  = 5 * time.Second
 	defaultOpcuaBrowseRequestTimeout  = 8 * time.Second
@@ -29,7 +28,7 @@ const (
 
 // ProtocolDevOpcuaBrowser 表示开发态 OPC UA 地址空间浏览适配器。
 type ProtocolDevOpcuaBrowser interface {
-	Browse(ctx context.Context, session ProtocolDevSession) (*ProtocolDevOpcuaBrowseResult, error)
+	Browse(ctx context.Context, session ProtocolDevSession, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error)
 }
 
 // ProtocolDevOpcuaRealBrowser 连接真实 OPC UA Server 并浏览地址空间。
@@ -50,7 +49,6 @@ type opcuaBrowseOptions struct {
 	CertificatePEM  string
 	PrivateKeyPEM   string
 	RootNodeID      string
-	MaxDepth        int
 	MaxNodes        int
 	ConnectTimeout  time.Duration
 	RequestTimeout  time.Duration
@@ -62,12 +60,11 @@ type opcuaBrowseState struct {
 	result       ProtocolDevOpcuaBrowseResult
 	visited      map[string]bool
 	limitHit     bool
-	depthHit     bool
 	dataTypeWarn bool
 }
 
-// Browse 返回真实 OPC UA 地址空间节点。失败时直接返回错误，避免前端误以为看到的是现场地址空间。
-func (b *ProtocolDevOpcuaRealBrowser) Browse(ctx context.Context, session ProtocolDevSession) (*ProtocolDevOpcuaBrowseResult, error) {
+// Browse 返回指定父节点的一层真实 OPC UA 地址空间子节点。失败时直接返回错误，避免前端误以为看到的是现场地址空间。
+func (b *ProtocolDevOpcuaRealBrowser) Browse(ctx context.Context, session ProtocolDevSession, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error) {
 	if b == nil {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "OPC UA 真实浏览适配器未初始化")
 	}
@@ -91,22 +88,27 @@ func (b *ProtocolDevOpcuaRealBrowser) Browse(ctx context.Context, session Protoc
 	}
 	defer client.Close(context.Background())
 
-	rootID, err := ua.ParseNodeID(options.RootNodeID)
+	rootIDText := strings.TrimSpace(parentNodeID)
+	if rootIDText == "" {
+		rootIDText = options.RootNodeID
+	}
+	rootID, err := ua.ParseNodeID(rootIDText)
 	if err != nil {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 浏览根节点无效: %v", err))
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 浏览父节点无效: %v", err))
 	}
 	state := &opcuaBrowseState{
 		result:  ProtocolDevOpcuaBrowseResult{Nodes: []ProtocolDevBrowseNode{}, Diagnostics: []string{}},
 		visited: map[string]bool{},
 	}
-	if err := b.browseNode(browseCtx, client.Node(rootID), nil, 0, options, state); err != nil {
+	parentID := ""
+	if strings.TrimSpace(parentNodeID) != "" {
+		parentID = opcuaBrowseNodeID(rootID.String())
+	}
+	if err := b.browseChildren(browseCtx, client.Node(rootID), parentID, options, state); err != nil {
 		return nil, err
 	}
 	if state.limitHit {
-		state.result.Diagnostics = append(state.result.Diagnostics, fmt.Sprintf("OPC UA 地址空间节点数超过限制，已截断到 %d 个节点。", options.MaxNodes))
-	}
-	if state.depthHit {
-		state.result.Diagnostics = append(state.result.Diagnostics, fmt.Sprintf("OPC UA 地址空间层级超过限制，已截断到 %d 层。", options.MaxDepth))
+		state.result.Diagnostics = append(state.result.Diagnostics, fmt.Sprintf("OPC UA 当前节点子节点数超过限制，已截断到 %d 个节点。", options.MaxNodes))
 	}
 	if state.dataTypeWarn {
 		state.result.Diagnostics = append(state.result.Diagnostics, "部分变量 DataType 属性读取失败，已保留节点并留空数据类型。")
@@ -114,34 +116,54 @@ func (b *ProtocolDevOpcuaRealBrowser) Browse(ctx context.Context, session Protoc
 	return &state.result, nil
 }
 
-func (b *ProtocolDevOpcuaRealBrowser) browseNode(ctx context.Context, node *opcua.Node, parentID *string, depth int, options opcuaBrowseOptions, state *opcuaBrowseState) error {
-	if len(state.result.Nodes) >= options.MaxNodes {
-		state.limitHit = true
+func (b *ProtocolDevOpcuaRealBrowser) browseChildren(ctx context.Context, parent *opcua.Node, parentID string, options opcuaBrowseOptions, state *opcuaBrowseState) error {
+	if parent == nil || parent.ID == nil {
 		return nil
 	}
-	if depth > options.MaxDepth {
-		state.depthHit = true
-		return nil
+	parentIDPtr := stringPtrIfNotEmpty(parentID)
+	// OPC UA 常见层级关系分散在 Organizes/HasComponent/HasProperty 中，逐类浏览可覆盖多数设备建模方式。
+	for _, refType := range []uint32{id.Organizes, id.HasComponent, id.HasProperty} {
+		children, err := parent.ReferencedNodes(ctx, refType, ua.BrowseDirectionForward, ua.NodeClassObject|ua.NodeClassVariable, true)
+		if err != nil {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 浏览子节点失败 nodeId=%s: %v", parent.ID.String(), err))
+		}
+		for _, child := range children {
+			if len(state.result.Nodes) >= options.MaxNodes {
+				state.limitHit = true
+				return nil
+			}
+			if child == nil || child.ID == nil {
+				continue
+			}
+			nodeID := child.ID.String()
+			if state.visited[nodeID] {
+				continue
+			}
+			state.visited[nodeID] = true
+			node, err := b.projectBrowseNode(ctx, child, parentIDPtr, state)
+			if err != nil {
+				return err
+			}
+			if node != nil {
+				state.result.Nodes = append(state.result.Nodes, *node)
+			}
+		}
 	}
-	if node == nil || node.ID == nil {
-		return nil
-	}
-	nodeID := node.ID.String()
-	if state.visited[nodeID] {
-		return nil
-	}
-	state.visited[nodeID] = true
+	return nil
+}
 
+func (b *ProtocolDevOpcuaRealBrowser) projectBrowseNode(ctx context.Context, node *opcua.Node, parentID *string, state *opcuaBrowseState) (*ProtocolDevBrowseNode, error) {
+	nodeID := node.ID.String()
 	attrs, err := node.Attributes(ctx, ua.AttributeIDNodeClass, ua.AttributeIDBrowseName, ua.AttributeIDDisplayName, ua.AttributeIDDataType)
 	if err != nil {
-		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 浏览节点属性失败 nodeId=%s: %v", nodeID, err))
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 浏览节点属性失败 nodeId=%s: %v", nodeID, err))
 	}
 	nodeClass, err := opcuaNodeClassFromAttributes(attrs)
 	if err != nil {
-		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 读取节点类型失败 nodeId=%s: %v", nodeID, err))
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 读取节点类型失败 nodeId=%s: %v", nodeID, err))
 	}
 	if nodeClass != ua.NodeClassObject && nodeClass != ua.NodeClassVariable {
-		return nil
+		return nil, nil
 	}
 
 	browseName := opcuaBrowseNameFromAttributes(attrs)
@@ -156,43 +178,24 @@ func (b *ProtocolDevOpcuaRealBrowser) browseNode(ctx context.Context, node *opcu
 		}
 	}
 
-	currentID := "opcua-" + nodeID
 	nodeType := "folder"
+	hasChildren := true
 	if nodeClass == ua.NodeClassVariable {
 		nodeType = "variable"
+		hasChildren = false
 	}
-	state.result.Nodes = append(state.result.Nodes, ProtocolDevBrowseNode{
-		ID:          currentID,
+	return &ProtocolDevBrowseNode{
+		ID:          opcuaBrowseNodeID(nodeID),
 		ParentID:    parentID,
 		Name:        name,
 		NodeID:      nodeID,
 		NodeType:    nodeType,
 		DataType:    dataType,
 		Modeled:     false,
+		HasChildren: hasChildren,
 		BrowseName:  browseName,
 		DisplayName: displayName,
-	})
-	if len(state.result.Nodes) >= options.MaxNodes {
-		state.limitHit = true
-		return nil
-	}
-
-	// OPC UA 常见层级关系分散在 Organizes/HasComponent/HasProperty 中，逐类浏览可覆盖多数设备建模方式。
-	for _, refType := range []uint32{id.Organizes, id.HasComponent, id.HasProperty} {
-		children, err := node.ReferencedNodes(ctx, refType, ua.BrowseDirectionForward, ua.NodeClassObject|ua.NodeClassVariable, true)
-		if err != nil {
-			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 浏览子节点失败 nodeId=%s: %v", nodeID, err))
-		}
-		for _, child := range children {
-			if err := b.browseNode(ctx, child, &currentID, depth+1, options, state); err != nil {
-				return err
-			}
-			if state.limitHit {
-				return nil
-			}
-		}
-	}
-	return nil
+	}, nil
 }
 
 func parseOpcuaBrowseOptions(config map[string]any) (opcuaBrowseOptions, error) {
@@ -219,13 +222,24 @@ func parseOpcuaBrowseOptions(config map[string]any) (opcuaBrowseOptions, error) 
 		CertificatePEM:  firstNonEmpty(textFromMap(sslConfig, "cert"), textFromMap(sslConfig, "certificate")),
 		PrivateKeyPEM:   firstNonEmpty(textFromMap(sslConfig, "key"), textFromMap(sslConfig, "privateKey")),
 		RootNodeID:      firstNonEmpty(textFromMap(optionsMap, "browseRootNodeId"), defaultOpcuaBrowseRootNodeID),
-		MaxDepth:        positiveIntFromMap(optionsMap, "browseMaxDepth", defaultOpcuaBrowseMaxDepth),
 		MaxNodes:        positiveIntFromMap(optionsMap, "browseMaxNodes", defaultOpcuaBrowseMaxNodes),
 		ConnectTimeout:  durationFromMS(optionsMap, "connectTimeoutMs", defaultOpcuaBrowseConnectTimeout),
 		RequestTimeout:  durationFromMS(optionsMap, "browseTimeoutMs", defaultOpcuaBrowseRequestTimeout),
 		SessionTimeout:  durationFromMS(optionsMap, "sessionTimeoutMs", defaultOpcuaBrowseSessionTimeout),
 		ApplicationName: firstNonEmpty(textFromMap(optionsMap, "applicationName"), defaultOpcuaBrowseApplicationName),
 	}, nil
+}
+
+func opcuaBrowseNodeID(nodeID string) string {
+	return "opcua-" + nodeID
+}
+
+func stringPtrIfNotEmpty(value string) *string {
+	text := strings.TrimSpace(value)
+	if text == "" {
+		return nil
+	}
+	return &text
 }
 
 func (o opcuaBrowseOptions) clientOptions(ctx context.Context) ([]opcua.Option, error) {

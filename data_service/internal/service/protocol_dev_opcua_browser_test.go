@@ -19,7 +19,6 @@ func TestParseOpcuaBrowseOptions(t *testing.T) {
 		"password":       "secret",
 		"options": map[string]any{
 			"browseRootNodeId": "ns=2;s=Root",
-			"browseMaxDepth":   float64(4),
 			"browseMaxNodes":   "120",
 			"connectTimeoutMs": 2500,
 			"browseTimeoutMs":  float64(3500),
@@ -38,7 +37,7 @@ func TestParseOpcuaBrowseOptions(t *testing.T) {
 	if options.AuthType != "username_password" || options.Username != "tester" || options.Password != "secret" {
 		t.Fatalf("unexpected auth options: %#v", options)
 	}
-	if options.RootNodeID != "ns=2;s=Root" || options.MaxDepth != 4 || options.MaxNodes != 120 {
+	if options.RootNodeID != "ns=2;s=Root" || options.MaxNodes != 120 {
 		t.Fatalf("unexpected browse limits: %#v", options)
 	}
 	if options.ConnectTimeout != 2500*time.Millisecond || options.RequestTimeout != 3500*time.Millisecond {

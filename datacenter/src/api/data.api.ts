@@ -728,10 +728,11 @@ export const closeOpcuaDevSession = (projectId, connectionId, sessionId) => {
   })
 }
 
-export const browseOpcuaDevSession = (projectId, connectionId, sessionId) => {
+export const browseOpcuaDevSession = (projectId, connectionId, sessionId, params = {}) => {
   return request({
     url: `/data/projects/${projectId}/opcua/${connectionId}/sessions/${sessionId}/browse`,
     method: 'get',
+    params,
   })
 }
 

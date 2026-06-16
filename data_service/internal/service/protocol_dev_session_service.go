@@ -103,6 +103,7 @@ type ProtocolDevBrowseNode struct {
 	NodeType    string  `json:"nodeType"`
 	DataType    string  `json:"dataType,omitempty"`
 	Modeled     bool    `json:"modeled"`
+	HasChildren bool    `json:"hasChildren"`
 	BrowseName  string  `json:"browseName,omitempty"`
 	DisplayName string  `json:"displayName,omitempty"`
 }
@@ -380,8 +381,8 @@ func (s *ProtocolDevSessionService) CloseSession(ctx context.Context, projectID,
 	return &session, nil
 }
 
-// BrowseOpcua 基于当前会话返回真实 OPC UA 地址空间浏览树。
-func (s *ProtocolDevSessionService) BrowseOpcua(ctx context.Context, projectID, connectionID, sessionID, userID string) (*ProtocolDevOpcuaBrowseResult, error) {
+// BrowseOpcua 基于当前会话返回真实 OPC UA 地址空间中指定父节点的直接子节点。
+func (s *ProtocolDevSessionService) BrowseOpcua(ctx context.Context, projectID, connectionID, sessionID, userID, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error) {
 	session, err := s.requireSession(projectID, connectionID, sessionID, userID, "opcua")
 	if err != nil {
 		return nil, err
@@ -403,7 +404,7 @@ func (s *ProtocolDevSessionService) BrowseOpcua(ctx context.Context, projectID, 
 			modeledNodeIDs[text] = true
 		}
 	}
-	result, err := s.opcuaBrowser.Browse(ctx, session)
+	result, err := s.opcuaBrowser.Browse(ctx, session, parentNodeID)
 	if err != nil {
 		return nil, err
 	}

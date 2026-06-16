@@ -707,12 +707,9 @@ const loadExportNodes = async () => {
 
 const openImportDialog = async () => {
   importVisible.value = true
-  if (session.connected.value && browseNodes.value.length === 0) {
-    await loadBrowseNodes()
-  }
 }
 
-const loadBrowseNodes = async () => {
+const loadBrowseNodes = async (nodeId?: string) => {
   if (!session.connected.value || !session.sessionId.value) {
     ElMessage.warning('请先连接 OPC UA 开发态会话')
     return
@@ -723,15 +720,34 @@ const loadBrowseNodes = async () => {
       props.projectId,
       props.connection.id,
       session.sessionId.value,
+      { nodeId: nodeId || undefined },
     )
     const data = unwrapData(response)
-    browseNodes.value = data.nodes || []
+    mergeBrowseNodes(data.nodes || [], nodeId)
     browseDiagnostics.value = data.diagnostics || []
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '浏览 OPC UA 节点失败'))
   } finally {
     browsing.value = false
   }
+}
+
+const mergeBrowseNodes = (incoming: OpcuaBrowseNode[], parentNodeId?: string) => {
+  const parent = parentNodeId
+    ? browseNodes.value.find((node) => node.nodeId === parentNodeId)
+    : null
+  const parentId = parent?.id || null
+  const next = parentNodeId
+    ? browseNodes.value.filter((node) => node.parentId !== parentId)
+    : []
+  const byId = new Map(next.map((node) => [node.id, node]))
+  incoming.forEach((node) => {
+    byId.set(node.id, {
+      ...node,
+      parentId: node.parentId ?? parentId,
+    })
+  })
+  browseNodes.value = Array.from(byId.values())
 }
 
 const selectGroup = async (groupId: string) => {

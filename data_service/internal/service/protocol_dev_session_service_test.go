@@ -24,9 +24,10 @@ type fakeProtocolDevOpcuaReader struct {
 }
 
 type fakeProtocolDevOpcuaBrowser struct {
-	result  *ProtocolDevOpcuaBrowseResult
-	session ProtocolDevSession
-	err     error
+	result       *ProtocolDevOpcuaBrowseResult
+	session      ProtocolDevSession
+	parentNodeID string
+	err          error
 }
 
 type fakeProtocolDevModbusReader struct {
@@ -74,8 +75,9 @@ func (r *fakeProtocolDevOpcuaReader) UpdateNodeLastValue(_ context.Context, _, _
 	return nil
 }
 
-func (b *fakeProtocolDevOpcuaBrowser) Browse(_ context.Context, session ProtocolDevSession) (*ProtocolDevOpcuaBrowseResult, error) {
+func (b *fakeProtocolDevOpcuaBrowser) Browse(_ context.Context, session ProtocolDevSession, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error) {
 	b.session = session
+	b.parentNodeID = parentNodeID
 	if b.err != nil {
 		return nil, b.err
 	}
@@ -188,12 +190,15 @@ func TestProtocolDevSessionService_BrowseAndReadOpcuaNodes(t *testing.T) {
 		t.Fatalf("create session failed: %v", err)
 	}
 
-	browse, err := service.BrowseOpcua(context.Background(), "project-1", "conn-1", session.SessionID, "user-1")
+	browse, err := service.BrowseOpcua(context.Background(), "project-1", "conn-1", session.SessionID, "user-1", "ns=2;s=Furnace01")
 	if err != nil {
 		t.Fatalf("browse failed: %v", err)
 	}
 	if browser.session.SessionID != session.SessionID {
 		t.Fatalf("browser did not receive session: %#v", browser.session)
+	}
+	if browser.parentNodeID != "ns=2;s=Furnace01" {
+		t.Fatalf("browser did not receive parent node id: %q", browser.parentNodeID)
 	}
 	if len(browse.Nodes) != 2 || browse.Nodes[1].NodeID != "ns=2;s=Furnace01.Temp" || !browse.Nodes[1].Modeled || browse.Nodes[0].Modeled {
 		t.Fatalf("unexpected browse result: %#v", browse)

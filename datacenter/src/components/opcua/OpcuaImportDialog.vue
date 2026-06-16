@@ -3,9 +3,9 @@
     ref="dialogRef"
     v-model="visible"
     title="从 OPC UA 导入变量"
-    width="1040px"
+    width="min(1280px, calc(100vw - 64px))"
     class="opcua-import-dialog"
-    body-max-height="calc(100vh - 180px)"
+    body-max-height="calc(100vh - 132px)"
     :dirty="isDirty"
     :close-disabled="loading"
   >
@@ -50,13 +50,13 @@
                 v-model="browseKeyword"
                 size="small"
                 clearable
-                placeholder="搜索 NodeId / 节点名称 / 路径 / 类型"
+                placeholder="搜索已加载节点的 NodeId / 节点名称 / 类型"
               />
               <el-button
                 size="small"
                 :loading="browseLoading"
                 :disabled="!connected"
-                @click="$emit('browse')"
+                @click="refreshBrowseTree"
               >
                 <IconTablerRefresh />
                 刷新浏览
@@ -68,36 +68,37 @@
             <div v-else-if="browseDiagnostics.length > 0" class="opcua-import__hint">
               {{ browseDiagnostics[0] }}
             </div>
-            <el-table
-              :data="filteredBrowseRows"
-              height="270"
-              size="small"
-              row-key="id"
-              @selection-change="handleBrowseSelection"
-            >
-              <el-table-column type="selection" width="42" :selectable="isBrowseRowSelectable" />
-              <el-table-column label="节点" min-width="220" show-overflow-tooltip>
-                <template #default="{ row }">
-                  <div class="opcua-import__node-name" :style="{ paddingLeft: `${row.depth * 14}px` }">
-                    <strong>
-                      <IconTablerFolder v-if="row.nodeType === 'folder'" />
+            <div class="opcua-import__browse-tree">
+              <el-tree
+                :key="treeVersion"
+                ref="treeRef"
+                lazy
+                show-checkbox
+                check-strictly
+                node-key="id"
+                :load="loadBrowseTreeNode"
+                :props="browseTreeProps"
+                :filter-node-method="filterBrowseTreeNode"
+                @check="handleBrowseCheck"
+              >
+                <template #default="{ data }">
+                  <div class="opcua-import__tree-node">
+                    <span class="opcua-import__tree-title">
+                      <IconTablerFolder v-if="data.nodeType === 'folder'" />
                       <IconTablerVariable v-else />
-                      {{ row.name }}
-                    </strong>
-                    <span>{{ row.path }}</span>
+                      <strong>{{ data.name }}</strong>
+                      <el-tag size="small" :type="browseStateTagType(data)">
+                        {{ browseStateText(data) }}
+                      </el-tag>
+                    </span>
+                    <span class="opcua-import__tree-meta">
+                      <span>{{ data.nodeId }}</span>
+                      <em v-if="data.dataType">{{ data.dataType }}</em>
+                    </span>
                   </div>
                 </template>
-              </el-table-column>
-              <el-table-column prop="nodeId" label="NodeId" min-width="250" show-overflow-tooltip />
-              <el-table-column prop="dataType" label="类型" width="110" />
-              <el-table-column label="状态" width="104">
-                <template #default="{ row }">
-                  <el-tag size="small" :type="browseStateTagType(row)">
-                    {{ browseStateText(row) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-            </el-table>
+              </el-tree>
+            </div>
           </section>
         </el-tab-pane>
         <el-tab-pane label="批量 NodeId" name="manual">
@@ -196,8 +197,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import type { TreeInstance } from 'element-plus'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import { downloadCsv, normalizeHeaderRow, parseDelimitedRows, parseTabularText } from '@/utils/tabular-file'
 import type { OpcuaBrowseNode } from './types'
@@ -210,8 +212,6 @@ type OpcuaImportState = 'ready' | 'existing' | 'duplicate' | 'error'
 type OpcuaImportSource = 'browse' | 'manual'
 
 type OpcuaBrowseRow = OpcuaBrowseNode & {
-  path: string
-  depth: number
   modeled: boolean
 }
 
@@ -246,7 +246,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: 'update:modelValue', value: boolean): void
   (event: 'submit', rows: Array<Record<string, unknown>>): void
-  (event: 'browse'): void
+  (event: 'browse', nodeId?: string): void
 }>()
 
 const visible = computed({
@@ -261,6 +261,9 @@ const browseKeyword = ref('')
 const selectedBrowseIds = ref<string[]>([])
 const manualDraftRows = ref<OpcuaImportPreviewRow[]>([])
 const browseDraftRows = ref<OpcuaImportPreviewRow[]>([])
+const treeRef = ref<TreeInstance | null>(null)
+const treeVersion = ref(0)
+const pendingBrowseResolvers = new Map<string, (nodes: OpcuaBrowseRow[]) => void>()
 const onlyIssues = ref(false)
 const defaults = reactive({
   samplingMs: 1000,
@@ -304,8 +307,19 @@ watch(selectedBrowseIds, () => {
   browseDraftRows.value = buildBrowseRows(selectedBrowseIds.value)
 })
 
+watch(browseKeyword, (keyword) => {
+  treeRef.value?.filter(keyword)
+})
+
+watch(
+  () => props.browseNodes,
+  () => {
+    resolvePendingBrowseNodes()
+  },
+  { deep: true },
+)
+
 const browseDiagnostics = computed(() => props.browseDiagnostics || [])
-const browseNodeById = computed(() => new Map((props.browseNodes || []).map((node) => [node.id, node])))
 const existingNodeIds = computed(
   () =>
     new Set(
@@ -316,31 +330,20 @@ const existingNodeIds = computed(
     ),
 )
 const browseRows = computed<OpcuaBrowseRow[]>(() =>
-  (props.browseNodes || []).map((node) => {
-    const path = browsePathOf(node)
-    return {
-      ...node,
-      path,
-      depth: Math.max(path.split('/').length - 1, 0),
-      modeled: node.modeled === true,
-    }
-  }),
+  (props.browseNodes || []).map((node) => ({ ...node, modeled: node.modeled === true })),
 )
-const filteredBrowseRows = computed(() => {
-  const text = browseKeyword.value.trim().toLowerCase()
-  const rows = browseRows.value
-  if (!text) return rows
-  return rows.filter((row) =>
-    [row.name, row.nodeId, row.dataType || '', row.path].some((value) =>
-      String(value).toLowerCase().includes(text),
-    ),
-  )
-})
+const browseRowsById = computed(() => new Map(browseRows.value.map((node) => [node.id, node])))
 const browseSummary = computed(() => {
   const variables = browseRows.value.filter((row) => row.nodeType === 'variable')
   const importable = variables.filter((row) => !row.modeled).length
-  return `${variables.length} 个变量节点 · ${importable} 个可导入`
+  return `${browseRows.value.length} 个已加载节点 · ${variables.length} 个变量 · ${importable} 个可导入`
 })
+const browseTreeProps = {
+  label: 'name',
+  children: 'children',
+  isLeaf: (data: OpcuaBrowseRow) => data.nodeType === 'variable' || data.hasChildren === false,
+  disabled: (data: OpcuaBrowseRow) => !isBrowseRowSelectable(data),
+}
 
 const draftRows = computed(() => (mode.value === 'browse' ? browseDraftRows.value : manualDraftRows.value))
 const previewRows = computed(() => validateRows(draftRows.value))
@@ -375,7 +378,7 @@ function buildManualRows(value: string): OpcuaImportPreviewRow[] {
 
 function buildBrowseRows(ids: string[]): OpcuaImportPreviewRow[] {
   return ids
-    .map((id, index) => ({ node: browseRows.value.find((row) => row.id === id), index }))
+    .map((id, index) => ({ node: browseRowsById.value.get(id), index }))
     .filter((item): item is { node: OpcuaBrowseRow; index: number } => Boolean(item.node))
     .map(({ node, index }) =>
       createPreviewRow({
@@ -572,26 +575,71 @@ function closeSilently() {
   dialogRef.value?.closeSilently()
 }
 
-function handleBrowseSelection(selection: Array<{ id: string }>) {
-  selectedBrowseIds.value = selection.map((row) => row.id)
+function refreshBrowseTree() {
+  selectedBrowseIds.value = []
+  browseDraftRows.value = []
+  pendingBrowseResolvers.clear()
+  treeVersion.value += 1
+  emit('browse')
+}
+
+function handleBrowseCheck(_: OpcuaBrowseRow, checked: { checkedKeys: Array<string | number> }) {
+  const ids = checked.checkedKeys.map(String)
+  selectedBrowseIds.value = ids.filter((id) => {
+    const row = browseRowsById.value.get(id)
+    return row && isBrowseRowSelectable(row)
+  })
+  nextTick(() => treeRef.value?.setCheckedKeys(selectedBrowseIds.value))
 }
 
 function isBrowseRowSelectable(row: OpcuaBrowseRow) {
   return row.nodeType === 'variable' && row.modeled !== true
 }
 
-function browsePathOf(node: OpcuaBrowseNode) {
-  const segments: string[] = [node.name]
-  const visited = new Set<string>([node.id])
-  let parentId = node.parentId || ''
-  while (parentId && !visited.has(parentId)) {
-    visited.add(parentId)
-    const parent = browseNodeById.value.get(parentId)
-    if (!parent) break
-    segments.unshift(parent.name)
-    parentId = parent.parentId || ''
+function loadBrowseTreeNode(node: { level: number; data?: OpcuaBrowseRow }, resolve: (nodes: OpcuaBrowseRow[]) => void) {
+  if (!props.connected) {
+    resolve([])
+    return
   }
-  return segments.join('/')
+  const parentNodeId = node.level === 0 ? '' : node.data?.nodeId || ''
+  const key = browsePendingKey(parentNodeId)
+  pendingBrowseResolvers.set(key, resolve)
+  emit('browse', parentNodeId || undefined)
+  window.setTimeout(() => {
+    if (!pendingBrowseResolvers.has(key)) return
+    pendingBrowseResolvers.delete(key)
+    resolve(childrenOf(parentNodeId))
+  }, 12000)
+}
+
+function resolvePendingBrowseNodes() {
+  pendingBrowseResolvers.forEach((resolve, key) => {
+    const parentNodeId = key === '__root__' ? '' : key
+    resolve(childrenOf(parentNodeId))
+    pendingBrowseResolvers.delete(key)
+  })
+  nextTick(() => treeRef.value?.setCheckedKeys(selectedBrowseIds.value))
+}
+
+function childrenOf(parentNodeId: string) {
+  if (!parentNodeId) {
+    return browseRows.value.filter((row) => !row.parentId)
+  }
+  const parent = browseRows.value.find((row) => row.nodeId === parentNodeId)
+  if (!parent) return []
+  return browseRows.value.filter((row) => row.parentId === parent.id)
+}
+
+function browsePendingKey(parentNodeId: string) {
+  return parentNodeId || '__root__'
+}
+
+function filterBrowseTreeNode(keyword: string, data: OpcuaBrowseRow) {
+  const text = keyword.trim().toLowerCase()
+  if (!text) return true
+  return [data.name, data.nodeId, data.dataType || '', data.browseName || '', data.displayName || ''].some(
+    (value) => String(value).toLowerCase().includes(text),
+  )
 }
 
 function rowStateText(state: OpcuaImportState) {
@@ -681,8 +729,8 @@ defineExpose({ closeSilently })
 .opcua-import {
   display: grid;
   gap: 12px;
-  max-height: calc(100vh - 220px);
-  overflow-y: auto;
+  max-height: calc(100vh - 172px);
+  overflow: hidden;
   padding-right: 2px;
 }
 
@@ -785,38 +833,79 @@ defineExpose({ closeSilently })
   color: var(--el-color-warning);
 }
 
-.opcua-import__node-name {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
+.opcua-import__browse-tree {
+  height: 360px;
+  overflow: auto;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface);
 }
 
-.opcua-import__node-name strong {
+.opcua-import__browse-tree :deep(.el-tree) {
+  min-width: 760px;
+  padding: 6px 0;
+  background: transparent;
+}
+
+.opcua-import__browse-tree :deep(.el-tree-node__content) {
+  height: 44px;
+  align-items: flex-start;
+  padding-top: 4px;
+}
+
+.opcua-import__tree-node {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding-right: 10px;
+}
+
+.opcua-import__tree-title {
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   overflow: hidden;
+}
+
+.opcua-import__tree-title strong {
+  min-width: 0;
   color: var(--dc-text);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+  overflow: hidden;
 }
 
-.opcua-import__node-name strong svg {
+.opcua-import__tree-title svg {
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
   color: var(--dc-text-muted);
 }
 
-.opcua-import__node-name span {
+.opcua-import__tree-meta {
   min-width: 0;
+  display: inline-flex;
+  gap: 10px;
   overflow: hidden;
   color: var(--dc-text-muted);
   font-size: 11px;
+  line-height: 14px;
+}
+
+.opcua-import__tree-meta span {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.opcua-import__tree-meta em {
+  flex: 0 0 auto;
+  font-style: normal;
+  color: var(--dc-text-secondary);
 }
 
 .opcua-import__default-grid {
@@ -834,6 +923,10 @@ defineExpose({ closeSilently })
 .opcua-import :deep(.el-table) {
   --el-table-header-bg-color: var(--dc-surface-raised);
   --el-table-border-color: var(--dc-border);
+}
+
+.opcua-import__confirm-section :deep(.el-table__body-wrapper) {
+  overflow: auto;
 }
 </style>
 

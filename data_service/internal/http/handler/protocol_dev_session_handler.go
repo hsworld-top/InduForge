@@ -46,13 +46,13 @@ func (h *ProtocolDevSessionHandler) CloseOpcua(w http.ResponseWriter, r *http.Re
 	return nil
 }
 
-// BrowseOpcua 返回 OPC UA 开发态浏览树。
+// BrowseOpcua 返回 OPC UA 开发态指定父节点的一层浏览结果。
 func (h *ProtocolDevSessionHandler) BrowseOpcua(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
 	}
-	result, err := h.service.BrowseOpcua(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), r.PathValue("sessionId"), claims.UserID)
+	result, err := h.service.BrowseOpcua(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), r.PathValue("sessionId"), claims.UserID, r.URL.Query().Get("nodeId"))
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
