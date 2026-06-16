@@ -23,6 +23,12 @@ type fakeProtocolDevOpcuaReader struct {
 	updated map[string]any
 }
 
+type fakeProtocolDevOpcuaBrowser struct {
+	result  *ProtocolDevOpcuaBrowseResult
+	session ProtocolDevSession
+	err     error
+}
+
 type fakeProtocolDevModbusReader struct {
 	registers []ProtocolDevModbusRegister
 }
@@ -66,6 +72,21 @@ func (r *fakeProtocolDevOpcuaReader) UpdateNodeLastValue(_ context.Context, _, _
 	}
 	r.updated[nodeID] = value
 	return nil
+}
+
+func (b *fakeProtocolDevOpcuaBrowser) Browse(_ context.Context, session ProtocolDevSession) (*ProtocolDevOpcuaBrowseResult, error) {
+	b.session = session
+	if b.err != nil {
+		return nil, b.err
+	}
+	if b.result == nil {
+		return &ProtocolDevOpcuaBrowseResult{Nodes: []ProtocolDevBrowseNode{}, Diagnostics: []string{}}, nil
+	}
+	clone := &ProtocolDevOpcuaBrowseResult{
+		Nodes:       append([]ProtocolDevBrowseNode{}, b.result.Nodes...),
+		Diagnostics: append([]string{}, b.result.Diagnostics...),
+	}
+	return clone, nil
 }
 
 func (r *fakeProtocolDevModbusReader) ListDevSessionModbusRegisters(_ context.Context, _, _ string, groupID *string) ([]ProtocolDevModbusRegister, error) {
@@ -112,7 +133,7 @@ func TestProtocolDevSessionService_CreateAndCloseSession(t *testing.T) {
 			Config:    map[string]any{"endpoint": "opc.tcp://127.0.0.1:4840"},
 		},
 	}
-	service := NewProtocolDevSessionService(repo, nil, nil, nil)
+	service := NewProtocolDevSessionService(repo, nil, nil, nil, nil)
 
 	session, err := service.CreateSession(context.Background(), "project-1", "conn-1", "user-1", "opcua")
 	if err != nil {
@@ -152,7 +173,16 @@ func TestProtocolDevSessionService_BrowseAndReadOpcuaNodes(t *testing.T) {
 			DataType: "Double",
 		}},
 	}
-	service := NewProtocolDevSessionService(repo, opcua, nil, nil)
+	browser := &fakeProtocolDevOpcuaBrowser{
+		result: &ProtocolDevOpcuaBrowseResult{
+			Nodes: []ProtocolDevBrowseNode{
+				{ID: "opcua-i=85", Name: "Objects", NodeID: "i=85", NodeType: "folder"},
+				{ID: "opcua-ns=2;s=Furnace01.Temp", ParentID: protocolDevStringPtr("opcua-i=85"), Name: "Temp", NodeID: "ns=2;s=Furnace01.Temp", NodeType: "variable", DataType: "Double"},
+			},
+			Diagnostics: []string{"真实浏览"},
+		},
+	}
+	service := NewProtocolDevSessionService(repo, opcua, browser, nil, nil)
 	session, err := service.CreateSession(context.Background(), "project-1", "conn-1", "user-1", "opcua")
 	if err != nil {
 		t.Fatalf("create session failed: %v", err)
@@ -162,7 +192,10 @@ func TestProtocolDevSessionService_BrowseAndReadOpcuaNodes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("browse failed: %v", err)
 	}
-	if len(browse.Nodes) != 2 || browse.Nodes[1].NodeID != "ns=2;s=Furnace01.Temp" {
+	if browser.session.SessionID != session.SessionID {
+		t.Fatalf("browser did not receive session: %#v", browser.session)
+	}
+	if len(browse.Nodes) != 2 || browse.Nodes[1].NodeID != "ns=2;s=Furnace01.Temp" || !browse.Nodes[1].Modeled || browse.Nodes[0].Modeled {
 		t.Fatalf("unexpected browse result: %#v", browse)
 	}
 
@@ -203,7 +236,7 @@ func TestProtocolDevSessionService_ReadAndPollModbusRegisters(t *testing.T) {
 			Scale:           1,
 		}},
 	}
-	service := NewProtocolDevSessionService(repo, nil, modbus, nil)
+	service := NewProtocolDevSessionService(repo, nil, nil, modbus, nil)
 	session, err := service.CreateSession(context.Background(), "project-1", "conn-1", "user-1", "modbus")
 	if err != nil {
 		t.Fatalf("create session failed: %v", err)
@@ -251,7 +284,7 @@ func TestProtocolDevSessionService_ReadAndPollS7Variables(t *testing.T) {
 			Scale:             1,
 		}},
 	}
-	service := NewProtocolDevSessionService(repo, nil, nil, s7)
+	service := NewProtocolDevSessionService(repo, nil, nil, nil, s7)
 	session, err := service.CreateSession(context.Background(), "project-1", "conn-1", "user-1", "s7")
 	if err != nil {
 		t.Fatalf("create session failed: %v", err)

@@ -96,13 +96,15 @@ type ProtocolDevOpcuaNode struct {
 
 // ProtocolDevBrowseNode 表示前端浏览树中的节点。
 type ProtocolDevBrowseNode struct {
-	ID       string  `json:"id"`
-	ParentID *string `json:"parentId,omitempty"`
-	Name     string  `json:"name"`
-	NodeID   string  `json:"nodeId"`
-	NodeType string  `json:"nodeType"`
-	DataType string  `json:"dataType,omitempty"`
-	Modeled  bool    `json:"modeled"`
+	ID          string  `json:"id"`
+	ParentID    *string `json:"parentId,omitempty"`
+	Name        string  `json:"name"`
+	NodeID      string  `json:"nodeId"`
+	NodeType    string  `json:"nodeType"`
+	DataType    string  `json:"dataType,omitempty"`
+	Modeled     bool    `json:"modeled"`
+	BrowseName  string  `json:"browseName,omitempty"`
+	DisplayName string  `json:"displayName,omitempty"`
 }
 
 // ProtocolDevOpcuaBrowseResult 表示 OPC UA 开发态浏览结果。
@@ -316,24 +318,26 @@ type ProtocolDevSession struct {
 
 // ProtocolDevSessionService 管理协议工作台的短时开发态会话。
 type ProtocolDevSessionService struct {
-	connections ProtocolDevConnectionReader
-	opcua       ProtocolDevOpcuaModelReader
-	modbus      ProtocolDevModbusModelReader
-	s7          ProtocolDevS7ModelReader
-	mu          sync.Mutex
-	sessions    map[string]ProtocolDevSession
-	now         func() time.Time
+	connections  ProtocolDevConnectionReader
+	opcua        ProtocolDevOpcuaModelReader
+	opcuaBrowser ProtocolDevOpcuaBrowser
+	modbus       ProtocolDevModbusModelReader
+	s7           ProtocolDevS7ModelReader
+	mu           sync.Mutex
+	sessions     map[string]ProtocolDevSession
+	now          func() time.Time
 }
 
 // NewProtocolDevSessionService 创建协议开发态会话服务。
-func NewProtocolDevSessionService(connections ProtocolDevConnectionReader, opcua ProtocolDevOpcuaModelReader, modbus ProtocolDevModbusModelReader, s7 ProtocolDevS7ModelReader) *ProtocolDevSessionService {
+func NewProtocolDevSessionService(connections ProtocolDevConnectionReader, opcua ProtocolDevOpcuaModelReader, opcuaBrowser ProtocolDevOpcuaBrowser, modbus ProtocolDevModbusModelReader, s7 ProtocolDevS7ModelReader) *ProtocolDevSessionService {
 	return &ProtocolDevSessionService{
-		connections: connections,
-		opcua:       opcua,
-		modbus:      modbus,
-		s7:          s7,
-		sessions:    map[string]ProtocolDevSession{},
-		now:         time.Now,
+		connections:  connections,
+		opcua:        opcua,
+		opcuaBrowser: opcuaBrowser,
+		modbus:       modbus,
+		s7:           s7,
+		sessions:     map[string]ProtocolDevSession{},
+		now:          time.Now,
 	}
 }
 
@@ -376,49 +380,40 @@ func (s *ProtocolDevSessionService) CloseSession(ctx context.Context, projectID,
 	return &session, nil
 }
 
-// BrowseOpcua 基于当前会话返回 OPC UA 浏览树，第一版使用已建模分组和变量投影生成结果。
+// BrowseOpcua 基于当前会话返回真实 OPC UA 地址空间浏览树。
 func (s *ProtocolDevSessionService) BrowseOpcua(ctx context.Context, projectID, connectionID, sessionID, userID string) (*ProtocolDevOpcuaBrowseResult, error) {
-	if _, err := s.requireSession(projectID, connectionID, sessionID, userID, "opcua"); err != nil {
+	session, err := s.requireSession(projectID, connectionID, sessionID, userID, "opcua")
+	if err != nil {
 		return nil, err
 	}
 	if s.opcua == nil {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "OPC UA 开发态模型读取器未初始化")
 	}
-	groups, err := s.opcua.ListDevSessionOpcuaGroups(ctx, projectID, connectionID)
-	if err != nil {
-		return nil, err
+	if s.opcuaBrowser == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "OPC UA 真实浏览适配器未初始化")
 	}
+	// 建模数据只用于标记真实地址空间中已导入的变量，不再参与生成浏览树，避免误导用户。
 	nodes, err := s.opcua.ListDevSessionOpcuaNodes(ctx, projectID, connectionID, nil)
 	if err != nil {
 		return nil, err
 	}
-
-	result := &ProtocolDevOpcuaBrowseResult{
-		Nodes: make([]ProtocolDevBrowseNode, 0, len(groups)+len(nodes)),
-		Diagnostics: []string{
-			"当前浏览结果来自已建模变量，真实 OPC UA 地址空间适配器接入后保持同一响应结构。",
-		},
-	}
-	for _, group := range groups {
-		result.Nodes = append(result.Nodes, ProtocolDevBrowseNode{
-			ID:       "group-" + group.ID,
-			ParentID: optionalPrefixedID("group-", group.ParentID),
-			Name:     group.Name,
-			NodeID:   group.ID,
-			NodeType: "folder",
-			Modeled:  true,
-		})
-	}
+	modeledNodeIDs := map[string]bool{}
 	for _, node := range nodes {
-		result.Nodes = append(result.Nodes, ProtocolDevBrowseNode{
-			ID:       node.ID,
-			ParentID: optionalPrefixedID("group-", node.GroupID),
-			Name:     node.Name,
-			NodeID:   node.NodeID,
-			NodeType: "variable",
-			DataType: node.DataType,
-			Modeled:  true,
-		})
+		if text := strings.TrimSpace(node.NodeID); text != "" {
+			modeledNodeIDs[text] = true
+		}
+	}
+	result, err := s.opcuaBrowser.Browse(ctx, session)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return &ProtocolDevOpcuaBrowseResult{Nodes: []ProtocolDevBrowseNode{}, Diagnostics: []string{}}, nil
+	}
+	for index := range result.Nodes {
+		if modeledNodeIDs[strings.TrimSpace(result.Nodes[index].NodeID)] {
+			result.Nodes[index].Modeled = true
+		}
 	}
 	return result, nil
 }
@@ -707,14 +702,6 @@ func toProtocolString(value any) string {
 	default:
 		return ""
 	}
-}
-
-func optionalPrefixedID(prefix string, value *string) *string {
-	if value == nil || strings.TrimSpace(*value) == "" {
-		return nil
-	}
-	prefixed := prefix + strings.TrimSpace(*value)
-	return &prefixed
 }
 
 func stringSet(values []string) map[string]bool {

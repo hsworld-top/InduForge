@@ -8,6 +8,7 @@ require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/google/uuid v1.6.0
+	github.com/gopcua/opcua v0.8.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/ismhdez/socket.io-golang/v4 v4.0.11
 	github.com/jackc/pgx/v5 v5.9.1

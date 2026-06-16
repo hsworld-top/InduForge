@@ -205,6 +205,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	protocolDevSessionService := service.NewProtocolDevSessionService(
 		service.NewProtocolDevConnectionRepositoryAdapter(connectionRepository),
 		service.NewProtocolDevOpcuaModelingAdapter(opcuaModelingService),
+		service.NewProtocolDevOpcuaRealBrowser(),
 		service.NewProtocolDevModbusModelingAdapter(modbusModelingService),
 		s7ModelingService,
 	)
