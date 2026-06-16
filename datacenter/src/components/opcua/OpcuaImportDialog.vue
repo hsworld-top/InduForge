@@ -12,19 +12,19 @@
     <div class="opcua-import">
       <div class="opcua-import__summary">
         <div>
-          <strong>{{ previewRows.length }}</strong>
+          <strong>{{ candidateCount }}</strong>
           <span>候选变量</span>
         </div>
         <div>
-          <strong>{{ readyRows.length }}</strong>
+          <strong>{{ step === 'confirm' ? readyRows.length : '-' }}</strong>
           <span>可导入</span>
         </div>
         <div>
-          <strong>{{ skippedRows.length }}</strong>
+          <strong>{{ step === 'confirm' ? skippedRows.length : '-' }}</strong>
           <span>将跳过</span>
         </div>
         <div>
-          <strong>{{ issueRows.length }}</strong>
+          <strong>{{ step === 'confirm' ? issueRows.length : '-' }}</strong>
           <span>需检查</span>
         </div>
         <em>{{ step === 'pick' ? '选择变量' : '导入确认' }}</em>
@@ -149,7 +149,7 @@
           <strong>导入确认</strong>
           <span>导入前可逐行调整关键字段</span>
         </div>
-        <el-table :data="displayRows" height="260" size="small" row-key="key">
+        <el-table :data="pagedDisplayRows" height="260" size="small" row-key="key">
           <el-table-column label="状态" width="82">
             <template #default="{ row }">
               <el-tag size="small" :type="rowTagType(row.state)">
@@ -189,6 +189,16 @@
           </el-table-column>
           <el-table-column prop="issue" label="问题" min-width="180" show-overflow-tooltip />
         </el-table>
+        <div class="opcua-import__pager">
+          <el-pagination
+            v-model:current-page="confirmPage"
+            v-model:page-size="confirmPageSize"
+            small
+            layout="total, sizes, prev, pager, next"
+            :page-sizes="[50, 100, 200]"
+            :total="displayRows.length"
+          />
+        </div>
       </section>
     </div>
     <template #footer>
@@ -197,10 +207,10 @@
       <el-button
         v-if="step === 'pick'"
         type="primary"
-        :disabled="draftRows.length === 0"
+        :disabled="candidateCount === 0"
         @click="goConfirm"
       >
-        下一步，确认 {{ draftRows.length }} 个候选变量
+        下一步，确认 {{ candidateCount }} 个候选变量
       </el-button>
       <el-button
         v-else
@@ -287,6 +297,8 @@ const treeVersion = ref(0)
 const pendingBrowseResolvers = new Map<string, (nodes: OpcuaBrowseRow[]) => void>()
 const subtreeLoadingNodeId = ref('')
 const onlyIssues = ref(false)
+const confirmPage = ref(1)
+const confirmPageSize = ref(50)
 const defaults = reactive({
   samplingMs: 1000,
   accessLevel: 'Read',
@@ -315,6 +327,8 @@ watch(
     browseDraftRows.value = []
     subtreeLoadingNodeId.value = ''
     onlyIssues.value = false
+    confirmPage.value = 1
+    confirmPageSize.value = 50
     defaults.samplingMs = 1000
     defaults.accessLevel = 'Read'
     defaults.deadband = null
@@ -325,10 +339,6 @@ watch(
 
 watch(rawText, () => {
   manualDraftRows.value = buildManualRows(rawText.value)
-})
-
-watch(selectedBrowseIds, () => {
-  browseDraftRows.value = buildBrowseRows(selectedBrowseIds.value)
 })
 
 watch(browseKeyword, (keyword) => {
@@ -342,6 +352,10 @@ watch(
   },
   { deep: true },
 )
+
+watch([onlyIssues, confirmPageSize], () => {
+  confirmPage.value = 1
+})
 
 const browseDiagnostics = computed(() => props.browseDiagnostics || [])
 const existingNodeIds = computed(
@@ -369,11 +383,18 @@ const browseTreeProps = {
   disabled: (data: OpcuaBrowseRow) => data.nodeType === 'variable' && !isBrowseRowSelectable(data),
 }
 
+const candidateCount = computed(() =>
+  mode.value === 'browse' ? selectedBrowseIds.value.length : manualDraftRows.value.length,
+)
 const draftRows = computed(() => (mode.value === 'browse' ? browseDraftRows.value : manualDraftRows.value))
 const previewRows = computed(() => validateRows(draftRows.value))
 const displayRows = computed(() =>
   onlyIssues.value ? previewRows.value.filter((row) => row.state !== 'ready') : previewRows.value,
 )
+const pagedDisplayRows = computed(() => {
+  const start = (confirmPage.value - 1) * confirmPageSize.value
+  return displayRows.value.slice(start, start + confirmPageSize.value)
+})
 const readyRows = computed(() => previewRows.value.filter((row) => row.state === 'ready'))
 const skippedRows = computed(() => previewRows.value.filter((row) => row.state === 'existing'))
 const issueRows = computed(() =>
@@ -570,10 +591,14 @@ function submit() {
 }
 
 function goConfirm() {
-  if (draftRows.value.length === 0) {
+  if (candidateCount.value === 0) {
     ElMessage.warning(mode.value === 'browse' ? '请先选择要导入的 OPC UA 变量' : '请先输入 NodeId')
     return
   }
+  if (mode.value === 'browse') {
+    browseDraftRows.value = buildBrowseRows(selectedBrowseIds.value)
+  }
+  confirmPage.value = 1
   step.value = 'confirm'
 }
 
@@ -987,6 +1012,12 @@ defineExpose({ closeSilently })
 
 .opcua-import__confirm-section :deep(.el-table__body-wrapper) {
   overflow: auto;
+}
+
+.opcua-import__pager {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
 }
 </style>
 

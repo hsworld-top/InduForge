@@ -5,7 +5,9 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -34,6 +36,8 @@ type ProtocolDevOpcuaBrowser interface {
 	Browse(ctx context.Context, session ProtocolDevSession, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error)
 	BrowseSubtree(ctx context.Context, session ProtocolDevSession, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error)
 }
+
+type opcuaBrowseOperation func(context.Context, *opcua.Client, opcuaBrowseOptions) (*ProtocolDevOpcuaBrowseResult, error)
 
 // ProtocolDevOpcuaRealBrowser 连接真实 OPC UA Server 并浏览地址空间。
 type ProtocolDevOpcuaRealBrowser struct {
@@ -124,28 +128,16 @@ func (b *ProtocolDevOpcuaRealBrowser) Close(sessionID string) {
 
 // Browse 返回指定父节点的一层真实 OPC UA 地址空间子节点。失败时直接返回错误，避免前端误以为看到的是现场地址空间。
 func (b *ProtocolDevOpcuaRealBrowser) Browse(ctx context.Context, session ProtocolDevSession, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error) {
-	entry, err := b.requireClient(session.SessionID)
-	if err != nil {
-		return nil, err
-	}
-	entry.mu.Lock()
-	defer entry.mu.Unlock()
-	browseCtx, cancel := context.WithTimeout(ctx, entry.options.RequestTimeout)
-	defer cancel()
-	return b.browseWithClient(browseCtx, entry.client, entry.options, parentNodeID)
+	return b.runWithClientRetry(ctx, session, func(runCtx context.Context, client *opcua.Client, options opcuaBrowseOptions) (*ProtocolDevOpcuaBrowseResult, error) {
+		return b.browseWithClient(runCtx, client, options, parentNodeID)
+	})
 }
 
 // BrowseSubtree 递归收集指定节点子树下的变量。该操作只在用户明确选择“导入子树变量”时触发。
 func (b *ProtocolDevOpcuaRealBrowser) BrowseSubtree(ctx context.Context, session ProtocolDevSession, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error) {
-	entry, err := b.requireClient(session.SessionID)
-	if err != nil {
-		return nil, err
-	}
-	entry.mu.Lock()
-	defer entry.mu.Unlock()
-	browseCtx, cancel := context.WithTimeout(ctx, entry.options.RequestTimeout)
-	defer cancel()
-	return b.browseSubtreeWithClient(browseCtx, entry.client, entry.options, parentNodeID)
+	return b.runWithClientRetry(ctx, session, func(runCtx context.Context, client *opcua.Client, options opcuaBrowseOptions) (*ProtocolDevOpcuaBrowseResult, error) {
+		return b.browseSubtreeWithClient(runCtx, client, options, parentNodeID)
+	})
 }
 
 func (b *ProtocolDevOpcuaRealBrowser) browseWithClient(ctx context.Context, client *opcua.Client, options opcuaBrowseOptions, parentNodeID string) (*ProtocolDevOpcuaBrowseResult, error) {
@@ -246,16 +238,16 @@ func (b *ProtocolDevOpcuaRealBrowser) collectVariableSubtree(ctx context.Context
 	if parent == nil || parent.ID == nil || state.limitHit {
 		return nil
 	}
-	before := len(state.result.Nodes)
-	if err := b.browseChildren(ctx, parent, parentID, options, state); err != nil {
+	children, err := b.projectChildNodes(ctx, parent, parentID, options, state)
+	if err != nil {
 		return err
 	}
-	children := append([]ProtocolDevBrowseNode{}, state.result.Nodes[before:]...)
 	for _, child := range children {
 		if state.limitHit {
 			return nil
 		}
 		if child.NodeType == "variable" {
+			state.result.Nodes = append(state.result.Nodes, child)
 			continue
 		}
 		nodeID, err := ua.ParseNodeID(child.NodeID)
@@ -266,14 +258,43 @@ func (b *ProtocolDevOpcuaRealBrowser) collectVariableSubtree(ctx context.Context
 			return err
 		}
 	}
-	result := state.result.Nodes[:0]
-	for _, node := range state.result.Nodes {
-		if node.NodeType == "variable" {
-			result = append(result, node)
+	return nil
+}
+
+func (b *ProtocolDevOpcuaRealBrowser) projectChildNodes(ctx context.Context, parent *opcua.Node, parentID string, options opcuaBrowseOptions, state *opcuaBrowseState) ([]ProtocolDevBrowseNode, error) {
+	if parent == nil || parent.ID == nil {
+		return []ProtocolDevBrowseNode{}, nil
+	}
+	parentIDPtr := stringPtrIfNotEmpty(parentID)
+	result := []ProtocolDevBrowseNode{}
+	for _, refType := range []uint32{id.Organizes, id.HasComponent, id.HasProperty} {
+		children, err := parent.ReferencedNodes(ctx, refType, ua.BrowseDirectionForward, ua.NodeClassObject|ua.NodeClassVariable, true)
+		if err != nil {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, fmt.Sprintf("OPC UA 浏览子节点失败 nodeId=%s: %v", parent.ID.String(), err))
+		}
+		for _, child := range children {
+			if len(state.result.Nodes)+len(result) >= options.MaxNodes {
+				state.limitHit = true
+				return result, nil
+			}
+			if child == nil || child.ID == nil {
+				continue
+			}
+			nodeID := child.ID.String()
+			if state.visited[nodeID] {
+				continue
+			}
+			state.visited[nodeID] = true
+			node, err := b.projectBrowseNode(ctx, child, parentIDPtr, state)
+			if err != nil {
+				return nil, err
+			}
+			if node != nil {
+				result = append(result, *node)
+			}
 		}
 	}
-	state.result.Nodes = result
-	return nil
+	return result, nil
 }
 
 func (b *ProtocolDevOpcuaRealBrowser) projectBrowseNode(ctx context.Context, node *opcua.Node, parentID *string, state *opcuaBrowseState) (*ProtocolDevBrowseNode, error) {
@@ -379,10 +400,47 @@ func (b *ProtocolDevOpcuaRealBrowser) requireClient(sessionID string) (*opcuaBro
 	return entry, nil
 }
 
+func (b *ProtocolDevOpcuaRealBrowser) runWithClientRetry(ctx context.Context, session ProtocolDevSession, operation opcuaBrowseOperation) (*ProtocolDevOpcuaBrowseResult, error) {
+	result, err := b.runWithClient(ctx, session, operation)
+	if err == nil || !isRecoverableOpcuaSessionError(err) {
+		return result, err
+	}
+	b.Close(session.SessionID)
+	if openErr := b.Open(ctx, session); openErr != nil {
+		return nil, openErr
+	}
+	return b.runWithClient(ctx, session, operation)
+}
+
+func (b *ProtocolDevOpcuaRealBrowser) runWithClient(ctx context.Context, session ProtocolDevSession, operation opcuaBrowseOperation) (*ProtocolDevOpcuaBrowseResult, error) {
+	entry, err := b.requireClient(session.SessionID)
+	if err != nil {
+		if openErr := b.Open(ctx, session); openErr != nil {
+			return nil, openErr
+		}
+		entry, err = b.requireClient(session.SessionID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	runCtx, cancel := context.WithTimeout(ctx, entry.options.RequestTimeout)
+	defer cancel()
+	return operation(runCtx, entry.client, entry.options)
+}
+
+func isRecoverableOpcuaSessionError(err error) bool {
+	return errors.Is(err, io.EOF) ||
+		errors.Is(err, ua.StatusBadSessionNotActivated) ||
+		errors.Is(err, ua.StatusBadSessionIDInvalid) ||
+		errors.Is(err, ua.StatusBadSecureChannelIDInvalid)
+}
+
 func (o opcuaBrowseOptions) clientOptions(ctx context.Context) ([]opcua.Option, error) {
 	result := []opcua.Option{
 		opcua.ApplicationName(o.ApplicationName),
-		opcua.AutoReconnect(false),
+		opcua.AutoReconnect(true),
 		opcua.DialTimeout(o.ConnectTimeout),
 		opcua.RequestTimeout(o.RequestTimeout),
 		opcua.SessionTimeout(o.SessionTimeout),
