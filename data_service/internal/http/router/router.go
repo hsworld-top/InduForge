@@ -1534,7 +1534,7 @@ func mountProtocolWave2Routes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
-		"PUT /api/v1/data/projects/{projectId}/s7/configs/{connectionId}",
+		"PUT /api/v1/data/projects/{projectId}/s7/{connectionId}/config",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:write")(
 				middleware.ErrorHandler(opts.protocolWave2Handler.UpdateS7Config),
@@ -1550,7 +1550,7 @@ func mountProtocolWave2Routes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
-		"PUT /api/v1/data/projects/{projectId}/modbus/configs/{connectionId}",
+		"PUT /api/v1/data/projects/{projectId}/modbus/{connectionId}/config",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:write")(
 				middleware.ErrorHandler(opts.protocolWave2Handler.UpdateModbusConfig),

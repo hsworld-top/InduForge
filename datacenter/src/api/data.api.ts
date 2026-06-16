@@ -217,7 +217,7 @@ export const createS7Config = (projectId, data) => {
 
 export const updateS7Config = (projectId, connectionId, data) => {
   return request({
-    url: `/data/projects/${projectId}/s7/configs/${connectionId}`,
+    url: `/data/projects/${projectId}/s7/${connectionId}/config`,
     method: 'put',
     data: normalizeS7ConfigPayload(data),
   })
@@ -233,7 +233,7 @@ export const createModbusConfig = (projectId, data) => {
 
 export const updateModbusConfig = (projectId, connectionId, data) => {
   return request({
-    url: `/data/projects/${projectId}/modbus/configs/${connectionId}`,
+    url: `/data/projects/${projectId}/modbus/${connectionId}/config`,
     method: 'put',
     data: normalizeModbusConfigPayload(data),
   })
