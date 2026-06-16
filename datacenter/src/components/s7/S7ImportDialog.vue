@@ -217,7 +217,16 @@ const validRows = computed(() =>
   rows.value
     .filter((row) => !row.issue)
     .map(
-      ({ issue, normalizedAddress, area, dbNumber, byteRange, bitOffset, groupPath, ...row }) => ({
+      ({
+        issue: _issue,
+        normalizedAddress,
+        area,
+        dbNumber,
+        byteRange,
+        bitOffset,
+        groupPath,
+        ...row
+      }) => ({
         ...row,
         metadata: {
           ...row.metadata,
@@ -420,8 +429,7 @@ function estimateDataTypeBytes(dataType: string) {
 
 function normalizeAccessLevel(value: string) {
   const text = value.trim().toLowerCase()
-  if (['write', '写'].includes(text)) return 'Write'
-  if (['readwrite', 'read_write', '读写'].includes(text)) return 'ReadWrite'
+  if (['write', '写', 'readwrite', 'read_write', '读写'].includes(text)) return 'ReadWrite'
   return 'Read'
 }
 

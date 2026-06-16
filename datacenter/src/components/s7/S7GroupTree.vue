@@ -1,9 +1,5 @@
 <template>
   <aside class="s7-group-tree">
-    <div class="s7-group-tree__head">
-      <strong>变量组</strong>
-      <span>{{ groups.length }} 组</span>
-    </div>
     <div class="s7-group-tree__toolbar">
       <el-input v-model="keyword" size="small" placeholder="搜索变量组" clearable />
       <button
@@ -29,7 +25,7 @@
     </button>
     <div class="s7-group-tree__list">
       <div v-if="filteredGroups.length === 0" class="s7-group-tree__empty">
-        {{ keyword ? '没有匹配的变量组' : '暂无变量组' }}
+        {{ keyword ? '没有匹配的变量组' : '暂无变量组，可右键全部变量新建' }}
       </div>
       <div v-for="group in filteredGroups" :key="group.id" class="s7-group-tree__row">
         <button
@@ -174,20 +170,6 @@ function runMenuAction(action: 'create-child' | 'edit' | 'delete') {
   flex-direction: column;
   overflow: hidden;
 }
-.s7-group-tree__head {
-  height: 38px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 10px 0 12px;
-  border-bottom: 1px solid var(--dc-border);
-}
-.s7-group-tree__head strong {
-  color: var(--dc-text);
-  font-size: 13px;
-}
-.s7-group-tree__head span,
 .s7-group-tree__empty {
   color: var(--dc-text-muted);
   font-size: 12px;

@@ -24,6 +24,7 @@ type ConnectionRecord struct {
 	Status       string
 	Config       map[string]any
 	DisplayOrder int
+	VariableCount int
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
@@ -123,10 +124,43 @@ func translateConnectionWriteError(message string, err error) error {
 // 查询路径固定为 project_id；display_order 是用户在接入源面板拖拽后的持久化顺序。
 func (r *ConnectionRepository) ListByProject(ctx context.Context, projectID string) ([]ConnectionRecord, error) {
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, name, type, category, status, metadata, display_order, created_at, updated_at
-        FROM data_connections
-        WHERE project_id = $1
-        ORDER BY display_order ASC, created_at ASC
+		WITH variable_counts AS (
+			SELECT project_id, connection_id, COUNT(*)::int AS variable_count
+			FROM data_opcua_nodes
+			WHERE project_id = $1
+			GROUP BY project_id, connection_id
+			UNION ALL
+			SELECT project_id, connection_id, COUNT(*)::int AS variable_count
+			FROM data_s7_variables
+			WHERE project_id = $1
+			GROUP BY project_id, connection_id
+			UNION ALL
+			SELECT project_id, connection_id, COUNT(*)::int AS variable_count
+			FROM data_modbus_registers
+			WHERE project_id = $1
+			GROUP BY project_id, connection_id
+		),
+		variable_count_by_connection AS (
+			SELECT project_id, connection_id, SUM(variable_count)::int AS variable_count
+			FROM variable_counts
+			GROUP BY project_id, connection_id
+		)
+		SELECT conn.id,
+		       conn.project_id,
+		       conn.name,
+		       conn.type,
+		       conn.category,
+		       conn.status,
+		       conn.metadata,
+		       conn.display_order,
+		       COALESCE(vc.variable_count, 0) AS variable_count,
+		       conn.created_at,
+		       conn.updated_at
+		FROM data_connections conn
+		LEFT JOIN variable_count_by_connection vc
+		  ON vc.project_id = conn.project_id AND vc.connection_id = conn.id
+		WHERE conn.project_id = $1
+		ORDER BY conn.display_order ASC, conn.created_at ASC
     `, projectID)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询连接列表失败", err)
@@ -154,7 +188,7 @@ func (r *ConnectionRepository) ListByProject(ctx context.Context, projectID stri
 // 如果后续频繁走 project_id + id 联合过滤，可再评估是否需要复合索引。
 func (r *ConnectionRepository) GetByProjectAndID(ctx context.Context, projectID, connectionID string) (*ConnectionRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-        SELECT id, project_id, name, type, category, status, metadata, display_order, created_at, updated_at
+        SELECT id, project_id, name, type, category, status, metadata, display_order, 0 AS variable_count, created_at, updated_at
         FROM data_connections
         WHERE project_id = $1 AND id = $2
     `, projectID, connectionID)
@@ -171,7 +205,7 @@ func (r *ConnectionRepository) GetByProjectAndID(ctx context.Context, projectID,
 // 用于校验工程级内置运行库唯一性；调用方只关心是否存在，不依赖排序。
 func (r *ConnectionRepository) GetByProjectAndType(ctx context.Context, projectID, connectionType string) (*ConnectionRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-        SELECT id, project_id, name, type, category, status, metadata, display_order, created_at, updated_at
+        SELECT id, project_id, name, type, category, status, metadata, display_order, 0 AS variable_count, created_at, updated_at
         FROM data_connections
         WHERE project_id = $1 AND type = $2
         LIMIT 1
@@ -221,7 +255,7 @@ func (r *ConnectionRepository) Create(ctx context.Context, params CreateConnecti
         VALUES ($1, $2, $3, $4, $5, $6::jsonb,
             COALESCE((SELECT MAX(display_order) + 1 FROM data_connections WHERE project_id = $1), 0),
             $7, $7)
-        RETURNING id, project_id, name, type, category, status, metadata, display_order, created_at, updated_at
+        RETURNING id, project_id, name, type, category, status, metadata, display_order, 0 AS variable_count, created_at, updated_at
     `, params.ProjectID, params.Name, params.Type, params.Category, params.Status, string(configBytes), params.UserID)
 
 	record, scanErr := scanConnection(row)
@@ -254,7 +288,7 @@ func (r *ConnectionRepository) Update(ctx context.Context, params UpdateConnecti
             updated_by = $8,
             updated_at = now()
         WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, name, type, category, status, metadata, display_order, created_at, updated_at
+        RETURNING id, project_id, name, type, category, status, metadata, display_order, 0 AS variable_count, created_at, updated_at
     `, params.ProjectID, params.ID, params.Name, params.Type, params.Category, params.Status, string(configBytes), params.UserID)
 
 	record, scanErr := scanConnection(row)
@@ -294,7 +328,7 @@ func (r *ConnectionRepository) UpdateKafka(ctx context.Context, params UpdateKaf
             updated_by = $8,
             updated_at = now()
         WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, name, type, category, status, metadata, display_order, created_at, updated_at
+        RETURNING id, project_id, name, type, category, status, metadata, display_order, 0 AS variable_count, created_at, updated_at
     `, params.ProjectID, params.ID, params.Name, params.Type, params.Category, params.Status, string(configBytes), params.UserID)
 
 	record, scanErr := scanConnection(row)
@@ -419,6 +453,7 @@ func scanConnection(row scannable) (ConnectionRecord, error) {
 		&record.Status,
 		&configBytes,
 		&record.DisplayOrder,
+		&record.VariableCount,
 		&record.CreatedAt,
 		&record.UpdatedAt,
 	); err != nil {

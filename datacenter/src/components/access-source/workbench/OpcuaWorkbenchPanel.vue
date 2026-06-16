@@ -8,20 +8,32 @@
         @back="$emit('back')"
       >
         <template #status>
-          <button
-            type="button"
-            class="opcua-workbench__connect-action"
-            :class="{ 'is-connected': session.connected.value }"
-            :title="session.connected.value ? '断开 OPC UA 开发态会话' : '连接 OPC UA 开发态会话'"
-            @click="toggleSession"
-          >
-            <span class="opcua-workbench__connect-label is-default">
-              {{ session.connected.value ? '已连接' : '连接' }}
-            </span>
-            <span v-if="session.connected.value" class="opcua-workbench__connect-label is-hover"
-              >断开</span
+          <div class="opcua-workbench__status-actions">
+            <button
+              type="button"
+              class="opcua-workbench__connect-action"
+              :class="{ 'is-connected': session.connected.value }"
+              :title="session.connected.value ? '断开 OPC UA 开发态会话' : '连接 OPC UA 开发态会话'"
+              @click="toggleSession"
             >
-          </button>
+              <span class="opcua-workbench__connect-label is-default">
+                {{ session.connected.value ? '已连接' : '连接' }}
+              </span>
+              <span v-if="session.connected.value" class="opcua-workbench__connect-label is-hover">
+                断开
+              </span>
+            </button>
+            <button
+              v-if="!session.connected.value"
+              type="button"
+              class="opcua-workbench__edit-config"
+              title="编辑连接配置"
+              aria-label="编辑连接配置"
+              @click="showEditDialog = true"
+            >
+              <IconTablerSettings />
+            </button>
+          </div>
         </template>
       </WorkbenchSourceHeader>
       <OpcuaGroupTree
@@ -41,6 +53,15 @@
         <div class="opcua-workbench__actions">
           <button
             type="button"
+            class="opcua-workbench__icon-action is-primary"
+            title="新建变量"
+            aria-label="新建变量"
+            @click="openCreateNode"
+          >
+            <IconTablerPlus />
+          </button>
+          <button
+            type="button"
             class="opcua-workbench__icon-action"
             :title="importActionTitle"
             :aria-label="importActionTitle"
@@ -48,11 +69,7 @@
           >
             <IconTablerUpload />
           </button>
-          <el-dropdown
-            trigger="click"
-            :disabled="nodes.length === 0"
-            @command="exportNodes"
-          >
+          <el-dropdown trigger="click" :disabled="nodes.length === 0" @command="exportNodes">
             <button
               type="button"
               class="opcua-workbench__icon-action"
@@ -71,15 +88,6 @@
           </el-dropdown>
           <button
             type="button"
-            class="opcua-workbench__icon-action is-primary"
-            title="新建变量"
-            aria-label="新建变量"
-            @click="openCreateNode"
-          >
-            <IconTablerPlus />
-          </button>
-          <button
-            type="button"
             class="opcua-workbench__icon-action"
             :disabled="!session.connected.value"
             :title="previewActionTitle"
@@ -88,6 +96,35 @@
           >
             <IconTablerActivityHeartbeat />
           </button>
+        </div>
+        <div class="opcua-workbench__right-tools">
+          <el-popover placement="bottom-start" :width="150" trigger="click">
+            <template #reference>
+              <PillButton :active="quickFilter !== 'all'">
+                <template #icon><IconTablerFilter /></template>
+                {{ currentQuickFilterLabel }}
+              </PillButton>
+            </template>
+            <div class="opcua-workbench__filter-menu">
+              <button
+                v-for="item in quickFilters"
+                :key="item.value"
+                type="button"
+                class="opcua-workbench__filter-item"
+                :class="{ 'is-active': quickFilter === item.value }"
+                @click="quickFilter = item.value"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+          </el-popover>
+          <el-input
+            v-model="nodeKeyword"
+            class="opcua-workbench__search"
+            size="small"
+            placeholder="搜索变量"
+            clearable
+          />
           <button
             type="button"
             class="opcua-workbench__icon-action"
@@ -115,23 +152,7 @@
           >
             <IconTablerRefresh />
           </button>
-          <button
-            type="button"
-            class="opcua-workbench__icon-action"
-            title="连接与会话配置"
-            aria-label="连接与会话配置"
-            @click="showEditDialog = true"
-          >
-            <IconTablerSettings />
-          </button>
         </div>
-        <el-input
-          v-model="nodeKeyword"
-          class="opcua-workbench__search"
-          size="small"
-          placeholder="搜索变量"
-          clearable
-        />
       </div>
       <OpcuaNodeTable
         :nodes="nodes"
@@ -140,7 +161,9 @@
         :page="nodePagination.page"
         :page-size="nodePagination.pageSize"
         :total="nodePagination.total"
-        @select="selectNode"
+        @select="openNodeDetail"
+        @detail="openNodeDetail"
+        @duplicate="openDuplicateNode"
         @edit="openEditNode"
         @delete="removeNode"
         @row-contextmenu="openNodeMenu"
@@ -148,29 +171,41 @@
         @page-size-change="changeNodePageSize"
         @sort-change="changeNodeSort"
       />
-      <div class="opcua-workbench__filters">
-        <button
-          v-for="item in quickFilters"
-          :key="item.value"
-          type="button"
-          :class="{ 'is-active': quickFilter === item.value }"
-          @click="quickFilter = item.value"
-        >
-          {{ item.label }}
-        </button>
-      </div>
     </main>
 
-    <OpcuaInspectorPanel
-      :group="currentGroup"
-      :node="selectedNode"
-      :nodes="nodes"
-      :issues="scopedValidationIssues"
-      :connection="localConnection"
-      :project-id="projectId"
-    />
+    <el-drawer
+      v-model="detailVisible"
+      class="opcua-workbench__detail-drawer"
+      size="420px"
+      append-to-body
+      destroy-on-close
+    >
+      <template #header>
+        <div class="opcua-workbench__detail-header">
+          <button
+            type="button"
+            class="opcua-workbench__detail-collapse"
+            title="收起详情"
+            aria-label="收起详情"
+            @click="detailVisible = false"
+          >
+            <IconTablerChevronRight />
+          </button>
+          <span>{{ selectedNode?.name || '变量详情' }}</span>
+        </div>
+      </template>
+      <OpcuaInspectorPanel
+        :group="null"
+        :node="selectedNode"
+        :nodes="nodes"
+        :issues="scopedValidationIssues"
+        :connection="localConnection"
+        :project-id="projectId"
+      />
+    </el-drawer>
 
     <OpcuaGroupDialog
+      ref="groupDialogRef"
       v-model="groupDialogVisible"
       :mode="groupDialogMode"
       :groups="groups"
@@ -180,6 +215,7 @@
       @submit="saveGroup"
     />
     <OpcuaNodeDialog
+      ref="nodeDialogRef"
       v-model="nodeDialogVisible"
       :mode="nodeDialogMode"
       :groups="groups"
@@ -189,6 +225,7 @@
       @submit="saveNode"
     />
     <OpcuaImportDialog
+      ref="importDialogRef"
       v-model="importVisible"
       :loading="saving"
       :connected="session.connected.value"
@@ -202,6 +239,7 @@
       v-model="previewVisible"
       :nodes="previewNodes"
       :diagnostics="previewDiagnostics"
+      :scope-label="previewScopeLabel"
     />
     <OpcuaValidationDrawer
       v-model="validationVisible"
@@ -217,6 +255,7 @@
       :issues="contractIssues"
     />
     <ConnectionDialog
+      ref="connectionDialogRef"
       v-model="showEditDialog"
       mode="edit"
       :connection="localConnection"
@@ -235,25 +274,17 @@
           :style="{ left: `${nodeMenu.x}px`, top: `${nodeMenu.y}px` }"
           @click.stop
         >
+          <button type="button" @click="runNodeMenuAction('detail')">
+            <IconTablerEye class="opcua-workbench__menu-icon" />
+            <span>查看详情</span>
+          </button>
           <button type="button" @click="runNodeMenuAction('edit')">
             <IconTablerPencil class="opcua-workbench__menu-icon" />
-            <span>编辑</span>
+            <span>编辑变量</span>
           </button>
           <button type="button" @click="runNodeMenuAction('duplicate')">
             <IconTablerCopy class="opcua-workbench__menu-icon" />
             <span>复制为新变量</span>
-          </button>
-          <button type="button" @click="runNodeMenuAction('copy-info')">
-            <IconTablerClipboard class="opcua-workbench__menu-icon" />
-            <span>复制变量信息</span>
-          </button>
-          <button type="button" @click="runNodeMenuAction('copy-path')">
-            <IconTablerRoute class="opcua-workbench__menu-icon" />
-            <span>复制数据点路径</span>
-          </button>
-          <button type="button" @click="runNodeMenuAction('datapoint')">
-            <IconTablerExternalLink class="opcua-workbench__menu-icon" />
-            <span>查看数据点详情</span>
           </button>
           <button type="button" class="is-danger" @click="runNodeMenuAction('delete')">
             <IconTablerTrash class="opcua-workbench__menu-icon" />
@@ -274,6 +305,7 @@ import { getApiErrorMessage } from '@/utils/request'
 import { downloadCsv, downloadXlsx } from '@/utils/tabular-file'
 import { useProtocolDevSession } from './useProtocolDevSession'
 import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
+import PillButton from '@/components/shared/PillButton.vue'
 import OpcuaGroupDialog from '@/components/opcua/OpcuaGroupDialog.vue'
 import OpcuaGroupTree from '@/components/opcua/OpcuaGroupTree.vue'
 import OpcuaImportDialog from '@/components/opcua/OpcuaImportDialog.vue'
@@ -291,16 +323,16 @@ import type {
   OpcuaValidationIssue,
 } from '@/components/opcua/types'
 import IconTablerActivityHeartbeat from '~icons/tabler/activity-heartbeat'
+import IconTablerChevronRight from '~icons/tabler/chevron-right'
 import IconTablerChecklist from '~icons/tabler/checklist'
-import IconTablerClipboard from '~icons/tabler/clipboard'
 import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerDownload from '~icons/tabler/download'
-import IconTablerExternalLink from '~icons/tabler/external-link'
+import IconTablerEye from '~icons/tabler/eye'
+import IconTablerFilter from '~icons/tabler/filter'
 import IconTablerFileDescription from '~icons/tabler/file-description'
 import IconTablerPencil from '~icons/tabler/pencil'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerRefresh from '~icons/tabler/refresh'
-import IconTablerRoute from '~icons/tabler/route'
 import IconTablerTrash from '~icons/tabler/trash'
 import IconTablerUpload from '~icons/tabler/upload'
 import IconTablerSettings from '~icons/tabler/settings'
@@ -338,31 +370,26 @@ watch(
 
 const showEditDialog = ref(false)
 const isSavingConnection = ref(false)
+const connectionDialogRef = ref(null)
 
 const handleEditConnectionSubmit = async (data: any) => {
   isSavingConnection.value = true
   try {
-    await dataAPI.updateConnection(props.projectId, props.connection.id, {
+    await dataAPI.updateOpcuaConfig(props.projectId, props.connection.id, {
       name: data.name,
-      type: data.type,
-      config: data.config,
+      status: localConnection.value.status || props.connection.status || 'disconnected',
+      ...data.config,
     })
     ElMessage.success('连接配置更新成功')
+    connectionDialogRef.value?.closeSilently?.()
     showEditDialog.value = false
 
-    // 原地更新本地状态，实现 UI 的即时零延迟刷新
-    const buildOpcuaEndpoint = (ip: any, port: any) => {
-      const safeIp = String(ip || '').trim()
-      const safePort = Number(port) || 4840
-      return `opc.tcp://${safeIp}:${safePort}`
-    }
     localConnection.value = {
       ...localConnection.value,
       name: data.name,
       config: {
         ...localConnection.value.config,
         ...data.config,
-        endpoint: buildOpcuaEndpoint(data.config.ip, data.config.port),
       },
     }
 
@@ -400,17 +427,21 @@ const selectedGroupId = ref('')
 const selectedNodeId = ref('')
 const nodeKeyword = ref('')
 const groupDialogVisible = ref(false)
+const groupDialogRef = ref<InstanceType<typeof OpcuaGroupDialog> | null>(null)
 const groupDialogMode = ref<'create' | 'edit'>('create')
 const editingGroup = ref<OpcuaNodeGroup | null>(null)
 const defaultGroupParentId = ref('')
 const nodeDialogVisible = ref(false)
+const nodeDialogRef = ref<InstanceType<typeof OpcuaNodeDialog> | null>(null)
 const nodeDialogMode = ref<'create' | 'edit'>('create')
 const editingNode = ref<OpcuaNode | null>(null)
 const importVisible = ref(false)
+const importDialogRef = ref<InstanceType<typeof OpcuaImportDialog> | null>(null)
 const browsing = ref(false)
 const browseNodes = ref<OpcuaBrowseNode[]>([])
 const browseDiagnostics = ref<string[]>([])
 const previewVisible = ref(false)
+const detailVisible = ref(false)
 const previewNodes = ref<OpcuaReadValue[]>([])
 const previewDiagnostics = ref<string[]>([])
 const validationVisible = ref(false)
@@ -433,6 +464,9 @@ const quickFilters = [
   { label: '可写', value: 'writable' },
   { label: '已停用', value: 'disabled' },
 ]
+const currentQuickFilterLabel = computed(
+  () => quickFilters.find((item) => item.value === quickFilter.value)?.label || '全部',
+)
 
 const session = useProtocolDevSession({
   create: () => dataAPI.createOpcuaDevSession(props.projectId, props.connection.id),
@@ -442,11 +476,16 @@ const session = useProtocolDevSession({
 
 const config = computed(() => localConnection.value.config || {})
 const endpointText = computed(() =>
-  String(config.value.endpoint || config.value.url || '未配置 endpoint'),
+  String(config.value.endpoint || config.value.url || '未配置服务器地址'),
 )
+const serverAddressText = computed(() => {
+  const endpoint = endpointText.value.trim()
+  const match = endpoint.match(/^opc\.tcp:\/\/([^/]+)$/i)
+  return match?.[1] || endpoint.replace(/^opc\.tcp:\/\//i, '') || '未配置服务器地址'
+})
 const sourceMetaRows = computed(() => [
   { label: '类型', value: 'OPC UA' },
-  { label: 'Endpoint', value: endpointText.value },
+  { label: '服务器地址', value: serverAddressText.value },
 ])
 const currentGroup = computed(
   () => groups.value.find((group) => group.id === selectedGroupId.value) || null,
@@ -463,6 +502,9 @@ const previewActionTitle = computed(() =>
       ? `预览「${currentGroup.value.name}」变量`
       : '预览全部变量'
     : '连接后可预览当前分组变量',
+)
+const previewScopeLabel = computed(() =>
+  currentGroup.value ? `变量组：${currentGroup.value.name}` : '全部变量',
 )
 const validationActionTitle = computed(() =>
   selectedNode.value
@@ -527,10 +569,6 @@ const buildNodeExportRows = (items: OpcuaNode[]) =>
     质量: node.quality || '',
     诊断问题摘要: issueSummaryForNode(node.id),
   }))
-const nodeExportRows = computed(() => buildNodeExportRows(nodes.value))
-const issueExportRows = computed(() =>
-  buildIssueExportRows(nodes.value, scopedValidationIssues.value),
-)
 const buildIssueExportRows = (items: OpcuaNode[], issues: OpcuaValidationIssue[]) => {
   const nodeByID = new Map(items.map((item) => [item.id, item]))
   return issues
@@ -566,7 +604,7 @@ const contractSections = computed(() => [
   {
     title: '协议建模',
     rows: [
-      { label: 'Endpoint', value: endpointText.value },
+      { label: '连接地址', value: endpointText.value },
       { label: '变量数', value: nodePagination.value.total },
       { label: '当前页启用', value: nodes.value.filter((node) => node.status === 'active').length },
       { label: '发布能力', value: '按服务器能力收窄，不提供工作台写值' },
@@ -588,9 +626,8 @@ const contractSections = computed(() => [
       { label: '历史归档', value: storageSummaryText.value },
       { label: '异常策略', value: storageSummary.value?.errorCount ?? 0 },
       { label: '设备冗余', value: deviceRedundancyText.value },
-      { label: '采集冗余', value: '运行部署策略统一配置' },
     ],
-    notes: ['同一 connection 同一时刻只有一个采集 Owner；设备 endpoint 故障时由该 Owner 按主备策略切换。'],
+    notes: ['同一接入源同一时刻只有一个采集 Owner；设备服务器故障时由该 Owner 按主备策略切换。'],
   },
 ])
 
@@ -647,7 +684,11 @@ const loadExportNodes = async () => {
   })
   const firstPage = unwrapList<OpcuaNode>(firstResponse)
   const pagination = unwrapPagination(firstResponse) || {}
-  const totalPages = Number(pagination.totalPages || Math.ceil(Number(pagination.total || firstPage.length) / pageSize) || 1)
+  const totalPages = Number(
+    pagination.totalPages ||
+      Math.ceil(Number(pagination.total || firstPage.length) / pageSize) ||
+      1,
+  )
   const result = [...firstPage]
   for (let page = 2; page <= totalPages; page += 1) {
     const response = await dataAPI.getOpcuaNodes(props.projectId, props.connection.id, {
@@ -714,14 +755,11 @@ const changeNodePageSize = async (pageSize: number) => {
 const changeNodeSort = async (payload: { prop?: string; order?: string | null }) => {
   nodeSort.value = {
     sortBy: payload.prop || undefined,
-    sortOrder: payload.order === 'descending' ? 'desc' : payload.order === 'ascending' ? 'asc' : undefined,
+    sortOrder:
+      payload.order === 'descending' ? 'desc' : payload.order === 'ascending' ? 'asc' : undefined,
   }
   nodePagination.value.page = 1
   await reloadAll()
-}
-
-const selectNode = (node: OpcuaNode) => {
-  selectedNodeId.value = node.id
 }
 
 const openCreateGroup = () => {
@@ -761,6 +799,7 @@ const saveGroup = async (payload: Record<string, unknown>) => {
     } else {
       await dataAPI.createOpcuaNodeGroup(props.projectId, props.connection.id, payload)
     }
+    groupDialogRef.value?.closeSilently()
     groupDialogVisible.value = false
     await reloadAll()
   } catch (error) {
@@ -783,12 +822,24 @@ const openCreateNode = () => {
   nodeDialogVisible.value = true
 }
 
+const openEditNode = (node: OpcuaNode) => {
+  editingNode.value = node
+  nodeDialogMode.value = 'edit'
+  nodeDialogVisible.value = true
+}
+
 const openDuplicateNode = (node: OpcuaNode) => {
   editingNode.value = {
     ...node,
     id: '',
-    name: `${node.name} 副本`,
-    code: `${node.code}_copy`,
+    name: nextCopyName(
+      node.name,
+      nodes.value.map((item) => item.name),
+    ),
+    code: nextCopyName(
+      node.code || toVariableCode(node.name),
+      nodes.value.map((item) => item.code),
+    ),
     datapointId: null,
     datapointPath: null,
     datapointStatus: null,
@@ -800,10 +851,9 @@ const openDuplicateNode = (node: OpcuaNode) => {
   nodeDialogVisible.value = true
 }
 
-const openEditNode = (node: OpcuaNode) => {
-  editingNode.value = node
-  nodeDialogMode.value = 'edit'
-  nodeDialogVisible.value = true
+const openNodeDetail = (node: OpcuaNode) => {
+  selectedNodeId.value = node.id
+  detailVisible.value = true
 }
 
 const saveNode = async (payload: Record<string, unknown>) => {
@@ -818,6 +868,7 @@ const saveNode = async (payload: Record<string, unknown>) => {
             payload,
           )
         : await dataAPI.createOpcuaNode(props.projectId, props.connection.id, payload)
+    nodeDialogRef.value?.closeSilently()
     nodeDialogVisible.value = false
     await reloadAll()
     selectedNodeId.value = saved?.data?.id || saved?.data?.data?.id || ''
@@ -842,6 +893,7 @@ const importNodes = async (rows: Array<Record<string, unknown>>) => {
       groupId: selectedGroupId.value || null,
       nodes: rows,
     })
+    importDialogRef.value?.closeSilently()
     importVisible.value = false
     await reloadAll()
   } catch (error) {
@@ -865,7 +917,11 @@ const exportNodes = async (format: string | number | object) => {
     if (suffix === 'xlsx') {
       downloadXlsx(filename, [
         { name: '变量清单', headers: nodeExportHeaders, rows },
-        { name: '问题清单', headers: issueExportHeaders, rows: buildIssueExportRows(exportItems, validationIssues.value) },
+        {
+          name: '问题清单',
+          headers: issueExportHeaders,
+          rows: buildIssueExportRows(exportItems, validationIssues.value),
+        },
       ])
       return
     }
@@ -897,7 +953,9 @@ const openPreview = async () => {
       },
     )
     const data = unwrapData(response)
-    previewNodes.value = data.values || []
+    const values = data.values || []
+    previewNodes.value = values
+    applyPreviewValues(values)
     previewDiagnostics.value = data.diagnostics || []
     previewVisible.value = true
   } catch (error) {
@@ -929,7 +987,7 @@ const openNodeMenu = (event: MouseEvent, node: OpcuaNode) => {
   nodeMenu.value = {
     visible: true,
     x: Math.min(event.clientX, window.innerWidth - 180),
-    y: Math.min(event.clientY, window.innerHeight - 210),
+    y: Math.min(event.clientY, window.innerHeight - 150),
     node,
   }
 }
@@ -938,9 +996,7 @@ const closeNodeMenu = () => {
   nodeMenu.value.visible = false
 }
 
-const runNodeMenuAction = async (
-  action: 'edit' | 'duplicate' | 'copy-info' | 'copy-path' | 'datapoint' | 'delete',
-) => {
+const runNodeMenuAction = async (action: 'edit' | 'detail' | 'duplicate' | 'delete') => {
   const node = nodeMenu.value.node
   closeNodeMenu()
   if (!node) return
@@ -948,34 +1004,12 @@ const runNodeMenuAction = async (
     openEditNode(node)
     return
   }
+  if (action === 'detail') {
+    openNodeDetail(node)
+    return
+  }
   if (action === 'duplicate') {
     openDuplicateNode(node)
-    return
-  }
-  if (action === 'copy-info') {
-    await copyText(
-      [
-        `name=${node.name}`,
-        `code=${node.code}`,
-        `nodeId=${node.nodeId}`,
-        `browseName=${node.browseName || ''}`,
-        `type=${node.dataType}`,
-        `datapoint=${node.datapointPath || ''}`,
-      ].join('\n'),
-      '变量信息已复制',
-    )
-    return
-  }
-  if (action === 'copy-path') {
-    if (!node.datapointPath) {
-      ElMessage.warning('当前变量还没有数据点 path')
-      return
-    }
-    await copyText(node.datapointPath, '数据点 path 已复制')
-    return
-  }
-  if (action === 'datapoint') {
-    ElMessage.info(node.datapointPath ? `数据点：${node.datapointPath}` : '当前变量还没有数据点')
     return
   }
   await removeNode(node)
@@ -1022,7 +1056,7 @@ const deviceRedundancyText = computed(() => {
   const redundancy = config.value.redundancy
   if (!redundancy || redundancy.enabled === false) return '未配置'
   const count = Array.isArray(redundancy.endpoints) ? redundancy.endpoints.length : 0
-  return count > 1 ? `主备优先级 · ${count} endpoint` : '待补备用路径'
+  return count > 1 ? `主备优先级 · ${count} 台服务器` : '待补备用服务器'
 })
 
 watch(nodeKeyword, () => {
@@ -1042,15 +1076,44 @@ onBeforeUnmount(() => {
   if (searchTimer) window.clearTimeout(searchTimer)
 })
 
-async function copyText(text: string, successMessage: string) {
-  await navigator.clipboard.writeText(text)
-  ElMessage.success(successMessage)
-}
-
 function formatExportValue(value: unknown) {
   if (value === null || value === undefined || value === '') return ''
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
+}
+
+function nextCopyName(baseName: string, existingNames: Array<string | undefined>) {
+  const base = String(baseName || 'node').replace(/_copy\d+$/i, '')
+  const existing = new Set(existingNames.filter(Boolean).map((item) => String(item)))
+  for (let index = 1; index < 10000; index += 1) {
+    const candidate = `${base}_copy${index}`
+    if (!existing.has(candidate)) return candidate
+  }
+  return `${base}_copy${Date.now()}`
+}
+
+function toVariableCode(value: string) {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  return normalized || 'node'
+}
+
+function applyPreviewValues(values: OpcuaReadValue[]) {
+  if (!Array.isArray(values) || values.length === 0) return
+  const valueByNodeId = new Map(values.map((item) => [item.nodeId, item]))
+  nodes.value = nodes.value.map((node) => {
+    const preview = valueByNodeId.get(node.nodeId)
+    if (!preview) return node
+    return {
+      ...node,
+      lastValue: preview.error ? node.lastValue : preview.value,
+      quality: preview.quality || (preview.error ? 'Bad' : node.quality),
+      lastUpdatedAt: preview.sourceTimestamp || preview.serverTimestamp || node.lastUpdatedAt,
+    }
+  })
 }
 
 onMounted(() => {
@@ -1064,7 +1127,7 @@ onMounted(() => {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 286px;
+  grid-template-columns: 260px minmax(0, 1fr);
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-md);
   background: var(--dc-surface-raised);
@@ -1084,6 +1147,12 @@ onMounted(() => {
 .opcua-workbench__side :deep(.opcua-groups) {
   flex: 1;
   min-height: 0;
+}
+
+.opcua-workbench__status-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .opcua-workbench__connect-action {
@@ -1135,6 +1204,28 @@ onMounted(() => {
   color: #b91c1c;
 }
 
+.opcua-workbench__edit-config {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-secondary);
+}
+
+.opcua-workbench__edit-config svg {
+  width: 14px;
+  height: 14px;
+}
+
+.opcua-workbench__edit-config:hover {
+  border-color: color-mix(in oklch, var(--dc-primary) 28%, var(--dc-border));
+  color: var(--dc-primary);
+}
+
 .opcua-workbench__main {
   min-width: 0;
   min-height: 0;
@@ -1150,7 +1241,7 @@ onMounted(() => {
   border-bottom: 1px solid var(--dc-border);
   background: var(--dc-surface-subtle);
   display: grid;
-  grid-template-columns: auto minmax(180px, 260px);
+  grid-template-columns: auto minmax(260px, 1fr);
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -1161,6 +1252,29 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+
+.opcua-workbench__right-tools {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(74px, auto) minmax(180px, 260px) repeat(3, 28px);
+  justify-content: end;
+  align-items: center;
+  gap: 6px;
+}
+
+.opcua-workbench__right-tools :deep(.dc-pill-button) {
+  width: 74px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--dc-radius-sm);
+  font-size: 12px;
+}
+
+.opcua-workbench__right-tools :deep(.dc-pill-button__icon),
+.opcua-workbench__right-tools :deep(.dc-pill-button__icon svg) {
+  width: 13px;
+  height: 13px;
 }
 
 .opcua-workbench__icon-action {
@@ -1199,28 +1313,39 @@ onMounted(() => {
 .opcua-workbench__search {
   min-width: 0;
 }
-.opcua-workbench__filters {
-  min-height: 36px;
+
+.opcua-workbench__filter-menu {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-top: 1px solid var(--dc-border);
-  background: var(--dc-surface-subtle);
+  flex-direction: column;
+  gap: 2px;
+  margin: -6px -8px;
 }
-.opcua-workbench__filters button {
-  height: 24px;
-  padding: 0 9px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-raised);
+
+.opcua-workbench__filter-item {
+  width: 100%;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
   color: var(--dc-text-secondary);
-  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
-.opcua-workbench__filters button.is-active,
-.opcua-workbench__filters button:hover {
-  border-color: color-mix(in oklch, var(--dc-primary) 32%, var(--dc-border));
+
+.opcua-workbench__filter-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--dc-text);
+}
+
+.opcua-workbench__filter-item.is-active {
+  background: rgba(29, 78, 216, 0.12);
   color: var(--dc-primary);
+  font-weight: 600;
 }
 .opcua-workbench__menu-mask {
   position: fixed;
@@ -1269,8 +1394,76 @@ onMounted(() => {
     grid-template-columns: 230px minmax(0, 1fr);
   }
 
-  .opcua-workbench :deep(.opcua-inspector) {
-    display: none;
+  .opcua-workbench__bar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
+
+  .opcua-workbench__right-tools {
+    grid-template-columns: 74px minmax(0, 1fr) repeat(3, 28px);
+    justify-content: stretch;
+  }
+}
+</style>
+
+<style>
+.opcua-workbench__detail-drawer .el-drawer__body {
+  min-height: 0;
+  padding: 0;
+  background: var(--dc-surface-subtle);
+}
+
+.opcua-workbench__detail-drawer .el-drawer__header {
+  margin-bottom: 0;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--dc-border);
+}
+
+.opcua-workbench__detail-header {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.opcua-workbench__detail-header span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dc-text);
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opcua-workbench__detail-collapse {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-secondary);
+  cursor: pointer;
+}
+
+.opcua-workbench__detail-collapse:hover {
+  border-color: color-mix(in oklch, var(--dc-primary) 28%, var(--dc-border));
+  color: var(--dc-primary);
+}
+
+.opcua-workbench__detail-collapse svg {
+  width: 15px;
+  height: 15px;
+}
+
+.opcua-workbench__detail-drawer .opcua-inspector {
+  width: auto;
+  height: 100%;
+  border-left: 0;
 }
 </style>

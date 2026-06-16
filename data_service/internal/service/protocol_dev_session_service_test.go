@@ -18,8 +18,9 @@ type fakeProtocolDevConnectionRepository struct {
 }
 
 type fakeProtocolDevOpcuaReader struct {
-	groups []ProtocolDevOpcuaGroup
-	nodes  []ProtocolDevOpcuaNode
+	groups  []ProtocolDevOpcuaGroup
+	nodes   []ProtocolDevOpcuaNode
+	updated map[string]any
 }
 
 type fakeProtocolDevModbusReader struct {
@@ -57,6 +58,14 @@ func (r *fakeProtocolDevOpcuaReader) ListDevSessionOpcuaNodes(_ context.Context,
 		result = append(result, node)
 	}
 	return result, nil
+}
+
+func (r *fakeProtocolDevOpcuaReader) UpdateNodeLastValue(_ context.Context, _, _, nodeID, _ string, value any, _ string) error {
+	if r.updated == nil {
+		r.updated = map[string]any{}
+	}
+	r.updated[nodeID] = value
+	return nil
 }
 
 func (r *fakeProtocolDevModbusReader) ListDevSessionModbusRegisters(_ context.Context, _, _ string, groupID *string) ([]ProtocolDevModbusRegister, error) {
@@ -161,8 +170,8 @@ func TestProtocolDevSessionService_BrowseAndReadOpcuaNodes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read failed: %v", err)
 	}
-	if len(read.Values) != 1 || read.Values[0].Quality != "Good" || read.Values[0].Value == nil {
-		t.Fatalf("unexpected read result: %#v", read)
+	if len(read.Values) != 1 || read.Values[0].Quality != "Good" || read.Values[0].Value == nil || opcua.updated["n-1"] == nil {
+		t.Fatalf("unexpected read result: %#v updated=%#v", read, opcua.updated)
 	}
 }
 

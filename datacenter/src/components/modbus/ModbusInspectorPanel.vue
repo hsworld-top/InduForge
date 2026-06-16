@@ -51,23 +51,6 @@
         <p>{{ register.datapointPath || '未生成' }}</p>
       </section>
       <section>
-        <h3><IconTablerArchive />运行契约摘要</h3>
-        <dl>
-          <dt>当前值</dt>
-          <dd>IF 实时库</dd>
-          <dt>历史归档</dt>
-          <dd>
-            <button type="button" class="modbus-inspector__link" @click="openStoragePolicy">
-              {{ storageCoverageText }}
-            </button>
-          </dd>
-          <dt>设备冗余</dt>
-          <dd>{{ deviceRedundancyText }}</dd>
-          <dt>采集冗余</dt>
-          <dd>{{ collectionRedundancyText }}</dd>
-        </dl>
-      </section>
-      <section>
         <h3><IconTablerAlertTriangle />校验问题</h3>
         <p :class="{ 'is-warning': registerIssues.length }">
           {{ registerIssues.length ? `${registerIssues.length} 个问题` : '无' }}
@@ -116,9 +99,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { getStoragePolicyCoverage } from '@/api/storage-policy.api'
+import { computed } from 'vue'
 import type {
   ModbusReadPlanEstimate,
   ModbusRegister,
@@ -126,7 +107,6 @@ import type {
   ModbusValidationIssue,
 } from './types'
 import IconTablerAlertTriangle from '~icons/tabler/alert-triangle'
-import IconTablerArchive from '~icons/tabler/archive'
 import IconTablerBinaryTree from '~icons/tabler/binary-tree'
 import IconTablerChartBar from '~icons/tabler/chart-bar'
 import IconTablerDatabase from '~icons/tabler/database'
@@ -145,12 +125,6 @@ const props = defineProps<{
   projectId: string
 }>()
 
-const route = useRoute()
-const router = useRouter()
-const storagePolicyCount = ref<number | null>(null)
-const storageCoverageLoading = ref(false)
-const storageCoverageFailed = ref(false)
-
 const scopedRegisters = computed(() =>
   props.group
     ? props.registers.filter((item) => item.groupId === props.group?.id)
@@ -165,21 +139,6 @@ const countByArea = computed(() => {
 const registerIssues = computed(() =>
   props.register ? props.issues.filter((issue) => issue.registerId === props.register?.id) : [],
 )
-const deviceRedundancyText = computed(() => {
-  const redundancy = props.connection?.config?.redundancy
-  if (!redundancy || redundancy.enabled === false) return '未配置'
-  const count = Array.isArray(redundancy.endpoints) ? redundancy.endpoints.length : 0
-  return count > 1 ? `主备优先级 · ${count} endpoint` : '主备优先级'
-})
-const collectionRedundancyText = computed(() => '运行部署策略统一配置')
-const storageCoverageText = computed(() => {
-  if (!props.register?.datapointPath) return '未生成数据点'
-  if (storageCoverageLoading.value) return '历史归档检查中'
-  if (storageCoverageFailed.value) return '历史归档检查失败'
-  if (!storagePolicyCount.value) return '未配置历史归档'
-  return `已命中 ${storagePolicyCount.value} 条历史策略`
-})
-
 const formatArea = (area: string) => {
   const map: Record<string, string> = {
     coil: 'Coil',
@@ -189,41 +148,6 @@ const formatArea = (area: string) => {
   }
   return map[area] || area
 }
-
-const openStoragePolicy = () => {
-  const base = route.path.startsWith('/debug/') ? '/debug' : ''
-  void router.push({
-    path: `${base}/storage-policy`,
-    query: {
-      ...route.query,
-      accessSourceId: props.connection?.id || '',
-      datapointPath: props.register?.datapointPath || '',
-    },
-  })
-}
-
-watch(
-  () => [props.projectId, props.register?.datapointId, props.register?.datapointPath] as const,
-  async ([projectId, datapointId, datapointPath]) => {
-    storagePolicyCount.value = null
-    storageCoverageFailed.value = false
-    if (!projectId || (!datapointId && !datapointPath)) return
-    storageCoverageLoading.value = true
-    try {
-      const coverage = await getStoragePolicyCoverage(projectId, {
-        datapointId: datapointId || undefined,
-        path: datapointPath || undefined,
-      })
-      storagePolicyCount.value = coverage.matchedPolicyCount
-    } catch {
-      storagePolicyCount.value = 0
-      storageCoverageFailed.value = true
-    } finally {
-      storageCoverageLoading.value = false
-    }
-  },
-  { immediate: true },
-)
 </script>
 
 <style scoped>

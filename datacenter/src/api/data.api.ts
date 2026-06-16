@@ -112,19 +112,103 @@ export const createRedisConfig = (projectId, data) => {
   })
 }
 
+const normalizeOpcuaConfigPayload = (data = {}) => {
+  const securityMode = String(data.securityMode || 'none')
+    .replace(/_/g, '')
+    .toLowerCase()
+  const authType = data.authType || 'anonymous'
+  const payload = {
+    name: data.name,
+    status: data.status || 'disconnected',
+    endpoint: data.endpoint,
+    securityPolicy: data.securityPolicy || 'None',
+    securityMode,
+    authType,
+    samplingMs: Number(data.samplingMs) || 1000,
+    options: data.options && typeof data.options === 'object' ? data.options : {},
+    redundancy:
+      data.redundancy && typeof data.redundancy === 'object'
+        ? data.redundancy
+        : {
+            enabled: false,
+            mode: 'none',
+            endpoints: [],
+            failoverPolicy: {},
+          },
+  }
+  if (authType === 'username_password') {
+    payload.username = data.username || null
+    payload.password = data.password || null
+  }
+  return payload
+}
+
+const defaultRedundancyPayload = {
+  enabled: false,
+  mode: 'none',
+  endpoints: [],
+  failoverPolicy: {},
+}
+
+const normalizeRedundancyPayload = (redundancy) =>
+  redundancy && typeof redundancy === 'object' ? redundancy : defaultRedundancyPayload
+
 export const createOpcuaConfig = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/opcua/configs`,
     method: 'post',
-    data,
+    data: normalizeOpcuaConfigPayload(data),
   })
+}
+
+export const updateOpcuaConfig = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/opcua/configs/${connectionId}`,
+    method: 'put',
+    data: normalizeOpcuaConfigPayload(data),
+  })
+}
+
+const normalizeS7ConfigPayload = (data = {}) => ({
+  name: data.name,
+  status: data.status || 'disconnected',
+  host: data.host,
+  port: Number(data.port) || 102,
+  rack: Number(data.rack) || 0,
+  slot: Number(data.slot) || 1,
+  pollIntervalMs: Number(data.pollIntervalMs) || 1000,
+  options: data.options && typeof data.options === 'object' ? data.options : {},
+  redundancy: normalizeRedundancyPayload(data.redundancy),
+})
+
+const normalizeModbusConfigPayload = (data = {}) => {
+  const mode = String(data.mode || 'tcp').toLowerCase()
+  const payload = {
+    name: data.name,
+    status: data.status || 'disconnected',
+    mode,
+    slaveId: Number(data.slaveId) || 1,
+    startAddress: Number(data.startAddress) || 0,
+    quantity: Number(data.quantity) || 1,
+    pollIntervalMs: Number(data.pollIntervalMs) || 1000,
+    options: data.options && typeof data.options === 'object' ? data.options : {},
+    redundancy: normalizeRedundancyPayload(data.redundancy),
+  }
+  if (mode === 'rtu') {
+    payload.serialConfig =
+      data.serialConfig && typeof data.serialConfig === 'object' ? data.serialConfig : {}
+  } else {
+    payload.host = data.host
+    payload.port = Number(data.port) || 502
+  }
+  return payload
 }
 
 export const createS7Config = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/s7/configs`,
     method: 'post',
-    data,
+    data: normalizeS7ConfigPayload(data),
   })
 }
 
@@ -132,7 +216,7 @@ export const createModbusConfig = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/modbus/configs`,
     method: 'post',
-    data,
+    data: normalizeModbusConfigPayload(data),
   })
 }
 
@@ -1843,6 +1927,7 @@ export default {
   createRealtimeStoreKeyDatapoint,
   batchCreateRealtimeStoreKeyDatapoints,
   createOpcuaConfig,
+  updateOpcuaConfig,
   createS7Config,
   createModbusConfig,
   createTdengineConfig,

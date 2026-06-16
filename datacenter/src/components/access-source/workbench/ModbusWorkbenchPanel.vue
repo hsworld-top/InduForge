@@ -41,6 +41,15 @@
         <div class="modbus-workbench__actions">
           <button
             type="button"
+            class="modbus-workbench__icon-action is-primary"
+            title="新建变量"
+            aria-label="新建变量"
+            @click="openCreateRegister"
+          >
+            <IconTablerPlus />
+          </button>
+          <button
+            type="button"
             class="modbus-workbench__icon-action"
             :title="importActionTitle"
             :aria-label="importActionTitle"
@@ -71,15 +80,6 @@
           </el-dropdown>
           <button
             type="button"
-            class="modbus-workbench__icon-action is-primary"
-            title="新建变量"
-            aria-label="新建变量"
-            @click="openCreateRegister"
-          >
-            <IconTablerPlus />
-          </button>
-          <button
-            type="button"
             class="modbus-workbench__icon-action"
             :disabled="!session.connected.value"
             :title="previewActionTitle"
@@ -88,6 +88,35 @@
           >
             <IconTablerActivityHeartbeat />
           </button>
+        </div>
+        <div class="modbus-workbench__right-tools">
+          <el-popover placement="bottom-start" :width="150" trigger="click">
+            <template #reference>
+              <PillButton :active="quickFilter !== 'all'">
+                <template #icon><IconTablerFilter /></template>
+                {{ currentQuickFilterLabel }}
+              </PillButton>
+            </template>
+            <div class="modbus-workbench__filter-menu">
+              <button
+                v-for="item in quickFilters"
+                :key="item.value"
+                type="button"
+                class="modbus-workbench__filter-item"
+                :class="{ 'is-active': quickFilter === item.value }"
+                @click="quickFilter = item.value"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+          </el-popover>
+          <el-input
+            v-model="registerKeyword"
+            class="modbus-workbench__search"
+            size="small"
+            placeholder="搜索变量"
+            clearable
+          />
           <button
             type="button"
             class="modbus-workbench__icon-action"
@@ -125,13 +154,6 @@
             <IconTablerRefresh />
           </button>
         </div>
-        <el-input
-          v-model="registerKeyword"
-          class="modbus-workbench__search"
-          size="small"
-          placeholder="搜索变量"
-          clearable
-        />
       </div>
       <ModbusRegisterTable
         :registers="registers"
@@ -140,7 +162,9 @@
         :page="registerPagination.page"
         :page-size="registerPagination.pageSize"
         :total="registerPagination.total"
-        @select="selectRegister"
+        @select="openRegisterDetail"
+        @detail="openRegisterDetail"
+        @duplicate="openDuplicateRegister"
         @edit="openEditRegister"
         @delete="removeRegister"
         @row-contextmenu="openRegisterMenu"
@@ -148,28 +172,39 @@
         @page-size-change="changeRegisterPageSize"
         @sort-change="changeRegisterSort"
       />
-      <div class="modbus-workbench__filters">
-        <button
-          v-for="item in quickFilters"
-          :key="item.value"
-          type="button"
-          :class="{ 'is-active': quickFilter === item.value }"
-          @click="quickFilter = item.value"
-        >
-          {{ item.label }}
-        </button>
-      </div>
     </main>
 
-    <ModbusInspectorPanel
-      :group="currentGroup"
-      :register="selectedRegister"
-      :registers="registers"
-      :issues="scopedValidationIssues"
-      :estimate="readPlanEstimate"
-      :connection="connection"
-      :project-id="projectId"
-    />
+    <el-drawer
+      v-model="detailVisible"
+      class="modbus-workbench__detail-drawer"
+      size="420px"
+      append-to-body
+      destroy-on-close
+    >
+      <template #header>
+        <div class="modbus-workbench__detail-header">
+          <button
+            type="button"
+            class="modbus-workbench__detail-collapse"
+            title="收起详情"
+            aria-label="收起详情"
+            @click="detailVisible = false"
+          >
+            <IconTablerChevronRight />
+          </button>
+          <span>{{ selectedRegister?.name || '变量详情' }}</span>
+        </div>
+      </template>
+      <ModbusInspectorPanel
+        :group="null"
+        :register="selectedRegister"
+        :registers="registers"
+        :issues="scopedValidationIssues"
+        :estimate="readPlanEstimate"
+        :connection="connection"
+        :project-id="projectId"
+      />
+    </el-drawer>
 
     <ModbusGroupDialog
       v-model="groupDialogVisible"
@@ -194,6 +229,7 @@
       v-model="previewVisible"
       :registers="previewRegisters"
       :diagnostics="previewDiagnostics"
+      :scope-label="previewScopeLabel"
     />
     <ModbusValidationDrawer
       v-model="validationVisible"
@@ -221,25 +257,21 @@
           :style="{ left: `${registerMenu.x}px`, top: `${registerMenu.y}px` }"
           @click.stop
         >
+          <button type="button" @click="runRegisterMenuAction('detail')">
+            <IconTablerEye class="modbus-workbench__menu-icon" />
+            <span>查看详情</span>
+          </button>
           <button type="button" @click="runRegisterMenuAction('edit')">
             <IconTablerPencil class="modbus-workbench__menu-icon" />
-            <span>编辑</span>
+            <span>编辑变量</span>
           </button>
           <button type="button" @click="runRegisterMenuAction('duplicate')">
             <IconTablerCopy class="modbus-workbench__menu-icon" />
             <span>复制为新变量</span>
           </button>
-          <button type="button" @click="runRegisterMenuAction('copy-info')">
-            <IconTablerClipboard class="modbus-workbench__menu-icon" />
-            <span>复制变量信息</span>
-          </button>
           <button type="button" @click="runRegisterMenuAction('copy-path')">
-            <IconTablerRoute class="modbus-workbench__menu-icon" />
-            <span>复制数据点路径</span>
-          </button>
-          <button type="button" @click="runRegisterMenuAction('datapoint')">
-            <IconTablerExternalLink class="modbus-workbench__menu-icon" />
-            <span>查看数据点详情</span>
+            <IconTablerClipboard class="modbus-workbench__menu-icon" />
+            <span>复制数据点 path</span>
           </button>
           <button type="button" class="is-danger" @click="runRegisterMenuAction('delete')">
             <IconTablerTrash class="modbus-workbench__menu-icon" />
@@ -260,6 +292,7 @@ import { getApiErrorMessage } from '@/utils/request'
 import { downloadCsv, downloadXlsx } from '@/utils/tabular-file'
 import { useProtocolDevSession } from './useProtocolDevSession'
 import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
+import PillButton from '@/components/common/PillButton.vue'
 import ModbusGroupDialog from '@/components/modbus/ModbusGroupDialog.vue'
 import ModbusGroupTree from '@/components/modbus/ModbusGroupTree.vue'
 import ModbusImportDialog from '@/components/modbus/ModbusImportDialog.vue'
@@ -278,11 +311,13 @@ import type {
   ModbusValidationIssue,
 } from '@/components/modbus/types'
 import IconTablerActivityHeartbeat from '~icons/tabler/activity-heartbeat'
+import IconTablerChevronRight from '~icons/tabler/chevron-right'
 import IconTablerChecklist from '~icons/tabler/checklist'
 import IconTablerClipboard from '~icons/tabler/clipboard'
 import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerDownload from '~icons/tabler/download'
-import IconTablerExternalLink from '~icons/tabler/external-link'
+import IconTablerEye from '~icons/tabler/eye'
+import IconTablerFilter from '~icons/tabler/filter'
 import IconTablerFileDescription from '~icons/tabler/file-description'
 import IconTablerPencil from '~icons/tabler/pencil'
 import IconTablerPlus from '~icons/tabler/plus'
@@ -335,6 +370,7 @@ const importVisible = ref(false)
 const previewVisible = ref(false)
 const previewRegisters = ref<ModbusReadValue[]>([])
 const previewDiagnostics = ref<string[]>([])
+const detailVisible = ref(false)
 const validationVisible = ref(false)
 const validationIssues = ref<ModbusValidationIssue[]>([])
 const readPlanVisible = ref(false)
@@ -356,6 +392,9 @@ const quickFilters = [
   { label: '可写', value: 'writable' },
   { label: '已停用', value: 'disabled' },
 ]
+const currentQuickFilterLabel = computed(
+  () => quickFilters.find((item) => item.value === quickFilter.value)?.label || '筛选',
+)
 
 const session = useProtocolDevSession({
   create: () => dataAPI.createModbusDevSession(props.projectId, props.connection.id),
@@ -371,7 +410,7 @@ const endpointText = computed(() => {
 })
 const sourceMetaRows = computed(() => [
   { label: '类型', value: 'Modbus' },
-  { label: '端点', value: endpointText.value },
+  { label: '连接地址', value: endpointText.value },
   { label: '默认从站', value: String(config.value.slaveId ?? 1) },
 ])
 const currentGroup = computed(
@@ -458,10 +497,6 @@ const buildRegisterExportRows = (items: ModbusRegister[]) =>
     质量: register.quality || '',
     诊断问题摘要: issueSummaryForRegister(register.id),
   }))
-const registerExportRows = computed(() => buildRegisterExportRows(registers.value))
-const issueExportRows = computed(() =>
-  buildIssueExportRows(registers.value, scopedValidationIssues.value),
-)
 const buildIssueExportRows = (items: ModbusRegister[], issues: ModbusValidationIssue[]) => {
   const registerByID = new Map(items.map((item) => [item.id, item]))
   return issues
@@ -498,7 +533,7 @@ const contractSections = computed(() => [
   {
     title: '协议建模',
     rows: [
-      { label: '端点', value: endpointText.value },
+      { label: '连接地址', value: endpointText.value },
       { label: '变量数', value: registerPagination.value.total },
       { label: '从站数', value: unitCount.value },
       { label: '发布能力', value: '寄存器区约束，只配置读写权限，不提供写值' },
@@ -510,7 +545,10 @@ const contractSections = computed(() => [
       { label: '读取次数', value: readPlanEstimate.value.readCount },
       { label: '预计 reads/s', value: readPlanEstimate.value.readsPerSecond.toFixed(2) },
       { label: '开发态位置', value: '平台侧 data_service' },
-      { label: 'RTU 策略', value: config.value.mode === 'rtu' ? 'Linux 环境优先级较低，建议节点侧验证' : 'TCP 优先' },
+      {
+        label: 'RTU 策略',
+        value: config.value.mode === 'rtu' ? 'Linux 环境优先级较低，建议节点侧验证' : 'TCP 优先',
+      },
     ],
   },
   {
@@ -520,7 +558,6 @@ const contractSections = computed(() => [
       { label: '历史归档', value: storageSummaryText.value },
       { label: '异常策略', value: storageSummary.value?.errorCount ?? 0 },
       { label: '设备冗余', value: deviceRedundancyText.value },
-      { label: '采集冗余', value: '运行部署策略统一配置' },
     ],
     notes: ['读取计划由系统按从站、寄存器区、地址和周期估算，工作台不提供手工编辑 readPlan。'],
   },
@@ -591,7 +628,9 @@ const loadExportRegisters = async () => {
   const firstPage = unwrapList<ModbusRegister>(firstResponse)
   const pagination = unwrapPagination(firstResponse) || {}
   const totalPages = Number(
-    pagination.totalPages || Math.ceil(Number(pagination.total || firstPage.length) / pageSize) || 1,
+    pagination.totalPages ||
+      Math.ceil(Number(pagination.total || firstPage.length) / pageSize) ||
+      1,
   )
   const result = [...firstPage]
   for (let page = 2; page <= totalPages; page += 1) {
@@ -630,14 +669,16 @@ const changeRegisterPageSize = async (pageSize: number) => {
 const changeRegisterSort = async (payload: { prop?: string; order?: string | null }) => {
   registerSort.value = {
     sortBy: payload.prop || undefined,
-    sortOrder: payload.order === 'descending' ? 'desc' : payload.order === 'ascending' ? 'asc' : undefined,
+    sortOrder:
+      payload.order === 'descending' ? 'desc' : payload.order === 'ascending' ? 'asc' : undefined,
   }
   registerPagination.value.page = 1
   await reloadAll()
 }
 
-const selectRegister = (register: ModbusRegister) => {
+const openRegisterDetail = (register: ModbusRegister) => {
   selectedRegisterId.value = register.id
+  detailVisible.value = true
 }
 
 const openCreateGroup = () => {
@@ -784,7 +825,11 @@ const exportRegisters = async (format: string | number | object) => {
     if (suffix === 'xlsx') {
       downloadXlsx(filename, [
         { name: '变量清单', headers: registerExportHeaders, rows },
-        { name: '问题清单', headers: issueExportHeaders, rows: buildIssueExportRows(exportItems, validationIssues.value) },
+        {
+          name: '问题清单',
+          headers: issueExportHeaders,
+          rows: buildIssueExportRows(exportItems, validationIssues.value),
+        },
       ])
       return
     }
@@ -799,6 +844,21 @@ const exportRegisters = async (format: string | number | object) => {
 const toggleSession = () => {
   if (session.connected.value) void session.disconnect()
   else void session.connect()
+}
+
+const applyReadValues = (values: ModbusReadValue[]) => {
+  const valueMap = new Map(values.map((item) => [item.registerId, item]))
+  registers.value = registers.value.map((register) => {
+    const next = valueMap.get(register.id)
+    return next
+      ? {
+          ...register,
+          lastValue: next.value,
+          quality: next.error ? 'Bad' : register.quality || 'Good',
+          lastUpdatedAt: next.timestamp,
+        }
+      : register
+  })
 }
 
 const openPreview = async () => {
@@ -818,6 +878,7 @@ const openPreview = async () => {
     const data = unwrapData(response)
     previewRegisters.value = data.values || []
     previewDiagnostics.value = data.diagnostics || []
+    applyReadValues(previewRegisters.value)
     previewVisible.value = true
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '变量预览失败'))
@@ -863,11 +924,15 @@ const closeRegisterMenu = () => {
 }
 
 const runRegisterMenuAction = async (
-  action: 'edit' | 'duplicate' | 'copy-info' | 'copy-path' | 'datapoint' | 'delete',
+  action: 'detail' | 'edit' | 'duplicate' | 'copy-path' | 'delete',
 ) => {
   const register = registerMenu.value.register
   closeRegisterMenu()
   if (!register) return
+  if (action === 'detail') {
+    openRegisterDetail(register)
+    return
+  }
   if (action === 'edit') {
     openEditRegister(register)
     return
@@ -876,31 +941,12 @@ const runRegisterMenuAction = async (
     openDuplicateRegister(register)
     return
   }
-  if (action === 'copy-info') {
-    await copyText(
-      [
-        `name=${register.name}`,
-        `code=${register.code}`,
-        `address=${formatModbusAddress(register)}`,
-        `type=${register.dataType}`,
-        `datapoint=${register.datapointPath || ''}`,
-      ].join('\n'),
-      '变量信息已复制',
-    )
-    return
-  }
   if (action === 'copy-path') {
     if (!register.datapointPath) {
       ElMessage.warning('当前变量还没有数据点 path')
       return
     }
     await copyText(register.datapointPath, '数据点 path 已复制')
-    return
-  }
-  if (action === 'datapoint') {
-    ElMessage.info(
-      register.datapointPath ? `数据点：${register.datapointPath}` : '当前变量还没有数据点',
-    )
     return
   }
   await removeRegister(register)
@@ -932,7 +978,7 @@ const deviceRedundancyText = computed(() => {
   const redundancy = config.value.redundancy
   if (!redundancy || redundancy.enabled === false) return '未配置'
   const count = Array.isArray(redundancy.endpoints) ? redundancy.endpoints.length : 0
-  return count > 1 ? `主备优先级 · ${count} endpoint` : '待补备用路径'
+  return count > 1 ? `主备优先级 · ${count} 台网关` : '待补备用网关'
 })
 
 const storageSummaryText = computed(() => {
@@ -987,7 +1033,7 @@ onMounted(() => {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-columns: 264px minmax(0, 1fr) 292px;
+  grid-template-columns: 264px minmax(0, 1fr);
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-md);
   background: var(--dc-surface-raised);
@@ -1073,7 +1119,7 @@ onMounted(() => {
   border-bottom: 1px solid var(--dc-border);
   background: var(--dc-surface-subtle);
   display: grid;
-  grid-template-columns: auto minmax(180px, 260px);
+  grid-template-columns: auto minmax(260px, 1fr);
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -1084,6 +1130,29 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+
+.modbus-workbench__right-tools {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(74px, auto) minmax(180px, 260px) repeat(4, 28px);
+  justify-content: end;
+  align-items: center;
+  gap: 6px;
+}
+
+.modbus-workbench__right-tools :deep(.dc-pill-button) {
+  width: 74px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--dc-radius-sm);
+  font-size: 12px;
+}
+
+.modbus-workbench__right-tools :deep(.dc-pill-button__icon),
+.modbus-workbench__right-tools :deep(.dc-pill-button__icon svg) {
+  width: 13px;
+  height: 13px;
 }
 
 .modbus-workbench__icon-action {
@@ -1122,28 +1191,82 @@ onMounted(() => {
 .modbus-workbench__search {
   min-width: 0;
 }
-.modbus-workbench__filters {
-  min-height: 36px;
+
+.modbus-workbench__filter-menu {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-top: 1px solid var(--dc-border);
-  background: var(--dc-surface-subtle);
+  flex-direction: column;
+  gap: 2px;
+  margin: -6px -8px;
 }
-.modbus-workbench__filters button {
-  height: 24px;
-  padding: 0 9px;
+
+.modbus-workbench__filter-item {
+  width: 100%;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dc-text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.modbus-workbench__filter-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--dc-text);
+}
+
+.modbus-workbench__filter-item.is-active {
+  background: rgba(29, 78, 216, 0.12);
+  color: var(--dc-primary);
+  font-weight: 600;
+}
+
+.modbus-workbench__detail-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--dc-text);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.modbus-workbench__detail-header span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modbus-workbench__detail-collapse {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-sm);
   background: var(--dc-surface-raised);
   color: var(--dc-text-secondary);
-  font-size: 12px;
 }
-.modbus-workbench__filters button.is-active,
-.modbus-workbench__filters button:hover {
-  border-color: color-mix(in oklch, var(--dc-primary) 32%, var(--dc-border));
+
+.modbus-workbench__detail-collapse:hover {
+  border-color: color-mix(in oklch, var(--dc-primary) 28%, var(--dc-border));
   color: var(--dc-primary);
+}
+
+.modbus-workbench__detail-collapse svg {
+  width: 15px;
+  height: 15px;
+}
+
+.modbus-workbench__detail-drawer :deep(.el-drawer__body) {
+  padding: 0;
 }
 .modbus-workbench__menu-mask {
   position: fixed;
@@ -1192,8 +1315,13 @@ onMounted(() => {
     grid-template-columns: 230px minmax(0, 1fr);
   }
 
-  .modbus-workbench :deep(.modbus-inspector) {
-    display: none;
+  .modbus-workbench__bar {
+    grid-template-columns: 1fr;
+  }
+
+  .modbus-workbench__right-tools {
+    grid-template-columns: minmax(74px, auto) minmax(140px, 1fr) repeat(4, 28px);
+    justify-content: stretch;
   }
 }
 </style>

@@ -1,9 +1,13 @@
 <template>
-  <el-dialog
-    :model-value="modelValue"
+  <DcDialog
+    ref="dialogRef"
+    v-model="visible"
     title="从 OPC UA 导入变量"
     width="940px"
-    @close="$emit('update:modelValue', false)"
+    class="opcua-import-dialog"
+    body-max-height="calc(100vh - 180px)"
+    :dirty="isDirty"
+    :close-disabled="loading"
   >
     <div class="opcua-import">
       <el-tabs v-model="mode">
@@ -20,7 +24,12 @@
                 clearable
                 placeholder="搜索 NodeId / BrowseName / 路径"
               />
-              <el-button size="small" :loading="browseLoading" :disabled="!connected" @click="$emit('browse')">
+              <el-button
+                size="small"
+                :loading="browseLoading"
+                :disabled="!connected"
+                @click="$emit('browse')"
+              >
                 <IconTablerRefresh />
                 刷新浏览
               </el-button>
@@ -97,15 +106,16 @@
       </section>
     </div>
     <template #footer>
-      <el-button @click="$emit('update:modelValue', false)">取消</el-button>
+      <el-button @click="requestClose">取消</el-button>
       <el-button type="primary" :loading="loading" @click="submit">导入</el-button>
     </template>
-  </el-dialog>
+  </DcDialog>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import DcDialog from '@/components/shared/DcDialog.vue'
 import type { OpcuaBrowseNode } from './types'
 import IconTablerRefresh from '~icons/tabler/refresh'
 
@@ -124,10 +134,19 @@ const emit = defineEmits<{
   (event: 'browse'): void
 }>()
 
+const visible = computed({
+  get: () => props.modelValue,
+  set: (value: boolean) => emit('update:modelValue', value),
+})
+
+const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
 const rawText = ref('')
 const mode = ref<'browse' | 'manual'>('browse')
 const browseKeyword = ref('')
 const selectedBrowseIds = ref<string[]>([])
+const isDirty = computed(
+  () => props.modelValue && (rawText.value.trim().length > 0 || selectedBrowseIds.value.length > 0),
+)
 
 watch(
   () => props.modelValue,
@@ -141,7 +160,9 @@ watch(
 )
 
 const browseDiagnostics = computed(() => props.browseDiagnostics || [])
-const browseNodeById = computed(() => new Map((props.browseNodes || []).map((node) => [node.id, node])))
+const browseNodeById = computed(
+  () => new Map((props.browseNodes || []).map((node) => [node.id, node])),
+)
 const browseRows = computed(() =>
   (props.browseNodes || [])
     .filter((node) => node.nodeType === 'variable')
@@ -207,10 +228,20 @@ const rows = computed(() => (mode.value === 'browse' ? browseImportRows.value : 
 
 const submit = () => {
   if (rows.value.length === 0) {
-    ElMessage.warning(mode.value === 'browse' ? '请选择可导入的 OPC UA 变量节点' : '请至少输入一个 NodeId')
+    ElMessage.warning(
+      mode.value === 'browse' ? '请选择可导入的 OPC UA 变量节点' : '请至少输入一个 NodeId',
+    )
     return
   }
   emit('submit', rows.value)
+}
+
+function requestClose() {
+  void dialogRef.value?.requestClose()
+}
+
+function closeSilently() {
+  dialogRef.value?.closeSilently()
 }
 
 function handleBrowseSelection(selection: Array<{ id: string }>) {
@@ -234,12 +265,29 @@ function browsePathOf(node: OpcuaBrowseNode) {
   }
   return segments.join('/')
 }
+
+defineExpose({ closeSilently })
 </script>
 
 <style scoped>
 .opcua-import {
   display: grid;
   gap: 12px;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.opcua-import :deep(.el-tabs) {
+  min-height: 0;
+}
+
+.opcua-import :deep(.el-tabs__content) {
+  min-height: 0;
+}
+
+.opcua-import :deep(.el-tab-pane) {
+  min-height: 0;
 }
 
 .opcua-import section {
@@ -247,6 +295,13 @@ function browsePathOf(node: OpcuaBrowseNode) {
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-sm);
   background: var(--dc-surface-subtle);
+}
+
+.opcua-import__browse-section,
+.opcua-import__manual-section,
+.opcua-import__confirm-section {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .opcua-import__section-head {
@@ -326,5 +381,15 @@ function browsePathOf(node: OpcuaBrowseNode) {
 .opcua-import :deep(.el-table) {
   --el-table-header-bg-color: var(--dc-surface-raised);
   --el-table-border-color: var(--dc-border);
+}
+</style>
+
+<style>
+.opcua-import-dialog .el-dialog__body {
+  overflow: hidden;
+}
+
+.opcua-import-dialog .dc-dialog__body {
+  overflow: hidden;
 }
 </style>

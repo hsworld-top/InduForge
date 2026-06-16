@@ -1,9 +1,5 @@
 <template>
   <aside class="opcua-groups">
-    <div class="opcua-groups__head">
-      <strong>变量组</strong>
-      <span>{{ groups.length }} 组</span>
-    </div>
     <div class="opcua-groups__toolbar">
       <el-input v-model="keyword" size="small" placeholder="搜索变量组" clearable />
       <button
@@ -17,39 +13,31 @@
       </button>
     </div>
 
-    <button
-      type="button"
-      class="opcua-groups__item opcua-groups__all"
-      :class="{ 'is-active': selectedGroupId === '' }"
-      @click="$emit('select', '')"
-      @contextmenu.prevent="openRootMenu"
-    >
-      <IconTablerStack2 />
-      <span>全部变量</span>
-      <em class="opcua-groups__count">{{ selectedGroupId === '' ? total : '' }}</em>
-    </button>
-
     <div class="opcua-groups__tree">
-      <div v-if="filteredGroups.length === 0" class="opcua-groups__empty">
-        {{ keyword ? '没有匹配的变量组' : '暂无变量组' }}
-      </div>
-      <div v-for="group in filteredGroups" :key="group.id" class="opcua-groups__row">
-        <button
-          type="button"
-          class="opcua-groups__item"
-          :class="{ 'is-active': selectedGroupId === group.id }"
-          :style="{ paddingLeft: `${12 + group.depth * 16}px` }"
-          @click="$emit('select', group.id)"
-          @contextmenu.prevent="openGroupMenu($event, group)"
-        >
-          <IconTablerFolder />
-          <span>{{ group.name }}</span>
-          <em class="opcua-groups__count">{{ selectedGroupId === group.id ? total : '' }}</em>
-        </button>
-        <div class="opcua-groups__actions">
-          <el-button text size="small" :icon="IconTablerEdit" @click="$emit('edit', group)" />
-          <el-button text size="small" :icon="IconTablerTrash" @click="$emit('delete', group)" />
-        </div>
+      <button
+        type="button"
+        class="opcua-groups__root"
+        :class="{ 'is-active': selectedGroupId === '' }"
+        @click="$emit('select', '')"
+        @contextmenu.prevent.stop="openRootMenu"
+      >
+        <IconTablerStack2 class="opcua-groups__root-icon" />
+        <span class="opcua-groups__root-name">全部变量</span>
+        <span class="opcua-groups__root-count">{{ total || 0 }}</span>
+      </button>
+
+      <template v-if="filteredGroups.length > 0">
+        <OpcuaGroupTreeBranch
+          v-for="group in filteredGroups"
+          :key="group.id"
+          :node="group"
+          :selected-group-id="selectedGroupId"
+          @select="$emit('select', $event)"
+          @group-contextmenu="openGroupMenu"
+        />
+      </template>
+      <div v-else class="opcua-groups__empty">
+        {{ keyword ? '没有匹配的变量组' : '暂无变量组，可右键全部变量新建' }}
       </div>
     </div>
     <Teleport to="body">
@@ -69,8 +57,8 @@
             <span>{{ menu.group ? '新建子分组' : '新建变量组' }}</span>
           </button>
           <button v-if="menu.group" type="button" @click="runMenuAction('edit')">
-            <IconTablerEdit />
-            <span>重命名</span>
+            <IconTablerPencil />
+            <span>编辑分组</span>
           </button>
           <button
             v-if="menu.group"
@@ -89,12 +77,16 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import IconTablerEdit from '~icons/tabler/edit'
-import IconTablerFolder from '~icons/tabler/folder'
 import IconTablerFolderPlus from '~icons/tabler/folder-plus'
+import IconTablerPencil from '~icons/tabler/pencil'
 import IconTablerStack2 from '~icons/tabler/stack-2'
 import IconTablerTrash from '~icons/tabler/trash'
+import OpcuaGroupTreeBranch from './OpcuaGroupTreeBranch.vue'
 import type { OpcuaNodeGroup } from './types'
+
+type OpcuaGroupTreeNode = OpcuaNodeGroup & {
+  children: OpcuaGroupTreeNode[]
+}
 
 const props = defineProps<{
   groups: OpcuaNodeGroup[]
@@ -119,31 +111,61 @@ const menu = ref({
 })
 
 const treeGroups = computed(() => {
-  const children = new Map<string, OpcuaNodeGroup[]>()
+  const nodes = new Map<string, OpcuaGroupTreeNode>()
   props.groups.forEach((group) => {
-    const parent = group.parentId || ''
-    children.set(parent, [...(children.get(parent) || []), group])
+    nodes.set(group.id, { ...group, children: [] })
   })
-  const walk = (parentId = '', depth = 0): Array<OpcuaNodeGroup & { depth: number }> =>
-    (children.get(parentId) || []).flatMap((group) => [
-      { ...group, depth },
-      ...walk(group.id, depth + 1),
-    ])
-  return walk()
+  const roots: OpcuaGroupTreeNode[] = []
+  nodes.forEach((node) => {
+    const parent = node.parentId ? nodes.get(node.parentId) : null
+    if (parent) parent.children.push(node)
+    else roots.push(node)
+  })
+  const sortNodes = (items: OpcuaGroupTreeNode[]) => {
+    items.sort(
+      (left, right) =>
+        (left.sortOrder || 0) - (right.sortOrder || 0) || left.name.localeCompare(right.name),
+    )
+    items.forEach((item) => sortNodes(item.children))
+  }
+  sortNodes(roots)
+  return roots
 })
 
 const filteredGroups = computed(() => {
   const text = keyword.value.trim().toLowerCase()
   if (!text) return treeGroups.value
-  return treeGroups.value.filter((group) => group.name.toLowerCase().includes(text))
+  const filterNode = (group: OpcuaGroupTreeNode): OpcuaGroupTreeNode | null => {
+    const children = group.children
+      .map(filterNode)
+      .filter((child): child is OpcuaGroupTreeNode => Boolean(child))
+    const selfMatches = group.name.toLowerCase().includes(text)
+    if (selfMatches || children.length > 0) {
+      return { ...group, children: selfMatches ? group.children : children }
+    }
+    return null
+  }
+  return treeGroups.value
+    .map(filterNode)
+    .filter((group): group is OpcuaGroupTreeNode => Boolean(group))
 })
 
 function openRootMenu(event: MouseEvent) {
-  menu.value = { visible: true, x: event.clientX, y: event.clientY, group: null }
+  menu.value = {
+    visible: true,
+    x: Math.min(event.clientX, window.innerWidth - 180),
+    y: Math.min(event.clientY, window.innerHeight - 92),
+    group: null,
+  }
 }
 
-function openGroupMenu(event: MouseEvent, group: OpcuaNodeGroup) {
-  menu.value = { visible: true, x: event.clientX, y: event.clientY, group }
+function openGroupMenu(event: MouseEvent, group: OpcuaGroupTreeNode) {
+  menu.value = {
+    visible: true,
+    x: Math.min(event.clientX, window.innerWidth - 180),
+    y: Math.min(event.clientY, window.innerHeight - 126),
+    group,
+  }
 }
 
 function closeMenu() {
@@ -173,26 +195,6 @@ function runMenuAction(action: 'create-child' | 'edit' | 'delete') {
   overflow: hidden;
 }
 
-.opcua-groups__head {
-  height: 38px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 10px 0 12px;
-  border-bottom: 1px solid var(--dc-border);
-  color: var(--dc-text);
-}
-
-.opcua-groups__head strong {
-  font-size: 13px;
-}
-
-.opcua-groups__head span {
-  color: var(--dc-text-muted);
-  font-size: 12px;
-}
-
 .opcua-groups__toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 30px;
@@ -218,10 +220,6 @@ function runMenuAction(action: 'create-child' | 'edit' | 'delete') {
   border-color: var(--dc-primary);
 }
 
-.opcua-groups__all {
-  margin: 8px 8px 0;
-}
-
 .opcua-groups__tree {
   min-height: 0;
   flex: 1;
@@ -232,89 +230,61 @@ function runMenuAction(action: 'create-child' | 'edit' | 'delete') {
   padding: 8px 8px 12px;
 }
 
-.opcua-groups__row {
-  position: relative;
-}
-
-.opcua-groups__item {
+.opcua-groups__root {
   width: 100%;
-  min-height: 30px;
-  border: 0;
-  border: 1px solid transparent;
-  border-radius: var(--dc-radius-sm);
-  background: transparent;
-  color: var(--dc-text-secondary);
+  min-height: 32px;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
-  padding: 3px 6px;
-  text-align: left;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.opcua-groups__item > svg {
-  width: 15px;
-  height: 15px;
-  color: var(--dc-primary);
-}
-
-.opcua-groups__item span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--dc-text);
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--dc-radius-sm);
+  background: transparent;
+  color: var(--dc-text-secondary);
   font-size: 13px;
   font-weight: 700;
+  text-align: left;
 }
 
-.opcua-groups__count {
-  min-width: 22px;
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 6px;
+.opcua-groups__root:hover {
+  border-color: var(--dc-border);
+  background: var(--dc-surface-muted);
+  color: var(--dc-text);
+}
+
+.opcua-groups__root.is-active {
+  border-color: rgba(29, 78, 216, 0.28);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+}
+
+.opcua-groups__root-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--dc-primary);
+}
+
+.opcua-groups__root-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dc-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opcua-groups__root.is-active .opcua-groups__root-name {
+  color: var(--dc-primary);
+}
+
+.opcua-groups__root-count {
+  min-width: 20px;
+  padding: 2px 6px;
   border-radius: 999px;
-  background: var(--dc-surface-raised);
-  border: 1px solid var(--dc-border);
-  font-style: normal;
+  background: var(--dc-surface-muted);
   color: var(--dc-text-muted);
   font-size: 11px;
-  font-weight: 700;
-}
-
-.opcua-groups__item:hover {
-  border-color: var(--dc-border);
-}
-
-.opcua-groups__item:hover,
-.opcua-groups__item.is-active {
-  background: var(--dc-primary-soft);
-  color: var(--dc-primary);
-}
-
-.opcua-groups__item:hover span,
-.opcua-groups__item.is-active span {
-  color: var(--dc-primary);
-}
-
-.opcua-groups__actions {
-  position: absolute;
-  right: 3px;
-  top: 1px;
-  display: none;
-  align-items: center;
-  height: 28px;
-  padding-left: 4px;
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-primary-soft);
-}
-
-.opcua-groups__row:hover .opcua-groups__actions {
-  display: flex;
+  text-align: center;
 }
 
 .opcua-groups__empty {

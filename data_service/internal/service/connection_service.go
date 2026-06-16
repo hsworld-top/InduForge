@@ -78,6 +78,7 @@ type Connection struct {
 	RelationalConfig map[string]any `json:"relationalConfig,omitempty"`
 	MqttConfig       map[string]any `json:"mqttConfig,omitempty"`
 	DisplayOrder     int            `json:"displayOrder"`
+	VariableCount    int            `json:"variableCount"`
 	CreatedAt        time.Time      `json:"createdAt"`
 	UpdatedAt        time.Time      `json:"updatedAt"`
 }
@@ -1542,6 +1543,7 @@ func toConnection(record repository.ConnectionRecord, tenantID string) Connectio
 		RelationalConfig: relationalConfig,
 		MqttConfig:       mqttConfig,
 		DisplayOrder:     record.DisplayOrder,
+		VariableCount:    record.VariableCount,
 		CreatedAt:        record.CreatedAt,
 		UpdatedAt:        record.UpdatedAt,
 	}

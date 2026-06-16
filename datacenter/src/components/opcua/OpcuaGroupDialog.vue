@@ -1,98 +1,117 @@
 <template>
-  <el-dialog
-    :model-value="modelValue"
-    :title="mode === 'edit' ? '编辑变量组' : '新建变量组'"
-    width="420px"
-    @close="$emit('update:modelValue', false)"
-  >
-    <el-form class="opcua-group-form" label-width="86px">
-      <el-form-item label="变量组名称" required>
-        <el-input v-model="form.name" maxlength="100" />
-      </el-form-item>
-      <el-form-item label="父级变量组">
-        <el-select v-model="form.parentId" clearable placeholder="无">
-          <el-option
-            v-for="item in groups.filter((group) => group.id !== groupValue?.id)"
-            :key="item.id"
-            :label="item.name"
-            :value="item.id"
-          />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="说明">
-        <el-input v-model="form.description" type="textarea" :rows="3" />
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <el-button @click="$emit('update:modelValue', false)">取消</el-button>
-      <el-button type="primary" :loading="loading" @click="submit">保存</el-button>
-    </template>
-  </el-dialog>
+  <WorkbenchGroupDialog
+    ref="dialogRef"
+    v-model="visible"
+    :mode="mode"
+    :title="mode === 'create' ? '新建变量组' : '编辑变量组'"
+    :group="groupValue"
+    :group-options="groupOptions"
+    :initial-parent-id="defaultParentId || null"
+    :loading="loading"
+    @submit="$emit('submit', $event)"
+  />
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, ref } from 'vue'
+import WorkbenchGroupDialog from '@/components/workbench/WorkbenchGroupDialog.vue'
 import type { OpcuaNodeGroup } from './types'
 
-const props = defineProps<{
-  modelValue: boolean
-  mode: 'create' | 'edit'
-  groups: OpcuaNodeGroup[]
-  groupValue?: OpcuaNodeGroup | null
-  defaultParentId?: string
-  loading?: boolean
-}>()
+type OpcuaGroupNode = OpcuaNodeGroup & {
+  children: OpcuaGroupNode[]
+}
+
+const props = withDefaults(
+  defineProps<{
+    modelValue: boolean
+    mode: 'create' | 'edit'
+    groups: OpcuaNodeGroup[]
+    groupValue?: OpcuaNodeGroup | null
+    defaultParentId?: string
+    loading?: boolean
+  }>(),
+  {
+    groupValue: null,
+    defaultParentId: '',
+    loading: false,
+  },
+)
 
 const emit = defineEmits<{
   (event: 'update:modelValue', value: boolean): void
-  (
-    event: 'submit',
-    value: { name: string; parentId: string | null; description: string | null },
-  ): void
+  (event: 'submit', value: { name: string; parentId: string | null }): void
 }>()
 
-const form = reactive({
-  name: '',
-  parentId: '',
-  description: '',
+const visible = computed({
+  get: () => props.modelValue,
+  set: (value: boolean) => emit('update:modelValue', value),
 })
 
-watch(
-  () => [props.modelValue, props.groupValue] as const,
-  () => {
-    if (!props.modelValue) return
-    form.name = props.groupValue?.name || ''
-    form.parentId =
-      props.mode === 'create' ? props.defaultParentId || '' : props.groupValue?.parentId || ''
-    form.description = props.groupValue?.description || ''
-  },
-  { immediate: true },
-)
+const dialogRef = ref<InstanceType<typeof WorkbenchGroupDialog> | null>(null)
 
-const submit = () => {
-  if (!form.name.trim()) {
-    ElMessage.warning('变量组名称不能为空')
-    return
+const blockedIds = computed(() => {
+  if (props.mode !== 'edit' || !props.groupValue) return new Set<string>()
+  return collectGroupIds(props.groupValue.id)
+})
+
+const groupOptions = computed(() => flattenOpcuaGroups(props.groups, blockedIds.value))
+
+function flattenOpcuaGroups(groups: OpcuaNodeGroup[], blocked: Set<string>) {
+  const nodes = buildGroupTree(groups)
+  const visit = (group: OpcuaGroupNode, depth: number): Array<{ id: string; label: string }> => {
+    const children = group.children.flatMap((child) => visit(child, depth + 1))
+    if (blocked.has(group.id)) return children
+    return [{ id: group.id, label: `${'　'.repeat(depth)}${group.name}` }, ...children]
   }
-  emit('submit', {
-    name: form.name.trim(),
-    parentId: form.parentId || null,
-    description: form.description.trim() || null,
+  return nodes.flatMap((group) => visit(group, 0))
+}
+
+function collectGroupIds(rootId: string) {
+  const result = new Set<string>()
+  const childrenByParent = new Map<string, OpcuaNodeGroup[]>()
+  props.groups.forEach((group) => {
+    const parentId = group.parentId || ''
+    childrenByParent.set(parentId, [...(childrenByParent.get(parentId) || []), group])
   })
+  const visit = (id: string) => {
+    result.add(id)
+    const children = childrenByParent.get(id) || []
+    children.forEach((child) => visit(child.id))
+  }
+  visit(rootId)
+  return result
 }
+
+function buildGroupTree(groups: OpcuaNodeGroup[]) {
+  const nodeMap = new Map<string, OpcuaGroupNode>()
+  groups.forEach((group) => {
+    nodeMap.set(group.id, { ...group, children: [] })
+  })
+
+  const roots: OpcuaGroupNode[] = []
+  nodeMap.forEach((node) => {
+    const parent = node.parentId ? nodeMap.get(node.parentId) : null
+    if (parent) {
+      parent.children.push(node)
+    } else {
+      roots.push(node)
+    }
+  })
+
+  const sortNodes = (items: OpcuaGroupNode[]) => {
+    items.sort(
+      (left, right) =>
+        (left.sortOrder || 0) - (right.sortOrder || 0) || left.name.localeCompare(right.name),
+    )
+    items.forEach((item) => sortNodes(item.children))
+  }
+  sortNodes(roots)
+  return roots
+}
+
+function closeSilently() {
+  dialogRef.value?.closeSilently()
+}
+
+defineExpose({ closeSilently })
 </script>
-
-<style scoped>
-.opcua-group-form {
-  padding-top: 2px;
-}
-
-.opcua-group-form :deep(.el-form-item) {
-  margin-bottom: 13px;
-}
-
-.opcua-group-form :deep(.el-select) {
-  width: 100%;
-}
-</style>

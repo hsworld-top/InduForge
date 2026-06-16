@@ -74,12 +74,42 @@
       <el-table-column label="操作" width="92" fixed="right">
         <template #default="{ row }">
           <div class="modbus-register-table__actions">
-            <button type="button" title="编辑" aria-label="编辑" @click.stop="$emit('edit', row)">
-              <IconTablerPencil />
-            </button>
-            <button type="button" title="删除" aria-label="删除" @click.stop="$emit('delete', row)">
-              <IconTablerTrash />
-            </button>
+            <el-tooltip content="查看详情" placement="top">
+              <button
+                type="button"
+                title="查看详情"
+                aria-label="查看详情"
+                @click.stop="$emit('detail', row)"
+              >
+                <IconTablerEye />
+              </button>
+            </el-tooltip>
+            <el-tooltip content="复制为新变量" placement="top">
+              <button
+                type="button"
+                title="复制为新变量"
+                aria-label="复制为新变量"
+                @click.stop="$emit('duplicate', row)"
+              >
+                <IconTablerCopy />
+              </button>
+            </el-tooltip>
+            <el-tooltip content="编辑" placement="top">
+              <button type="button" title="编辑" aria-label="编辑" @click.stop="$emit('edit', row)">
+                <IconTablerPencil />
+              </button>
+            </el-tooltip>
+            <el-tooltip content="删除" placement="top">
+              <button
+                type="button"
+                title="删除"
+                aria-label="删除"
+                class="is-danger"
+                @click.stop="$emit('delete', row)"
+              >
+                <IconTablerTrash />
+              </button>
+            </el-tooltip>
           </div>
         </template>
       </el-table-column>
@@ -102,6 +132,8 @@
 
 <script setup lang="ts">
 import type { ModbusRegister } from './types'
+import IconTablerCopy from '~icons/tabler/copy'
+import IconTablerEye from '~icons/tabler/eye'
 import IconTablerPencil from '~icons/tabler/pencil'
 import IconTablerTrash from '~icons/tabler/trash'
 
@@ -116,6 +148,8 @@ const props = defineProps<{
 
 defineEmits<{
   (event: 'select', register: ModbusRegister): void
+  (event: 'detail', register: ModbusRegister): void
+  (event: 'duplicate', register: ModbusRegister): void
   (event: 'edit', register: ModbusRegister): void
   (event: 'delete', register: ModbusRegister): void
   (event: 'row-contextmenu', mouseEvent: MouseEvent, register: ModbusRegister): void
@@ -248,6 +282,11 @@ const rowClassName = ({ row }: { row: ModbusRegister }) =>
 .modbus-register-table__actions button:hover {
   border-color: color-mix(in oklch, var(--dc-primary) 28%, var(--dc-border));
   color: var(--dc-primary);
+}
+
+.modbus-register-table__actions button.is-danger:hover {
+  border-color: color-mix(in oklch, var(--dc-danger) 34%, var(--dc-border));
+  color: var(--dc-danger);
 }
 
 .modbus-register-table__pagination {

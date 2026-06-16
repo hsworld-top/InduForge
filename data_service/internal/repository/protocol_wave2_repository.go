@@ -28,6 +28,12 @@ type CreateOpcuaConfigParams struct {
 	Redundancy     map[string]any
 }
 
+// UpdateOpcuaConfigParams 描述 OPC UA 配置更新落库参数。
+type UpdateOpcuaConfigParams struct {
+	ConnectionID string
+	CreateOpcuaConfigParams
+}
+
 // CreateS7ConfigParams 描述 S7 配置落库参数。
 type CreateS7ConfigParams struct {
 	ProjectID      string
@@ -40,6 +46,7 @@ type CreateS7ConfigParams struct {
 	Slot           int
 	PollIntervalMS int
 	Options        map[string]any
+	Redundancy     map[string]any
 }
 
 // CreateModbusConfigParams 描述 Modbus 配置落库参数。
@@ -58,6 +65,7 @@ type CreateModbusConfigParams struct {
 	Quantity       int
 	PollIntervalMS int
 	Options        map[string]any
+	Redundancy     map[string]any
 }
 
 // CreateTdengineConfigParams 描述 TDengine 配置落库参数。
@@ -143,6 +151,95 @@ func (r *ProtocolWave2Repository) CreateOpcuaConfig(ctx context.Context, params 
 	return record, nil
 }
 
+// UpdateOpcuaConfig 更新 OPC UA 配置。
+func (r *ProtocolWave2Repository) UpdateOpcuaConfig(ctx context.Context, params UpdateOpcuaConfigParams) (*ProtocolConnectionRecord, error) {
+	optionsPayload, err := marshalWave2JSONObject(params.Options, true)
+	if err != nil {
+		return nil, err
+	}
+	metadataPayload, err := json.Marshal(map[string]any{
+		"endpoint":       params.Endpoint,
+		"securityPolicy": params.SecurityPolicy,
+		"securityMode":   params.SecurityMode,
+		"authType":       params.AuthType,
+		"username":       params.Username,
+		"password":       params.Password,
+		"samplingMs":     params.SamplingMS,
+		"options":        cloneWave2Map(params.Options),
+		"redundancy":     cloneWave2Map(params.Redundancy),
+	})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "序列化 OPC UA 连接元数据失败", err)
+	}
+
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 OPC UA 配置更新事务失败", err)
+	}
+	defer rollbackWave2TxQuietly(ctx, tx)
+
+	record := ProtocolConnectionRecord{}
+	err = tx.QueryRow(ctx, `
+		UPDATE data_connections
+		SET name = $3,
+			type = 'opcua',
+			category = 'protocol',
+			status = $4,
+			metadata = $5::jsonb,
+			updated_by = $6,
+			updated_at = now()
+		WHERE project_id = $1 AND id = $2 AND type = 'opcua'
+		RETURNING id, project_id, name, type, status, created_at, updated_at
+	`, params.ProjectID, params.ConnectionID, params.Name, params.Status, string(metadataPayload), params.UserID).Scan(
+		&record.ID,
+		&record.ProjectID,
+		&record.Name,
+		&record.Type,
+		&record.Status,
+		&record.CreatedAt,
+		&record.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "OPC UA 连接不存在")
+		}
+		return nil, translateConnectionWriteError("更新 OPC UA 连接失败", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO data_opcua_configs (
+			connection_id,
+			endpoint,
+			security_policy,
+			security_mode,
+			auth_type,
+			username,
+			password,
+			sampling_ms,
+			options
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+		ON CONFLICT (connection_id) DO UPDATE
+		SET endpoint = EXCLUDED.endpoint,
+			security_policy = EXCLUDED.security_policy,
+			security_mode = EXCLUDED.security_mode,
+			auth_type = EXCLUDED.auth_type,
+			username = EXCLUDED.username,
+			password = EXCLUDED.password,
+			sampling_ms = EXCLUDED.sampling_ms,
+			options = EXCLUDED.options,
+			updated_at = now()
+	`, params.ConnectionID, params.Endpoint, params.SecurityPolicy, params.SecurityMode, params.AuthType, params.Username, params.Password, params.SamplingMS, optionsPayload)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "同步 OPC UA 配置失败", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 OPC UA 配置更新事务失败", err)
+	}
+	return &record, nil
+}
+
 // CreateS7Config 创建 S7 配置。
 func (r *ProtocolWave2Repository) CreateS7Config(ctx context.Context, params CreateS7ConfigParams) (*ProtocolConnectionRecord, error) {
 	optionsPayload, err := marshalWave2JSONObject(params.Options, true)
@@ -169,6 +266,7 @@ func (r *ProtocolWave2Repository) CreateS7Config(ctx context.Context, params Cre
 			"slot":           params.Slot,
 			"pollIntervalMs": params.PollIntervalMS,
 			"options":        cloneWave2Map(params.Options),
+			"redundancy":     cloneWave2Map(params.Redundancy),
 		},
 	})
 	if err != nil {
@@ -230,6 +328,7 @@ func (r *ProtocolWave2Repository) CreateModbusConfig(ctx context.Context, params
 			"quantity":       params.Quantity,
 			"pollIntervalMs": params.PollIntervalMS,
 			"options":        cloneWave2Map(params.Options),
+			"redundancy":     cloneWave2Map(params.Redundancy),
 		},
 	})
 	if err != nil {

@@ -62,6 +62,7 @@ func (a *ProtocolDevConnectionRepositoryAdapter) GetProtocolDevConnection(ctx co
 type ProtocolDevOpcuaModelReader interface {
 	ListDevSessionOpcuaGroups(ctx context.Context, projectID, connectionID string) ([]ProtocolDevOpcuaGroup, error)
 	ListDevSessionOpcuaNodes(ctx context.Context, projectID, connectionID string, groupID *string) ([]ProtocolDevOpcuaNode, error)
+	UpdateNodeLastValue(ctx context.Context, projectID, connectionID, nodeID, userID string, value any, quality string) error
 }
 
 // ProtocolDevModbusModelReader 表示 Modbus 开发态会话需要读取的建模数据接口。
@@ -245,6 +246,14 @@ func (a *ProtocolDevOpcuaModelingAdapter) ListDevSessionOpcuaNodes(ctx context.C
 		})
 	}
 	return result, nil
+}
+
+// UpdateNodeLastValue 写回开发态 OPC UA 读取快照。
+func (a *ProtocolDevOpcuaModelingAdapter) UpdateNodeLastValue(ctx context.Context, projectID, connectionID, nodeID, userID string, value any, quality string) error {
+	if a == nil || a.service == nil {
+		return apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "OPC UA 建模服务未初始化")
+	}
+	return a.service.UpdateNodeLastValue(ctx, projectID, connectionID, nodeID, userID, value, quality)
 }
 
 // ProtocolDevModbusModelingAdapter 把 Modbus 建模服务适配为会话读取/轮询投影。
@@ -434,11 +443,14 @@ func (s *ProtocolDevSessionService) ReadOpcua(ctx context.Context, projectID, co
 		if len(wanted) > 0 && !wanted[node.ID] && !wanted[node.NodeID] {
 			continue
 		}
+		value := sampleProtocolValue(node.DataType, node.Code)
+		quality := "Good"
+		_ = s.opcua.UpdateNodeLastValue(ctx, projectID, connectionID, node.ID, userID, value, quality)
 		result.Values = append(result.Values, ProtocolDevOpcuaReadValue{
 			NodeID:          node.NodeID,
-			Value:           sampleProtocolValue(node.DataType, node.Code),
+			Value:           value,
 			DataType:        node.DataType,
-			Quality:         "Good",
+			Quality:         quality,
 			SourceTimestamp: now,
 			ServerTimestamp: now,
 			Error:           nil,

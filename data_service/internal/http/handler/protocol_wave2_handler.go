@@ -25,19 +25,7 @@ func (h *ProtocolWave2Handler) CreateOpcuaConfig(w http.ResponseWriter, r *http.
 		return err
 	}
 
-	var request struct {
-		Name           string         `json:"name"`
-		Status         string         `json:"status"`
-		Endpoint       string         `json:"endpoint"`
-		SecurityPolicy string         `json:"securityPolicy"`
-		SecurityMode   string         `json:"securityMode"`
-		AuthType       string         `json:"authType"`
-		Username       *string        `json:"username"`
-		Password       *string        `json:"password"`
-		SamplingMS     *int           `json:"samplingMs"`
-		Options        map[string]any `json:"options"`
-		Redundancy     map[string]any `json:"redundancy"`
-	}
+	var request opcuaConfigRequest
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
 	}
@@ -63,6 +51,53 @@ func (h *ProtocolWave2Handler) CreateOpcuaConfig(w http.ResponseWriter, r *http.
 	return nil
 }
 
+// UpdateOpcuaConfig 更新 OPC UA 配置。
+func (h *ProtocolWave2Handler) UpdateOpcuaConfig(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+
+	var request opcuaConfigRequest
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+
+	connection, err := h.service.UpdateOpcuaConfig(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.UpdateOpcuaConfigInput{
+		Name:           request.Name,
+		Status:         request.Status,
+		Endpoint:       request.Endpoint,
+		SecurityPolicy: request.SecurityPolicy,
+		SecurityMode:   request.SecurityMode,
+		AuthType:       request.AuthType,
+		Username:       request.Username,
+		Password:       request.Password,
+		SamplingMS:     request.SamplingMS,
+		Options:        request.Options,
+		Redundancy:     request.Redundancy,
+	})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)
+	return nil
+}
+
+type opcuaConfigRequest struct {
+	Name           string         `json:"name"`
+	Status         string         `json:"status"`
+	Endpoint       string         `json:"endpoint"`
+	SecurityPolicy string         `json:"securityPolicy"`
+	SecurityMode   string         `json:"securityMode"`
+	AuthType       string         `json:"authType"`
+	Username       *string        `json:"username"`
+	Password       *string        `json:"password"`
+	SamplingMS     *int           `json:"samplingMs"`
+	Options        map[string]any `json:"options"`
+	Redundancy     map[string]any `json:"redundancy"`
+}
+
 // CreateS7Config 创建 S7 配置。
 func (h *ProtocolWave2Handler) CreateS7Config(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
@@ -79,6 +114,7 @@ func (h *ProtocolWave2Handler) CreateS7Config(w http.ResponseWriter, r *http.Req
 		Slot           *int           `json:"slot"`
 		PollIntervalMS *int           `json:"pollIntervalMs"`
 		Options        map[string]any `json:"options"`
+		Redundancy     map[string]any `json:"redundancy"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
@@ -93,6 +129,7 @@ func (h *ProtocolWave2Handler) CreateS7Config(w http.ResponseWriter, r *http.Req
 		Slot:           request.Slot,
 		PollIntervalMS: request.PollIntervalMS,
 		Options:        request.Options,
+		Redundancy:     request.Redundancy,
 	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
@@ -121,6 +158,7 @@ func (h *ProtocolWave2Handler) CreateModbusConfig(w http.ResponseWriter, r *http
 		Quantity       *int           `json:"quantity"`
 		PollIntervalMS *int           `json:"pollIntervalMs"`
 		Options        map[string]any `json:"options"`
+		Redundancy     map[string]any `json:"redundancy"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
@@ -138,6 +176,7 @@ func (h *ProtocolWave2Handler) CreateModbusConfig(w http.ResponseWriter, r *http
 		Quantity:       request.Quantity,
 		PollIntervalMS: request.PollIntervalMS,
 		Options:        request.Options,
+		Redundancy:     request.Redundancy,
 	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)

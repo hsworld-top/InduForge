@@ -248,6 +248,7 @@
 
   <!-- 新建/编辑连接对话框 -->
   <ConnectionDialog
+    ref="connectionDialogRef"
     v-model="showConnectionDialog"
     :mode="connectionDialogMode"
     :connection="currentConnection"
@@ -442,6 +443,7 @@ const queryContextMenuQuery = ref(null)
 
 // 引用
 const connectionListRef = ref(null)
+const connectionDialogRef = ref(null)
 
 /**
  * 创建表列表标签页
@@ -1042,6 +1044,19 @@ const handleConnectionSubmit = async (data) => {
           config: data.config,
         })
       }
+    } else if (data.type === 'opcua') {
+      await dataAPI.updateOpcuaConfig(projectId.value, currentConnection.value.id, {
+        name: data.name,
+        status: currentConnection.value.status || 'disconnected',
+        ...data.config,
+      })
+      ElMessage({
+        type: 'success',
+        message: '接入源更新成功',
+        offset: 60,
+        duration: 3000,
+      })
+      await loadConnections()
     } else {
       await updateConnection(currentConnection.value.id, {
         name: data.name,
@@ -1049,6 +1064,7 @@ const handleConnectionSubmit = async (data) => {
         config: data.config,
       })
     }
+    connectionDialogRef.value?.closeSilently?.()
     showConnectionDialog.value = false
   } catch (error) {
     console.error('保存连接失败:', error)

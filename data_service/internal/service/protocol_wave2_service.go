@@ -42,6 +42,9 @@ type CreateOpcuaConfigInput struct {
 	Redundancy     map[string]any
 }
 
+// UpdateOpcuaConfigInput 表示更新 OPC UA 配置输入。
+type UpdateOpcuaConfigInput = CreateOpcuaConfigInput
+
 // CreateS7ConfigInput 表示创建 S7 配置输入。
 type CreateS7ConfigInput struct {
 	Name           string
@@ -52,6 +55,7 @@ type CreateS7ConfigInput struct {
 	Slot           *int
 	PollIntervalMS *int
 	Options        map[string]any
+	Redundancy     map[string]any
 }
 
 // CreateModbusConfigInput 表示创建 Modbus 配置输入。
@@ -67,6 +71,7 @@ type CreateModbusConfigInput struct {
 	Quantity       *int
 	PollIntervalMS *int
 	Options        map[string]any
+	Redundancy     map[string]any
 }
 
 // CreateTdengineConfigInput 表示创建 TDengine 配置输入。
@@ -109,36 +114,7 @@ func (s *ProtocolWave2Service) CreateOpcuaConfig(ctx context.Context, projectID,
 	if err := validateUserID(userID); err != nil {
 		return nil, err
 	}
-	name, err := normalizeConnectionName(input.Name)
-	if err != nil {
-		return nil, err
-	}
-	status, err := normalizeProtocolStatus(input.Status)
-	if err != nil {
-		return nil, err
-	}
-	endpoint := strings.TrimSpace(input.Endpoint)
-	if endpoint == "" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "endpoint 不能为空")
-	}
-	securityPolicy := strings.TrimSpace(input.SecurityPolicy)
-	if securityPolicy == "" {
-		securityPolicy = "None"
-	}
-	securityMode, err := normalizeOpcuaSecurityMode(input.SecurityMode)
-	if err != nil {
-		return nil, err
-	}
-	authType, err := normalizeOpcuaAuthType(input.AuthType)
-	if err != nil {
-		return nil, err
-	}
-	username := normalizeOptionalText(input.Username)
-	password := normalizeOptionalText(input.Password)
-	if authType == "username_password" && username == nil {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "OPC UA username_password 认证需要 username")
-	}
-	samplingMS, err := normalizePositiveInt(input.SamplingMS, 1000, "samplingMs 必须大于 0")
+	params, err := normalizeOpcuaConfigParams(input)
 	if err != nil {
 		return nil, err
 	}
@@ -146,17 +122,58 @@ func (s *ProtocolWave2Service) CreateOpcuaConfig(ctx context.Context, projectID,
 	record, err := s.repository.CreateOpcuaConfig(ctx, repository.CreateOpcuaConfigParams{
 		ProjectID:      projectID,
 		UserID:         userID,
-		Name:           name,
-		Status:         status,
-		Endpoint:       endpoint,
-		SecurityPolicy: securityPolicy,
-		SecurityMode:   opcuaSecurityModeForStorage(securityMode),
-		AuthType:       authType,
-		Username:       username,
-		Password:       password,
-		SamplingMS:     samplingMS,
-		Options:        cloneMap(input.Options),
-		Redundancy:     cloneMap(input.Redundancy),
+		Name:           params.Name,
+		Status:         params.Status,
+		Endpoint:       params.Endpoint,
+		SecurityPolicy: params.SecurityPolicy,
+		SecurityMode:   params.SecurityMode,
+		AuthType:       params.AuthType,
+		Username:       params.Username,
+		Password:       params.Password,
+		SamplingMS:     params.SamplingMS,
+		Options:        params.Options,
+		Redundancy:     params.Redundancy,
+	})
+	if err != nil {
+		return nil, err
+	}
+	connection := toProtocolConnection(*record)
+	return &connection, nil
+}
+
+// UpdateOpcuaConfig 更新 OPC UA 配置。
+func (s *ProtocolWave2Service) UpdateOpcuaConfig(ctx context.Context, projectID, connectionID, userID string, input UpdateOpcuaConfigInput) (*ProtocolConnection, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateProtocolConnectionID(connectionID); err != nil {
+		return nil, err
+	}
+	if err := validateUserID(userID); err != nil {
+		return nil, err
+	}
+	params, err := normalizeOpcuaConfigParams(input)
+	if err != nil {
+		return nil, err
+	}
+
+	record, err := s.repository.UpdateOpcuaConfig(ctx, repository.UpdateOpcuaConfigParams{
+		ConnectionID: connectionID,
+		CreateOpcuaConfigParams: repository.CreateOpcuaConfigParams{
+			ProjectID:      projectID,
+			UserID:         userID,
+			Name:           params.Name,
+			Status:         params.Status,
+			Endpoint:       params.Endpoint,
+			SecurityPolicy: params.SecurityPolicy,
+			SecurityMode:   params.SecurityMode,
+			AuthType:       params.AuthType,
+			Username:       params.Username,
+			Password:       params.Password,
+			SamplingMS:     params.SamplingMS,
+			Options:        params.Options,
+			Redundancy:     params.Redundancy,
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -213,6 +230,7 @@ func (s *ProtocolWave2Service) CreateS7Config(ctx context.Context, projectID, us
 		Slot:           slot,
 		PollIntervalMS: pollIntervalMS,
 		Options:        cloneMap(input.Options),
+		Redundancy:     cloneMap(input.Redundancy),
 	})
 	if err != nil {
 		return nil, err
@@ -298,6 +316,7 @@ func (s *ProtocolWave2Service) CreateModbusConfig(ctx context.Context, projectID
 		Quantity:       quantity,
 		PollIntervalMS: pollIntervalMS,
 		Options:        cloneMap(input.Options),
+		Redundancy:     cloneMap(input.Redundancy),
 	})
 	if err != nil {
 		return nil, err
@@ -368,6 +387,70 @@ func normalizeOpcuaSecurityMode(value string) (string, error) {
 		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "securityMode 仅支持 none/sign/signandencrypt")
 	}
 	return normalized, nil
+}
+
+type normalizedOpcuaConfigParams struct {
+	Name           string
+	Status         string
+	Endpoint       string
+	SecurityPolicy string
+	SecurityMode   string
+	AuthType       string
+	Username       *string
+	Password       *string
+	SamplingMS     int
+	Options        map[string]any
+	Redundancy     map[string]any
+}
+
+func normalizeOpcuaConfigParams(input CreateOpcuaConfigInput) (normalizedOpcuaConfigParams, error) {
+	name, err := normalizeConnectionName(input.Name)
+	if err != nil {
+		return normalizedOpcuaConfigParams{}, err
+	}
+	status, err := normalizeProtocolStatus(input.Status)
+	if err != nil {
+		return normalizedOpcuaConfigParams{}, err
+	}
+	endpoint := strings.TrimSpace(input.Endpoint)
+	if endpoint == "" {
+		return normalizedOpcuaConfigParams{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "endpoint 不能为空")
+	}
+	securityPolicy := strings.TrimSpace(input.SecurityPolicy)
+	if securityPolicy == "" {
+		securityPolicy = "None"
+	}
+	securityMode, err := normalizeOpcuaSecurityMode(input.SecurityMode)
+	if err != nil {
+		return normalizedOpcuaConfigParams{}, err
+	}
+	authType, err := normalizeOpcuaAuthType(input.AuthType)
+	if err != nil {
+		return normalizedOpcuaConfigParams{}, err
+	}
+	username := normalizeOptionalText(input.Username)
+	password := normalizeOptionalText(input.Password)
+	if authType == "username_password" && username == nil {
+		return normalizedOpcuaConfigParams{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "OPC UA username_password 认证需要 username")
+	}
+	samplingMS, err := normalizePositiveInt(input.SamplingMS, 1000, "samplingMs 必须大于 0")
+	if err != nil {
+		return normalizedOpcuaConfigParams{}, err
+	}
+
+	return normalizedOpcuaConfigParams{
+		Name:           name,
+		Status:         status,
+		Endpoint:       endpoint,
+		SecurityPolicy: securityPolicy,
+		SecurityMode:   opcuaSecurityModeForStorage(securityMode),
+		AuthType:       authType,
+		Username:       username,
+		Password:       password,
+		SamplingMS:     samplingMS,
+		Options:        cloneMap(input.Options),
+		Redundancy:     cloneMap(input.Redundancy),
+	}, nil
 }
 
 func opcuaSecurityModeForStorage(value string) string {

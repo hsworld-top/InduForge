@@ -167,7 +167,7 @@ const issueRows = computed(() => previewRows.value.filter((row) => row.issue))
 const validRows = computed(() =>
   previewRows.value
     .filter((row) => !row.issue)
-    .map(({ issue, rowNo, protocolAddress, ...row }) => row),
+    .map(({ issue: _issue, rowNo: _rowNo, protocolAddress: _protocolAddress, ...row }) => row),
 )
 const sourceRows = computed(() => {
   if (fileRows.value.length > 0) return fileRows.value
@@ -299,7 +299,8 @@ function buildPreviewRow(row: Record<string, string>, index: number) {
   const addressBase = normalizeAddressBase(normalized.addressBase)
   const address = toInteger(normalized.address, Number.NaN)
   const protocolAddress = normalizeProtocolAddress(area, addressBase, address)
-  const dataType = normalized.dataType || (area === 'coil' || area === 'discrete_input' ? 'bool' : 'uint16')
+  const dataType =
+    normalized.dataType || (area === 'coil' || area === 'discrete_input' ? 'bool' : 'uint16')
   const unitId = toInteger(normalized.unitId, 1)
   const scale = toNumber(normalized.scale, 1)
   const offset = toNumber(normalized.offset, 0)
@@ -310,7 +311,8 @@ function buildPreviewRow(row: Record<string, string>, index: number) {
     Number.isNaN(address) ? '地址不是数字' : '',
     Number.isNaN(protocolAddress) || protocolAddress < 0 ? '地址与寄存器区域不匹配' : '',
     !dataType ? '数据类型为空' : '',
-    ['coil', 'discrete_input'].includes(area) && !['bool', 'boolean'].includes(dataType.toLowerCase())
+    ['coil', 'discrete_input'].includes(area) &&
+    !['bool', 'boolean'].includes(dataType.toLowerCase())
       ? 'Coil / Discrete Input 默认只支持 bool'
       : '',
     Number.isNaN(scale) ? '倍率不是数字' : '',
@@ -367,7 +369,8 @@ function downloadIssueReport() {
 function normalizeArea(value: string) {
   const text = value.trim().toLowerCase()
   if (['coil', 'coils', '0x', '00001'].includes(text)) return 'coil'
-  if (['discrete_input', 'discrete input', 'input', '1x', '10001'].includes(text)) return 'discrete_input'
+  if (['discrete_input', 'discrete input', 'input', '1x', '10001'].includes(text))
+    return 'discrete_input'
   if (['input_register', 'input register', '3x', '30001'].includes(text)) return 'input_register'
   return 'holding_register'
 }
@@ -399,8 +402,7 @@ function defaultAccessLevel(area: string) {
 
 function normalizeAccessLevel(value: string) {
   const text = value.trim().toLowerCase()
-  if (['write', '写'].includes(text)) return 'write'
-  if (['readwrite', 'read_write', '读写'].includes(text)) return 'readwrite'
+  if (['write', '写', 'readwrite', 'read_write', '读写'].includes(text)) return 'readwrite'
   return 'read'
 }
 

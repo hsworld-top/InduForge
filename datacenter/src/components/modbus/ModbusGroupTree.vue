@@ -1,9 +1,5 @@
 <template>
   <aside class="modbus-group-tree">
-    <div class="modbus-group-tree__head">
-      <strong>寄存器组</strong>
-      <span>{{ groups.length }} 组</span>
-    </div>
     <div class="modbus-group-tree__toolbar">
       <el-input v-model="keyword" size="small" placeholder="搜索寄存器组" clearable />
       <button
@@ -31,7 +27,7 @@
 
     <div class="modbus-group-tree__list">
       <div v-if="filteredGroups.length === 0" class="modbus-group-tree__empty">
-        {{ keyword ? '没有匹配的寄存器组' : '暂无寄存器组' }}
+        {{ keyword ? '没有匹配的寄存器组' : '暂无寄存器组，可右键全部变量新建' }}
       </div>
       <div v-for="group in filteredGroups" :key="group.id" class="modbus-group-tree__row">
         <button
@@ -171,26 +167,6 @@ function runMenuAction(action: 'create-child' | 'edit' | 'delete') {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.modbus-group-tree__head {
-  height: 38px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 10px 0 12px;
-  border-bottom: 1px solid var(--dc-border);
-  color: var(--dc-text);
-}
-
-.modbus-group-tree__head strong {
-  font-size: 13px;
-}
-
-.modbus-group-tree__head span {
-  color: var(--dc-text-muted);
-  font-size: 12px;
 }
 
 .modbus-group-tree__toolbar {

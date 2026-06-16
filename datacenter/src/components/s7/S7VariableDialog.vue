@@ -9,7 +9,9 @@
         <h3><span>01</span>基础信息</h3>
         <div class="s7-variable-dialog__grid">
           <el-form-item label="变量名"><el-input v-model="form.name" /></el-form-item>
-          <el-form-item label="Code"><el-input v-model="form.code" /></el-form-item>
+          <el-form-item label="Code">
+            <el-input v-model="form.code" placeholder="留空时按变量名自动生成" />
+          </el-form-item>
           <el-form-item label="变量组">
             <el-select v-model="form.groupId" clearable>
               <el-option
@@ -74,9 +76,8 @@
           /></el-form-item>
           <el-form-item label="读写权限">
             <el-select v-model="form.accessLevel">
-              <el-option label="Read" value="Read" />
-              <el-option label="Write" value="Write" />
-              <el-option label="ReadWrite" value="ReadWrite" />
+              <el-option label="只读" value="Read" />
+              <el-option label="读写" value="ReadWrite" />
             </el-select>
           </el-form-item>
           <el-form-item label="状态"
@@ -156,7 +157,7 @@ watch(
       offset: variable?.offset ?? 0,
       unit: variable?.unit || '',
       pollIntervalMs: variable?.pollIntervalMs || 1000,
-      accessLevel: variable?.accessLevel || 'Read',
+      accessLevel: normalizeAccessLevel(variable?.accessLevel),
       status: variable?.status || 'active',
       description: variable?.description || '',
     })
@@ -171,7 +172,7 @@ const submit = () => {
     groupId: form.groupId || null,
     hasGroupId: true,
     name: form.name.trim(),
-    code: form.code.trim(),
+    code: form.code.trim() || toVariableCode(form.name),
     addressText: form.addressText.trim(),
     dataType: form.dataType,
     length: form.length || null,
@@ -187,6 +188,19 @@ const submit = () => {
     description: form.description.trim() || null,
     sortOrder: props.variable?.sortOrder || 0,
   })
+}
+
+function normalizeAccessLevel(value?: string | null) {
+  return value === 'ReadWrite' || value === 'Write' ? 'ReadWrite' : 'Read'
+}
+
+function toVariableCode(value: string) {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  return normalized || 'variable'
 }
 </script>
 

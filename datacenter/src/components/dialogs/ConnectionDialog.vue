@@ -1,9 +1,10 @@
 <template>
   <DcDialog
+    ref="dialogRef"
     v-model="visible"
     class="connection-dialog"
     width="920px"
-    :dirty="false"
+    :dirty="isDialogDirty"
     :close-on-click-modal="canCloseByModalClick"
     :body-max-height="'none'"
     @close="handleClosed"
@@ -372,23 +373,31 @@
               <!-- 安全与认证配置 -->
               <div class="connection-dialog__form-section">
                 <div class="connection-dialog__form-section-title">安全与认证配置</div>
-                <div class="connection-dialog__form-grid">
-                  <el-form-item label="安全策略">
+                <el-form-item label="保护模式">
+                  <el-segmented
+                    v-model="formData.securityMode"
+                    :options="opcuaSecurityModeOptions"
+                    class="connection-dialog__segmented-full"
+                  />
+                  <p class="connection-dialog__field-tip">
+                    None 不签名也不加密；Sign 仅签名；Sign & Encrypt 同时签名和加密。
+                  </p>
+                </el-form-item>
+                <div v-if="formData.securityMode !== 'none'" class="connection-dialog__form-grid">
+                  <el-form-item label="安全算法">
                     <el-select v-model="formData.securityPolicy" class="w-full">
                       <el-option label="None" value="None" />
                       <el-option label="Basic256Sha256" value="Basic256Sha256" />
                       <el-option label="Basic256" value="Basic256" />
                     </el-select>
                   </el-form-item>
-                  <el-form-item label="安全模式">
-                    <el-segmented
-                      v-model="formData.securityMode"
-                      :options="opcuaSecurityModeOptions"
-                    />
-                  </el-form-item>
                 </div>
                 <el-form-item label="认证方式">
-                  <el-segmented v-model="formData.authType" :options="opcuaAuthOptions" />
+                  <el-segmented
+                    v-model="formData.authType"
+                    :options="opcuaAuthOptions"
+                    class="connection-dialog__segmented-full"
+                  />
                 </el-form-item>
                 <div
                   v-if="formData.authType === 'username_password'"
@@ -404,6 +413,88 @@
                       show-password
                       placeholder="OPC UA 密码"
                     />
+                  </el-form-item>
+                </div>
+              </div>
+
+              <div class="connection-dialog__form-section">
+                <div class="connection-dialog__form-section-title">设备冗余</div>
+                <div class="connection-dialog__switch-line">
+                  <el-switch v-model="formData.redundancy.enabled" />
+                  <span class="connection-dialog__switch-text">
+                    {{ formData.redundancy.enabled ? '启用主备服务器' : '不启用' }}
+                  </span>
+                </div>
+                <div v-if="formData.redundancy.enabled" class="connection-dialog__redundancy-grid">
+                  <el-form-item
+                    v-for="endpoint in formData.redundancy.endpoints"
+                    :key="endpoint.role"
+                    :label="endpoint.role === 'primary' ? '主服务器' : '备用服务器'"
+                  >
+                    <div
+                      v-if="endpoint.role === 'primary'"
+                      class="connection-dialog__readonly-value"
+                    >
+                      {{ formatEndpoint(formData.ip, formData.port) }}
+                    </div>
+                    <div v-else class="connection-dialog__endpoint-row">
+                      <el-input v-model="endpoint.host" placeholder="备用服务器 IP" />
+                      <el-input-number v-model="endpoint.port" :min="1" class="w-full" />
+                    </div>
+                  </el-form-item>
+                </div>
+                <div v-if="formData.redundancy.enabled" class="connection-dialog__redundancy-grid">
+                  <el-form-item>
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        故障超时
+                        <el-tooltip
+                          content="主服务器连续无响应超过该时间后，切换到备用服务器。"
+                          placement="top"
+                        >
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
+                    <el-input-number
+                      v-model="formData.redundancy.failoverPolicy.timeoutMs"
+                      :min="1000"
+                      :step="1000"
+                      class="w-full"
+                    />
+                  </el-form-item>
+                  <el-form-item>
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        冷却时间
+                        <el-tooltip
+                          content="完成一次切换后，至少等待该时间再允许下一次切换。"
+                          placement="top"
+                        >
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
+                    <el-input-number
+                      v-model="formData.redundancy.failoverPolicy.cooldownMs"
+                      :min="1000"
+                      :step="1000"
+                      class="w-full"
+                    />
+                  </el-form-item>
+                  <el-form-item>
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        自动回切
+                        <el-tooltip
+                          content="主服务器恢复稳定后，自动从备用服务器切回主服务器。"
+                          placement="top"
+                        >
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
+                    <el-switch v-model="formData.redundancy.failoverPolicy.autoFailback" />
                   </el-form-item>
                 </div>
               </div>
@@ -478,50 +569,6 @@
                   </el-form-item>
                 </el-collapse-item>
               </el-collapse>
-              <div class="connection-dialog__form-section">
-                <div class="connection-dialog__form-section-title">设备冗余</div>
-                <el-switch
-                  v-model="formData.redundancy.enabled"
-                  active-text="启用主备 endpoint"
-                  inactive-text="不启用"
-                />
-                <div v-if="formData.redundancy.enabled" class="connection-dialog__redundancy-grid">
-                  <el-form-item
-                    v-for="endpoint in formData.redundancy.endpoints"
-                    :key="endpoint.role"
-                    :label="endpoint.role === 'primary' ? '主 endpoint' : '备 endpoint'"
-                  >
-                    <div class="connection-dialog__endpoint-row">
-                      <el-input
-                        v-model="endpoint.host"
-                        :placeholder="endpoint.role === 'primary' ? formData.ip : '备用 IP'"
-                      />
-                      <el-input-number v-model="endpoint.port" :min="1" class="w-full" />
-                    </div>
-                  </el-form-item>
-                </div>
-                <div v-if="formData.redundancy.enabled" class="connection-dialog__redundancy-grid">
-                  <el-form-item label="故障超时">
-                    <el-input-number
-                      v-model="formData.redundancy.failoverPolicy.timeoutMs"
-                      :min="1000"
-                      :step="1000"
-                      class="w-full"
-                    />
-                  </el-form-item>
-                  <el-form-item label="冷却时间">
-                    <el-input-number
-                      v-model="formData.redundancy.failoverPolicy.cooldownMs"
-                      :min="1000"
-                      :step="1000"
-                      class="w-full"
-                    />
-                  </el-form-item>
-                  <el-form-item label="自动回切">
-                    <el-switch v-model="formData.redundancy.failoverPolicy.autoFailback" />
-                  </el-form-item>
-                </div>
-              </div>
             </template>
 
             <template v-else-if="connectionType === 's7'">
@@ -550,14 +597,56 @@
                   <template #append>ms</template>
                 </el-input>
               </el-form-item>
-              <el-form-item label="扩展参数">
-                <el-input
-                  v-model="formData.optionsText"
-                  type="textarea"
-                  :rows="4"
-                  placeholder='{"pduSize":480}'
-                />
-              </el-form-item>
+              <el-collapse v-model="s7ActiveCollapse" class="connection-dialog__collapse mt-4">
+                <el-collapse-item title="高级参数配置" name="advanced">
+                  <div class="connection-dialog__form-grid">
+                    <el-form-item>
+                      <template #label>
+                        <span class="connection-dialog__field-label">
+                          PDU 长度
+                          <el-tooltip
+                            content="PLC 单次通信的数据包上限，常见值为 240、480、960。"
+                            placement="top"
+                          >
+                            <IconTablerHelpCircle class="connection-dialog__field-help" />
+                          </el-tooltip>
+                        </span>
+                      </template>
+                      <el-input-number
+                        v-model="formData.pduSize"
+                        :min="0"
+                        :step="120"
+                        class="w-full"
+                        placeholder="480"
+                      />
+                    </el-form-item>
+                    <el-form-item label="本地 TSAP">
+                      <el-input v-model="formData.localTsap" placeholder="可选，例如 0100" />
+                    </el-form-item>
+                  </div>
+                  <div class="connection-dialog__form-grid">
+                    <el-form-item label="远端 TSAP">
+                      <el-input v-model="formData.remoteTsap" placeholder="可选，例如 0102" />
+                    </el-form-item>
+                    <el-form-item label="连接超时">
+                      <el-input-number
+                        v-model="formData.connectionTimeoutMs"
+                        :min="1000"
+                        :step="1000"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                    <el-form-item label="请求超时">
+                      <el-input-number
+                        v-model="formData.requestTimeoutMs"
+                        :min="1000"
+                        :step="1000"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                  </div>
+                </el-collapse-item>
+              </el-collapse>
               <div class="connection-dialog__form-section">
                 <div class="connection-dialog__form-section-title">设备冗余</div>
                 <el-switch
@@ -571,17 +660,31 @@
                     :key="endpoint.role"
                     :label="endpoint.role === 'primary' ? '主 PLC' : '备 PLC'"
                   >
-                    <div class="connection-dialog__endpoint-row">
-                      <el-input
-                        v-model="endpoint.host"
-                        :placeholder="endpoint.role === 'primary' ? formData.ip : '备用 PLC IP'"
-                      />
+                    <div
+                      v-if="endpoint.role === 'primary'"
+                      class="connection-dialog__readonly-value"
+                    >
+                      {{ formatEndpoint(formData.ip, formData.port) }}
+                    </div>
+                    <div v-else class="connection-dialog__endpoint-row">
+                      <el-input v-model="endpoint.host" placeholder="备用 PLC IP" />
                       <el-input-number v-model="endpoint.port" :min="1" class="w-full" />
                     </div>
                   </el-form-item>
                 </div>
                 <div v-if="formData.redundancy.enabled" class="connection-dialog__redundancy-grid">
-                  <el-form-item label="故障超时">
+                  <el-form-item>
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        故障超时
+                        <el-tooltip
+                          content="主 PLC 连续无响应超过该时间后，切换到备用 PLC。"
+                          placement="top"
+                        >
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
                     <el-input-number
                       v-model="formData.redundancy.failoverPolicy.timeoutMs"
                       :min="1000"
@@ -589,7 +692,18 @@
                       class="w-full"
                     />
                   </el-form-item>
-                  <el-form-item label="冷却时间">
+                  <el-form-item>
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        冷却时间
+                        <el-tooltip
+                          content="完成一次切换后，至少等待该时间再允许下一次切换。"
+                          placement="top"
+                        >
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
                     <el-input-number
                       v-model="formData.redundancy.failoverPolicy.cooldownMs"
                       :min="1000"
@@ -597,7 +711,18 @@
                       class="w-full"
                     />
                   </el-form-item>
-                  <el-form-item label="自动回切">
+                  <el-form-item>
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        自动回切
+                        <el-tooltip
+                          content="主 PLC 恢复稳定后，自动从备用 PLC 切回主 PLC。"
+                          placement="top"
+                        >
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
                     <el-switch v-model="formData.redundancy.failoverPolicy.autoFailback" />
                   </el-form-item>
                 </div>
@@ -616,14 +741,42 @@
                   <el-input v-model.number="formData.port" inputmode="numeric" placeholder="502" />
                 </el-form-item>
               </div>
-              <el-form-item v-else label="串口配置" prop="serialConfigText">
-                <el-input
-                  v-model="formData.serialConfigText"
-                  type="textarea"
-                  :rows="5"
-                  placeholder='{"port":"COM3","baudRate":9600,"dataBits":8,"parity":"N","stopBits":1}'
-                />
-              </el-form-item>
+              <div v-else>
+                <div class="connection-dialog__form-grid">
+                  <el-form-item label="串口" prop="serialPort">
+                    <el-input v-model="formData.serialPort" placeholder="/dev/ttyUSB0" />
+                  </el-form-item>
+                  <el-form-item label="波特率">
+                    <el-input-number
+                      v-model="formData.baudRate"
+                      :min="1200"
+                      :step="1200"
+                      class="w-full"
+                    />
+                  </el-form-item>
+                </div>
+                <div class="connection-dialog__form-grid">
+                  <el-form-item label="数据位">
+                    <el-select v-model="formData.dataBits" class="w-full">
+                      <el-option :value="7" label="7" />
+                      <el-option :value="8" label="8" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="校验位">
+                    <el-select v-model="formData.parity" class="w-full">
+                      <el-option label="无校验" value="N" />
+                      <el-option label="偶校验" value="E" />
+                      <el-option label="奇校验" value="O" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="停止位">
+                    <el-select v-model="formData.stopBits" class="w-full">
+                      <el-option :value="1" label="1" />
+                      <el-option :value="2" label="2" />
+                    </el-select>
+                  </el-form-item>
+                </div>
+              </div>
               <div class="connection-dialog__form-grid">
                 <el-form-item label="站号">
                   <el-input v-model.number="formData.slaveId" inputmode="numeric" placeholder="1" />
@@ -652,14 +805,55 @@
                   <template #append>ms</template>
                 </el-input>
               </el-form-item>
-              <el-form-item label="扩展参数">
-                <el-input
-                  v-model="formData.optionsText"
-                  type="textarea"
-                  :rows="4"
-                  placeholder='{"functionCode":3}'
-                />
-              </el-form-item>
+              <el-collapse v-model="modbusActiveCollapse" class="connection-dialog__collapse mt-4">
+                <el-collapse-item title="高级参数配置" name="advanced">
+                  <div class="connection-dialog__form-grid">
+                    <el-form-item>
+                      <template #label>
+                        <span class="connection-dialog__field-label">
+                          功能码
+                          <el-tooltip
+                            content="3 表示保持寄存器，4 表示输入寄存器；线圈类变量后续在变量层配置。"
+                            placement="top"
+                          >
+                            <IconTablerHelpCircle class="connection-dialog__field-help" />
+                          </el-tooltip>
+                        </span>
+                      </template>
+                      <el-select v-model="formData.functionCode" class="w-full">
+                        <el-option :value="3" label="03 读保持寄存器" />
+                        <el-option :value="4" label="04 读输入寄存器" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item label="连接超时">
+                      <el-input-number
+                        v-model="formData.connectTimeoutMs"
+                        :min="1000"
+                        :step="1000"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                  </div>
+                  <div class="connection-dialog__form-grid">
+                    <el-form-item label="请求超时">
+                      <el-input-number
+                        v-model="formData.requestTimeoutMs"
+                        :min="1000"
+                        :step="1000"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                    <el-form-item label="重试次数">
+                      <el-input-number
+                        v-model="formData.retries"
+                        :min="0"
+                        :max="10"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                  </div>
+                </el-collapse-item>
+              </el-collapse>
               <div class="connection-dialog__form-section">
                 <div class="connection-dialog__form-section-title">设备冗余</div>
                 <el-switch
@@ -680,11 +874,14 @@
                     :key="endpoint.role"
                     :label="endpoint.role === 'primary' ? '主网关' : '备网关'"
                   >
-                    <div class="connection-dialog__endpoint-row">
-                      <el-input
-                        v-model="endpoint.host"
-                        :placeholder="endpoint.role === 'primary' ? formData.ip : '备用网关 IP'"
-                      />
+                    <div
+                      v-if="endpoint.role === 'primary'"
+                      class="connection-dialog__readonly-value"
+                    >
+                      {{ formatEndpoint(formData.ip, formData.port) }}
+                    </div>
+                    <div v-else class="connection-dialog__endpoint-row">
+                      <el-input v-model="endpoint.host" placeholder="备用网关 IP" />
                       <el-input-number v-model="endpoint.port" :min="1" class="w-full" />
                     </div>
                   </el-form-item>
@@ -693,7 +890,18 @@
                   v-if="formData.redundancy.enabled && formData.mode !== 'rtu'"
                   class="connection-dialog__redundancy-grid"
                 >
-                  <el-form-item label="故障超时">
+                  <el-form-item>
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        故障超时
+                        <el-tooltip
+                          content="主网关连续无响应超过该时间后，切换到备用网关。"
+                          placement="top"
+                        >
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
                     <el-input-number
                       v-model="formData.redundancy.failoverPolicy.timeoutMs"
                       :min="1000"
@@ -701,7 +909,18 @@
                       class="w-full"
                     />
                   </el-form-item>
-                  <el-form-item label="冷却时间">
+                  <el-form-item>
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        冷却时间
+                        <el-tooltip
+                          content="完成一次切换后，至少等待该时间再允许下一次切换。"
+                          placement="top"
+                        >
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
                     <el-input-number
                       v-model="formData.redundancy.failoverPolicy.cooldownMs"
                       :min="1000"
@@ -709,7 +928,18 @@
                       class="w-full"
                     />
                   </el-form-item>
-                  <el-form-item label="自动回切">
+                  <el-form-item>
+                    <template #label>
+                      <span class="connection-dialog__field-label">
+                        自动回切
+                        <el-tooltip
+                          content="主网关恢复稳定后，自动从备用网关切回主网关。"
+                          placement="top"
+                        >
+                          <IconTablerHelpCircle class="connection-dialog__field-help" />
+                        </el-tooltip>
+                      </span>
+                    </template>
                     <el-switch v-model="formData.redundancy.failoverPolicy.autoFailback" />
                   </el-form-item>
                 </div>
@@ -847,7 +1077,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, markRaw } from 'vue'
+import { ref, computed, watch, markRaw, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getDefaultConfig } from '@/config/connectionTypes'
 import { t } from '@/i18n/runtime'
@@ -933,6 +1163,8 @@ const lastTestSignature = ref('')
 const emptyFormSignature = ref('')
 const kafkaActiveCollapse = ref([])
 const opcuaActiveCollapse = ref([])
+const s7ActiveCollapse = ref([])
+const modbusActiveCollapse = ref([])
 const testResult = ref({
   status: 'idle',
   title: '尚未测试',
@@ -1073,7 +1305,7 @@ const protocolRules = {
   address: [{ required: true, message: 'Redis 地址不能为空', trigger: 'blur' }],
   ip: [{ required: true, message: 'IP 地址不能为空', trigger: 'blur' }],
   username: [{ required: true, message: '用户名不能为空', trigger: 'blur' }],
-  serialConfigText: [{ required: true, message: '串口配置不能为空', trigger: 'blur' }],
+  serialPort: [{ required: true, message: '串口不能为空', trigger: 'blur' }],
   database: [{ required: true, message: 'Database 不能为空', trigger: 'blur' }],
 }
 
@@ -1134,15 +1366,17 @@ const configSignature = computed(() => {
 
 const formInputSignature = computed(() => JSON.stringify(formData.value || {}))
 
-const hasUserInput = computed(
+const canCloseByModalClick = computed(() => true)
+const dialogRef = ref(null)
+const silentClosing = ref(false)
+const isDialogDirty = computed(
   () =>
+    !silentClosing.value &&
     visible.value &&
     step.value === 2 &&
     Boolean(emptyFormSignature.value) &&
     formInputSignature.value !== emptyFormSignature.value,
 )
-
-const canCloseByModalClick = computed(() => !hasUserInput.value)
 
 const isTestStale = computed(() => {
   return (
@@ -1238,7 +1472,6 @@ const summaryRows = computed(() => {
         label: '认证',
         value: data.authType === 'username_password' ? '用户名/密码' : '匿名',
       },
-      { label: '采样', value: formatTimeout(data.samplingMs) },
     )
   } else if (connectionType.value === 's7') {
     rows.push(
@@ -1297,7 +1530,7 @@ const checklist = computed(() => {
             : connectionType.value === 'opcua'
               ? Boolean(data.ip && data.port)
               : connectionType.value === 'modbus' && data.mode === 'rtu'
-                ? Boolean(data.serialConfigText)
+                ? Boolean(data.serialPort)
                 : connectionType.value === 'tdengine'
                   ? Boolean(data.ip && data.port)
                   : relationalSourceTypes.includes(connectionType.value)
@@ -1389,6 +1622,8 @@ watch(
       if (!opcuaActiveCollapse.value.includes('ssl')) {
         opcuaActiveCollapse.value = [...opcuaActiveCollapse.value, 'ssl']
       }
+    } else if (secMode === 'none' && opcuaActiveCollapse.value.includes('ssl')) {
+      opcuaActiveCollapse.value = opcuaActiveCollapse.value.filter((name) => name !== 'ssl')
     }
   },
   { deep: true },
@@ -1398,6 +1633,8 @@ watch(
 watch(
   () => props.modelValue,
   (isOpen) => {
+    document.body.classList.toggle('connection-dialog-open', isOpen)
+    document.documentElement.classList.toggle('connection-dialog-open', isOpen)
     if (isOpen && props.mode === 'create') {
       // create 打开时回到 step 1 并重置
       step.value = 1
@@ -1409,10 +1646,18 @@ watch(
     } else if (isOpen && props.mode === 'edit') {
       // edit 模式直接进入 step 2
       step.value = 2
-      emptyFormSignature.value = formInputSignature.value
+      hydrateEditForm(props.connection)
+    } else if (!isOpen) {
+      document.body.classList.remove('connection-dialog-open')
+      document.documentElement.classList.remove('connection-dialog-open')
     }
   },
 )
+
+onBeforeUnmount(() => {
+  document.body.classList.remove('connection-dialog-open')
+  document.documentElement.classList.remove('connection-dialog-open')
+})
 
 const selectSource = (value) => {
   if (props.mode === 'edit' || connectionType.value === value) return
@@ -1457,6 +1702,50 @@ const resetTestState = () => {
     detail: '',
     durationMs: 0,
   }
+}
+
+const hydrateEditForm = (connection) => {
+  if (!connection || props.mode !== 'edit') return
+  connectionType.value = connection.type
+  const protocolConfig = resolveConnectionConfigForForm(connection)
+  if (isBuiltinStoreType(connection.type)) {
+    formData.value = normalizeBuiltinFormData(connection.type, {
+      name: connection.name,
+      ...protocolConfig,
+    })
+  } else if (connection.type === 'relational' && connection.relationalConfig) {
+    dbType.value = connection.relationalConfig.dbType
+    connectionType.value = dbType.value
+    formData.value = {
+      name: connection.name,
+      ...connection.relationalConfig,
+    }
+  } else if (connection.type === 'mqtt' && connection.mqttConfig) {
+    formData.value = {
+      name: connection.name,
+      ...connection.mqttConfig,
+    }
+  } else {
+    formData.value = normalizeProtocolFormData(connection.type, {
+      name: connection.name,
+      ...protocolConfig,
+    })
+  }
+  resetTestState()
+  emptyFormSignature.value = formInputSignature.value
+}
+
+const resolveConnectionConfigForForm = (connection) => {
+  const config =
+    connection?.config && typeof connection.config === 'object' ? { ...connection.config } : {}
+  if (config.config && typeof config.config === 'object') {
+    Object.assign(config, config.config)
+    delete config.config
+  }
+  if (!config.redundancy && connection?.redundancy && typeof connection.redundancy === 'object') {
+    config.redundancy = connection.redundancy
+  }
+  return config
 }
 
 const handleValidate = (valid, data) => {
@@ -1546,7 +1835,6 @@ const generateKafkaClientId = () => {
 const handleTest = async () => {
   const valid = await validateCurrentForm()
   if (!valid) {
-    ElMessage.warning(tc('connection.incompleteInfoWarning'))
     return
   }
 
@@ -1624,7 +1912,6 @@ const handleTest = async () => {
 const handleSubmit = async () => {
   const valid = await validateCurrentForm()
   if (!valid) {
-    ElMessage.warning(tc('connection.incompleteInfoWarning'))
     return
   }
 
@@ -1646,8 +1933,15 @@ const requestClose = () => {
   visible.value = false
 }
 
+const closeSilently = () => {
+  silentClosing.value = true
+  emptyFormSignature.value = formInputSignature.value
+  dialogRef.value?.closeSilently?.()
+}
+
 const handleClosed = () => {
   emptyFormSignature.value = ''
+  silentClosing.value = false
   // 清空表单
   if (formRef.value) {
     formRef.value.clearValidate()
@@ -1656,6 +1950,8 @@ const handleClosed = () => {
     protocolFormRef.value.clearValidate()
   }
 }
+
+defineExpose({ closeSilently })
 
 const getProtocolDefaultConfig = (type) => {
   const defaults = {
@@ -1723,7 +2019,11 @@ const getProtocolDefaultConfig = (type) => {
       rack: 0,
       slot: 1,
       pollIntervalMs: 1000,
-      optionsText: '{}',
+      pduSize: 480,
+      localTsap: '',
+      remoteTsap: '',
+      connectionTimeoutMs: 5000,
+      requestTimeoutMs: 5000,
       redundancy: defaultRedundancyConfig(102),
     },
     modbus: {
@@ -1731,12 +2031,19 @@ const getProtocolDefaultConfig = (type) => {
       mode: 'tcp',
       ip: '',
       port: 502,
-      serialConfigText: '{"port":"COM3","baudRate":9600,"dataBits":8,"parity":"N","stopBits":1}',
+      serialPort: '/dev/ttyUSB0',
+      baudRate: 9600,
+      dataBits: 8,
+      parity: 'N',
+      stopBits: 1,
       slaveId: 1,
       startAddress: 0,
       quantity: 1,
       pollIntervalMs: 1000,
-      optionsText: '{}',
+      functionCode: 3,
+      connectTimeoutMs: 5000,
+      requestTimeoutMs: 5000,
+      retries: 1,
       redundancy: defaultRedundancyConfig(502),
     },
     tdengine: {
@@ -1834,6 +2141,59 @@ const buildKafkaOptions = (config) => {
   return options
 }
 
+const normalizeS7OptionsForForm = (options = {}) => ({
+  pduSize: Number(options.pduSize) || 480,
+  localTsap: options.localTsap || '',
+  remoteTsap: options.remoteTsap || '',
+  connectionTimeoutMs: Number(options.connectionTimeoutMs) || 5000,
+  requestTimeoutMs: Number(options.requestTimeoutMs) || 5000,
+})
+
+const buildS7Options = (config) => {
+  const options: Record<string, any> = {
+    pduSize: Number(config.pduSize) || 480,
+    connectionTimeoutMs: Number(config.connectionTimeoutMs) || 5000,
+    requestTimeoutMs: Number(config.requestTimeoutMs) || 5000,
+  }
+  if (String(config.localTsap || '').trim()) {
+    options.localTsap = String(config.localTsap).trim()
+  }
+  if (String(config.remoteTsap || '').trim()) {
+    options.remoteTsap = String(config.remoteTsap).trim()
+  }
+  return options
+}
+
+const normalizeModbusOptionsForForm = (options = {}) => ({
+  functionCode: Number(options.functionCode) || 3,
+  connectTimeoutMs: Number(options.connectTimeoutMs) || 5000,
+  requestTimeoutMs: Number(options.requestTimeoutMs) || 5000,
+  retries: Number(options.retries ?? 1),
+})
+
+const buildModbusOptions = (config) => ({
+  functionCode: Number(config.functionCode) || 3,
+  connectTimeoutMs: Number(config.connectTimeoutMs) || 5000,
+  requestTimeoutMs: Number(config.requestTimeoutMs) || 5000,
+  retries: Number(config.retries ?? 1),
+})
+
+const normalizeModbusSerialConfigForForm = (serialConfig = {}) => ({
+  serialPort: serialConfig.port || serialConfig.serialPort || '/dev/ttyUSB0',
+  baudRate: Number(serialConfig.baudRate) || 9600,
+  dataBits: Number(serialConfig.dataBits) || 8,
+  parity: serialConfig.parity || 'N',
+  stopBits: Number(serialConfig.stopBits) || 1,
+})
+
+const buildModbusSerialConfig = (config) => ({
+  port: String(config.serialPort || '').trim(),
+  baudRate: Number(config.baudRate) || 9600,
+  dataBits: Number(config.dataBits) || 8,
+  parity: String(config.parity || 'N').toUpperCase(),
+  stopBits: Number(config.stopBits) || 1,
+})
+
 const normalizeProtocolFormData = (type, config) => {
   const data = { ...getProtocolDefaultConfig(type), ...config }
   if (type === 'kafka' && config.options && typeof config.options === 'object') {
@@ -1842,6 +2202,12 @@ const normalizeProtocolFormData = (type, config) => {
   if (type === 'opcua') {
     if (config.endpoint) {
       Object.assign(data, parseOpcuaEndpoint(config.endpoint))
+    }
+    data.securityMode = normalizeOpcuaSecurityModeForForm(data.securityMode)
+    if (data.securityMode === 'none') {
+      data.securityPolicy = 'None'
+    } else if (!data.securityPolicy || data.securityPolicy === 'None') {
+      data.securityPolicy = 'Basic256Sha256'
     }
     const options = config.options || {}
     data.sessionName = options.sessionName || 'InduForge_Session'
@@ -1863,6 +2229,17 @@ const normalizeProtocolFormData = (type, config) => {
   if (['s7', 'modbus'].includes(type) && config.host) {
     data.ip = config.host
   }
+  if (type === 's7' && config.options && typeof config.options === 'object') {
+    Object.assign(data, normalizeS7OptionsForForm(config.options))
+  }
+  if (type === 'modbus') {
+    if (config.options && typeof config.options === 'object') {
+      Object.assign(data, normalizeModbusOptionsForForm(config.options))
+    }
+    if (config.serialConfig && typeof config.serialConfig === 'object') {
+      Object.assign(data, normalizeModbusSerialConfigForForm(config.serialConfig))
+    }
+  }
   if (type === 'tdengine' && config.dsn) {
     Object.assign(data, parseTdengineDsn(config.dsn))
   }
@@ -1870,12 +2247,12 @@ const normalizeProtocolFormData = (type, config) => {
     data.headersText = JSON.stringify(data.headers, null, 2)
   }
   if (data.options && typeof data.options === 'object') {
-    if (type !== 'kafka') {
+    if (!['kafka', 's7', 'modbus'].includes(type)) {
       data.optionsText = JSON.stringify(data.options, null, 2)
     }
     data.masterName = data.options.masterName || data.masterName
   }
-  if (data.serialConfig && typeof data.serialConfig === 'object') {
+  if (data.serialConfig && typeof data.serialConfig === 'object' && type !== 'modbus') {
     data.serialConfigText = JSON.stringify(data.serialConfig, null, 2)
   }
   if (data.bodyTemplate && typeof data.bodyTemplate === 'object') {
@@ -1961,18 +2338,22 @@ const normalizeProtocolSubmitConfig = (type, config) => {
     return
   }
   if (type === 's7') {
-    config.options = parseOptionalJsonObject(config.optionsText, '扩展参数')
+    config.options = buildS7Options(config)
     config.redundancy = normalizeRedundancyForSubmit('s7', config)
     config.host = config.ip
     delete config.ip
-    delete config.optionsText
+    delete config.pduSize
+    delete config.localTsap
+    delete config.remoteTsap
+    delete config.connectionTimeoutMs
+    delete config.requestTimeoutMs
     return
   }
   if (type === 'modbus') {
-    config.options = parseOptionalJsonObject(config.optionsText, '扩展参数')
+    config.options = buildModbusOptions(config)
     config.redundancy = normalizeRedundancyForSubmit('modbus', config)
     if (config.mode === 'rtu') {
-      config.serialConfig = parseOptionalJsonObject(config.serialConfigText, '串口配置')
+      config.serialConfig = buildModbusSerialConfig(config)
       config.redundancy = {
         enabled: false,
         mode: 'none',
@@ -1986,8 +2367,15 @@ const normalizeProtocolSubmitConfig = (type, config) => {
       delete config.ip
       delete config.serialConfig
     }
-    delete config.serialConfigText
-    delete config.optionsText
+    delete config.serialPort
+    delete config.baudRate
+    delete config.dataBits
+    delete config.parity
+    delete config.stopBits
+    delete config.functionCode
+    delete config.connectTimeoutMs
+    delete config.requestTimeoutMs
+    delete config.retries
     return
   }
   if (type === 'tdengine') {
@@ -2016,6 +2404,16 @@ const parseOpcuaEndpoint = (endpoint) => {
     ip: match[1],
     port: match[2] ? Number(match[2]) : 4840,
   }
+}
+
+const normalizeOpcuaSecurityModeForForm = (value) => {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replaceAll('_', '')
+  if (normalized === 'sign') return 'sign'
+  if (normalized === 'signandencrypt') return 'signandencrypt'
+  return 'none'
 }
 
 const buildTdengineDsn = (config) => {
@@ -2130,27 +2528,56 @@ function normalizeRedundancyForSubmit(type: string, config: Record<string, any>)
       failoverPolicy: defaultFailoverPolicy(),
     }
   }
-  const endpoints = redundancy.endpoints
-    .map((endpoint, index) => ({
-      id: endpoint.id || endpoint.role || `endpoint-${index + 1}`,
-      name: endpoint.name || (endpoint.role === 'primary' ? '主路径' : '备用路径'),
-      role: endpoint.role || (index === 0 ? 'primary' : 'standby'),
-      host: String(endpoint.host || '').trim(),
-      port: Number(endpoint.port || config.port || 0),
-      priority: Number(endpoint.priority || index + 1),
-      enabled: endpoint.enabled !== false,
-      healthCheck: endpoint.healthCheck !== false,
-    }))
-    .filter((endpoint) => endpoint.host)
+  const labels = redundancyLabels(type)
+  const endpoints = redundancy.endpoints.map((endpoint, index) => ({
+    id: endpoint.id || endpoint.role || `endpoint-${index + 1}`,
+    name: endpoint.name || (endpoint.role === 'primary' ? '主路径' : '备用路径'),
+    role: endpoint.role || (index === 0 ? 'primary' : 'standby'),
+    host:
+      endpoint.role === 'primary'
+        ? String(config.ip || config.host || '').trim()
+        : String(endpoint.host || '').trim(),
+    port:
+      endpoint.role === 'primary'
+        ? Number(config.port || 0)
+        : Number(endpoint.port || config.port || 0),
+    priority: Number(endpoint.priority || index + 1),
+    enabled: endpoint.enabled !== false,
+    healthCheck: endpoint.healthCheck !== false,
+  }))
+  const primary = endpoints.find((endpoint) => endpoint.role === 'primary')
+  const standby = endpoints.find((endpoint) => endpoint.role === 'standby')
+  if (!primary?.host) {
+    throw new Error(`请填写${labels.primaryBase}地址`)
+  }
+  if (!standby?.host) {
+    throw new Error(`请填写${labels.standby} IP`)
+  }
+  if (!primary.port || primary.port < 1 || primary.port > 65535) {
+    throw new Error(`请填写有效的${labels.primaryBase}端口`)
+  }
+  if (!standby.port || standby.port < 1 || standby.port > 65535) {
+    throw new Error(`请填写有效的${labels.standby}端口`)
+  }
   return {
-    enabled: endpoints.length > 1,
-    mode: endpoints.length > 1 ? 'priority_failover' : 'none',
-    endpoints: endpoints.length > 1 ? endpoints : [],
+    enabled: true,
+    mode: 'priority_failover',
+    endpoints,
     failoverPolicy: {
       ...defaultFailoverPolicy(),
       ...(redundancy.failoverPolicy || {}),
     },
   }
+}
+
+function redundancyLabels(type: string) {
+  if (type === 's7') {
+    return { primaryBase: 'PLC', standby: '备用 PLC' }
+  }
+  if (type === 'modbus') {
+    return { primaryBase: '网关', standby: '备用网关' }
+  }
+  return { primaryBase: '服务器', standby: '备用服务器' }
 }
 
 const formatEndpoint = (host, port) => {
@@ -2174,42 +2601,43 @@ const formatTimeout = (timeout) => {
 watch(
   () => props.connection,
   (newConnection) => {
-    if (newConnection && props.mode === 'edit') {
-      connectionType.value = newConnection.type
-      if (isBuiltinStoreType(newConnection.type)) {
-        formData.value = normalizeBuiltinFormData(newConnection.type, {
-          name: newConnection.name,
-          ...(newConnection.config || {}),
-        })
-      } else if (newConnection.type === 'relational' && newConnection.relationalConfig) {
-        dbType.value = newConnection.relationalConfig.dbType
-        connectionType.value = dbType.value
-        formData.value = {
-          name: newConnection.name,
-          ...newConnection.relationalConfig,
-        }
-      } else if (newConnection.type === 'mqtt' && newConnection.mqttConfig) {
-        formData.value = {
-          name: newConnection.name,
-          ...newConnection.mqttConfig,
-        }
-      } else {
-        formData.value = normalizeProtocolFormData(newConnection.type, {
-          name: newConnection.name,
-          ...(newConnection.config || {}),
-        })
-      }
-      resetTestState()
-    }
+    hydrateEditForm(newConnection)
   },
   { immediate: true },
 )
 </script>
 
 <style scoped>
+:deep(.connection-dialog.el-dialog) {
+  height: min(760px, calc(100vh - 56px));
+  max-height: calc(100vh - 56px) !important;
+  margin: 28px auto !important;
+}
+
+:deep(.connection-dialog.el-dialog .el-dialog__body) {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
+  padding-bottom: 12px;
+}
+
+:deep(.connection-dialog.el-dialog .dc-dialog__body) {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+:deep(.connection-dialog.el-dialog .el-dialog__footer) {
+  flex: 0 0 auto;
+}
+
 /* ── Step 1：选择接入类型 ── */
 .connection-dialog__step1 {
+  height: 100%;
+  min-height: 0;
   padding: 24px 20px 8px;
+  overflow-y: auto;
 }
 
 .connection-dialog__step1-header {
@@ -2294,7 +2722,9 @@ watch(
 .connection-dialog__body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 232px;
-  min-height: 520px;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-md);
   background: var(--dc-surface-raised);
@@ -2337,11 +2767,15 @@ watch(
 }
 
 .connection-dialog__inspector {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 14px;
   border-left: 1px solid var(--dc-border);
+  overflow-y: hidden;
 }
 
 .connection-dialog__section + .connection-dialog__section {
@@ -2433,9 +2867,13 @@ watch(
 
 .connection-dialog__form-panel {
   min-width: 0;
-  max-height: 620px;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
   padding: 18px 20px;
-  overflow: auto;
+  overflow-y: scroll;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .connection-dialog__form-heading {
@@ -2618,7 +3056,17 @@ watch(
 }
 
 :global(.connection-dialog .el-dialog__body) {
-  padding: 24px 20px 16px;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  padding: 24px 20px 12px;
+}
+
+:global(.connection-dialog .dc-dialog__body) {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 :global(.connection-dialog .el-dialog__footer) {
@@ -2694,6 +3142,18 @@ watch(
   color: var(--dc-primary);
 }
 
+.connection-dialog__readonly-value {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 11px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
+  color: var(--dc-text);
+  font-size: 13px;
+}
+
 .connection-dialog__form-section {
   margin-bottom: 18px;
 }
@@ -2752,6 +3212,26 @@ watch(
   margin-left: 8px;
 }
 
+.connection-dialog__segmented-full {
+  width: 100%;
+}
+
+.connection-dialog__segmented-full :deep(.el-segmented__item) {
+  flex: 1;
+}
+
+.connection-dialog__switch-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.connection-dialog__switch-text {
+  color: var(--dc-text);
+  font-size: 13px;
+}
+
 .connection-dialog__collapse {
   margin-top: 4px;
 }
@@ -2796,5 +3276,56 @@ watch(
   .connection-dialog__form-grid {
     grid-template-columns: 1fr;
   }
+}
+</style>
+
+<style>
+html.connection-dialog-open,
+body.connection-dialog-open {
+  overflow: hidden !important;
+}
+
+html.connection-dialog-open .el-overlay-dialog {
+  overflow: hidden !important;
+}
+
+.connection-dialog.el-dialog {
+  height: min(760px, calc(100vh - 56px)) !important;
+  max-height: calc(100vh - 56px) !important;
+  overflow: hidden !important;
+}
+
+.connection-dialog.el-dialog .el-dialog__body {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  padding: 24px 20px 12px !important;
+}
+
+.connection-dialog.el-dialog .dc-dialog__body {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden !important;
+}
+
+.connection-dialog.el-dialog .connection-dialog__body {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.connection-dialog.el-dialog .connection-dialog__form-panel {
+  height: 100%;
+  min-height: 0;
+  overflow-y: scroll;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.connection-dialog.el-dialog .connection-dialog__inspector {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 </style>

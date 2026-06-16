@@ -408,6 +408,18 @@ func (s *OpcuaModelingService) DeleteNode(ctx context.Context, projectID, connec
 	return nil
 }
 
+// UpdateNodeLastValue 保存开发态读取后的变量最近值快照。
+func (s *OpcuaModelingService) UpdateNodeLastValue(ctx context.Context, projectID, connectionID, nodeID, userID string, value any, quality string) error {
+	return s.repository.UpdateNodeLastValue(ctx, repository.UpdateOpcuaNodeLastValueParams{
+		ProjectID:    projectID,
+		ConnectionID: connectionID,
+		NodeID:       nodeID,
+		LastValue:    value,
+		Quality:      firstNonEmpty(quality, "Good"),
+		UserID:       userID,
+	})
+}
+
 // ValidateModel 校验当前连接下的 OPC UA 建模结果。
 func (s *OpcuaModelingService) ValidateModel(ctx context.Context, projectID, connectionID string) (*OpcuaValidationResult, error) {
 	nodes, err := s.ListNodes(ctx, projectID, connectionID, nil)
@@ -774,7 +786,9 @@ func toOpcuaNode(record repository.OpcuaNodeRecord) OpcuaNode {
 		DataPointID:     cloneOptionalString(record.DataPointID),
 		DataPointPath:   cloneOptionalString(record.DataPointPath),
 		DataPointStatus: cloneOptionalString(record.DataPointStatus),
-		Quality:         "unknown",
+		LastValue:       bytesToAny(record.LastValue),
+		Quality:         firstNonEmpty(record.Quality, "unknown"),
+		LastUpdatedAt:   cloneOptionalTime(record.LastUpdatedAt),
 		CreatedAt:       record.CreatedAt,
 		UpdatedAt:       record.UpdatedAt,
 	}

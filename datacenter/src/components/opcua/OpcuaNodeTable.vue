@@ -13,15 +13,26 @@
       @row-contextmenu="(row, _column, event) => $emit('row-contextmenu', event, row)"
       @sort-change="(payload) => $emit('sort-change', payload)"
     >
-      <el-table-column label="变量名" min-width="170" show-overflow-tooltip prop="name" sortable="custom">
+      <el-table-column
+        label="变量名"
+        min-width="170"
+        show-overflow-tooltip
+        prop="name"
+        sortable="custom"
+      >
         <template #default="{ row }">
           <div class="opcua-table__name">
             <strong>{{ row.name }}</strong>
-            <span>{{ row.code }}</span>
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="NodeId" min-width="250" show-overflow-tooltip prop="nodeId" sortable="custom">
+      <el-table-column
+        label="NodeId"
+        min-width="250"
+        show-overflow-tooltip
+        prop="nodeId"
+        sortable="custom"
+      >
         <template #default="{ row }">
           <code class="opcua-table__node-id">{{ row.nodeId }}</code>
         </template>
@@ -47,9 +58,9 @@
           <el-tag
             class="opcua-table__tag"
             size="small"
-            :type="row.quality === 'good' ? 'success' : 'info'"
+            :type="isGoodQuality(row.quality) ? 'success' : 'info'"
           >
-            {{ row.quality || 'unknown' }}
+            {{ formatQuality(row.quality) }}
           </el-tag>
         </template>
       </el-table-column>
@@ -64,16 +75,45 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="112" fixed="right">
+      <el-table-column label="操作" width="160" fixed="right">
         <template #default="{ row }">
           <div class="opcua-table__actions">
-            <el-button text size="small" :icon="IconTablerEdit" @click.stop="$emit('edit', row)" />
-            <el-button
-              text
-              size="small"
-              :icon="IconTablerTrash"
-              @click.stop="$emit('delete', row)"
-            />
+            <el-tooltip content="查看详情" placement="top">
+              <button
+                type="button"
+                class="opcua-table__icon-action"
+                @click.stop="$emit('detail', row)"
+              >
+                <IconTablerEye />
+              </button>
+            </el-tooltip>
+            <el-tooltip content="复制为新变量" placement="top">
+              <button
+                type="button"
+                class="opcua-table__icon-action"
+                @click.stop="$emit('duplicate', row)"
+              >
+                <IconTablerCopy />
+              </button>
+            </el-tooltip>
+            <el-tooltip content="编辑" placement="top">
+              <button
+                type="button"
+                class="opcua-table__icon-action"
+                @click.stop="$emit('edit', row)"
+              >
+                <IconTablerEdit />
+              </button>
+            </el-tooltip>
+            <el-tooltip content="删除" placement="top">
+              <button
+                type="button"
+                class="opcua-table__icon-action is-danger"
+                @click.stop="$emit('delete', row)"
+              >
+                <IconTablerTrash />
+              </button>
+            </el-tooltip>
           </div>
         </template>
       </el-table-column>
@@ -95,7 +135,9 @@
 </template>
 
 <script setup lang="ts">
+import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerEdit from '~icons/tabler/edit'
+import IconTablerEye from '~icons/tabler/eye'
 import IconTablerTrash from '~icons/tabler/trash'
 import type { OpcuaNode } from './types'
 
@@ -110,6 +152,8 @@ defineProps<{
 
 defineEmits<{
   (event: 'select', node: OpcuaNode): void
+  (event: 'detail', node: OpcuaNode): void
+  (event: 'duplicate', node: OpcuaNode): void
   (event: 'edit', node: OpcuaNode): void
   (event: 'delete', node: OpcuaNode): void
   (event: 'row-contextmenu', mouseEvent: MouseEvent, node: OpcuaNode): void
@@ -122,6 +166,14 @@ const formatValue = (value: unknown) => {
   if (value === null || value === undefined || value === '') return '-'
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
+}
+
+const isGoodQuality = (quality?: string) => String(quality || '').toLowerCase() === 'good'
+
+const formatQuality = (quality?: string) => {
+  if (!quality) return 'unknown'
+  if (isGoodQuality(quality)) return 'Good'
+  return quality
 }
 </script>
 
@@ -171,16 +223,6 @@ const formatValue = (value: unknown) => {
   white-space: nowrap;
 }
 
-.opcua-table__name span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--dc-text-muted);
-  font-size: 11px;
-  line-height: 14px;
-  white-space: nowrap;
-}
-
 .opcua-table__node-id {
   max-width: 100%;
   display: inline-block;
@@ -216,7 +258,35 @@ const formatValue = (value: unknown) => {
 .opcua-table__actions {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
+}
+
+.opcua-table__icon-action {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-secondary);
+  cursor: pointer;
+}
+
+.opcua-table__icon-action:hover {
+  border-color: var(--dc-primary);
+  color: var(--dc-primary);
+}
+
+.opcua-table__icon-action.is-danger:hover {
+  border-color: var(--dc-danger);
+  color: var(--dc-danger);
+}
+
+.opcua-table__icon-action svg {
+  width: 14px;
+  height: 14px;
 }
 
 .opcua-table__muted {

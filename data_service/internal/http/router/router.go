@@ -1518,6 +1518,14 @@ func mountProtocolWave2Routes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
+		"PUT /api/v1/data/projects/{projectId}/opcua/configs/{connectionId}",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:write")(
+				middleware.ErrorHandler(opts.protocolWave2Handler.UpdateOpcuaConfig),
+			),
+		),
+	)
+	mux.Handle(
 		"POST /api/v1/data/projects/{projectId}/s7/configs",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:write")(

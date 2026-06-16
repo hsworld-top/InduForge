@@ -9,7 +9,9 @@
         <h3><span>01</span>基础信息</h3>
         <div class="modbus-register-dialog__grid">
           <el-form-item label="变量名"><el-input v-model="form.name" /></el-form-item>
-          <el-form-item label="Code"><el-input v-model="form.code" /></el-form-item>
+          <el-form-item label="Code">
+            <el-input v-model="form.code" placeholder="留空时按变量名自动生成" />
+          </el-form-item>
           <el-form-item label="寄存器组">
             <el-select v-model="form.groupId" clearable>
               <el-option
@@ -101,9 +103,8 @@
           /></el-form-item>
           <el-form-item label="读写权限">
             <el-select v-model="form.accessLevel">
-              <el-option label="Read" value="Read" />
-              <el-option label="Write" value="Write" />
-              <el-option label="ReadWrite" value="ReadWrite" />
+              <el-option label="只读" value="Read" />
+              <el-option label="读写" value="ReadWrite" />
             </el-select>
           </el-form-item>
         </div>
@@ -189,7 +190,7 @@ watch(
     form.pollIntervalMs = item?.pollIntervalMs ?? 1000
     form.timeoutMs = item?.timeoutMs ?? null
     form.retryCount = item?.retryCount ?? null
-    form.accessLevel = item?.accessLevel || 'Read'
+    form.accessLevel = normalizeAccessLevel(item?.accessLevel)
     form.description = item?.description || ''
     form.status = item?.status || 'active'
   },
@@ -199,11 +200,27 @@ watch(
 const submit = () => {
   emit('submit', {
     ...form,
+    code: form.code.trim() || toVariableCode(form.name),
     groupId: form.groupId || null,
     unit: form.unit.trim() || null,
     description: form.description.trim() || null,
     hasGroupId: true,
   })
+}
+
+function normalizeAccessLevel(value?: string | null) {
+  return value === 'ReadWrite' || value === 'readwrite' || value === 'Write' || value === 'write'
+    ? 'ReadWrite'
+    : 'Read'
+}
+
+function toVariableCode(value: string) {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  return normalized || 'register'
 }
 </script>
 

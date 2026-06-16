@@ -22,10 +22,8 @@
         </span>
       </div>
       <div v-if="isIndustrialConnection" class="access-source-card__health">
-        <span>{{ variableSummary }}</span>
+        <span>{{ variableCountSummary }}</span>
         <span>{{ redundancySummary }}</span>
-        <span>{{ collectionRedundancySummary }}</span>
-        <span>{{ historyStorageSummary }}</span>
       </div>
     </div>
 
@@ -76,7 +74,6 @@ type AccessSourceConnection = {
   dataPointCount?: number
   variableCount?: number
   issueCount?: number
-  historyPolicyCount?: number
   relationalConfig?: {
     dbType?: string
     host?: string
@@ -249,14 +246,11 @@ const isIndustrialConnection = computed(
   () => resolveConnectionCategory(props.connection) === 'industrial',
 )
 
-const variableSummary = computed(() => {
+const variableCountSummary = computed(() => {
   const variableCount = Number(props.connection.variableCount ?? 0)
-  const dataPointCount = Number(
-    props.connection.datapointCount ?? props.connection.dataPointCount ?? 0,
-  )
   const issueCount = Number(props.connection.issueCount ?? 0)
   const issueText = issueCount > 0 ? ` / 问题${issueCount}` : ''
-  return `变量${variableCount} / 点${dataPointCount}${issueText}`
+  return `变量：${variableCount}${issueText}`
 })
 
 const redundancySummary = computed(() => {
@@ -265,24 +259,6 @@ const redundancySummary = computed(() => {
   const endpoints = Array.isArray(redundancy.endpoints) ? redundancy.endpoints : []
   const enabledCount = endpoints.filter((endpoint) => endpoint?.enabled !== false).length
   return enabledCount > 1 ? '设备冗余：主备' : '设备冗余：待补'
-})
-
-const collectionRedundancySummary = computed(() => {
-  const redundancy = props.connection.config?.['collectionRedundancy'] as
-    | Record<string, any>
-    | undefined
-  const mode = String(redundancy?.mode || 'none')
-  const labelMap: Record<string, string> = {
-    none: '无',
-    standby_failover: '主备接管',
-    sharded: '分片',
-  }
-  return `采集冗余：${labelMap[mode] || mode}`
-})
-
-const historyStorageSummary = computed(() => {
-  const count = Number(props.connection.historyPolicyCount ?? 0)
-  return count > 0 ? `历史归档：${count}条` : '历史归档：未配置'
 })
 </script>
 

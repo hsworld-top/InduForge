@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -50,6 +51,9 @@ type OpcuaNodeRecord struct {
 	DataPointID     *string
 	DataPointPath   *string
 	DataPointStatus *string
+	LastValue       []byte
+	Quality         string
+	LastUpdatedAt   *time.Time
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }
@@ -131,6 +135,16 @@ type UpdateOpcuaNodeParams struct {
 	Description  *string
 	SortOrder    int
 	Status       string
+	UserID       string
+}
+
+// UpdateOpcuaNodeLastValueParams 描述开发态读取后写回的最近值快照。
+type UpdateOpcuaNodeLastValueParams struct {
+	ProjectID    string
+	ConnectionID string
+	NodeID       string
+	LastValue    any
+	Quality      string
 	UserID       string
 }
 
@@ -265,6 +279,7 @@ func (r *OpcuaModelingRepository) ListNodes(ctx context.Context, projectID, conn
 		       n.browse_name, n.display_name, n.data_type, n.unit, n.sampling_ms, n.deadband,
 		       n.access_level, n.description, n.sort_order, n.status,
 		       dp.id, dp.path, dp.status,
+		       n.last_value, n.quality, n.last_updated_at,
 		       n.created_at, n.updated_at
 		FROM data_opcua_nodes n
 		LEFT JOIN data_points dp
@@ -317,6 +332,7 @@ func (r *OpcuaModelingRepository) ListNodesPage(ctx context.Context, projectID, 
 		       n.browse_name, n.display_name, n.data_type, n.unit, n.sampling_ms, n.deadband,
 		       n.access_level, n.description, n.sort_order, n.status,
 		       dp.id, dp.path, dp.status,
+		       n.last_value, n.quality, n.last_updated_at,
 		       n.created_at, n.updated_at
 		FROM data_opcua_nodes n
 		LEFT JOIN data_points dp
@@ -423,6 +439,7 @@ func (r *OpcuaModelingRepository) GetNode(ctx context.Context, projectID, nodeID
 		       n.browse_name, n.display_name, n.data_type, n.unit, n.sampling_ms, n.deadband,
 		       n.access_level, n.description, n.sort_order, n.status,
 		       dp.id, dp.path, dp.status,
+		       n.last_value, n.quality, n.last_updated_at,
 		       n.created_at, n.updated_at
 		FROM data_opcua_nodes n
 		LEFT JOIN data_points dp
@@ -452,7 +469,8 @@ func (r *OpcuaModelingRepository) CreateNode(ctx context.Context, params CreateO
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16)
 		RETURNING id, project_id, connection_id, group_id, name, code, node_id, browse_name,
 		          display_name, data_type, unit, sampling_ms, deadband, access_level, description,
-		          sort_order, status, NULL::uuid, NULL::text, NULL::text, created_at, updated_at
+		          sort_order, status, NULL::uuid, NULL::text, NULL::text,
+		          last_value, quality, last_updated_at, created_at, updated_at
 	`, params.ProjectID, params.ConnectionID, params.GroupID, params.Name, params.Code, params.NodeID, params.BrowseName, params.DisplayName, params.DataType, params.Unit, params.SamplingMS, params.Deadband, params.AccessLevel, params.Description, params.SortOrder, params.UserID)
 
 	record, err := scanOpcuaNodeRecord(row)
@@ -496,7 +514,8 @@ func (r *OpcuaModelingRepository) UpdateNode(ctx context.Context, params UpdateO
 		WHERE project_id = $1 AND connection_id = $2 AND id = $3
 		RETURNING id, project_id, connection_id, group_id, name, code, node_id, browse_name,
 		          display_name, data_type, unit, sampling_ms, deadband, access_level, description,
-		          sort_order, status, NULL::uuid, NULL::text, NULL::text, created_at, updated_at
+		          sort_order, status, NULL::uuid, NULL::text, NULL::text,
+		          last_value, quality, last_updated_at, created_at, updated_at
 	`, args...)
 
 	record, err := scanOpcuaNodeRecord(row)
@@ -517,6 +536,30 @@ func (r *OpcuaModelingRepository) DeleteNode(ctx context.Context, projectID, con
 	`, projectID, connectionID, nodeID)
 	if err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "删除 OPC UA 变量失败", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "OPC UA 变量不存在")
+	}
+	return nil
+}
+
+// UpdateNodeLastValue 写回开发态读取得到的最近值快照。
+func (r *OpcuaModelingRepository) UpdateNodeLastValue(ctx context.Context, params UpdateOpcuaNodeLastValueParams) error {
+	valueBytes, err := marshalOpcuaJSONValue(params.LastValue)
+	if err != nil {
+		return err
+	}
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE data_opcua_nodes
+		SET last_value = $4::jsonb,
+		    quality = $5,
+		    last_updated_at = now(),
+		    updated_by = $6,
+		    updated_at = now()
+		WHERE project_id = $1 AND connection_id = $2 AND id = $3
+	`, params.ProjectID, params.ConnectionID, params.NodeID, string(valueBytes), params.Quality, params.UserID)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "更新 OPC UA 变量最近值失败", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "OPC UA 变量不存在")
@@ -568,6 +611,9 @@ func scanOpcuaNodeRecord(row pgx.Row) (OpcuaNodeRecord, error) {
 		&record.DataPointID,
 		&record.DataPointPath,
 		&record.DataPointStatus,
+		&record.LastValue,
+		&record.Quality,
+		&record.LastUpdatedAt,
 		&record.CreatedAt,
 		&record.UpdatedAt,
 	); err != nil {
@@ -592,4 +638,12 @@ func translateOpcuaModelingWriteError(err error) error {
 		}
 	}
 	return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入 OPC UA 建模数据失败", err)
+}
+
+func marshalOpcuaJSONValue(value any) ([]byte, error) {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "OPC UA 最近值 JSON 格式无效", err)
+	}
+	return payload, nil
 }
