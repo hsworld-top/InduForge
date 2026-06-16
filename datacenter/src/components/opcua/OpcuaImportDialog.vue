@@ -211,7 +211,7 @@
         :loading="confirmPreparing"
         @click="goConfirm"
       >
-        下一步，确认 {{ candidateCount }} 个候选变量
+        {{ confirmPreparing ? '准备确认...' : `下一步，确认 ${candidateCount} 个候选变量` }}
       </el-button>
       <el-button
         v-else
@@ -607,6 +607,7 @@ async function goConfirm() {
   }
   confirmPreparing.value = true
   await nextTick()
+  await waitForPaint()
   try {
     if (mode.value === 'browse') {
       browseDraftRows.value = buildBrowseRows(selectedBrowseIds.value)
@@ -620,6 +621,12 @@ async function goConfirm() {
   } finally {
     confirmPreparing.value = false
   }
+}
+
+function waitForPaint() {
+  return new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))
+  })
 }
 
 function applyDefaults() {
