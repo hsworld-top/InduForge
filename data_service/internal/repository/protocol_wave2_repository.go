@@ -25,6 +25,7 @@ type CreateOpcuaConfigParams struct {
 	Password       *string
 	SamplingMS     int
 	Options        map[string]any
+	Redundancy     map[string]any
 }
 
 // CreateS7ConfigParams 描述 S7 配置落库参数。
@@ -111,6 +112,7 @@ func (r *ProtocolWave2Repository) CreateOpcuaConfig(ctx context.Context, params 
 			"password":       params.Password,
 			"samplingMs":     params.SamplingMS,
 			"options":        cloneWave2Map(params.Options),
+			"redundancy":     cloneWave2Map(params.Redundancy),
 		},
 	})
 	if err != nil {

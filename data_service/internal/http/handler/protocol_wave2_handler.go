@@ -36,6 +36,7 @@ func (h *ProtocolWave2Handler) CreateOpcuaConfig(w http.ResponseWriter, r *http.
 		Password       *string        `json:"password"`
 		SamplingMS     *int           `json:"samplingMs"`
 		Options        map[string]any `json:"options"`
+		Redundancy     map[string]any `json:"redundancy"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
@@ -52,6 +53,7 @@ func (h *ProtocolWave2Handler) CreateOpcuaConfig(w http.ResponseWriter, r *http.
 		Password:       request.Password,
 		SamplingMS:     request.SamplingMS,
 		Options:        request.Options,
+		Redundancy:     request.Redundancy,
 	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)

@@ -39,6 +39,7 @@ type CreateOpcuaConfigInput struct {
 	Password       *string
 	SamplingMS     *int
 	Options        map[string]any
+	Redundancy     map[string]any
 }
 
 // CreateS7ConfigInput 表示创建 S7 配置输入。
@@ -155,6 +156,7 @@ func (s *ProtocolWave2Service) CreateOpcuaConfig(ctx context.Context, projectID,
 		Password:       password,
 		SamplingMS:     samplingMS,
 		Options:        cloneMap(input.Options),
+		Redundancy:     cloneMap(input.Redundancy),
 	})
 	if err != nil {
 		return nil, err
