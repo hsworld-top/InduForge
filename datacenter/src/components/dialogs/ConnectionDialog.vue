@@ -597,63 +597,14 @@
                   <template #append>ms</template>
                 </el-input>
               </el-form-item>
-              <el-collapse v-model="s7ActiveCollapse" class="connection-dialog__collapse mt-4">
-                <el-collapse-item title="高级参数配置" name="advanced">
-                  <div class="connection-dialog__form-grid">
-                    <el-form-item>
-                      <template #label>
-                        <span class="connection-dialog__field-label">
-                          PDU 长度
-                          <el-tooltip
-                            content="PLC 单次通信的数据包上限，常见值为 240、480、960。"
-                            placement="top"
-                          >
-                            <IconTablerHelpCircle class="connection-dialog__field-help" />
-                          </el-tooltip>
-                        </span>
-                      </template>
-                      <el-input-number
-                        v-model="formData.pduSize"
-                        :min="0"
-                        :step="120"
-                        class="w-full"
-                        placeholder="480"
-                      />
-                    </el-form-item>
-                    <el-form-item label="本地 TSAP">
-                      <el-input v-model="formData.localTsap" placeholder="可选，例如 0100" />
-                    </el-form-item>
-                  </div>
-                  <div class="connection-dialog__form-grid">
-                    <el-form-item label="远端 TSAP">
-                      <el-input v-model="formData.remoteTsap" placeholder="可选，例如 0102" />
-                    </el-form-item>
-                    <el-form-item label="连接超时">
-                      <el-input-number
-                        v-model="formData.connectionTimeoutMs"
-                        :min="1000"
-                        :step="1000"
-                        class="w-full"
-                      />
-                    </el-form-item>
-                    <el-form-item label="请求超时">
-                      <el-input-number
-                        v-model="formData.requestTimeoutMs"
-                        :min="1000"
-                        :step="1000"
-                        class="w-full"
-                      />
-                    </el-form-item>
-                  </div>
-                </el-collapse-item>
-              </el-collapse>
               <div class="connection-dialog__form-section">
                 <div class="connection-dialog__form-section-title">设备冗余</div>
-                <el-switch
-                  v-model="formData.redundancy.enabled"
-                  active-text="启用主备 PLC"
-                  inactive-text="不启用"
-                />
+                <div class="connection-dialog__switch-line">
+                  <el-switch v-model="formData.redundancy.enabled" />
+                  <span class="connection-dialog__switch-text">
+                    {{ formData.redundancy.enabled ? '启用主备 PLC' : '不启用' }}
+                  </span>
+                </div>
                 <div v-if="formData.redundancy.enabled" class="connection-dialog__redundancy-grid">
                   <el-form-item
                     v-for="endpoint in formData.redundancy.endpoints"
@@ -727,6 +678,56 @@
                   </el-form-item>
                 </div>
               </div>
+              <el-collapse v-model="s7ActiveCollapse" class="connection-dialog__collapse mt-4">
+                <el-collapse-item title="高级参数配置" name="advanced">
+                  <div class="connection-dialog__form-grid">
+                    <el-form-item>
+                      <template #label>
+                        <span class="connection-dialog__field-label">
+                          PDU 长度
+                          <el-tooltip
+                            content="PLC 单次通信的数据包上限，常见值为 240、480、960。"
+                            placement="top"
+                          >
+                            <IconTablerHelpCircle class="connection-dialog__field-help" />
+                          </el-tooltip>
+                        </span>
+                      </template>
+                      <el-input-number
+                        v-model="formData.pduSize"
+                        :min="0"
+                        :step="120"
+                        class="w-full"
+                        placeholder="480"
+                      />
+                    </el-form-item>
+                    <el-form-item label="本地 TSAP">
+                      <el-input v-model="formData.localTsap" placeholder="可选，例如 0100" />
+                    </el-form-item>
+                  </div>
+                  <div class="connection-dialog__form-grid">
+                    <el-form-item label="远端 TSAP">
+                      <el-input v-model="formData.remoteTsap" placeholder="可选，例如 0102" />
+                    </el-form-item>
+                    <el-form-item label="连接超时">
+                      <el-input-number
+                        v-model="formData.connectionTimeoutMs"
+                        :min="1000"
+                        :step="1000"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                    <el-form-item label="请求超时">
+                      <el-input-number
+                        v-model="formData.requestTimeoutMs"
+                        :min="1000"
+                        :step="1000"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                  </div>
+                </el-collapse-item>
+              </el-collapse>
             </template>
 
             <template v-else-if="connectionType === 'modbus'">
@@ -805,63 +806,23 @@
                   <template #append>ms</template>
                 </el-input>
               </el-form-item>
-              <el-collapse v-model="modbusActiveCollapse" class="connection-dialog__collapse mt-4">
-                <el-collapse-item title="高级参数配置" name="advanced">
-                  <div class="connection-dialog__form-grid">
-                    <el-form-item>
-                      <template #label>
-                        <span class="connection-dialog__field-label">
-                          功能码
-                          <el-tooltip
-                            content="3 表示保持寄存器，4 表示输入寄存器；线圈类变量后续在变量层配置。"
-                            placement="top"
-                          >
-                            <IconTablerHelpCircle class="connection-dialog__field-help" />
-                          </el-tooltip>
-                        </span>
-                      </template>
-                      <el-select v-model="formData.functionCode" class="w-full">
-                        <el-option :value="3" label="03 读保持寄存器" />
-                        <el-option :value="4" label="04 读输入寄存器" />
-                      </el-select>
-                    </el-form-item>
-                    <el-form-item label="连接超时">
-                      <el-input-number
-                        v-model="formData.connectTimeoutMs"
-                        :min="1000"
-                        :step="1000"
-                        class="w-full"
-                      />
-                    </el-form-item>
-                  </div>
-                  <div class="connection-dialog__form-grid">
-                    <el-form-item label="请求超时">
-                      <el-input-number
-                        v-model="formData.requestTimeoutMs"
-                        :min="1000"
-                        :step="1000"
-                        class="w-full"
-                      />
-                    </el-form-item>
-                    <el-form-item label="重试次数">
-                      <el-input-number
-                        v-model="formData.retries"
-                        :min="0"
-                        :max="10"
-                        class="w-full"
-                      />
-                    </el-form-item>
-                  </div>
-                </el-collapse-item>
-              </el-collapse>
               <div class="connection-dialog__form-section">
                 <div class="connection-dialog__form-section-title">设备冗余</div>
-                <el-switch
-                  v-model="formData.redundancy.enabled"
-                  :disabled="formData.mode === 'rtu'"
-                  active-text="启用主备 TCP 网关"
-                  inactive-text="不启用"
-                />
+                <div class="connection-dialog__switch-line">
+                  <el-switch
+                    v-model="formData.redundancy.enabled"
+                    :disabled="formData.mode === 'rtu'"
+                  />
+                  <span class="connection-dialog__switch-text">
+                    {{
+                      formData.mode === 'rtu'
+                        ? 'RTU 暂不启用设备冗余'
+                        : formData.redundancy.enabled
+                          ? '启用主备 TCP 网关'
+                          : '不启用'
+                    }}
+                  </span>
+                </div>
                 <p v-if="formData.mode === 'rtu'" class="connection-dialog__field-tip">
                   当前 Linux 目标环境下 RTU 优先级较低，串口冗余后续在采集节点侧配置。
                 </p>
@@ -944,6 +905,55 @@
                   </el-form-item>
                 </div>
               </div>
+              <el-collapse v-model="modbusActiveCollapse" class="connection-dialog__collapse mt-4">
+                <el-collapse-item title="高级参数配置" name="advanced">
+                  <div class="connection-dialog__form-grid">
+                    <el-form-item>
+                      <template #label>
+                        <span class="connection-dialog__field-label">
+                          功能码
+                          <el-tooltip
+                            content="3 表示保持寄存器，4 表示输入寄存器；线圈类变量后续在变量层配置。"
+                            placement="top"
+                          >
+                            <IconTablerHelpCircle class="connection-dialog__field-help" />
+                          </el-tooltip>
+                        </span>
+                      </template>
+                      <el-select v-model="formData.functionCode" class="w-full">
+                        <el-option :value="3" label="03 读保持寄存器" />
+                        <el-option :value="4" label="04 读输入寄存器" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item label="连接超时">
+                      <el-input-number
+                        v-model="formData.connectTimeoutMs"
+                        :min="1000"
+                        :step="1000"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                  </div>
+                  <div class="connection-dialog__form-grid">
+                    <el-form-item label="请求超时">
+                      <el-input-number
+                        v-model="formData.requestTimeoutMs"
+                        :min="1000"
+                        :step="1000"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                    <el-form-item label="重试次数">
+                      <el-input-number
+                        v-model="formData.retries"
+                        :min="0"
+                        :max="10"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                  </div>
+                </el-collapse-item>
+              </el-collapse>
             </template>
 
             <template v-else-if="connectionType === 'tdengine'">
