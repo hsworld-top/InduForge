@@ -2018,6 +2018,7 @@ export default {
   createOpcuaDevSession,
   closeOpcuaDevSession,
   browseOpcuaDevSession,
+  browseOpcuaDevSessionSubtree,
   readOpcuaDevSession,
   subscribeOpcuaDevSession,
   getModbusRegisterGroups,
