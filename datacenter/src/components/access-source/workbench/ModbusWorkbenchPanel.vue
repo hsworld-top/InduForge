@@ -474,7 +474,6 @@ const endpointText = computed(() => {
 const sourceMetaRows = computed(() => [
   { label: '类型', value: 'Modbus' },
   { label: '连接地址', value: endpointText.value },
-  { label: '默认从站', value: String(config.value.slaveId ?? 1) },
 ])
 const currentGroup = computed(
   () => groups.value.find((group) => group.id === selectedGroupId.value) || null,
