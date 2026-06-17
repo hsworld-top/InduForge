@@ -66,7 +66,7 @@ Windows PowerShell 中单独启动：
 
 | 协议 | 地址 |
 | --- | --- |
-| Modbus TCP | `127.0.0.1:18502`，`unitId=1` |
+| Modbus TCP | `127.0.0.1:18502`，`unitId=1/2/3` |
 | OPC UA | `opc.tcp://127.0.0.1:18540/induforge/sim` |
 | S7 | `127.0.0.1:18102`，`rack=0`，`slot=1` |
 
@@ -101,27 +101,51 @@ Windows PowerShell 中单独启动：
 
 ## Modbus 点表
 
-| 区域 | 地址 | 名称 | 类型/缩放 | 读写 |
-| --- | --- | --- | --- | --- |
-| coil | 0 | 运行命令 | Bool | RW |
-| coil | 1 | 报警复位 | Bool 脉冲 | RW |
-| coil | 2 | 急停 | Bool | RW |
-| coil | 3 | 维护模式 | Bool | RW |
-| discrete input | 0 | 运行中 | Bool | R |
-| discrete input | 1 | 启动中 | Bool | R |
-| discrete input | 2 | 故障 | Bool | R |
-| discrete input | 3 | 报警激活 | Bool | R |
-| holding register | 0 | 目标压力 | UInt16 / 100 bar | RW |
-| holding register | 1 | 目标转速 | UInt16 rpm | RW |
-| holding register | 2 | 状态码 | UInt16 | R |
-| input register | 0 | 压力 | UInt16 / 100 bar | R |
-| input register | 1 | 温度 | UInt16 / 10 C | R |
-| input register | 2 | 流量 | UInt16 / 10 m3/h | R |
-| input register | 3 | 液位 | UInt16 / 10 % | R |
-| input register | 4 | 电机转速 | UInt16 rpm | R |
-| input register | 5 | 电流 | UInt16 / 100 A | R |
-| input register | 6 | 报警码 | UInt16 bitmask | R |
-| input register | 7 | 质量码 | 0 Good / 1 Uncertain / 2 Bad | R |
+Modbus TCP 暴露 `unitId=1/2/3` 三个从站。三个从站使用同一套地址段，数据不同；`normal` 场景下 `unitId=1` 默认停机，`unitId=2` 默认启动中，`unitId=3` 默认运行且带噪声，便于测试从站地址选择和动态数据。
+
+以下地址均为零基地址，适合工作台从“起始地址 + 数量 + 类型 + 字节序”批量生成变量。
+
+| 区域 | 起始地址 | 变量数/寄存器数 | 类型/字节序 | 读写 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| coil | 0 | 8 | Bool | RW | 命令位 |
+| discrete input | 0 | 16 | Bool | R | 状态位、从站标识、质量位 |
+| holding register | 0 | 12 | UInt16 | 0/1 RW，其余 R | 设定值、状态镜像、缩放过程值 |
+| holding register | 20 | 8 | Int16 | R | 有符号偏差/修正量 |
+| holding register | 100 | 4/8 | Float32 ABCD | R | 目标/状态浮点镜像 |
+| holding register | 120 | 4/8 | Float32 BADC | R | 目标/状态浮点镜像 |
+| holding register | 140 | 4/8 | Float32 CDAB | R | 目标/状态浮点镜像 |
+| holding register | 160 | 4/8 | Float32 DCBA | R | 目标/状态浮点镜像 |
+| input register | 0 | 12 | UInt16 | R | 过程量缩放值 |
+| input register | 20 | 8 | Int16 | R | 过程偏差有符号值 |
+| input register | 100 | 8/16 | Float32 ABCD | R | 过程量浮点值 |
+| input register | 120 | 8/16 | Float32 BADC | R | 过程量浮点值 |
+| input register | 140 | 8/16 | Float32 CDAB | R | 过程量浮点值 |
+| input register | 160 | 8/16 | Float32 DCBA | R | 过程量浮点值 |
+| input register | 200 | 5/10 | UInt32 ABCD | R | 运行秒数/累计量 |
+| input register | 220 | 5/10 | UInt32 BADC | R | 运行秒数/累计量 |
+| input register | 240 | 5/10 | UInt32 CDAB | R | 运行秒数/累计量 |
+| input register | 260 | 5/10 | UInt32 DCBA | R | 运行秒数/累计量 |
+| input register | 300 | 5/10 | Int32 ABCD | R | 有符号诊断量 |
+| input register | 320 | 5/10 | Int32 BADC | R | 有符号诊断量 |
+| input register | 340 | 5/10 | Int32 CDAB | R | 有符号诊断量 |
+| input register | 360 | 5/10 | Int32 DCBA | R | 有符号诊断量 |
+
+常用起始地址：
+
+| 用途 | 从站 | 区域 | 起始地址 | 变量数/寄存器数 | 类型/字节序 |
+| --- | --- | --- | --- | --- | --- |
+| 运行/复位/急停/维护命令 | 1/2/3 | coil | 0 | 4 | Bool |
+| 状态位 | 1/2/3 | discrete input | 0 | 16 | Bool |
+| UInt16 过程量 | 1/2/3 | input register | 0 | 12 | UInt16 |
+| Int16 偏差量 | 1/2/3 | input register | 20 | 8 | Int16 |
+| Float32 过程量，标准大端 | 1/2/3 | input register | 100 | 8/16 | Float32 ABCD |
+| Float32 过程量，字节交换 | 1/2/3 | input register | 120 | 8/16 | Float32 BADC |
+| Float32 过程量，字交换 | 1/2/3 | input register | 140 | 8/16 | Float32 CDAB |
+| Float32 过程量，全反序 | 1/2/3 | input register | 160 | 8/16 | Float32 DCBA |
+| UInt32 累计量，标准大端 | 1/2/3 | input register | 200 | 5/10 | UInt32 ABCD |
+| Int32 诊断量，标准大端 | 1/2/3 | input register | 300 | 5/10 | Int32 ABCD |
+
+`coil 0` 为运行命令，`coil 1` 为报警复位脉冲，`coil 2` 为急停，`coil 3` 为维护模式。`holding register 0` 为目标压力，缩放 `value / 100 = bar`；`holding register 1` 为目标转速，单位 rpm。
 
 ## OPC UA 点表
 
