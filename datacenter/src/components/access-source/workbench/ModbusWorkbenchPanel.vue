@@ -24,7 +24,24 @@
           </button>
         </template>
       </WorkbenchSourceHeader>
+      <div class="modbus-workbench__view-tabs">
+        <button
+          type="button"
+          :class="{ 'is-active': sideView === 'groups' }"
+          @click="selectSideView('groups')"
+        >
+          分组
+        </button>
+        <button
+          type="button"
+          :class="{ 'is-active': sideView === 'slaves' }"
+          @click="selectSideView('slaves')"
+        >
+          从站
+        </button>
+      </div>
       <ModbusGroupTree
+        v-if="sideView === 'groups'"
         :groups="groups"
         :selected-group-id="selectedGroupId"
         :total="registerPagination.total"
@@ -33,6 +50,15 @@
         @create-child="openCreateChildGroup"
         @edit="openEditGroup"
         @delete="removeGroup"
+      />
+      <ModbusSlaveTree
+        v-else
+        :slaves="slaves"
+        :selected-slave-id="selectedSlaveId"
+        @select="selectSlave"
+        @create="openCreateSlave"
+        @edit="openEditSlave"
+        @delete="removeSlave"
       />
     </aside>
 
@@ -168,10 +194,18 @@
         @edit="openEditRegister"
         @delete="removeRegister"
         @row-contextmenu="openRegisterMenu"
+        @selection-change="handleRegisterSelectionChange"
         @page-change="changeRegisterPage"
         @page-size-change="changeRegisterPageSize"
         @sort-change="changeRegisterSort"
+        :group-formatter="groupPathOf"
       />
+      <div v-if="selectedRegisters.length > 0" class="modbus-workbench__bulk-bar">
+        <span>已选 {{ selectedRegisters.length }} 个变量</span>
+        <button type="button" @click="openBulkMoveGroup">移动分组</button>
+        <button type="button" @click="openBulkUpdate">批量修改</button>
+        <button type="button" class="is-danger" @click="removeSelectedRegisters">批量删除</button>
+      </div>
     </main>
 
     <el-drawer
@@ -221,14 +255,28 @@
       v-model="registerDialogVisible"
       :mode="registerDialogMode"
       :groups="groups"
+      :slaves="slaves"
       :register="editingRegister"
       :default-group-id="selectedGroupId"
+      :default-unit-id="selectedSlave?.unitId || Number(config.slaveId || 1)"
       :loading="saving"
       @submit="saveRegister"
+    />
+    <ModbusSlaveDialog
+      v-model="slaveDialogVisible"
+      :mode="slaveDialogMode"
+      :slave="editingSlave"
+      :default-unit-id="nextSlaveUnitId"
+      :loading="saving"
+      @submit="saveSlave"
     />
     <ModbusImportDialog
       ref="importDialogRef"
       v-model="importVisible"
+      :groups="groups"
+      :slaves="slaves"
+      :default-group-id="selectedGroupId"
+      :default-unit-id="selectedSlave?.unitId || Number(config.slaveId || 1)"
       :loading="saving"
       @submit="importRegisters"
     />
@@ -304,6 +352,8 @@ import ModbusPreviewDialog from '@/components/modbus/ModbusPreviewDialog.vue'
 import ModbusReadPlanDialog from '@/components/modbus/ModbusReadPlanDialog.vue'
 import ModbusRegisterDialog from '@/components/modbus/ModbusRegisterDialog.vue'
 import ModbusRegisterTable from '@/components/modbus/ModbusRegisterTable.vue'
+import ModbusSlaveDialog from '@/components/modbus/ModbusSlaveDialog.vue'
+import ModbusSlaveTree from '@/components/modbus/ModbusSlaveTree.vue'
 import ModbusValidationDrawer from '@/components/modbus/ModbusValidationDrawer.vue'
 import ProtocolContractDrawer from './ProtocolContractDrawer.vue'
 import type {
@@ -311,6 +361,7 @@ import type {
   ModbusReadValue,
   ModbusRegister,
   ModbusRegisterGroup,
+  ModbusSlaveDevice,
   ModbusValidationIssue,
 } from '@/components/modbus/types'
 import IconTablerActivityHeartbeat from '~icons/tabler/activity-heartbeat'
@@ -353,13 +404,17 @@ const emptyEstimate = (): ModbusReadPlanEstimate => ({
 })
 
 const groups = ref<ModbusRegisterGroup[]>([])
+const slaves = ref<ModbusSlaveDevice[]>([])
 const registers = ref<ModbusRegister[]>([])
 const readPlanEstimate = ref<ModbusReadPlanEstimate>(emptyEstimate())
 const registerPagination = ref({ page: 1, pageSize: 20, total: 0, totalPages: 0 })
 const loading = ref(false)
 const saving = ref(false)
 const selectedGroupId = ref('')
+const selectedSlaveId = ref('')
 const selectedRegisterId = ref('')
+const selectedRegisters = ref<ModbusRegister[]>([])
+const sideView = ref<'groups' | 'slaves'>('groups')
 const registerKeyword = ref('')
 const groupDialogVisible = ref(false)
 const groupDialogRef = ref<InstanceType<typeof ModbusGroupDialog> | null>(null)
@@ -370,6 +425,9 @@ const registerDialogVisible = ref(false)
 const registerDialogRef = ref<InstanceType<typeof ModbusRegisterDialog> | null>(null)
 const registerDialogMode = ref<'create' | 'edit'>('create')
 const editingRegister = ref<ModbusRegister | null>(null)
+const slaveDialogVisible = ref(false)
+const slaveDialogMode = ref<'create' | 'edit'>('create')
+const editingSlave = ref<ModbusSlaveDevice | null>(null)
 const importVisible = ref(false)
 const importDialogRef = ref<InstanceType<typeof ModbusImportDialog> | null>(null)
 const previewVisible = ref(false)
@@ -421,9 +479,19 @@ const sourceMetaRows = computed(() => [
 const currentGroup = computed(
   () => groups.value.find((group) => group.id === selectedGroupId.value) || null,
 )
+const selectedSlave = computed(
+  () => slaves.value.find((slave) => slave.id === selectedSlaveId.value) || null,
+)
 const selectedRegister = computed(
   () => registers.value.find((item) => item.id === selectedRegisterId.value) || null,
 )
+const nextSlaveUnitId = computed(() => {
+  const used = new Set(slaves.value.map((slave) => slave.unitId))
+  for (let unit = 1; unit <= 247; unit += 1) {
+    if (!used.has(unit)) return unit
+  }
+  return 1
+})
 const importActionTitle = computed(() =>
   currentGroup.value ? `导入到「${currentGroup.value.name}」` : '导入到未分组',
 )
@@ -442,10 +510,15 @@ const validationActionTitle = computed(() =>
       : '校验全部变量',
 )
 const readPlanActionTitle = computed(() =>
-  currentGroup.value ? `当前分组读取计划：${currentGroup.value.name}` : '全部变量读取计划',
+  selectedSlave.value
+    ? `当前从站读取计划：${selectedSlave.value.name}`
+    : currentGroup.value
+      ? `当前分组读取计划：${currentGroup.value.name}`
+      : '全部变量读取计划',
 )
 const validationScopeLabel = computed(() => {
   if (selectedRegister.value) return `当前变量：${selectedRegister.value.name}`
+  if (selectedSlave.value) return `当前从站：${selectedSlave.value.name}`
   if (currentGroup.value) return `当前分组：${currentGroup.value.name}`
   return '全部变量'
 })
@@ -458,6 +531,13 @@ const scopedValidationIssues = computed(() => {
       registers.value
         .filter((item) => item.groupId === selectedGroupId.value)
         .map((item) => item.id),
+    )
+    return validationIssues.value.filter((item) => item.registerId && ids.has(item.registerId))
+  }
+  if (selectedSlave.value) {
+    const unitId = selectedSlave.value.unitId
+    const ids = new Set(
+      registers.value.filter((item) => item.unitId === unitId).map((item) => item.id),
     )
     return validationIssues.value.filter((item) => item.registerId && ids.has(item.registerId))
   }
@@ -577,6 +657,7 @@ const unwrapPagination = (response: any) =>
 const reloadEstimate = async () => {
   const response = await dataAPI.getModbusReadPlanEstimate(props.projectId, props.connection.id, {
     groupId: selectedGroupId.value || undefined,
+    unitId: selectedSlave.value?.unitId || undefined,
   })
   readPlanEstimate.value = { ...emptyEstimate(), ...unwrapData(response) }
 }
@@ -584,10 +665,12 @@ const reloadEstimate = async () => {
 const reloadAll = async () => {
   loading.value = true
   try {
-    const [groupResponse, registerResponse] = await Promise.all([
+    const [groupResponse, slaveResponse, registerResponse] = await Promise.all([
       dataAPI.getModbusRegisterGroups(props.projectId, props.connection.id),
+      dataAPI.getModbusSlaveDevices(props.projectId, props.connection.id),
       dataAPI.getModbusRegisters(props.projectId, props.connection.id, {
         groupId: selectedGroupId.value || undefined,
+        unitId: selectedSlave.value?.unitId || undefined,
         q: registerKeyword.value.trim() || undefined,
         filter: quickFilter.value === 'all' ? undefined : quickFilter.value,
         sortBy: registerSort.value.sortBy,
@@ -597,6 +680,7 @@ const reloadAll = async () => {
       }),
     ])
     groups.value = unwrapList<ModbusRegisterGroup>(groupResponse)
+    slaves.value = unwrapList<ModbusSlaveDevice>(slaveResponse)
     registers.value = unwrapList<ModbusRegister>(registerResponse)
     registerPagination.value = {
       ...registerPagination.value,
@@ -655,9 +739,28 @@ const loadExportRegisters = async () => {
 
 const selectGroup = async (groupId: string) => {
   selectedGroupId.value = groupId
+  selectedSlaveId.value = ''
   selectedRegisterId.value = ''
+  selectedRegisters.value = []
   registerPagination.value.page = 1
   await reloadAll()
+}
+
+const selectSlave = async (slaveId: string) => {
+  selectedSlaveId.value = slaveId
+  selectedGroupId.value = ''
+  selectedRegisterId.value = ''
+  selectedRegisters.value = []
+  registerPagination.value.page = 1
+  await reloadAll()
+}
+
+const selectSideView = (view: 'groups' | 'slaves') => {
+  sideView.value = view
+  if (view === 'groups') selectedSlaveId.value = ''
+  else selectedGroupId.value = ''
+  registerPagination.value.page = 1
+  void reloadAll()
 }
 
 const changeRegisterPage = async (page: number) => {
@@ -705,6 +808,47 @@ const openEditGroup = (group: ModbusRegisterGroup) => {
   defaultGroupParentId.value = ''
   groupDialogMode.value = 'edit'
   groupDialogVisible.value = true
+}
+
+const openCreateSlave = () => {
+  editingSlave.value = null
+  slaveDialogMode.value = 'create'
+  slaveDialogVisible.value = true
+}
+
+const openEditSlave = (slave: ModbusSlaveDevice) => {
+  editingSlave.value = slave
+  slaveDialogMode.value = 'edit'
+  slaveDialogVisible.value = true
+}
+
+const saveSlave = async (payload: Record<string, unknown>) => {
+  saving.value = true
+  try {
+    if (slaveDialogMode.value === 'edit' && editingSlave.value) {
+      await dataAPI.updateModbusSlaveDevice(
+        props.projectId,
+        props.connection.id,
+        editingSlave.value.id,
+        payload,
+      )
+    } else {
+      await dataAPI.createModbusSlaveDevice(props.projectId, props.connection.id, payload)
+    }
+    slaveDialogVisible.value = false
+    await reloadAll()
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '保存从站失败'))
+  } finally {
+    saving.value = false
+  }
+}
+
+const removeSlave = async (slave: ModbusSlaveDevice) => {
+  await ElMessageBox.confirm(`删除从站“${slave.name}”？从站下存在变量时将阻止删除。`, '删除从站')
+  await dataAPI.deleteModbusSlaveDevice(props.projectId, props.connection.id, slave.id)
+  if (selectedSlaveId.value === slave.id) selectedSlaveId.value = ''
+  await reloadAll()
 }
 
 const saveGroup = async (payload: Record<string, unknown>) => {
@@ -808,11 +952,67 @@ const removeRegister = async (register: ModbusRegister) => {
   await reloadAll()
 }
 
+const handleRegisterSelectionChange = (rows: ModbusRegister[]) => {
+  selectedRegisters.value = rows
+}
+
+const removeSelectedRegisters = async () => {
+  await ElMessageBox.confirm(
+    `删除选中的 ${selectedRegisters.value.length} 个变量？对应数据点将标记为失效。`,
+    '批量删除变量',
+  )
+  await dataAPI.batchDeleteModbusRegisters(props.projectId, props.connection.id, {
+    ids: selectedRegisters.value.map((item) => item.id),
+  })
+  selectedRegisters.value = []
+  await reloadAll()
+}
+
+const openBulkMoveGroup = async () => {
+  const options = groups.value.map((group) => `${group.name}=${group.id}`).join('\n')
+  const { value } = await ElMessageBox.prompt(
+    `请输入目标分组 ID，留空移动到未分组。\n${options}`,
+    '批量移动分组',
+    { inputValue: selectedGroupId.value || '' },
+  )
+  await dataAPI.batchMoveModbusRegistersGroup(props.projectId, props.connection.id, {
+    ids: selectedRegisters.value.map((item) => item.id),
+    groupId: String(value || '').trim() || null,
+  })
+  selectedRegisters.value = []
+  await reloadAll()
+}
+
+const openBulkUpdate = async () => {
+  const { value } = await ElMessageBox.prompt(
+    '输入批量修改内容，格式：unitId=1,pollIntervalMs=1000,byteOrder=ABCD,wordOrder=high_first',
+    '批量修改变量',
+  )
+  const payload: Record<string, unknown> = {
+    ids: selectedRegisters.value.map((item) => item.id),
+  }
+  String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .forEach((item) => {
+      const [key, raw] = item.split('=')
+      if (!key) return
+      const valueText = String(raw || '').trim()
+      if (key === 'unitId' || key === 'pollIntervalMs') payload[key] = Number(valueText)
+      else payload[key] = valueText
+    })
+  await dataAPI.batchUpdateModbusRegisters(props.projectId, props.connection.id, payload)
+  selectedRegisters.value = []
+  await reloadAll()
+}
+
 const importRegisters = async (rows: Array<Record<string, unknown>>) => {
   saving.value = true
   try {
+    const groupId = (rows[0]?.groupId as string | null | undefined) ?? selectedGroupId.value ?? null
     await dataAPI.batchImportModbusRegisters(props.projectId, props.connection.id, {
-      groupId: selectedGroupId.value || null,
+      groupId,
       registers: rows,
     })
     importDialogRef.value?.closeSilently()
@@ -1073,6 +1273,35 @@ onMounted(() => {
   min-height: 0;
 }
 
+.modbus-workbench__side :deep(.modbus-slave-tree) {
+  flex: 1;
+  min-height: 0;
+  padding: 0 10px 10px;
+}
+
+.modbus-workbench__view-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+
+.modbus-workbench__view-tabs button {
+  height: 30px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.modbus-workbench__view-tabs button.is-active {
+  color: var(--dc-primary);
+  border-color: color-mix(in oklch, var(--dc-primary) 30%, var(--dc-border));
+  background: var(--dc-primary-soft);
+}
+
 .modbus-workbench__connect-action {
   min-width: 58px;
   height: 26px;
@@ -1125,6 +1354,7 @@ onMounted(() => {
 .modbus-workbench__main {
   min-width: 0;
   min-height: 0;
+  position: relative;
   background: var(--dc-surface-raised);
   display: flex;
   flex-direction: column;
@@ -1204,6 +1434,45 @@ onMounted(() => {
 .modbus-workbench__icon-action svg {
   width: 15px;
   height: 15px;
+}
+
+.modbus-workbench__bulk-bar {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 16px;
+  z-index: 3;
+  min-height: 42px;
+  border: 1px solid color-mix(in oklch, var(--dc-primary) 26%, var(--dc-border));
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-raised);
+  box-shadow: var(--dc-shadow-floating);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+}
+
+.modbus-workbench__bulk-bar span {
+  margin-right: auto;
+  color: var(--dc-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.modbus-workbench__bulk-bar button {
+  height: 28px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface);
+  color: var(--dc-text);
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.modbus-workbench__bulk-bar button.is-danger {
+  color: var(--dc-danger);
+  border-color: rgba(220, 38, 38, 0.3);
 }
 
 .modbus-workbench__search {

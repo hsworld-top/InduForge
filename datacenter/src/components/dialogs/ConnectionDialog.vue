@@ -963,23 +963,6 @@
               <el-collapse v-model="modbusActiveCollapse" class="connection-dialog__collapse mt-4">
                 <el-collapse-item title="高级参数配置" name="advanced">
                   <div class="connection-dialog__form-grid">
-                    <el-form-item>
-                      <template #label>
-                        <span class="connection-dialog__field-label">
-                          功能码
-                          <el-tooltip
-                            content="3 表示保持寄存器，4 表示输入寄存器；线圈类变量后续在变量层配置。"
-                            placement="top"
-                          >
-                            <IconTablerHelpCircle class="connection-dialog__field-help" />
-                          </el-tooltip>
-                        </span>
-                      </template>
-                      <el-select v-model="formData.functionCode" class="w-full">
-                        <el-option :value="3" label="03 读保持寄存器" />
-                        <el-option :value="4" label="04 读输入寄存器" />
-                      </el-select>
-                    </el-form-item>
                     <el-form-item label="连接超时">
                       <el-input-number
                         v-model="formData.connectTimeoutMs"
@@ -988,8 +971,6 @@
                         class="w-full"
                       />
                     </el-form-item>
-                  </div>
-                  <div class="connection-dialog__form-grid">
                     <el-form-item label="请求超时">
                       <el-input-number
                         v-model="formData.requestTimeoutMs"
@@ -998,6 +979,8 @@
                         class="w-full"
                       />
                     </el-form-item>
+                  </div>
+                  <div class="connection-dialog__form-grid">
                     <el-form-item label="重试次数">
                       <el-input-number
                         v-model="formData.retries"
@@ -1006,7 +989,77 @@
                         class="w-full"
                       />
                     </el-form-item>
+                    <el-form-item label="请求间隔">
+                      <el-input-number
+                        v-model="formData.requestIntervalMs"
+                        :min="0"
+                        :step="50"
+                        class="w-full"
+                      />
+                    </el-form-item>
                   </div>
+                  <div class="connection-dialog__form-grid">
+                    <el-form-item label="最大连续读取">
+                      <el-input-number
+                        v-model="formData.maxReadQuantity"
+                        :min="1"
+                        :max="2000"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                    <el-form-item label="最大批量请求">
+                      <el-input-number
+                        v-model="formData.maxBatchRequests"
+                        :min="1"
+                        :max="1000"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                  </div>
+                  <div class="connection-dialog__form-grid">
+                    <el-form-item label="地址基准">
+                      <el-select v-model="formData.addressBase" class="w-full">
+                        <el-option label="Modicon 地址 40001/30001" value="modicon" />
+                        <el-option label="1 基地址" value="one_based" />
+                        <el-option label="0 基地址" value="zero_based" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item label="默认从站号">
+                      <el-input-number
+                        v-model="formData.slaveId"
+                        :min="0"
+                        :max="247"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                  </div>
+                  <div class="connection-dialog__form-grid">
+                    <el-form-item label="默认字节序">
+                      <el-select v-model="formData.byteOrder" class="w-full">
+                        <el-option label="ABCD" value="ABCD" />
+                        <el-option label="BADC" value="BADC" />
+                        <el-option label="CDAB" value="CDAB" />
+                        <el-option label="DCBA" value="DCBA" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item label="默认字序">
+                      <el-select v-model="formData.wordOrder" class="w-full">
+                        <el-option label="高字在前" value="high_first" />
+                        <el-option label="低字在前" value="low_first" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item label="默认轮询周期">
+                      <el-input-number
+                        v-model="formData.pollIntervalMs"
+                        :min="100"
+                        :step="100"
+                        class="w-full"
+                      />
+                    </el-form-item>
+                  </div>
+                  <p class="connection-dialog__field-tip">
+                    默认从站和默认采集参数只用于新建变量、批量导入时带入，不限制该接入源只能访问一个从站。
+                  </p>
                 </el-collapse-item>
               </el-collapse>
             </template>
@@ -2117,10 +2170,17 @@ const getProtocolDefaultConfig = (type) => {
       dataBits: 8,
       parity: 'N',
       stopBits: 1,
-      functionCode: 3,
       connectTimeoutMs: 5000,
       requestTimeoutMs: 5000,
       retries: 1,
+      requestIntervalMs: 0,
+      maxReadQuantity: 125,
+      maxBatchRequests: 64,
+      addressBase: 'modicon',
+      byteOrder: 'ABCD',
+      wordOrder: 'high_first',
+      pollIntervalMs: 1000,
+      slaveId: 1,
       redundancy: defaultRedundancyConfig(502),
     },
     tdengine: {
@@ -2302,17 +2362,27 @@ const applyS7FamilyDefaults = () => {
 }
 
 const normalizeModbusOptionsForForm = (options = {}) => ({
-  functionCode: Number(options.functionCode) || 3,
   connectTimeoutMs: Number(options.connectTimeoutMs) || 5000,
   requestTimeoutMs: Number(options.requestTimeoutMs) || 5000,
   retries: Number(options.retries ?? 1),
+  requestIntervalMs: Number(options.requestIntervalMs) || 0,
+  maxReadQuantity: Number(options.maxReadQuantity) || 125,
+  maxBatchRequests: Number(options.maxBatchRequests) || 64,
+  addressBase: options.addressBase || 'modicon',
+  byteOrder: options.byteOrder || 'ABCD',
+  wordOrder: options.wordOrder || 'high_first',
 })
 
 const buildModbusOptions = (config) => ({
-  functionCode: Number(config.functionCode) || 3,
   connectTimeoutMs: Number(config.connectTimeoutMs) || 5000,
   requestTimeoutMs: Number(config.requestTimeoutMs) || 5000,
   retries: Number(config.retries ?? 1),
+  requestIntervalMs: Number(config.requestIntervalMs) || 0,
+  maxReadQuantity: Number(config.maxReadQuantity) || 125,
+  maxBatchRequests: Number(config.maxBatchRequests) || 64,
+  addressBase: config.addressBase || 'modicon',
+  byteOrder: config.byteOrder || 'ABCD',
+  wordOrder: config.wordOrder || 'high_first',
 })
 
 const normalizeModbusSerialConfigForForm = (serialConfig = {}) => ({
@@ -2518,10 +2588,15 @@ const normalizeProtocolSubmitConfig = (type, config) => {
     delete config.dataBits
     delete config.parity
     delete config.stopBits
-    delete config.functionCode
     delete config.connectTimeoutMs
     delete config.requestTimeoutMs
     delete config.retries
+    delete config.requestIntervalMs
+    delete config.maxReadQuantity
+    delete config.maxBatchRequests
+    delete config.addressBase
+    delete config.byteOrder
+    delete config.wordOrder
     return
   }
   if (type === 'tdengine') {

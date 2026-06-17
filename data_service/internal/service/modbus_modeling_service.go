@@ -28,6 +28,27 @@ type ModbusRegisterGroup struct {
 	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
+// ModbusSlaveDevice 表示 Modbus 接入源下的真实从站设备。
+type ModbusSlaveDevice struct {
+	ID                    string    `json:"id"`
+	ProjectID             string    `json:"projectId"`
+	ConnectionID          string    `json:"connectionId"`
+	UnitID                int       `json:"unitId"`
+	Name                  string    `json:"name"`
+	Description           *string   `json:"description"`
+	Enabled               bool      `json:"enabled"`
+	DefaultPollIntervalMS int       `json:"defaultPollIntervalMs"`
+	DefaultByteOrder      string    `json:"defaultByteOrder"`
+	DefaultWordOrder      string    `json:"defaultWordOrder"`
+	RequestIntervalMS     *int      `json:"requestIntervalMs"`
+	TimeoutMS             *int      `json:"timeoutMs"`
+	RetryCount            *int      `json:"retryCount"`
+	SortOrder             int       `json:"sortOrder"`
+	CreatedAt             time.Time `json:"createdAt"`
+	UpdatedAt             time.Time `json:"updatedAt"`
+	RegisterCount         int       `json:"registerCount,omitempty"`
+}
+
 // ModbusRegister 表示前端工作台使用的 Modbus 变量。
 type ModbusRegister struct {
 	ID              string     `json:"id"`
@@ -127,6 +148,36 @@ type UpdateModbusRegisterGroupInput struct {
 	Name        string
 	Description *string
 	SortOrder   int
+}
+
+// CreateModbusSlaveDeviceInput 描述创建从站输入。
+type CreateModbusSlaveDeviceInput struct {
+	UnitID                *int
+	Name                  string
+	Description           *string
+	Enabled               *bool
+	DefaultPollIntervalMS *int
+	DefaultByteOrder      string
+	DefaultWordOrder      string
+	RequestIntervalMS     *int
+	TimeoutMS             *int
+	RetryCount            *int
+	SortOrder             int
+}
+
+// UpdateModbusSlaveDeviceInput 描述更新从站输入。
+type UpdateModbusSlaveDeviceInput struct {
+	UnitID                *int
+	Name                  string
+	Description           *string
+	Enabled               *bool
+	DefaultPollIntervalMS *int
+	DefaultByteOrder      string
+	DefaultWordOrder      string
+	RequestIntervalMS     *int
+	TimeoutMS             *int
+	RetryCount            *int
+	SortOrder             int
 }
 
 // CreateModbusRegisterInput 描述创建变量输入。
@@ -296,6 +347,74 @@ func (s *ModbusModelingService) DeleteGroup(ctx context.Context, projectID, conn
 	return s.repository.DeleteGroup(ctx, projectID, connectionID, groupID, userID)
 }
 
+// ListSlaveDevices 返回 Modbus 从站设备。
+func (s *ModbusModelingService) ListSlaveDevices(ctx context.Context, projectID, connectionID string) ([]ModbusSlaveDevice, error) {
+	if err := s.validateProjectConnection(ctx, projectID, connectionID); err != nil {
+		return nil, err
+	}
+	records, err := s.repository.ListSlaveDevices(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	registers, err := s.repository.ListRegisters(ctx, projectID, connectionID, nil)
+	if err != nil {
+		return nil, err
+	}
+	countByUnit := map[int]int{}
+	for _, register := range registers {
+		countByUnit[register.UnitID]++
+	}
+	result := make([]ModbusSlaveDevice, 0, len(records))
+	for _, record := range records {
+		item := toModbusSlaveDevice(record)
+		item.RegisterCount = countByUnit[item.UnitID]
+		result = append(result, item)
+	}
+	return result, nil
+}
+
+// CreateSlaveDevice 创建 Modbus 从站设备。
+func (s *ModbusModelingService) CreateSlaveDevice(ctx context.Context, projectID, connectionID, userID string, input CreateModbusSlaveDeviceInput) (*ModbusSlaveDevice, error) {
+	if err := s.validateProjectConnectionAndUser(ctx, projectID, connectionID, userID); err != nil {
+		return nil, err
+	}
+	params, err := s.normalizeCreateSlaveDeviceInput(projectID, connectionID, userID, input)
+	if err != nil {
+		return nil, err
+	}
+	record, err := s.repository.CreateSlaveDevice(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	result := toModbusSlaveDevice(*record)
+	return &result, nil
+}
+
+// UpdateSlaveDevice 更新 Modbus 从站设备。
+func (s *ModbusModelingService) UpdateSlaveDevice(ctx context.Context, projectID, connectionID, slaveID, userID string, input UpdateModbusSlaveDeviceInput) (*ModbusSlaveDevice, error) {
+	if err := s.validateProjectConnectionAndUser(ctx, projectID, connectionID, userID); err != nil {
+		return nil, err
+	}
+	params, err := s.normalizeUpdateSlaveDeviceInput(projectID, connectionID, slaveID, userID, input)
+	if err != nil {
+		return nil, err
+	}
+	record, err := s.repository.UpdateSlaveDevice(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	result := toModbusSlaveDevice(*record)
+	return &result, nil
+}
+
+// DeleteSlaveDevice 删除没有变量引用的 Modbus 从站设备。
+func (s *ModbusModelingService) DeleteSlaveDevice(ctx context.Context, projectID, connectionID, slaveID, userID string) error {
+	if err := s.validateProjectConnectionAndUser(ctx, projectID, connectionID, userID); err != nil {
+		return err
+	}
+	return s.repository.DeleteSlaveDevice(ctx, projectID, connectionID, slaveID)
+}
+
 // ListRegisters 返回变量列表。
 func (s *ModbusModelingService) ListRegisters(ctx context.Context, projectID, connectionID string, groupID *string) ([]ModbusRegister, error) {
 	if err := s.validateProjectConnection(ctx, projectID, connectionID); err != nil {
@@ -327,10 +446,23 @@ type ModbusRegisterListFilter struct {
 	AddressStart *int
 	AddressEnd   *int
 	DataType     string
+	SlaveEnabled *bool
 	SortBy       string
 	SortOrder    string
 	Page         int
 	PageSize     int
+}
+
+// ModbusRegisterBulkUpdateInput 描述变量批量更新输入。
+type ModbusRegisterBulkUpdateInput struct {
+	IDs            []string
+	GroupID        *string
+	HasGroupID     bool
+	UnitID         *int
+	PollIntervalMS *int
+	ByteOrder      string
+	WordOrder      string
+	Status         string
 }
 
 // ListRegistersPage 返回当前分组下的一页变量，分页条件只影响列表展示，不影响预览和校验等全量流程。
@@ -348,6 +480,7 @@ func (s *ModbusModelingService) ListRegistersPage(ctx context.Context, projectID
 		AddressStart: filter.AddressStart,
 		AddressEnd:   filter.AddressEnd,
 		DataType:     strings.TrimSpace(filter.DataType),
+		SlaveEnabled: filter.SlaveEnabled,
 		SortBy:       strings.TrimSpace(filter.SortBy),
 		SortOrder:    strings.TrimSpace(filter.SortOrder),
 	}, page, pageSize)
@@ -427,6 +560,62 @@ func (s *ModbusModelingService) BatchImportRegisters(ctx context.Context, projec
 	return result, nil
 }
 
+// DeleteRegistersBatch 批量删除变量并标记数据点失效。
+func (s *ModbusModelingService) DeleteRegistersBatch(ctx context.Context, projectID, connectionID, userID string, ids []string) (int, error) {
+	if err := s.validateProjectConnectionAndUser(ctx, projectID, connectionID, userID); err != nil {
+		return 0, err
+	}
+	deleted, err := s.repository.DeleteRegistersBatch(ctx, projectID, connectionID, ids, userID)
+	if err != nil {
+		return 0, err
+	}
+	return len(deleted), nil
+}
+
+// UpdateRegistersBatch 批量更新变量公共字段并同步数据点。
+func (s *ModbusModelingService) UpdateRegistersBatch(ctx context.Context, projectID, connectionID, userID string, input ModbusRegisterBulkUpdateInput) (int, error) {
+	if err := s.validateProjectConnectionAndUser(ctx, projectID, connectionID, userID); err != nil {
+		return 0, err
+	}
+	if input.UnitID != nil {
+		if err := s.ensureSlaveDevice(ctx, projectID, connectionID, userID, *input.UnitID); err != nil {
+			return 0, err
+		}
+	}
+	if input.PollIntervalMS != nil && *input.PollIntervalMS <= 0 {
+		return 0, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "轮询周期必须大于 0")
+	}
+	status := ""
+	if strings.TrimSpace(input.Status) != "" {
+		status = strings.TrimSpace(input.Status)
+		if _, ok := allowedDataPointStatuses[status]; !ok {
+			return 0, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "变量状态不合法")
+		}
+	}
+	records, err := s.repository.UpdateRegistersBatch(ctx, repository.BatchUpdateModbusRegistersParams{
+		ProjectID:      projectID,
+		ConnectionID:   connectionID,
+		IDs:            input.IDs,
+		GroupID:        normalizeOptionalText(input.GroupID),
+		HasGroupID:     input.HasGroupID,
+		UnitID:         input.UnitID,
+		PollIntervalMS: input.PollIntervalMS,
+		ByteOrder:      normalizeOptionalValue(input.ByteOrder, normalizeModbusByteOrder),
+		WordOrder:      normalizeOptionalValue(input.WordOrder, normalizeModbusWordOrder),
+		Status:         status,
+		UserID:         userID,
+	})
+	if err != nil {
+		return 0, err
+	}
+	for _, record := range records {
+		if err := s.syncRegisterDatapoint(ctx, record, userID); err != nil {
+			return 0, err
+		}
+	}
+	return len(records), nil
+}
+
 // UpdateRegister 更新变量并同步数据点。
 func (s *ModbusModelingService) UpdateRegister(ctx context.Context, projectID, connectionID, registerID, userID string, input UpdateModbusRegisterInput) (*ModbusRegister, error) {
 	if err := s.validateProjectConnectionAndUser(ctx, projectID, connectionID, userID); err != nil {
@@ -483,7 +672,22 @@ func (s *ModbusModelingService) ValidateModel(ctx context.Context, projectID, co
 	if err != nil {
 		return nil, err
 	}
+	slaves, err := s.ListSlaveDevices(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
 	issues := make([]ModbusValidationIssue, 0)
+	slaveByUnit := make(map[int]ModbusSlaveDevice, len(slaves))
+	for _, slave := range slaves {
+		slaveByUnit[slave.UnitID] = slave
+		if slave.UnitID < 0 || slave.UnitID > 247 {
+			issues = append(issues, ModbusValidationIssue{
+				Severity: "error",
+				Code:     "slave.unit.invalid",
+				Message:  fmt.Sprintf("从站「%s」地址必须在 0-247 范围内", slave.Name),
+			})
+		}
+	}
 	codeSeen := map[string]string{}
 	type rangeItem struct {
 		register ModbusRegister
@@ -505,6 +709,12 @@ func (s *ModbusModelingService) ValidateModel(ctx context.Context, projectID, co
 		codeSeen[register.Code] = register.ID
 		if register.UnitID < 0 || register.UnitID > 247 {
 			issues = append(issues, modbusRegisterIssue("error", "unit.invalid", registerID, register.Name, "从站地址必须在 0-247 范围内"))
+		}
+		slave, slaveExists := slaveByUnit[register.UnitID]
+		if !slaveExists {
+			issues = append(issues, modbusRegisterIssue("error", "slave.missing", registerID, register.Name, "变量引用的从站不存在"))
+		} else if !slave.Enabled {
+			issues = append(issues, modbusRegisterIssue("warning", "slave.disabled", registerID, register.Name, fmt.Sprintf("所属从站「%s」已停用，运行态不会采集该变量", slave.Name)))
 		}
 		if _, ok := allowedModbusAreas[register.Area]; !ok {
 			issues = append(issues, modbusRegisterIssue("error", "area.invalid", registerID, register.Name, "寄存器区域不合法"))
@@ -563,18 +773,117 @@ func (s *ModbusModelingService) PreviewRegisters(ctx context.Context, projectID,
 }
 
 // EstimateReadPlans 返回运行态读取预估。
-func (s *ModbusModelingService) EstimateReadPlans(ctx context.Context, projectID, connectionID string, groupID *string) (*ModbusReadPlanEstimate, error) {
+func (s *ModbusModelingService) EstimateReadPlans(ctx context.Context, projectID, connectionID string, groupID *string, unitID *int) (*ModbusReadPlanEstimate, error) {
 	registers, err := s.ListRegisters(ctx, projectID, connectionID, groupID)
 	if err != nil {
 		return nil, err
 	}
-	estimate := BuildModbusReadPlanEstimate(registers)
+	if unitID != nil {
+		filtered := make([]ModbusRegister, 0, len(registers))
+		for _, register := range registers {
+			if register.UnitID == *unitID {
+				filtered = append(filtered, register)
+			}
+		}
+		registers = filtered
+	}
+	slaves, err := s.ListSlaveDevices(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	enabledByUnit := make(map[int]bool, len(slaves))
+	for _, slave := range slaves {
+		enabledByUnit[slave.UnitID] = slave.Enabled
+	}
+	filtered := make([]ModbusRegister, 0, len(registers))
+	skipped := 0
+	for _, register := range registers {
+		if enabled, ok := enabledByUnit[register.UnitID]; ok && !enabled {
+			skipped++
+			continue
+		}
+		filtered = append(filtered, register)
+	}
+	estimate := BuildModbusReadPlanEstimate(filtered)
+	if skipped > 0 {
+		estimate.Diagnostics = append(estimate.Diagnostics, fmt.Sprintf("已跳过 %d 个禁用从站下的变量。", skipped))
+	}
 	return &estimate, nil
+}
+
+func (s *ModbusModelingService) normalizeCreateSlaveDeviceInput(projectID, connectionID, userID string, input CreateModbusSlaveDeviceInput) (repository.CreateModbusSlaveDeviceParams, error) {
+	unitID := intOrDefault(input.UnitID, 1)
+	if unitID < 0 || unitID > 247 {
+		return repository.CreateModbusSlaveDeviceParams{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "从站地址必须在 0-247 范围内")
+	}
+	name, err := normalizeModbusRequiredText(firstNonEmpty(input.Name, fmt.Sprintf("从站 %d", unitID)), "从站名称不能为空")
+	if err != nil {
+		return repository.CreateModbusSlaveDeviceParams{}, err
+	}
+	poll := intOrDefault(input.DefaultPollIntervalMS, 1000)
+	if poll <= 0 {
+		return repository.CreateModbusSlaveDeviceParams{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "默认轮询周期必须大于 0")
+	}
+	return repository.CreateModbusSlaveDeviceParams{
+		ProjectID:             projectID,
+		ConnectionID:          connectionID,
+		UnitID:                unitID,
+		Name:                  name,
+		Description:           normalizeOptionalText(input.Description),
+		Enabled:               boolOrDefault(input.Enabled, true),
+		DefaultPollIntervalMS: poll,
+		DefaultByteOrder:      normalizeModbusByteOrder(input.DefaultByteOrder),
+		DefaultWordOrder:      normalizeModbusWordOrder(input.DefaultWordOrder),
+		RequestIntervalMS:     input.RequestIntervalMS,
+		TimeoutMS:             input.TimeoutMS,
+		RetryCount:            input.RetryCount,
+		SortOrder:             input.SortOrder,
+		UserID:                userID,
+	}, nil
+}
+
+func (s *ModbusModelingService) normalizeUpdateSlaveDeviceInput(projectID, connectionID, slaveID, userID string, input UpdateModbusSlaveDeviceInput) (repository.UpdateModbusSlaveDeviceParams, error) {
+	params, err := s.normalizeCreateSlaveDeviceInput(projectID, connectionID, userID, CreateModbusSlaveDeviceInput{
+		UnitID:                input.UnitID,
+		Name:                  input.Name,
+		Description:           input.Description,
+		Enabled:               input.Enabled,
+		DefaultPollIntervalMS: input.DefaultPollIntervalMS,
+		DefaultByteOrder:      input.DefaultByteOrder,
+		DefaultWordOrder:      input.DefaultWordOrder,
+		RequestIntervalMS:     input.RequestIntervalMS,
+		TimeoutMS:             input.TimeoutMS,
+		RetryCount:            input.RetryCount,
+		SortOrder:             input.SortOrder,
+	})
+	if err != nil {
+		return repository.UpdateModbusSlaveDeviceParams{}, err
+	}
+	return repository.UpdateModbusSlaveDeviceParams{
+		ID:                    slaveID,
+		ProjectID:             params.ProjectID,
+		ConnectionID:          params.ConnectionID,
+		UnitID:                params.UnitID,
+		Name:                  params.Name,
+		Description:           params.Description,
+		Enabled:               params.Enabled,
+		DefaultPollIntervalMS: params.DefaultPollIntervalMS,
+		DefaultByteOrder:      params.DefaultByteOrder,
+		DefaultWordOrder:      params.DefaultWordOrder,
+		RequestIntervalMS:     params.RequestIntervalMS,
+		TimeoutMS:             params.TimeoutMS,
+		RetryCount:            params.RetryCount,
+		SortOrder:             params.SortOrder,
+		UserID:                userID,
+	}, nil
 }
 
 func (s *ModbusModelingService) normalizeCreateRegisterInput(ctx context.Context, projectID, connectionID, userID string, input CreateModbusRegisterInput) (repository.CreateModbusRegisterParams, error) {
 	defaultUnitID := s.defaultUnitID(ctx, projectID, connectionID)
 	unitID := intOrDefault(input.UnitID, defaultUnitID)
+	if err := s.ensureSlaveDevice(ctx, projectID, connectionID, userID, unitID); err != nil {
+		return repository.CreateModbusRegisterParams{}, err
+	}
 	area := normalizeModbusArea(input.Area)
 	addressBase := normalizeModbusAddressBase(input.AddressBase)
 	address, protocolAddress, err := normalizeModbusAddresses(area, addressBase, input.Address, input.ProtocolAddress)
@@ -623,6 +932,9 @@ func (s *ModbusModelingService) normalizeUpdateRegisterInput(ctx context.Context
 	unitID := current.UnitID
 	if input.UnitID != nil {
 		unitID = *input.UnitID
+	}
+	if err := s.ensureSlaveDevice(ctx, projectID, current.ConnectionID, userID, unitID); err != nil {
+		return repository.UpdateModbusRegisterParams{}, err
 	}
 	area := firstNonEmpty(input.Area, current.Area)
 	addressBase := firstNonEmpty(input.AddressBase, current.AddressBase)
@@ -816,6 +1128,32 @@ func (s *ModbusModelingService) defaultUnitID(ctx context.Context, projectID, co
 		return parsed
 	}
 	return 1
+}
+
+func (s *ModbusModelingService) ensureSlaveDevice(ctx context.Context, projectID, connectionID, userID string, unitID int) error {
+	if unitID < 0 || unitID > 247 {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "从站地址必须在 0-247 范围内")
+	}
+	existing, err := s.repository.GetSlaveDeviceByUnitID(ctx, projectID, connectionID, unitID)
+	if err != nil {
+		return err
+	}
+	if existing != nil {
+		return nil
+	}
+	_, err = s.repository.CreateSlaveDevice(ctx, repository.CreateModbusSlaveDeviceParams{
+		ProjectID:             projectID,
+		ConnectionID:          connectionID,
+		UnitID:                unitID,
+		Name:                  fmt.Sprintf("从站 %d", unitID),
+		Enabled:               true,
+		DefaultPollIntervalMS: 1000,
+		DefaultByteOrder:      "ABCD",
+		DefaultWordOrder:      "high_first",
+		SortOrder:             unitID,
+		UserID:                userID,
+	})
+	return err
 }
 
 // BuildModbusReadPlanEstimate 按运行态合并规则生成读取预估。
@@ -1141,6 +1479,20 @@ func optionalIntOrCurrent(next *int, current *int) *int {
 	return &cloned
 }
 
+func boolOrDefault(value *bool, fallback bool) bool {
+	if value == nil {
+		return fallback
+	}
+	return *value
+}
+
+func normalizeOptionalValue(value string, normalize func(string) string) string {
+	if strings.TrimSpace(value) == "" {
+		return ""
+	}
+	return normalize(value)
+}
+
 func parseModbusConfigInt(value any) int {
 	switch typed := value.(type) {
 	case int:
@@ -1171,6 +1523,27 @@ func toModbusRegisterGroup(record repository.ModbusRegisterGroupRecord) ModbusRe
 		SortOrder:    record.SortOrder,
 		CreatedAt:    record.CreatedAt,
 		UpdatedAt:    record.UpdatedAt,
+	}
+}
+
+func toModbusSlaveDevice(record repository.ModbusSlaveDeviceRecord) ModbusSlaveDevice {
+	return ModbusSlaveDevice{
+		ID:                    record.ID,
+		ProjectID:             record.ProjectID,
+		ConnectionID:          record.ConnectionID,
+		UnitID:                record.UnitID,
+		Name:                  record.Name,
+		Description:           cloneOptionalString(record.Description),
+		Enabled:               record.Enabled,
+		DefaultPollIntervalMS: record.DefaultPollIntervalMS,
+		DefaultByteOrder:      record.DefaultByteOrder,
+		DefaultWordOrder:      record.DefaultWordOrder,
+		RequestIntervalMS:     cloneOptionalInt(record.RequestIntervalMS),
+		TimeoutMS:             cloneOptionalInt(record.TimeoutMS),
+		RetryCount:            cloneOptionalInt(record.RetryCount),
+		SortOrder:             record.SortOrder,
+		CreatedAt:             record.CreatedAt,
+		UpdatedAt:             record.UpdatedAt,
 	}
 }
 

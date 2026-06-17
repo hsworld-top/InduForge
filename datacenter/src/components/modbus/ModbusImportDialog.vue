@@ -42,6 +42,27 @@
         fileName
       }}</span>
     </div>
+    <div class="modbus-import-dialog__defaults">
+      <el-select v-model="selectedDefaultGroupId" clearable filterable placeholder="默认分组">
+        <el-option label="未分组" value="" />
+        <el-option v-for="group in groups" :key="group.id" :label="group.name" :value="group.id" />
+      </el-select>
+      <el-select v-model="selectedDefaultUnitId" filterable placeholder="默认从站">
+        <el-option
+          v-for="slave in slaves"
+          :key="slave.id"
+          :label="`${slave.name} (${slave.unitId})`"
+          :value="slave.unitId"
+        />
+      </el-select>
+      <el-select v-model="defaultByteOrder" placeholder="默认字节序">
+        <el-option label="ABCD" value="ABCD" />
+        <el-option label="BADC" value="BADC" />
+        <el-option label="CDAB" value="CDAB" />
+        <el-option label="DCBA" value="DCBA" />
+      </el-select>
+      <el-input-number v-model="defaultPollIntervalMs" :min="100" :step="100" />
+    </div>
     <el-tabs v-model="mode">
       <el-tab-pane label="粘贴表格" name="paste">
         <el-input
@@ -115,12 +136,20 @@ import {
   parseTabularText,
   readTabularFile,
 } from '@/utils/tabular-file'
+import type { ModbusRegisterGroup, ModbusSlaveDevice } from './types'
 import IconTablerAlertTriangle from '~icons/tabler/alert-triangle'
 import IconTablerFileImport from '~icons/tabler/file-import'
 import IconTablerFileSpreadsheet from '~icons/tabler/file-spreadsheet'
 import IconTablerFileTypeCsv from '~icons/tabler/file-type-csv'
 
-const props = defineProps<{ modelValue: boolean; loading?: boolean }>()
+const props = defineProps<{
+  modelValue: boolean
+  loading?: boolean
+  groups?: ModbusRegisterGroup[]
+  slaves?: ModbusSlaveDevice[]
+  defaultGroupId?: string
+  defaultUnitId?: number
+}>()
 const emit = defineEmits<{
   (event: 'update:modelValue', value: boolean): void
   (event: 'submit', rows: Array<Record<string, unknown>>): void
@@ -136,6 +165,10 @@ const pasteText = ref('')
 const fileRows = ref<Record<string, string>[]>([])
 const fileName = ref('')
 const onlyIssues = ref(false)
+const selectedDefaultGroupId = ref('')
+const selectedDefaultUnitId = ref(1)
+const defaultByteOrder = ref('ABCD')
+const defaultPollIntervalMs = ref(1000)
 const range = reactive({
   unitId: 1,
   area: 'holding_register',
@@ -144,6 +177,23 @@ const range = reactive({
   dataType: 'uint16',
   prefix: 'modbus_reg_',
 })
+
+const groups = computed(() => props.groups || [])
+const slaves = computed(() =>
+  (props.slaves || []).length > 0
+    ? props.slaves || []
+    : [
+        {
+          id: 'default',
+          unitId: props.defaultUnitId ?? 1,
+          name: `从站 ${props.defaultUnitId ?? 1}`,
+          enabled: true,
+          defaultPollIntervalMs: 1000,
+          defaultByteOrder: 'ABCD',
+          defaultWordOrder: 'high_first',
+        },
+      ],
+)
 
 const initialRangeSnapshot = JSON.stringify({ ...range })
 const isDirty = computed(
@@ -167,11 +217,11 @@ const previewRows = computed(() => {
       addressBase: 'modicon',
       protocolAddress: normalizeProtocolAddress(range.area, 'modicon', range.startAddress + index),
       dataType: range.dataType,
-      byteOrder: 'ABCD',
+      byteOrder: defaultByteOrder.value,
       wordOrder: 'high_first',
       scale: 1,
       offset: 0,
-      pollIntervalMs: 1000,
+      pollIntervalMs: defaultPollIntervalMs.value,
       accessLevel: defaultAccessLevel(range.area),
       issue: '',
     }))
@@ -186,7 +236,10 @@ const issueRows = computed(() => previewRows.value.filter((row) => row.issue))
 const validRows = computed(() =>
   previewRows.value
     .filter((row) => !row.issue)
-    .map(({ issue: _issue, rowNo: _rowNo, protocolAddress: _protocolAddress, ...row }) => row),
+    .map(({ issue: _issue, rowNo: _rowNo, protocolAddress: _protocolAddress, ...row }) => ({
+      ...row,
+      groupId: selectedDefaultGroupId.value || null,
+    })),
 )
 const sourceRows = computed(() => {
   if (fileRows.value.length > 0) return fileRows.value
@@ -272,6 +325,13 @@ watch(
     fileRows.value = []
     fileName.value = ''
     onlyIssues.value = false
+    selectedDefaultGroupId.value = props.defaultGroupId || ''
+    const defaultSlave =
+      slaves.value.find((slave) => slave.unitId === props.defaultUnitId) || slaves.value[0]
+    selectedDefaultUnitId.value = defaultSlave?.unitId ?? 1
+    defaultByteOrder.value = defaultSlave?.defaultByteOrder || 'ABCD'
+    defaultPollIntervalMs.value = defaultSlave?.defaultPollIntervalMs || 1000
+    range.unitId = selectedDefaultUnitId.value
   },
 )
 
@@ -320,10 +380,10 @@ function buildPreviewRow(row: Record<string, string>, index: number) {
   const protocolAddress = normalizeProtocolAddress(area, addressBase, address)
   const dataType =
     normalized.dataType || (area === 'coil' || area === 'discrete_input' ? 'bool' : 'uint16')
-  const unitId = toInteger(normalized.unitId, 1)
+  const unitId = toInteger(normalized.unitId, selectedDefaultUnitId.value)
   const scale = toNumber(normalized.scale, 1)
   const offset = toNumber(normalized.offset, 0)
-  const pollIntervalMs = toInteger(normalized.pollIntervalMs, 1000)
+  const pollIntervalMs = toInteger(normalized.pollIntervalMs, defaultPollIntervalMs.value)
   const issue = firstIssue([
     !normalized.name ? '变量名为空' : '',
     Number.isNaN(unitId) || unitId < 0 || unitId > 247 ? '从站地址必须在 0-247' : '',
@@ -348,7 +408,7 @@ function buildPreviewRow(row: Record<string, string>, index: number) {
     addressBase,
     protocolAddress,
     dataType,
-    byteOrder: normalized.byteOrder || 'ABCD',
+    byteOrder: normalized.byteOrder || defaultByteOrder.value,
     wordOrder: normalized.wordOrder || 'high_first',
     scale,
     offset,

@@ -44,9 +44,16 @@
       <section>
         <h3><span>02</span>Modbus 地址</h3>
         <div class="modbus-register-dialog__grid">
-          <el-form-item label="从站地址"
-            ><el-input-number v-model="form.unitId" :min="0" :max="247"
-          /></el-form-item>
+          <el-form-item label="从站">
+            <el-select v-model="form.unitId" filterable>
+              <el-option
+                v-for="slave in slaves"
+                :key="slave.id"
+                :label="`${slave.name} (${slave.unitId})`"
+                :value="slave.unitId"
+              />
+            </el-select>
+          </el-form-item>
           <el-form-item label="区域">
             <el-select v-model="form.area">
               <el-option label="Holding Register" value="holding_register" />
@@ -141,14 +148,16 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import DcDialog from '@/components/shared/DcDialog.vue'
-import type { ModbusRegister, ModbusRegisterGroup } from './types'
+import type { ModbusRegister, ModbusRegisterGroup, ModbusSlaveDevice } from './types'
 
 const props = defineProps<{
   modelValue: boolean
   mode: 'create' | 'edit'
   groups: ModbusRegisterGroup[]
+  slaves?: ModbusSlaveDevice[]
   register?: ModbusRegister | null
   defaultGroupId?: string
+  defaultUnitId?: number
   loading?: boolean
 }>()
 
@@ -219,6 +228,22 @@ const groupOptions = computed(() => {
   return roots.flatMap((group) => visit(group, 0))
 })
 
+const slaves = computed(() =>
+  (props.slaves || []).length > 0
+    ? props.slaves || []
+    : [
+        {
+          id: 'default',
+          unitId: props.defaultUnitId ?? 1,
+          name: `从站 ${props.defaultUnitId ?? 1}`,
+          enabled: true,
+          defaultPollIntervalMs: 1000,
+          defaultByteOrder: 'ABCD',
+          defaultWordOrder: 'high_first',
+        },
+      ],
+)
+
 watch(
   () => [props.modelValue, props.register, props.defaultGroupId],
   () => {
@@ -227,19 +252,21 @@ watch(
     form.groupId = item?.groupId || props.defaultGroupId || ''
     form.name = item?.name || ''
     form.code = item?.code || ''
-    form.unitId = item?.unitId ?? 1
+    const defaultSlave =
+      slaves.value.find((slave) => slave.unitId === props.defaultUnitId) || slaves.value[0]
+    form.unitId = item?.unitId ?? defaultSlave?.unitId ?? 1
     form.area = item?.area || 'holding_register'
     form.address = item?.address ?? 40001
     form.addressBase = item?.addressBase || 'modicon'
     form.quantity = item?.quantity ?? 1
     form.dataType = item?.dataType || 'uint16'
-    form.byteOrder = item?.byteOrder || 'ABCD'
-    form.wordOrder = item?.wordOrder || 'high_first'
+    form.byteOrder = item?.byteOrder || defaultSlave?.defaultByteOrder || 'ABCD'
+    form.wordOrder = item?.wordOrder || defaultSlave?.defaultWordOrder || 'high_first'
     form.bitIndex = item?.bitIndex ?? null
     form.scale = item?.scale ?? 1
     form.offset = item?.offset ?? 0
     form.unit = item?.unit || ''
-    form.pollIntervalMs = item?.pollIntervalMs ?? 1000
+    form.pollIntervalMs = item?.pollIntervalMs ?? defaultSlave?.defaultPollIntervalMs ?? 1000
     form.timeoutMs = item?.timeoutMs ?? null
     form.retryCount = item?.retryCount ?? null
     form.accessLevel = normalizeAccessLevel(item?.accessLevel)

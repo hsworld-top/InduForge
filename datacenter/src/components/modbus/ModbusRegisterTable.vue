@@ -11,8 +11,10 @@
       empty-text="暂无 Modbus 变量"
       @row-click="(row) => $emit('select', row)"
       @row-contextmenu="(row, _column, event) => $emit('row-contextmenu', event, row)"
+      @selection-change="(rows) => $emit('selection-change', rows)"
       @sort-change="(payload) => $emit('sort-change', payload)"
     >
+      <el-table-column type="selection" width="44" />
       <el-table-column label="变量名" min-width="150" prop="name" sortable="custom">
         <template #default="{ row }">
           <div class="modbus-register-table__name">
@@ -46,7 +48,17 @@
         </template>
       </el-table-column>
       <el-table-column label="字节序" width="86">
-        <template #default="{ row }">{{ row.byteOrder || '-' }}</template>
+        <template #default="{ row }"
+          >{{ row.byteOrder || '-' }}/{{ row.wordOrder || '-' }}</template
+        >
+      </el-table-column>
+      <el-table-column label="周期" width="92" prop="pollIntervalMs" sortable="custom">
+        <template #default="{ row }">{{ row.pollIntervalMs }}ms</template>
+      </el-table-column>
+      <el-table-column label="分组" min-width="120">
+        <template #default="{ row }">
+          <span class="modbus-register-table__path">{{ formatGroup(row.groupId) }}</span>
+        </template>
       </el-table-column>
       <el-table-column label="数据点" min-width="170">
         <template #default="{ row }">
@@ -143,6 +155,7 @@ const props = defineProps<{
   page: number
   pageSize: number
   total: number
+  groupFormatter?: (groupId?: string | null) => string
 }>()
 
 defineEmits<{
@@ -152,6 +165,7 @@ defineEmits<{
   (event: 'edit', register: ModbusRegister): void
   (event: 'delete', register: ModbusRegister): void
   (event: 'row-contextmenu', mouseEvent: MouseEvent, register: ModbusRegister): void
+  (event: 'selection-change', rows: ModbusRegister[]): void
   (event: 'page-change', page: number): void
   (event: 'page-size-change', pageSize: number): void
   (event: 'sort-change', payload: { prop?: string; order?: string | null }): void
@@ -169,6 +183,8 @@ const formatArea = (area: string) => {
 
 const rowClassName = ({ row }: { row: ModbusRegister }) =>
   row.id === props.selectedRegisterId ? 'modbus-register-table__row--selected' : ''
+
+const formatGroup = (groupId?: string | null) => props.groupFormatter?.(groupId) || '未分组'
 </script>
 
 <style scoped>
