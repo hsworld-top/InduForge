@@ -20,47 +20,9 @@
           <span class="modbus-register-table__text">{{ row.name }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="从站" width="84" prop="unitId" sortable="custom">
-        <template #default="{ row }">
-          <span class="modbus-register-table__unit">{{ row.unitId }}</span>
-        </template>
-      </el-table-column>
       <el-table-column label="分组" min-width="120">
         <template #default="{ row }">
           <span class="modbus-register-table__path">{{ formatGroup(row.groupId) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="地址" min-width="172" prop="address" sortable="custom">
-        <template #default="{ row }">
-          <div class="modbus-register-table__address">
-            <span class="modbus-register-table__area" :data-area="row.area">{{
-              formatArea(row.area)
-            }}</span>
-            <strong>{{ row.address }}</strong>
-            <span>协议 {{ row.protocolAddress }}</span>
-          </div>
-        </template>
-      </el-table-column>
-      <el-table-column label="类型" width="88" prop="dataType" sortable="custom">
-        <template #default="{ row }">
-          <span class="modbus-register-table__type">{{ row.dataType }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="采集周期(ms)" width="128" prop="pollIntervalMs" sortable="custom">
-        <template #default="{ row }">
-          <span class="modbus-register-table__text">{{ row.pollIntervalMs }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="启用状态" width="96" prop="status" sortable="custom">
-        <template #default="{ row }">
-          <el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">
-            {{ formatStatus(row.status) }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="读写权限" width="96">
-        <template #default="{ row }">
-          <span class="modbus-register-table__text">{{ formatAccessLevel(row.accessLevel) }}</span>
         </template>
       </el-table-column>
       <el-table-column label="数据点" min-width="170">
@@ -68,16 +30,48 @@
           <span class="modbus-register-table__path">{{ row.datapointPath || '-' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="质量" width="92">
-        <template #default="{ row }">
-          <el-tag size="small" :type="qualityTagType(row.quality)">
-            {{ formatQuality(row.quality) }}
-          </el-tag>
-        </template>
-      </el-table-column>
       <el-table-column label="最近值" width="116">
         <template #default="{ row }">
           <span class="modbus-register-table__text">{{ formatValue(row.lastValue) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="质量" width="92">
+        <template #default="{ row }">
+          <span class="modbus-register-table__text">{{ formatQuality(row.quality) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="从站" width="84" prop="unitId" sortable="custom">
+        <template #default="{ row }">
+          <span class="modbus-register-table__text">{{ row.unitId }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="地址" min-width="172" prop="address" sortable="custom">
+        <template #default="{ row }">
+          <span class="modbus-register-table__text">{{
+            `${formatArea(row.area)} ${row.address} / 协议 ${row.protocolAddress}`
+          }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="类型" width="88" prop="dataType" sortable="custom">
+        <template #default="{ row }">
+          <span class="modbus-register-table__text">{{ row.dataType }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="采集周期(ms)" width="128" prop="pollIntervalMs" sortable="custom">
+        <template #default="{ row }">
+          <span class="modbus-register-table__text">{{ row.pollIntervalMs }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="读写权限" width="96">
+        <template #default="{ row }">
+          <span class="modbus-register-table__text">{{ formatAccessLevel(row.accessLevel) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="启用状态" width="96" prop="status" sortable="custom">
+        <template #default="{ row }">
+          <el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">
+            {{ formatStatus(row.status) }}
+          </el-tag>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="132" fixed="right">
@@ -181,12 +175,6 @@ const formatQuality = (quality?: string) => {
   return '暂无质量'
 }
 
-const qualityTagType = (quality?: string) => {
-  if (quality === 'Good') return 'success'
-  if (quality === 'Bad') return 'danger'
-  return 'info'
-}
-
 const formatValue = (value: unknown) => {
   if (value === null || value === undefined || value === '') return '-'
   if (typeof value === 'object') return JSON.stringify(value)
@@ -249,59 +237,6 @@ const formatGroup = (groupId?: string | null) => props.groupFormatter?.(groupId)
 
 .modbus-register-table__path {
   font-size: 12px;
-}
-
-.modbus-register-table__unit,
-.modbus-register-table__type {
-  min-height: 22px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 7px;
-  border: 1px solid var(--dc-border);
-  border-radius: 999px;
-  background: var(--dc-surface-subtle);
-  color: var(--dc-text-secondary);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.modbus-register-table__area {
-  min-width: 58px;
-  color: var(--dc-primary);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.modbus-register-table__unit {
-  min-width: 30px;
-  justify-content: center;
-  color: var(--dc-primary);
-}
-
-.modbus-register-table__area[data-area='holding_register'] {
-  color: var(--dc-primary);
-}
-
-.modbus-register-table__area[data-area='coil'] {
-  color: #15803d;
-}
-
-.modbus-register-table__address {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.modbus-register-table__address strong {
-  color: var(--dc-text);
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.modbus-register-table__address span {
-  color: var(--dc-text-muted);
-  font-size: 11px;
 }
 
 .modbus-register-table__actions {
