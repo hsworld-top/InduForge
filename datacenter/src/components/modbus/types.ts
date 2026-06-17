@@ -104,6 +104,7 @@ export type ModbusReadValue = {
   rawValue: number[]
   value: unknown
   dataType: string
+  quality: string
   timestamp: string
   error?: string | null
 }

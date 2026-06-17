@@ -35,6 +35,9 @@
           <template #default="{ row }">{{ formatRawValue(row.rawValue) }}</template>
         </el-table-column>
         <el-table-column prop="dataType" label="类型" width="110" />
+        <el-table-column label="质量" width="92">
+          <template #default="{ row }">{{ formatQuality(row.quality) }}</template>
+        </el-table-column>
         <el-table-column label="更新时间" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">{{ formatTime(row.timestamp) }}</template>
         </el-table-column>
@@ -113,6 +116,13 @@ const formatValue = (value: unknown) => {
 const formatRawValue = (value: unknown) => {
   if (!Array.isArray(value)) return formatValue(value)
   return value.length > 0 ? value.join(', ') : '-'
+}
+
+const formatQuality = (quality?: string) => {
+  const normalized = String(quality || '').toLowerCase()
+  if (normalized === 'good') return '质量正常'
+  if (normalized === 'bad') return '质量异常'
+  return '暂无质量'
 }
 
 const formatTime = (value?: string) => {

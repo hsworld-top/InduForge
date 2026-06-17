@@ -170,8 +170,9 @@ const formatAccessLevel = (accessLevel?: string) => {
 }
 
 const formatQuality = (quality?: string) => {
-  if (quality === 'Good') return '质量正常'
-  if (quality === 'Bad') return '质量异常'
+  const normalized = String(quality || '').toLowerCase()
+  if (normalized === 'good') return '质量正常'
+  if (normalized === 'bad') return '质量异常'
   return '暂无质量'
 }
 

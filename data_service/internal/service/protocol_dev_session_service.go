@@ -160,6 +160,7 @@ type ProtocolDevModbusReadValue struct {
 	RawValue   []int   `json:"rawValue"`
 	Value      any     `json:"value"`
 	DataType   string  `json:"dataType"`
+	Quality    string  `json:"quality"`
 	Timestamp  string  `json:"timestamp"`
 	Error      *string `json:"error"`
 }
@@ -650,6 +651,26 @@ func (s *ProtocolDevSessionService) buildModbusReadValues(registers []ProtocolDe
 		if len(wanted) > 0 && !wanted[register.ID] && !wanted[register.Code] {
 			continue
 		}
+		status := strings.TrimSpace(register.Status)
+		if status == "" {
+			status = "active"
+		}
+		if status != "active" {
+			message := "变量未启用，未参与采集预览"
+			values = append(values, ProtocolDevModbusReadValue{
+				RegisterID: register.ID,
+				SlaveID:    register.UnitID,
+				Area:       register.Area,
+				Address:    register.Address,
+				RawValue:   []int{},
+				Value:      nil,
+				DataType:   register.DataType,
+				Quality:    "Bad",
+				Timestamp:  now,
+				Error:      &message,
+			})
+			continue
+		}
 		raw := sampleModbusRawValue(register)
 		values = append(values, ProtocolDevModbusReadValue{
 			RegisterID: register.ID,
@@ -659,6 +680,7 @@ func (s *ProtocolDevSessionService) buildModbusReadValues(registers []ProtocolDe
 			RawValue:   raw,
 			Value:      sampleModbusValue(register, raw),
 			DataType:   register.DataType,
+			Quality:    "Good",
 			Timestamp:  now,
 			Error:      nil,
 		})

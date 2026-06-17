@@ -1068,7 +1068,7 @@ const applyReadValues = (values: ModbusReadValue[]) => {
       ? {
           ...register,
           lastValue: next.value,
-          quality: next.error ? 'Bad' : register.quality || 'Good',
+          quality: next.quality || (next.error ? 'Bad' : 'Good'),
           lastUpdatedAt: next.timestamp,
         }
       : register
