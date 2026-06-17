@@ -3,133 +3,293 @@
     ref="dialogRef"
     v-model="visible"
     title="导入 Modbus 变量"
-    width="860px"
-    body-max-height="calc(100vh - 180px)"
+    width="min(1180px, calc(100vw - 64px))"
+    body-max-height="calc(100vh - 132px)"
+    class="modbus-import-dialog"
     :dirty="isDirty"
-    :close-disabled="loading"
+    :close-disabled="loading || confirmPreparing"
   >
-    <div class="modbus-import-dialog__summary">
-      <strong>{{ previewRows.length }}</strong>
-      <span>待导入变量</span>
-      <em>{{ mode === 'paste' ? '粘贴表格' : '地址段生成' }}</em>
-    </div>
-    <div class="modbus-import-dialog__tools">
-      <el-upload
-        :auto-upload="false"
-        :show-file-list="false"
-        accept=".csv,.tsv,.xlsx,.xls"
-        :on-change="handleFileChange"
-      >
-        <el-button size="small">
-          <IconTablerFileImport />
-          选择文件
-        </el-button>
-      </el-upload>
-      <el-button size="small" @click="downloadTemplate('csv')">
-        <IconTablerFileTypeCsv />
-        CSV模板
-      </el-button>
-      <el-button size="small" @click="downloadTemplate('xlsx')">
-        <IconTablerFileSpreadsheet />
-        XLSX模板
-      </el-button>
-      <el-checkbox v-model="onlyIssues" size="small">只看错误</el-checkbox>
-      <el-button size="small" :disabled="issueRows.length === 0" @click="downloadIssueReport">
-        <IconTablerAlertTriangle />
-        错误报告
-      </el-button>
-      <span v-if="fileName" class="modbus-import-dialog__file" :title="fileName">{{
-        fileName
-      }}</span>
-    </div>
-    <div class="modbus-import-dialog__defaults">
-      <el-select v-model="selectedDefaultGroupId" clearable filterable placeholder="默认分组">
-        <el-option label="未分组" value="" />
-        <el-option v-for="group in groups" :key="group.id" :label="group.name" :value="group.id" />
-      </el-select>
-      <el-select v-model="selectedDefaultUnitId" filterable placeholder="默认从站">
-        <el-option
-          v-for="slave in slaves"
-          :key="slave.id"
-          :label="`${slave.name} (${slave.unitId})`"
-          :value="slave.unitId"
-        />
-      </el-select>
-      <el-select v-model="defaultByteOrder" placeholder="默认字节序">
-        <el-option label="ABCD" value="ABCD" />
-        <el-option label="BADC" value="BADC" />
-        <el-option label="CDAB" value="CDAB" />
-        <el-option label="DCBA" value="DCBA" />
-      </el-select>
-      <el-input-number v-model="defaultPollIntervalMs" :min="100" :step="100" />
-    </div>
-    <el-tabs v-model="mode">
-      <el-tab-pane label="粘贴表格" name="paste">
-        <el-input
-          v-model="pasteText"
-          type="textarea"
-          :rows="9"
-          placeholder="变量名,从站地址,区域,地址,地址基准,类型,字节序,字序,倍率,偏移,单位,采集周期,发布能力,描述"
-          @input="clearFileSource"
-        />
-      </el-tab-pane>
-      <el-tab-pane label="地址段生成" name="range">
-        <div class="modbus-import-dialog__range">
-          <el-input-number v-model="range.unitId" :min="0" :max="247" />
-          <el-select v-model="range.area">
-            <el-option
-              v-for="option in areaOptions"
-              :key="option.value"
-              :label="option.label"
-              :value="option.value"
-            />
-          </el-select>
-          <el-input-number v-model="range.startAddress" :min="0" />
-          <el-input-number v-model="range.count" :min="1" :max="500" />
-          <el-select v-model="range.dataType">
-            <el-option label="uint16" value="uint16" />
-            <el-option label="bool" value="bool" />
-            <el-option label="float32" value="float32" />
-          </el-select>
-          <el-input v-model="range.prefix" />
+    <div class="modbus-import">
+      <div class="modbus-import__summary">
+        <div>
+          <strong>{{ candidateCount }}</strong>
+          <span>候选变量</span>
         </div>
-      </el-tab-pane>
-    </el-tabs>
-    <el-table :data="displayRows" height="230px" row-key="rowNo">
-      <el-table-column label="状态" width="74">
-        <template #default="{ row }">
-          <el-tag size="small" :type="row.issue ? 'warning' : 'success'">
-            {{ row.issue ? '检查' : '可导入' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="name" label="变量名" />
-      <el-table-column prop="unitId" label="从站" width="70" />
-      <el-table-column label="区域" width="112">
-        <template #default="{ row }">{{ formatArea(row.area) }}</template>
-      </el-table-column>
-      <el-table-column prop="address" label="地址" width="90" />
-      <el-table-column prop="protocolAddress" label="协议地址" width="92" />
-      <el-table-column prop="dataType" label="类型" width="90" />
-      <el-table-column prop="issue" label="问题" min-width="150" show-overflow-tooltip />
-    </el-table>
+        <div>
+          <strong>{{ step === 'confirm' ? validRows.length : '-' }}</strong>
+          <span>可导入</span>
+        </div>
+        <div>
+          <strong>{{ step === 'confirm' ? issueRows.length : '-' }}</strong>
+          <span>需检查</span>
+        </div>
+        <em>{{ step === 'pick' ? '准备数据' : '导入确认' }}</em>
+      </div>
+
+      <div v-if="step === 'confirm'" class="modbus-import__tools">
+        <el-checkbox v-model="onlyIssues" size="small">只看问题</el-checkbox>
+        <el-button size="small" :disabled="issueRows.length === 0" @click="downloadIssueReport">
+          <IconTablerAlertTriangle />
+          错误报告
+        </el-button>
+      </div>
+
+      <el-tabs v-if="step === 'pick'" v-model="mode" class="modbus-import__tabs">
+        <el-tab-pane label="粘贴表格" name="paste">
+          <section class="modbus-import__section">
+            <div class="modbus-import__section-head">
+              <strong>粘贴表格 / 文件导入</strong>
+              <span>{{ pasteSourceSummary }}</span>
+            </div>
+            <div class="modbus-import__toolbar">
+              <el-upload
+                :auto-upload="false"
+                :show-file-list="false"
+                accept=".csv,.tsv,.xlsx,.xls"
+                :on-change="handleFileChange"
+              >
+                <el-button size="small">
+                  <IconTablerFileImport />
+                  选择文件
+                </el-button>
+              </el-upload>
+              <el-button size="small" @click="downloadTemplate('csv')">
+                <IconTablerFileTypeCsv />
+                CSV模板
+              </el-button>
+              <el-button size="small" @click="downloadTemplate('xlsx')">
+                <IconTablerFileSpreadsheet />
+                XLSX模板
+              </el-button>
+              <span v-if="fileName" class="modbus-import__file" :title="fileName">
+                {{ fileName }}
+              </span>
+            </div>
+            <el-form label-position="top" class="modbus-import__form">
+              <el-form-item label="表格内容">
+                <el-input
+                  v-model="pasteText"
+                  type="textarea"
+                  :rows="12"
+                  placeholder="变量名,从站地址,区域,地址,地址基准,类型,字节序,字序,倍率,偏移,单位,采集周期,读写权限,描述"
+                  @input="clearFileSource"
+                />
+              </el-form-item>
+            </el-form>
+          </section>
+        </el-tab-pane>
+
+        <el-tab-pane label="地址段生成" name="range">
+          <section class="modbus-import__section">
+            <div class="modbus-import__section-head">
+              <strong>地址段生成</strong>
+              <span>{{ range.count }} 个候选变量</span>
+            </div>
+            <el-form label-position="top" class="modbus-import__range-form">
+              <el-form-item label="从站地址">
+                <el-input-number v-model="range.unitId" :min="0" :max="247" />
+              </el-form-item>
+              <el-form-item label="寄存器区域">
+                <el-select v-model="range.area">
+                  <el-option
+                    v-for="option in areaOptions"
+                    :key="option.value"
+                    :label="option.label"
+                    :value="option.value"
+                  />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="地址基准">
+                <el-select v-model="range.addressBase">
+                  <el-option label="Modicon 地址（40001/30001 等）" value="modicon" />
+                  <el-option label="从 1 开始" value="one_based" />
+                  <el-option label="从 0 开始" value="zero_based" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="起始地址">
+                <el-input-number v-model="range.startAddress" :min="0" />
+              </el-form-item>
+              <el-form-item label="变量数量">
+                <el-input-number v-model="range.count" :min="1" :max="500" />
+              </el-form-item>
+              <el-form-item label="数据类型">
+                <el-select v-model="range.dataType">
+                  <el-option label="uint16" value="uint16" />
+                  <el-option label="int16" value="int16" />
+                  <el-option label="uint32" value="uint32" />
+                  <el-option label="int32" value="int32" />
+                  <el-option label="float32" value="float32" />
+                  <el-option label="bool" value="bool" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="变量名前缀">
+                <el-input v-model="range.prefix" />
+              </el-form-item>
+              <el-form-item label="采集周期(ms)">
+                <el-input-number v-model="range.pollIntervalMs" :min="100" :step="100" />
+              </el-form-item>
+            </el-form>
+          </section>
+        </el-tab-pane>
+      </el-tabs>
+
+      <section v-if="step === 'confirm'" class="modbus-import__defaults">
+        <div class="modbus-import__section-head">
+          <strong>批量默认值</strong>
+          <span>应用后会重新检查候选行</span>
+        </div>
+        <el-form label-position="top" class="modbus-import__default-form">
+          <el-form-item label="导入到分组">
+            <el-select v-model="selectedDefaultGroupId" clearable filterable placeholder="未分组">
+              <el-option label="未分组" value="" />
+              <el-option
+                v-for="group in groups"
+                :key="group.id"
+                :label="group.name"
+                :value="group.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="默认从站">
+            <el-select v-model="selectedDefaultUnitId" filterable>
+              <el-option
+                v-for="slave in slaves"
+                :key="slave.id"
+                :label="`${slave.name} (${slave.unitId})`"
+                :value="slave.unitId"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="默认字节序">
+            <el-select v-model="defaultByteOrder">
+              <el-option label="ABCD" value="ABCD" />
+              <el-option label="BADC" value="BADC" />
+              <el-option label="CDAB" value="CDAB" />
+              <el-option label="DCBA" value="DCBA" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="默认采集周期(ms)">
+            <el-input-number v-model="defaultPollIntervalMs" :min="100" :step="100" />
+          </el-form-item>
+          <el-form-item label=" ">
+            <el-button @click="applyDefaults">应用到候选行</el-button>
+          </el-form-item>
+        </el-form>
+      </section>
+
+      <section v-if="step === 'confirm'" class="modbus-import__confirm-section">
+        <div class="modbus-import__section-head">
+          <strong>导入确认</strong>
+          <span>导入前可逐行调整关键字段</span>
+        </div>
+        <el-table
+          :data="pagedDisplayRows"
+          height="320"
+          row-key="rowNo"
+          size="small"
+          class="modbus-import__confirm-table"
+        >
+          <el-table-column label="状态" width="78" fixed>
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.issue ? 'warning' : 'success'">
+                {{ row.issue ? '检查' : '可导入' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="变量名" min-width="150">
+            <template #default="{ row }">
+              <el-input v-model="row.name" size="small" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="code" label="Code" min-width="130" show-overflow-tooltip />
+          <el-table-column label="从站" width="92">
+            <template #default="{ row }">
+              <el-input v-model="row.unitId" size="small" />
+            </template>
+          </el-table-column>
+          <el-table-column label="区域" min-width="138">
+            <template #default="{ row }">
+              <el-select v-model="row.area" size="small">
+                <el-option
+                  v-for="option in areaOptions"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="地址" width="102">
+            <template #default="{ row }">
+              <el-input v-model="row.address" size="small" />
+            </template>
+          </el-table-column>
+          <el-table-column label="地址基准" width="128">
+            <template #default="{ row }">
+              <el-select v-model="row.addressBase" size="small">
+                <el-option label="Modicon" value="modicon" />
+                <el-option label="从 1 开始" value="one_based" />
+                <el-option label="从 0 开始" value="zero_based" />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column prop="protocolAddress" label="协议地址" width="92" />
+          <el-table-column label="类型" width="112">
+            <template #default="{ row }">
+              <el-input v-model="row.dataType" size="small" />
+            </template>
+          </el-table-column>
+          <el-table-column label="采集周期" width="110">
+            <template #default="{ row }">
+              <el-input v-model="row.pollIntervalMs" size="small" />
+            </template>
+          </el-table-column>
+          <el-table-column label="问题" min-width="160" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.issue || '-' }}</template>
+          </el-table-column>
+        </el-table>
+        <div class="modbus-import__pager">
+          <el-pagination
+            v-model:current-page="confirmPage"
+            v-model:page-size="confirmPageSize"
+            small
+            layout="total, sizes, prev, pager, next"
+            :page-sizes="[50, 100, 200]"
+            :total="displayRows.length"
+          />
+        </div>
+      </section>
+    </div>
+
     <template #footer>
       <el-button @click="requestClose">取消</el-button>
+      <el-button v-if="step === 'confirm'" @click="step = 'pick'">上一步</el-button>
       <el-button
+        v-if="step === 'pick'"
+        type="primary"
+        :disabled="candidateCount === 0"
+        :loading="confirmPreparing"
+        @click="goConfirm"
+      >
+        {{ confirmPreparing ? '准备确认...' : `下一步，确认 ${candidateCount} 个候选变量` }}
+      </el-button>
+      <el-button
+        v-else
         type="primary"
         :disabled="validRows.length === 0"
         :loading="loading"
         @click="submit"
-        >导入 {{ validRows.length }} 个变量</el-button
       >
+        导入 {{ validRows.length }} 个变量
+      </el-button>
     </template>
   </DcDialog>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import type { UploadFile } from 'element-plus'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import {
   downloadCsv,
@@ -144,6 +304,29 @@ import IconTablerAlertTriangle from '~icons/tabler/alert-triangle'
 import IconTablerFileImport from '~icons/tabler/file-import'
 import IconTablerFileSpreadsheet from '~icons/tabler/file-spreadsheet'
 import IconTablerFileTypeCsv from '~icons/tabler/file-type-csv'
+
+type ModbusImportMode = 'paste' | 'range'
+type ModbusImportStep = 'pick' | 'confirm'
+type ModbusImportPreviewRow = {
+  rowNo: number
+  name: string
+  code: string
+  unitId: number | string
+  area: string
+  address: number | string
+  addressBase: string
+  protocolAddress: number
+  dataType: string
+  byteOrder: string
+  wordOrder: string
+  scale: number | string
+  offset: number | string
+  unit: string | null
+  pollIntervalMs: number | string
+  accessLevel: string
+  description: string | null
+  issue: string
+}
 
 const props = defineProps<{
   modelValue: boolean
@@ -164,11 +347,17 @@ const visible = computed({
   set: (value: boolean) => emit('update:modelValue', value),
 })
 const dialogRef = ref<InstanceType<typeof DcDialog> | null>(null)
-const mode = ref('paste')
+const mode = ref<ModbusImportMode>('paste')
+const step = ref<ModbusImportStep>('pick')
 const pasteText = ref('')
 const fileRows = ref<Record<string, string>[]>([])
 const fileName = ref('')
 const onlyIssues = ref(false)
+const confirmPage = ref(1)
+const confirmPageSize = ref(50)
+const confirmPreparing = ref(false)
+const confirmRows = ref<ModbusImportPreviewRow[]>([])
+const validatingRows = ref(false)
 const selectedDefaultGroupId = ref('')
 const selectedDefaultUnitId = ref(1)
 const defaultByteOrder = ref('ABCD')
@@ -184,10 +373,12 @@ const areaOptions = [
 const range = reactive({
   unitId: 1,
   area: 'holding_register',
+  addressBase: 'modicon',
   startAddress: 40001,
   count: 20,
   dataType: 'uint16',
   prefix: 'modbus_reg_',
+  pollIntervalMs: 1000,
 })
 
 const groups = computed(() => props.groups || [])
@@ -214,55 +405,50 @@ const isDirty = computed(
     (pasteText.value.trim().length > 0 ||
       fileRows.value.length > 0 ||
       Boolean(fileName.value) ||
+      confirmRows.value.length > 0 ||
       (mode.value === 'range' && JSON.stringify({ ...range }) !== initialRangeSnapshot)),
-)
-
-const previewRows = computed(() => {
-  if (mode.value === 'range') {
-    return allocatePreviewCodes(
-      Array.from({ length: range.count }, (_, index) => ({
-        rowNo: index + 1,
-        name: `${range.prefix}${index + 1}`,
-        code: toVariableCode(`${range.prefix}${index + 1}`, `range_${range.startAddress + index}`),
-        unitId: range.unitId,
-        area: range.area,
-        address: range.startAddress + index,
-        addressBase: 'modicon',
-        protocolAddress: normalizeProtocolAddress(
-          range.area,
-          'modicon',
-          range.startAddress + index,
-        ),
-        dataType: range.dataType,
-        byteOrder: defaultByteOrder.value,
-        wordOrder: 'high_first',
-        scale: 1,
-        offset: 0,
-        pollIntervalMs: defaultPollIntervalMs.value,
-        accessLevel: defaultAccessLevel(range.area),
-        issue: '',
-      })),
-    )
-  }
-  return allocatePreviewCodes(sourceRows.value.map((row, index) => buildPreviewRow(row, index)))
-})
-
-const displayRows = computed(() =>
-  onlyIssues.value ? previewRows.value.filter((row) => row.issue) : previewRows.value,
-)
-const issueRows = computed(() => previewRows.value.filter((row) => row.issue))
-const validRows = computed(() =>
-  previewRows.value
-    .filter((row) => !row.issue)
-    .map(({ issue: _issue, rowNo: _rowNo, protocolAddress: _protocolAddress, ...row }) => ({
-      ...row,
-      groupId: selectedDefaultGroupId.value || null,
-    })),
 )
 const sourceRows = computed(() => {
   if (fileRows.value.length > 0) return fileRows.value
   return parsePasteRows(pasteText.value)
 })
+const candidateCount = computed(() =>
+  mode.value === 'range' ? Number(range.count || 0) : sourceRows.value.length,
+)
+const pasteSourceSummary = computed(() =>
+  fileRows.value.length > 0 ? `${fileRows.value.length} 行文件数据` : `${sourceRows.value.length} 行粘贴数据`,
+)
+const displayRows = computed(() =>
+  onlyIssues.value ? confirmRows.value.filter((row) => row.issue) : confirmRows.value,
+)
+const pagedDisplayRows = computed(() => {
+  const start = (confirmPage.value - 1) * confirmPageSize.value
+  return displayRows.value.slice(start, start + confirmPageSize.value)
+})
+const issueRows = computed(() => confirmRows.value.filter((row) => row.issue))
+const validRows = computed(() =>
+  confirmRows.value
+    .filter((row) => !row.issue)
+    .map((row) => ({
+      name: row.name,
+      code: row.code,
+      unitId: Number(row.unitId),
+      area: row.area,
+      address: Number(row.address),
+      addressBase: row.addressBase,
+      protocolAddress: row.protocolAddress,
+      dataType: row.dataType,
+      byteOrder: row.byteOrder,
+      wordOrder: row.wordOrder,
+      scale: Number(row.scale),
+      offset: Number(row.offset),
+      unit: row.unit || null,
+      pollIntervalMs: Number(row.pollIntervalMs),
+      accessLevel: normalizeAccessLevel(row.accessLevel),
+      description: row.description || null,
+      groupId: selectedDefaultGroupId.value || null,
+    })),
+)
 
 const headerAliases = {
   name: ['变量名', '名称', 'name'],
@@ -277,7 +463,7 @@ const headerAliases = {
   offset: ['偏移', 'offset'],
   unit: ['单位', 'unit'],
   pollIntervalMs: ['采集周期', '周期', 'pollIntervalMs'],
-  accessLevel: ['发布能力', '读写能力', 'accessLevel'],
+  accessLevel: ['发布能力', '读写能力', '读写权限', 'accessLevel'],
   description: ['描述', '说明', 'description'],
 }
 const templateHeaders = [
@@ -293,7 +479,7 @@ const templateHeaders = [
   '偏移',
   '单位',
   '采集周期',
-  '发布能力',
+  '读写权限',
   '描述',
 ]
 const templateRows = [
@@ -310,7 +496,7 @@ const templateRows = [
     偏移: 0,
     单位: 'rpm',
     采集周期: 1000,
-    发布能力: 'read',
+    读写权限: 'read',
     描述: '主电机转速',
   },
   {
@@ -326,7 +512,7 @@ const templateRows = [
     偏移: 0,
     单位: '',
     采集周期: 500,
-    发布能力: 'readwrite',
+    读写权限: 'readwrite',
     描述: '线圈状态',
   },
 ]
@@ -338,7 +524,12 @@ watch(
     pasteText.value = ''
     fileRows.value = []
     fileName.value = ''
+    step.value = 'pick'
     onlyIssues.value = false
+    confirmPage.value = 1
+    confirmPageSize.value = 50
+    confirmPreparing.value = false
+    confirmRows.value = []
     selectedDefaultGroupId.value = props.defaultGroupId || ''
     const defaultSlave =
       slaves.value.find((slave) => slave.unitId === props.defaultUnitId) || slaves.value[0]
@@ -346,7 +537,25 @@ watch(
     defaultByteOrder.value = defaultSlave?.defaultByteOrder || 'ABCD'
     defaultPollIntervalMs.value = defaultSlave?.defaultPollIntervalMs || 1000
     range.unitId = selectedDefaultUnitId.value
+    range.pollIntervalMs = defaultPollIntervalMs.value
   },
+)
+
+watch([onlyIssues, confirmPageSize], () => {
+  confirmPage.value = 1
+})
+
+watch([mode, pasteText, fileRows, range], () => {
+  if (step.value !== 'pick') return
+  confirmRows.value = []
+})
+
+watch(
+  confirmRows,
+  () => {
+    validateConfirmRows()
+  },
+  { deep: true },
 )
 
 async function handleFileChange(uploadFile: UploadFile) {
@@ -386,6 +595,32 @@ function parsePasteRows(value: string) {
   )
 }
 
+function buildRangeRows() {
+  return Array.from({ length: Number(range.count || 0) }, (_, index) => {
+    const address = Number(range.startAddress) + index
+    const name = `${range.prefix}${index + 1}`
+    return createPreviewRow({
+      rowNo: index + 1,
+      name,
+      code: toVariableCode(name, `range_${address}`),
+      unitId: range.unitId,
+      area: range.area,
+      address,
+      addressBase: range.addressBase,
+      protocolAddress: normalizeProtocolAddress(range.area, range.addressBase, address),
+      dataType: range.dataType,
+      byteOrder: defaultByteOrder.value,
+      wordOrder: 'high_first',
+      scale: 1,
+      offset: 0,
+      unit: null,
+      pollIntervalMs: range.pollIntervalMs,
+      accessLevel: defaultAccessLevel(range.area),
+      description: null,
+    })
+  })
+}
+
 function buildPreviewRow(row: Record<string, string>, index: number) {
   const normalized = normalizeHeaderRow(row, headerAliases)
   const area = normalizeArea(normalized.area)
@@ -394,31 +629,12 @@ function buildPreviewRow(row: Record<string, string>, index: number) {
   const protocolAddress = normalizeProtocolAddress(area, addressBase, address)
   const dataType =
     normalized.dataType || (area === 'coil' || area === 'discrete_input' ? 'bool' : 'uint16')
-  const unitId = toInteger(normalized.unitId, selectedDefaultUnitId.value)
-  const scale = toNumber(normalized.scale, 1)
-  const offset = toNumber(normalized.offset, 0)
-  const pollIntervalMs = toInteger(normalized.pollIntervalMs, defaultPollIntervalMs.value)
   const name = sanitizeVariableName(normalized.name || `变量${index + 1}`)
-  const issue = firstIssue([
-    !normalized.name ? '变量名为空' : '',
-    !isValidVariableName(name) ? '变量名称包含不支持的字符' : '',
-    Number.isNaN(unitId) || unitId < 0 || unitId > 247 ? '从站地址必须在 0-247' : '',
-    Number.isNaN(address) ? '地址不是数字' : '',
-    Number.isNaN(protocolAddress) || protocolAddress < 0 ? '地址与寄存器区域不匹配' : '',
-    !dataType ? '数据类型为空' : '',
-    ['coil', 'discrete_input'].includes(area) &&
-    !['bool', 'boolean'].includes(dataType.toLowerCase())
-      ? 'Coil / Discrete Input 默认只支持 bool'
-      : '',
-    Number.isNaN(scale) ? '倍率不是数字' : '',
-    Number.isNaN(offset) ? '偏移不是数字' : '',
-    Number.isNaN(pollIntervalMs) || pollIntervalMs <= 0 ? '采集周期必须大于 0' : '',
-  ])
-  return {
+  return createPreviewRow({
     rowNo: index + 1,
     name,
     code: toVariableCode(name, `${area}_${address}_${index + 1}`),
-    unitId,
+    unitId: toInteger(normalized.unitId, selectedDefaultUnitId.value),
     area,
     address,
     addressBase,
@@ -426,14 +642,107 @@ function buildPreviewRow(row: Record<string, string>, index: number) {
     dataType,
     byteOrder: normalized.byteOrder || defaultByteOrder.value,
     wordOrder: normalized.wordOrder || 'high_first',
-    scale,
-    offset,
+    scale: toNumber(normalized.scale, 1),
+    offset: toNumber(normalized.offset, 0),
     unit: normalized.unit || null,
-    pollIntervalMs,
+    pollIntervalMs: toInteger(normalized.pollIntervalMs, defaultPollIntervalMs.value),
     accessLevel: normalizeAccessLevel(normalized.accessLevel || defaultAccessLevel(area)),
     description: normalized.description || null,
-    issue,
+  })
+}
+
+function createPreviewRow(row: Omit<ModbusImportPreviewRow, 'issue'>): ModbusImportPreviewRow {
+  return { ...row, issue: '' }
+}
+
+function validateRows(rows: ModbusImportPreviewRow[]) {
+  const usedCodes = new Set((props.existingCodes || []).filter(Boolean))
+  return rows.map((row) => {
+    const area = normalizeArea(row.area)
+    const addressBase = normalizeAddressBase(row.addressBase)
+    const unitId = toInteger(String(row.unitId), Number.NaN)
+    const address = toInteger(String(row.address), Number.NaN)
+    const protocolAddress = normalizeProtocolAddress(area, addressBase, address)
+    const scale = toNumber(String(row.scale), Number.NaN)
+    const offset = toNumber(String(row.offset), Number.NaN)
+    const pollIntervalMs = toInteger(String(row.pollIntervalMs), Number.NaN)
+    const dataType = String(row.dataType || '').trim()
+    const name = sanitizeVariableName(row.name)
+    const issue = firstIssue([
+      !name ? '变量名为空' : '',
+      !isValidVariableName(name) ? '变量名称包含不支持的字符' : '',
+      Number.isNaN(unitId) || unitId < 0 || unitId > 247 ? '从站地址必须在 0-247' : '',
+      Number.isNaN(address) ? '地址不是数字' : '',
+      Number.isNaN(protocolAddress) || protocolAddress < 0 ? '地址与寄存器区域不匹配' : '',
+      !dataType ? '数据类型为空' : '',
+      ['coil', 'discrete_input'].includes(area) &&
+      !['bool', 'boolean'].includes(dataType.toLowerCase())
+        ? 'Coil / Discrete Input 默认只支持 bool'
+        : '',
+      Number.isNaN(scale) ? '倍率不是数字' : '',
+      Number.isNaN(offset) ? '偏移不是数字' : '',
+      Number.isNaN(pollIntervalMs) || pollIntervalMs <= 0 ? '采集周期必须大于 0' : '',
+    ])
+    const code = issue
+      ? row.code
+      : allocateUniqueCode(row.code || toVariableCode(row.name, 'register'), usedCodes)
+    if (!issue) usedCodes.add(code)
+    return {
+      ...row,
+      name,
+      code,
+      area,
+      addressBase,
+      unitId: Number.isNaN(unitId) ? row.unitId : unitId,
+      address: Number.isNaN(address) ? row.address : address,
+      protocolAddress,
+      scale: Number.isNaN(scale) ? row.scale : scale,
+      offset: Number.isNaN(offset) ? row.offset : offset,
+      pollIntervalMs: Number.isNaN(pollIntervalMs) ? row.pollIntervalMs : pollIntervalMs,
+      accessLevel: normalizeAccessLevel(row.accessLevel),
+      issue,
+    }
+  })
+}
+
+function validateConfirmRows() {
+  if (validatingRows.value) return
+  validatingRows.value = true
+  try {
+    confirmRows.value = validateRows(confirmRows.value)
+  } finally {
+    validatingRows.value = false
   }
+}
+
+async function goConfirm() {
+  if (candidateCount.value === 0) {
+    ElMessage.warning(mode.value === 'range' ? '请先设置地址段数量' : '请先粘贴或选择导入文件')
+    return
+  }
+  confirmPreparing.value = true
+  await nextTick()
+  await waitForPaint()
+  try {
+    confirmRows.value =
+      mode.value === 'range'
+        ? buildRangeRows()
+        : sourceRows.value.map((row, index) => buildPreviewRow(row, index))
+    validateConfirmRows()
+    confirmPage.value = 1
+    onlyIssues.value = false
+    step.value = 'confirm'
+  } finally {
+    confirmPreparing.value = false
+  }
+}
+
+function applyDefaults() {
+  confirmRows.value.forEach((row) => {
+    row.unitId = selectedDefaultUnitId.value
+    row.byteOrder = defaultByteOrder.value
+    row.pollIntervalMs = defaultPollIntervalMs.value
+  })
 }
 
 function downloadTemplate(type: 'csv' | 'xlsx') {
@@ -461,7 +770,20 @@ function downloadIssueReport() {
 }
 
 function submit() {
-  emit('submit', validRows.value)
+  if (validRows.value.length === 0) {
+    ElMessage.warning('没有可导入的 Modbus 变量')
+    return
+  }
+  const skipped = confirmRows.value.length - validRows.value.length
+  const runSubmit = () => emit('submit', validRows.value)
+  if (skipped > 0) {
+    void ElMessageBox.confirm(
+      `本次将导入 ${validRows.value.length} 个变量，跳过 ${skipped} 行问题数据。是否继续？`,
+      '确认导入',
+    ).then(runSubmit)
+    return
+  }
+  runSubmit()
 }
 
 function requestClose() {
@@ -472,8 +794,14 @@ function closeSilently() {
   dialogRef.value?.closeSilently()
 }
 
+function waitForPaint() {
+  return new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))
+  })
+}
+
 function normalizeArea(value: string) {
-  const text = value.trim().toLowerCase()
+  const text = String(value || '').trim().toLowerCase()
   if (['coil', 'coils', '0x', '00001'].includes(text)) return 'coil'
   if (['discrete_input', 'discrete input', 'input', '1x', '10001'].includes(text))
     return 'discrete_input'
@@ -481,12 +809,8 @@ function normalizeArea(value: string) {
   return 'holding_register'
 }
 
-function formatArea(area: string) {
-  return areaOptions.find((option) => option.value === area)?.label || area
-}
-
 function normalizeAddressBase(value: string) {
-  const text = value.trim().toLowerCase()
+  const text = String(value || '').trim().toLowerCase()
   if (['zero_based', '0', '0-based'].includes(text)) return 'zero_based'
   if (['one_based', '1', '1-based'].includes(text)) return 'one_based'
   return 'modicon'
@@ -511,13 +835,13 @@ function defaultAccessLevel(area: string) {
 }
 
 function normalizeAccessLevel(value: string) {
-  const text = value.trim().toLowerCase()
+  const text = String(value || '').trim().toLowerCase()
   if (['write', '写', 'readwrite', 'read_write', '读写'].includes(text)) return 'readwrite'
   return 'read'
 }
 
 function sanitizeVariableName(value: string) {
-  return value.trim().replace(invalidVariableNamePattern, '')
+  return String(value || '').trim().replace(invalidVariableNamePattern, '')
 }
 
 function isValidVariableName(value: string) {
@@ -531,16 +855,6 @@ function toVariableCode(value: string, fallback: string) {
     .replace(/[^a-z0-9_]+/g, '_')
     .replace(/^_+|_+$/g, '')
   return normalized || 'register'
-}
-
-function allocatePreviewCodes<T extends { code: string; issue: string }>(rows: T[]) {
-  const usedCodes = new Set((props.existingCodes || []).filter(Boolean))
-  return rows.map((row) => {
-    if (row.issue) return row
-    const code = allocateUniqueCode(row.code || 'register', usedCodes)
-    usedCodes.add(code)
-    return { ...row, code }
-  })
 }
 
 function allocateUniqueCode(baseCode: string, usedCodes: Set<string>) {
@@ -571,53 +885,105 @@ defineExpose({ closeSilently })
 </script>
 
 <style scoped>
-.modbus-import-dialog__summary {
-  margin-bottom: 10px;
+.modbus-import {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.modbus-import__summary {
+  min-height: 54px;
   padding: 10px 12px;
   border: 1px solid color-mix(in oklch, var(--dc-primary) 18%, var(--dc-border));
   border-radius: var(--dc-radius-sm);
   background: var(--dc-surface-subtle);
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(92px, 120px)) 1fr;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
-.modbus-import-dialog__summary strong {
+.modbus-import__summary div {
+  display: grid;
+  gap: 2px;
+}
+
+.modbus-import__summary strong {
   color: var(--dc-primary);
   font-size: 18px;
+  line-height: 20px;
 }
 
-.modbus-import-dialog__summary span {
+.modbus-import__summary span {
   color: var(--dc-text-secondary);
   font-size: 12px;
   font-weight: 700;
 }
 
-.modbus-import-dialog__summary em {
-  margin-left: auto;
+.modbus-import__summary em {
+  justify-self: end;
   font-style: normal;
   color: var(--dc-text-muted);
   font-size: 12px;
 }
 
-.modbus-import-dialog__tools {
+.modbus-import__tools,
+.modbus-import__toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
   min-width: 0;
 }
 
-.modbus-import-dialog__tools :deep(.el-button) {
+.modbus-import__tools :deep(.el-button),
+.modbus-import__toolbar :deep(.el-button) {
   gap: 5px;
 }
 
-.modbus-import-dialog__tools svg {
+.modbus-import__tools svg,
+.modbus-import__toolbar svg {
   width: 14px;
   height: 14px;
 }
 
-.modbus-import-dialog__file {
+.modbus-import__tabs {
+  min-height: 0;
+}
+
+.modbus-import__section,
+.modbus-import__defaults,
+.modbus-import__confirm-section {
+  min-height: 0;
+  padding: 12px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface);
+}
+
+.modbus-import__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.modbus-import__section-head strong {
+  color: var(--dc-text);
+  font-size: 13px;
+}
+
+.modbus-import__section-head span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dc-text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modbus-import__file {
   min-width: 0;
   overflow: hidden;
   color: var(--dc-text-muted);
@@ -626,15 +992,80 @@ defineExpose({ closeSilently })
   font-size: 12px;
 }
 
-.modbus-import-dialog__range {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
+.modbus-import__form {
+  margin-top: 10px;
 }
 
-.modbus-import-dialog__range :deep(.el-select),
-.modbus-import-dialog__range :deep(.el-input-number) {
+.modbus-import__range-form,
+.modbus-import__default-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.modbus-import__default-form {
+  grid-template-columns: minmax(160px, 1.2fr) repeat(3, minmax(130px, 1fr)) auto;
+}
+
+.modbus-import__range-form :deep(.el-select),
+.modbus-import__range-form :deep(.el-input),
+.modbus-import__range-form :deep(.el-input-number),
+.modbus-import__default-form :deep(.el-select),
+.modbus-import__default-form :deep(.el-input-number) {
   width: 100%;
+}
+
+.modbus-import__confirm-table {
+  width: 100%;
+}
+
+.modbus-import__confirm-table :deep(.el-table__inner-wrapper) {
+  min-width: 1080px;
+}
+
+.modbus-import__confirm-table :deep(.cell) {
+  padding-left: 7px;
+  padding-right: 7px;
+  white-space: nowrap;
+}
+
+.modbus-import__confirm-table :deep(.el-input__wrapper),
+.modbus-import__confirm-table :deep(.el-select__wrapper) {
+  min-height: 30px;
+  box-shadow: 0 0 0 1px var(--dc-border) inset;
+}
+
+.modbus-import__confirm-table :deep(.el-table__body-wrapper) {
+  overflow: auto;
+}
+
+.modbus-import__pager {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+  margin-top: 8px;
+  border-top: 1px solid var(--dc-border);
+}
+
+.modbus-import :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+.modbus-import :deep(.el-form-item__label) {
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.modbus-import :deep(.el-table) {
+  --el-table-header-bg-color: var(--dc-surface-raised);
+  --el-table-border-color: var(--dc-border);
+}
+</style>
+
+<style>
+.modbus-import-dialog .el-dialog__body,
+.modbus-import-dialog .dc-dialog__body {
+  overflow: hidden;
 }
 </style>
