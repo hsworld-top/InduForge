@@ -69,7 +69,7 @@
           v-model="pasteText"
           type="textarea"
           :rows="9"
-          placeholder="变量名,Code,从站地址,区域,地址,地址基准,类型,字节序,字序,倍率,偏移,单位,采集周期,发布能力,描述"
+          placeholder="变量名,从站地址,区域,地址,地址基准,类型,字节序,字序,倍率,偏移,单位,采集周期,发布能力,描述"
           @input="clearFileSource"
         />
       </el-tab-pane>
@@ -102,7 +102,6 @@
         </template>
       </el-table-column>
       <el-table-column prop="name" label="变量名" />
-      <el-table-column prop="code" label="Code" />
       <el-table-column prop="unitId" label="从站" width="70" />
       <el-table-column prop="area" label="区域" width="130" />
       <el-table-column prop="address" label="地址" width="90" />
@@ -147,6 +146,7 @@ const props = defineProps<{
   loading?: boolean
   groups?: ModbusRegisterGroup[]
   slaves?: ModbusSlaveDevice[]
+  existingCodes?: string[]
   defaultGroupId?: string
   defaultUnitId?: number
 }>()
@@ -169,6 +169,8 @@ const selectedDefaultGroupId = ref('')
 const selectedDefaultUnitId = ref(1)
 const defaultByteOrder = ref('ABCD')
 const defaultPollIntervalMs = ref(1000)
+const invalidVariableNamePattern = /[^\u4e00-\u9fa5A-Za-z0-9_$#%@+()[\]&-]/g
+const validVariableNamePattern = /^[\u4e00-\u9fa5A-Za-z0-9_$#%@+()[\]&-]+$/
 const range = reactive({
   unitId: 1,
   area: 'holding_register',
@@ -207,26 +209,32 @@ const isDirty = computed(
 
 const previewRows = computed(() => {
   if (mode.value === 'range') {
-    return Array.from({ length: range.count }, (_, index) => ({
-      rowNo: index + 1,
-      name: `${range.prefix}${index + 1}`,
-      code: `${range.prefix}${index + 1}`,
-      unitId: range.unitId,
-      area: range.area,
-      address: range.startAddress + index,
-      addressBase: 'modicon',
-      protocolAddress: normalizeProtocolAddress(range.area, 'modicon', range.startAddress + index),
-      dataType: range.dataType,
-      byteOrder: defaultByteOrder.value,
-      wordOrder: 'high_first',
-      scale: 1,
-      offset: 0,
-      pollIntervalMs: defaultPollIntervalMs.value,
-      accessLevel: defaultAccessLevel(range.area),
-      issue: '',
-    }))
+    return allocatePreviewCodes(
+      Array.from({ length: range.count }, (_, index) => ({
+        rowNo: index + 1,
+        name: `${range.prefix}${index + 1}`,
+        code: toVariableCode(`${range.prefix}${index + 1}`, `range_${range.startAddress + index}`),
+        unitId: range.unitId,
+        area: range.area,
+        address: range.startAddress + index,
+        addressBase: 'modicon',
+        protocolAddress: normalizeProtocolAddress(
+          range.area,
+          'modicon',
+          range.startAddress + index,
+        ),
+        dataType: range.dataType,
+        byteOrder: defaultByteOrder.value,
+        wordOrder: 'high_first',
+        scale: 1,
+        offset: 0,
+        pollIntervalMs: defaultPollIntervalMs.value,
+        accessLevel: defaultAccessLevel(range.area),
+        issue: '',
+      })),
+    )
   }
-  return sourceRows.value.map((row, index) => buildPreviewRow(row, index))
+  return allocatePreviewCodes(sourceRows.value.map((row, index) => buildPreviewRow(row, index)))
 })
 
 const displayRows = computed(() =>
@@ -248,7 +256,6 @@ const sourceRows = computed(() => {
 
 const headerAliases = {
   name: ['变量名', '名称', 'name'],
-  code: ['Code', '编码', 'code'],
   unitId: ['从站地址', '从站', 'unitId', 'slaveId'],
   area: ['区域', '寄存器区', 'area'],
   address: ['地址', '用户地址', 'address'],
@@ -265,7 +272,6 @@ const headerAliases = {
 }
 const templateHeaders = [
   '变量名',
-  'Code',
   '从站地址',
   '区域',
   '地址',
@@ -283,7 +289,6 @@ const templateHeaders = [
 const templateRows = [
   {
     变量名: '电机转速',
-    Code: 'motor_speed',
     从站地址: 1,
     区域: 'holding_register',
     地址: 40001,
@@ -300,7 +305,6 @@ const templateRows = [
   },
   {
     变量名: '运行状态',
-    Code: 'running_state',
     从站地址: 1,
     区域: 'coil',
     地址: 1,
@@ -384,8 +388,10 @@ function buildPreviewRow(row: Record<string, string>, index: number) {
   const scale = toNumber(normalized.scale, 1)
   const offset = toNumber(normalized.offset, 0)
   const pollIntervalMs = toInteger(normalized.pollIntervalMs, defaultPollIntervalMs.value)
+  const name = sanitizeVariableName(normalized.name || `变量${index + 1}`)
   const issue = firstIssue([
     !normalized.name ? '变量名为空' : '',
+    !isValidVariableName(name) ? '变量名称包含不支持的字符' : '',
     Number.isNaN(unitId) || unitId < 0 || unitId > 247 ? '从站地址必须在 0-247' : '',
     Number.isNaN(address) ? '地址不是数字' : '',
     Number.isNaN(protocolAddress) || protocolAddress < 0 ? '地址与寄存器区域不匹配' : '',
@@ -400,8 +406,8 @@ function buildPreviewRow(row: Record<string, string>, index: number) {
   ])
   return {
     rowNo: index + 1,
-    name: normalized.name || `变量${index + 1}`,
-    code: normalized.code,
+    name,
+    code: toVariableCode(name, `${area}_${address}_${index + 1}`),
     unitId,
     area,
     address,
@@ -433,11 +439,10 @@ function downloadTemplate(type: 'csv' | 'xlsx') {
 function downloadIssueReport() {
   downloadCsv(
     'modbus-import-issues.csv',
-    ['行号', '变量名', 'Code', '区域', '地址', '问题'],
+    ['行号', '变量名', '区域', '地址', '问题'],
     issueRows.value.map((row) => ({
       行号: row.rowNo,
       变量名: row.name,
-      Code: row.code,
       区域: row.area,
       地址: row.address,
       问题: row.issue,
@@ -495,6 +500,43 @@ function normalizeAccessLevel(value: string) {
   const text = value.trim().toLowerCase()
   if (['write', '写', 'readwrite', 'read_write', '读写'].includes(text)) return 'readwrite'
   return 'read'
+}
+
+function sanitizeVariableName(value: string) {
+  return value.trim().replace(invalidVariableNamePattern, '')
+}
+
+function isValidVariableName(value: string) {
+  return validVariableNamePattern.test(value)
+}
+
+function toVariableCode(value: string, fallback: string) {
+  const normalized = String(value || fallback)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  return normalized || 'register'
+}
+
+function allocatePreviewCodes<T extends { code: string; issue: string }>(rows: T[]) {
+  const usedCodes = new Set((props.existingCodes || []).filter(Boolean))
+  return rows.map((row) => {
+    if (row.issue) return row
+    const code = allocateUniqueCode(row.code || 'register', usedCodes)
+    usedCodes.add(code)
+    return { ...row, code }
+  })
+}
+
+function allocateUniqueCode(baseCode: string, usedCodes: Set<string>) {
+  const base = toVariableCode(baseCode, 'register')
+  if (!usedCodes.has(base)) return base
+  for (let index = 2; index < 10000; index += 1) {
+    const candidate = `${base}_${index}`
+    if (!usedCodes.has(candidate)) return candidate
+  }
+  return `${base}_${Date.now()}`
 }
 
 function toNumber(value: string, fallback: number) {
