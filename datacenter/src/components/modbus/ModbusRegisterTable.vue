@@ -37,7 +37,9 @@
       </el-table-column>
       <el-table-column label="质量" width="92">
         <template #default="{ row }">
-          <span class="modbus-register-table__text">{{ formatQuality(row.quality) }}</span>
+          <el-tag size="small" :type="qualityTagType(row.quality)">
+            {{ formatQuality(row.quality) }}
+          </el-tag>
         </template>
       </el-table-column>
       <el-table-column label="从站" width="84" prop="unitId" sortable="custom">
@@ -45,7 +47,13 @@
           <span class="modbus-register-table__text">{{ row.unitId }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="地址" min-width="172" prop="address" sortable="custom">
+      <el-table-column
+        label="地址"
+        min-width="172"
+        prop="address"
+        sortable="custom"
+        show-overflow-tooltip
+      >
         <template #default="{ row }">
           <span class="modbus-register-table__text">{{
             `${formatArea(row.area)} ${row.address} / 协议 ${row.protocolAddress}`
@@ -171,9 +179,16 @@ const formatAccessLevel = (accessLevel?: string) => {
 
 const formatQuality = (quality?: string) => {
   const normalized = String(quality || '').toLowerCase()
-  if (normalized === 'good') return '质量正常'
-  if (normalized === 'bad') return '质量异常'
-  return '暂无质量'
+  if (normalized === 'good') return 'Good'
+  if (normalized === 'bad') return 'Bad'
+  return 'Unknown'
+}
+
+const qualityTagType = (quality?: string) => {
+  const normalized = String(quality || '').toLowerCase()
+  if (normalized === 'good') return 'success'
+  if (normalized === 'bad') return 'danger'
+  return 'info'
 }
 
 const formatValue = (value: unknown) => {

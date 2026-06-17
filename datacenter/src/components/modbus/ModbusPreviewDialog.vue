@@ -36,7 +36,11 @@
         </el-table-column>
         <el-table-column prop="dataType" label="类型" width="110" />
         <el-table-column label="质量" width="92">
-          <template #default="{ row }">{{ formatQuality(row.quality) }}</template>
+          <template #default="{ row }">
+            <el-tag size="small" :type="qualityTagType(row.quality)">
+              {{ formatQuality(row.quality) }}
+            </el-tag>
+          </template>
         </el-table-column>
         <el-table-column label="更新时间" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">{{ formatTime(row.timestamp) }}</template>
@@ -120,9 +124,16 @@ const formatRawValue = (value: unknown) => {
 
 const formatQuality = (quality?: string) => {
   const normalized = String(quality || '').toLowerCase()
-  if (normalized === 'good') return '质量正常'
-  if (normalized === 'bad') return '质量异常'
-  return '暂无质量'
+  if (normalized === 'good') return 'Good'
+  if (normalized === 'bad') return 'Bad'
+  return 'Unknown'
+}
+
+const qualityTagType = (quality?: string) => {
+  const normalized = String(quality || '').toLowerCase()
+  if (normalized === 'good') return 'success'
+  if (normalized === 'bad') return 'danger'
+  return 'info'
 }
 
 const formatTime = (value?: string) => {
