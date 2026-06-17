@@ -315,7 +315,25 @@ func (h *ModbusModelingHandler) BatchDeleteRegisters(w http.ResponseWriter, r *h
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
 	}
-	count, err := h.service.DeleteRegistersBatch(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, request.IDs)
+	count, err := h.service.DeleteRegistersBatch(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.ModbusRegisterBulkSelection{IDs: request.IDs})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]int{"count": count})
+	return nil
+}
+
+// DeleteRegistersByFilter 按当前搜索/筛选条件批量删除 Modbus 变量。
+func (h *ModbusModelingHandler) DeleteRegistersByFilter(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	selection, err := decodeModbusBulkSelection(r)
+	if err != nil {
+		return err
+	}
+	count, err := h.service.DeleteRegistersBatch(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, selection)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -337,7 +355,32 @@ func (h *ModbusModelingHandler) BatchMoveRegistersGroup(w http.ResponseWriter, r
 		return err
 	}
 	count, err := h.service.UpdateRegistersBatch(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.ModbusRegisterBulkUpdateInput{
-		IDs:        request.IDs,
+		Selection:  service.ModbusRegisterBulkSelection{IDs: request.IDs},
+		GroupID:    request.GroupID,
+		HasGroupID: true,
+	})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]int{"count": count})
+	return nil
+}
+
+// MoveRegistersByFilter 按当前搜索/筛选条件批量移动 Modbus 变量分组。
+func (h *ModbusModelingHandler) MoveRegistersByFilter(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Filter  modbusRegisterFilterRequest `json:"filter"`
+		GroupID *string                     `json:"groupId"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	count, err := h.service.UpdateRegistersBatch(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.ModbusRegisterBulkUpdateInput{
+		Selection:  service.ModbusRegisterBulkSelection{Filter: request.Filter.toServiceFilter(), UseFilter: true},
 		GroupID:    request.GroupID,
 		HasGroupID: true,
 	})
@@ -366,7 +409,39 @@ func (h *ModbusModelingHandler) BatchUpdateRegisters(w http.ResponseWriter, r *h
 		return err
 	}
 	count, err := h.service.UpdateRegistersBatch(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.ModbusRegisterBulkUpdateInput{
-		IDs:            request.IDs,
+		Selection:      service.ModbusRegisterBulkSelection{IDs: request.IDs},
+		UnitID:         request.UnitID,
+		PollIntervalMS: request.PollIntervalMS,
+		ByteOrder:      request.ByteOrder,
+		WordOrder:      request.WordOrder,
+		Status:         request.Status,
+	})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]int{"count": count})
+	return nil
+}
+
+// UpdateRegistersByFilter 按当前搜索/筛选条件批量更新 Modbus 变量公共配置。
+func (h *ModbusModelingHandler) UpdateRegistersByFilter(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Filter         modbusRegisterFilterRequest `json:"filter"`
+		UnitID         *int                        `json:"unitId"`
+		PollIntervalMS *int                        `json:"pollIntervalMs"`
+		ByteOrder      string                      `json:"byteOrder"`
+		WordOrder      string                      `json:"wordOrder"`
+		Status         string                      `json:"status"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	count, err := h.service.UpdateRegistersBatch(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.ModbusRegisterBulkUpdateInput{
+		Selection:      service.ModbusRegisterBulkSelection{Filter: request.Filter.toServiceFilter(), UseFilter: true},
 		UnitID:         request.UnitID,
 		PollIntervalMS: request.PollIntervalMS,
 		ByteOrder:      request.ByteOrder,
@@ -435,6 +510,46 @@ func (h *ModbusModelingHandler) EstimateReadPlans(w http.ResponseWriter, r *http
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
+}
+
+type modbusRegisterFilterRequest struct {
+	GroupID      *string `json:"groupId"`
+	Search       string  `json:"search"`
+	QuickFilter  string  `json:"filter"`
+	UnitID       *int    `json:"unitId"`
+	Area         string  `json:"area"`
+	AddressStart *int    `json:"addressStart"`
+	AddressEnd   *int    `json:"addressEnd"`
+	DataType     string  `json:"dataType"`
+	SlaveEnabled *bool   `json:"slaveEnabled"`
+	SortBy       string  `json:"sortBy"`
+	SortOrder    string  `json:"sortOrder"`
+}
+
+func (r modbusRegisterFilterRequest) toServiceFilter() service.ModbusRegisterListFilter {
+	return service.ModbusRegisterListFilter{
+		GroupID:      r.GroupID,
+		Search:       r.Search,
+		QuickFilter:  r.QuickFilter,
+		UnitID:       r.UnitID,
+		Area:         r.Area,
+		AddressStart: r.AddressStart,
+		AddressEnd:   r.AddressEnd,
+		DataType:     r.DataType,
+		SlaveEnabled: r.SlaveEnabled,
+		SortBy:       r.SortBy,
+		SortOrder:    r.SortOrder,
+	}
+}
+
+func decodeModbusBulkSelection(r *http.Request) (service.ModbusRegisterBulkSelection, error) {
+	var request struct {
+		Filter modbusRegisterFilterRequest `json:"filter"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return service.ModbusRegisterBulkSelection{}, err
+	}
+	return service.ModbusRegisterBulkSelection{Filter: request.Filter.toServiceFilter(), UseFilter: true}, nil
 }
 
 type modbusRegisterRequest struct {

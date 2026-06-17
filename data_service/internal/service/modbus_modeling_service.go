@@ -456,6 +456,7 @@ type ModbusRegisterListFilter struct {
 // ModbusRegisterBulkUpdateInput 描述变量批量更新输入。
 type ModbusRegisterBulkUpdateInput struct {
 	IDs            []string
+	Selection      ModbusRegisterBulkSelection
 	GroupID        *string
 	HasGroupID     bool
 	UnitID         *int
@@ -465,25 +466,20 @@ type ModbusRegisterBulkUpdateInput struct {
 	Status         string
 }
 
+// ModbusRegisterBulkSelection 描述批量操作选择范围；IDs 用于显式勾选，Filter 用于“全部结果”。
+type ModbusRegisterBulkSelection struct {
+	IDs       []string
+	Filter    ModbusRegisterListFilter
+	UseFilter bool
+}
+
 // ListRegistersPage 返回当前分组下的一页变量，分页条件只影响列表展示，不影响预览和校验等全量流程。
 func (s *ModbusModelingService) ListRegistersPage(ctx context.Context, projectID, connectionID string, filter ModbusRegisterListFilter) (*ModbusRegisterListResult, error) {
 	if err := s.validateProjectConnection(ctx, projectID, connectionID); err != nil {
 		return nil, err
 	}
 	page, pageSize := normalizePageAndSize(filter.Page, filter.PageSize, 1, 100)
-	records, total, err := s.repository.ListRegistersPage(ctx, projectID, connectionID, repository.ModbusRegisterListFilter{
-		GroupID:      normalizeOptionalText(filter.GroupID),
-		Search:       strings.TrimSpace(filter.Search),
-		QuickFilter:  strings.TrimSpace(filter.QuickFilter),
-		UnitID:       filter.UnitID,
-		Area:         strings.TrimSpace(filter.Area),
-		AddressStart: filter.AddressStart,
-		AddressEnd:   filter.AddressEnd,
-		DataType:     strings.TrimSpace(filter.DataType),
-		SlaveEnabled: filter.SlaveEnabled,
-		SortBy:       strings.TrimSpace(filter.SortBy),
-		SortOrder:    strings.TrimSpace(filter.SortOrder),
-	}, page, pageSize)
+	records, total, err := s.repository.ListRegistersPage(ctx, projectID, connectionID, toRepositoryModbusRegisterFilter(filter), page, pageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -573,9 +569,16 @@ func (s *ModbusModelingService) UpdateRegisterLastValue(ctx context.Context, pro
 }
 
 // DeleteRegistersBatch 批量删除变量并标记数据点失效。
-func (s *ModbusModelingService) DeleteRegistersBatch(ctx context.Context, projectID, connectionID, userID string, ids []string) (int, error) {
+func (s *ModbusModelingService) DeleteRegistersBatch(ctx context.Context, projectID, connectionID, userID string, selection ModbusRegisterBulkSelection) (int, error) {
 	if err := s.validateProjectConnectionAndUser(ctx, projectID, connectionID, userID); err != nil {
 		return 0, err
+	}
+	ids, err := s.resolveBulkRegisterIDs(ctx, projectID, connectionID, selection)
+	if err != nil {
+		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, nil
 	}
 	deleted, err := s.repository.DeleteRegistersBatch(ctx, projectID, connectionID, ids, userID)
 	if err != nil {
@@ -588,6 +591,10 @@ func (s *ModbusModelingService) DeleteRegistersBatch(ctx context.Context, projec
 func (s *ModbusModelingService) UpdateRegistersBatch(ctx context.Context, projectID, connectionID, userID string, input ModbusRegisterBulkUpdateInput) (int, error) {
 	if err := s.validateProjectConnectionAndUser(ctx, projectID, connectionID, userID); err != nil {
 		return 0, err
+	}
+	selection := input.Selection
+	if len(selection.IDs) == 0 && !selection.UseFilter {
+		selection.IDs = input.IDs
 	}
 	if input.UnitID != nil {
 		if err := s.ensureSlaveDevice(ctx, projectID, connectionID, userID, *input.UnitID); err != nil {
@@ -607,7 +614,9 @@ func (s *ModbusModelingService) UpdateRegistersBatch(ctx context.Context, projec
 	records, err := s.repository.UpdateRegistersBatch(ctx, repository.BatchUpdateModbusRegistersParams{
 		ProjectID:      projectID,
 		ConnectionID:   connectionID,
-		IDs:            input.IDs,
+		IDs:            selection.IDs,
+		Filter:         toRepositoryModbusRegisterFilter(selection.Filter),
+		UseFilter:      selection.UseFilter,
 		GroupID:        normalizeOptionalText(input.GroupID),
 		HasGroupID:     input.HasGroupID,
 		UnitID:         input.UnitID,
@@ -1522,6 +1531,29 @@ func parseModbusConfigInt(value any) int {
 
 func modbusRegisterIssue(severity, code, registerID, registerName, message string) ModbusValidationIssue {
 	return ModbusValidationIssue{Severity: severity, Code: code, RegisterID: &registerID, RegisterName: registerName, Message: message}
+}
+
+func (s *ModbusModelingService) resolveBulkRegisterIDs(ctx context.Context, projectID, connectionID string, selection ModbusRegisterBulkSelection) ([]string, error) {
+	if selection.UseFilter {
+		return s.repository.ListRegisterIDsByFilter(ctx, projectID, connectionID, toRepositoryModbusRegisterFilter(selection.Filter))
+	}
+	return uniqueStrings(selection.IDs), nil
+}
+
+func toRepositoryModbusRegisterFilter(filter ModbusRegisterListFilter) repository.ModbusRegisterListFilter {
+	return repository.ModbusRegisterListFilter{
+		GroupID:      normalizeOptionalText(filter.GroupID),
+		Search:       strings.TrimSpace(filter.Search),
+		QuickFilter:  strings.TrimSpace(filter.QuickFilter),
+		UnitID:       filter.UnitID,
+		Area:         strings.TrimSpace(filter.Area),
+		AddressStart: filter.AddressStart,
+		AddressEnd:   filter.AddressEnd,
+		DataType:     strings.TrimSpace(filter.DataType),
+		SlaveEnabled: filter.SlaveEnabled,
+		SortBy:       strings.TrimSpace(filter.SortBy),
+		SortOrder:    strings.TrimSpace(filter.SortOrder),
+	}
 }
 
 func toModbusRegisterGroup(record repository.ModbusRegisterGroupRecord) ModbusRegisterGroup {

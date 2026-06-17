@@ -239,6 +239,8 @@ type BatchUpdateModbusRegistersParams struct {
 	ProjectID      string
 	ConnectionID   string
 	IDs            []string
+	Filter         ModbusRegisterListFilter
+	UseFilter      bool
 	GroupID        *string
 	HasGroupID     bool
 	UnitID         *int
@@ -702,6 +704,37 @@ func modbusRegisterOrderSQL(sortBy, sortOrder string) string {
 	return "r.sort_order ASC, r.created_at ASC"
 }
 
+// ListRegisterIDsByFilter 返回当前筛选条件匹配的 Modbus 变量 ID，用于“全部结果”批量操作。
+func (r *ModbusModelingRepository) ListRegisterIDsByFilter(ctx context.Context, projectID, connectionID string, filter ModbusRegisterListFilter) ([]string, error) {
+	where, args := buildModbusRegisterListWhere(projectID, connectionID, filter)
+	rows, err := r.pool.Query(ctx, `
+		SELECT r.id
+		FROM data_modbus_registers r
+		LEFT JOIN data_points dp
+		  ON dp.project_id = r.project_id
+		 AND dp.source_type = 'modbus.register'
+		 AND dp.source_id = r.id
+		WHERE `+where+`
+		ORDER BY `+modbusRegisterOrderSQL(filter.SortBy, filter.SortOrder), args...)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 Modbus 变量 ID 失败", err)
+	}
+	defer rows.Close()
+
+	ids := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if scanErr := rows.Scan(&id); scanErr != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 Modbus 变量 ID 失败", scanErr)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 Modbus 变量 ID 失败", err)
+	}
+	return ids, nil
+}
+
 // GetRegister 按项目和变量 ID 读取 Modbus 变量。
 func (r *ModbusModelingRepository) GetRegister(ctx context.Context, projectID, registerID string) (*ModbusRegisterRecord, error) {
 	row := r.pool.QueryRow(ctx, `
@@ -890,6 +923,13 @@ func (r *ModbusModelingRepository) DeleteRegistersBatch(ctx context.Context, pro
 // UpdateRegistersBatch 批量更新变量公共属性。
 func (r *ModbusModelingRepository) UpdateRegistersBatch(ctx context.Context, params BatchUpdateModbusRegistersParams) ([]ModbusRegisterRecord, error) {
 	ids := uniqueTrimmedModbusIDs(params.IDs)
+	if params.UseFilter {
+		matched, err := r.ListRegisterIDsByFilter(ctx, params.ProjectID, params.ConnectionID, params.Filter)
+		if err != nil {
+			return nil, err
+		}
+		ids = matched
+	}
 	if len(ids) == 0 {
 		return []ModbusRegisterRecord{}, nil
 	}

@@ -205,8 +205,8 @@
         <button type="button" class="modbus-workbench__bulk-action-btn" @click="selectCurrentPage">
           当前页
         </button>
-        <button type="button" class="modbus-workbench__bulk-action-btn" @click="selectLoadedResults">
-          已加载
+        <button type="button" class="modbus-workbench__bulk-action-btn" @click="selectAllResults">
+          全部结果
         </button>
         <button type="button" class="modbus-workbench__bulk-action-btn" @click="openBulkMoveDialog">
           移动分组
@@ -460,6 +460,7 @@ const selectedGroupId = ref('')
 const selectedSlaveId = ref('')
 const selectedRegisterId = ref('')
 const selectedRegisters = ref<ModbusRegister[]>([])
+const allRegisterResultsSelected = ref(false)
 const registerTableRef = ref<InstanceType<typeof ModbusRegisterTable> | null>(null)
 const sideView = ref<'groups' | 'slaves'>('groups')
 const registerKeyword = ref('')
@@ -535,7 +536,9 @@ const selectedRegister = computed(
   () => registers.value.find((item) => item.id === selectedRegisterId.value) || null,
 )
 const selectedRegisterIds = computed(() => selectedRegisters.value.map((item) => item.id).filter(Boolean))
-const selectedRegisterCount = computed(() => selectedRegisterIds.value.length)
+const selectedRegisterCount = computed(() =>
+  allRegisterResultsSelected.value ? registerPagination.value.total : selectedRegisterIds.value.length,
+)
 const nextSlaveUnitId = computed(() => {
   const used = new Set(slaves.value.map((slave) => slave.unitId))
   for (let unit = 1; unit <= 247; unit += 1) {
@@ -797,7 +800,7 @@ const selectGroup = async (groupId: string) => {
   selectedGroupId.value = groupId
   selectedSlaveId.value = ''
   selectedRegisterId.value = ''
-  selectedRegisters.value = []
+  clearRegisterSelection()
   registerPagination.value.page = 1
   await reloadAll()
 }
@@ -806,7 +809,7 @@ const selectSlave = async (slaveId: string) => {
   selectedSlaveId.value = slaveId
   selectedGroupId.value = ''
   selectedRegisterId.value = ''
-  selectedRegisters.value = []
+  clearRegisterSelection()
   registerPagination.value.page = 1
   await reloadAll()
 }
@@ -827,6 +830,9 @@ const changeRegisterPage = async (page: number) => {
 const changeRegisterPageSize = async (pageSize: number) => {
   registerPagination.value.page = 1
   registerPagination.value.pageSize = pageSize
+  if (!allRegisterResultsSelected.value) {
+    clearRegisterSelection()
+  }
   await reloadAll()
 }
 
@@ -837,6 +843,7 @@ const changeRegisterSort = async (payload: { prop?: string; order?: string | nul
       payload.order === 'descending' ? 'desc' : payload.order === 'ascending' ? 'asc' : undefined,
   }
   registerPagination.value.page = 1
+  clearRegisterSelection()
   await reloadAll()
 }
 
@@ -1009,29 +1016,57 @@ const removeRegister = async (register: ModbusRegister) => {
 }
 
 const handleRegisterSelectionChange = (rows: ModbusRegister[]) => {
-  selectedRegisters.value = rows
+  if (allRegisterResultsSelected.value) {
+    allRegisterResultsSelected.value = false
+  }
+  const visibleIds = new Set(registers.value.map((item) => item.id))
+  const retainedRows = selectedRegisters.value.filter((item) => !visibleIds.has(item.id))
+  selectedRegisters.value = [...retainedRows, ...(rows || [])]
 }
 
 const clearRegisterSelection = () => {
+  allRegisterResultsSelected.value = false
   selectedRegisters.value = []
   registerTableRef.value?.clearSelection()
 }
 
 const selectCurrentPage = async () => {
+  allRegisterResultsSelected.value = false
   selectedRegisters.value = [...registers.value]
   await registerTableRef.value?.syncSelection()
 }
 
-const selectLoadedResults = async () => {
+const selectAllResults = async () => {
+  allRegisterResultsSelected.value = true
   selectedRegisters.value = [...registers.value]
   await registerTableRef.value?.syncSelection()
+}
+
+const currentRegisterFilterPayload = () => ({
+  groupId: selectedGroupId.value || undefined,
+  unitId: selectedSlave.value?.unitId || undefined,
+  search: registerKeyword.value.trim(),
+  filter: quickFilter.value === 'all' ? '' : quickFilter.value,
+  sortBy: registerSort.value.sortBy || '',
+  sortOrder: registerSort.value.sortOrder || '',
+})
+
+const reloadAfterRegisterBatchMutation = async () => {
+  await reloadAll()
+  if (registerPagination.value.page > 1 && registers.value.length === 0 && registerPagination.value.total > 0) {
+    registerPagination.value.page -= 1
+    await reloadAll()
+  }
 }
 
 const removeSelectedRegisters = async () => {
   if (selectedRegisterCount.value === 0) return
+  const deleteCount = selectedRegisterCount.value
   try {
     await ElMessageBox.confirm(
-      `确定要删除选中的 ${selectedRegisterCount.value} 个变量吗？对应数据点将标记为失效。`,
+      allRegisterResultsSelected.value
+        ? `确定要删除当前筛选结果中的 ${deleteCount} 个变量吗？对应数据点将标记为失效。`
+        : `确定要删除选中的 ${deleteCount} 个变量吗？对应数据点将标记为失效。`,
       '批量删除确认',
       {
         type: 'warning',
@@ -1044,12 +1079,19 @@ const removeSelectedRegisters = async () => {
   }
   saving.value = true
   try {
-    await dataAPI.batchDeleteModbusRegisters(props.projectId, props.connection.id, {
-      ids: selectedRegisterIds.value,
-    })
-    ElMessage.success(`已删除 ${selectedRegisterCount.value} 个变量`)
+    const response = allRegisterResultsSelected.value
+      ? await dataAPI.deleteModbusRegistersByFilter(
+          props.projectId,
+          props.connection.id,
+          currentRegisterFilterPayload(),
+        )
+      : await dataAPI.batchDeleteModbusRegisters(props.projectId, props.connection.id, {
+          ids: selectedRegisterIds.value,
+        })
+    const count = Number(response?.data?.count ?? response?.data?.data?.count ?? deleteCount)
+    ElMessage.success(`已删除 ${count} 个变量`)
     clearRegisterSelection()
-    await reloadAll()
+    await reloadAfterRegisterBatchMutation()
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '批量删除失败'))
   } finally {
@@ -1067,14 +1109,23 @@ const moveSelectedRegisters = async () => {
   if (selectedRegisterCount.value === 0) return
   saving.value = true
   try {
-    await dataAPI.batchMoveModbusRegistersGroup(props.projectId, props.connection.id, {
-      ids: selectedRegisterIds.value,
-      groupId: bulkMoveGroupId.value || null,
-    })
-    ElMessage.success(`已移动 ${selectedRegisterCount.value} 个变量`)
+    const groupId = bulkMoveGroupId.value || null
+    const response = allRegisterResultsSelected.value
+      ? await dataAPI.moveModbusRegistersByFilter(
+          props.projectId,
+          props.connection.id,
+          currentRegisterFilterPayload(),
+          groupId,
+        )
+      : await dataAPI.batchMoveModbusRegistersGroup(props.projectId, props.connection.id, {
+          ids: selectedRegisterIds.value,
+          groupId,
+        })
+    const count = Number(response?.data?.count ?? response?.data?.data?.count ?? selectedRegisterCount.value)
+    ElMessage.success(`已移动 ${count} 个变量`)
     bulkMoveVisible.value = false
     clearRegisterSelection()
-    await reloadAll()
+    await reloadAfterRegisterBatchMutation()
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '批量移动失败'))
   } finally {
@@ -1094,8 +1145,9 @@ const openBulkUpdate = async () => {
   } catch {
     return
   }
-  const payload: Record<string, unknown> = {
-    ids: selectedRegisterIds.value,
+  const payload: Record<string, unknown> = {}
+  if (!allRegisterResultsSelected.value) {
+    payload.ids = selectedRegisterIds.value
   }
   String(value || '')
     .split(',')
@@ -1110,10 +1162,18 @@ const openBulkUpdate = async () => {
     })
   saving.value = true
   try {
-    await dataAPI.batchUpdateModbusRegisters(props.projectId, props.connection.id, payload)
-    ElMessage.success(`已修改 ${selectedRegisterCount.value} 个变量`)
+    const response = allRegisterResultsSelected.value
+      ? await dataAPI.updateModbusRegistersByFilter(
+          props.projectId,
+          props.connection.id,
+          currentRegisterFilterPayload(),
+          payload,
+        )
+      : await dataAPI.batchUpdateModbusRegisters(props.projectId, props.connection.id, payload)
+    const count = Number(response?.data?.count ?? response?.data?.data?.count ?? selectedRegisterCount.value)
+    ElMessage.success(`已修改 ${count} 个变量`)
     clearRegisterSelection()
-    await reloadAll()
+    await reloadAfterRegisterBatchMutation()
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '批量修改失败'))
   } finally {

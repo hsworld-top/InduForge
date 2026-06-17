@@ -901,6 +901,14 @@ export const batchDeleteModbusRegisters = (projectId, connectionId, data) => {
   })
 }
 
+export const deleteModbusRegistersByFilter = (projectId, connectionId, filter = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/registers/delete-filtered`,
+    method: 'post',
+    data: { filter },
+  })
+}
+
 export const batchMoveModbusRegistersGroup = (projectId, connectionId, data) => {
   return request({
     url: `/data/projects/${projectId}/modbus/${connectionId}/registers/batch-move-group`,
@@ -909,11 +917,27 @@ export const batchMoveModbusRegistersGroup = (projectId, connectionId, data) => 
   })
 }
 
+export const moveModbusRegistersByFilter = (projectId, connectionId, filter = {}, groupId = null) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/registers/move-filtered`,
+    method: 'post',
+    data: { filter, groupId },
+  })
+}
+
 export const batchUpdateModbusRegisters = (projectId, connectionId, data) => {
   return request({
     url: `/data/projects/${projectId}/modbus/${connectionId}/registers/batch-update`,
     method: 'post',
     data,
+  })
+}
+
+export const updateModbusRegistersByFilter = (projectId, connectionId, filter = {}, data = {}) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/registers/update-filtered`,
+    method: 'post',
+    data: { filter, ...data },
   })
 }
 
@@ -2134,8 +2158,11 @@ export default {
   createModbusRegister,
   batchImportModbusRegisters,
   batchDeleteModbusRegisters,
+  deleteModbusRegistersByFilter,
   batchMoveModbusRegistersGroup,
+  moveModbusRegistersByFilter,
   batchUpdateModbusRegisters,
+  updateModbusRegistersByFilter,
   updateModbusRegister,
   deleteModbusRegister,
   validateModbusModel,
