@@ -54,7 +54,7 @@
           :total="registers.length"
           background
           layout="total, sizes, prev, pager, next"
-          small
+          size="small"
         />
       </div>
     </div>

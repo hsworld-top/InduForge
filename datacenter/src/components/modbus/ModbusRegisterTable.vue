@@ -114,7 +114,7 @@
         :total="total"
         background
         layout="total, sizes, prev, pager, next, jumper"
-        small
+        size="small"
         @current-change="$emit('page-change', $event)"
         @size-change="$emit('page-size-change', $event)"
       />

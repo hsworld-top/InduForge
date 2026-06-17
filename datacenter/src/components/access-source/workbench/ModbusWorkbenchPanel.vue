@@ -502,6 +502,11 @@ const previewActionTitle = computed(() =>
       : '预览全部变量'
     : '连接后可预览当前分组变量',
 )
+const previewScopeLabel = computed(() => {
+  if (selectedSlave.value) return `当前从站：${selectedSlave.value.name}`
+  if (currentGroup.value) return `当前分组：${currentGroup.value.name}`
+  return '全部变量'
+})
 const validationActionTitle = computed(() =>
   selectedRegister.value
     ? `校验当前变量：${selectedRegister.value.name}`

@@ -191,8 +191,8 @@
         >
           <el-table-column label="状态" width="78" fixed>
             <template #default="{ row }">
-              <el-tag size="small" :type="row.issue ? 'warning' : 'success'">
-                {{ row.issue ? '检查' : '可导入' }}
+              <el-tag size="small" :type="rowIssue(row) ? 'warning' : 'success'">
+                {{ rowIssue(row) ? '检查' : '可导入' }}
               </el-tag>
             </template>
           </el-table-column>
@@ -233,7 +233,9 @@
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column prop="protocolAddress" label="协议地址" width="92" />
+          <el-table-column label="协议地址" width="92">
+            <template #default="{ row }">{{ rowProtocolAddress(row) }}</template>
+          </el-table-column>
           <el-table-column label="类型" width="112">
             <template #default="{ row }">
               <el-input v-model="row.dataType" size="small" />
@@ -245,14 +247,14 @@
             </template>
           </el-table-column>
           <el-table-column label="问题" min-width="160" show-overflow-tooltip>
-            <template #default="{ row }">{{ row.issue || '-' }}</template>
+            <template #default="{ row }">{{ rowIssue(row) || '-' }}</template>
           </el-table-column>
         </el-table>
         <div class="modbus-import__pager">
           <el-pagination
             v-model:current-page="confirmPage"
             v-model:page-size="confirmPageSize"
-            small
+            size="small"
             layout="total, sizes, prev, pager, next"
             :page-sizes="[50, 100, 200]"
             :total="displayRows.length"
@@ -357,7 +359,6 @@ const confirmPage = ref(1)
 const confirmPageSize = ref(50)
 const confirmPreparing = ref(false)
 const confirmRows = ref<ModbusImportPreviewRow[]>([])
-const validatingRows = ref(false)
 const selectedDefaultGroupId = ref('')
 const selectedDefaultUnitId = ref(1)
 const defaultByteOrder = ref('ABCD')
@@ -418,16 +419,20 @@ const candidateCount = computed(() =>
 const pasteSourceSummary = computed(() =>
   fileRows.value.length > 0 ? `${fileRows.value.length} 行文件数据` : `${sourceRows.value.length} 行粘贴数据`,
 )
+const validatedRows = computed(() => validateRows(confirmRows.value))
+const validatedRowMap = computed(
+  () => new Map(validatedRows.value.map((row) => [row.rowNo, row])),
+)
 const displayRows = computed(() =>
-  onlyIssues.value ? confirmRows.value.filter((row) => row.issue) : confirmRows.value,
+  onlyIssues.value ? confirmRows.value.filter((row) => rowIssue(row)) : confirmRows.value,
 )
 const pagedDisplayRows = computed(() => {
   const start = (confirmPage.value - 1) * confirmPageSize.value
   return displayRows.value.slice(start, start + confirmPageSize.value)
 })
-const issueRows = computed(() => confirmRows.value.filter((row) => row.issue))
+const issueRows = computed(() => validatedRows.value.filter((row) => row.issue))
 const validRows = computed(() =>
-  confirmRows.value
+  validatedRows.value
     .filter((row) => !row.issue)
     .map((row) => ({
       name: row.name,
@@ -549,14 +554,6 @@ watch([mode, pasteText, fileRows, range], () => {
   if (step.value !== 'pick') return
   confirmRows.value = []
 })
-
-watch(
-  confirmRows,
-  () => {
-    validateConfirmRows()
-  },
-  { deep: true },
-)
 
 async function handleFileChange(uploadFile: UploadFile) {
   const raw = uploadFile.raw
@@ -705,14 +702,17 @@ function validateRows(rows: ModbusImportPreviewRow[]) {
   })
 }
 
-function validateConfirmRows() {
-  if (validatingRows.value) return
-  validatingRows.value = true
-  try {
-    confirmRows.value = validateRows(confirmRows.value)
-  } finally {
-    validatingRows.value = false
-  }
+function validatedRow(row: ModbusImportPreviewRow) {
+  return validatedRowMap.value.get(row.rowNo) || row
+}
+
+function rowIssue(row: ModbusImportPreviewRow) {
+  return validatedRow(row).issue
+}
+
+function rowProtocolAddress(row: ModbusImportPreviewRow) {
+  const value = validatedRow(row).protocolAddress
+  return Number.isNaN(value) ? '-' : value
 }
 
 async function goConfirm() {
@@ -728,7 +728,6 @@ async function goConfirm() {
       mode.value === 'range'
         ? buildRangeRows()
         : sourceRows.value.map((row, index) => buildPreviewRow(row, index))
-    validateConfirmRows()
     confirmPage.value = 1
     onlyIssues.value = false
     step.value = 'confirm'
