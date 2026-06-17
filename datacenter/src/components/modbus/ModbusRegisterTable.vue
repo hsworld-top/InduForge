@@ -1,6 +1,7 @@
 <template>
   <div class="modbus-register-table">
     <el-table
+      ref="tableRef"
       class="modbus-register-table__grid"
       :data="registers"
       :loading="loading"
@@ -11,10 +12,10 @@
       empty-text="暂无 Modbus 变量"
       @row-click="(row) => $emit('select', row)"
       @row-contextmenu="(row, _column, event) => $emit('row-contextmenu', event, row)"
-      @selection-change="(rows) => $emit('selection-change', rows)"
+      @selection-change="handleSelectionChange"
       @sort-change="(payload) => $emit('sort-change', payload)"
     >
-      <el-table-column type="selection" width="44" />
+      <el-table-column type="selection" width="44" reserve-selection />
       <el-table-column label="变量" min-width="190" prop="name" sortable="custom">
         <template #default="{ row }">
           <span class="modbus-register-table__text">{{ row.name }}</span>
@@ -131,6 +132,8 @@
 </template>
 
 <script setup lang="ts">
+import { nextTick, ref, watch } from 'vue'
+import type { TableInstance } from 'element-plus'
 import type { ModbusRegister } from './types'
 import IconTablerCopy from '~icons/tabler/copy'
 import IconTablerEye from '~icons/tabler/eye'
@@ -141,13 +144,14 @@ const props = defineProps<{
   registers: ModbusRegister[]
   loading?: boolean
   selectedRegisterId?: string
+  selectedIds?: string[]
   page: number
   pageSize: number
   total: number
   groupFormatter?: (groupId?: string | null) => string
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (event: 'select', register: ModbusRegister): void
   (event: 'detail', register: ModbusRegister): void
   (event: 'duplicate', register: ModbusRegister): void
@@ -159,6 +163,44 @@ defineEmits<{
   (event: 'page-size-change', pageSize: number): void
   (event: 'sort-change', payload: { prop?: string; order?: string | null }): void
 }>()
+
+const tableRef = ref<TableInstance | null>(null)
+const syncingSelection = ref(false)
+
+watch(
+  () => [props.registers, props.selectedIds] as const,
+  () => {
+    void syncSelection()
+  },
+  { deep: true },
+)
+
+async function syncSelection() {
+  await nextTick()
+  const table = tableRef.value
+  if (!table) return
+  syncingSelection.value = true
+  table.clearSelection()
+  const selected = new Set(props.selectedIds || [])
+  props.registers.forEach((register) => {
+    if (selected.has(register.id)) {
+      table.toggleRowSelection(register, true)
+    }
+  })
+  await nextTick()
+  syncingSelection.value = false
+}
+
+function handleSelectionChange(rows: ModbusRegister[]) {
+  if (syncingSelection.value) return
+  emit('selection-change', rows || [])
+}
+
+function clearSelection() {
+  tableRef.value?.clearSelection()
+}
+
+defineExpose({ clearSelection, syncSelection })
 
 const formatArea = (area: string) => {
   const map: Record<string, string> = {

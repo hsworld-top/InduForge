@@ -181,9 +181,11 @@
         </div>
       </div>
       <ModbusRegisterTable
+        ref="registerTableRef"
         :registers="registers"
         :loading="loading"
         :selected-register-id="selectedRegisterId"
+        :selected-ids="selectedRegisterIds"
         :page="registerPagination.page"
         :page-size="registerPagination.pageSize"
         :total="registerPagination.total"
@@ -199,12 +201,27 @@
         @sort-change="changeRegisterSort"
         :group-formatter="groupPathOf"
       />
-      <div v-if="selectedRegisters.length > 0" class="modbus-workbench__bulk-bar">
-        <span>已选 {{ selectedRegisters.length }} 个变量</span>
-        <button type="button" @click="openBulkMoveGroup">移动分组</button>
-        <button type="button" @click="openBulkUpdate">批量修改</button>
-        <button type="button" class="is-danger" @click="removeSelectedRegisters">批量删除</button>
-      </div>
+      <BulkActionBar :selected-count="selectedRegisterCount" @clear="clearRegisterSelection">
+        <button type="button" class="modbus-workbench__bulk-action-btn" @click="selectCurrentPage">
+          当前页
+        </button>
+        <button type="button" class="modbus-workbench__bulk-action-btn" @click="selectLoadedResults">
+          已加载
+        </button>
+        <button type="button" class="modbus-workbench__bulk-action-btn" @click="openBulkMoveDialog">
+          移动分组
+        </button>
+        <button type="button" class="modbus-workbench__bulk-action-btn" @click="openBulkUpdate">
+          批量修改
+        </button>
+        <button
+          type="button"
+          class="modbus-workbench__bulk-action-btn is-danger"
+          @click="removeSelectedRegisters"
+        >
+          删除选中
+        </button>
+      </BulkActionBar>
     </main>
 
     <el-drawer
@@ -270,6 +287,32 @@
       :loading="saving"
       @submit="saveSlave"
     />
+    <DcDialog
+      v-model="bulkMoveVisible"
+      title="移动变量分组"
+      width="420px"
+      :confirm-on-dirty-close="false"
+      class="modbus-workbench__move-dialog"
+    >
+      <div class="modbus-workbench__move-form">
+        <div class="modbus-workbench__move-summary">
+          将移动 {{ selectedRegisterCount }} 个变量
+        </div>
+        <el-select v-model="bulkMoveGroupId" filterable clearable placeholder="未分组">
+          <el-option label="未分组" value="" />
+          <el-option
+            v-for="option in groupSelectOptions"
+            :key="option.id"
+            :label="option.label"
+            :value="option.id"
+          />
+        </el-select>
+      </div>
+      <template #footer>
+        <el-button :disabled="saving" @click="bulkMoveVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="moveSelectedRegisters">移动</el-button>
+      </template>
+    </DcDialog>
     <ModbusImportDialog
       ref="importDialogRef"
       v-model="importVisible"
@@ -344,6 +387,8 @@ import { getApiErrorMessage } from '@/utils/request'
 import { downloadCsv, downloadXlsx } from '@/utils/tabular-file'
 import { useProtocolDevSession } from './useProtocolDevSession'
 import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.vue'
+import BulkActionBar from '@/components/shared/BulkActionBar.vue'
+import DcDialog from '@/components/shared/DcDialog.vue'
 import PillButton from '@/components/shared/PillButton.vue'
 import ModbusGroupDialog from '@/components/modbus/ModbusGroupDialog.vue'
 import ModbusGroupTree from '@/components/modbus/ModbusGroupTree.vue'
@@ -415,6 +460,7 @@ const selectedGroupId = ref('')
 const selectedSlaveId = ref('')
 const selectedRegisterId = ref('')
 const selectedRegisters = ref<ModbusRegister[]>([])
+const registerTableRef = ref<InstanceType<typeof ModbusRegisterTable> | null>(null)
 const sideView = ref<'groups' | 'slaves'>('groups')
 const registerKeyword = ref('')
 const groupDialogVisible = ref(false)
@@ -426,6 +472,8 @@ const registerDialogVisible = ref(false)
 const registerDialogRef = ref<InstanceType<typeof ModbusRegisterDialog> | null>(null)
 const registerDialogMode = ref<'create' | 'edit'>('create')
 const editingRegister = ref<ModbusRegister | null>(null)
+const bulkMoveVisible = ref(false)
+const bulkMoveGroupId = ref('')
 const slaveDialogVisible = ref(false)
 const slaveDialogMode = ref<'create' | 'edit'>('create')
 const editingSlave = ref<ModbusSlaveDevice | null>(null)
@@ -479,12 +527,15 @@ const sourceMetaRows = computed(() => [
 const currentGroup = computed(
   () => groups.value.find((group) => group.id === selectedGroupId.value) || null,
 )
+const groupSelectOptions = computed(() => flattenRegisterGroupOptions(groups.value))
 const selectedSlave = computed(
   () => slaves.value.find((slave) => slave.id === selectedSlaveId.value) || null,
 )
 const selectedRegister = computed(
   () => registers.value.find((item) => item.id === selectedRegisterId.value) || null,
 )
+const selectedRegisterIds = computed(() => selectedRegisters.value.map((item) => item.id).filter(Boolean))
+const selectedRegisterCount = computed(() => selectedRegisterIds.value.length)
 const nextSlaveUnitId = computed(() => {
   const used = new Set(slaves.value.map((slave) => slave.unitId))
   for (let unit = 1; unit <= 247; unit += 1) {
@@ -961,40 +1012,90 @@ const handleRegisterSelectionChange = (rows: ModbusRegister[]) => {
   selectedRegisters.value = rows
 }
 
-const removeSelectedRegisters = async () => {
-  await ElMessageBox.confirm(
-    `删除选中的 ${selectedRegisters.value.length} 个变量？对应数据点将标记为失效。`,
-    '批量删除变量',
-  )
-  await dataAPI.batchDeleteModbusRegisters(props.projectId, props.connection.id, {
-    ids: selectedRegisters.value.map((item) => item.id),
-  })
+const clearRegisterSelection = () => {
   selectedRegisters.value = []
-  await reloadAll()
+  registerTableRef.value?.clearSelection()
 }
 
-const openBulkMoveGroup = async () => {
-  const options = groups.value.map((group) => `${group.name}=${group.id}`).join('\n')
-  const { value } = await ElMessageBox.prompt(
-    `请输入目标分组 ID，留空移动到未分组。\n${options}`,
-    '批量移动分组',
-    { inputValue: selectedGroupId.value || '' },
-  )
-  await dataAPI.batchMoveModbusRegistersGroup(props.projectId, props.connection.id, {
-    ids: selectedRegisters.value.map((item) => item.id),
-    groupId: String(value || '').trim() || null,
-  })
-  selectedRegisters.value = []
-  await reloadAll()
+const selectCurrentPage = async () => {
+  selectedRegisters.value = [...registers.value]
+  await registerTableRef.value?.syncSelection()
+}
+
+const selectLoadedResults = async () => {
+  selectedRegisters.value = [...registers.value]
+  await registerTableRef.value?.syncSelection()
+}
+
+const removeSelectedRegisters = async () => {
+  if (selectedRegisterCount.value === 0) return
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedRegisterCount.value} 个变量吗？对应数据点将标记为失效。`,
+      '批量删除确认',
+      {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+      },
+    )
+  } catch {
+    return
+  }
+  saving.value = true
+  try {
+    await dataAPI.batchDeleteModbusRegisters(props.projectId, props.connection.id, {
+      ids: selectedRegisterIds.value,
+    })
+    ElMessage.success(`已删除 ${selectedRegisterCount.value} 个变量`)
+    clearRegisterSelection()
+    await reloadAll()
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '批量删除失败'))
+  } finally {
+    saving.value = false
+  }
+}
+
+const openBulkMoveDialog = () => {
+  if (selectedRegisterCount.value === 0) return
+  bulkMoveGroupId.value = selectedGroupId.value || ''
+  bulkMoveVisible.value = true
+}
+
+const moveSelectedRegisters = async () => {
+  if (selectedRegisterCount.value === 0) return
+  saving.value = true
+  try {
+    await dataAPI.batchMoveModbusRegistersGroup(props.projectId, props.connection.id, {
+      ids: selectedRegisterIds.value,
+      groupId: bulkMoveGroupId.value || null,
+    })
+    ElMessage.success(`已移动 ${selectedRegisterCount.value} 个变量`)
+    bulkMoveVisible.value = false
+    clearRegisterSelection()
+    await reloadAll()
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '批量移动失败'))
+  } finally {
+    saving.value = false
+  }
 }
 
 const openBulkUpdate = async () => {
-  const { value } = await ElMessageBox.prompt(
-    '输入批量修改内容，格式：unitId=1,pollIntervalMs=1000,byteOrder=ABCD,wordOrder=high_first',
-    '批量修改变量',
-  )
+  if (selectedRegisterCount.value === 0) return
+  let value = ''
+  try {
+    const result = await ElMessageBox.prompt(
+      '输入批量修改内容，格式：unitId=1,pollIntervalMs=1000,byteOrder=ABCD,wordOrder=high_first',
+      '批量修改变量',
+    )
+    value = String(result.value || '')
+  } catch {
+    return
+  }
   const payload: Record<string, unknown> = {
-    ids: selectedRegisters.value.map((item) => item.id),
+    ids: selectedRegisterIds.value,
   }
   String(value || '')
     .split(',')
@@ -1007,9 +1108,17 @@ const openBulkUpdate = async () => {
       if (key === 'unitId' || key === 'pollIntervalMs') payload[key] = Number(valueText)
       else payload[key] = valueText
     })
-  await dataAPI.batchUpdateModbusRegisters(props.projectId, props.connection.id, payload)
-  selectedRegisters.value = []
-  await reloadAll()
+  saving.value = true
+  try {
+    await dataAPI.batchUpdateModbusRegisters(props.projectId, props.connection.id, payload)
+    ElMessage.success(`已修改 ${selectedRegisterCount.value} 个变量`)
+    clearRegisterSelection()
+    await reloadAll()
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '批量修改失败'))
+  } finally {
+    saving.value = false
+  }
 }
 
 const importRegisters = async (
@@ -1182,6 +1291,25 @@ function groupPathOf(groupId?: string | null) {
     currentId = group.parentId || ''
   }
   return segments.join('/') || '未分组'
+}
+
+function flattenRegisterGroupOptions(sourceGroups: ModbusRegisterGroup[]) {
+  const childrenByParent = new Map<string, ModbusRegisterGroup[]>()
+  sourceGroups.forEach((group) => {
+    const parentId = group.parentId || ''
+    childrenByParent.set(parentId, [...(childrenByParent.get(parentId) || []), group])
+  })
+  const visit = (parentId: string, depth: number): Array<{ id: string; label: string }> => {
+    const children = [...(childrenByParent.get(parentId) || [])].sort(
+      (left, right) =>
+        (left.sortOrder || 0) - (right.sortOrder || 0) || left.name.localeCompare(right.name),
+    )
+    return children.flatMap((group) => [
+      { id: group.id, label: `${'　'.repeat(depth)}${group.name}` },
+      ...visit(group.id, depth + 1),
+    ])
+  }
+  return visit('', 0)
 }
 
 function formatModbusAddress(register: ModbusRegister) {
@@ -1448,43 +1576,54 @@ onMounted(() => {
   height: 15px;
 }
 
-.modbus-workbench__bulk-bar {
-  position: absolute;
-  left: 18px;
-  right: 18px;
-  bottom: 16px;
-  z-index: 3;
-  min-height: 42px;
-  border: 1px solid color-mix(in oklch, var(--dc-primary) 26%, var(--dc-border));
-  border-radius: var(--dc-radius-md);
-  background: var(--dc-surface-raised);
-  box-shadow: var(--dc-shadow-floating);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-}
-
-.modbus-workbench__bulk-bar span {
-  margin-right: auto;
-  color: var(--dc-text);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.modbus-workbench__bulk-bar button {
+.modbus-workbench__bulk-action-btn {
+  max-width: 96px;
   height: 28px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 10px;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface);
+  background: var(--dc-surface-raised);
   color: var(--dc-text);
-  padding: 0 10px;
   cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
 }
 
-.modbus-workbench__bulk-bar button.is-danger {
+.modbus-workbench__bulk-action-btn:hover {
+  border-color: rgba(29, 78, 216, 0.26);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+}
+
+.modbus-workbench__bulk-action-btn.is-danger:hover {
+  border-color: rgba(220, 38, 38, 0.26);
+  background: rgba(220, 38, 38, 0.08);
   color: var(--dc-danger);
-  border-color: rgba(220, 38, 38, 0.3);
+}
+
+.modbus-workbench__move-form {
+  display: grid;
+  gap: 12px;
+}
+
+.modbus-workbench__move-summary {
+  padding: 8px 10px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-subtle);
+  color: var(--dc-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .modbus-workbench__search {
