@@ -77,10 +77,12 @@
         <div class="modbus-import-dialog__range">
           <el-input-number v-model="range.unitId" :min="0" :max="247" />
           <el-select v-model="range.area">
-            <el-option label="Holding Register" value="holding_register" />
-            <el-option label="Input Register" value="input_register" />
-            <el-option label="Coil" value="coil" />
-            <el-option label="Discrete Input" value="discrete_input" />
+            <el-option
+              v-for="option in areaOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
           </el-select>
           <el-input-number v-model="range.startAddress" :min="0" />
           <el-input-number v-model="range.count" :min="1" :max="500" />
@@ -103,7 +105,9 @@
       </el-table-column>
       <el-table-column prop="name" label="变量名" />
       <el-table-column prop="unitId" label="从站" width="70" />
-      <el-table-column prop="area" label="区域" width="130" />
+      <el-table-column label="区域" width="112">
+        <template #default="{ row }">{{ formatArea(row.area) }}</template>
+      </el-table-column>
       <el-table-column prop="address" label="地址" width="90" />
       <el-table-column prop="protocolAddress" label="协议地址" width="92" />
       <el-table-column prop="dataType" label="类型" width="90" />
@@ -171,6 +175,12 @@ const defaultByteOrder = ref('ABCD')
 const defaultPollIntervalMs = ref(1000)
 const invalidVariableNamePattern = /[^\u4e00-\u9fa5A-Za-z0-9_$#%@+()[\]&-]/g
 const validVariableNamePattern = /^[\u4e00-\u9fa5A-Za-z0-9_$#%@+()[\]&-]+$/
+const areaOptions = [
+  { label: '保持寄存器', value: 'holding_register' },
+  { label: '输入寄存器', value: 'input_register' },
+  { label: '线圈', value: 'coil' },
+  { label: '离散输入', value: 'discrete_input' },
+]
 const range = reactive({
   unitId: 1,
   area: 'holding_register',
@@ -469,6 +479,10 @@ function normalizeArea(value: string) {
     return 'discrete_input'
   if (['input_register', 'input register', '3x', '30001'].includes(text)) return 'input_register'
   return 'holding_register'
+}
+
+function formatArea(area: string) {
+  return areaOptions.find((option) => option.value === area)?.label || area
 }
 
 function normalizeAddressBase(value: string) {

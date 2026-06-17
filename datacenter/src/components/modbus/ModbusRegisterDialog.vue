@@ -49,12 +49,30 @@
               </el-option>
             </el-select>
           </el-form-item>
-          <el-form-item label="区域">
+          <el-form-item>
+            <template #label>
+              <span class="modbus-register-dialog__label">
+                区域
+                <el-tooltip
+                  content="选择 Modbus 数据区：线圈/保持寄存器通常可读写；离散输入/输入寄存器通常只读。"
+                  placement="top"
+                >
+                  <IconTablerInfoCircle />
+                </el-tooltip>
+              </span>
+            </template>
             <el-select v-model="form.area" @change="applyAreaDefaults">
-              <el-option label="Holding Register" value="holding_register" />
-              <el-option label="Input Register" value="input_register" />
-              <el-option label="Coil" value="coil" />
-              <el-option label="Discrete Input" value="discrete_input" />
+              <el-option
+                v-for="option in areaOptions"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
+              >
+                <span class="modbus-register-dialog__option">
+                  <span>{{ option.label }}</span>
+                  <em>{{ option.hint }}</em>
+                </span>
+              </el-option>
             </el-select>
           </el-form-item>
           <el-form-item label="用户地址"
@@ -249,6 +267,12 @@ const addressBaseOptions = [
   { label: 'Modicon 地址（40001/30001）', value: 'modicon', hint: '常见 PLC 文档写法' },
   { label: '从 1 开始', value: 'one_based', hint: '用户地址 1 对应协议地址 0' },
   { label: '从 0 开始', value: 'zero_based', hint: '用户地址就是协议地址' },
+]
+const areaOptions = [
+  { label: '保持寄存器', value: 'holding_register', hint: 'Holding Register，可读写数值' },
+  { label: '输入寄存器', value: 'input_register', hint: 'Input Register，只读数值' },
+  { label: '线圈', value: 'coil', hint: 'Coil，可读写开关量' },
+  { label: '离散输入', value: 'discrete_input', hint: 'Discrete Input，只读开关量' },
 ]
 const byteOrderOptions = [
   { label: 'ABCD（默认）', value: 'ABCD' },

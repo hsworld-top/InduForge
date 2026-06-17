@@ -15,112 +15,50 @@
       @sort-change="(payload) => $emit('sort-change', payload)"
     >
       <el-table-column type="selection" width="44" />
-      <el-table-column label="变量名" min-width="150" prop="name" sortable="custom">
+      <el-table-column label="变量" min-width="190" prop="name" sortable="custom">
         <template #default="{ row }">
           <div class="modbus-register-table__name">
             <strong>{{ row.name }}</strong>
+            <span>{{ formatGroup(row.groupId) }}</span>
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="从站" width="76" prop="unitId" sortable="custom">
+      <el-table-column label="从站" width="72" prop="unitId" sortable="custom">
         <template #default="{ row }">
           <span class="modbus-register-table__unit">{{ row.unitId }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="区域" min-width="128" prop="area" sortable="custom">
-        <template #default="{ row }">
-          <span class="modbus-register-table__area" :data-area="row.area">{{
-            formatArea(row.area)
-          }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="地址" width="126" prop="address" sortable="custom">
+      <el-table-column label="地址" min-width="172" prop="address" sortable="custom">
         <template #default="{ row }">
           <div class="modbus-register-table__address">
+            <span class="modbus-register-table__area" :data-area="row.area">{{
+              formatArea(row.area)
+            }}</span>
             <strong>{{ row.address }}</strong>
             <span>协议 {{ row.protocolAddress }}</span>
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="类型" width="92" prop="dataType" sortable="custom">
+      <el-table-column label="类型" width="88" prop="dataType" sortable="custom">
         <template #default="{ row }">
           <span class="modbus-register-table__type">{{ row.dataType }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="字节序" width="86">
-        <template #default="{ row }"
-          >{{ row.byteOrder || '-' }}/{{ row.wordOrder || '-' }}</template
-        >
-      </el-table-column>
-      <el-table-column label="周期" width="92" prop="pollIntervalMs" sortable="custom">
-        <template #default="{ row }">{{ row.pollIntervalMs }}ms</template>
-      </el-table-column>
-      <el-table-column label="分组" min-width="120">
+      <el-table-column label="采集" width="112" prop="pollIntervalMs" sortable="custom">
         <template #default="{ row }">
-          <span class="modbus-register-table__path">{{ formatGroup(row.groupId) }}</span>
+          <div class="modbus-register-table__collect">
+            <strong>{{ row.pollIntervalMs }}ms</strong>
+            <span :class="{ 'is-muted': row.status !== 'active' }">{{
+              formatStatus(row.status)
+            }}</span>
+          </div>
         </template>
       </el-table-column>
-      <el-table-column label="数据点" min-width="170">
+      <el-table-column label="最近值" width="116">
         <template #default="{ row }">
-          <span class="modbus-register-table__path">{{ row.datapointPath || '-' }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="最近值" width="90">
-        <template #default="{ row }">{{ row.lastValue ?? '-' }}</template>
-      </el-table-column>
-      <el-table-column label="质量" width="84">
-        <template #default="{ row }">
-          <el-tag size="small" :type="row.quality === 'Good' ? 'success' : 'info'">{{
-            row.quality || 'unknown'
-          }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" width="86" prop="status" sortable="custom">
-        <template #default="{ row }">
-          <el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{
-            row.status
-          }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="160" fixed="right">
-        <template #default="{ row }">
-          <div class="modbus-register-table__actions">
-            <el-tooltip content="查看详情" placement="top">
-              <button
-                type="button"
-                title="查看详情"
-                aria-label="查看详情"
-                @click.stop="$emit('detail', row)"
-              >
-                <IconTablerEye />
-              </button>
-            </el-tooltip>
-            <el-tooltip content="复制为新变量" placement="top">
-              <button
-                type="button"
-                title="复制为新变量"
-                aria-label="复制为新变量"
-                @click.stop="$emit('duplicate', row)"
-              >
-                <IconTablerCopy />
-              </button>
-            </el-tooltip>
-            <el-tooltip content="编辑" placement="top">
-              <button type="button" title="编辑" aria-label="编辑" @click.stop="$emit('edit', row)">
-                <IconTablerPencil />
-              </button>
-            </el-tooltip>
-            <el-tooltip content="删除" placement="top">
-              <button
-                type="button"
-                title="删除"
-                aria-label="删除"
-                class="is-danger"
-                @click.stop="$emit('delete', row)"
-              >
-                <IconTablerTrash />
-              </button>
-            </el-tooltip>
+          <div class="modbus-register-table__value">
+            <strong>{{ formatValue(row.lastValue) }}</strong>
+            <span>{{ formatQuality(row.quality) }}</span>
           </div>
         </template>
       </el-table-column>
@@ -143,10 +81,6 @@
 
 <script setup lang="ts">
 import type { ModbusRegister } from './types'
-import IconTablerCopy from '~icons/tabler/copy'
-import IconTablerEye from '~icons/tabler/eye'
-import IconTablerPencil from '~icons/tabler/pencil'
-import IconTablerTrash from '~icons/tabler/trash'
 
 const props = defineProps<{
   registers: ModbusRegister[]
@@ -173,12 +107,26 @@ defineEmits<{
 
 const formatArea = (area: string) => {
   const map: Record<string, string> = {
-    coil: 'Coil',
-    discrete_input: 'Discrete Input',
-    input_register: 'Input Register',
-    holding_register: 'Holding Register',
+    coil: '线圈',
+    discrete_input: '离散输入',
+    input_register: '输入寄存器',
+    holding_register: '保持寄存器',
   }
   return map[area] || area
+}
+
+const formatStatus = (status?: string) => (status === 'active' ? '启用' : '停用')
+
+const formatQuality = (quality?: string) => {
+  if (quality === 'Good') return '质量正常'
+  if (quality === 'Bad') return '质量异常'
+  return '暂无质量'
+}
+
+const formatValue = (value: unknown) => {
+  if (value === null || value === undefined || value === '') return '-'
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
 }
 
 const rowClassName = ({ row }: { row: ModbusRegister }) =>
@@ -223,7 +171,7 @@ const formatGroup = (groupId?: string | null) => props.groupFormatter?.(groupId)
   line-height: 18px;
 }
 
-.modbus-register-table__path {
+.modbus-register-table__name span {
   overflow: hidden;
   color: var(--dc-text-muted);
   text-overflow: ellipsis;
@@ -232,8 +180,7 @@ const formatGroup = (groupId?: string | null) => props.groupFormatter?.(groupId)
 }
 
 .modbus-register-table__unit,
-.modbus-register-table__type,
-.modbus-register-table__area {
+.modbus-register-table__type {
   min-height: 22px;
   display: inline-flex;
   align-items: center;
@@ -246,6 +193,13 @@ const formatGroup = (groupId?: string | null) => props.groupFormatter?.(groupId)
   font-weight: 700;
 }
 
+.modbus-register-table__area {
+  min-width: 58px;
+  color: var(--dc-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .modbus-register-table__unit {
   min-width: 30px;
   justify-content: center;
@@ -253,16 +207,18 @@ const formatGroup = (groupId?: string | null) => props.groupFormatter?.(groupId)
 }
 
 .modbus-register-table__area[data-area='holding_register'] {
-  border-color: color-mix(in oklch, var(--dc-primary) 26%, var(--dc-border));
+  color: var(--dc-primary);
 }
 
 .modbus-register-table__area[data-area='coil'] {
-  border-color: color-mix(in oklch, #16a34a 32%, var(--dc-border));
+  color: #15803d;
 }
 
 .modbus-register-table__address {
-  display: grid;
-  gap: 1px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .modbus-register-table__address strong {
@@ -276,32 +232,31 @@ const formatGroup = (groupId?: string | null) => props.groupFormatter?.(groupId)
   font-size: 11px;
 }
 
-.modbus-register-table__actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.modbus-register-table__collect,
+.modbus-register-table__value {
+  display: grid;
+  gap: 1px;
 }
 
-.modbus-register-table__actions button {
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-raised);
-  color: var(--dc-text-secondary);
+.modbus-register-table__collect strong,
+.modbus-register-table__value strong {
+  overflow: hidden;
+  color: var(--dc-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 16px;
 }
 
-.modbus-register-table__actions button:hover {
-  border-color: color-mix(in oklch, var(--dc-primary) 28%, var(--dc-border));
-  color: var(--dc-primary);
+.modbus-register-table__collect span,
+.modbus-register-table__value span {
+  color: var(--dc-success);
+  font-size: 11px;
 }
 
-.modbus-register-table__actions button.is-danger:hover {
-  border-color: color-mix(in oklch, var(--dc-danger) 34%, var(--dc-border));
-  color: var(--dc-danger);
+.modbus-register-table__collect span.is-muted,
+.modbus-register-table__value span {
+  color: var(--dc-text-muted);
 }
 
 .modbus-register-table__pagination {
