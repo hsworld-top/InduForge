@@ -46,9 +46,9 @@
           <span class="modbus-register-table__type">{{ row.dataType }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="采集" width="112" prop="pollIntervalMs" sortable="custom">
+      <el-table-column label="采集周期(ms)" width="128" prop="pollIntervalMs" sortable="custom">
         <template #default="{ row }">
-          <span class="modbus-register-table__text">{{ row.pollIntervalMs }}ms</span>
+          <span class="modbus-register-table__text">{{ row.pollIntervalMs }}</span>
         </template>
       </el-table-column>
       <el-table-column label="启用状态" width="96" prop="status" sortable="custom">
