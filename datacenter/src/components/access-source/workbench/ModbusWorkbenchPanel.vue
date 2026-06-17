@@ -44,7 +44,6 @@
         v-if="sideView === 'groups'"
         :groups="groups"
         :selected-group-id="selectedGroupId"
-        :total="registerPagination.total"
         @select="selectGroup"
         @create="openCreateGroup"
         @create-child="openCreateChildGroup"

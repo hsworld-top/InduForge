@@ -22,7 +22,6 @@
     >
       <IconTablerStack2 />
       <span>全部变量</span>
-      <em>{{ !selectedGroupId ? total : '' }}</em>
     </button>
 
     <div class="modbus-group-tree__list">
@@ -40,12 +39,7 @@
         >
           <IconTablerFolder />
           <span>{{ group.name }}</span>
-          <em>{{ selectedGroupId === group.id ? total : '' }}</em>
         </button>
-        <div class="modbus-group-tree__actions">
-          <el-button text size="small" :icon="IconTablerEdit" @click="$emit('edit', group)" />
-          <el-button text size="small" :icon="IconTablerTrash" @click="$emit('delete', group)" />
-        </div>
       </div>
     </div>
     <Teleport to="body">
@@ -95,7 +89,6 @@ import IconTablerTrash from '~icons/tabler/trash'
 const props = defineProps<{
   groups: ModbusRegisterGroup[]
   selectedGroupId: string
-  total?: number
 }>()
 
 const emit = defineEmits<{
@@ -206,7 +199,7 @@ function runMenuAction(action: 'create-child' | 'edit' | 'delete') {
   background: transparent;
   color: var(--dc-text-secondary);
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+  grid-template-columns: 18px minmax(0, 1fr);
   align-items: center;
   gap: 6px;
   padding: 3px 6px;
@@ -246,22 +239,6 @@ function runMenuAction(action: 'create-child' | 'edit' | 'delete') {
   color: var(--dc-primary);
 }
 
-.modbus-group-tree__item em {
-  min-width: 22px;
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--dc-surface-raised);
-  border: 1px solid var(--dc-border);
-  font-style: normal;
-  color: var(--dc-text-muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
 .modbus-group-tree__list {
   min-height: 0;
   flex: 1;
@@ -270,26 +247,6 @@ function runMenuAction(action: 'create-child' | 'edit' | 'delete') {
   gap: 2px;
   overflow: auto;
   padding: 8px 8px 12px;
-}
-
-.modbus-group-tree__row {
-  position: relative;
-}
-
-.modbus-group-tree__actions {
-  position: absolute;
-  right: 3px;
-  top: 1px;
-  display: none;
-  align-items: center;
-  height: 28px;
-  padding-left: 4px;
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-primary-soft);
-}
-
-.modbus-group-tree__row:hover .modbus-group-tree__actions {
-  display: flex;
 }
 
 .modbus-group-tree__empty {
