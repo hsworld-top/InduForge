@@ -17,15 +17,17 @@
       <el-table-column type="selection" width="44" />
       <el-table-column label="变量" min-width="190" prop="name" sortable="custom">
         <template #default="{ row }">
-          <div class="modbus-register-table__name">
-            <strong>{{ row.name }}</strong>
-            <span>{{ formatGroup(row.groupId) }}</span>
-          </div>
+          <span class="modbus-register-table__text">{{ row.name }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="从站" width="72" prop="unitId" sortable="custom">
+      <el-table-column label="从站" width="84" prop="unitId" sortable="custom">
         <template #default="{ row }">
           <span class="modbus-register-table__unit">{{ row.unitId }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="分组" min-width="120">
+        <template #default="{ row }">
+          <span class="modbus-register-table__path">{{ formatGroup(row.groupId) }}</span>
         </template>
       </el-table-column>
       <el-table-column label="地址" min-width="172" prop="address" sortable="custom">
@@ -46,19 +48,66 @@
       </el-table-column>
       <el-table-column label="采集" width="112" prop="pollIntervalMs" sortable="custom">
         <template #default="{ row }">
-          <div class="modbus-register-table__collect">
-            <strong>{{ row.pollIntervalMs }}ms</strong>
-            <span :class="{ 'is-muted': row.status !== 'active' }">{{
-              formatStatus(row.status)
-            }}</span>
-          </div>
+          <span class="modbus-register-table__text">{{ row.pollIntervalMs }}ms</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="启用状态" width="96" prop="status" sortable="custom">
+        <template #default="{ row }">
+          <el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">
+            {{ formatStatus(row.status) }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="读写权限" width="96">
+        <template #default="{ row }">
+          <span class="modbus-register-table__text">{{ formatAccessLevel(row.accessLevel) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="数据点" min-width="170">
+        <template #default="{ row }">
+          <span class="modbus-register-table__path">{{ row.datapointPath || '-' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="质量" width="92">
+        <template #default="{ row }">
+          <el-tag size="small" :type="qualityTagType(row.quality)">
+            {{ formatQuality(row.quality) }}
+          </el-tag>
         </template>
       </el-table-column>
       <el-table-column label="最近值" width="116">
         <template #default="{ row }">
-          <div class="modbus-register-table__value">
-            <strong>{{ formatValue(row.lastValue) }}</strong>
-            <span>{{ formatQuality(row.quality) }}</span>
+          <span class="modbus-register-table__text">{{ formatValue(row.lastValue) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="132" fixed="right">
+        <template #default="{ row }">
+          <div class="modbus-register-table__actions">
+            <el-tooltip content="查看详情" placement="top">
+              <button type="button" aria-label="查看详情" @click.stop="$emit('detail', row)">
+                <IconTablerEye />
+              </button>
+            </el-tooltip>
+            <el-tooltip content="复制为新变量" placement="top">
+              <button type="button" aria-label="复制为新变量" @click.stop="$emit('duplicate', row)">
+                <IconTablerCopy />
+              </button>
+            </el-tooltip>
+            <el-tooltip content="编辑" placement="top">
+              <button type="button" aria-label="编辑" @click.stop="$emit('edit', row)">
+                <IconTablerPencil />
+              </button>
+            </el-tooltip>
+            <el-tooltip content="删除" placement="top">
+              <button
+                type="button"
+                class="is-danger"
+                aria-label="删除"
+                @click.stop="$emit('delete', row)"
+              >
+                <IconTablerTrash />
+              </button>
+            </el-tooltip>
           </div>
         </template>
       </el-table-column>
@@ -81,6 +130,10 @@
 
 <script setup lang="ts">
 import type { ModbusRegister } from './types'
+import IconTablerCopy from '~icons/tabler/copy'
+import IconTablerEye from '~icons/tabler/eye'
+import IconTablerPencil from '~icons/tabler/pencil'
+import IconTablerTrash from '~icons/tabler/trash'
 
 const props = defineProps<{
   registers: ModbusRegister[]
@@ -117,10 +170,21 @@ const formatArea = (area: string) => {
 
 const formatStatus = (status?: string) => (status === 'active' ? '启用' : '停用')
 
+const formatAccessLevel = (accessLevel?: string) => {
+  const normalized = String(accessLevel || '').toLowerCase()
+  return normalized.includes('write') ? '读写' : '只读'
+}
+
 const formatQuality = (quality?: string) => {
   if (quality === 'Good') return '质量正常'
   if (quality === 'Bad') return '质量异常'
   return '暂无质量'
+}
+
+const qualityTagType = (quality?: string) => {
+  if (quality === 'Good') return 'success'
+  if (quality === 'Bad') return 'danger'
+  return 'info'
 }
 
 const formatValue = (value: unknown) => {
@@ -152,31 +216,39 @@ const formatGroup = (groupId?: string | null) => props.groupFormatter?.(groupId)
   cursor: pointer;
 }
 
+.modbus-register-table__grid :deep(.cell) {
+  word-break: normal;
+}
+
+.modbus-register-table__grid :deep(th .cell) {
+  white-space: nowrap;
+}
+
 .modbus-register-table__grid :deep(.modbus-register-table__row--selected td) {
   background: color-mix(in oklch, var(--dc-primary) 8%, var(--dc-surface-raised));
 }
 
-.modbus-register-table__name {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
+.modbus-register-table__text,
+.modbus-register-table__path {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.modbus-register-table__name strong {
-  overflow: hidden;
+.modbus-register-table__text {
   color: var(--dc-text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: 13px;
-  line-height: 18px;
 }
 
-.modbus-register-table__name span {
-  overflow: hidden;
+.modbus-register-table__text.is-muted,
+.modbus-register-table__path {
   color: var(--dc-text-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
+}
+
+.modbus-register-table__path {
+  font-size: 12px;
 }
 
 .modbus-register-table__unit,
@@ -232,31 +304,37 @@ const formatGroup = (groupId?: string | null) => props.groupFormatter?.(groupId)
   font-size: 11px;
 }
 
-.modbus-register-table__collect,
-.modbus-register-table__value {
-  display: grid;
-  gap: 1px;
+.modbus-register-table__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-.modbus-register-table__collect strong,
-.modbus-register-table__value strong {
-  overflow: hidden;
-  color: var(--dc-text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  line-height: 16px;
+.modbus-register-table__actions button {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-secondary);
 }
 
-.modbus-register-table__collect span,
-.modbus-register-table__value span {
-  color: var(--dc-success);
-  font-size: 11px;
+.modbus-register-table__actions button:hover {
+  border-color: color-mix(in oklch, var(--dc-primary) 28%, var(--dc-border));
+  color: var(--dc-primary);
 }
 
-.modbus-register-table__collect span.is-muted,
-.modbus-register-table__value span {
-  color: var(--dc-text-muted);
+.modbus-register-table__actions button.is-danger:hover {
+  border-color: color-mix(in oklch, var(--dc-danger) 34%, var(--dc-border));
+  color: var(--dc-danger);
+}
+
+.modbus-register-table__actions svg {
+  width: 14px;
+  height: 14px;
 }
 
 .modbus-register-table__pagination {
