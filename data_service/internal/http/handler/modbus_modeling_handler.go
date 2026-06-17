@@ -102,6 +102,68 @@ func (h *ModbusModelingHandler) DeleteGroup(w http.ResponseWriter, r *http.Reque
 	return nil
 }
 
+// ListSlaveDevices 返回当前 Modbus 接入源下的从站设备。
+func (h *ModbusModelingHandler) ListSlaveDevices(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	result, err := h.service.ListSlaveDevices(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"))
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"list": result})
+	return nil
+}
+
+// CreateSlaveDevice 创建 Modbus 从站设备。
+func (h *ModbusModelingHandler) CreateSlaveDevice(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request modbusSlaveDeviceRequest
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.CreateSlaveDevice(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, request.toCreateInput())
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// UpdateSlaveDevice 更新 Modbus 从站设备。
+func (h *ModbusModelingHandler) UpdateSlaveDevice(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request modbusSlaveDeviceRequest
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.UpdateSlaveDevice(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), r.PathValue("slaveId"), claims.UserID, request.toUpdateInput())
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// DeleteSlaveDevice 删除没有变量引用的 Modbus 从站设备。
+func (h *ModbusModelingHandler) DeleteSlaveDevice(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	if err := h.service.DeleteSlaveDevice(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), r.PathValue("slaveId"), claims.UserID); err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"deleted": true})
+	return nil
+}
+
 // ListRegisters 返回变量列表。
 func (h *ModbusModelingHandler) ListRegisters(w http.ResponseWriter, r *http.Request) error {
 	if _, err := requireClaims(r); err != nil {
@@ -144,6 +206,11 @@ func (h *ModbusModelingHandler) ListRegisters(w http.ResponseWriter, r *http.Req
 		}
 		addressEnd = &parsed
 	}
+	var slaveEnabled *bool
+	if value := query.Get("slaveEnabled"); value != "" {
+		parsed := value == "true" || value == "1"
+		slaveEnabled = &parsed
+	}
 	result, err := h.service.ListRegistersPage(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), service.ModbusRegisterListFilter{
 		GroupID:      groupID,
 		Search:       firstNonEmpty(query.Get("q"), query.Get("search")),
@@ -153,6 +220,7 @@ func (h *ModbusModelingHandler) ListRegisters(w http.ResponseWriter, r *http.Req
 		AddressStart: addressStart,
 		AddressEnd:   addressEnd,
 		DataType:     query.Get("dataType"),
+		SlaveEnabled: slaveEnabled,
 		SortBy:       firstNonEmpty(query.Get("sortBy"), query.Get("sort")),
 		SortOrder:    firstNonEmpty(query.Get("sortOrder"), query.Get("order")),
 		Page:         page,
@@ -235,6 +303,83 @@ func (h *ModbusModelingHandler) DeleteRegister(w http.ResponseWriter, r *http.Re
 	return nil
 }
 
+// BatchDeleteRegisters 批量删除变量。
+func (h *ModbusModelingHandler) BatchDeleteRegisters(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		IDs []string `json:"ids"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	count, err := h.service.DeleteRegistersBatch(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, request.IDs)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]int{"count": count})
+	return nil
+}
+
+// BatchMoveRegistersGroup 批量移动变量分组。
+func (h *ModbusModelingHandler) BatchMoveRegistersGroup(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		IDs     []string `json:"ids"`
+		GroupID *string  `json:"groupId"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	count, err := h.service.UpdateRegistersBatch(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.ModbusRegisterBulkUpdateInput{
+		IDs:        request.IDs,
+		GroupID:    request.GroupID,
+		HasGroupID: true,
+	})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]int{"count": count})
+	return nil
+}
+
+// BatchUpdateRegisters 批量更新变量公共配置。
+func (h *ModbusModelingHandler) BatchUpdateRegisters(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		IDs            []string `json:"ids"`
+		UnitID         *int     `json:"unitId"`
+		PollIntervalMS *int     `json:"pollIntervalMs"`
+		ByteOrder      string   `json:"byteOrder"`
+		WordOrder      string   `json:"wordOrder"`
+		Status         string   `json:"status"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	count, err := h.service.UpdateRegistersBatch(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.ModbusRegisterBulkUpdateInput{
+		IDs:            request.IDs,
+		UnitID:         request.UnitID,
+		PollIntervalMS: request.PollIntervalMS,
+		ByteOrder:      request.ByteOrder,
+		WordOrder:      request.WordOrder,
+		Status:         request.Status,
+	})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]int{"count": count})
+	return nil
+}
+
 // ValidateModel 执行建模校验。
 func (h *ModbusModelingHandler) ValidateModel(w http.ResponseWriter, r *http.Request) error {
 	if _, err := requireClaims(r); err != nil {
@@ -276,7 +421,15 @@ func (h *ModbusModelingHandler) EstimateReadPlans(w http.ResponseWriter, r *http
 	if value := r.URL.Query().Get("groupId"); value != "" {
 		groupID = &value
 	}
-	result, err := h.service.EstimateReadPlans(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), groupID)
+	var unitID *int
+	if value := r.URL.Query().Get("unitId"); value != "" {
+		parsed, parseErr := parseOptionalInt(value, 0, "unitId")
+		if parseErr != nil {
+			return parseErr
+		}
+		unitID = &parsed
+	}
+	result, err := h.service.EstimateReadPlans(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), groupID, unitID)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -309,6 +462,52 @@ type modbusRegisterRequest struct {
 	Description     *string  `json:"description"`
 	SortOrder       int      `json:"sortOrder"`
 	Status          string   `json:"status"`
+}
+
+type modbusSlaveDeviceRequest struct {
+	UnitID                *int    `json:"unitId"`
+	Name                  string  `json:"name"`
+	Description           *string `json:"description"`
+	Enabled               *bool   `json:"enabled"`
+	DefaultPollIntervalMS *int    `json:"defaultPollIntervalMs"`
+	DefaultByteOrder      string  `json:"defaultByteOrder"`
+	DefaultWordOrder      string  `json:"defaultWordOrder"`
+	RequestIntervalMS     *int    `json:"requestIntervalMs"`
+	TimeoutMS             *int    `json:"timeoutMs"`
+	RetryCount            *int    `json:"retryCount"`
+	SortOrder             int     `json:"sortOrder"`
+}
+
+func (r modbusSlaveDeviceRequest) toCreateInput() service.CreateModbusSlaveDeviceInput {
+	return service.CreateModbusSlaveDeviceInput{
+		UnitID:                r.UnitID,
+		Name:                  r.Name,
+		Description:           r.Description,
+		Enabled:               r.Enabled,
+		DefaultPollIntervalMS: r.DefaultPollIntervalMS,
+		DefaultByteOrder:      r.DefaultByteOrder,
+		DefaultWordOrder:      r.DefaultWordOrder,
+		RequestIntervalMS:     r.RequestIntervalMS,
+		TimeoutMS:             r.TimeoutMS,
+		RetryCount:            r.RetryCount,
+		SortOrder:             r.SortOrder,
+	}
+}
+
+func (r modbusSlaveDeviceRequest) toUpdateInput() service.UpdateModbusSlaveDeviceInput {
+	return service.UpdateModbusSlaveDeviceInput{
+		UnitID:                r.UnitID,
+		Name:                  r.Name,
+		Description:           r.Description,
+		Enabled:               r.Enabled,
+		DefaultPollIntervalMS: r.DefaultPollIntervalMS,
+		DefaultByteOrder:      r.DefaultByteOrder,
+		DefaultWordOrder:      r.DefaultWordOrder,
+		RequestIntervalMS:     r.RequestIntervalMS,
+		TimeoutMS:             r.TimeoutMS,
+		RetryCount:            r.RetryCount,
+		SortOrder:             r.SortOrder,
+	}
 }
 
 func (r modbusRegisterRequest) toCreateInput() service.CreateModbusRegisterInput {

@@ -6,6 +6,26 @@ export type ModbusRegisterGroup = {
   sortOrder?: number
 }
 
+export type ModbusSlaveDevice = {
+  id: string
+  projectId?: string
+  connectionId?: string
+  unitId: number
+  name: string
+  description?: string | null
+  enabled: boolean
+  defaultPollIntervalMs: number
+  defaultByteOrder: string
+  defaultWordOrder: string
+  requestIntervalMs?: number | null
+  timeoutMs?: number | null
+  retryCount?: number | null
+  sortOrder?: number
+  registerCount?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
 export type ModbusRegister = {
   id: string
   groupId?: string | null

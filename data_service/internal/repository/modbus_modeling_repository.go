@@ -28,6 +28,26 @@ type ModbusRegisterGroupRecord struct {
 	UpdatedAt    time.Time
 }
 
+// ModbusSlaveDeviceRecord 表示 Modbus 接入源下的真实从站设备。
+type ModbusSlaveDeviceRecord struct {
+	ID                    string
+	ProjectID             string
+	ConnectionID          string
+	UnitID                int
+	Name                  string
+	Description           *string
+	Enabled               bool
+	DefaultPollIntervalMS int
+	DefaultByteOrder      string
+	DefaultWordOrder      string
+	RequestIntervalMS     *int
+	TimeoutMS             *int
+	RetryCount            *int
+	SortOrder             int
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+}
+
 // ModbusRegisterRecord 表示 Modbus 寄存器变量定义。
 type ModbusRegisterRecord struct {
 	ID              string
@@ -73,6 +93,7 @@ type ModbusRegisterListFilter struct {
 	AddressStart *int
 	AddressEnd   *int
 	DataType     string
+	SlaveEnabled *bool
 	SortBy       string
 	SortOrder    string
 }
@@ -99,6 +120,43 @@ type UpdateModbusRegisterGroupParams struct {
 	Description  *string
 	SortOrder    int
 	UserID       string
+}
+
+// CreateModbusSlaveDeviceParams 描述创建 Modbus 从站参数。
+type CreateModbusSlaveDeviceParams struct {
+	ProjectID             string
+	ConnectionID          string
+	UnitID                int
+	Name                  string
+	Description           *string
+	Enabled               bool
+	DefaultPollIntervalMS int
+	DefaultByteOrder      string
+	DefaultWordOrder      string
+	RequestIntervalMS     *int
+	TimeoutMS             *int
+	RetryCount            *int
+	SortOrder             int
+	UserID                string
+}
+
+// UpdateModbusSlaveDeviceParams 描述更新 Modbus 从站参数。
+type UpdateModbusSlaveDeviceParams struct {
+	ID                    string
+	ProjectID             string
+	ConnectionID          string
+	UnitID                int
+	Name                  string
+	Description           *string
+	Enabled               bool
+	DefaultPollIntervalMS int
+	DefaultByteOrder      string
+	DefaultWordOrder      string
+	RequestIntervalMS     *int
+	TimeoutMS             *int
+	RetryCount            *int
+	SortOrder             int
+	UserID                string
 }
 
 // CreateModbusRegisterParams 描述创建寄存器变量参数。
@@ -160,6 +218,21 @@ type UpdateModbusRegisterParams struct {
 	SortOrder       int
 	Status          string
 	UserID          string
+}
+
+// BatchUpdateModbusRegistersParams 描述批量更新变量公共属性的参数。
+type BatchUpdateModbusRegistersParams struct {
+	ProjectID      string
+	ConnectionID   string
+	IDs            []string
+	GroupID        *string
+	HasGroupID     bool
+	UnitID         *int
+	PollIntervalMS *int
+	ByteOrder      string
+	WordOrder      string
+	Status         string
+	UserID         string
 }
 
 // ModbusModelingRepository 封装 Modbus 建模参数化 SQL。
@@ -275,6 +348,158 @@ func (r *ModbusModelingRepository) DeleteGroup(ctx context.Context, projectID, c
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 Modbus 寄存器组删除事务失败", err)
+	}
+	return nil
+}
+
+// ListSlaveDevices 返回连接下的 Modbus 从站设备。
+func (r *ModbusModelingRepository) ListSlaveDevices(ctx context.Context, projectID, connectionID string) ([]ModbusSlaveDeviceRecord, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, project_id, connection_id, unit_id, name, description, enabled,
+		       default_poll_interval_ms, default_byte_order, default_word_order,
+		       request_interval_ms, timeout_ms, retry_count, sort_order, created_at, updated_at
+		FROM data_modbus_slave_devices
+		WHERE project_id = $1 AND connection_id = $2
+		ORDER BY sort_order ASC, unit_id ASC, created_at ASC
+	`, projectID, connectionID)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 Modbus 从站失败", err)
+	}
+	defer rows.Close()
+
+	result := make([]ModbusSlaveDeviceRecord, 0)
+	for rows.Next() {
+		record, scanErr := scanModbusSlaveDeviceRecord(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		result = append(result, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 Modbus 从站失败", err)
+	}
+	return result, nil
+}
+
+// GetSlaveDeviceByUnitID 按 unitId 返回从站设备。
+func (r *ModbusModelingRepository) GetSlaveDeviceByUnitID(ctx context.Context, projectID, connectionID string, unitID int) (*ModbusSlaveDeviceRecord, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT id, project_id, connection_id, unit_id, name, description, enabled,
+		       default_poll_interval_ms, default_byte_order, default_word_order,
+		       request_interval_ms, timeout_ms, retry_count, sort_order, created_at, updated_at
+		FROM data_modbus_slave_devices
+		WHERE project_id = $1 AND connection_id = $2 AND unit_id = $3
+	`, projectID, connectionID, unitID)
+	record, err := scanModbusSlaveDeviceRecord(row)
+	if err != nil {
+		if appErr, ok := err.(*apperrors.AppError); ok && appErr.StatusCode == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &record, nil
+}
+
+// CreateSlaveDevice 创建 Modbus 从站设备。
+func (r *ModbusModelingRepository) CreateSlaveDevice(ctx context.Context, params CreateModbusSlaveDeviceParams) (*ModbusSlaveDeviceRecord, error) {
+	row := r.pool.QueryRow(ctx, `
+		INSERT INTO data_modbus_slave_devices (
+			project_id, connection_id, unit_id, name, description, enabled,
+			default_poll_interval_ms, default_byte_order, default_word_order,
+			request_interval_ms, timeout_ms, retry_count, sort_order, created_by, updated_by
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)
+		RETURNING id, project_id, connection_id, unit_id, name, description, enabled,
+		          default_poll_interval_ms, default_byte_order, default_word_order,
+		          request_interval_ms, timeout_ms, retry_count, sort_order, created_at, updated_at
+	`, params.ProjectID, params.ConnectionID, params.UnitID, params.Name, params.Description, params.Enabled,
+		params.DefaultPollIntervalMS, params.DefaultByteOrder, params.DefaultWordOrder, params.RequestIntervalMS,
+		params.TimeoutMS, params.RetryCount, params.SortOrder, params.UserID)
+
+	record, err := scanModbusSlaveDeviceRecord(row)
+	if err != nil {
+		return nil, translateModbusModelingWriteError(err)
+	}
+	return &record, nil
+}
+
+// UpdateSlaveDevice 更新 Modbus 从站设备。
+func (r *ModbusModelingRepository) UpdateSlaveDevice(ctx context.Context, params UpdateModbusSlaveDeviceParams) (*ModbusSlaveDeviceRecord, error) {
+	row := r.pool.QueryRow(ctx, `
+		UPDATE data_modbus_slave_devices
+		SET unit_id = $4,
+		    name = $5,
+		    description = $6,
+		    enabled = $7,
+		    default_poll_interval_ms = $8,
+		    default_byte_order = $9,
+		    default_word_order = $10,
+		    request_interval_ms = $11,
+		    timeout_ms = $12,
+		    retry_count = $13,
+		    sort_order = $14,
+		    updated_by = $15,
+		    updated_at = now()
+		WHERE project_id = $1 AND connection_id = $2 AND id = $3
+		RETURNING id, project_id, connection_id, unit_id, name, description, enabled,
+		          default_poll_interval_ms, default_byte_order, default_word_order,
+		          request_interval_ms, timeout_ms, retry_count, sort_order, created_at, updated_at
+	`, params.ProjectID, params.ConnectionID, params.ID, params.UnitID, params.Name, params.Description,
+		params.Enabled, params.DefaultPollIntervalMS, params.DefaultByteOrder, params.DefaultWordOrder,
+		params.RequestIntervalMS, params.TimeoutMS, params.RetryCount, params.SortOrder, params.UserID)
+
+	record, err := scanModbusSlaveDeviceRecord(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "Modbus 从站不存在")
+		}
+		return nil, translateModbusModelingWriteError(err)
+	}
+	return &record, nil
+}
+
+// DeleteSlaveDevice 删除未被变量引用的 Modbus 从站设备。
+func (r *ModbusModelingRepository) DeleteSlaveDevice(ctx context.Context, projectID, connectionID, slaveID string) error {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 Modbus 从站删除事务失败", err)
+	}
+	defer rollbackTxQuietly(ctx, tx)
+
+	var unitID int
+	if err := tx.QueryRow(ctx, `
+		SELECT unit_id
+		FROM data_modbus_slave_devices
+		WHERE project_id = $1 AND connection_id = $2 AND id = $3
+	`, projectID, connectionID, slaveID).Scan(&unitID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "Modbus 从站不存在")
+		}
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 Modbus 从站失败", err)
+	}
+	var registerCount int
+	if err := tx.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM data_modbus_registers
+		WHERE project_id = $1 AND connection_id = $2 AND unit_id = $3
+	`, projectID, connectionID, unitID).Scan(&registerCount); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "统计 Modbus 从站变量失败", err)
+	}
+	if registerCount > 0 {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "从站下存在变量，请先迁移变量")
+	}
+	tag, err := tx.Exec(ctx, `
+		DELETE FROM data_modbus_slave_devices
+		WHERE project_id = $1 AND connection_id = $2 AND id = $3
+	`, projectID, connectionID, slaveID)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "删除 Modbus 从站失败", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "Modbus 从站不存在")
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 Modbus 从站删除事务失败", err)
 	}
 	return nil
 }
@@ -404,6 +629,16 @@ func buildModbusRegisterListWhere(projectID, connectionID string, filter ModbusR
 	if filter.UnitID != nil {
 		args = append(args, *filter.UnitID)
 		clauses = append(clauses, fmt.Sprintf("r.unit_id = $%d", len(args)))
+	}
+	if filter.SlaveEnabled != nil {
+		args = append(args, *filter.SlaveEnabled)
+		clauses = append(clauses, fmt.Sprintf(`EXISTS (
+			SELECT 1 FROM data_modbus_slave_devices sd
+			WHERE sd.project_id = r.project_id
+			  AND sd.connection_id = r.connection_id
+			  AND sd.unit_id = r.unit_id
+			  AND sd.enabled = $%d
+		)`, len(args)))
 	}
 	addEqual("r.area", filter.Area)
 	addEqual("r.data_type", filter.DataType)
@@ -583,6 +818,121 @@ func (r *ModbusModelingRepository) DeleteRegister(ctx context.Context, projectID
 	return nil
 }
 
+// DeleteRegistersBatch 批量删除变量，并在同一事务中标记数据点失效。
+func (r *ModbusModelingRepository) DeleteRegistersBatch(ctx context.Context, projectID, connectionID string, ids []string, userID string) ([]string, error) {
+	ids = uniqueTrimmedModbusIDs(ids)
+	if len(ids) == 0 {
+		return []string{}, nil
+	}
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 Modbus 批量删除事务失败", err)
+	}
+	defer rollbackTxQuietly(ctx, tx)
+
+	rows, err := tx.Query(ctx, `
+		DELETE FROM data_modbus_registers
+		WHERE project_id = $1 AND connection_id = $2 AND id = ANY($3::uuid[])
+		RETURNING id
+	`, projectID, connectionID, ids)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "批量删除 Modbus 变量失败", err)
+	}
+	deleted := make([]string, 0, len(ids))
+	for rows.Next() {
+		var id string
+		if scanErr := rows.Scan(&id); scanErr != nil {
+			rows.Close()
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 Modbus 批量删除结果失败", scanErr)
+		}
+		deleted = append(deleted, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 Modbus 批量删除结果失败", err)
+	}
+	rows.Close()
+	if len(deleted) > 0 {
+		if _, err := tx.Exec(ctx, `
+			UPDATE data_points
+			SET status = 'invalid',
+			    updated_by = COALESCE($3, updated_by),
+			    updated_at = now()
+			WHERE project_id = $1
+			  AND source_type = 'modbus.register'
+			  AND source_id = ANY($2::uuid[])
+		`, projectID, deleted, userID); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "批量标记 Modbus 数据点失效失败", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 Modbus 批量删除事务失败", err)
+	}
+	return deleted, nil
+}
+
+// UpdateRegistersBatch 批量更新变量公共属性。
+func (r *ModbusModelingRepository) UpdateRegistersBatch(ctx context.Context, params BatchUpdateModbusRegistersParams) ([]ModbusRegisterRecord, error) {
+	ids := uniqueTrimmedModbusIDs(params.IDs)
+	if len(ids) == 0 {
+		return []ModbusRegisterRecord{}, nil
+	}
+	setParts := []string{"updated_by = $4", "updated_at = now()"}
+	args := []any{params.ProjectID, params.ConnectionID, ids, params.UserID}
+	if params.HasGroupID {
+		args = append(args, params.GroupID)
+		setParts = append(setParts, fmt.Sprintf("group_id = $%d", len(args)))
+	}
+	if params.UnitID != nil {
+		args = append(args, *params.UnitID)
+		setParts = append(setParts, fmt.Sprintf("unit_id = $%d", len(args)))
+	}
+	if params.PollIntervalMS != nil {
+		args = append(args, *params.PollIntervalMS)
+		setParts = append(setParts, fmt.Sprintf("poll_interval_ms = $%d", len(args)))
+	}
+	if strings.TrimSpace(params.ByteOrder) != "" {
+		args = append(args, strings.TrimSpace(params.ByteOrder))
+		setParts = append(setParts, fmt.Sprintf("byte_order = $%d", len(args)))
+	}
+	if strings.TrimSpace(params.WordOrder) != "" {
+		args = append(args, strings.TrimSpace(params.WordOrder))
+		setParts = append(setParts, fmt.Sprintf("word_order = $%d", len(args)))
+	}
+	if strings.TrimSpace(params.Status) != "" {
+		args = append(args, strings.TrimSpace(params.Status))
+		setParts = append(setParts, fmt.Sprintf("status = $%d", len(args)))
+	}
+
+	rows, err := r.pool.Query(ctx, fmt.Sprintf(`
+		UPDATE data_modbus_registers
+		SET %s
+		WHERE project_id = $1 AND connection_id = $2 AND id = ANY($3::uuid[])
+		RETURNING id, project_id, connection_id, group_id, name, code, unit_id, area,
+		          address, address_base, protocol_address, quantity, data_type, byte_order,
+		          word_order, bit_index, scale, offset_value, unit, poll_interval_ms,
+		          timeout_ms, retry_count, access_level, description, sort_order, status,
+		          NULL::uuid, NULL::text, NULL::text, created_at, updated_at
+	`, strings.Join(setParts, ",\n\t\t\t")), args...)
+	if err != nil {
+		return nil, translateModbusModelingWriteError(err)
+	}
+	defer rows.Close()
+
+	result := make([]ModbusRegisterRecord, 0, len(ids))
+	for rows.Next() {
+		record, scanErr := scanModbusRegisterRecord(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		result = append(result, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 Modbus 批量更新结果失败", err)
+	}
+	return result, nil
+}
+
 func scanModbusRegisterGroupRecord(row pgx.Row) (ModbusRegisterGroupRecord, error) {
 	record := ModbusRegisterGroupRecord{}
 	if err := row.Scan(
@@ -600,6 +950,34 @@ func scanModbusRegisterGroupRecord(row pgx.Row) (ModbusRegisterGroupRecord, erro
 			return record, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "Modbus 寄存器组不存在")
 		}
 		return record, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 Modbus 寄存器组失败", err)
+	}
+	return record, nil
+}
+
+func scanModbusSlaveDeviceRecord(row pgx.Row) (ModbusSlaveDeviceRecord, error) {
+	record := ModbusSlaveDeviceRecord{}
+	if err := row.Scan(
+		&record.ID,
+		&record.ProjectID,
+		&record.ConnectionID,
+		&record.UnitID,
+		&record.Name,
+		&record.Description,
+		&record.Enabled,
+		&record.DefaultPollIntervalMS,
+		&record.DefaultByteOrder,
+		&record.DefaultWordOrder,
+		&record.RequestIntervalMS,
+		&record.TimeoutMS,
+		&record.RetryCount,
+		&record.SortOrder,
+		&record.CreatedAt,
+		&record.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return record, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "Modbus 从站不存在")
+		}
+		return record, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 Modbus 从站失败", err)
 	}
 	return record, nil
 }
@@ -645,6 +1023,23 @@ func scanModbusRegisterRecord(row pgx.Row) (ModbusRegisterRecord, error) {
 		return record, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 Modbus 变量失败", err)
 	}
 	return record, nil
+}
+
+func uniqueTrimmedModbusIDs(ids []string) []string {
+	seen := map[string]struct{}{}
+	result := make([]string, 0, len(ids))
+	for _, id := range ids {
+		trimmed := strings.TrimSpace(id)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		result = append(result, trimmed)
+	}
+	return result
 }
 
 func translateModbusModelingWriteError(err error) error {

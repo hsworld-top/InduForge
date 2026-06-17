@@ -185,16 +185,24 @@ const normalizeS7ConfigPayload = (data = {}) => ({
 
 const normalizeModbusConfigPayload = (data = {}) => {
   const mode = String(data.mode || 'tcp').toLowerCase()
+  const options = data.options && typeof data.options === 'object' ? { ...data.options } : {}
+  Object.assign(options, {
+    requestIntervalMs: Number(data.requestIntervalMs) || 0,
+    maxReadQuantity: Number(data.maxReadQuantity) || 125,
+    maxBatchRequests: Number(data.maxBatchRequests) || 64,
+    addressBase: data.addressBase || options.addressBase || 'modicon',
+    byteOrder: data.byteOrder || options.byteOrder || 'ABCD',
+    wordOrder: data.wordOrder || options.wordOrder || 'high_first',
+  })
   const payload = {
     name: data.name,
     status: data.status || 'disconnected',
     mode,
-    // 连接表单不再暴露默认从站/范围；后端仍保留连接表历史字段，默认值仅用于兼容存储结构。
     slaveId: Number(data.slaveId) || 1,
-    startAddress: Number(data.startAddress) || 0,
-    quantity: Number(data.quantity) || 1,
+    startAddress: 0,
+    quantity: 1,
     pollIntervalMs: Number(data.pollIntervalMs) || 1000,
-    options: data.options && typeof data.options === 'object' ? data.options : {},
+    options,
     redundancy: normalizeRedundancyPayload(data.redundancy),
   }
   if (mode === 'rtu') {
@@ -825,6 +833,39 @@ export const deleteModbusRegisterGroup = (projectId, connectionId, groupId) => {
   })
 }
 
+export const getModbusSlaveDevices = (projectId, connectionId) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/slaves`,
+    method: 'get',
+  }).then((response) => ({
+    ...response,
+    data: normalizeModbusListPayload(response, 'slaves'),
+  }))
+}
+
+export const createModbusSlaveDevice = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/slaves`,
+    method: 'post',
+    data,
+  })
+}
+
+export const updateModbusSlaveDevice = (projectId, connectionId, slaveId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/slaves/${slaveId}`,
+    method: 'put',
+    data,
+  })
+}
+
+export const deleteModbusSlaveDevice = (projectId, connectionId, slaveId) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/slaves/${slaveId}`,
+    method: 'delete',
+  })
+}
+
 export const getModbusRegisters = (projectId, connectionId, params = {}) => {
   return request({
     url: `/data/projects/${projectId}/modbus/${connectionId}/registers`,
@@ -847,6 +888,30 @@ export const createModbusRegister = (projectId, connectionId, data) => {
 export const batchImportModbusRegisters = (projectId, connectionId, data) => {
   return request({
     url: `/data/projects/${projectId}/modbus/${connectionId}/registers/batch-import`,
+    method: 'post',
+    data,
+  })
+}
+
+export const batchDeleteModbusRegisters = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/registers/batch-delete`,
+    method: 'post',
+    data,
+  })
+}
+
+export const batchMoveModbusRegistersGroup = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/registers/batch-move-group`,
+    method: 'post',
+    data,
+  })
+}
+
+export const batchUpdateModbusRegisters = (projectId, connectionId, data) => {
+  return request({
+    url: `/data/projects/${projectId}/modbus/${connectionId}/registers/batch-update`,
     method: 'post',
     data,
   })
@@ -2061,9 +2126,16 @@ export default {
   createModbusRegisterGroup,
   updateModbusRegisterGroup,
   deleteModbusRegisterGroup,
+  getModbusSlaveDevices,
+  createModbusSlaveDevice,
+  updateModbusSlaveDevice,
+  deleteModbusSlaveDevice,
   getModbusRegisters,
   createModbusRegister,
   batchImportModbusRegisters,
+  batchDeleteModbusRegisters,
+  batchMoveModbusRegistersGroup,
+  batchUpdateModbusRegisters,
   updateModbusRegister,
   deleteModbusRegister,
   validateModbusModel,
