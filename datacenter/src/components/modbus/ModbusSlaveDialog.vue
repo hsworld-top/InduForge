@@ -46,13 +46,31 @@
       </div>
       <div class="modbus-slave-dialog__grid">
         <el-form-item label="请求间隔">
-          <el-input-number v-model="form.requestIntervalMs" :min="0" :step="50" class="w-full" />
+          <el-input-number
+            v-model="form.requestIntervalMs"
+            :min="0"
+            :step="50"
+            placeholder="默认不额外等待"
+            class="w-full"
+          />
         </el-form-item>
         <el-form-item label="请求超时">
-          <el-input-number v-model="form.timeoutMs" :min="0" :step="1000" class="w-full" />
+          <el-input-number
+            v-model="form.timeoutMs"
+            :min="1"
+            :step="1000"
+            placeholder="默认跟随连接"
+            class="w-full"
+          />
         </el-form-item>
         <el-form-item label="重试次数">
-          <el-input-number v-model="form.retryCount" :min="0" :max="10" class="w-full" />
+          <el-input-number
+            v-model="form.retryCount"
+            :min="0"
+            :max="10"
+            placeholder="默认不重试"
+            class="w-full"
+          />
         </el-form-item>
       </div>
       <el-form-item label="描述">
@@ -88,9 +106,9 @@ const form = reactive({
   defaultPollIntervalMs: 1000,
   defaultByteOrder: 'ABCD',
   defaultWordOrder: 'high_first',
-  requestIntervalMs: 0,
-  timeoutMs: 0,
-  retryCount: 0,
+  requestIntervalMs: null as number | null,
+  timeoutMs: null as number | null,
+  retryCount: null as number | null,
   description: '',
   sortOrder: 0,
 })
@@ -103,9 +121,9 @@ const reset = () => {
   form.defaultPollIntervalMs = slave?.defaultPollIntervalMs ?? 1000
   form.defaultByteOrder = slave?.defaultByteOrder || 'ABCD'
   form.defaultWordOrder = slave?.defaultWordOrder || 'high_first'
-  form.requestIntervalMs = slave?.requestIntervalMs ?? 0
-  form.timeoutMs = slave?.timeoutMs ?? 0
-  form.retryCount = slave?.retryCount ?? 0
+  form.requestIntervalMs = slave?.requestIntervalMs ?? null
+  form.timeoutMs = slave?.timeoutMs ?? null
+  form.retryCount = slave?.retryCount ?? null
   form.description = slave?.description || ''
   form.sortOrder = slave?.sortOrder ?? form.unitId
 }
