@@ -204,10 +204,10 @@ defineExpose({ clearSelection, syncSelection })
 
 const formatArea = (area: string) => {
   const map: Record<string, string> = {
-    coil: '线圈',
-    discrete_input: '离散输入',
-    input_register: '输入寄存器',
-    holding_register: '保持寄存器',
+    coil: '输出开关(0x)',
+    discrete_input: '输入开关(1x)',
+    input_register: '只读寄存器(3x)',
+    holding_register: '读写寄存器(4x)',
   }
   return map[area] || area
 }

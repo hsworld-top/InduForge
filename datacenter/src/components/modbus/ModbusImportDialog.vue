@@ -71,7 +71,7 @@
                   v-model="pasteText"
                   type="textarea"
                   :rows="12"
-                  placeholder="变量名,从站地址,区域,地址,地址基准,类型,字节序,字序,倍率,偏移,单位,采集周期,读写权限,描述"
+                  placeholder="变量名,从站地址,数据区,地址,地址基准,类型,字节序,字序,倍率,偏移,单位,采集周期,读写权限,描述"
                   @input="clearFileSource"
                 />
               </el-form-item>
@@ -89,7 +89,7 @@
               <el-form-item label="从站地址">
                 <el-input-number v-model="range.unitId" :min="0" :max="247" />
               </el-form-item>
-              <el-form-item label="寄存器区域">
+              <el-form-item label="Modbus 数据区">
                 <el-select v-model="range.area">
                   <el-option
                     v-for="option in areaOptions"
@@ -207,7 +207,7 @@
               <el-input v-model="row.unitId" size="small" />
             </template>
           </el-table-column>
-          <el-table-column label="区域" min-width="138">
+          <el-table-column label="数据区" min-width="168">
             <template #default="{ row }">
               <el-select v-model="row.area" size="small">
                 <el-option
@@ -377,10 +377,10 @@ const defaultPollIntervalMs = ref(1000)
 const invalidVariableNamePattern = /[^\u4e00-\u9fa5A-Za-z0-9_$#%@+()[\]&-]/g
 const validVariableNamePattern = /^[\u4e00-\u9fa5A-Za-z0-9_$#%@+()[\]&-]+$/
 const areaOptions = [
-  { label: '保持寄存器', value: 'holding_register' },
-  { label: '输入寄存器', value: 'input_register' },
-  { label: '线圈', value: 'coil' },
-  { label: '离散输入', value: 'discrete_input' },
+  { label: '读写数值寄存器（保持寄存器 4x）', value: 'holding_register' },
+  { label: '只读数值寄存器（输入寄存器 3x）', value: 'input_register' },
+  { label: '开关量输出（线圈 0x）', value: 'coil' },
+  { label: '开关量输入（离散输入 1x）', value: 'discrete_input' },
 ]
 const dataTypeOptions = [
   { label: 'bool', value: 'bool' },
@@ -476,7 +476,7 @@ const validRows = computed(() =>
 const headerAliases = {
   name: ['变量名', '名称', 'name'],
   unitId: ['从站地址', '从站', 'unitId', 'slaveId'],
-  area: ['区域', '寄存器区', 'area'],
+  area: ['数据区', '区域', '寄存器区', 'area'],
   address: ['地址', '用户地址', 'address'],
   addressBase: ['地址基准', 'addressBase'],
   dataType: ['数据类型', '类型', 'dataType', 'type'],
@@ -492,7 +492,7 @@ const headerAliases = {
 const templateHeaders = [
   '变量名',
   '从站地址',
-  '区域',
+  '数据区',
   '地址',
   '地址基准',
   '数据类型',
@@ -509,7 +509,7 @@ const templateRows = [
   {
     变量名: '电机转速',
     从站地址: 1,
-    区域: 'holding_register',
+    数据区: '读写数值寄存器（保持寄存器 4x）',
     地址: 40001,
     地址基准: 'modicon',
     数据类型: 'float32',
@@ -525,7 +525,7 @@ const templateRows = [
   {
     变量名: '运行状态',
     从站地址: 1,
-    区域: 'coil',
+    数据区: '开关量输出（线圈 0x）',
     地址: 1,
     地址基准: 'modicon',
     数据类型: 'bool',
@@ -688,12 +688,12 @@ function validateRows(rows: ModbusImportPreviewRow[]) {
       !isValidVariableName(name) ? '变量名称包含不支持的字符' : '',
       Number.isNaN(unitId) || unitId < 0 || unitId > 247 ? '从站地址必须在 0-247' : '',
       Number.isNaN(address) ? '地址不是数字' : '',
-      Number.isNaN(protocolAddress) || protocolAddress < 0 ? '地址与寄存器区域不匹配' : '',
+      Number.isNaN(protocolAddress) || protocolAddress < 0 ? '地址与 Modbus 数据区不匹配' : '',
       !dataType ? '数据类型为空' : '',
       !isSupportedDataType(dataType) ? '数据类型不支持' : '',
       ['coil', 'discrete_input'].includes(area) &&
       !['bool', 'boolean'].includes(dataType.toLowerCase())
-        ? 'Coil / Discrete Input 默认只支持 bool'
+        ? '开关量数据区默认只支持 bool'
         : '',
       Number.isNaN(scale) ? '倍率不是数字' : '',
       Number.isNaN(offset) ? '偏移不是数字' : '',
@@ -781,15 +781,25 @@ function downloadTemplate(type: 'csv' | 'xlsx') {
 function downloadIssueReport() {
   downloadCsv(
     'modbus-import-issues.csv',
-    ['行号', '变量名', '区域', '地址', '问题'],
+    ['行号', '变量名', '数据区', '地址', '问题'],
     issueRows.value.map((row) => ({
       行号: row.rowNo,
       变量名: row.name,
-      区域: row.area,
+      数据区: formatAreaLabel(row.area),
       地址: row.address,
       问题: row.issue,
     })),
   )
+}
+
+function formatAreaLabel(area: string) {
+  const map: Record<string, string> = {
+    coil: '开关量输出（线圈 0x）',
+    discrete_input: '开关量输入（离散输入 1x）',
+    input_register: '只读数值寄存器（输入寄存器 3x）',
+    holding_register: '读写数值寄存器（保持寄存器 4x）',
+  }
+  return map[area] || area
 }
 
 function submit() {
@@ -825,10 +835,47 @@ function waitForPaint() {
 
 function normalizeArea(value: string) {
   const text = String(value || '').trim().toLowerCase()
-  if (['coil', 'coils', '0x', '00001'].includes(text)) return 'coil'
-  if (['discrete_input', 'discrete input', 'input', '1x', '10001'].includes(text))
+  if (
+    [
+      'coil',
+      'coils',
+      '0x',
+      '00001',
+      '线圈',
+      '开关量输出',
+      '输出开关',
+      '开关量输出（线圈 0x）',
+    ].includes(text)
+  )
+    return 'coil'
+  if (
+    [
+      'discrete_input',
+      'discrete input',
+      'input',
+      '1x',
+      '10001',
+      '离散输入',
+      '离散量输入',
+      '开关量输入',
+      '输入开关',
+      '开关量输入（离散输入 1x）',
+    ].includes(text)
+  )
     return 'discrete_input'
-  if (['input_register', 'input register', '3x', '30001'].includes(text)) return 'input_register'
+  if (
+    [
+      'input_register',
+      'input register',
+      '3x',
+      '30001',
+      '输入寄存器',
+      '只读寄存器',
+      '只读数值寄存器',
+      '只读数值寄存器（输入寄存器 3x）',
+    ].includes(text)
+  )
+    return 'input_register'
   return 'holding_register'
 }
 

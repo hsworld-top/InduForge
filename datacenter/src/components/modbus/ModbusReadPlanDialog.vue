@@ -21,7 +21,7 @@
     </div>
     <el-table :data="estimate.plans" height="300px">
       <el-table-column prop="unitId" label="从站地址" width="88" />
-      <el-table-column prop="displayArea" label="寄存器区" width="150" />
+      <el-table-column prop="displayArea" label="数据区" width="150" />
       <el-table-column prop="displayRange" label="读取范围" />
       <el-table-column prop="displayCycle" label="周期" width="90" />
       <el-table-column prop="registerCount" label="本次读取变量数" width="132" />

@@ -729,7 +729,7 @@ func (s *ModbusModelingService) ValidateModel(ctx context.Context, projectID, co
 			issues = append(issues, modbusRegisterIssue("warning", "slave.disabled", registerID, register.Name, fmt.Sprintf("所属从站「%s」已停用，运行态不会采集该变量", slave.Name)))
 		}
 		if _, ok := allowedModbusAreas[register.Area]; !ok {
-			issues = append(issues, modbusRegisterIssue("error", "area.invalid", registerID, register.Name, "寄存器区域不合法"))
+			issues = append(issues, modbusRegisterIssue("error", "area.invalid", registerID, register.Name, "Modbus 数据区不合法"))
 		}
 		if register.ProtocolAddress < 0 {
 			issues = append(issues, modbusRegisterIssue("error", "address.invalid", registerID, register.Name, "协议地址不能小于 0"))
@@ -1321,7 +1321,7 @@ func normalizeModbusAddresses(area, addressBase string, address *int, protocolAd
 		base := modbusAreaAddressPrefix(area)
 		protocol := userAddress - base - 1
 		if protocol < 0 {
-			return 0, 0, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "用户地址与寄存器区域不匹配")
+			return 0, 0, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "用户地址与 Modbus 数据区不匹配")
 		}
 		return userAddress, protocol, nil
 	}
@@ -1411,7 +1411,7 @@ func normalizeModbusDataPointType(dataType string) string {
 func validateModbusDataType(register ModbusRegister) string {
 	dataType := strings.ToLower(strings.TrimSpace(register.DataType))
 	if (register.Area == "coil" || register.Area == "discrete_input") && dataType != "bool" && dataType != "boolean" {
-		return "Coil / Discrete Input 默认只支持 bool"
+		return "开关量数据区默认只支持 bool"
 	}
 	required := modbusQuantityForDataType(dataType)
 	if register.Quantity < required {
@@ -1437,13 +1437,13 @@ func formatModbusReadRange(area string, start int, end int) string {
 func formatModbusArea(area string) string {
 	switch area {
 	case "coil":
-		return "Coil"
+		return "输出开关(0x)"
 	case "discrete_input":
-		return "Discrete Input"
+		return "输入开关(1x)"
 	case "input_register":
-		return "Input Register"
+		return "只读寄存器(3x)"
 	default:
-		return "Holding Register"
+		return "读写寄存器(4x)"
 	}
 }
 

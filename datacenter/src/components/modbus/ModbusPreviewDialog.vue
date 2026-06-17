@@ -24,7 +24,7 @@
         empty-text="当前范围暂无预览值"
       >
         <el-table-column prop="slaveId" label="从站" width="76" />
-        <el-table-column label="区域" min-width="130" show-overflow-tooltip>
+        <el-table-column label="数据区" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">{{ formatArea(row.area) }}</template>
         </el-table-column>
         <el-table-column prop="address" label="变量地址" width="110" />
@@ -103,10 +103,10 @@ watch(
 
 const formatArea = (area?: string) => {
   const map: Record<string, string> = {
-    coil: 'Coil',
-    discrete_input: 'Discrete Input',
-    input_register: 'Input Register',
-    holding_register: 'Holding Register',
+    coil: '输出开关(0x)',
+    discrete_input: '输入开关(1x)',
+    input_register: '只读寄存器(3x)',
+    holding_register: '读写寄存器(4x)',
   }
   return map[String(area || '')] || area || '-'
 }

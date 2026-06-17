@@ -21,7 +21,7 @@
         <dl>
           <dt>从站地址</dt>
           <dd>{{ register.unitId }}</dd>
-          <dt>区域</dt>
+          <dt>数据区</dt>
           <dd>{{ formatArea(register.area) }}</dd>
           <dt>用户地址</dt>
           <dd>{{ register.address }}</dd>
@@ -78,15 +78,15 @@
         </dl>
       </section>
       <section>
-        <h3><IconTablerChartBar />地址分布</h3>
+        <h3><IconTablerChartBar />数据区分布</h3>
         <dl>
-          <dt>Holding Register</dt>
+          <dt>读写寄存器(4x)</dt>
           <dd>{{ countByArea.holding_register || 0 }}</dd>
-          <dt>Input Register</dt>
+          <dt>只读寄存器(3x)</dt>
           <dd>{{ countByArea.input_register || 0 }}</dd>
-          <dt>Coil</dt>
+          <dt>输出开关(0x)</dt>
           <dd>{{ countByArea.coil || 0 }}</dd>
-          <dt>Discrete Input</dt>
+          <dt>输入开关(1x)</dt>
           <dd>{{ countByArea.discrete_input || 0 }}</dd>
         </dl>
       </section>
@@ -141,10 +141,10 @@ const registerIssues = computed(() =>
 )
 const formatArea = (area: string) => {
   const map: Record<string, string> = {
-    coil: 'Coil',
-    discrete_input: 'Discrete Input',
-    input_register: 'Input Register',
-    holding_register: 'Holding Register',
+    coil: '开关量输出（线圈 0x）',
+    discrete_input: '开关量输入（离散输入 1x）',
+    input_register: '只读数值寄存器（输入寄存器 3x）',
+    holding_register: '读写数值寄存器（保持寄存器 4x）',
   }
   return map[area] || area
 }

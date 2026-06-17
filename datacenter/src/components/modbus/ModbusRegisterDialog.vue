@@ -52,9 +52,9 @@
           <el-form-item>
             <template #label>
               <span class="modbus-register-dialog__label">
-                区域
+                Modbus 数据区
                 <el-tooltip
-                  content="选择 Modbus 数据区：线圈/保持寄存器通常可读写；离散输入/输入寄存器通常只读。"
+                  content="Modbus 标准数据区：0x/1x 是单 bit 开关量，3x/4x 是 16 位寄存器；括号里保留协议常用名称和区号。"
                   placement="top"
                 >
                   <IconTablerInfoCircle />
@@ -269,10 +269,26 @@ const addressBaseOptions = [
   { label: '从 0 开始', value: 'zero_based', hint: '用户地址就是协议地址' },
 ]
 const areaOptions = [
-  { label: '保持寄存器', value: 'holding_register', hint: 'Holding Register，可读写数值' },
-  { label: '输入寄存器', value: 'input_register', hint: 'Input Register，只读数值' },
-  { label: '线圈', value: 'coil', hint: 'Coil，可读写开关量' },
-  { label: '离散输入', value: 'discrete_input', hint: 'Discrete Input，只读开关量' },
+  {
+    label: '读写数值寄存器（保持寄存器 4x）',
+    value: 'holding_register',
+    hint: 'Holding Register，常用于设定值、控制参数',
+  },
+  {
+    label: '只读数值寄存器（输入寄存器 3x）',
+    value: 'input_register',
+    hint: 'Input Register，常用于测量值',
+  },
+  {
+    label: '开关量输出（线圈 0x）',
+    value: 'coil',
+    hint: 'Coil，1 bit，可读写',
+  },
+  {
+    label: '开关量输入（离散输入 1x）',
+    value: 'discrete_input',
+    hint: 'Discrete Input，1 bit，只读',
+  },
 ]
 const byteOrderOptions = [
   { label: 'ABCD（默认）', value: 'ABCD' },
