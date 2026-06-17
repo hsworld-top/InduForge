@@ -36,6 +36,7 @@ type fakeProtocolDevOpcuaBrowser struct {
 
 type fakeProtocolDevModbusReader struct {
 	registers []ProtocolDevModbusRegister
+	updated   map[string]any
 }
 
 type fakeProtocolDevS7Reader struct {
@@ -130,6 +131,14 @@ func (r *fakeProtocolDevModbusReader) ListDevSessionModbusRegisters(_ context.Co
 		result = append(result, register)
 	}
 	return result, nil
+}
+
+func (r *fakeProtocolDevModbusReader) UpdateRegisterLastValue(_ context.Context, _, _, registerID, _ string, value any, _ string) error {
+	if r.updated == nil {
+		r.updated = map[string]any{}
+	}
+	r.updated[registerID] = value
+	return nil
 }
 
 func (r *fakeProtocolDevS7Reader) ListDevSessionS7Variables(_ context.Context, _, _ string, groupID *string) ([]ProtocolDevS7Variable, error) {
@@ -307,6 +316,9 @@ func TestProtocolDevSessionService_ReadAndPollModbusRegisters(t *testing.T) {
 	}
 	if len(read.Values) != 1 || read.Values[0].RawValue == nil || read.Values[0].Value == nil {
 		t.Fatalf("unexpected read result: %#v", read)
+	}
+	if modbus.updated["r-1"] == nil {
+		t.Fatalf("expected read to persist last value, updated=%#v", modbus.updated)
 	}
 
 	poll, err := service.PollModbus(context.Background(), "project-1", "conn-1", session.SessionID, "user-1", nil)

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -79,6 +80,9 @@ type ModbusRegisterRecord struct {
 	DataPointID     *string
 	DataPointPath   *string
 	DataPointStatus *string
+	LastValue       []byte
+	Quality         string
+	LastUpdatedAt   *time.Time
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }
@@ -218,6 +222,16 @@ type UpdateModbusRegisterParams struct {
 	SortOrder       int
 	Status          string
 	UserID          string
+}
+
+// UpdateModbusRegisterLastValueParams 描述开发态读取后写回的最近值快照。
+type UpdateModbusRegisterLastValueParams struct {
+	ProjectID    string
+	ConnectionID string
+	RegisterID   string
+	LastValue    any
+	Quality      string
+	UserID       string
 }
 
 // BatchUpdateModbusRegistersParams 描述批量更新变量公共属性的参数。
@@ -519,7 +533,7 @@ func (r *ModbusModelingRepository) ListRegisters(ctx context.Context, projectID,
 		       r.data_type, r.byte_order, r.word_order, r.bit_index, r.scale, r.offset_value,
 		       r.unit, r.poll_interval_ms, r.timeout_ms, r.retry_count, r.access_level,
 		       r.description, r.sort_order, r.status, dp.id, dp.path, dp.status,
-		       r.created_at, r.updated_at
+		       r.last_value, r.quality, r.last_updated_at, r.created_at, r.updated_at
 		FROM data_modbus_registers r
 		LEFT JOIN data_points dp
 		  ON dp.project_id = r.project_id
@@ -572,7 +586,7 @@ func (r *ModbusModelingRepository) ListRegistersPage(ctx context.Context, projec
 		       r.data_type, r.byte_order, r.word_order, r.bit_index, r.scale, r.offset_value,
 		       r.unit, r.poll_interval_ms, r.timeout_ms, r.retry_count, r.access_level,
 		       r.description, r.sort_order, r.status, dp.id, dp.path, dp.status,
-		       r.created_at, r.updated_at
+		       r.last_value, r.quality, r.last_updated_at, r.created_at, r.updated_at
 		FROM data_modbus_registers r
 		LEFT JOIN data_points dp
 		  ON dp.project_id = r.project_id
@@ -696,7 +710,7 @@ func (r *ModbusModelingRepository) GetRegister(ctx context.Context, projectID, r
 		       r.data_type, r.byte_order, r.word_order, r.bit_index, r.scale, r.offset_value,
 		       r.unit, r.poll_interval_ms, r.timeout_ms, r.retry_count, r.access_level,
 		       r.description, r.sort_order, r.status, dp.id, dp.path, dp.status,
-		       r.created_at, r.updated_at
+		       r.last_value, r.quality, r.last_updated_at, r.created_at, r.updated_at
 		FROM data_modbus_registers r
 		LEFT JOIN data_points dp
 		  ON dp.project_id = r.project_id
@@ -730,7 +744,8 @@ func (r *ModbusModelingRepository) CreateRegister(ctx context.Context, params Cr
 		          address, address_base, protocol_address, quantity, data_type, byte_order,
 		          word_order, bit_index, scale, offset_value, unit, poll_interval_ms,
 		          timeout_ms, retry_count, access_level, description, sort_order, status,
-		          NULL::uuid, NULL::text, NULL::text, created_at, updated_at
+		          NULL::uuid, NULL::text, NULL::text, NULL::jsonb, 'unknown'::text,
+		          NULL::timestamptz, created_at, updated_at
 	`, params.ProjectID, params.ConnectionID, params.GroupID, params.Name, params.Code, params.UnitID, params.Area,
 		params.Address, params.AddressBase, params.ProtocolAddress, params.Quantity, params.DataType, params.ByteOrder,
 		params.WordOrder, params.BitIndex, params.Scale, params.Offset, params.Unit, params.PollIntervalMS,
@@ -790,7 +805,8 @@ func (r *ModbusModelingRepository) UpdateRegister(ctx context.Context, params Up
 		          address, address_base, protocol_address, quantity, data_type, byte_order,
 		          word_order, bit_index, scale, offset_value, unit, poll_interval_ms,
 		          timeout_ms, retry_count, access_level, description, sort_order, status,
-		          NULL::uuid, NULL::text, NULL::text, created_at, updated_at
+		          NULL::uuid, NULL::text, NULL::text, last_value, quality, last_updated_at,
+		          created_at, updated_at
 	`, args...)
 
 	record, err := scanModbusRegisterRecord(row)
@@ -912,7 +928,8 @@ func (r *ModbusModelingRepository) UpdateRegistersBatch(ctx context.Context, par
 		          address, address_base, protocol_address, quantity, data_type, byte_order,
 		          word_order, bit_index, scale, offset_value, unit, poll_interval_ms,
 		          timeout_ms, retry_count, access_level, description, sort_order, status,
-		          NULL::uuid, NULL::text, NULL::text, created_at, updated_at
+		          NULL::uuid, NULL::text, NULL::text, last_value, quality, last_updated_at,
+		          created_at, updated_at
 	`, strings.Join(setParts, ",\n\t\t\t")), args...)
 	if err != nil {
 		return nil, translateModbusModelingWriteError(err)
@@ -931,6 +948,30 @@ func (r *ModbusModelingRepository) UpdateRegistersBatch(ctx context.Context, par
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 Modbus 批量更新结果失败", err)
 	}
 	return result, nil
+}
+
+// UpdateRegisterLastValue 写回开发态读取得到的最近值快照。
+func (r *ModbusModelingRepository) UpdateRegisterLastValue(ctx context.Context, params UpdateModbusRegisterLastValueParams) error {
+	valueBytes, err := marshalModbusJSONValue(params.LastValue)
+	if err != nil {
+		return err
+	}
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE data_modbus_registers
+		SET last_value = $4::jsonb,
+		    quality = $5,
+		    last_updated_at = now(),
+		    updated_by = $6,
+		    updated_at = now()
+		WHERE project_id = $1 AND connection_id = $2 AND id = $3
+	`, params.ProjectID, params.ConnectionID, params.RegisterID, string(valueBytes), params.Quality, params.UserID)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "更新 Modbus 变量最近值失败", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "Modbus 变量不存在")
+	}
+	return nil
 }
 
 func scanModbusRegisterGroupRecord(row pgx.Row) (ModbusRegisterGroupRecord, error) {
@@ -1014,6 +1055,9 @@ func scanModbusRegisterRecord(row pgx.Row) (ModbusRegisterRecord, error) {
 		&record.DataPointID,
 		&record.DataPointPath,
 		&record.DataPointStatus,
+		&record.LastValue,
+		&record.Quality,
+		&record.LastUpdatedAt,
 		&record.CreatedAt,
 		&record.UpdatedAt,
 	); err != nil {
@@ -1040,6 +1084,14 @@ func uniqueTrimmedModbusIDs(ids []string) []string {
 		result = append(result, trimmed)
 	}
 	return result
+}
+
+func marshalModbusJSONValue(value any) ([]byte, error) {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Modbus 最近值不是有效 JSON", err)
+	}
+	return payload, nil
 }
 
 func translateModbusModelingWriteError(err error) error {

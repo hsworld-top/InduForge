@@ -560,6 +560,18 @@ func (s *ModbusModelingService) BatchImportRegisters(ctx context.Context, projec
 	return result, nil
 }
 
+// UpdateRegisterLastValue 保存开发态读取后的最近值、质量和时间戳。
+func (s *ModbusModelingService) UpdateRegisterLastValue(ctx context.Context, projectID, connectionID, registerID, userID string, value any, quality string) error {
+	return s.repository.UpdateRegisterLastValue(ctx, repository.UpdateModbusRegisterLastValueParams{
+		ProjectID:    projectID,
+		ConnectionID: connectionID,
+		RegisterID:   registerID,
+		LastValue:    value,
+		Quality:      firstNonEmpty(quality, "Good"),
+		UserID:       userID,
+	})
+}
+
 // DeleteRegistersBatch 批量删除变量并标记数据点失效。
 func (s *ModbusModelingService) DeleteRegistersBatch(ctx context.Context, projectID, connectionID, userID string, ids []string) (int, error) {
 	if err := s.validateProjectConnectionAndUser(ctx, projectID, connectionID, userID); err != nil {
@@ -1578,7 +1590,9 @@ func toModbusRegister(record repository.ModbusRegisterRecord) ModbusRegister {
 		DataPointID:     cloneOptionalString(record.DataPointID),
 		DataPointPath:   cloneOptionalString(record.DataPointPath),
 		DataPointStatus: cloneOptionalString(record.DataPointStatus),
-		Quality:         "unknown",
+		LastValue:       bytesToAny(record.LastValue),
+		Quality:         firstNonEmpty(record.Quality, "unknown"),
+		LastUpdatedAt:   cloneOptionalTime(record.LastUpdatedAt),
 		CreatedAt:       record.CreatedAt,
 		UpdatedAt:       record.UpdatedAt,
 	}

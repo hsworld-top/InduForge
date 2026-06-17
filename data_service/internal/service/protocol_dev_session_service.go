@@ -68,6 +68,7 @@ type ProtocolDevOpcuaModelReader interface {
 // ProtocolDevModbusModelReader 表示 Modbus 开发态会话需要读取的建模数据接口。
 type ProtocolDevModbusModelReader interface {
 	ListDevSessionModbusRegisters(ctx context.Context, projectID, connectionID string, groupID *string) ([]ProtocolDevModbusRegister, error)
+	UpdateRegisterLastValue(ctx context.Context, projectID, connectionID, registerID, userID string, value any, quality string) error
 }
 
 // ProtocolDevS7ModelReader 表示 S7 开发态会话需要读取的建模数据接口。
@@ -527,7 +528,7 @@ func (s *ProtocolDevSessionService) ReadModbus(ctx context.Context, projectID, c
 	if err != nil {
 		return nil, err
 	}
-	values := s.buildModbusReadValues(registers, registerIDs)
+	values := s.buildModbusReadValues(ctx, projectID, connectionID, userID, registers, registerIDs)
 	return &ProtocolDevModbusReadResult{Values: values, Diagnostics: []string{}}, nil
 }
 
@@ -540,7 +541,7 @@ func (s *ProtocolDevSessionService) PollModbus(ctx context.Context, projectID, c
 	if err != nil {
 		return nil, err
 	}
-	values := s.buildModbusReadValues(registers, nil)
+	values := s.buildModbusReadValues(ctx, projectID, connectionID, userID, registers, nil)
 	readPlan := BuildModbusReadPlanEstimate(toModbusRegisters(registers))
 	diagnostics := append([]string{}, readPlan.Diagnostics...)
 	diagnostics = append(diagnostics, "当前轮询结果为开发态短时读取快照，不写入历史库、不触发报警或计算。")
@@ -643,7 +644,15 @@ func (s *ProtocolDevSessionService) listS7Variables(ctx context.Context, project
 	return s.s7.ListDevSessionS7Variables(ctx, projectID, connectionID, groupID)
 }
 
-func (s *ProtocolDevSessionService) buildModbusReadValues(registers []ProtocolDevModbusRegister, registerIDs []string) []ProtocolDevModbusReadValue {
+// UpdateRegisterLastValue 写回开发态 Modbus 读取快照。
+func (a *ProtocolDevModbusModelingAdapter) UpdateRegisterLastValue(ctx context.Context, projectID, connectionID, registerID, userID string, value any, quality string) error {
+	if a == nil || a.service == nil {
+		return apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "Modbus 建模服务未初始化")
+	}
+	return a.service.UpdateRegisterLastValue(ctx, projectID, connectionID, registerID, userID, value, quality)
+}
+
+func (s *ProtocolDevSessionService) buildModbusReadValues(ctx context.Context, projectID, connectionID, userID string, registers []ProtocolDevModbusRegister, registerIDs []string) []ProtocolDevModbusReadValue {
 	wanted := stringSet(registerIDs)
 	now := s.now().UTC().Format("2006-01-02 15:04:05")
 	values := make([]ProtocolDevModbusReadValue, 0, len(registers))
@@ -672,15 +681,18 @@ func (s *ProtocolDevSessionService) buildModbusReadValues(registers []ProtocolDe
 			continue
 		}
 		raw := sampleModbusRawValue(register)
+		value := sampleModbusValue(register, raw)
+		quality := "Good"
+		_ = s.modbus.UpdateRegisterLastValue(ctx, projectID, connectionID, register.ID, userID, value, quality)
 		values = append(values, ProtocolDevModbusReadValue{
 			RegisterID: register.ID,
 			SlaveID:    register.UnitID,
 			Area:       register.Area,
 			Address:    register.Address,
 			RawValue:   raw,
-			Value:      sampleModbusValue(register, raw),
+			Value:      value,
 			DataType:   register.DataType,
-			Quality:    "Good",
+			Quality:    quality,
 			Timestamp:  now,
 			Error:      nil,
 		})
