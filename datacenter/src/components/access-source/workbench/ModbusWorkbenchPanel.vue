@@ -1012,10 +1012,17 @@ const openBulkUpdate = async () => {
   await reloadAll()
 }
 
-const importRegisters = async (rows: Array<Record<string, unknown>>) => {
+const importRegisters = async (
+  payload:
+    | Array<Record<string, unknown>>
+    | { groupId?: string | null; registers?: Array<Record<string, unknown>> },
+) => {
   saving.value = true
   try {
-    const groupId = (rows[0]?.groupId as string | null | undefined) ?? selectedGroupId.value ?? null
+    const rows = Array.isArray(payload) ? payload : payload.registers || []
+    const groupId = Array.isArray(payload)
+      ? selectedGroupId.value || null
+      : payload.groupId ?? selectedGroupId.value ?? null
     await dataAPI.batchImportModbusRegisters(props.projectId, props.connection.id, {
       groupId,
       registers: rows,

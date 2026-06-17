@@ -238,7 +238,14 @@
           </el-table-column>
           <el-table-column label="类型" width="112">
             <template #default="{ row }">
-              <el-input v-model="row.dataType" size="small" />
+              <el-select v-model="row.dataType" size="small">
+                <el-option
+                  v-for="option in dataTypeOptions"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                />
+              </el-select>
             </template>
           </el-table-column>
           <el-table-column label="采集周期" width="110">
@@ -309,6 +316,10 @@ import IconTablerFileTypeCsv from '~icons/tabler/file-type-csv'
 
 type ModbusImportMode = 'paste' | 'range'
 type ModbusImportStep = 'pick' | 'confirm'
+type ModbusImportSubmitPayload = {
+  groupId: string | null
+  registers: Array<Record<string, unknown>>
+}
 type ModbusImportPreviewRow = {
   rowNo: number
   name: string
@@ -341,7 +352,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   (event: 'update:modelValue', value: boolean): void
-  (event: 'submit', rows: Array<Record<string, unknown>>): void
+  (event: 'submit', payload: ModbusImportSubmitPayload): void
 }>()
 
 const visible = computed({
@@ -370,6 +381,15 @@ const areaOptions = [
   { label: '输入寄存器', value: 'input_register' },
   { label: '线圈', value: 'coil' },
   { label: '离散输入', value: 'discrete_input' },
+]
+const dataTypeOptions = [
+  { label: 'bool', value: 'bool' },
+  { label: 'uint16', value: 'uint16' },
+  { label: 'int16', value: 'int16' },
+  { label: 'uint32', value: 'uint32' },
+  { label: 'int32', value: 'int32' },
+  { label: 'float32', value: 'float32' },
+  { label: 'float64', value: 'float64' },
 ]
 const range = reactive({
   unitId: 1,
@@ -441,8 +461,7 @@ const validRows = computed(() =>
       area: row.area,
       address: Number(row.address),
       addressBase: row.addressBase,
-      protocolAddress: row.protocolAddress,
-      dataType: row.dataType,
+      dataType: normalizeDataType(row.dataType),
       byteOrder: row.byteOrder,
       wordOrder: row.wordOrder,
       scale: Number(row.scale),
@@ -451,7 +470,6 @@ const validRows = computed(() =>
       pollIntervalMs: Number(row.pollIntervalMs),
       accessLevel: normalizeAccessLevel(row.accessLevel),
       description: row.description || null,
-      groupId: selectedDefaultGroupId.value || null,
     })),
 )
 
@@ -663,7 +681,7 @@ function validateRows(rows: ModbusImportPreviewRow[]) {
     const scale = toNumber(String(row.scale), Number.NaN)
     const offset = toNumber(String(row.offset), Number.NaN)
     const pollIntervalMs = toInteger(String(row.pollIntervalMs), Number.NaN)
-    const dataType = String(row.dataType || '').trim()
+    const dataType = normalizeDataType(row.dataType)
     const name = sanitizeVariableName(row.name)
     const issue = firstIssue([
       !name ? '变量名为空' : '',
@@ -672,6 +690,7 @@ function validateRows(rows: ModbusImportPreviewRow[]) {
       Number.isNaN(address) ? '地址不是数字' : '',
       Number.isNaN(protocolAddress) || protocolAddress < 0 ? '地址与寄存器区域不匹配' : '',
       !dataType ? '数据类型为空' : '',
+      !isSupportedDataType(dataType) ? '数据类型不支持' : '',
       ['coil', 'discrete_input'].includes(area) &&
       !['bool', 'boolean'].includes(dataType.toLowerCase())
         ? 'Coil / Discrete Input 默认只支持 bool'
@@ -693,6 +712,7 @@ function validateRows(rows: ModbusImportPreviewRow[]) {
       unitId: Number.isNaN(unitId) ? row.unitId : unitId,
       address: Number.isNaN(address) ? row.address : address,
       protocolAddress,
+      dataType,
       scale: Number.isNaN(scale) ? row.scale : scale,
       offset: Number.isNaN(offset) ? row.offset : offset,
       pollIntervalMs: Number.isNaN(pollIntervalMs) ? row.pollIntervalMs : pollIntervalMs,
@@ -700,6 +720,10 @@ function validateRows(rows: ModbusImportPreviewRow[]) {
       issue,
     }
   })
+}
+
+function currentGroupId() {
+  return selectedDefaultGroupId.value || null
 }
 
 function validatedRow(row: ModbusImportPreviewRow) {
@@ -774,7 +798,7 @@ function submit() {
     return
   }
   const skipped = confirmRows.value.length - validRows.value.length
-  const runSubmit = () => emit('submit', validRows.value)
+  const runSubmit = () => emit('submit', { groupId: currentGroupId(), registers: validRows.value })
   if (skipped > 0) {
     void ElMessageBox.confirm(
       `本次将导入 ${validRows.value.length} 个变量，跳过 ${skipped} 行问题数据。是否继续？`,
@@ -837,6 +861,15 @@ function normalizeAccessLevel(value: string) {
   const text = String(value || '').trim().toLowerCase()
   if (['write', '写', 'readwrite', 'read_write', '读写'].includes(text)) return 'readwrite'
   return 'read'
+}
+
+function normalizeDataType(value: string) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function isSupportedDataType(value: string) {
+  const normalized = normalizeDataType(value)
+  return dataTypeOptions.some((option) => option.value === normalized)
 }
 
 function sanitizeVariableName(value: string) {
