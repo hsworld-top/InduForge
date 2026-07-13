@@ -296,6 +296,7 @@ func mustSignIntegrationJWT(t *testing.T, secret string, claims *auth.Claims) st
 	payload := map[string]any{
 		"userId":       claims.UserID,
 		"tenantId":     claims.TenantID,
+		"role":         claims.Role,
 		"projectIds":   claims.ProjectIDs,
 		"capabilities": claims.Capabilities,
 		"exp":          now.Add(time.Hour).Unix(),

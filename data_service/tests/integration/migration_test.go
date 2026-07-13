@@ -81,6 +81,9 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_alarm_policies",
 		"data_realtime_keys",
 		"data_workbench_object_groups",
+		"collector_dev_agents",
+		"collector_dev_registration_codes",
+		"collector_dev_tasks",
 		"data_table_group_members",
 	} {
 		if !tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
@@ -100,8 +103,8 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&appliedCount); err != nil {
 		t.Fatalf("鏌ヨ schema_migrations 澶辫触: %v", err)
 	}
-	if appliedCount != 44 {
-		t.Fatalf("expected 44 migration records, got %d", appliedCount)
+	if appliedCount != 45 {
+		t.Fatalf("expected 45 migration records, got %d", appliedCount)
 	}
 
 	if err := migrator.DownAll(ctx); err != nil {
@@ -135,6 +138,9 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		"data_alarm_policy_groups",
 		"data_alarm_policies",
 		"data_workbench_object_groups",
+		"collector_dev_agents",
+		"collector_dev_registration_codes",
+		"collector_dev_tasks",
 		"data_table_group_members",
 	} {
 		if tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {

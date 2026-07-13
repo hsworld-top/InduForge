@@ -15,6 +15,8 @@ type options struct {
 	builtinRuntimeHandler     *handler.BuiltinRuntimeHandler
 	connectionHandler         *handler.ConnectionHandler
 	contractCheckHandler      *handler.ContractCheckHandler
+	collectorDevHandler       *handler.CollectorDevHandler
+	collectorAuthenticator    middleware.CollectorAgentAuthenticator
 	storagePolicyHandler      *handler.StoragePolicyHandler
 	queryHandler              *handler.QueryHandler
 	workbenchGroupHandler     *handler.WorkbenchGroupHandler
@@ -76,6 +78,15 @@ func WithStoragePolicyRoutes(storagePolicyHandler *handler.StoragePolicyHandler,
 func WithContractCheckRoutes(contractCheckHandler *handler.ContractCheckHandler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
 		opts.contractCheckHandler = contractCheckHandler
+		opts.jwtValidator = jwtValidator
+	}
+}
+
+// WithCollectorDevRoutes wires Collector Dev 用户 API 与 Agent API。
+func WithCollectorDevRoutes(collectorHandler *handler.CollectorDevHandler, authenticator middleware.CollectorAgentAuthenticator, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.collectorDevHandler = collectorHandler
+		opts.collectorAuthenticator = authenticator
 		opts.jwtValidator = jwtValidator
 	}
 }
@@ -251,6 +262,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountBuiltinRuntimeRoutes(mux, opts)
 	mountAccessSourceRoutes(mux, opts)
 	mountContractCheckRoutes(mux, opts)
+	mountCollectorDevRoutes(mux, opts)
 	mountConnectionRoutes(mux, opts)
 	mountDataRoutes(mux, opts)
 	mountWorkbenchGroupRoutes(mux, opts)
@@ -1763,4 +1775,33 @@ func mountComputeRoutes(mux *http.ServeMux, opts options) {
 			),
 		),
 	)
+}
+
+func mountCollectorDevRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.collectorDevHandler == nil || opts.jwtValidator == nil || opts.collectorAuthenticator == nil {
+		return
+	}
+	platformRead := func(next middleware.ErrorHandlerFunc) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(middleware.ErrorHandler(next))
+	}
+	platformProjectRead := func(next middleware.ErrorHandlerFunc) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(middleware.RequireCapability("project:read")(middleware.ErrorHandler(next)))
+	}
+	platformProjectWrite := func(next middleware.ErrorHandlerFunc) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(middleware.RequireCapability("project:write")(middleware.ErrorHandler(next)))
+	}
+	agent := func(next middleware.ErrorHandlerFunc) http.Handler {
+		return middleware.AuthenticateCollectorAgent(opts.collectorAuthenticator)(middleware.ErrorHandler(next))
+	}
+
+	mux.Handle("POST /api/v1/data/collector-dev/registration-codes", platformRead(opts.collectorDevHandler.CreateRegistrationCode))
+	mux.Handle("GET /api/v1/data/collector-dev/agents", platformRead(opts.collectorDevHandler.ListAgents))
+	mux.Handle("DELETE /api/v1/data/collector-dev/agents/{agentId}", platformRead(opts.collectorDevHandler.DeleteAgent))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/collector-dev/tasks", platformProjectWrite(opts.collectorDevHandler.CreateTask))
+	mux.Handle("GET /api/v1/data/projects/{projectId}/collector-dev/tasks/{taskId}", platformProjectRead(opts.collectorDevHandler.GetTask))
+	mux.Handle("DELETE /api/v1/data/projects/{projectId}/collector-dev/tasks/{taskId}", platformProjectWrite(opts.collectorDevHandler.CancelTask))
+	mux.Handle("POST /api/v1/data/collector-dev/agent/register", middleware.ErrorHandler(opts.collectorDevHandler.RegisterAgent))
+	mux.Handle("POST /api/v1/data/collector-dev/agent/heartbeat", agent(opts.collectorDevHandler.Heartbeat))
+	mux.Handle("POST /api/v1/data/collector-dev/agent/tasks/claim", agent(opts.collectorDevHandler.ClaimTask))
+	mux.Handle("POST /api/v1/data/collector-dev/agent/tasks/{taskId}/complete", agent(opts.collectorDevHandler.CompleteTask))
 }

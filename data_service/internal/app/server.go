@@ -168,6 +168,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	alarmPolicyRepository := repository.NewAlarmPolicyRepository(pool)
 	storagePolicyRepository := repository.NewStoragePolicyRepository(pool)
 	contractCheckRepository := repository.NewContractCheckRepository(pool)
+	collectorDevRepository := repository.NewCollectorDevRepository(pool)
 	queryRepository := repository.NewQueryRepository(pool)
 	workbenchGroupRepository := repository.NewWorkbenchGroupRepository(pool)
 	dataPointRepository := repository.NewDataPointRepository(pool)
@@ -188,6 +189,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	alarmRuleService := service.NewAlarmRuleService(alarmRuleRepository, dataPointRepository)
 	alarmPolicyService := service.NewAlarmPolicyService(alarmPolicyRepository, dataPointRepository)
 	storagePolicyService := service.NewStoragePolicyService(storagePolicyRepository, dataPointRepository)
+	collectorDevService := service.NewCollectorDevService(collectorDevRepository)
 	contractCheckService := service.NewContractCheckService(dataPointRepository, computeRepository, alarmRuleRepository, queryRepository, contractCheckRepository)
 	builtinRuntimeService := newBuiltinRuntimeServiceFromConfig(cfg, pool, devPool, &cleanupFns)
 	connectionService := service.NewConnectionService(connectionRepository, builtinRuntimeService)
@@ -232,6 +234,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	alarmPolicyHandler := handler.NewAlarmPolicyHandler(alarmPolicyService)
 	storagePolicyHandler := handler.NewStoragePolicyHandler(storagePolicyService)
 	contractCheckHandler := handler.NewContractCheckHandler(contractCheckService)
+	collectorDevHandler := handler.NewCollectorDevHandler(collectorDevService)
 	connectionHandler := handler.NewConnectionHandler(connectionService)
 	builtinRuntimeHandler := handler.NewBuiltinRuntimeHandler(builtinRuntimeService, connectionService)
 	queryHandler := handler.NewQueryHandler(queryService)
@@ -258,6 +261,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		router.WithBuiltinRuntimeRoutes(builtinRuntimeHandler, jwtValidator),
 		router.WithAccessSourceRoutes(accessSourceHandler, jwtValidator),
 		router.WithContractCheckRoutes(contractCheckHandler, jwtValidator),
+		router.WithCollectorDevRoutes(collectorDevHandler, collectorDevService, jwtValidator),
 		router.WithConnectionRoutes(connectionHandler, jwtValidator),
 		router.WithDataRoutes(queryHandler, dataPointHandler, jwtValidator),
 		router.WithWorkbenchGroupRoutes(workbenchGroupHandler, jwtValidator),
