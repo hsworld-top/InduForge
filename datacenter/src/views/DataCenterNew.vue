@@ -12,10 +12,29 @@
           <IconTablerShieldCheck class="h-5 w-5" />
           <span>数据契约检查</span>
         </button>
+        <button
+          type="button"
+          class="datacenter-side-action"
+          :class="{ 'is-primary': showCollectorAgentManager }"
+          title="采集调试代理"
+          aria-label="采集调试代理"
+          @click="showCollectorAgentManager = true"
+        >
+          <IconTablerPlugConnected class="h-5 w-5" />
+          <span>采集调试代理</span>
+        </button>
       </div>
     </template>
 
-    <DataPointWorkspace v-if="activeModule === 'datapoint' && projectId" :project-id="projectId" />
+    <CollectorAgentManager
+      v-if="showCollectorAgentManager"
+      @close="showCollectorAgentManager = false"
+    />
+
+    <DataPointWorkspace
+      v-else-if="activeModule === 'datapoint' && projectId"
+      :project-id="projectId"
+    />
 
     <template v-else-if="activeModule === 'access-source'">
       <!-- v2 workbench 路由：tab === 'workbench' 时挂新容器 -->
@@ -301,6 +320,7 @@ import ComputeUnitPanel from '@/components/compute/ComputeUnitPanel.vue'
 import ComputeWorkspace from '@/components/compute/ComputeWorkspace.vue'
 import StoragePolicyWorkspace from '@/views/storage-policy/StoragePolicyWorkspace.vue'
 import DataContractCheckDialog from '@/components/contract/DataContractCheckDialog.vue'
+import CollectorAgentManager from '@/components/collector/CollectorAgentManager.vue'
 import DataCenterShell from '@/components/layout/DataCenterShell.vue'
 import { useConnection } from '@/composables/useConnection'
 import { useConfirm } from '@/composables/useConfirm'
@@ -361,6 +381,7 @@ watch(
 
 /** 切换模块时更新 URL（由 NavRail 双向绑定触发） */
 watch(activeModule, (newModule, oldModule) => {
+  showCollectorAgentManager.value = false
   if (newModule === oldModule) return
   if (route.params.module === newModule) return
   // 切换模块时清空 objectId/tab，保留 query string
@@ -416,6 +437,7 @@ const setDataPointListRef = (tabId, el) => {
 
 // 对话框状态
 const showDataContractCheckDialog = ref(false)
+const showCollectorAgentManager = ref(false)
 const showConnectionDialog = ref(false)
 const showDetailsDialog = ref(false)
 const showTableStructureDialog = ref(false)
