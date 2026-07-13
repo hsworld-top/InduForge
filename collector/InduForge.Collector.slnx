@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/InduForge.Collector.Contracts/InduForge.Collector.Contracts.csproj" />
+    <Project Path="src/InduForge.Collector.DevAgent/InduForge.Collector.DevAgent.csproj" />
+    <Project Path="src/InduForge.Collector.Drivers.OpcUa/InduForge.Collector.Drivers.OpcUa.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/InduForge.Collector.Contracts.Tests/InduForge.Collector.Contracts.Tests.csproj" />
+    <Project Path="tests/InduForge.Collector.Drivers.OpcUa.Tests/InduForge.Collector.Drivers.OpcUa.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -13,3 +13,4 @@
 - [IFP Manifest](./跨模块契约/ifp-manifest-contract.md)
 - [NodeAgent 与运行系统协议](./跨模块契约/node-agent-runtime-protocol.md)
 - [Runtime 健康检查与状态协议](./跨模块契约/runtime-health-status-contract.md)
+- [采集调试代理协议](./跨模块契约/collector-dev-agent-protocol.md)

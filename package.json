@@ -50,6 +50,10 @@
     "typecheck:ide": "pnpm --filter ide typecheck",
     "typecheck:datacenter": "pnpm --filter datacenter typecheck",
     "typecheck:designer": "pnpm --filter designer typecheck",
-    "typecheck": "pnpm typecheck:ide && pnpm typecheck:datacenter && pnpm typecheck:designer"
+    "typecheck": "pnpm typecheck:ide && pnpm typecheck:datacenter && pnpm typecheck:designer",
+    "dotnet:restore:collector": "dotnet restore collector/InduForge.Collector.slnx",
+    "dotnet:build:collector": "dotnet build collector/InduForge.Collector.slnx --no-restore",
+    "dotnet:test:collector": "dotnet test collector/InduForge.Collector.slnx",
+    "dotnet:publish:collector-dev": "dotnet publish collector/src/InduForge.Collector.DevAgent/InduForge.Collector.DevAgent.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o collector/artifacts/win-x64"
   }
 }

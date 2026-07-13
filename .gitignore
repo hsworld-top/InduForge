@@ -26,6 +26,8 @@ lerna-debug.log*
 .DS_Store
 Thumbs.db
 .kiro/
+.vs/
+**/TestResults/
 
 # ============================================
 # 运行时 PID、日志与临时文件
@@ -70,6 +72,9 @@ runtime/node_agent/build/
 runtime/node_agent/data/
 runtime/node_agent/logs/
 runtime/node_agent/runtime/
+collector/**/bin/
+collector/**/obj/
+collector/artifacts/
 
 # ============================================
 # 项目过程文档与本地工作区

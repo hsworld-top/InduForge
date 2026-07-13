@@ -133,6 +133,7 @@ YYYY-MM-DD HH:mm:ss
 
 - `dev_core/`：平台控制面后端与发布部署聚合能力。
 - `data_service/`：平台侧与开发态数据域服务。
+- `collector/`：采集调试代理、运行采集器共享契约与工业协议适配器。
 - `dev_ide/`：平台管理与运维前端。
 - `datacenter/`：数据接入与数据语义建模前端。
 - `designer/`：低代码页面设计器。
