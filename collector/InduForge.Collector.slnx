@@ -7,5 +7,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/InduForge.Collector.Contracts.Tests/InduForge.Collector.Contracts.Tests.csproj" />
     <Project Path="tests/InduForge.Collector.Drivers.OpcUa.Tests/InduForge.Collector.Drivers.OpcUa.Tests.csproj" />
+    <Project Path="tests/InduForge.Collector.DevAgent.Tests/InduForge.Collector.DevAgent.Tests.csproj" />
   </Folder>
 </Solution>
