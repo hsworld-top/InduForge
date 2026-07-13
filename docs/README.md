@@ -1,67 +1,43 @@
 # InduForge 文档中心
 
-## 1. 使用原则
+## 1. 文档体系
 
-- `docs/` 只保留已确认的正式文档、稳定规范与模块说明。
-- 开发过程文档、专项计划、分析稿、审计稿、测试清单、AI 辅助资料不放入仓库，统一使用外部协作空间管理。
-- 当前代码、数据库、接口与已实现能力优先于过时文档；跨模块协议以 `docs/contracts/` 为准。
+| 目录                                       | 内容                                    | 主要读者               |
+| ------------------------------------------ | --------------------------------------- | ---------------------- |
+| [01-产品与架构](./01-产品与架构/README.md) | 产品定义、系统上下文和总体架构          | 产品、架构、研发负责人 |
+| [02-系统设计](./02-系统设计/README.md)     | 中心、节点、运行、采集、消息和发布设计  | 架构师、后端、运维     |
+| [03-模块设计](./03-模块设计/README.md)     | 各代码模块的职责和稳定设计              | 模块开发人员           |
+| [04-契约与规范](./04-契约与规范/README.md) | API、Schema、数据库、错误码和跨模块协议 | 前后端、测试、集成人员 |
+| [05-研发与交付](./05-研发与交付/README.md) | 测试、研发流程和交付模型                | 研发、测试、交付人员   |
+| [06-运维与安全](./06-运维与安全/README.md) | 端口、授权、资产保护和运维边界          | 运维、安全、实施人员   |
+| [归档](./归档/README.md)                   | 被替代设计、旧入口和过程文档            | 历史追溯               |
 
-## 2. 正式文档入口
+## 2. 当前正式架构基线
 
-### 平台级正式文档
+- [产品定义](./01-产品与架构/产品定义.md)
+- [平台系统架构](./01-产品与架构/平台系统架构.md)
+- [平台开发与管理系统架构](./02-系统设计/平台开发与管理系统架构.md)
+- [平台部署拓扑架构](./02-系统设计/平台部署拓扑架构.md)
+- [节点管理与交付架构](./02-系统设计/节点管理与交付架构.md)
+- [工程运行系统架构](./02-系统设计/工程运行系统架构.md)
+- [工程运行微服务设计](./02-系统设计/工程运行微服务设计.md)
+- [NATS JetStream 消息架构](./02-系统设计/NATS-JetStream消息架构.md)
+- [工业采集架构](./02-系统设计/工业采集架构.md)
+- [工程发布与资源分发架构](./02-系统设计/工程发布与资源分发架构.md)
 
-- [产品定义](./产品定义.md)
-- [数据库设计](./database-design.md)
-- [环境端口规划](./环境端口规划.md)
-- [高层设计](./高层设计.md)
-- [详细设计](./详细设计.md)
-- [离线授权与工程资产保护设计](./离线授权与工程资产保护设计.md)
-- [节点侧运行态数据引擎设计](./节点侧运行态数据引擎设计.md)
-- [节点侧客户端引擎与工程运行网关设计](./节点侧客户端引擎与工程运行网关设计.md)
-- [测试与质量策略](./测试与质量策略.md)
-- [研发与交付视角模型](./研发与交付视角模型.md)
+## 3. 当前关键技术基线
 
-### 跨模块契约
+- 中心开发与管理系统运行于 Linux Docker。
+- 运行站点一套 K3s、一套 NATS JetStream，可承载多个工程。
+- 每个工程使用独立 Namespace、NATS Account 和 Release。
+- 工程资源存放于中心 S3，发布后下载到工程运行空间。
+- Windows/Linux 工业采集均为 NodeAgent 托管的原生进程。
+- MQTT 是工程对外协议能力，JetStream 是内部可靠事件总线。
 
-- [发布态 Schema 契约](./contracts/designer-publish-schema.md)
-- [IFP Manifest 契约](./contracts/ifp-manifest-contract.md)
-- [NodeAgent 启动协议](./contracts/node-agent-runtime-protocol.md)
-- [Runtime 健康状态协议](./contracts/runtime-health-status-contract.md)
+## 4. 文档规则
 
-### 模块概览与稳定说明
-
-- [dev_core 后端概览](./backend/README.md)
-- [IDE 管理端概览](./dev_ide/README.md)
-- [数据中心概览](./datacenter/README.md)
-- [data_service 概览](./data_service/README.md)
-- [设计器概览](./designer/README.md)
-- [NodeAgent 后端概览](./node_agent/README.md)
-- [NodeAgent Front 概览](./node_agent_front/README.md)
-- [Designer 组件开发](./designer/component-development.md)
-- [Designer 层级约定](./designer/layer-order-convention.md)
-- [Designer 放置与堆叠](./designer/placement-and-stacking.md)
-- [Designer 尺寸约定](./designer/size-convention.md)
-- [Datacenter 连接说明](./datacenter/connections.md)
-- [Datacenter 查询说明](./datacenter/queries.md)
-- [Datacenter MQTT 自动发现](./datacenter/mqtt-auto-discovery.md)
-- [Datacenter 数据点设计](./datacenter/datapoint-design.md)
-- [Datacenter Compute/Alarm 设计](./datacenter/compute-alarm-design.md)
-- [NodeAgent 初始化流程](./node_agent/初始化流程.md)
-
-### 开发、基础设施与交付
-
-- [scripts 目录说明](../scripts/README.md)
-- [开发环境初始化](../scripts/dev/README.md)
-- [Docker 脚本目录](../scripts/docker/README.md)
-- [测试打包说明](../scripts/release/README.md)
-- [离线交付包说明](../scripts/offline/README.md)
-
-## 3. 过程文档入口
-
-- 本仓库不再维护开发过程文档与 AI 辅助资料索引。
-
-## 4. 文档维护规则
-
-- 未确认的规划、专项计划、分析稿、审计稿、测试清单不要放在 `docs/`。
-- 这类资料统一迁移到团队外部协作空间，不在仓库内沉淀。
-- 正式文档发生设计取舍或结构调整时，先讨论结论，再更新正文。
+- 正式文档只描述已确认的目标架构、稳定规范和模块边界。
+- 实现计划、阶段总结、临时方案和 AI 辅助规格放入 `归档/过程文档/`，不作为正式依据。
+- 旧设计被替代时必须归档并注明替代文档。
+- 跨模块协议以 `04-契约与规范/跨模块契约/` 为准。
+- 当前代码与正式契约不一致时，应明确记录差异，不能让旧文档继续充当目标架构。

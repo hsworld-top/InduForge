@@ -103,7 +103,7 @@ InduForge 是一个面向工业互联网场景的多模块单仓低代码平台�
 - 当前开发环境默认以 Windows + PowerShell 为主，下面示例优先使用 PowerShell 写法。
 - 若需要同时启动多个模块，建议为每个模块单独打开一个 PowerShell 窗口。
 - Windows + WSL2 开发时，WSL2 只承载 Docker 基础设施；`pnpm install` 和业务项目启动建议在 Windows 侧执行。
-- 默认端口以根 `.env`、`.env.development.example`、`.env.production.example` 和 [环境端口规划](./docs/环境端口规划.md) 为准。
+- 默认端口以根 `.env`、`.env.development.example`、`.env.production.example` 和 [环境端口规划](./docs/06-运维与安全/环境端口规划.md) 为准。
 
 ### 安装依赖
 
@@ -226,45 +226,19 @@ InduForge/
 
 ## 文档导航
 
-### 📚 核心文档
+- [InduForge 文档中心](./docs/README.md)
+- [产品定义](./docs/01-产品与架构/产品定义.md)
+- [平台系统架构](./docs/01-产品与架构/平台系统架构.md)
+- [系统设计入口](./docs/02-系统设计/README.md)
+- [模块设计入口](./docs/03-模块设计/README.md)
+- [契约与规范入口](./docs/04-契约与规范/README.md)
+- [研发与交付入口](./docs/05-研发与交付/README.md)
+- [运维与安全入口](./docs/06-运维与安全/README.md)
 
-- [数据库设计](./docs/database-design.md) - 数据库表结构说明
-- [环境端口规划](./docs/环境端口规划.md) - 开发、生产和离线交付端口约定
-- [产品定义](./docs/产品定义.md)
-- [高层设计](./docs/高层设计.md)
-- [详细设计](./docs/详细设计.md)
-- [测试与质量策略](./docs/测试与质量策略.md)
-
-### 🎨 设计中心文档
-
-- [设计中心概述](./docs/designer/README.md)
-- [组件开发指南](./docs/designer/component-development.md)
-- [层级约定](./docs/designer/layer-order-convention.md)
-- [放置与堆叠](./docs/designer/placement-and-stacking.md)
-- [尺寸约定](./docs/designer/size-convention.md)
-
-### 📊 数据中心文档
-
-- [数据中心概述](./docs/datacenter/README.md)
-- [数据连接管理](./docs/datacenter/connections.md)
-- [查询管理](./docs/datacenter/queries.md)
-
-### 🧩 数据域与运行时文档
-
-- [数据域服务概述](./docs/data_service/README.md)
-- [节点执行器概述](./docs/node_agent/README.md)
-- [节点本地管理前端概述](./docs/node_agent_front/README.md)
-
-### 🔧 后端文档
-
-- [后端 API 文档](./docs/backend/README.md)
-- [认证与授权](./docs/backend/auth.md)
-
-### 📦 脚本与交付
+### 脚本与交付
 
 - [scripts 目录说明](./scripts/README.md)
 - [开发环境初始化](./scripts/dev/README.md)
-- [Docker 脚本目录](./scripts/docker/README.md)
 - [测试打包说明](./scripts/release/README.md)
 - [离线交付包说明](./scripts/offline/README.md)
 

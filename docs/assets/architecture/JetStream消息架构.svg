@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1000" viewBox="0 0 1800 1000">
+<defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#64748B"/></marker><filter id="s"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.12"/></filter></defs>
+<rect width="100%" height="100%" fill="#FBFCFE"/>
+<text x="900.0" y="42" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#1F2937">NATS JetStream 消息架构</text>
+<text x="900.0" y="68" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" fill="#64748B">站点共享集群，工程 Account 隔离，Stream 与 Consumer 明确分工</text>
+<path d="M 740,267.5 L 760,267.5" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#a)"/>
+<rect x="720.0" y="255.5" width="60" height="21" rx="4" fill="#FBFCFE"/>
+<text x="750.0" y="270.5" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="12" fill="#475569">计算结果</text>
+<path d="M 740,457.5 L 760,457.5" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#a)"/>
+<rect x="720.0" y="445.5" width="60" height="21" rx="4" fill="#FBFCFE"/>
+<text x="750.0" y="460.5" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="12" fill="#475569">执行结果</text>
+<rect x="60" y="100" width="1680" height="800" rx="16" fill="#E4F7F8" stroke="#35A5AD" stroke-width="2"/>
+<text x="78" y="128" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#35A5AD">Site NATS JetStream</text>
+<rect x="110" y="165" width="300" height="640" rx="16" fill="#FFF8D8" stroke="#C69A18" stroke-width="2"/>
+<text x="128" y="193" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#C69A18">SYS Account</text>
+<rect x="150" y="240" width="220" height="70" rx="10" fill="#FFF8D8" stroke="#C69A18" stroke-width="2" filter="url(#s)"/>
+<text x="260.0" y="280.25" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">监控 / 管理</text>
+<rect x="150" y="360" width="220" height="70" rx="10" fill="#FFF8D8" stroke="#C69A18" stroke-width="2" filter="url(#s)"/>
+<text x="260.0" y="400.25" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">账号与权限</text>
+<rect x="470" y="165" width="560" height="640" rx="16" fill="#F0ECFF" stroke="#7567C7" stroke-width="2"/>
+<text x="488" y="193" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#7567C7">PROJECT_A Account</text>
+<rect x="520" y="230" width="220" height="75" rx="10" fill="#E4F7F8" stroke="#35A5AD" stroke-width="2" filter="url(#s)"/>
+<text x="630.0" y="262.625" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">DATA_RAW</text>
+<text x="630.0" y="282.875" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">data.raw.&gt;</text>
+<rect x="760" y="230" width="220" height="75" rx="10" fill="#E4F7F8" stroke="#35A5AD" stroke-width="2" filter="url(#s)"/>
+<text x="870.0" y="262.625" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">DATA_DERIVED</text>
+<text x="870.0" y="282.875" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">data.computed.&gt;</text>
+<rect x="520" y="420" width="220" height="75" rx="10" fill="#FFF1DF" stroke="#E58A2B" stroke-width="2" filter="url(#s)"/>
+<text x="630.0" y="452.625" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">COMMAND</text>
+<text x="630.0" y="472.875" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">write.request.&gt;</text>
+<rect x="760" y="420" width="220" height="75" rx="10" fill="#E9F7E7" stroke="#58A65C" stroke-width="2" filter="url(#s)"/>
+<text x="870.0" y="452.625" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">EVENT</text>
+<text x="870.0" y="472.875" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">alarm.event</text>
+<rect x="520" y="610" width="220" height="75" rx="10" fill="#FFFFFF" stroke="#A8B0BA" stroke-width="2" filter="url(#s)"/>
+<text x="630.0" y="642.625" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">Durable Pull</text>
+<text x="630.0" y="662.875" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">writer/alarm/compute</text>
+<rect x="760" y="610" width="220" height="75" rx="10" fill="#FFFFFF" stroke="#A8B0BA" stroke-width="2" filter="url(#s)"/>
+<text x="870.0" y="642.625" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">Collector / runtime-api</text>
+<text x="870.0" y="662.875" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">受限 Consumer</text>
+<rect x="1090" y="165" width="560" height="640" rx="16" fill="#F0ECFF" stroke="#7567C7" stroke-width="2"/>
+<text x="1108" y="193" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#7567C7">PROJECT_B Account</text>
+<rect x="1140" y="250" width="460" height="80" rx="10" fill="#E4F7F8" stroke="#35A5AD" stroke-width="2" filter="url(#s)"/>
+<text x="1370.0" y="295.25" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">独立 Subject / Stream</text>
+<rect x="1140" y="400" width="460" height="80" rx="10" fill="#FFF8D8" stroke="#C69A18" stroke-width="2" filter="url(#s)"/>
+<text x="1370.0" y="445.25" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">独立用户与权限</text>
+<rect x="1140" y="550" width="460" height="80" rx="10" fill="#FDEBEC" stroke="#D85C63" stroke-width="2" filter="url(#s)"/>
+<text x="1370.0" y="595.25" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">默认禁止跨工程访问</text>
+</svg>

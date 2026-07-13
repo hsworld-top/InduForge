@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1660" height="1030" viewBox="0 0 1660 1030">
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#64748B"/></marker><filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.12"/></filter></defs>
+<rect width="100%" height="100%" fill="#FBFCFE"/>
+<text x="830.0" y="42" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#1F2937">Industrial Collector 组件架构</text>
+<text x="830.0" y="70" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" fill="#64748B">开发态与运行态复用同一 Host、驱动适配层和统一采集值模型</text>
+<path d="M 410,167.5 L 520,167.5" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 940,167.5 L 830,167.5" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 830,167.5 L 1330,167.5" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 520,167.5 L 390,342.5" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 675.0,195 L 580.0,305" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 830,167.5 L 770,342.5" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 830,167.5 L 1090,342.5" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 830,167.5 L 1410,342.5" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 260.0,380 L 260.0,520" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 390,557.5 L 450,557.5" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 390,557.5 L 740,557.5" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 680,557.5 L 1050,557.5" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 990,557.5 L 1050,557.5" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 1280,557.5 L 1340,557.5" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 580.0,380 L 290.0,730" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 580.0,380 L 680.0,730" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 710,342.5 L 910,767.5" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 710,342.5 L 1280,767.5" fill="none" stroke="#64748B" stroke-width="2" stroke-dasharray="8 6" marker-end="url(#arrow)"/>
+<path d="M 450,557.5 L 450,767.5" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 680,557.5 L 910,767.5" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 865.0,595 L 680.0,730" fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="70" y="95" width="1520" height="125" rx="14" fill="#E8F2FF" stroke="#3B82C4" stroke-width="2" filter="url(#shadow)"/>
+<text x="88" y="122" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#3B82C4">入口与宿主层</text>
+<rect x="130" y="140" width="280" height="55" rx="10" fill="#E8F2FF" stroke="#3B82C4" stroke-width="2" filter="url(#shadow)"/>
+<text x="270.0" y="162.95000000000002" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">Development API</text>
+<text x="270.0" y="181.85000000000002" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">连接·浏览·读写·诊断</text>
+<rect x="520" y="140" width="310" height="55" rx="10" fill="#DCEBFF" stroke="#2563A6" stroke-width="2" filter="url(#shadow)"/>
+<text x="675.0" y="162.95000000000002" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">Collector Host · .NET 8</text>
+<text x="675.0" y="181.85000000000002" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">配置·生命周期·依赖注入</text>
+<rect x="940" y="140" width="280" height="55" rx="10" fill="#E8F2FF" stroke="#3B82C4" stroke-width="2" filter="url(#shadow)"/>
+<text x="1080.0" y="172.4" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">Runtime Artifact Loader</text>
+<rect x="1330" y="140" width="200" height="55" rx="10" fill="#FFF8D8" stroke="#C69A18" stroke-width="2" filter="url(#shadow)"/>
+<text x="1430.0" y="172.4" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">Health / Metrics</text>
+<rect x="70" y="245" width="1520" height="185" rx="14" fill="#E4F7F8" stroke="#35A5AD" stroke-width="2" filter="url(#shadow)"/>
+<text x="88" y="272" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#35A5AD">统一服务层</text>
+<rect x="130" y="305" width="260" height="75" rx="10" fill="#E4F7F8" stroke="#35A5AD" stroke-width="2" filter="url(#shadow)"/>
+<text x="260.0" y="337.95" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">Session Manager</text>
+<text x="260.0" y="356.84999999999997" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">连接池·超时·重连</text>
+<rect x="450" y="305" width="260" height="75" rx="10" fill="#E4F7F8" stroke="#35A5AD" stroke-width="2" filter="url(#shadow)"/>
+<text x="580.0" y="337.95" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">Driver Registry</text>
+<text x="580.0" y="356.84999999999997" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">能力声明·参数 Schema</text>
+<rect x="770" y="305" width="260" height="75" rx="10" fill="#E4F7F8" stroke="#35A5AD" stroke-width="2" filter="url(#shadow)"/>
+<text x="900.0" y="337.95" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">Validation Service</text>
+<text x="900.0" y="356.84999999999997" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">地址·配置·写入保护</text>
+<rect x="1090" y="305" width="260" height="75" rx="10" fill="#E4F7F8" stroke="#35A5AD" stroke-width="2" filter="url(#shadow)"/>
+<text x="1220.0" y="337.95" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">Diagnostics Service</text>
+<text x="1220.0" y="356.84999999999997" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">错误·质量·链路指标</text>
+<rect x="1410" y="305" width="130" height="75" rx="10" fill="#FDEBEC" stroke="#D85C63" stroke-width="2" filter="url(#shadow)"/>
+<text x="1475.0" y="337.95" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">Secret</text>
+<text x="1475.0" y="356.84999999999997" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">Provider</text>
+<rect x="70" y="455" width="1520" height="190" rx="14" fill="#E9F7E7" stroke="#58A65C" stroke-width="2" filter="url(#shadow)"/>
+<text x="88" y="482" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#58A65C">采集执行层</text>
+<rect x="130" y="520" width="260" height="75" rx="10" fill="#E9F7E7" stroke="#58A65C" stroke-width="2" filter="url(#shadow)"/>
+<text x="260.0" y="552.9499999999999" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">Collection Scheduler</text>
+<text x="260.0" y="571.8499999999999" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">周期分组·批量计划</text>
+<rect x="450" y="520" width="230" height="75" rx="10" fill="#E9F7E7" stroke="#58A65C" stroke-width="2" filter="url(#shadow)"/>
+<text x="565.0" y="552.9499999999999" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">Polling Engine</text>
+<text x="565.0" y="571.8499999999999" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">PLC / 仪表轮询</text>
+<rect x="740" y="520" width="250" height="75" rx="10" fill="#E9F7E7" stroke="#58A65C" stroke-width="2" filter="url(#shadow)"/>
+<text x="865.0" y="552.9499999999999" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">Subscription Engine</text>
+<text x="865.0" y="571.8499999999999" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">OPC UA 订阅</text>
+<rect x="1050" y="520" width="230" height="75" rx="10" fill="#E9F7E7" stroke="#58A65C" stroke-width="2" filter="url(#shadow)"/>
+<text x="1165.0" y="552.9499999999999" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">Value Normalizer</text>
+<text x="1165.0" y="571.8499999999999" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">类型·质量·时间戳</text>
+<rect x="1340" y="520" width="200" height="75" rx="10" fill="#E9F7E7" stroke="#58A65C" stroke-width="2" filter="url(#shadow)"/>
+<text x="1440.0" y="552.9499999999999" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">Output Pipeline</text>
+<text x="1440.0" y="571.8499999999999" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">Runtime / MQTT</text>
+<rect x="70" y="670" width="1520" height="185" rx="14" fill="#FFF1DF" stroke="#E58A2B" stroke-width="2" filter="url(#shadow)"/>
+<text x="88" y="697" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#E58A2B">驱动适配层</text>
+<rect x="130" y="730" width="320" height="75" rx="10" fill="#FFF1DF" stroke="#E58A2B" stroke-width="2" filter="url(#shadow)"/>
+<text x="290.0" y="762.9499999999999" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">HSL Driver Adapter</text>
+<text x="290.0" y="781.8499999999999" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">S7 · Modbus · Mitsubishi…</text>
+<rect x="520" y="730" width="320" height="75" rx="10" fill="#FFF1DF" stroke="#E58A2B" stroke-width="2" filter="url(#shadow)"/>
+<text x="680.0" y="762.9499999999999" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">OPC UA Adapter</text>
+<text x="680.0" y="781.8499999999999" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">Browse · Read · Write · Subscribe</text>
+<rect x="910" y="730" width="300" height="75" rx="10" fill="#FFF1DF" stroke="#E58A2B" stroke-width="2" filter="url(#shadow)"/>
+<text x="1060.0" y="762.9499999999999" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">OPC DA IPC Client</text>
+<text x="1060.0" y="781.8499999999999" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">调用 Windows Worker</text>
+<rect x="1280" y="730" width="260" height="75" rx="10" fill="#F2F4F7" stroke="#7A8491" stroke-width="2" stroke-dasharray="8 6" filter="url(#shadow)"/>
+<text x="1410.0" y="762.9499999999999" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">后续 Driver Adapter</text>
+<text x="1410.0" y="781.8499999999999" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#243142">按能力扩展</text>
+<rect x="70" y="880" width="1520" height="90" rx="14" fill="#F2F4F7" stroke="#7A8491" stroke-width="2" filter="url(#shadow)"/>
+<text x="88" y="907" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#7A8491">统一驱动契约</text>
+<rect x="120" y="915" width="1420" height="35" rx="10" fill="#F2F4F7" stroke="#7A8491" stroke-width="2" filter="url(#shadow)"/>
+<text x="830.0" y="937.05" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="13" font-weight="700" fill="#243142">Connect · Disconnect · Validate · Read · Write · Diagnostics    |    可选：Browse · Subscribe · ReadHistory · CallMethod</text>
+</svg>

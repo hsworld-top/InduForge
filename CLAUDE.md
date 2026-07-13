@@ -73,7 +73,7 @@
 - 统一使用根目录 `.env`。
 - 端口以根目录 `.env` 为本机实际来源。
 - 环境模板分为 `.env.development.example` 与 `.env.production.example`。
-- 默认端口以根目录 `.env`、环境模板和 `docs/环境端口规划.md` 为准。
+- 默认端口以根目录 `.env`、环境模板和 `docs/06-运维与安全/环境端口规划.md` 为准。
 - 开发环境宿主机端口统一使用 `18xxx` 段；生产/离线环境默认只暴露 edge/Nginx 入口，其他服务走 Docker 内部服务名。
 - Windows + WSL2 开发时，WSL2 只承载 Docker 基础设施；`pnpm install` 和业务项目启动优先在 Windows 侧执行。
 

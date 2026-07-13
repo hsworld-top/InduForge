@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1200" viewBox="0 0 1900 1200">
+<defs><marker id="arr" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#607086"/></marker><filter id="shadow"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.12"/></filter></defs>
+<rect width="100%" height="100%" fill="#FBFCFE"/>
+<text x="950.0" y="40" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="29" font-weight="700" fill="#17263A">InduForge 平台总体架构</text>
+<text x="950.0" y="68" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" fill="#64748B">产品入口、中心控制面、交付控制面、站点运行数据面与工业采集分层</text>
+<path d="M 430,350.0 L 500,350.0" fill="none" stroke="#607086" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="405.0" y="338.0" width="120" height="21" rx="4" fill="#FBFCFE" opacity=".95"/><text x="465.0" y="353.0" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="11.5" fill="#46566B">项目 / 发布上下文</text>
+<path d="M 800,350.0 L 1240,350.0" fill="none" stroke="#607086" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="942.0" y="338.0" width="156" height="21" rx="4" fill="#FBFCFE" opacity=".95"/><text x="1020.0" y="353.0" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="11.5" fill="#46566B">Release / 元数据</text>
+<path d="M 430,770.0 L 500,770.0" fill="none" stroke="#607086" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="363.0" y="758.0" width="204" height="21" rx="4" fill="#FBFCFE" opacity=".95"/><text x="465.0" y="773.0" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="11.5" fill="#46566B">Account / Service</text>
+<path d="M 430,770.0 L 870,770.0" fill="none" stroke="#607086" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="548.0" y="758.0" width="204" height="21" rx="4" fill="#FBFCFE" opacity=".95"/><text x="650.0" y="773.0" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="11.5" fill="#46566B">Account / Service</text>
+<path d="M 800,770.0 L 1240,770.0" fill="none" stroke="#607086" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="978.0" y="758.0" width="84" height="21" rx="4" fill="#FBFCFE" opacity=".95"/><text x="1020.0" y="773.0" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="11.5" fill="#46566B">写入 / 查询</text>
+<rect x="70" y="95" width="1760" height="125" rx="17" fill="#F0ECFF" stroke="#7567C7" stroke-width="2"/>
+<text x="88" y="123" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#7567C7">用户入口（中心管理与站点工程访问分离）</text>
+<rect x="125" y="140" width="280" height="55" rx="9" fill="#F0ECFF" stroke="#7567C7" stroke-width="2" filter="url(#shadow)"/>
+<text x="265.0" y="163.16" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">dev_ide</text>
+<text x="265.0" y="181.64" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">平台管理与运维</text>
+<rect x="455" y="140" width="280" height="55" rx="9" fill="#F0ECFF" stroke="#7567C7" stroke-width="2" filter="url(#shadow)"/>
+<text x="595.0" y="163.16" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">datacenter</text>
+<text x="595.0" y="181.64" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">数据接入与语义建模</text>
+<rect x="785" y="140" width="280" height="55" rx="9" fill="#F0ECFF" stroke="#7567C7" stroke-width="2" filter="url(#shadow)"/>
+<text x="925.0" y="163.16" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">designer</text>
+<text x="925.0" y="181.64" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">页面与交互设计</text>
+<rect x="1115" y="140" width="280" height="55" rx="9" fill="#F0ECFF" stroke="#7567C7" stroke-width="2" filter="url(#shadow)"/>
+<text x="1255.0" y="163.16" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">站点工程地址</text>
+<text x="1255.0" y="181.64" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">二级用户操作与可视化</text>
+<rect x="1445" y="140" width="280" height="55" rx="9" fill="#F0ECFF" stroke="#7567C7" stroke-width="2" filter="url(#shadow)"/>
+<text x="1585.0" y="163.16" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">节点本地管理</text>
+<text x="1585.0" y="181.64" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">站点与采集诊断</text>
+<rect x="70" y="245" width="1760" height="195" rx="17" fill="#E8F2FF" stroke="#347CC1" stroke-width="2"/>
+<text x="88" y="273" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#347CC1">平台开发与管理系统 · 中心 Linux Docker</text>
+<rect x="130" y="305" width="300" height="90" rx="9" fill="#E8F2FF" stroke="#347CC1" stroke-width="2" filter="url(#shadow)"/>
+<text x="280.0" y="336.41999999999996" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">dev_core</text>
+<text x="280.0" y="354.9" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">用户 · 项目 · 权限</text>
+<text x="280.0" y="373.37999999999994" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">站点 · 节点 · 发布</text>
+<rect x="500" y="305" width="300" height="90" rx="9" fill="#E4F7F8" stroke="#2FA4AE" stroke-width="2" filter="url(#shadow)"/>
+<text x="650.0" y="336.41999999999996" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">data_service</text>
+<text x="650.0" y="354.9" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">数据建模 · 调试编排</text>
+<text x="650.0" y="373.37999999999994" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">契约检查 · Release 构建</text>
+<rect x="870" y="305" width="300" height="90" rx="9" fill="#F0ECFF" stroke="#7567C7" stroke-width="2" filter="url(#shadow)"/>
+<text x="1020.0" y="336.41999999999996" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">设计能力</text>
+<text x="1020.0" y="354.9" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">数据中心 · 页面设计器</text>
+<text x="1020.0" y="373.37999999999994" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">运行安全快照</text>
+<rect x="1240" y="305" width="300" height="90" rx="9" fill="#E4F7F8" stroke="#2FA4AE" stroke-width="2" filter="url(#shadow)"/>
+<text x="1390.0" y="336.41999999999996" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">中心资源</text>
+<text x="1390.0" y="354.9" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">PostgreSQL · Redis</text>
+<text x="1390.0" y="373.37999999999994" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">S3 对象存储</text>
+<rect x="70" y="465" width="1760" height="170" rx="17" fill="#FFF8D8" stroke="#C5930C" stroke-width="2"/>
+<text x="88" y="493" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#C5930C">节点管理与交付系统</text>
+<rect x="130" y="520" width="300" height="75" rx="9" fill="#FFF8D8" stroke="#C5930C" stroke-width="2" filter="url(#shadow)"/>
+<text x="280.0" y="553.16" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">中心 Node Management</text>
+<text x="280.0" y="571.64" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">期望状态与操作审计</text>
+<rect x="500" y="520" width="300" height="75" rx="9" fill="#FFF8D8" stroke="#C5930C" stroke-width="2" filter="url(#shadow)"/>
+<text x="650.0" y="553.16" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">Site NodeAgent</text>
+<text x="650.0" y="571.64" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">K3s 外 · systemd</text>
+<rect x="870" y="520" width="300" height="75" rx="9" fill="#FFF8D8" stroke="#C5930C" stroke-width="2" filter="url(#shadow)"/>
+<text x="1020.0" y="553.16" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">K3s Adapter</text>
+<text x="1020.0" y="571.64" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">Namespace · Workload · Ingress</text>
+<rect x="1240" y="520" width="300" height="75" rx="9" fill="#FFF8D8" stroke="#C5930C" stroke-width="2" filter="url(#shadow)"/>
+<text x="1390.0" y="553.16" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">Native Process Executor</text>
+<text x="1390.0" y="571.64" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">Windows Service · systemd</text>
+<rect x="70" y="660" width="1760" height="210" rx="17" fill="#E9F7E7" stroke="#4DA257" stroke-width="2"/>
+<text x="88" y="688" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#4DA257">工程运行系统 · 站点 K3s</text>
+<rect x="130" y="720" width="300" height="100" rx="9" fill="#E9F7E7" stroke="#4DA257" stroke-width="2" filter="url(#shadow)"/>
+<text x="280.0" y="756.42" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">站点共享底座</text>
+<text x="280.0" y="774.9" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">K3s · NATS JetStream</text>
+<text x="280.0" y="793.38" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">Ingress · StorageClass</text>
+<rect x="500" y="720" width="300" height="100" rx="9" fill="#F0ECFF" stroke="#7567C7" stroke-width="2" filter="url(#shadow)"/>
+<text x="650.0" y="756.42" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">Project A Namespace</text>
+<text x="650.0" y="774.9" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">project-nginx · runtime-api</text>
+<text x="650.0" y="793.38" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">writer · alarm · compute</text>
+<rect x="870" y="720" width="300" height="100" rx="9" fill="#F0ECFF" stroke="#7567C7" stroke-width="2" filter="url(#shadow)"/>
+<text x="1020.0" y="756.42" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">Project B Namespace</text>
+<text x="1020.0" y="774.9" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">独立 Release · Account</text>
+<text x="1020.0" y="793.38" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">独立运行与数据空间</text>
+<rect x="1240" y="720" width="300" height="100" rx="9" fill="#E4F7F8" stroke="#2FA4AE" stroke-width="2" filter="url(#shadow)"/>
+<text x="1390.0" y="756.42" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">工程运行数据</text>
+<text x="1390.0" y="774.9" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">实时 · 历史 · 报警</text>
+<text x="1390.0" y="793.38" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">外部数据库与 API</text>
+<rect x="70" y="895" width="1760" height="175" rx="17" fill="#FFF1DF" stroke="#E58219" stroke-width="2"/>
+<text x="88" y="923" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#E58219">工业采集系统 · K3s 外原生进程</text>
+<rect x="130" y="950" width="300" height="75" rx="9" fill="#FFF1DF" stroke="#E58219" stroke-width="2" filter="url(#shadow)"/>
+<text x="280.0" y="983.16" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">Windows Collector</text>
+<text x="280.0" y="1001.64" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">HSL · OPC UA</text>
+<rect x="500" y="950" width="300" height="75" rx="9" fill="#FFF1DF" stroke="#E58219" stroke-width="2" filter="url(#shadow)"/>
+<text x="650.0" y="983.16" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">Linux Collector</text>
+<text x="650.0" y="1001.64" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">认证 HSL · OPC UA</text>
+<rect x="870" y="950" width="300" height="75" rx="9" fill="#FFF1DF" stroke="#E58219" stroke-width="2" filter="url(#shadow)"/>
+<text x="1020.0" y="983.16" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">OPC DA Worker</text>
+<text x="1020.0" y="1001.64" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">Windows COM/DCOM</text>
+<rect x="1240" y="950" width="300" height="75" rx="9" fill="#FFF1DF" stroke="#E58219" stroke-width="2" filter="url(#shadow)"/>
+<text x="1390.0" y="983.16" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">本地可靠性</text>
+<text x="1390.0" y="1001.64" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#233247">WAL · 重连 · 诊断</text>
+<rect x="70" y="1095" width="1760" height="70" rx="17" fill="#F2F4F7" stroke="#748092" stroke-width="2"/>
+<text x="88" y="1123" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#748092">现场设备与外部系统</text>
+<rect x="220" y="1115" width="350" height="35" rx="9" fill="#FFF1DF" stroke="#E58219" stroke-width="2" filter="url(#shadow)"/>
+<text x="395.0" y="1136.7" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#233247">PLC · 仪表 · CNC · Robot</text>
+<rect x="760" y="1115" width="350" height="35" rx="9" fill="#FFF1DF" stroke="#E58219" stroke-width="2" filter="url(#shadow)"/>
+<text x="935.0" y="1136.7" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#233247">OPC UA / OPC DA Server</text>
+<rect x="1300" y="1115" width="350" height="35" rx="9" fill="#F2F4F7" stroke="#748092" stroke-width="2" filter="url(#shadow)"/>
+<text x="1475.0" y="1136.7" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#233247">数据库 · API · MQTT</text>
+<rect x="15" y="245" width="40" height="825" rx="17" fill="#FDEBEC" stroke="#D65760" stroke-width="2"/>
+<text x="35" y="657.5" text-anchor="middle" transform="rotate(-90 35 657.5)" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#D65760">安全 · 身份 · 权限 · 审计</text>
+<rect x="1845" y="245" width="40" height="825" rx="17" fill="#FFF8D8" stroke="#C5930C" stroke-width="2"/>
+<text x="1865" y="657.5" text-anchor="middle" transform="rotate(-90 1865 657.5)" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#C5930C">日志 · 指标 · 诊断 · 运维</text>
+</svg>
