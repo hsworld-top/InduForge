@@ -10,7 +10,7 @@
 - `runtime/node_agent/Makefile`
 - `runtime/node_agent/cmd/`
 - `runtime/node_agent/internal/`
-- `docs/node_agent/README.md`
+- `docs/03-模块设计/node_agent/README.md`
 
 ## 开发约束
 
@@ -32,6 +32,6 @@
 
 ## 相关契约
 
-- `docs/node_agent/README.md`
-- `docs/contracts/node-agent-runtime-protocol.md`
-- `docs/contracts/runtime-health-status-contract.md`
+- `docs/03-模块设计/node_agent/README.md`
+- `docs/04-契约与规范/跨模块契约/node-agent-runtime-protocol.md`
+- `docs/04-契约与规范/跨模块契约/runtime-health-status-contract.md`

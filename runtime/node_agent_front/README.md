@@ -26,15 +26,16 @@ NodeAgent 的 Web 管理界面，基于 Vue 3 + Element Plus 实现。
 
 ### 1. 安装依赖
 
+请在仓库根目录统一安装全部 Node workspace 依赖：
+
 ```bash
-cd runtime/node_agent_front
 pnpm install
 ```
 
 ### 2. 启动开发服务器
 
 ```bash
-pnpm dev
+pnpm dev:agent-front
 ```
 
 服务默认读取仓库根目录 `.env`，通过 `VITE_NODE_AGENT_FRONT_PORT` 决定前端端口，当前统一默认访问地址是 `http://localhost:18604`。
@@ -46,7 +47,7 @@ pnpm dev
 ### 1. 构建生产版本
 
 ```bash
-pnpm build
+pnpm build:agent-front
 ```
 
 构建产物将输出到 `dist/` 目录。
@@ -54,7 +55,7 @@ pnpm build
 ### 2. 预览构建结果
 
 ```bash
-pnpm preview
+pnpm --filter node_agent_front preview
 ```
 
 ## 项目结构

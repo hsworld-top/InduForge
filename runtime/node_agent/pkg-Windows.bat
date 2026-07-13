@@ -35,10 +35,14 @@ REM 设置前端目录（使用更直接的方式）
 set "FRONTEND_DIR=%SCRIPT_DIR%\..\node_agent_front"
 set "FRONTEND_DIR=%FRONTEND_DIR:\=\%"
 
+REM Node 依赖统一由仓库根目录 pnpm workspace 管理
+for %%I in ("%SCRIPT_DIR%\..\..") do set "REPO_ROOT=%%~fI"
+
 REM 设置静态目录
 set "STATIC_DIR=%SCRIPT_DIR%\internal\web\static\dist"
 
 echo 前端目录: %FRONTEND_DIR%
+echo 仓库根目录: %REPO_ROOT%
 echo 静态目录: %STATIC_DIR%
 echo.
 
@@ -55,12 +59,12 @@ if not exist "%FRONTEND_DIR%" (
 ) else (
     echo 正在构建前端...
 
-        REM 进入前端目录并执行 pnpm 命令（使用 call 以确保变量正确展开）
-        echo 当前目录: %FRONTEND_DIR%
+        REM 从仓库根目录安装依赖并通过 workspace 调度前端构建
+        echo 当前目录: %REPO_ROOT%
 
-        pushd "%FRONTEND_DIR%" >nul
+        pushd "%REPO_ROOT%" >nul
         if %errorlevel% neq 0 (
-            echo 错误: 无法进入前端目录！
+            echo 错误: 无法进入仓库根目录！
             echo.
             pause
             exit /b 1
@@ -69,7 +73,7 @@ if not exist "%FRONTEND_DIR%" (
         echo 已切换到目录: %CD%
 
         REM 安装依赖
-        echo 安装依赖...
+        echo 安装 workspace 依赖...
         call pnpm install
 
         if %errorlevel% neq 0 (
@@ -82,7 +86,7 @@ if not exist "%FRONTEND_DIR%" (
 
         REM 构建前端
         echo 构建前端...
-        call pnpm build
+        call pnpm build:agent-front
 
         if %errorlevel% neq 0 (
             echo 错误: 前端构建失败！

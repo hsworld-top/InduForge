@@ -8,8 +8,8 @@
 
 - `runtime/node_agent/`
 - `runtime/node_agent_front/`
-- `docs/contracts/node-agent-runtime-protocol.md`
-- `docs/contracts/runtime-health-status-contract.md`
+- `docs/04-契约与规范/跨模块契约/node-agent-runtime-protocol.md`
+- `docs/04-契约与规范/跨模块契约/runtime-health-status-contract.md`
 
 ## 开发约束
 
@@ -29,5 +29,5 @@
 
 ## 相关契约
 
-- `docs/contracts/node-agent-runtime-protocol.md`
-- `docs/contracts/runtime-health-status-contract.md`
+- `docs/04-契约与规范/跨模块契约/node-agent-runtime-protocol.md`
+- `docs/04-契约与规范/跨模块契约/runtime-health-status-contract.md`

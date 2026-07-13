@@ -8,11 +8,11 @@
 
 - `runtime/node_agent_front/package.json`
 - `runtime/node_agent_front/src/`
-- `docs/node_agent_front/README.md`
+- `docs/03-模块设计/node_agent_front/README.md`
 
 ## 开发约束
 
-- 运行时为 Vue 3 + Vite + Pinia + Element Plus，但依赖和脚本链路独立维护，按本模块现状处理。
+- 运行时为 Vue 3 + Vite + Pinia + Element Plus，Node 依赖由根目录 pnpm workspace 统一管理，模块脚本通过根 workspace 调度。
 - 本地前端只消费 NodeAgent 暴露的标准状态字段，不自行发明新的协议语义。
 - 列表、状态与日志展示优先保证稳定和可诊断性，避免过度重构页面结构。
 - 变更前先确认是否会影响节点本地部署、状态轮询和日志查看链路。
@@ -29,5 +29,5 @@
 
 ## 相关契约
 
-- `docs/node_agent_front/README.md`
-- `docs/contracts/runtime-health-status-contract.md`
+- `docs/03-模块设计/node_agent_front/README.md`
+- `docs/04-契约与规范/跨模块契约/runtime-health-status-contract.md`

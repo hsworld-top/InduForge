@@ -9,8 +9,8 @@
 - `designer/package.json`
 - `designer/src/`
 - `designer/scripts/`
-- `docs/designer/README.md`
-- `docs/contracts/designer-publish-schema.md`
+- `docs/03-模块设计/designer/README.md`
+- `docs/04-契约与规范/跨模块契约/designer-publish-schema.md`
 
 ## 开发约束
 
@@ -34,5 +34,5 @@
 
 ## 相关契约
 
-- `docs/designer/README.md`
-- `docs/contracts/designer-publish-schema.md`
+- `docs/03-模块设计/designer/README.md`
+- `docs/04-契约与规范/跨模块契约/designer-publish-schema.md`

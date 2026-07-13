@@ -113,10 +113,11 @@ NodeAgent 提供了完整的 Web 管理界面，基于 Vue 3 开发，位于独�
 
 ### 启动前端
 
+请在仓库根目录执行：
+
 ```bash
-cd runtime/node_agent_front
 pnpm install
-pnpm dev
+pnpm dev:agent-front
 ```
 
 前端默认在 `http://localhost:18604` 启动，并通过根目录 `.env` 的 `NODE_AGENT_PORT` 代理访问 NodeAgent API，默认后端地址是 `http://localhost:18103`。

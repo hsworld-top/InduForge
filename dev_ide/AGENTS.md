@@ -9,7 +9,7 @@
 - `dev_ide/package.json`
 - `dev_ide/src/`
 - `dev_ide/tests/`
-- `docs/dev_ide/README.md`
+- `docs/03-模块设计/dev_ide/README.md`
 
 ## 开发约束
 
@@ -32,5 +32,5 @@
 
 ## 相关契约
 
-- `docs/dev_ide/README.md`
-- `docs/contracts/runtime-health-status-contract.md`
+- `docs/03-模块设计/dev_ide/README.md`
+- `docs/04-契约与规范/跨模块契约/runtime-health-status-contract.md`

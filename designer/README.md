@@ -1,19 +1,16 @@
 # Designer（设计中心前端）
 
-## 本地门禁（请在 `designer` 目录执行）
+## 本地门禁（请在仓库根目录执行）
 
 ```bash
-cd designer
 pnpm install
-pnpm run typecheck
-pnpm run lint
-pnpm run test
-pnpm run build
+pnpm typecheck:designer
+pnpm lint:designer
+pnpm test:designer
+pnpm build:designer
 ```
 
-若在仓库根目录或其它路径执行 `pnpm run lint`，可能出现 **`Cannot find module 'typescript'`**：请在 **`designer` 目录** 安装依赖，并确认存在 `node_modules/typescript`。
-
-若仍报错：删除本目录下 `node_modules` 后重新 `pnpm install`；排除杀毒软件对 `designer/node_modules` 的实时扫描。仍失败时可在团队允许下于 `.npmrc` 增加 `shamefully-hoist=true` 后重装。
+Node 依赖由根目录 pnpm workspace 统一管理，不要在 `designer` 目录单独执行 `pnpm install`。若依赖异常，请删除安装产物后回到仓库根目录重新安装；仍失败时再检查杀毒软件或 Defender 是否阻止 pnpm 创建链接或启动二进制依赖。
 
 ## 测试（Windows `esbuild spawn EPERM`）
 

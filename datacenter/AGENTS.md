@@ -8,8 +8,8 @@
 
 - `datacenter/package.json`
 - `datacenter/src/`
-- `docs/datacenter/README.md`
-- `docs/datacenter/queries.md`
+- `docs/03-模块设计/datacenter/README.md`
+- `docs/03-模块设计/datacenter/queries.md`
 
 ## 开发约束
 
@@ -33,6 +33,6 @@
 
 ## 相关契约
 
-- `docs/datacenter/README.md`
-- `docs/datacenter/queries.md`
-- `docs/data_service/README.md`
+- `docs/03-模块设计/datacenter/README.md`
+- `docs/03-模块设计/datacenter/queries.md`
+- `docs/03-模块设计/data_service/README.md`

@@ -10,7 +10,7 @@
 - `data_service/Makefile`
 - `data_service/cmd/`
 - `data_service/internal/`
-- `docs/data_service/README.md`
+- `docs/03-模块设计/data_service/README.md`
 
 ## 开发约束
 
@@ -33,7 +33,7 @@
 
 ## 相关契约
 
-- `docs/data_service/README.md`
-- `docs/datacenter/README.md`
-- `docs/高层设计.md`
-- `docs/详细设计.md`
+- `docs/03-模块设计/data_service/README.md`
+- `docs/03-模块设计/datacenter/README.md`
+- `docs/01-产品与架构/平台系统架构.md`
+- `docs/02-系统设计/README.md`

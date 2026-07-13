@@ -11,8 +11,8 @@
 - `dev_core/src/app.js`
 - `dev_core/src/routes/`
 - `dev_core/src/services/`
-- `docs/backend/README.md`
-- `docs/backend/publish-deploy-api.md`
+- `docs/03-模块设计/dev_core/README.md`
+- `docs/03-模块设计/dev_core/publish-deploy-api.md`
 
 ## 开发约束
 
@@ -36,7 +36,7 @@
 
 ## 相关契约
 
-- `docs/backend/README.md`
-- `docs/backend/publish-deploy-api.md`
-- `docs/contracts/designer-publish-schema.md`
-- `docs/contracts/ifp-manifest-contract.md`
+- `docs/03-模块设计/dev_core/README.md`
+- `docs/03-模块设计/dev_core/publish-deploy-api.md`
+- `docs/04-契约与规范/跨模块契约/designer-publish-schema.md`
+- `docs/04-契约与规范/跨模块契约/ifp-manifest-contract.md`

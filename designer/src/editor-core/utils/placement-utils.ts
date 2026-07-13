@@ -4,7 +4,7 @@
  * 用于统一「拖放落点」相对某容器的坐标计算，避免 DesignCanvas 与 NodeRenderer 等处各自实现导致不一致。
  * 约定：返回坐标为相对 containerElement 的坐标，且已按 zoom 折算（设计态逻辑坐标）。
  *
- * @see docs/designer/placement-and-stacking.md
+ * @see docs/03-模块设计/designer/placement-and-stacking.md
  */
 
 export interface CanvasPoint {
