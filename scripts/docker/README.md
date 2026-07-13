@@ -2,7 +2,7 @@
 
 ## Compose 文件
 
-- `docker-compose.dev.yml`：开发基础设施，只启动数据库、缓存、消息、对象存储等依赖。
+- `docker-compose.dev.yml`：开发基础设施，只启动数据库、缓存、MQTT 接入、JetStream 内部总线、对象存储等依赖。
 - `docker-compose.prod.yml`：生产源码构建拓扑，适合构建机或演示环境。
 - `docker-compose.offline.yml`：离线安装包拓扑，只引用 `induforge/*` 产品体系镜像。
 

@@ -29,6 +29,7 @@ ENV_FILE="$REPO_ROOT/.env"
 DEV_ENV_TEMPLATE="$REPO_ROOT/.env.development.example"
 COMPOSE_FILE="$REPO_ROOT/scripts/docker/docker-compose.dev.yml"
 META_CONTAINER="induforge-meta-store"
+RUNTIME_BUS_CONTAINER="induforge-runtime-bus"
 META_STORE_RETRY_COUNT=5
 META_STORE_RETRY_DELAY_SEC=3
 META_STORE_SETTLE_DELAY_SEC=3
@@ -170,6 +171,27 @@ wait_for_meta_store() {
   exit 1
 }
 
+wait_for_runtime_bus() {
+  local host port monitor_port response
+  host="127.0.0.1"
+  port="$(read_env IF_RUNTIME_BUS_PORT 18222)"
+  monitor_port="$(read_env IF_RUNTIME_BUS_MONITOR_PORT 18223)"
+
+  echo "等待工程运行内部总线就绪..."
+  for _ in $(seq 1 60); do
+    response="$(timeout 3 bash -c "exec 3<>/dev/tcp/${host}/${monitor_port}; printf 'GET /jsz HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3; cat <&3" 2>/dev/null || true)"
+    if printf '%s' "$response" | grep -q '200 OK' \
+      && printf '%s' "$response" | grep -q '"config"'; then
+      echo "✓ JetStream 已就绪: nats://${host}:${port}"
+      return
+    fi
+    sleep 1
+  done
+
+  echo "JetStream 启动超时，请检查容器日志: docker logs $RUNTIME_BUS_CONTAINER" >&2
+  exit 1
+}
+
 start_infra() {
   local compose
   compose="$(compose_command)"
@@ -251,6 +273,7 @@ tcp_check() {
 check_optional_infra_ports() {
   tcp_check "$(read_env IF_CACHE_STORE_HOST 127.0.0.1)" "$(read_env IF_CACHE_STORE_PORT 18379)" "缓存能力"
   tcp_check "$(read_env IF_MESSAGE_HUB_HOST 127.0.0.1)" "$(read_env IF_MESSAGE_HUB_MQTT_PORT 18883)" "消息接入能力"
+  tcp_check "127.0.0.1" "$(read_env IF_RUNTIME_BUS_PORT 18222)" "工程运行内部总线"
   tcp_check "$(read_env IF_OBJECT_STORE_ENDPOINT 127.0.0.1)" "$(read_env IF_OBJECT_STORE_PORT 18500)" "对象存储能力"
 }
 
@@ -263,6 +286,7 @@ main() {
   ensure_env_file
   start_infra
   wait_for_meta_store
+  wait_for_runtime_bus
   init_databases
 
   echo "开发环境基础设施初始化完成。"
