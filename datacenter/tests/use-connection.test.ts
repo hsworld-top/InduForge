@@ -45,3 +45,14 @@ test('连接列表继续兼容前端旧的 data.connections 包络', () => {
     },
   ])
 })
+
+test('连接列表解析服务端分页的 data.list 包络', () => {
+  const payload = normalizeConnectionsPayload({
+    data: {
+      list: [{ id: 'conn-page', name: 'paged', type: 'opcua' }],
+      pagination: { page: 1, pageSize: 10, total: 1, totalPages: 1 },
+    },
+  })
+
+  assert.deepEqual(payload, [{ id: 'conn-page', name: 'paged', type: 'opcua' }])
+})

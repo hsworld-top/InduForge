@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -16,17 +18,17 @@ import (
 
 // ConnectionRecord 表示 data_connections 表在仓储层的投影结果。
 type ConnectionRecord struct {
-	ID           string
-	ProjectID    string
-	Name         string
-	Type         string
-	Category     string `json:"-"`
-	Status       string
-	Config       map[string]any
-	DisplayOrder int
+	ID            string
+	ProjectID     string
+	Name          string
+	Type          string
+	Category      string `json:"-"`
+	Status        string
+	Config        map[string]any
+	DisplayOrder  int
 	VariableCount int
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 // ConnectionStatusRecord 表示连接状态更新后的返回结构。
@@ -35,6 +37,14 @@ type ConnectionStatusRecord struct {
 	ProjectID string
 	Status    string
 	UpdatedAt time.Time
+}
+
+// ConnectionListFilter 表示接入源管理页的服务端分页与筛选条件。
+type ConnectionListFilter struct {
+	Page      int
+	PageSize  int
+	Search    string
+	TypeGroup string
 }
 
 // CreateConnectionParams 描述创建连接时需要落库的字段。
@@ -181,6 +191,81 @@ func (r *ConnectionRepository) ListByProject(ctx context.Context, projectID stri
 	}
 
 	return records, nil
+}
+
+// ListByProjectPage 按项目、搜索条件和类型分组分页读取连接列表。
+func (r *ConnectionRepository) ListByProjectPage(ctx context.Context, projectID string, filter ConnectionListFilter) ([]ConnectionRecord, int, error) {
+	page, pageSize := normalizePageAndSize(filter.Page, filter.PageSize, 10, 100)
+	conditions := []string{"conn.project_id = $1"}
+	args := []any{projectID}
+
+	if search := strings.TrimSpace(filter.Search); search != "" {
+		args = append(args, "%"+search+"%")
+		conditions = append(conditions, fmt.Sprintf("conn.name ILIKE $%d", len(args)))
+	}
+
+	switch strings.TrimSpace(filter.TypeGroup) {
+	case "builtin":
+		conditions = append(conditions, "conn.type LIKE 'builtin.%'")
+	case "database":
+		conditions = append(conditions, "conn.type IN ('relational', 'mysql', 'postgresql', 'sqlserver', 'tdengine', 'redis')")
+	case "stream":
+		conditions = append(conditions, "conn.type IN ('mqtt', 'kafka', 'websocket', 'http')")
+	case "industrial":
+		conditions = append(conditions, "(conn.type IN ('opcua', 'opcda', 's7', 'modbus') OR conn.type LIKE 'opc%' OR conn.type LIKE 'modbus%')")
+	}
+
+	whereClause := strings.Join(conditions, " AND ")
+	var total int
+	if err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM data_connections conn WHERE "+whereClause, args...).Scan(&total); err != nil {
+		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "统计连接列表失败", err)
+	}
+
+	listArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
+	listQuery := fmt.Sprintf(`
+		WITH variable_counts AS (
+			SELECT project_id, connection_id, COUNT(*)::int AS variable_count
+			FROM data_opcua_nodes WHERE project_id = $1 GROUP BY project_id, connection_id
+			UNION ALL
+			SELECT project_id, connection_id, COUNT(*)::int AS variable_count
+			FROM data_s7_variables WHERE project_id = $1 GROUP BY project_id, connection_id
+			UNION ALL
+			SELECT project_id, connection_id, COUNT(*)::int AS variable_count
+			FROM data_modbus_registers WHERE project_id = $1 GROUP BY project_id, connection_id
+		),
+		variable_count_by_connection AS (
+			SELECT project_id, connection_id, SUM(variable_count)::int AS variable_count
+			FROM variable_counts GROUP BY project_id, connection_id
+		)
+		SELECT conn.id, conn.project_id, conn.name, conn.type, conn.category, conn.status,
+		       conn.metadata, conn.display_order, COALESCE(vc.variable_count, 0) AS variable_count,
+		       conn.created_at, conn.updated_at
+		FROM data_connections conn
+		LEFT JOIN variable_count_by_connection vc
+		  ON vc.project_id = conn.project_id AND vc.connection_id = conn.id
+		WHERE %s
+		ORDER BY conn.display_order ASC, conn.created_at ASC
+		LIMIT $%d OFFSET $%d
+	`, whereClause, len(args)+1, len(args)+2)
+
+	rows, err := r.pool.Query(ctx, listQuery, listArgs...)
+	if err != nil {
+		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "分页查询连接列表失败", err)
+	}
+	defer rows.Close()
+
+	records := make([]ConnectionRecord, 0, pageSize)
+	for rows.Next() {
+		record, scanErr := scanConnection(rows)
+		if scanErr != nil {
+			return nil, 0, scanErr
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历分页连接列表失败", err)
+	}
+	return records, total, nil
 }
 
 // GetByProjectAndID 按项目和连接 ID 读取单条记录。

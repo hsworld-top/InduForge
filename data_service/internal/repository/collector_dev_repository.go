@@ -19,6 +19,7 @@ type CollectorDevAgentRecord struct {
 	OS             string
 	Arch           string
 	Version        string
+	LastIP         string
 	CredentialHash string
 	Capabilities   json.RawMessage
 	LastSeenAt     *time.Time
@@ -60,6 +61,7 @@ type CreateCollectorAgentParams struct {
 	OS             string
 	Arch           string
 	Version        string
+	LastIP         string
 	Capabilities   any
 }
 
@@ -131,10 +133,10 @@ func (r *CollectorDevRepository) RegisterAgent(ctx context.Context, params Creat
 	}
 
 	row := tx.QueryRow(ctx, `
-		INSERT INTO collector_dev_agents (id, tenant_id, name, os, arch, version, credential_hash, capabilities, last_seen_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, now())
-		RETURNING id, tenant_id, name, os, arch, version, credential_hash, capabilities, last_seen_at, created_at, updated_at
-	`, params.ID, tenantID, params.Name, params.OS, params.Arch, params.Version, params.CredentialHash, string(capabilities))
+		INSERT INTO collector_dev_agents (id, tenant_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, now())
+		RETURNING id, tenant_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at, created_at, updated_at
+	`, params.ID, tenantID, params.Name, params.OS, params.Arch, params.Version, params.LastIP, params.CredentialHash, string(capabilities))
 	record, err := scanCollectorAgent(row)
 	if err != nil {
 		return nil, err
@@ -154,7 +156,7 @@ func (r *CollectorDevRepository) RegisterAgent(ctx context.Context, params Creat
 
 func (r *CollectorDevRepository) AuthenticateAgent(ctx context.Context, credentialHash string) (*CollectorDevAgentRecord, error) {
 	record, err := scanCollectorAgent(r.pool.QueryRow(ctx, `
-		SELECT id, tenant_id, name, os, arch, version, credential_hash, capabilities, last_seen_at, created_at, updated_at
+		SELECT id, tenant_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at, created_at, updated_at
 		FROM collector_dev_agents WHERE credential_hash = $1 AND revoked_at IS NULL
 	`, credentialHash))
 	if errors.Is(err, errCollectorAgentNotFound) {
@@ -166,24 +168,36 @@ func (r *CollectorDevRepository) AuthenticateAgent(ctx context.Context, credenti
 	return &record, nil
 }
 
-func (r *CollectorDevRepository) ListAgents(ctx context.Context, tenantID string) ([]CollectorDevAgentRecord, error) {
+// ListAgentsPage 按租户分页读取未撤销的采集调试代理。
+func (r *CollectorDevRepository) ListAgentsPage(ctx context.Context, tenantID string, page, pageSize int) ([]CollectorDevAgentRecord, int, error) {
+	page, pageSize = normalizePageAndSize(page, pageSize, 10, 100)
+	var total int
+	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM collector_dev_agents WHERE tenant_id = $1 AND revoked_at IS NULL`, tenantID).Scan(&total); err != nil {
+		return nil, 0, wrapCollectorRepositoryError("统计采集调试代理失败", err)
+	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, tenant_id, name, os, arch, version, credential_hash, capabilities, last_seen_at, created_at, updated_at
-		FROM collector_dev_agents WHERE tenant_id = $1 AND revoked_at IS NULL ORDER BY updated_at DESC, created_at DESC
-	`, tenantID)
+		SELECT id, tenant_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at, created_at, updated_at
+		FROM collector_dev_agents
+		WHERE tenant_id = $1 AND revoked_at IS NULL
+		ORDER BY updated_at DESC, created_at DESC
+		LIMIT $2 OFFSET $3
+	`, tenantID, pageSize, (page-1)*pageSize)
 	if err != nil {
-		return nil, wrapCollectorRepositoryError("查询采集调试代理失败", err)
+		return nil, 0, wrapCollectorRepositoryError("分页查询采集调试代理失败", err)
 	}
 	defer rows.Close()
-	records := make([]CollectorDevAgentRecord, 0)
+	records := make([]CollectorDevAgentRecord, 0, pageSize)
 	for rows.Next() {
 		record, scanErr := scanCollectorAgent(rows)
 		if scanErr != nil {
-			return nil, scanErr
+			return nil, 0, scanErr
 		}
 		records = append(records, record)
 	}
-	return records, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, wrapCollectorRepositoryError("遍历采集调试代理分页失败", err)
+	}
+	return records, total, nil
 }
 
 func (r *CollectorDevRepository) DeleteAgent(ctx context.Context, tenantID, agentID string) error {
@@ -197,16 +211,16 @@ func (r *CollectorDevRepository) DeleteAgent(ctx context.Context, tenantID, agen
 	return nil
 }
 
-func (r *CollectorDevRepository) Heartbeat(ctx context.Context, agentID string, capabilities any) (*CollectorDevAgentRecord, error) {
+func (r *CollectorDevRepository) Heartbeat(ctx context.Context, agentID, lastIP string, capabilities any) (*CollectorDevAgentRecord, error) {
 	payload, err := json.Marshal(capabilities)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "序列化 Agent 能力失败", err)
 	}
 	record, err := scanCollectorAgent(r.pool.QueryRow(ctx, `
-		UPDATE collector_dev_agents SET capabilities = $2::jsonb, last_seen_at = now(), updated_at = now()
+		UPDATE collector_dev_agents SET capabilities = $2::jsonb, last_ip = $3, last_seen_at = now(), updated_at = now()
 		WHERE id = $1 AND revoked_at IS NULL
-		RETURNING id, tenant_id, name, os, arch, version, credential_hash, capabilities, last_seen_at, created_at, updated_at
-	`, agentID, string(payload)))
+		RETURNING id, tenant_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at, created_at, updated_at
+	`, agentID, string(payload), lastIP))
 	if errors.Is(err, errCollectorAgentNotFound) {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "Agent 已被移除")
 	}
@@ -326,7 +340,7 @@ type collectorRow interface{ Scan(dest ...any) error }
 
 func scanCollectorAgent(row collectorRow) (CollectorDevAgentRecord, error) {
 	var record CollectorDevAgentRecord
-	err := row.Scan(&record.ID, &record.TenantID, &record.Name, &record.OS, &record.Arch, &record.Version, &record.CredentialHash, &record.Capabilities, &record.LastSeenAt, &record.CreatedAt, &record.UpdatedAt)
+	err := row.Scan(&record.ID, &record.TenantID, &record.Name, &record.OS, &record.Arch, &record.Version, &record.LastIP, &record.CredentialHash, &record.Capabilities, &record.LastSeenAt, &record.CreatedAt, &record.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return record, errCollectorAgentNotFound
 	}

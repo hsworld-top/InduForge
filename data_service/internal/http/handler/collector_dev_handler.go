@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"net"
 	"net/http"
+	"strings"
 
 	"github.com/indu-forge/data_service/internal/auth"
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -33,11 +35,29 @@ func (h *CollectorDevHandler) ListAgents(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		return err
 	}
-	result, err := h.service.ListAgents(r.Context(), claims)
+	page, err := parseOptionalInt(r.URL.Query().Get("page"), 1, "page")
+	if err != nil {
+		return err
+	}
+	pageSize, err := parseOptionalInt(firstNonEmpty(r.URL.Query().Get("pageSize"), r.URL.Query().Get("limit")), 10, "pageSize")
+	if err != nil {
+		return err
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	result, total, err := h.service.ListAgentsPage(r.Context(), claims, page, pageSize)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + pageSize - 1) / pageSize
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{
+		"list":       result,
+		"pagination": map[string]int{"page": page, "pageSize": pageSize, "total": total, "totalPages": totalPages},
+	})
 	return nil
 }
 func (h *CollectorDevHandler) DeleteAgent(w http.ResponseWriter, r *http.Request) error {
@@ -56,7 +76,7 @@ func (h *CollectorDevHandler) RegisterAgent(w http.ResponseWriter, r *http.Reque
 	if err := decodeJSONBody(r, &input); err != nil {
 		return err
 	}
-	result, err := h.service.Register(r.Context(), input)
+	result, err := h.service.Register(r.Context(), input, requestClientIP(r))
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -74,12 +94,26 @@ func (h *CollectorDevHandler) Heartbeat(w http.ResponseWriter, r *http.Request) 
 	if err = decodeJSONBody(r, &input); err != nil {
 		return err
 	}
-	result, err := h.service.Heartbeat(r.Context(), identity, input.Capabilities)
+	result, err := h.service.Heartbeat(r.Context(), identity, input.Capabilities, requestClientIP(r))
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
+}
+
+func requestClientIP(r *http.Request) string {
+	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-For"), ",")[0]); forwarded != "" {
+		return forwarded
+	}
+	if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" {
+		return realIP
+	}
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err == nil {
+		return host
+	}
+	return strings.TrimSpace(r.RemoteAddr)
 }
 func (h *CollectorDevHandler) ClaimTask(w http.ResponseWriter, r *http.Request) error {
 	identity, err := requireCollectorAgent(r)

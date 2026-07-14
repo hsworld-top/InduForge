@@ -42,6 +42,29 @@
             </div>
           </el-popover>
 
+          <div class="access-source-workspace__view-switcher">
+            <el-tooltip content="卡片视图" placement="top">
+              <button
+                type="button"
+                :class="{ 'is-active': viewMode === 'card' }"
+                aria-label="切换到卡片视图"
+                @click="viewMode = 'card'"
+              >
+                <IconTablerLayoutGrid />
+              </button>
+            </el-tooltip>
+            <el-tooltip content="列表视图" placement="top">
+              <button
+                type="button"
+                :class="{ 'is-active': viewMode === 'list' }"
+                aria-label="切换到列表视图"
+                @click="viewMode = 'list'"
+              >
+                <IconTablerListDetails />
+              </button>
+            </el-tooltip>
+          </div>
+
           <!-- 刷新 -->
           <button
             type="button"
@@ -65,16 +88,117 @@
         </div>
       </header>
 
-      <AccessSourceList
-        :connections="filteredConnections"
-        :selected-connection-id="activeConnectionId"
-        :draggable="canReorderConnections"
-        @open="handleOpen"
-        @edit="handleEdit"
-        @delete-connection="handleDeleteConnection"
-        @reorder="handleReorderConnections"
-        @create="$emit('create')"
-      />
+      <section class="access-source-workspace__content-panel">
+        <AccessSourceList
+          v-if="viewMode === 'card'"
+          v-loading="loading"
+          :connections="filteredConnections"
+          :selected-connection-id="activeConnectionId"
+          :draggable="canReorderConnections"
+          @open="handleOpen"
+          @edit="handleEdit"
+          @delete-connection="handleDeleteConnection"
+          @reorder="handleReorderConnections"
+          @create="$emit('create')"
+        />
+
+        <div v-else v-loading="loading" class="access-source-workspace__table-wrap">
+          <div class="access-source-workspace__table-shell">
+            <el-table
+              :data="filteredConnections"
+              row-key="id"
+              class="access-source-workspace__table"
+            >
+              <el-table-column label="名称" min-width="220">
+                <template #default="{ row }">
+                  <div class="access-source-workspace__source-identity">
+                    <span
+                      class="access-source-workspace__source-icon"
+                      :class="`is-${resolveCategory(row)}`"
+                    >
+                      <component :is="resolveConnectionIcon(row)" />
+                    </span>
+                    <button
+                      type="button"
+                      class="access-source-workspace__name-button"
+                      @click="handleOpen(row)"
+                    >
+                      {{ row.name || '未命名连接' }}
+                    </button>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="类型" width="150">
+                <template #default="{ row }">
+                  <span
+                    class="access-source-workspace__type-badge"
+                    :class="`is-${resolveCategory(row)}`"
+                  >
+                    {{ resolveConnectionTypeLabel(row) }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column label="连接地址" min-width="260" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span
+                    class="access-source-workspace__endpoint"
+                    :class="{ 'is-pending': isConnectionEndpointPending(row) }"
+                  >
+                    {{ resolveConnectionEndpoint(row) }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column label="数据点" width="92" align="center">
+                <template #default="{ row }">
+                  <span
+                    class="access-source-workspace__point-count"
+                    :class="{ 'is-empty': resolveDatapointCount(row) === 0 }"
+                  >
+                    {{ resolveDatapointCount(row) }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="148" align="right" fixed="right">
+                <template #default="{ row }">
+                  <div class="access-source-workspace__table-actions">
+                    <button type="button" class="is-workbench" @click="handleOpen(row)">
+                      <span>工作台</span>
+                      <IconTablerArrowRight />
+                    </button>
+                    <button
+                      type="button"
+                      class="is-icon"
+                      title="编辑"
+                      aria-label="编辑接入源"
+                      @click="handleEdit(row)"
+                    >
+                      <IconTablerSettings />
+                    </button>
+                    <button
+                      type="button"
+                      class="is-icon is-danger"
+                      title="删除"
+                      aria-label="删除接入源"
+                      @click="handleDeleteConnection(row)"
+                    >
+                      <IconTablerTrash />
+                    </button>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
+
+        <DataCenterPagination
+          v-if="pagination.total > 0"
+          :page="pagination.page"
+          :page-size="pagination.pageSize"
+          :total="pagination.total"
+          :total-pages="pagination.totalPages"
+          @change="handlePaginationChange"
+        />
+      </section>
     </section>
   </div>
 </template>
@@ -85,14 +209,21 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import IconTablerPlus from '~icons/tabler/plus'
+import IconTablerArrowRight from '~icons/tabler/arrow-right'
+import IconTablerLayoutGrid from '~icons/tabler/layout-grid'
+import IconTablerListDetails from '~icons/tabler/list-details'
 import IconTablerRefresh from '~icons/tabler/refresh'
+import IconTablerSettings from '~icons/tabler/settings'
+import IconTablerTrash from '~icons/tabler/trash'
 import dataAPI from '@/api/data.api'
 import { deleteAccessSource, updateAccessSourceOrder } from '@/api/access-source.api'
 import { useConfirm } from '@/composables/useConfirm'
 import { getApiErrorMessage } from '@/utils/request'
 import AccessSourceList from './AccessSourceList.vue'
 import PillButton from '@/components/shared/PillButton.vue'
+import DataCenterPagination from '@/components/shared/DataCenterPagination.vue'
 import { isBuiltinStoreType } from './workbench/builtin-store'
+import { resolveAccessSourceVisual } from './access-source-visual'
 
 /* Search 图标赋值给变量，传给 el-input prefix-icon */
 const SearchIcon = Search
@@ -103,6 +234,7 @@ type AccessSourceConnection = {
   type?: string
   datapointCount?: number
   dataPointCount?: number
+  variableCount?: number
   relationalConfig?: {
     dbType?: string
     host?: string
@@ -124,16 +256,27 @@ const props = defineProps<{
   connections: AccessSourceConnection[]
   selectedConnectionId?: string | null
   projectId?: string | number | null
+  loading?: boolean
+  pagination: {
+    page: number
+    pageSize: number
+    total: number
+    totalPages: number
+  }
 }>()
 
 const emit = defineEmits<{
   (event: 'create'): void
   (event: 'refresh'): void
   (event: 'edit', connection: AccessSourceConnection): void
+  (
+    event: 'query-change',
+    value: { page: number; pageSize: number; search: string; typeGroup: string },
+  ): void
 }>()
 
 /* ── toolbar 概览计算属性 ── */
-const overviewTotal = computed(() => props.connections.length)
+const overviewTotal = computed(() => props.pagination.total)
 
 const route = useRoute()
 const router = useRouter()
@@ -142,6 +285,7 @@ const { confirm } = useConfirm()
 /* ── URL 同步：从 query 读取初始筛选值 ── */
 const filterQ = ref(String(route.query.q || ''))
 const filterType = ref(String(route.query.type || 'all'))
+const viewMode = ref<'card' | 'list'>('card')
 const connectionOrder = ref<string[]>([])
 const hasLocalConnectionOrder = ref(false)
 
@@ -156,6 +300,7 @@ const handleSearchInput = (val: string) => {
   searchDebounceTimer = setTimeout(() => {
     filterQ.value = val.trim()
     syncQuery()
+    emitQueryChange(1, props.pagination.pageSize)
   }, 300)
 }
 
@@ -164,6 +309,7 @@ const handleSearchClear = () => {
   filterQ.value = ''
   searchInputValue.value = ''
   syncQuery()
+  emitQueryChange(1, props.pagination.pageSize)
 }
 
 /* 当前激活的连接 id：优先 URL params，其次 props，最后 null */
@@ -198,20 +344,93 @@ const typeLabel = computed(() => {
 const selectType = (val: string) => {
   filterType.value = val
   syncQuery()
+  emitQueryChange(1, props.pagination.pageSize)
 }
 
-const canReorderConnections = computed(() => filterType.value === 'all' && !filterQ.value)
+const canReorderConnections = computed(
+  () =>
+    filterType.value === 'all' &&
+    !filterQ.value &&
+    props.pagination.total <= props.pagination.pageSize,
+)
+
+const emitQueryChange = (page: number, pageSize: number) => {
+  emit('query-change', {
+    page,
+    pageSize,
+    search: filterQ.value,
+    typeGroup: filterType.value,
+  })
+}
+
+const handlePaginationChange = (value: { page: number; pageSize: number }) => {
+  emitQueryChange(value.page, value.pageSize)
+}
 
 /* ── 分类判断（与旧 resolveCategory 逻辑一致）── */
 const resolveCategory = (connection: AccessSourceConnection) => {
-  const type = connection.type || ''
-  if (isBuiltinStoreType(type)) return 'builtin'
-  if (['relational', 'mysql', 'postgresql', 'sqlserver', 'tdengine', 'redis'].includes(type))
-    return 'database'
-  if (['mqtt', 'kafka', 'websocket', 'http'].includes(type)) return 'stream'
-  if (['opcua', 'opcda', 's7', 'modbus'].includes(type)) return 'industrial'
-  if (type.includes('opc') || type.includes('modbus')) return 'industrial'
-  return 'all'
+  const category = resolveAccessSourceVisual(connection.type).category
+  return category === 'other' ? 'all' : category
+}
+
+const resolveConnectionTypeLabel = (connection: AccessSourceConnection) => {
+  const labels: Record<string, string> = {
+    'builtin.relation': 'IF关系库',
+    'builtin.timeseries': 'IF时序库',
+    'builtin.realtime': 'IF实时库',
+    'builtin.message': 'IF消息库',
+    relational: String(connection.relationalConfig?.dbType || '数据库'),
+    mqtt: 'MQTT',
+    kafka: 'Kafka',
+    websocket: 'WebSocket',
+    http: 'HTTP',
+    redis: 'Redis',
+    opcua: 'OPC UA',
+    opcda: 'OPC DA',
+    s7: 'Siemens S7',
+    modbus: 'Modbus',
+    tdengine: 'TDengine',
+  }
+  return labels[connection.type || ''] || connection.type || '未知类型'
+}
+
+const resolveConnectionIcon = (connection: AccessSourceConnection) =>
+  resolveAccessSourceVisual(connection.type).icon
+
+const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
+  if (isBuiltinStoreType(connection.type || '')) return '工程内置运行库'
+  if (connection.type === 'relational') {
+    const config = connection.relationalConfig
+    const address = [config?.host, config?.port].filter(Boolean).join(':')
+    return [address, config?.database].filter(Boolean).join(' / ') || '未配置数据库地址'
+  }
+  if (connection.type === 'mqtt') {
+    const config = connection.mqttConfig
+    return (
+      [config?.brokerUrl || config?.host, config?.port].filter(Boolean).join(':') || '未配置 Broker'
+    )
+  }
+  const config = connection.config || {}
+  if (connection.type === 's7' || connection.type === 'modbus') {
+    return [config['host'], config['port']].filter(Boolean).join(':') || '等待接入配置'
+  }
+  return String(
+    config['endpoint'] ||
+      config['url'] ||
+      config['address'] ||
+      config['brokers'] ||
+      config['host'] ||
+      config['serverProgId'] ||
+      '等待接入配置',
+  )
+}
+
+const resolveDatapointCount = (connection: AccessSourceConnection) =>
+  connection.variableCount ?? connection.datapointCount ?? connection.dataPointCount ?? 0
+
+const isConnectionEndpointPending = (connection: AccessSourceConnection) => {
+  const endpoint = resolveConnectionEndpoint(connection)
+  return endpoint.startsWith('等待') || endpoint.startsWith('未配置')
 }
 
 /* ── SQL 数据点数量本地加载（过渡期保留） ── */
@@ -299,17 +518,6 @@ const filteredConnections = computed(() => {
     return { ...connection, datapointCount: count, dataPointCount: count }
   })
 
-  /* 名称搜索（大小写不敏感前缀模糊匹配）*/
-  if (filterQ.value) {
-    const lower = filterQ.value.toLowerCase()
-    list = list.filter((c) => (c.name || '').toLowerCase().includes(lower))
-  }
-
-  /* 类型筛选 */
-  if (filterType.value !== 'all') {
-    list = list.filter((c) => resolveCategory(c) === filterType.value)
-  }
-
   return list
 })
 
@@ -375,11 +583,8 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-md);
-  background: linear-gradient(180deg, #fbfcff 0%, var(--dc-surface) 100%);
-  box-shadow: var(--dc-shadow-surface);
+  gap: 14px;
+  overflow: visible;
 }
 
 /* 头部：单行 toolbar，固定 56px */
@@ -388,8 +593,27 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
   display: flex;
   align-items: center;
   padding: 0 20px;
-  border-bottom: 1px solid var(--dc-border);
+  border: 1px solid var(--dc-border);
+  border-radius: 14px;
   background: var(--dc-surface-raised);
+  box-shadow:
+    0 8px 24px rgba(15, 23, 42, 0.06),
+    0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.access-source-workspace__content-panel {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--dc-border);
+  border-radius: 14px;
+  background: var(--dc-surface-raised);
+  box-shadow:
+    0 8px 24px rgba(15, 23, 42, 0.055),
+    0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 /* toolbar：搜索 + pill + 刷新 + 新增 */
@@ -403,6 +627,39 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
 
 .access-source-workspace__search {
   width: 240px;
+}
+
+.access-source-workspace__view-switcher {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
+}
+
+.access-source-workspace__view-switcher button {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--dc-text-muted);
+}
+
+.access-source-workspace__view-switcher button.is-active {
+  background: var(--dc-surface-raised);
+  color: var(--dc-primary);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+}
+
+.access-source-workspace__view-switcher svg {
+  width: 15px;
+  height: 15px;
 }
 
 /* 刷新图标按钮 */
@@ -459,6 +716,268 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
 .access-source-workspace__action-icon {
   width: 16px;
   height: 16px;
+}
+
+.access-source-workspace__table-wrap {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  padding: 12px 24px 0;
+  background: var(--dc-surface-raised);
+}
+
+.access-source-workspace__table-shell {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: var(--dc-surface-raised);
+  box-shadow: none;
+}
+
+.access-source-workspace__table {
+  width: 100%;
+  height: 100%;
+}
+
+.access-source-workspace__table :deep(.el-table__inner-wrapper::before) {
+  display: none;
+}
+
+.access-source-workspace__table :deep(.el-table__header th) {
+  height: 50px;
+  background: var(--dc-surface-raised);
+  color: var(--dc-text);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.access-source-workspace__table :deep(.el-table__cell) {
+  padding: 8px 0;
+  color: var(--dc-text-secondary);
+  font-size: 13px;
+}
+
+.access-source-workspace__table :deep(.el-table__row) {
+  height: 60px;
+}
+
+.access-source-workspace__table :deep(.el-table__row td) {
+  border-bottom-color: color-mix(in oklch, var(--dc-border) 66%, transparent);
+  transition: background-color 0.16s ease;
+}
+
+.access-source-workspace__table :deep(.el-table__row:hover > td.el-table__cell) {
+  background: color-mix(in oklch, var(--dc-primary-soft) 28%, var(--dc-surface-raised));
+}
+
+.access-source-workspace__table :deep(.el-table-fixed-column--right) {
+  background: var(--dc-surface-raised);
+}
+
+.access-source-workspace__table :deep(th.el-table-fixed-column--right) {
+  background: var(--dc-surface-raised);
+}
+
+.access-source-workspace__table :deep(.el-table__row:hover > td.el-table-fixed-column--right) {
+  background: color-mix(in oklch, var(--dc-primary-soft) 28%, var(--dc-surface-raised));
+}
+
+.access-source-workspace__source-identity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.access-source-workspace__source-icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in oklch, var(--dc-primary) 14%, var(--dc-border));
+  border-radius: 7px;
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+}
+
+.access-source-workspace__source-icon.is-database {
+  border-color: #d1fae5;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.access-source-workspace__source-icon.is-stream {
+  border-color: #ffedd5;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.access-source-workspace__source-icon.is-industrial {
+  border-color: #e2e8f0;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.access-source-workspace__source-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.access-source-workspace__name-button {
+  max-width: 100%;
+  overflow: hidden;
+  border: none;
+  background: transparent;
+  color: var(--dc-primary);
+  padding: 4px 0;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.access-source-workspace__name-button:hover {
+  color: var(--dc-primary-hover);
+}
+
+.access-source-workspace__type-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--dc-border);
+  border-radius: 999px;
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.access-source-workspace__type-badge.is-builtin {
+  border-color: color-mix(in oklch, var(--dc-primary) 18%, var(--dc-border));
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+}
+
+.access-source-workspace__type-badge.is-database {
+  border-color: #d1fae5;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.access-source-workspace__type-badge.is-stream {
+  border-color: #ffedd5;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.access-source-workspace__type-badge.is-industrial {
+  border-color: #e2e8f0;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.access-source-workspace__endpoint {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--dc-text-secondary);
+  font-family: 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.access-source-workspace__endpoint.is-pending {
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: #fff7ed;
+  color: #9a5b13;
+  font-family: inherit;
+}
+
+.access-source-workspace__point-count {
+  min-width: 32px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+  font-size: 12px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.access-source-workspace__point-count.is-empty {
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-muted);
+}
+
+.access-source-workspace__table-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.access-source-workspace__table-actions button {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dc-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.access-source-workspace__table-actions button:hover {
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+}
+
+.access-source-workspace__table-actions button.is-workbench {
+  color: var(--dc-primary);
+}
+
+.access-source-workspace__table-actions button.is-workbench:hover {
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary-hover);
+}
+
+.access-source-workspace__table-actions button.is-icon {
+  width: 28px;
+  min-width: 28px;
+  padding: 0;
+}
+
+.access-source-workspace__table-actions button.is-danger:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.access-source-workspace__table-actions svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* toolbar 右侧概览：占据剩余空间并右对齐文字 */

@@ -10,6 +10,7 @@ import (
 	apperrors "github.com/indu-forge/data_service/internal/errors"
 	"github.com/indu-forge/data_service/internal/http/middleware"
 	"github.com/indu-forge/data_service/internal/http/response"
+	"github.com/indu-forge/data_service/internal/repository"
 	"github.com/indu-forge/data_service/internal/service"
 )
 
@@ -30,12 +31,57 @@ func (h *ConnectionHandler) List(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	query := r.URL.Query()
+	isPagedQuery := query.Has("page") || query.Has("pageSize") || query.Has("limit") || query.Has("search") || query.Has("typeGroup")
+	if isPagedQuery {
+		page, parseErr := parseOptionalInt(query.Get("page"), 1, "page")
+		if parseErr != nil {
+			return parseErr
+		}
+		pageSize, parseErr := parseOptionalInt(firstNonEmpty(query.Get("pageSize"), query.Get("limit")), 10, "pageSize")
+		if parseErr != nil {
+			return parseErr
+		}
+		if pageSize > 100 {
+			pageSize = 100
+		}
+		connections, total, listErr := h.service.ListConnectionsPage(r.Context(), r.PathValue("projectId"), claims.TenantID, repository.ConnectionListFilter{
+			Page: page, PageSize: pageSize, Search: query.Get("search"), TypeGroup: query.Get("typeGroup"),
+		})
+		if listErr != nil {
+			return normalizeRepresentativeHandlerError(listErr)
+		}
+		totalPages := 0
+		if total > 0 {
+			totalPages = (total + pageSize - 1) / pageSize
+		}
+		response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{
+			"list":       connections,
+			"pagination": map[string]int{"page": page, "pageSize": pageSize, "total": total, "totalPages": totalPages},
+		})
+		return nil
+	}
+
 	connections, err := h.service.ListConnections(r.Context(), r.PathValue("projectId"), claims.TenantID)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), connections)
+	return nil
+}
+
+// Get 返回单个项目连接，用于分页列表外的工作台深链接恢复。
+func (h *ConnectionHandler) Get(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	connection, err := h.service.GetConnection(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.TenantID)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)
 	return nil
 }
 

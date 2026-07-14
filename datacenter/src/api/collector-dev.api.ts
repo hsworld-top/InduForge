@@ -1,10 +1,17 @@
 import request from '@/utils/request'
 import {
-  CollectorAgentSchema,
+  CollectorAgentPageSchema,
   CollectorRegistrationCodeSchema,
-  type CollectorAgent,
+  type CollectorAgentPage,
   type CollectorRegistrationCode,
 } from './schemas/collector-dev.schema'
+
+const unwrapData = (value: unknown) => {
+  if (value && typeof value === 'object' && 'code' in value && 'data' in value) {
+    return (value as { data?: unknown }).data
+  }
+  return value
+}
 
 export async function createCollectorRegistrationCode(): Promise<CollectorRegistrationCode> {
   const response = await request({
@@ -12,12 +19,15 @@ export async function createCollectorRegistrationCode(): Promise<CollectorRegist
     method: 'post',
     data: {},
   })
-  return CollectorRegistrationCodeSchema.parse(response)
+  return CollectorRegistrationCodeSchema.parse(unwrapData(response))
 }
 
-export async function getCollectorAgents(): Promise<CollectorAgent[]> {
-  const response = await request({ url: '/data/collector-dev/agents', method: 'get' })
-  return CollectorAgentSchema.array().parse(response)
+export async function getCollectorAgents(params: {
+  page: number
+  pageSize: number
+}): Promise<CollectorAgentPage> {
+  const response = await request({ url: '/data/collector-dev/agents', method: 'get', params })
+  return CollectorAgentPageSchema.parse(unwrapData(response))
 }
 
 export async function deleteCollectorAgent(agentId: string): Promise<void> {

@@ -150,6 +150,29 @@ func (s *ConnectionService) ListConnections(ctx context.Context, projectID, tena
 	return connections, nil
 }
 
+// ListConnectionsPage 查询项目下的分页连接列表。
+func (s *ConnectionService) ListConnectionsPage(ctx context.Context, projectID, tenantID string, filter repository.ConnectionListFilter) ([]Connection, int, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, 0, err
+	}
+	if filter.TypeGroup != "" && filter.TypeGroup != "all" {
+		validTypeGroups := map[string]struct{}{"builtin": {}, "database": {}, "stream": {}, "industrial": {}}
+		if _, ok := validTypeGroups[filter.TypeGroup]; !ok {
+			return nil, 0, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "typeGroup 参数格式无效")
+		}
+	}
+
+	records, total, err := s.repository.ListByProjectPage(ctx, projectID, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+	connections := make([]Connection, 0, len(records))
+	for _, record := range records {
+		connections = append(connections, toConnection(record, tenantID))
+	}
+	return connections, total, nil
+}
+
 func (s *ConnectionService) GetConnection(ctx context.Context, projectID, connectionID, tenantID string) (*Connection, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err

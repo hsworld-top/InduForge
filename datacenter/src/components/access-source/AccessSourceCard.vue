@@ -1,21 +1,28 @@
 <template>
   <article class="access-source-card" :class="{ 'is-active': active }">
     <div class="access-source-card__top">
-      <span
-        class="access-source-card__icon"
-        :class="`is-${resolveConnectionVisual(connection).category}`"
-      >
-        <component :is="resolveConnectionVisual(connection).icon" />
-      </span>
+      <div class="access-source-card__heading">
+        <span
+          class="access-source-card__icon"
+          :class="`is-${resolveConnectionVisual(connection).category}`"
+        >
+          <component :is="resolveConnectionVisual(connection).icon" />
+        </span>
+        <div class="access-source-card__name" :title="connection.name">
+          {{ connection.name || '未命名连接' }}
+        </div>
+      </div>
       <slot name="top-actions"></slot>
     </div>
 
     <div class="access-source-card__body">
-      <div class="access-source-card__name" :title="connection.name">
-        {{ connection.name || '未命名连接' }}
-      </div>
       <div class="access-source-card__type">
-        <span>{{ resolveConnectionType(connection) }}</span>
+        <span
+          class="access-source-card__type-badge"
+          :class="`is-${resolveConnectionVisual(connection).category}`"
+        >
+          {{ resolveConnectionType(connection) }}
+        </span>
         <span class="access-source-card__divider">·</span>
         <span class="access-source-card__endpoint">
           {{ resolveConnectionEndpoint(connection) }}
@@ -60,11 +67,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import IconTablerArrowRight from '~icons/tabler/arrow-right'
-import IconTablerBuildingFactory2 from '~icons/tabler/building-factory-2'
-import IconTablerDatabase from '~icons/tabler/database'
-import IconTablerMessages from '~icons/tabler/messages'
 import IconTablerSettings from '~icons/tabler/settings'
 import IconTablerTrash from '~icons/tabler/trash'
+import { resolveAccessSourceVisual } from './access-source-visual'
 
 type AccessSourceConnection = {
   id: string
@@ -105,18 +110,6 @@ defineEmits<{
   (event: 'delete-connection', connection: AccessSourceConnection): void
 }>()
 
-const databaseTypes = new Set([
-  'relational',
-  'mysql',
-  'postgresql',
-  'sqlserver',
-  'tdengine',
-  'redis',
-  'builtin.relation',
-  'builtin.timeseries',
-])
-const streamTypes = new Set(['mqtt', 'kafka', 'websocket', 'http', 'builtin.message'])
-const industrialTypes = new Set(['opcua', 'opcda', 's7', 'modbus'])
 const builtinTypes = new Set([
   'builtin.relation',
   'builtin.timeseries',
@@ -125,27 +118,11 @@ const builtinTypes = new Set([
 ])
 
 const resolveConnectionCategory = (connection: AccessSourceConnection) => {
-  const type = connection.type || ''
-  if (type === 'builtin.realtime') return 'stream'
-  if (databaseTypes.has(type)) return 'database'
-  if (streamTypes.has(type)) return 'stream'
-  if (industrialTypes.has(type)) return 'industrial'
-  if (type.includes('opc') || type.includes('modbus')) return 'industrial'
-  return 'database'
+  return resolveAccessSourceVisual(connection.type).category
 }
 
 const resolveConnectionVisual = (connection: AccessSourceConnection) => {
-  const category = resolveConnectionCategory(connection)
-  if (category === 'stream') {
-    return { category, icon: IconTablerMessages }
-  }
-  if (category === 'industrial') {
-    return {
-      category,
-      icon: IconTablerBuildingFactory2,
-    }
-  }
-  return { category, icon: IconTablerDatabase }
+  return resolveAccessSourceVisual(connection.type)
 }
 
 const resolveConnectionType = (connection: AccessSourceConnection) => {
@@ -301,16 +278,41 @@ const redundancySummary = computed(() => {
   gap: 8px;
 }
 
+.access-source-card__heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .access-source-card__icon {
   width: 32px;
   height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border: 1px solid color-mix(in oklch, var(--dc-primary) 14%, var(--dc-border));
   border-radius: var(--dc-radius-sm);
-  /* 去掉三色背景，统一中性色 */
-  background: var(--dc-surface-muted);
-  color: var(--dc-text-secondary);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+}
+
+.access-source-card__icon.is-database {
+  border-color: #d1fae5;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.access-source-card__icon.is-stream {
+  border-color: #ffedd5;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.access-source-card__icon.is-industrial {
+  border-color: #e2e8f0;
+  background: #f1f5f9;
+  color: #475569;
 }
 
 .access-source-card__icon svg {
@@ -321,7 +323,7 @@ const redundancySummary = computed(() => {
 .access-source-card__body {
   min-width: 0;
   flex: 1 1 auto;
-  margin-top: 12px;
+  margin-top: 14px;
 }
 
 .access-source-card__name {
@@ -343,6 +345,37 @@ const redundancySummary = computed(() => {
   color: var(--dc-text-secondary);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.access-source-card__type-badge {
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid color-mix(in oklch, var(--dc-primary) 18%, var(--dc-border));
+  border-radius: 999px;
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.access-source-card__type-badge.is-database {
+  border-color: #d1fae5;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.access-source-card__type-badge.is-stream {
+  border-color: #ffedd5;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.access-source-card__type-badge.is-industrial {
+  border-color: #e2e8f0;
+  background: #f1f5f9;
+  color: #475569;
 }
 
 .access-source-card__type
@@ -400,18 +433,21 @@ const redundancySummary = computed(() => {
 .access-source-card__open {
   flex: 0 1 auto;
   min-width: 0;
-  height: 28px;
+  height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
   gap: 5px;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  padding: 0 9px;
+  border: 1px solid color-mix(in oklch, var(--dc-primary) 20%, var(--dc-border));
+  border-radius: 6px;
+  background: var(--dc-surface-raised);
   color: var(--dc-primary);
   font-size: 13px;
   font-weight: 700;
   transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
     color 0.18s ease,
     transform 0.18s ease;
 }
@@ -423,8 +459,10 @@ const redundancySummary = computed(() => {
 }
 
 .access-source-card__open:hover {
-  color: color-mix(in oklch, var(--dc-primary) 82%, var(--dc-text));
-  transform: translateX(1px);
+  border-color: var(--dc-primary);
+  background: var(--dc-primary);
+  color: var(--dc-surface-raised);
+  transform: translateY(-1px);
 }
 
 .access-source-card__open-icon {
@@ -454,9 +492,9 @@ const redundancySummary = computed(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 0;
+  border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-sm);
-  background: transparent;
+  background: var(--dc-surface-raised);
   color: var(--dc-text-secondary);
   transition:
     background-color 0.18s ease,
@@ -470,6 +508,7 @@ const redundancySummary = computed(() => {
 }
 
 .access-source-card__edit:hover {
+  border-color: color-mix(in oklch, var(--dc-primary) 24%, var(--dc-border));
   background: var(--dc-primary-soft);
   color: var(--dc-primary);
 }
@@ -479,6 +518,7 @@ const redundancySummary = computed(() => {
 }
 
 .access-source-card__delete:hover {
+  border-color: #fecaca;
   background: rgba(220, 38, 38, 0.08);
   color: var(--dc-danger, #dc2626);
 }

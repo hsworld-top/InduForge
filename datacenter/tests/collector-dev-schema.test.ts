@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CollectorAgentPageSchema,
   CollectorAgentSchema,
   CollectorRegistrationCodeSchema,
 } from '@/api/schemas/collector-dev.schema'
@@ -12,6 +13,7 @@ describe('collector dev schemas', () => {
       os: 'windows',
       arch: 'x64',
       version: '0.1.0',
+      ipAddress: '192.168.1.10',
       online: true,
       capabilities: [
         {
@@ -24,6 +26,7 @@ describe('collector dev schemas', () => {
       createdAt: '2026-07-13 11:00:00',
     })
     expect(agent.online).toBe(true)
+    expect(agent.ipAddress).toBe('192.168.1.10')
     expect(agent.capabilities[0]?.operations).toContain('opcua.read')
   })
 
@@ -31,5 +34,14 @@ describe('collector dev schemas', () => {
     expect(() =>
       CollectorRegistrationCodeSchema.parse({ expiresAt: '2026-07-13 12:10:00' }),
     ).toThrow()
+  })
+
+  it('parses paginated agent response', () => {
+    const page = CollectorAgentPageSchema.parse({
+      list: [],
+      pagination: { page: 1, pageSize: 10, total: 0, totalPages: 0 },
+    })
+    expect(page.pagination.pageSize).toBe(10)
+    expect(page.list).toEqual([])
   })
 })

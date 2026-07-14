@@ -55,6 +55,25 @@ func TestCollectorDevVerticalLoop(t *testing.T) {
 	}
 	capabilities := []map[string]any{{"protocolType": "opcua", "capabilityVersion": "1.0", "operations": []string{"connection.test", "opcua.browse", "opcua.read"}}}
 	doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/agent/heartbeat", agent.AgentToken, map[string]any{"capabilities": capabilities})
+	agentsResponse := doJSONRequest(t, http.MethodGet, server.URL+"/api/v1/data/collector-dev/agents?page=1&pageSize=10", adminToken, nil)
+	var agentsPage struct {
+		List []struct {
+			IPAddress string `json:"ipAddress"`
+		} `json:"list"`
+		Pagination struct {
+			Page       int `json:"page"`
+			PageSize   int `json:"pageSize"`
+			Total      int `json:"total"`
+			TotalPages int `json:"totalPages"`
+		} `json:"pagination"`
+	}
+	mustDecodeCollectorData(t, agentsResponse.Data, &agentsPage)
+	if len(agentsPage.List) != 1 || agentsPage.List[0].IPAddress != "127.0.0.1" {
+		t.Fatalf("期望记录代理 IP 127.0.0.1，实际 %#v", agentsPage.List)
+	}
+	if agentsPage.Pagination.Page != 1 || agentsPage.Pagination.PageSize != 10 || agentsPage.Pagination.Total != 1 || agentsPage.Pagination.TotalPages != 1 {
+		t.Fatalf("采集调试代理分页信息不符合预期: %#v", agentsPage.Pagination)
+	}
 	created := doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/collector-dev/tasks", adminToken, map[string]any{
 		"agentId":        agent.AgentID,
 		"operation":      "connection.test",

@@ -43,6 +43,7 @@ type CollectorAgent struct {
 	OS           string                        `json:"os"`
 	Arch         string                        `json:"arch"`
 	Version      string                        `json:"version"`
+	IPAddress    string                        `json:"ipAddress"`
 	Online       bool                          `json:"online"`
 	Capabilities []CollectorProtocolCapability `json:"capabilities"`
 	LastSeenAt   *string                       `json:"lastSeenAt"`
@@ -109,7 +110,7 @@ func (s *CollectorDevService) CreateRegistrationCode(ctx context.Context, claims
 	return &CollectorRegistrationCode{Code: code, ExpiresAt: formatCollectorTime(expiresAt)}, nil
 }
 
-func (s *CollectorDevService) Register(ctx context.Context, input CollectorRegisterInput) (*CollectorRegistration, error) {
+func (s *CollectorDevService) Register(ctx context.Context, input CollectorRegisterInput, clientIP string) (*CollectorRegistration, error) {
 	input.Name = strings.TrimSpace(input.Name)
 	input.RegistrationCode = strings.TrimSpace(input.RegistrationCode)
 	if input.Name == "" || input.RegistrationCode == "" {
@@ -128,7 +129,7 @@ func (s *CollectorDevService) Register(ctx context.Context, input CollectorRegis
 	if err != nil {
 		return nil, err
 	}
-	record, err := s.repository.RegisterAgent(ctx, repository.CreateCollectorAgentParams{ID: uuid.NewString(), CodeHash: hashSecret(input.RegistrationCode), CredentialHash: hashSecret(token), Name: input.Name, OS: input.OS, Arch: input.Arch, Version: input.Version, Capabilities: input.Capabilities})
+	record, err := s.repository.RegisterAgent(ctx, repository.CreateCollectorAgentParams{ID: uuid.NewString(), CodeHash: hashSecret(input.RegistrationCode), CredentialHash: hashSecret(token), Name: input.Name, OS: input.OS, Arch: input.Arch, Version: input.Version, LastIP: clientIP, Capabilities: input.Capabilities})
 	if err != nil {
 		return nil, err
 	}
@@ -142,20 +143,22 @@ func (s *CollectorDevService) AuthenticateAgent(ctx context.Context, token strin
 	}
 	return &auth.CollectorAgentIdentity{AgentID: record.ID, TenantID: record.TenantID}, nil
 }
-func (s *CollectorDevService) ListAgents(ctx context.Context, claims *auth.Claims) ([]CollectorAgent, error) {
+
+// ListAgentsPage 查询当前租户下的分页采集调试代理。
+func (s *CollectorDevService) ListAgentsPage(ctx context.Context, claims *auth.Claims, page, pageSize int) ([]CollectorAgent, int, error) {
 	if claims == nil || strings.TrimSpace(claims.TenantID) == "" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "JWT 缺少租户信息")
+		return nil, 0, apperrors.NewAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "JWT 缺少租户信息")
 	}
-	records, err := s.repository.ListAgents(ctx, claims.TenantID)
+	records, total, err := s.repository.ListAgentsPage(ctx, claims.TenantID, page, pageSize)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	result := make([]CollectorAgent, 0, len(records))
 	now := time.Now()
 	for _, record := range records {
 		result = append(result, toCollectorAgent(record, now))
 	}
-	return result, nil
+	return result, total, nil
 }
 
 func (s *CollectorDevService) DeleteAgent(ctx context.Context, claims *auth.Claims, agentID string) error {
@@ -164,11 +167,11 @@ func (s *CollectorDevService) DeleteAgent(ctx context.Context, claims *auth.Clai
 	}
 	return s.repository.DeleteAgent(ctx, claims.TenantID, agentID)
 }
-func (s *CollectorDevService) Heartbeat(ctx context.Context, identity *auth.CollectorAgentIdentity, capabilities []CollectorProtocolCapability) (*CollectorAgent, error) {
+func (s *CollectorDevService) Heartbeat(ctx context.Context, identity *auth.CollectorAgentIdentity, capabilities []CollectorProtocolCapability, clientIP string) (*CollectorAgent, error) {
 	if err := validateCapabilities(capabilities); err != nil {
 		return nil, err
 	}
-	record, err := s.repository.Heartbeat(ctx, identity.AgentID, capabilities)
+	record, err := s.repository.Heartbeat(ctx, identity.AgentID, clientIP, capabilities)
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +311,7 @@ func optionalCollectorTime(value *time.Time) *string {
 func toCollectorAgent(record repository.CollectorDevAgentRecord, now time.Time) CollectorAgent {
 	capabilities := []CollectorProtocolCapability{}
 	_ = json.Unmarshal(record.Capabilities, &capabilities)
-	return CollectorAgent{ID: record.ID, Name: record.Name, OS: record.OS, Arch: record.Arch, Version: record.Version, Online: record.LastSeenAt != nil && now.Sub(*record.LastSeenAt) <= collectorOnlineWindow, Capabilities: capabilities, LastSeenAt: optionalCollectorTime(record.LastSeenAt), CreatedAt: formatCollectorTime(record.CreatedAt)}
+	return CollectorAgent{ID: record.ID, Name: record.Name, OS: record.OS, Arch: record.Arch, Version: record.Version, IPAddress: record.LastIP, Online: record.LastSeenAt != nil && now.Sub(*record.LastSeenAt) <= collectorOnlineWindow, Capabilities: capabilities, LastSeenAt: optionalCollectorTime(record.LastSeenAt), CreatedAt: formatCollectorTime(record.CreatedAt)}
 }
 func toCollectorTask(record repository.CollectorDevTaskRecord) CollectorTask {
 	return CollectorTask{ID: record.ID, ProjectID: record.ProjectID, AgentID: record.AgentID, Operation: record.Operation, Status: record.Status, Request: record.RequestPayload, Result: record.ResultPayload, ErrorCode: record.ErrorCode, ErrorMessage: record.ErrorMessage, DeadlineAt: formatCollectorTime(record.DeadlineAt), ClaimedAt: optionalCollectorTime(record.ClaimedAt), FinishedAt: optionalCollectorTime(record.FinishedAt), CreatedAt: formatCollectorTime(record.CreatedAt)}

@@ -17,6 +17,10 @@ import { getApiErrorMessage } from '@/utils/request'
  * 这里统一收敛成数组，避免 debug 链路在接口成功时仍被误判为“暂无连接”。
  */
 export function normalizeConnectionsPayload(response) {
+  if (Array.isArray(response?.data?.list)) {
+    return response.data.list
+  }
+
   if (Array.isArray(response?.data?.connections)) {
     return response.data.connections
   }
@@ -28,10 +32,13 @@ export function normalizeConnectionsPayload(response) {
   return []
 }
 
-export function useConnection(projectId) {
+export function useConnection(projectId, options = {}) {
   const connections = ref([])
   const selectedConnectionId = ref(null)
   const loading = ref(false)
+  const paginated = options.paginated === true
+  const connectionPagination = ref({ page: 1, pageSize: 10, total: 0, totalPages: 0 })
+  const connectionQuery = ref({ search: '', typeGroup: 'all' })
 
   // 当前选中的连接
   const selectedConnection = computed(() => {
@@ -55,8 +62,35 @@ export function useConnection(projectId) {
 
     loading.value = true
     try {
-      const response = await dataAPI.getConnections(projectId.value)
+      const params = paginated
+        ? {
+            page: connectionPagination.value.page,
+            pageSize: connectionPagination.value.pageSize,
+            search: connectionQuery.value.search || undefined,
+            typeGroup:
+              connectionQuery.value.typeGroup === 'all'
+                ? undefined
+                : connectionQuery.value.typeGroup,
+          }
+        : undefined
+      const response = await dataAPI.getConnections(projectId.value, params)
       connections.value = normalizeConnectionsPayload(response)
+      if (paginated) {
+        const pageInfo = response?.data?.pagination || {}
+        connectionPagination.value = {
+          page: Number(pageInfo.page ?? connectionPagination.value.page),
+          pageSize: Number(pageInfo.pageSize ?? connectionPagination.value.pageSize),
+          total: Number(pageInfo.total ?? connections.value.length),
+          totalPages: Number(pageInfo.totalPages ?? 0),
+        }
+        if (
+          connectionPagination.value.totalPages > 0 &&
+          connectionPagination.value.page > connectionPagination.value.totalPages
+        ) {
+          connectionPagination.value.page = connectionPagination.value.totalPages
+          return await loadConnections()
+        }
+      }
     } catch (error) {
       console.error('加载连接列表失败:', error)
       ElMessage({
@@ -78,6 +112,19 @@ export function useConnection(projectId) {
   const resetConnections = () => {
     connections.value = []
     selectedConnectionId.value = null
+    connectionPagination.value = { page: 1, pageSize: 10, total: 0, totalPages: 0 }
+    connectionQuery.value = { search: '', typeGroup: 'all' }
+  }
+
+  const setConnectionQuery = async ({ page, pageSize, search, typeGroup }) => {
+    if (!paginated) return
+    connectionPagination.value.page = Number(page || 1)
+    connectionPagination.value.pageSize = Number(pageSize || connectionPagination.value.pageSize)
+    connectionQuery.value = {
+      search: String(search || ''),
+      typeGroup: String(typeGroup || 'all'),
+    }
+    await loadConnections()
   }
 
   /**
@@ -241,7 +288,10 @@ export function useConnection(projectId) {
     selectedConnection,
     relationalConnections,
     loading,
+    connectionPagination,
+    connectionQuery,
     loadConnections,
+    setConnectionQuery,
     resetConnections,
     createConnection,
     updateConnection,

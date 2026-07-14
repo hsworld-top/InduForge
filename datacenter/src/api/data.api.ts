@@ -43,6 +43,13 @@ export const getConnections = (projectId, params = {}) => {
   })
 }
 
+export const getConnection = (projectId, connectionId) => {
+  return request({
+    url: `/data/projects/${projectId}/connections/${connectionId}`,
+    method: 'get',
+  })
+}
+
 /**
  * 创建数据连接
  * @param {string} projectId - 工程ID
@@ -917,7 +924,12 @@ export const batchMoveModbusRegistersGroup = (projectId, connectionId, data) => 
   })
 }
 
-export const moveModbusRegistersByFilter = (projectId, connectionId, filter = {}, groupId = null) => {
+export const moveModbusRegistersByFilter = (
+  projectId,
+  connectionId,
+  filter = {},
+  groupId = null,
+) => {
   return request({
     url: `/data/projects/${projectId}/modbus/${connectionId}/registers/move-filtered`,
     method: 'post',
@@ -2060,6 +2072,7 @@ export const debugComputeUnit = (projectId, id, input = {}) => {
 
 export default {
   getConnections,
+  getConnection,
   createConnection,
   createMqttConnection,
   testConnection,

@@ -24,7 +24,7 @@ import type { DatacenterModuleId, DatacenterModuleMeta } from '@/config/datacent
 
 defineProps<{
   modules: DatacenterModuleMeta[]
-  activeModule: DatacenterModuleId
+  activeModule: DatacenterModuleId | null
 }>()
 
 defineEmits<{

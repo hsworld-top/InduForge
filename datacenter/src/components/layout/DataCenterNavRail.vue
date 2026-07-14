@@ -23,15 +23,16 @@
 </template>
 
 <script setup lang="ts">
-import IconTablerBell from '~icons/tabler/bell'
-import IconTablerCalculator from '~icons/tabler/calculator'
-import IconTablerDatabase from '~icons/tabler/database'
-import IconTablerPlugConnected from '~icons/tabler/plug-connected'
+import IconTablerBellRinging from '~icons/tabler/bell-ringing'
+import IconTablerChartDots3 from '~icons/tabler/chart-dots-3'
+import IconTablerDatabaseCog from '~icons/tabler/database-cog'
+import IconTablerFunction from '~icons/tabler/function'
+import IconTablerRouter from '~icons/tabler/router'
 import type { DatacenterModuleId, DatacenterModuleMeta } from '@/config/datacenterModules'
 
-const props = defineProps<{
+defineProps<{
   modules: DatacenterModuleMeta[]
-  activeModule: DatacenterModuleId
+  activeModule: DatacenterModuleId | null
 }>()
 
 defineEmits<{
@@ -40,11 +41,11 @@ defineEmits<{
 
 // 使用 v2 模块 ID 映射图标
 const moduleIcons: Record<string, unknown> = {
-  datapoint: IconTablerDatabase,
-  'access-source': IconTablerPlugConnected,
-  'storage-policy': IconTablerDatabase,
-  compute: IconTablerCalculator,
-  alarm: IconTablerBell,
+  datapoint: IconTablerChartDots3,
+  'access-source': IconTablerRouter,
+  'storage-policy': IconTablerDatabaseCog,
+  compute: IconTablerFunction,
+  alarm: IconTablerBellRinging,
 }
 </script>
 

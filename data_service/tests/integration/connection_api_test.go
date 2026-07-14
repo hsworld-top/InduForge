@@ -90,6 +90,34 @@ func TestConnectionsCRUD(t *testing.T) {
 		t.Fatalf("期望列表首项 ID 为 %q，实际为 %q", created.ID, listAfterCreate[0].ID)
 	}
 
+	pagedResponse := doJSONRequest(t, http.MethodGet, server.URL+"/api/v1/data/projects/"+projectID+"/connections?page=1&pageSize=1&search=pg&typeGroup=database", token, nil)
+	var paged struct {
+		List       []connectionPayload `json:"list"`
+		Pagination struct {
+			Page       int `json:"page"`
+			PageSize   int `json:"pageSize"`
+			Total      int `json:"total"`
+			TotalPages int `json:"totalPages"`
+		} `json:"pagination"`
+	}
+	if err := json.Unmarshal(pagedResponse.Data, &paged); err != nil {
+		t.Fatalf("解析连接分页响应失败: %v", err)
+	}
+	if len(paged.List) != 1 || paged.List[0].ID != created.ID {
+		t.Fatalf("期望分页列表返回已创建连接，实际 %#v", paged.List)
+	}
+	if paged.Pagination.Page != 1 || paged.Pagination.PageSize != 1 || paged.Pagination.Total != 1 || paged.Pagination.TotalPages != 1 {
+		t.Fatalf("连接分页信息不符合预期: %#v", paged.Pagination)
+	}
+	detailResponse := doJSONRequest(t, http.MethodGet, server.URL+"/api/v1/data/projects/"+projectID+"/connections/"+created.ID, token, nil)
+	var detail connectionPayload
+	if err := json.Unmarshal(detailResponse.Data, &detail); err != nil {
+		t.Fatalf("解析连接详情响应失败: %v", err)
+	}
+	if detail.ID != created.ID || detail.Name != created.Name {
+		t.Fatalf("连接详情不符合预期: %#v", detail)
+	}
+
 	updated := mustUpdateConnection(t, server.URL, token, projectID, created.ID, map[string]any{
 		"name":   "pg-main-2",
 		"status": "disconnected",

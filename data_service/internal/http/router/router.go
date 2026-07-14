@@ -585,6 +585,14 @@ func mountConnectionRoutes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/connections/{connectionId}",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.connectionHandler.Get),
+			),
+		),
+	)
+	mux.Handle(
 		"PUT /api/v1/data/projects/{projectId}/connections/{connectionId}",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:write")(

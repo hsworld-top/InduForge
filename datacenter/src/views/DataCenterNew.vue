@@ -1,5 +1,5 @@
 <template>
-  <DataCenterShell v-model:active-module="activeModule" :modules="datacenterModules">
+  <DataCenterShell v-model:active-module="navActiveModule" :modules="datacenterModules">
     <template #actions>
       <div class="datacenter-side-actions">
         <button
@@ -9,7 +9,7 @@
           aria-label="数据契约检查"
           @click="showDataContractCheckDialog = true"
         >
-          <IconTablerShieldCheck class="h-5 w-5" />
+          <IconTablerFileCheck class="h-5 w-5" />
           <span>数据契约检查</span>
         </button>
         <button
@@ -20,7 +20,7 @@
           aria-label="采集调试代理"
           @click="showCollectorAgentManager = true"
         >
-          <IconTablerPlugConnected class="h-5 w-5" />
+          <IconTablerDeviceDesktopCog class="h-5 w-5" />
           <span>采集调试代理</span>
         </button>
       </div>
@@ -51,9 +51,12 @@
         :connections="connections"
         :selected-connection-id="selectedConnectionId"
         :project-id="projectId"
+        :loading="connectionLoading"
+        :pagination="connectionPagination"
         @create="openCreateConnectionDialog"
         @refresh="loadConnections"
         @edit="handleEditConnection"
+        @query-change="setConnectionQuery"
       />
 
       <!-- 旧标签页能力入口，已被 v2 接管，保留代码备用。 -->
@@ -297,7 +300,8 @@ import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerAlertCircle from '~icons/tabler/alert-circle'
 import IconTablerCalculator from '~icons/tabler/calculator'
 import IconTablerBell from '~icons/tabler/bell'
-import IconTablerShieldCheck from '~icons/tabler/shield-check'
+import IconTablerDeviceDesktopCog from '~icons/tabler/device-desktop-cog'
+import IconTablerFileCheck from '~icons/tabler/file-check'
 import ConnectionList from '@/components/connection/ConnectionList.vue'
 import ConnectionContextMenu from '@/components/connection/ConnectionContextMenu.vue'
 import TableContextMenu from '@/components/connection/TableContextMenu.vue'
@@ -361,6 +365,14 @@ const resolveModuleFromRoute = (): DatacenterModuleId => {
 }
 
 const activeModule = ref<DatacenterModuleId>(resolveModuleFromRoute())
+const navActiveModule = computed<DatacenterModuleId | null>({
+  get: () => (showCollectorAgentManager.value ? null : activeModule.value),
+  set: (module) => {
+    if (!module) return
+    showCollectorAgentManager.value = false
+    activeModule.value = module
+  },
+})
 const activeObjectId = computed(() => String(route.params.objectId || ''))
 const selectedComputeUnitId = computed(() =>
   route.params.module === 'compute' ? activeObjectId.value : '',
@@ -406,14 +418,25 @@ provide('projectId', projectId)
 const {
   connections,
   selectedConnectionId,
+  loading: connectionLoading,
+  connectionPagination,
   loadConnections,
+  setConnectionQuery,
   resetConnections,
   createConnection,
   updateConnection,
   deleteConnection,
   updateConnectionStatus,
   selectConnection,
-} = useConnection(projectId)
+} = useConnection(projectId, { paginated: true })
+
+const loadConnectionWorkspace = () =>
+  setConnectionQuery({
+    page: 1,
+    pageSize: connectionPagination.value.pageSize,
+    search: String(route.query.q || ''),
+    typeGroup: String(route.query.type || 'all'),
+  })
 
 // 统一标签页管理
 const tabs = ref([])
@@ -818,7 +841,7 @@ const syncProjectStore = () => {
 onMounted(() => {
   syncProjectStore()
   if (projectId.value) {
-    loadConnections()
+    void loadConnectionWorkspace()
   }
   window.addEventListener('beforeunload', handleBeforeUnload)
 })
@@ -834,7 +857,7 @@ watch(
     syncProjectStore()
     if (newId !== oldId) {
       resetConnections()
-      loadConnections()
+      void loadConnectionWorkspace()
     }
   },
 )
@@ -855,13 +878,44 @@ const handleSelectConnection = (connection) => {
   selectConnection(connection.id)
 }
 
-/* v2 workbench：当 tab === 'workbench' 且找到对应 connection 时激活 */
-const activeWorkbenchConnection = computed(() => {
-  if (route.params.tab !== 'workbench') return null
-  const id = String(route.params.objectId || '')
-  if (!id) return null
-  return connections.value.find((c) => String(c.id) === id) ?? null
-})
+/* 分页列表之外通过详情接口恢复工作台连接，保证深链接刷新仍可打开。 */
+const activeWorkbenchConnection = ref(null)
+let workbenchConnectionLoadVersion = 0
+watch(
+  [
+    () => route.params.tab,
+    () => route.params.objectId,
+    () => projectId.value,
+    () => connections.value.map((connection) => connection.id).join(','),
+  ],
+  async ([tab, objectId, currentProjectId]) => {
+    const loadVersion = ++workbenchConnectionLoadVersion
+    if (tab !== 'workbench' || !objectId || !currentProjectId) {
+      activeWorkbenchConnection.value = null
+      return
+    }
+    const connectionId = String(objectId)
+    const currentPageConnection = connections.value.find(
+      (connection) => String(connection.id) === connectionId,
+    )
+    if (currentPageConnection) {
+      activeWorkbenchConnection.value = currentPageConnection
+      return
+    }
+    try {
+      const response = await dataAPI.getConnection(currentProjectId, connectionId)
+      if (loadVersion === workbenchConnectionLoadVersion) {
+        activeWorkbenchConnection.value = response.data || null
+      }
+    } catch (error) {
+      if (loadVersion === workbenchConnectionLoadVersion) {
+        activeWorkbenchConnection.value = null
+        console.error('加载接入源详情失败:', error)
+      }
+    }
+  },
+  { immediate: true },
+)
 
 /* 从 workbench 返回接入源列表，保留筛选 query */
 const handleWorkbenchBack = () => {
