@@ -10,8 +10,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly AgentCredentialStore _credentialStore = new();
     private readonly AgentStatusForm _statusForm;
     private readonly NotifyIcon _notifyIcon;
+    private readonly ContextMenuStrip _trayMenu;
+    private readonly TrayMenuHostForm _trayMenuHost = new();
     private readonly ToolStripMenuItem _connectionMenuItem;
     private readonly ToolStripMenuItem _clearRegistrationMenuItem;
+    private readonly SingleInstanceCoordinator _singleInstance;
     private readonly OpcUaSelfTestService _selfTestService = new();
     private readonly CenterApiClient _apiClient = new(new HttpClient { Timeout = TimeSpan.FromSeconds(35) });
     private readonly AgentWorker _worker;
@@ -20,8 +23,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private AgentStatusSnapshot _snapshot;
     private bool _isExiting;
 
-    public TrayApplicationContext()
+    public TrayApplicationContext(SingleInstanceCoordinator singleInstance)
     {
+        _singleInstance = singleInstance;
         _credentials = LoadCredentialsSafely();
         _snapshot = new AgentStatusSnapshot(
             _credentials is null ? AgentConnectionState.NotRegistered : AgentConnectionState.Disconnected,
@@ -40,18 +44,24 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _statusForm.SelfTestRequested += OnSelfTestRequested;
         _worker = new AgentWorker(_apiClient, new CollectorTaskExecutor(), OnWorkerUpdateAsync);
 
-        var menu = new ContextMenuStrip();
-        menu.Items.Add("打开状态", null, (_, _) => ShowStatus());
+        _trayMenu = new ContextMenuStrip();
+        _trayMenu.Items.Add("打开状态", null, (_, _) => ShowStatus());
         _connectionMenuItem = new ToolStripMenuItem("重新连接", null, (_, _) => OnConnectionToggleRequested(this, EventArgs.Empty));
         _clearRegistrationMenuItem = new ToolStripMenuItem("清除注册", null, (_, _) => OnClearRegistrationRequested(this, EventArgs.Empty));
-        menu.Items.Add(_connectionMenuItem);
-        menu.Items.Add(_clearRegistrationMenuItem);
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("退出", null, (_, _) => ExitAgent());
-        _notifyIcon = new NotifyIcon { Icon = SystemIcons.Application, Text = "InduForge 采集调试代理：未注册", Visible = true, ContextMenuStrip = menu };
-        _notifyIcon.DoubleClick += (_, _) => ShowStatus();
-        RefreshMenus();
+        _trayMenu.Items.Add(_connectionMenuItem);
+        _trayMenu.Items.Add(_clearRegistrationMenuItem);
+        _trayMenu.Items.Add(new ToolStripSeparator());
+        _trayMenu.Items.Add("退出", null, (_, _) => ExitAgent());
+        _trayMenu.Closed += (_, _) => _trayMenuHost.Hide();
+        _notifyIcon = new NotifyIcon { Icon = SystemIcons.Application, Text = "InduForge 采集调试代理：未注册", Visible = true };
+        _notifyIcon.MouseClick += (_, args) =>
+        {
+            if (args.Button != MouseButtons.Right) return;
+            ShowTrayMenu();
+        };
+        _notifyIcon.MouseDoubleClick += (_, args) => { if (args.Button == MouseButtons.Left) ShowStatus(); };
         ShowStatus();
+        _singleInstance.StartListening(OnActivationRequestedAsync);
         if (_credentials is not null) _worker.Start(_credentials, _applicationCancellation.Token);
     }
 
@@ -59,8 +69,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         _applicationCancellation.Cancel();
         _worker.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        _singleInstance.DisposeAsync().AsTask().GetAwaiter().GetResult();
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
+        _trayMenu.Dispose();
+        _trayMenuHost.Dispose();
         _statusForm.Dispose();
         _applicationCancellation.Dispose();
         base.ExitThreadCore();
@@ -131,9 +144,46 @@ internal sealed class TrayApplicationContext : ApplicationContext
     }
 
     private void ClearCredentials() { _credentialStore.Clear(); _credentials = null; }
-    private void ShowStatus() { if (_statusForm.Visible) { _statusForm.Activate(); return; } _statusForm.Show(); _statusForm.WindowState = FormWindowState.Normal; _statusForm.Activate(); }
+    private Task OnActivationRequestedAsync()
+    {
+        if (_isExiting || _statusForm.IsDisposed) return Task.CompletedTask;
+        try
+        {
+            if (_statusForm.InvokeRequired) _statusForm.BeginInvoke(ShowStatus);
+            else ShowStatus();
+        }
+        catch (InvalidOperationException) when (_isExiting || _statusForm.IsDisposed)
+        {
+        }
+        return Task.CompletedTask;
+    }
+
+    private void ShowStatus()
+    {
+        if (_statusForm.IsDisposed) return;
+        if (!_statusForm.Visible) _statusForm.Show();
+        if (_statusForm.WindowState == FormWindowState.Minimized) _statusForm.WindowState = FormWindowState.Normal;
+        _statusForm.BringToFront();
+        _statusForm.Activate();
+        SetForegroundWindow(_statusForm.Handle);
+    }
+
+    // 托盘菜单必须绑定前台窗口显示，否则窗口可见时 Windows 可能立即收回菜单焦点。
+    private void ShowTrayMenu()
+    {
+        if (_trayMenu.Visible || _isExiting) return;
+        RefreshMenus();
+        var cursorPosition = Cursor.Position;
+        _trayMenuHost.ActivateAt(cursorPosition);
+        SetForegroundWindow(_trayMenuHost.Handle);
+        _trayMenu.Show(_trayMenuHost, Point.Empty);
+    }
     private async void OnSelfTestRequested(object? sender, string endpointUrl) { _statusForm.SetSelfTestRunning(true); UpdateSnapshot(_snapshot with { CurrentTask = "OPC UA 本地自检", LastMessage = $"正在连接 {endpointUrl}", UpdatedAt = DateTimeOffset.Now }); try { var message = await _selfTestService.RunAsync(endpointUrl, _applicationCancellation.Token); UpdateSnapshot(_snapshot with { CurrentTask = "空闲", LastMessage = message, UpdatedAt = DateTimeOffset.Now }); } catch (OperationCanceledException) when (_applicationCancellation.IsCancellationRequested) { } catch (Exception exception) { UpdateSnapshot(_snapshot with { CurrentTask = "空闲", LastMessage = exception.Message, UpdatedAt = DateTimeOffset.Now }); } finally { _statusForm.SetSelfTestRunning(false); } }
-    private void UpdateSnapshot(AgentStatusSnapshot snapshot) { _snapshot = snapshot; _statusForm.UpdateStatus(snapshot); _notifyIcon.Text = snapshot.ConnectionState switch { AgentConnectionState.Connected => "InduForge 采集调试代理：已连接", AgentConnectionState.Disconnected => "InduForge 采集调试代理：已断开", _ => "InduForge 采集调试代理：未注册" }; RefreshMenus(); }
+    private void UpdateSnapshot(AgentStatusSnapshot snapshot) { _snapshot = snapshot; _statusForm.UpdateStatus(snapshot); _notifyIcon.Text = snapshot.ConnectionState switch { AgentConnectionState.Connected => "InduForge 采集调试代理：已连接", AgentConnectionState.Disconnected => "InduForge 采集调试代理：已断开", _ => "InduForge 采集调试代理：未注册" }; }
     private void RefreshMenus() { var registered = _credentials is not null; _connectionMenuItem.Visible = registered; _connectionMenuItem.Text = _worker?.IsRunning == true ? "断开中心" : "重新连接"; _clearRegistrationMenuItem.Visible = registered; }
     private void ExitAgent() { if (_isExiting) return; _isExiting = true; _applicationCancellation.Cancel(); _statusForm.ExitApplication(); ExitThread(); }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr windowHandle);
 }
