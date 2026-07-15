@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   agentSupportsOperation,
+  buildCollectorDriverTree,
   collectorAgentStorageKey,
   formatCollectorAgentName,
   formatCollectorProtocolFamily,
@@ -60,6 +61,44 @@ describe('industrial collector workbench model', () => {
     expect(resolveCollectorDriverIconKey('plc', 'siemens.s7')).toBe('siemens')
     expect(resolveCollectorDriverIconKey('opcua', 'opcua.standard')).toBeNull()
   })
+  it('builds a category, device family and driver tree with bilingual labels', () => {
+    const drivers = [
+      {
+        protocolFamily: 'siemens',
+        driverId: 'siemens.s7-tcp',
+        driverVersion: '1.0.0',
+        schemaVersion: 1,
+        displayName: 'Siemens S7 TCP',
+        category: 'plc',
+        transports: ['tcp'],
+        operations: [],
+        dataTypes: ['bool'],
+        acquisitionModes: ['polling'],
+        platforms: { devAgent: [], runtime: [] },
+      },
+      {
+        protocolFamily: 'modbus',
+        driverId: 'modbus.rtu',
+        driverVersion: '1.0.0',
+        schemaVersion: 1,
+        displayName: 'Modbus RTU',
+        category: 'fieldbus',
+        transports: ['serial'],
+        operations: [],
+        dataTypes: ['bool'],
+        acquisitionModes: ['polling'],
+        platforms: { devAgent: [], runtime: [] },
+      },
+    ]
+
+    const tree = buildCollectorDriverTree(drivers)
+    expect(tree[0]?.label).toBe('PLC [可编程控制器]')
+    expect(tree[0]?.children?.[0]?.label).toBe('Siemens Plc [西门子]')
+    expect(tree[0]?.children?.[0]?.children?.[0]?.label).toBe('Siemens S7 TCP [西门子 S7 以太网]')
+    expect(buildCollectorDriverTree(drivers, '串口')[0]?.children?.[0]?.protocolFamily).toBe(
+      'modbus',
+    )
+  })
   it('groups configured connections by protocol family', () => {
     const connection = {
       id: 'connection-1',
@@ -86,7 +125,7 @@ describe('industrial collector workbench model', () => {
 
     expect(groups.map((group) => [group.label, group.items.length])).toEqual([
       ['Modbus', 2],
-      ['OPC UA', 1],
+      ['OPC UA [开放平台通信]', 1],
     ])
     expect(formatCollectorProtocolFamily('custom')).toBe('CUSTOM')
   })

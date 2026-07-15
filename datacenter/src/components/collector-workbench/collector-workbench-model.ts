@@ -1,4 +1,5 @@
 import type { CollectorAgent } from '@/api/schemas/collector-dev.schema'
+import type { CollectorConnection, CollectorDriverSummary } from '@/api/schemas/collector.schema'
 
 export type CollectorDriverIconKey =
   | 'modbus'
@@ -11,7 +12,6 @@ export type CollectorDriverIconKey =
   | 'fatek'
   | 'inovance'
   | 'schneider'
-import type { CollectorConnection } from '@/api/schemas/collector.schema'
 
 export type CollectorConnectionGroup = {
   key: string
@@ -19,12 +19,51 @@ export type CollectorConnectionGroup = {
   items: CollectorConnection[]
 }
 
+export type CollectorDriverTreeNode = {
+  id: string
+  type: 'category' | 'family' | 'driver'
+  label: string
+  protocolFamily?: string
+  driver?: CollectorDriverSummary
+  children?: CollectorDriverTreeNode[]
+}
+
 const protocolFamilyLabels: Record<string, string> = {
   modbus: 'Modbus',
-  opc: 'OPC',
-  opcua: 'OPC UA',
-  s7: '西门子 PLC',
-  mitsubishi: '三菱 PLC',
+  opc: 'OPC [开放平台通信]',
+  opcua: 'OPC UA [开放平台通信]',
+  s7: 'Siemens Plc [西门子]',
+  siemens: 'Siemens Plc [西门子]',
+  mitsubishi: 'Melsec Plc [三菱]',
+  melsec: 'Melsec Plc [三菱]',
+  omron: 'Omron Plc [欧姆龙]',
+  beckhoff: 'Beckhoff Plc [倍福]',
+  panasonic: 'Panasonic Plc [松下]',
+  keyence: 'Keyence Plc [基恩士]',
+  fatek: 'Fatek Plc [永宏]',
+  inovance: 'Inovance Plc [汇川]',
+  schneider: 'Schneider Plc [施耐德]',
+}
+
+const categoryLabels: Record<string, string> = {
+  plc: 'PLC [可编程控制器]',
+  fieldbus: 'Fieldbus [现场总线]',
+  opc: 'OPC [工业互操作]',
+  instrument: 'Instrument [仪器仪表]',
+  robot: 'Robot [机器人]',
+  cnc: 'CNC [数控机床]',
+  sensor: 'Sensor [传感器]',
+  custom: 'Custom Protocol [自定义协议]',
+  industrial: 'Industrial [工业协议]',
+}
+
+const categoryOrder = ['plc', 'fieldbus', 'opc', 'instrument', 'robot', 'cnc', 'sensor', 'custom']
+
+const driverChineseLabels: Record<string, string> = {
+  'opcua.standard': '标准客户端',
+  'modbus.tcp': '以太网',
+  'modbus.rtu': '串口',
+  'siemens.s7-tcp': '西门子 S7 以太网',
 }
 
 export function resolveCollectorDriverIconKey(
@@ -52,9 +91,79 @@ export function formatCollectorAgentName(agent: CollectorAgent) {
   const platform = agent.os.toLowerCase() === 'windows' ? 'Windows' : agent.os || '本机'
   return agent.ipAddress ? `${platform} 调试代理 · ${agent.ipAddress}` : `${platform} 调试代理`
 }
+
 export function formatCollectorProtocolFamily(protocolFamily: string) {
   const normalized = protocolFamily.trim().toLowerCase()
   return protocolFamilyLabels[normalized] || protocolFamily.trim().toUpperCase()
+}
+
+export function formatCollectorCategoryLabel(category: string) {
+  const normalized = category.trim().toLowerCase()
+  return categoryLabels[normalized] || category.trim().toUpperCase()
+}
+
+export function formatCollectorDriverDisplayName(driver: CollectorDriverSummary) {
+  const chineseLabel = driverChineseLabels[driver.driverId]
+  return chineseLabel ? `${driver.displayName} [${chineseLabel}]` : driver.displayName
+}
+
+export function buildCollectorDriverTree(
+  drivers: CollectorDriverSummary[],
+  search = '',
+): CollectorDriverTreeNode[] {
+  const keyword = search.trim().toLowerCase()
+  const categories = new Map<string, Map<string, CollectorDriverSummary[]>>()
+
+  for (const driver of drivers) {
+    const category = driver.category.trim().toLowerCase() || 'industrial'
+    const family = driver.protocolFamily.trim().toLowerCase() || 'unknown'
+    const categoryLabel = formatCollectorCategoryLabel(category)
+    const familyLabel = formatCollectorProtocolFamily(family)
+    const driverLabel = formatCollectorDriverDisplayName(driver)
+    const matches = [category, categoryLabel, family, familyLabel, driver.driverId, driverLabel]
+      .join(' ')
+      .toLowerCase()
+      .includes(keyword)
+    if (keyword && !matches) continue
+
+    const families = categories.get(category) || new Map<string, CollectorDriverSummary[]>()
+    const familyDrivers = families.get(family) || []
+    familyDrivers.push(driver)
+    families.set(family, familyDrivers)
+    categories.set(category, families)
+  }
+
+  return [...categories.entries()]
+    .sort(([left], [right]) => {
+      const leftIndex = categoryOrder.indexOf(left)
+      const rightIndex = categoryOrder.indexOf(right)
+      return (
+        (leftIndex < 0 ? categoryOrder.length : leftIndex) -
+          (rightIndex < 0 ? categoryOrder.length : rightIndex) || left.localeCompare(right)
+      )
+    })
+    .map(([category, families]) => ({
+      id: `category:${category}`,
+      type: 'category' as const,
+      label: formatCollectorCategoryLabel(category),
+      children: [...families.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([family, familyDrivers]) => ({
+          id: `family:${category}:${family}`,
+          type: 'family' as const,
+          label: formatCollectorProtocolFamily(family),
+          protocolFamily: family,
+          children: familyDrivers
+            .sort((left, right) => left.displayName.localeCompare(right.displayName))
+            .map((driver) => ({
+              id: driver.driverId,
+              type: 'driver' as const,
+              label: formatCollectorDriverDisplayName(driver),
+              protocolFamily: family,
+              driver,
+            })),
+        })),
+    }))
 }
 
 export function groupCollectorConnections(
