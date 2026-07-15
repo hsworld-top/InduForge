@@ -21,7 +21,7 @@ const databaseTypes = new Set([
   'redis',
 ])
 const messageStreamTypes = new Set(['mqtt', 'kafka'])
-const industrialTypes = new Set(['opcua', 'opcda', 's7', 'modbus'])
+const industrialTypes = new Set(['collector', 'opcua', 'opcda', 's7', 'modbus'])
 
 export const resolveAccessSourceVisual = (type?: string) => {
   const normalizedType = type || ''

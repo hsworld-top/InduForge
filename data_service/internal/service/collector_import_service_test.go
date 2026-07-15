@@ -1,0 +1,58 @@
+package service
+
+import (
+	"context"
+	"testing"
+
+	"github.com/indu-forge/data_service/internal/repository"
+)
+
+func TestCollectorImportPreviewParsesSchemaAddressColumns(t *testing.T) {
+	connectionID := "550e8400-e29b-41d4-a716-446655440002"
+	pointStore := &fakeCollectorPointStore{connection: repository.CollectorConnectionRecord{ID: connectionID, ProjectID: "550e8400-e29b-41d4-a716-446655440000", DriverID: "opcua.standard", SchemaVersion: 1}}
+	pointService := newRepositoryCollectorPointService(t, pointStore)
+	importStore := &fakeCollectorImportStore{}
+	service, err := NewCollectorImportService(importStore, pointService, pointService.catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := []byte("groupPath,code,name,dataType,elementCount,address.nodeId\n设备一,temp,温度,float32,1,ns=2;s=Temperature\n")
+	preview, err := service.Preview(context.Background(), pointStore.connection.ProjectID, connectionID, "550e8400-e29b-41d4-a716-446655440001", "points.csv", content, 1, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.ValidRows != 1 || preview.Candidates[0].AddressText != "ns=2;s=Temperature" || importStore.session.Candidates[0].GroupPath != "设备一" {
+		t.Fatalf("unexpected preview: %#v", preview)
+	}
+}
+
+func TestCollectorImportTemplateCreatesXLSX(t *testing.T) {
+	pointStore := &fakeCollectorPointStore{}
+	pointService := newRepositoryCollectorPointService(t, pointStore)
+	service, err := NewCollectorImportService(&fakeCollectorImportStore{}, pointService, pointService.catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template, err := service.BuildTemplate("opcua.standard", "xlsx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(template.Content) < 100 || template.ContentType == "" {
+		t.Fatalf("invalid template: %#v", template)
+	}
+}
+
+type fakeCollectorImportStore struct {
+	session repository.CollectorImportSessionRecord
+}
+
+func (f *fakeCollectorImportStore) CreateImportSession(_ context.Context, params repository.CreateCollectorImportSessionParams) (*repository.CollectorImportSessionRecord, error) {
+	f.session = repository.CollectorImportSessionRecord{ID: params.ID, ProjectID: params.ProjectID, ConnectionID: params.ConnectionID, DriverID: params.DriverID, Status: "preview", Candidates: params.Candidates, Errors: params.Errors, TotalRows: params.TotalRows, ValidRows: len(params.Candidates), ExpiresAt: params.ExpiresAt}
+	return &f.session, nil
+}
+func (f *fakeCollectorImportStore) GetImportSession(context.Context, string, string, string) (*repository.CollectorImportSessionRecord, error) {
+	return &f.session, nil
+}
+func (f *fakeCollectorImportStore) CommitImportSession(context.Context, string, string, string) ([]repository.CollectorPointRecord, error) {
+	return nil, nil
+}

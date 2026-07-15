@@ -8,7 +8,7 @@ using CollectorReadRequest = InduForge.Collector.Contracts.ReadRequest;
 
 namespace InduForge.Collector.Drivers.OpcUa;
 
-public sealed class OpcUaDriver : IIndustrialDriver
+public sealed class OpcUaDriver : IIndustrialDriver, IDeviceBrowser, IPointReader
 {
     private static readonly IReadOnlyList<DriverDiagnostic> NoDiagnostics = [];
     private readonly IOpcUaConnectionFactory _connectionFactory;
@@ -23,10 +23,12 @@ public sealed class OpcUaDriver : IIndustrialDriver
         _connectionFactory = connectionFactory;
     }
 
-    public ProtocolCapability Capability { get; } = new(
-        "opcua",
-        "1.0",
-        [DriverOperations.ConnectionTest, DriverOperations.OpcUaBrowse, DriverOperations.OpcUaRead]);
+    public DriverDescriptor Descriptor { get; } = new(
+        ProtocolFamily: "opcua",
+        DriverId: "opcua.standard",
+        DriverVersion: "1.0.0",
+        SchemaVersions: [1],
+        Operations: [DriverOperations.ConnectionTest, DriverOperations.DeviceBrowse, DriverOperations.PointRead]);
 
     public async Task<ConnectionTestResult> TestConnectionAsync(
         ConnectionProfile profile,

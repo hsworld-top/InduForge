@@ -18,13 +18,10 @@ import { computed } from 'vue'
 import SqlWorkbench from './workbench/SqlWorkbench.vue'
 import MqttWorkbenchPanel from './workbench/MqttWorkbenchPanel.vue'
 import KafkaWorkbenchPanel from './workbench/KafkaWorkbenchPanel.vue'
-import ModbusWorkbenchPanel from './workbench/ModbusWorkbenchPanel.vue'
-import OpcuaWorkbenchPanel from './workbench/OpcuaWorkbenchPanel.vue'
-import S7WorkbenchPanel from './workbench/S7WorkbenchPanel.vue'
 import HttpWorkbenchPanel from './workbench/http/HttpWorkbenchPanel.vue'
 import WebSocketWorkbenchPanel from './workbench/websocket/WebSocketWorkbenchPanel.vue'
 import RealtimeStoreWorkbench from './workbench/realtime/RealtimeStoreWorkbench.vue'
-import IndustrialProtocolWorkbench from './workbench/IndustrialProtocolWorkbench.vue'
+import IndustrialCollectorWorkbench from '@/components/collector-workbench/IndustrialCollectorWorkbench.vue'
 import ReadOnlyConfigPanel from './workbench/ReadOnlyConfigPanel.vue'
 import BuiltinRelationWorkbench from './workbench/BuiltinRelationWorkbench.vue'
 import BuiltinTimeseriesWorkbench from './workbench/BuiltinTimeseriesWorkbench.vue'
@@ -38,6 +35,7 @@ type AccessSourceConnection = {
   relationalConfig?: Record<string, any>
   mqttConfig?: Record<string, any>
   config?: Record<string, any>
+  category?: string
 }
 
 const props = defineProps<{
@@ -53,6 +51,8 @@ defineEmits<{
 /* 按协议类型选对应子壳 */
 const resolvedPanel = computed(() => {
   const type = props.connection.type || ''
+  if (type === 'collector' && props.connection.category === 'industrial')
+    return IndustrialCollectorWorkbench
   if (type === 'builtin.relation') return BuiltinRelationWorkbench
   if (type === 'builtin.timeseries') return BuiltinTimeseriesWorkbench
   if (type === 'builtin.realtime') return RealtimeStoreWorkbench
@@ -66,17 +66,8 @@ const resolvedPanel = computed(() => {
   if (type === 'kafka') {
     return KafkaWorkbenchPanel
   }
-  if (type === 'opcua') {
-    return OpcuaWorkbenchPanel
-  }
   if (type === 'redis') {
     return RealtimeStoreWorkbench
-  }
-  if (type === 'modbus') {
-    return ModbusWorkbenchPanel
-  }
-  if (type === 's7') {
-    return S7WorkbenchPanel
   }
   if (type === 'http') {
     return HttpWorkbenchPanel

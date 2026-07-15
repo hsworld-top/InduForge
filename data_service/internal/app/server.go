@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/indu-forge/data_service/internal/auth"
 	"github.com/indu-forge/data_service/internal/bootstrap"
 	"github.com/indu-forge/data_service/internal/cache"
+	"github.com/indu-forge/data_service/internal/collectorprotocol"
 	"github.com/indu-forge/data_service/internal/config"
 	"github.com/indu-forge/data_service/internal/db/postgres"
 	enginecompute "github.com/indu-forge/data_service/internal/engine/compute"
@@ -21,6 +23,7 @@ import (
 	"github.com/indu-forge/data_service/internal/http/router"
 	previewsocket "github.com/indu-forge/data_service/internal/http/socket"
 	"github.com/indu-forge/data_service/internal/repository"
+	collectorsecurity "github.com/indu-forge/data_service/internal/security"
 	"github.com/indu-forge/data_service/internal/service"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -169,13 +172,16 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	storagePolicyRepository := repository.NewStoragePolicyRepository(pool)
 	contractCheckRepository := repository.NewContractCheckRepository(pool)
 	collectorDevRepository := repository.NewCollectorDevRepository(pool)
+	collectorRepository := repository.NewCollectorRepository(pool)
+	collectorCatalog, err := collectorprotocol.LoadCatalog(os.DirFS(config.ResolveCollectorProtocolCatalogPath(cfg.CollectorProtocolCatalogPath)))
+	if err != nil {
+		joinCleanup(cleanupFns...)()
+		return nil, nil, err
+	}
 	queryRepository := repository.NewQueryRepository(pool)
 	workbenchGroupRepository := repository.NewWorkbenchGroupRepository(pool)
 	dataPointRepository := repository.NewDataPointRepository(pool)
-	modbusModelingRepository := repository.NewModbusModelingRepository(pool)
 	mqttRepository := repository.NewMqttRepository(pool)
-	opcuaModelingRepository := repository.NewOpcuaModelingRepository(pool)
-	s7ModelingRepository := repository.NewS7ModelingRepository(pool)
 	projectSnapshotRepository := repository.NewProjectSnapshotRepository(pool)
 	protocolWave1Repository := repository.NewProtocolWave1Repository(pool)
 	protocolWave2Repository := repository.NewProtocolWave2Repository(pool)
@@ -190,6 +196,42 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	alarmPolicyService := service.NewAlarmPolicyService(alarmPolicyRepository, dataPointRepository)
 	storagePolicyService := service.NewStoragePolicyService(storagePolicyRepository, dataPointRepository)
 	collectorDevService := service.NewCollectorDevService(collectorDevRepository)
+	collectorCatalogService := service.NewCollectorCatalogService(collectorCatalog)
+	var collectorHandler *handler.CollectorHandler
+	var collectorPointHandler *handler.CollectorPointHandler
+	var collectorImportHandler *handler.CollectorImportHandler
+	if collectorKeyErr := config.ValidateCollectorSecretKey(cfg); collectorKeyErr != nil {
+		if strings.EqualFold(strings.TrimSpace(os.Getenv("NODE_ENV")), "production") {
+			joinCleanup(cleanupFns...)()
+			return nil, nil, collectorKeyErr
+		}
+		logf("warn: data_service 启动阶段=collector-routes status=disabled reason=%v", collectorKeyErr)
+	} else {
+		secretCipher, cipherErr := collectorsecurity.NewCollectorSecretCipher(cfg.CollectorSecretKey, cfg.CollectorSecretKeyVersion)
+		if cipherErr != nil {
+			joinCleanup(cleanupFns...)()
+			return nil, nil, cipherErr
+		}
+		collectorService, serviceErr := service.NewCollectorService(collectorRepository, collectorCatalog, secretCipher)
+		if serviceErr != nil {
+			joinCleanup(cleanupFns...)()
+			return nil, nil, serviceErr
+		}
+		collectorHandler = handler.NewCollectorHandler(collectorService)
+		collectorDevService.ConfigureTaskEnvelope(collectorRepository, secretCipher)
+		collectorPointService, pointServiceErr := service.NewCollectorPointService(collectorRepository, collectorCatalog)
+		if pointServiceErr != nil {
+			joinCleanup(cleanupFns...)()
+			return nil, nil, pointServiceErr
+		}
+		collectorPointHandler = handler.NewCollectorPointHandler(collectorPointService)
+		collectorImportService, importServiceErr := service.NewCollectorImportService(collectorRepository, collectorPointService, collectorCatalog)
+		if importServiceErr != nil {
+			joinCleanup(cleanupFns...)()
+			return nil, nil, importServiceErr
+		}
+		collectorImportHandler = handler.NewCollectorImportHandler(collectorImportService)
+	}
 	contractCheckService := service.NewContractCheckService(dataPointRepository, computeRepository, alarmRuleRepository, queryRepository, contractCheckRepository)
 	builtinRuntimeService := newBuiltinRuntimeServiceFromConfig(cfg, pool, devPool, &cleanupFns)
 	connectionService := service.NewConnectionService(connectionRepository, builtinRuntimeService)
@@ -198,19 +240,9 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	workbenchGroupService := service.NewWorkbenchGroupService(workbenchGroupRepository, connectionRepository)
 	connectionService.SetWorkbenchGroupService(workbenchGroupService)
 	dataPointService := service.NewDataPointService(dataPointRepository, queryService, mqttRepository, computeRepository)
-	dataPointService.SetGeneratedSourceRepositories(kafkaWorkbenchRepository, httpWorkbenchRepository, websocketWorkbenchRepository, realtimeStoreRepository, connectionRepository, builtinRuntimeService, opcuaModelingRepository, modbusModelingRepository, s7ModelingRepository)
-	modbusModelingService := service.NewModbusModelingService(modbusModelingRepository, connectionRepository, dataPointRepository)
+	dataPointService.SetGeneratedSourceRepositories(kafkaWorkbenchRepository, httpWorkbenchRepository, websocketWorkbenchRepository, realtimeStoreRepository, connectionRepository, builtinRuntimeService)
 	mqttService := service.NewMqttService(mqttRepository, connectionRepository, dataPointRepository)
 	mqttService.ConfigureBuiltinMessageHub(cfg.MessageHubAddr, cfg.MessageHubUsername, cfg.MessageHubPassword)
-	opcuaModelingService := service.NewOpcuaModelingService(opcuaModelingRepository, connectionRepository, dataPointRepository)
-	s7ModelingService := service.NewS7ModelingService(s7ModelingRepository, connectionRepository, dataPointRepository)
-	protocolDevSessionService := service.NewProtocolDevSessionService(
-		service.NewProtocolDevConnectionRepositoryAdapter(connectionRepository),
-		service.NewProtocolDevOpcuaModelingAdapter(opcuaModelingService),
-		service.NewProtocolDevOpcuaRealBrowser(),
-		service.NewProtocolDevModbusModelingAdapter(modbusModelingService),
-		s7ModelingService,
-	)
 	projectSnapshotService := service.NewProjectSnapshotService(projectSnapshotRepository)
 	protocolWave1Service := service.NewProtocolWave1Service(protocolWave1Repository)
 	protocolPreviewService := service.NewProtocolPreviewService(protocolWave1Repository, service.NewDefaultProtocolPreviewAdapters())
@@ -235,16 +267,13 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	storagePolicyHandler := handler.NewStoragePolicyHandler(storagePolicyService)
 	contractCheckHandler := handler.NewContractCheckHandler(contractCheckService)
 	collectorDevHandler := handler.NewCollectorDevHandler(collectorDevService)
+	collectorCatalogHandler := handler.NewCollectorCatalogHandler(collectorCatalogService)
 	connectionHandler := handler.NewConnectionHandler(connectionService)
 	builtinRuntimeHandler := handler.NewBuiltinRuntimeHandler(builtinRuntimeService, connectionService)
 	queryHandler := handler.NewQueryHandler(queryService)
 	workbenchGroupHandler := handler.NewWorkbenchGroupHandler(workbenchGroupService)
 	dataPointHandler := handler.NewDataPointHandler(dataPointService)
-	modbusModelingHandler := handler.NewModbusModelingHandler(modbusModelingService)
 	mqttHandler := handler.NewMqttHandler(mqttService)
-	opcuaModelingHandler := handler.NewOpcuaModelingHandler(opcuaModelingService)
-	s7ModelingHandler := handler.NewS7ModelingHandler(s7ModelingService)
-	protocolDevSessionHandler := handler.NewProtocolDevSessionHandler(protocolDevSessionService)
 	projectSnapshotHandler := handler.NewProjectSnapshotHandler(projectSnapshotService)
 	protocolWave1Handler := handler.NewProtocolWave1Handler(protocolWave1Service, protocolPreviewService)
 	protocolWave2Handler := handler.NewProtocolWave2Handler(protocolWave2Service)
@@ -262,14 +291,11 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		router.WithAccessSourceRoutes(accessSourceHandler, jwtValidator),
 		router.WithContractCheckRoutes(contractCheckHandler, jwtValidator),
 		router.WithCollectorDevRoutes(collectorDevHandler, collectorDevService, jwtValidator),
+		router.WithCollectorCatalogRoutes(collectorCatalogHandler, jwtValidator),
 		router.WithConnectionRoutes(connectionHandler, jwtValidator),
 		router.WithDataRoutes(queryHandler, dataPointHandler, jwtValidator),
 		router.WithWorkbenchGroupRoutes(workbenchGroupHandler, jwtValidator),
 		router.WithMqttRoutes(mqttHandler, jwtValidator),
-		router.WithModbusModelingRoutes(modbusModelingHandler, jwtValidator),
-		router.WithOpcuaModelingRoutes(opcuaModelingHandler, jwtValidator),
-		router.WithS7ModelingRoutes(s7ModelingHandler, jwtValidator),
-		router.WithProtocolDevSessionRoutes(protocolDevSessionHandler, jwtValidator),
 		router.WithProjectSnapshotRoutes(projectSnapshotHandler, jwtValidator),
 		router.WithProtocolWave1Routes(protocolWave1Handler, jwtValidator),
 		router.WithProtocolWave2Routes(protocolWave2Handler, jwtValidator),
@@ -278,6 +304,11 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		router.WithWebSocketWorkbenchRoutes(websocketWorkbenchHandler, jwtValidator),
 		router.WithRealtimeStoreRoutes(realtimeStoreHandler, jwtValidator),
 		router.WithComputeRoutes(computeHandler, jwtValidator),
+	}
+	if collectorHandler != nil {
+		routeOptions = append(routeOptions, router.WithCollectorRoutes(collectorHandler, jwtValidator))
+		routeOptions = append(routeOptions, router.WithCollectorPointRoutes(collectorPointHandler, jwtValidator))
+		routeOptions = append(routeOptions, router.WithCollectorImportRoutes(collectorImportHandler, jwtValidator))
 	}
 	routeSummaryParts := []string{
 		"connections=enabled",
@@ -288,7 +319,6 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		"modbusModeling=enabled",
 		"opcuaModeling=enabled",
 		"s7Modeling=enabled",
-		"protocolDevSession=enabled",
 		"projectSnapshot=enabled",
 		"protocolWave1=enabled",
 		"protocolWave2=enabled",

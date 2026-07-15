@@ -31,3 +31,13 @@ public sealed record IndustrialDataValue(
 public sealed record ReadResult(
     IReadOnlyList<IndustrialDataValue> Values,
     IReadOnlyList<DriverDiagnostic> Diagnostics);
+
+public sealed record PointWriteResult(string NodeId, bool Succeeded, string? ErrorCode, string? ErrorMessage);
+
+public sealed record WriteResult(
+    IReadOnlyList<PointWriteResult> Results,
+    IReadOnlyList<DriverDiagnostic> Diagnostics);
+
+public sealed record SubscriptionPreviewResult(
+    IReadOnlyList<IndustrialDataValue> Values,
+    IReadOnlyList<DriverDiagnostic> Diagnostics);

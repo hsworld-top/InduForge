@@ -1356,24 +1356,6 @@ const externalSourceOptions = [
     icon: markRaw(IconTablerDatabase),
   },
   {
-    value: 'opcua',
-    label: 'OPC UA',
-    description: 'IP、端口与安全策略',
-    icon: markRaw(IconTablerServer),
-  },
-  {
-    value: 's7',
-    label: 'Siemens S7',
-    description: 'PLC 类型与通信参数',
-    icon: markRaw(IconTablerServer),
-  },
-  {
-    value: 'modbus',
-    label: 'Modbus',
-    description: 'TCP/RTU 网关连接',
-    icon: markRaw(IconTablerWebhook),
-  },
-  {
     value: 'tdengine',
     label: 'TDengine',
     description: '时序库连接契约',
@@ -1383,7 +1365,7 @@ const externalSourceOptions = [
 const sourceOptions = [...builtinSourceOptions, ...externalSourceOptions]
 
 const previewProtocolTypes = ['kafka', 'http', 'websocket', 'redis']
-const industrialProtocolTypes = ['opcua', 's7', 'modbus', 'tdengine']
+const industrialProtocolTypes = ['tdengine']
 const relationalSourceTypes = ['mysql', 'postgresql', 'sqlserver']
 const specializedProtocolTypes = [...previewProtocolTypes, ...industrialProtocolTypes]
 const kafkaSecurityProtocolOptions = [

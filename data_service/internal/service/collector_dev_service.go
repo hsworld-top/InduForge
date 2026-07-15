@@ -16,12 +16,20 @@ import (
 	"github.com/indu-forge/data_service/internal/auth"
 	apperrors "github.com/indu-forge/data_service/internal/errors"
 	"github.com/indu-forge/data_service/internal/repository"
+	collectorsecurity "github.com/indu-forge/data_service/internal/security"
 )
 
 const collectorOnlineWindow = 45 * time.Second
 
 type CollectorDevService struct {
-	repository *repository.CollectorDevRepository
+	repository          *repository.CollectorDevRepository
+	collectorRepository *repository.CollectorRepository
+	secretCipher        *collectorsecurity.CollectorSecretCipher
+}
+
+func (s *CollectorDevService) ConfigureTaskEnvelope(collectorRepository *repository.CollectorRepository, secretCipher *collectorsecurity.CollectorSecretCipher) {
+	s.collectorRepository = collectorRepository
+	s.secretCipher = secretCipher
 }
 
 func NewCollectorDevService(repository *repository.CollectorDevRepository) *CollectorDevService {
@@ -29,9 +37,10 @@ func NewCollectorDevService(repository *repository.CollectorDevRepository) *Coll
 }
 
 type CollectorProtocolCapability struct {
-	ProtocolType      string   `json:"protocolType"`
-	CapabilityVersion string   `json:"capabilityVersion"`
-	Operations        []string `json:"operations"`
+	DriverID       string   `json:"driverId"`
+	DriverVersion  string   `json:"driverVersion"`
+	SchemaVersions []int    `json:"schemaVersions"`
+	Operations     []string `json:"operations"`
 }
 type CollectorRegistrationCode struct {
 	Code      string `json:"code"`
@@ -64,8 +73,8 @@ type CollectorRegistration struct {
 }
 type CollectorTaskInput struct {
 	AgentID        string         `json:"agentId"`
+	ConnectionID   string         `json:"connectionId"`
 	Operation      string         `json:"operation"`
-	Connection     map[string]any `json:"connection"`
 	Input          map[string]any `json:"input"`
 	TimeoutSeconds int            `json:"timeoutSeconds"`
 }
@@ -82,6 +91,7 @@ type CollectorTaskError struct {
 type CollectorTask struct {
 	ID           string          `json:"taskId"`
 	ProjectID    string          `json:"projectId"`
+	ConnectionID string          `json:"connectionId"`
 	AgentID      string          `json:"agentId"`
 	Operation    string          `json:"operation"`
 	Status       string          `json:"status"`
@@ -184,6 +194,11 @@ func (s *CollectorDevService) ClaimTask(ctx context.Context, identity *auth.Coll
 		return nil, err
 	}
 	result := toCollectorTask(*record)
+	envelope, err := s.buildTaskEnvelope(ctx, record)
+	if err != nil {
+		return nil, err
+	}
+	result.Request = envelope
 	return &result, nil
 }
 
@@ -197,8 +212,25 @@ func (s *CollectorDevService) CreateTask(ctx context.Context, claims *auth.Claim
 	if input.TimeoutSeconds == 0 {
 		input.TimeoutSeconds = 30
 	}
-	request := map[string]any{"connection": input.Connection, "input": input.Input}
-	record, err := s.repository.CreateTask(ctx, repository.CreateCollectorTaskParams{ID: uuid.NewString(), TenantID: claims.TenantID, ProjectID: projectID, AgentID: input.AgentID, Operation: input.Operation, RequestPayload: request, DeadlineAt: time.Now().Add(time.Duration(input.TimeoutSeconds) * time.Second), CreatedBy: claims.UserID})
+	if s.collectorRepository == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "工业采集任务服务未初始化")
+	}
+	connection, err := s.collectorRepository.GetConnection(ctx, projectID, input.ConnectionID)
+	if err != nil {
+		return nil, err
+	}
+	agent, err := s.repository.GetAgent(ctx, claims.TenantID, input.AgentID)
+	if err != nil {
+		return nil, err
+	}
+	capabilities := []CollectorProtocolCapability{}
+	if err := json.Unmarshal(agent.Capabilities, &capabilities); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "解析 Agent 能力失败", err)
+	}
+	if !collectorAgentSupports(capabilities, connection.DriverID, connection.DriverVersion, connection.SchemaVersion, input.Operation) {
+		return nil, badCollectorRequest("所选 Agent 不支持该驱动、版本或操作")
+	}
+	record, err := s.repository.CreateTask(ctx, repository.CreateCollectorTaskParams{ID: uuid.NewString(), TenantID: claims.TenantID, ProjectID: projectID, ConnectionID: input.ConnectionID, AgentID: input.AgentID, Operation: input.Operation, RequestPayload: input.Input, DeadlineAt: time.Now().Add(time.Duration(input.TimeoutSeconds) * time.Second), CreatedBy: claims.UserID})
 	if err != nil {
 		return nil, err
 	}
@@ -248,36 +280,37 @@ func validateCollectorTaskInput(input CollectorTaskInput) error {
 	if strings.TrimSpace(input.AgentID) == "" {
 		return badCollectorRequest("agentId 不能为空")
 	}
-	allowed := map[string]bool{"connection.test": true, "opcua.browse": true, "opcua.read": true}
+	if _, err := uuid.Parse(strings.TrimSpace(input.ConnectionID)); err != nil {
+		return badCollectorRequest("connectionId 格式无效")
+	}
+	allowed := map[string]bool{"connection.test": true, "device.browse": true, "point.read": true, "point.write": true, "point.subscribe.preview": true}
 	if !allowed[input.Operation] {
 		return badCollectorRequest("不支持的调试任务操作")
 	}
 	if input.TimeoutSeconds < 0 || input.TimeoutSeconds > 120 {
 		return badCollectorRequest("timeoutSeconds 必须在 1 到 120 秒之间")
 	}
-	if input.Connection["protocolType"] != "opcua" {
-		return badCollectorRequest("仅支持 OPC UA 调试任务")
-	}
-	authentication, _ := input.Connection["authentication"].(map[string]any)
-	if authentication != nil && authentication["type"] != "anonymous" {
-		return badCollectorRequest("当前仅支持 OPC UA 匿名认证")
-	}
-	if input.Operation == "opcua.browse" {
+	if input.Operation == "device.browse" {
 		if depth, ok := input.Input["maxDepth"].(float64); ok && depth != 1 {
 			return badCollectorRequest("Browse 仅支持 maxDepth = 1")
 		}
 	}
-	if input.Operation == "opcua.read" {
-		if ids, ok := input.Input["nodeIds"].([]any); !ok || len(ids) == 0 || len(ids) > 500 {
-			return badCollectorRequest("Read 节点数必须在 1 到 500 之间")
+	if input.Operation == "point.read" || input.Operation == "point.write" || input.Operation == "point.subscribe.preview" {
+		if ids, ok := input.Input["pointIds"].([]any); !ok || len(ids) == 0 || len(ids) > 500 {
+			return badCollectorRequest("pointIds 数量必须在 1 到 500 之间")
 		}
 	}
 	return nil
 }
 func validateCapabilities(capabilities []CollectorProtocolCapability) error {
 	for _, capability := range capabilities {
-		if capability.ProtocolType != "opcua" {
-			return badCollectorRequest("Agent 仅允许声明平台支持的协议能力")
+		if strings.TrimSpace(capability.DriverID) == "" || strings.TrimSpace(capability.DriverVersion) == "" || len(capability.SchemaVersions) == 0 {
+			return badCollectorRequest("Agent capability 缺少 driverId、driverVersion 或 schemaVersions")
+		}
+		for _, operation := range capability.Operations {
+			if !map[string]bool{"connection.test": true, "device.browse": true, "point.read": true, "point.write": true, "point.subscribe.preview": true}[operation] {
+				return badCollectorRequest("Agent capability 包含不支持的操作")
+			}
 		}
 	}
 	return nil
@@ -314,5 +347,87 @@ func toCollectorAgent(record repository.CollectorDevAgentRecord, now time.Time) 
 	return CollectorAgent{ID: record.ID, Name: record.Name, OS: record.OS, Arch: record.Arch, Version: record.Version, IPAddress: record.LastIP, Online: record.LastSeenAt != nil && now.Sub(*record.LastSeenAt) <= collectorOnlineWindow, Capabilities: capabilities, LastSeenAt: optionalCollectorTime(record.LastSeenAt), CreatedAt: formatCollectorTime(record.CreatedAt)}
 }
 func toCollectorTask(record repository.CollectorDevTaskRecord) CollectorTask {
-	return CollectorTask{ID: record.ID, ProjectID: record.ProjectID, AgentID: record.AgentID, Operation: record.Operation, Status: record.Status, Request: record.RequestPayload, Result: record.ResultPayload, ErrorCode: record.ErrorCode, ErrorMessage: record.ErrorMessage, DeadlineAt: formatCollectorTime(record.DeadlineAt), ClaimedAt: optionalCollectorTime(record.ClaimedAt), FinishedAt: optionalCollectorTime(record.FinishedAt), CreatedAt: formatCollectorTime(record.CreatedAt)}
+	return CollectorTask{ID: record.ID, ProjectID: record.ProjectID, ConnectionID: record.ConnectionID, AgentID: record.AgentID, Operation: record.Operation, Status: record.Status, Request: record.RequestPayload, Result: record.ResultPayload, ErrorCode: record.ErrorCode, ErrorMessage: record.ErrorMessage, DeadlineAt: formatCollectorTime(record.DeadlineAt), ClaimedAt: optionalCollectorTime(record.ClaimedAt), FinishedAt: optionalCollectorTime(record.FinishedAt), CreatedAt: formatCollectorTime(record.CreatedAt)}
+}
+
+func collectorAgentSupports(capabilities []CollectorProtocolCapability, driverID, driverVersion string, schemaVersion int, operation string) bool {
+	for _, capability := range capabilities {
+		if capability.DriverID != driverID || capability.DriverVersion != driverVersion || !containsInt(capability.SchemaVersions, schemaVersion) || !containsFold(capability.Operations, operation) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+func containsInt(values []int, expected int) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *CollectorDevService) buildTaskEnvelope(ctx context.Context, record *repository.CollectorDevTaskRecord) (json.RawMessage, error) {
+	if s.collectorRepository == nil || s.secretCipher == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "工业采集任务信封服务未初始化")
+	}
+	connection, err := s.collectorRepository.GetConnection(ctx, record.ProjectID, record.ConnectionID)
+	if err != nil {
+		return nil, err
+	}
+	secretRecords, err := s.collectorRepository.GetConnectionSecrets(ctx, record.ConnectionID)
+	if err != nil {
+		return nil, err
+	}
+	secrets := map[string]string{}
+	for _, secret := range secretRecords {
+		if secret.KeyVersion != s.secretCipher.KeyVersion() {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "连接密钥版本当前不可解密")
+		}
+		plaintext, err := s.secretCipher.Decrypt(secret.Value)
+		if err != nil {
+			return nil, err
+		}
+		secrets[secret.Key] = string(plaintext)
+	}
+	input := map[string]any{}
+	if len(record.RequestPayload) > 0 {
+		if err := json.Unmarshal(record.RequestPayload, &input); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "解析调试任务输入失败", err)
+		}
+	}
+	if record.Operation == "point.read" || record.Operation == "point.write" || record.Operation == "point.subscribe.preview" {
+		pointIDs := collectorStringSliceFromAny(input["pointIds"])
+		points, err := s.collectorRepository.GetPointsByIDs(ctx, record.ProjectID, record.ConnectionID, pointIDs)
+		if err != nil {
+			return nil, err
+		}
+		if len(points) != len(pointIDs) {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "部分调试点位不存在")
+		}
+		resolved := make([]map[string]any, 0, len(points))
+		for _, point := range points {
+			resolved = append(resolved, map[string]any{"pointId": point.ID, "address": point.Address, "dataType": point.DataType, "elementCount": point.ElementCount, "readOptions": point.ReadOptions})
+		}
+		input["points"] = resolved
+		delete(input, "pointIds")
+	}
+	payload, err := json.Marshal(map[string]any{"driverId": connection.DriverID, "driverVersion": connection.DriverVersion, "schemaVersion": connection.SchemaVersion, "connection": map[string]any{"protocolFamily": connection.ProtocolFamily, "config": connection.Config, "secrets": secrets}, "input": input})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "生成调试任务执行信封失败", err)
+	}
+	return payload, nil
+}
+
+func collectorStringSliceFromAny(value any) []string {
+	raw, _ := value.([]any)
+	result := make([]string, 0, len(raw))
+	for _, item := range raw {
+		if text, ok := item.(string); ok && strings.TrimSpace(text) != "" {
+			result = append(result, text)
+		}
+	}
+	return result
 }

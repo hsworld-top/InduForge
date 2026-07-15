@@ -142,9 +142,6 @@ type DataPointService struct {
 	realtimeStore  *repository.RealtimeStoreRepository
 	connections    *repository.ConnectionRepository
 	builtinRuntime *BuiltinRuntimeService
-	opcuaModeling  *repository.OpcuaModelingRepository
-	modbusModeling *repository.ModbusModelingRepository
-	s7Modeling     *repository.S7ModelingRepository
 }
 
 // NewDataPointService 创建数据点服务。
@@ -166,9 +163,6 @@ func (s *DataPointService) SetGeneratedSourceRepositories(
 	realtimeStore *repository.RealtimeStoreRepository,
 	connections *repository.ConnectionRepository,
 	builtinRuntime *BuiltinRuntimeService,
-	opcuaModeling *repository.OpcuaModelingRepository,
-	modbusModeling *repository.ModbusModelingRepository,
-	s7Modeling *repository.S7ModelingRepository,
 ) {
 	s.kafkaWorkbench = kafkaWorkbench
 	s.httpWorkbench = httpWorkbench
@@ -176,9 +170,6 @@ func (s *DataPointService) SetGeneratedSourceRepositories(
 	s.realtimeStore = realtimeStore
 	s.connections = connections
 	s.builtinRuntime = builtinRuntime
-	s.opcuaModeling = opcuaModeling
-	s.modbusModeling = modbusModeling
-	s.s7Modeling = s7Modeling
 }
 
 // ListDataPoints 查询项目下的数据点列表。
@@ -737,7 +728,7 @@ func (s *DataPointService) refreshDataPointValidity(ctx context.Context, project
 
 func isGeneratedDataPoint(sourceType string) bool {
 	switch strings.TrimSpace(sourceType) {
-	case "calc.output", "db.query", "mqtt.subscription", "mqtt.tag", "kafka.field", "http.request", "websocket.session", "realtime.key", "opcua.node", "modbus.register", "s7.variable":
+	case "calc.output", "db.query", "mqtt.subscription", "mqtt.tag", "kafka.field", "http.request", "websocket.session", "realtime.key", "collector.point":
 		return true
 	default:
 		return false
@@ -762,12 +753,6 @@ func (s *DataPointService) isDataPointSourceValid(ctx context.Context, projectID
 		return s.isWebSocketSessionDataPointValid(ctx, projectID, record)
 	case "realtime.key":
 		return s.isRealtimeKeyDataPointValid(ctx, projectID, record)
-	case "opcua.node":
-		return s.isOpcuaNodeDataPointValid(ctx, projectID, record)
-	case "modbus.register":
-		return s.isModbusRegisterDataPointValid(ctx, projectID, record)
-	case "s7.variable":
-		return s.isS7VariableDataPointValid(ctx, projectID, record)
 	default:
 		return true, nil
 	}
@@ -990,91 +975,6 @@ func (s *DataPointService) isRealtimeKeyDataPointValid(ctx context.Context, proj
 		isGeneratedPathMatch(record.Path, basePath, key.ID), nil
 }
 
-func (s *DataPointService) isOpcuaNodeDataPointValid(ctx context.Context, projectID string, record repository.DataPointRecord) (bool, error) {
-	if s.opcuaModeling == nil || s.connections == nil || record.SourceID == nil {
-		return true, nil
-	}
-	node, err := s.opcuaModeling.GetNode(ctx, projectID, strings.TrimSpace(*record.SourceID))
-	if isNotFoundError(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	connection, err := s.connections.GetByProjectAndID(ctx, projectID, node.ConnectionID)
-	if isNotFoundError(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	expectedPath := "opcua." + normalizeDatapointSegment(connection.Name)
-	groups, _ := s.opcuaModeling.ListGroups(ctx, projectID, node.ConnectionID)
-	if groupPath := opcuaDataPointGroupPath(groups, node.GroupID); groupPath != "" {
-		expectedPath += "." + groupPath
-	}
-	expectedPath += "." + normalizeDatapointSegment(node.Code)
-	return record.Name == node.Name && isGeneratedPathMatch(record.Path, expectedPath, node.ID), nil
-}
-
-func (s *DataPointService) isModbusRegisterDataPointValid(ctx context.Context, projectID string, record repository.DataPointRecord) (bool, error) {
-	if s.modbusModeling == nil || s.connections == nil || record.SourceID == nil {
-		return true, nil
-	}
-	register, err := s.modbusModeling.GetRegister(ctx, projectID, strings.TrimSpace(*record.SourceID))
-	if isNotFoundError(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	connection, err := s.connections.GetByProjectAndID(ctx, projectID, register.ConnectionID)
-	if isNotFoundError(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	expectedPath := "modbus." + normalizeDatapointSegment(connection.Name)
-	groups, _ := s.modbusModeling.ListGroups(ctx, projectID, register.ConnectionID)
-	if groupPath := modbusDataPointGroupPath(groups, register.GroupID); groupPath != "" {
-		expectedPath += "." + groupPath
-	}
-	expectedPath += "." + normalizeDatapointSegment(register.Code)
-	return record.Name == register.Name && isGeneratedPathMatch(record.Path, expectedPath, register.ID), nil
-}
-
-func (s *DataPointService) isS7VariableDataPointValid(ctx context.Context, projectID string, record repository.DataPointRecord) (bool, error) {
-	if s.s7Modeling == nil || s.connections == nil || record.SourceID == nil {
-		return true, nil
-	}
-	connectionID := strings.TrimSpace(firstString(record.SourceConfig, "connectionId"))
-	if connectionID == "" {
-		return true, nil
-	}
-	variable, err := s.s7Modeling.GetVariable(ctx, projectID, connectionID, strings.TrimSpace(*record.SourceID))
-	if isNotFoundError(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	connection, err := s.connections.GetByProjectAndID(ctx, projectID, variable.ConnectionID)
-	if isNotFoundError(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	expectedPath := "s7." + normalizeDatapointSegment(connection.Name)
-	groups, _ := s.s7Modeling.ListGroups(ctx, projectID, variable.ConnectionID)
-	if groupPath := s7DataPointGroupPath(groups, variable.GroupID); groupPath != "" {
-		expectedPath += "." + groupPath
-	}
-	expectedPath += "." + normalizeDatapointSegment(variable.Code)
-	return record.Name == variable.Name && isGeneratedPathMatch(record.Path, expectedPath, variable.ID), nil
-}
-
 func isNotFoundError(err error) bool {
 	if err == nil {
 		return false
@@ -1109,69 +1009,6 @@ func realtimeDataPointPathSegment(value string) string {
 		return "unnamed"
 	}
 	return value
-}
-
-func opcuaDataPointGroupPath(groups []repository.OpcuaNodeGroupRecord, groupID *string) string {
-	if groupID == nil || strings.TrimSpace(*groupID) == "" {
-		return ""
-	}
-	byID := make(map[string]repository.OpcuaNodeGroupRecord, len(groups))
-	for _, group := range groups {
-		byID[group.ID] = group
-	}
-	return buildDataPointGroupPath(strings.TrimSpace(*groupID), func(id string) (string, *string, bool) {
-		group, ok := byID[id]
-		return group.Name, group.ParentID, ok
-	})
-}
-
-func modbusDataPointGroupPath(groups []repository.ModbusRegisterGroupRecord, groupID *string) string {
-	if groupID == nil || strings.TrimSpace(*groupID) == "" {
-		return ""
-	}
-	byID := make(map[string]repository.ModbusRegisterGroupRecord, len(groups))
-	for _, group := range groups {
-		byID[group.ID] = group
-	}
-	return buildDataPointGroupPath(strings.TrimSpace(*groupID), func(id string) (string, *string, bool) {
-		group, ok := byID[id]
-		return group.Name, group.ParentID, ok
-	})
-}
-
-func s7DataPointGroupPath(groups []repository.S7VariableGroupRecord, groupID *string) string {
-	if groupID == nil || strings.TrimSpace(*groupID) == "" {
-		return ""
-	}
-	byID := make(map[string]repository.S7VariableGroupRecord, len(groups))
-	for _, group := range groups {
-		byID[group.ID] = group
-	}
-	return buildDataPointGroupPath(strings.TrimSpace(*groupID), func(id string) (string, *string, bool) {
-		group, ok := byID[id]
-		return group.Code, group.ParentID, ok
-	})
-}
-
-func buildDataPointGroupPath(groupID string, resolve func(string) (string, *string, bool)) string {
-	segments := make([]string, 0)
-	visited := map[string]struct{}{}
-	for currentID := groupID; currentID != ""; {
-		if _, ok := visited[currentID]; ok {
-			break
-		}
-		visited[currentID] = struct{}{}
-		name, parentID, ok := resolve(currentID)
-		if !ok {
-			break
-		}
-		segments = append([]string{normalizeDatapointSegment(name)}, segments...)
-		if parentID == nil {
-			break
-		}
-		currentID = strings.TrimSpace(*parentID)
-	}
-	return strings.Join(segments, ".")
 }
 
 func (s *DataPointService) enrichDataPointPreview(ctx context.Context, projectID string, record repository.DataPointRecord, target *DataPoint) {
@@ -1319,12 +1156,6 @@ func deriveDataPointInvalidReason(record repository.DataPointRecord) string {
 		return "实时库 key 数据点已失效：key 元数据、接入源不存在，或路径已变更"
 	case "kafka.field":
 		return "Kafka 变量数据点已失效：变量、Topic 映射不存在，或路径已变更"
-	case "opcua.node":
-		return "OPC UA 变量数据点已失效：变量、接入源不存在，或路径已变更"
-	case "modbus.register":
-		return "Modbus 变量数据点已失效：变量、接入源不存在，或路径已变更"
-	case "s7.variable":
-		return "S7 变量数据点已失效：变量、接入源不存在，或路径已变更"
 	default:
 		return "数据点已失效"
 	}

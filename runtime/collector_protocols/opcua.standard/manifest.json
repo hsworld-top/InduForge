@@ -1,0 +1,29 @@
+{
+  "protocolFamily": "opcua",
+  "driverId": "opcua.standard",
+  "driverVersion": "1.0.0",
+  "schemaVersion": 1,
+  "displayName": "OPC UA",
+  "category": "opc",
+  "transports": ["tcp"],
+  "operations": ["connection.test", "device.browse", "point.read"],
+  "dataTypes": [
+    "bool",
+    "int8",
+    "uint8",
+    "int16",
+    "uint16",
+    "int32",
+    "uint32",
+    "int64",
+    "uint64",
+    "float32",
+    "float64",
+    "decimal",
+    "string",
+    "bytes",
+    "datetime"
+  ],
+  "acquisitionModes": ["polling"],
+  "platforms": { "devAgent": ["windows-x64"], "runtime": [] }
+}

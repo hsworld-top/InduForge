@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,6 +16,35 @@ func TestLoad_UsesDefaultAddr(t *testing.T) {
 	}
 	if cfg.Addr != defaultAddr {
 		t.Fatalf("expected default addr %q, got %q", defaultAddr, cfg.Addr)
+	}
+}
+
+func TestLoad_ReadsCollectorSecretKey(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(make([]byte, 32))
+	t.Setenv("DATA_SERVICE_COLLECTOR_SECRET_KEY", encoded)
+	t.Setenv("DATA_SERVICE_COLLECTOR_SECRET_KEY_VERSION", "v2")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.CollectorSecretKey) != 32 || cfg.CollectorSecretKeyVersion != "v2" {
+		t.Fatalf("unexpected collector secret config: length=%d version=%q", len(cfg.CollectorSecretKey), cfg.CollectorSecretKeyVersion)
+	}
+}
+
+func TestLoad_RejectsInvalidCollectorSecretKey(t *testing.T) {
+	t.Setenv("DATA_SERVICE_COLLECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte("short")))
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected invalid collector secret key to be rejected")
+	}
+}
+
+func TestValidateCollectorSecretKeyRejectsMissingKey(t *testing.T) {
+	err := ValidateCollectorSecretKey(Config{CollectorSecretKeyVersion: "v1"})
+	if err == nil {
+		t.Fatal("expected missing collector secret key to be rejected")
 	}
 }
 

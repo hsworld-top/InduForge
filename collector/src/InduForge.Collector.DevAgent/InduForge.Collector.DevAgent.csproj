@@ -5,6 +5,11 @@
     <ProjectReference Include="..\InduForge.Collector.Drivers.OpcUa\InduForge.Collector.Drivers.OpcUa.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\opcua.standard\manifest.json"
+                      LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.opcua.standard.manifest.json" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["area", "byteOffset"],
+  "properties": {
+    "area": {
+      "type": "string",
+      "enum": ["input", "output", "marker", "dataBlock", "timer", "counter"]
+    },
+    "dbNumber": { "type": "integer", "minimum": 1, "maximum": 65535 },
+    "byteOffset": { "type": "integer", "minimum": 0, "x-induforge-address-text": true },
+    "bitOffset": { "type": "integer", "minimum": 0, "maximum": 7 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "area": { "const": "dataBlock" } } },
+      "then": { "required": ["dbNumber"] }
+    }
+  ]
+}

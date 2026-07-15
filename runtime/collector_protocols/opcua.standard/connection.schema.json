@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["endpointUrl", "securityMode", "securityPolicy", "authenticationType"],
+  "properties": {
+    "endpointUrl": { "type": "string", "minLength": 1, "pattern": "^opc\\.tcp://" },
+    "securityMode": { "type": "string", "enum": ["None"] },
+    "securityPolicy": { "type": "string", "enum": ["None"] },
+    "authenticationType": { "type": "string", "enum": ["anonymous"] },
+    "timeoutMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 120000,
+      "default": 30000,
+      "x-induforge-unit": "ms",
+      "x-induforge-advanced": true
+    }
+  }
+}

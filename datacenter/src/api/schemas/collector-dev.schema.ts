@@ -1,8 +1,9 @@
 import { z } from 'zod'
 
 export const CollectorProtocolCapabilitySchema = z.object({
-  protocolType: z.string(),
-  capabilityVersion: z.string(),
+  driverId: z.string(),
+  driverVersion: z.string(),
+  schemaVersions: z.array(z.number().int().positive()),
   operations: z.array(z.string()),
 })
 

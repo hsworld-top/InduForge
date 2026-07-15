@@ -16,20 +16,20 @@ type options struct {
 	connectionHandler         *handler.ConnectionHandler
 	contractCheckHandler      *handler.ContractCheckHandler
 	collectorDevHandler       *handler.CollectorDevHandler
+	collectorCatalogHandler   *handler.CollectorCatalogHandler
+	collectorHandler          *handler.CollectorHandler
+	collectorPointHandler     *handler.CollectorPointHandler
+	collectorImportHandler    *handler.CollectorImportHandler
 	collectorAuthenticator    middleware.CollectorAgentAuthenticator
 	storagePolicyHandler      *handler.StoragePolicyHandler
 	queryHandler              *handler.QueryHandler
 	workbenchGroupHandler     *handler.WorkbenchGroupHandler
 	realtimeStoreHandler      *handler.RealtimeStoreHandler
 	dataPointHandler          *handler.DataPointHandler
-	modbusModelingHandler     *handler.ModbusModelingHandler
 	mqttHandler               *handler.MqttHandler
 	kafkaWorkbenchHandler     *handler.KafkaWorkbenchHandler
 	httpWorkbenchHandler      *handler.HTTPWorkbenchHandler
 	websocketWorkbenchHandler *handler.WebSocketWorkbenchHandler
-	opcuaModelingHandler      *handler.OpcuaModelingHandler
-	s7ModelingHandler         *handler.S7ModelingHandler
-	protocolDevSessionHandler *handler.ProtocolDevSessionHandler
 	protocolWave1Handler      *handler.ProtocolWave1Handler
 	protocolWave2Handler      *handler.ProtocolWave2Handler
 	previewHandler            *handler.PreviewHandler
@@ -89,6 +89,26 @@ func WithCollectorDevRoutes(collectorHandler *handler.CollectorDevHandler, authe
 		opts.collectorAuthenticator = authenticator
 		opts.jwtValidator = jwtValidator
 	}
+}
+
+// WithCollectorCatalogRoutes wires统一工业采集驱动目录路由。
+func WithCollectorCatalogRoutes(catalogHandler *handler.CollectorCatalogHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) {
+		opts.collectorCatalogHandler = catalogHandler
+		opts.jwtValidator = jwtValidator
+	}
+}
+
+func WithCollectorRoutes(collectorHandler *handler.CollectorHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) { opts.collectorHandler = collectorHandler; opts.jwtValidator = jwtValidator }
+}
+
+func WithCollectorPointRoutes(pointHandler *handler.CollectorPointHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) { opts.collectorPointHandler = pointHandler; opts.jwtValidator = jwtValidator }
+}
+
+func WithCollectorImportRoutes(importHandler *handler.CollectorImportHandler, jwtValidator *auth.JWTValidator) Option {
+	return func(opts *options) { opts.collectorImportHandler = importHandler; opts.jwtValidator = jwtValidator }
 }
 
 // WithAccessSourceRoutes wires access source routes.
@@ -164,38 +184,6 @@ func WithWebSocketWorkbenchRoutes(websocketHandler *handler.WebSocketWorkbenchHa
 	}
 }
 
-// WithModbusModelingRoutes wires Modbus 寄存器建模 routes.
-func WithModbusModelingRoutes(modbusModelingHandler *handler.ModbusModelingHandler, jwtValidator *auth.JWTValidator) Option {
-	return func(opts *options) {
-		opts.modbusModelingHandler = modbusModelingHandler
-		opts.jwtValidator = jwtValidator
-	}
-}
-
-// WithOpcuaModelingRoutes wires OPC UA 点位建模 routes.
-func WithOpcuaModelingRoutes(opcuaModelingHandler *handler.OpcuaModelingHandler, jwtValidator *auth.JWTValidator) Option {
-	return func(opts *options) {
-		opts.opcuaModelingHandler = opcuaModelingHandler
-		opts.jwtValidator = jwtValidator
-	}
-}
-
-// WithS7ModelingRoutes wires S7 变量建模 routes.
-func WithS7ModelingRoutes(s7ModelingHandler *handler.S7ModelingHandler, jwtValidator *auth.JWTValidator) Option {
-	return func(opts *options) {
-		opts.s7ModelingHandler = s7ModelingHandler
-		opts.jwtValidator = jwtValidator
-	}
-}
-
-// WithProtocolDevSessionRoutes wires OPC UA / Modbus 开发态会话 routes.
-func WithProtocolDevSessionRoutes(protocolDevSessionHandler *handler.ProtocolDevSessionHandler, jwtValidator *auth.JWTValidator) Option {
-	return func(opts *options) {
-		opts.protocolDevSessionHandler = protocolDevSessionHandler
-		opts.jwtValidator = jwtValidator
-	}
-}
-
 // WithProtocolWave1Routes wires protocol wave 1 routes.
 func WithProtocolWave1Routes(protocolWave1Handler *handler.ProtocolWave1Handler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
@@ -263,6 +251,10 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountAccessSourceRoutes(mux, opts)
 	mountContractCheckRoutes(mux, opts)
 	mountCollectorDevRoutes(mux, opts)
+	mountCollectorCatalogRoutes(mux, opts)
+	mountCollectorRoutes(mux, opts)
+	mountCollectorPointRoutes(mux, opts)
+	mountCollectorImportRoutes(mux, opts)
 	mountConnectionRoutes(mux, opts)
 	mountDataRoutes(mux, opts)
 	mountWorkbenchGroupRoutes(mux, opts)
@@ -270,10 +262,6 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	mountKafkaWorkbenchRoutes(mux, opts)
 	mountHTTPWorkbenchRoutes(mux, opts)
 	mountWebSocketWorkbenchRoutes(mux, opts)
-	mountModbusModelingRoutes(mux, opts)
-	mountOpcuaModelingRoutes(mux, opts)
-	mountS7ModelingRoutes(mux, opts)
-	mountProtocolDevSessionRoutes(mux, opts)
 	mountRealtimeStoreRoutes(mux, opts)
 	mountProtocolWave1Routes(mux, opts)
 	mountProtocolWave2Routes(mux, opts)
@@ -1289,170 +1277,6 @@ func mountWebSocketWorkbenchRoutes(mux *http.ServeMux, opts options) {
 	mux.Handle("GET "+sessionBase+"/stream", opts.websocketWorkbenchHandler.StreamSessionWithQueryToken(opts.jwtValidator))
 }
 
-func mountOpcuaModelingRoutes(mux *http.ServeMux, opts options) {
-	if mux == nil || opts.jwtValidator == nil || opts.opcuaModelingHandler == nil {
-		return
-	}
-
-	read := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
-		return middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:read")(
-				middleware.ErrorHandler(handlerFunc),
-			),
-		)
-	}
-	write := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
-		return middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:write")(
-				middleware.ErrorHandler(handlerFunc),
-			),
-		)
-	}
-
-	base := "/api/v1/data/projects/{projectId}/opcua/{connectionId}"
-	mux.Handle("GET "+base+"/node-groups", read(opts.opcuaModelingHandler.ListGroups))
-	mux.Handle("POST "+base+"/node-groups", write(opts.opcuaModelingHandler.CreateGroup))
-	mux.Handle("PUT "+base+"/node-groups/{groupId}", write(opts.opcuaModelingHandler.UpdateGroup))
-	mux.Handle("DELETE "+base+"/node-groups/{groupId}", write(opts.opcuaModelingHandler.DeleteGroup))
-	mux.Handle("GET "+base+"/nodes", read(opts.opcuaModelingHandler.ListNodes))
-	mux.Handle("POST "+base+"/nodes", write(opts.opcuaModelingHandler.CreateNode))
-	mux.Handle("POST "+base+"/nodes/batch-import", write(opts.opcuaModelingHandler.BatchImportNodes))
-	mux.Handle("POST "+base+"/nodes/batch-delete", write(opts.opcuaModelingHandler.DeleteNodesBatch))
-	mux.Handle("POST "+base+"/nodes/delete-filtered", write(opts.opcuaModelingHandler.DeleteNodesByFilter))
-	mux.Handle("POST "+base+"/nodes/batch-move", write(opts.opcuaModelingHandler.MoveNodesBatch))
-	mux.Handle("POST "+base+"/nodes/move-filtered", write(opts.opcuaModelingHandler.MoveNodesByFilter))
-	mux.Handle("PUT "+base+"/nodes/{nodeId}", write(opts.opcuaModelingHandler.UpdateNode))
-	mux.Handle("DELETE "+base+"/nodes/{nodeId}", write(opts.opcuaModelingHandler.DeleteNode))
-	mux.Handle("POST "+base+"/validate-model", read(opts.opcuaModelingHandler.ValidateModel))
-	mux.Handle("POST "+base+"/preview", read(opts.opcuaModelingHandler.PreviewNodes))
-}
-
-func mountModbusModelingRoutes(mux *http.ServeMux, opts options) {
-	if mux == nil || opts.jwtValidator == nil || opts.modbusModelingHandler == nil {
-		return
-	}
-
-	read := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
-		return middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:read")(
-				middleware.ErrorHandler(handlerFunc),
-			),
-		)
-	}
-	write := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
-		return middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:write")(
-				middleware.ErrorHandler(handlerFunc),
-			),
-		)
-	}
-
-	base := "/api/v1/data/projects/{projectId}/modbus/{connectionId}"
-	mux.Handle("GET "+base+"/register-groups", read(opts.modbusModelingHandler.ListGroups))
-	mux.Handle("POST "+base+"/register-groups", write(opts.modbusModelingHandler.CreateGroup))
-	mux.Handle("PUT "+base+"/register-groups/{groupId}", write(opts.modbusModelingHandler.UpdateGroup))
-	mux.Handle("DELETE "+base+"/register-groups/{groupId}", write(opts.modbusModelingHandler.DeleteGroup))
-	mux.Handle("GET "+base+"/slaves", read(opts.modbusModelingHandler.ListSlaveDevices))
-	mux.Handle("POST "+base+"/slaves", write(opts.modbusModelingHandler.CreateSlaveDevice))
-	mux.Handle("PUT "+base+"/slaves/{slaveId}", write(opts.modbusModelingHandler.UpdateSlaveDevice))
-	mux.Handle("DELETE "+base+"/slaves/{slaveId}", write(opts.modbusModelingHandler.DeleteSlaveDevice))
-	mux.Handle("GET "+base+"/registers", read(opts.modbusModelingHandler.ListRegisters))
-	mux.Handle("POST "+base+"/registers", write(opts.modbusModelingHandler.CreateRegister))
-	mux.Handle("POST "+base+"/registers/batch-import", write(opts.modbusModelingHandler.BatchImportRegisters))
-	mux.Handle("POST "+base+"/registers/batch-delete", write(opts.modbusModelingHandler.BatchDeleteRegisters))
-	mux.Handle("POST "+base+"/registers/delete-filtered", write(opts.modbusModelingHandler.DeleteRegistersByFilter))
-	mux.Handle("POST "+base+"/registers/batch-move-group", write(opts.modbusModelingHandler.BatchMoveRegistersGroup))
-	mux.Handle("POST "+base+"/registers/move-filtered", write(opts.modbusModelingHandler.MoveRegistersByFilter))
-	mux.Handle("POST "+base+"/registers/batch-update", write(opts.modbusModelingHandler.BatchUpdateRegisters))
-	mux.Handle("POST "+base+"/registers/update-filtered", write(opts.modbusModelingHandler.UpdateRegistersByFilter))
-	mux.Handle("PUT "+base+"/registers/{registerId}", write(opts.modbusModelingHandler.UpdateRegister))
-	mux.Handle("DELETE "+base+"/registers/{registerId}", write(opts.modbusModelingHandler.DeleteRegister))
-	mux.Handle("POST "+base+"/validate-model", read(opts.modbusModelingHandler.ValidateModel))
-	mux.Handle("POST "+base+"/preview", read(opts.modbusModelingHandler.PreviewRegisters))
-	mux.Handle("GET "+base+"/read-plan-estimate", read(opts.modbusModelingHandler.EstimateReadPlans))
-}
-
-func mountS7ModelingRoutes(mux *http.ServeMux, opts options) {
-	if mux == nil || opts.jwtValidator == nil || opts.s7ModelingHandler == nil {
-		return
-	}
-
-	read := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
-		return middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:read")(
-				middleware.ErrorHandler(handlerFunc),
-			),
-		)
-	}
-	write := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
-		return middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:write")(
-				middleware.ErrorHandler(handlerFunc),
-			),
-		)
-	}
-
-	base := "/api/v1/data/projects/{projectId}/s7/{connectionId}"
-	mux.Handle("GET "+base+"/profile", read(opts.s7ModelingHandler.GetProfile))
-	mux.Handle("PUT "+base+"/profile", write(opts.s7ModelingHandler.UpsertProfile))
-	mux.Handle("GET "+base+"/variable-groups", read(opts.s7ModelingHandler.ListGroups))
-	mux.Handle("POST "+base+"/variable-groups", write(opts.s7ModelingHandler.CreateGroup))
-	mux.Handle("PUT "+base+"/variable-groups/{groupId}", write(opts.s7ModelingHandler.UpdateGroup))
-	mux.Handle("DELETE "+base+"/variable-groups/{groupId}", write(opts.s7ModelingHandler.DeleteGroup))
-	mux.Handle("GET "+base+"/variables", read(opts.s7ModelingHandler.ListVariables))
-	mux.Handle("POST "+base+"/variables", write(opts.s7ModelingHandler.CreateVariable))
-	mux.Handle("POST "+base+"/variables/batch-import", write(opts.s7ModelingHandler.BatchImportVariables))
-	mux.Handle("PUT "+base+"/variables/{variableId}", write(opts.s7ModelingHandler.UpdateVariable))
-	mux.Handle("DELETE "+base+"/variables/{variableId}", write(opts.s7ModelingHandler.DeleteVariable))
-	mux.Handle("POST "+base+"/validate-model", read(opts.s7ModelingHandler.ValidateModel))
-	mux.Handle("POST "+base+"/preview", read(opts.s7ModelingHandler.PreviewVariables))
-	mux.Handle("GET "+base+"/read-plan-estimate", read(opts.s7ModelingHandler.EstimateReadPlans))
-}
-
-func mountProtocolDevSessionRoutes(mux *http.ServeMux, opts options) {
-	if mux == nil || opts.jwtValidator == nil || opts.protocolDevSessionHandler == nil {
-		return
-	}
-
-	read := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
-		return middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:read")(
-				middleware.ErrorHandler(handlerFunc),
-			),
-		)
-	}
-	write := func(handlerFunc func(http.ResponseWriter, *http.Request) error) http.Handler {
-		return middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:write")(
-				middleware.ErrorHandler(handlerFunc),
-			),
-		)
-	}
-
-	opcuaBase := "/api/v1/data/projects/{projectId}/opcua/{connectionId}/sessions"
-	mux.Handle("POST "+opcuaBase, read(opts.protocolDevSessionHandler.CreateOpcua))
-	mux.Handle("DELETE "+opcuaBase+"/{sessionId}", write(opts.protocolDevSessionHandler.CloseOpcua))
-	mux.Handle("GET "+opcuaBase+"/{sessionId}/browse", read(opts.protocolDevSessionHandler.BrowseOpcua))
-	mux.Handle("GET "+opcuaBase+"/{sessionId}/browse-subtree", read(opts.protocolDevSessionHandler.BrowseOpcuaSubtree))
-	mux.Handle("POST "+opcuaBase+"/{sessionId}/read", read(opts.protocolDevSessionHandler.ReadOpcua))
-	mux.Handle("POST "+opcuaBase+"/{sessionId}/subscribe", read(opts.protocolDevSessionHandler.SubscribeOpcua))
-	mux.Handle("DELETE "+opcuaBase+"/{sessionId}/subscribe", write(opts.protocolDevSessionHandler.StopSubscribeOpcua))
-
-	modbusBase := "/api/v1/data/projects/{projectId}/modbus/{connectionId}/sessions"
-	mux.Handle("POST "+modbusBase, read(opts.protocolDevSessionHandler.CreateModbus))
-	mux.Handle("DELETE "+modbusBase+"/{sessionId}", write(opts.protocolDevSessionHandler.CloseModbus))
-	mux.Handle("POST "+modbusBase+"/{sessionId}/read", read(opts.protocolDevSessionHandler.ReadModbus))
-	mux.Handle("POST "+modbusBase+"/{sessionId}/poll", read(opts.protocolDevSessionHandler.PollModbus))
-	mux.Handle("DELETE "+modbusBase+"/{sessionId}/poll", write(opts.protocolDevSessionHandler.StopPollModbus))
-
-	s7Base := "/api/v1/data/projects/{projectId}/s7/{connectionId}/sessions"
-	mux.Handle("POST "+s7Base, read(opts.protocolDevSessionHandler.CreateS7))
-	mux.Handle("DELETE "+s7Base+"/{sessionId}", write(opts.protocolDevSessionHandler.CloseS7))
-	mux.Handle("POST "+s7Base+"/{sessionId}/read", read(opts.protocolDevSessionHandler.ReadS7))
-	mux.Handle("POST "+s7Base+"/{sessionId}/poll", read(opts.protocolDevSessionHandler.PollS7))
-	mux.Handle("DELETE "+s7Base+"/{sessionId}/poll", write(opts.protocolDevSessionHandler.StopPollS7))
-}
-
 func mountProjectSnapshotRoutes(mux *http.ServeMux, opts options) {
 	if mux == nil || opts.jwtValidator == nil || opts.projectSnapshotHandler == nil {
 		return
@@ -1544,54 +1368,6 @@ func mountProtocolWave2Routes(mux *http.ServeMux, opts options) {
 		return
 	}
 
-	mux.Handle(
-		"POST /api/v1/data/projects/{projectId}/opcua/configs",
-		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:write")(
-				middleware.ErrorHandler(opts.protocolWave2Handler.CreateOpcuaConfig),
-			),
-		),
-	)
-	mux.Handle(
-		"PUT /api/v1/data/projects/{projectId}/opcua/configs/{connectionId}",
-		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:write")(
-				middleware.ErrorHandler(opts.protocolWave2Handler.UpdateOpcuaConfig),
-			),
-		),
-	)
-	mux.Handle(
-		"POST /api/v1/data/projects/{projectId}/s7/configs",
-		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:write")(
-				middleware.ErrorHandler(opts.protocolWave2Handler.CreateS7Config),
-			),
-		),
-	)
-	mux.Handle(
-		"PUT /api/v1/data/projects/{projectId}/s7/{connectionId}/config",
-		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:write")(
-				middleware.ErrorHandler(opts.protocolWave2Handler.UpdateS7Config),
-			),
-		),
-	)
-	mux.Handle(
-		"POST /api/v1/data/projects/{projectId}/modbus/configs",
-		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:write")(
-				middleware.ErrorHandler(opts.protocolWave2Handler.CreateModbusConfig),
-			),
-		),
-	)
-	mux.Handle(
-		"PUT /api/v1/data/projects/{projectId}/modbus/{connectionId}/config",
-		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:write")(
-				middleware.ErrorHandler(opts.protocolWave2Handler.UpdateModbusConfig),
-			),
-		),
-	)
 	mux.Handle(
 		"POST /api/v1/data/projects/{projectId}/tdengine/configs",
 		middleware.Authenticate(opts.jwtValidator)(
@@ -1783,6 +1559,75 @@ func mountComputeRoutes(mux *http.ServeMux, opts options) {
 			),
 		),
 	)
+}
+
+func mountCollectorCatalogRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.collectorCatalogHandler == nil || opts.jwtValidator == nil {
+		return
+	}
+	read := func(handlerFunc middleware.ErrorHandlerFunc) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("platform:read")(
+				middleware.ErrorHandler(handlerFunc),
+			),
+		)
+	}
+	mux.Handle("GET /api/v1/data/collector/drivers", read(opts.collectorCatalogHandler.List))
+	mux.Handle("GET /api/v1/data/collector/drivers/{driverId}", read(opts.collectorCatalogHandler.Get))
+}
+
+func mountCollectorRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.collectorHandler == nil || opts.jwtValidator == nil {
+		return
+	}
+	read := func(handlerFunc middleware.ErrorHandlerFunc) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(middleware.RequireCapability("project:read")(middleware.ErrorHandler(handlerFunc)))
+	}
+	write := func(handlerFunc middleware.ErrorHandlerFunc) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(middleware.RequireCapability("project:write")(middleware.ErrorHandler(handlerFunc)))
+	}
+	base := "/api/v1/data/projects/{projectId}/collector/connections"
+	mux.Handle("GET "+base, read(opts.collectorHandler.ListConnections))
+	mux.Handle("POST "+base, write(opts.collectorHandler.CreateConnection))
+	mux.Handle("GET "+base+"/{connectionId}", read(opts.collectorHandler.GetConnection))
+	mux.Handle("PUT "+base+"/{connectionId}", write(opts.collectorHandler.UpdateConnection))
+	mux.Handle("DELETE "+base+"/{connectionId}", write(opts.collectorHandler.DeleteConnection))
+}
+
+func mountCollectorPointRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.collectorPointHandler == nil || opts.jwtValidator == nil {
+		return
+	}
+	read := func(handlerFunc middleware.ErrorHandlerFunc) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(middleware.RequireCapability("project:read")(middleware.ErrorHandler(handlerFunc)))
+	}
+	write := func(handlerFunc middleware.ErrorHandlerFunc) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(middleware.RequireCapability("project:write")(middleware.ErrorHandler(handlerFunc)))
+	}
+	base := "/api/v1/data/projects/{projectId}/collector/connections/{connectionId}"
+	mux.Handle("GET "+base+"/point-groups", read(opts.collectorPointHandler.ListGroups))
+	mux.Handle("POST "+base+"/point-groups", write(opts.collectorPointHandler.CreateGroup))
+	mux.Handle("GET "+base+"/points", read(opts.collectorPointHandler.ListPoints))
+	mux.Handle("POST "+base+"/points/batch", write(opts.collectorPointHandler.CreateBatch))
+	mux.Handle("POST "+base+"/points/update-batch", write(opts.collectorPointHandler.UpdateBatch))
+	mux.Handle("POST "+base+"/points/delete-batch", write(opts.collectorPointHandler.DeleteBatch))
+	mux.Handle("POST "+base+"/points/move-batch", write(opts.collectorPointHandler.MoveBatch))
+}
+
+func mountCollectorImportRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.collectorImportHandler == nil || opts.jwtValidator == nil {
+		return
+	}
+	platformRead := func(handlerFunc middleware.ErrorHandlerFunc) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(middleware.RequireCapability("platform:read")(middleware.ErrorHandler(handlerFunc)))
+	}
+	projectWrite := func(handlerFunc middleware.ErrorHandlerFunc) http.Handler {
+		return middleware.Authenticate(opts.jwtValidator)(middleware.RequireCapability("project:write")(middleware.ErrorHandler(handlerFunc)))
+	}
+	mux.Handle("GET /api/v1/data/collector/drivers/{driverId}/points/import-template", platformRead(opts.collectorImportHandler.Template))
+	base := "/api/v1/data/projects/{projectId}/collector/connections/{connectionId}/points"
+	mux.Handle("POST "+base+"/import-preview", projectWrite(opts.collectorImportHandler.Preview))
+	mux.Handle("POST "+base+"/import-commit", projectWrite(opts.collectorImportHandler.Commit))
 }
 
 func mountCollectorDevRoutes(mux *http.ServeMux, opts options) {

@@ -2,21 +2,18 @@ namespace InduForge.Collector.DevAgent;
 
 internal sealed class AgentWorker : IAsyncDisposable
 {
-    private static readonly AgentProtocolCapability[] Capabilities =
-    [
-        new("opcua", "1.0", ["connection.test", "opcua.browse", "opcua.read"]),
-    ];
-
     private readonly CenterApiClient _apiClient;
     private readonly CollectorTaskExecutor _taskExecutor;
+    private readonly IReadOnlyList<AgentProtocolCapability> _capabilities;
     private readonly Func<AgentWorkerUpdate, Task> _onUpdate;
     private CancellationTokenSource? _runCancellation;
     private Task? _runTask;
 
-    public AgentWorker(CenterApiClient apiClient, CollectorTaskExecutor taskExecutor, Func<AgentWorkerUpdate, Task> onUpdate)
+    public AgentWorker(CenterApiClient apiClient, CollectorTaskExecutor taskExecutor, IReadOnlyList<AgentProtocolCapability> capabilities, Func<AgentWorkerUpdate, Task> onUpdate)
     {
         _apiClient = apiClient;
         _taskExecutor = taskExecutor;
+        _capabilities = capabilities;
         _onUpdate = onUpdate;
     }
 
@@ -52,7 +49,7 @@ internal sealed class AgentWorker : IAsyncDisposable
             {
                 if (DateTimeOffset.UtcNow >= heartbeatAt)
                 {
-                    await _apiClient.HeartbeatAsync(credentials, new AgentHeartbeatRequest(Capabilities), cancellationToken).ConfigureAwait(false);
+                    await _apiClient.HeartbeatAsync(credentials, new AgentHeartbeatRequest(_capabilities), cancellationToken).ConfigureAwait(false);
                     heartbeatAt = DateTimeOffset.UtcNow.AddSeconds(15);
                     await _onUpdate(new AgentWorkerUpdate(AgentConnectionState.Connected, "空闲", "心跳成功", DateTimeOffset.Now, false)).ConfigureAwait(false);
                 }

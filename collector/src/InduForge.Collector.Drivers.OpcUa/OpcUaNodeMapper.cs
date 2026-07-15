@@ -34,7 +34,7 @@ internal static class OpcUaNodeMapper
         return new IndustrialDataValue(
             nodeId,
             NormalizeValue(value.WrappedValue.Value),
-            value.WrappedValue.TypeInfo?.BuiltInType.ToString(),
+            value.WrappedValue.TypeInfo is null ? null : OpcUaAddressMapper.MapDataType(value.WrappedValue.TypeInfo.BuiltInType),
             MapQuality(value.StatusCode),
             sourceTimestamp,
             serverTimestamp);

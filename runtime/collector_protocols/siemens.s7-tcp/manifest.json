@@ -1,0 +1,28 @@
+{
+  "protocolFamily": "siemens",
+  "driverId": "siemens.s7-tcp",
+  "driverVersion": "1.0.0",
+  "schemaVersion": 1,
+  "displayName": "Siemens S7 TCP",
+  "category": "plc",
+  "transports": ["tcp"],
+  "operations": [],
+  "dataTypes": [
+    "bool",
+    "int8",
+    "uint8",
+    "int16",
+    "uint16",
+    "int32",
+    "uint32",
+    "int64",
+    "uint64",
+    "float32",
+    "float64",
+    "string",
+    "bytes",
+    "datetime"
+  ],
+  "acquisitionModes": ["polling"],
+  "platforms": { "devAgent": [], "runtime": [] }
+}

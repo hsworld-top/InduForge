@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"net/url"
@@ -16,19 +17,22 @@ const minJWTSecretLength = 16
 
 // Config 定义 data_service 的基础运行配置。
 type Config struct {
-	Addr               string
-	DatabaseURL        string
-	DatabaseSearchPath string
-	JWTSecret          string
-	RedisAddr          string
-	RedisPassword      string
-	RedisDB            int
-	DevDatabaseURL     string
-	RedisDevDB         int
-	DevCacheKeyPrefix  string
-	MessageHubAddr     string
-	MessageHubUsername string
-	MessageHubPassword string
+	Addr                         string
+	DatabaseURL                  string
+	DatabaseSearchPath           string
+	JWTSecret                    string
+	RedisAddr                    string
+	RedisPassword                string
+	RedisDB                      int
+	DevDatabaseURL               string
+	RedisDevDB                   int
+	DevCacheKeyPrefix            string
+	MessageHubAddr               string
+	MessageHubUsername           string
+	MessageHubPassword           string
+	CollectorSecretKey           []byte
+	CollectorSecretKeyVersion    string
+	CollectorProtocolCatalogPath string
 }
 
 // Load 从环境变量读取服务配置，并在缺省时使用内置默认值。
@@ -52,22 +56,76 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	collectorSecretKey, err := parseCollectorSecretKey(os.Getenv("DATA_SERVICE_COLLECTOR_SECRET_KEY"))
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
-		Addr:               addr,
-		DatabaseURL:        buildDatabaseURL(),
-		DevDatabaseURL:     buildDevDatabaseURL(),
-		DatabaseSearchPath: strings.TrimSpace(firstEnv("IF_META_STORE_DATA_SCHEMA", "DATA_SERVICE_DATABASE_SCHEMA")),
-		JWTSecret:          strings.TrimSpace(os.Getenv("DATA_SERVICE_JWT_SECRET")),
-		RedisAddr:          buildRedisAddr(),
-		RedisPassword:      strings.TrimSpace(firstEnv("IF_CACHE_STORE_PASSWORD", "DATA_SERVICE_REDIS_PASSWORD")),
-		RedisDB:            redisDB,
-		RedisDevDB:         redisDevDB,
-		DevCacheKeyPrefix:  firstEnvWithDefault("IF_DEV_CACHE_KEY_PREFIX", "ifdev"),
-		MessageHubAddr:     buildMessageHubAddr(),
-		MessageHubUsername: strings.TrimSpace(firstEnv("IF_MESSAGE_HUB_USERNAME")),
-		MessageHubPassword: strings.TrimSpace(firstEnv("IF_MESSAGE_HUB_PASSWORD")),
+		Addr:                         addr,
+		DatabaseURL:                  buildDatabaseURL(),
+		DevDatabaseURL:               buildDevDatabaseURL(),
+		DatabaseSearchPath:           strings.TrimSpace(firstEnv("IF_META_STORE_DATA_SCHEMA", "DATA_SERVICE_DATABASE_SCHEMA")),
+		JWTSecret:                    strings.TrimSpace(os.Getenv("DATA_SERVICE_JWT_SECRET")),
+		RedisAddr:                    buildRedisAddr(),
+		RedisPassword:                strings.TrimSpace(firstEnv("IF_CACHE_STORE_PASSWORD", "DATA_SERVICE_REDIS_PASSWORD")),
+		RedisDB:                      redisDB,
+		RedisDevDB:                   redisDevDB,
+		DevCacheKeyPrefix:            firstEnvWithDefault("IF_DEV_CACHE_KEY_PREFIX", "ifdev"),
+		MessageHubAddr:               buildMessageHubAddr(),
+		MessageHubUsername:           strings.TrimSpace(firstEnv("IF_MESSAGE_HUB_USERNAME")),
+		MessageHubPassword:           strings.TrimSpace(firstEnv("IF_MESSAGE_HUB_PASSWORD")),
+		CollectorSecretKey:           collectorSecretKey,
+		CollectorSecretKeyVersion:    firstEnvWithDefault("DATA_SERVICE_COLLECTOR_SECRET_KEY_VERSION", "v1"),
+		CollectorProtocolCatalogPath: strings.TrimSpace(os.Getenv("DATA_SERVICE_COLLECTOR_PROTOCOL_CATALOG_PATH")),
 	}, nil
+}
+
+func ResolveCollectorProtocolCatalogPath(configured string) string {
+	if configured = strings.TrimSpace(configured); configured != "" {
+		return filepath.Clean(configured)
+	}
+	current, err := os.Getwd()
+	if err == nil {
+		for {
+			candidate := filepath.Join(current, "runtime", "collector_protocols")
+			if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
+				return candidate
+			}
+			parent := filepath.Dir(current)
+			if parent == current {
+				break
+			}
+			current = parent
+		}
+	}
+	return filepath.Clean(filepath.Join("runtime", "collector_protocols"))
+}
+
+// ValidateCollectorSecretKey 校验统一采集连接密钥服务是否具备启动条件。
+func ValidateCollectorSecretKey(cfg Config) error {
+	if len(cfg.CollectorSecretKey) != 32 {
+		return fmt.Errorf("缺少有效的 DATA_SERVICE_COLLECTOR_SECRET_KEY，工业采集连接路由不会挂载")
+	}
+	if strings.TrimSpace(cfg.CollectorSecretKeyVersion) == "" {
+		return fmt.Errorf("DATA_SERVICE_COLLECTOR_SECRET_KEY_VERSION 不能为空")
+	}
+	return nil
+}
+
+func parseCollectorSecretKey(value string) ([]byte, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		return nil, fmt.Errorf("DATA_SERVICE_COLLECTOR_SECRET_KEY 必须是 Base64 字符串")
+	}
+	if len(decoded) != 32 {
+		return nil, fmt.Errorf("DATA_SERVICE_COLLECTOR_SECRET_KEY 解码后必须为 32 字节")
+	}
+	return decoded, nil
 }
 
 // validateAddr 校验监听地址是否为合法的 TCP 地址。

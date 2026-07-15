@@ -7,19 +7,35 @@ namespace InduForge.Collector.DevAgent;
 internal sealed class CollectorTaskExecutor
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private readonly OpcUaDriver _opcUaDriver = new();
+    private readonly DriverRegistry _registry;
+
+    public CollectorTaskExecutor()
+        : this(DriverRegistry.CreateDefault())
+    {
+    }
+
+    public CollectorTaskExecutor(DriverRegistry registry)
+    {
+        _registry = registry;
+    }
 
     public async Task<CollectorTaskCompletion> ExecuteAsync(CollectorTaskEnvelope task, CancellationToken cancellationToken)
     {
         try
         {
             var request = task.Request.Deserialize<CollectorTaskRequest>(JsonOptions) ?? throw new InvalidOperationException("任务请求为空");
+            var descriptor = _registry.Describe(request.DriverId);
+            if (descriptor.DriverVersion != request.DriverVersion || !descriptor.SchemaVersions.Contains(request.SchemaVersion))
+            {
+                throw new CollectorTaskExecutionException("COLLECTOR_DRIVER_VERSION_UNSUPPORTED", "Agent 驱动版本或 Schema 版本不匹配", false);
+            }
+            var driver = _registry.Create(request.DriverId);
             var profile = CreateProfile(request.Connection);
             object result = task.Operation switch
             {
-                "connection.test" => await _opcUaDriver.TestConnectionAsync(profile, cancellationToken).ConfigureAwait(false),
-                "opcua.browse" => await _opcUaDriver.BrowseAsync(profile, CreateBrowseRequest(request.Input), cancellationToken).ConfigureAwait(false),
-                "opcua.read" => await _opcUaDriver.ReadAsync(profile, CreateReadRequest(request.Input), cancellationToken).ConfigureAwait(false),
+                DriverOperations.ConnectionTest => await driver.TestConnectionAsync(profile, cancellationToken).ConfigureAwait(false),
+                DriverOperations.DeviceBrowse when driver is IDeviceBrowser browser => await browser.BrowseAsync(profile, CreateBrowseRequest(request.Input), cancellationToken).ConfigureAwait(false),
+                DriverOperations.PointRead when driver is IPointReader reader => await reader.ReadAsync(profile, CreateReadRequest(request.Input), cancellationToken).ConfigureAwait(false),
                 _ => throw new CollectorTaskExecutionException("COLLECTOR_OPERATION_UNSUPPORTED", "不支持的调试任务操作", false),
             };
             return new CollectorTaskCompletion("succeeded", result, null);
@@ -44,15 +60,21 @@ internal sealed class CollectorTaskExecutor
 
     private static ConnectionProfile CreateProfile(CollectorTaskConnection connection)
     {
-        if (!string.Equals(connection.ProtocolType, "opcua", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(connection.ProtocolFamily, "opcua", StringComparison.OrdinalIgnoreCase))
         {
             throw new CollectorTaskExecutionException("COLLECTOR_PROTOCOL_UNSUPPORTED", "当前 Agent 不支持该协议", false);
         }
-        if (!string.Equals(connection.Authentication.Type, "anonymous", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(connection.Config.AuthenticationType, "anonymous", StringComparison.OrdinalIgnoreCase))
         {
             throw new CollectorTaskExecutionException("COLLECTOR_AUTH_UNSUPPORTED", "当前仅支持匿名认证", false);
         }
-        return new ConnectionProfile("opcua", connection.EndpointUrl, connection.SecurityMode, connection.SecurityPolicy, new ConnectionAuthentication(AuthenticationType.Anonymous), TimeSpan.FromSeconds(30));
+        return new ConnectionProfile(
+            connection.ProtocolFamily,
+            connection.Config.EndpointUrl,
+            connection.Config.SecurityMode,
+            connection.Config.SecurityPolicy,
+            new ConnectionAuthentication(AuthenticationType.Anonymous),
+            TimeSpan.FromMilliseconds(connection.Config.TimeoutMs ?? 30000));
     }
 
     private static BrowseRequest CreateBrowseRequest(JsonElement input) => new(
@@ -61,19 +83,27 @@ internal sealed class CollectorTaskExecutor
 
     private static ReadRequest CreateReadRequest(JsonElement input)
     {
-        if (!input.TryGetProperty("nodeIds", out var nodeIds) || nodeIds.ValueKind != JsonValueKind.Array)
+        if (!input.TryGetProperty("points", out var points) || points.ValueKind != JsonValueKind.Array)
         {
-            throw new CollectorTaskExecutionException("OPCUA_NODE_IDS_REQUIRED", "OPC UA Read 任务缺少 nodeIds", false);
+            throw new CollectorTaskExecutionException("COLLECTOR_POINTS_REQUIRED", "Read 任务缺少 points", false);
         }
-        return new ReadRequest(nodeIds.EnumerateArray().Select(item => item.GetString() ?? string.Empty).Where(item => item.Length > 0).ToArray());
+        var nodeIds = points.EnumerateArray().Select(point =>
+        {
+            if (!point.TryGetProperty("address", out var address))
+            {
+                throw new CollectorTaskExecutionException("COLLECTOR_POINT_ADDRESS_REQUIRED", "采集点缺少结构化地址", false);
+            }
+            return OpcUaAddressMapper.ParseNodeId(address);
+        }).ToArray();
+        return new ReadRequest(nodeIds);
     }
 
     private static CollectorTaskCompletion Failed(string code, string message, bool retryable) => new("failed", null, new CollectorTaskFailure(code, message, retryable));
 }
 
-internal sealed record CollectorTaskRequest(CollectorTaskConnection Connection, JsonElement Input);
-internal sealed record CollectorTaskConnection(string ProtocolType, string EndpointUrl, string SecurityMode, string SecurityPolicy, CollectorTaskAuthentication Authentication);
-internal sealed record CollectorTaskAuthentication(string Type);
+internal sealed record CollectorTaskRequest(string DriverId, string DriverVersion, int SchemaVersion, CollectorTaskConnection Connection, JsonElement Input);
+internal sealed record CollectorTaskConnection(string ProtocolFamily, CollectorTaskConnectionConfig Config, JsonElement Secrets);
+internal sealed record CollectorTaskConnectionConfig(string EndpointUrl, string SecurityMode, string SecurityPolicy, string AuthenticationType, int? TimeoutMs);
 internal sealed class CollectorTaskExecutionException(string code, string message, bool retryable) : Exception(message)
 {
     public string Code { get; } = code;

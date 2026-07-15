@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["host", "port", "rack", "slot"],
+  "properties": {
+    "host": { "type": "string", "minLength": 1 },
+    "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 102 },
+    "rack": { "type": "integer", "minimum": 0, "maximum": 7, "default": 0 },
+    "slot": { "type": "integer", "minimum": 0, "maximum": 31, "default": 1 },
+    "localTsap": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535,
+      "x-induforge-advanced": true
+    },
+    "remoteTsap": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535,
+      "x-induforge-advanced": true
+    },
+    "connectTimeoutMs": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 120000,
+      "default": 5000,
+      "x-induforge-unit": "ms",
+      "x-induforge-advanced": true
+    }
+  }
+}

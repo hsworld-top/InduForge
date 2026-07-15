@@ -134,25 +134,10 @@ func translateConnectionWriteError(message string, err error) error {
 // 查询路径固定为 project_id；display_order 是用户在接入源面板拖拽后的持久化顺序。
 func (r *ConnectionRepository) ListByProject(ctx context.Context, projectID string) ([]ConnectionRecord, error) {
 	rows, err := r.pool.Query(ctx, `
-		WITH variable_counts AS (
+		WITH variable_count_by_connection AS (
 			SELECT project_id, connection_id, COUNT(*)::int AS variable_count
-			FROM data_opcua_nodes
+			FROM data_collector_points
 			WHERE project_id = $1
-			GROUP BY project_id, connection_id
-			UNION ALL
-			SELECT project_id, connection_id, COUNT(*)::int AS variable_count
-			FROM data_s7_variables
-			WHERE project_id = $1
-			GROUP BY project_id, connection_id
-			UNION ALL
-			SELECT project_id, connection_id, COUNT(*)::int AS variable_count
-			FROM data_modbus_registers
-			WHERE project_id = $1
-			GROUP BY project_id, connection_id
-		),
-		variable_count_by_connection AS (
-			SELECT project_id, connection_id, SUM(variable_count)::int AS variable_count
-			FROM variable_counts
 			GROUP BY project_id, connection_id
 		)
 		SELECT conn.id,
@@ -223,19 +208,9 @@ func (r *ConnectionRepository) ListByProjectPage(ctx context.Context, projectID 
 
 	listArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
 	listQuery := fmt.Sprintf(`
-		WITH variable_counts AS (
+		WITH variable_count_by_connection AS (
 			SELECT project_id, connection_id, COUNT(*)::int AS variable_count
-			FROM data_opcua_nodes WHERE project_id = $1 GROUP BY project_id, connection_id
-			UNION ALL
-			SELECT project_id, connection_id, COUNT(*)::int AS variable_count
-			FROM data_s7_variables WHERE project_id = $1 GROUP BY project_id, connection_id
-			UNION ALL
-			SELECT project_id, connection_id, COUNT(*)::int AS variable_count
-			FROM data_modbus_registers WHERE project_id = $1 GROUP BY project_id, connection_id
-		),
-		variable_count_by_connection AS (
-			SELECT project_id, connection_id, SUM(variable_count)::int AS variable_count
-			FROM variable_counts GROUP BY project_id, connection_id
+			FROM data_collector_points WHERE project_id = $1 GROUP BY project_id, connection_id
 		)
 		SELECT conn.id, conn.project_id, conn.name, conn.type, conn.category, conn.status,
 		       conn.metadata, conn.display_order, COALESCE(vc.variable_count, 0) AS variable_count,

@@ -53,7 +53,7 @@ public sealed class OpcUaNodeMapperTests
         var result = OpcUaNodeMapper.MapDataValue("ns=2;s=Pressure", value);
 
         Assert.Equal(12.5, result.Value);
-        Assert.Equal("Double", result.DataType);
+        Assert.Equal("float64", result.DataType);
         Assert.Equal("Good", result.Quality);
         Assert.Equal(DateTimeOffset.MinValue, result.SourceTimestamp);
     }

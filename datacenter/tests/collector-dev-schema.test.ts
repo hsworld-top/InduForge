@@ -17,9 +17,10 @@ describe('collector dev schemas', () => {
       online: true,
       capabilities: [
         {
-          protocolType: 'opcua',
-          capabilityVersion: '1.0',
-          operations: ['connection.test', 'opcua.browse', 'opcua.read'],
+          driverId: 'opcua.standard',
+          driverVersion: '1.0.0',
+          schemaVersions: [1],
+          operations: ['connection.test', 'device.browse', 'point.read'],
         },
       ],
       lastSeenAt: '2026-07-13 12:00:00',
@@ -27,7 +28,7 @@ describe('collector dev schemas', () => {
     })
     expect(agent.online).toBe(true)
     expect(agent.ipAddress).toBe('192.168.1.10')
-    expect(agent.capabilities[0]?.operations).toContain('opcua.read')
+    expect(agent.capabilities[0]?.operations).toContain('point.read')
   })
 
   it('requires one-time registration code fields', () => {

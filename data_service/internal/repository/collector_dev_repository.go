@@ -38,6 +38,7 @@ type CollectorDevTaskRecord struct {
 	ID             string
 	TenantID       string
 	ProjectID      string
+	ConnectionID   string
 	AgentID        string
 	Operation      string
 	Status         string
@@ -69,6 +70,7 @@ type CreateCollectorTaskParams struct {
 	ID             string
 	TenantID       string
 	ProjectID      string
+	ConnectionID   string
 	AgentID        string
 	Operation      string
 	RequestPayload any
@@ -168,6 +170,14 @@ func (r *CollectorDevRepository) AuthenticateAgent(ctx context.Context, credenti
 	return &record, nil
 }
 
+func (r *CollectorDevRepository) GetAgent(ctx context.Context, tenantID, agentID string) (*CollectorDevAgentRecord, error) {
+	record, err := scanCollectorAgent(r.pool.QueryRow(ctx, `SELECT id, tenant_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at, created_at, updated_at FROM collector_dev_agents WHERE id=$1 AND tenant_id=$2 AND revoked_at IS NULL`, agentID, tenantID))
+	if errors.Is(err, errCollectorAgentNotFound) {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "采集调试代理不存在")
+	}
+	return &record, err
+}
+
 // ListAgentsPage 按租户分页读取未撤销的采集调试代理。
 func (r *CollectorDevRepository) ListAgentsPage(ctx context.Context, tenantID string, page, pageSize int) ([]CollectorDevAgentRecord, int, error) {
 	page, pageSize = normalizePageAndSize(page, pageSize, 10, 100)
@@ -240,10 +250,10 @@ func (r *CollectorDevRepository) CreateTask(ctx context.Context, params CreateCo
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "采集调试代理不存在")
 	}
 	record, err := scanCollectorTask(r.pool.QueryRow(ctx, `
-		INSERT INTO collector_dev_tasks (id, tenant_id, project_id, agent_id, operation, status, request_payload, deadline_at, created_by)
-		VALUES ($1, $2, $3, $4, $5, 'queued', $6::jsonb, $7, $8)
-		RETURNING id, tenant_id, project_id, agent_id, operation, status, request_payload, result_payload, error_code, error_message, deadline_at, claimed_at, finished_at, created_by, created_at, updated_at
-	`, params.ID, params.TenantID, params.ProjectID, params.AgentID, params.Operation, string(payload), params.DeadlineAt, params.CreatedBy))
+		INSERT INTO collector_dev_tasks (id, tenant_id, project_id, connection_id, agent_id, operation, status, request_payload, deadline_at, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7::jsonb, $8, $9)
+		RETURNING id, tenant_id, project_id, connection_id, agent_id, operation, status, request_payload, result_payload, error_code, error_message, deadline_at, claimed_at, finished_at, created_by, created_at, updated_at
+	`, params.ID, params.TenantID, params.ProjectID, params.ConnectionID, params.AgentID, params.Operation, string(payload), params.DeadlineAt, params.CreatedBy))
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +264,7 @@ func (r *CollectorDevRepository) GetTask(ctx context.Context, tenantID, projectI
 	if _, err := r.pool.Exec(ctx, `UPDATE collector_dev_tasks SET status = 'expired', finished_at = now(), updated_at = now() WHERE id = $1 AND tenant_id = $2 AND project_id = $3 AND status IN ('queued', 'running') AND deadline_at <= now()`, taskID, tenantID, projectID); err != nil {
 		return nil, wrapCollectorRepositoryError("更新调试任务过期状态失败", err)
 	}
-	record, err := scanCollectorTask(r.pool.QueryRow(ctx, `SELECT id, tenant_id, project_id, agent_id, operation, status, request_payload, result_payload, error_code, error_message, deadline_at, claimed_at, finished_at, created_by, created_at, updated_at FROM collector_dev_tasks WHERE id = $1 AND tenant_id = $2 AND project_id = $3`, taskID, tenantID, projectID))
+	record, err := scanCollectorTask(r.pool.QueryRow(ctx, `SELECT id, tenant_id, project_id, connection_id, agent_id, operation, status, request_payload, result_payload, error_code, error_message, deadline_at, claimed_at, finished_at, created_by, created_at, updated_at FROM collector_dev_tasks WHERE id = $1 AND tenant_id = $2 AND project_id = $3`, taskID, tenantID, projectID))
 	if errors.Is(err, errCollectorTaskNotFound) {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "调试任务不存在")
 	}
@@ -283,7 +293,7 @@ func (r *CollectorDevRepository) ClaimTask(ctx context.Context, agentID string) 
 	record, err := scanCollectorTask(tx.QueryRow(ctx, `
 		WITH candidate AS (SELECT id FROM collector_dev_tasks WHERE agent_id = $1 AND status = 'queued' AND deadline_at > now() ORDER BY created_at, id FOR UPDATE SKIP LOCKED LIMIT 1)
 		UPDATE collector_dev_tasks task SET status = 'running', claimed_at = now(), updated_at = now() FROM candidate WHERE task.id = candidate.id
-		RETURNING task.id, task.tenant_id, task.project_id, task.agent_id, task.operation, task.status, task.request_payload, task.result_payload, task.error_code, task.error_message, task.deadline_at, task.claimed_at, task.finished_at, task.created_by, task.created_at, task.updated_at
+		RETURNING task.id, task.tenant_id, task.project_id, task.connection_id, task.agent_id, task.operation, task.status, task.request_payload, task.result_payload, task.error_code, task.error_message, task.deadline_at, task.claimed_at, task.finished_at, task.created_by, task.created_at, task.updated_at
 	`, agentID))
 	if errors.Is(err, errCollectorTaskNotFound) {
 		if err = tx.Commit(ctx); err != nil {
@@ -315,7 +325,7 @@ func (r *CollectorDevRepository) CompleteTask(ctx context.Context, params Comple
 	record, err := scanCollectorTask(r.pool.QueryRow(ctx, `
 		UPDATE collector_dev_tasks SET status = $3, result_payload = CASE WHEN $4::text IS NULL THEN NULL ELSE $4::jsonb END, error_code = NULLIF($5, ''), error_message = NULLIF($6, ''), finished_at = now(), updated_at = now()
 		WHERE id = $1 AND agent_id = $2 AND status = 'running' AND deadline_at > now()
-		RETURNING id, tenant_id, project_id, agent_id, operation, status, request_payload, result_payload, error_code, error_message, deadline_at, claimed_at, finished_at, created_by, created_at, updated_at
+		RETURNING id, tenant_id, project_id, connection_id, agent_id, operation, status, request_payload, result_payload, error_code, error_message, deadline_at, claimed_at, finished_at, created_by, created_at, updated_at
 	`, params.TaskID, params.AgentID, params.Status, resultPayload, params.ErrorCode, params.ErrorMessage))
 	if errors.Is(err, errCollectorTaskNotFound) {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusConflict, "调试任务不存在、已结束或已过期")
@@ -324,7 +334,7 @@ func (r *CollectorDevRepository) CompleteTask(ctx context.Context, params Comple
 }
 
 func (r *CollectorDevRepository) CancelTask(ctx context.Context, tenantID, projectID, taskID string) (*CollectorDevTaskRecord, error) {
-	record, err := scanCollectorTask(r.pool.QueryRow(ctx, `UPDATE collector_dev_tasks SET status = 'cancelled', finished_at = now(), updated_at = now() WHERE id = $1 AND tenant_id = $2 AND project_id = $3 AND status IN ('queued', 'running') RETURNING id, tenant_id, project_id, agent_id, operation, status, request_payload, result_payload, error_code, error_message, deadline_at, claimed_at, finished_at, created_by, created_at, updated_at`, taskID, tenantID, projectID))
+	record, err := scanCollectorTask(r.pool.QueryRow(ctx, `UPDATE collector_dev_tasks SET status = 'cancelled', finished_at = now(), updated_at = now() WHERE id = $1 AND tenant_id = $2 AND project_id = $3 AND status IN ('queued', 'running') RETURNING id, tenant_id, project_id, connection_id, agent_id, operation, status, request_payload, result_payload, error_code, error_message, deadline_at, claimed_at, finished_at, created_by, created_at, updated_at`, taskID, tenantID, projectID))
 	if errors.Is(err, errCollectorTaskNotFound) {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusConflict, "调试任务不存在或已结束")
 	}
@@ -352,7 +362,7 @@ func scanCollectorAgent(row collectorRow) (CollectorDevAgentRecord, error) {
 
 func scanCollectorTask(row collectorRow) (CollectorDevTaskRecord, error) {
 	var record CollectorDevTaskRecord
-	err := row.Scan(&record.ID, &record.TenantID, &record.ProjectID, &record.AgentID, &record.Operation, &record.Status, &record.RequestPayload, &record.ResultPayload, &record.ErrorCode, &record.ErrorMessage, &record.DeadlineAt, &record.ClaimedAt, &record.FinishedAt, &record.CreatedBy, &record.CreatedAt, &record.UpdatedAt)
+	err := row.Scan(&record.ID, &record.TenantID, &record.ProjectID, &record.ConnectionID, &record.AgentID, &record.Operation, &record.Status, &record.RequestPayload, &record.ResultPayload, &record.ErrorCode, &record.ErrorMessage, &record.DeadlineAt, &record.ClaimedAt, &record.FinishedAt, &record.CreatedBy, &record.CreatedAt, &record.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return record, errCollectorTaskNotFound
 	}

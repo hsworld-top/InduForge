@@ -48,3 +48,9 @@ public sealed record ConnectionProfile(
 public sealed record BrowseRequest(string ParentNodeId, int MaxDepth = 1);
 
 public sealed record ReadRequest(IReadOnlyList<string> NodeIds);
+
+public sealed record PointWriteValue(string NodeId, object? Value);
+
+public sealed record WriteRequest(IReadOnlyList<PointWriteValue> Values);
+
+public sealed record SubscriptionPreviewRequest(IReadOnlyList<string> NodeIds, TimeSpan Duration);

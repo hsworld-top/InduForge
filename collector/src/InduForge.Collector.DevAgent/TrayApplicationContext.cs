@@ -5,7 +5,7 @@ namespace InduForge.Collector.DevAgent;
 
 internal sealed class TrayApplicationContext : ApplicationContext
 {
-    private static readonly AgentProtocolCapability[] Capabilities = [new("opcua", "1.0", ["connection.test", "opcua.browse", "opcua.read"])];
+    private readonly DriverRegistry _driverRegistry = DriverRegistry.CreateDefault();
     private readonly AgentLocalSettings _settings = AgentLocalSettings.Default;
     private readonly AgentCredentialStore _credentialStore = new();
     private readonly AgentStatusForm _statusForm;
@@ -42,7 +42,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _statusForm.ConnectionToggleRequested += OnConnectionToggleRequested;
         _statusForm.ClearRegistrationRequested += OnClearRegistrationRequested;
         _statusForm.SelfTestRequested += OnSelfTestRequested;
-        _worker = new AgentWorker(_apiClient, new CollectorTaskExecutor(), OnWorkerUpdateAsync);
+        var capabilities = _driverRegistry.Descriptors.Select(ToAgentCapability).ToArray();
+        _worker = new AgentWorker(_apiClient, new CollectorTaskExecutor(_driverRegistry), capabilities, OnWorkerUpdateAsync);
 
         _trayMenu = new ContextMenuStrip();
         _trayMenu.Items.Add("打开状态", null, (_, _) => ShowStatus());
@@ -89,7 +90,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _statusForm.SetRegistrationRunning(true);
         try
         {
-            var registration = await _apiClient.RegisterAsync(value.CenterUrl, new AgentRegistrationRequest(value.RegistrationCode, value.AgentName, "windows", RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(), Application.ProductVersion, Capabilities), _applicationCancellation.Token);
+            var capabilities = _driverRegistry.Descriptors.Select(ToAgentCapability).ToArray();
+            var registration = await _apiClient.RegisterAsync(value.CenterUrl, new AgentRegistrationRequest(value.RegistrationCode, value.AgentName, "windows", RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(), Application.ProductVersion, capabilities), _applicationCancellation.Token);
             _credentials = new AgentCredentials(value.CenterUrl, registration.AgentId, registration.AgentToken, registration.TenantId, value.AgentName);
             _credentialStore.Save(_credentials);
             UpdateSnapshot(_snapshot with { ConnectionState = AgentConnectionState.Disconnected, CenterUrl = value.CenterUrl, AgentName = value.AgentName, AgentId = registration.AgentId, LastMessage = "注册成功，正在连接中心", UpdatedAt = DateTimeOffset.Now });
@@ -182,6 +184,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void UpdateSnapshot(AgentStatusSnapshot snapshot) { _snapshot = snapshot; _statusForm.UpdateStatus(snapshot); _notifyIcon.Text = snapshot.ConnectionState switch { AgentConnectionState.Connected => "InduForge 采集调试代理：已连接", AgentConnectionState.Disconnected => "InduForge 采集调试代理：已断开", _ => "InduForge 采集调试代理：未注册" }; }
     private void RefreshMenus() { var registered = _credentials is not null; _connectionMenuItem.Visible = registered; _connectionMenuItem.Text = _worker?.IsRunning == true ? "断开中心" : "重新连接"; _clearRegistrationMenuItem.Visible = registered; }
     private void ExitAgent() { if (_isExiting) return; _isExiting = true; _applicationCancellation.Cancel(); _statusForm.ExitApplication(); ExitThread(); }
+
+    private static AgentProtocolCapability ToAgentCapability(InduForge.Collector.Contracts.DriverDescriptor descriptor) =>
+        new(descriptor.DriverId, descriptor.DriverVersion, descriptor.SchemaVersions, descriptor.Operations);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

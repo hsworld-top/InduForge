@@ -827,6 +827,14 @@ func uniqueTrimmedStrings(values []string) []string {
 	return result
 }
 
+func stringsToAnySlice(values []string) []any {
+	result := make([]any, 0, len(values))
+	for _, value := range values {
+		result = append(result, value)
+	}
+	return result
+}
+
 func validateStoragePolicyID(id string) error {
 	if _, err := uuid.Parse(strings.TrimSpace(id)); err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "id 格式无效", err)

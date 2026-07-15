@@ -37,9 +37,15 @@
     />
 
     <template v-else-if="activeModule === 'access-source'">
+      <IndustrialCollectorWorkbench
+        v-if="showIndustrialCollectorWorkbench && projectId"
+        :project-id="String(projectId)"
+        @back="showIndustrialCollectorWorkbench = false"
+      />
+
       <!-- v2 workbench 路由：tab === 'workbench' 时挂新容器 -->
       <AccessSourceWorkbench
-        v-if="activeWorkbenchConnection && projectId"
+        v-else-if="activeWorkbenchConnection && projectId"
         :connection="activeWorkbenchConnection"
         :project-id="String(projectId)"
         @back="handleWorkbenchBack"
@@ -54,6 +60,7 @@
         :loading="connectionLoading"
         :pagination="connectionPagination"
         @create="openCreateConnectionDialog"
+        @industrial="showIndustrialCollectorWorkbench = true"
         @refresh="loadConnections"
         @edit="handleEditConnection"
         @query-change="setConnectionQuery"
@@ -317,6 +324,7 @@ import SqlServerTableList from '@/components/database/sqlserver/SqlServerTableLi
 import SqlServerQueryEditor from '@/components/database/sqlserver/SqlServerQueryEditor.vue'
 import AccessSourceWorkspace from '@/components/access-source/AccessSourceWorkspace.vue'
 import AccessSourceWorkbench from '@/components/access-source/AccessSourceWorkbench.vue'
+import IndustrialCollectorWorkbench from '@/components/collector-workbench/IndustrialCollectorWorkbench.vue'
 import DataPointList from '@/components/datapoint/DataPointList.vue'
 import DataPointWorkspace from '@/components/datapoint/DataPointWorkspace.vue'
 import AlarmWorkspace from '@/components/alarm/AlarmWorkspace.vue'
@@ -880,6 +888,7 @@ const handleSelectConnection = (connection) => {
 
 /* 分页列表之外通过详情接口恢复工作台连接，保证深链接刷新仍可打开。 */
 const activeWorkbenchConnection = ref(null)
+const showIndustrialCollectorWorkbench = ref(false)
 let workbenchConnectionLoadVersion = 0
 watch(
   [
@@ -1153,17 +1162,10 @@ const protocolCreateHandlers = {
   http: dataAPI.createHttpConfig,
   websocket: dataAPI.createWebSocketConfig,
   redis: dataAPI.createRedisConfig,
-  opcua: dataAPI.createOpcuaConfig,
-  s7: dataAPI.createS7Config,
-  modbus: dataAPI.createModbusConfig,
   tdengine: dataAPI.createTdengineConfig,
 }
 
-const protocolUpdateHandlers = {
-  opcua: dataAPI.updateOpcuaConfig,
-  s7: dataAPI.updateS7Config,
-  modbus: dataAPI.updateModbusConfig,
-}
+const protocolUpdateHandlers = {}
 
 /**
  * 表双击 - 创建查询

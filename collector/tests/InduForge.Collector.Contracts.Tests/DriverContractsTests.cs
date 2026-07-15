@@ -5,16 +5,15 @@ namespace InduForge.Collector.Contracts.Tests;
 public sealed class DriverContractsTests
 {
     [Fact]
-    public void OpcUaCapabilityUsesStablePublicNames()
+    public void DriverDescriptorUsesStablePublicNames()
     {
-        var capability = new ProtocolCapability(
-            "opcua",
-            "1.0",
-            [DriverOperations.ConnectionTest, DriverOperations.OpcUaBrowse, DriverOperations.OpcUaRead]);
+        var descriptor = new DriverDescriptor(
+            "opcua", "opcua.standard", "1.0.0", [1],
+            [DriverOperations.ConnectionTest, DriverOperations.DeviceBrowse, DriverOperations.PointRead]);
 
-        Assert.Equal("opcua", capability.ProtocolType);
-        Assert.Contains("opcua.browse", capability.Operations);
-        Assert.DoesNotContain(capability.Operations, operation => operation.Contains("sdk", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("opcua.standard", descriptor.DriverId);
+        Assert.Contains("device.browse", descriptor.Operations);
+        Assert.DoesNotContain(descriptor.Operations, operation => operation.Contains("sdk", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
