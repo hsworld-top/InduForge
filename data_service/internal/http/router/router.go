@@ -1654,6 +1654,8 @@ func mountCollectorDevRoutes(mux *http.ServeMux, opts options) {
 	mux.Handle("GET /api/v1/data/projects/{projectId}/collector-dev/tasks/{taskId}", platformProjectRead(opts.collectorDevHandler.GetTask))
 	mux.Handle("DELETE /api/v1/data/projects/{projectId}/collector-dev/tasks/{taskId}", platformProjectWrite(opts.collectorDevHandler.CancelTask))
 	mux.Handle("POST /api/v1/data/collector-dev/agent/register", middleware.ErrorHandler(opts.collectorDevHandler.RegisterAgent))
+	mux.Handle("POST /api/v1/data/collector-dev/agent/disconnect", agent(opts.collectorDevHandler.Disconnect))
+	mux.Handle("POST /api/v1/data/collector-dev/agent/revoke", agent(opts.collectorDevHandler.Revoke))
 	mux.Handle("POST /api/v1/data/collector-dev/agent/heartbeat", agent(opts.collectorDevHandler.Heartbeat))
 	mux.Handle("POST /api/v1/data/collector-dev/agent/tasks/claim", agent(opts.collectorDevHandler.ClaimTask))
 	mux.Handle("POST /api/v1/data/collector-dev/agent/tasks/{taskId}/complete", agent(opts.collectorDevHandler.CompleteTask))

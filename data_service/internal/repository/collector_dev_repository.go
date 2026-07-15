@@ -15,6 +15,7 @@ import (
 type CollectorDevAgentRecord struct {
 	ID             string
 	TenantID       string
+	MachineID      string
 	Name           string
 	OS             string
 	Arch           string
@@ -23,6 +24,8 @@ type CollectorDevAgentRecord struct {
 	CredentialHash string
 	Capabilities   json.RawMessage
 	LastSeenAt     *time.Time
+	RevokedAt      *time.Time
+	DisconnectedAt *time.Time
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }
@@ -58,6 +61,7 @@ type CreateCollectorAgentParams struct {
 	ID             string
 	CodeHash       string
 	CredentialHash string
+	MachineID      string
 	Name           string
 	OS             string
 	Arch           string
@@ -108,7 +112,7 @@ func (r *CollectorDevRepository) CreateRegistrationCode(ctx context.Context, id,
 	return &record, nil
 }
 
-// RegisterAgent 在同一事务中锁定并消费一次性注册码，避免重复注册。
+// RegisterAgent 在同一事务中消费注册码，并按租户和机器身份复用节点记录。
 func (r *CollectorDevRepository) RegisterAgent(ctx context.Context, params CreateCollectorAgentParams) (*CollectorDevAgentRecord, error) {
 	capabilities, err := json.Marshal(params.Capabilities)
 	if err != nil {
@@ -134,12 +138,23 @@ func (r *CollectorDevRepository) RegisterAgent(ctx context.Context, params Creat
 		return nil, wrapCollectorRepositoryError("校验 Agent 注册码失败", err)
 	}
 
-	row := tx.QueryRow(ctx, `
-		INSERT INTO collector_dev_agents (id, tenant_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, now())
-		RETURNING id, tenant_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at, created_at, updated_at
-	`, params.ID, tenantID, params.Name, params.OS, params.Arch, params.Version, params.LastIP, params.CredentialHash, string(capabilities))
-	record, err := scanCollectorAgent(row)
+	record, err := scanCollectorAgent(tx.QueryRow(ctx, `
+		INSERT INTO collector_dev_agents (id, tenant_id, machine_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at, disconnected_at, revoked_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, now(), NULL, NULL)
+		ON CONFLICT (tenant_id, machine_id) DO UPDATE SET
+			name = EXCLUDED.name,
+			os = EXCLUDED.os,
+			arch = EXCLUDED.arch,
+			version = EXCLUDED.version,
+			last_ip = EXCLUDED.last_ip,
+			credential_hash = EXCLUDED.credential_hash,
+			capabilities = EXCLUDED.capabilities,
+			last_seen_at = now(),
+			disconnected_at = NULL,
+			revoked_at = NULL,
+			updated_at = now()
+		RETURNING id, tenant_id, machine_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at, revoked_at, disconnected_at, created_at, updated_at
+	`, params.ID, tenantID, params.MachineID, params.Name, params.OS, params.Arch, params.Version, params.LastIP, params.CredentialHash, string(capabilities)))
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +162,7 @@ func (r *CollectorDevRepository) RegisterAgent(ctx context.Context, params Creat
 		UPDATE collector_dev_registration_codes
 		SET used_at = now(), used_by_agent_id = $2
 		WHERE code_hash = $1 AND used_at IS NULL
-	`, params.CodeHash, params.ID); err != nil {
+	`, params.CodeHash, record.ID); err != nil {
 		return nil, wrapCollectorRepositoryError("消费 Agent 注册码失败", err)
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -158,7 +173,7 @@ func (r *CollectorDevRepository) RegisterAgent(ctx context.Context, params Creat
 
 func (r *CollectorDevRepository) AuthenticateAgent(ctx context.Context, credentialHash string) (*CollectorDevAgentRecord, error) {
 	record, err := scanCollectorAgent(r.pool.QueryRow(ctx, `
-		SELECT id, tenant_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at, created_at, updated_at
+		SELECT id, tenant_id, machine_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at, revoked_at, disconnected_at, created_at, updated_at
 		FROM collector_dev_agents WHERE credential_hash = $1 AND revoked_at IS NULL
 	`, credentialHash))
 	if errors.Is(err, errCollectorAgentNotFound) {
@@ -171,24 +186,24 @@ func (r *CollectorDevRepository) AuthenticateAgent(ctx context.Context, credenti
 }
 
 func (r *CollectorDevRepository) GetAgent(ctx context.Context, tenantID, agentID string) (*CollectorDevAgentRecord, error) {
-	record, err := scanCollectorAgent(r.pool.QueryRow(ctx, `SELECT id, tenant_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at, created_at, updated_at FROM collector_dev_agents WHERE id=$1 AND tenant_id=$2 AND revoked_at IS NULL`, agentID, tenantID))
+	record, err := scanCollectorAgent(r.pool.QueryRow(ctx, `SELECT id, tenant_id, machine_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at, revoked_at, disconnected_at, created_at, updated_at FROM collector_dev_agents WHERE id=$1 AND tenant_id=$2 AND revoked_at IS NULL`, agentID, tenantID))
 	if errors.Is(err, errCollectorAgentNotFound) {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "采集调试代理不存在")
 	}
 	return &record, err
 }
 
-// ListAgentsPage 按租户分页读取未撤销的采集调试代理。
+// ListAgentsPage 按租户分页读取全部采集调试代理，包括已撤销记录。
 func (r *CollectorDevRepository) ListAgentsPage(ctx context.Context, tenantID string, page, pageSize int) ([]CollectorDevAgentRecord, int, error) {
 	page, pageSize = normalizePageAndSize(page, pageSize, 10, 100)
 	var total int
-	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM collector_dev_agents WHERE tenant_id = $1 AND revoked_at IS NULL`, tenantID).Scan(&total); err != nil {
+	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM collector_dev_agents WHERE tenant_id = $1`, tenantID).Scan(&total); err != nil {
 		return nil, 0, wrapCollectorRepositoryError("统计采集调试代理失败", err)
 	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, tenant_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at, created_at, updated_at
+		SELECT id, tenant_id, machine_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at, revoked_at, disconnected_at, created_at, updated_at
 		FROM collector_dev_agents
-		WHERE tenant_id = $1 AND revoked_at IS NULL
+		WHERE tenant_id = $1
 		ORDER BY updated_at DESC, created_at DESC
 		LIMIT $2 OFFSET $3
 	`, tenantID, pageSize, (page-1)*pageSize)
@@ -211,7 +226,7 @@ func (r *CollectorDevRepository) ListAgentsPage(ctx context.Context, tenantID st
 }
 
 func (r *CollectorDevRepository) DeleteAgent(ctx context.Context, tenantID, agentID string) error {
-	result, err := r.pool.Exec(ctx, `UPDATE collector_dev_agents SET revoked_at = now(), updated_at = now() WHERE id = $1 AND tenant_id = $2 AND revoked_at IS NULL`, agentID, tenantID)
+	result, err := r.pool.Exec(ctx, `UPDATE collector_dev_agents SET revoked_at = now(), disconnected_at = now(), updated_at = now() WHERE id = $1 AND tenant_id = $2 AND revoked_at IS NULL`, agentID, tenantID)
 	if err != nil {
 		return wrapCollectorRepositoryError("删除采集调试代理失败", err)
 	}
@@ -227,9 +242,9 @@ func (r *CollectorDevRepository) Heartbeat(ctx context.Context, agentID, lastIP 
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "序列化 Agent 能力失败", err)
 	}
 	record, err := scanCollectorAgent(r.pool.QueryRow(ctx, `
-		UPDATE collector_dev_agents SET capabilities = $2::jsonb, last_ip = $3, last_seen_at = now(), updated_at = now()
+		UPDATE collector_dev_agents SET capabilities = $2::jsonb, last_ip = $3, last_seen_at = now(), disconnected_at = NULL, updated_at = now()
 		WHERE id = $1 AND revoked_at IS NULL
-		RETURNING id, tenant_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at, created_at, updated_at
+		RETURNING id, tenant_id, machine_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at, revoked_at, disconnected_at, created_at, updated_at
 	`, agentID, string(payload), lastIP))
 	if errors.Is(err, errCollectorAgentNotFound) {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "Agent 已被移除")
@@ -237,17 +252,48 @@ func (r *CollectorDevRepository) Heartbeat(ctx context.Context, agentID, lastIP 
 	return &record, err
 }
 
+// DisconnectAgent 记录客户端主动断开；后续心跳会清除此状态。
+func (r *CollectorDevRepository) DisconnectAgent(ctx context.Context, agentID string) error {
+	result, err := r.pool.Exec(ctx, `UPDATE collector_dev_agents SET disconnected_at = now(), updated_at = now() WHERE id = $1 AND revoked_at IS NULL`, agentID)
+	if err != nil {
+		return wrapCollectorRepositoryError("更新 Agent 断开状态失败", err)
+	}
+	if result.RowsAffected() == 0 {
+		return apperrors.NewAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "Agent Token 无效")
+	}
+	return nil
+}
+
+// RevokeAgent 撤销 Agent 自身凭据并保留节点记录，等待新注册码重新激活。
+func (r *CollectorDevRepository) RevokeAgent(ctx context.Context, agentID string) error {
+	result, err := r.pool.Exec(ctx, `UPDATE collector_dev_agents SET revoked_at = now(), disconnected_at = now(), updated_at = now() WHERE id = $1 AND revoked_at IS NULL`, agentID)
+	if err != nil {
+		return wrapCollectorRepositoryError("撤销 Agent 注册失败", err)
+	}
+	if result.RowsAffected() == 0 {
+		return apperrors.NewAppError(apperrors.ErrorCodeAuthTokenInvalid, http.StatusUnauthorized, "Agent Token 无效")
+	}
+	return nil
+}
+
 func (r *CollectorDevRepository) CreateTask(ctx context.Context, params CreateCollectorTaskParams) (*CollectorDevTaskRecord, error) {
 	payload, err := json.Marshal(params.RequestPayload)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "序列化调试任务失败", err)
 	}
-	var agentExists bool
-	if err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM collector_dev_agents WHERE id = $1 AND tenant_id = $2 AND revoked_at IS NULL)`, params.AgentID, params.TenantID).Scan(&agentExists); err != nil {
-		return nil, wrapCollectorRepositoryError("校验采集调试代理失败", err)
+	var agentOnline bool
+	if err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM collector_dev_agents
+			WHERE id = $1 AND tenant_id = $2 AND revoked_at IS NULL
+				AND last_seen_at >= now() - interval '45 seconds'
+				AND (disconnected_at IS NULL OR disconnected_at < last_seen_at)
+		)
+	`, params.AgentID, params.TenantID).Scan(&agentOnline); err != nil {
+		return nil, wrapCollectorRepositoryError("校验采集调试代理状态失败", err)
 	}
-	if !agentExists {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "采集调试代理不存在")
+	if !agentOnline {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "采集调试代理当前不在线")
 	}
 	record, err := scanCollectorTask(r.pool.QueryRow(ctx, `
 		INSERT INTO collector_dev_tasks (id, tenant_id, project_id, connection_id, agent_id, operation, status, request_payload, deadline_at, created_by)
@@ -350,7 +396,7 @@ type collectorRow interface{ Scan(dest ...any) error }
 
 func scanCollectorAgent(row collectorRow) (CollectorDevAgentRecord, error) {
 	var record CollectorDevAgentRecord
-	err := row.Scan(&record.ID, &record.TenantID, &record.Name, &record.OS, &record.Arch, &record.Version, &record.LastIP, &record.CredentialHash, &record.Capabilities, &record.LastSeenAt, &record.CreatedAt, &record.UpdatedAt)
+	err := row.Scan(&record.ID, &record.TenantID, &record.MachineID, &record.Name, &record.OS, &record.Arch, &record.Version, &record.LastIP, &record.CredentialHash, &record.Capabilities, &record.LastSeenAt, &record.RevokedAt, &record.DisconnectedAt, &record.CreatedAt, &record.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return record, errCollectorAgentNotFound
 	}

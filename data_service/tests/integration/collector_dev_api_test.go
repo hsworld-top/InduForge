@@ -39,6 +39,7 @@ func TestCollectorDevVerticalLoop(t *testing.T) {
 	mustDecodeCollectorData(t, registration.Data, &registrationPayload)
 	registered := doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/agent/register", "", map[string]any{
 		"registrationCode": registrationPayload.Code,
+		"machineId":        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		"name":             "integration-agent",
 		"os":               "windows",
 		"arch":             "x64",
@@ -59,6 +60,7 @@ func TestCollectorDevVerticalLoop(t *testing.T) {
 	var agentsPage struct {
 		List []struct {
 			IPAddress string `json:"ipAddress"`
+			Status    string `json:"status"`
 		} `json:"list"`
 		Pagination struct {
 			Page       int `json:"page"`
@@ -68,12 +70,19 @@ func TestCollectorDevVerticalLoop(t *testing.T) {
 		} `json:"pagination"`
 	}
 	mustDecodeCollectorData(t, agentsResponse.Data, &agentsPage)
-	if len(agentsPage.List) != 1 || agentsPage.List[0].IPAddress != "127.0.0.1" {
-		t.Fatalf("期望记录代理 IP 127.0.0.1，实际 %#v", agentsPage.List)
+	if len(agentsPage.List) != 1 || agentsPage.List[0].IPAddress != "127.0.0.1" || agentsPage.List[0].Status != "online" {
+		t.Fatalf("期望代理在线且记录 IP 127.0.0.1，实际 %#v", agentsPage.List)
 	}
 	if agentsPage.Pagination.Page != 1 || agentsPage.Pagination.PageSize != 10 || agentsPage.Pagination.Total != 1 || agentsPage.Pagination.TotalPages != 1 {
 		t.Fatalf("采集调试代理分页信息不符合预期: %#v", agentsPage.Pagination)
 	}
+	doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/agent/disconnect", agent.AgentToken, map[string]any{})
+	disconnectedResponse := doJSONRequest(t, http.MethodGet, server.URL+"/api/v1/data/collector-dev/agents?page=1&pageSize=10", adminToken, nil)
+	mustDecodeCollectorData(t, disconnectedResponse.Data, &agentsPage)
+	if agentsPage.List[0].Status != "offline" {
+		t.Fatalf("主动断开后期望 offline，实际 %q", agentsPage.List[0].Status)
+	}
+	doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/agent/heartbeat", agent.AgentToken, map[string]any{"capabilities": capabilities})
 	connectionResponse := doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/collector/connections", adminToken, map[string]any{
 		"name": "integration-opcua", "driverId": "opcua.standard",
 		"config":  map[string]any{"endpointUrl": "opc.tcp://127.0.0.1:18540/induforge/sim", "securityMode": "None", "securityPolicy": "None", "authenticationType": "anonymous"},
@@ -109,8 +118,38 @@ func TestCollectorDevVerticalLoop(t *testing.T) {
 	if task.Status != "succeeded" {
 		t.Fatalf("期望 succeeded，实际 %q", task.Status)
 	}
-	doJSONRequest(t, http.MethodDelete, server.URL+"/api/v1/data/collector-dev/agents/"+agent.AgentID, adminToken, nil)
+	doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/agent/revoke", agent.AgentToken, map[string]any{})
 	doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/agent/heartbeat", agent.AgentToken, map[string]any{"capabilities": capabilities}, http.StatusUnauthorized)
+	invalidResponse := doJSONRequest(t, http.MethodGet, server.URL+"/api/v1/data/collector-dev/agents?page=1&pageSize=10", adminToken, nil)
+	mustDecodeCollectorData(t, invalidResponse.Data, &agentsPage)
+	if agentsPage.List[0].Status != "invalid" {
+		t.Fatalf("撤销后期望 invalid，实际 %q", agentsPage.List[0].Status)
+	}
+
+	secondCodeResponse := doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/registration-codes", adminToken, map[string]any{})
+	mustDecodeCollectorData(t, secondCodeResponse.Data, &registrationPayload)
+	secondRegistration := doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/agent/register", "", map[string]any{
+		"registrationCode": registrationPayload.Code,
+		"machineId":        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"name":             "integration-agent-reconnected",
+		"os":               "windows",
+		"arch":             "x64",
+		"version":          "0.2.0",
+		"capabilities":     capabilities,
+	})
+	var reactivated struct {
+		AgentID    string `json:"agentId"`
+		AgentToken string `json:"agentToken"`
+	}
+	mustDecodeCollectorData(t, secondRegistration.Data, &reactivated)
+	if reactivated.AgentID != agent.AgentID {
+		t.Fatalf("同一机器重新注册应复用节点 ID，原 %q，新 %q", agent.AgentID, reactivated.AgentID)
+	}
+	if reactivated.AgentToken == agent.AgentToken {
+		t.Fatal("重新注册必须轮换 Agent Token")
+	}
+	doJSONRequest(t, http.MethodDelete, server.URL+"/api/v1/data/collector-dev/agents/"+reactivated.AgentID, adminToken, nil)
+	doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/agent/heartbeat", reactivated.AgentToken, map[string]any{"capabilities": capabilities}, http.StatusUnauthorized)
 }
 
 func mustDecodeCollectorData(t *testing.T, raw json.RawMessage, target any) {

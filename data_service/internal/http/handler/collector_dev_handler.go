@@ -83,6 +83,30 @@ func (h *CollectorDevHandler) RegisterAgent(w http.ResponseWriter, r *http.Reque
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
 }
+func (h *CollectorDevHandler) Disconnect(w http.ResponseWriter, r *http.Request) error {
+	identity, err := requireCollectorAgent(r)
+	if err != nil {
+		return err
+	}
+	if err = h.service.Disconnect(r.Context(), identity); err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"disconnected": true})
+	return nil
+}
+
+func (h *CollectorDevHandler) Revoke(w http.ResponseWriter, r *http.Request) error {
+	identity, err := requireCollectorAgent(r)
+	if err != nil {
+		return err
+	}
+	if err = h.service.Revoke(r.Context(), identity); err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"revoked": true})
+	return nil
+}
+
 func (h *CollectorDevHandler) Heartbeat(w http.ResponseWriter, r *http.Request) error {
 	identity, err := requireCollectorAgent(r)
 	if err != nil {

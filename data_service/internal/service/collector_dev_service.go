@@ -53,13 +53,14 @@ type CollectorAgent struct {
 	Arch         string                        `json:"arch"`
 	Version      string                        `json:"version"`
 	IPAddress    string                        `json:"ipAddress"`
-	Online       bool                          `json:"online"`
+	Status       string                        `json:"status"`
 	Capabilities []CollectorProtocolCapability `json:"capabilities"`
 	LastSeenAt   *string                       `json:"lastSeenAt"`
 	CreatedAt    string                        `json:"createdAt"`
 }
 type CollectorRegisterInput struct {
 	RegistrationCode string                        `json:"registrationCode"`
+	MachineID        string                        `json:"machineId"`
 	Name             string                        `json:"name"`
 	OS               string                        `json:"os"`
 	Arch             string                        `json:"arch"`
@@ -123,8 +124,15 @@ func (s *CollectorDevService) CreateRegistrationCode(ctx context.Context, claims
 func (s *CollectorDevService) Register(ctx context.Context, input CollectorRegisterInput, clientIP string) (*CollectorRegistration, error) {
 	input.Name = strings.TrimSpace(input.Name)
 	input.RegistrationCode = strings.TrimSpace(input.RegistrationCode)
-	if input.Name == "" || input.RegistrationCode == "" {
-		return nil, badCollectorRequest("注册码和 Agent 名称不能为空")
+	input.MachineID = strings.ToLower(strings.TrimSpace(input.MachineID))
+	if input.Name == "" || input.RegistrationCode == "" || input.MachineID == "" {
+		return nil, badCollectorRequest("注册码、机器标识和 Agent 名称不能为空")
+	}
+	if len(input.MachineID) != sha256.Size*2 {
+		return nil, badCollectorRequest("机器标识格式无效")
+	}
+	if _, err := hex.DecodeString(input.MachineID); err != nil {
+		return nil, badCollectorRequest("机器标识格式无效")
 	}
 	if input.OS == "" {
 		input.OS = runtime.GOOS
@@ -139,7 +147,7 @@ func (s *CollectorDevService) Register(ctx context.Context, input CollectorRegis
 	if err != nil {
 		return nil, err
 	}
-	record, err := s.repository.RegisterAgent(ctx, repository.CreateCollectorAgentParams{ID: uuid.NewString(), CodeHash: hashSecret(input.RegistrationCode), CredentialHash: hashSecret(token), Name: input.Name, OS: input.OS, Arch: input.Arch, Version: input.Version, LastIP: clientIP, Capabilities: input.Capabilities})
+	record, err := s.repository.RegisterAgent(ctx, repository.CreateCollectorAgentParams{ID: uuid.NewString(), CodeHash: hashSecret(input.RegistrationCode), CredentialHash: hashSecret(token), MachineID: input.MachineID, Name: input.Name, OS: input.OS, Arch: input.Arch, Version: input.Version, LastIP: clientIP, Capabilities: input.Capabilities})
 	if err != nil {
 		return nil, err
 	}
@@ -177,6 +185,17 @@ func (s *CollectorDevService) DeleteAgent(ctx context.Context, claims *auth.Clai
 	}
 	return s.repository.DeleteAgent(ctx, claims.TenantID, agentID)
 }
+
+// Disconnect 标记代理主动离线，凭据仍可用于后续重新连接。
+func (s *CollectorDevService) Disconnect(ctx context.Context, identity *auth.CollectorAgentIdentity) error {
+	return s.repository.DisconnectAgent(ctx, identity.AgentID)
+}
+
+// Revoke 撤销代理当前凭据，节点记录保留等待新注册码激活。
+func (s *CollectorDevService) Revoke(ctx context.Context, identity *auth.CollectorAgentIdentity) error {
+	return s.repository.RevokeAgent(ctx, identity.AgentID)
+}
+
 func (s *CollectorDevService) Heartbeat(ctx context.Context, identity *auth.CollectorAgentIdentity, capabilities []CollectorProtocolCapability, clientIP string) (*CollectorAgent, error) {
 	if err := validateCapabilities(capabilities); err != nil {
 		return nil, err
@@ -353,8 +372,24 @@ func toCollectorAgent(record repository.CollectorDevAgentRecord, now time.Time) 
 			capabilities[index].Operations = []string{}
 		}
 	}
-	return CollectorAgent{ID: record.ID, Name: record.Name, OS: record.OS, Arch: record.Arch, Version: record.Version, IPAddress: record.LastIP, Online: record.LastSeenAt != nil && now.Sub(*record.LastSeenAt) <= collectorOnlineWindow, Capabilities: capabilities, LastSeenAt: optionalCollectorTime(record.LastSeenAt), CreatedAt: formatCollectorTime(record.CreatedAt)}
+	return CollectorAgent{ID: record.ID, Name: record.Name, OS: record.OS, Arch: record.Arch, Version: record.Version, IPAddress: record.LastIP, Status: collectorAgentStatus(record, now), Capabilities: capabilities, LastSeenAt: optionalCollectorTime(record.LastSeenAt), CreatedAt: formatCollectorTime(record.CreatedAt)}
 }
+func collectorAgentStatus(record repository.CollectorDevAgentRecord, now time.Time) string {
+	if record.RevokedAt != nil {
+		return "invalid"
+	}
+	if record.LastSeenAt == nil {
+		return "offline"
+	}
+	if record.DisconnectedAt != nil && !record.DisconnectedAt.Before(*record.LastSeenAt) {
+		return "offline"
+	}
+	if now.Sub(*record.LastSeenAt) > collectorOnlineWindow {
+		return "offline"
+	}
+	return "online"
+}
+
 func toCollectorTask(record repository.CollectorDevTaskRecord) CollectorTask {
 	return CollectorTask{ID: record.ID, ProjectID: record.ProjectID, ConnectionID: record.ConnectionID, AgentID: record.AgentID, Operation: record.Operation, Status: record.Status, Request: record.RequestPayload, Result: record.ResultPayload, ErrorCode: record.ErrorCode, ErrorMessage: record.ErrorMessage, DeadlineAt: formatCollectorTime(record.DeadlineAt), ClaimedAt: optionalCollectorTime(record.ClaimedAt), FinishedAt: optionalCollectorTime(record.FinishedAt), CreatedAt: formatCollectorTime(record.CreatedAt)}
 }
