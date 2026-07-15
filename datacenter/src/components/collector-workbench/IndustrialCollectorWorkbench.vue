@@ -29,7 +29,9 @@
         </div>
         <div class="industrial-workbench__actions">
           <div class="industrial-workbench__agent">
-            <span><i :class="{ 'is-online': selectedAgent?.online }" />开发调试代理</span>
+            <span
+              ><i :class="{ 'is-online': selectedAgent?.status === 'online' }" />开发调试代理</span
+            >
             <CollectorAgentSelector
               v-model="agentId"
               :project-id="projectId"

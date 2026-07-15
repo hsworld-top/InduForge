@@ -8,7 +8,7 @@ export function agentSupportsOperation(
   operation: string,
 ) {
   return Boolean(
-    agent?.online &&
+    agent?.status === 'online' &&
     agent.capabilities.some(
       (capability) =>
         capability.driverId === driverId &&

@@ -12,7 +12,7 @@ describe('industrial collector workbench model', () => {
     arch: 'x64',
     version: '1',
     ipAddress: '127.0.0.1',
-    online: true,
+    status: 'online' as const,
     capabilities: [
       {
         driverId: 'opcua.standard',
@@ -28,6 +28,15 @@ describe('industrial collector workbench model', () => {
       false,
     )
     expect(agentSupportsOperation(agent, 'opcua.standard', '1.0.0', 1, 'device.browse')).toBe(true)
+    expect(
+      agentSupportsOperation(
+        { ...agent, status: 'offline' },
+        'opcua.standard',
+        '1.0.0',
+        1,
+        'device.browse',
+      ),
+    ).toBe(false)
   })
   it('rejects mismatched driver versions and operations', () => {
     expect(agentSupportsOperation(agent, 'opcua.standard', '2.0.0', 1, 'point.read')).toBe(false)

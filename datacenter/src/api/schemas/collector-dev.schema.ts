@@ -14,7 +14,7 @@ export const CollectorAgentSchema = z.object({
   arch: z.string(),
   version: z.string(),
   ipAddress: z.string(),
-  online: z.boolean(),
+  status: z.enum(['online', 'offline', 'invalid']),
   capabilities: z.array(CollectorProtocolCapabilitySchema),
   lastSeenAt: z.string().nullable().optional(),
   createdAt: z.string(),

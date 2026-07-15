@@ -6,15 +6,20 @@
     style="width: 240px"
     @update:model-value="selectAgent"
   >
-    <el-option v-for="agent in agents" :key="agent.id" :value="agent.id" :disabled="!agent.online">
+    <el-option
+      v-for="agent in agents"
+      :key="agent.id"
+      :value="agent.id"
+      :disabled="agent.status !== 'online'"
+    >
       <span>{{ agent.name }}</span
-      ><span class="collector-agent-option">{{ agent.online ? '在线' : '离线' }}</span>
+      ><span class="collector-agent-option">{{ agent.status === 'online' ? '在线' : '离线' }}</span>
     </el-option>
   </el-select>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { getCollectorAgents } from '@/api/collector-dev.api'
 import type { CollectorAgent } from '@/api/schemas/collector-dev.schema'
 import { collectorAgentStorageKey } from './collector-workbench-model'
@@ -26,13 +31,31 @@ const emit = defineEmits<{
   loaded: [agents: CollectorAgent[]]
 }>()
 const agents = ref<CollectorAgent[]>([])
+let refreshTimer: number | undefined
+let loading = false
 
 async function load() {
-  agents.value = (await getCollectorAgents({ page: 1, pageSize: 100 })).list
-  emit('loaded', agents.value)
-  const remembered = localStorage.getItem(collectorAgentStorageKey(props.projectId)) || ''
-  const selected = props.modelValue || remembered
-  if (selected && agents.value.some((agent) => agent.id === selected)) selectAgent(selected)
+  if (loading || document.visibilityState !== 'visible') return
+  loading = true
+  try {
+    const result = await getCollectorAgents({ page: 1, pageSize: 100 })
+    agents.value = result.list.filter((agent) => agent.status !== 'invalid')
+    emit('loaded', agents.value)
+    const remembered = localStorage.getItem(collectorAgentStorageKey(props.projectId)) || ''
+    const selected = props.modelValue || remembered
+    if (!selected) return
+    const selectedAgent = agents.value.find((agent) => agent.id === selected)
+    if (!selectedAgent) {
+      selectAgent('')
+      return
+    }
+    emit('update:modelValue', selected)
+    emit('change', selectedAgent)
+  } catch {
+    // 静默刷新失败时保留当前选择，等待下一次轮询恢复。
+  } finally {
+    loading = false
+  }
 }
 function selectAgent(id: string) {
   if (id) localStorage.setItem(collectorAgentStorageKey(props.projectId), id)
@@ -43,7 +66,18 @@ function selectAgent(id: string) {
     agents.value.find((agent) => agent.id === id),
   )
 }
-onMounted(load)
+function handleVisibilityChange() {
+  if (document.visibilityState === 'visible') void load()
+}
+onMounted(() => {
+  void load()
+  refreshTimer = window.setInterval(() => void load(), 5000)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+})
+onBeforeUnmount(() => {
+  if (refreshTimer !== undefined) window.clearInterval(refreshTimer)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+})
 </script>
 
 <style scoped>

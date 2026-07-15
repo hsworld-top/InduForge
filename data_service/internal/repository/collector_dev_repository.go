@@ -204,7 +204,7 @@ func (r *CollectorDevRepository) ListAgentsPage(ctx context.Context, tenantID st
 		SELECT id, tenant_id, machine_id, name, os, arch, version, last_ip, credential_hash, capabilities, last_seen_at, revoked_at, disconnected_at, created_at, updated_at
 		FROM collector_dev_agents
 		WHERE tenant_id = $1
-		ORDER BY updated_at DESC, created_at DESC
+		ORDER BY (revoked_at IS NOT NULL), updated_at DESC, created_at DESC
 		LIMIT $2 OFFSET $3
 	`, tenantID, pageSize, (page-1)*pageSize)
 	if err != nil {

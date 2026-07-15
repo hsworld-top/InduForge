@@ -34,7 +34,7 @@
             class="collector-agent-action collector-agent-action--secondary"
             :disabled="loading"
             aria-label="刷新采集调试代理"
-            @click="loadAgents"
+            @click="loadAgents()"
           >
             <IconTablerRefresh :class="{ 'is-spinning': loading }" />
             <span>刷新</span>
@@ -65,7 +65,7 @@
             <strong>代理状态加载失败</strong>
             <span>{{ loadError }}</span>
           </div>
-          <button type="button" class="collector-agent-error__retry" @click="loadAgents">
+          <button type="button" class="collector-agent-error__retry" @click="loadAgents()">
             重新加载
           </button>
         </div>
@@ -131,13 +131,13 @@
               v-for="agent in agents"
               :key="agent.id"
               class="collector-agent-card"
-              :class="{ 'is-online': agent.online }"
+              :class="`is-${agent.status}`"
             >
               <header class="collector-agent-card__header">
                 <div class="collector-agent-card__machine">
                   <div class="collector-agent-card__device">
                     <IconTablerDeviceDesktop />
-                    <span :class="{ 'is-online': agent.online }" />
+                    <span :class="`is-${agent.status}`" />
                   </div>
                   <div>
                     <h2>{{ agent.name }}</h2>
@@ -146,11 +146,8 @@
                     </p>
                   </div>
                 </div>
-                <span
-                  class="collector-agent-card__status"
-                  :class="agent.online ? 'is-online' : 'is-offline'"
-                >
-                  {{ agent.online ? '在线' : '离线' }}
+                <span class="collector-agent-card__status" :class="`is-${agent.status}`">
+                  {{ agentStatusText(agent.status) }}
                 </span>
               </header>
 
@@ -190,7 +187,10 @@
                 <span v-else class="collector-agent-card__empty-capability">暂未上报协议能力</span>
               </div>
 
-              <footer v-if="canManage" class="collector-agent-card__footer">
+              <footer
+                v-if="canManage && agent.status !== 'invalid'"
+                class="collector-agent-card__footer"
+              >
                 <button
                   type="button"
                   class="collector-agent-card__remove"
@@ -199,6 +199,12 @@
                   <IconTablerTrash />
                   <span>移除代理</span>
                 </button>
+              </footer>
+              <footer
+                v-else-if="agent.status === 'invalid'"
+                class="collector-agent-card__footer collector-agent-card__invalid-note"
+              >
+                需要使用新注册码重新激活
               </footer>
             </article>
           </section>
@@ -210,7 +216,7 @@
                   <div class="collector-agent-table__machine">
                     <div class="collector-agent-table__device">
                       <IconTablerDeviceDesktop />
-                      <span :class="{ 'is-online': row.online }" />
+                      <span :class="`is-${row.status}`" />
                     </div>
                     <div>
                       <strong>{{ row.name }}</strong>
@@ -221,11 +227,8 @@
               </el-table-column>
               <el-table-column label="状态" width="88" align="center">
                 <template #default="{ row }">
-                  <span
-                    class="collector-agent-card__status"
-                    :class="row.online ? 'is-online' : 'is-offline'"
-                  >
-                    {{ row.online ? '在线' : '离线' }}
+                  <span class="collector-agent-card__status" :class="`is-${row.status}`">
+                    {{ agentStatusText(row.status) }}
                   </span>
                 </template>
               </el-table-column>
@@ -250,12 +253,14 @@
               <el-table-column v-if="canManage" label="操作" width="90" align="right" fixed="right">
                 <template #default="{ row }">
                   <button
+                    v-if="row.status !== 'invalid'"
                     type="button"
                     class="collector-agent-table__remove"
                     @click="removeAgent(row)"
                   >
                     移除
                   </button>
+                  <span v-else class="collector-agent-table__invalid">需重新注册</span>
                 </template>
               </el-table-column>
             </el-table>
@@ -318,7 +323,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import IconTablerAlertTriangle from '~icons/tabler/alert-triangle'
 import IconTablerClock from '~icons/tabler/clock'
@@ -354,24 +359,39 @@ const registrationDialogVisible = ref(false)
 const userInfo = Storage.getUserInfo() as { role?: string } | null
 const canManage = computed(() => ['SYSTEM_ADMIN', 'SUPER_ADMIN'].includes(userInfo?.role ?? ''))
 
-const loadAgents = async () => {
-  loading.value = true
-  loadError.value = ''
+let refreshTimer: number | undefined
+let refreshRunning = false
+
+const agentStatusText = (status: CollectorAgent['status']) =>
+  ({ online: '在线', offline: '离线', invalid: '无效' })[status]
+
+const loadAgents = async (silent = false) => {
+  if (refreshRunning) return
+  refreshRunning = true
+  if (!silent) loading.value = true
+  if (!silent) loadError.value = ''
   try {
-    const result = await getCollectorAgents({
+    let result = await getCollectorAgents({
       page: pagination.value.page,
       pageSize: pagination.value.pageSize,
     })
+    if (result.pagination.totalPages > 0 && result.pagination.page > result.pagination.totalPages) {
+      pagination.value.page = result.pagination.totalPages
+      result = await getCollectorAgents({
+        page: pagination.value.page,
+        pageSize: pagination.value.pageSize,
+      })
+    }
+    loadError.value = ''
     agents.value = result.list
     pagination.value = result.pagination
-    if (pagination.value.totalPages > 0 && pagination.value.page > pagination.value.totalPages) {
-      pagination.value.page = pagination.value.totalPages
-      await loadAgents()
-    }
   } catch (error) {
-    loadError.value = getApiErrorMessage(error, '无法连接数据服务，请确认服务已启动后重试。')
+    if (!silent) {
+      loadError.value = getApiErrorMessage(error, '无法连接数据服务，请确认服务已启动后重试。')
+    }
   } finally {
-    loading.value = false
+    refreshRunning = false
+    if (!silent) loading.value = false
   }
 }
 
@@ -411,7 +431,21 @@ const removeAgent = async (agent: CollectorAgent) => {
   }
 }
 
-onMounted(loadAgents)
+const handleVisibilityChange = () => {
+  if (document.visibilityState === 'visible') void loadAgents(true)
+}
+
+onMounted(() => {
+  void loadAgents()
+  refreshTimer = window.setInterval(() => {
+    if (document.visibilityState === 'visible') void loadAgents(true)
+  }, 5000)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+})
+onBeforeUnmount(() => {
+  if (refreshTimer !== undefined) window.clearInterval(refreshTimer)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+})
 </script>
 
 <style scoped>
@@ -1050,6 +1084,27 @@ onMounted(loadAgents)
 .collector-agent-card__status.is-offline {
   background: #f1f5f9;
   color: #64748b;
+}
+
+.collector-agent-card__status.is-invalid {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.collector-agent-card.is-invalid {
+  border-color: #fecdd3;
+}
+
+.collector-agent-card__device span.is-invalid,
+.collector-agent-table__device span.is-invalid {
+  background: #e11d48;
+}
+
+.collector-agent-card__invalid-note,
+.collector-agent-table__invalid {
+  color: #be123c;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .collector-agent-card__details {
