@@ -97,3 +97,21 @@ func TestEmbeddedMigrationsContainCollectorConnectionTypeBoundary(t *testing.T) 
 		}
 	}
 }
+
+func TestEmbeddedMigrationsContainCollectorSchemaRepair(t *testing.T) {
+	payload, err := Files.ReadFile("0064_collector_schema_repair.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	migration := string(payload)
+	for _, fragment := range []string{
+		"CREATE TABLE IF NOT EXISTS data_collector_import_sessions",
+		"ADD COLUMN IF NOT EXISTS connection_id uuid",
+		"collector_dev_tasks_connection_fkey",
+		"point.subscribe.preview",
+	} {
+		if !strings.Contains(migration, fragment) {
+			t.Fatalf("missing collector schema repair fragment %s", fragment)
+		}
+	}
+}
