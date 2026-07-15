@@ -1,11 +1,13 @@
 <template>
-  <el-dialog
+  <DcDialog
     :model-value="modelValue"
     class="collector-wizard-dialog"
     title="新建工业连接"
     width="88vw"
+    body-max-height="calc(90vh - 132px)"
+    :confirm-on-dirty-close="false"
     destroy-on-close
-    @close="emit('update:modelValue', false)"
+    @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="collector-wizard">
       <aside class="collector-wizard__catalog">
@@ -117,7 +119,7 @@
         </div>
       </div>
     </template>
-  </el-dialog>
+  </DcDialog>
 </template>
 
 <script setup lang="ts">
@@ -143,6 +145,7 @@ import {
 import IconTablerCategory from '~icons/tabler/category'
 import IconTablerSearch from '~icons/tabler/search'
 import IconTablerTopologyStar3 from '~icons/tabler/topology-star-3'
+import DcDialog from '@/components/shared/DcDialog.vue'
 import CollectorDriverIcon from './CollectorDriverIcon.vue'
 import CollectorSchemaForm from './CollectorSchemaForm.vue'
 
@@ -236,8 +239,8 @@ async function save() {
 <style scoped>
 .collector-wizard {
   display: grid;
-  height: min(680px, 72vh);
-  min-height: 500px;
+  height: min(680px, calc(90vh - 190px));
+  min-height: 420px;
   grid-template-columns: 360px minmax(0, 1fr);
   overflow: hidden;
   border: 1px solid var(--dc-border);
@@ -444,10 +447,15 @@ async function save() {
 </style>
 
 <style>
-.collector-wizard-dialog {
+.collector-wizard-dialog.dc-dialog.el-dialog {
   max-width: 1180px;
 }
 .collector-wizard-dialog .el-dialog__body {
+  overflow: hidden;
   padding: 8px 20px 12px;
+}
+.collector-wizard-dialog .dc-dialog__body {
+  min-height: 0;
+  overflow: hidden;
 }
 </style>
