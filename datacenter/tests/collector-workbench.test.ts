@@ -129,4 +129,3 @@ describe('industrial collector workbench model', () => {
     expect(formatCollectorProtocolFamily('custom')).toBe('CUSTOM')
   })
 })
-

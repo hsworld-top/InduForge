@@ -1,6 +1,6 @@
 # 工业驱动目录简化实现计划
 
-> **面向 AI 代理的工作者：** 必需子技能：使用 superpowers:subagent-driven-development（推荐）或 superpowers:executing-plans 逐任务实现此计划。步骤使用复选框（`- [ ]`）语法来跟踪进度。
+> **面向 AI 代理的工作者：** 必需子技能：使用 superpowers:subagent-driven-development（推荐）或 superpowers:executing-plans 逐任务实现此计划。步骤使用复选框（`- [x]`）语法来跟踪进度。
 
 **目标：** 将新建工业连接弹窗从“能力类别 → 厂商/协议 → 驱动”简化为“厂商/协议 → 驱动”。
 
@@ -22,7 +22,7 @@
 **文件：**
 - 修改：`datacenter/tests/collector-workbench.test.ts:64`
 
-- [ ] **步骤 1：修改树结构测试**
+- [x] **步骤 1：修改树结构测试**
 
 ```ts
 it('builds a protocol family and driver tree with bilingual labels', () => {
@@ -35,7 +35,7 @@ it('builds a protocol family and driver tree with bilingual labels', () => {
 })
 ```
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：`pnpm --filter datacenter test -- collector-workbench.test.ts`
 
@@ -48,13 +48,13 @@ it('builds a protocol family and driver tree with bilingual labels', () => {
 - 修改：`datacenter/src/components/collector-workbench/collector-workbench-model.ts:110`
 - 修改：`datacenter/src/components/collector-workbench/CollectorConnectionWizard.vue:37`
 
-- [ ] **步骤 1：将树节点类型收窄为 `family | driver`。**
+- [x] **步骤 1：将树节点类型收窄为 `family | driver`。**
 
-- [ ] **步骤 2：按 `protocolFamily` 直接聚合驱动，同时把 `category` 和分类中文名称保留在搜索词中。**
+- [x] **步骤 2：按 `protocolFamily` 直接聚合驱动，同时把 `category` 和分类中文名称保留在搜索词中。**
 
-- [ ] **步骤 3：删除 `IconTablerCategory`、分类节点渲染分支和 `.is-category` 样式，协议族节点继续显示图标和驱动数量。**
+- [x] **步骤 3：删除 `IconTablerCategory`、分类节点渲染分支和 `.is-category` 样式，协议族节点继续显示图标和驱动数量。**
 
-- [ ] **步骤 4：运行定向测试。**
+- [x] **步骤 4：运行定向测试。**
 
 运行：`pnpm --filter datacenter test -- collector-workbench.test.ts`
 
@@ -65,27 +65,27 @@ it('builds a protocol family and driver tree with bilingual labels', () => {
 **文件：**
 - 修改：`docs/02-系统设计/统一工业采集工作台与驱动模型设计.md:101`
 
-- [ ] **步骤 1：将用户可见目录说明改为 `协议族 → 驱动`，明确 `category` 只用于搜索和内部管理。**
+- [x] **步骤 1：将用户可见目录说明改为 `协议族 → 驱动`，明确 `category` 只用于搜索和内部管理。**
 
-- [ ] **步骤 2：运行 TypeScript 类型检查。**
+- [x] **步骤 2：运行 TypeScript 类型检查。**
 
 运行：`pnpm --filter datacenter typecheck`
 
 预期：退出码为 `0`。
 
-- [ ] **步骤 3：运行定向 ESLint。**
+- [x] **步骤 3：运行定向 ESLint。**
 
-运行：`pnpm exec eslint datacenter/src/components/collector-workbench/collector-workbench-model.ts datacenter/src/components/collector-workbench/CollectorConnectionWizard.vue datacenter/tests/collector-workbench.test.ts`
+运行：`pnpm --dir datacenter exec eslint src/components/collector-workbench/collector-workbench-model.ts src/components/collector-workbench/CollectorConnectionWizard.vue tests/collector-workbench.test.ts`
 
 预期：退出码为 `0`。
 
-- [ ] **步骤 4：运行生产构建。**
+- [x] **步骤 4：运行生产构建。**
 
 运行：`pnpm --filter datacenter build`
 
 预期：构建成功；允许保留项目已有的大 chunk 警告。
 
-- [ ] **步骤 5：提交实现。**
+- [x] **步骤 5：提交实现。**
 
 ```powershell
 git add -- datacenter/src/components/collector-workbench/collector-workbench-model.ts datacenter/src/components/collector-workbench/CollectorConnectionWizard.vue datacenter/tests/collector-workbench.test.ts docs/02-系统设计/统一工业采集工作台与驱动模型设计.md docs/superpowers/plans/2026-07-15-industrial-driver-catalog-simplification.md
