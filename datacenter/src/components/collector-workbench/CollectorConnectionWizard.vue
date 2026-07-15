@@ -36,16 +36,14 @@
             :data="driverTree"
             node-key="id"
             :current-node-key="driverId"
-            :default-expanded-keys="expandedCategoryKeys"
+            :default-expanded-keys="expandedFamilyKeys"
             highlight-current
             empty-text="没有匹配的驱动"
             @node-click="handleNodeClick"
           >
             <template #default="{ data }">
               <div class="collector-wizard__tree-node" :class="`is-${data.type}`">
-                <IconTablerCategory v-if="data.type === 'category'" />
                 <CollectorDriverIcon
-                  v-else
                   :protocol-family="data.protocolFamily || ''"
                   :driver-id="data.driver?.driverId"
                 />
@@ -142,7 +140,6 @@ import {
   formatCollectorDriverDisplayName,
   type CollectorDriverTreeNode,
 } from './collector-workbench-model'
-import IconTablerCategory from '~icons/tabler/category'
 import IconTablerSearch from '~icons/tabler/search'
 import IconTablerTopologyStar3 from '~icons/tabler/topology-star-3'
 import DcDialog from '@/components/shared/DcDialog.vue'
@@ -166,7 +163,7 @@ const loadingDetail = ref(false)
 const loadError = ref('')
 
 const driverTree = computed(() => buildCollectorDriverTree(drivers.value, search.value))
-const expandedCategoryKeys = computed(() => driverTree.value.map((node) => node.id))
+const expandedFamilyKeys = computed(() => driverTree.value.map((node) => node.id))
 const selectedDriver = computed(() =>
   drivers.value.find((driver) => driver.driverId === driverId.value),
 )
@@ -334,9 +331,6 @@ async function save() {
   font-size: 10px;
   font-style: normal;
   text-align: center;
-}
-.collector-wizard__tree-node.is-category strong {
-  font-size: 13px;
 }
 .collector-wizard__config {
   display: flex;

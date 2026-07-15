@@ -21,7 +21,7 @@ export type CollectorConnectionGroup = {
 
 export type CollectorDriverTreeNode = {
   id: string
-  type: 'category' | 'family' | 'driver'
+  type: 'family' | 'driver'
   label: string
   protocolFamily?: string
   driver?: CollectorDriverSummary
@@ -56,8 +56,6 @@ const categoryLabels: Record<string, string> = {
   custom: 'Custom Protocol [自定义协议]',
   industrial: 'Industrial [工业协议]',
 }
-
-const categoryOrder = ['plc', 'fieldbus', 'opc', 'instrument', 'robot', 'cnc', 'sensor', 'custom']
 
 const driverChineseLabels: Record<string, string> = {
   'opcua.standard': '标准客户端',
@@ -112,56 +110,43 @@ export function buildCollectorDriverTree(
   search = '',
 ): CollectorDriverTreeNode[] {
   const keyword = search.trim().toLowerCase()
-  const categories = new Map<string, Map<string, CollectorDriverSummary[]>>()
+  const families = new Map<string, CollectorDriverSummary[]>()
 
   for (const driver of drivers) {
-    const category = driver.category.trim().toLowerCase() || 'industrial'
     const family = driver.protocolFamily.trim().toLowerCase() || 'unknown'
-    const categoryLabel = formatCollectorCategoryLabel(category)
     const familyLabel = formatCollectorProtocolFamily(family)
     const driverLabel = formatCollectorDriverDisplayName(driver)
+    // 分类仅作为搜索元数据，避免在用户目录中增加存在歧义的额外层级。
+    const category = driver.category.trim().toLowerCase() || 'industrial'
+    const categoryLabel = formatCollectorCategoryLabel(category)
     const matches = [category, categoryLabel, family, familyLabel, driver.driverId, driverLabel]
       .join(' ')
       .toLowerCase()
       .includes(keyword)
     if (keyword && !matches) continue
 
-    const families = categories.get(category) || new Map<string, CollectorDriverSummary[]>()
     const familyDrivers = families.get(family) || []
     familyDrivers.push(driver)
     families.set(family, familyDrivers)
-    categories.set(category, families)
   }
 
-  return [...categories.entries()]
-    .sort(([left], [right]) => {
-      const leftIndex = categoryOrder.indexOf(left)
-      const rightIndex = categoryOrder.indexOf(right)
-      return (
-        (leftIndex < 0 ? categoryOrder.length : leftIndex) -
-          (rightIndex < 0 ? categoryOrder.length : rightIndex) || left.localeCompare(right)
-      )
-    })
-    .map(([category, families]) => ({
-      id: `category:${category}`,
-      type: 'category' as const,
-      label: formatCollectorCategoryLabel(category),
-      children: [...families.entries()]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([family, familyDrivers]) => ({
-          id: `family:${category}:${family}`,
-          type: 'family' as const,
-          label: formatCollectorProtocolFamily(family),
+  return [...families.entries()]
+    .sort(([left], [right]) =>
+      formatCollectorProtocolFamily(left).localeCompare(formatCollectorProtocolFamily(right)),
+    )
+    .map(([family, familyDrivers]) => ({
+      id: `family:${family}`,
+      type: 'family' as const,
+      label: formatCollectorProtocolFamily(family),
+      protocolFamily: family,
+      children: familyDrivers
+        .sort((left, right) => left.displayName.localeCompare(right.displayName))
+        .map((driver) => ({
+          id: driver.driverId,
+          type: 'driver' as const,
+          label: formatCollectorDriverDisplayName(driver),
           protocolFamily: family,
-          children: familyDrivers
-            .sort((left, right) => left.displayName.localeCompare(right.displayName))
-            .map((driver) => ({
-              id: driver.driverId,
-              type: 'driver' as const,
-              label: formatCollectorDriverDisplayName(driver),
-              protocolFamily: family,
-              driver,
-            })),
+          driver,
         })),
     }))
 }
