@@ -3,10 +3,7 @@
     <header class="industrial-workbench__toolbar">
       <div class="industrial-workbench__title">
         <span class="industrial-workbench__title-icon"><IconTablerCpu /></span>
-        <div>
-          <h1>工业采集</h1>
-          <p>统一管理工业协议连接、变量配置、设备浏览与开发态调试</p>
-        </div>
+        <h1>工业采集</h1>
       </div>
       <div class="industrial-workbench__toolbar-actions">
         <div class="industrial-workbench__agent">
@@ -40,7 +37,11 @@
         <template v-if="activeConnection">
           <header class="industrial-workbench__connection-head">
             <div class="industrial-workbench__identity">
-              <span class="industrial-workbench__mark"><IconTablerCpu /></span>
+              <span class="industrial-workbench__mark"
+                ><CollectorDriverIcon
+                  :protocol-family="activeConnection.protocolFamily"
+                  :driver-id="activeConnection.driverId"
+              /></span>
               <div>
                 <div class="industrial-workbench__name-row">
                   <h2>{{ activeConnection.name }}</h2>
@@ -51,7 +52,9 @@
                 <p>
                   <span>{{ formatCollectorProtocolFamily(activeConnection.protocolFamily) }}</span>
                   <span>{{ activeConnection.driverId }}@{{ activeConnection.driverVersion }}</span>
-                  <span>{{ selectedAgent?.name || '未选择调试代理' }}</span>
+                  <span>{{
+                    selectedAgent ? formatCollectorAgentName(selectedAgent) : '未选择调试代理'
+                  }}</span>
                 </p>
               </div>
             </div>
@@ -138,12 +141,17 @@ import { computed, ref } from 'vue'
 import { createCollectorPointsBatch, getCollectorConnection } from '@/api/collector.api'
 import type { CollectorAgent } from '@/api/schemas/collector-dev.schema'
 import type { CollectorConnection } from '@/api/schemas/collector.schema'
-import { agentSupportsOperation, formatCollectorProtocolFamily } from './collector-workbench-model'
+import {
+  agentSupportsOperation,
+  formatCollectorAgentName,
+  formatCollectorProtocolFamily,
+} from './collector-workbench-model'
 import IconTablerCpu from '~icons/tabler/cpu'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerTopologyStar3 from '~icons/tabler/topology-star-3'
 import CollectorAgentSelector from './CollectorAgentSelector.vue'
 import CollectorConnectionEditor from './CollectorConnectionEditor.vue'
+import CollectorDriverIcon from './CollectorDriverIcon.vue'
 import CollectorConnectionList from './CollectorConnectionList.vue'
 import CollectorConnectionWizard from './CollectorConnectionWizard.vue'
 import CollectorDiscoveryPanel from './CollectorDiscoveryPanel.vue'
@@ -270,11 +278,7 @@ async function createDiscoveredPoints(points: Record<string, unknown>[]) {
   font-size: 17px;
   line-height: 1.25;
 }
-.industrial-workbench__title p {
-  margin: 3px 0 0;
-  color: var(--dc-text-muted);
-  font-size: 11px;
-}
+
 .industrial-workbench__toolbar-actions {
   gap: 9px;
 }
@@ -284,18 +288,18 @@ async function createDiscoveredPoints(points: Record<string, unknown>[]) {
 }
 .industrial-workbench__agent {
   display: flex;
-  min-width: 210px;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 9px;
   margin-right: 4px;
 }
 .industrial-workbench__agent > span {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--dc-text-muted);
-  font-size: 10px;
+  color: var(--dc-text-secondary);
+  font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
 }
 .industrial-workbench__agent i {
   width: 7px;
@@ -500,9 +504,6 @@ async function createDiscoveredPoints(points: Record<string, unknown>[]) {
   .industrial-workbench__title p,
   .industrial-workbench__connection-state {
     display: none;
-  }
-  .industrial-workbench__agent {
-    min-width: 180px;
   }
 }
 </style>

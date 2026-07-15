@@ -1,10 +1,7 @@
 <template>
   <aside class="collector-connection-list">
     <div class="collector-connection-list__head">
-      <div>
-        <small>工业采集</small>
-        <strong>已配置连接</strong>
-      </div>
+      <strong>已配置连接</strong>
       <button type="button" aria-label="新增工业连接" @click="emit('create')">
         <IconTablerPlus />
       </button>
@@ -33,6 +30,7 @@
           <component
             :is="collapsedGroups.has(group.key) ? IconTablerChevronRight : IconTablerChevronDown"
           />
+          <CollectorDriverIcon :protocol-family="group.key" />
           <span>{{ group.label }}</span>
           <em>{{ group.items.length }}</em>
         </button>
@@ -83,6 +81,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { listCollectorConnections } from '@/api/collector.api'
 import type { CollectorConnection } from '@/api/schemas/collector.schema'
 import { groupCollectorConnections } from './collector-workbench-model'
+import CollectorDriverIcon from './CollectorDriverIcon.vue'
 import IconTablerChevronDown from '~icons/tabler/chevron-down'
 import IconTablerChevronRight from '~icons/tabler/chevron-right'
 import IconTablerPlus from '~icons/tabler/plus'
@@ -153,17 +152,6 @@ onMounted(() => reload())
   justify-content: space-between;
   padding: 0 2px;
 }
-.collector-connection-list__head > div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.collector-connection-list__head small {
-  color: var(--dc-text-muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-}
 .collector-connection-list__head strong {
   color: var(--dc-text);
   font-size: 16px;
@@ -199,7 +187,7 @@ onMounted(() => reload())
   display: grid;
   width: 100%;
   height: 34px;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
+  grid-template-columns: 16px 20px minmax(0, 1fr) auto;
   align-items: center;
   gap: 5px;
   padding: 0 7px;

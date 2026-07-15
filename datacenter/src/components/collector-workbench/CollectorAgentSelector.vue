@@ -9,11 +9,12 @@
     <el-option
       v-for="agent in agents"
       :key="agent.id"
+      :label="formatCollectorAgentName(agent)"
       :value="agent.id"
       :disabled="agent.status !== 'online'"
     >
-      <span>{{ agent.name }}</span
-      ><span class="collector-agent-option">{{ agent.status === 'online' ? '在线' : '离线' }}</span>
+      <span>{{ formatCollectorAgentName(agent) }}</span>
+      <span class="collector-agent-option">{{ agent.status === 'online' ? '在线' : '离线' }}</span>
     </el-option>
   </el-select>
 </template>
@@ -22,7 +23,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { getCollectorAgents } from '@/api/collector-dev.api'
 import type { CollectorAgent } from '@/api/schemas/collector-dev.schema'
-import { collectorAgentStorageKey } from './collector-workbench-model'
+import { collectorAgentStorageKey, formatCollectorAgentName } from './collector-workbench-model'
 
 const props = defineProps<{ modelValue?: string; projectId: string }>()
 const emit = defineEmits<{
@@ -84,7 +85,7 @@ onBeforeUnmount(() => {
 .collector-agent-option {
   float: right;
   margin-left: 20px;
-  color: #87929a;
+  color: var(--dc-text-muted);
   font-size: 12px;
 }
 </style>

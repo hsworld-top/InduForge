@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   agentSupportsOperation,
   collectorAgentStorageKey,
+  formatCollectorAgentName,
   formatCollectorProtocolFamily,
   groupCollectorConnections,
+  resolveCollectorDriverIconKey,
 } from '@/components/collector-workbench/collector-workbench-model'
 
 describe('industrial collector workbench model', () => {
@@ -46,6 +48,17 @@ describe('industrial collector workbench model', () => {
   })
   it('stores agent selection per project', () => {
     expect(collectorAgentStorageKey('project-1')).toBe('induforge:collector-agent:project-1')
+  })
+  it('uses readable agent labels instead of opaque ids', () => {
+    expect(formatCollectorAgentName({ ...agent, name: agent.id })).toBe(
+      'Windows 调试代理 · 127.0.0.1',
+    )
+    expect(formatCollectorAgentName({ ...agent, name: '车间开发机' })).toBe('车间开发机')
+  })
+  it('maps HSL driver icons and keeps unsupported protocols on fallback', () => {
+    expect(resolveCollectorDriverIconKey('modbus', 'modbus.tcp')).toBe('modbus')
+    expect(resolveCollectorDriverIconKey('plc', 'siemens.s7')).toBe('siemens')
+    expect(resolveCollectorDriverIconKey('opcua', 'opcua.standard')).toBeNull()
   })
   it('groups configured connections by protocol family', () => {
     const connection = {
