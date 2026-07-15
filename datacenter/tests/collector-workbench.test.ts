@@ -61,7 +61,7 @@ describe('industrial collector workbench model', () => {
     expect(resolveCollectorDriverIconKey('plc', 'siemens.s7')).toBe('siemens')
     expect(resolveCollectorDriverIconKey('opcua', 'opcua.standard')).toBeNull()
   })
-  it('builds a category, device family and driver tree with bilingual labels', () => {
+  it('builds a protocol family and driver tree with bilingual labels', () => {
     const drivers = [
       {
         protocolFamily: 'siemens',
@@ -92,12 +92,11 @@ describe('industrial collector workbench model', () => {
     ]
 
     const tree = buildCollectorDriverTree(drivers)
-    expect(tree[0]?.label).toBe('PLC [可编程控制器]')
-    expect(tree[0]?.children?.[0]?.label).toBe('Siemens Plc [西门子]')
-    expect(tree[0]?.children?.[0]?.children?.[0]?.label).toBe('Siemens S7 TCP [西门子 S7 以太网]')
-    expect(buildCollectorDriverTree(drivers, '串口')[0]?.children?.[0]?.protocolFamily).toBe(
-      'modbus',
-    )
+    const siemens = tree.find((node) => node.protocolFamily === 'siemens')
+    expect(siemens?.label).toBe('Siemens Plc [西门子]')
+    expect(siemens?.children?.[0]?.label).toBe('Siemens S7 TCP [西门子 S7 以太网]')
+    expect(buildCollectorDriverTree(drivers, 'PLC')[0]?.protocolFamily).toBe('siemens')
+    expect(buildCollectorDriverTree(drivers, '串口')[0]?.protocolFamily).toBe('modbus')
   })
   it('groups configured connections by protocol family', () => {
     const connection = {
@@ -130,3 +129,4 @@ describe('industrial collector workbench model', () => {
     expect(formatCollectorProtocolFamily('custom')).toBe('CUSTOM')
   })
 })
+
