@@ -1,4 +1,5 @@
 import request from '@/utils/request'
+import type { AxiosRequestConfig } from 'axios'
 import { z } from 'zod'
 import {
   CollectorConnectionPageSchema,
@@ -24,17 +25,26 @@ export type PageResult<T> = {
   pagination: { page: number; pageSize: number; total: number; totalPages: number }
 }
 
+const unwrapData = (value: unknown) => {
+  if (value && typeof value === 'object' && 'code' in value && 'data' in value) {
+    return (value as { data?: unknown }).data
+  }
+  return value
+}
+
+const requestData = async (config: AxiosRequestConfig): Promise<unknown> =>
+  unwrapData(await request(config))
 export async function listCollectorDrivers(
   params: Record<string, unknown>,
 ): Promise<PageResult<CollectorDriverSummary>> {
   return CollectorDriverPageSchema.parse(
-    await request({ url: '/data/collector/drivers', method: 'get', params }),
+    await requestData({ url: '/data/collector/drivers', method: 'get', params }),
   )
 }
 
 export async function getCollectorDriver(driverId: string): Promise<CollectorDriverDetail> {
   return CollectorDriverDetailSchema.parse(
-    await request({ url: `/data/collector/drivers/${driverId}`, method: 'get' }),
+    await requestData({ url: `/data/collector/drivers/${driverId}`, method: 'get' }),
   )
 }
 
@@ -43,7 +53,7 @@ export async function listCollectorConnections(
   params: Record<string, unknown>,
 ): Promise<PageResult<CollectorConnection>> {
   return CollectorConnectionPageSchema.parse(
-    await request({
+    await requestData({
       url: `/data/projects/${projectId}/collector/connections`,
       method: 'get',
       params,
@@ -56,7 +66,7 @@ export async function getCollectorConnection(
   connectionId: string,
 ): Promise<CollectorConnection> {
   return CollectorConnectionSchema.parse(
-    await request({
+    await requestData({
       url: `/data/projects/${projectId}/collector/connections/${connectionId}`,
       method: 'get',
     }),
@@ -68,7 +78,7 @@ export async function createCollectorConnection(
   data: Record<string, unknown>,
 ): Promise<CollectorConnection> {
   return CollectorConnectionSchema.parse(
-    await request({
+    await requestData({
       url: `/data/projects/${projectId}/collector/connections`,
       method: 'post',
       data,
@@ -82,7 +92,7 @@ export async function updateCollectorConnection(
   data: Record<string, unknown>,
 ): Promise<CollectorConnection> {
   return CollectorConnectionSchema.parse(
-    await request({
+    await requestData({
       url: `/data/projects/${projectId}/collector/connections/${connectionId}`,
       method: 'put',
       data,
@@ -94,7 +104,7 @@ export async function deleteCollectorConnection(
   projectId: string,
   connectionId: string,
 ): Promise<void> {
-  await request({
+  await requestData({
     url: `/data/projects/${projectId}/collector/connections/${connectionId}`,
     method: 'delete',
   })
@@ -105,7 +115,7 @@ export async function listCollectorPointGroups(
   connectionId: string,
   parentId?: string | null,
 ): Promise<CollectorPointGroup[]> {
-  const data = await request({
+  const data = await requestData({
     url: `/data/projects/${projectId}/collector/connections/${connectionId}/point-groups`,
     method: 'get',
     params: parentId ? { parentId } : {},
@@ -119,7 +129,7 @@ export async function createCollectorPointGroup(
   data: Record<string, unknown>,
 ): Promise<CollectorPointGroup> {
   return CollectorPointGroupSchema.parse(
-    await request({
+    await requestData({
       url: `/data/projects/${projectId}/collector/connections/${connectionId}/point-groups`,
       method: 'post',
       data,
@@ -133,7 +143,7 @@ export async function listCollectorPoints(
   params: Record<string, unknown>,
 ): Promise<PageResult<CollectorPoint>> {
   return CollectorPointPageSchema.parse(
-    await request({
+    await requestData({
       url: `/data/projects/${projectId}/collector/connections/${connectionId}/points`,
       method: 'get',
       params,
@@ -147,7 +157,7 @@ async function postPointBatch(
   action: string,
   data: unknown,
 ): Promise<CollectorPoint[]> {
-  const response = await request({
+  const response = await requestData({
     url: `/data/projects/${projectId}/collector/connections/${connectionId}/points/${action}`,
     method: 'post',
     data,
@@ -170,7 +180,7 @@ export async function deleteCollectorPointsBatch(
   connectionId: string,
   pointIds: string[],
 ): Promise<void> {
-  await request({
+  await requestData({
     url: `/data/projects/${projectId}/collector/connections/${connectionId}/points/delete-batch`,
     method: 'post',
     data: { pointIds },
@@ -182,7 +192,7 @@ export async function moveCollectorPointsBatch(
   pointIds: string[],
   groupId: string | null,
 ): Promise<void> {
-  await request({
+  await requestData({
     url: `/data/projects/${projectId}/collector/connections/${connectionId}/points/move-batch`,
     method: 'post',
     data: { pointIds, groupId },
@@ -201,7 +211,7 @@ export async function previewCollectorPointImport(
   data.append('page', String(page))
   data.append('pageSize', String(pageSize))
   return CollectorImportPreviewSchema.parse(
-    await request({
+    await requestData({
       url: `/data/projects/${projectId}/collector/connections/${connectionId}/points/import-preview`,
       method: 'post',
       data,
@@ -215,7 +225,7 @@ export async function commitCollectorPointImport(
   connectionId: string,
   importId: string,
 ): Promise<CollectorPoint[]> {
-  const response = await request({
+  const response = await requestData({
     url: `/data/projects/${projectId}/collector/connections/${connectionId}/points/import-commit`,
     method: 'post',
     data: { importId },
@@ -234,13 +244,17 @@ export async function createCollectorTask(
   },
 ): Promise<CollectorTask> {
   return CollectorTaskSchema.parse(
-    await request({ url: `/data/projects/${projectId}/collector-dev/tasks`, method: 'post', data }),
+    await requestData({
+      url: `/data/projects/${projectId}/collector-dev/tasks`,
+      method: 'post',
+      data,
+    }),
   )
 }
 
 export async function getCollectorTask(projectId: string, taskId: string): Promise<CollectorTask> {
   return CollectorTaskSchema.parse(
-    await request({
+    await requestData({
       url: `/data/projects/${projectId}/collector-dev/tasks/${taskId}`,
       method: 'get',
     }),
@@ -248,7 +262,7 @@ export async function getCollectorTask(projectId: string, taskId: string): Promi
 }
 
 export async function cancelCollectorTask(projectId: string, taskId: string): Promise<void> {
-  await request({
+  await requestData({
     url: `/data/projects/${projectId}/collector-dev/tasks/${taskId}`,
     method: 'delete',
   })

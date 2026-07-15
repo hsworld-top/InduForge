@@ -22,7 +22,12 @@ export const datacenterModules: DatacenterModuleMeta[] = [
   {
     id: 'access-source',
     label: '接入源',
-    description: '维护数据库与 MQTT 连接，并承载接入源二级工作台。',
+    description: '维护数据库、消息和接口类数据接入连接。',
+  },
+  {
+    id: 'industrial-collector',
+    label: '工业采集',
+    description: '管理工业协议连接、采集点位与开发态调试。',
   },
   {
     id: 'storage-policy',

@@ -72,14 +72,14 @@ func NewCollectorRepository(pool *pgxpool.Pool) *CollectorRepository {
 }
 
 func (r *CollectorRepository) ListConnections(ctx context.Context, projectID string, filter CollectorConnectionListFilter) ([]CollectorConnectionRecord, int, error) {
-	conditions := []string{"conn.project_id = $1", "conn.type = 'collector'", "conn.category = 'industrial'"}
+	conditions := []string{"collector.project_id = $1"}
 	args := []any{projectID}
 	add := func(condition string, value any) {
 		args = append(args, value)
 		conditions = append(conditions, fmt.Sprintf(condition, len(args)))
 	}
 	if value := strings.TrimSpace(filter.Search); value != "" {
-		add("(conn.name ILIKE $%[1]d OR collector.driver_id ILIKE $%[1]d OR collector.protocol_family ILIKE $%[1]d)", "%"+value+"%")
+		add("(collector.name ILIKE $%[1]d OR collector.driver_id ILIKE $%[1]d OR collector.protocol_family ILIKE $%[1]d)", "%"+value+"%")
 	}
 	if value := strings.TrimSpace(filter.ProtocolFamily); value != "" {
 		add("collector.protocol_family = $%d", value)
@@ -88,11 +88,11 @@ func (r *CollectorRepository) ListConnections(ctx context.Context, projectID str
 		add("collector.driver_id = $%d", value)
 	}
 	if filter.Enabled != nil {
-		add("conn.is_enabled = $%d", *filter.Enabled)
+		add("collector.enabled = $%d", *filter.Enabled)
 	}
-	orderColumn := map[string]string{"name": "conn.name", "driverId": "collector.driver_id", "createdAt": "conn.created_at", "updatedAt": "collector.updated_at"}[filter.SortBy]
+	orderColumn := map[string]string{"name": "collector.name", "driverId": "collector.driver_id", "createdAt": "collector.created_at", "updatedAt": "collector.updated_at"}[filter.SortBy]
 	if orderColumn == "" {
-		orderColumn = "conn.display_order"
+		orderColumn = "collector.display_order"
 	}
 	orderDirection := "ASC"
 	if strings.EqualFold(filter.SortOrder, "desc") {
@@ -100,15 +100,14 @@ func (r *CollectorRepository) ListConnections(ctx context.Context, projectID str
 	}
 	args = append(args, filter.PageSize, (filter.Page-1)*filter.PageSize)
 	query := fmt.Sprintf(`
-		SELECT conn.id, conn.project_id, conn.name, conn.status, conn.is_enabled, conn.display_order,
+		SELECT collector.id, collector.project_id, collector.name, collector.status, collector.enabled, collector.display_order,
 		       collector.protocol_family, collector.driver_id, collector.driver_version, collector.schema_version,
 		       collector.config, collector.metadata,
-		       COALESCE((SELECT jsonb_object_agg(secret_key, true) FROM data_collector_connection_secrets secret WHERE secret.connection_id = conn.id), '{}'::jsonb),
-		       conn.created_at, collector.updated_at, COUNT(*) OVER()::int
-		FROM data_connections conn
-		JOIN data_collector_connections collector ON collector.connection_id = conn.id AND collector.project_id = conn.project_id
+		       COALESCE((SELECT jsonb_object_agg(secret_key, true) FROM data_collector_connection_secrets secret WHERE secret.connection_id = collector.id), '{}'::jsonb),
+		       collector.created_at, collector.updated_at, COUNT(*) OVER()::int
+		FROM data_collector_connections collector
 		WHERE %s
-		ORDER BY %s %s, conn.id ASC
+		ORDER BY %s %s, collector.id ASC
 		LIMIT $%d OFFSET $%d`, strings.Join(conditions, " AND "), orderColumn, orderDirection, len(args)-1, len(args))
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -132,7 +131,7 @@ func (r *CollectorRepository) ListConnections(ctx context.Context, projectID str
 }
 
 func (r *CollectorRepository) GetConnection(ctx context.Context, projectID, connectionID string) (*CollectorConnectionRecord, error) {
-	record, err := scanCollectorConnection(r.pool.QueryRow(ctx, collectorConnectionSelect+` WHERE conn.project_id = $1 AND conn.id = $2 AND conn.type = 'collector' AND conn.category = 'industrial'`, projectID, connectionID))
+	record, err := scanCollectorConnection(r.pool.QueryRow(ctx, collectorConnectionSelect+` WHERE collector.project_id = $1 AND collector.id = $2`, projectID, connectionID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "工业采集连接不存在")
 	}
@@ -173,13 +172,9 @@ func (r *CollectorRepository) CreateConnection(ctx context.Context, params Creat
 		return nil, wrapUnifiedCollectorRepositoryError("开启连接创建事务失败", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	_, err = tx.Exec(ctx, `INSERT INTO data_connections (id, project_id, name, type, category, status, created_by, updated_by) VALUES ($1,$2,$3,'collector','industrial','unknown',$4,$4)`, params.ID, params.ProjectID, params.Name, params.UserID)
+	_, err = tx.Exec(ctx, `INSERT INTO data_collector_connections (id, project_id, name, protocol_family, driver_id, driver_version, schema_version, config, metadata, created_by, updated_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$10)`, params.ID, params.ProjectID, params.Name, params.ProtocolFamily, params.DriverID, params.DriverVersion, params.SchemaVersion, string(configPayload), string(metadataPayload), params.UserID)
 	if err != nil {
-		return nil, translateCollectorWriteError("创建工业采集连接主表失败", err)
-	}
-	_, err = tx.Exec(ctx, `INSERT INTO data_collector_connections (connection_id, project_id, protocol_family, driver_id, driver_version, schema_version, config, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb)`, params.ID, params.ProjectID, params.ProtocolFamily, params.DriverID, params.DriverVersion, params.SchemaVersion, string(configPayload), string(metadataPayload))
-	if err != nil {
-		return nil, translateCollectorWriteError("创建工业采集连接扩展失败", err)
+		return nil, translateCollectorWriteError("创建工业采集连接失败", err)
 	}
 	if err := writeCollectorSecrets(ctx, tx, params.ID, params.Secrets, nil); err != nil {
 		return nil, err
@@ -204,16 +199,12 @@ func (r *CollectorRepository) UpdateConnection(ctx context.Context, params Updat
 		return nil, wrapUnifiedCollectorRepositoryError("开启连接更新事务失败", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	tag, err := tx.Exec(ctx, `UPDATE data_connections SET name=$3, is_enabled=$4, updated_by=$5, updated_at=now() WHERE id=$1 AND project_id=$2 AND type='collector' AND category='industrial'`, params.ID, params.ProjectID, params.Name, params.Enabled, params.UserID)
+	tag, err := tx.Exec(ctx, `UPDATE data_collector_connections SET name=$3, enabled=$4, config=$5::jsonb, metadata=$6::jsonb, updated_by=$7, updated_at=now() WHERE id=$1 AND project_id=$2`, params.ID, params.ProjectID, params.Name, params.Enabled, string(configPayload), string(metadataPayload), params.UserID)
 	if err != nil {
-		return nil, translateCollectorWriteError("更新工业采集连接主表失败", err)
+		return nil, translateCollectorWriteError("更新工业采集连接失败", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "工业采集连接不存在")
-	}
-	_, err = tx.Exec(ctx, `UPDATE data_collector_connections SET config=$3::jsonb, metadata=$4::jsonb, updated_at=now() WHERE connection_id=$1 AND project_id=$2`, params.ID, params.ProjectID, string(configPayload), string(metadataPayload))
-	if err != nil {
-		return nil, translateCollectorWriteError("更新工业采集连接扩展失败", err)
 	}
 	if err := writeCollectorSecrets(ctx, tx, params.ID, params.Secrets, params.DeleteSecretKeys); err != nil {
 		return nil, err
@@ -225,7 +216,7 @@ func (r *CollectorRepository) UpdateConnection(ctx context.Context, params Updat
 }
 
 func (r *CollectorRepository) DeleteConnection(ctx context.Context, projectID, connectionID string) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM data_connections WHERE id=$1 AND project_id=$2 AND type='collector' AND category='industrial'`, connectionID, projectID)
+	tag, err := r.pool.Exec(ctx, `DELETE FROM data_collector_connections WHERE id=$1 AND project_id=$2`, connectionID, projectID)
 	if err != nil {
 		return translateCollectorWriteError("删除工业采集连接失败", err)
 	}
@@ -236,13 +227,12 @@ func (r *CollectorRepository) DeleteConnection(ctx context.Context, projectID, c
 }
 
 const collectorConnectionSelect = `
-	SELECT conn.id, conn.project_id, conn.name, conn.status, conn.is_enabled, conn.display_order,
+	SELECT collector.id, collector.project_id, collector.name, collector.status, collector.enabled, collector.display_order,
 	       collector.protocol_family, collector.driver_id, collector.driver_version, collector.schema_version,
 	       collector.config, collector.metadata,
-	       COALESCE((SELECT jsonb_object_agg(secret_key, true) FROM data_collector_connection_secrets secret WHERE secret.connection_id = conn.id), '{}'::jsonb),
-	       conn.created_at, collector.updated_at
-	FROM data_connections conn
-	JOIN data_collector_connections collector ON collector.connection_id = conn.id AND collector.project_id = conn.project_id`
+	       COALESCE((SELECT jsonb_object_agg(secret_key, true) FROM data_collector_connection_secrets secret WHERE secret.connection_id = collector.id), '{}'::jsonb),
+	       collector.created_at, collector.updated_at
+	FROM data_collector_connections collector`
 
 type unifiedCollectorRow interface{ Scan(...any) error }
 

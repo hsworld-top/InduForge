@@ -36,17 +36,15 @@
       :project-id="projectId"
     />
 
-    <template v-else-if="activeModule === 'access-source'">
-      <IndustrialCollectorWorkbench
-        v-if="showIndustrialCollectorWorkbench && projectId"
-        :project-id="String(projectId)"
-        :create-on-open="industrialCreateOnOpen"
-        @back="closeIndustrialCollectorWorkbench"
-      />
+    <IndustrialCollectorWorkbench
+      v-else-if="activeModule === 'industrial-collector' && projectId"
+      :project-id="String(projectId)"
+    />
 
+    <template v-else-if="activeModule === 'access-source'">
       <!-- v2 workbench 路由：tab === 'workbench' 时挂新容器 -->
       <AccessSourceWorkbench
-        v-else-if="activeWorkbenchConnection && projectId"
+        v-if="activeWorkbenchConnection && projectId"
         :connection="activeWorkbenchConnection"
         :project-id="String(projectId)"
         @back="handleWorkbenchBack"
@@ -282,7 +280,6 @@
     :mode="connectionDialogMode"
     :connection="currentConnection"
     :project-id="projectId"
-    @industrial="openIndustrialCollectorCreation"
     @submit="handleConnectionSubmit"
   />
 
@@ -359,6 +356,7 @@ const projectStore = useProjectStore()
 const VALID_MODULES = new Set<V2ModuleId>([
   'datapoint',
   'access-source',
+  'industrial-collector',
   'storage-policy',
   'compute',
   'alarm',
@@ -700,8 +698,6 @@ const handleCloseTab = (tabId) => {
   const index = tabs.value.findIndex((t) => t.id === tabId)
   if (index === -1) return
 
-  const tab = tabs.value[index]
-
   tabs.value.splice(index, 1)
 
   // 如果关闭的是当前激活的标签页，切换到最后一个标签页
@@ -889,8 +885,6 @@ const handleSelectConnection = (connection) => {
 
 /* 分页列表之外通过详情接口恢复工作台连接，保证深链接刷新仍可打开。 */
 const activeWorkbenchConnection = ref(null)
-const showIndustrialCollectorWorkbench = ref(false)
-const industrialCreateOnOpen = ref(false)
 let workbenchConnectionLoadVersion = 0
 watch(
   [
@@ -1102,18 +1096,6 @@ const openCreateConnectionDialog = () => {
   connectionDialogMode.value = 'create'
   currentConnection.value = null
   showConnectionDialog.value = true
-}
-
-/* 工业采集仍属于接入源类型；选择后进入工程级工作台并直接打开创建向导。 */
-const openIndustrialCollectorCreation = () => {
-  showConnectionDialog.value = false
-  industrialCreateOnOpen.value = true
-  showIndustrialCollectorWorkbench.value = true
-}
-
-const closeIndustrialCollectorWorkbench = () => {
-  showIndustrialCollectorWorkbench.value = false
-  industrialCreateOnOpen.value = false
 }
 
 /**

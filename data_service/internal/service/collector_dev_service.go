@@ -344,6 +344,15 @@ func optionalCollectorTime(value *time.Time) *string {
 func toCollectorAgent(record repository.CollectorDevAgentRecord, now time.Time) CollectorAgent {
 	capabilities := []CollectorProtocolCapability{}
 	_ = json.Unmarshal(record.Capabilities, &capabilities)
+	// 历史代理能力可能缺少数组字段，统一输出空数组，避免 JSON null 破坏前端契约。
+	for index := range capabilities {
+		if capabilities[index].SchemaVersions == nil {
+			capabilities[index].SchemaVersions = []int{}
+		}
+		if capabilities[index].Operations == nil {
+			capabilities[index].Operations = []string{}
+		}
+	}
 	return CollectorAgent{ID: record.ID, Name: record.Name, OS: record.OS, Arch: record.Arch, Version: record.Version, IPAddress: record.LastIP, Online: record.LastSeenAt != nil && now.Sub(*record.LastSeenAt) <= collectorOnlineWindow, Capabilities: capabilities, LastSeenAt: optionalCollectorTime(record.LastSeenAt), CreatedAt: formatCollectorTime(record.CreatedAt)}
 }
 func toCollectorTask(record repository.CollectorDevTaskRecord) CollectorTask {

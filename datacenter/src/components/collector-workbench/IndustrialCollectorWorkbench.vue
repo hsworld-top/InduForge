@@ -11,9 +11,6 @@
     <main class="industrial-workbench__main">
       <header class="industrial-workbench__header">
         <div class="industrial-workbench__identity">
-          <button class="industrial-workbench__back" type="button" @click="emit('back')">
-            <IconTablerArrowLeft />
-          </button>
           <span class="industrial-workbench__mark"><IconTablerCpu /></span>
           <div>
             <div class="industrial-workbench__eyebrow">
@@ -116,7 +113,6 @@ import { createCollectorPointsBatch, getCollectorConnection } from '@/api/collec
 import type { CollectorAgent } from '@/api/schemas/collector-dev.schema'
 import type { CollectorConnection } from '@/api/schemas/collector.schema'
 import { agentSupportsOperation } from './collector-workbench-model'
-import IconTablerArrowLeft from '~icons/tabler/arrow-left'
 import IconTablerCpu from '~icons/tabler/cpu'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerTopologyStar3 from '~icons/tabler/topology-star-3'
@@ -132,15 +128,13 @@ import CollectorPointTable from './CollectorPointTable.vue'
 const props = defineProps<{
   projectId: string
   connection?: { id: string }
-  createOnOpen?: boolean
 }>()
-const emit = defineEmits<{ back: [] }>()
 const selectedId = ref(props.connection?.id || '')
 const activeConnection = ref<CollectorConnection | null>(null)
 const agentId = ref('')
 const selectedAgent = ref<CollectorAgent>()
 const activeTab = ref('config')
-const wizardVisible = ref(Boolean(props.createOnOpen))
+const wizardVisible = ref(false)
 const importVisible = ref(false)
 const groupId = ref<string | null>(null)
 const selectedPointIds = ref<string[]>([])
@@ -219,22 +213,6 @@ async function createDiscoveredPoints(points: Record<string, unknown>[]) {
   min-width: 0;
   align-items: center;
   gap: 12px;
-}
-.industrial-workbench__back {
-  display: inline-flex;
-  width: 32px;
-  height: 32px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #d8e1e5;
-  border-radius: 8px;
-  background: #fff;
-  color: #51636d;
-  cursor: pointer;
-}
-.industrial-workbench__back:hover {
-  border-color: #91b6c6;
-  color: #1c6c8b;
 }
 .industrial-workbench__mark {
   display: inline-flex;

@@ -67,3 +67,33 @@ func TestEmbeddedMigrationsContainLegacyCollectorConversion(t *testing.T) {
 		t.Fatal("missing legacy data point source conversion")
 	}
 }
+
+func TestEmbeddedMigrationsContainCollectorDomainSplit(t *testing.T) {
+	payload, err := Files.ReadFile("0062_collector_domain_split.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	migration := string(payload)
+	for _, fragment := range []string{
+		"RENAME COLUMN connection_id TO id",
+		"ADD COLUMN name text",
+		"DELETE FROM data_connections",
+		"data_collector_connections_connection_fkey",
+	} {
+		if !strings.Contains(migration, fragment) {
+			t.Fatalf("missing collector domain split fragment %s", fragment)
+		}
+	}
+}
+func TestEmbeddedMigrationsContainCollectorConnectionTypeBoundary(t *testing.T) {
+	payload, err := Files.ReadFile("0063_collector_connection_type_boundary.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	migration := string(payload)
+	for _, forbiddenType := range []string{"'opcua'", "'modbus'", "'s7'", "'collector'"} {
+		if strings.Contains(migration, forbiddenType) {
+			t.Fatalf("generic connection constraint still contains collector type %s", forbiddenType)
+		}
+	}
+}

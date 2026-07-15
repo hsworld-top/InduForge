@@ -334,7 +334,6 @@ const typeOptions = [
   { label: '内置运行库', value: 'builtin' },
   { label: '数据库', value: 'database' },
   { label: '消息/流', value: 'stream' },
-  { label: '工业协议', value: 'industrial' },
 ]
 
 const typeLabel = computed(() => {
@@ -386,11 +385,6 @@ const resolveConnectionTypeLabel = (connection: AccessSourceConnection) => {
     websocket: 'WebSocket',
     http: 'HTTP',
     redis: 'Redis',
-    opcua: 'OPC UA',
-    opcda: 'OPC DA',
-    s7: 'Siemens S7',
-    modbus: 'Modbus',
-    collector: '工业采集',
     tdengine: 'TDengine',
   }
   return labels[connection.type || ''] || connection.type || '未知类型'
@@ -819,12 +813,6 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
   color: #c2410c;
 }
 
-.access-source-workspace__source-icon.is-industrial {
-  border-color: #e2e8f0;
-  background: #f1f5f9;
-  color: #475569;
-}
-
 .access-source-workspace__source-icon svg {
   width: 16px;
   height: 16px;
@@ -878,12 +866,6 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
   border-color: #ffedd5;
   background: #fff7ed;
   color: #c2410c;
-}
-
-.access-source-workspace__type-badge.is-industrial {
-  border-color: #e2e8f0;
-  background: #f1f5f9;
-  color: #475569;
 }
 
 .access-source-workspace__endpoint {

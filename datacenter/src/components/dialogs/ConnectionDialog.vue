@@ -34,24 +34,6 @@
           </div>
         </div>
         <div class="connection-dialog__type-section">
-          <div class="connection-dialog__section-title">工业设备</div>
-          <button
-            type="button"
-            class="connection-dialog__industrial-card"
-            @click="selectSourceAndAdvance('collector')"
-          >
-            <span class="connection-dialog__industrial-icon"><IconTablerCpu /></span>
-            <span class="connection-dialog__industrial-copy">
-              <strong>工业采集</strong>
-              <span>统一接入 OPC UA、Modbus、Siemens S7 及后续工业协议</span>
-            </span>
-            <span class="connection-dialog__industrial-tags">
-              <em>统一驱动</em><em>离线建模</em><em>代理调试</em>
-            </span>
-            <IconTablerChevronRight class="connection-dialog__industrial-arrow" />
-          </button>
-        </div>
-        <div class="connection-dialog__type-section">
           <div class="connection-dialog__section-title">外部数据源</div>
           <div class="connection-dialog__step1-grid">
             <button
@@ -1230,8 +1212,6 @@ import IconTablerServer from '~icons/tabler/server'
 import IconTablerWorldWww from '~icons/tabler/world-www'
 import IconTablerWebhook from '~icons/tabler/webhook'
 import IconTablerBolt from '~icons/tabler/bolt'
-import IconTablerChevronRight from '~icons/tabler/chevron-right'
-import IconTablerCpu from '~icons/tabler/cpu'
 import IconTablerRadio from '~icons/tabler/radio'
 import IconTablerTimeline from '~icons/tabler/timeline'
 import MysqlConnectionForm from '../connection/forms/MysqlConnectionForm.vue'
@@ -1264,7 +1244,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['update:modelValue', 'submit', 'industrial'])
+const emit = defineEmits(['update:modelValue', 'submit'])
 const tc = (key: string, params?: Record<string, any>) => t(key, params)
 
 const visible = computed({
@@ -1277,11 +1257,6 @@ const step = ref<1 | 2>(props.mode === 'edit' ? 2 : 1)
 
 // 点击协议卡进入 Step 2
 const selectSourceAndAdvance = (value: string) => {
-  if (value === 'collector') {
-    emit('industrial')
-    visible.value = false
-    return
-  }
   selectSource(value)
   step.value = 2
   emptyFormSignature.value = formInputSignature.value
@@ -2889,84 +2864,6 @@ watch(
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 12px;
-}
-
-.connection-dialog__industrial-card {
-  display: grid;
-  width: 100%;
-  grid-template-columns: 48px minmax(0, 1fr) auto 20px;
-  gap: 14px;
-  align-items: center;
-  padding: 16px 18px;
-  border: 1px solid color-mix(in oklch, var(--dc-primary) 26%, var(--dc-border));
-  border-radius: var(--dc-radius-md);
-  background:
-    linear-gradient(100deg, color-mix(in oklch, var(--dc-primary) 9%, white), transparent 58%),
-    var(--dc-surface-raised);
-  color: var(--dc-text);
-  cursor: pointer;
-  text-align: left;
-  transition:
-    border-color 0.18s ease,
-    box-shadow 0.18s ease,
-    transform 0.18s ease;
-}
-
-.connection-dialog__industrial-card:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in oklch, var(--dc-primary) 52%, var(--dc-border));
-  box-shadow: 0 10px 24px rgb(15 76 102 / 10%);
-}
-
-.connection-dialog__industrial-icon {
-  display: inline-flex;
-  width: 48px;
-  height: 48px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 12px;
-  background: var(--dc-primary);
-  color: white;
-}
-
-.connection-dialog__industrial-icon svg {
-  width: 25px;
-  height: 25px;
-}
-
-.connection-dialog__industrial-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.connection-dialog__industrial-copy strong {
-  font-size: 15px;
-}
-
-.connection-dialog__industrial-copy span {
-  color: var(--dc-text-secondary);
-  font-size: 12px;
-}
-
-.connection-dialog__industrial-tags {
-  display: flex;
-  gap: 6px;
-}
-
-.connection-dialog__industrial-tags em {
-  padding: 4px 7px;
-  border-radius: 999px;
-  background: color-mix(in oklch, var(--dc-primary) 9%, white);
-  color: var(--dc-primary);
-  font-size: 10px;
-  font-style: normal;
-  font-weight: 700;
-}
-
-.connection-dialog__industrial-arrow {
-  color: var(--dc-text-muted);
 }
 
 .connection-dialog__step1-card {

@@ -156,7 +156,7 @@ func (s *ConnectionService) ListConnectionsPage(ctx context.Context, projectID, 
 		return nil, 0, err
 	}
 	if filter.TypeGroup != "" && filter.TypeGroup != "all" {
-		validTypeGroups := map[string]struct{}{"builtin": {}, "database": {}, "stream": {}, "industrial": {}}
+		validTypeGroups := map[string]struct{}{"builtin": {}, "database": {}, "stream": {}}
 		if _, ok := validTypeGroups[filter.TypeGroup]; !ok {
 			return nil, 0, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "typeGroup 参数格式无效")
 		}
@@ -460,7 +460,7 @@ func (s *ConnectionService) TestConnection(ctx context.Context, projectID string
 func normalizeConnectionTestType(connectionType string) (string, error) {
 	connectionType = strings.TrimSpace(strings.ToLower(connectionType))
 	switch connectionType {
-	case "relational", "kafka", "http", "websocket", "redis", "opcua", "modbus":
+	case "relational", "kafka", "http", "websocket", "redis":
 		return connectionType, nil
 	default:
 		if displayName, ok := reservedPhase2ConnectionTypes[connectionType]; ok {
@@ -1624,7 +1624,7 @@ func deriveStoredConnectionCategory(connectionType string) string {
 		return "message"
 	case "builtin.relation", "builtin.timeseries", "builtin.realtime", "builtin.message":
 		return "builtin"
-	case "kafka", "http", "websocket", "redis", "opcua", "modbus", "s7", "tdengine":
+	case "kafka", "http", "websocket", "redis", "tdengine":
 		return "protocol"
 	default:
 		return ""

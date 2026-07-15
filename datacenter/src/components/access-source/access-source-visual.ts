@@ -1,10 +1,9 @@
-import IconTablerCpu from '~icons/tabler/cpu'
 import IconTablerDatabase from '~icons/tabler/database'
 import IconTablerMessages from '~icons/tabler/messages'
 import IconTablerPlugConnected from '~icons/tabler/plug-connected'
 import IconTablerWorldWww from '~icons/tabler/world-www'
 
-export type AccessSourceVisualCategory = 'builtin' | 'database' | 'stream' | 'industrial' | 'other'
+export type AccessSourceVisualCategory = 'builtin' | 'database' | 'stream' | 'other'
 
 const builtinTypes = new Set([
   'builtin.relation',
@@ -21,8 +20,6 @@ const databaseTypes = new Set([
   'redis',
 ])
 const messageStreamTypes = new Set(['mqtt', 'kafka'])
-const industrialTypes = new Set(['collector', 'opcua', 'opcda', 's7', 'modbus'])
-
 export const resolveAccessSourceVisual = (type?: string) => {
   const normalizedType = type || ''
   if (builtinTypes.has(normalizedType)) {
@@ -39,13 +36,6 @@ export const resolveAccessSourceVisual = (type?: string) => {
   }
   if (normalizedType === 'websocket') {
     return { category: 'stream' as const, icon: IconTablerPlugConnected }
-  }
-  if (
-    industrialTypes.has(normalizedType) ||
-    normalizedType.includes('opc') ||
-    normalizedType.includes('modbus')
-  ) {
-    return { category: 'industrial' as const, icon: IconTablerCpu }
   }
   return { category: 'other' as const, icon: IconTablerPlugConnected }
 }

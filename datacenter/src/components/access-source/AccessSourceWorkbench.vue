@@ -21,7 +21,6 @@ import KafkaWorkbenchPanel from './workbench/KafkaWorkbenchPanel.vue'
 import HttpWorkbenchPanel from './workbench/http/HttpWorkbenchPanel.vue'
 import WebSocketWorkbenchPanel from './workbench/websocket/WebSocketWorkbenchPanel.vue'
 import RealtimeStoreWorkbench from './workbench/realtime/RealtimeStoreWorkbench.vue'
-import IndustrialCollectorWorkbench from '@/components/collector-workbench/IndustrialCollectorWorkbench.vue'
 import ReadOnlyConfigPanel from './workbench/ReadOnlyConfigPanel.vue'
 import BuiltinRelationWorkbench from './workbench/BuiltinRelationWorkbench.vue'
 import BuiltinTimeseriesWorkbench from './workbench/BuiltinTimeseriesWorkbench.vue'
@@ -51,8 +50,6 @@ defineEmits<{
 /* 按协议类型选对应子壳 */
 const resolvedPanel = computed(() => {
   const type = props.connection.type || ''
-  if (type === 'collector' && props.connection.category === 'industrial')
-    return IndustrialCollectorWorkbench
   if (type === 'builtin.relation') return BuiltinRelationWorkbench
   if (type === 'builtin.timeseries') return BuiltinTimeseriesWorkbench
   if (type === 'builtin.realtime') return RealtimeStoreWorkbench

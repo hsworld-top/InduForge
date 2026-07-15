@@ -28,10 +28,6 @@
           {{ resolveConnectionEndpoint(connection) }}
         </span>
       </div>
-      <div v-if="isIndustrialConnection" class="access-source-card__health">
-        <span>{{ variableCountSummary }}</span>
-        <span>{{ redundancySummary }}</span>
-      </div>
     </div>
 
     <div class="access-source-card__bottom">
@@ -65,7 +61,6 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import IconTablerArrowRight from '~icons/tabler/arrow-right'
 import IconTablerSettings from '~icons/tabler/settings'
 import IconTablerTrash from '~icons/tabler/trash'
@@ -96,7 +91,7 @@ type AccessSourceConnection = {
   config?: Record<string, unknown>
 }
 
-const props = defineProps<{
+defineProps<{
   connection: AccessSourceConnection
   active: boolean
 }>()
@@ -116,10 +111,6 @@ const builtinTypes = new Set([
   'builtin.realtime',
   'builtin.message',
 ])
-
-const resolveConnectionCategory = (connection: AccessSourceConnection) => {
-  return resolveAccessSourceVisual(connection.type).category
-}
 
 const resolveConnectionVisual = (connection: AccessSourceConnection) => {
   return resolveAccessSourceVisual(connection.type)
@@ -150,11 +141,6 @@ const resolveConnectionType = (connection: AccessSourceConnection) => {
     http: 'HTTP Source',
     websocket: 'WebSocket',
     redis: 'Redis',
-    opcua: 'OPC UA',
-    opcda: 'OPC DA',
-    s7: 'Siemens S7',
-    modbus: 'Modbus',
-    collector: '工业采集',
     tdengine: 'TDengine',
   }
   if (connection.type && protocolLabels[connection.type]) {
@@ -198,46 +184,11 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
       [config['address'], config['keyPattern'] || '*'].filter(Boolean).join(' / ') || '未配置 Redis'
     )
   }
-  if (connection.type === 'opcua') {
-    return (
-      [config['endpoint'], config['securityMode'] || 'none'].filter(Boolean).join(' / ') ||
-      '未配置 OPC UA'
-    )
-  }
-  if (connection.type === 'opcda') {
-    return String(config['serverProgId'] || config['host'] || '未配置 OPC DA')
-  }
-  if (connection.type === 's7') {
-    return [config['host'], config['port']].filter(Boolean).join(':') || '未配置 S7'
-  }
-  if (connection.type === 'modbus') {
-    if (config['mode'] === 'rtu') return 'RTU / 串口配置'
-    return [config['host'], config['port']].filter(Boolean).join(':') || '未配置 Modbus'
-  }
   if (connection.type === 'tdengine') {
     return [config['dsn'], config['database']].filter(Boolean).join(' / ') || '未配置 TDengine'
   }
   return '等待接入配置'
 }
-
-const isIndustrialConnection = computed(
-  () => resolveConnectionCategory(props.connection) === 'industrial',
-)
-
-const variableCountSummary = computed(() => {
-  const variableCount = Number(props.connection.variableCount ?? 0)
-  const issueCount = Number(props.connection.issueCount ?? 0)
-  const issueText = issueCount > 0 ? ` / 问题${issueCount}` : ''
-  return `变量：${variableCount}${issueText}`
-})
-
-const redundancySummary = computed(() => {
-  const redundancy = props.connection.config?.['redundancy'] as Record<string, any> | undefined
-  if (!redundancy?.enabled) return '设备冗余：无'
-  const endpoints = Array.isArray(redundancy.endpoints) ? redundancy.endpoints : []
-  const enabledCount = endpoints.filter((endpoint) => endpoint?.enabled !== false).length
-  return enabledCount > 1 ? '设备冗余：主备' : '设备冗余：待补'
-})
 </script>
 
 <style scoped>
@@ -310,12 +261,6 @@ const redundancySummary = computed(() => {
   color: #c2410c;
 }
 
-.access-source-card__icon.is-industrial {
-  border-color: #e2e8f0;
-  background: #f1f5f9;
-  color: #475569;
-}
-
 .access-source-card__icon svg {
   width: 18px;
   height: 18px;
@@ -373,12 +318,6 @@ const redundancySummary = computed(() => {
   color: #c2410c;
 }
 
-.access-source-card__type-badge.is-industrial {
-  border-color: #e2e8f0;
-  background: #f1f5f9;
-  color: #475569;
-}
-
 .access-source-card__type
   span:not(.access-source-card__divider):not(.access-source-card__endpoint) {
   min-width: 0;
@@ -397,27 +336,6 @@ const redundancySummary = computed(() => {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.access-source-card__health {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 10px;
-}
-
-.access-source-card__health span {
-  max-width: 100%;
-  min-height: 20px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 6px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface-subtle);
-  color: var(--dc-text-muted);
-  font-size: 11px;
   white-space: nowrap;
 }
 

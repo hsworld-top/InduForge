@@ -3,6 +3,7 @@
 // v2 模块 ID 常量
 export const MODULE_DATAPOINT = 'datapoint' as const
 export const MODULE_ACCESS_SOURCE = 'access-source' as const
+export const MODULE_INDUSTRIAL_COLLECTOR = 'industrial-collector' as const
 export const MODULE_STORAGE_POLICY = 'storage-policy' as const
 export const MODULE_COMPUTE = 'compute' as const
 export const MODULE_ALARM = 'alarm' as const
@@ -10,6 +11,7 @@ export const MODULE_ALARM = 'alarm' as const
 export type V2ModuleId =
   | typeof MODULE_DATAPOINT
   | typeof MODULE_ACCESS_SOURCE
+  | typeof MODULE_INDUSTRIAL_COLLECTOR
   | typeof MODULE_STORAGE_POLICY
   | typeof MODULE_COMPUTE
   | typeof MODULE_ALARM
@@ -18,6 +20,7 @@ export type V2ModuleId =
 export const V2_MODULE_IDS: readonly V2ModuleId[] = [
   MODULE_DATAPOINT,
   MODULE_ACCESS_SOURCE,
+  MODULE_INDUSTRIAL_COLLECTOR,
   MODULE_STORAGE_POLICY,
   MODULE_COMPUTE,
   MODULE_ALARM,
@@ -47,7 +50,7 @@ const DEFAULT_DEBUG_ROUTE_ENABLED =
  * 数据中心路由配置工厂。
  *
  * v2 路由结构：
- *   /datacenter/:module(datapoint|access-source|storage-policy|compute|alarm)/:objectId?/:tab?
+ *   /datacenter/:module(datapoint|access-source|industrial-collector|storage-policy|compute|alarm)/:objectId?/:tab?
  *   /datacenter/debug/:module(...)/:objectId?/:tab?
  *
  * 旧模块 ID 通过 redirect 兼容：
@@ -73,7 +76,7 @@ export function createDatacenterRoutes({
     },
     // v2 正式模块路由
     {
-      path: '/:module(datapoint|access-source|storage-policy|compute|alarm)/:objectId?/:tab?',
+      path: '/:module(datapoint|access-source|industrial-collector|storage-policy|compute|alarm)/:objectId?/:tab?',
       name: 'datacenter',
       component: DataCenterComponent,
       meta: {
@@ -83,8 +86,7 @@ export function createDatacenterRoutes({
     },
     // 旧模块 ID 兼容 redirect（旧链接不白屏）
     {
-      path:
-        '/:legacyModule(datapoints|access-sources|storage-policies|compute-units|alarm-units)/:rest(.*)?',
+      path: '/:legacyModule(datapoints|access-sources|storage-policies|compute-units|alarm-units)/:rest(.*)?',
       redirect: (to: { params: Record<string, string> }) => {
         const legacyId = to.params.legacyModule as string
         const newId = LEGACY_MODULE_ID_MAP[legacyId] ?? DEFAULT_MODULE
@@ -103,7 +105,7 @@ export function createDatacenterRoutes({
       },
       // v2 debug 模块路由
       {
-        path: '/debug/:module(datapoint|access-source|storage-policy|compute|alarm)/:objectId?/:tab?',
+        path: '/debug/:module(datapoint|access-source|industrial-collector|storage-policy|compute|alarm)/:objectId?/:tab?',
         name: 'datacenter-debug',
         component: DataCenterComponent,
         meta: {
@@ -113,8 +115,7 @@ export function createDatacenterRoutes({
       },
       // debug 旧模块 ID 兼容 redirect
       {
-        path:
-          '/debug/:legacyModule(datapoints|access-sources|storage-policies|compute-units|alarm-units)/:rest(.*)?',
+        path: '/debug/:legacyModule(datapoints|access-sources|storage-policies|compute-units|alarm-units)/:rest(.*)?',
         redirect: (to: { params: Record<string, string> }) => {
           const legacyId = to.params.legacyModule as string
           const newId = LEGACY_MODULE_ID_MAP[legacyId] ?? DEFAULT_MODULE

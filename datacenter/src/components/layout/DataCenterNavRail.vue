@@ -27,6 +27,7 @@ import IconTablerBellRinging from '~icons/tabler/bell-ringing'
 import IconTablerChartDots3 from '~icons/tabler/chart-dots-3'
 import IconTablerDatabaseCog from '~icons/tabler/database-cog'
 import IconTablerFunction from '~icons/tabler/function'
+import IconTablerCpu from '~icons/tabler/cpu'
 import IconTablerRouter from '~icons/tabler/router'
 import type { DatacenterModuleId, DatacenterModuleMeta } from '@/config/datacenterModules'
 
@@ -43,6 +44,7 @@ defineEmits<{
 const moduleIcons: Record<string, unknown> = {
   datapoint: IconTablerChartDots3,
   'access-source': IconTablerRouter,
+  'industrial-collector': IconTablerCpu,
   'storage-policy': IconTablerDatabaseCog,
   compute: IconTablerFunction,
   alarm: IconTablerBellRinging,

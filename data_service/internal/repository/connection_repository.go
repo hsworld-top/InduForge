@@ -134,12 +134,6 @@ func translateConnectionWriteError(message string, err error) error {
 // 查询路径固定为 project_id；display_order 是用户在接入源面板拖拽后的持久化顺序。
 func (r *ConnectionRepository) ListByProject(ctx context.Context, projectID string) ([]ConnectionRecord, error) {
 	rows, err := r.pool.Query(ctx, `
-		WITH variable_count_by_connection AS (
-			SELECT project_id, connection_id, COUNT(*)::int AS variable_count
-			FROM data_collector_points
-			WHERE project_id = $1
-			GROUP BY project_id, connection_id
-		)
 		SELECT conn.id,
 		       conn.project_id,
 		       conn.name,
@@ -148,12 +142,10 @@ func (r *ConnectionRepository) ListByProject(ctx context.Context, projectID stri
 		       conn.status,
 		       conn.metadata,
 		       conn.display_order,
-		       COALESCE(vc.variable_count, 0) AS variable_count,
+		       0 AS variable_count,
 		       conn.created_at,
 		       conn.updated_at
 		FROM data_connections conn
-		LEFT JOIN variable_count_by_connection vc
-		  ON vc.project_id = conn.project_id AND vc.connection_id = conn.id
 		WHERE conn.project_id = $1
 		ORDER BY conn.display_order ASC, conn.created_at ASC
     `, projectID)
@@ -196,8 +188,6 @@ func (r *ConnectionRepository) ListByProjectPage(ctx context.Context, projectID 
 		conditions = append(conditions, "conn.type IN ('relational', 'mysql', 'postgresql', 'sqlserver', 'tdengine', 'redis')")
 	case "stream":
 		conditions = append(conditions, "conn.type IN ('mqtt', 'kafka', 'websocket', 'http')")
-	case "industrial":
-		conditions = append(conditions, "(conn.type IN ('opcua', 'opcda', 's7', 'modbus') OR conn.type LIKE 'opc%' OR conn.type LIKE 'modbus%')")
 	}
 
 	whereClause := strings.Join(conditions, " AND ")
@@ -208,16 +198,10 @@ func (r *ConnectionRepository) ListByProjectPage(ctx context.Context, projectID 
 
 	listArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
 	listQuery := fmt.Sprintf(`
-		WITH variable_count_by_connection AS (
-			SELECT project_id, connection_id, COUNT(*)::int AS variable_count
-			FROM data_collector_points WHERE project_id = $1 GROUP BY project_id, connection_id
-		)
 		SELECT conn.id, conn.project_id, conn.name, conn.type, conn.category, conn.status,
-		       conn.metadata, conn.display_order, COALESCE(vc.variable_count, 0) AS variable_count,
+		       conn.metadata, conn.display_order, 0 AS variable_count,
 		       conn.created_at, conn.updated_at
 		FROM data_connections conn
-		LEFT JOIN variable_count_by_connection vc
-		  ON vc.project_id = conn.project_id AND vc.connection_id = conn.id
 		WHERE %s
 		ORDER BY conn.display_order ASC, conn.created_at ASC
 		LIMIT $%d OFFSET $%d
