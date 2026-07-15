@@ -2,6 +2,8 @@ namespace InduForge.Collector.DevAgent;
 
 internal sealed class AgentWorker : IAsyncDisposable
 {
+    private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan TaskPollingInterval = TimeSpan.FromSeconds(2);
     private readonly CenterApiClient _apiClient;
     private readonly CollectorTaskExecutor _taskExecutor;
     private readonly IReadOnlyList<AgentProtocolCapability> _capabilities;
@@ -42,18 +44,40 @@ internal sealed class AgentWorker : IAsyncDisposable
     private async Task RunAsync(AgentCredentials credentials, CancellationToken cancellationToken)
     {
         var heartbeatAt = DateTimeOffset.MinValue;
-        var retryDelay = TimeSpan.FromSeconds(1);
+        var heartbeatFailureCount = 0;
         while (!cancellationToken.IsCancellationRequested)
         {
-            try
+            if (DateTimeOffset.UtcNow >= heartbeatAt)
             {
-                if (DateTimeOffset.UtcNow >= heartbeatAt)
+                try
                 {
                     await _apiClient.HeartbeatAsync(credentials, new AgentHeartbeatRequest(_capabilities), cancellationToken).ConfigureAwait(false);
-                    heartbeatAt = DateTimeOffset.UtcNow.AddSeconds(15);
+                    heartbeatFailureCount = 0;
+                    heartbeatAt = DateTimeOffset.UtcNow.Add(HeartbeatInterval);
                     await _onUpdate(new AgentWorkerUpdate(AgentConnectionState.Connected, "空闲", "心跳成功", DateTimeOffset.Now, false)).ConfigureAwait(false);
                 }
+                catch (CenterApiException exception) when (exception.IsCredentialInvalid)
+                {
+                    await NotifyCredentialsInvalidAsync(exception).ConfigureAwait(false);
+                    return;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception exception)
+                {
+                    heartbeatFailureCount++;
+                    var retryDelay = HeartbeatRetrySchedule.GetDelay(heartbeatFailureCount);
+                    heartbeatAt = DateTimeOffset.UtcNow.Add(retryDelay);
+                    await _onUpdate(new AgentWorkerUpdate(AgentConnectionState.Disconnected, "空闲", $"心跳失败，{retryDelay.TotalSeconds:0} 秒后重试：{exception.Message}", DateTimeOffset.Now, false)).ConfigureAwait(false);
+                    await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+            }
 
+            try
+            {
                 var task = await _apiClient.ClaimTaskAsync(credentials, cancellationToken).ConfigureAwait(false);
                 if (task is not null)
                 {
@@ -62,25 +86,40 @@ internal sealed class AgentWorker : IAsyncDisposable
                     await _apiClient.CompleteTaskAsync(credentials, task.TaskId, completion, cancellationToken).ConfigureAwait(false);
                     await _onUpdate(new AgentWorkerUpdate(AgentConnectionState.Connected, "空闲", $"任务 {task.TaskId} 已{(completion.Status == "succeeded" ? "完成" : "失败")}", DateTimeOffset.Now, false)).ConfigureAwait(false);
                 }
-                retryDelay = TimeSpan.FromSeconds(1);
-                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
             }
             catch (CenterApiException exception) when (exception.IsCredentialInvalid)
             {
-                await _onUpdate(new AgentWorkerUpdate(AgentConnectionState.NotRegistered, "空闲", exception.Message, DateTimeOffset.Now, true)).ConfigureAwait(false);
+                await NotifyCredentialsInvalidAsync(exception).ConfigureAwait(false);
                 return;
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return; }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
             catch (Exception exception)
             {
-                await _onUpdate(new AgentWorkerUpdate(AgentConnectionState.Disconnected, "空闲", exception.Message, DateTimeOffset.Now, false)).ConfigureAwait(false);
-                await Task.Delay(retryDelay, cancellationToken).ConfigureAwait(false);
-                retryDelay = TimeSpan.FromSeconds(Math.Min(retryDelay.TotalSeconds * 2, 30));
+                // 任务轮询与心跳独立，领取失败不能改变已经确认的心跳节奏。
+                await _onUpdate(new AgentWorkerUpdate(AgentConnectionState.Connected, "空闲", $"任务轮询失败：{exception.Message}", DateTimeOffset.Now, false)).ConfigureAwait(false);
             }
+
+            await Task.Delay(TaskPollingInterval, cancellationToken).ConfigureAwait(false);
         }
     }
 
+    private Task NotifyCredentialsInvalidAsync(CenterApiException exception) =>
+        _onUpdate(new AgentWorkerUpdate(AgentConnectionState.NotRegistered, "空闲", exception.Message, DateTimeOffset.Now, true));
+
     public async ValueTask DisposeAsync() => await StopAsync().ConfigureAwait(false);
+}
+
+internal static class HeartbeatRetrySchedule
+{
+    public static TimeSpan GetDelay(int failureCount) => failureCount switch
+    {
+        <= 1 => TimeSpan.FromSeconds(5),
+        2 => TimeSpan.FromSeconds(15),
+        _ => TimeSpan.FromSeconds(30),
+    };
 }
 
 internal sealed record AgentWorkerUpdate(AgentConnectionState State, string CurrentTask, string Message, DateTimeOffset UpdatedAt, bool CredentialsInvalid);

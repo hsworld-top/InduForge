@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -18,14 +20,20 @@ internal sealed class SingleInstanceCoordinator : IAsyncDisposable
     public SingleInstanceCoordinator(string? instanceName = null)
     {
         var identity = instanceName ?? "InduForge.Collector.DevAgent";
-        var userScope = $"{Environment.UserDomainName}\\{Environment.UserName}";
-        var suffix = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{identity}|{userScope}")))[..24];
+        var suffix = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity)))[..24];
         _pipeName = $"InduForge.Collector.DevAgent.{suffix}";
-        _instanceMutex = new Mutex(false, $"Local\\{_pipeName}", out var createdNew);
+        var security = new MutexSecurity();
+        security.AddAccessRule(new MutexAccessRule(
+            new SecurityIdentifier(WellKnownSidType.WorldSid, null),
+            MutexRights.FullControl,
+            AccessControlType.Allow));
+        _instanceMutex = MutexAcl.Create(false, $"Global\\{_pipeName}", out var createdNew, security);
         IsPrimaryInstance = createdNew;
+        ExistingInstanceInCurrentSession = !createdNew && HasMatchingProcessInCurrentSession();
     }
 
     public bool IsPrimaryInstance { get; }
+    public bool ExistingInstanceInCurrentSession { get; }
 
     // 首实例监听后续进程的唤醒请求；回调由调用方负责切换到 UI 线程。
     public void StartListening(Func<Task> activationHandler)
@@ -116,6 +124,31 @@ internal sealed class SingleInstanceCoordinator : IAsyncDisposable
                 await Task.Delay(100, cancellationToken).ConfigureAwait(false);
             }
         }
+    }
+
+    private static bool HasMatchingProcessInCurrentSession()
+    {
+        if (string.IsNullOrWhiteSpace(Environment.ProcessPath)) return false;
+        using var currentProcess = Process.GetCurrentProcess();
+        var processName = Path.GetFileNameWithoutExtension(Environment.ProcessPath);
+        foreach (var process in Process.GetProcessesByName(processName))
+        {
+            using (process)
+            {
+                if (process.Id == currentProcess.Id || process.SessionId != currentProcess.SessionId) continue;
+                try
+                {
+                    if (string.Equals(process.MainModule?.FileName, Environment.ProcessPath, StringComparison.OrdinalIgnoreCase)) return true;
+                }
+                catch (InvalidOperationException)
+                {
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                }
+            }
+        }
+        return false;
     }
 
     private static void GrantForegroundPermissionToExistingProcess()

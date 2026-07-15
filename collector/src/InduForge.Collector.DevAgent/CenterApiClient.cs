@@ -16,6 +16,16 @@ internal sealed class CenterApiClient(HttpClient httpClient)
         return await ReadDataAsync<AgentRegistration>(response, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task DisconnectAsync(AgentCredentials credentials, CancellationToken cancellationToken)
+    {
+        await SendAgentCommandAsync(credentials, "/api/v1/data/collector-dev/agent/disconnect", cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task RevokeAsync(AgentCredentials credentials, CancellationToken cancellationToken)
+    {
+        await SendAgentCommandAsync(credentials, "/api/v1/data/collector-dev/agent/revoke", cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task HeartbeatAsync(AgentCredentials credentials, AgentHeartbeatRequest request, CancellationToken cancellationToken)
     {
         using var message = CreateAgentRequest(credentials, HttpMethod.Post, "/api/v1/data/collector-dev/agent/heartbeat", request);
@@ -33,6 +43,13 @@ internal sealed class CenterApiClient(HttpClient httpClient)
     public async Task CompleteTaskAsync(AgentCredentials credentials, string taskId, CollectorTaskCompletion completion, CancellationToken cancellationToken)
     {
         using var message = CreateAgentRequest(credentials, HttpMethod.Post, $"/api/v1/data/collector-dev/agent/tasks/{taskId}/complete", completion);
+        using var response = await httpClient.SendAsync(message, cancellationToken).ConfigureAwait(false);
+        _ = await ReadDataAsync<JsonElement>(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task SendAgentCommandAsync(AgentCredentials credentials, string path, CancellationToken cancellationToken)
+    {
+        using var message = CreateAgentRequest(credentials, HttpMethod.Post, path, new { });
         using var response = await httpClient.SendAsync(message, cancellationToken).ConfigureAwait(false);
         _ = await ReadDataAsync<JsonElement>(response, cancellationToken).ConfigureAwait(false);
     }
@@ -78,7 +95,7 @@ internal sealed class CenterApiException(HttpStatusCode statusCode, string messa
 }
 
 internal sealed record ApiEnvelope<T>(int Code, string Msg, T? Data, string ReqId);
-internal sealed record AgentRegistrationRequest(string RegistrationCode, string Name, string OS, string Arch, string Version, IReadOnlyList<AgentProtocolCapability> Capabilities);
+internal sealed record AgentRegistrationRequest(string RegistrationCode, string MachineId, string Name, string OS, string Arch, string Version, IReadOnlyList<AgentProtocolCapability> Capabilities);
 internal sealed record AgentRegistration(string AgentId, string AgentToken, string TenantId);
 internal sealed record AgentProtocolCapability(string DriverId, string DriverVersion, IReadOnlyList<int> SchemaVersions, IReadOnlyList<string> Operations);
 internal sealed record AgentHeartbeatRequest(IReadOnlyList<AgentProtocolCapability> Capabilities);

@@ -52,7 +52,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _trayMenu.Items.Add(_connectionMenuItem);
         _trayMenu.Items.Add(_clearRegistrationMenuItem);
         _trayMenu.Items.Add(new ToolStripSeparator());
-        _trayMenu.Items.Add("退出", null, (_, _) => ExitAgent());
+        _trayMenu.Items.Add("退出", null, async (_, _) => await ExitAgentAsync());
         _trayMenu.Closed += (_, _) => _trayMenuHost.Hide();
         _notifyIcon = new NotifyIcon { Icon = SystemIcons.Application, Text = "InduForge 采集调试代理：未注册", Visible = true };
         _notifyIcon.MouseClick += (_, args) =>
@@ -91,7 +91,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         try
         {
             var capabilities = _driverRegistry.Descriptors.Select(ToAgentCapability).ToArray();
-            var registration = await _apiClient.RegisterAsync(value.CenterUrl, new AgentRegistrationRequest(value.RegistrationCode, value.AgentName, "windows", RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(), Application.ProductVersion, capabilities), _applicationCancellation.Token);
+            var registration = await _apiClient.RegisterAsync(value.CenterUrl, new AgentRegistrationRequest(value.RegistrationCode, MachineIdentityProvider.GetMachineId(), value.AgentName, "windows", RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(), Application.ProductVersion, capabilities), _applicationCancellation.Token);
             _credentials = new AgentCredentials(value.CenterUrl, registration.AgentId, registration.AgentToken, registration.TenantId, value.AgentName);
             _credentialStore.Save(_credentials);
             UpdateSnapshot(_snapshot with { ConnectionState = AgentConnectionState.Disconnected, CenterUrl = value.CenterUrl, AgentName = value.AgentName, AgentId = registration.AgentId, LastMessage = "注册成功，正在连接中心", UpdatedAt = DateTimeOffset.Now });
@@ -110,8 +110,23 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (_credentials is null) return;
         if (_worker.IsRunning)
         {
+            var credentials = _credentials;
             await _worker.StopAsync();
-            UpdateSnapshot(_snapshot with { ConnectionState = AgentConnectionState.Disconnected, LastMessage = "已手动断开中心；本地协议自检仍可使用", UpdatedAt = DateTimeOffset.Now });
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await _apiClient.DisconnectAsync(credentials, timeout.Token);
+                UpdateSnapshot(_snapshot with { ConnectionState = AgentConnectionState.Disconnected, LastMessage = "已手动断开中心；本地协议自检仍可使用", UpdatedAt = DateTimeOffset.Now });
+            }
+            catch (CenterApiException exception) when (exception.IsCredentialInvalid)
+            {
+                ClearCredentials();
+                UpdateSnapshot(new AgentStatusSnapshot(AgentConnectionState.NotRegistered, _settings.CenterUrl, _settings.AgentName, string.Empty, "空闲", exception.Message, null, DateTimeOffset.Now));
+            }
+            catch (Exception exception)
+            {
+                UpdateSnapshot(_snapshot with { ConnectionState = AgentConnectionState.Disconnected, LastMessage = $"本地已断开，但中心通知失败：{exception.Message}", UpdatedAt = DateTimeOffset.Now });
+            }
         }
         else
         {
@@ -122,10 +137,26 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private async void OnClearRegistrationRequested(object? sender, EventArgs args)
     {
-        if (MessageBox.Show("清除后需要新的注册码才能再次连接中心，是否继续？", "清除注册", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        if (_credentials is null) return;
+        if (MessageBox.Show("清除后中心会将当前代理标记为无效，需要新的注册码才能再次连接，是否继续？", "清除注册", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        var credentials = _credentials;
         await _worker.StopAsync();
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await _apiClient.RevokeAsync(credentials, timeout.Token);
+        }
+        catch (CenterApiException exception) when (exception.IsCredentialInvalid)
+        {
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show($"中心撤销失败，本地凭据已保留，请稍后重试。\n\n{exception.Message}", "清除注册失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            UpdateSnapshot(_snapshot with { ConnectionState = AgentConnectionState.Disconnected, LastMessage = $"撤销注册失败：{exception.Message}", UpdatedAt = DateTimeOffset.Now });
+            return;
+        }
         ClearCredentials();
-        UpdateSnapshot(new AgentStatusSnapshot(AgentConnectionState.NotRegistered, _settings.CenterUrl, _settings.AgentName, string.Empty, "空闲", "本地注册已清除", null, DateTimeOffset.Now));
+        UpdateSnapshot(new AgentStatusSnapshot(AgentConnectionState.NotRegistered, _settings.CenterUrl, _settings.AgentName, string.Empty, "空闲", "注册已撤销，请使用新注册码重新注册", null, DateTimeOffset.Now));
     }
 
     private Task OnWorkerUpdateAsync(AgentWorkerUpdate update)
@@ -183,7 +214,28 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private async void OnSelfTestRequested(object? sender, string endpointUrl) { _statusForm.SetSelfTestRunning(true); UpdateSnapshot(_snapshot with { CurrentTask = "OPC UA 本地自检", LastMessage = $"正在连接 {endpointUrl}", UpdatedAt = DateTimeOffset.Now }); try { var message = await _selfTestService.RunAsync(endpointUrl, _applicationCancellation.Token); UpdateSnapshot(_snapshot with { CurrentTask = "空闲", LastMessage = message, UpdatedAt = DateTimeOffset.Now }); } catch (OperationCanceledException) when (_applicationCancellation.IsCancellationRequested) { } catch (Exception exception) { UpdateSnapshot(_snapshot with { CurrentTask = "空闲", LastMessage = exception.Message, UpdatedAt = DateTimeOffset.Now }); } finally { _statusForm.SetSelfTestRunning(false); } }
     private void UpdateSnapshot(AgentStatusSnapshot snapshot) { _snapshot = snapshot; _statusForm.UpdateStatus(snapshot); _notifyIcon.Text = snapshot.ConnectionState switch { AgentConnectionState.Connected => "InduForge 采集调试代理：已连接", AgentConnectionState.Disconnected => "InduForge 采集调试代理：已断开", _ => "InduForge 采集调试代理：未注册" }; }
     private void RefreshMenus() { var registered = _credentials is not null; _connectionMenuItem.Visible = registered; _connectionMenuItem.Text = _worker?.IsRunning == true ? "断开中心" : "重新连接"; _clearRegistrationMenuItem.Visible = registered; }
-    private void ExitAgent() { if (_isExiting) return; _isExiting = true; _applicationCancellation.Cancel(); _statusForm.ExitApplication(); ExitThread(); }
+    private async Task ExitAgentAsync()
+    {
+        if (_isExiting) return;
+        _isExiting = true;
+        var credentials = _credentials;
+        await _worker.StopAsync();
+        if (credentials is not null)
+        {
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                await _apiClient.DisconnectAsync(credentials, timeout.Token);
+            }
+            catch
+            {
+                // 退出通知是尽力发送，中心不可达时不能阻止本地进程关闭。
+            }
+        }
+        _applicationCancellation.Cancel();
+        _statusForm.ExitApplication();
+        ExitThread();
+    }
 
     private static AgentProtocolCapability ToAgentCapability(InduForge.Collector.Contracts.DriverDescriptor descriptor) =>
         new(descriptor.DriverId, descriptor.DriverVersion, descriptor.SchemaVersions, descriptor.Operations);
