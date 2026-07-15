@@ -177,12 +177,12 @@
                 <div v-if="agent.capabilities.length > 0" class="collector-agent-capability-list">
                   <el-tooltip
                     v-for="capability in agent.capabilities"
-                    :key="`${agent.id}-${capability.protocolType}`"
+                    :key="`${agent.id}-${capability.driverId}`"
                     :content="capability.operations.join('、') || '未上报操作能力'"
                     placement="top"
                   >
                     <span class="collector-agent-capability">
-                      {{ capability.protocolType.toUpperCase() }}
+                      {{ capability.driverId.toUpperCase() }}
                       <small>{{ capability.operations.length }}</small>
                     </span>
                   </el-tooltip>
@@ -237,8 +237,8 @@
               <el-table-column label="协议能力" min-width="160">
                 <template #default="{ row }">
                   <div class="collector-agent-table__protocols">
-                    <span v-for="capability in row.capabilities" :key="capability.protocolType">
-                      {{ capability.protocolType.toUpperCase() }}
+                    <span v-for="capability in row.capabilities" :key="capability.driverId">
+                      {{ capability.driverId.toUpperCase() }}
                     </span>
                     <small v-if="row.capabilities.length === 0">未上报</small>
                   </div>

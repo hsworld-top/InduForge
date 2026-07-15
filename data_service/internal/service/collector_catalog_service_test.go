@@ -41,6 +41,13 @@ func TestCollectorCatalogGetReturnsSchemas(t *testing.T) {
 	}
 }
 
+func TestCollectorDriverSummaryNormalizesOptionalCollections(t *testing.T) {
+	summary := collectorDriverSummary(collectorprotocol.Manifest{})
+	if summary.Transports == nil || summary.Operations == nil || summary.DataTypes == nil || summary.AcquisitionModes == nil || summary.Platforms == nil {
+		t.Fatalf("collector driver summary contains nil collection: %#v", summary)
+	}
+}
+
 func newRepositoryCollectorCatalogService(t *testing.T) *CollectorCatalogService {
 	t.Helper()
 	root := filepath.Clean(filepath.Join("..", "..", "..", "runtime", "collector_protocols"))

@@ -133,8 +133,21 @@ func collectorDriverSummary(manifest collectorprotocol.Manifest) CollectorDriver
 	return CollectorDriverSummary{
 		ProtocolFamily: manifest.ProtocolFamily, DriverID: manifest.DriverID, DriverVersion: manifest.DriverVersion,
 		SchemaVersion: manifest.SchemaVersion, DisplayName: manifest.DisplayName, Category: manifest.Category,
-		Transports: append([]string(nil), manifest.Transports...), Operations: append([]string(nil), manifest.Operations...),
-		DataTypes: append([]string(nil), manifest.DataTypes...), AcquisitionModes: append([]string(nil), manifest.AcquisitionModes...),
-		Platforms: manifest.Platforms,
+		Transports: cloneCollectorStringSlice(manifest.Transports), Operations: cloneCollectorStringSlice(manifest.Operations),
+		DataTypes: cloneCollectorStringSlice(manifest.DataTypes), AcquisitionModes: cloneCollectorStringSlice(manifest.AcquisitionModes),
+		Platforms: cloneCollectorPlatforms(manifest.Platforms),
 	}
+}
+
+// 驱动清单允许省略可选数组，但对外 JSON 契约必须稳定输出 [] 而不是 null。
+func cloneCollectorStringSlice(values []string) []string {
+	return append([]string{}, values...)
+}
+
+func cloneCollectorPlatforms(values map[string][]string) map[string][]string {
+	cloned := make(map[string][]string, len(values))
+	for platform, architectures := range values {
+		cloned[platform] = cloneCollectorStringSlice(architectures)
+	}
+	return cloned
 }
