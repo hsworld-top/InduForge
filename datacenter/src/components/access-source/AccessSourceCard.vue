@@ -154,6 +154,7 @@ const resolveConnectionType = (connection: AccessSourceConnection) => {
     opcda: 'OPC DA',
     s7: 'Siemens S7',
     modbus: 'Modbus',
+    collector: '工业采集',
     tdengine: 'TDengine',
   }
   if (connection.type && protocolLabels[connection.type]) {
