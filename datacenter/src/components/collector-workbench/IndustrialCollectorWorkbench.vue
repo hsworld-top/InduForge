@@ -1,99 +1,123 @@
 <template>
   <div class="industrial-workbench">
-    <CollectorConnectionList
-      ref="connectionList"
-      :project-id="projectId"
-      :selected-id="selectedId"
-      @select="selectConnection"
-      @create="wizardVisible = true"
-      @loaded="onConnectionsLoaded"
-    />
-    <main class="industrial-workbench__main">
-      <header class="industrial-workbench__header">
-        <div class="industrial-workbench__identity">
-          <span class="industrial-workbench__mark"><IconTablerCpu /></span>
-          <div>
-            <div class="industrial-workbench__eyebrow">
-              <span>工业采集工作台</span>
-              <em v-if="activeConnection" :class="{ 'is-enabled': activeConnection.enabled }">
-                {{ activeConnection.enabled ? '采集已启用' : '采集已停用' }}
-              </em>
-            </div>
-            <h2>{{ activeConnection?.name || '工程采集连接' }}</h2>
-            <p v-if="activeConnection">
-              {{ activeConnection.protocolFamily.toUpperCase() }} ·
-              {{ activeConnection.driverId }}@{{ activeConnection.driverVersion }}
-            </p>
-            <p v-else>统一管理工业协议连接、设备发现、点位与开发态调试</p>
-          </div>
+    <header class="industrial-workbench__toolbar">
+      <div class="industrial-workbench__title">
+        <span class="industrial-workbench__title-icon"><IconTablerCpu /></span>
+        <div>
+          <h1>工业采集</h1>
+          <p>统一管理工业协议连接、变量配置、设备浏览与开发态调试</p>
         </div>
-        <div class="industrial-workbench__actions">
-          <div class="industrial-workbench__agent">
-            <span
-              ><i :class="{ 'is-online': selectedAgent?.status === 'online' }" />开发调试代理</span
-            >
-            <CollectorAgentSelector
-              v-model="agentId"
-              :project-id="projectId"
-              @change="selectedAgent = $event"
-            />
-          </div>
-          <el-button type="primary" @click="wizardVisible = true">
-            <IconTablerPlus />新增连接
-          </el-button>
-        </div>
-      </header>
-      <section v-if="activeConnection" class="industrial-workbench__content">
-        <el-tabs v-model="activeTab" class="industrial-workbench__tabs">
-          <el-tab-pane label="连接配置" name="config"
-            ><CollectorConnectionEditor
-              :project-id="projectId"
-              :connection="activeConnection"
-              @saved="activeConnection = $event"
-          /></el-tab-pane>
-          <el-tab-pane label="设备发现" name="discovery"
-            ><CollectorDiscoveryPanel
-              :project-id="projectId"
-              :connection-id="activeConnection.id"
-              :agent-id="agentId"
-              :enabled="canBrowse"
-              @points="createDiscoveredPoints"
-          /></el-tab-pane>
-          <el-tab-pane label="点位管理" name="points"
-            ><div class="industrial-workbench__points">
-              <CollectorPointGroupTree
-                :project-id="projectId"
-                :connection-id="activeConnection.id"
-                @select="groupId = $event"
-              /><CollectorPointTable
-                ref="pointTable"
-                :project-id="projectId"
-                :connection-id="activeConnection.id"
-                :group-id="groupId"
-                @selection="selectedPointIds = $event"
-              />
-            </div>
-            <div class="industrial-workbench__point-actions">
-              <el-button @click="importVisible = true">批量导入</el-button>
-            </div></el-tab-pane
+      </div>
+      <div class="industrial-workbench__toolbar-actions">
+        <div class="industrial-workbench__agent">
+          <span
+            ><i :class="{ 'is-online': selectedAgent?.status === 'online' }" />采集调试代理</span
           >
-          <el-tab-pane label="实时调试" name="debug"
-            ><CollectorLiveDebugPanel
-              :project-id="projectId"
-              :connection-id="activeConnection.id"
-              :agent-id="agentId"
-              :point-ids="selectedPointIds"
-              :enabled="canRead"
-          /></el-tab-pane>
-        </el-tabs>
-      </section>
-      <section v-else class="industrial-workbench__empty">
-        <span><IconTablerTopologyStar3 /></span>
-        <strong>建立第一条工业采集连接</strong>
-        <p>无需调试代理也可以先完成协议配置和点位建模，连接测试与设备发现稍后执行。</p>
-        <el-button type="primary" @click="wizardVisible = true">创建工业采集连接</el-button>
-      </section>
-    </main>
+          <CollectorAgentSelector
+            v-model="agentId"
+            :project-id="projectId"
+            @change="selectedAgent = $event"
+          />
+        </div>
+        <el-button @click="connectionList?.reload(1)">刷新</el-button>
+        <el-button type="primary" @click="wizardVisible = true">
+          <IconTablerPlus />新建工业连接
+        </el-button>
+      </div>
+    </header>
+
+    <section class="industrial-workbench__surface">
+      <CollectorConnectionList
+        ref="connectionList"
+        :project-id="projectId"
+        :selected-id="selectedId"
+        @select="selectConnection"
+        @create="wizardVisible = true"
+        @loaded="onConnectionsLoaded"
+      />
+
+      <main class="industrial-workbench__main">
+        <template v-if="activeConnection">
+          <header class="industrial-workbench__connection-head">
+            <div class="industrial-workbench__identity">
+              <span class="industrial-workbench__mark"><IconTablerCpu /></span>
+              <div>
+                <div class="industrial-workbench__name-row">
+                  <h2>{{ activeConnection.name }}</h2>
+                  <em :class="{ 'is-enabled': activeConnection.enabled }">
+                    {{ activeConnection.enabled ? '采集已启用' : '采集已停用' }}
+                  </em>
+                </div>
+                <p>
+                  <span>{{ formatCollectorProtocolFamily(activeConnection.protocolFamily) }}</span>
+                  <span>{{ activeConnection.driverId }}@{{ activeConnection.driverVersion }}</span>
+                  <span>{{ selectedAgent?.name || '未选择调试代理' }}</span>
+                </p>
+              </div>
+            </div>
+            <div class="industrial-workbench__connection-state">
+              <span>配置状态</span>
+              <strong>{{ activeConnection.status || 'configured' }}</strong>
+            </div>
+          </header>
+
+          <section class="industrial-workbench__content">
+            <el-tabs v-model="activeTab" class="industrial-workbench__tabs">
+              <el-tab-pane label="连接配置" name="config">
+                <CollectorConnectionEditor
+                  :project-id="projectId"
+                  :connection="activeConnection"
+                  @saved="onConnectionSaved"
+                />
+              </el-tab-pane>
+              <el-tab-pane label="变量配置" name="points">
+                <div class="industrial-workbench__points">
+                  <CollectorPointGroupTree
+                    :project-id="projectId"
+                    :connection-id="activeConnection.id"
+                    @select="groupId = $event"
+                  />
+                  <CollectorPointTable
+                    ref="pointTable"
+                    :project-id="projectId"
+                    :connection-id="activeConnection.id"
+                    :group-id="groupId"
+                    @selection="selectedPointIds = $event"
+                    @import="importVisible = true"
+                  />
+                </div>
+              </el-tab-pane>
+              <el-tab-pane label="设备浏览" name="discovery">
+                <CollectorDiscoveryPanel
+                  :project-id="projectId"
+                  :connection-id="activeConnection.id"
+                  :agent-id="agentId"
+                  :enabled="canBrowse"
+                  @points="createDiscoveredPoints"
+                />
+              </el-tab-pane>
+              <el-tab-pane label="实时调试" name="debug">
+                <CollectorLiveDebugPanel
+                  :project-id="projectId"
+                  :connection-id="activeConnection.id"
+                  :agent-id="agentId"
+                  :point-ids="selectedPointIds"
+                  :enabled="canRead"
+                />
+              </el-tab-pane>
+            </el-tabs>
+          </section>
+        </template>
+
+        <section v-else class="industrial-workbench__empty">
+          <span><IconTablerTopologyStar3 /></span>
+          <strong>建立第一条工业采集连接</strong>
+          <p>无需调试代理也可以先完成协议配置和变量建模，连接测试与设备浏览可稍后执行。</p>
+          <el-button type="primary" @click="wizardVisible = true">创建工业采集连接</el-button>
+        </section>
+      </main>
+    </section>
+
     <CollectorConnectionWizard
       v-model="wizardVisible"
       :project-id="projectId"
@@ -114,7 +138,7 @@ import { computed, ref } from 'vue'
 import { createCollectorPointsBatch, getCollectorConnection } from '@/api/collector.api'
 import type { CollectorAgent } from '@/api/schemas/collector-dev.schema'
 import type { CollectorConnection } from '@/api/schemas/collector.schema'
-import { agentSupportsOperation } from './collector-workbench-model'
+import { agentSupportsOperation, formatCollectorProtocolFamily } from './collector-workbench-model'
 import IconTablerCpu from '~icons/tabler/cpu'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerTopologyStar3 from '~icons/tabler/topology-star-3'
@@ -127,6 +151,7 @@ import CollectorImportDialog from './CollectorImportDialog.vue'
 import CollectorLiveDebugPanel from './CollectorLiveDebugPanel.vue'
 import CollectorPointGroupTree from './CollectorPointGroupTree.vue'
 import CollectorPointTable from './CollectorPointTable.vue'
+
 const props = defineProps<{
   projectId: string
   connection?: { id: string }
@@ -164,10 +189,12 @@ const canRead = computed(() =>
       )
     : false,
 )
+
 async function selectConnection(id: string) {
   selectedId.value = id
   activeConnection.value = await getCollectorConnection(props.projectId, id)
   activeTab.value = 'config'
+  groupId.value = null
   selectedPointIds.value = []
 }
 function onConnectionsLoaded(items: CollectorConnection[]) {
@@ -177,6 +204,10 @@ function onConnectionsLoaded(items: CollectorConnection[]) {
 async function onCreated(id: string) {
   await connectionList.value?.reload(1)
   await selectConnection(id)
+}
+async function onConnectionSaved(connection: CollectorConnection) {
+  activeConnection.value = connection
+  await connectionList.value?.reload()
 }
 async function createDiscoveredPoints(points: Record<string, unknown>[]) {
   if (!activeConnection.value) return
@@ -191,146 +222,243 @@ async function createDiscoveredPoints(points: Record<string, unknown>[]) {
   display: flex;
   height: 100%;
   min-height: 0;
-  background: #f2f5f6;
-  color: #1d2a32;
-}
-.industrial-workbench__main {
-  display: flex;
-  min-width: 0;
-  flex: 1;
   flex-direction: column;
+  gap: 14px;
+  color: var(--dc-text);
 }
-.industrial-workbench__header {
+.industrial-workbench__toolbar {
   display: flex;
+  min-height: 64px;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  min-height: 92px;
-  padding: 15px 24px;
-  border-bottom: 1px solid #dce4e7;
-  background: #fff;
+  gap: 18px;
+  padding: 0 20px;
+  border: 1px solid var(--dc-border);
+  border-radius: 14px;
+  background: var(--dc-surface-raised);
+  box-shadow:
+    0 8px 24px rgba(15, 23, 42, 0.06),
+    0 1px 2px rgba(15, 23, 42, 0.04);
 }
-.industrial-workbench__identity {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 12px;
-}
-.industrial-workbench__mark {
-  display: inline-flex;
-  width: 42px;
-  height: 42px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 11px;
-  background: #123f52;
-  color: #fff;
-  box-shadow: 0 8px 18px rgb(18 63 82 / 18%);
-}
-.industrial-workbench__mark svg {
-  width: 22px;
-  height: 22px;
-}
-.industrial-workbench__identity > div:last-child {
-  min-width: 0;
-}
-.industrial-workbench__eyebrow {
+.industrial-workbench__title,
+.industrial-workbench__identity,
+.industrial-workbench__name-row,
+.industrial-workbench__toolbar-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: #75848c;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
 }
-.industrial-workbench__eyebrow em {
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: #eef1f2;
-  color: #75828a;
-  font-size: 10px;
-  font-style: normal;
-  letter-spacing: 0;
+.industrial-workbench__title {
+  min-width: 0;
+  gap: 11px;
 }
-.industrial-workbench__eyebrow em.is-enabled {
-  background: #e8f6ef;
-  color: #217653;
+.industrial-workbench__title-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
 }
-.industrial-workbench__header h2 {
-  margin: 4px 0 1px;
-  font-size: 20px;
-  line-height: 1.15;
+.industrial-workbench__title-icon svg {
+  width: 20px;
+  height: 20px;
 }
-.industrial-workbench__header p {
+.industrial-workbench__title h1 {
   margin: 0;
-  overflow: hidden;
-  color: #7b8990;
+  font-size: 17px;
+  line-height: 1.25;
+}
+.industrial-workbench__title p {
+  margin: 3px 0 0;
+  color: var(--dc-text-muted);
   font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.industrial-workbench__actions {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
+.industrial-workbench__toolbar-actions {
+  gap: 9px;
 }
-.industrial-workbench__actions :deep(.el-button svg) {
+.industrial-workbench__toolbar-actions :deep(.el-button svg) {
   width: 15px;
   margin-right: 6px;
 }
 .industrial-workbench__agent {
   display: flex;
+  min-width: 210px;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
+  margin-right: 4px;
 }
 .industrial-workbench__agent > span {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #77868e;
-  font-size: 11px;
-  font-weight: 600;
+  color: var(--dc-text-muted);
+  font-size: 10px;
+  font-weight: 700;
 }
 .industrial-workbench__agent i {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #b0bbc0;
+  background: var(--dc-border-strong);
 }
 .industrial-workbench__agent i.is-online {
-  background: #2b9c70;
-  box-shadow: 0 0 0 3px rgb(43 156 112 / 12%);
+  background: var(--dc-success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dc-success) 13%, transparent);
 }
-.industrial-workbench__content {
+.industrial-workbench__surface {
+  display: flex;
+  min-width: 0;
   min-height: 0;
   flex: 1;
-  margin: 16px 18px 18px;
-  padding: 0 18px 16px;
-  border: 1px solid #dce4e7;
+  overflow: hidden;
+  border: 1px solid var(--dc-border);
+  border-radius: 14px;
+  background: var(--dc-surface-raised);
+  box-shadow:
+    0 8px 24px rgba(15, 23, 42, 0.055),
+    0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.industrial-workbench__main {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  background: var(--dc-surface-subtle);
+}
+.industrial-workbench__connection-head {
+  display: flex;
+  min-height: 76px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 20px;
+  border-bottom: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
+}
+.industrial-workbench__identity {
+  min-width: 0;
+  gap: 12px;
+}
+.industrial-workbench__mark {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  place-items: center;
   border-radius: 10px;
-  background: #fff;
-  box-shadow: 0 8px 24px rgb(34 61 73 / 5%);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+}
+.industrial-workbench__mark svg {
+  width: 21px;
+  height: 21px;
+}
+.industrial-workbench__identity > div {
+  min-width: 0;
+}
+.industrial-workbench__name-row {
+  gap: 9px;
+}
+.industrial-workbench__name-row h2 {
+  margin: 0;
+  overflow: hidden;
+  font-size: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.industrial-workbench__name-row em {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-muted);
+  font-size: 10px;
+  font-style: normal;
+}
+.industrial-workbench__name-row em.is-enabled {
+  background: var(--dc-success-soft);
+  color: var(--dc-success);
+}
+.industrial-workbench__identity p {
+  display: flex;
+  gap: 9px;
+  margin: 5px 0 0;
+  color: var(--dc-text-muted);
+  font-size: 11px;
+}
+.industrial-workbench__identity p span + span::before {
+  margin-right: 9px;
+  color: var(--dc-border-strong);
+  content: '·';
+}
+.industrial-workbench__connection-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  color: var(--dc-text-muted);
+  font-size: 10px;
+}
+.industrial-workbench__connection-state strong {
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+.industrial-workbench__content {
+  display: flex;
+  min-height: 0;
+  flex: 1;
 }
 .industrial-workbench__tabs {
   display: flex;
+  min-width: 0;
   min-height: 0;
   flex: 1;
   flex-direction: column;
 }
-.industrial-workbench__tabs :deep(.el-tabs__content),
+.industrial-workbench__tabs :deep(.el-tabs__header) {
+  flex: 0 0 46px;
+  margin: 0;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--dc-border);
+  background: var(--dc-surface-raised);
+}
+.industrial-workbench__tabs :deep(.el-tabs__nav-wrap::after) {
+  display: none;
+}
+.industrial-workbench__tabs :deep(.el-tabs__item) {
+  height: 46px;
+  color: var(--dc-text-secondary);
+  font-size: 13px;
+}
+.industrial-workbench__tabs :deep(.el-tabs__item.is-active) {
+  color: var(--dc-primary);
+  font-weight: 700;
+}
+.industrial-workbench__tabs :deep(.el-tabs__active-bar) {
+  background: var(--dc-primary);
+}
+.industrial-workbench__tabs :deep(.el-tabs__content) {
+  min-height: 0;
+  flex: 1;
+  padding: 14px 16px 16px;
+  overflow: hidden;
+}
 .industrial-workbench__tabs :deep(.el-tab-pane) {
   height: 100%;
   min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-raised);
+  padding: 16px;
 }
 .industrial-workbench__points {
   display: flex;
-  height: calc(100% - 48px);
+  height: 100%;
   min-height: 0;
-}
-.industrial-workbench__point-actions {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 10px;
 }
 .industrial-workbench__empty {
   display: flex;
@@ -344,16 +472,15 @@ async function createDiscoveredPoints(points: Record<string, unknown>[]) {
   text-align: center;
 }
 .industrial-workbench__empty > span {
-  display: inline-flex;
+  display: grid;
   width: 68px;
   height: 68px;
-  align-items: center;
-  justify-content: center;
+  place-items: center;
   margin-bottom: 18px;
-  border: 1px solid #cfe0e7;
+  border: 1px solid color-mix(in srgb, var(--dc-primary) 18%, var(--dc-border));
   border-radius: 20px;
-  background: #eaf4f7;
-  color: #246b86;
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
 }
 .industrial-workbench__empty svg {
   width: 32px;
@@ -365,8 +492,17 @@ async function createDiscoveredPoints(points: Record<string, unknown>[]) {
 .industrial-workbench__empty p {
   max-width: 430px;
   margin: 10px 0 20px;
-  color: #73828a;
+  color: var(--dc-text-muted);
   font-size: 13px;
   line-height: 1.7;
+}
+@media (max-width: 1100px) {
+  .industrial-workbench__title p,
+  .industrial-workbench__connection-state {
+    display: none;
+  }
+  .industrial-workbench__agent {
+    min-width: 180px;
+  }
 }
 </style>
