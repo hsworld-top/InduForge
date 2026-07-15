@@ -40,7 +40,8 @@
       <IndustrialCollectorWorkbench
         v-if="showIndustrialCollectorWorkbench && projectId"
         :project-id="String(projectId)"
-        @back="showIndustrialCollectorWorkbench = false"
+        :create-on-open="industrialCreateOnOpen"
+        @back="closeIndustrialCollectorWorkbench"
       />
 
       <!-- v2 workbench 路由：tab === 'workbench' 时挂新容器 -->
@@ -60,7 +61,6 @@
         :loading="connectionLoading"
         :pagination="connectionPagination"
         @create="openCreateConnectionDialog"
-        @industrial="showIndustrialCollectorWorkbench = true"
         @refresh="loadConnections"
         @edit="handleEditConnection"
         @query-change="setConnectionQuery"
@@ -282,6 +282,7 @@
     :mode="connectionDialogMode"
     :connection="currentConnection"
     :project-id="projectId"
+    @industrial="openIndustrialCollectorCreation"
     @submit="handleConnectionSubmit"
   />
 
@@ -889,6 +890,7 @@ const handleSelectConnection = (connection) => {
 /* 分页列表之外通过详情接口恢复工作台连接，保证深链接刷新仍可打开。 */
 const activeWorkbenchConnection = ref(null)
 const showIndustrialCollectorWorkbench = ref(false)
+const industrialCreateOnOpen = ref(false)
 let workbenchConnectionLoadVersion = 0
 watch(
   [
@@ -1100,6 +1102,18 @@ const openCreateConnectionDialog = () => {
   connectionDialogMode.value = 'create'
   currentConnection.value = null
   showConnectionDialog.value = true
+}
+
+/* 工业采集仍属于接入源类型；选择后进入工程级工作台并直接打开创建向导。 */
+const openIndustrialCollectorCreation = () => {
+  showConnectionDialog.value = false
+  industrialCreateOnOpen.value = true
+  showIndustrialCollectorWorkbench.value = true
+}
+
+const closeIndustrialCollectorWorkbench = () => {
+  showIndustrialCollectorWorkbench.value = false
+  industrialCreateOnOpen.value = false
 }
 
 /**

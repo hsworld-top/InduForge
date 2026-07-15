@@ -13,7 +13,18 @@
     </el-steps>
 
     <div class="collector-wizard__body">
-      <div v-if="step === 0" class="collector-wizard__choices">
+      <div v-if="loadingDrivers" class="collector-wizard__loading">
+        <el-skeleton :rows="4" animated />
+      </div>
+      <el-result
+        v-else-if="loadError"
+        icon="warning"
+        title="协议目录暂不可用"
+        :sub-title="loadError"
+      >
+        <template #extra><el-button @click="loadDrivers">重新加载</el-button></template>
+      </el-result>
+      <div v-else-if="step === 0" class="collector-wizard__choices">
         <button
           v-for="family in protocolFamilies"
           :key="family"
@@ -70,6 +81,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { getApiErrorMessage } from '@/utils/request'
 import {
   createCollectorConnection,
   getCollectorDriver,
@@ -95,6 +107,8 @@ const driverDetail = ref<CollectorDriverDetail | null>(null)
 const name = ref('')
 const values = ref<Record<string, unknown>>({})
 const saving = ref(false)
+const loadingDrivers = ref(false)
+const loadError = ref('')
 
 const protocolFamilies = computed(() => [
   ...new Set(drivers.value.map((driver) => driver.protocolFamily)),
@@ -116,9 +130,23 @@ watch(
     driverDetail.value = null
     name.value = ''
     values.value = {}
-    drivers.value = (await listCollectorDrivers({ page: 1, pageSize: 100 })).list
+    await loadDrivers()
   },
 )
+
+async function loadDrivers() {
+  loadingDrivers.value = true
+  loadError.value = ''
+  try {
+    drivers.value = (await listCollectorDrivers({ page: 1, pageSize: 100 })).list
+    if (!drivers.value.length) loadError.value = '当前没有可用的工业采集驱动。'
+  } catch (error) {
+    drivers.value = []
+    loadError.value = getApiErrorMessage(error, '请确认 data_service 已更新并完成采集模型迁移。')
+  } finally {
+    loadingDrivers.value = false
+  }
+}
 
 async function selectDriver(value: string) {
   driverId.value = value
@@ -154,6 +182,9 @@ async function save() {
 .collector-wizard__body {
   min-height: 320px;
   padding: 32px 4px 4px;
+}
+.collector-wizard__loading {
+  padding: 8px 20px;
 }
 .collector-wizard__choices {
   display: grid;

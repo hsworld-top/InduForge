@@ -81,14 +81,6 @@
           </div>
 
           <!-- 新增连接 -->
-          <button
-            type="button"
-            class="access-source-workspace__industrial"
-            @click="$emit('industrial')"
-          >
-            <IconTablerCpu class="access-source-workspace__action-icon" />
-            <span>工业采集</span>
-          </button>
           <button type="button" class="access-source-workspace__primary" @click="$emit('create')">
             <IconTablerPlus class="access-source-workspace__action-icon" />
             <span>新增连接</span>
@@ -223,7 +215,6 @@ import IconTablerListDetails from '~icons/tabler/list-details'
 import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerSettings from '~icons/tabler/settings'
 import IconTablerTrash from '~icons/tabler/trash'
-import IconTablerCpu from '~icons/tabler/cpu'
 import dataAPI from '@/api/data.api'
 import { deleteAccessSource, updateAccessSourceOrder } from '@/api/access-source.api'
 import { useConfirm } from '@/composables/useConfirm'
@@ -277,7 +268,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: 'create'): void
-  (event: 'industrial'): void
   (event: 'refresh'): void
   (event: 'edit', connection: AccessSourceConnection): void
   (
@@ -717,21 +707,6 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
     background-color 0.18s ease,
     border-color 0.18s ease,
     transform 0.18s ease;
-}
-
-.access-source-workspace__industrial {
-  display: inline-flex;
-  height: 34px;
-  align-items: center;
-  gap: 7px;
-  padding: 0 13px;
-  border: 1px solid #8bb3c5;
-  border-radius: 6px;
-  background: #f4fafc;
-  color: #245f78;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
 }
 
 .access-source-workspace__primary:hover {
