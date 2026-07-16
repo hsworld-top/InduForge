@@ -6,6 +6,45 @@ internal static class Program
     private static void Main()
     {
         ApplicationConfiguration.Initialize();
+        AgentFileLogger logger;
+        try
+        {
+            logger = new AgentFileLogger();
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(
+                $"无法在程序目录创建日志文件，请确认目录可写。\n\n{AppContext.BaseDirectory}\n\n{exception.Message}",
+                "采集调试代理启动失败",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            return;
+        }
+
+        RegisterUnhandledExceptionLogging(logger);
+        logger.WriteFailed += exception => MessageBox.Show(
+            $"日志写入失败，后续异常可能无法保存。\n\n{logger.LogDirectory}\n\n{exception.Message}",
+            "采集调试代理日志异常",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Warning);
+        logger.Info("agent.start", $"version={Application.ProductVersion} processId={Environment.ProcessId} baseDirectory={AppContext.BaseDirectory}");
+        try
+        {
+            RunApplication(logger);
+        }
+        catch (Exception exception)
+        {
+            logger.Error("agent.fatal", "采集调试代理发生未处理异常", exception);
+            MessageBox.Show(exception.Message, "采集调试代理异常", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            logger.Info("agent.exit", "采集调试代理已退出");
+        }
+    }
+
+    private static void RunApplication(AgentFileLogger logger)
+    {
         var singleInstance = new SingleInstanceCoordinator();
         if (!singleInstance.IsPrimaryInstance)
         {
@@ -32,12 +71,28 @@ internal static class Program
 
         try
         {
-            Application.Run(new TrayApplicationContext(singleInstance));
+            Application.Run(new TrayApplicationContext(singleInstance, logger));
         }
         catch
         {
             singleInstance.DisposeAsync().AsTask().GetAwaiter().GetResult();
             throw;
         }
+    }
+
+    private static void RegisterUnhandledExceptionLogging(AgentFileLogger logger)
+    {
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, args) => logger.Error("agent.ui.unhandled", "WinForms UI 线程异常", args.Exception);
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            var exception = args.ExceptionObject as Exception ?? new InvalidOperationException(args.ExceptionObject?.ToString() ?? "未知异常");
+            logger.Error("agent.domain.unhandled", $"AppDomain 未处理异常 terminating={args.IsTerminating}", exception);
+        };
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            logger.Error("agent.task.unobserved", "未观察的 Task 异常", args.Exception);
+            args.SetObserved();
+        };
     }
 }

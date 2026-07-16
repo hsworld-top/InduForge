@@ -114,6 +114,7 @@ internal sealed class AgentStatusForm : Form
     }
 
     public void SetRegistrationRunning(bool running) { _registerButton.Enabled = !running; _registerButton.Text = running ? "正在注册..." : "注册并连接"; }
+    public void ClearRegistrationCode() => _registrationCodeInput.Clear();
     public void SetSelfTestRunning(bool running) { _selfTestButton.Enabled = !running; _selfTestButton.Text = running ? "正在测试..." : "OPC UA 本地自检"; }
     public void ExitApplication() { _allowClose = true; Close(); }
 

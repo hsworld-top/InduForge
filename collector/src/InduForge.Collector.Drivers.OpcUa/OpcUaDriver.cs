@@ -27,7 +27,7 @@ public sealed class OpcUaDriver : IIndustrialDriver, IDeviceBrowser, IPointReade
         ProtocolFamily: "opcua",
         DriverId: "opcua.standard",
         DriverVersion: "1.0.0",
-        SchemaVersions: [1],
+        SchemaVersions: [2],
         Operations: [DriverOperations.ConnectionTest, DriverOperations.DeviceBrowse, DriverOperations.PointRead]);
 
     public async Task<ConnectionTestResult> TestConnectionAsync(

@@ -15,17 +15,20 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _connectionMenuItem;
     private readonly ToolStripMenuItem _clearRegistrationMenuItem;
     private readonly SingleInstanceCoordinator _singleInstance;
+    private readonly AgentFileLogger _logger;
     private readonly OpcUaSelfTestService _selfTestService = new();
-    private readonly CenterApiClient _apiClient = new(new HttpClient { Timeout = TimeSpan.FromSeconds(35) });
+    private readonly CenterApiClient _apiClient;
     private readonly AgentWorker _worker;
     private readonly CancellationTokenSource _applicationCancellation = new();
     private AgentCredentials? _credentials;
     private AgentStatusSnapshot _snapshot;
     private bool _isExiting;
 
-    public TrayApplicationContext(SingleInstanceCoordinator singleInstance)
+    public TrayApplicationContext(SingleInstanceCoordinator singleInstance, AgentFileLogger logger)
     {
         _singleInstance = singleInstance;
+        _logger = logger;
+        _apiClient = new CenterApiClient(new HttpClient { Timeout = TimeSpan.FromSeconds(35) }, logger);
         _credentials = LoadCredentialsSafely();
         _snapshot = new AgentStatusSnapshot(
             _credentials is null ? AgentConnectionState.NotRegistered : AgentConnectionState.Disconnected,
@@ -43,7 +46,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _statusForm.ClearRegistrationRequested += OnClearRegistrationRequested;
         _statusForm.SelfTestRequested += OnSelfTestRequested;
         var capabilities = _driverRegistry.Descriptors.Select(ToAgentCapability).ToArray();
-        _worker = new AgentWorker(_apiClient, new CollectorTaskExecutor(_driverRegistry), capabilities, OnWorkerUpdateAsync);
+        _worker = new AgentWorker(_apiClient, new CollectorTaskExecutor(_driverRegistry, logger), capabilities, OnWorkerUpdateAsync, logger);
 
         _trayMenu = new ContextMenuStrip();
         _trayMenu.Items.Add("打开状态", null, (_, _) => ShowStatus());
@@ -82,23 +85,27 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private async void OnRegisterRequested(object? sender, AgentRegistrationFormValue value)
     {
+        _statusForm.ClearRegistrationCode();
         if (string.IsNullOrWhiteSpace(value.CenterUrl) || string.IsNullOrWhiteSpace(value.AgentName) || string.IsNullOrWhiteSpace(value.RegistrationCode))
         {
             MessageBox.Show("中心地址、代理名称和注册码不能为空。", "注册失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         _statusForm.SetRegistrationRunning(true);
+        _logger.Info("agent.registration.started", $"center={value.CenterUrl} agentName={value.AgentName}");
         try
         {
             var capabilities = _driverRegistry.Descriptors.Select(ToAgentCapability).ToArray();
             var registration = await _apiClient.RegisterAsync(value.CenterUrl, new AgentRegistrationRequest(value.RegistrationCode, MachineIdentityProvider.GetMachineId(), value.AgentName, "windows", RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(), Application.ProductVersion, capabilities), _applicationCancellation.Token);
             _credentials = new AgentCredentials(value.CenterUrl, registration.AgentId, registration.AgentToken, registration.TenantId, value.AgentName);
             _credentialStore.Save(_credentials);
+            _logger.Info("agent.registration.succeeded", $"center={value.CenterUrl} agentId={registration.AgentId}");
             UpdateSnapshot(_snapshot with { ConnectionState = AgentConnectionState.Disconnected, CenterUrl = value.CenterUrl, AgentName = value.AgentName, AgentId = registration.AgentId, LastMessage = "注册成功，正在连接中心", UpdatedAt = DateTimeOffset.Now });
             _worker.Start(_credentials, _applicationCancellation.Token);
         }
         catch (Exception exception)
         {
+            _logger.Error("agent.registration.failed", $"center={value.CenterUrl} agentName={value.AgentName}", exception);
             MessageBox.Show(exception.Message, "注册失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
             UpdateSnapshot(_snapshot with { LastMessage = exception.Message, UpdatedAt = DateTimeOffset.Now });
         }
@@ -116,6 +123,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             {
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                 await _apiClient.DisconnectAsync(credentials, timeout.Token);
+                _logger.Info("agent.disconnected", $"agentId={credentials.AgentId}");
                 UpdateSnapshot(_snapshot with { ConnectionState = AgentConnectionState.Disconnected, LastMessage = "已手动断开中心；本地协议自检仍可使用", UpdatedAt = DateTimeOffset.Now });
             }
             catch (CenterApiException exception) when (exception.IsCredentialInvalid)
@@ -125,6 +133,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             }
             catch (Exception exception)
             {
+                _logger.Warn("agent.disconnect.failed", $"agentId={credentials.AgentId}", exception);
                 UpdateSnapshot(_snapshot with { ConnectionState = AgentConnectionState.Disconnected, LastMessage = $"本地已断开，但中心通知失败：{exception.Message}", UpdatedAt = DateTimeOffset.Now });
             }
         }
@@ -145,12 +154,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             await _apiClient.RevokeAsync(credentials, timeout.Token);
+            _logger.Info("agent.registration.revoked", $"agentId={credentials.AgentId}");
         }
         catch (CenterApiException exception) when (exception.IsCredentialInvalid)
         {
         }
         catch (Exception exception)
         {
+            _logger.Error("agent.registration.revoke_failed", $"agentId={credentials.AgentId}", exception);
             MessageBox.Show($"中心撤销失败，本地凭据已保留，请稍后重试。\n\n{exception.Message}", "清除注册失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
             UpdateSnapshot(_snapshot with { ConnectionState = AgentConnectionState.Disconnected, LastMessage = $"撤销注册失败：{exception.Message}", UpdatedAt = DateTimeOffset.Now });
             return;
@@ -173,7 +184,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private AgentCredentials? LoadCredentialsSafely()
     {
         try { return _credentialStore.Load(); }
-        catch { _credentialStore.Clear(); return null; }
+        catch (Exception exception)
+        {
+            _logger.Error("agent.credentials.load_failed", $"path={AgentCredentialStore.GetDefaultPath()}", exception);
+            _credentialStore.Clear();
+            return null;
+        }
     }
 
     private void ClearCredentials() { _credentialStore.Clear(); _credentials = null; }
@@ -211,7 +227,30 @@ internal sealed class TrayApplicationContext : ApplicationContext
         SetForegroundWindow(_trayMenuHost.Handle);
         _trayMenu.Show(_trayMenuHost, Point.Empty);
     }
-    private async void OnSelfTestRequested(object? sender, string endpointUrl) { _statusForm.SetSelfTestRunning(true); UpdateSnapshot(_snapshot with { CurrentTask = "OPC UA 本地自检", LastMessage = $"正在连接 {endpointUrl}", UpdatedAt = DateTimeOffset.Now }); try { var message = await _selfTestService.RunAsync(endpointUrl, _applicationCancellation.Token); UpdateSnapshot(_snapshot with { CurrentTask = "空闲", LastMessage = message, UpdatedAt = DateTimeOffset.Now }); } catch (OperationCanceledException) when (_applicationCancellation.IsCancellationRequested) { } catch (Exception exception) { UpdateSnapshot(_snapshot with { CurrentTask = "空闲", LastMessage = exception.Message, UpdatedAt = DateTimeOffset.Now }); } finally { _statusForm.SetSelfTestRunning(false); } }
+    private async void OnSelfTestRequested(object? sender, string endpointUrl)
+    {
+        _statusForm.SetSelfTestRunning(true);
+        _logger.Info("opcua.self_test.started", $"endpoint={endpointUrl}");
+        UpdateSnapshot(_snapshot with { CurrentTask = "OPC UA 本地自检", LastMessage = $"正在连接 {endpointUrl}", UpdatedAt = DateTimeOffset.Now });
+        try
+        {
+            var message = await _selfTestService.RunAsync(endpointUrl, _applicationCancellation.Token);
+            _logger.Info("opcua.self_test.succeeded", $"endpoint={endpointUrl}");
+            UpdateSnapshot(_snapshot with { CurrentTask = "空闲", LastMessage = message, UpdatedAt = DateTimeOffset.Now });
+        }
+        catch (OperationCanceledException) when (_applicationCancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            _logger.Error("opcua.self_test.failed", $"endpoint={endpointUrl}", exception);
+            UpdateSnapshot(_snapshot with { CurrentTask = "空闲", LastMessage = exception.Message, UpdatedAt = DateTimeOffset.Now });
+        }
+        finally
+        {
+            _statusForm.SetSelfTestRunning(false);
+        }
+    }
     private void UpdateSnapshot(AgentStatusSnapshot snapshot) { _snapshot = snapshot; _statusForm.UpdateStatus(snapshot); _notifyIcon.Text = snapshot.ConnectionState switch { AgentConnectionState.Connected => "InduForge 采集调试代理：已连接", AgentConnectionState.Disconnected => "InduForge 采集调试代理：已断开", _ => "InduForge 采集调试代理：未注册" }; }
     private void RefreshMenus() { var registered = _credentials is not null; _connectionMenuItem.Visible = registered; _connectionMenuItem.Text = _worker?.IsRunning == true ? "断开中心" : "重新连接"; _clearRegistrationMenuItem.Visible = registered; }
     private async Task ExitAgentAsync()
@@ -227,9 +266,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
                 await _apiClient.DisconnectAsync(credentials, timeout.Token);
             }
-            catch
+            catch (Exception exception)
             {
                 // 退出通知是尽力发送，中心不可达时不能阻止本地进程关闭。
+                _logger.Warn("agent.exit_disconnect.failed", $"agentId={credentials.AgentId}", exception);
             }
         }
         _applicationCancellation.Cancel();

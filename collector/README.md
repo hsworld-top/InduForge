@@ -24,9 +24,13 @@ dotnet test collector/InduForge.Collector.slnx
 - 启动后显示状态窗口。
 - 关闭窗口后继续驻留托盘。
 - 托盘“退出”才结束进程。
-- 支持使用一次性注册码接入中心，并使用 DPAPI 保存 Agent Token。
+- 支持使用一次性注册码接入中心，并使用 DPAPI 保存 Agent Token；注册码提交后立即从界面清空。
 - 支持 15 秒心跳、2 秒任务轮询和 Connect/Browse/Read 串行执行。
 - 可使用 `opc.tcp://127.0.0.1:18540/induforge/sim` 执行 OPC UA 本地自检。
+- 凭据保存到 EXE 同级目录的 `data/credentials.dat`。
+- 日志保存到 EXE 同级目录的 `logs/collector-dev-agent-yyyyMMdd.log`，按天滚动并保留最近 14 个文件。
+
+EXE 所在目录必须可写。旧版 `LocalAppData` 凭据不再读取，升级后需要重新注册一次。
 
 生成自包含单文件：
 

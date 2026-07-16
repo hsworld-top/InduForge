@@ -24,6 +24,13 @@ public sealed class DriverRegistryTests
         ]));
     }
 
+    [Fact]
+    public void DefaultOpcUaDriverUsesStructuredConnectionSchemaVersion()
+    {
+        var descriptor = DriverRegistry.CreateDefault().Describe("opcua.standard");
+        Assert.Equal([2], descriptor.SchemaVersions);
+    }
+
     private sealed class BrowserAndReaderDriver : IIndustrialDriver, IDeviceBrowser, IPointReader
     {
         public DriverDescriptor Descriptor { get; } = new(

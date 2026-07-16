@@ -11,8 +11,13 @@ internal sealed class AgentCredentialStore
 
     public AgentCredentialStore(string? filePath = null)
     {
-        _filePath = filePath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "InduForge", "CollectorDevAgent", "credentials.dat");
+        _filePath = filePath ?? GetDefaultPath();
+        var directory = Path.GetDirectoryName(_filePath) ?? throw new InvalidOperationException("凭据目录无效");
+        Directory.CreateDirectory(directory);
     }
+
+    internal static string GetDefaultPath(string? baseDirectory = null) =>
+        Path.Combine(baseDirectory ?? AppContext.BaseDirectory, "data", "credentials.dat");
 
     public AgentCredentials? Load()
     {

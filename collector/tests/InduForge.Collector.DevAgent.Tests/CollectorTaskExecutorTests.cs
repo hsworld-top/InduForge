@@ -14,7 +14,7 @@ public sealed class CollectorTaskExecutorTests
             driverId = "test.driver",
             driverVersion = "1.0.0",
             schemaVersion = 1,
-            connection = new { protocolFamily = "opcua", config = new { endpointUrl = "opc.tcp://127.0.0.1:18540/induforge/sim", securityMode = "None", securityPolicy = "None", authenticationType = "anonymous" }, secrets = new { } },
+            connection = new { protocolFamily = "opcua", config = new { host = "127.0.0.1", port = 18540, endpointPath = "/induforge/sim", securityMode = "None", securityPolicy = "None", authenticationType = "anonymous" }, secrets = new { } },
             input = new { },
         });
         var task = new CollectorTaskEnvelope("task-1", "project-1", "agent-1", "point.write", "running", request, "2026-07-13 12:00:00");
@@ -31,7 +31,7 @@ public sealed class CollectorTaskExecutorTests
             driverId = "test.driver",
             driverVersion = "1.0.0",
             schemaVersion = 1,
-            connection = new { protocolFamily = "opcua", config = new { endpointUrl = "opc.tcp://127.0.0.1:18540/induforge/sim", securityMode = "None", securityPolicy = "None", authenticationType = "anonymous" }, secrets = new { } },
+            connection = new { protocolFamily = "opcua", config = new { host = "127.0.0.1", port = 18540, endpointPath = "/induforge/sim", securityMode = "None", securityPolicy = "None", authenticationType = "anonymous" }, secrets = new { } },
             input = new { points = new[] { new { pointId = "point-1", address = new { nodeId = "ns=2;s=Temperature" }, dataType = "float32", elementCount = 1, readOptions = new { } } } },
         });
         var task = new CollectorTaskEnvelope("task-1", "project-1", "agent-1", "point.read", "running", request, "2026-07-13 12:00:00");
@@ -44,6 +44,24 @@ public sealed class CollectorTaskExecutorTests
     }
 
     private static DriverRegistry CreateRegistry() => new([() => new TestDriver()]);
+
+    [Theory]
+    [InlineData("127.0.0.1", 4840, "/factory/server", "opc.tcp://127.0.0.1:4840/factory/server")]
+    [InlineData("plc.local", 4840, "factory/server", "opc.tcp://plc.local:4840/factory/server")]
+    [InlineData("2001:db8::1", 4840, "/", "opc.tcp://[2001:db8::1]:4840/")]
+    public void OpcUaEndpointBuilderCombinesStructuredConfiguration(string host, int port, string path, string expected)
+    {
+        Assert.Equal(expected, OpcUaEndpointBuilder.Build(host, port, path));
+    }
+
+    [Theory]
+    [InlineData("opc.tcp://127.0.0.1", 4840)]
+    [InlineData("", 4840)]
+    [InlineData("127.0.0.1", 0)]
+    public void OpcUaEndpointBuilderRejectsInvalidConfiguration(string host, int port)
+    {
+        Assert.Throws<CollectorTaskExecutionException>(() => OpcUaEndpointBuilder.Build(host, port, "/"));
+    }
 
     private sealed class TestDriver : IIndustrialDriver, IPointReader
     {
@@ -75,6 +93,28 @@ public sealed class CollectorTaskExecutorTests
         finally
         {
             if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void CredentialStoreDefaultPathUsesExecutableDataDirectory()
+    {
+        var baseDirectory = Path.Combine(Path.GetTempPath(), $"induforge-collector-{Guid.NewGuid():N}");
+        Assert.Equal(Path.Combine(baseDirectory, "data", "credentials.dat"), AgentCredentialStore.GetDefaultPath(baseDirectory));
+    }
+
+    [Fact]
+    public void CredentialStoreCreatesDataDirectoryOnStartup()
+    {
+        var baseDirectory = Path.Combine(Path.GetTempPath(), $"induforge-collector-{Guid.NewGuid():N}");
+        try
+        {
+            _ = new AgentCredentialStore(Path.Combine(baseDirectory, "data", "credentials.dat"));
+            Assert.True(Directory.Exists(Path.Combine(baseDirectory, "data")));
+        }
+        finally
+        {
+            if (Directory.Exists(baseDirectory)) Directory.Delete(baseDirectory, true);
         }
     }
 }

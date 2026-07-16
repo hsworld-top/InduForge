@@ -8,15 +8,17 @@ internal sealed class CollectorTaskExecutor
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly DriverRegistry _registry;
+    private readonly AgentFileLogger? _logger;
 
     public CollectorTaskExecutor()
         : this(DriverRegistry.CreateDefault())
     {
     }
 
-    public CollectorTaskExecutor(DriverRegistry registry)
+    public CollectorTaskExecutor(DriverRegistry registry, AgentFileLogger? logger = null)
     {
         _registry = registry;
+        _logger = logger;
     }
 
     public async Task<CollectorTaskCompletion> ExecuteAsync(CollectorTaskEnvelope task, CancellationToken cancellationToken)
@@ -46,14 +48,17 @@ internal sealed class CollectorTaskExecutor
         }
         catch (OpcUaDriverException exception)
         {
+            _logger?.Warn("task.driver.failed", $"taskId={task.TaskId} operation={task.Operation} code={exception.Code}", exception);
             return Failed(exception.Code, exception.Message, exception.Retryable);
         }
         catch (CollectorTaskExecutionException exception)
         {
+            _logger?.Warn("task.validation.failed", $"taskId={task.TaskId} operation={task.Operation} code={exception.Code}", exception);
             return Failed(exception.Code, exception.Message, exception.Retryable);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            _logger?.Error("task.execution.failed", $"taskId={task.TaskId} operation={task.Operation}", exception);
             return Failed("COLLECTOR_TASK_FAILED", "调试任务执行失败", false);
         }
     }
@@ -70,9 +75,9 @@ internal sealed class CollectorTaskExecutor
         }
         return new ConnectionProfile(
             connection.ProtocolFamily,
-            connection.Config.EndpointUrl,
-            connection.Config.SecurityMode,
-            connection.Config.SecurityPolicy,
+            OpcUaEndpointBuilder.Build(connection.Config.Host, connection.Config.Port, connection.Config.EndpointPath),
+            connection.Config.SecurityMode ?? string.Empty,
+            connection.Config.SecurityPolicy ?? string.Empty,
             new ConnectionAuthentication(AuthenticationType.Anonymous),
             TimeSpan.FromMilliseconds(connection.Config.TimeoutMs ?? 30000));
     }
@@ -103,7 +108,38 @@ internal sealed class CollectorTaskExecutor
 
 internal sealed record CollectorTaskRequest(string DriverId, string DriverVersion, int SchemaVersion, CollectorTaskConnection Connection, JsonElement Input);
 internal sealed record CollectorTaskConnection(string ProtocolFamily, CollectorTaskConnectionConfig Config, JsonElement Secrets);
-internal sealed record CollectorTaskConnectionConfig(string EndpointUrl, string SecurityMode, string SecurityPolicy, string AuthenticationType, int? TimeoutMs);
+internal sealed record CollectorTaskConnectionConfig(string? Host, int Port, string? EndpointPath, string? SecurityMode, string? SecurityPolicy, string? AuthenticationType, int? TimeoutMs);
+
+internal static class OpcUaEndpointBuilder
+{
+    public static string Build(string? host, int port, string? endpointPath)
+    {
+        var normalizedHost = host?.Trim() ?? string.Empty;
+        if (normalizedHost.Length == 0 || normalizedHost.Contains("://", StringComparison.Ordinal))
+        {
+            throw new CollectorTaskExecutionException("COLLECTOR_ENDPOINT_HOST_INVALID", "OPC UA 设备 IP / 主机名无效", false);
+        }
+        if (port is < 1 or > 65535)
+        {
+            throw new CollectorTaskExecutionException("COLLECTOR_ENDPOINT_PORT_INVALID", "OPC UA 端口必须在 1 到 65535 之间", false);
+        }
+        if (normalizedHost.StartsWith('[') && normalizedHost.EndsWith(']'))
+        {
+            normalizedHost = normalizedHost[1..^1];
+        }
+
+        var normalizedPath = string.IsNullOrWhiteSpace(endpointPath) ? "/" : endpointPath.Trim();
+        if (!normalizedPath.StartsWith('/')) normalizedPath = "/" + normalizedPath;
+        try
+        {
+            return new UriBuilder("opc.tcp", normalizedHost, port, normalizedPath).Uri.AbsoluteUri;
+        }
+        catch (UriFormatException exception)
+        {
+            throw new CollectorTaskExecutionException("COLLECTOR_ENDPOINT_INVALID", $"无法生成 OPC UA 端点地址：{exception.Message}", false);
+        }
+    }
+}
 internal sealed class CollectorTaskExecutionException(string code, string message, bool retryable) : Exception(message)
 {
     public string Code { get; } = code;

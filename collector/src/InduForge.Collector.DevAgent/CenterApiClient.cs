@@ -1,18 +1,23 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace InduForge.Collector.DevAgent;
 
-internal sealed class CenterApiClient(HttpClient httpClient)
+internal sealed class CenterApiClient(HttpClient httpClient, AgentFileLogger? logger = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<AgentRegistration> RegisterAsync(string centerUrl, AgentRegistrationRequest request, CancellationToken cancellationToken)
     {
-        using var response = await httpClient.PostAsJsonAsync(BuildUrl(centerUrl, "/api/v1/data/collector-dev/agent/register"), request, JsonOptions, cancellationToken).ConfigureAwait(false);
+        using var message = new HttpRequestMessage(HttpMethod.Post, BuildUrl(centerUrl, "/api/v1/data/collector-dev/agent/register"))
+        {
+            Content = JsonContent.Create(request, options: JsonOptions),
+        };
+        using var response = await SendAsync(message, cancellationToken).ConfigureAwait(false);
         return await ReadDataAsync<AgentRegistration>(response, cancellationToken).ConfigureAwait(false);
     }
 
@@ -29,29 +34,56 @@ internal sealed class CenterApiClient(HttpClient httpClient)
     public async Task HeartbeatAsync(AgentCredentials credentials, AgentHeartbeatRequest request, CancellationToken cancellationToken)
     {
         using var message = CreateAgentRequest(credentials, HttpMethod.Post, "/api/v1/data/collector-dev/agent/heartbeat", request);
-        using var response = await httpClient.SendAsync(message, cancellationToken).ConfigureAwait(false);
+        using var response = await SendAsync(message, cancellationToken).ConfigureAwait(false);
         _ = await ReadDataAsync<JsonElement>(response, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<CollectorTaskEnvelope?> ClaimTaskAsync(AgentCredentials credentials, CancellationToken cancellationToken)
     {
         using var message = CreateAgentRequest(credentials, HttpMethod.Post, "/api/v1/data/collector-dev/agent/tasks/claim", new { });
-        using var response = await httpClient.SendAsync(message, cancellationToken).ConfigureAwait(false);
+        using var response = await SendAsync(message, cancellationToken, false).ConfigureAwait(false);
         return await ReadOptionalDataAsync<CollectorTaskEnvelope>(response, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task CompleteTaskAsync(AgentCredentials credentials, string taskId, CollectorTaskCompletion completion, CancellationToken cancellationToken)
     {
         using var message = CreateAgentRequest(credentials, HttpMethod.Post, $"/api/v1/data/collector-dev/agent/tasks/{taskId}/complete", completion);
-        using var response = await httpClient.SendAsync(message, cancellationToken).ConfigureAwait(false);
+        using var response = await SendAsync(message, cancellationToken).ConfigureAwait(false);
         _ = await ReadDataAsync<JsonElement>(response, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task SendAgentCommandAsync(AgentCredentials credentials, string path, CancellationToken cancellationToken)
     {
         using var message = CreateAgentRequest(credentials, HttpMethod.Post, path, new { });
-        using var response = await httpClient.SendAsync(message, cancellationToken).ConfigureAwait(false);
+        using var response = await SendAsync(message, cancellationToken).ConfigureAwait(false);
         _ = await ReadDataAsync<JsonElement>(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage message, CancellationToken cancellationToken, bool logFailure = true)
+    {
+        var startedAt = Stopwatch.GetTimestamp();
+        var requestPath = message.RequestUri?.AbsolutePath ?? "unknown";
+        try
+        {
+            var response = await httpClient.SendAsync(message, cancellationToken).ConfigureAwait(false);
+            if (logFailure && !response.IsSuccessStatusCode)
+            {
+                logger?.Warn("center.http.failed", $"method={message.Method} path={requestPath} status={(int)response.StatusCode} elapsedMs={Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds:F0}");
+            }
+            return response;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            if (logFailure)
+            {
+                logger?.Error("center.http.exception", $"method={message.Method} path={requestPath} elapsedMs={Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds:F0}", exception);
+            }
+            throw;
+        }
     }
 
     private static HttpRequestMessage CreateAgentRequest(AgentCredentials credentials, HttpMethod method, string path, object body)
