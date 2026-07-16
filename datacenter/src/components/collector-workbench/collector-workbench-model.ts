@@ -1,5 +1,9 @@
 import type { CollectorAgent } from '@/api/schemas/collector-dev.schema'
-import type { CollectorConnection, CollectorDriverSummary } from '@/api/schemas/collector.schema'
+import type {
+  CollectorConnection,
+  CollectorDriverSummary,
+  CollectorJsonSchemaProperty,
+} from '@/api/schemas/collector.schema'
 
 export type CollectorDriverIconKey =
   | 'modbus'
@@ -26,6 +30,13 @@ export type CollectorDriverTreeNode = {
   protocolFamily?: string
   driver?: CollectorDriverSummary
   children?: CollectorDriverTreeNode[]
+}
+
+export function resolveCollectorEnumOptionLabel(
+  property: CollectorJsonSchemaProperty,
+  option: unknown,
+) {
+  return property['x-induforge-enum-labels']?.[String(option)] || String(option)
 }
 
 const protocolFamilyLabels: Record<string, string> = {
@@ -93,6 +104,35 @@ export function formatCollectorAgentName(agent: CollectorAgent) {
 export function formatCollectorProtocolFamily(protocolFamily: string) {
   const normalized = protocolFamily.trim().toLowerCase()
   return protocolFamilyLabels[normalized] || protocolFamily.trim().toUpperCase()
+}
+
+export function formatCollectorConnectionSummary(connection: CollectorConnection) {
+  const config = connection.config
+  const host = typeof config.host === 'string' ? config.host.trim() : ''
+  const port = typeof config.port === 'number' || typeof config.port === 'string' ? config.port : ''
+  const endpointPath = typeof config.endpointPath === 'string' ? config.endpointPath.trim() : ''
+  const portName = typeof config.portName === 'string' ? config.portName.trim() : ''
+
+  if (host) {
+    const hostText = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
+    const pathText = endpointPath && endpointPath !== '/' ? endpointPath : ''
+    return `${hostText}${port ? `:${port}` : ''}${pathText}`
+  }
+  if (portName) return portName
+  return connection.driverId
+}
+
+export function formatCollectorConnectionStatus(status: string) {
+  const normalized = status.trim().toLowerCase()
+  if (['online', 'connected', 'running', 'healthy'].includes(normalized))
+    return { label: '在线', tone: 'success' as const }
+  if (['failed', 'error', 'invalid', 'unhealthy'].includes(normalized))
+    return { label: '异常', tone: 'danger' as const }
+  if (['offline', 'disconnected'].includes(normalized))
+    return { label: '离线', tone: 'muted' as const }
+  if (['configured', 'ready'].includes(normalized))
+    return { label: '已配置', tone: 'primary' as const }
+  return { label: '未检测', tone: 'warning' as const }
 }
 
 export function formatCollectorCategoryLabel(category: string) {

@@ -264,9 +264,6 @@ const typeLabel = computed(() => {
     http: 'HTTP Source',
     websocket: 'WebSocket',
     redis: 'Redis',
-    opcua: 'OPC UA',
-    s7: 'Siemens S7',
-    modbus: 'Modbus',
     tdengine: 'TDengine',
   }
   if (connection.type && protocolLabels[connection.type]) {
@@ -306,16 +303,6 @@ const endpointText = computed(() => {
   }
   if (connection.type === 'redis') {
     return [config.address, config.keyPattern || '*'].filter(Boolean).join(' / ') || '未配置'
-  }
-  if (connection.type === 'opcua') {
-    return [config.endpoint, config.securityMode || 'none'].filter(Boolean).join(' / ') || '未配置'
-  }
-  if (connection.type === 's7') {
-    return [config.host, config.port].filter(Boolean).join(':') || '未配置'
-  }
-  if (connection.type === 'modbus') {
-    if (config.mode === 'rtu') return 'RTU / 串口配置'
-    return [config.host, config.port].filter(Boolean).join(':') || '未配置'
   }
   if (connection.type === 'tdengine') {
     return [config.dsn, config.database].filter(Boolean).join(' / ') || '未配置'
@@ -479,49 +466,6 @@ const configRows = computed(() => {
       { label: 'Address', value: config.address || '-' },
       { label: 'DB', value: config.db ?? 0 },
       { label: 'Key Pattern', value: config.keyPattern || '*' },
-    ]
-  }
-
-  if (connection.type === 'opcua') {
-    return [
-      { label: 'Endpoint', value: config.endpoint || '-' },
-      { label: 'Security Policy', value: config.securityPolicy || 'None' },
-      { label: 'Security Mode', value: config.securityMode || 'none' },
-      { label: 'Auth Type', value: config.authType || 'anonymous' },
-      {
-        label: 'Sampling',
-        value: config.samplingMs ? `${config.samplingMs}ms` : '-',
-      },
-    ]
-  }
-
-  if (connection.type === 's7') {
-    return [
-      { label: 'IP', value: config.host || '-' },
-      { label: '端口', value: config.port || 102 },
-      { label: 'Rack', value: config.rack ?? 0 },
-      { label: 'Slot', value: config.slot ?? 1 },
-      {
-        label: '轮询周期',
-        value: config.pollIntervalMs ? `${config.pollIntervalMs}ms` : '-',
-      },
-    ]
-  }
-
-  if (connection.type === 'modbus') {
-    return [
-      { label: 'Mode', value: config.mode || 'tcp' },
-      {
-        label: 'IP',
-        value: config.mode === 'rtu' ? 'RTU 串口' : config.host || '-',
-      },
-      {
-        label: '端口',
-        value: config.mode === 'rtu' ? '-' : config.port || 502,
-      },
-      { label: 'Slave ID', value: config.slaveId ?? 1 },
-      { label: 'Address', value: config.startAddress ?? 0 },
-      { label: 'Quantity', value: config.quantity ?? 1 },
     ]
   }
 

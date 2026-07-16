@@ -5,13 +5,8 @@
     label-position="top"
     class="collector-editor"
   >
-    <div class="collector-editor__grid">
+    <div class="collector-editor__basic">
       <el-form-item label="连接名称"><el-input v-model="name" /></el-form-item>
-      <el-form-item label="启用采集"><el-switch v-model="enabled" /></el-form-item>
-    </div>
-    <div class="collector-editor__driver">
-      <span>驱动</span><strong>{{ driver.displayName }}</strong
-      ><code>{{ connection.driverId }}@{{ connection.driverVersion }}</code>
     </div>
     <CollectorSchemaForm
       v-model="values"
@@ -41,7 +36,6 @@ const props = defineProps<{ projectId: string; connection: CollectorConnection |
 const emit = defineEmits<{ saved: [connection: CollectorConnection] }>()
 const driver = ref<CollectorDriverDetail | null>(null)
 const name = ref('')
-const enabled = ref(true)
 const values = ref<Record<string, unknown>>({})
 const loading = ref(false)
 const saving = ref(false)
@@ -53,7 +47,6 @@ watch(
     try {
       driver.value = await getCollectorDriver(connection.driverId)
       name.value = connection.name
-      enabled.value = connection.enabled
       values.value = { ...connection.config }
     } finally {
       loading.value = false
@@ -68,7 +61,6 @@ async function save() {
     const payload = splitCollectorFormValues(driver.value.connectionSchema, values.value)
     const result = await updateCollectorConnection(props.projectId, props.connection.id, {
       name: name.value,
-      enabled: enabled.value,
       ...payload,
     })
     emit('saved', result)
@@ -81,32 +73,24 @@ async function save() {
 
 <style scoped>
 .collector-editor {
-  max-width: 760px;
+  width: min(100%, 1180px);
+  margin: 0 auto;
   padding: 6px 4px 24px;
 }
-.collector-editor__grid {
-  display: grid;
-  grid-template-columns: 1fr 160px;
-  gap: 18px;
-}
-.collector-editor__driver {
-  display: grid;
-  grid-template-columns: 80px 1fr auto;
-  align-items: center;
-  margin-bottom: 20px;
-  padding: 14px 16px;
-  border: 1px solid #dfe7eb;
-  border-radius: 8px;
-  background: #f7f9fa;
-}
-.collector-editor__driver span,
-.collector-editor__driver code {
-  color: #74818a;
-  font-size: 12px;
+.collector-editor__basic {
+  width: min(100%, 560px);
+  margin-bottom: 4px;
 }
 .collector-editor__actions {
+  position: sticky;
+  bottom: -16px;
+  z-index: 2;
   display: flex;
   justify-content: flex-end;
-  padding-top: 18px;
+  margin: 8px -4px -24px;
+  padding: 14px 4px 16px;
+  border-top: 1px solid var(--dc-border);
+  background: color-mix(in srgb, var(--dc-surface-raised) 94%, transparent);
+  backdrop-filter: blur(8px);
 }
 </style>

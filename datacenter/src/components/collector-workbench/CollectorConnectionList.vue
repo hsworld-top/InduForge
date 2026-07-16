@@ -1,20 +1,23 @@
 <template>
   <aside class="collector-connection-list">
-    <div class="collector-connection-list__head">
-      <strong>已配置连接</strong>
-      <button type="button" aria-label="新增工业连接" @click="emit('create')">
-        <IconTablerPlus />
+    <div class="collector-connection-list__search-row">
+      <el-input
+        v-model="search"
+        clearable
+        :prefix-icon="IconTablerSearch"
+        placeholder="搜索连接名称或协议"
+        @keyup.enter="reload(1)"
+        @clear="reload(1)"
+      />
+      <button
+        type="button"
+        aria-label="收起连接列表"
+        title="收起连接列表"
+        @click="emit('collapse')"
+      >
+        <IconTablerLayoutSidebarLeftCollapse />
       </button>
     </div>
-
-    <el-input
-      v-model="search"
-      clearable
-      :prefix-icon="IconTablerSearch"
-      placeholder="搜索连接名称或协议"
-      @keyup.enter="reload(1)"
-      @clear="reload(1)"
-    />
 
     <div v-loading="loading" class="collector-connection-list__items">
       <section
@@ -31,30 +34,63 @@
             :is="collapsedGroups.has(group.key) ? IconTablerChevronRight : IconTablerChevronDown"
           />
           <CollectorDriverIcon :protocol-family="group.key" />
-          <span>{{ group.label }}</span>
+          <span :title="group.label">{{ group.label }}</span>
           <em>{{ group.items.length }}</em>
         </button>
         <div
           v-show="!collapsedGroups.has(group.key)"
           class="collector-connection-list__group-items"
         >
-          <button
+          <el-dropdown
             v-for="item in group.items"
             :key="item.id"
-            type="button"
-            :class="['collector-connection-list__item', { 'is-active': item.id === selectedId }]"
-            @click="emit('select', item.id)"
+            class="collector-connection-list__context"
+            trigger="contextmenu"
+            @command="handleItemCommand($event, item)"
           >
-            <span
-              class="collector-connection-list__pulse"
-              :class="{ 'is-enabled': item.enabled }"
-            />
-            <span class="collector-connection-list__identity">
-              <strong>{{ item.name }}</strong>
-              <small>{{ item.driverId }}</small>
-            </span>
-            <em>{{ item.enabled ? '已启用' : '已停用' }}</em>
-          </button>
+            <div
+              role="button"
+              tabindex="0"
+              :class="['collector-connection-list__item', { 'is-active': item.id === selectedId }]"
+              @click="emit('select', item.id)"
+              @keydown.enter="emit('select', item.id)"
+            >
+              <span
+                class="collector-connection-list__pulse"
+                :class="`is-${formatCollectorConnectionStatus(item.status).tone}`"
+              />
+              <span class="collector-connection-list__identity">
+                <strong>{{ item.name }}</strong>
+                <small>{{ formatCollectorConnectionSummary(item) }}</small>
+              </span>
+              <el-dropdown
+                trigger="click"
+                placement="bottom-end"
+                @command="handleItemCommand($event, item)"
+              >
+                <button
+                  type="button"
+                  class="collector-connection-list__more"
+                  :aria-label="`${item.name}更多操作`"
+                  @click.stop
+                >
+                  <IconTablerDots />
+                </button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="delete">
+                      <IconTablerTrash />删除连接
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="delete"> <IconTablerTrash />删除连接 </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </section>
       <el-empty v-if="!loading && !items.length" description="暂无工业连接" :image-size="64" />
@@ -78,20 +114,28 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { listCollectorConnections } from '@/api/collector.api'
+import { deleteCollectorConnection, listCollectorConnections } from '@/api/collector.api'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { CollectorConnection } from '@/api/schemas/collector.schema'
-import { groupCollectorConnections } from './collector-workbench-model'
+import {
+  formatCollectorConnectionStatus,
+  formatCollectorConnectionSummary,
+  groupCollectorConnections,
+} from './collector-workbench-model'
 import CollectorDriverIcon from './CollectorDriverIcon.vue'
 import IconTablerChevronDown from '~icons/tabler/chevron-down'
 import IconTablerChevronRight from '~icons/tabler/chevron-right'
-import IconTablerPlus from '~icons/tabler/plus'
+import IconTablerDots from '~icons/tabler/dots'
+import IconTablerLayoutSidebarLeftCollapse from '~icons/tabler/layout-sidebar-left-collapse'
+import IconTablerTrash from '~icons/tabler/trash'
 import IconTablerSearch from '~icons/tabler/search'
 
 const props = defineProps<{ projectId: string; selectedId?: string }>()
 const emit = defineEmits<{
   select: [id: string]
-  create: []
+  collapse: []
   loaded: [items: CollectorConnection[]]
+  deleted: [id: string]
 }>()
 const items = ref<CollectorConnection[]>([])
 const loading = ref(false)
@@ -107,6 +151,29 @@ function toggleGroup(key: string) {
   if (next.has(key)) next.delete(key)
   else next.add(key)
   collapsedGroups.value = next
+}
+
+async function handleItemCommand(command: string, item: CollectorConnection) {
+  if (command !== 'delete') return
+  await removeConnection(item)
+}
+
+async function removeConnection(item: CollectorConnection) {
+  // 删除连接会级联删除该连接下的变量分组和变量，必须在执行前明确提示影响范围。
+  await ElMessageBox.confirm(
+    `确认删除连接“${item.name}”？该连接下的变量分组和变量也会一并删除。`,
+    '删除工业连接',
+    {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+    },
+  )
+  await deleteCollectorConnection(props.projectId, item.id)
+  emit('deleted', item.id)
+  ElMessage.success('工业连接已删除')
+  await reload(items.value.length === 1 && page.value > 1 ? page.value - 1 : page.value)
 }
 
 async function reload(nextPage = page.value) {
@@ -137,8 +204,8 @@ onMounted(() => reload())
 <style scoped>
 .collector-connection-list {
   display: flex;
-  width: 292px;
-  min-width: 292px;
+  width: 320px;
+  min-width: 320px;
   min-height: 0;
   flex-direction: column;
   gap: 12px;
@@ -146,31 +213,29 @@ onMounted(() => reload())
   border-right: 1px solid var(--dc-border);
   background: var(--dc-surface-raised);
 }
-.collector-connection-list__head {
-  display: flex;
+.collector-connection-list__search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 2px;
+  gap: 8px;
 }
-.collector-connection-list__head strong {
-  color: var(--dc-text);
-  font-size: 16px;
-}
-.collector-connection-list__head > button {
+.collector-connection-list__search-row > button {
   display: grid;
   width: 32px;
   height: 32px;
   place-items: center;
-  border: 1px solid var(--dc-primary);
+  border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-sm);
-  background: var(--dc-primary);
-  color: #fff;
+  background: var(--dc-surface-raised);
+  color: var(--dc-text-muted);
   cursor: pointer;
 }
-.collector-connection-list__head > button:hover {
-  background: var(--dc-primary-hover);
+.collector-connection-list__search-row > button:hover {
+  border-color: var(--dc-primary);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
 }
-.collector-connection-list__head svg {
+.collector-connection-list__search-row svg {
   width: 17px;
   height: 17px;
 }
@@ -206,7 +271,10 @@ onMounted(() => reload())
   height: 14px;
 }
 .collector-connection-list__group-head span {
+  overflow: hidden;
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .collector-connection-list__group-head em {
   min-width: 22px;
@@ -221,10 +289,14 @@ onMounted(() => reload())
 .collector-connection-list__group-items {
   padding-left: 17px;
 }
+.collector-connection-list__context {
+  display: block;
+  width: 100%;
+}
 .collector-connection-list__item {
   display: grid;
   width: 100%;
-  grid-template-columns: 9px minmax(0, 1fr) auto;
+  grid-template-columns: 9px minmax(0, 1fr) 30px;
   align-items: center;
   gap: 8px;
   margin-bottom: 3px;
@@ -238,6 +310,35 @@ onMounted(() => reload())
 }
 .collector-connection-list__item:hover {
   background: var(--dc-surface-subtle);
+}
+.collector-connection-list__item:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--dc-primary) 45%, transparent);
+  outline-offset: -2px;
+}
+.collector-connection-list__more {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dc-text-muted);
+  cursor: pointer;
+  opacity: 0.55;
+}
+.collector-connection-list__item:hover .collector-connection-list__more,
+.collector-connection-list__item.is-active .collector-connection-list__more,
+.collector-connection-list__more:focus-visible {
+  opacity: 1;
+}
+.collector-connection-list__more:hover {
+  background: color-mix(in srgb, var(--dc-primary) 9%, transparent);
+  color: var(--dc-primary);
+}
+.collector-connection-list__more svg {
+  width: 18px;
+  height: 18px;
 }
 .collector-connection-list__item.is-active {
   border-color: color-mix(in srgb, var(--dc-primary) 20%, var(--dc-border));
@@ -264,23 +365,24 @@ onMounted(() => reload())
   color: var(--dc-text-muted);
   font-size: 10px;
 }
-.collector-connection-list__item > em {
-  color: var(--dc-text-muted);
-  font-size: 10px;
-  font-style: normal;
-}
-.collector-connection-list__item.is-active > em {
-  color: var(--dc-primary);
-}
 .collector-connection-list__pulse {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--dc-border-strong);
 }
-.collector-connection-list__pulse.is-enabled {
+.collector-connection-list__pulse.is-primary {
+  background: var(--dc-primary);
+}
+.collector-connection-list__pulse.is-success {
   background: var(--dc-success);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--dc-success) 13%, transparent);
+}
+.collector-connection-list__pulse.is-warning {
+  background: #d99000;
+}
+.collector-connection-list__pulse.is-danger {
+  background: var(--dc-danger);
 }
 .collector-connection-list__footer {
   display: flex;

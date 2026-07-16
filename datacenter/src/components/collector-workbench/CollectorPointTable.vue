@@ -41,6 +41,9 @@
         </el-table-column>
         <el-table-column prop="dataType" label="数据类型" width="120" />
         <el-table-column prop="elementCount" label="元素数量" width="100" />
+        <el-table-column label="采集周期" width="110">
+          <template #default="scope">{{ formatAcquisitionInterval(scope.row) }}</template>
+        </el-table-column>
         <el-table-column prop="enabled" label="状态" width="100">
           <template #default="scope">
             <span
@@ -85,6 +88,11 @@ const search = ref('')
 const page = ref(1)
 const pageSize = 50
 const total = ref(0)
+
+function formatAcquisitionInterval(point: CollectorPoint) {
+  const intervalMs = point.acquisition.intervalMs
+  return typeof intervalMs === 'number' ? `${intervalMs} ms` : '-'
+}
 
 async function load(nextPage = page.value) {
   page.value = nextPage

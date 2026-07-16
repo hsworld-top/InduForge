@@ -4,8 +4,11 @@ import {
   buildCollectorDriverTree,
   collectorAgentStorageKey,
   formatCollectorAgentName,
+  formatCollectorConnectionStatus,
+  formatCollectorConnectionSummary,
   formatCollectorProtocolFamily,
   groupCollectorConnections,
+  resolveCollectorEnumOptionLabel,
   resolveCollectorDriverIconKey,
 } from '@/components/collector-workbench/collector-workbench-model'
 
@@ -22,30 +25,30 @@ describe('industrial collector workbench model', () => {
       {
         driverId: 'opcua.standard',
         driverVersion: '1.0.0',
-        schemaVersions: [1],
+        schemaVersions: [2],
         operations: ['connection.test', 'device.browse', 'point.read'],
       },
     ],
     createdAt: '2026-07-15 10:00:00',
   }
   it('allows offline editing while device operations require a compatible agent', () => {
-    expect(agentSupportsOperation(undefined, 'opcua.standard', '1.0.0', 1, 'device.browse')).toBe(
+    expect(agentSupportsOperation(undefined, 'opcua.standard', '1.0.0', 2, 'device.browse')).toBe(
       false,
     )
-    expect(agentSupportsOperation(agent, 'opcua.standard', '1.0.0', 1, 'device.browse')).toBe(true)
+    expect(agentSupportsOperation(agent, 'opcua.standard', '1.0.0', 2, 'device.browse')).toBe(true)
     expect(
       agentSupportsOperation(
         { ...agent, status: 'offline' },
         'opcua.standard',
         '1.0.0',
-        1,
+        2,
         'device.browse',
       ),
     ).toBe(false)
   })
   it('rejects mismatched driver versions and operations', () => {
-    expect(agentSupportsOperation(agent, 'opcua.standard', '2.0.0', 1, 'point.read')).toBe(false)
-    expect(agentSupportsOperation(agent, 'opcua.standard', '1.0.0', 1, 'point.write')).toBe(false)
+    expect(agentSupportsOperation(agent, 'opcua.standard', '2.0.0', 2, 'point.read')).toBe(false)
+    expect(agentSupportsOperation(agent, 'opcua.standard', '1.0.0', 2, 'point.write')).toBe(false)
   })
   it('stores agent selection per project', () => {
     expect(collectorAgentStorageKey('project-1')).toBe('induforge:collector-agent:project-1')
@@ -60,6 +63,15 @@ describe('industrial collector workbench model', () => {
     expect(resolveCollectorDriverIconKey('modbus', 'modbus.tcp')).toBe('modbus')
     expect(resolveCollectorDriverIconKey('plc', 'siemens.s7')).toBe('siemens')
     expect(resolveCollectorDriverIconKey('opcua', 'opcua.standard')).toBeNull()
+  })
+  it('shows bilingual enum labels and falls back to raw values', () => {
+    const property = {
+      type: 'string' as const,
+      enum: ['none', 'odd'],
+      'x-induforge-enum-labels': { none: '无校验（none）' },
+    }
+    expect(resolveCollectorEnumOptionLabel(property, 'none')).toBe('无校验（none）')
+    expect(resolveCollectorEnumOptionLabel(property, 'odd')).toBe('odd')
   })
   it('builds a protocol family and driver tree with bilingual labels', () => {
     const drivers = [
@@ -104,7 +116,6 @@ describe('industrial collector workbench model', () => {
       projectId: 'project-1',
       name: '锅炉 PLC',
       status: 'configured',
-      enabled: true,
       displayOrder: 0,
       protocolFamily: 'modbus',
       driverId: 'modbus.tcp',
@@ -127,5 +138,32 @@ describe('industrial collector workbench model', () => {
       ['OPC UA [开放平台通信]', 1],
     ])
     expect(formatCollectorProtocolFamily('custom')).toBe('CUSTOM')
+  })
+  it('formats connection summaries and localized status labels', () => {
+    const connection = {
+      id: 'connection-1',
+      projectId: 'project-1',
+      name: 'OPC UA',
+      status: 'unknown',
+      displayOrder: 0,
+      protocolFamily: 'opcua',
+      driverId: 'opcua.standard',
+      driverVersion: '1.0.0',
+      schemaVersion: 2,
+      config: { host: 'fe80::1', port: 4840, endpointPath: '/induforge/sim' },
+      metadata: {},
+      secretStatus: {},
+      createdAt: '2026-07-16 10:00:00',
+      updatedAt: '2026-07-16 10:00:00',
+    }
+
+    expect(formatCollectorConnectionSummary(connection)).toBe('[fe80::1]:4840/induforge/sim')
+    expect(formatCollectorConnectionStatus(connection.status)).toEqual({
+      label: '未检测',
+      tone: 'warning',
+    })
+    expect(formatCollectorConnectionStatus('connected').label).toBe('在线')
+    expect(formatCollectorConnectionStatus('error').label).toBe('异常')
+    expect(formatCollectorConnectionStatus('configured').label).toBe('已配置')
   })
 })

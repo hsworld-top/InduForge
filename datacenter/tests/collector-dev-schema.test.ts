@@ -19,7 +19,7 @@ describe('collector dev schemas', () => {
         {
           driverId: 'opcua.standard',
           driverVersion: '1.0.0',
-          schemaVersions: [1],
+          schemaVersions: [2],
           operations: ['connection.test', 'device.browse', 'point.read'],
         },
       ],

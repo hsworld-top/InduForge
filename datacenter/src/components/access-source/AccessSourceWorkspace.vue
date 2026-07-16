@@ -407,9 +407,7 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
     )
   }
   const config = connection.config || {}
-  if (connection.type === 's7' || connection.type === 'modbus') {
-    return [config['host'], config['port']].filter(Boolean).join(':') || '等待接入配置'
-  }
+
   return String(
     config['endpoint'] ||
       config['url'] ||

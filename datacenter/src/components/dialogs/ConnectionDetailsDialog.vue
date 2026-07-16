@@ -67,9 +67,8 @@
       </template>
       <template
         v-if="
-          ['kafka', 'http', 'websocket', 'redis', 'opcua', 's7', 'modbus', 'tdengine'].includes(
-            connection.type,
-          ) && connection.config
+          ['kafka', 'http', 'websocket', 'redis', 'tdengine'].includes(connection.type) &&
+          connection.config
         "
       >
         <el-descriptions-item
@@ -131,10 +130,7 @@ const getConnectionTypeLabel = (type) => {
     kafka: 'Kafka',
     websocket: 'WebSocket',
     redis: 'Redis',
-    opcua: 'OPC UA',
     http: 'HTTP',
-    s7: 'Siemens S7',
-    modbus: 'Modbus',
     tdengine: 'TDengine',
   }
   return labels[type] || type
@@ -164,37 +160,6 @@ const protocolConfigRows = computed(() => {
         { label: 'Mode', value: config.mode || 'standalone' },
         { label: 'Address', value: config.address || '-' },
         { label: 'Key Pattern', value: config.keyPattern || '*' },
-      ]
-    case 'opcua':
-      return [
-        { label: 'Endpoint', value: config.endpoint || '-' },
-        { label: 'Security Policy', value: config.securityPolicy || 'None' },
-        { label: 'Security Mode', value: config.securityMode || 'none' },
-        { label: 'Auth Type', value: config.authType || 'anonymous' },
-        {
-          label: 'Sampling',
-          value: config.samplingMs ? `${config.samplingMs}ms` : '-',
-        },
-      ]
-    case 's7':
-      return [
-        { label: 'PLC 地址', value: config.host || '-' },
-        { label: '端口', value: config.port || 102 },
-        { label: 'PLC 系列', value: config.plcFamily || 'S7 Compatible' },
-        { label: '机架/槽位', value: `${config.rack ?? 0}/${config.slot ?? 1}` },
-      ]
-    case 'modbus':
-      return [
-        { label: '模式', value: (config.mode || 'tcp').toUpperCase() },
-        {
-          label: '地址',
-          value: config.mode === 'rtu' ? 'RTU 串口' : config.host || '-',
-        },
-        {
-          label: '端口',
-          value: config.mode === 'rtu' ? '-' : config.port || 502,
-        },
-        { label: '从站与寄存器', value: '进入工作台维护' },
       ]
     case 'tdengine':
       return [

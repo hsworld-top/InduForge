@@ -39,7 +39,8 @@ export const CollectorConnectionSchema = z.object({
   projectId: z.string(),
   name: z.string(),
   status: z.string(),
-  enabled: z.boolean(),
+  lastTestStatus: z.string().nullable().optional(),
+  lastTestedAt: z.string().nullable().optional(),
   displayOrder: z.number().int(),
   protocolFamily: z.string(),
   driverId: z.string(),
@@ -151,6 +152,7 @@ export type CollectorJsonSchemaProperty = {
   'x-induforge-secret'?: boolean
   'x-induforge-advanced'?: boolean
   'x-induforge-unit'?: string
+  'x-induforge-enum-labels'?: Record<string, string>
 }
 
 export type CollectorJsonSchema = CollectorJsonSchemaProperty & {

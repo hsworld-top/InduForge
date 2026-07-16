@@ -72,9 +72,7 @@ const resolvedPanel = computed(() => {
   if (type === 'websocket') {
     return WebSocketWorkbenchPanel
   }
-  if (['opcua', 'opcda', 's7', 'modbus'].includes(type)) {
-    return ReadOnlyConfigPanel
-  }
+
   return ReadOnlyConfigPanel
 })
 </script>

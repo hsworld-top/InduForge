@@ -13,7 +13,7 @@
           <el-option
             v-for="option in field.property.enum"
             :key="String(option)"
-            :label="String(option)"
+            :label="enumOptionLabel(field.property, option)"
             :value="option"
           />
         </el-select>
@@ -22,14 +22,21 @@
           :model-value="Boolean(model[field.name])"
           @update:model-value="setValue(field.name, $event)"
         />
-        <el-input-number
+        <div
           v-else-if="field.property.type === 'number' || field.property.type === 'integer'"
-          :model-value="numberValue(model[field.name])"
-          :min="field.property.minimum"
-          :max="field.property.maximum"
-          :step="field.property.type === 'integer' ? 1 : 0.1"
-          @update:model-value="setValue(field.name, $event)"
-        />
+          class="collector-schema-form__number"
+        >
+          <el-input-number
+            :model-value="numberValue(model[field.name])"
+            :min="field.property.minimum"
+            :max="field.property.maximum"
+            :step="field.property.type === 'integer' ? 1 : 0.1"
+            @update:model-value="setValue(field.name, $event)"
+          />
+          <span v-if="field.property['x-induforge-unit']" class="collector-schema-form__unit">
+            {{ field.property['x-induforge-unit'] }}
+          </span>
+        </div>
         <CollectorSchemaForm
           v-else-if="field.property.type === 'object'"
           :model-value="objectValue(model[field.name])"
@@ -62,13 +69,33 @@
           :key="field.name"
           :label="field.property.title || field.name"
         >
-          <el-input-number
-            v-if="field.property.type === 'number' || field.property.type === 'integer'"
-            :model-value="numberValue(model[field.name])"
-            :min="field.property.minimum"
-            :max="field.property.maximum"
+          <el-select
+            v-if="field.property.enum"
+            :model-value="model[field.name]"
             @update:model-value="setValue(field.name, $event)"
-          />
+          >
+            <el-option
+              v-for="option in field.property.enum"
+              :key="String(option)"
+              :label="enumOptionLabel(field.property, option)"
+              :value="option"
+            />
+          </el-select>
+          <div
+            v-else-if="field.property.type === 'number' || field.property.type === 'integer'"
+            class="collector-schema-form__number"
+          >
+            <el-input-number
+              :model-value="numberValue(model[field.name])"
+              :min="field.property.minimum"
+              :max="field.property.maximum"
+              :step="field.property.type === 'integer' ? 1 : 0.1"
+              @update:model-value="setValue(field.name, $event)"
+            />
+            <span v-if="field.property['x-induforge-unit']" class="collector-schema-form__unit">
+              {{ field.property['x-induforge-unit'] }}
+            </span>
+          </div>
           <el-switch
             v-else-if="field.property.type === 'boolean'"
             :model-value="Boolean(model[field.name])"
@@ -77,8 +104,14 @@
           <el-input
             v-else
             :model-value="stringValue(model[field.name])"
+            :type="field.property['x-induforge-secret'] ? 'password' : 'text'"
+            :show-password="Boolean(field.property['x-induforge-secret'])"
+            :placeholder="field.property.description"
             @update:model-value="setValue(field.name, $event)"
           />
+          <div v-if="field.property.description" class="collector-schema-form__hint">
+            {{ field.property.description }}
+          </div>
         </el-form-item>
       </el-collapse-item>
     </el-collapse>
@@ -91,6 +124,7 @@ import type {
   CollectorJsonSchema,
   CollectorJsonSchemaProperty,
 } from '@/api/schemas/collector.schema'
+import { resolveCollectorEnumOptionLabel } from './collector-workbench-model'
 
 defineOptions({ name: 'CollectorSchemaForm' })
 
@@ -131,6 +165,9 @@ function stringValue(value: unknown) {
 function numberValue(value: unknown) {
   return typeof value === 'number' ? value : undefined
 }
+function enumOptionLabel(property: CollectorJsonSchemaProperty, option: unknown) {
+  return resolveCollectorEnumOptionLabel(property, option)
+}
 function objectValue(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -140,11 +177,29 @@ function objectValue(value: unknown) {
 
 <style scoped>
 .collector-schema-form {
+  display: grid;
   width: 100%;
+  grid-template-columns: repeat(2, minmax(280px, 560px));
+  justify-content: space-between;
+  gap: 2px 24px;
+}
+.collector-schema-form > :deep(.el-form-item:has(.collector-schema-form)) {
+  grid-column: 1 / -1;
 }
 .collector-schema-form :deep(.el-select),
 .collector-schema-form :deep(.el-input-number) {
   width: 100%;
+}
+.collector-schema-form__number {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+}
+.collector-schema-form__unit {
+  flex: 0 0 auto;
+  color: #667584;
+  font-size: 13px;
 }
 .collector-schema-form__hint {
   margin-top: 6px;
@@ -153,8 +208,14 @@ function objectValue(value: unknown) {
   line-height: 1.5;
 }
 .collector-schema-form__advanced {
+  grid-column: 1 / -1;
   margin-top: 8px;
   border-top: 1px solid #e7ebef;
   border-bottom: 0;
+}
+@media (max-width: 960px) {
+  .collector-schema-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>

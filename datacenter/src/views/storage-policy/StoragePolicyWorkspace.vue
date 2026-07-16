@@ -45,7 +45,13 @@
             @keyup.enter="reloadFirstPage"
             @clear="reloadFirstPage"
           />
-          <el-select v-model="filters.status" size="small" placeholder="状态" clearable @change="reloadFirstPage">
+          <el-select
+            v-model="filters.status"
+            size="small"
+            placeholder="状态"
+            clearable
+            @change="reloadFirstPage"
+          >
             <el-option label="启用" value="enabled" />
             <el-option label="停用" value="disabled" />
             <el-option label="异常" value="error" />
@@ -78,7 +84,11 @@
               <em :class="`is-${policy.status}`">{{ statusText(policy.status) }}</em>
             </span>
             <span>{{ policy.target.name }} · {{ writeModeText(policy.writeMode) }}</span>
-            <span>{{ policy.bindingMode === 'static' ? `${policy.bindingCount} 点` : `${policy.estimate.matchedDataPointCount} 点动态命中` }}</span>
+            <span>{{
+              policy.bindingMode === 'static'
+                ? `${policy.bindingCount} 点`
+                : `${policy.estimate.matchedDataPointCount} 点动态命中`
+            }}</span>
           </button>
           <div v-if="!loading && policies.length === 0" class="storage-workspace__empty">
             <strong>暂无存储策略</strong>
@@ -152,20 +162,39 @@
             </dl>
             <div class="storage-estimate">
               <strong>写入预估</strong>
-              <span>{{ selectedPolicy.estimate.matchedDataPointCount }} 点 · {{ selectedPolicy.estimate.eventsPerSecond.toFixed(2) }} events/s</span>
-              <span>{{ formatNumber(selectedPolicy.estimate.rowsPerDay) }} rows/day · 保留期 {{ formatNumber(selectedPolicy.estimate.rowsByRetention) }} 行</span>
+              <span
+                >{{ selectedPolicy.estimate.matchedDataPointCount }} 点 ·
+                {{ selectedPolicy.estimate.eventsPerSecond.toFixed(2) }} events/s</span
+              >
+              <span
+                >{{ formatNumber(selectedPolicy.estimate.rowsPerDay) }} rows/day · 保留期
+                {{ formatNumber(selectedPolicy.estimate.rowsByRetention) }} 行</span
+              >
               <small>{{ selectedPolicy.estimate.assumption }}</small>
             </div>
             <div class="storage-diagnostics">
               <strong>诊断</strong>
               <p v-if="selectedPolicy.diagnostics.length === 0">当前没有诊断问题。</p>
-              <p v-for="item in selectedPolicy.diagnostics" :key="`${item.type}-${item.message}`" :class="`is-${item.severity}`">
+              <p
+                v-for="item in selectedPolicy.diagnostics"
+                :key="`${item.type}-${item.message}`"
+                :class="`is-${item.severity}`"
+              >
                 {{ diagnosticText(item) }}
               </p>
             </div>
             <div class="storage-detail__actions">
-              <el-button size="small" :icon="Edit" @click="openEdit(selectedPolicy)">编辑</el-button>
-              <el-button size="small" type="danger" plain :icon="Delete" @click="removePolicy(selectedPolicy)">删除</el-button>
+              <el-button size="small" :icon="Edit" @click="openEdit(selectedPolicy)"
+                >编辑</el-button
+              >
+              <el-button
+                size="small"
+                type="danger"
+                plain
+                :icon="Delete"
+                @click="removePolicy(selectedPolicy)"
+                >删除</el-button
+              >
             </div>
           </div>
           <div v-else class="storage-workspace__empty is-large">
@@ -176,7 +205,11 @@
       </main>
     </div>
 
-    <el-drawer v-model="drawerVisible" :title="editingId ? '编辑存储策略' : '新建存储策略'" size="520px">
+    <el-drawer
+      v-model="drawerVisible"
+      :title="editingId ? '编辑存储策略' : '新建存储策略'"
+      size="520px"
+    >
       <div class="storage-form">
         <label>
           <span>策略名称</span>
@@ -188,7 +221,12 @@
         </label>
         <label>
           <span>历史目标</span>
-          <el-select v-model="draft.targetConnectionId" placeholder="选择存储接入源" filterable @change="syncCapability">
+          <el-select
+            v-model="draft.targetConnectionId"
+            placeholder="选择存储接入源"
+            filterable
+            @change="syncCapability"
+          >
             <el-option
               v-for="target in targets"
               :key="target.id"
@@ -251,9 +289,17 @@
           </div>
           <div class="storage-form__grid">
             <el-input v-model="draft.bindingFilter.search" placeholder="名称或 path 关键词" />
-            <el-input v-model="draft.bindingFilter.type" placeholder="来源类型，如 opcua.node" />
+            <el-input
+              v-model="draft.bindingFilter.type"
+              placeholder="来源类型，如 collector.point"
+            />
             <el-input v-model="draft.bindingFilter.accessSourceId" placeholder="接入源 ID" />
-            <el-input v-model="tagInput" placeholder="标签，逗号分隔" @blur="syncTags" @keyup.enter="syncTags" />
+            <el-input
+              v-model="tagInput"
+              placeholder="标签，逗号分隔"
+              @blur="syncTags"
+              @keyup.enter="syncTags"
+            />
           </div>
           <el-select v-model="draft.bindingFilter.status" placeholder="数据点状态" clearable>
             <el-option label="正常" value="active" />
@@ -273,7 +319,12 @@
           </label>
           <label>
             <span>保留天数</span>
-            <el-input-number v-model="draft.retentionDays" :min="1" :max="3650" controls-position="right" />
+            <el-input-number
+              v-model="draft.retentionDays"
+              :min="1"
+              :max="3650"
+              controls-position="right"
+            />
           </label>
         </div>
 
@@ -290,7 +341,11 @@
 
         <label v-if="draft.writeMode === 'periodic_snapshot'">
           <span>快照周期 ms</span>
-          <el-input-number v-model="draft.snapshotIntervalMs" :min="1000" controls-position="right" />
+          <el-input-number
+            v-model="draft.snapshotIntervalMs"
+            :min="1000"
+            controls-position="right"
+          />
         </label>
 
         <label>
@@ -311,8 +366,13 @@
         </label>
 
         <div class="storage-form__estimate">
-          <el-button size="small" :loading="estimating" @click="refreshEstimate">刷新预估</el-button>
-          <span v-if="draftEstimate">{{ draftEstimate.matchedDataPointCount }} 点 · {{ formatNumber(draftEstimate.rowsPerDay) }} rows/day</span>
+          <el-button size="small" :loading="estimating" @click="refreshEstimate"
+            >刷新预估</el-button
+          >
+          <span v-if="draftEstimate"
+            >{{ draftEstimate.matchedDataPointCount }} 点 ·
+            {{ formatNumber(draftEstimate.rowsPerDay) }} rows/day</span
+          >
         </div>
       </div>
 
@@ -471,14 +531,24 @@ async function reload() {
     policies.value = result.list
     pagination.total = Number(result.pagination?.total ?? result.list.length)
     Object.assign(summary, {
-      enabledCount: result.summary?.enabledCount ?? result.list.filter((item) => item.status === 'enabled').length,
-      errorCount: result.summary?.errorCount ?? result.list.filter((item) => item.status === 'error').length,
-      totalBindingCount: result.summary?.totalBindingCount ?? result.list.reduce((total, item) => total + item.bindingCount, 0),
-      estimatedRowsPerDay: result.summary?.estimatedRowsPerDay ?? result.list.reduce((total, item) => total + item.estimate.rowsPerDay, 0),
-      estimatedEventsSecond: result.summary?.estimatedEventsSecond ?? result.list.reduce((total, item) => total + item.estimate.eventsPerSecond, 0),
+      enabledCount:
+        result.summary?.enabledCount ??
+        result.list.filter((item) => item.status === 'enabled').length,
+      errorCount:
+        result.summary?.errorCount ?? result.list.filter((item) => item.status === 'error').length,
+      totalBindingCount:
+        result.summary?.totalBindingCount ??
+        result.list.reduce((total, item) => total + item.bindingCount, 0),
+      estimatedRowsPerDay:
+        result.summary?.estimatedRowsPerDay ??
+        result.list.reduce((total, item) => total + item.estimate.rowsPerDay, 0),
+      estimatedEventsSecond:
+        result.summary?.estimatedEventsSecond ??
+        result.list.reduce((total, item) => total + item.estimate.eventsPerSecond, 0),
     })
     if (selectedPolicy.value) {
-      selectedPolicy.value = result.list.find((item) => item.id === selectedPolicy.value?.id) || null
+      selectedPolicy.value =
+        result.list.find((item) => item.id === selectedPolicy.value?.id) || null
     }
     if (!selectedPolicy.value && result.list.length > 0) {
       selectedPolicy.value = result.list[0]
@@ -694,10 +764,10 @@ const statusText = (status: string) =>
   ({ enabled: '启用', disabled: '停用', error: '异常' })[status] || status
 
 const writeModeText = (mode: string) =>
-  ({ every_sample: '每次采样', on_change: '变化写入', periodic_snapshot: '周期快照' })[mode] ||
-  mode
+  ({ every_sample: '每次采样', on_change: '变化写入', periodic_snapshot: '周期快照' })[mode] || mode
 
-const bindingModeText = (mode: string) => ({ static: '静态绑定', dynamic: '动态规则' })[mode] || mode
+const bindingModeText = (mode: string) =>
+  ({ static: '静态绑定', dynamic: '动态规则' })[mode] || mode
 
 const capabilityText = (capability: string) =>
   ({ timeseriesAppend: '时序追加', relationalAppend: '关系库追加' })[capability] || capability
@@ -713,7 +783,8 @@ const targetTypeText = (type: string) =>
 const diagnosticText = (item: { message: string; suggest?: string }) =>
   item.suggest ? `${item.message}：${item.suggest}` : item.message
 
-const formatNumber = (value: number) => new Intl.NumberFormat('zh-CN').format(Math.round(value || 0))
+const formatNumber = (value: number) =>
+  new Intl.NumberFormat('zh-CN').format(Math.round(value || 0))
 
 watch(
   () => props.projectId,
