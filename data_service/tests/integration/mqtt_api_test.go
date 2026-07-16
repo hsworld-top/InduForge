@@ -21,9 +21,9 @@ func TestMqttConnectionLifecycle(t *testing.T) {
 	defer cancel()
 
 	fixture := setupTestDatabase(t, ctx)
-	migrator := setupMigrator(t, fixture.pool)
-	if err := migrator.Up(ctx); err != nil {
-		t.Fatalf("migrate up failed: %v", err)
+	migrator := setupSchemaInitializer(t, fixture.pool)
+	if err := migrator.Ensure(ctx); err != nil {
+		t.Fatalf("schema initialization failed: %v", err)
 	}
 
 	projectID := uuid.NewString()
@@ -90,9 +90,9 @@ func TestMqttSubscriptionChineseNameDataPointStaysActive(t *testing.T) {
 	defer cancel()
 
 	fixture := setupTestDatabase(t, ctx)
-	migrator := setupMigrator(t, fixture.pool)
-	if err := migrator.Up(ctx); err != nil {
-		t.Fatalf("migrate up failed: %v", err)
+	migrator := setupSchemaInitializer(t, fixture.pool)
+	if err := migrator.Ensure(ctx); err != nil {
+		t.Fatalf("schema initialization failed: %v", err)
 	}
 
 	projectID := uuid.NewString()
@@ -174,9 +174,9 @@ func TestMqttSubscriptionDataPointValidWithoutMqttConfig(t *testing.T) {
 	defer cancel()
 
 	fixture := setupTestDatabase(t, ctx)
-	migrator := setupMigrator(t, fixture.pool)
-	if err := migrator.Up(ctx); err != nil {
-		t.Fatalf("migrate up failed: %v", err)
+	migrator := setupSchemaInitializer(t, fixture.pool)
+	if err := migrator.Ensure(ctx); err != nil {
+		t.Fatalf("schema initialization failed: %v", err)
 	}
 
 	projectID := uuid.NewString()
@@ -235,9 +235,9 @@ func TestMqttTagsListSupportsPaginationAndSearch(t *testing.T) {
 	defer cancel()
 
 	fixture := setupTestDatabase(t, ctx)
-	migrator := setupMigrator(t, fixture.pool)
-	if err := migrator.Up(ctx); err != nil {
-		t.Fatalf("migrate up failed: %v", err)
+	migrator := setupSchemaInitializer(t, fixture.pool)
+	if err := migrator.Ensure(ctx); err != nil {
+		t.Fatalf("schema initialization failed: %v", err)
 	}
 
 	projectID := uuid.NewString()

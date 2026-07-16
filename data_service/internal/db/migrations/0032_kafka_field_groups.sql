@@ -1,1 +1,0 @@
--- no-op: 当前开发态重建库基线已在 0030_kafka_workbench.sql 中包含 Kafka 变量分组模型。

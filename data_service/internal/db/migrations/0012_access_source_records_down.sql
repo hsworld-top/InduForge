@@ -1,3 +1,0 @@
-DROP INDEX IF EXISTS data_access_source_records_project_created_idx;
-DROP INDEX IF EXISTS data_access_source_records_connection_created_idx;
-DROP TABLE IF EXISTS data_access_source_records;

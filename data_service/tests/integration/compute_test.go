@@ -28,9 +28,9 @@ func TestComputeRunTimeout(t *testing.T) {
 	defer cancel()
 
 	fixture := setupTestDatabase(t, ctx)
-	migrator := setupMigrator(t, fixture.pool)
-	if err := migrator.Up(ctx); err != nil {
-		t.Fatalf("migrate up failed: %v", err)
+	migrator := setupSchemaInitializer(t, fixture.pool)
+	if err := migrator.Ensure(ctx); err != nil {
+		t.Fatalf("schema initialization failed: %v", err)
 	}
 
 	projectID := uuid.NewString()
@@ -91,9 +91,9 @@ func TestComputeRunJSPython(t *testing.T) {
 	defer cancel()
 
 	fixture := setupTestDatabase(t, ctx)
-	migrator := setupMigrator(t, fixture.pool)
-	if err := migrator.Up(ctx); err != nil {
-		t.Fatalf("migrate up failed: %v", err)
+	migrator := setupSchemaInitializer(t, fixture.pool)
+	if err := migrator.Ensure(ctx); err != nil {
+		t.Fatalf("schema initialization failed: %v", err)
 	}
 
 	projectID := uuid.NewString()
@@ -159,9 +159,9 @@ func TestComputeOutputDataPointGeneratedOnSave(t *testing.T) {
 	defer cancel()
 
 	fixture := setupTestDatabase(t, ctx)
-	migrator := setupMigrator(t, fixture.pool)
-	if err := migrator.Up(ctx); err != nil {
-		t.Fatalf("migrate up failed: %v", err)
+	migrator := setupSchemaInitializer(t, fixture.pool)
+	if err := migrator.Ensure(ctx); err != nil {
+		t.Fatalf("schema initialization failed: %v", err)
 	}
 
 	projectID := uuid.NewString()
@@ -245,9 +245,9 @@ func TestComputeUnitRenameMoveUpdatesOutputDataPoint(t *testing.T) {
 	defer cancel()
 
 	fixture := setupTestDatabase(t, ctx)
-	migrator := setupMigrator(t, fixture.pool)
-	if err := migrator.Up(ctx); err != nil {
-		t.Fatalf("migrate up failed: %v", err)
+	migrator := setupSchemaInitializer(t, fixture.pool)
+	if err := migrator.Ensure(ctx); err != nil {
+		t.Fatalf("schema initialization failed: %v", err)
 	}
 
 	projectID := uuid.NewString()
@@ -327,9 +327,9 @@ func TestDataPointListRefreshMarksMismatchedGeneratedPointInvalid(t *testing.T) 
 	defer cancel()
 
 	fixture := setupTestDatabase(t, ctx)
-	migrator := setupMigrator(t, fixture.pool)
-	if err := migrator.Up(ctx); err != nil {
-		t.Fatalf("migrate up failed: %v", err)
+	migrator := setupSchemaInitializer(t, fixture.pool)
+	if err := migrator.Ensure(ctx); err != nil {
+		t.Fatalf("schema initialization failed: %v", err)
 	}
 
 	projectID := uuid.NewString()

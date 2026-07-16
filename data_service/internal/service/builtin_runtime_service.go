@@ -265,7 +265,7 @@ func (s *BuiltinRuntimeService) ListTablesInSchema(ctx context.Context, schemaNa
 		 AND m.table_name = t.table_name
 		WHERE t.table_schema = $1
 		  AND t.table_type IN ('BASE TABLE', 'VIEW')
-		  AND t.table_name NOT IN ('if_schema_migrations', 'if_table_metadata')
+		  AND t.table_name <> 'if_table_metadata'
 		ORDER BY t.table_name
 	`, schemaName)
 	if err != nil {
@@ -826,14 +826,6 @@ func (s *BuiltinRuntimeService) ensureSchema(ctx context.Context, schemaName str
 	if _, err := s.devPool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA IF NOT EXISTS %s`, identifier)); err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "创建开发态 schema 失败", err)
 	}
-	if _, err := s.devPool.Exec(ctx, fmt.Sprintf(`
-		CREATE TABLE IF NOT EXISTS %s.if_schema_migrations (
-			version text PRIMARY KEY,
-			applied_at timestamptz NOT NULL DEFAULT now()
-		)
-	`, identifier)); err != nil {
-		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "创建开发态迁移表失败", err)
-	}
 	if _, err := s.devPool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS if_table_metadata (
 			schema_name text NOT NULL,
@@ -845,9 +837,6 @@ func (s *BuiltinRuntimeService) ensureSchema(ctx context.Context, schemaName str
 		)
 	`); err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "创建开发态表元数据失败", err)
-	}
-	if _, err := s.devPool.Exec(ctx, `ALTER TABLE if_table_metadata ADD COLUMN IF NOT EXISTS timeseries jsonb NOT NULL DEFAULT '{}'::jsonb`); err != nil {
-		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "升级开发态表元数据失败", err)
 	}
 	return nil
 }

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/indu-forge/data_service/internal/db/migrate"
 	"github.com/indu-forge/data_service/internal/db/postgres"
+	"github.com/indu-forge/data_service/internal/db/schema"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
@@ -24,12 +24,12 @@ const (
 	postgresTestImage  = "postgres:16.4-alpine"
 )
 
-func TestMigrateUp_CreatesCoreTables(t *testing.T) {
+func TestSchemaInitializer_CreatesCoreTables(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	fixture := setupTestDatabase(t, ctx)
-	migrator := setupMigrator(t, fixture.pool)
+	initializer := setupSchemaInitializer(t, fixture.pool)
 
 	start := make(chan struct{})
 	errCh := make(chan error, 2)
@@ -40,7 +40,7 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			errCh <- migrator.Up(ctx)
+			errCh <- initializer.Ensure(ctx)
 		}()
 	}
 	close(start)
@@ -49,7 +49,7 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 
 	for err := range errCh {
 		if err != nil {
-			t.Fatalf("骞跺彂鎵ц Up 澶辫触: %v", err)
+			t.Fatalf("骞跺彂执行数据库结构初始化失败: %v", err)
 		}
 	}
 
@@ -100,66 +100,17 @@ func TestMigrateUp_CreatesCoreTables(t *testing.T) {
 		}
 	}
 
-	var appliedCount int
-	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&appliedCount); err != nil {
-		t.Fatalf("鏌ヨ schema_migrations 澶辫触: %v", err)
-	}
-	if appliedCount != 61 {
-		t.Fatalf("expected 61 migration records, got %d", appliedCount)
-	}
-
-	if err := migrator.DownAll(ctx); err != nil {
-		t.Fatalf("鎵ц DownAll 澶辫触: %v", err)
-	}
-
-	for _, tableName := range []string{
-		"data_connections",
-		"data_relational_configs",
-		"data_queries",
-		"data_points",
-		"data_mqtt_configs",
-		"data_mqtt_subscriptions",
-		"data_mqtt_messages",
-		"data_kafka_configs",
-		"data_kafka_topic_groups",
-		"data_kafka_topic_mappings",
-		"data_kafka_field_groups",
-		"data_kafka_fields",
-		"data_http_configs",
-		"data_websocket_configs",
-		"data_redis_configs",
-		"data_collector_connections",
-		"data_collector_point_groups",
-		"data_collector_points",
-		"data_collector_import_sessions",
-		"data_tdengine_configs",
-		"data_preview_sessions",
-		"data_compute_folders",
-		"data_compute_units",
-		"data_compute_runs",
-		"data_alarm_policy_groups",
-		"data_alarm_policies",
-		"data_workbench_object_groups",
-		"collector_dev_agents",
-		"collector_dev_registration_codes",
-		"collector_dev_tasks",
-		"data_table_group_members",
-	} {
-		if tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
-			t.Fatalf("鏈熸湜琛?%s 宸茶鍒犻櫎", tableName)
-		}
-	}
 }
 
-func TestMigrationIndexes(t *testing.T) {
+func TestSchemaInitializer_CreatesIndexes(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	fixture := setupTestDatabase(t, ctx)
-	migrator := setupMigrator(t, fixture.pool)
+	initializer := setupSchemaInitializer(t, fixture.pool)
 
-	if err := migrator.Up(ctx); err != nil {
-		t.Fatalf("鎵ц Up 澶辫触: %v", err)
+	if err := initializer.Ensure(ctx); err != nil {
+		t.Fatalf("执行数据库结构初始化失败: %v", err)
 	}
 
 	indexes := loadIndexNames(ctx, t, fixture.pool, fixture.schemaName)
@@ -227,14 +178,14 @@ func TestMigrationIndexes(t *testing.T) {
 	}
 }
 
-func TestBuiltinRuntimeStoreMigration(t *testing.T) {
+func TestSchemaInitializer_CreatesBuiltinRuntimeStores(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	fixture := setupTestDatabase(t, ctx)
-	migrator := setupMigrator(t, fixture.pool)
-	if err := migrator.Up(ctx); err != nil {
-		t.Fatalf("migrate up failed: %v", err)
+	initializer := setupSchemaInitializer(t, fixture.pool)
+	if err := initializer.Ensure(ctx); err != nil {
+		t.Fatalf("schema initialization failed: %v", err)
 	}
 
 	projectID := "11111111-1111-1111-1111-111111111111"
@@ -297,19 +248,19 @@ func TestBuiltinRuntimeStoreMigration(t *testing.T) {
 	}
 	for _, storeType := range storeTypes {
 		if !seen[storeType] {
-			t.Fatalf("expected migrated builtin connection %s", storeType)
+			t.Fatalf("expected builtin connection %s", storeType)
 		}
 	}
 }
 
-func TestAlarmRuleFinalModelMigration(t *testing.T) {
+func TestSchemaInitializer_CreatesAlarmRuleModel(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	fixture := setupTestDatabase(t, ctx)
-	migrator := setupMigrator(t, fixture.pool)
-	if err := migrator.Up(ctx); err != nil {
-		t.Fatalf("migrate up failed: %v", err)
+	initializer := setupSchemaInitializer(t, fixture.pool)
+	if err := initializer.Ensure(ctx); err != nil {
+		t.Fatalf("schema initialization failed: %v", err)
 	}
 
 	suppressionType, suppressionDefault := loadColumnTypeAndDefault(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_rules", "suppression")
@@ -351,14 +302,14 @@ func TestAlarmRuleFinalModelMigration(t *testing.T) {
 	}
 }
 
-func TestAlarmPolicyTablesMigration(t *testing.T) {
+func TestSchemaInitializer_CreatesAlarmPolicyTables(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	fixture := setupTestDatabase(t, ctx)
-	migrator := setupMigrator(t, fixture.pool)
-	if err := migrator.Up(ctx); err != nil {
-		t.Fatalf("migrate up failed: %v", err)
+	initializer := setupSchemaInitializer(t, fixture.pool)
+	if err := initializer.Ensure(ctx); err != nil {
+		t.Fatalf("schema initialization failed: %v", err)
 	}
 
 	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policy_groups", "is_enabled", "boolean")
@@ -381,15 +332,15 @@ func TestAlarmPolicyTablesMigration(t *testing.T) {
 	}
 }
 
-func setupMigrator(t *testing.T, pool *pgxpool.Pool) *migrate.Migrator {
+func setupSchemaInitializer(t *testing.T, pool *pgxpool.Pool) *schema.Initializer {
 	t.Helper()
 
-	migrator, err := migrate.NewMigrator(pool)
+	initializer, err := schema.NewInitializer(pool)
 	if err != nil {
 		t.Fatalf("鍒涘缓杩佺Щ鍣ㄥけ璐? %v", err)
 	}
 
-	return migrator
+	return initializer
 }
 
 func loadColumnTypeAndDefault(ctx context.Context, t *testing.T, pool *pgxpool.Pool, schemaName string, tableName string, columnName string) (string, string) {

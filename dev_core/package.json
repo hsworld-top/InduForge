@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "test": "cross-env NODE_ENV=test ENABLE_DB_SYNC=false ENABLE_SWAGGER=false jest --runInBand",
+    "test": "cross-env NODE_ENV=test DB_AUTO_SCHEMA_SYNC=false ENABLE_SWAGGER=false jest --runInBand",
     "lint": "eslint src scripts eslint.config.mjs --fix",
     "format": "prettier --write \"src/**/*.js\" \"scripts/**/*.js\" \"config/**/*.json\" \"src/**/*.json\" \"*.json\" \"*.md\" \"scripts/**/*.md\""
   },

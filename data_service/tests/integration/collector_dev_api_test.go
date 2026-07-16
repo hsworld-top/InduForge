@@ -18,8 +18,8 @@ func TestCollectorDevVerticalLoop(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	fixture := setupTestDatabase(t, ctx)
-	if err := setupMigrator(t, fixture.pool).Up(ctx); err != nil {
-		t.Fatalf("执行迁移失败: %v", err)
+	if err := setupSchemaInitializer(t, fixture.pool).Ensure(ctx); err != nil {
+		t.Fatalf("初始化数据库结构失败: %v", err)
 	}
 	projectID, userID, tenantID := uuid.NewString(), uuid.NewString(), "tenant-collector"
 	secret := "collector-dev-secret-123"
@@ -44,7 +44,7 @@ func TestCollectorDevVerticalLoop(t *testing.T) {
 		"os":               "windows",
 		"arch":             "x64",
 		"version":          "0.1.0",
-		"capabilities":     []map[string]any{{"driverId": "opcua.standard", "driverVersion": "1.0.0", "schemaVersions": []int{1}, "operations": []string{"connection.test", "device.browse", "point.read"}}},
+		"capabilities":     []map[string]any{{"driverId": "opcua.standard", "driverVersion": "1.0.0", "schemaVersions": []int{2}, "operations": []string{"connection.test", "device.browse", "point.read"}}},
 	})
 	var agent struct {
 		AgentID    string `json:"agentId"`
@@ -54,7 +54,7 @@ func TestCollectorDevVerticalLoop(t *testing.T) {
 	if agent.AgentID == "" || agent.AgentToken == "" {
 		t.Fatal("期望注册返回 agentId 和 agentToken")
 	}
-	capabilities := []map[string]any{{"driverId": "opcua.standard", "driverVersion": "1.0.0", "schemaVersions": []int{1}, "operations": []string{"connection.test", "device.browse", "point.read"}}}
+	capabilities := []map[string]any{{"driverId": "opcua.standard", "driverVersion": "1.0.0", "schemaVersions": []int{2}, "operations": []string{"connection.test", "device.browse", "point.read"}}}
 	doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/agent/heartbeat", agent.AgentToken, map[string]any{"capabilities": capabilities})
 	agentsResponse := doJSONRequest(t, http.MethodGet, server.URL+"/api/v1/data/collector-dev/agents?page=1&pageSize=10", adminToken, nil)
 	var agentsPage struct {
@@ -85,7 +85,7 @@ func TestCollectorDevVerticalLoop(t *testing.T) {
 	doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/agent/heartbeat", agent.AgentToken, map[string]any{"capabilities": capabilities})
 	connectionResponse := doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/collector/connections", adminToken, map[string]any{
 		"name": "integration-opcua", "driverId": "opcua.standard",
-		"config":  map[string]any{"endpointUrl": "opc.tcp://127.0.0.1:18540/induforge/sim", "securityMode": "None", "securityPolicy": "None", "authenticationType": "anonymous"},
+		"config":  map[string]any{"host": "127.0.0.1", "port": 18540, "endpointPath": "/induforge/sim", "securityMode": "None", "securityPolicy": "None", "authenticationType": "anonymous"},
 		"secrets": map[string]string{}, "metadata": map[string]any{},
 	})
 	var connection struct {

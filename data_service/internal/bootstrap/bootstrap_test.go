@@ -10,11 +10,11 @@ import (
 	"github.com/indu-forge/data_service/internal/config"
 )
 
-func TestEnsureReady_RunsMigrationsWhenDatabaseExists(t *testing.T) {
+func TestEnsureReady_ChecksSchemaWhenDatabaseExists(t *testing.T) {
 	t.Helper()
 
 	targetPool := &fakePool{name: "target"}
-	migrator := &fakeMigrator{}
+	initializer := &fakeInitializer{}
 
 	bootstrapper := NewRuntimeBootstrapper(
 		withPoolOpener(func(_ context.Context, databaseURL, searchPath string) (poolHandle, error) {
@@ -26,11 +26,11 @@ func TestEnsureReady_RunsMigrationsWhenDatabaseExists(t *testing.T) {
 			}
 			return targetPool, nil
 		}),
-		withMigratorFactory(func(pool poolHandle) (migrationRunner, error) {
+		withInitializerFactory(func(pool poolHandle) (schemaInitializer, error) {
 			if pool != targetPool {
-				t.Fatalf("unexpected pool passed to migrator")
+				t.Fatalf("unexpected pool passed to initializer")
 			}
-			return migrator, nil
+			return initializer, nil
 		}),
 	)
 
@@ -41,17 +41,17 @@ func TestEnsureReady_RunsMigrationsWhenDatabaseExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if migrator.upCalls != 1 {
-		t.Fatalf("expected migrator.Up to be called once, got %d", migrator.upCalls)
+	if initializer.ensureCalls != 1 {
+		t.Fatalf("expected initializer.Ensure to be called once, got %d", initializer.ensureCalls)
 	}
 }
 
-func TestEnsureReady_CreatesMissingDatabaseThenRunsMigrations(t *testing.T) {
+func TestEnsureReady_CreatesMissingDatabaseThenInitializesSchema(t *testing.T) {
 	t.Helper()
 
 	targetPool := &fakePool{name: "target"}
 	adminPool := &fakeAdminPool{}
-	migrator := &fakeMigrator{}
+	initializer := &fakeInitializer{}
 	logs := make([]string, 0, 4)
 	openCalls := 0
 	reset := stubBootstrapLogf(func(format string, args ...any) {
@@ -79,11 +79,11 @@ func TestEnsureReady_CreatesMissingDatabaseThenRunsMigrations(t *testing.T) {
 			}
 			return adminPool, nil
 		}),
-		withMigratorFactory(func(pool poolHandle) (migrationRunner, error) {
+		withInitializerFactory(func(pool poolHandle) (schemaInitializer, error) {
 			if pool != targetPool {
-				t.Fatalf("unexpected pool passed to migrator")
+				t.Fatalf("unexpected pool passed to initializer")
 			}
-			return migrator, nil
+			return initializer, nil
 		}),
 	)
 
@@ -103,13 +103,13 @@ func TestEnsureReady_CreatesMissingDatabaseThenRunsMigrations(t *testing.T) {
 	if !strings.Contains(adminPool.execSQL[0], "CREATE DATABASE") || !strings.Contains(adminPool.execSQL[0], "app_db") {
 		t.Fatalf("unexpected create database sql: %s", adminPool.execSQL[0])
 	}
-	if migrator.upCalls != 1 {
-		t.Fatalf("expected migrator.Up to be called once, got %d", migrator.upCalls)
+	if initializer.ensureCalls != 1 {
+		t.Fatalf("expected initializer.Ensure to be called once, got %d", initializer.ensureCalls)
 	}
 	assertBootstrapLogContains(t, logs, "目标数据库不存在，准备自动创建")
 	assertBootstrapLogContains(t, logs, "自动创建数据库成功")
-	assertBootstrapLogContains(t, logs, "开始执行数据库迁移")
-	assertBootstrapLogContains(t, logs, "数据库迁移完成")
+	assertBootstrapLogContains(t, logs, "开始检查数据库结构")
+	assertBootstrapLogContains(t, logs, "数据库结构检查完成")
 }
 
 func TestEnsureReady_FailsWhenCreateDatabasePermissionDenied(t *testing.T) {
@@ -163,12 +163,12 @@ func (p *fakeAdminPool) Close() {
 	p.closed = true
 }
 
-type fakeMigrator struct {
-	upCalls int
+type fakeInitializer struct {
+	ensureCalls int
 }
 
-func (m *fakeMigrator) Up(_ context.Context) error {
-	m.upCalls++
+func (m *fakeInitializer) Ensure(_ context.Context) error {
+	m.ensureCalls++
 	return nil
 }
 

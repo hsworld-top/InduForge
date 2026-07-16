@@ -87,7 +87,7 @@ func NewPool(ctx context.Context, cfg PoolConfig) (*pgxpool.Pool, error) {
 		poolConfig.ConnConfig.RuntimeParams["search_path"] = searchPath
 	}
 
-	// 迁移会直接执行多条 SQL 语句，这里统一切到 simple protocol。
+	// 数据库结构基线会一次执行多条 SQL 语句，这里统一切到 simple protocol。
 	poolConfig.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
 
 	connectCtx, cancel := context.WithTimeout(ctx, cfg.ConnectionTimeout)

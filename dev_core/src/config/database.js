@@ -6,17 +6,6 @@ const { logger } = require('../utils/logger')
 const { TIME_FORMAT } = require('../constants/time')
 const { buildMetaStoreConfig } = require('./infra')
 
-const USER_ROLE_VALUES = [
-  'SUPER_ADMIN',
-  'SYSTEM_ADMIN',
-  'PROJECT_ADMIN',
-  'OPS_ADMIN',
-  'USER_ADMIN',
-  'DEVELOPER',
-  'OPERATOR',
-  'VIEWER',
-]
-
 const getDatabaseConfig = buildMetaStoreConfig
 
 const getPgSslConfig = (dbConfig) =>
@@ -161,38 +150,12 @@ const stopDbHealthCheck = () => {
 
 /**
  * 是否启用启动时数据库结构自动同步
- * 优先读取 DB_AUTO_SCHEMA_SYNC，兼容历史 ENABLE_DB_SYNC 配置。
+ * 只读取 DB_AUTO_SCHEMA_SYNC，控制空数据库自动初始化。
  * @returns {boolean}
  */
 const shouldAutoSyncSchema = () => {
-  const configuredValue = process.env.DB_AUTO_SCHEMA_SYNC ?? process.env.ENABLE_DB_SYNC ?? 'true'
+  const configuredValue = process.env.DB_AUTO_SCHEMA_SYNC ?? 'true'
   return String(configuredValue).toLowerCase() === 'true'
-}
-
-/**
- * 兼容历史 PostgreSQL 库结构：确保 users.role 约束包含当前全部角色。
- * 该修复不阻断启动，仅用于平滑接入旧库。
- * @returns {Promise<void>}
- */
-const ensureUserRoleEnumCompatibility = async () => {
-  const roleList = USER_ROLE_VALUES.map((value) => `'${value}'`).join(', ')
-
-  try {
-    await sequelize.query(`
-      ALTER TABLE users
-      DROP CONSTRAINT IF EXISTS users_role_check
-    `)
-    await sequelize.query(`
-      ALTER TABLE users
-      ADD CONSTRAINT users_role_check
-      CHECK ("role" IN (${roleList}))
-    `)
-    logger.info('✅ users.role 约束兼容检查完成')
-  } catch (error) {
-    logger.warn('users.role 约束兼容修复失败，将继续启动服务', {
-      error: error.message,
-    })
-  }
 }
 
 /**
@@ -241,10 +204,10 @@ const checkDatabaseExists = async () => {
  */
 const autoInitializeDatabase = async () => {
   try {
-    logger.info('🔄 检测到数据库不存在，开始按开发配置创建并同步结构...')
-    const { syncDatabaseSchema } = require('../../scripts/bootstrap/init-core-database')
-    const syncResult = await syncDatabaseSchema({ reset: false, seed: true })
-    logger.info('✅ 数据库自动创建并同步完成', syncResult)
+    logger.info('🔄 检测到数据库不存在，开始按开发配置创建最终结构...')
+    const { initializeDatabaseSchema } = require('../../scripts/bootstrap/init-core-database')
+    const initializationResult = await initializeDatabaseSchema({ reset: false, seed: true })
+    logger.info('✅ 数据库自动创建并初始化完成', initializationResult)
     return true
   } catch (error) {
     logger.error('❌ 自动初始化数据库失败', {
@@ -338,20 +301,6 @@ const testConnection = async () => {
     logger.info('🔍 测试业务数据库连接...')
     await sequelize.authenticate()
     logger.info('✅ 数据库连接成功')
-
-    if (shouldAutoSyncSchema()) {
-      logger.info('🔄 开始数据库结构一致性同步（core-schema.sql）...')
-      const { syncDatabaseSchema } = require('../../scripts/bootstrap/init-core-database')
-      const syncResult = await syncDatabaseSchema({
-        reset: false,
-        seed: false,
-      })
-      logger.info('✅ 数据库结构一致性同步完成', syncResult)
-    } else {
-      logger.info('⏭️ 已禁用数据库结构自动同步（DB_AUTO_SCHEMA_SYNC=false）')
-    }
-
-    await ensureUserRoleEnumCompatibility()
 
     dbStatus.connected = true
     dbStatus.degraded = false

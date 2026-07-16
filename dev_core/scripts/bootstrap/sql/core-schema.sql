@@ -230,32 +230,6 @@ CREATE INDEX IF NOT EXISTS project_tag_bindings_tag_idx
 CREATE INDEX IF NOT EXISTS project_tag_bindings_created_by_idx
   ON project_tag_bindings ("createdBy");
 
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_constraint
-    WHERE conname = 'project_tag_bindings_project_tenant_fk'
-  ) THEN
-    ALTER TABLE project_tag_bindings
-      ADD CONSTRAINT project_tag_bindings_project_tenant_fk
-      FOREIGN KEY ("projectId", "tenantId")
-      REFERENCES projects ("id", "tenantId")
-      ON DELETE CASCADE;
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_constraint
-    WHERE conname = 'project_tag_bindings_tag_tenant_fk'
-  ) THEN
-    ALTER TABLE project_tag_bindings
-      ADD CONSTRAINT project_tag_bindings_tag_tenant_fk
-      FOREIGN KEY ("tagId", "tenantId")
-      REFERENCES project_tags ("id", "tenantId")
-      ON DELETE CASCADE;
-  END IF;
-END $$;
 
 COMMENT ON TABLE project_tag_bindings IS '工程标签绑定表';
 COMMENT ON COLUMN project_tag_bindings."id" IS '绑定ID';
@@ -331,32 +305,6 @@ CREATE INDEX IF NOT EXISTS project_group_members_group_idx
 CREATE INDEX IF NOT EXISTS project_group_members_created_by_idx
   ON project_group_members ("createdBy");
 
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_constraint
-    WHERE conname = 'project_group_members_project_tenant_fk'
-  ) THEN
-    ALTER TABLE project_group_members
-      ADD CONSTRAINT project_group_members_project_tenant_fk
-      FOREIGN KEY ("projectId", "tenantId")
-      REFERENCES projects ("id", "tenantId")
-      ON DELETE CASCADE;
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_constraint
-    WHERE conname = 'project_group_members_group_tenant_fk'
-  ) THEN
-    ALTER TABLE project_group_members
-      ADD CONSTRAINT project_group_members_group_tenant_fk
-      FOREIGN KEY ("groupId", "tenantId")
-      REFERENCES project_groups ("id", "tenantId")
-      ON DELETE CASCADE;
-  END IF;
-END $$;
 
 COMMENT ON TABLE project_group_members IS '工程分组成员表';
 COMMENT ON COLUMN project_group_members."id" IS '成员关系ID';
@@ -992,4 +940,3 @@ COMMENT ON COLUMN node_commands."lastError" IS '最近错误信息';
 COMMENT ON COLUMN node_commands."createdAt" IS '创建时间';
 COMMENT ON COLUMN node_commands."updatedAt" IS '更新时间';
 COMMENT ON COLUMN node_commands."deletedAt" IS '软删除时间';
-

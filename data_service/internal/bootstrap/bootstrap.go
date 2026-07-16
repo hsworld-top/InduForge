@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/indu-forge/data_service/internal/config"
-	"github.com/indu-forge/data_service/internal/db/migrate"
 	"github.com/indu-forge/data_service/internal/db/postgres"
+	"github.com/indu-forge/data_service/internal/db/schema"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -25,12 +25,12 @@ const (
 var logf = log.Printf
 
 // RuntimeBootstrapper 负责在服务正式装配前完成数据库自举。
-// 关键流程固定为：连接目标库 -> 缺库时自动建库 -> 执行 migration。
+// 关键流程固定为：连接目标库 -> 缺库时自动建库 -> 初始化数据库结构。
 // 边界上只处理数据库和表结构初始化，不负责创建用户或修复权限。
 type RuntimeBootstrapper struct {
-	openPool       poolOpener
-	openAdminPool  adminPoolOpener
-	createMigrator migratorFactory
+	openPool          poolOpener
+	openAdminPool     adminPoolOpener
+	createInitializer initializerFactory
 }
 
 type poolHandle interface {
@@ -42,21 +42,21 @@ type adminExecutor interface {
 	Close()
 }
 
-type migrationRunner interface {
-	Up(ctx context.Context) error
+type schemaInitializer interface {
+	Ensure(ctx context.Context) error
 }
 
 type poolOpener func(ctx context.Context, databaseURL, searchPath string) (poolHandle, error)
 type adminPoolOpener func(ctx context.Context, databaseURL string) (adminExecutor, error)
-type migratorFactory func(pool poolHandle) (migrationRunner, error)
+type initializerFactory func(pool poolHandle) (schemaInitializer, error)
 type runtimeBootstrapperOption func(*RuntimeBootstrapper)
 
 // NewRuntimeBootstrapper 创建生产环境默认使用的数据库自举器。
 func NewRuntimeBootstrapper(options ...runtimeBootstrapperOption) *RuntimeBootstrapper {
 	bootstrapper := &RuntimeBootstrapper{
-		openPool:       defaultPoolOpener,
-		openAdminPool:  defaultAdminPoolOpener,
-		createMigrator: defaultMigratorFactory,
+		openPool:          defaultPoolOpener,
+		openAdminPool:     defaultAdminPoolOpener,
+		createInitializer: defaultInitializerFactory,
 	}
 	for _, option := range options {
 		if option == nil {
@@ -79,19 +79,19 @@ func withAdminPoolOpener(opener adminPoolOpener) runtimeBootstrapperOption {
 	}
 }
 
-func withMigratorFactory(factory migratorFactory) runtimeBootstrapperOption {
+func withInitializerFactory(factory initializerFactory) runtimeBootstrapperOption {
 	return func(bootstrapper *RuntimeBootstrapper) {
-		bootstrapper.createMigrator = factory
+		bootstrapper.createInitializer = factory
 	}
 }
 
-// EnsureReady 保证目标数据库已存在且全部 migration 已执行。
+// EnsureReady 保证目标数据库已存在且空数据库已完成结构初始化。
 // 任一步失败都会直接返回错误，调用方应终止服务启动，避免降级成空路由实例。
 func (b *RuntimeBootstrapper) EnsureReady(ctx context.Context, cfg config.Config) error {
 	targetPool, err := b.openPool(ctx, strings.TrimSpace(cfg.DatabaseURL), strings.TrimSpace(cfg.DatabaseSearchPath))
 	if err == nil {
 		logf("info: 目标数据库连接成功，开始执行启动自举")
-		return runMigrations(ctx, targetPool, b.createMigrator)
+		return initializeSchema(ctx, targetPool, b.createInitializer)
 	}
 	if !isMissingDatabaseError(err) {
 		return fmt.Errorf("初始化目标数据库连接失败: %w", err)
@@ -123,21 +123,21 @@ func (b *RuntimeBootstrapper) EnsureReady(ctx context.Context, cfg config.Config
 		return fmt.Errorf("创建数据库 %q 后重新连接失败: %w", databaseName, err)
 	}
 
-	return runMigrations(ctx, targetPool, b.createMigrator)
+	return initializeSchema(ctx, targetPool, b.createInitializer)
 }
 
-func runMigrations(ctx context.Context, pool poolHandle, factory migratorFactory) error {
+func initializeSchema(ctx context.Context, pool poolHandle, factory initializerFactory) error {
 	defer pool.Close()
 
-	logf("info: 开始执行数据库迁移")
+	logf("info: 开始检查数据库结构")
 	runner, err := factory(pool)
 	if err != nil {
-		return fmt.Errorf("创建 migration 执行器失败: %w", err)
+		return fmt.Errorf("创建数据库结构初始化器失败: %w", err)
 	}
-	if err := runner.Up(ctx); err != nil {
-		return fmt.Errorf("执行 migration 失败: %w", err)
+	if err := runner.Ensure(ctx); err != nil {
+		return fmt.Errorf("初始化数据库结构失败: %w", err)
 	}
-	logf("info: 数据库迁移完成")
+	logf("info: 数据库结构检查完成")
 	return nil
 }
 
@@ -160,12 +160,12 @@ func defaultAdminPoolOpener(ctx context.Context, databaseURL string) (adminExecu
 	return &pgxAdminPool{pool: pool}, nil
 }
 
-func defaultMigratorFactory(pool poolHandle) (migrationRunner, error) {
+func defaultInitializerFactory(pool poolHandle) (schemaInitializer, error) {
 	pgxPool, ok := unwrapPGXPool(pool)
 	if !ok {
 		return nil, fmt.Errorf("不支持的 pool 类型 %T", pool)
 	}
-	return migrate.NewMigrator(pgxPool)
+	return schema.NewInitializer(pgxPool)
 }
 
 func deriveAdminDatabaseURL(databaseURL string) (string, string, error) {

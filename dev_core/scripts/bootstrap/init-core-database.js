@@ -2,7 +2,7 @@
 
 /**
  * 控制面数据库 bootstrap 脚本。
- * 使用 PostgreSQL 创建 if_core，并执行 core-schema.sql 完成结构同步和初始数据补齐。
+ * 使用 PostgreSQL 创建 if_core，并仅在空数据库中执行 core-schema.sql 和初始数据创建。
  */
 
 const { Client } = require('pg')
@@ -17,8 +17,6 @@ const dbConfig = {
   ...buildMetaStoreConfig(),
   connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT || 60000),
 }
-
-const NON_CRITICAL_SQL_ERROR_CODES = new Set(['42P07', '42710', '23505'])
 
 const initialData = {
   superAdmin: {
@@ -367,7 +365,7 @@ async function ensureDatabaseExists(reset = false) {
   }
 }
 
-async function syncDatabaseSchema(options = {}) {
+async function initializeDatabaseSchema(options = {}) {
   const { reset = false, seed = true } = options
   let client
 
@@ -377,6 +375,13 @@ async function syncDatabaseSchema(options = {}) {
     client = buildClient(dbConfig.database)
     await client.connect()
 
+    const existingTables = await client.query(
+      `SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = 'public' LIMIT 1`,
+    )
+    if (existingTables.rowCount > 0) {
+      return { initialized: false, total: 0, executed: 0 }
+    }
+
     const sqlFilePath = path.join(__dirname, 'sql', 'core-schema.sql')
     if (!fs.existsSync(sqlFilePath)) {
       throw new Error(`SQL 文件不存在: ${sqlFilePath}`)
@@ -385,19 +390,10 @@ async function syncDatabaseSchema(options = {}) {
     const sqlContent = fs.readFileSync(sqlFilePath, 'utf8')
     const statements = splitSqlStatements(sqlContent)
     let executed = 0
-    let skipped = 0
 
     for (const statement of statements) {
-      try {
-        await client.query(statement)
-        executed += 1
-      } catch (error) {
-        if (NON_CRITICAL_SQL_ERROR_CODES.has(error.code)) {
-          skipped += 1
-          continue
-        }
-        throw error
-      }
+      await client.query(statement)
+      executed += 1
     }
 
     if (seed) {
@@ -405,9 +401,9 @@ async function syncDatabaseSchema(options = {}) {
     }
 
     return {
+      initialized: true,
       total: statements.length,
       executed,
-      skipped,
     }
   } finally {
     if (client) {
@@ -418,10 +414,12 @@ async function syncDatabaseSchema(options = {}) {
 
 async function executeSqlFile() {
   try {
-    console.log('🔄 正在同步数据库结构...')
-    const result = await syncDatabaseSchema({ reset: false, seed: true })
+    console.log('🔄 正在初始化空数据库...')
+    const result = await initializeDatabaseSchema({ reset: false, seed: true })
     console.log(
-      `✅ 数据库结构同步完成，总语句 ${result.total}，执行 ${result.executed}，跳过 ${result.skipped}`,
+      result.initialized
+        ? `✅ 数据库初始化完成，总语句 ${result.total}，执行 ${result.executed}`
+        : '⏭️ 数据库已有业务表，跳过结构初始化',
     )
     console.log('🎉 数据库初始化完成！')
   } catch (error) {
@@ -451,6 +449,6 @@ if (require.main === module) {
 
 module.exports = {
   executeSqlFile,
-  syncDatabaseSchema,
+  initializeDatabaseSchema,
   splitSqlStatements,
 }

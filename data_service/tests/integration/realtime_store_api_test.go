@@ -20,9 +20,9 @@ func TestRealtimeStoreListAfterConnectionCreate(t *testing.T) {
 	defer cancel()
 
 	fixture := setupTestDatabase(t, ctx)
-	migrator := setupMigrator(t, fixture.pool)
-	if err := migrator.Up(ctx); err != nil {
-		t.Fatalf("执行迁移失败: %v", err)
+	migrator := setupSchemaInitializer(t, fixture.pool)
+	if err := migrator.Ensure(ctx); err != nil {
+		t.Fatalf("初始化数据库结构失败: %v", err)
 	}
 
 	projectID := uuid.NewString()
@@ -90,9 +90,9 @@ func TestRealtimeStoreDataPointRevivesInvalidPath(t *testing.T) {
 	defer cancel()
 
 	fixture := setupTestDatabase(t, ctx)
-	migrator := setupMigrator(t, fixture.pool)
-	if err := migrator.Up(ctx); err != nil {
-		t.Fatalf("执行迁移失败: %v", err)
+	migrator := setupSchemaInitializer(t, fixture.pool)
+	if err := migrator.Ensure(ctx); err != nil {
+		t.Fatalf("初始化数据库结构失败: %v", err)
 	}
 
 	projectID := uuid.NewString()
