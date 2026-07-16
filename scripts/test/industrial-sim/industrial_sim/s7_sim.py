@@ -35,7 +35,7 @@ LOGGER = logging.getLogger("industrial_sim.s7")
 
 
 def main() -> None:
-    parser = build_parser("InduForge S7 泵站模拟设备", 18102)
+    parser = build_parser("InduForge S7 泵站模拟设备", 18503)
     args = parser.parse_args()
     configure_logging(args.verbose)
     if not args.verbose:

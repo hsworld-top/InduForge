@@ -68,7 +68,7 @@ Windows PowerShell 中单独启动：
 | --- | --- |
 | Modbus TCP | `127.0.0.1:18502`，`unitId=1/2/3` |
 | OPC UA | `opc.tcp://127.0.0.1:18540/induforge/sim` |
-| S7 | `127.0.0.1:18102`，`rack=0`，`slot=1` |
+| S7 | `127.0.0.1:18503`，`rack=0`，`slot=1` |
 
 ## 通用设备行为
 

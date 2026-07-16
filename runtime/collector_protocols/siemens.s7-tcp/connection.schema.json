@@ -4,24 +4,56 @@
   "additionalProperties": false,
   "required": ["host", "port", "rack", "slot"],
   "properties": {
-    "host": { "type": "string", "minLength": 1 },
-    "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 102 },
-    "rack": { "type": "integer", "minimum": 0, "maximum": 7, "default": 0 },
-    "slot": { "type": "integer", "minimum": 0, "maximum": 31, "default": 1 },
+    "host": {
+      "type": "string",
+      "title": "设备 IP / 主机名（host）",
+      "description": "请输入 Siemens PLC 的 IPv4、IPv6 或主机名",
+      "minLength": 1
+    },
+    "port": {
+      "type": "integer",
+      "title": "端口（port）",
+      "description": "Siemens S7 TCP 服务端口",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 102
+    },
+    "rack": {
+      "type": "integer",
+      "title": "机架号（rack）",
+      "description": "PLC CPU 所在机架编号",
+      "minimum": 0,
+      "maximum": 7,
+      "default": 0
+    },
+    "slot": {
+      "type": "integer",
+      "title": "槽位号（slot）",
+      "description": "PLC CPU 所在槽位编号",
+      "minimum": 0,
+      "maximum": 31,
+      "default": 1
+    },
     "localTsap": {
       "type": "integer",
+      "title": "本地 TSAP（localTsap）",
+      "description": "可选的本地传输服务访问点",
       "minimum": 0,
       "maximum": 65535,
       "x-induforge-advanced": true
     },
     "remoteTsap": {
       "type": "integer",
+      "title": "远端 TSAP（remoteTsap）",
+      "description": "可选的 PLC 传输服务访问点",
       "minimum": 0,
       "maximum": 65535,
       "x-induforge-advanced": true
     },
     "connectTimeoutMs": {
       "type": "integer",
+      "title": "连接超时（connectTimeoutMs）",
+      "description": "建立 S7 TCP 连接的最大等待时间",
       "minimum": 100,
       "maximum": 120000,
       "default": 5000,

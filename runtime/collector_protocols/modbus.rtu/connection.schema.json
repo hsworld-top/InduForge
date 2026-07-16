@@ -4,16 +4,67 @@
   "additionalProperties": false,
   "required": ["portName", "baudRate", "dataBits", "parity", "stopBits"],
   "properties": {
-    "portName": { "type": "string", "minLength": 1 },
+    "portName": {
+      "type": "string",
+      "title": "串口名称（portName）",
+      "description": "Windows 示例：COM3；Linux 示例：/dev/ttyUSB0",
+      "minLength": 1
+    },
     "baudRate": {
       "type": "integer",
-      "enum": [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]
+      "title": "波特率（baudRate）",
+      "description": "必须与串口设备的通信参数一致",
+      "enum": [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200],
+      "default": 9600,
+      "x-induforge-enum-labels": {
+        "1200": "1200 波特（1200）",
+        "2400": "2400 波特（2400）",
+        "4800": "4800 波特（4800）",
+        "9600": "9600 波特（9600）",
+        "19200": "19200 波特（19200）",
+        "38400": "38400 波特（38400）",
+        "57600": "57600 波特（57600）",
+        "115200": "115200 波特（115200）"
+      }
     },
-    "dataBits": { "type": "integer", "enum": [7, 8], "default": 8 },
-    "parity": { "type": "string", "enum": ["none", "odd", "even"], "default": "none" },
-    "stopBits": { "type": "string", "enum": ["one", "two"], "default": "one" },
+    "dataBits": {
+      "type": "integer",
+      "title": "数据位（dataBits）",
+      "description": "每个串口字符的数据位数",
+      "enum": [7, 8],
+      "default": 8,
+      "x-induforge-enum-labels": {
+        "7": "7 位（7）",
+        "8": "8 位（8）"
+      }
+    },
+    "parity": {
+      "type": "string",
+      "title": "校验方式（parity）",
+      "description": "串口奇偶校验方式",
+      "enum": ["none", "odd", "even"],
+      "default": "none",
+      "x-induforge-enum-labels": {
+        "none": "无校验（none）",
+        "odd": "奇校验（odd）",
+        "even": "偶校验（even）"
+      }
+    },
+    "stopBits": {
+      "type": "string",
+      "title": "停止位（stopBits）",
+      "description": "每个串口字符的停止位数",
+      "enum": ["one", "two"],
+      "default": "one",
+      "x-induforge-enum-labels": {
+        "one": "1 位（one）",
+        "two": "2 位（two）"
+      }
+    },
     "timeoutMs": {
       "type": "integer",
+      "title": "通信超时（timeoutMs）",
+      "description": "串口读写操作的最大等待时间",
       "minimum": 100,
       "maximum": 120000,
       "default": 3000,

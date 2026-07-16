@@ -4,10 +4,24 @@
   "additionalProperties": false,
   "required": ["host", "port"],
   "properties": {
-    "host": { "type": "string", "minLength": 1 },
-    "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 502 },
+    "host": {
+      "type": "string",
+      "title": "设备 IP / 主机名（host）",
+      "description": "请输入 Modbus TCP 设备的 IPv4、IPv6 或主机名",
+      "minLength": 1
+    },
+    "port": {
+      "type": "integer",
+      "title": "端口（port）",
+      "description": "Modbus TCP 服务端口",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 502
+    },
     "connectTimeoutMs": {
       "type": "integer",
+      "title": "连接超时（connectTimeoutMs）",
+      "description": "建立 TCP 连接的最大等待时间",
       "minimum": 100,
       "maximum": 120000,
       "default": 5000,

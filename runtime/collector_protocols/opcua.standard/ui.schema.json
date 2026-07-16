@@ -1,6 +1,6 @@
 {
   "connection": {
-    "order": ["endpointUrl", "securityMode", "securityPolicy", "authenticationType", "timeoutMs"]
+    "order": ["host", "port", "endpointPath", "securityMode", "securityPolicy", "authenticationType", "timeoutMs"]
   },
   "address": { "order": ["nodeId"] }
 }

@@ -20,7 +20,7 @@ UPDATE_MS="${UPDATE_MS:-500}"
 PORT=""
 MODBUS_PORT="${MODBUS_PORT:-18502}"
 OPCUA_PORT="${OPCUA_PORT:-18540}"
-S7_PORT="${S7_PORT:-18102}"
+S7_PORT="${S7_PORT:-18503}"
 VERBOSE=0
 PROTOCOL=""
 PIDS=()
@@ -38,14 +38,14 @@ Options:
   --update-ms MS         设备刷新周期，默认 500
   --modbus-port PORT     all 模式下的 Modbus TCP 端口，默认 18502
   --opcua-port PORT      all 模式下的 OPC UA 端口，默认 18540
-  --s7-port PORT         all 模式下的 S7 端口，默认 18102
+  --s7-port PORT         all 模式下的 S7 端口，默认 18503
   --verbose              输出调试日志
   -h, --help             显示帮助
 
 Examples:
   bash scripts/test/industrial-sim/run.sh modbus --python ./.venv-industrial-sim/bin/python
   bash scripts/test/industrial-sim/run.sh opcua --scenario alarm
-  bash scripts/test/industrial-sim/run.sh s7 --port 18102
+  bash scripts/test/industrial-sim/run.sh s7 --port 18503
   bash scripts/test/industrial-sim/run.sh all
 EOF
 }

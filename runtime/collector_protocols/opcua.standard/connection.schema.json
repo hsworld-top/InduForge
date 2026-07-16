@@ -2,14 +2,62 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["endpointUrl", "securityMode", "securityPolicy", "authenticationType"],
+  "required": ["host", "port", "endpointPath", "securityMode", "securityPolicy", "authenticationType"],
   "properties": {
-    "endpointUrl": { "type": "string", "minLength": 1, "pattern": "^opc\\.tcp://" },
-    "securityMode": { "type": "string", "enum": ["None"] },
-    "securityPolicy": { "type": "string", "enum": ["None"] },
-    "authenticationType": { "type": "string", "enum": ["anonymous"] },
+    "host": {
+      "type": "string",
+      "title": "设备 IP / 主机名（host）",
+      "description": "请输入 OPC UA 服务器的 IPv4、IPv6 或主机名，不包含 opc.tcp://",
+      "minLength": 1
+    },
+    "port": {
+      "type": "integer",
+      "title": "端口（port）",
+      "description": "OPC UA 服务器监听端口",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 4840
+    },
+    "endpointPath": {
+      "type": "string",
+      "title": "端点路径（endpointPath）",
+      "description": "例如 /induforge/sim；未填写前导斜杠时会自动补齐",
+      "default": "/"
+    },
+    "securityMode": {
+      "type": "string",
+      "title": "安全模式（securityMode）",
+      "description": "当前调试代理仅支持无签名和无加密模式",
+      "enum": ["None"],
+      "default": "None",
+      "x-induforge-enum-labels": {
+        "None": "无签名和加密（None）"
+      }
+    },
+    "securityPolicy": {
+      "type": "string",
+      "title": "安全策略（securityPolicy）",
+      "description": "当前调试代理仅支持无安全策略",
+      "enum": ["None"],
+      "default": "None",
+      "x-induforge-enum-labels": {
+        "None": "无安全策略（None）"
+      }
+    },
+    "authenticationType": {
+      "type": "string",
+      "title": "认证方式（authenticationType）",
+      "description": "当前调试代理仅支持匿名认证",
+      "enum": ["anonymous"],
+      "default": "anonymous",
+      "x-induforge-enum-labels": {
+        "anonymous": "匿名认证（anonymous）"
+      }
+    },
     "timeoutMs": {
       "type": "integer",
+      "title": "通信超时（timeoutMs）",
+      "description": "OPC UA 连接和请求的最大等待时间",
       "minimum": 1000,
       "maximum": 120000,
       "default": 30000,

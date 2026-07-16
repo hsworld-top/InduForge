@@ -11,7 +11,7 @@ $PackageRoot = Join-Path $Root "industrial_sim"
 $modules = @(
   @{ Name = "Modbus TCP"; Script = Join-Path $PackageRoot "modbus_sim.py"; Port = "18502" },
   @{ Name = "OPC UA"; Script = Join-Path $PackageRoot "opcua_sim.py"; Port = "18540" },
-  @{ Name = "S7"; Script = Join-Path $PackageRoot "s7_sim.py"; Port = "18102" }
+  @{ Name = "S7"; Script = Join-Path $PackageRoot "s7_sim.py"; Port = "18503" }
 )
 
 Write-Host "启动 InduForge 工业模拟设备，scenario=$Scenario"
@@ -22,4 +22,3 @@ foreach ($module in $modules) {
 }
 
 Write-Host "停止服务请结束上述 PID，或关闭对应 Python 进程。"
-
