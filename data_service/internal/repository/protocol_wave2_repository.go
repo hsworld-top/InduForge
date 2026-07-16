@@ -11,12 +11,6 @@ import (
 	apperrors "github.com/indu-forge/data_service/internal/errors"
 )
 
-// CreateOpcuaConfigParams 描述 OPC UA 配置落库参数。
-// UpdateOpcuaConfigParams 描述 OPC UA 配置更新落库参数。
-// CreateS7ConfigParams 描述 S7 配置落库参数。
-// UpdateS7ConfigParams 描述 S7 配置更新落库参数。
-// CreateModbusConfigParams 描述 Modbus 配置落库参数。
-// UpdateModbusConfigParams 描述 Modbus 配置更新落库参数。
 // CreateTdengineConfigParams 描述 TDengine 配置落库参数。
 type CreateTdengineConfigParams struct {
 	ProjectID    string
@@ -29,9 +23,7 @@ type CreateTdengineConfigParams struct {
 	Options      map[string]any
 }
 
-// ProtocolWave2Repository 负责第二波协议配置（opcua/s7/modbus/tdengine）参数化 SQL。
-// 说明：当前只保留 schema 与参数化落库实现，便于后续进入 Phase 2 时复用；
-// Phase 1 不再通过这些对象对外宣称正式协议能力。
+// ProtocolWave2Repository 负责 TDengine 配置的参数化 SQL。
 type ProtocolWave2Repository struct {
 	pool *pgxpool.Pool
 }
@@ -41,12 +33,6 @@ func NewProtocolWave2Repository(pool *pgxpool.Pool) *ProtocolWave2Repository {
 	return &ProtocolWave2Repository{pool: pool}
 }
 
-// CreateOpcuaConfig 创建 OPC UA 配置。
-// UpdateOpcuaConfig 更新 OPC UA 配置。
-// CreateS7Config 创建 S7 配置。
-// UpdateS7Config 更新 S7 配置，并同步 PLC 档案。
-// CreateModbusConfig 创建 Modbus 配置。
-// UpdateModbusConfig 更新 Modbus 配置。
 // CreateTdengineConfig 创建 TDengine 配置。
 func (r *ProtocolWave2Repository) CreateTdengineConfig(ctx context.Context, params CreateTdengineConfigParams) (*ProtocolConnectionRecord, error) {
 	optionsPayload, err := marshalWave2JSONObject(params.Options, true)

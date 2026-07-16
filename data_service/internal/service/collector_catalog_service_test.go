@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -38,6 +39,31 @@ func TestCollectorCatalogGetReturnsSchemas(t *testing.T) {
 	}
 	if len(result.ConnectionSchema) == 0 || len(result.AddressSchema) == 0 || len(result.UISchema) == 0 {
 		t.Fatalf("schemas missing: %#v", result)
+	}
+}
+
+func TestCollectorCatalogOpcUaUsesStructuredBilingualConnectionSchema(t *testing.T) {
+	service := newRepositoryCollectorCatalogService(t)
+	result, err := service.Get("opcua.standard")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema struct {
+		Required   []string                  `json:"required"`
+		Properties map[string]map[string]any `json:"properties"`
+	}
+	if err := json.Unmarshal(result.ConnectionSchema, &schema); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := schema.Properties["endpointUrl"]; exists {
+		t.Fatal("OPC UA connection schema must not expose endpointUrl")
+	}
+	if schema.Properties["host"]["title"] != "设备 IP / 主机名（host）" || schema.Properties["port"]["title"] != "端口（port）" {
+		t.Fatalf("OPC UA bilingual titles missing: %#v", schema.Properties)
+	}
+	labels, ok := schema.Properties["securityMode"]["x-induforge-enum-labels"].(map[string]any)
+	if !ok || labels["None"] != "无签名和加密（None）" {
+		t.Fatalf("OPC UA enum labels missing: %#v", schema.Properties["securityMode"])
 	}
 }
 

@@ -316,8 +316,6 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		"data=enabled",
 		"builtinRuntime=enabled",
 		"mqtt=enabled",
-		"modbusModeling=enabled",
-		"opcuaModeling=enabled",
 		"s7Modeling=enabled",
 		"projectSnapshot=enabled",
 		"protocolWave1=enabled",

@@ -9,32 +9,7 @@ import (
 	"github.com/indu-forge/data_service/internal/repository"
 )
 
-var allowedOpcuaSecurityModes = map[string]struct{}{
-	"none":           {},
-	"sign":           {},
-	"signandencrypt": {},
-}
-
-var allowedOpcuaAuthTypes = map[string]struct{}{
-	"anonymous":         {},
-	"username_password": {},
-}
-
-var allowedModbusModes = map[string]struct{}{
-	"tcp": {},
-	"rtu": {},
-}
-
 const phase2ProtocolBoundaryMessage = "已进入工业协议配置阶段，请使用对应的工业协议专用配置接口"
-
-// CreateOpcuaConfigInput 表示创建 OPC UA 配置输入。
-// UpdateOpcuaConfigInput 表示更新 OPC UA 配置输入。
-
-// CreateS7ConfigInput 表示创建 S7 配置输入。
-// UpdateS7ConfigInput 表示更新 S7 配置输入。
-
-// CreateModbusConfigInput 表示创建 Modbus 配置输入。
-// UpdateModbusConfigInput 表示更新 Modbus 配置输入。
 
 // CreateTdengineConfigInput 表示创建 TDengine 配置输入。
 type CreateTdengineConfigInput struct {
@@ -57,8 +32,7 @@ type OpcdaContractValidateResult struct {
 	Valid bool `json:"valid"`
 }
 
-// ProtocolWave2Service 负责第二波工业协议配置和 OPC DA 合约校验逻辑。
-// 当前阶段只交付平台侧配置与 artifact 契约，不启动节点侧长期采集，也不在 data_service 内常驻协议会话。
+// ProtocolWave2Service 负责 TDengine 配置和 OPC DA 合约校验。
 type ProtocolWave2Service struct {
 	repository *repository.ProtocolWave2Repository
 }
@@ -68,12 +42,6 @@ func NewProtocolWave2Service(repo *repository.ProtocolWave2Repository) *Protocol
 	return &ProtocolWave2Service{repository: repo}
 }
 
-// CreateOpcuaConfig 创建 OPC UA 配置。
-// UpdateOpcuaConfig 更新 OPC UA 配置。
-// CreateS7Config 创建 S7 配置。
-// UpdateS7Config 更新 S7 配置。
-// CreateModbusConfig 创建 Modbus 配置。
-// UpdateModbusConfig 更新 Modbus 配置。
 // CreateTdengineConfig 创建 TDengine 配置。
 func (s *ProtocolWave2Service) CreateTdengineConfig(ctx context.Context, projectID, userID string, input CreateTdengineConfigInput) (*ProtocolConnection, error) {
 	if err := validateProjectID(projectID); err != nil {
@@ -125,17 +93,6 @@ func (s *ProtocolWave2Service) ValidateOpcdaContract(input OpcdaContractValidate
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "samplingMs 必须大于 0")
 	}
 	return &OpcdaContractValidateResult{Valid: true}, nil
-}
-
-func opcuaSecurityModeForStorage(value string) string {
-	switch value {
-	case "sign":
-		return "Sign"
-	case "signandencrypt":
-		return "SignAndEncrypt"
-	default:
-		return "None"
-	}
 }
 
 func wave2TextFromMap(input map[string]any, key string, fallback string) string {
@@ -241,29 +198,6 @@ func normalizePort(value *int, defaultValue int, errorMessage string) (int, erro
 		return defaultValue, nil
 	}
 	if *value <= 0 || *value > 65535 {
-		return 0, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, errorMessage)
-	}
-	return *value, nil
-}
-
-func normalizeOptionalPort(value *int, defaultValue int, errorMessage string) (*int, error) {
-	if value == nil {
-		if defaultValue <= 0 {
-			return nil, nil
-		}
-		return &defaultValue, nil
-	}
-	if *value <= 0 || *value > 65535 {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, errorMessage)
-	}
-	return value, nil
-}
-
-func normalizePositiveInt(value *int, defaultValue int, errorMessage string) (int, error) {
-	if value == nil {
-		return defaultValue, nil
-	}
-	if *value <= 0 {
 		return 0, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, errorMessage)
 	}
 	return *value, nil

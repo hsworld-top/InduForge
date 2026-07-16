@@ -2,10 +2,8 @@ package service
 
 import (
 	"context"
-	"net"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
@@ -56,78 +54,5 @@ func TestConnectionProtocolTest_Redis(t *testing.T) {
 	}
 	if !result.Connected || result.Type != "redis" {
 		t.Fatalf("unexpected Redis result: %#v", result)
-	}
-}
-
-func TestConnectionProtocolTest_OPCUATcpProbe(t *testing.T) {
-	listener := mustTCPListener(t)
-	defer listener.Close()
-	go acceptAndClose(listener)
-
-	result, err := testOPCUAConnection(context.Background(), map[string]any{
-		"endpoint": "opc.tcp://" + listener.Addr().String(),
-	})
-	if err != nil {
-		t.Fatalf("OPC UA test failed: %v", err)
-	}
-	if !result.Connected || result.Type != "opcua" {
-		t.Fatalf("unexpected OPC UA result: %#v", result)
-	}
-}
-
-func TestConnectionProtocolTest_ModbusTCPProbe(t *testing.T) {
-	listener := mustTCPListener(t)
-	defer listener.Close()
-	go acceptAndClose(listener)
-	host, port, err := net.SplitHostPort(listener.Addr().String())
-	if err != nil {
-		t.Fatalf("split listener address: %v", err)
-	}
-	portNumber, err := strconv.Atoi(port)
-	if err != nil {
-		t.Fatalf("parse listener port: %v", err)
-	}
-
-	result, err := testModbusConnection(context.Background(), map[string]any{
-		"mode": "tcp",
-		"host": host,
-		"port": portNumber,
-	})
-	if err != nil {
-		t.Fatalf("Modbus TCP test failed: %v", err)
-	}
-	if !result.Connected || result.Type != "modbus" {
-		t.Fatalf("unexpected Modbus result: %#v", result)
-	}
-}
-
-func TestConnectionProtocolTest_ModbusRTUConfig(t *testing.T) {
-	result, err := testModbusConnection(context.Background(), map[string]any{
-		"mode": "rtu",
-		"serialConfig": map[string]any{
-			"port": "COM3",
-		},
-	})
-	if err != nil {
-		t.Fatalf("Modbus RTU config test failed: %v", err)
-	}
-	if !result.Connected || result.Type != "modbus" {
-		t.Fatalf("unexpected Modbus RTU result: %#v", result)
-	}
-}
-
-func mustTCPListener(t *testing.T) net.Listener {
-	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen tcp: %v", err)
-	}
-	return listener
-}
-
-func acceptAndClose(listener net.Listener) {
-	conn, err := listener.Accept()
-	if err == nil {
-		_ = conn.Close()
 	}
 }

@@ -30,11 +30,8 @@ func (h *CollectorHandler) ListConnections(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		return err
 	}
-	enabled, err := parseOptionalBool(query.Get("enabled"))
-	if err != nil {
-		return err
-	}
-	result, err := h.service.ListConnections(r.Context(), r.PathValue("projectId"), repository.CollectorConnectionListFilter{Page: page, PageSize: pageSize, Search: query.Get("search"), ProtocolFamily: query.Get("protocolFamily"), DriverID: query.Get("driverId"), Enabled: enabled, SortBy: query.Get("sortBy"), SortOrder: query.Get("sortOrder")})
+
+	result, err := h.service.ListConnections(r.Context(), r.PathValue("projectId"), repository.CollectorConnectionListFilter{Page: page, PageSize: pageSize, Search: query.Get("search"), ProtocolFamily: query.Get("protocolFamily"), DriverID: query.Get("driverId"), SortBy: query.Get("sortBy"), SortOrder: query.Get("sortOrder")})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -80,7 +77,7 @@ func (h *CollectorHandler) UpdateConnection(w http.ResponseWriter, r *http.Reque
 	if err := decodeJSONBody(r, &raw); err != nil {
 		return err
 	}
-	allowed := map[string]struct{}{"name": {}, "enabled": {}, "config": {}, "metadata": {}, "secrets": {}}
+	allowed := map[string]struct{}{"name": {}, "config": {}, "metadata": {}, "secrets": {}}
 	for key := range raw {
 		if _, ok := allowed[key]; !ok {
 			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "更新请求包含不支持的字段: "+key)
@@ -94,13 +91,7 @@ func (h *CollectorHandler) UpdateConnection(w http.ResponseWriter, r *http.Reque
 		}
 		input.Name = &parsed
 	}
-	if value, ok := raw["enabled"]; ok {
-		var parsed bool
-		if err := json.Unmarshal(value, &parsed); err != nil {
-			return invalidCollectorField("enabled", err)
-		}
-		input.Enabled = &parsed
-	}
+
 	if value, ok := raw["config"]; ok {
 		if err := json.Unmarshal(value, &input.Config); err != nil {
 			return invalidCollectorField("config", err)

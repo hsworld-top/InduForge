@@ -53,7 +53,9 @@
   "deadlineAt": "2026-07-13 12:00:00",
   "connection": {
     "protocolType": "opcua",
-    "endpointUrl": "opc.tcp://127.0.0.1:18540/induforge/sim",
+    "host": "127.0.0.1",
+    "port": 18540,
+    "endpointPath": "/induforge/sim",
     "securityMode": "None",
     "securityPolicy": "None",
     "authentication": {

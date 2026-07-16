@@ -21,7 +21,7 @@ var allowedOperations = map[string]struct{}{
 
 var allowedExtensions = map[string]struct{}{
 	"x-induforge-secret": {}, "x-induforge-sensitive-log": {}, "x-induforge-unit": {},
-	"x-induforge-advanced": {}, "x-induforge-address-text": {},
+	"x-induforge-advanced": {}, "x-induforge-address-text": {}, "x-induforge-enum-labels": {},
 }
 
 type Manifest struct {

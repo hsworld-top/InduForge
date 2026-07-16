@@ -20,7 +20,6 @@ type CollectorConnectionRecord struct {
 	ProjectID      string
 	Name           string
 	Status         string
-	Enabled        bool
 	DisplayOrder   int
 	ProtocolFamily string
 	DriverID       string
@@ -31,12 +30,13 @@ type CollectorConnectionRecord struct {
 	SecretStatus   map[string]bool
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+	LastTestStatus *string
+	LastTestedAt   *time.Time
 }
 
 type CollectorConnectionListFilter struct {
 	Page, PageSize                                      int
 	Search, ProtocolFamily, DriverID, SortBy, SortOrder string
-	Enabled                                             *bool
 }
 
 type EncryptedCollectorSecret struct {
@@ -59,7 +59,6 @@ type CreateCollectorConnectionParams struct {
 
 type UpdateCollectorConnectionParams struct {
 	ID, ProjectID, UserID, Name string
-	Enabled                     bool
 	Config, Metadata            map[string]any
 	Secrets                     []EncryptedCollectorSecret
 	DeleteSecretKeys            []string
@@ -87,9 +86,7 @@ func (r *CollectorRepository) ListConnections(ctx context.Context, projectID str
 	if value := strings.TrimSpace(filter.DriverID); value != "" {
 		add("collector.driver_id = $%d", value)
 	}
-	if filter.Enabled != nil {
-		add("collector.enabled = $%d", *filter.Enabled)
-	}
+
 	orderColumn := map[string]string{"name": "collector.name", "driverId": "collector.driver_id", "createdAt": "collector.created_at", "updatedAt": "collector.updated_at"}[filter.SortBy]
 	if orderColumn == "" {
 		orderColumn = "collector.display_order"
@@ -100,10 +97,12 @@ func (r *CollectorRepository) ListConnections(ctx context.Context, projectID str
 	}
 	args = append(args, filter.PageSize, (filter.Page-1)*filter.PageSize)
 	query := fmt.Sprintf(`
-		SELECT collector.id, collector.project_id, collector.name, collector.status, collector.enabled, collector.display_order,
+		SELECT collector.id, collector.project_id, collector.name, collector.status, collector.display_order,
 		       collector.protocol_family, collector.driver_id, collector.driver_version, collector.schema_version,
 		       collector.config, collector.metadata,
 		       COALESCE((SELECT jsonb_object_agg(secret_key, true) FROM data_collector_connection_secrets secret WHERE secret.connection_id = collector.id), '{}'::jsonb),
+		       (SELECT task.status FROM collector_dev_tasks task WHERE task.project_id = collector.project_id AND task.connection_id = collector.id AND task.operation = 'connection.test' ORDER BY task.created_at DESC, task.id DESC LIMIT 1),
+		       (SELECT COALESCE(task.finished_at, task.created_at) FROM collector_dev_tasks task WHERE task.project_id = collector.project_id AND task.connection_id = collector.id AND task.operation = 'connection.test' ORDER BY task.created_at DESC, task.id DESC LIMIT 1),
 		       collector.created_at, collector.updated_at, COUNT(*) OVER()::int
 		FROM data_collector_connections collector
 		WHERE %s
@@ -199,7 +198,7 @@ func (r *CollectorRepository) UpdateConnection(ctx context.Context, params Updat
 		return nil, wrapUnifiedCollectorRepositoryError("开启连接更新事务失败", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	tag, err := tx.Exec(ctx, `UPDATE data_collector_connections SET name=$3, enabled=$4, config=$5::jsonb, metadata=$6::jsonb, updated_by=$7, updated_at=now() WHERE id=$1 AND project_id=$2`, params.ID, params.ProjectID, params.Name, params.Enabled, string(configPayload), string(metadataPayload), params.UserID)
+	tag, err := tx.Exec(ctx, `UPDATE data_collector_connections SET name=$3, config=$4::jsonb, metadata=$5::jsonb, updated_by=$6, updated_at=now() WHERE id=$1 AND project_id=$2`, params.ID, params.ProjectID, params.Name, string(configPayload), string(metadataPayload), params.UserID)
 	if err != nil {
 		return nil, translateCollectorWriteError("更新工业采集连接失败", err)
 	}
@@ -227,10 +226,12 @@ func (r *CollectorRepository) DeleteConnection(ctx context.Context, projectID, c
 }
 
 const collectorConnectionSelect = `
-	SELECT collector.id, collector.project_id, collector.name, collector.status, collector.enabled, collector.display_order,
+	SELECT collector.id, collector.project_id, collector.name, collector.status, collector.display_order,
 	       collector.protocol_family, collector.driver_id, collector.driver_version, collector.schema_version,
 	       collector.config, collector.metadata,
 	       COALESCE((SELECT jsonb_object_agg(secret_key, true) FROM data_collector_connection_secrets secret WHERE secret.connection_id = collector.id), '{}'::jsonb),
+	       (SELECT task.status FROM collector_dev_tasks task WHERE task.project_id = collector.project_id AND task.connection_id = collector.id AND task.operation = 'connection.test' ORDER BY task.created_at DESC, task.id DESC LIMIT 1),
+	       (SELECT COALESCE(task.finished_at, task.created_at) FROM collector_dev_tasks task WHERE task.project_id = collector.project_id AND task.connection_id = collector.id AND task.operation = 'connection.test' ORDER BY task.created_at DESC, task.id DESC LIMIT 1),
 	       collector.created_at, collector.updated_at
 	FROM data_collector_connections collector`
 
@@ -239,7 +240,7 @@ type unifiedCollectorRow interface{ Scan(...any) error }
 func scanCollectorConnection(row unifiedCollectorRow) (CollectorConnectionRecord, error) {
 	var record CollectorConnectionRecord
 	var configPayload, metadataPayload, secretStatusPayload []byte
-	err := row.Scan(&record.ID, &record.ProjectID, &record.Name, &record.Status, &record.Enabled, &record.DisplayOrder, &record.ProtocolFamily, &record.DriverID, &record.DriverVersion, &record.SchemaVersion, &configPayload, &metadataPayload, &secretStatusPayload, &record.CreatedAt, &record.UpdatedAt)
+	err := row.Scan(&record.ID, &record.ProjectID, &record.Name, &record.Status, &record.DisplayOrder, &record.ProtocolFamily, &record.DriverID, &record.DriverVersion, &record.SchemaVersion, &configPayload, &metadataPayload, &secretStatusPayload, &record.LastTestStatus, &record.LastTestedAt, &record.CreatedAt, &record.UpdatedAt)
 	if err != nil {
 		return CollectorConnectionRecord{}, err
 	}
@@ -259,7 +260,7 @@ func scanCollectorConnectionWithTotal(row unifiedCollectorRow) (CollectorConnect
 	var record CollectorConnectionRecord
 	var configPayload, metadataPayload, secretStatusPayload []byte
 	var total int
-	err := row.Scan(&record.ID, &record.ProjectID, &record.Name, &record.Status, &record.Enabled, &record.DisplayOrder, &record.ProtocolFamily, &record.DriverID, &record.DriverVersion, &record.SchemaVersion, &configPayload, &metadataPayload, &secretStatusPayload, &record.CreatedAt, &record.UpdatedAt, &total)
+	err := row.Scan(&record.ID, &record.ProjectID, &record.Name, &record.Status, &record.DisplayOrder, &record.ProtocolFamily, &record.DriverID, &record.DriverVersion, &record.SchemaVersion, &configPayload, &metadataPayload, &secretStatusPayload, &record.LastTestStatus, &record.LastTestedAt, &record.CreatedAt, &record.UpdatedAt, &total)
 	if err != nil {
 		return CollectorConnectionRecord{}, 0, wrapUnifiedCollectorRepositoryError("扫描工业采集连接失败", err)
 	}

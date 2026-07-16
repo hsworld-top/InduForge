@@ -33,7 +33,6 @@ type CreateCollectorConnectionInput struct {
 
 type UpdateCollectorConnectionInput struct {
 	Name        *string
-	Enabled     *bool
 	Config      map[string]any
 	HasConfig   bool
 	Metadata    map[string]any
@@ -46,7 +45,6 @@ type CollectorConnection struct {
 	ProjectID      string          `json:"projectId"`
 	Name           string          `json:"name"`
 	Status         string          `json:"status"`
-	Enabled        bool            `json:"enabled"`
 	DisplayOrder   int             `json:"displayOrder"`
 	ProtocolFamily string          `json:"protocolFamily"`
 	DriverID       string          `json:"driverId"`
@@ -55,6 +53,8 @@ type CollectorConnection struct {
 	Config         map[string]any  `json:"config"`
 	Metadata       map[string]any  `json:"metadata"`
 	SecretStatus   map[string]bool `json:"secretStatus"`
+	LastTestStatus *string         `json:"lastTestStatus"`
+	LastTestedAt   *string         `json:"lastTestedAt"`
 	CreatedAt      string          `json:"createdAt"`
 	UpdatedAt      string          `json:"updatedAt"`
 }
@@ -188,10 +188,7 @@ func (s *CollectorService) UpdateConnection(ctx context.Context, projectID, conn
 			return nil, err
 		}
 	}
-	enabled := current.Enabled
-	if input.Enabled != nil {
-		enabled = *input.Enabled
-	}
+
 	config := cloneCollectorMap(current.Config)
 	if input.HasConfig {
 		config = cloneCollectorMap(input.Config)
@@ -207,7 +204,7 @@ func (s *CollectorService) UpdateConnection(ctx context.Context, projectID, conn
 	if err != nil {
 		return nil, err
 	}
-	record, err := s.store.UpdateConnection(ctx, repository.UpdateCollectorConnectionParams{ID: connectionID, ProjectID: projectID, UserID: userID, Name: name, Enabled: enabled, Config: config, Metadata: metadata, Secrets: upserts, DeleteSecretKeys: deletes})
+	record, err := s.store.UpdateConnection(ctx, repository.UpdateCollectorConnectionParams{ID: connectionID, ProjectID: projectID, UserID: userID, Name: name, Config: config, Metadata: metadata, Secrets: upserts, DeleteSecretKeys: deletes})
 	if err != nil {
 		return nil, err
 	}
@@ -326,5 +323,10 @@ func cloneCollectorMap(value map[string]any) map[string]any {
 }
 
 func toCollectorConnection(record repository.CollectorConnectionRecord) CollectorConnection {
-	return CollectorConnection{ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, Status: record.Status, Enabled: record.Enabled, DisplayOrder: record.DisplayOrder, ProtocolFamily: record.ProtocolFamily, DriverID: record.DriverID, DriverVersion: record.DriverVersion, SchemaVersion: record.SchemaVersion, Config: cloneCollectorMap(record.Config), Metadata: cloneCollectorMap(record.Metadata), SecretStatus: record.SecretStatus, CreatedAt: record.CreatedAt.Format("2006-01-02 15:04:05"), UpdatedAt: record.UpdatedAt.Format("2006-01-02 15:04:05")}
+	var lastTestedAt *string
+	if record.LastTestedAt != nil {
+		value := record.LastTestedAt.Format("2006-01-02 15:04:05")
+		lastTestedAt = &value
+	}
+	return CollectorConnection{ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, Status: record.Status, DisplayOrder: record.DisplayOrder, ProtocolFamily: record.ProtocolFamily, DriverID: record.DriverID, DriverVersion: record.DriverVersion, SchemaVersion: record.SchemaVersion, Config: cloneCollectorMap(record.Config), Metadata: cloneCollectorMap(record.Metadata), SecretStatus: record.SecretStatus, LastTestStatus: record.LastTestStatus, LastTestedAt: lastTestedAt, CreatedAt: record.CreatedAt.Format("2006-01-02 15:04:05"), UpdatedAt: record.UpdatedAt.Format("2006-01-02 15:04:05")}
 }

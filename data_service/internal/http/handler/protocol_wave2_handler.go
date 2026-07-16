@@ -8,7 +8,7 @@ import (
 	"github.com/indu-forge/data_service/internal/service"
 )
 
-// ProtocolWave2Handler 负责第二波协议和 OPC DA 合约接口。
+// ProtocolWave2Handler 负责 TDengine 配置和 OPC DA 合约接口。
 type ProtocolWave2Handler struct {
 	service *service.ProtocolWave2Service
 }
@@ -18,12 +18,6 @@ func NewProtocolWave2Handler(protocolService *service.ProtocolWave2Service) *Pro
 	return &ProtocolWave2Handler{service: protocolService}
 }
 
-// CreateOpcuaConfig 创建 OPC UA 配置。
-// UpdateOpcuaConfig 更新 OPC UA 配置。
-// CreateS7Config 创建 S7 配置。
-// UpdateS7Config 更新 S7 配置。
-// CreateModbusConfig 创建 Modbus 配置。
-// UpdateModbusConfig 更新 Modbus 配置。
 // CreateTdengineConfig 创建 TDengine 配置。
 func (h *ProtocolWave2Handler) CreateTdengineConfig(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)

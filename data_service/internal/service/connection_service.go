@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -26,7 +25,7 @@ import (
 )
 
 // publicConnectionTypeCategoryMap 只保留通用连接接口允许新建/改型的类型。
-// 说明：kafka/http/websocket/redis 与 opcua/modbus/s7/tdengine 均走各自协议专用配置接口。
+// 说明：协议专用配置不允许通过通用连接接口写入。
 var publicConnectionTypeCategoryMap = map[string]string{
 	"relational":         "database",
 	"mqtt":               "message",
@@ -40,9 +39,6 @@ var publicConnectionTypeCategoryMap = map[string]string{
 
 // reservedPhase2ConnectionTypes 用于阻止工业协议从通用连接入口写入，避免只生成 metadata 而缺失专用配置表。
 var reservedPhase2ConnectionTypes = map[string]string{
-	"opcua":    "OPC UA",
-	"modbus":   "Modbus",
-	"s7":       "S7",
 	"tdengine": "TDengine",
 }
 
@@ -448,10 +444,6 @@ func (s *ConnectionService) TestConnection(ctx context.Context, projectID string
 		return testWebSocketConnection(ctx, input.Config)
 	case "redis":
 		return testRedisConnection(ctx, input.Config)
-	case "opcua":
-		return testOPCUAConnection(ctx, input.Config)
-	case "modbus":
-		return testModbusConnection(ctx, input.Config)
 	default:
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前接入源类型暂不支持连接测试")
 	}
@@ -612,76 +604,6 @@ func testRedisConnection(ctx context.Context, config map[string]any) (*Connectio
 		Type:      "redis",
 		Detail:    fmt.Sprintf("PING 成功，耗时 %dms", time.Since(startedAt).Milliseconds()),
 		Message:   "Redis 接入源连接成功",
-	}, nil
-}
-
-// testOPCUAConnection 对 OPC UA endpoint 做 TCP 探测。
-// 输入为 opc.tcp://host:port 配置；输出只表示网络端点可达，不声明已完成 OPC UA 会话协商。
-func testOPCUAConnection(ctx context.Context, config map[string]any) (*ConnectionTestResult, error) {
-	startedAt := time.Now()
-	endpoint := strings.TrimSpace(toString(config["endpoint"]))
-	if endpoint == "" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "OPC UA endpoint 不能为空")
-	}
-	parsed, err := url.Parse(endpoint)
-	if err != nil || !strings.EqualFold(parsed.Scheme, "opc.tcp") || strings.TrimSpace(parsed.Host) == "" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "OPC UA endpoint 必须是 opc.tcp://host:port")
-	}
-	address, err := ensureHostPort(parsed.Host, 4840)
-	if err != nil {
-		return nil, err
-	}
-	if err := dialTCP(ctx, address, connectionTestTimeout(config)); err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "OPC UA endpoint TCP 探测失败", err)
-	}
-	return &ConnectionTestResult{
-		Connected: true,
-		Type:      "opcua",
-		Detail:    fmt.Sprintf("TCP endpoint 可达，耗时 %dms", time.Since(startedAt).Milliseconds()),
-		Message:   "OPC UA 接入源端点可达",
-	}, nil
-}
-
-// testModbusConnection 按 Modbus 模式执行最小连通性验证。
-// TCP 模式探测 host:port；RTU 模式只校验串口配置完整性，避免服务端误占本机串口。
-func testModbusConnection(ctx context.Context, config map[string]any) (*ConnectionTestResult, error) {
-	startedAt := time.Now()
-	mode := strings.ToLower(strings.TrimSpace(toString(config["mode"])))
-	if mode == "" {
-		mode = "tcp"
-	}
-	if mode == "rtu" {
-		serialConfig := mapFromAny(config["serialConfig"])
-		if strings.TrimSpace(toString(serialConfig["port"])) == "" {
-			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Modbus RTU serialConfig.port 不能为空")
-		}
-		return &ConnectionTestResult{
-			Connected: true,
-			Type:      "modbus",
-			Detail:    "RTU 串口配置已通过字段校验，真实连通由节点侧串口运行器执行",
-			Message:   "Modbus RTU 配置校验通过",
-		}, nil
-	}
-	if mode != "tcp" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Modbus mode 仅支持 tcp/rtu")
-	}
-	host := strings.TrimSpace(firstNonEmptyString(toString(config["host"]), toString(config["ip"])))
-	if host == "" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Modbus TCP host 不能为空")
-	}
-	port := intFromAny(config["port"], 502)
-	address, err := ensureHostPort(fmt.Sprintf("%s:%d", host, port), 502)
-	if err != nil {
-		return nil, err
-	}
-	if err := dialTCP(ctx, address, connectionTestTimeout(config)); err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Modbus TCP 探测失败", err)
-	}
-	return &ConnectionTestResult{
-		Connected: true,
-		Type:      "modbus",
-		Detail:    fmt.Sprintf("TCP 端口可达，耗时 %dms", time.Since(startedAt).Milliseconds()),
-		Message:   "Modbus TCP 接入源端口可达",
 	}, nil
 }
 

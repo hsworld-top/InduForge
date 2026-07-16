@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
@@ -85,120 +84,6 @@ type SnapshotMqttTagRecord struct {
 	UpdatedAt      time.Time      `json:"updatedAt"`
 }
 
-// SnapshotOpcuaNodeRecord 表示 artifact 使用的 OPC UA 变量投影。
-type SnapshotOpcuaNodeRecord struct {
-	ID            string   `json:"id"`
-	ConnectionID  string   `json:"connectionId"`
-	GroupID       *string  `json:"groupId,omitempty"`
-	Name          string   `json:"name"`
-	Code          string   `json:"code"`
-	NodeID        string   `json:"nodeId"`
-	DataType      string   `json:"dataType"`
-	SamplingMS    int      `json:"samplingMs"`
-	Deadband      *float64 `json:"deadband,omitempty"`
-	AccessLevel   string   `json:"accessLevel"`
-	DataPointPath *string  `json:"datapointPath,omitempty"`
-}
-
-// SnapshotModbusRegisterRecord 表示 artifact 使用的 Modbus 寄存器变量投影。
-type SnapshotModbusRegisterRecord struct {
-	ID              string  `json:"id"`
-	ConnectionID    string  `json:"connectionId"`
-	GroupID         *string `json:"groupId,omitempty"`
-	Name            string  `json:"name"`
-	Code            string  `json:"code"`
-	UnitID          int     `json:"unitId"`
-	Area            string  `json:"area"`
-	Address         int     `json:"address"`
-	AddressBase     string  `json:"addressBase"`
-	ProtocolAddress int     `json:"protocolAddress"`
-	Quantity        int     `json:"quantity"`
-	DataType        string  `json:"dataType"`
-	ByteOrder       string  `json:"byteOrder"`
-	WordOrder       string  `json:"wordOrder"`
-	BitIndex        *int    `json:"bitIndex,omitempty"`
-	Scale           float64 `json:"scale"`
-	Offset          float64 `json:"offset"`
-	Unit            *string `json:"unit,omitempty"`
-	PollIntervalMS  int     `json:"pollIntervalMs"`
-	TimeoutMS       *int    `json:"timeoutMs,omitempty"`
-	RetryCount      *int    `json:"retryCount,omitempty"`
-	AccessLevel     string  `json:"accessLevel"`
-	DataPointPath   *string `json:"datapointPath,omitempty"`
-}
-
-// SnapshotModbusReadPlanRecord 表示 artifact 使用的 Modbus 运行态读取计划。
-type SnapshotModbusReadPlanRecord struct {
-	ID             string   `json:"id"`
-	ConnectionID   string   `json:"connectionId"`
-	UnitID         int      `json:"unitId"`
-	Area           string   `json:"area"`
-	ProtocolStart  int      `json:"protocolStart"`
-	Quantity       int      `json:"quantity"`
-	PollIntervalMS int      `json:"pollIntervalMs"`
-	RegisterIDs    []string `json:"registerIds"`
-	RegisterCount  int      `json:"registerCount"`
-}
-
-// SnapshotS7ProfileRecord 表示 artifact 使用的 S7 PLC 档案。
-type SnapshotS7ProfileRecord struct {
-	ConnectionID         string         `json:"connectionId"`
-	PlcFamily            string         `json:"plcFamily"`
-	CommunicationMode    string         `json:"communicationMode"`
-	Host                 string         `json:"host"`
-	Port                 int            `json:"port"`
-	Rack                 int            `json:"rack"`
-	Slot                 int            `json:"slot"`
-	PollIntervalMS       int            `json:"pollIntervalMs"`
-	PDUSize              *int           `json:"pduSize,omitempty"`
-	MaxReadBytes         *int           `json:"maxReadBytes,omitempty"`
-	MaxGapBytes          int            `json:"maxGapBytes"`
-	OptimizedBlockAccess bool           `json:"optimizedBlockAccess"`
-	SupportedAreas       []string       `json:"supportedAreas"`
-	Options              map[string]any `json:"options"`
-}
-
-// SnapshotS7VariableRecord 表示 artifact 使用的 S7 变量投影。
-type SnapshotS7VariableRecord struct {
-	ID                string  `json:"id"`
-	ConnectionID      string  `json:"connectionId"`
-	GroupID           *string `json:"groupId,omitempty"`
-	Name              string  `json:"name"`
-	Code              string  `json:"code"`
-	AddressText       string  `json:"addressText"`
-	NormalizedAddress string  `json:"normalizedAddress"`
-	Area              string  `json:"area"`
-	DBNumber          *int    `json:"dbNumber,omitempty"`
-	ByteOffset        int     `json:"byteOffset"`
-	BitOffset         *int    `json:"bitOffset,omitempty"`
-	ReadLength        int     `json:"readLength"`
-	DataType          string  `json:"dataType"`
-	ByteOrder         string  `json:"byteOrder"`
-	WordOrder         string  `json:"wordOrder"`
-	Scale             float64 `json:"scale"`
-	Offset            float64 `json:"offset"`
-	Unit              *string `json:"unit,omitempty"`
-	PollIntervalMS    int     `json:"pollIntervalMs"`
-	AccessLevel       string  `json:"accessLevel"`
-	DataPointPath     *string `json:"datapointPath,omitempty"`
-}
-
-// SnapshotS7ReadPlanRecord 表示 artifact 使用的 S7 运行态读取计划。
-type SnapshotS7ReadPlanRecord struct {
-	ID             string   `json:"id"`
-	ConnectionID   string   `json:"connectionId"`
-	Area           string   `json:"area"`
-	DBNumber       *int     `json:"dbNumber,omitempty"`
-	StartByte      int      `json:"startByte"`
-	EndByte        int      `json:"endByte"`
-	ReadLength     int      `json:"readLength"`
-	PollIntervalMS int      `json:"pollIntervalMs"`
-	VariableIDs    []string `json:"variableIds"`
-	VariableCount  int      `json:"variableCount"`
-	MaxGapBytes    int      `json:"maxGapBytes"`
-	ReadMode       string   `json:"readMode"`
-}
-
 // ProjectSnapshot 表示工程级数据域快照。
 type ProjectSnapshot struct {
 	Connections       []ConnectionRecord               `json:"connections"`
@@ -207,10 +92,6 @@ type ProjectSnapshot struct {
 	MqttConfigs       []SnapshotMqttConfigRecord       `json:"mqttConfigs"`
 	MqttSubscriptions []SnapshotMqttSubscriptionRecord `json:"mqttSubscriptions"`
 	MqttTags          []SnapshotMqttTagRecord          `json:"mqttTags"`
-	OpcuaNodes        []SnapshotOpcuaNodeRecord        `json:"opcuaNodes"`
-	ModbusRegisters   []SnapshotModbusRegisterRecord   `json:"modbusRegisters"`
-	S7Profiles        []SnapshotS7ProfileRecord        `json:"s7Profiles"`
-	S7Variables       []SnapshotS7VariableRecord       `json:"s7Variables"`
 	DataPoints        []DataPointRecord                `json:"datapoints"`
 	ComputeUnits      []ComputeUnitRecord              `json:"computeUnits"`
 	AlarmRules        []AlarmRuleRecord                `json:"alarmRules"`
@@ -315,16 +196,11 @@ type ArtifactMqttConnectionRecord struct {
 
 // ArtifactProtocolRecord 表示产物层协议对象（kafka/http/websocket/redis）。
 type ArtifactProtocolRecord struct {
-	ID        string                         `json:"id"`
-	Name      string                         `json:"name"`
-	Type      string                         `json:"type"`
-	Status    string                         `json:"status"`
-	Config    map[string]any                 `json:"config"`
-	Nodes     []SnapshotOpcuaNodeRecord      `json:"nodes,omitempty"`
-	Registers []SnapshotModbusRegisterRecord `json:"registers,omitempty"`
-	Profile   *SnapshotS7ProfileRecord       `json:"profile,omitempty"`
-	Variables []SnapshotS7VariableRecord     `json:"variables,omitempty"`
-	ReadPlans any                            `json:"readPlans,omitempty"`
+	ID     string         `json:"id"`
+	Name   string         `json:"name"`
+	Type   string         `json:"type"`
+	Status string         `json:"status"`
+	Config map[string]any `json:"config"`
 }
 
 // ArtifactMqttPayload 表示产物层 MQTT 区块。
@@ -340,9 +216,6 @@ type ArtifactProtocolsPayload struct {
 	HTTP      []ArtifactProtocolRecord `json:"http"`
 	Websocket []ArtifactProtocolRecord `json:"websocket"`
 	Redis     []ArtifactProtocolRecord `json:"redis"`
-	OPCUA     []ArtifactProtocolRecord `json:"opcua"`
-	S7        []ArtifactProtocolRecord `json:"s7"`
-	Modbus    []ArtifactProtocolRecord `json:"modbus"`
 	TDengine  []ArtifactProtocolRecord `json:"tdengine"`
 }
 
@@ -432,22 +305,6 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 	if err != nil {
 		return nil, err
 	}
-	opcuaNodes, err := r.listOpcuaNodes(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-	modbusRegisters, err := r.listModbusRegisters(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-	s7Profiles, err := r.listS7Profiles(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-	s7Variables, err := r.listS7Variables(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
 	computeUnits, err := r.listComputeUnits(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -464,10 +321,6 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 		MqttConfigs:       mqttConfigs,
 		MqttSubscriptions: mqttSubscriptions,
 		MqttTags:          mqttTags,
-		OpcuaNodes:        opcuaNodes,
-		ModbusRegisters:   modbusRegisters,
-		S7Profiles:        s7Profiles,
-		S7Variables:       s7Variables,
 		DataPoints:        datapoints,
 		ComputeUnits:      computeUnits,
 		AlarmRules:        alarmRules,
@@ -641,18 +494,9 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 		HTTP:      make([]ArtifactProtocolRecord, 0),
 		Websocket: make([]ArtifactProtocolRecord, 0),
 		Redis:     make([]ArtifactProtocolRecord, 0),
-		OPCUA:     make([]ArtifactProtocolRecord, 0),
-		S7:        make([]ArtifactProtocolRecord, 0),
-		Modbus:    make([]ArtifactProtocolRecord, 0),
 		TDengine:  make([]ArtifactProtocolRecord, 0),
 	}
 	builtinStores := buildBuiltinStores(snapshot.Connections)
-	opcuaNodesByConnection := groupOpcuaNodesByConnection(snapshot.OpcuaNodes)
-	modbusRegistersByConnection := groupModbusRegistersByConnection(snapshot.ModbusRegisters)
-	modbusReadPlansByConnection := buildSnapshotModbusReadPlansByConnection(snapshot.ModbusRegisters)
-	s7ProfilesByConnection := groupS7ProfilesByConnection(snapshot.S7Profiles)
-	s7VariablesByConnection := groupS7VariablesByConnection(snapshot.S7Variables)
-	s7ReadPlansByConnection := buildSnapshotS7ReadPlansByConnection(snapshot.S7Profiles, snapshot.S7Variables)
 	for _, connection := range snapshot.Connections {
 		protocolRecord := ArtifactProtocolRecord{
 			ID:     connection.ID,
@@ -670,20 +514,6 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 			protocols.Websocket = append(protocols.Websocket, protocolRecord)
 		case "redis":
 			protocols.Redis = append(protocols.Redis, protocolRecord)
-		case "opcua":
-			protocolRecord.Nodes = append([]SnapshotOpcuaNodeRecord{}, opcuaNodesByConnection[connection.ID]...)
-			protocols.OPCUA = append(protocols.OPCUA, protocolRecord)
-		case "s7":
-			if profile, ok := s7ProfilesByConnection[connection.ID]; ok {
-				protocolRecord.Profile = &profile
-			}
-			protocolRecord.Variables = append([]SnapshotS7VariableRecord{}, s7VariablesByConnection[connection.ID]...)
-			protocolRecord.ReadPlans = append([]SnapshotS7ReadPlanRecord{}, s7ReadPlansByConnection[connection.ID]...)
-			protocols.S7 = append(protocols.S7, protocolRecord)
-		case "modbus":
-			protocolRecord.Registers = append([]SnapshotModbusRegisterRecord{}, modbusRegistersByConnection[connection.ID]...)
-			protocolRecord.ReadPlans = append([]SnapshotModbusReadPlanRecord{}, modbusReadPlansByConnection[connection.ID]...)
-			protocols.Modbus = append(protocols.Modbus, protocolRecord)
 		case "tdengine":
 			protocols.TDengine = append(protocols.TDengine, protocolRecord)
 		}
@@ -1078,22 +908,6 @@ func (r *ProjectSnapshotRepository) listMqttTags(ctx context.Context, projectID 
 	return result, nil
 }
 
-func (r *ProjectSnapshotRepository) listOpcuaNodes(ctx context.Context, projectID string) ([]SnapshotOpcuaNodeRecord, error) {
-	return []SnapshotOpcuaNodeRecord{}, nil
-}
-
-func (r *ProjectSnapshotRepository) listModbusRegisters(ctx context.Context, projectID string) ([]SnapshotModbusRegisterRecord, error) {
-	return []SnapshotModbusRegisterRecord{}, nil
-}
-
-func (r *ProjectSnapshotRepository) listS7Profiles(ctx context.Context, projectID string) ([]SnapshotS7ProfileRecord, error) {
-	return []SnapshotS7ProfileRecord{}, nil
-}
-
-func (r *ProjectSnapshotRepository) listS7Variables(ctx context.Context, projectID string) ([]SnapshotS7VariableRecord, error) {
-	return []SnapshotS7VariableRecord{}, nil
-}
-
 func (r *ProjectSnapshotRepository) deleteProjectSnapshot(ctx context.Context, tx pgx.Tx, projectID string) error {
 	for _, sqlText := range []string{
 		`DELETE FROM data_alarm_rules WHERE project_id = $1`,
@@ -1374,191 +1188,6 @@ func coalesceProtocolType(value string, fallback string) string {
 	return value
 }
 
-func groupOpcuaNodesByConnection(nodes []SnapshotOpcuaNodeRecord) map[string][]SnapshotOpcuaNodeRecord {
-	result := make(map[string][]SnapshotOpcuaNodeRecord)
-	for _, node := range nodes {
-		result[node.ConnectionID] = append(result[node.ConnectionID], node)
-	}
-	return result
-}
-
-func groupModbusRegistersByConnection(registers []SnapshotModbusRegisterRecord) map[string][]SnapshotModbusRegisterRecord {
-	result := make(map[string][]SnapshotModbusRegisterRecord)
-	for _, register := range registers {
-		result[register.ConnectionID] = append(result[register.ConnectionID], register)
-	}
-	return result
-}
-
-func groupS7ProfilesByConnection(profiles []SnapshotS7ProfileRecord) map[string]SnapshotS7ProfileRecord {
-	result := make(map[string]SnapshotS7ProfileRecord, len(profiles))
-	for _, profile := range profiles {
-		result[profile.ConnectionID] = profile
-	}
-	return result
-}
-
-func groupS7VariablesByConnection(variables []SnapshotS7VariableRecord) map[string][]SnapshotS7VariableRecord {
-	result := make(map[string][]SnapshotS7VariableRecord)
-	for _, variable := range variables {
-		result[variable.ConnectionID] = append(result[variable.ConnectionID], variable)
-	}
-	return result
-}
-
-func buildSnapshotModbusReadPlansByConnection(registers []SnapshotModbusRegisterRecord) map[string][]SnapshotModbusReadPlanRecord {
-	grouped := map[string][]SnapshotModbusRegisterRecord{}
-	for _, register := range registers {
-		key := strings.Join([]string{register.ConnectionID, intToSnapshotString(register.UnitID), register.Area, intToSnapshotString(register.PollIntervalMS)}, "|")
-		grouped[key] = append(grouped[key], register)
-	}
-	result := map[string][]SnapshotModbusReadPlanRecord{}
-	for _, items := range grouped {
-		sort.Slice(items, func(i, j int) bool {
-			return items[i].ProtocolAddress < items[j].ProtocolAddress
-		})
-		maxQuantity := snapshotModbusMaxReadQuantity(items[0].Area)
-		var current *SnapshotModbusReadPlanRecord
-		for _, item := range items {
-			start := item.ProtocolAddress
-			end := item.ProtocolAddress + item.Quantity - 1
-			if current == nil || start > current.ProtocolStart+maxQuantity-1 || start > current.ProtocolStart+current.Quantity+1 {
-				plan := SnapshotModbusReadPlanRecord{
-					ConnectionID:   item.ConnectionID,
-					UnitID:         item.UnitID,
-					Area:           item.Area,
-					ProtocolStart:  start,
-					Quantity:       item.Quantity,
-					PollIntervalMS: item.PollIntervalMS,
-					RegisterIDs:    []string{item.ID},
-					RegisterCount:  1,
-				}
-				current = &plan
-				result[item.ConnectionID] = append(result[item.ConnectionID], plan)
-				continue
-			}
-			currentEnd := current.ProtocolStart + current.Quantity - 1
-			if end > currentEnd {
-				current.Quantity = end - current.ProtocolStart + 1
-			}
-			current.RegisterIDs = append(current.RegisterIDs, item.ID)
-			current.RegisterCount++
-			plans := result[item.ConnectionID]
-			plans[len(plans)-1] = *current
-			result[item.ConnectionID] = plans
-		}
-	}
-	for connectionID, plans := range result {
-		sort.Slice(plans, func(i, j int) bool {
-			if plans[i].UnitID != plans[j].UnitID {
-				return plans[i].UnitID < plans[j].UnitID
-			}
-			if plans[i].Area != plans[j].Area {
-				return plans[i].Area < plans[j].Area
-			}
-			return plans[i].ProtocolStart < plans[j].ProtocolStart
-		})
-		for index := range plans {
-			plans[index].ID = "modbus-read-plan-" + intToSnapshotString(index+1)
-		}
-		result[connectionID] = plans
-	}
-	return result
-}
-
-func buildSnapshotS7ReadPlansByConnection(profiles []SnapshotS7ProfileRecord, variables []SnapshotS7VariableRecord) map[string][]SnapshotS7ReadPlanRecord {
-	profilesByConnection := groupS7ProfilesByConnection(profiles)
-	grouped := map[string][]SnapshotS7VariableRecord{}
-	for _, variable := range variables {
-		key := strings.Join([]string{variable.ConnectionID, variable.Area, snapshotOptionalIntKey(variable.DBNumber), intToSnapshotString(variable.PollIntervalMS), snapshotS7ReadMode(variable)}, "|")
-		grouped[key] = append(grouped[key], variable)
-	}
-	result := map[string][]SnapshotS7ReadPlanRecord{}
-	for _, items := range grouped {
-		sort.Slice(items, func(i, j int) bool {
-			return items[i].ByteOffset < items[j].ByteOffset
-		})
-		profile := profilesByConnection[items[0].ConnectionID]
-		maxBytes := 240
-		if profile.MaxReadBytes != nil && *profile.MaxReadBytes > 0 {
-			maxBytes = *profile.MaxReadBytes
-		}
-		maxGap := profile.MaxGapBytes
-		if maxGap < 0 {
-			maxGap = 0
-		}
-		var current *SnapshotS7ReadPlanRecord
-		for _, item := range items {
-			start := item.ByteOffset
-			end := item.ByteOffset + item.ReadLength - 1
-			if current == nil || start > current.EndByte+maxGap || end-current.StartByte+1 > maxBytes {
-				plan := SnapshotS7ReadPlanRecord{
-					ConnectionID:   item.ConnectionID,
-					Area:           item.Area,
-					DBNumber:       item.DBNumber,
-					StartByte:      start,
-					EndByte:        end,
-					ReadLength:     end - start + 1,
-					PollIntervalMS: item.PollIntervalMS,
-					VariableIDs:    []string{item.ID},
-					VariableCount:  1,
-					MaxGapBytes:    maxGap,
-					ReadMode:       snapshotS7ReadMode(item),
-				}
-				current = &plan
-				result[item.ConnectionID] = append(result[item.ConnectionID], plan)
-				continue
-			}
-			if end > current.EndByte {
-				current.EndByte = end
-				current.ReadLength = current.EndByte - current.StartByte + 1
-			}
-			current.VariableIDs = append(current.VariableIDs, item.ID)
-			current.VariableCount++
-			plans := result[item.ConnectionID]
-			plans[len(plans)-1] = *current
-			result[item.ConnectionID] = plans
-		}
-	}
-	for connectionID, plans := range result {
-		sort.Slice(plans, func(i, j int) bool {
-			if plans[i].Area != plans[j].Area {
-				return plans[i].Area < plans[j].Area
-			}
-			if snapshotOptionalIntKey(plans[i].DBNumber) != snapshotOptionalIntKey(plans[j].DBNumber) {
-				return snapshotOptionalIntKey(plans[i].DBNumber) < snapshotOptionalIntKey(plans[j].DBNumber)
-			}
-			return plans[i].StartByte < plans[j].StartByte
-		})
-		for index := range plans {
-			plans[index].ID = "s7-read-plan-" + intToSnapshotString(index+1)
-		}
-		result[connectionID] = plans
-	}
-	return result
-}
-
-func snapshotS7ReadMode(variable SnapshotS7VariableRecord) string {
-	if variable.Area == "DB" {
-		return "db"
-	}
-	return "area"
-}
-
-func snapshotOptionalIntKey(value *int) string {
-	if value == nil {
-		return ""
-	}
-	return intToSnapshotString(*value)
-}
-
-func snapshotModbusMaxReadQuantity(area string) int {
-	if area == "coil" || area == "discrete_input" {
-		return 2000
-	}
-	return 125
-}
-
 func intToSnapshotString(value int) string {
 	return fmt.Sprintf("%d", value)
 }
@@ -1569,7 +1198,7 @@ func deriveConnectionCategory(connectionType string) string {
 		return "database"
 	case "mqtt":
 		return "message"
-	case "kafka", "http", "websocket", "redis", "opcua", "modbus", "s7", "tdengine":
+	case "kafka", "http", "websocket", "redis", "tdengine":
 		return "protocol"
 	default:
 		return "api"
