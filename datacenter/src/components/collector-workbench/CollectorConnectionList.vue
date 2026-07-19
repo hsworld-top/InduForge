@@ -57,7 +57,7 @@
             >
               <span
                 class="collector-connection-list__pulse"
-                :class="`is-${formatCollectorConnectionStatus(item.status).tone}`"
+                :class="`is-${connectionTone(item.id)}`"
               />
               <span class="collector-connection-list__identity">
                 <strong>{{ item.name }}</strong>
@@ -78,7 +78,18 @@
                 </button>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item command="delete">
+                    <el-dropdown-item
+                      v-if="connectionStatus(item.id) === 'connected'"
+                      command="disconnect"
+                    >
+                      <IconTablerPlugConnectedX />断开连接
+                    </el-dropdown-item>
+                    <el-dropdown-item v-else command="connect" :disabled="connectionBusy(item.id)">
+                      <IconTablerPlugConnected />{{
+                        connectionStatus(item.id) === 'error' ? '重新连接' : '连接'
+                      }}</el-dropdown-item
+                    >
+                    <el-dropdown-item divided command="delete">
                       <IconTablerTrash />删除连接
                     </el-dropdown-item>
                   </el-dropdown-menu>
@@ -87,7 +98,20 @@
             </div>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="delete"> <IconTablerTrash />删除连接 </el-dropdown-item>
+                <el-dropdown-item
+                  v-if="connectionStatus(item.id) === 'connected'"
+                  command="disconnect"
+                >
+                  <IconTablerPlugConnectedX />断开连接
+                </el-dropdown-item>
+                <el-dropdown-item v-else command="connect" :disabled="connectionBusy(item.id)">
+                  <IconTablerPlugConnected />{{
+                    connectionStatus(item.id) === 'error' ? '重新连接' : '连接'
+                  }}</el-dropdown-item
+                >
+                <el-dropdown-item divided command="delete">
+                  <IconTablerTrash />删除连接
+                </el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -118,24 +142,34 @@ import { deleteCollectorConnection, listCollectorConnections } from '@/api/colle
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { CollectorConnection } from '@/api/schemas/collector.schema'
 import {
-  formatCollectorConnectionStatus,
+  collectorDebugConnectionTone,
   formatCollectorConnectionSummary,
   groupCollectorConnections,
+  type CollectorDebugConnectionState,
+  type CollectorDebugConnectionStatus,
 } from './collector-workbench-model'
 import CollectorDriverIcon from './CollectorDriverIcon.vue'
 import IconTablerChevronDown from '~icons/tabler/chevron-down'
 import IconTablerChevronRight from '~icons/tabler/chevron-right'
 import IconTablerDots from '~icons/tabler/dots'
 import IconTablerLayoutSidebarLeftCollapse from '~icons/tabler/layout-sidebar-left-collapse'
+import IconTablerPlugConnected from '~icons/tabler/plug-connected'
+import IconTablerPlugConnectedX from '~icons/tabler/plug-connected-x'
 import IconTablerTrash from '~icons/tabler/trash'
 import IconTablerSearch from '~icons/tabler/search'
 
-const props = defineProps<{ projectId: string; selectedId?: string }>()
+const props = defineProps<{
+  projectId: string
+  selectedId?: string
+  sessionStates: Record<string, CollectorDebugConnectionState>
+}>()
 const emit = defineEmits<{
   select: [id: string]
   collapse: []
   loaded: [items: CollectorConnection[]]
   deleted: [id: string]
+  connect: [connection: CollectorConnection]
+  disconnect: [connection: CollectorConnection]
 }>()
 const items = ref<CollectorConnection[]>([])
 const loading = ref(false)
@@ -153,12 +187,32 @@ function toggleGroup(key: string) {
   collapsedGroups.value = next
 }
 
+function connectionStatus(connectionId: string): CollectorDebugConnectionStatus {
+  return props.sessionStates[connectionId]?.status || 'disconnected'
+}
+function connectionTone(connectionId: string) {
+  return collectorDebugConnectionTone(connectionStatus(connectionId))
+}
+function connectionBusy(connectionId: string) {
+  return ['connecting', 'disconnecting'].includes(connectionStatus(connectionId))
+}
 async function handleItemCommand(command: string, item: CollectorConnection) {
-  if (command !== 'delete') return
-  await removeConnection(item)
+  if (command === 'connect') {
+    emit('connect', item)
+    return
+  }
+  if (command === 'disconnect') {
+    emit('disconnect', item)
+    return
+  }
+  if (command === 'delete') await removeConnection(item)
 }
 
 async function removeConnection(item: CollectorConnection) {
+  if (connectionStatus(item.id) !== 'disconnected') {
+    ElMessage.warning('请先断开调试长连接，再删除工业连接')
+    return
+  }
   // 删除连接会级联删除该连接下的变量分组和变量，必须在执行前明确提示影响范围。
   await ElMessageBox.confirm(
     `确认删除连接“${item.name}”？该连接下的变量分组和变量也会一并删除。`,
@@ -193,7 +247,10 @@ async function reload(nextPage = page.value) {
   }
 }
 
-defineExpose({ reload })
+defineExpose({
+  reload,
+  getConnection: (connectionId: string) => items.value.find((item) => item.id === connectionId),
+})
 watch(
   () => props.projectId,
   () => reload(1),
@@ -373,6 +430,7 @@ onMounted(() => reload())
 }
 .collector-connection-list__pulse.is-primary {
   background: var(--dc-primary);
+  animation: collector-connection-pulse 1.1s ease-in-out infinite;
 }
 .collector-connection-list__pulse.is-success {
   background: var(--dc-success);
@@ -383,6 +441,11 @@ onMounted(() => reload())
 }
 .collector-connection-list__pulse.is-danger {
   background: var(--dc-danger);
+}
+@keyframes collector-connection-pulse {
+  50% {
+    opacity: 0.35;
+  }
 }
 .collector-connection-list__footer {
   display: flex;

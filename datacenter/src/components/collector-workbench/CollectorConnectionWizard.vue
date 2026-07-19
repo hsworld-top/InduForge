@@ -77,7 +77,11 @@
           <div v-loading="loadingDetail" class="collector-wizard__form-wrap">
             <el-form label-position="top">
               <el-form-item label="连接名称" required>
-                <el-input v-model="name" placeholder="请输入便于识别的连接名称" />
+                <el-input
+                  v-model="name"
+                  maxlength="50"
+                  placeholder="仅支持文字、数字和空格，例如 1号产线 OPC UA"
+                />
               </el-form-item>
               <CollectorSchemaForm
                 v-if="driverDetail"

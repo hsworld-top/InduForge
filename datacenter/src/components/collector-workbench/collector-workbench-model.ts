@@ -23,6 +23,17 @@ export type CollectorConnectionGroup = {
   items: CollectorConnection[]
 }
 
+export const collectorDriverFeatures = {
+  pointElementCount: 'point.elementCount',
+} as const
+
+export function collectorDriverSupportsFeature(
+  driver: Pick<CollectorDriverSummary, 'features'> | null | undefined,
+  feature: string,
+) {
+  return driver?.features.includes(feature) ?? false
+}
+
 export type CollectorDriverTreeNode = {
   id: string
   type: 'family' | 'driver'
@@ -229,4 +240,121 @@ export function agentSupportsOperation(
 
 export function collectorAgentStorageKey(projectId: string) {
   return `induforge:collector-agent:${projectId}`
+}
+
+export type CollectorBrowseNode = {
+  nodeId: string
+  browseName: string
+  displayName: string
+  nodeClass: string
+  dataType?: string | null
+  hasChildren: boolean
+  modeled?: boolean
+}
+
+export type CollectorBrowseBranch = {
+  parentNodeId: string
+  nodes: CollectorBrowseNode[]
+}
+
+// 父节点勾选必须覆盖尚未展开的后代，因此按受控并发递归读取整棵子树并过滤已建模变量。
+export async function collectCollectorBrowseVariables(
+  root: CollectorBrowseNode,
+  loadChildren: (nodeId: string) => Promise<CollectorBrowseNode[]>,
+  concurrency = 3,
+) {
+  const variables = new Map<string, CollectorBrowseNode>()
+  const branches: CollectorBrowseBranch[] = []
+  const visited = new Set<string>()
+  const queue = [root]
+  while (queue.length > 0) {
+    const batch = queue.splice(0, Math.max(1, concurrency)).filter((node) => {
+      if (visited.has(node.nodeId)) return false
+      visited.add(node.nodeId)
+      return node.hasChildren
+    })
+    if (batch.length === 0) continue
+    const loaded = await Promise.all(
+      batch.map(async (parent) => ({
+        parentNodeId: parent.nodeId,
+        nodes: await loadChildren(parent.nodeId),
+      })),
+    )
+    for (const branch of loaded) {
+      branches.push(branch)
+      for (const child of branch.nodes) {
+        if (child.nodeClass === 'variable' && !child.modeled) variables.set(child.nodeId, child)
+        if (child.hasChildren) queue.push(child)
+      }
+    }
+  }
+  return { variables: [...variables.values()], branches }
+}
+
+export type CollectorPointCreateDefaults = {
+  name: string
+  description?: string
+  dataType: string
+  elementCount: number
+  enabled: boolean
+  address: Record<string, unknown>
+}
+
+const opcuaDataTypeMap: Record<string, string> = {
+  boolean: 'bool',
+  sbyte: 'int8',
+  byte: 'uint8',
+  int16: 'int16',
+  uint16: 'uint16',
+  int32: 'int32',
+  uint32: 'uint32',
+  int64: 'int64',
+  uint64: 'uint64',
+  float: 'float32',
+  double: 'float64',
+  string: 'string',
+  bytestring: 'bytes',
+  datetime: 'datetime',
+}
+
+export function filterCollectorBrowseNode(nodeIdFilter: string, node: CollectorBrowseNode) {
+  const keyword = nodeIdFilter.trim().toLowerCase()
+  return !keyword || node.nodeId.toLowerCase().includes(keyword)
+}
+
+export function buildCollectorPointCreateDefaults(
+  node: CollectorBrowseNode,
+): CollectorPointCreateDefaults {
+  const name = node.displayName.trim() || node.browseName.trim() || '未命名变量'
+  const rawDataType = node.dataType?.trim() || ''
+  const dataType = opcuaDataTypeMap[rawDataType.toLowerCase()] || rawDataType || 'float64'
+
+  return {
+    name,
+    dataType,
+    elementCount: 1,
+    enabled: true,
+    address: { nodeId: node.nodeId },
+  }
+}
+
+export type CollectorDebugConnectionStatus =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'disconnecting'
+  | 'error'
+
+export type CollectorDebugConnectionState = {
+  status: CollectorDebugConnectionStatus
+  connectedAt?: string
+  serverName?: string
+  message?: string
+}
+
+export function collectorDebugConnectionTone(status: CollectorDebugConnectionStatus) {
+  if (status === 'connected') return 'success' as const
+  if (status === 'connecting' || status === 'disconnecting') return 'primary' as const
+  if (status === 'error') return 'danger' as const
+  return 'muted' as const
 }

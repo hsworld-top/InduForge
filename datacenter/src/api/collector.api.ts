@@ -137,6 +137,32 @@ export async function createCollectorPointGroup(
   )
 }
 
+export async function updateCollectorPointGroup(
+  projectId: string,
+  connectionId: string,
+  groupId: string,
+  data: { name: string },
+): Promise<CollectorPointGroup> {
+  return CollectorPointGroupSchema.parse(
+    await requestData({
+      url: `/data/projects/${projectId}/collector/connections/${connectionId}/point-groups/${groupId}`,
+      method: 'put',
+      data,
+    }),
+  )
+}
+
+export async function deleteCollectorPointGroup(
+  projectId: string,
+  connectionId: string,
+  groupId: string,
+): Promise<void> {
+  await requestData({
+    url: `/data/projects/${projectId}/collector/connections/${connectionId}/point-groups/${groupId}`,
+    method: 'delete',
+  })
+}
+
 export async function listCollectorPoints(
   projectId: string,
   connectionId: string,
@@ -149,6 +175,21 @@ export async function listCollectorPoints(
       params,
     }),
   )
+}
+
+export async function checkCollectorPointAddresses(
+  projectId: string,
+  connectionId: string,
+  addresses: Record<string, unknown>[],
+): Promise<number[]> {
+  const response = z.object({ indexes: z.array(z.number().int().nonnegative()) }).parse(
+    await requestData({
+      url: `/data/projects/${projectId}/collector/connections/${connectionId}/points/check-addresses`,
+      method: 'post',
+      data: { addresses },
+    }),
+  )
+  return response.indexes
 }
 
 async function postPointBatch(

@@ -7,6 +7,7 @@ describe('collector schemas', () => {
       id: 'connection-1',
       projectId: 'project-1',
       name: 'OPC UA',
+      code: 'opc_ua',
       status: 'offline',
       displayOrder: 0,
       protocolFamily: 'opcua',

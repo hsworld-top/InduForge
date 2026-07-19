@@ -6,7 +6,13 @@
     class="collector-editor"
   >
     <div class="collector-editor__basic">
-      <el-form-item label="连接名称"><el-input v-model="name" /></el-form-item>
+      <el-form-item label="连接名称">
+        <el-input v-model="name" maxlength="50" placeholder="仅支持文字、数字和空格" />
+      </el-form-item>
+      <el-form-item label="连接编码">
+        <el-input :model-value="connection.code" disabled />
+        <span class="collector-editor__hint">创建时自动生成，修改连接名称不会改变编码</span>
+      </el-form-item>
     </div>
     <CollectorSchemaForm
       v-model="values"
@@ -80,6 +86,11 @@ async function save() {
 .collector-editor__basic {
   width: min(100%, 560px);
   margin-bottom: 4px;
+}
+.collector-editor__hint {
+  margin-top: 6px;
+  color: var(--dc-text-muted);
+  font-size: 12px;
 }
 .collector-editor__actions {
   position: sticky;

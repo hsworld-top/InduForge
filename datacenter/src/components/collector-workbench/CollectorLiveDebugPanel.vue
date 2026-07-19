@@ -28,9 +28,11 @@ const props = defineProps<{
   projectId: string
   connectionId: string
   agentId?: string
+  workspaceSessionId: string
   pointIds: string[]
   enabled: boolean
 }>()
+const emit = defineEmits<{ sessionError: [message: string] }>()
 const loading = ref(false)
 const output = ref('请选择点位后执行读取')
 async function read() {
@@ -41,7 +43,7 @@ async function read() {
       agentId: props.agentId,
       connectionId: props.connectionId,
       operation: 'point.read',
-      input: { pointIds: props.pointIds },
+      input: { workspaceSessionId: props.workspaceSessionId, pointIds: props.pointIds },
     })
     for (let index = 0; index < 30; index++) {
       const current = await getCollectorTask(props.projectId, task.taskId)
@@ -55,7 +57,9 @@ async function read() {
     }
     throw new Error('读取任务超时')
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '读取失败')
+    const message = error instanceof Error ? error.message : '读取失败'
+    if (/会话.*(断开|建立)|连接.*断开/.test(message)) emit('sessionError', message)
+    ElMessage.error(message)
   } finally {
     loading.value = false
   }

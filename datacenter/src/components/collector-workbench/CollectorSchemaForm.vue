@@ -8,6 +8,7 @@
         <el-select
           v-if="field.property.enum"
           :model-value="model[field.name]"
+          :disabled="disabled"
           @update:model-value="setValue(field.name, $event)"
         >
           <el-option
@@ -20,6 +21,7 @@
         <el-switch
           v-else-if="field.property.type === 'boolean'"
           :model-value="Boolean(model[field.name])"
+          :disabled="disabled"
           @update:model-value="setValue(field.name, $event)"
         />
         <div
@@ -31,6 +33,7 @@
             :min="field.property.minimum"
             :max="field.property.maximum"
             :step="field.property.type === 'integer' ? 1 : 0.1"
+            :disabled="disabled"
             @update:model-value="setValue(field.name, $event)"
           />
           <span v-if="field.property['x-induforge-unit']" class="collector-schema-form__unit">
@@ -42,6 +45,7 @@
           :model-value="objectValue(model[field.name])"
           :schema="field.property"
           :ui-schema="{}"
+          :disabled="disabled"
           @update:model-value="setValue(field.name, $event)"
         />
         <el-input
@@ -49,6 +53,7 @@
           :model-value="stringValue(model[field.name])"
           :type="field.property['x-induforge-secret'] ? 'password' : 'text'"
           :show-password="Boolean(field.property['x-induforge-secret'])"
+          :disabled="disabled"
           :placeholder="field.property.description"
           @update:model-value="setValue(field.name, $event)"
         >
@@ -72,6 +77,7 @@
           <el-select
             v-if="field.property.enum"
             :model-value="model[field.name]"
+            :disabled="disabled"
             @update:model-value="setValue(field.name, $event)"
           >
             <el-option
@@ -90,6 +96,7 @@
               :min="field.property.minimum"
               :max="field.property.maximum"
               :step="field.property.type === 'integer' ? 1 : 0.1"
+              :disabled="disabled"
               @update:model-value="setValue(field.name, $event)"
             />
             <span v-if="field.property['x-induforge-unit']" class="collector-schema-form__unit">
@@ -99,6 +106,7 @@
           <el-switch
             v-else-if="field.property.type === 'boolean'"
             :model-value="Boolean(model[field.name])"
+            :disabled="disabled"
             @update:model-value="setValue(field.name, $event)"
           />
           <el-input
@@ -106,6 +114,7 @@
             :model-value="stringValue(model[field.name])"
             :type="field.property['x-induforge-secret'] ? 'password' : 'text'"
             :show-password="Boolean(field.property['x-induforge-secret'])"
+            :disabled="disabled"
             :placeholder="field.property.description"
             @update:model-value="setValue(field.name, $event)"
           />
@@ -134,8 +143,9 @@ const props = withDefaults(
     schema: CollectorJsonSchema
     uiSchema?: Record<string, unknown>
     section?: string
+    disabled?: boolean
   }>(),
-  { uiSchema: () => ({}), section: 'connection' },
+  { uiSchema: () => ({}), section: 'connection', disabled: false },
 )
 
 const emit = defineEmits<{ 'update:modelValue': [value: Record<string, unknown>] }>()
@@ -157,6 +167,7 @@ const advancedFields = computed(() =>
 )
 
 function setValue(name: string, value: unknown) {
+  if (props.disabled) return
   emit('update:modelValue', { ...model.value, [name]: value })
 }
 function stringValue(value: unknown) {

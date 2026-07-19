@@ -29,7 +29,10 @@
         ref="connectionList"
         :project-id="projectId"
         :selected-id="selectedId"
+        :session-states="connectionSessions"
         @select="selectConnection"
+        @connect="connectConnection"
+        @disconnect="disconnectConnection"
         @collapse="connectionListCollapsed = true"
         @loaded="onConnectionsLoaded"
         @deleted="onConnectionDeleted"
@@ -79,16 +82,15 @@
                 :class="`is-${connectionStatus.tone}`"
               >
                 <strong><i />{{ connectionStatus.label }}</strong>
-                <time v-if="connectionTestTime">
-                  {{ connectionStatus.timeLabel }}：{{ connectionTestTime }}
-                </time>
+                <time v-if="connectionSessionTime">连接时间：{{ connectionSessionTime }}</time>
               </div>
               <el-button
-                :disabled="!canTest || connectionTestLoading"
-                :loading="connectionTestLoading"
-                @click="runConnectionTest"
+                :type="activeSessionState.status === 'connected' ? 'default' : 'primary'"
+                :disabled="!canManageConnection || connectionSessionBusy"
+                :loading="connectionSessionBusy"
+                @click="toggleActiveConnection"
               >
-                测试连接
+                {{ connectionActionLabel }}
               </el-button>
             </div>
           </header>
@@ -108,33 +110,47 @@
                     :project-id="projectId"
                     :connection-id="activeConnection.id"
                     @select="groupId = $event"
+                    @create-point="pointTable?.openCreate($event)"
+                    @changed="onPointGroupsChanged"
                   />
                   <CollectorPointTable
                     ref="pointTable"
                     :project-id="projectId"
                     :connection-id="activeConnection.id"
+                    :driver-id="activeConnection.driverId"
                     :group-id="groupId"
+                    :show-element-count="supportsElementCount"
                     @selection="selectedPointIds = $event"
                     @import="importVisible = true"
+                    @saved="discoveryPanel?.refreshExisting()"
                   />
                 </div>
               </el-tab-pane>
-              <el-tab-pane label="设备浏览" name="discovery">
+              <el-tab-pane v-if="supportsDeviceBrowse" label="设备浏览" name="discovery">
                 <CollectorDiscoveryPanel
+                  ref="discoveryPanel"
                   :project-id="projectId"
                   :connection-id="activeConnection.id"
+                  :protocol-family="activeConnection.protocolFamily"
                   :agent-id="agentId"
+                  :workspace-session-id="workspaceSessionId"
                   :enabled="canBrowse"
+                  :batch-loading="discoveryBatchLoading"
                   @points="createDiscoveredPoints"
+                  @create-point="openDiscoveredPoint"
+                  @session-error="markActiveSessionError"
                 />
               </el-tab-pane>
               <el-tab-pane label="实时调试" name="debug">
                 <CollectorLiveDebugPanel
                   :project-id="projectId"
                   :connection-id="activeConnection.id"
+                  :protocol-family="activeConnection.protocolFamily"
                   :agent-id="agentId"
+                  :workspace-session-id="workspaceSessionId"
                   :point-ids="selectedPointIds"
                   :enabled="canRead"
+                  @session-error="markActiveSessionError"
                 />
               </el-tab-pane>
               <el-tab-pane label="通信诊断" name="diagnostics">
@@ -190,21 +206,30 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import { ElMessage } from 'element-plus'
 import {
   createCollectorPointsBatch,
   createCollectorTask,
   getCollectorConnection,
+  getCollectorDriver,
   getCollectorTask,
 } from '@/api/collector.api'
 import type { CollectorAgent } from '@/api/schemas/collector-dev.schema'
-import type { CollectorConnection, CollectorTask } from '@/api/schemas/collector.schema'
+import type {
+  CollectorConnection,
+  CollectorDriverDetail,
+  CollectorTask,
+} from '@/api/schemas/collector.schema'
 import {
   agentSupportsOperation,
+  collectorDriverFeatures,
+  collectorDriverSupportsFeature,
   formatCollectorAgentName,
   formatCollectorProtocolFamily,
+  type CollectorDebugConnectionState,
+  type CollectorPointCreateDefaults,
 } from './collector-workbench-model'
 import IconTablerCpu from '~icons/tabler/cpu'
 import IconTablerLayoutSidebarLeftExpand from '~icons/tabler/layout-sidebar-left-expand'
@@ -226,8 +251,10 @@ const props = defineProps<{
   projectId: string
   connection?: { id: string }
 }>()
+const workspaceSessionId = crypto.randomUUID()
 const selectedId = ref(props.connection?.id || '')
 const activeConnection = ref<CollectorConnection | null>(null)
+const activeDriver = ref<CollectorDriverDetail | null>(null)
 const agentId = ref('')
 const selectedAgent = ref<CollectorAgent>()
 const activeTab = ref('config')
@@ -238,29 +265,58 @@ const selectedPointIds = ref<string[]>([])
 const connectionListCollapsed = ref(false)
 const connectionList = ref<InstanceType<typeof CollectorConnectionList>>()
 const pointTable = ref<InstanceType<typeof CollectorPointTable>>()
+const discoveryPanel = ref<InstanceType<typeof CollectorDiscoveryPanel>>()
+const discoveryBatchLoading = ref(false)
 const connectionTestTasks = ref<Record<string, CollectorTask>>({})
 const testingConnectionIds = ref(new Set<string>())
+const connectionSessions = ref<Record<string, CollectorDebugConnectionState>>({})
 const activeConnectionTestTask = computed(() =>
   activeConnection.value ? connectionTestTasks.value[activeConnection.value.id] : undefined,
 )
 const connectionTestLoading = computed(() =>
   activeConnection.value ? testingConnectionIds.value.has(activeConnection.value.id) : false,
 )
+const activeSessionState = computed<CollectorDebugConnectionState>(() =>
+  activeConnection.value
+    ? connectionSessions.value[activeConnection.value.id] || { status: 'disconnected' }
+    : { status: 'disconnected' },
+)
+const connectionSessionBusy = computed(() =>
+  ['connecting', 'disconnecting'].includes(activeSessionState.value.status),
+)
 const connectionStatus = computed(() => {
-  const taskStatus = activeConnectionTestTask.value?.status
-  const status = taskStatus || activeConnection.value?.lastTestStatus
-  if (!status) return { label: '未检测', tone: 'warning' as const, timeLabel: '上次测试' }
-  if (status === 'succeeded')
-    return { label: '连接正常', tone: 'success' as const, timeLabel: '上次测试' }
-  if (['failed', 'cancelled', 'expired'].includes(status))
-    return { label: '连接失败', tone: 'danger' as const, timeLabel: '上次测试' }
-  return { label: '测试中', tone: 'primary' as const, timeLabel: '开始时间' }
+  const status = activeSessionState.value.status
+  if (status === 'connected') return { label: '已连接', tone: 'success' as const }
+  if (status === 'connecting') return { label: '连接中', tone: 'primary' as const }
+  if (status === 'disconnecting') return { label: '断开中', tone: 'primary' as const }
+  if (status === 'error') return { label: '连接异常', tone: 'danger' as const }
+  return { label: '未连接', tone: 'warning' as const }
 })
-const connectionTestTime = computed(() => {
-  const task = activeConnectionTestTask.value
-  const time = task?.finishedAt || task?.createdAt || activeConnection.value?.lastTestedAt
-  return time ? dayjs(time).format('YYYY-MM-DD HH:mm:ss') : ''
+const connectionSessionTime = computed(() => activeSessionState.value.connectedAt || '')
+const connectionActionLabel = computed(() => {
+  if (activeSessionState.value.status === 'connected') return '断开'
+  if (activeSessionState.value.status === 'error') return '重新连接'
+  return '连接'
 })
+
+const canManageConnection = computed(() =>
+  activeConnection.value
+    ? agentSupportsOperation(
+        selectedAgent.value,
+        activeConnection.value.driverId,
+        activeConnection.value.driverVersion,
+        activeConnection.value.schemaVersion,
+        'connection.open',
+      ) &&
+      agentSupportsOperation(
+        selectedAgent.value,
+        activeConnection.value.driverId,
+        activeConnection.value.driverVersion,
+        activeConnection.value.schemaVersion,
+        'connection.close',
+      )
+    : false,
+)
 
 const canTest = computed(() =>
   activeConnection.value
@@ -273,8 +329,16 @@ const canTest = computed(() =>
       )
     : false,
 )
+const supportsDeviceBrowse = computed(
+  () => activeDriver.value?.operations.includes('device.browse') ?? false,
+)
+const supportsElementCount = computed(() =>
+  collectorDriverSupportsFeature(activeDriver.value, collectorDriverFeatures.pointElementCount),
+)
 const canBrowse = computed(() =>
-  activeConnection.value
+  activeConnection.value &&
+  supportsDeviceBrowse.value &&
+  activeSessionState.value.status === 'connected'
     ? agentSupportsOperation(
         selectedAgent.value,
         activeConnection.value.driverId,
@@ -285,7 +349,7 @@ const canBrowse = computed(() =>
     : false,
 )
 const canRead = computed(() =>
-  activeConnection.value
+  activeConnection.value && activeSessionState.value.status === 'connected'
     ? agentSupportsOperation(
         selectedAgent.value,
         activeConnection.value.driverId,
@@ -295,6 +359,134 @@ const canRead = computed(() =>
       )
     : false,
 )
+
+function updateConnectionSession(connectionId: string, state: CollectorDebugConnectionState) {
+  connectionSessions.value = { ...connectionSessions.value, [connectionId]: state }
+}
+
+async function waitTaskCompletion(task: CollectorTask, timeoutMessage: string) {
+  let current = task
+  for (let index = 0; index < 30; index++) {
+    current = await getCollectorTask(props.projectId, current.taskId)
+    if (current.status === 'succeeded') return current
+    if (['failed', 'cancelled', 'expired'].includes(current.status)) {
+      throw new Error(current.errorMessage || timeoutMessage)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+  }
+  throw new Error(timeoutMessage)
+}
+
+async function connectConnection(connection: CollectorConnection) {
+  const currentAgentId = agentId.value
+  if (
+    !currentAgentId ||
+    ['connecting', 'connected'].includes(connectionSessions.value[connection.id]?.status || '')
+  ) {
+    return
+  }
+  if (
+    !agentSupportsOperation(
+      selectedAgent.value,
+      connection.driverId,
+      connection.driverVersion,
+      connection.schemaVersion,
+      'connection.open',
+    )
+  ) {
+    ElMessage.warning('当前调试代理不支持该驱动的长连接')
+    return
+  }
+
+  updateConnectionSession(connection.id, { status: 'connecting' })
+  try {
+    const task = await createCollectorTask(props.projectId, {
+      agentId: currentAgentId,
+      connectionId: connection.id,
+      operation: 'connection.open',
+      input: { workspaceSessionId },
+      timeoutSeconds: 120,
+    })
+    const completed = await waitTaskCompletion(task, '建立调试长连接超时')
+    const result = completed.result as {
+      connected?: boolean
+      serverName?: string
+      connectedAt?: string
+    } | null
+    if (result?.connected !== true) throw new Error('调试长连接未进入已连接状态')
+    updateConnectionSession(connection.id, {
+      status: 'connected',
+      connectedAt: result.connectedAt
+        ? dayjs(result.connectedAt).format('YYYY-MM-DD HH:mm:ss')
+        : dayjs().format('YYYY-MM-DD HH:mm:ss'),
+      serverName: result.serverName || undefined,
+    })
+    ElMessage.success(`“${connection.name}”已连接`)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '建立调试长连接失败'
+    updateConnectionSession(connection.id, { status: 'error', message })
+    ElMessage.error(message)
+  }
+}
+
+async function disconnectConnection(
+  connection: CollectorConnection,
+  options: { silent?: boolean; agentId?: string } = {},
+) {
+  const currentAgentId = options.agentId || agentId.value
+  if (!currentAgentId) {
+    updateConnectionSession(connection.id, { status: 'disconnected' })
+    return
+  }
+  if (connectionSessions.value[connection.id]?.status === 'disconnecting') return
+
+  updateConnectionSession(connection.id, { status: 'disconnecting' })
+  try {
+    const task = await createCollectorTask(props.projectId, {
+      agentId: currentAgentId,
+      connectionId: connection.id,
+      operation: 'connection.close',
+      input: { workspaceSessionId },
+    })
+    if (!options.silent) await waitTaskCompletion(task, '断开调试长连接超时')
+    updateConnectionSession(connection.id, { status: 'disconnected' })
+    if (!options.silent) ElMessage.success(`“${connection.name}”已断开`)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '断开调试长连接失败'
+    updateConnectionSession(
+      connection.id,
+      options.silent ? { status: 'disconnected' } : { status: 'error', message },
+    )
+    if (!options.silent) ElMessage.error(message)
+  }
+}
+
+function markActiveSessionError(message: string) {
+  if (!activeConnection.value) return
+  updateConnectionSession(activeConnection.value.id, { status: 'error', message })
+}
+
+function toggleActiveConnection() {
+  const connection = activeConnection.value
+  if (!connection) return
+  if (activeSessionState.value.status === 'connected') void disconnectConnection(connection)
+  else void connectConnection(connection)
+}
+
+function closeAllPageSessions(currentAgentId = agentId.value) {
+  if (!currentAgentId) return
+  const connectedIds = Object.entries(connectionSessions.value)
+    .filter(([, state]) => state.status !== 'disconnected')
+    .map(([connectionId]) => connectionId)
+  for (const connectionId of connectedIds) {
+    void createCollectorTask(props.projectId, {
+      agentId: currentAgentId,
+      connectionId,
+      operation: 'connection.close',
+      input: { workspaceSessionId },
+    }).catch(() => undefined)
+  }
+}
 
 function updateConnectionTestTask(task: CollectorTask) {
   connectionTestTasks.value = { ...connectionTestTasks.value, [task.connectionId]: task }
@@ -352,7 +544,11 @@ async function runConnectionTest() {
 
 async function selectConnection(id: string) {
   selectedId.value = id
-  activeConnection.value = await getCollectorConnection(props.projectId, id)
+  const connection = await getCollectorConnection(props.projectId, id)
+  const driver = await getCollectorDriver(connection.driverId)
+  if (selectedId.value !== id) return
+  activeConnection.value = connection
+  activeDriver.value = driver
   activeTab.value = 'config'
   groupId.value = null
   selectedPointIds.value = []
@@ -362,9 +558,13 @@ function onConnectionsLoaded(items: CollectorConnection[]) {
   else if (selectedId.value && !activeConnection.value) void selectConnection(selectedId.value)
 }
 function onConnectionDeleted(id: string) {
+  const nextSessions = { ...connectionSessions.value }
+  delete nextSessions[id]
+  connectionSessions.value = nextSessions
   if (selectedId.value !== id) return
   selectedId.value = ''
   activeConnection.value = null
+  activeDriver.value = null
   activeTab.value = 'config'
   groupId.value = null
   selectedPointIds.value = []
@@ -375,15 +575,36 @@ async function onCreated(id: string) {
   await selectConnection(id)
 }
 async function onConnectionSaved(connection: CollectorConnection) {
+  if (connectionSessions.value[connection.id]?.status === 'connected') {
+    await disconnectConnection(connection)
+  }
   activeConnection.value = connection
+  activeDriver.value = await getCollectorDriver(connection.driverId)
   await connectionList.value?.reload()
 }
 async function createDiscoveredPoints(points: Record<string, unknown>[]) {
-  if (!activeConnection.value) return
-  await createCollectorPointsBatch(props.projectId, activeConnection.value.id, points)
-  activeTab.value = 'points'
-  await pointTable.value?.reload(1)
+  if (!activeConnection.value || points.length === 0) return
+  discoveryBatchLoading.value = true
+  try {
+    await createCollectorPointsBatch(props.projectId, activeConnection.value.id, points)
+    discoveryPanel.value?.markSelectedCreated()
+    await pointTable.value?.reload(1)
+    ElMessage.success(`已新增 ${points.length} 个变量`)
+  } finally {
+    discoveryBatchLoading.value = false
+  }
 }
+function openDiscoveredPoint(defaults: CollectorPointCreateDefaults) {
+  pointTable.value?.openCreate(groupId.value, defaults, true)
+}
+async function onPointGroupsChanged() {
+  await Promise.all([pointTable.value?.reloadGroups(), pointTable.value?.reload(1)])
+}
+watch(agentId, (nextAgentId, previousAgentId) => {
+  if (previousAgentId && previousAgentId !== nextAgentId) closeAllPageSessions(previousAgentId)
+  connectionSessions.value = {}
+})
+onBeforeUnmount(() => closeAllPageSessions())
 </script>
 
 <style scoped>

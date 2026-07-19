@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
   agentSupportsOperation,
+  buildCollectorPointCreateDefaults,
   buildCollectorDriverTree,
+  collectCollectorBrowseVariables,
   collectorAgentStorageKey,
+  collectorDebugConnectionTone,
+  collectorDriverFeatures,
+  collectorDriverSupportsFeature,
   formatCollectorAgentName,
   formatCollectorConnectionStatus,
   formatCollectorConnectionSummary,
+  filterCollectorBrowseNode,
   formatCollectorProtocolFamily,
   groupCollectorConnections,
   resolveCollectorEnumOptionLabel,
@@ -50,6 +56,89 @@ describe('industrial collector workbench model', () => {
     expect(agentSupportsOperation(agent, 'opcua.standard', '2.0.0', 2, 'point.read')).toBe(false)
     expect(agentSupportsOperation(agent, 'opcua.standard', '1.0.0', 2, 'point.write')).toBe(false)
   })
+  it('recursively collects only variables that have not been modeled', async () => {
+    const branches = new Map([
+      [
+        'root',
+        [
+          {
+            nodeId: 'folder',
+            browseName: 'folder',
+            displayName: 'folder',
+            nodeClass: 'object',
+            hasChildren: true,
+          },
+          {
+            nodeId: 'existing',
+            browseName: 'existing',
+            displayName: 'existing',
+            nodeClass: 'variable',
+            hasChildren: false,
+            modeled: true,
+          },
+        ],
+      ],
+      [
+        'folder',
+        [
+          {
+            nodeId: 'method',
+            browseName: 'method',
+            displayName: 'method',
+            nodeClass: 'method',
+            hasChildren: true,
+          },
+          {
+            nodeId: 'temperature',
+            browseName: 'temperature',
+            displayName: 'temperature',
+            nodeClass: 'variable',
+            hasChildren: false,
+          },
+        ],
+      ],
+      [
+        'method',
+        [
+          {
+            nodeId: 'pressure',
+            browseName: 'pressure',
+            displayName: 'pressure',
+            nodeClass: 'variable',
+            hasChildren: false,
+          },
+          {
+            nodeId: 'root',
+            browseName: 'root',
+            displayName: 'root',
+            nodeClass: 'object',
+            hasChildren: true,
+          },
+        ],
+      ],
+    ])
+    const root = {
+      nodeId: 'root',
+      browseName: 'root',
+      displayName: 'root',
+      nodeClass: 'object',
+      hasChildren: true,
+    }
+
+    const result = await collectCollectorBrowseVariables(
+      root,
+      async (nodeId) => branches.get(nodeId) || [],
+      2,
+    )
+
+    expect(result.variables.map((node) => node.nodeId)).toEqual(['temperature', 'pressure'])
+    expect(result.branches.map((branch) => branch.parentNodeId)).toEqual([
+      'root',
+      'folder',
+      'method',
+    ])
+  })
+
   it('stores agent selection per project', () => {
     expect(collectorAgentStorageKey('project-1')).toBe('induforge:collector-agent:project-1')
   })
@@ -84,6 +173,7 @@ describe('industrial collector workbench model', () => {
         category: 'plc',
         transports: ['tcp'],
         operations: [],
+        features: ['point.elementCount'],
         dataTypes: ['bool'],
         acquisitionModes: ['polling'],
         platforms: { devAgent: [], runtime: [] },
@@ -97,6 +187,7 @@ describe('industrial collector workbench model', () => {
         category: 'fieldbus',
         transports: ['serial'],
         operations: [],
+        features: ['point.elementCount'],
         dataTypes: ['bool'],
         acquisitionModes: ['polling'],
         platforms: { devAgent: [], runtime: [] },
@@ -110,11 +201,24 @@ describe('industrial collector workbench model', () => {
     expect(buildCollectorDriverTree(drivers, 'PLC')[0]?.protocolFamily).toBe('siemens')
     expect(buildCollectorDriverTree(drivers, '串口')[0]?.protocolFamily).toBe('modbus')
   })
+  it('resolves optional point fields from driver features', () => {
+    expect(
+      collectorDriverSupportsFeature(
+        { features: ['point.elementCount'] },
+        collectorDriverFeatures.pointElementCount,
+      ),
+    ).toBe(true)
+    expect(
+      collectorDriverSupportsFeature({ features: [] }, collectorDriverFeatures.pointElementCount),
+    ).toBe(false)
+  })
+
   it('groups configured connections by protocol family', () => {
     const connection = {
       id: 'connection-1',
       projectId: 'project-1',
       name: '锅炉 PLC',
+      code: '锅炉_plc',
       status: 'configured',
       displayOrder: 0,
       protocolFamily: 'modbus',
@@ -139,11 +243,53 @@ describe('industrial collector workbench model', () => {
     ])
     expect(formatCollectorProtocolFamily('custom')).toBe('CUSTOM')
   })
+  it('filters OPC UA browse nodes only by loaded NodeId values', () => {
+    const node = {
+      nodeId: 'ns=2;s=Line1.Temperature',
+      browseName: '2:Temperature',
+      displayName: '入口温度',
+      nodeClass: 'variable',
+      dataType: 'Float',
+      hasChildren: false,
+    }
+
+    expect(filterCollectorBrowseNode('', node)).toBe(true)
+    expect(filterCollectorBrowseNode('line1', node)).toBe(true)
+    expect(filterCollectorBrowseNode('入口温度', node)).toBe(false)
+  })
+
+  it('builds editable variable defaults from an OPC UA variable node', () => {
+    expect(
+      buildCollectorPointCreateDefaults({
+        nodeId: 'ns=2;s=Line1.Temperature',
+        browseName: '2:Temperature',
+        displayName: '入口温度',
+        nodeClass: 'variable',
+        dataType: 'Float',
+        hasChildren: false,
+      }),
+    ).toEqual({
+      name: '入口温度',
+      dataType: 'float32',
+      elementCount: 1,
+      enabled: true,
+      address: { nodeId: 'ns=2;s=Line1.Temperature' },
+    })
+  })
+
+  it('maps page connection session states to consistent tones', () => {
+    expect(collectorDebugConnectionTone('connected')).toBe('success')
+    expect(collectorDebugConnectionTone('connecting')).toBe('primary')
+    expect(collectorDebugConnectionTone('disconnecting')).toBe('primary')
+    expect(collectorDebugConnectionTone('error')).toBe('danger')
+    expect(collectorDebugConnectionTone('disconnected')).toBe('muted')
+  })
   it('formats connection summaries and localized status labels', () => {
     const connection = {
       id: 'connection-1',
       projectId: 'project-1',
       name: 'OPC UA',
+      code: 'opc_ua',
       status: 'unknown',
       displayOrder: 0,
       protocolFamily: 'opcua',
