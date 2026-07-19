@@ -20,6 +20,15 @@ public sealed record BrowseResult(
     IReadOnlyList<IndustrialNode> Nodes,
     IReadOnlyList<DriverDiagnostic> Diagnostics);
 
+public sealed record BrowseBranchResult(
+    string ParentNodeId,
+    IReadOnlyList<IndustrialNode> Nodes,
+    IReadOnlyList<DriverDiagnostic> Diagnostics);
+
+public sealed record BrowseBatchResult(
+    IReadOnlyList<BrowseBranchResult> Branches,
+    IReadOnlyList<DriverDiagnostic> Diagnostics);
+
 public sealed record IndustrialDataValue(
     string NodeId,
     object? Value,
@@ -41,3 +50,10 @@ public sealed record WriteResult(
 public sealed record SubscriptionPreviewResult(
     IReadOnlyList<IndustrialDataValue> Values,
     IReadOnlyList<DriverDiagnostic> Diagnostics);
+
+public sealed record ConnectionSessionResult(
+    bool Connected,
+    string? ServerName,
+    DateTimeOffset ConnectedAt);
+
+public sealed record ConnectionSessionCloseResult(bool Closed);

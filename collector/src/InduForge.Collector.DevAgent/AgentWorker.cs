@@ -5,7 +5,8 @@ namespace InduForge.Collector.DevAgent;
 internal sealed class AgentWorker : IAsyncDisposable
 {
     private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(15);
-    private static readonly TimeSpan TaskPollingInterval = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan EmptyClaimRetryInterval = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan FailedClaimRetryInterval = TimeSpan.FromSeconds(1);
     private readonly CenterApiClient _apiClient;
     private readonly CollectorTaskExecutor _taskExecutor;
     private readonly IReadOnlyList<AgentProtocolCapability> _capabilities;
@@ -44,7 +45,8 @@ internal sealed class AgentWorker : IAsyncDisposable
         _runCancellation.Dispose();
         _runCancellation = null;
         _runTask = null;
-        _logger?.Info("worker.stop", "中心连接工作线程已停止");
+        await _taskExecutor.CloseAllSessionsAsync().ConfigureAwait(false);
+        _logger?.Info("worker.stop", "中心连接工作线程已停止，调试长连接已释放");
     }
 
     private async Task RunAsync(AgentCredentials credentials, CancellationToken cancellationToken)
@@ -91,11 +93,13 @@ internal sealed class AgentWorker : IAsyncDisposable
                 }
             }
 
+            var claimedTask = false;
             try
             {
                 var task = await _apiClient.ClaimTaskAsync(credentials, cancellationToken).ConfigureAwait(false);
                 if (task is not null)
                 {
+                    claimedTask = true;
                     var taskStartedAt = Stopwatch.GetTimestamp();
                     _logger?.Info("task.claimed", $"taskId={task.TaskId} operation={task.Operation}");
                     await _onUpdate(new AgentWorkerUpdate(AgentConnectionState.Connected, task.Operation, $"正在执行任务 {task.TaskId}", DateTimeOffset.Now, false)).ConfigureAwait(false);
@@ -124,9 +128,15 @@ internal sealed class AgentWorker : IAsyncDisposable
                     lastPollingFailureLoggedAt = now;
                 }
                 await _onUpdate(new AgentWorkerUpdate(AgentConnectionState.Connected, "空闲", $"任务轮询失败：{exception.Message}", DateTimeOffset.Now, false)).ConfigureAwait(false);
+                await Task.Delay(FailedClaimRetryInterval, cancellationToken).ConfigureAwait(false);
+                continue;
             }
 
-            await Task.Delay(TaskPollingInterval, cancellationToken).ConfigureAwait(false);
+            if (!claimedTask)
+            {
+                // 新版中心会保持长轮询；短暂退避用于兼容尚未支持 waitSeconds 的旧中心。
+                await Task.Delay(EmptyClaimRetryInterval, cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 
@@ -136,7 +146,11 @@ internal sealed class AgentWorker : IAsyncDisposable
         return _onUpdate(new AgentWorkerUpdate(AgentConnectionState.NotRegistered, "空闲", exception.Message, DateTimeOffset.Now, true));
     }
 
-    public async ValueTask DisposeAsync() => await StopAsync().ConfigureAwait(false);
+    public async ValueTask DisposeAsync()
+    {
+        await StopAsync().ConfigureAwait(false);
+        await _taskExecutor.DisposeAsync().ConfigureAwait(false);
+    }
 }
 
 internal static class HeartbeatRetrySchedule

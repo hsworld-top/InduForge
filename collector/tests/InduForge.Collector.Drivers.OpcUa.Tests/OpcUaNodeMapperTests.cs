@@ -29,6 +29,23 @@ public sealed class OpcUaNodeMapperTests
     }
 
     [Fact]
+    public void KeepsBrowseDataTypeOnVariableNode()
+    {
+        var result = OpcUaNodeMapper.Map(
+            new ReferenceDescription
+            {
+                NodeId = new ExpandedNodeId("Temperature", 2),
+                BrowseName = new QualifiedName("Temperature", 2),
+                DisplayName = new LocalizedText("温度"),
+                NodeClass = NodeClass.Variable,
+            },
+            new NamespaceTable(),
+            "float32");
+
+        Assert.Equal("float32", result.DataType);
+    }
+
+    [Fact]
     public void MapsObjectReferenceAsExpandable()
     {
         var result = OpcUaNodeMapper.Map(

@@ -43,6 +43,148 @@ public sealed class CollectorTaskExecutorTests
         Assert.Equal("ns=2;s=Temperature", Assert.Single(readResult.Values).NodeId);
     }
 
+    [Fact]
+    public async Task LongConnectionReusesSessionForBrowseAndClosesIt()
+    {
+        var state = new SessionDriverState();
+        var registry = new DriverRegistry([() => new SessionDriver(state)]);
+        await using var executor = new CollectorTaskExecutor(registry);
+        var connectionId = Guid.NewGuid();
+        var workspaceSessionId = Guid.NewGuid();
+
+        var opened = await executor.ExecuteAsync(
+            CreateSessionTask(DriverOperations.ConnectionOpen, connectionId, new { workspaceSessionId }),
+            CancellationToken.None);
+        var browsed = await executor.ExecuteAsync(
+            CreateSessionTask(
+                DriverOperations.DeviceBrowse,
+                connectionId,
+                new { workspaceSessionId, parentNodeId = "ns=0;i=85", maxDepth = 1 }),
+            CancellationToken.None);
+        var closed = await executor.ExecuteAsync(
+            CreateSessionTask(DriverOperations.ConnectionClose, connectionId, new { workspaceSessionId }),
+            CancellationToken.None);
+
+        Assert.Equal("succeeded", opened.Status);
+        Assert.Equal("succeeded", browsed.Status);
+        Assert.Equal("succeeded", closed.Status);
+        Assert.Equal(1, state.OpenCount);
+        Assert.Equal(1, state.SessionBrowseCount);
+        Assert.Equal(0, state.OneShotBrowseCount);
+        Assert.Equal(1, state.DisposeCount);
+    }
+
+    [Fact]
+    public async Task LongConnectionCachesBatchBrowseUntilRefresh()
+    {
+        var state = new SessionDriverState();
+        await using var executor = new CollectorTaskExecutor(
+            new DriverRegistry([() => new SessionDriver(state)]));
+        var connectionId = Guid.NewGuid();
+        var workspaceSessionId = Guid.NewGuid();
+        var parentNodeIds = new[] { "node-1", "node-2" };
+        await executor.ExecuteAsync(
+            CreateSessionTask(DriverOperations.ConnectionOpen, connectionId, new { workspaceSessionId }),
+            CancellationToken.None);
+
+        var first = await executor.ExecuteAsync(
+            CreateSessionTask(
+                DriverOperations.DeviceBrowse,
+                connectionId,
+                new { workspaceSessionId, parentNodeIds, maxDepth = 1 }),
+            CancellationToken.None);
+        var second = await executor.ExecuteAsync(
+            CreateSessionTask(
+                DriverOperations.DeviceBrowse,
+                connectionId,
+                new { workspaceSessionId, parentNodeIds, maxDepth = 1 }),
+            CancellationToken.None);
+        var refreshed = await executor.ExecuteAsync(
+            CreateSessionTask(
+                DriverOperations.DeviceBrowse,
+                connectionId,
+                new { workspaceSessionId, parentNodeIds, maxDepth = 1, refreshCache = true }),
+            CancellationToken.None);
+
+        Assert.Equal(2, Assert.IsType<BrowseBatchResult>(first.Result).Branches.Count);
+        Assert.Equal(2, Assert.IsType<BrowseBatchResult>(second.Result).Branches.Count);
+        Assert.Equal(2, Assert.IsType<BrowseBatchResult>(refreshed.Result).Branches.Count);
+        Assert.Equal(4, state.SessionBrowseCount);
+    }
+
+    [Fact]
+    public async Task LongConnectionRequiresWorkspaceSessionId()
+    {
+        var state = new SessionDriverState();
+        await using var executor = new CollectorTaskExecutor(
+            new DriverRegistry([() => new SessionDriver(state)]));
+
+        var result = await executor.ExecuteAsync(
+            CreateSessionTask(DriverOperations.ConnectionOpen, Guid.NewGuid(), new { }),
+            CancellationToken.None);
+
+        Assert.Equal("failed", result.Status);
+        Assert.Equal("COLLECTOR_SESSION_ID_REQUIRED", result.Error?.Code);
+        Assert.Equal(0, state.OpenCount);
+    }
+
+    [Fact]
+    public async Task ClosingSessionDoesNotParseProtocolProfile()
+    {
+        var state = new SessionDriverState();
+        await using var executor = new CollectorTaskExecutor(
+            new DriverRegistry([() => new SessionDriver(state)]));
+
+        var result = await executor.ExecuteAsync(
+            CreateSessionTask(
+                DriverOperations.ConnectionClose,
+                Guid.NewGuid(),
+                new { workspaceSessionId = Guid.NewGuid() },
+                "future.protocol"),
+            CancellationToken.None);
+
+        Assert.Equal("succeeded", result.Status);
+        var closeResult = Assert.IsType<ConnectionSessionCloseResult>(result.Result);
+        Assert.False(closeResult.Closed);
+    }
+
+    private static CollectorTaskEnvelope CreateSessionTask(
+        string operation,
+        Guid connectionId,
+        object input,
+        string protocolFamily = "opcua")
+    {
+        var request = JsonSerializer.SerializeToElement(new
+        {
+            connectionId,
+            driverId = "session.driver",
+            driverVersion = "1.0.0",
+            schemaVersion = 1,
+            connection = new
+            {
+                protocolFamily,
+                config = new
+                {
+                    host = "127.0.0.1",
+                    port = 18540,
+                    endpointPath = "/induforge/sim",
+                    securityMode = "None",
+                    securityPolicy = "None",
+                    authenticationType = "anonymous",
+                },
+                secrets = new { },
+            },
+            input,
+        });
+        return new CollectorTaskEnvelope(
+            Guid.NewGuid().ToString(),
+            "project-1",
+            "agent-1",
+            operation,
+            "running",
+            request,
+            "2026-07-17 12:00:00");
+    }
     private static DriverRegistry CreateRegistry() => new([() => new TestDriver()]);
 
     [Theory]
@@ -63,6 +205,75 @@ public sealed class CollectorTaskExecutorTests
         Assert.Throws<CollectorTaskExecutionException>(() => OpcUaEndpointBuilder.Build(host, port, "/"));
     }
 
+    private sealed class SessionDriverState
+    {
+        public int OpenCount { get; set; }
+        public int SessionBrowseCount { get; set; }
+        public int OneShotBrowseCount { get; set; }
+        public int DisposeCount { get; set; }
+    }
+
+    private sealed class SessionDriver(SessionDriverState state) :
+        IIndustrialDriver,
+        IConnectionSessionDriver,
+        IDeviceBrowser
+    {
+        public DriverDescriptor Descriptor { get; } = new(
+            "opcua",
+            "session.driver",
+            "1.0.0",
+            [1],
+            [
+                DriverOperations.ConnectionTest,
+                DriverOperations.ConnectionOpen,
+                DriverOperations.ConnectionClose,
+                DriverOperations.DeviceBrowse,
+            ]);
+
+        public Task<ConnectionTestResult> TestConnectionAsync(
+            ConnectionProfile profile,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new ConnectionTestResult(true, TimeSpan.Zero, "test", []));
+
+        public Task<IIndustrialConnectionSession> OpenSessionAsync(
+            ConnectionProfile profile,
+            CancellationToken cancellationToken)
+        {
+            state.OpenCount++;
+            return Task.FromResult<IIndustrialConnectionSession>(new SessionDriverSession(state));
+        }
+
+        public Task<BrowseResult> BrowseAsync(
+            ConnectionProfile profile,
+            BrowseRequest request,
+            CancellationToken cancellationToken)
+        {
+            state.OneShotBrowseCount++;
+            return Task.FromResult(new BrowseResult([], []));
+        }
+    }
+
+    private sealed class SessionDriverSession(SessionDriverState state) :
+        IIndustrialConnectionSession,
+        IDeviceBrowserSession
+    {
+        public bool IsConnected { get; private set; } = true;
+
+        public string? ServerName => "session-test";
+
+        public Task<BrowseResult> BrowseAsync(BrowseRequest request, CancellationToken cancellationToken)
+        {
+            state.SessionBrowseCount++;
+            return Task.FromResult(new BrowseResult([], []));
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            IsConnected = false;
+            state.DisposeCount++;
+            return ValueTask.CompletedTask;
+        }
+    }
     private sealed class TestDriver : IIndustrialDriver, IPointReader
     {
         public DriverDescriptor Descriptor { get; } = new(

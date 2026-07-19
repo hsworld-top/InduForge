@@ -73,6 +73,11 @@ internal sealed class DriverRegistry
         }
 
         var operations = new List<string> { DriverOperations.ConnectionTest };
+        if (driver is IConnectionSessionDriver)
+        {
+            operations.Add(DriverOperations.ConnectionOpen);
+            operations.Add(DriverOperations.ConnectionClose);
+        }
         if (driver is IDeviceBrowser) operations.Add(DriverOperations.DeviceBrowse);
         if (driver is IPointReader) operations.Add(DriverOperations.PointRead);
         if (driver is IPointWriter) operations.Add(DriverOperations.PointWrite);

@@ -6,7 +6,7 @@ namespace InduForge.Collector.Drivers.OpcUa;
 
 internal static class OpcUaNodeMapper
 {
-    public static IndustrialNode Map(ReferenceDescription reference, NamespaceTable namespaceUris)
+    public static IndustrialNode Map(ReferenceDescription reference, NamespaceTable namespaceUris, string? dataType = null)
     {
         ArgumentNullException.ThrowIfNull(reference);
         ArgumentNullException.ThrowIfNull(namespaceUris);
@@ -19,7 +19,7 @@ internal static class OpcUaNodeMapper
             reference.BrowseName?.ToString() ?? string.Empty,
             reference.DisplayName?.Text ?? reference.BrowseName?.Name ?? nodeId,
             MapNodeClass(reference.NodeClass),
-            DataType: null,
+            DataType: dataType,
             HasChildren: reference.NodeClass is NodeClass.Object or NodeClass.View);
     }
 

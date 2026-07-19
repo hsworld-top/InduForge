@@ -40,7 +40,7 @@ internal sealed class CenterApiClient(HttpClient httpClient, AgentFileLogger? lo
 
     public async Task<CollectorTaskEnvelope?> ClaimTaskAsync(AgentCredentials credentials, CancellationToken cancellationToken)
     {
-        using var message = CreateAgentRequest(credentials, HttpMethod.Post, "/api/v1/data/collector-dev/agent/tasks/claim", new { });
+        using var message = CreateAgentRequest(credentials, HttpMethod.Post, "/api/v1/data/collector-dev/agent/tasks/claim?waitSeconds=10", new { });
         using var response = await SendAsync(message, cancellationToken, false).ConfigureAwait(false);
         return await ReadOptionalDataAsync<CollectorTaskEnvelope>(response, cancellationToken).ConfigureAwait(false);
     }

@@ -16,6 +16,17 @@ public sealed class DriverRegistryTests
     }
 
     [Fact]
+    public void RegistryAddsConnectionSessionOperationsFromSessionDriver()
+    {
+        var registry = new DriverRegistry([() => new SessionDriver()]);
+
+        var descriptor = registry.Describe("session.driver");
+
+        Assert.Equal(
+            ["connection.test", "connection.open", "connection.close"],
+            descriptor.Operations);
+    }
+    [Fact]
     public void RegistryRejectsDuplicateDriverId()
     {
         Assert.Throws<InvalidOperationException>(() => new DriverRegistry([
@@ -31,6 +42,34 @@ public sealed class DriverRegistryTests
         Assert.Equal([2], descriptor.SchemaVersions);
     }
 
+    private sealed class SessionDriver : IIndustrialDriver, IConnectionSessionDriver
+    {
+        public DriverDescriptor Descriptor { get; } = new(
+            "test",
+            "session.driver",
+            "1.0.0",
+            [1],
+            [DriverOperations.ConnectionTest, DriverOperations.ConnectionOpen, DriverOperations.ConnectionClose]);
+
+        public Task<ConnectionTestResult> TestConnectionAsync(
+            ConnectionProfile profile,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new ConnectionTestResult(true, TimeSpan.Zero, "test", []));
+
+        public Task<IIndustrialConnectionSession> OpenSessionAsync(
+            ConnectionProfile profile,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IIndustrialConnectionSession>(new EmptySession());
+    }
+
+    private sealed class EmptySession : IIndustrialConnectionSession
+    {
+        public bool IsConnected => true;
+
+        public string? ServerName => "test";
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
     private sealed class BrowserAndReaderDriver : IIndustrialDriver, IDeviceBrowser, IPointReader
     {
         public DriverDescriptor Descriptor { get; } = new(
