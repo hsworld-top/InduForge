@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/indu-forge/data_service/internal/auth"
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -144,7 +145,14 @@ func (h *CollectorDevHandler) ClaimTask(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		return err
 	}
-	result, err := h.service.ClaimTask(r.Context(), identity)
+	waitSeconds, err := parseOptionalInt(r.URL.Query().Get("waitSeconds"), 0, "waitSeconds")
+	if err != nil {
+		return err
+	}
+	if waitSeconds < 0 || waitSeconds > 25 {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "waitSeconds 必须在 0 到 25 之间")
+	}
+	result, err := h.service.ClaimTask(r.Context(), identity, time.Duration(waitSeconds)*time.Second)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}

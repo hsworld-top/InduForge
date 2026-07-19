@@ -48,3 +48,21 @@ func TestCollectorConnectionSchemaHasNoConnectionEnabledColumn(t *testing.T) {
 		t.Fatal("工业连接表不应包含连接级 enabled 字段")
 	}
 }
+func TestCollectorTaskSchemaAllowsConnectionSessionOperations(t *testing.T) {
+	payload, err := Files.ReadFile("schema.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseline := string(payload)
+	start := strings.Index(baseline, "CREATE TABLE collector_dev_tasks (")
+	end := strings.Index(baseline[start:], "\n);")
+	if start < 0 || end < 0 {
+		t.Fatal("未找到采集调试任务表定义")
+	}
+	definition := baseline[start : start+end]
+	for _, operation := range []string{"connection.open", "connection.close"} {
+		if !strings.Contains(definition, operation) {
+			t.Fatalf("采集调试任务操作约束缺少 %s", operation)
+		}
+	}
+}

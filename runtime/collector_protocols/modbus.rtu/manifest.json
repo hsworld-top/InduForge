@@ -7,6 +7,7 @@
   "category": "fieldbus",
   "transports": ["serial"],
   "operations": [],
+  "features": ["point.elementCount"],
   "dataTypes": [
     "bool",
     "int16",
@@ -21,5 +22,8 @@
     "bytes"
   ],
   "acquisitionModes": ["polling"],
-  "platforms": { "devAgent": [], "runtime": [] }
+  "platforms": {
+    "devAgent": [],
+    "runtime": []
+  }
 }

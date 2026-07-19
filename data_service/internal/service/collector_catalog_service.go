@@ -27,6 +27,7 @@ type CollectorDriverSummary struct {
 	Category         string              `json:"category"`
 	Transports       []string            `json:"transports"`
 	Operations       []string            `json:"operations"`
+	Features         []string            `json:"features"`
 	DataTypes        []string            `json:"dataTypes"`
 	AcquisitionModes []string            `json:"acquisitionModes"`
 	Platforms        map[string][]string `json:"platforms"`
@@ -134,7 +135,7 @@ func collectorDriverSummary(manifest collectorprotocol.Manifest) CollectorDriver
 		ProtocolFamily: manifest.ProtocolFamily, DriverID: manifest.DriverID, DriverVersion: manifest.DriverVersion,
 		SchemaVersion: manifest.SchemaVersion, DisplayName: manifest.DisplayName, Category: manifest.Category,
 		Transports: cloneCollectorStringSlice(manifest.Transports), Operations: cloneCollectorStringSlice(manifest.Operations),
-		DataTypes: cloneCollectorStringSlice(manifest.DataTypes), AcquisitionModes: cloneCollectorStringSlice(manifest.AcquisitionModes),
+		Features: cloneCollectorStringSlice(manifest.Features), DataTypes: cloneCollectorStringSlice(manifest.DataTypes), AcquisitionModes: cloneCollectorStringSlice(manifest.AcquisitionModes),
 		Platforms: cloneCollectorPlatforms(manifest.Platforms),
 	}
 }

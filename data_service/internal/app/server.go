@@ -32,8 +32,9 @@ import (
 const (
 	defaultReadHeaderTimeout = 5 * time.Second
 	defaultReadTimeout       = 10 * time.Second
-	defaultWriteTimeout      = 10 * time.Second
-	defaultIdleTimeout       = 60 * time.Second
+	// 写超时必须覆盖采集代理最长 25 秒的任务长轮询，并预留响应序列化与网络传输时间。
+	defaultWriteTimeout = 30 * time.Second
+	defaultIdleTimeout  = 60 * time.Second
 )
 
 // Server 封装 data_service 的 HTTP 服务生命周期。

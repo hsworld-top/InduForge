@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,6 +26,7 @@ type CollectorDevService struct {
 	repository          *repository.CollectorDevRepository
 	collectorRepository *repository.CollectorRepository
 	secretCipher        *collectorsecurity.CollectorSecretCipher
+	taskSignals         sync.Map
 }
 
 func (s *CollectorDevService) ConfigureTaskEnvelope(collectorRepository *repository.CollectorRepository, secretCipher *collectorsecurity.CollectorSecretCipher) {
@@ -207,8 +209,59 @@ func (s *CollectorDevService) Heartbeat(ctx context.Context, identity *auth.Coll
 	result := toCollectorAgent(*record, time.Now())
 	return &result, nil
 }
-func (s *CollectorDevService) ClaimTask(ctx context.Context, identity *auth.CollectorAgentIdentity) (*CollectorTask, error) {
-	record, err := s.repository.ClaimTask(ctx, identity.AgentID)
+
+const collectorTaskClaimFallbackInterval = time.Second
+
+func waitForCollectorTask(
+	ctx context.Context,
+	wait time.Duration,
+	signal <-chan struct{},
+	claim func() (*repository.CollectorDevTaskRecord, error),
+) (*repository.CollectorDevTaskRecord, error) {
+	deadline := time.Now().Add(wait)
+	for {
+		record, err := claim()
+		if err != nil || record != nil || wait <= 0 {
+			return record, err
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return nil, nil
+		}
+		delay := collectorTaskClaimFallbackInterval
+		if remaining < delay {
+			delay = remaining
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-signal:
+			if !timer.Stop() {
+				<-timer.C
+			}
+		case <-timer.C:
+		}
+	}
+}
+
+func (s *CollectorDevService) taskSignal(agentID string) chan struct{} {
+	value, _ := s.taskSignals.LoadOrStore(agentID, make(chan struct{}, 1))
+	return value.(chan struct{})
+}
+
+func (s *CollectorDevService) notifyTaskCreated(agentID string) {
+	select {
+	case s.taskSignal(agentID) <- struct{}{}:
+	default:
+	}
+}
+
+func (s *CollectorDevService) ClaimTask(ctx context.Context, identity *auth.CollectorAgentIdentity, wait time.Duration) (*CollectorTask, error) {
+	record, err := waitForCollectorTask(ctx, wait, s.taskSignal(identity.AgentID), func() (*repository.CollectorDevTaskRecord, error) {
+		return s.repository.ClaimTask(ctx, identity.AgentID)
+	})
 	if err != nil || record == nil {
 		return nil, err
 	}
@@ -253,6 +306,7 @@ func (s *CollectorDevService) CreateTask(ctx context.Context, claims *auth.Claim
 	if err != nil {
 		return nil, err
 	}
+	s.notifyTaskCreated(input.AgentID)
 	result := toCollectorTask(*record)
 	return &result, nil
 }
@@ -302,7 +356,7 @@ func validateCollectorTaskInput(input CollectorTaskInput) error {
 	if _, err := uuid.Parse(strings.TrimSpace(input.ConnectionID)); err != nil {
 		return badCollectorRequest("connectionId 格式无效")
 	}
-	allowed := map[string]bool{"connection.test": true, "device.browse": true, "point.read": true, "point.write": true, "point.subscribe.preview": true}
+	allowed := map[string]bool{"connection.test": true, "connection.open": true, "connection.close": true, "device.browse": true, "point.read": true, "point.write": true, "point.subscribe.preview": true}
 	if !allowed[input.Operation] {
 		return badCollectorRequest("不支持的调试任务操作")
 	}
@@ -312,6 +366,17 @@ func validateCollectorTaskInput(input CollectorTaskInput) error {
 	if input.Operation == "device.browse" {
 		if depth, ok := input.Input["maxDepth"].(float64); ok && depth != 1 {
 			return badCollectorRequest("Browse 仅支持 maxDepth = 1")
+		}
+		if parentNodeIDs, exists := input.Input["parentNodeIds"]; exists {
+			values, ok := parentNodeIDs.([]any)
+			if !ok || len(values) == 0 || len(values) > 100 {
+				return badCollectorRequest("parentNodeIds 数量必须在 1 到 100 之间")
+			}
+			for _, value := range values {
+				if nodeID, ok := value.(string); !ok || strings.TrimSpace(nodeID) == "" {
+					return badCollectorRequest("parentNodeIds 只能包含非空字符串")
+				}
+			}
 		}
 	}
 	if input.Operation == "point.read" || input.Operation == "point.write" || input.Operation == "point.subscribe.preview" {
@@ -327,7 +392,7 @@ func validateCapabilities(capabilities []CollectorProtocolCapability) error {
 			return badCollectorRequest("Agent capability 缺少 driverId、driverVersion 或 schemaVersions")
 		}
 		for _, operation := range capability.Operations {
-			if !map[string]bool{"connection.test": true, "device.browse": true, "point.read": true, "point.write": true, "point.subscribe.preview": true}[operation] {
+			if !map[string]bool{"connection.test": true, "connection.open": true, "connection.close": true, "device.browse": true, "point.read": true, "point.write": true, "point.subscribe.preview": true}[operation] {
 				return badCollectorRequest("Agent capability 包含不支持的操作")
 			}
 		}
@@ -458,7 +523,7 @@ func (s *CollectorDevService) buildTaskEnvelope(ctx context.Context, record *rep
 		input["points"] = resolved
 		delete(input, "pointIds")
 	}
-	payload, err := json.Marshal(map[string]any{"driverId": connection.DriverID, "driverVersion": connection.DriverVersion, "schemaVersion": connection.SchemaVersion, "connection": map[string]any{"protocolFamily": connection.ProtocolFamily, "config": connection.Config, "secrets": secrets}, "input": input})
+	payload, err := json.Marshal(map[string]any{"connectionId": connection.ID, "driverId": connection.DriverID, "driverVersion": connection.DriverVersion, "schemaVersion": connection.SchemaVersion, "connection": map[string]any{"protocolFamily": connection.ProtocolFamily, "config": connection.Config, "secrets": secrets}, "input": input})
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "生成调试任务执行信封失败", err)
 	}

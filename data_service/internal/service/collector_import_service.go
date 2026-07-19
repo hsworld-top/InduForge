@@ -118,21 +118,23 @@ func (s *CollectorImportService) Preview(ctx context.Context, projectID, connect
 	for index, value := range rows[0] {
 		headers[strings.TrimSpace(value)] = index
 	}
+	existingCodes, err := s.points.store.ListPointCodes(ctx, projectID, connectionID)
+	if err != nil {
+		return CollectorImportPreview{}, err
+	}
+	usedCodes := make(map[string]struct{}, len(existingCodes)+len(rows))
+	for _, code := range existingCodes {
+		usedCodes[code] = struct{}{}
+	}
 	candidates := make([]repository.CollectorImportCandidate, 0)
 	issues := make([]repository.CollectorImportError, 0)
-	seen := map[string]struct{}{}
 	for rowIndex, row := range rows[1:] {
 		input, groupPath, parseErr := s.parseImportRow(connection.DriverID, headers, row)
 		if parseErr != nil {
 			issues = append(issues, repository.CollectorImportError{Row: rowIndex + 2, Code: "INVALID_ROW", Message: parseErr.Error()})
 			continue
 		}
-		if _, exists := seen[input.Code]; exists {
-			issues = append(issues, repository.CollectorImportError{Row: rowIndex + 2, Field: "code", Code: "DUPLICATE_CODE", Message: "文件内采集点编码重复"})
-			continue
-		}
-		seen[input.Code] = struct{}{}
-		point, buildErr := s.points.buildPointParams(connection, userID, uuid.NewString(), input)
+		point, buildErr := s.points.buildPointParams(connection, userID, uuid.NewString(), allocateCollectorPointCode(input.Name, usedCodes), input)
 		if buildErr != nil {
 			issues = append(issues, repository.CollectorImportError{Row: rowIndex + 2, Code: "VALIDATION_FAILED", Message: buildErr.Error()})
 			continue
@@ -165,7 +167,7 @@ func (s *CollectorImportService) storeConnection(ctx context.Context, projectID,
 }
 
 func (s *CollectorImportService) templateHeaders(driverID string) []string {
-	headers := []string{"groupPath", "code", "name", "description", "dataType", "elementCount", "enabled"}
+	headers := []string{"groupPath", "name", "description", "dataType", "elementCount", "enabled"}
 	properties := make([]string, 0, len(s.addressProperties[driverID]))
 	for name := range s.addressProperties[driverID] {
 		properties = append(properties, name)
@@ -184,9 +186,9 @@ func (s *CollectorImportService) parseImportRow(driverID string, headers map[str
 		}
 		return strings.TrimSpace(row[index])
 	}
-	code, name, dataType := get("code"), get("name"), get("dataType")
-	if code == "" || name == "" || dataType == "" {
-		return CreateCollectorPointInput{}, "", fmt.Errorf("code、name、dataType 不能为空")
+	name, dataType := get("name"), get("dataType")
+	if name == "" || dataType == "" {
+		return CreateCollectorPointInput{}, "", fmt.Errorf("name、dataType 不能为空")
 	}
 	elementCount := 1
 	if raw := get("elementCount"); raw != "" {
@@ -232,7 +234,7 @@ func (s *CollectorImportService) parseImportRow(driverID string, headers map[str
 	if value := get("description"); value != "" {
 		description = &value
 	}
-	return CreateCollectorPointInput{Code: code, Name: name, Description: description, Address: address, DataType: dataType, ElementCount: elementCount, ReadOptions: readOptions, Acquisition: acquisition, Enabled: &enabled, Metadata: metadata}, get("groupPath"), nil
+	return CreateCollectorPointInput{Name: name, Description: description, Address: address, DataType: dataType, ElementCount: elementCount, ReadOptions: readOptions, Acquisition: acquisition, Enabled: &enabled, Metadata: metadata}, get("groupPath"), nil
 }
 func parseCollectorImportScalar(raw, valueType string) (any, error) {
 	switch valueType {

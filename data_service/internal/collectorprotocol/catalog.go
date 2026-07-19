@@ -16,7 +16,11 @@ var allowedDataTypes = map[string]struct{}{
 }
 
 var allowedOperations = map[string]struct{}{
-	"connection.test": {}, "device.browse": {}, "point.read": {}, "point.write": {}, "point.subscribe.preview": {},
+	"connection.test": {}, "connection.open": {}, "connection.close": {}, "device.browse": {}, "point.read": {}, "point.write": {}, "point.subscribe.preview": {},
+}
+
+var allowedFeatures = map[string]struct{}{
+	"point.elementCount": {},
 }
 
 var allowedExtensions = map[string]struct{}{
@@ -33,6 +37,7 @@ type Manifest struct {
 	Category         string              `json:"category"`
 	Transports       []string            `json:"transports"`
 	Operations       []string            `json:"operations"`
+	Features         []string            `json:"features"`
 	DataTypes        []string            `json:"dataTypes"`
 	AcquisitionModes []string            `json:"acquisitionModes"`
 	Platforms        map[string][]string `json:"platforms"`
@@ -131,6 +136,11 @@ func validateManifest(manifest Manifest) error {
 	for _, operation := range manifest.Operations {
 		if _, ok := allowedOperations[operation]; !ok {
 			return fmt.Errorf("不支持的操作: %s", operation)
+		}
+	}
+	for _, feature := range manifest.Features {
+		if _, ok := allowedFeatures[feature]; !ok {
+			return fmt.Errorf("不支持的驱动特性: %s", feature)
 		}
 	}
 	for _, dataType := range manifest.DataTypes {

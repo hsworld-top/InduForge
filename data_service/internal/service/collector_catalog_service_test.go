@@ -69,7 +69,7 @@ func TestCollectorCatalogOpcUaUsesStructuredBilingualConnectionSchema(t *testing
 
 func TestCollectorDriverSummaryNormalizesOptionalCollections(t *testing.T) {
 	summary := collectorDriverSummary(collectorprotocol.Manifest{})
-	if summary.Transports == nil || summary.Operations == nil || summary.DataTypes == nil || summary.AcquisitionModes == nil || summary.Platforms == nil {
+	if summary.Transports == nil || summary.Operations == nil || summary.Features == nil || summary.DataTypes == nil || summary.AcquisitionModes == nil || summary.Platforms == nil {
 		t.Fatalf("collector driver summary contains nil collection: %#v", summary)
 	}
 }

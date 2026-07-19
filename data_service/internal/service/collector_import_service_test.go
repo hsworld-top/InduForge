@@ -16,7 +16,7 @@ func TestCollectorImportPreviewParsesSchemaAddressColumns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	content := []byte("groupPath,code,name,dataType,elementCount,address.nodeId\n设备一,temp,温度,float32,1,ns=2;s=Temperature\n")
+	content := []byte("groupPath,name,dataType,elementCount,address.nodeId\n设备一,温度,float32,1,ns=2;s=Temperature\n")
 	preview, err := service.Preview(context.Background(), pointStore.connection.ProjectID, connectionID, "550e8400-e29b-41d4-a716-446655440001", "points.csv", content, 1, 20)
 	if err != nil {
 		t.Fatal(err)

@@ -81,7 +81,7 @@ func (f *fakeCollectorConnectionStore) CreateConnection(_ context.Context, param
 	for _, secret := range params.Secrets {
 		status[secret.Key] = true
 	}
-	return &repository.CollectorConnectionRecord{ID: params.ID, ProjectID: params.ProjectID, Name: params.Name, ProtocolFamily: params.ProtocolFamily, DriverID: params.DriverID, DriverVersion: params.DriverVersion, SchemaVersion: params.SchemaVersion, Config: params.Config, Metadata: params.Metadata, SecretStatus: status, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+	return &repository.CollectorConnectionRecord{ID: params.ID, ProjectID: params.ProjectID, Name: params.Name, Code: params.Code, ProtocolFamily: params.ProtocolFamily, DriverID: params.DriverID, DriverVersion: params.DriverVersion, SchemaVersion: params.SchemaVersion, Config: params.Config, Metadata: params.Metadata, SecretStatus: status, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
 }
 func (f *fakeCollectorConnectionStore) UpdateConnection(context.Context, repository.UpdateCollectorConnectionParams) (*repository.CollectorConnectionRecord, error) {
 	return nil, nil

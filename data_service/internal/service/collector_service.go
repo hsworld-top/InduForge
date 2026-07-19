@@ -44,6 +44,7 @@ type CollectorConnection struct {
 	ID             string          `json:"id"`
 	ProjectID      string          `json:"projectId"`
 	Name           string          `json:"name"`
+	Code           string          `json:"code"`
 	Status         string          `json:"status"`
 	DisplayOrder   int             `json:"displayOrder"`
 	ProtocolFamily string          `json:"protocolFamily"`
@@ -159,7 +160,8 @@ func (s *CollectorService) CreateConnection(ctx context.Context, projectID, user
 	if err != nil {
 		return nil, err
 	}
-	record, err := s.store.CreateConnection(ctx, repository.CreateCollectorConnectionParams{ID: uuid.NewString(), ProjectID: projectID, UserID: userID, Name: name, ProtocolFamily: driver.Manifest.ProtocolFamily, DriverID: driver.Manifest.DriverID, DriverVersion: driver.Manifest.DriverVersion, SchemaVersion: driver.Manifest.SchemaVersion, Config: config, Metadata: metadata, Secrets: secrets})
+	connectionID := uuid.NewString()
+	record, err := s.store.CreateConnection(ctx, repository.CreateCollectorConnectionParams{ID: connectionID, ProjectID: projectID, UserID: userID, Name: name, Code: collectorCodeFromName(name, "connection"), ProtocolFamily: driver.Manifest.ProtocolFamily, DriverID: driver.Manifest.DriverID, DriverVersion: driver.Manifest.DriverVersion, SchemaVersion: driver.Manifest.SchemaVersion, Config: config, Metadata: metadata, Secrets: secrets})
 	if err != nil {
 		return nil, err
 	}
@@ -307,11 +309,11 @@ func mergeCollectorSecretStatus(current map[string]bool, updates map[string]*str
 }
 
 func normalizeCollectorConnectionName(value string) (string, error) {
-	value = strings.TrimSpace(value)
-	if value == "" || len([]rune(value)) > 100 {
-		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "工业采集连接名称长度必须为 1 到 100 个字符")
+	name, err := normalizeCollectorDisplayName(value, 50)
+	if err != nil {
+		return "", apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "工业采集连接名称无效", err)
 	}
-	return value, nil
+	return name, nil
 }
 
 func cloneCollectorMap(value map[string]any) map[string]any {
@@ -328,5 +330,5 @@ func toCollectorConnection(record repository.CollectorConnectionRecord) Collecto
 		value := record.LastTestedAt.Format("2006-01-02 15:04:05")
 		lastTestedAt = &value
 	}
-	return CollectorConnection{ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, Status: record.Status, DisplayOrder: record.DisplayOrder, ProtocolFamily: record.ProtocolFamily, DriverID: record.DriverID, DriverVersion: record.DriverVersion, SchemaVersion: record.SchemaVersion, Config: cloneCollectorMap(record.Config), Metadata: cloneCollectorMap(record.Metadata), SecretStatus: record.SecretStatus, LastTestStatus: record.LastTestStatus, LastTestedAt: lastTestedAt, CreatedAt: record.CreatedAt.Format("2006-01-02 15:04:05"), UpdatedAt: record.UpdatedAt.Format("2006-01-02 15:04:05")}
+	return CollectorConnection{ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, Code: record.Code, Status: record.Status, DisplayOrder: record.DisplayOrder, ProtocolFamily: record.ProtocolFamily, DriverID: record.DriverID, DriverVersion: record.DriverVersion, SchemaVersion: record.SchemaVersion, Config: cloneCollectorMap(record.Config), Metadata: cloneCollectorMap(record.Metadata), SecretStatus: record.SecretStatus, LastTestStatus: record.LastTestStatus, LastTestedAt: lastTestedAt, CreatedAt: record.CreatedAt.Format("2006-01-02 15:04:05"), UpdatedAt: record.UpdatedAt.Format("2006-01-02 15:04:05")}
 }

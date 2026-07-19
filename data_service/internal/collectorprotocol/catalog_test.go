@@ -28,6 +28,14 @@ func TestLoadCatalogRejectsUnknownDataType(t *testing.T) {
 	}
 }
 
+func TestLoadCatalogRejectsUnknownFeature(t *testing.T) {
+	manifest := strings.Replace(validManifest("opcua.standard", "opcua", []string{"connection.test"}), `"operations":["connection.test"]`, `"operations":["connection.test"],"features":["point.unknown"]`, 1)
+	_, err := LoadCatalog(completeDriverFS("opcua.standard", manifest))
+	if err == nil || !strings.Contains(err.Error(), "不支持的驱动特性") {
+		t.Fatalf("expected feature error, got %v", err)
+	}
+}
+
 func TestLoadCatalogRejectsForbiddenPublicTerm(t *testing.T) {
 	manifest := strings.Replace(validManifest("opcua.standard", "opcua", []string{"connection.test"}), `"displayName":"OPC UA"`, `"displayName":"HSL OPC UA"`, 1)
 	_, err := LoadCatalog(completeDriverFS("opcua.standard", manifest))

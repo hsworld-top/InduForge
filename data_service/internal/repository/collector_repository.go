@@ -19,6 +19,7 @@ type CollectorConnectionRecord struct {
 	ID             string
 	ProjectID      string
 	Name           string
+	Code           string
 	Status         string
 	DisplayOrder   int
 	ProtocolFamily string
@@ -51,10 +52,10 @@ type CollectorConnectionSecretRecord struct {
 }
 
 type CreateCollectorConnectionParams struct {
-	ID, ProjectID, UserID, Name, ProtocolFamily, DriverID, DriverVersion string
-	SchemaVersion                                                        int
-	Config, Metadata                                                     map[string]any
-	Secrets                                                              []EncryptedCollectorSecret
+	ID, ProjectID, UserID, Name, Code, ProtocolFamily, DriverID, DriverVersion string
+	SchemaVersion                                                              int
+	Config, Metadata                                                           map[string]any
+	Secrets                                                                    []EncryptedCollectorSecret
 }
 
 type UpdateCollectorConnectionParams struct {
@@ -97,7 +98,7 @@ func (r *CollectorRepository) ListConnections(ctx context.Context, projectID str
 	}
 	args = append(args, filter.PageSize, (filter.Page-1)*filter.PageSize)
 	query := fmt.Sprintf(`
-		SELECT collector.id, collector.project_id, collector.name, collector.status, collector.display_order,
+		SELECT collector.id, collector.project_id, collector.name, collector.code, collector.status, collector.display_order,
 		       collector.protocol_family, collector.driver_id, collector.driver_version, collector.schema_version,
 		       collector.config, collector.metadata,
 		       COALESCE((SELECT jsonb_object_agg(secret_key, true) FROM data_collector_connection_secrets secret WHERE secret.connection_id = collector.id), '{}'::jsonb),
@@ -171,7 +172,7 @@ func (r *CollectorRepository) CreateConnection(ctx context.Context, params Creat
 		return nil, wrapUnifiedCollectorRepositoryError("开启连接创建事务失败", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	_, err = tx.Exec(ctx, `INSERT INTO data_collector_connections (id, project_id, name, protocol_family, driver_id, driver_version, schema_version, config, metadata, created_by, updated_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$10)`, params.ID, params.ProjectID, params.Name, params.ProtocolFamily, params.DriverID, params.DriverVersion, params.SchemaVersion, string(configPayload), string(metadataPayload), params.UserID)
+	_, err = tx.Exec(ctx, `INSERT INTO data_collector_connections (id, project_id, name, code, protocol_family, driver_id, driver_version, schema_version, config, metadata, created_by, updated_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11,$11)`, params.ID, params.ProjectID, params.Name, params.Code, params.ProtocolFamily, params.DriverID, params.DriverVersion, params.SchemaVersion, string(configPayload), string(metadataPayload), params.UserID)
 	if err != nil {
 		return nil, translateCollectorWriteError("创建工业采集连接失败", err)
 	}
@@ -226,7 +227,7 @@ func (r *CollectorRepository) DeleteConnection(ctx context.Context, projectID, c
 }
 
 const collectorConnectionSelect = `
-	SELECT collector.id, collector.project_id, collector.name, collector.status, collector.display_order,
+	SELECT collector.id, collector.project_id, collector.name, collector.code, collector.status, collector.display_order,
 	       collector.protocol_family, collector.driver_id, collector.driver_version, collector.schema_version,
 	       collector.config, collector.metadata,
 	       COALESCE((SELECT jsonb_object_agg(secret_key, true) FROM data_collector_connection_secrets secret WHERE secret.connection_id = collector.id), '{}'::jsonb),
@@ -240,7 +241,7 @@ type unifiedCollectorRow interface{ Scan(...any) error }
 func scanCollectorConnection(row unifiedCollectorRow) (CollectorConnectionRecord, error) {
 	var record CollectorConnectionRecord
 	var configPayload, metadataPayload, secretStatusPayload []byte
-	err := row.Scan(&record.ID, &record.ProjectID, &record.Name, &record.Status, &record.DisplayOrder, &record.ProtocolFamily, &record.DriverID, &record.DriverVersion, &record.SchemaVersion, &configPayload, &metadataPayload, &secretStatusPayload, &record.LastTestStatus, &record.LastTestedAt, &record.CreatedAt, &record.UpdatedAt)
+	err := row.Scan(&record.ID, &record.ProjectID, &record.Name, &record.Code, &record.Status, &record.DisplayOrder, &record.ProtocolFamily, &record.DriverID, &record.DriverVersion, &record.SchemaVersion, &configPayload, &metadataPayload, &secretStatusPayload, &record.LastTestStatus, &record.LastTestedAt, &record.CreatedAt, &record.UpdatedAt)
 	if err != nil {
 		return CollectorConnectionRecord{}, err
 	}
@@ -260,7 +261,7 @@ func scanCollectorConnectionWithTotal(row unifiedCollectorRow) (CollectorConnect
 	var record CollectorConnectionRecord
 	var configPayload, metadataPayload, secretStatusPayload []byte
 	var total int
-	err := row.Scan(&record.ID, &record.ProjectID, &record.Name, &record.Status, &record.DisplayOrder, &record.ProtocolFamily, &record.DriverID, &record.DriverVersion, &record.SchemaVersion, &configPayload, &metadataPayload, &secretStatusPayload, &record.LastTestStatus, &record.LastTestedAt, &record.CreatedAt, &record.UpdatedAt, &total)
+	err := row.Scan(&record.ID, &record.ProjectID, &record.Name, &record.Code, &record.Status, &record.DisplayOrder, &record.ProtocolFamily, &record.DriverID, &record.DriverVersion, &record.SchemaVersion, &configPayload, &metadataPayload, &secretStatusPayload, &record.LastTestStatus, &record.LastTestedAt, &record.CreatedAt, &record.UpdatedAt, &total)
 	if err != nil {
 		return CollectorConnectionRecord{}, 0, wrapUnifiedCollectorRepositoryError("扫描工业采集连接失败", err)
 	}
@@ -295,8 +296,10 @@ func translateCollectorWriteError(message string, err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		switch pgErr.ConstraintName {
-		case "data_connections_project_name_key":
+		case "data_collector_connections_project_name_key":
 			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "工业采集连接名称已存在")
+		case "data_collector_connections_project_code_key":
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "工业采集连接编码已存在")
 		case "data_collector_connections_driver_id_check":
 			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "工业采集驱动标识无效")
 		}

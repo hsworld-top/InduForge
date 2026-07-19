@@ -7,6 +7,7 @@
   "category": "plc",
   "transports": ["tcp"],
   "operations": [],
+  "features": ["point.elementCount"],
   "dataTypes": [
     "bool",
     "int8",
@@ -24,5 +25,8 @@
     "datetime"
   ],
   "acquisitionModes": ["polling"],
-  "platforms": { "devAgent": [], "runtime": [] }
+  "platforms": {
+    "devAgent": [],
+    "runtime": []
+  }
 }

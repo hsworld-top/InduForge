@@ -53,6 +53,35 @@ func (h *CollectorPointHandler) CreateGroup(w http.ResponseWriter, r *http.Reque
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
 }
+func (h *CollectorPointHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	var input struct {
+		Name string `json:"name"`
+	}
+	if err := decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	result, err := h.service.UpdatePointGroup(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), r.PathValue("groupId"), input.Name)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+func (h *CollectorPointHandler) DeleteGroup(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	if err := h.service.DeletePointGroup(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), r.PathValue("groupId")); err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"deleted": true})
+	return nil
+}
+
 func (h *CollectorPointHandler) ListPoints(w http.ResponseWriter, r *http.Request) error {
 	if _, err := requireClaims(r); err != nil {
 		return err
@@ -81,6 +110,24 @@ func (h *CollectorPointHandler) ListPoints(w http.ResponseWriter, r *http.Reques
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
 }
+func (h *CollectorPointHandler) CheckAddresses(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	var input struct {
+		Addresses []map[string]any `json:"addresses"`
+	}
+	if err := decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	indexes, err := h.service.FindExistingPointAddressIndexes(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), input.Addresses)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"indexes": indexes})
+	return nil
+}
+
 func (h *CollectorPointHandler) CreateBatch(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {

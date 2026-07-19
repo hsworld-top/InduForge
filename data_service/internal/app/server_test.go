@@ -31,6 +31,9 @@ func TestNewServer_UsesProductionRouter(t *testing.T) {
 		t.Fatalf("new server failed: %v", err)
 	}
 	t.Cleanup(srv.Close)
+	if srv.httpServer.WriteTimeout != 30*time.Second {
+		t.Fatalf("expected write timeout 30s, got %s", srv.httpServer.WriteTimeout)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	recorder := httptest.NewRecorder()

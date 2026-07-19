@@ -93,7 +93,7 @@ CREATE TABLE collector_dev_tasks (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     connection_id uuid NOT NULL,
-    CONSTRAINT collector_dev_tasks_operation_check CHECK ((operation = ANY (ARRAY['connection.test'::text, 'device.browse'::text, 'point.read'::text, 'point.write'::text, 'point.subscribe.preview'::text]))),
+    CONSTRAINT collector_dev_tasks_operation_check CHECK ((operation = ANY (ARRAY['connection.test'::text, 'connection.open'::text, 'connection.close'::text, 'device.browse'::text, 'point.read'::text, 'point.write'::text, 'point.subscribe.preview'::text]))),
     CONSTRAINT collector_dev_tasks_request_payload_check CHECK ((jsonb_typeof(request_payload) = 'object'::text)),
     CONSTRAINT collector_dev_tasks_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'succeeded'::text, 'failed'::text, 'cancelled'::text, 'expired'::text])))
 );
@@ -266,10 +266,12 @@ CREATE TABLE data_collector_connections (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     name text NOT NULL,
+    code text NOT NULL,
     status text DEFAULT 'unknown'::text NOT NULL,
     display_order integer DEFAULT 0 NOT NULL,
     created_by uuid NOT NULL,
     updated_by uuid,
+    CONSTRAINT data_collector_connections_code_check CHECK (((char_length(code) >= 1) AND (char_length(code) <= 100))),
     CONSTRAINT data_collector_connections_config_check CHECK ((jsonb_typeof(config) = 'object'::text)),
     CONSTRAINT data_collector_connections_display_order_check CHECK ((display_order >= 0)),
     CONSTRAINT data_collector_connections_driver_id_check CHECK (((driver_id = lower(driver_id)) AND (driver_id ~ '^[a-z0-9][a-z0-9.-]*$'::text))),
@@ -1382,6 +1384,11 @@ ALTER TABLE ONLY data_collector_connections
 ALTER TABLE ONLY data_collector_connections
     ADD CONSTRAINT data_collector_connections_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY data_collector_connections
+    ADD CONSTRAINT data_collector_connections_project_code_key UNIQUE (project_id, code);
+
+CREATE UNIQUE INDEX data_collector_connections_project_name_key ON data_collector_connections USING btree (project_id, lower(name));
+
 
 --
 -- Name: data_collector_import_sessions data_collector_import_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -1413,6 +1420,14 @@ ALTER TABLE ONLY data_collector_point_groups
 
 ALTER TABLE ONLY data_collector_points
     ADD CONSTRAINT data_collector_points_connection_code_key UNIQUE (project_id, connection_id, code);
+
+
+--
+-- Name: data_collector_points data_collector_points_connection_address_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_collector_points
+    ADD CONSTRAINT data_collector_points_connection_address_key UNIQUE (project_id, connection_id, address_text);
 
 
 --

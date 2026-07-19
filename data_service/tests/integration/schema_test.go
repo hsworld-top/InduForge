@@ -12,6 +12,7 @@ import (
 
 	"github.com/indu-forge/data_service/internal/db/postgres"
 	"github.com/indu-forge/data_service/internal/db/schema"
+	"github.com/indu-forge/data_service/internal/repository"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
@@ -23,6 +24,63 @@ const (
 	testDatabaseURLEnv = "DATA_SERVICE_TEST_DATABASE_URL"
 	postgresTestImage  = "postgres:16.4-alpine"
 )
+
+func TestCollectorPointGroupDeleteMovesSubtreePointsToParent(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	fixture := setupTestDatabase(t, ctx)
+	initializer := setupSchemaInitializer(t, fixture.pool)
+	if err := initializer.Ensure(ctx); err != nil {
+		t.Fatalf("初始化数据库结构失败: %v", err)
+	}
+
+	projectID := "550e8400-e29b-41d4-a716-446655440000"
+	connectionID := "550e8400-e29b-41d4-a716-446655440010"
+	parentID := "550e8400-e29b-41d4-a716-446655440020"
+	rootID := "550e8400-e29b-41d4-a716-446655440021"
+	childID := "550e8400-e29b-41d4-a716-446655440022"
+	pointID := "550e8400-e29b-41d4-a716-446655440030"
+	userID := "550e8400-e29b-41d4-a716-446655440001"
+
+	_, err := fixture.pool.Exec(ctx, `
+		INSERT INTO data_collector_connections (
+			id, project_id, name, status, display_order, protocol_family, driver_id,
+			driver_version, schema_version, config, metadata, created_by
+		) VALUES ($1,$2,'测试连接','unknown',0,'opcua','opcua.standard','1.0.0',2,'{}','{}',$3);
+		INSERT INTO data_collector_point_groups (id,project_id,connection_id,parent_id,name) VALUES
+			($4,$2,$1,NULL,'上级分组'),
+			($5,$2,$1,$4,'待删除分组'),
+			($6,$2,$1,$5,'子分组');
+		INSERT INTO data_collector_points (
+			id,project_id,connection_id,group_id,code,name,address,address_text,address_schema_version,
+			data_type,element_count,read_options,acquisition,enabled,sort_order,metadata
+		) VALUES ($7,$2,$1,$6,'temperature','温度','{"nodeId":"ns=2;s=Temperature"}',
+			'ns=2;s=Temperature',2,'float32',1,'{}','{"intervalMs":1000}',true,0,'{}')
+	`, connectionID, projectID, userID, parentID, rootID, childID, pointID)
+	if err != nil {
+		t.Fatalf("准备分组删除测试数据失败: %v", err)
+	}
+
+	repo := repository.NewCollectorRepository(fixture.pool)
+	if err := repo.DeletePointGroup(ctx, projectID, connectionID, rootID); err != nil {
+		t.Fatalf("删除分组失败: %v", err)
+	}
+
+	var movedGroupID string
+	if err := fixture.pool.QueryRow(ctx, `SELECT group_id FROM data_collector_points WHERE id=$1`, pointID).Scan(&movedGroupID); err != nil {
+		t.Fatalf("查询移动后的变量失败: %v", err)
+	}
+	if movedGroupID != parentID {
+		t.Fatalf("变量分组 = %s, want %s", movedGroupID, parentID)
+	}
+	var remaining int
+	if err := fixture.pool.QueryRow(ctx, `SELECT count(*) FROM data_collector_point_groups WHERE id=ANY($1::uuid[])`, []string{rootID, childID}).Scan(&remaining); err != nil {
+		t.Fatalf("查询剩余分组失败: %v", err)
+	}
+	if remaining != 0 {
+		t.Fatalf("待删除分组子树仍有 %d 条记录", remaining)
+	}
+}
 
 func TestSchemaInitializer_CreatesCoreTables(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)

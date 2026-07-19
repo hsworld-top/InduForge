@@ -29,6 +29,10 @@ type CreateCollectorPointGroupParams struct {
 	Metadata                          map[string]any
 }
 
+type UpdateCollectorPointGroupParams struct {
+	ID, ProjectID, ConnectionID, Name string
+}
+
 type CollectorPointRecord struct {
 	ID, ProjectID, ConnectionID, Code, Name, AddressText, DataType string
 	GroupID                                                        *string
@@ -47,12 +51,12 @@ type CollectorPointListFilter struct {
 }
 
 type CreateCollectorPointParams struct {
-	ID, ProjectID, ConnectionID, UserID, Code, Name, AddressText, DataType string
-	GroupID                                                                *string
-	Description                                                            *string
-	Address, ReadOptions, Acquisition, Metadata                            map[string]any
-	AddressSchemaVersion, ElementCount, SortOrder                          int
-	Enabled                                                                bool
+	ID, ProjectID, ConnectionID, ConnectionCode, UserID, Code, Name, AddressText, DataType string
+	GroupID                                                                                *string
+	Description                                                                            *string
+	Address, ReadOptions, Acquisition, Metadata                                            map[string]any
+	AddressSchemaVersion, ElementCount, SortOrder                                          int
+	Enabled                                                                                bool
 }
 
 type UpdateCollectorPointParams = CreateCollectorPointParams
@@ -96,6 +100,87 @@ func (r *CollectorRepository) CreatePointGroup(ctx context.Context, params Creat
 		return nil, translateCollectorWriteError("创建采集点分组失败", err)
 	}
 	return &record, nil
+}
+
+func (r *CollectorRepository) UpdatePointGroup(ctx context.Context, params UpdateCollectorPointGroupParams) (*CollectorPointGroupRecord, error) {
+	record, err := scanCollectorPointGroup(r.pool.QueryRow(ctx, `UPDATE data_collector_point_groups SET name=$4,updated_at=now() WHERE id=$1 AND project_id=$2 AND connection_id=$3 RETURNING id,project_id,connection_id,parent_id,name,sort_order,metadata,created_at,updated_at`, params.ID, params.ProjectID, params.ConnectionID, params.Name))
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "采集点分组不存在")
+		}
+		return nil, translateCollectorWriteError("更新采集点分组失败", err)
+	}
+	return &record, nil
+}
+
+// DeletePointGroup 将被删子树中的变量移动到根分组的上级，再级联删除整个分组子树。
+func (r *CollectorRepository) DeletePointGroup(ctx context.Context, projectID, connectionID, groupID string) error {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return wrapUnifiedCollectorRepositoryError("开启删除采集点分组事务失败", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var parentID *string
+	if err := tx.QueryRow(ctx, `SELECT parent_id FROM data_collector_point_groups WHERE id=$1 AND project_id=$2 AND connection_id=$3 FOR UPDATE`, groupID, projectID, connectionID).Scan(&parentID); err != nil {
+		if err == pgx.ErrNoRows {
+			return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "采集点分组不存在")
+		}
+		return wrapUnifiedCollectorRepositoryError("查询采集点分组失败", err)
+	}
+
+	if _, err := tx.Exec(ctx, `WITH RECURSIVE subtree AS (
+		SELECT id FROM data_collector_point_groups WHERE id=$1 AND project_id=$2 AND connection_id=$3
+		UNION ALL
+		SELECT child.id FROM data_collector_point_groups child JOIN subtree parent ON child.parent_id=parent.id
+		WHERE child.project_id=$2 AND child.connection_id=$3
+	) UPDATE data_collector_points SET group_id=$4,updated_at=now() WHERE project_id=$2 AND connection_id=$3 AND group_id IN (SELECT id FROM subtree)`, groupID, projectID, connectionID, parentID); err != nil {
+		return translateCollectorWriteError("移动被删分组变量失败", err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM data_collector_point_groups WHERE id=$1 AND project_id=$2 AND connection_id=$3`, groupID, projectID, connectionID); err != nil {
+		return translateCollectorWriteError("删除采集点分组失败", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return wrapUnifiedCollectorRepositoryError("提交删除采集点分组事务失败", err)
+	}
+	return nil
+}
+
+func (r *CollectorRepository) ListPointCodes(ctx context.Context, projectID, connectionID string) ([]string, error) {
+	rows, err := r.pool.Query(ctx, `SELECT code FROM data_collector_points WHERE project_id=$1 AND connection_id=$2`, projectID, connectionID)
+	if err != nil {
+		return nil, wrapUnifiedCollectorRepositoryError("查询采集点编码失败", err)
+	}
+	defer rows.Close()
+	result := []string{}
+	for rows.Next() {
+		var code string
+		if err := rows.Scan(&code); err != nil {
+			return nil, err
+		}
+		result = append(result, code)
+	}
+	return result, rows.Err()
+}
+
+func (r *CollectorRepository) ListExistingPointAddressTexts(ctx context.Context, projectID, connectionID string, addressTexts []string) ([]string, error) {
+	if len(addressTexts) == 0 {
+		return []string{}, nil
+	}
+	rows, err := r.pool.Query(ctx, `SELECT address_text FROM data_collector_points WHERE project_id=$1 AND connection_id=$2 AND address_text=ANY($3::text[])`, projectID, connectionID, addressTexts)
+	if err != nil {
+		return nil, wrapUnifiedCollectorRepositoryError("查询已存在采集点地址失败", err)
+	}
+	defer rows.Close()
+	result := make([]string, 0, len(addressTexts))
+	for rows.Next() {
+		var addressText string
+		if err := rows.Scan(&addressText); err != nil {
+			return nil, err
+		}
+		result = append(result, addressText)
+	}
+	return result, rows.Err()
 }
 
 func (r *CollectorRepository) ListPoints(ctx context.Context, projectID, connectionID string, filter CollectorPointListFilter) ([]CollectorPointRecord, int, error) {
@@ -193,7 +278,7 @@ func (r *CollectorRepository) UpdatePointsBatch(ctx context.Context, params []Up
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "采集点不存在")
 		}
 		interval := collectorRefreshInterval(item.Acquisition)
-		_, err = tx.Exec(ctx, `UPDATE data_points SET path=$2,name=$3,description=$4,data_type=$5,refresh_mode='auto',refresh_interval_ms=$6,status=$7,display_order=$8,updated_by=$9,updated_at=now() WHERE project_id=$1 AND source_type='collector.point' AND source_id=$10`, item.ProjectID, collectorPointPath(item.ConnectionID, item.Code), item.Name, item.Description, item.DataType, interval, collectorDataPointStatus(item.Enabled), item.SortOrder, item.UserID, item.ID)
+		_, err = tx.Exec(ctx, `UPDATE data_points SET path=$2,name=$3,description=$4,data_type=$5,refresh_mode='auto',refresh_interval_ms=$6,status=$7,display_order=$8,updated_by=$9,updated_at=now() WHERE project_id=$1 AND source_type='collector.point' AND source_id=$10`, item.ProjectID, collectorPointPath(item.ConnectionCode, item.Code), item.Name, item.Description, item.DataType, interval, collectorDataPointStatus(item.Enabled), item.SortOrder, item.UserID, item.ID)
 		if err != nil {
 			return nil, translateCollectorWriteError("更新采集点映射数据点失败", err)
 		}
@@ -277,7 +362,7 @@ func insertCollectorPointAndDataPoint(ctx context.Context, tx pgx.Tx, item Creat
 	}
 	sourceConfig := `{}`
 	interval := collectorRefreshInterval(item.Acquisition)
-	_, err = tx.Exec(ctx, `INSERT INTO data_points (project_id,path,name,description,source_type,source_id,source_config,data_type,refresh_mode,refresh_interval_ms,status,display_order,created_by,updated_by) VALUES ($1,$2,$3,$4,'collector.point',$5,$6::jsonb,$7,'auto',$8,$9,$10,$11,$11)`, item.ProjectID, collectorPointPath(item.ConnectionID, item.Code), item.Name, item.Description, item.ID, sourceConfig, item.DataType, interval, collectorDataPointStatus(item.Enabled), item.SortOrder, item.UserID)
+	_, err = tx.Exec(ctx, `INSERT INTO data_points (project_id,path,name,description,source_type,source_id,source_config,data_type,refresh_mode,refresh_interval_ms,status,display_order,created_by,updated_by) VALUES ($1,$2,$3,$4,'collector.point',$5,$6::jsonb,$7,'auto',$8,$9,$10,$11,$11)`, item.ProjectID, collectorPointPath(item.ConnectionCode, item.Code), item.Name, item.Description, item.ID, sourceConfig, item.DataType, interval, collectorDataPointStatus(item.Enabled), item.SortOrder, item.UserID)
 	if err != nil {
 		return translateCollectorWriteError("创建采集点映射数据点失败", err)
 	}
@@ -373,11 +458,8 @@ func decodeCollectorPointJSON(payload []byte, target *map[string]any) error {
 	return nil
 }
 
-func collectorPointPath(connectionID, code string) string {
-	prefix := strings.ReplaceAll(connectionID, "-", "")
-	if len(prefix) > 8 {
-		prefix = prefix[:8]
-	}
+func collectorPointPath(connectionCode, code string) string {
+	prefix := strings.TrimSpace(connectionCode)
 	var builder strings.Builder
 	for _, char := range strings.TrimSpace(code) {
 		if unicode.IsLetter(char) || unicode.IsDigit(char) || char == '.' || char == '_' || char == '-' {

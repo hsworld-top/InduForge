@@ -1607,7 +1607,10 @@ func mountCollectorPointRoutes(mux *http.ServeMux, opts options) {
 	base := "/api/v1/data/projects/{projectId}/collector/connections/{connectionId}"
 	mux.Handle("GET "+base+"/point-groups", read(opts.collectorPointHandler.ListGroups))
 	mux.Handle("POST "+base+"/point-groups", write(opts.collectorPointHandler.CreateGroup))
+	mux.Handle("PUT "+base+"/point-groups/{groupId}", write(opts.collectorPointHandler.UpdateGroup))
+	mux.Handle("DELETE "+base+"/point-groups/{groupId}", write(opts.collectorPointHandler.DeleteGroup))
 	mux.Handle("GET "+base+"/points", read(opts.collectorPointHandler.ListPoints))
+	mux.Handle("POST "+base+"/points/check-addresses", read(opts.collectorPointHandler.CheckAddresses))
 	mux.Handle("POST "+base+"/points/batch", write(opts.collectorPointHandler.CreateBatch))
 	mux.Handle("POST "+base+"/points/update-batch", write(opts.collectorPointHandler.UpdateBatch))
 	mux.Handle("POST "+base+"/points/delete-batch", write(opts.collectorPointHandler.DeleteBatch))
