@@ -20,4 +20,14 @@ public sealed class OpcUaAddressMapperTests
         Assert.Equal("float64", OpcUaAddressMapper.MapDataType(BuiltInType.Double));
         Assert.Equal("datetime", OpcUaAddressMapper.MapDataType(BuiltInType.DateTime));
     }
+
+    [Fact]
+    public void RejectsNodeIdWithoutIdentifierType()
+    {
+        var address = JsonSerializer.SerializeToElement(new { nodeId = "111" });
+
+        var exception = Assert.Throws<OpcUaDriverException>(() => OpcUaAddressMapper.ParseNodeId(address));
+
+        Assert.Equal("OPCUA_NODE_ID_INVALID", exception.Code);
+    }
 }

@@ -6,6 +6,7 @@ namespace InduForge.Collector.DevAgent.Tests;
 
 public sealed class CollectorTaskExecutorTests
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     [Fact]
     public async Task ExecuteAsyncRejectsUnsupportedOperation()
     {
@@ -39,8 +40,50 @@ public sealed class CollectorTaskExecutorTests
         var result = await new CollectorTaskExecutor(CreateRegistry()).ExecuteAsync(task, CancellationToken.None);
 
         Assert.Equal("succeeded", result.Status);
-        var readResult = Assert.IsType<ReadResult>(result.Result);
-        Assert.Equal("ns=2;s=Temperature", Assert.Single(readResult.Values).NodeId);
+        var readResult = JsonSerializer.SerializeToElement(result.Result, JsonOptions);
+        var value = Assert.Single(readResult.GetProperty("values").EnumerateArray());
+        Assert.Equal("point-1", value.GetProperty("pointId").GetString());
+        Assert.True(value.GetProperty("succeeded").GetBoolean());
+        Assert.Equal(12.5, value.GetProperty("value").GetDouble());
+        Assert.Equal("Good", value.GetProperty("quality").GetString());
+    }
+
+    [Fact]
+    public async Task ExecutePointReadKeepsValidPointsWhenOneAddressIsInvalid()
+    {
+        var request = JsonSerializer.SerializeToElement(new
+        {
+            driverId = "test.driver",
+            driverVersion = "1.0.0",
+            schemaVersion = 1,
+            connection = new { protocolFamily = "opcua", config = new { host = "127.0.0.1", port = 18540, endpointPath = "/induforge/sim", securityMode = "None", securityPolicy = "None", authenticationType = "anonymous" }, secrets = new { } },
+            input = new
+            {
+                points = new object[]
+                {
+                    new { pointId = "point-1", address = new { nodeId = "ns=2;s=Temperature" } },
+                    new { pointId = "point-2", address = new { nodeId = "111" } },
+                    new { pointId = "point-3", address = new { nodeId = "i=32851" } },
+                },
+            },
+        });
+        var task = new CollectorTaskEnvelope("task-1", "project-1", "agent-1", "point.read", "running", request, "2026-07-21 08:50:25");
+
+        var result = await new CollectorTaskExecutor(CreateRegistry()).ExecuteAsync(task, CancellationToken.None);
+
+        Assert.Equal("succeeded", result.Status);
+        var values = JsonSerializer.SerializeToElement(result.Result, JsonOptions)
+            .GetProperty("values")
+            .EnumerateArray()
+            .ToArray();
+        Assert.Equal(3, values.Length);
+        Assert.True(values[0].GetProperty("succeeded").GetBoolean());
+        Assert.Equal("point-1", values[0].GetProperty("pointId").GetString());
+        Assert.False(values[1].GetProperty("succeeded").GetBoolean());
+        Assert.Equal("point-2", values[1].GetProperty("pointId").GetString());
+        Assert.Equal("OPCUA_NODE_ID_INVALID", values[1].GetProperty("errorCode").GetString());
+        Assert.True(values[2].GetProperty("succeeded").GetBoolean());
+        Assert.Equal("point-3", values[2].GetProperty("pointId").GetString());
     }
 
     [Fact]
@@ -72,6 +115,44 @@ public sealed class CollectorTaskExecutorTests
         Assert.Equal(1, state.SessionBrowseCount);
         Assert.Equal(0, state.OneShotBrowseCount);
         Assert.Equal(1, state.DisposeCount);
+    }
+
+    [Fact]
+    public async Task LongConnectionReusesSessionForPointRead()
+    {
+        var state = new SessionDriverState();
+        await using var executor = new CollectorTaskExecutor(
+            new DriverRegistry([() => new SessionDriver(state)]));
+        var connectionId = Guid.NewGuid();
+        var workspaceSessionId = Guid.NewGuid();
+        await executor.ExecuteAsync(
+            CreateSessionTask(DriverOperations.ConnectionOpen, connectionId, new { workspaceSessionId }),
+            CancellationToken.None);
+
+        var result = await executor.ExecuteAsync(
+            CreateSessionTask(
+                DriverOperations.PointRead,
+                connectionId,
+                new
+                {
+                    workspaceSessionId,
+                    points = new[]
+                    {
+                        new
+                        {
+                            pointId = "point-1",
+                            address = new { nodeId = "ns=2;s=Temperature" },
+                        },
+                    },
+                }),
+            CancellationToken.None);
+
+        Assert.Equal("succeeded", result.Status);
+        Assert.Equal(1, state.OpenCount);
+        Assert.Equal(1, state.SessionReadCount);
+        Assert.Equal(0, state.OneShotReadCount);
+        var readResult = JsonSerializer.SerializeToElement(result.Result, JsonOptions);
+        Assert.Equal("point-1", Assert.Single(readResult.GetProperty("values").EnumerateArray()).GetProperty("pointId").GetString());
     }
 
     [Fact]
@@ -210,13 +291,16 @@ public sealed class CollectorTaskExecutorTests
         public int OpenCount { get; set; }
         public int SessionBrowseCount { get; set; }
         public int OneShotBrowseCount { get; set; }
+        public int SessionReadCount { get; set; }
+        public int OneShotReadCount { get; set; }
         public int DisposeCount { get; set; }
     }
 
     private sealed class SessionDriver(SessionDriverState state) :
         IIndustrialDriver,
         IConnectionSessionDriver,
-        IDeviceBrowser
+        IDeviceBrowser,
+        IPointReader
     {
         public DriverDescriptor Descriptor { get; } = new(
             "opcua",
@@ -228,6 +312,7 @@ public sealed class CollectorTaskExecutorTests
                 DriverOperations.ConnectionOpen,
                 DriverOperations.ConnectionClose,
                 DriverOperations.DeviceBrowse,
+                DriverOperations.PointRead,
             ]);
 
         public Task<ConnectionTestResult> TestConnectionAsync(
@@ -251,11 +336,21 @@ public sealed class CollectorTaskExecutorTests
             state.OneShotBrowseCount++;
             return Task.FromResult(new BrowseResult([], []));
         }
+
+        public Task<ReadResult> ReadAsync(
+            ConnectionProfile profile,
+            ReadRequest request,
+            CancellationToken cancellationToken)
+        {
+            state.OneShotReadCount++;
+            return Task.FromResult(CreateReadResult(request));
+        }
     }
 
     private sealed class SessionDriverSession(SessionDriverState state) :
         IIndustrialConnectionSession,
-        IDeviceBrowserSession
+        IDeviceBrowserSession,
+        IPointReaderSession
     {
         public bool IsConnected { get; private set; } = true;
 
@@ -267,6 +362,12 @@ public sealed class CollectorTaskExecutorTests
             return Task.FromResult(new BrowseResult([], []));
         }
 
+        public Task<ReadResult> ReadAsync(ReadRequest request, CancellationToken cancellationToken)
+        {
+            state.SessionReadCount++;
+            return Task.FromResult(CreateReadResult(request));
+        }
+
         public ValueTask DisposeAsync()
         {
             IsConnected = false;
@@ -274,6 +375,19 @@ public sealed class CollectorTaskExecutorTests
             return ValueTask.CompletedTask;
         }
     }
+    private static ReadResult CreateReadResult(ReadRequest request) =>
+        new(
+            request.NodeIds
+                .Select(nodeId => new IndustrialDataValue(
+                    nodeId,
+                    12.5,
+                    "float64",
+                    "Good",
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow))
+                .ToArray(),
+            []);
+
     private sealed class TestDriver : IIndustrialDriver, IPointReader
     {
         public DriverDescriptor Descriptor { get; } = new(

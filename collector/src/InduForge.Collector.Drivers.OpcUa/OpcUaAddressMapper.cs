@@ -19,7 +19,7 @@ public static class OpcUaAddressMapper
         {
             return NodeId.Parse(nodeIdElement.GetString()).ToString();
         }
-        catch (Exception exception) when (exception is FormatException or ServiceResultException)
+        catch (Exception exception) when (exception is ArgumentException or FormatException or ServiceResultException)
         {
             throw new OpcUaDriverException("OPCUA_NODE_ID_INVALID", "OPC UA NodeId 无效", retryable: false, exception);
         }

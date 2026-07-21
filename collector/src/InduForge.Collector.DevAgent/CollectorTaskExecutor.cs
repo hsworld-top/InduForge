@@ -148,34 +148,85 @@ internal sealed class CollectorTaskExecutor : IAsyncDisposable
             false);
     }
 
-    private async Task<ReadResult> ReadAsync(
+    private async Task<CollectorPointReadResult> ReadAsync(
         IIndustrialDriver driver,
         string? sessionKey,
         ConnectionProfile profile,
         JsonElement input,
         CancellationToken cancellationToken)
     {
-        var request = CreateReadRequest(input);
-        if (sessionKey is not null)
+        var taskRequest = CreateReadRequest(input);
+        ReadResult result = new([], []);
+        if (taskRequest.Request.NodeIds.Count > 0)
         {
-            var session = await _sessions.GetAsync(sessionKey, cancellationToken).ConfigureAwait(false);
-            if (session is not IPointReaderSession readerSession)
+            if (sessionKey is not null)
+            {
+                var session = await _sessions.GetAsync(sessionKey, cancellationToken).ConfigureAwait(false);
+                if (session is not IPointReaderSession readerSession)
+                {
+                    throw new CollectorTaskExecutionException(
+                        "COLLECTOR_SESSION_OPERATION_UNSUPPORTED",
+                        "当前长连接不支持变量读取",
+                        false);
+                }
+                result = await readerSession.ReadAsync(taskRequest.Request, cancellationToken).ConfigureAwait(false);
+            }
+            else if (driver is IPointReader reader)
+            {
+                result = await reader.ReadAsync(profile, taskRequest.Request, cancellationToken).ConfigureAwait(false);
+            }
+            else
             {
                 throw new CollectorTaskExecutionException(
-                    "COLLECTOR_SESSION_OPERATION_UNSUPPORTED",
-                    "当前长连接不支持变量读取",
+                    "COLLECTOR_OPERATION_UNSUPPORTED",
+                    "当前驱动不支持变量读取",
                     false);
             }
-            return await readerSession.ReadAsync(request, cancellationToken).ConfigureAwait(false);
         }
-        if (driver is IPointReader reader)
+
+        var values = taskRequest.Items.Select(item =>
         {
-            return await reader.ReadAsync(profile, request, cancellationToken).ConfigureAwait(false);
-        }
-        throw new CollectorTaskExecutionException(
-            "COLLECTOR_OPERATION_UNSUPPORTED",
-            "当前驱动不支持变量读取",
-            false);
+            if (item.ResultIndex is null)
+            {
+                return new CollectorPointReadValue(
+                    item.PointId,
+                    false,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    item.ErrorCode,
+                    item.ErrorMessage);
+            }
+
+            if (item.ResultIndex.Value >= result.Values.Count)
+            {
+                return new CollectorPointReadValue(
+                    item.PointId,
+                    false,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    "COLLECTOR_POINT_RESULT_MISSING",
+                    "驱动未返回该变量的读取结果");
+            }
+
+            var value = result.Values[item.ResultIndex.Value];
+            return new CollectorPointReadValue(
+                item.PointId,
+                true,
+                value.Value,
+                value.DataType,
+                value.Quality,
+                value.SourceTimestamp,
+                value.ServerTimestamp,
+                null,
+                null);
+        }).ToArray();
+        return new CollectorPointReadResult(values, result.Diagnostics);
     }
 
     private static ConnectionProfile CreateProfile(CollectorTaskConnection connection)
@@ -265,7 +316,7 @@ internal sealed class CollectorTaskExecutor : IAsyncDisposable
         return ([new BrowseRequest(parentNodeId, maxDepth)], false);
     }
 
-    private static ReadRequest CreateReadRequest(JsonElement input)
+    private static CollectorPointReadRequest CreateReadRequest(JsonElement input)
     {
         if (!input.TryGetProperty("points", out var points) || points.ValueKind != JsonValueKind.Array)
         {
@@ -274,23 +325,77 @@ internal sealed class CollectorTaskExecutor : IAsyncDisposable
                 "Read 任务缺少 points",
                 false);
         }
-        var nodeIds = points.EnumerateArray().Select(point =>
+        var items = new List<CollectorPointReadRequestItem>();
+        var nodeIds = new List<string>();
+        foreach (var point in points.EnumerateArray())
         {
-            if (!point.TryGetProperty("address", out var address))
+            if (!point.TryGetProperty("pointId", out var pointIdElement) ||
+                string.IsNullOrWhiteSpace(pointIdElement.GetString()))
             {
                 throw new CollectorTaskExecutionException(
-                    "COLLECTOR_POINT_ADDRESS_REQUIRED",
-                    "采集点缺少结构化地址",
+                    "COLLECTOR_POINT_ID_REQUIRED",
+                    "采集点缺少 pointId",
                     false);
             }
-            return OpcUaAddressMapper.ParseNodeId(address);
-        }).ToArray();
-        return new ReadRequest(nodeIds);
+
+            var pointId = pointIdElement.GetString()!;
+            if (!point.TryGetProperty("address", out var address))
+            {
+                items.Add(new CollectorPointReadRequestItem(
+                    pointId,
+                    null,
+                    "COLLECTOR_POINT_ADDRESS_REQUIRED",
+                    "采集点缺少结构化地址"));
+                continue;
+            }
+
+            // 单项地址错误不应中断整批读取；仅把合法地址交给驱动，并保留原始结果顺序。
+            try
+            {
+                var nodeId = OpcUaAddressMapper.ParseNodeId(address);
+                items.Add(new CollectorPointReadRequestItem(pointId, nodeIds.Count, null, null));
+                nodeIds.Add(nodeId);
+            }
+            catch (OpcUaDriverException exception)
+            {
+                items.Add(new CollectorPointReadRequestItem(
+                    pointId,
+                    null,
+                    exception.Code,
+                    exception.Message));
+            }
+        }
+        return new CollectorPointReadRequest(items, new ReadRequest(nodeIds));
     }
 
     private static CollectorTaskCompletion Failed(string code, string message, bool retryable) =>
         new("failed", null, new CollectorTaskFailure(code, message, retryable));
 }
+
+internal sealed record CollectorPointReadRequest(
+    IReadOnlyList<CollectorPointReadRequestItem> Items,
+    ReadRequest Request);
+
+internal sealed record CollectorPointReadRequestItem(
+    string PointId,
+    int? ResultIndex,
+    string? ErrorCode,
+    string? ErrorMessage);
+
+internal sealed record CollectorPointReadValue(
+    string PointId,
+    bool Succeeded,
+    object? Value,
+    string? DataType,
+    string? Quality,
+    DateTimeOffset? SourceTimestamp,
+    DateTimeOffset? ServerTimestamp,
+    string? ErrorCode,
+    string? ErrorMessage);
+
+internal sealed record CollectorPointReadResult(
+    IReadOnlyList<CollectorPointReadValue> Values,
+    IReadOnlyList<DriverDiagnostic> Diagnostics);
 
 internal sealed record CollectorTaskRequest(
     string ConnectionId,
