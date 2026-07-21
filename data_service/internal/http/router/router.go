@@ -1610,6 +1610,7 @@ func mountCollectorPointRoutes(mux *http.ServeMux, opts options) {
 	mux.Handle("PUT "+base+"/point-groups/{groupId}", write(opts.collectorPointHandler.UpdateGroup))
 	mux.Handle("DELETE "+base+"/point-groups/{groupId}", write(opts.collectorPointHandler.DeleteGroup))
 	mux.Handle("GET "+base+"/points", read(opts.collectorPointHandler.ListPoints))
+	mux.Handle("POST "+base+"/points/export", read(opts.collectorPointHandler.ExportPoints))
 	mux.Handle("POST "+base+"/points/check-addresses", read(opts.collectorPointHandler.CheckAddresses))
 	mux.Handle("POST "+base+"/points/batch", write(opts.collectorPointHandler.CreateBatch))
 	mux.Handle("POST "+base+"/points/update-batch", write(opts.collectorPointHandler.UpdateBatch))

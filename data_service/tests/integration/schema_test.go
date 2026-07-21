@@ -82,6 +82,47 @@ func TestCollectorPointGroupDeleteMovesSubtreePointsToParent(t *testing.T) {
 	}
 }
 
+func TestCollectorPointBatchCreateSkipsConflictsAndExportsSpecifiedPages(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	fixture := setupTestDatabase(t, ctx)
+	initializer := setupSchemaInitializer(t, fixture.pool)
+	if err := initializer.Ensure(ctx); err != nil {
+		t.Fatalf("初始化数据库结构失败: %v", err)
+	}
+	projectID := "550e8400-e29b-41d4-a716-446655440100"
+	connectionID := "550e8400-e29b-41d4-a716-446655440110"
+	userID := "550e8400-e29b-41d4-a716-446655440101"
+	_, err := fixture.pool.Exec(ctx, `INSERT INTO data_collector_connections (id,project_id,name,code,status,display_order,protocol_family,driver_id,driver_version,schema_version,config,metadata,created_by) VALUES ($1,$2,'批量测试连接','batch_test','unknown',0,'opcua','opcua.standard','1.0.0',2,'{}','{}',$3); INSERT INTO data_collector_points (id,project_id,connection_id,code,name,address,address_text,address_schema_version,data_type,element_count,read_options,acquisition,enabled,sort_order,metadata) VALUES ('550e8400-e29b-41d4-a716-446655440120',$2,$1,'existing','Existing','{"nodeId":"ns=2;s=Existing"}','ns=2;s=Existing',2,'float32',1,'{}','{"intervalMs":1000}',true,0,'{}')`, connectionID, projectID, userID)
+	if err != nil {
+		t.Fatalf("准备批量创建测试数据失败: %v", err)
+	}
+	repo := repository.NewCollectorRepository(fixture.pool)
+	params := []repository.CreateCollectorPointParams{
+		{ID: "550e8400-e29b-41d4-a716-446655440121", ProjectID: projectID, ConnectionID: connectionID, ConnectionCode: "batch_test", UserID: userID, Code: "existing_2", Name: "existing", Address: map[string]any{"nodeId": "ns=2;s=Existing2"}, AddressText: "ns=2;s=Existing2", AddressSchemaVersion: 2, DataType: "float32", ElementCount: 1, ReadOptions: map[string]any{}, Acquisition: map[string]any{"intervalMs": 1000}, Enabled: true, Metadata: map[string]any{}},
+		{ID: "550e8400-e29b-41d4-a716-446655440122", ProjectID: projectID, ConnectionID: connectionID, ConnectionCode: "batch_test", UserID: userID, Code: "pressure", Name: "Pressure", Address: map[string]any{"nodeId": "ns=2;s=Pressure"}, AddressText: "ns=2;s=Pressure", AddressSchemaVersion: 2, DataType: "float32", ElementCount: 1, ReadOptions: map[string]any{}, Acquisition: map[string]any{"intervalMs": 1000}, Enabled: true, SortOrder: 1, Metadata: map[string]any{}},
+		{ID: "550e8400-e29b-41d4-a716-446655440123", ProjectID: projectID, ConnectionID: connectionID, ConnectionCode: "batch_test", UserID: userID, Code: "temperature", Name: "Temperature", Address: map[string]any{"nodeId": "ns=2;s=Temperature"}, AddressText: "ns=2;s=Temperature", AddressSchemaVersion: 2, DataType: "float32", ElementCount: 1, ReadOptions: map[string]any{}, Acquisition: map[string]any{"intervalMs": 1000}, Enabled: true, SortOrder: 2, Metadata: map[string]any{}},
+	}
+	created, err := repo.CreatePointsBatch(ctx, params)
+	if err != nil {
+		t.Fatalf("批量创建变量失败: %v", err)
+	}
+	if len(created) != 2 {
+		t.Fatalf("创建数量 = %d, want 2", len(created))
+	}
+	exported := make([]repository.CollectorPointExportRecord, 0)
+	err = repo.StreamPointsForExport(ctx, projectID, connectionID, repository.CollectorPointExportFilter{Scope: "pages", PageSize: 1, Pages: []int64{2}, SortBy: "sortOrder", SortOrder: "asc"}, func(record repository.CollectorPointExportRecord) error {
+		exported = append(exported, record)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("导出指定页面失败: %v", err)
+	}
+	if len(exported) != 1 {
+		t.Fatalf("导出数量 = %d, want 1", len(exported))
+	}
+}
+
 func TestSchemaInitializer_CreatesCoreTables(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -130,6 +171,7 @@ func TestSchemaInitializer_CreatesCoreTables(t *testing.T) {
 		"data_collector_connections",
 		"data_collector_point_groups",
 		"data_collector_points",
+		"data_collector_point_debug_snapshots",
 		"data_collector_import_sessions",
 		"data_tdengine_configs",
 		"data_preview_sessions",
@@ -206,6 +248,7 @@ func TestSchemaInitializer_CreatesIndexes(t *testing.T) {
 		"data_collector_connections_project_driver_idx",
 		"data_collector_point_groups_parent_order_idx",
 		"data_collector_points_list_idx",
+		"data_collector_points_connection_name_key",
 		"data_tdengine_configs_database_idx",
 		"data_preview_sessions_project_user_status_idx",
 		"data_preview_sessions_last_active_at_idx",

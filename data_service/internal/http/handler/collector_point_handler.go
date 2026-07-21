@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"mime"
 	"net/http"
 	"strings"
 
@@ -110,6 +111,28 @@ func (h *CollectorPointHandler) ListPoints(w http.ResponseWriter, r *http.Reques
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
 }
+func (h *CollectorPointHandler) ExportPoints(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	var input service.CollectorPointExportRequest
+	if err := decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	plan, err := h.service.PreparePointExport(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), input)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	disposition := mime.FormatMediaType("attachment", map[string]string{"filename": plan.FileName})
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", disposition)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if err := plan.WriteCSV(r.Context(), w); err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	return nil
+}
+
 func (h *CollectorPointHandler) CheckAddresses(w http.ResponseWriter, r *http.Request) error {
 	if _, err := requireClaims(r); err != nil {
 		return err
@@ -143,7 +166,7 @@ func (h *CollectorPointHandler) CreateBatch(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"list": result})
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
 }
 func (h *CollectorPointHandler) UpdateBatch(w http.ResponseWriter, r *http.Request) error {

@@ -118,6 +118,82 @@ func TestCollectorDevVerticalLoop(t *testing.T) {
 	if task.Status != "succeeded" {
 		t.Fatalf("期望 succeeded，实际 %q", task.Status)
 	}
+	pointResponse := doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/collector/connections/"+connection.ID+"/points/batch", adminToken, map[string]any{
+		"points": []map[string]any{{
+			"name": "Temperature", "address": map[string]any{"nodeId": "ns=2;s=Temperature"},
+			"dataType": "float32", "elementCount": 1, "readOptions": map[string]any{},
+			"acquisition": map[string]any{"intervalMs": 1000}, "enabled": true, "sortOrder": 0, "metadata": map[string]any{},
+		}},
+	})
+	var pointBatch struct {
+		List []struct {
+			ID string `json:"id"`
+		} `json:"list"`
+	}
+	mustDecodeCollectorData(t, pointResponse.Data, &pointBatch)
+	if len(pointBatch.List) != 1 {
+		t.Fatalf("期望创建 1 个变量，实际 %#v", pointBatch.List)
+	}
+	pointID := pointBatch.List[0].ID
+	workspaceSessionID := uuid.NewString()
+
+	readTaskResponse := doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/collector-dev/tasks", adminToken, map[string]any{
+		"agentId": agent.AgentID, "connectionId": connection.ID, "operation": "point.read",
+		"input": map[string]any{"workspaceSessionId": workspaceSessionID, "pointIds": []string{pointID}}, "timeoutSeconds": 30,
+	})
+	mustDecodeCollectorData(t, readTaskResponse.Data, &task)
+	claimed = doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/agent/tasks/claim", agent.AgentToken, map[string]any{})
+	mustDecodeCollectorData(t, claimed.Data, &task)
+	doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/agent/tasks/"+task.TaskID+"/complete", agent.AgentToken, map[string]any{
+		"status": "succeeded",
+		"result": map[string]any{"values": []map[string]any{{
+			"pointId": pointID, "succeeded": true, "value": 12.5, "dataType": "float64", "quality": "Good",
+			"sourceTimestamp": "2026-07-20T01:02:03Z", "serverTimestamp": "2026-07-20T01:02:04Z",
+			"errorCode": nil, "errorMessage": nil,
+		}}, "diagnostics": []any{}},
+		"error": nil,
+	})
+
+	type pointSnapshotPage struct {
+		List []struct {
+			ID                  string `json:"id"`
+			LatestDebugSnapshot *struct {
+				Value             float64 `json:"value"`
+				ValueText         string  `json:"valueText"`
+				Quality           string  `json:"quality"`
+				LastAttemptStatus string  `json:"lastAttemptStatus"`
+				LastErrorMessage  *string `json:"lastErrorMessage"`
+			} `json:"latestDebugSnapshot"`
+		} `json:"list"`
+	}
+	loadSnapshotPage := func() pointSnapshotPage {
+		response := doJSONRequest(t, http.MethodGet, server.URL+"/api/v1/data/projects/"+projectID+"/collector/connections/"+connection.ID+"/points?page=1&pageSize=50", adminToken, nil)
+		var page pointSnapshotPage
+		mustDecodeCollectorData(t, response.Data, &page)
+		return page
+	}
+	page := loadSnapshotPage()
+	if len(page.List) != 1 || page.List[0].LatestDebugSnapshot == nil || page.List[0].LatestDebugSnapshot.ValueText != "12.5" || page.List[0].LatestDebugSnapshot.Quality != "Good" {
+		t.Fatalf("变量最近调试快照不符合预期: %#v", page.List)
+	}
+
+	failedTaskResponse := doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/collector-dev/tasks", adminToken, map[string]any{
+		"agentId": agent.AgentID, "connectionId": connection.ID, "operation": "point.read",
+		"input": map[string]any{"workspaceSessionId": workspaceSessionID, "pointIds": []string{pointID}}, "timeoutSeconds": 30,
+	})
+	mustDecodeCollectorData(t, failedTaskResponse.Data, &task)
+	claimed = doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/agent/tasks/claim", agent.AgentToken, map[string]any{})
+	mustDecodeCollectorData(t, claimed.Data, &task)
+	doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/agent/tasks/"+task.TaskID+"/complete", agent.AgentToken, map[string]any{
+		"status": "failed", "result": nil,
+		"error": map[string]any{"code": "COLLECTOR_SESSION_LOST", "message": "连接已断开", "retryable": true},
+	})
+	page = loadSnapshotPage()
+	snapshot := page.List[0].LatestDebugSnapshot
+	if snapshot == nil || snapshot.Value != 12.5 || snapshot.LastAttemptStatus != "failed" || snapshot.LastErrorMessage == nil || *snapshot.LastErrorMessage != "连接已断开" {
+		t.Fatalf("读取失败后应保留最近成功值: %#v", snapshot)
+	}
+
 	doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/agent/revoke", agent.AgentToken, map[string]any{})
 	doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/agent/heartbeat", agent.AgentToken, map[string]any{"capabilities": capabilities}, http.StatusUnauthorized)
 	invalidResponse := doJSONRequest(t, http.MethodGet, server.URL+"/api/v1/data/collector-dev/agents?page=1&pageSize=10", adminToken, nil)

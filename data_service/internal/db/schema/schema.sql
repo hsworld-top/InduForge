@@ -368,6 +368,27 @@ CREATE TABLE data_collector_points (
 
 
 --
+-- Name: data_collector_point_debug_snapshots; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE data_collector_point_debug_snapshots (
+    point_id uuid NOT NULL,
+    value jsonb,
+    value_text text,
+    data_type text,
+    quality text,
+    source_timestamp timestamp with time zone,
+    server_timestamp timestamp with time zone,
+    read_at timestamp with time zone,
+    last_attempt_status text NOT NULL,
+    last_attempt_at timestamp with time zone NOT NULL,
+    last_error_code text,
+    last_error_message text,
+    CONSTRAINT data_collector_point_debug_snapshots_status_check CHECK ((last_attempt_status = ANY (ARRAY['succeeded'::text, 'failed'::text])))
+);
+
+
+--
 -- Name: data_compute_folders; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1415,6 +1436,14 @@ ALTER TABLE ONLY data_collector_point_groups
 
 
 --
+-- Name: data_collector_point_debug_snapshots data_collector_point_debug_snapshots_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_collector_point_debug_snapshots
+    ADD CONSTRAINT data_collector_point_debug_snapshots_pkey PRIMARY KEY (point_id);
+
+
+--
 -- Name: data_collector_points data_collector_points_connection_code_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2045,6 +2074,13 @@ CREATE INDEX data_collector_points_address_gin_idx ON data_collector_points USIN
 --
 
 CREATE INDEX data_collector_points_address_text_trgm_idx ON data_collector_points USING gin (address_text gin_trgm_ops);
+
+
+--
+-- Name: data_collector_points_connection_name_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX data_collector_points_connection_name_key ON data_collector_points USING btree (project_id, connection_id, lower(name));
 
 
 --
@@ -2686,6 +2722,14 @@ ALTER TABLE ONLY data_collector_point_groups
 
 ALTER TABLE ONLY data_collector_point_groups
     ADD CONSTRAINT data_collector_point_groups_parent_fkey FOREIGN KEY (parent_id, project_id, connection_id) REFERENCES data_collector_point_groups(id, project_id, connection_id) ON DELETE CASCADE;
+
+
+--
+-- Name: data_collector_point_debug_snapshots data_collector_point_debug_snapshots_point_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_collector_point_debug_snapshots
+    ADD CONSTRAINT data_collector_point_debug_snapshots_point_fkey FOREIGN KEY (point_id) REFERENCES data_collector_points(id) ON DELETE CASCADE;
 
 
 --

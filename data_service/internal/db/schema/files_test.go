@@ -16,6 +16,7 @@ func TestEmbeddedSchemaContainsFinalStructure(t *testing.T) {
 		"data_connections",
 		"data_collector_connections",
 		"data_collector_points",
+		"data_collector_point_debug_snapshots",
 		"collector_dev_agents",
 		"data_storage_policies",
 	} {
@@ -29,6 +30,32 @@ func TestEmbeddedSchemaContainsFinalStructure(t *testing.T) {
 	}
 	if strings.Contains(baseline, "schema_migrations") {
 		t.Fatalf("数据库结构基线不得包含迁移版本表")
+	}
+}
+
+func TestCollectorPointDebugSnapshotSchemaUsesCascadeDelete(t *testing.T) {
+	payload, err := Files.ReadFile("schema.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseline := string(payload)
+	if !strings.Contains(baseline, "CREATE TABLE data_collector_point_debug_snapshots (") {
+		t.Fatal("数据库结构基线缺少采集变量调试快照表")
+	}
+	if !strings.Contains(baseline, "FOREIGN KEY (point_id) REFERENCES data_collector_points(id) ON DELETE CASCADE") {
+		t.Fatal("采集变量删除时必须级联删除调试快照")
+	}
+}
+
+func TestCollectorPointSchemaEnforcesConnectionNameUniqueness(t *testing.T) {
+	payload, err := Files.ReadFile("schema.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseline := string(payload)
+	expected := "CREATE UNIQUE INDEX data_collector_points_connection_name_key ON data_collector_points USING btree (project_id, connection_id, lower(name));"
+	if !strings.Contains(baseline, expected) {
+		t.Fatal("采集变量名称必须在同一连接内忽略大小写唯一")
 	}
 }
 

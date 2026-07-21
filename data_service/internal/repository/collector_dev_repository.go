@@ -357,7 +357,8 @@ func (r *CollectorDevRepository) ClaimTask(ctx context.Context, agentID string) 
 }
 
 func (r *CollectorDevRepository) CompleteTask(ctx context.Context, params CompleteCollectorTaskParams) (*CollectorDevTaskRecord, error) {
-	var resultPayload any
+	var resultPayload []byte
+	var resultPayloadText any
 	if params.Result != nil {
 		payload, err := json.Marshal(params.Result)
 		if err != nil {
@@ -366,17 +367,53 @@ func (r *CollectorDevRepository) CompleteTask(ctx context.Context, params Comple
 		if len(payload) > 2*1024*1024 {
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "调试任务结果不能超过 2 MB")
 		}
-		resultPayload = string(payload)
+		resultPayload = payload
+		resultPayloadText = string(payload)
 	}
-	record, err := scanCollectorTask(r.pool.QueryRow(ctx, `
-		UPDATE collector_dev_tasks SET status = $3, result_payload = CASE WHEN $4::text IS NULL THEN NULL ELSE $4::jsonb END, error_code = NULLIF($5, ''), error_message = NULLIF($6, ''), finished_at = now(), updated_at = now()
+
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, wrapCollectorRepositoryError("开始完成调试任务事务失败", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	locked, err := scanCollectorTask(tx.QueryRow(ctx, `
+		SELECT id, tenant_id, project_id, connection_id, agent_id, operation, status, request_payload, result_payload, error_code, error_message, deadline_at, claimed_at, finished_at, created_by, created_at, updated_at
+		FROM collector_dev_tasks
 		WHERE id = $1 AND agent_id = $2 AND status = 'running' AND deadline_at > now()
-		RETURNING id, tenant_id, project_id, connection_id, agent_id, operation, status, request_payload, result_payload, error_code, error_message, deadline_at, claimed_at, finished_at, created_by, created_at, updated_at
-	`, params.TaskID, params.AgentID, params.Status, resultPayload, params.ErrorCode, params.ErrorMessage))
+		FOR UPDATE
+	`, params.TaskID, params.AgentID))
 	if errors.Is(err, errCollectorTaskNotFound) {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusConflict, "调试任务不存在、已结束或已过期")
 	}
-	return &record, err
+	if err != nil {
+		return nil, err
+	}
+
+	completedAt := time.Now().UTC()
+	var attempts []collectorPointSnapshotAttempt
+	if locked.Operation == "point.read" {
+		attempts, err = buildCollectorPointSnapshotAttempts(locked, params.Status, resultPayload, params.ErrorCode, params.ErrorMessage)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	record, err := scanCollectorTask(tx.QueryRow(ctx, `
+		UPDATE collector_dev_tasks SET status = $3, result_payload = CASE WHEN $4::text IS NULL THEN NULL ELSE $4::jsonb END, error_code = NULLIF($5, ''), error_message = NULLIF($6, ''), finished_at = $7, updated_at = $7
+		WHERE id = $1 AND agent_id = $2 AND status = 'running'
+		RETURNING id, tenant_id, project_id, connection_id, agent_id, operation, status, request_payload, result_payload, error_code, error_message, deadline_at, claimed_at, finished_at, created_by, created_at, updated_at
+	`, params.TaskID, params.AgentID, params.Status, resultPayloadText, params.ErrorCode, params.ErrorMessage, completedAt))
+	if err != nil {
+		return nil, err
+	}
+	if err = upsertCollectorPointDebugSnapshots(ctx, tx, locked.ProjectID, locked.ConnectionID, completedAt, attempts); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, wrapCollectorRepositoryError("提交调试任务完成事务失败", err)
+	}
+	return &record, nil
 }
 
 func (r *CollectorDevRepository) CancelTask(ctx context.Context, tenantID, projectID, taskID string) (*CollectorDevTaskRecord, error) {

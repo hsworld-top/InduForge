@@ -302,6 +302,12 @@ func translateCollectorWriteError(message string, err error) error {
 			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "工业采集连接编码已存在")
 		case "data_collector_connections_driver_id_check":
 			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "工业采集驱动标识无效")
+		case "data_collector_points_connection_name_key":
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "变量名称已存在")
+		case "data_collector_points_connection_address_key":
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "变量地址已存在")
+		case "data_collector_points_connection_code_key":
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "变量编码已存在")
 		}
 	}
 	return wrapUnifiedCollectorRepositoryError(message, err)

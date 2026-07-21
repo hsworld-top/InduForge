@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -24,6 +26,8 @@ type CollectorPointStore interface {
 	ListPoints(context.Context, string, string, repository.CollectorPointListFilter) ([]repository.CollectorPointRecord, int, error)
 	ListPointCodes(context.Context, string, string) ([]string, error)
 	ListExistingPointAddressTexts(context.Context, string, string, []string) ([]string, error)
+	ListExistingPointConflicts(context.Context, string, string, []string, []string) (repository.CollectorPointExistingConflicts, error)
+	StreamPointsForExport(context.Context, string, string, repository.CollectorPointExportFilter, func(repository.CollectorPointExportRecord) error) error
 	GetPointsByIDs(context.Context, string, string, []string) ([]repository.CollectorPointRecord, error)
 	CreatePointsBatch(context.Context, []repository.CreateCollectorPointParams) ([]repository.CollectorPointRecord, error)
 	UpdatePointsBatch(context.Context, []repository.UpdateCollectorPointParams) ([]repository.CollectorPointRecord, error)
@@ -51,6 +55,18 @@ type UpdateCollectorPointInput struct {
 	CreateCollectorPointInput
 }
 
+type CollectorPointBatchFailure struct {
+	Index   int    `json:"index"`
+	Name    string `json:"name"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+type CollectorPointBatchResult struct {
+	List   []CollectorPoint             `json:"list"`
+	Failed []CollectorPointBatchFailure `json:"failed"`
+}
+
 type CollectorPointGroup struct {
 	ID        string         `json:"id"`
 	ParentID  *string        `json:"parentId"`
@@ -58,22 +74,37 @@ type CollectorPointGroup struct {
 	SortOrder int            `json:"sortOrder"`
 	Metadata  map[string]any `json:"metadata"`
 }
+type CollectorPointDebugSnapshot struct {
+	Value             any     `json:"value"`
+	ValueText         *string `json:"valueText"`
+	DataType          *string `json:"dataType"`
+	Quality           *string `json:"quality"`
+	SourceTimestamp   *string `json:"sourceTimestamp"`
+	ServerTimestamp   *string `json:"serverTimestamp"`
+	ReadAt            *string `json:"readAt"`
+	LastAttemptStatus string  `json:"lastAttemptStatus"`
+	LastAttemptAt     string  `json:"lastAttemptAt"`
+	LastErrorCode     *string `json:"lastErrorCode"`
+	LastErrorMessage  *string `json:"lastErrorMessage"`
+}
+
 type CollectorPoint struct {
-	ID                   string         `json:"id"`
-	GroupID              *string        `json:"groupId"`
-	Code                 string         `json:"code"`
-	Name                 string         `json:"name"`
-	Description          *string        `json:"description"`
-	Address              map[string]any `json:"address"`
-	AddressText          string         `json:"addressText"`
-	AddressSchemaVersion int            `json:"addressSchemaVersion"`
-	DataType             string         `json:"dataType"`
-	ElementCount         int            `json:"elementCount"`
-	ReadOptions          map[string]any `json:"readOptions"`
-	Acquisition          map[string]any `json:"acquisition"`
-	Enabled              bool           `json:"enabled"`
-	SortOrder            int            `json:"sortOrder"`
-	Metadata             map[string]any `json:"metadata"`
+	ID                   string                       `json:"id"`
+	GroupID              *string                      `json:"groupId"`
+	Code                 string                       `json:"code"`
+	Name                 string                       `json:"name"`
+	Description          *string                      `json:"description"`
+	Address              map[string]any               `json:"address"`
+	AddressText          string                       `json:"addressText"`
+	AddressSchemaVersion int                          `json:"addressSchemaVersion"`
+	DataType             string                       `json:"dataType"`
+	ElementCount         int                          `json:"elementCount"`
+	ReadOptions          map[string]any               `json:"readOptions"`
+	Acquisition          map[string]any               `json:"acquisition"`
+	Enabled              bool                         `json:"enabled"`
+	SortOrder            int                          `json:"sortOrder"`
+	Metadata             map[string]any               `json:"metadata"`
+	LatestDebugSnapshot  *CollectorPointDebugSnapshot `json:"latestDebugSnapshot"`
 }
 type CollectorPointPage struct {
 	List       []CollectorPoint          `json:"list"`
@@ -246,33 +277,102 @@ func (s *CollectorPointService) FindExistingPointAddressIndexes(ctx context.Cont
 	return indexes, nil
 }
 
-func (s *CollectorPointService) CreatePointsBatch(ctx context.Context, projectID, connectionID, userID string, inputs []CreateCollectorPointInput) ([]CollectorPoint, error) {
+func (s *CollectorPointService) CreatePointsBatch(ctx context.Context, projectID, connectionID, userID string, inputs []CreateCollectorPointInput) (CollectorPointBatchResult, error) {
+	result := CollectorPointBatchResult{List: []CollectorPoint{}, Failed: []CollectorPointBatchFailure{}}
+	if len(inputs) == 0 {
+		return result, nil
+	}
 	connection, err := s.store.GetConnection(ctx, projectID, connectionID)
 	if err != nil {
-		return nil, err
+		return CollectorPointBatchResult{}, err
 	}
 	existingCodes, err := s.store.ListPointCodes(ctx, projectID, connectionID)
 	if err != nil {
-		return nil, err
+		return CollectorPointBatchResult{}, err
 	}
 	usedCodes := make(map[string]struct{}, len(existingCodes)+len(inputs))
 	for _, code := range existingCodes {
 		usedCodes[code] = struct{}{}
 	}
-	params := make([]repository.CreateCollectorPointParams, 0, len(inputs))
-	for _, input := range inputs {
+	type candidate struct {
+		index int
+		point repository.CreateCollectorPointParams
+	}
+	candidates := make([]candidate, 0, len(inputs))
+	for index, input := range inputs {
 		pointID := uuid.NewString()
-		value, err := s.buildPointParams(connection, userID, pointID, allocateCollectorPointCode(input.Name, usedCodes), input)
-		if err != nil {
-			return nil, err
+		value, buildErr := s.buildPointParams(connection, userID, pointID, allocateCollectorPointCode(input.Name, usedCodes), input)
+		if buildErr != nil {
+			result.Failed = append(result.Failed, CollectorPointBatchFailure{Index: index, Name: strings.TrimSpace(input.Name), Code: "VALIDATION_FAILED", Message: buildErr.Error()})
+			continue
 		}
-		params = append(params, value)
+		candidates = append(candidates, candidate{index: index, point: value})
+	}
+	if len(candidates) == 0 {
+		sort.Slice(result.Failed, func(i, j int) bool { return result.Failed[i].Index < result.Failed[j].Index })
+		return result, nil
+	}
+	names := make([]string, 0, len(candidates))
+	addresses := make([]string, 0, len(candidates))
+	for _, item := range candidates {
+		names = append(names, strings.ToLower(item.point.Name))
+		addresses = append(addresses, item.point.AddressText)
+	}
+	conflicts, err := s.store.ListExistingPointConflicts(ctx, projectID, connectionID, names, addresses)
+	if err != nil {
+		return CollectorPointBatchResult{}, err
+	}
+	existingNames := make(map[string]struct{}, len(conflicts.Names))
+	for _, name := range conflicts.Names {
+		existingNames[strings.ToLower(name)] = struct{}{}
+	}
+	existingAddresses := make(map[string]struct{}, len(conflicts.AddressTexts))
+	for _, address := range conflicts.AddressTexts {
+		existingAddresses[address] = struct{}{}
+	}
+	valid := make([]candidate, 0, len(candidates))
+	params := make([]repository.CreateCollectorPointParams, 0, len(candidates))
+	seenNames := make(map[string]struct{}, len(candidates))
+	seenAddresses := make(map[string]struct{}, len(candidates))
+	for _, item := range candidates {
+		nameKey := strings.ToLower(item.point.Name)
+		if _, exists := existingNames[nameKey]; exists {
+			result.Failed = append(result.Failed, CollectorPointBatchFailure{Index: item.index, Name: item.point.Name, Code: "DUPLICATE_NAME", Message: "变量名称已存在：" + item.point.Name})
+			continue
+		}
+		if _, exists := existingAddresses[item.point.AddressText]; exists {
+			result.Failed = append(result.Failed, CollectorPointBatchFailure{Index: item.index, Name: item.point.Name, Code: "DUPLICATE_ADDRESS", Message: "变量地址已存在：" + item.point.AddressText})
+			continue
+		}
+		if _, exists := seenNames[nameKey]; exists {
+			result.Failed = append(result.Failed, CollectorPointBatchFailure{Index: item.index, Name: item.point.Name, Code: "DUPLICATE_NAME", Message: "变量名称已存在：" + item.point.Name})
+			continue
+		}
+		if _, exists := seenAddresses[item.point.AddressText]; exists {
+			result.Failed = append(result.Failed, CollectorPointBatchFailure{Index: item.index, Name: item.point.Name, Code: "DUPLICATE_ADDRESS", Message: "变量地址已存在：" + item.point.AddressText})
+			continue
+		}
+		seenNames[nameKey] = struct{}{}
+		seenAddresses[item.point.AddressText] = struct{}{}
+		valid = append(valid, item)
+		params = append(params, item.point)
 	}
 	records, err := s.store.CreatePointsBatch(ctx, params)
 	if err != nil {
-		return nil, err
+		return CollectorPointBatchResult{}, err
 	}
-	return mapCollectorPoints(records), nil
+	result.List = mapCollectorPoints(records)
+	createdIDs := make(map[string]struct{}, len(records))
+	for _, record := range records {
+		createdIDs[record.ID] = struct{}{}
+	}
+	for _, item := range valid {
+		if _, created := createdIDs[item.point.ID]; !created {
+			result.Failed = append(result.Failed, CollectorPointBatchFailure{Index: item.index, Name: item.point.Name, Code: "CONFLICT", Message: "变量名称或地址已存在：" + item.point.Name})
+		}
+	}
+	sort.Slice(result.Failed, func(i, j int) bool { return result.Failed[i].Index < result.Failed[j].Index })
+	return result, nil
 }
 func (s *CollectorPointService) UpdatePointsBatch(ctx context.Context, projectID, connectionID, userID string, inputs []UpdateCollectorPointInput) ([]CollectorPoint, error) {
 	connection, err := s.store.GetConnection(ctx, projectID, connectionID)
@@ -343,6 +443,14 @@ func (s *CollectorPointService) buildPointParams(connection *repository.Collecto
 	if !containsFold(driver.Manifest.DataTypes, input.DataType) {
 		return repository.CreateCollectorPointParams{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "驱动不支持该平台数据类型")
 	}
+	if connection.DriverID == "opcua.standard" {
+		nodeID, err := normalizeOpcUaNodeID(input.Address["nodeId"])
+		if err != nil {
+			return repository.CreateCollectorPointParams{}, err
+		}
+		input.Address = cloneCollectorMap(input.Address)
+		input.Address["nodeId"] = nodeID
+	}
 	if err := s.addressSchemas[connection.DriverID].Validate(input.Address); err != nil {
 		return repository.CreateCollectorPointParams{}, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "采集点地址不符合驱动 Schema", err)
 	}
@@ -363,6 +471,59 @@ func (s *CollectorPointService) buildPointParams(connection *repository.Collecto
 		acquisition = map[string]any{"mode": "polling", "intervalMs": 1000, "timeoutMs": 3000, "deadband": nil, "changeOnly": false, "priority": "normal"}
 	}
 	return repository.CreateCollectorPointParams{ID: id, ProjectID: connection.ProjectID, ConnectionID: connection.ID, ConnectionCode: connection.Code, UserID: userID, GroupID: input.GroupID, Code: code, Name: name, Description: input.Description, Address: cloneCollectorMap(input.Address), AddressText: addressText, AddressSchemaVersion: connection.SchemaVersion, DataType: input.DataType, ElementCount: elementCount, ReadOptions: cloneCollectorMap(input.ReadOptions), Acquisition: acquisition, Enabled: enabled, SortOrder: input.SortOrder, Metadata: cloneCollectorMap(input.Metadata)}, nil
+}
+
+// normalizeOpcUaNodeID 在保存阶段校验 OPC UA NodeId，避免无效地址进入变量模型后才在调试读取时失败。
+func normalizeOpcUaNodeID(value any) (string, error) {
+	nodeID, ok := value.(string)
+	nodeID = strings.TrimSpace(nodeID)
+	if !ok || nodeID == "" {
+		return "", invalidOpcUaNodeID()
+	}
+
+	identifier := nodeID
+	if strings.HasPrefix(identifier, "ns=") {
+		separator := strings.IndexByte(identifier, ';')
+		if separator <= len("ns=") {
+			return "", invalidOpcUaNodeID()
+		}
+		if _, err := strconv.ParseUint(identifier[len("ns="):separator], 10, 16); err != nil {
+			return "", invalidOpcUaNodeID()
+		}
+		identifier = identifier[separator+1:]
+	}
+
+	if len(identifier) < 3 || identifier[1] != '=' || identifier[2:] == "" {
+		return "", invalidOpcUaNodeID()
+	}
+	valuePart := identifier[2:]
+	switch identifier[0] {
+	case 'i':
+		if _, err := strconv.ParseUint(valuePart, 10, 32); err != nil {
+			return "", invalidOpcUaNodeID()
+		}
+	case 's':
+		// 字符串标识允许包含空格和分号，只要求 s= 后存在内容。
+	case 'g':
+		if _, err := uuid.Parse(valuePart); err != nil {
+			return "", invalidOpcUaNodeID()
+		}
+	case 'b':
+		if _, err := base64.StdEncoding.DecodeString(valuePart); err != nil {
+			return "", invalidOpcUaNodeID()
+		}
+	default:
+		return "", invalidOpcUaNodeID()
+	}
+	return nodeID, nil
+}
+
+func invalidOpcUaNodeID() error {
+	return apperrors.NewAppError(
+		apperrors.ErrorCodeBadRequest,
+		http.StatusBadRequest,
+		"OPC UA NodeId 格式无效，请使用 i=111、ns=2;i=111、s=LastChange 或 ns=2;s=LastChange 等格式",
+	)
 }
 
 func formatCollectorAddress(driverID string, address map[string]any) (string, error) {
@@ -414,7 +575,16 @@ func mapCollectorPoints(records []repository.CollectorPointRecord) []CollectorPo
 	return result
 }
 func toCollectorPoint(record repository.CollectorPointRecord) CollectorPoint {
-	return CollectorPoint{ID: record.ID, GroupID: record.GroupID, Code: record.Code, Name: record.Name, Description: record.Description, Address: record.Address, AddressText: record.AddressText, AddressSchemaVersion: record.AddressSchemaVersion, DataType: record.DataType, ElementCount: record.ElementCount, ReadOptions: record.ReadOptions, Acquisition: record.Acquisition, Enabled: record.Enabled, SortOrder: record.SortOrder, Metadata: record.Metadata}
+	point := CollectorPoint{ID: record.ID, GroupID: record.GroupID, Code: record.Code, Name: record.Name, Description: record.Description, Address: record.Address, AddressText: record.AddressText, AddressSchemaVersion: record.AddressSchemaVersion, DataType: record.DataType, ElementCount: record.ElementCount, ReadOptions: record.ReadOptions, Acquisition: record.Acquisition, Enabled: record.Enabled, SortOrder: record.SortOrder, Metadata: record.Metadata}
+	if snapshot := record.LatestDebugSnapshot; snapshot != nil {
+		point.LatestDebugSnapshot = &CollectorPointDebugSnapshot{
+			Value: snapshot.Value, ValueText: snapshot.ValueText, DataType: snapshot.DataType, Quality: snapshot.Quality,
+			SourceTimestamp: optionalCollectorTime(snapshot.SourceTimestamp), ServerTimestamp: optionalCollectorTime(snapshot.ServerTimestamp), ReadAt: optionalCollectorTime(snapshot.ReadAt),
+			LastAttemptStatus: snapshot.LastAttemptStatus, LastAttemptAt: formatCollectorTime(snapshot.LastAttemptAt),
+			LastErrorCode: snapshot.LastErrorCode, LastErrorMessage: snapshot.LastErrorMessage,
+		}
+	}
+	return point
 }
 
 func toCollectorPointGroup(record repository.CollectorPointGroupRecord) CollectorPointGroup {
