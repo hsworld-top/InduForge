@@ -33,6 +33,60 @@
         }}</el-descriptions-item>
         <el-descriptions-item label="采集周期">{{ intervalLabel(point) }}</el-descriptions-item>
       </el-descriptions>
+      <section class="collector-point-drawer__debug">
+        <div class="collector-point-drawer__section-title">
+          <span>最近调试结果</span>
+        </div>
+        <template v-if="point.latestDebugSnapshot">
+          <el-alert
+            v-if="point.latestDebugSnapshot.lastAttemptStatus === 'failed'"
+            :title="`${collectorDebugFailureText(point.latestDebugSnapshot)} · ${point.latestDebugSnapshot.lastAttemptAt}`"
+            type="warning"
+            show-icon
+            :closable="false"
+          />
+          <div class="collector-point-drawer__debug-value">
+            <span>最近成功值</span>
+            <pre>{{
+              hasCollectorDebugSuccess(point.latestDebugSnapshot)
+                ? formatCollectorDebugValue(
+                    point.latestDebugSnapshot.value,
+                    point.latestDebugSnapshot.valueText,
+                  )
+                : '—'
+            }}</pre>
+          </div>
+          <el-descriptions :column="1" border>
+            <el-descriptions-item label="质量">
+              <el-tag
+                v-if="point.latestDebugSnapshot.quality"
+                :type="collectorDebugQualityTone(point.latestDebugSnapshot.quality)"
+                size="small"
+              >
+                {{ collectorDebugQualityLabel(point.latestDebugSnapshot.quality) }}
+              </el-tag>
+              <span v-else>—</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="实际数据类型">{{
+              point.latestDebugSnapshot.dataType || '—'
+            }}</el-descriptions-item>
+            <el-descriptions-item label="数据时间">{{
+              collectorDebugTime(point.latestDebugSnapshot.sourceTimestamp)
+            }}</el-descriptions-item>
+            <el-descriptions-item label="服务端时间">{{
+              collectorDebugTime(point.latestDebugSnapshot.serverTimestamp)
+            }}</el-descriptions-item>
+            <el-descriptions-item label="平台获取时间">{{
+              collectorDebugTime(point.latestDebugSnapshot.readAt)
+            }}</el-descriptions-item>
+            <el-descriptions-item label="最近尝试">
+              {{ point.latestDebugSnapshot.lastAttemptStatus === 'succeeded' ? '成功' : '失败' }}
+              · {{ point.latestDebugSnapshot.lastAttemptAt }}
+            </el-descriptions-item>
+          </el-descriptions>
+        </template>
+        <el-empty v-else description="暂未获取调试数据" :image-size="72" />
+      </section>
       <section class="collector-point-drawer__json">
         <span>协议地址参数</span>
         <pre>{{ formatJson(point.address) }}</pre>
@@ -122,6 +176,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { getApiErrorMessage } from '@/utils/request'
 import {
   createCollectorPointsBatch,
   getCollectorDriver,
@@ -138,6 +193,14 @@ import {
   type CollectorPointCreateDefaults,
 } from './collector-workbench-model'
 import CollectorSchemaForm from './CollectorSchemaForm.vue'
+import {
+  collectorDebugFailureText,
+  collectorDebugQualityLabel,
+  collectorDebugQualityTone,
+  collectorDebugTime,
+  formatCollectorDebugValue,
+  hasCollectorDebugSuccess,
+} from './collector-debug-snapshot'
 
 export type CollectorPointGroupNode = CollectorPointGroup & { children?: CollectorPointGroupNode[] }
 
@@ -248,11 +311,21 @@ async function save() {
         { id: props.point.id, ...payload },
       ])
     } else {
-      await createCollectorPointsBatch(props.projectId, props.connectionId, [payload])
+      const result = await createCollectorPointsBatch(props.projectId, props.connectionId, [
+        payload,
+      ])
+      if (result.failed[0]) {
+        ElMessage.error(result.failed[0].message)
+        return
+      }
     }
     ElMessage.success(mode.value === 'edit' ? '变量已更新' : '变量已创建')
     emit('update:modelValue', false)
     emit('saved')
+  } catch (error) {
+    ElMessage.error(
+      getApiErrorMessage(error, mode.value === 'edit' ? '变量更新失败' : '变量创建失败'),
+    )
   } finally {
     saving.value = false
   }
@@ -290,6 +363,37 @@ function formatJson(value: Record<string, unknown>) {
 .collector-point-drawer__hero p {
   margin: 0;
   color: var(--dc-text-secondary);
+}
+.collector-point-drawer__debug {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-lg);
+  background: var(--dc-surface-raised);
+}
+.collector-point-drawer__debug :deep(.el-alert) {
+  margin-bottom: 14px;
+}
+.collector-point-drawer__debug-value {
+  margin-bottom: 14px;
+}
+.collector-point-drawer__debug-value > span {
+  font-size: 12px;
+  font-weight: 700;
+}
+.collector-point-drawer__debug-value pre {
+  max-height: 180px;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 12px;
+  border-radius: var(--dc-radius-md);
+  background: var(--dc-surface-subtle);
+  color: var(--dc-text);
+  font:
+    12px/1.6 Consolas,
+    monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 .collector-point-drawer__json {
   margin-top: 18px;

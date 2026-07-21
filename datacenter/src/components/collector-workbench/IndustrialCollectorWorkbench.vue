@@ -117,10 +117,15 @@
                     ref="pointTable"
                     :project-id="projectId"
                     :connection-id="activeConnection.id"
+                    :connection-name="activeConnection.name"
                     :driver-id="activeConnection.driverId"
                     :group-id="groupId"
                     :show-element-count="supportsElementCount"
-                    @selection="selectedPointIds = $event"
+                    :supports-point-read="supportsPointRead"
+                    :can-read-current-page="canRead"
+                    :read-current-page-loading="pointReadLoading"
+                    :read-current-page-disabled-reason="pointReadDisabledReason"
+                    @read-current-page="readCurrentPage"
                     @import="importVisible = true"
                     @saved="discoveryPanel?.refreshExisting()"
                   />
@@ -139,26 +144,6 @@
                   @points="createDiscoveredPoints"
                   @create-point="openDiscoveredPoint"
                   @session-error="markActiveSessionError"
-                />
-              </el-tab-pane>
-              <el-tab-pane label="实时调试" name="debug">
-                <CollectorLiveDebugPanel
-                  :project-id="projectId"
-                  :connection-id="activeConnection.id"
-                  :protocol-family="activeConnection.protocolFamily"
-                  :agent-id="agentId"
-                  :workspace-session-id="workspaceSessionId"
-                  :point-ids="selectedPointIds"
-                  :enabled="canRead"
-                  @session-error="markActiveSessionError"
-                />
-              </el-tab-pane>
-              <el-tab-pane label="通信诊断" name="diagnostics">
-                <CollectorDiagnosticsPanel
-                  :enabled="canTest"
-                  :loading="connectionTestLoading"
-                  :task="activeConnectionTestTask || null"
-                  @run="runConnectionTest"
                 />
               </el-tab-pane>
             </el-tabs>
@@ -202,6 +187,12 @@
       :connection-id="activeConnection.id"
       @committed="pointTable?.reload()"
     />
+    <CollectorBatchResultDialog
+      v-model="batchResultVisible"
+      :title="batchResultTitle"
+      :success-count="batchSuccessCount"
+      :failed="batchFailures"
+    />
   </div>
 </template>
 
@@ -217,9 +208,12 @@ import {
   getCollectorTask,
 } from '@/api/collector.api'
 import type { CollectorAgent } from '@/api/schemas/collector-dev.schema'
+import { CollectorPointReadResultSchema } from '@/api/schemas/collector.schema'
 import type {
   CollectorConnection,
   CollectorDriverDetail,
+  CollectorPoint,
+  CollectorPointBatchFailure,
   CollectorTask,
 } from '@/api/schemas/collector.schema'
 import {
@@ -236,16 +230,19 @@ import IconTablerLayoutSidebarLeftExpand from '~icons/tabler/layout-sidebar-left
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerTopologyStar3 from '~icons/tabler/topology-star-3'
 import CollectorAgentSelector from './CollectorAgentSelector.vue'
+import CollectorBatchResultDialog from './CollectorBatchResultDialog.vue'
 import CollectorConnectionEditor from './CollectorConnectionEditor.vue'
 import CollectorDriverIcon from './CollectorDriverIcon.vue'
 import CollectorConnectionList from './CollectorConnectionList.vue'
 import CollectorConnectionWizard from './CollectorConnectionWizard.vue'
-import CollectorDiagnosticsPanel from './CollectorDiagnosticsPanel.vue'
 import CollectorDiscoveryPanel from './CollectorDiscoveryPanel.vue'
 import CollectorImportDialog from './CollectorImportDialog.vue'
-import CollectorLiveDebugPanel from './CollectorLiveDebugPanel.vue'
 import CollectorPointGroupTree from './CollectorPointGroupTree.vue'
 import CollectorPointTable from './CollectorPointTable.vue'
+import {
+  currentPageCollectorPointIds,
+  summarizeCollectorPointRead,
+} from './collector-debug-snapshot'
 
 const props = defineProps<{
   projectId: string
@@ -260,22 +257,18 @@ const selectedAgent = ref<CollectorAgent>()
 const activeTab = ref('config')
 const wizardVisible = ref(false)
 const importVisible = ref(false)
+const batchResultVisible = ref(false)
+const batchResultTitle = ref('批量新增结果')
+const batchSuccessCount = ref(0)
+const batchFailures = ref<CollectorPointBatchFailure[]>([])
 const groupId = ref<string | null>(null)
-const selectedPointIds = ref<string[]>([])
 const connectionListCollapsed = ref(false)
 const connectionList = ref<InstanceType<typeof CollectorConnectionList>>()
 const pointTable = ref<InstanceType<typeof CollectorPointTable>>()
 const discoveryPanel = ref<InstanceType<typeof CollectorDiscoveryPanel>>()
 const discoveryBatchLoading = ref(false)
-const connectionTestTasks = ref<Record<string, CollectorTask>>({})
-const testingConnectionIds = ref(new Set<string>())
+const pointReadLoading = ref(false)
 const connectionSessions = ref<Record<string, CollectorDebugConnectionState>>({})
-const activeConnectionTestTask = computed(() =>
-  activeConnection.value ? connectionTestTasks.value[activeConnection.value.id] : undefined,
-)
-const connectionTestLoading = computed(() =>
-  activeConnection.value ? testingConnectionIds.value.has(activeConnection.value.id) : false,
-)
 const activeSessionState = computed<CollectorDebugConnectionState>(() =>
   activeConnection.value
     ? connectionSessions.value[activeConnection.value.id] || { status: 'disconnected' }
@@ -318,19 +311,11 @@ const canManageConnection = computed(() =>
     : false,
 )
 
-const canTest = computed(() =>
-  activeConnection.value
-    ? agentSupportsOperation(
-        selectedAgent.value,
-        activeConnection.value.driverId,
-        activeConnection.value.driverVersion,
-        activeConnection.value.schemaVersion,
-        'connection.test',
-      )
-    : false,
-)
 const supportsDeviceBrowse = computed(
   () => activeDriver.value?.operations.includes('device.browse') ?? false,
+)
+const supportsPointRead = computed(
+  () => activeDriver.value?.operations.includes('point.read') ?? false,
 )
 const supportsElementCount = computed(() =>
   collectorDriverSupportsFeature(activeDriver.value, collectorDriverFeatures.pointElementCount),
@@ -349,7 +334,9 @@ const canBrowse = computed(() =>
     : false,
 )
 const canRead = computed(() =>
-  activeConnection.value && activeSessionState.value.status === 'connected'
+  activeConnection.value &&
+  supportsPointRead.value &&
+  activeSessionState.value.status === 'connected'
     ? agentSupportsOperation(
         selectedAgent.value,
         activeConnection.value.driverId,
@@ -359,6 +346,11 @@ const canRead = computed(() =>
       )
     : false,
 )
+const pointReadDisabledReason = computed(() => {
+  if (activeSessionState.value.status !== 'connected') return '请先连接设备'
+  if (!canRead.value) return '当前调试代理不支持变量读取'
+  return ''
+})
 
 function updateConnectionSession(connectionId: string, state: CollectorDebugConnectionState) {
   connectionSessions.value = { ...connectionSessions.value, [connectionId]: state }
@@ -488,60 +480,6 @@ function closeAllPageSessions(currentAgentId = agentId.value) {
   }
 }
 
-function updateConnectionTestTask(task: CollectorTask) {
-  connectionTestTasks.value = { ...connectionTestTasks.value, [task.connectionId]: task }
-}
-
-function updateConnectionTesting(connectionId: string, testing: boolean) {
-  const next = new Set(testingConnectionIds.value)
-  if (testing) next.add(connectionId)
-  else next.delete(connectionId)
-  testingConnectionIds.value = next
-}
-
-async function runConnectionTest() {
-  const connection = activeConnection.value
-  const currentAgentId = agentId.value
-  if (!connection || !currentAgentId || !canTest.value || connectionTestLoading.value) return
-  updateConnectionTesting(connection.id, true)
-  let task: CollectorTask | undefined
-  try {
-    task = await createCollectorTask(props.projectId, {
-      agentId: currentAgentId,
-      connectionId: connection.id,
-      operation: 'connection.test',
-      input: {},
-    })
-    updateConnectionTestTask(task)
-    // 调试任务由 Agent 异步领取，页面只在有限时间内轮询，避免无限占用请求。
-    for (let index = 0; index < 30; index++) {
-      task = await getCollectorTask(props.projectId, task.taskId)
-      updateConnectionTestTask(task)
-      if (task.status === 'succeeded') {
-        ElMessage.success('连接测试通过')
-        return
-      }
-      if (['failed', 'cancelled', 'expired'].includes(task.status))
-        throw new Error(task.errorMessage || '连接测试失败')
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-    }
-    throw new Error('连接测试超时')
-  } catch (error) {
-    const message = error instanceof Error ? error.message : '连接测试失败'
-    if (task && !['succeeded', 'failed', 'cancelled', 'expired'].includes(task.status)) {
-      updateConnectionTestTask({
-        ...task,
-        status: 'failed',
-        errorMessage: message,
-        finishedAt: dayjs().format('YYYY-MM-DD HH:mm:ss'),
-      })
-    }
-    ElMessage.error(message)
-  } finally {
-    updateConnectionTesting(connection.id, false)
-  }
-}
-
 async function selectConnection(id: string) {
   selectedId.value = id
   const connection = await getCollectorConnection(props.projectId, id)
@@ -551,7 +489,6 @@ async function selectConnection(id: string) {
   activeDriver.value = driver
   activeTab.value = 'config'
   groupId.value = null
-  selectedPointIds.value = []
 }
 function onConnectionsLoaded(items: CollectorConnection[]) {
   if (!selectedId.value && items[0]) void selectConnection(items[0].id)
@@ -567,7 +504,6 @@ function onConnectionDeleted(id: string) {
   activeDriver.value = null
   activeTab.value = 'config'
   groupId.value = null
-  selectedPointIds.value = []
 }
 
 async function onCreated(id: string) {
@@ -582,14 +518,96 @@ async function onConnectionSaved(connection: CollectorConnection) {
   activeDriver.value = await getCollectorDriver(connection.driverId)
   await connectionList.value?.reload()
 }
+async function reloadPointTableAfterRead(connectionId: string) {
+  if (activeConnection.value?.id !== connectionId) return
+  try {
+    await pointTable.value?.reload()
+  } catch {
+    ElMessage.warning('调试结果已保存，但刷新当前页失败')
+  }
+}
+
+async function readCurrentPage(points: Array<Pick<CollectorPoint, 'id' | 'name'>>) {
+  const connection = activeConnection.value
+  const currentAgentId = agentId.value
+  if (
+    !connection ||
+    !currentAgentId ||
+    !canRead.value ||
+    pointReadLoading.value ||
+    points.length === 0
+  ) {
+    return
+  }
+
+  pointReadLoading.value = true
+  try {
+    const task = await createCollectorTask(props.projectId, {
+      agentId: currentAgentId,
+      connectionId: connection.id,
+      operation: 'point.read',
+      input: { workspaceSessionId, pointIds: currentPageCollectorPointIds(points) },
+    })
+    const completed = await waitTaskCompletion(task, '获取当前页数据超时')
+    const result = CollectorPointReadResultSchema.parse(completed.result)
+    await reloadPointTableAfterRead(connection.id)
+
+    const { successCount, failures } = summarizeCollectorPointRead(points, result)
+    if (failures.length === 0) {
+      ElMessage.success(`已获取当前页 ${successCount} 个变量`)
+      return
+    }
+    batchResultTitle.value = '当前页数据获取结果'
+    batchSuccessCount.value = successCount
+    batchFailures.value = failures
+    batchResultVisible.value = true
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '获取当前页数据失败'
+    await reloadPointTableAfterRead(connection.id)
+    batchResultTitle.value = '当前页数据获取结果'
+    batchSuccessCount.value = 0
+    batchFailures.value = points.map((point, index) => ({
+      index,
+      name: point.name,
+      code: 'COLLECTOR_POINT_READ_FAILED',
+      message,
+    }))
+    batchResultVisible.value = true
+    if (
+      activeConnection.value?.id === connection.id &&
+      /会话.*(断开|建立)|连接.*断开/.test(message)
+    ) {
+      markActiveSessionError(message)
+    }
+    ElMessage.error(message)
+  } finally {
+    pointReadLoading.value = false
+  }
+}
+
 async function createDiscoveredPoints(points: Record<string, unknown>[]) {
   if (!activeConnection.value || points.length === 0) return
   discoveryBatchLoading.value = true
   try {
-    await createCollectorPointsBatch(props.projectId, activeConnection.value.id, points)
-    discoveryPanel.value?.markSelectedCreated()
-    await pointTable.value?.reload(1)
-    ElMessage.success(`已新增 ${points.length} 个变量`)
+    const result = await createCollectorPointsBatch(
+      props.projectId,
+      activeConnection.value.id,
+      points,
+    )
+    const failedIndexes = new Set(result.failed.map((item) => item.index))
+    const createdIndexes = points
+      .map((_, index) => index)
+      .filter((index) => !failedIndexes.has(index))
+    discoveryPanel.value?.markSelectedCreated(createdIndexes)
+    if (result.list.length > 0) await pointTable.value?.reload(1)
+    if (result.failed.length === 0) {
+      ElMessage.success(`已新增 ${result.list.length} 个变量`)
+    } else {
+      batchResultTitle.value = '批量新增结果'
+      batchSuccessCount.value = result.list.length
+      batchFailures.value = result.failed
+      batchResultVisible.value = true
+    }
   } finally {
     discoveryBatchLoading.value = false
   }

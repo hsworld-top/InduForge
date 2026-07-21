@@ -1,5 +1,5 @@
 import request from '@/utils/request'
-import type { AxiosRequestConfig } from 'axios'
+import type { AxiosError, AxiosRequestConfig } from 'axios'
 import { z } from 'zod'
 import {
   CollectorConnectionPageSchema,
@@ -7,6 +7,7 @@ import {
   CollectorDriverDetailSchema,
   CollectorDriverPageSchema,
   CollectorImportPreviewSchema,
+  CollectorPointBatchResultSchema,
   CollectorPointGroupSchema,
   CollectorPointPageSchema,
   CollectorPointSchema,
@@ -16,6 +17,7 @@ import {
   type CollectorDriverSummary,
   type CollectorImportPreview,
   type CollectorPoint,
+  type CollectorPointBatchResult,
   type CollectorPointGroup,
   type CollectorTask,
 } from './schemas/collector.schema'
@@ -206,16 +208,69 @@ async function postPointBatch(
   return z.object({ list: z.array(CollectorPointSchema) }).parse(response).list
 }
 
-export const createCollectorPointsBatch = (
+export async function createCollectorPointsBatch(
   projectId: string,
   connectionId: string,
   points: Record<string, unknown>[],
-) => postPointBatch(projectId, connectionId, 'batch', { points })
+): Promise<CollectorPointBatchResult> {
+  return CollectorPointBatchResultSchema.parse(
+    await requestData({
+      url: `/data/projects/${projectId}/collector/connections/${connectionId}/points/batch`,
+      method: 'post',
+      data: { points },
+    }),
+  )
+}
 export const updateCollectorPointsBatch = (
   projectId: string,
   connectionId: string,
   points: Record<string, unknown>[],
 ) => postPointBatch(projectId, connectionId, 'update-batch', { points })
+
+export type CollectorPointExportRequest = {
+  format: 'csv'
+  scope: 'group' | 'current_page' | 'selected' | 'pages'
+  groupId?: string | null
+  includeChildren?: boolean
+  search?: string
+  dataType?: string
+  enabled?: boolean | null
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
+  page: number
+  pageSize: number
+  pages?: number[]
+  pointIds?: string[]
+}
+
+export async function exportCollectorPoints(
+  projectId: string,
+  connectionId: string,
+  data: CollectorPointExportRequest,
+): Promise<Blob> {
+  try {
+    return (await request({
+      url: `/data/projects/${projectId}/collector/connections/${connectionId}/points/export`,
+      method: 'post',
+      responseType: 'blob',
+      data,
+    })) as Blob
+  } catch (error) {
+    const response = (error as AxiosError<Blob>)?.response
+    if (response?.data instanceof Blob) {
+      const payload = await response.data.text()
+      let message = ''
+      try {
+        message = (JSON.parse(payload) as { msg?: string }).msg || ''
+      } catch {
+        message = ''
+      }
+      if (message) throw new Error(message)
+    }
+    throw error
+  }
+}
+
 export async function deleteCollectorPointsBatch(
   projectId: string,
   connectionId: string,

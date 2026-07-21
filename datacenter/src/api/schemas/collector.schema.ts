@@ -68,6 +68,37 @@ export const CollectorPointGroupSchema = z.object({
   metadata: JsonObjectSchema,
 })
 
+export const CollectorPointDebugSnapshotSchema = z.object({
+  value: z.unknown().nullable(),
+  valueText: z.string().nullable(),
+  dataType: z.string().nullable(),
+  quality: z.string().nullable(),
+  sourceTimestamp: z.string().nullable(),
+  serverTimestamp: z.string().nullable(),
+  readAt: z.string().nullable(),
+  lastAttemptStatus: z.enum(['succeeded', 'failed']),
+  lastAttemptAt: z.string(),
+  lastErrorCode: z.string().nullable(),
+  lastErrorMessage: z.string().nullable(),
+})
+
+export const CollectorPointReadValueSchema = z.object({
+  pointId: z.string(),
+  succeeded: z.boolean(),
+  value: z.unknown().nullable(),
+  dataType: z.string().nullable(),
+  quality: z.string().nullable(),
+  sourceTimestamp: z.string().nullable(),
+  serverTimestamp: z.string().nullable(),
+  errorCode: z.string().nullable(),
+  errorMessage: z.string().nullable(),
+})
+
+export const CollectorPointReadResultSchema = z.object({
+  values: z.array(CollectorPointReadValueSchema),
+  diagnostics: z.array(z.unknown()).default([]),
+})
+
 export const CollectorPointSchema = z.object({
   id: z.string(),
   groupId: z.string().nullable(),
@@ -84,11 +115,24 @@ export const CollectorPointSchema = z.object({
   enabled: z.boolean(),
   sortOrder: z.number().int(),
   metadata: JsonObjectSchema,
+  latestDebugSnapshot: CollectorPointDebugSnapshotSchema.nullable(),
 })
 
 export const CollectorPointPageSchema = z.object({
   list: z.array(CollectorPointSchema),
   pagination: CollectorPaginationSchema,
+})
+
+export const CollectorPointBatchFailureSchema = z.object({
+  index: z.number().int().nonnegative(),
+  name: z.string(),
+  code: z.string(),
+  message: z.string(),
+})
+
+export const CollectorPointBatchResultSchema = z.object({
+  list: z.array(CollectorPointSchema),
+  failed: z.array(CollectorPointBatchFailureSchema),
 })
 
 export const CollectorImportErrorSchema = z.object({
@@ -137,6 +181,11 @@ export type CollectorDriverDetail = z.infer<typeof CollectorDriverDetailSchema>
 export type CollectorConnection = z.infer<typeof CollectorConnectionSchema>
 export type CollectorPointGroup = z.infer<typeof CollectorPointGroupSchema>
 export type CollectorPoint = z.infer<typeof CollectorPointSchema>
+export type CollectorPointDebugSnapshot = z.infer<typeof CollectorPointDebugSnapshotSchema>
+export type CollectorPointReadResult = z.infer<typeof CollectorPointReadResultSchema>
+export type CollectorPointReadValue = z.infer<typeof CollectorPointReadValueSchema>
+export type CollectorPointBatchFailure = z.infer<typeof CollectorPointBatchFailureSchema>
+export type CollectorPointBatchResult = z.infer<typeof CollectorPointBatchResultSchema>
 export type CollectorImportPreview = z.infer<typeof CollectorImportPreviewSchema>
 export type CollectorTask = z.infer<typeof CollectorTaskSchema>
 export type CollectorProtocolCapability = z.infer<typeof CollectorProtocolCapabilitySchema>

@@ -13,7 +13,25 @@
         <span>共 {{ total }} 个变量</span>
       </div>
       <div class="collector-point-table__actions">
+        <el-tooltip
+          v-if="supportsPointRead"
+          :content="readCurrentPageDisabledReason"
+          :disabled="canReadCurrentPage && items.length > 0"
+          placement="top"
+        >
+          <span>
+            <el-button
+              :disabled="!canReadCurrentPage || items.length === 0"
+              :loading="readCurrentPageLoading"
+              @click="readCurrentPage"
+            >
+              <IconTablerDatabaseSearch />
+              {{ readCurrentPageLoading ? `正在获取 ${items.length} 项` : '获取当前页数据' }}
+            </el-button>
+          </span>
+        </el-tooltip>
         <el-button @click="emit('import')">批量导入</el-button>
+        <el-button @click="exportVisible = true">导出变量</el-button>
         <el-button type="primary" @click="openCreate(groupId)">新建变量</el-button>
       </div>
     </div>
@@ -25,7 +43,7 @@
         :data="items"
         height="100%"
         row-key="id"
-        @selection-change="selected = $event"
+        @selection-change="onSelectionChange"
       >
         <el-table-column type="selection" width="44" />
         <el-table-column prop="name" label="变量名称" min-width="180">
@@ -36,7 +54,6 @@
               @click="openDetail(scope.row)"
             >
               <strong>{{ scope.row.name }}</strong>
-              <small>{{ scope.row.code }}</small>
             </button>
           </template>
         </el-table-column>
@@ -46,6 +63,43 @@
           >
         </el-table-column>
         <el-table-column prop="dataType" label="数据类型" width="112" />
+        <el-table-column label="最近值" min-width="180">
+          <template #default="scope">
+            <div class="collector-point-table__debug-value">
+              <el-tooltip
+                :content="debugValue(scope.row)"
+                :disabled="!scope.row.latestDebugSnapshot"
+                placement="top"
+              >
+                <span>{{ debugValue(scope.row) }}</span>
+              </el-tooltip>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="质量" width="118" align="center">
+          <template #default="scope">
+            <el-tag
+              v-if="tableQuality(scope.row.latestDebugSnapshot?.quality)"
+              :type="
+                tableQuality(scope.row.latestDebugSnapshot?.quality) === 'Good'
+                  ? 'success'
+                  : 'danger'
+              "
+              size="small"
+              effect="light"
+            >
+              {{ tableQuality(scope.row.latestDebugSnapshot?.quality) }}
+            </el-tag>
+            <span v-else class="collector-point-table__empty-value">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="数据时间" width="168">
+          <template #default="scope">
+            <span class="collector-point-table__debug-time">{{
+              collectorDebugTime(scope.row.latestDebugSnapshot?.sourceTimestamp || null)
+            }}</span>
+          </template>
+        </el-table-column>
         <el-table-column v-if="showElementCount" prop="elementCount" label="元素" width="74" />
         <el-table-column label="采集周期" width="104">
           <template #default="scope">{{ formatAcquisitionInterval(scope.row) }}</template>
@@ -59,7 +113,7 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="146" fixed="right">
+        <el-table-column label="操作" width="168" fixed="right">
           <template #default="scope">
             <div class="collector-point-table__row-actions">
               <el-button link type="primary" @click="openDetail(scope.row)">查看</el-button>
@@ -71,16 +125,15 @@
       </el-table>
     </div>
 
-    <div class="collector-point-table__footer">
-      <span>第 {{ page }} 页 · 每页 {{ pageSize }} 条</span>
-      <el-pagination
-        layout="prev, pager, next"
-        :current-page="page"
-        :page-size="pageSize"
-        :total="total"
-        @current-change="load"
-      />
-    </div>
+    <DataCenterPagination
+      v-if="total > 0"
+      class="collector-point-table__pagination"
+      :page="page"
+      :page-size="pageSize"
+      :total="total"
+      :total-pages="totalPages"
+      @change="handlePaginationChange"
+    />
 
     <BulkActionBar :selected-count="selected.length" @clear="clearSelection">
       <el-button size="small" @click="batchSetEnabled(true)">批量启用</el-button>
@@ -110,6 +163,21 @@
       </template>
     </el-dialog>
 
+    <CollectorPointExportDialog
+      v-model="exportVisible"
+      :project-id="projectId"
+      :connection-id="connectionId"
+      :connection-name="connectionName"
+      :group-id="groupId"
+      :group-name="currentGroupName"
+      :search="search"
+      :page="page"
+      :page-size="pageSize"
+      :total="total"
+      :current-page-count="items.length"
+      :selected-ids="selected.map((item) => item.id)"
+    />
+
     <CollectorPointDrawer
       v-model="drawerVisible"
       :initial-mode="drawerMode"
@@ -127,7 +195,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   deleteCollectorPointsBatch,
@@ -138,32 +206,50 @@ import {
 } from '@/api/collector.api'
 import type { CollectorPoint } from '@/api/schemas/collector.schema'
 import BulkActionBar from '@/components/shared/BulkActionBar.vue'
+import DataCenterPagination from '@/components/shared/DataCenterPagination.vue'
 import type { CollectorPointCreateDefaults } from './collector-workbench-model'
 import CollectorPointDrawer, { type CollectorPointGroupNode } from './CollectorPointDrawer.vue'
+import CollectorPointExportDialog from './CollectorPointExportDialog.vue'
+import IconTablerDatabaseSearch from '~icons/tabler/database-search'
+import {
+  collectorDebugTime,
+  formatCollectorDebugValue,
+  hasCollectorDebugSuccess,
+} from './collector-debug-snapshot'
 
 const props = defineProps<{
   projectId: string
   connectionId: string
+  connectionName: string
   driverId: string
   groupId: string | null
   showElementCount: boolean
+  supportsPointRead: boolean
+  canReadCurrentPage: boolean
+  readCurrentPageLoading: boolean
+  readCurrentPageDisabledReason: string
 }>()
 const emit = defineEmits<{
-  selection: [pointIds: string[]]
   import: []
   saved: []
+  readCurrentPage: [points: Array<Pick<CollectorPoint, 'id' | 'name'>>]
 }>()
-const tableRef = ref<{ clearSelection: () => void }>()
+const tableRef = ref<{
+  clearSelection: () => void
+  toggleRowSelection: (row: CollectorPoint, selected: boolean) => void
+}>()
 const items = ref<CollectorPoint[]>([])
-const selected = ref<CollectorPoint[]>([])
+const selectedById = ref(new Map<string, CollectorPoint>())
+const selected = computed(() => [...selectedById.value.values()])
 const groups = ref<CollectorPointGroupNode[]>([])
 const loading = ref(false)
 const batchLoading = ref(false)
 const savingIds = ref(new Set<string>())
 const search = ref('')
 const page = ref(1)
-const pageSize = 50
+const pageSize = ref(50)
 const total = ref(0)
+const totalPages = computed(() => (total.value > 0 ? Math.ceil(total.value / pageSize.value) : 0))
 const drawerVisible = ref(false)
 const drawerMode = ref<'create' | 'edit' | 'detail'>('create')
 const currentPoint = ref<CollectorPoint | null>(null)
@@ -172,6 +258,33 @@ const createDefaults = ref<CollectorPointCreateDefaults | null>(null)
 const createSourceLocked = ref(false)
 const moveVisible = ref(false)
 const moveGroupId = ref<string | null>(null)
+const exportVisible = ref(false)
+let restoringSelection = false
+const currentGroupName = computed(() => {
+  if (!props.groupId) return '全部变量'
+  return flattenGroups(groups.value).find((group) => group.id === props.groupId)?.name || '当前分组'
+})
+
+function readCurrentPage() {
+  if (!props.canReadCurrentPage || props.readCurrentPageLoading || items.value.length === 0) return
+  emit(
+    'readCurrentPage',
+    items.value.map(({ id, name }) => ({ id, name })),
+  )
+}
+
+function debugValue(point: CollectorPoint) {
+  const snapshot = point.latestDebugSnapshot
+  return snapshot && hasCollectorDebugSuccess(snapshot)
+    ? formatCollectorDebugValue(snapshot.value, snapshot.valueText)
+    : '—'
+}
+
+function tableQuality(quality: string | null | undefined): 'Good' | 'Bad' | null {
+  const normalized = quality?.trim().toLowerCase()
+  if (!normalized) return null
+  return normalized.startsWith('good') ? 'Good' : 'Bad'
+}
 
 function formatAcquisitionInterval(point: CollectorPoint) {
   const intervalMs = point.acquisition.intervalMs
@@ -183,17 +296,26 @@ async function load(nextPage = page.value) {
   try {
     const result = await listCollectorPoints(props.projectId, props.connectionId, {
       page: page.value,
-      pageSize,
+      pageSize: pageSize.value,
       search: search.value,
       groupId: props.groupId || undefined,
     })
     items.value = result.list
     total.value = result.pagination.total
-    clearSelection()
+    if (currentPoint.value) {
+      currentPoint.value = items.value.find((item) => item.id === currentPoint.value?.id) || null
+    }
+    await nextTick()
+    restoreCurrentPageSelection()
   } finally {
     loading.value = false
   }
 }
+function handlePaginationChange(value: { page: number; pageSize: number }) {
+  pageSize.value = value.pageSize
+  void load(value.page)
+}
+
 async function loadGroupChildren(parentId: string | null): Promise<CollectorPointGroupNode[]> {
   const children = await listCollectorPointGroups(props.projectId, props.connectionId, parentId)
   return Promise.all(
@@ -325,23 +447,45 @@ async function moveSelected() {
     batchLoading.value = false
   }
 }
-function clearSelection() {
-  selected.value = []
-  tableRef.value?.clearSelection()
+function onSelectionChange(rows: CollectorPoint[]) {
+  if (restoringSelection) return
+  const next = new Map(selectedById.value)
+  for (const item of items.value) next.delete(item.id)
+  for (const row of rows) next.set(row.id, row)
+  selectedById.value = next
 }
-watch(selected, (value) =>
-  emit(
-    'selection',
-    value.map((item) => item.id),
-  ),
-)
+function restoreCurrentPageSelection() {
+  restoringSelection = true
+  tableRef.value?.clearSelection()
+  for (const item of items.value) {
+    if (selectedById.value.has(item.id)) tableRef.value?.toggleRowSelection(item, true)
+  }
+  nextTick(() => {
+    restoringSelection = false
+  })
+}
+function clearSelection() {
+  selectedById.value = new Map()
+  restoringSelection = true
+  tableRef.value?.clearSelection()
+  nextTick(() => {
+    restoringSelection = false
+  })
+}
+function flattenGroups(nodes: CollectorPointGroupNode[]): CollectorPointGroupNode[] {
+  return nodes.flatMap((node) => [node, ...flattenGroups(node.children || [])])
+}
 watch(
   () => props.groupId,
-  () => load(1),
+  () => {
+    clearSelection()
+    load(1)
+  },
 )
 watch(
   () => props.connectionId,
   async () => {
+    clearSelection()
     await Promise.all([reloadGroups(), load(1)])
   },
 )
@@ -358,8 +502,7 @@ defineExpose({ reload: load, reloadGroups, openCreate })
   flex-direction: column;
   padding-left: 16px;
 }
-.collector-point-table__toolbar,
-.collector-point-table__footer {
+.collector-point-table__toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -376,8 +519,7 @@ defineExpose({ reload: load, reloadGroups, openCreate })
   align-items: center;
   gap: 8px;
 }
-.collector-point-table__filters span,
-.collector-point-table__footer {
+.collector-point-table__filters span {
   color: var(--dc-text-muted);
   font-size: 11px;
 }
@@ -390,6 +532,28 @@ defineExpose({ reload: load, reloadGroups, openCreate })
   overflow: hidden;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-md);
+}
+.collector-point-table__debug-value {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+.collector-point-table__debug-value > span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--dc-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.collector-point-table__debug-value :deep(.el-tag) {
+  flex: 0 0 auto;
+}
+.collector-point-table__debug-time,
+.collector-point-table__empty-value {
+  color: var(--dc-text-muted);
+  font-size: 11px;
 }
 .collector-point-table__identity {
   display: flex;
@@ -410,13 +574,21 @@ defineExpose({ reload: load, reloadGroups, openCreate })
 .collector-point-table__identity:hover strong {
   color: var(--dc-primary);
 }
-.collector-point-table__identity small,
 .collector-point-table code {
   color: var(--dc-text-muted);
   font-size: 10px;
 }
-.collector-point-table__footer {
-  min-height: 48px;
+.collector-point-table__row-actions {
+  padding-right: 4px;
+}
+.collector-point-table__row-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+.collector-point-table__pagination {
+  margin-top: 8px;
+  overflow: hidden;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-md);
 }
 @media (max-width: 900px) {
   .collector-point-table__toolbar {

@@ -296,11 +296,16 @@ async function refreshExisting() {
   syncTreeChecks()
 }
 
-function markSelectedCreated() {
-  const createdIds = new Set([
-    ...selectedVariableIds.value,
-    ...selected.value.map((node) => node.nodeId),
-  ])
+function selectedBatchVariables() {
+  return selected.value.filter((node) => node.nodeClass === 'variable' && !node.modeled)
+}
+
+function markSelectedCreated(createdIndexes?: number[]) {
+  const candidates = selectedBatchVariables()
+  const createdNodes = createdIndexes
+    ? createdIndexes.map((index) => candidates[index]).filter(Boolean)
+    : candidates
+  const createdIds = new Set(createdNodes.map((node) => node.nodeId))
   const existing = new Set(existingNodeIds.value)
   createdIds.forEach((nodeId) => {
     existing.add(nodeId)
@@ -308,9 +313,11 @@ function markSelectedCreated() {
     if (node) node.modeled = true
   })
   existingNodeIds.value = existing
-  selectedVariableIds.value = new Set()
+  selected.value = selected.value.filter((node) => !createdIds.has(node.nodeId))
+  selectedVariableIds.value = new Set(
+    [...selectedVariableIds.value].filter((nodeId) => !createdIds.has(nodeId)),
+  )
   selectedBranchIds.value = new Set()
-  selected.value = []
   syncTreeChecks()
 }
 
@@ -641,12 +648,7 @@ function isGenericNodeSelectable(node: CollectorBrowseNode) {
 }
 
 function emitPoints() {
-  emit(
-    'points',
-    buildBatchPoints(
-      selected.value.filter((node) => node.nodeClass === 'variable' && !node.modeled),
-    ),
-  )
+  emit('points', buildBatchPoints(selectedBatchVariables()))
 }
 
 function buildBatchPoints(variables: CollectorBrowseNode[]) {
