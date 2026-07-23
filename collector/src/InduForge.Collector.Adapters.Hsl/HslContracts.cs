@@ -127,6 +127,11 @@ public interface IHslS7TcpClientFactory
     IHslS7TcpClient Create(HslS7TcpClientOptions options);
 }
 
+public sealed class HslS7TcpClientFactory : IHslS7TcpClientFactory
+{
+    public IHslS7TcpClient Create(HslS7TcpClientOptions options) => new HslS7TcpClient(options);
+}
+
 public sealed class HslModbusTcpClientFactory : IHslModbusTcpClientFactory
 {
     public IHslModbusTcpClient Create(HslModbusTcpClientOptions options) => new HslModbusTcpClient(options);

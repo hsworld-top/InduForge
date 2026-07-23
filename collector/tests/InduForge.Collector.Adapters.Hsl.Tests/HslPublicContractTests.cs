@@ -32,4 +32,23 @@ public sealed class HslPublicContractTests
         Assert.Equal("读取失败", result.ErrorMessage);
         Assert.True(result.Retryable);
     }
+
+    [Fact]
+    public async Task S7FactoryCreatesClientWithoutExposingHslTypes()
+    {
+        var factory = new HslS7TcpClientFactory();
+
+        var client = factory.Create(new HslS7TcpClientOptions(
+            "127.0.0.1",
+            102,
+            5000,
+            HslSiemensPlc.S1200,
+            0,
+            1,
+            null,
+            null));
+
+        Assert.IsAssignableFrom<IHslS7TcpClient>(client);
+        await client.DisposeAsync();
+    }
 }
