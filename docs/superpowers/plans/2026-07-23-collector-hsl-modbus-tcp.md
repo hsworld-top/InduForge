@@ -235,7 +235,7 @@ var parsed = ModbusTcpAddress.Parse(new PointReadRequest(
     "bool",
     1,
     JsonSerializer.SerializeToElement(new { })));
-Assert.Equal("s=1;x=3;100", parsed.HslAddress);
+Assert.Equal("s=1;100.3", parsed.HslAddress);
 ```
 
 - [ ] **步骤 2：运行测试验证失败**
