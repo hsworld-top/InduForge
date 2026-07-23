@@ -23,6 +23,17 @@ public enum HslValueType
     DoublePrecision,
     Text,
     Binary,
+    DateTime,
+}
+
+public enum HslSiemensPlc
+{
+    S1200,
+    S300,
+    S400,
+    S1500,
+    S200Smart,
+    S200,
 }
 
 public enum HslModbusReadArea
@@ -41,6 +52,21 @@ public sealed record HslModbusTcpClientOptions(
 public sealed record HslReadRequest(
     string Address,
     HslModbusReadArea Area,
+    HslValueType DataType,
+    int ElementCount);
+
+public sealed record HslS7TcpClientOptions(
+    string Host,
+    int Port,
+    int TimeoutMilliseconds,
+    HslSiemensPlc PlcType,
+    byte Rack,
+    byte Slot,
+    int? LocalTsap,
+    int? RemoteTsap);
+
+public sealed record HslS7ReadRequest(
+    string Address,
     HslValueType DataType,
     int ElementCount);
 
@@ -83,6 +109,22 @@ public interface IHslModbusTcpClient : IAsyncDisposable
 public interface IHslModbusTcpClientFactory
 {
     IHslModbusTcpClient Create(HslModbusTcpClientOptions options);
+}
+
+public interface IHslS7TcpClient : IAsyncDisposable
+{
+    bool IsConnected { get; }
+
+    Task<HslOperationResult> ConnectAsync(CancellationToken cancellationToken);
+
+    Task<HslOperationResult> CloseAsync(CancellationToken cancellationToken);
+
+    Task<HslReadResult> ReadAsync(HslS7ReadRequest request, CancellationToken cancellationToken);
+}
+
+public interface IHslS7TcpClientFactory
+{
+    IHslS7TcpClient Create(HslS7TcpClientOptions options);
 }
 
 public sealed class HslModbusTcpClientFactory : IHslModbusTcpClientFactory
