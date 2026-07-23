@@ -459,6 +459,11 @@ func (s *CollectorPointService) buildPointParams(connection *repository.Collecto
 			return repository.CreateCollectorPointParams{}, err
 		}
 	}
+	if connection.DriverID == "siemens.s7-tcp" {
+		if err := validateSiemensS7PointAddress(input.Address, input.DataType, input.ElementCount); err != nil {
+			return repository.CreateCollectorPointParams{}, err
+		}
+	}
 	addressText, err := formatCollectorAddress(connection.DriverID, input.Address)
 	if err != nil {
 		return repository.CreateCollectorPointParams{}, err
@@ -499,6 +504,31 @@ func validateModbusPointAddress(address map[string]any, dataType string) error {
 		if !isBoolean && hasBitIndex {
 			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "只有寄存器 bool 变量可以配置位索引")
 		}
+	}
+	return nil
+}
+
+// validateSiemensS7PointAddress 校验 S7 区域、数据类型和位偏移组合，规则与 DevAgent 驱动保持一致。
+func validateSiemensS7PointAddress(address map[string]any, dataType string, elementCount int) error {
+	area, _ := address["area"].(string)
+	_, hasBitOffset := address["bitOffset"]
+	isBoolean := strings.EqualFold(dataType, "bool")
+
+	if isBoolean {
+		if area == "timer" || area == "counter" || !hasBitOffset {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Siemens S7 bool 变量必须配置可位寻址区域和位偏移")
+		}
+	} else if hasBitOffset {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "只有 Siemens S7 bool 变量可以配置位偏移")
+	}
+
+	if area == "timer" || area == "counter" {
+		if !strings.EqualFold(dataType, "int16") && !strings.EqualFold(dataType, "uint16") {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "定时器和计数器只支持 int16 或 uint16 数据类型")
+		}
+	}
+	if strings.EqualFold(dataType, "datetime") && elementCount > 1 {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Siemens S7 datetime 变量只支持单元素读取")
 	}
 	return nil
 }
