@@ -603,10 +603,18 @@ func formatCollectorAddress(driverID string, address map[string]any) (string, er
 	case "siemens.s7-tcp":
 		area, _ := address["area"].(string)
 		offset := numberText(address["byteOffset"])
-		if area == "dataBlock" {
-			area = "DB" + numberText(address["dbNumber"])
+		prefix := map[string]string{
+			"input":     "I",
+			"output":    "Q",
+			"marker":    "M",
+			"dataBlock": "DB" + numberText(address["dbNumber"]) + ".",
+			"timer":     "T",
+			"counter":   "C",
+		}[area]
+		if prefix == "" {
+			return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Siemens S7 地址区域无效")
 		}
-		result := area + ":" + offset
+		result := prefix + offset
 		if bit, ok := address["bitOffset"]; ok {
 			result += "." + numberText(bit)
 		}

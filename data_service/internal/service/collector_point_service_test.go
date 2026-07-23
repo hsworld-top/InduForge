@@ -130,6 +130,9 @@ func TestCollectorPointServiceValidatesSiemensS7AddressAndDataTypeCombinations(t
 				if len(result.List) != 1 || len(result.Failed) != 0 {
 					t.Fatalf("合法变量未创建: %+v", result)
 				}
+				if result.List[0].AddressText != "DB1.10" {
+					t.Fatalf("S7 地址文本不正确: %s", result.List[0].AddressText)
+				}
 				return
 			}
 			if len(result.List) != 0 || len(result.Failed) != 1 || !strings.Contains(result.Failed[0].Message, tt.wantFailure) {
