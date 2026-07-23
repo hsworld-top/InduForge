@@ -1,4 +1,4 @@
 {
-  "connection": { "order": ["host", "port", "connectTimeoutMs"] },
+  "connection": { "order": ["host", "port", "connectTimeoutMs", "dataFormat"] },
   "address": { "order": ["station", "area", "address", "bitIndex"] }
 }

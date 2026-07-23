@@ -2,12 +2,15 @@
 
   <ItemGroup>
     <ProjectReference Include="..\InduForge.Collector.Contracts\InduForge.Collector.Contracts.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.ModbusTcp\InduForge.Collector.Drivers.ModbusTcp.csproj" />
     <ProjectReference Include="..\InduForge.Collector.Drivers.OpcUa\InduForge.Collector.Drivers.OpcUa.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="..\..\..\runtime\collector_protocols\opcua.standard\manifest.json"
                       LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.opcua.standard.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\modbus.tcp\manifest.json"
+                      LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.modbus.tcp.manifest.json" />
   </ItemGroup>
 
   <PropertyGroup>

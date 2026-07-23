@@ -2,14 +2,21 @@
   "protocolFamily": "modbus",
   "driverId": "modbus.tcp",
   "driverVersion": "1.0.0",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "displayName": "Modbus TCP",
   "category": "fieldbus",
   "transports": ["tcp"],
-  "operations": [],
+  "operations": [
+    "connection.test",
+    "connection.open",
+    "connection.close",
+    "point.read"
+  ],
   "features": ["point.elementCount"],
   "dataTypes": [
     "bool",
+    "int8",
+    "uint8",
     "int16",
     "uint16",
     "int32",
@@ -23,7 +30,7 @@
   ],
   "acquisitionModes": ["polling"],
   "platforms": {
-    "devAgent": [],
+    "devAgent": ["windows-x64"],
     "runtime": []
   }
 }

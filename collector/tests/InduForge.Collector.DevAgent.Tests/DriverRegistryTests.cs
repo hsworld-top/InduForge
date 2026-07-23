@@ -42,6 +42,20 @@ public sealed class DriverRegistryTests
         Assert.Equal([2], descriptor.SchemaVersions);
     }
 
+    [Fact]
+    public void DefaultRegistryLoadsModbusTcpManifest()
+    {
+        var descriptor = DriverRegistry.CreateDefault().Describe("modbus.tcp");
+
+        Assert.Equal("modbus", descriptor.ProtocolFamily);
+        Assert.Equal("1.0.0", descriptor.DriverVersion);
+        Assert.Equal([2], descriptor.SchemaVersions);
+        Assert.Contains(DriverOperations.ConnectionOpen, descriptor.Operations);
+        Assert.Contains(DriverOperations.ConnectionClose, descriptor.Operations);
+        Assert.Contains(DriverOperations.PointRead, descriptor.Operations);
+        Assert.DoesNotContain(DriverOperations.DeviceBrowse, descriptor.Operations);
+    }
+
     private sealed class SessionDriver : IIndustrialDriver, IConnectionSessionDriver
     {
         public DriverDescriptor Descriptor { get; } = new(

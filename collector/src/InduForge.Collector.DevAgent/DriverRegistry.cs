@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using InduForge.Collector.Contracts;
+using InduForge.Collector.Drivers.ModbusTcp;
 using InduForge.Collector.Drivers.OpcUa;
 
 namespace InduForge.Collector.DevAgent;
@@ -8,6 +9,7 @@ namespace InduForge.Collector.DevAgent;
 internal sealed class DriverRegistry
 {
     private const string OpcUaManifestResource = "InduForge.Collector.DevAgent.CollectorProtocols.opcua.standard.manifest.json";
+    private const string ModbusTcpManifestResource = "InduForge.Collector.DevAgent.CollectorProtocols.modbus.tcp.manifest.json";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly Dictionary<string, Func<IIndustrialDriver>> _factories;
     private readonly Dictionary<string, DriverDescriptor> _descriptors;
@@ -56,10 +58,18 @@ internal sealed class DriverRegistry
 
     public static DriverRegistry CreateDefault()
     {
-        var manifest = LoadManifest(Assembly.GetExecutingAssembly(), OpcUaManifestResource);
-        return new DriverRegistry([() => new OpcUaDriver()], new Dictionary<string, DriverManifest>(StringComparer.Ordinal)
+        var assembly = Assembly.GetExecutingAssembly();
+        var opcUaManifest = LoadManifest(assembly, OpcUaManifestResource);
+        var modbusTcpManifest = LoadManifest(assembly, ModbusTcpManifestResource);
+        return new DriverRegistry(
+        [
+            () => new OpcUaDriver(),
+            () => new ModbusTcpDriver(),
+        ],
+        new Dictionary<string, DriverManifest>(StringComparer.Ordinal)
         {
-            [manifest.DriverId] = manifest,
+            [opcUaManifest.DriverId] = opcUaManifest,
+            [modbusTcpManifest.DriverId] = modbusTcpManifest,
         });
     }
 

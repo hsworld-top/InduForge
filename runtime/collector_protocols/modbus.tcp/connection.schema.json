@@ -27,6 +27,20 @@
       "default": 5000,
       "x-induforge-unit": "ms",
       "x-induforge-advanced": true
+    },
+    "dataFormat": {
+      "type": "string",
+      "title": "多寄存器数据格式（dataFormat）",
+      "description": "控制 32 位及以上数值在多个寄存器中的字节顺序",
+      "enum": ["ABCD", "BADC", "CDAB", "DCBA"],
+      "default": "ABCD",
+      "x-induforge-enum-labels": {
+        "ABCD": "大端顺序（ABCD）",
+        "BADC": "字节交换（BADC）",
+        "CDAB": "字交换（CDAB）",
+        "DCBA": "完全反转（DCBA）"
+      },
+      "x-induforge-advanced": true
     }
   }
 }
