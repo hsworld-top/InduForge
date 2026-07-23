@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Net;
+using System.Net.Sockets;
 using InduForge.Collector.Contracts;
 
 namespace InduForge.Collector.Drivers.ModbusTcp.Tests;
@@ -38,14 +40,50 @@ public sealed class ModbusTcpDriverIntegrationTests
         Assert.All(result.Values, value => Assert.True(value.Succeeded));
     }
 
-    private static ConnectionProfile CreateProfile(int port) => new(
+    [Fact]
+    public async Task UnreachablePortReturnsRetryableConnectionError()
+    {
+        var driver = new ModbusTcpDriver();
+
+        var exception = await Assert.ThrowsAsync<ModbusTcpDriverException>(() =>
+            driver.TestConnectionAsync(CreateProfile(GetFreeTcpPort()), CancellationToken.None));
+
+        Assert.True(exception.Retryable);
+    }
+
+    [Fact]
+    public async Task ReadsMultiRegisterValueWithConfiguredDataFormat()
+    {
+        await using var server = new ModbusTcpTestServer();
+        server.HoldingRegisters[300] = 0x3412;
+        server.HoldingRegisters[301] = 0x7856;
+        var driver = new ModbusTcpDriver();
+
+        var result = await driver.ReadAsync(
+            CreateProfile(server.Port, "BADC"),
+            new ReadRequest([CreatePoint("value", "holdingRegister", 300, "int32")]),
+            CancellationToken.None);
+
+        Assert.Equal(0x12345678, Assert.IsType<int>(result.Values[0].Value));
+    }
+
+    private static int GetFreeTcpPort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
+    }
+
+    private static ConnectionProfile CreateProfile(int port, string dataFormat = "ABCD") => new(
         "modbus",
         JsonSerializer.SerializeToElement(new
         {
             host = "127.0.0.1",
             port,
             connectTimeoutMs = 3000,
-            dataFormat = "ABCD",
+            dataFormat,
         }),
         JsonSerializer.SerializeToElement(new { }));
 

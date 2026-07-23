@@ -157,7 +157,23 @@ internal sealed class ModbusTcpConnectionSession : IIndustrialConnectionSession,
     {
         if (!CanMergeType(next.Address.ValueType)) return false;
         var previous = segment.Points[^1];
-        return GetStartUnit(next) == GetStartUnit(previous) + GetSpanUnits(previous);
+        return GetStartUnit(next) == GetStartUnit(previous) + GetSpanUnits(previous) &&
+               FitsProtocolReadLimit(segment.First, next);
+    }
+
+    // 连续变量只在同一 Modbus 报文容量内合并，超过上限时自动开启下一读取段。
+    private static bool FitsProtocolReadLimit(ModbusReadPoint first, ModbusReadPoint last)
+    {
+        var start = GetStartUnit(first);
+        var end = GetStartUnit(last) + GetSpanUnits(last);
+        if (first.Address.ValueType == HslValueType.Boolean &&
+            first.Address.Area is ModbusTcpArea.InputRegister or ModbusTcpArea.HoldingRegister)
+        {
+            var firstRegister = start / 16;
+            var endRegister = (end + 15) / 16;
+            return endRegister - firstRegister <= 125;
+        }
+        return end - start <= (first.Address.Area is ModbusTcpArea.Coil or ModbusTcpArea.DiscreteInput ? 2000 : 125);
     }
 
     private static bool CanMergeType(HslValueType valueType) => valueType is not

@@ -81,6 +81,13 @@ internal sealed record ModbusTcpAddress(
         {
             throw Invalid("MODBUS_BIT_INDEX_DATA_TYPE_INVALID", "只有寄存器 bool 变量可以配置位索引");
         }
+        // 01/02 功能码最多读取 2000 位，03/04 功能码最多读取 125 个寄存器，保存前即拒绝单点超限请求。
+        var protocolUnits = GetProtocolReadUnits(valueType, point.ElementCount, bitIndex);
+        var maximumUnits = registerArea ? 125 : 2000;
+        if (protocolUnits > maximumUnits)
+        {
+            throw Invalid("MODBUS_ELEMENT_COUNT_TOO_LARGE", $"Modbus 单变量读取长度超过协议上限 {maximumUnits}");
+        }
 
         var prefix = area == ModbusTcpArea.InputRegister
             ? $"s={station};x=4;"
@@ -106,6 +113,18 @@ internal sealed record ModbusTcpAddress(
     }
 
     public HslReadRequest ToHslRequest() => new(HslAddress, ReadArea, ValueType, ElementCount);
+
+    private static long GetProtocolReadUnits(HslValueType valueType, int elementCount, int? bitIndex) => valueType switch
+    {
+        HslValueType.Boolean when bitIndex is not null => (bitIndex.Value + (long)elementCount + 15) / 16,
+        HslValueType.Boolean => elementCount,
+        HslValueType.Signed8 or HslValueType.Unsigned8 or HslValueType.Text or HslValueType.Binary =>
+            ((long)elementCount + 1) / 2,
+        HslValueType.Signed16 or HslValueType.Unsigned16 => elementCount,
+        HslValueType.Signed32 or HslValueType.Unsigned32 or HslValueType.SinglePrecision => (long)elementCount * 2,
+        HslValueType.Signed64 or HslValueType.Unsigned64 or HslValueType.DoublePrecision => (long)elementCount * 4,
+        _ => elementCount,
+    };
 
     private static HslValueType ParseValueType(string dataType) => dataType switch
     {

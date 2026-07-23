@@ -100,6 +100,52 @@ public sealed class ModbusTcpDriverTests
         Assert.True(result.Values[1].Succeeded);
     }
 
+    [Fact]
+    public async Task ReadSplitsContiguousRegistersAtProtocolLimit()
+    {
+        var client = new FakeHslModbusTcpClient
+        {
+            ReadHandler = request => HslReadResult.Success(
+                Enumerable.Range(0, request.ElementCount).Select(value => (short)value).ToArray()),
+        };
+        var driver = new ModbusTcpDriver(new FakeFactory(client));
+        await using var session = await driver.OpenSessionAsync(CreateProfile(), CancellationToken.None);
+        var reader = Assert.IsAssignableFrom<IPointReaderSession>(session);
+        var points = Enumerable.Range(0, 126)
+            .Select(index => CreatePoint($"point-{index}", 100 + index, "int16"))
+            .ToArray();
+
+        var result = await reader.ReadAsync(new ReadRequest(points), CancellationToken.None);
+
+        Assert.Equal(2, client.ReadRequests.Count);
+        Assert.Equal(125, client.ReadRequests[0].ElementCount);
+        Assert.Equal(1, client.ReadRequests[1].ElementCount);
+        Assert.All(result.Values, value => Assert.True(value.Succeeded));
+    }
+
+    [Fact]
+    public async Task ReadSeparatesDifferentStations()
+    {
+        var client = new FakeHslModbusTcpClient
+        {
+            ReadHandler = _ => HslReadResult.Success((short)1),
+        };
+        var driver = new ModbusTcpDriver(new FakeFactory(client));
+        await using var session = await driver.OpenSessionAsync(CreateProfile(), CancellationToken.None);
+        var reader = Assert.IsAssignableFrom<IPointReaderSession>(session);
+
+        await reader.ReadAsync(
+            new ReadRequest([
+                CreatePoint("station-1", 100, "int16", station: 1),
+                CreatePoint("station-2", 101, "int16", station: 2),
+            ]),
+            CancellationToken.None);
+
+        Assert.Equal(2, client.ReadRequests.Count);
+        Assert.Contains(client.ReadRequests, request => request.Address.StartsWith("s=1;", StringComparison.Ordinal));
+        Assert.Contains(client.ReadRequests, request => request.Address.StartsWith("s=2;", StringComparison.Ordinal));
+    }
+
     private static ConnectionProfile CreateProfile() => new(
         "modbus",
         JsonSerializer.SerializeToElement(new
@@ -111,9 +157,9 @@ public sealed class ModbusTcpDriverTests
         }),
         JsonSerializer.SerializeToElement(new { }));
 
-    private static PointReadRequest CreatePoint(string key, int address, string dataType) => new(
+    private static PointReadRequest CreatePoint(string key, int address, string dataType, int station = 1) => new(
         key,
-        JsonSerializer.SerializeToElement(new { station = 1, area = "holdingRegister", address }),
+        JsonSerializer.SerializeToElement(new { station, area = "holdingRegister", address }),
         dataType,
         1,
         JsonSerializer.SerializeToElement(new { }));

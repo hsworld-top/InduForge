@@ -65,10 +65,35 @@ public sealed class ModbusTcpAddressTests
         Assert.Throws<ModbusTcpDriverException>(() => ModbusTcpAddress.Parse(point));
     }
 
-    private static PointReadRequest CreatePoint(JsonElement address, string dataType) => new(
+    [Theory]
+    [InlineData("coil", "bool", 2001, null)]
+    [InlineData("holdingRegister", "int16", 126, null)]
+    [InlineData("holdingRegister", "int32", 63, null)]
+    [InlineData("holdingRegister", "bool", 1986, 15)]
+    public void ParseRejectsSinglePointReadsAboveProtocolLimit(
+        string area,
+        string dataType,
+        int elementCount,
+        int? bitIndex)
+    {
+        var address = new Dictionary<string, object?>
+        {
+            ["station"] = 1,
+            ["area"] = area,
+            ["address"] = 100,
+        };
+        if (bitIndex is not null) address["bitIndex"] = bitIndex;
+
+        var exception = Assert.Throws<ModbusTcpDriverException>(() =>
+            ModbusTcpAddress.Parse(CreatePoint(JsonSerializer.SerializeToElement(address), dataType, elementCount)));
+
+        Assert.Equal("MODBUS_ELEMENT_COUNT_TOO_LARGE", exception.Code);
+    }
+
+    private static PointReadRequest CreatePoint(JsonElement address, string dataType, int elementCount = 1) => new(
         "point-1",
         address,
         dataType,
-        1,
+        elementCount,
         JsonSerializer.SerializeToElement(new { }));
 }
