@@ -1,6 +1,5 @@
 using System.Text.Json;
 using InduForge.Collector.Contracts;
-using InduForge.Collector.Drivers.OpcUa;
 
 namespace InduForge.Collector.DevAgent;
 
@@ -76,7 +75,7 @@ internal sealed class CollectorTaskExecutor : IAsyncDisposable
         {
             throw;
         }
-        catch (OpcUaDriverException exception)
+        catch (IndustrialDriverException exception)
         {
             _logger?.Warn(
                 "task.driver.failed",
@@ -157,7 +156,7 @@ internal sealed class CollectorTaskExecutor : IAsyncDisposable
     {
         var taskRequest = CreateReadRequest(input);
         ReadResult result = new([], []);
-        if (taskRequest.Request.NodeIds.Count > 0)
+        if (taskRequest.Request.Points.Count > 0)
         {
             if (sessionKey is not null)
             {
@@ -184,26 +183,20 @@ internal sealed class CollectorTaskExecutor : IAsyncDisposable
             }
         }
 
-        var values = taskRequest.Items.Select(item =>
+        var returnedValues = result.Values
+            .GroupBy(value => value.Key, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        var values = taskRequest.PointIds.Select(pointId =>
         {
-            if (item.ResultIndex is null)
+            if (taskRequest.RejectedValues.TryGetValue(pointId, out var rejected))
             {
-                return new CollectorPointReadValue(
-                    item.PointId,
-                    false,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    item.ErrorCode,
-                    item.ErrorMessage);
+                return rejected;
             }
 
-            if (item.ResultIndex.Value >= result.Values.Count)
+            if (!returnedValues.TryGetValue(pointId, out var value))
             {
                 return new CollectorPointReadValue(
-                    item.PointId,
+                    pointId,
                     false,
                     null,
                     null,
@@ -214,48 +207,22 @@ internal sealed class CollectorTaskExecutor : IAsyncDisposable
                     "驱动未返回该变量的读取结果");
             }
 
-            var value = result.Values[item.ResultIndex.Value];
             return new CollectorPointReadValue(
-                item.PointId,
-                true,
+                pointId,
+                value.Succeeded,
                 value.Value,
                 value.DataType,
                 value.Quality,
                 value.SourceTimestamp,
                 value.ServerTimestamp,
-                null,
-                null);
+                value.ErrorCode,
+                value.ErrorMessage);
         }).ToArray();
         return new CollectorPointReadResult(values, result.Diagnostics);
     }
 
     private static ConnectionProfile CreateProfile(CollectorTaskConnection connection)
-    {
-        if (!string.Equals(connection.ProtocolFamily, "opcua", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new CollectorTaskExecutionException(
-                "COLLECTOR_PROTOCOL_UNSUPPORTED",
-                "当前 Agent 不支持该协议",
-                false);
-        }
-        if (!string.Equals(connection.Config.AuthenticationType, "anonymous", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new CollectorTaskExecutionException(
-                "COLLECTOR_AUTH_UNSUPPORTED",
-                "当前仅支持匿名认证",
-                false);
-        }
-        return new ConnectionProfile(
-            connection.ProtocolFamily,
-            OpcUaEndpointBuilder.Build(
-                connection.Config.Host,
-                connection.Config.Port,
-                connection.Config.EndpointPath),
-            connection.Config.SecurityMode ?? string.Empty,
-            connection.Config.SecurityPolicy ?? string.Empty,
-            new ConnectionAuthentication(AuthenticationType.Anonymous),
-            TimeSpan.FromMilliseconds(connection.Config.TimeoutMs ?? 30000));
-    }
+        => new(connection.ProtocolFamily, connection.Config.Clone(), connection.Secrets.Clone());
 
     private static string? TryCreateSessionKey(string connectionId, JsonElement input)
     {
@@ -325,8 +292,9 @@ internal sealed class CollectorTaskExecutor : IAsyncDisposable
                 "Read 任务缺少 points",
                 false);
         }
-        var items = new List<CollectorPointReadRequestItem>();
-        var nodeIds = new List<string>();
+        var pointIds = new List<string>();
+        var rejectedValues = new Dictionary<string, CollectorPointReadValue>(StringComparer.Ordinal);
+        var readPoints = new List<PointReadRequest>();
         foreach (var point in points.EnumerateArray())
         {
             if (!point.TryGetProperty("pointId", out var pointIdElement) ||
@@ -339,48 +307,63 @@ internal sealed class CollectorTaskExecutor : IAsyncDisposable
             }
 
             var pointId = pointIdElement.GetString()!;
-            if (!point.TryGetProperty("address", out var address))
+            if (pointIds.Contains(pointId, StringComparer.Ordinal))
             {
-                items.Add(new CollectorPointReadRequestItem(
-                    pointId,
-                    null,
-                    "COLLECTOR_POINT_ADDRESS_REQUIRED",
-                    "采集点缺少结构化地址"));
+                throw new CollectorTaskExecutionException(
+                    "COLLECTOR_POINT_ID_DUPLICATED",
+                    "Read 任务包含重复的 pointId",
+                    false);
+            }
+            pointIds.Add(pointId);
+
+            if (!point.TryGetProperty("address", out var address) || address.ValueKind != JsonValueKind.Object)
+            {
+                rejectedValues[pointId] = RejectedPoint(pointId, "COLLECTOR_POINT_ADDRESS_REQUIRED", "采集点缺少结构化地址");
+                continue;
+            }
+            if (!point.TryGetProperty("dataType", out var dataTypeElement) ||
+                dataTypeElement.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(dataTypeElement.GetString()))
+            {
+                rejectedValues[pointId] = RejectedPoint(pointId, "COLLECTOR_POINT_DATA_TYPE_REQUIRED", "采集点缺少数据类型");
+                continue;
+            }
+            var elementCount = point.TryGetProperty("elementCount", out var elementCountElement) &&
+                elementCountElement.ValueKind == JsonValueKind.Number &&
+                elementCountElement.TryGetInt32(out var parsedElementCount)
+                    ? parsedElementCount
+                    : 1;
+            if (elementCount < 1)
+            {
+                rejectedValues[pointId] = RejectedPoint(pointId, "COLLECTOR_POINT_ELEMENT_COUNT_INVALID", "采集点元素数量必须大于 0");
                 continue;
             }
 
-            // 单项地址错误不应中断整批读取；仅把合法地址交给驱动，并保留原始结果顺序。
-            try
-            {
-                var nodeId = OpcUaAddressMapper.ParseNodeId(address);
-                items.Add(new CollectorPointReadRequestItem(pointId, nodeIds.Count, null, null));
-                nodeIds.Add(nodeId);
-            }
-            catch (OpcUaDriverException exception)
-            {
-                items.Add(new CollectorPointReadRequestItem(
-                    pointId,
-                    null,
-                    exception.Code,
-                    exception.Message));
-            }
+            var readOptions = point.TryGetProperty("readOptions", out var readOptionsElement) &&
+                readOptionsElement.ValueKind == JsonValueKind.Object
+                    ? readOptionsElement.Clone()
+                    : JsonSerializer.SerializeToElement(new { });
+            readPoints.Add(new PointReadRequest(
+                pointId,
+                address.Clone(),
+                dataTypeElement.GetString()!,
+                elementCount,
+                readOptions));
         }
-        return new CollectorPointReadRequest(items, new ReadRequest(nodeIds));
+        return new CollectorPointReadRequest(pointIds, rejectedValues, new ReadRequest(readPoints));
     }
+
+    private static CollectorPointReadValue RejectedPoint(string pointId, string errorCode, string errorMessage) =>
+        new(pointId, false, null, null, "Bad", null, null, errorCode, errorMessage);
 
     private static CollectorTaskCompletion Failed(string code, string message, bool retryable) =>
         new("failed", null, new CollectorTaskFailure(code, message, retryable));
 }
 
 internal sealed record CollectorPointReadRequest(
-    IReadOnlyList<CollectorPointReadRequestItem> Items,
+    IReadOnlyList<string> PointIds,
+    IReadOnlyDictionary<string, CollectorPointReadValue> RejectedValues,
     ReadRequest Request);
-
-internal sealed record CollectorPointReadRequestItem(
-    string PointId,
-    int? ResultIndex,
-    string? ErrorCode,
-    string? ErrorMessage);
 
 internal sealed record CollectorPointReadValue(
     string PointId,
@@ -407,57 +390,8 @@ internal sealed record CollectorTaskRequest(
 
 internal sealed record CollectorTaskConnection(
     string ProtocolFamily,
-    CollectorTaskConnectionConfig Config,
+    JsonElement Config,
     JsonElement Secrets);
-
-internal sealed record CollectorTaskConnectionConfig(
-    string? Host,
-    int Port,
-    string? EndpointPath,
-    string? SecurityMode,
-    string? SecurityPolicy,
-    string? AuthenticationType,
-    int? TimeoutMs);
-
-internal static class OpcUaEndpointBuilder
-{
-    public static string Build(string? host, int port, string? endpointPath)
-    {
-        var normalizedHost = host?.Trim() ?? string.Empty;
-        if (normalizedHost.Length == 0 || normalizedHost.Contains("://", StringComparison.Ordinal))
-        {
-            throw new CollectorTaskExecutionException(
-                "COLLECTOR_ENDPOINT_HOST_INVALID",
-                "OPC UA 设备 IP / 主机名无效",
-                false);
-        }
-        if (port is < 1 or > 65535)
-        {
-            throw new CollectorTaskExecutionException(
-                "COLLECTOR_ENDPOINT_PORT_INVALID",
-                "OPC UA 端口必须在 1 到 65535 之间",
-                false);
-        }
-        if (normalizedHost.StartsWith('[') && normalizedHost.EndsWith(']'))
-        {
-            normalizedHost = normalizedHost[1..^1];
-        }
-
-        var normalizedPath = string.IsNullOrWhiteSpace(endpointPath) ? "/" : endpointPath.Trim();
-        if (!normalizedPath.StartsWith('/')) normalizedPath = "/" + normalizedPath;
-        try
-        {
-            return new UriBuilder("opc.tcp", normalizedHost, port, normalizedPath).Uri.AbsoluteUri;
-        }
-        catch (UriFormatException exception)
-        {
-            throw new CollectorTaskExecutionException(
-                "COLLECTOR_ENDPOINT_INVALID",
-                $"无法生成 OPC UA 端点地址：{exception.Message}",
-                false);
-        }
-    }
-}
 
 internal sealed class CollectorTaskExecutionException(
     string code,

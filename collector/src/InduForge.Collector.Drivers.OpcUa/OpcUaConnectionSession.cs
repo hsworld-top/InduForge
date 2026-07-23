@@ -63,15 +63,44 @@ internal sealed class OpcUaConnectionSession :
 
     public async Task<ReadResult> ReadAsync(CollectorReadRequest request, CancellationToken cancellationToken)
     {
-        if (request.NodeIds.Count == 0)
+        if (request.Points.Count == 0)
         {
             return new ReadResult([], NoDiagnostics);
         }
 
-        var readValues = new ReadValueIdCollection(
-            request.NodeIds.Select(nodeId => new ReadValueId
+        var values = new PointReadValue?[request.Points.Count];
+        var validPoints = new List<(int Index, PointReadRequest Point, string NodeId)>();
+        for (var index = 0; index < request.Points.Count; index++)
+        {
+            var point = request.Points[index];
+            try
             {
-                NodeId = ParseNodeId(nodeId),
+                validPoints.Add((index, point, OpcUaAddressMapper.ParseNodeId(point.Address)));
+            }
+            catch (OpcUaDriverException exception)
+            {
+                values[index] = new PointReadValue(
+                    point.Key,
+                    false,
+                    null,
+                    point.DataType,
+                    "Bad",
+                    null,
+                    null,
+                    exception.Code,
+                    exception.Message);
+            }
+        }
+
+        if (validPoints.Count == 0)
+        {
+            return new ReadResult(values.Select(value => value!).ToArray(), NoDiagnostics);
+        }
+
+        var readValues = new ReadValueIdCollection(
+            validPoints.Select(item => new ReadValueId
+            {
+                NodeId = ParseNodeId(item.NodeId),
                 AttributeId = Attributes.Value,
             }));
         var response = await _session.ReadAsync(
@@ -84,10 +113,13 @@ internal sealed class OpcUaConnectionSession :
         ClientBase.ValidateResponse(response.Results, readValues);
         ClientBase.ValidateDiagnosticInfos(response.DiagnosticInfos, readValues);
 
-        var values = response.Results
-            .Select((value, index) => OpcUaNodeMapper.MapDataValue(request.NodeIds[index], value))
-            .ToArray();
-        return new ReadResult(values, NoDiagnostics);
+        for (var index = 0; index < validPoints.Count; index++)
+        {
+            var item = validPoints[index];
+            values[item.Index] = OpcUaNodeMapper.MapDataValue(item.Point, response.Results[index]);
+        }
+
+        return new ReadResult(values.Select(value => value!).ToArray(), NoDiagnostics);
     }
 
     public ValueTask DisposeAsync()

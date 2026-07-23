@@ -37,8 +37,19 @@ public sealed record IndustrialDataValue(
     DateTimeOffset SourceTimestamp,
     DateTimeOffset ServerTimestamp);
 
+public sealed record PointReadValue(
+    string Key,
+    bool Succeeded,
+    object? Value,
+    string? DataType,
+    string Quality,
+    DateTimeOffset? SourceTimestamp,
+    DateTimeOffset? ServerTimestamp,
+    string? ErrorCode,
+    string? ErrorMessage);
+
 public sealed record ReadResult(
-    IReadOnlyList<IndustrialDataValue> Values,
+    IReadOnlyList<PointReadValue> Values,
     IReadOnlyList<DriverDiagnostic> Diagnostics);
 
 public sealed record PointWriteResult(string NodeId, bool Succeeded, string? ErrorCode, string? ErrorMessage);

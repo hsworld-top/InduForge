@@ -1,3 +1,4 @@
+using System.Text.Json;
 using InduForge.Collector.Contracts;
 using Opc.Ua;
 using CollectorBrowseRequest = InduForge.Collector.Contracts.BrowseRequest;
@@ -8,13 +9,7 @@ namespace InduForge.Collector.Drivers.OpcUa.Tests;
 
 public sealed class OpcUaDriverIntegrationTests
 {
-    private static readonly ConnectionProfile Profile = new(
-        "opcua",
-        "opc.tcp://127.0.0.1:18540/induforge/sim",
-        "None",
-        "None",
-        new ConnectionAuthentication(AuthenticationType.Anonymous),
-        TimeSpan.FromSeconds(10));
+    private static readonly ConnectionProfile Profile = OpcUaTestProfile.Create();
 
     [Fact]
     [Trait("Category", "Integration")]
@@ -30,10 +25,21 @@ public sealed class OpcUaDriverIntegrationTests
         Assert.True(connection.Connected);
 
         var variableNode = await FindFirstVariableAsync(driver, ObjectIds.ObjectsFolder.ToString());
-        var read = await driver.ReadAsync(Profile, new CollectorReadRequest([variableNode.NodeId]), CancellationToken.None);
+        var read = await driver.ReadAsync(
+            Profile,
+            new CollectorReadRequest([
+                new PointReadRequest(
+                    "point-1",
+                    JsonSerializer.SerializeToElement(new { nodeId = variableNode.NodeId }),
+                    variableNode.DataType ?? "string",
+                    1,
+                    JsonSerializer.SerializeToElement(new { })),
+            ]),
+            CancellationToken.None);
 
         var value = Assert.Single(read.Values);
-        Assert.Equal(variableNode.NodeId, value.NodeId);
+        Assert.Equal("point-1", value.Key);
+        Assert.True(value.Succeeded);
         Assert.False(string.IsNullOrWhiteSpace(value.Quality));
     }
 

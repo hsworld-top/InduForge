@@ -23,36 +23,28 @@ internal static class OpcUaNodeMapper
             HasChildren: reference.NodeClass is NodeClass.Object or NodeClass.View);
     }
 
-    public static IndustrialDataValue MapDataValue(string nodeId, DataValue value)
+    public static PointReadValue MapDataValue(PointReadRequest point, DataValue value)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(nodeId);
+        ArgumentNullException.ThrowIfNull(point);
         ArgumentNullException.ThrowIfNull(value);
 
         var sourceTimestamp = NormalizeTimestamp(value.SourceTimestamp);
         var serverTimestamp = NormalizeTimestamp(value.ServerTimestamp);
+        var succeeded = StatusCode.IsGood(value.StatusCode);
+        var dataType = value.WrappedValue.TypeInfo is null
+            ? point.DataType
+            : OpcUaAddressMapper.MapDataType(value.WrappedValue.TypeInfo.BuiltInType) ?? point.DataType;
 
-        return new IndustrialDataValue(
-            nodeId,
-            NormalizeValue(value.WrappedValue.Value),
-            value.WrappedValue.TypeInfo is null ? null : OpcUaAddressMapper.MapDataType(value.WrappedValue.TypeInfo.BuiltInType),
-            MapQuality(value.StatusCode),
+        return new PointReadValue(
+            point.Key,
+            succeeded,
+            succeeded ? NormalizeValue(value.WrappedValue.Value) : null,
+            dataType,
+            succeeded ? "Good" : "Bad",
             sourceTimestamp,
-            serverTimestamp);
-    }
-
-    private static string MapQuality(StatusCode statusCode)
-    {
-        if (StatusCode.IsGood(statusCode))
-        {
-            return "Good";
-        }
-
-        if (StatusCode.IsUncertain(statusCode))
-        {
-            return statusCode.SymbolicId ?? "Uncertain";
-        }
-
-        return statusCode.SymbolicId ?? "Bad";
+            serverTimestamp,
+            succeeded ? null : value.StatusCode.SymbolicId ?? "OPCUA_READ_BAD",
+            succeeded ? null : "OPC UA 变量读取失败");
     }
 
     private static string MapNodeClass(NodeClass nodeClass) => nodeClass switch
@@ -75,11 +67,11 @@ internal static class OpcUaNodeMapper
         _ => value,
     };
 
-    private static DateTimeOffset NormalizeTimestamp(DateTime timestamp)
+    private static DateTimeOffset? NormalizeTimestamp(DateTime timestamp)
     {
         if (timestamp == DateTime.MinValue)
         {
-            return DateTimeOffset.MinValue;
+            return null;
         }
 
         return new DateTimeOffset(DateTime.SpecifyKind(timestamp, DateTimeKind.Utc));

@@ -1,4 +1,3 @@
-using System.Text;
 using InduForge.Collector.Contracts;
 using Opc.Ua;
 using Opc.Ua.Client;
@@ -24,17 +23,16 @@ internal sealed class OpcUaConnectionFactory : IOpcUaConnectionFactory
 
     public async Task<ISession> ConnectAsync(ConnectionProfile profile, CancellationToken cancellationToken)
     {
-        ValidateProfile(profile);
+        var connection = OpcUaConnectionProfile.Parse(profile, _options.ConnectionTimeoutMilliseconds);
 
         try
         {
             var configuration = await _configuration.Value.ConfigureAwait(false);
-            var timeout = profile.Timeout ?? TimeSpan.FromMilliseconds(_options.ConnectionTimeoutMilliseconds);
             var endpointDescription = await CoreClientUtils.SelectEndpointAsync(
                 configuration,
-                profile.EndpointUrl,
+                connection.EndpointUrl,
                 useSecurity: false,
-                checked((int)timeout.TotalMilliseconds),
+                checked((int)connection.Timeout.TotalMilliseconds),
                 _sessionFactory.Telemetry,
                 cancellationToken).ConfigureAwait(false);
             var endpoint = new ConfiguredEndpoint(
@@ -48,7 +46,7 @@ internal sealed class OpcUaConnectionFactory : IOpcUaConnectionFactory
                 updateBeforeConnect: false,
                 sessionName: _options.ApplicationName,
                 sessionTimeout: _options.SessionTimeoutMilliseconds,
-                identity: CreateIdentity(profile.Authentication),
+                identity: new UserIdentity(),
                 preferredLocales: null,
                 cancellationToken).ConfigureAwait(false);
         }
@@ -121,48 +119,6 @@ internal sealed class OpcUaConnectionFactory : IOpcUaConnectionFactory
 
         await configuration.ValidateAsync(ApplicationType.Client, CancellationToken.None).ConfigureAwait(false);
         return configuration;
-    }
-
-    private static UserIdentity CreateIdentity(ConnectionAuthentication authentication) => authentication.Type switch
-    {
-        AuthenticationType.Anonymous => new UserIdentity(),
-        AuthenticationType.Username when !string.IsNullOrWhiteSpace(authentication.Username) =>
-            new UserIdentity(authentication.Username, Encoding.UTF8.GetBytes(authentication.Password ?? string.Empty)),
-        AuthenticationType.Username => throw new OpcUaDriverException(
-            "OPCUA_USERNAME_REQUIRED",
-            "OPC UA 用户名认证缺少用户名",
-            retryable: false),
-        AuthenticationType.Certificate => throw new OpcUaDriverException(
-            "OPCUA_CERTIFICATE_AUTH_UNSUPPORTED",
-            "当前版本尚未启用 OPC UA 用户证书认证",
-            retryable: false),
-        _ => throw new OpcUaDriverException(
-            "OPCUA_AUTH_UNSUPPORTED",
-            "不支持的 OPC UA 认证方式",
-            retryable: false),
-    };
-
-    private static void ValidateProfile(ConnectionProfile profile)
-    {
-        if (!string.Equals(profile.ProtocolType, "opcua", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new OpcUaDriverException("OPCUA_PROTOCOL_MISMATCH", "连接配置不是 OPC UA 协议", retryable: false);
-        }
-
-        if (!Uri.TryCreate(profile.EndpointUrl, UriKind.Absolute, out var endpointUri) ||
-            !string.Equals(endpointUri.Scheme, "opc.tcp", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new OpcUaDriverException("OPCUA_ENDPOINT_INVALID", "OPC UA Endpoint 地址无效", retryable: false);
-        }
-
-        if (!string.Equals(profile.SecurityMode, "None", StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(profile.SecurityPolicy, "None", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new OpcUaDriverException(
-                "OPCUA_SECURITY_UNSUPPORTED",
-                "当前版本只支持 SecurityMode=None 和 SecurityPolicy=None",
-                retryable: false);
-        }
     }
 
     private static bool IsCertificateError(StatusCode statusCode) =>

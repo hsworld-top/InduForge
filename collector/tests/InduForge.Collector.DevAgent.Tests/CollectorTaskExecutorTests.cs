@@ -49,6 +49,51 @@ public sealed class CollectorTaskExecutorTests
     }
 
     [Fact]
+    public async Task ExecutePointReadPassesProtocolSpecificConfigurationToDriver()
+    {
+        var state = new TestDriverState();
+        var request = JsonSerializer.SerializeToElement(new
+        {
+            driverId = "test.driver",
+            driverVersion = "1.0.0",
+            schemaVersion = 1,
+            connection = new
+            {
+                protocolFamily = "modbus",
+                config = new { host = "127.0.0.1", port = 502, dataFormat = "CDAB" },
+                secrets = new { },
+            },
+            input = new
+            {
+                points = new[]
+                {
+                    new
+                    {
+                        pointId = "point-1",
+                        address = new { station = 1, area = "holdingRegister", address = 20 },
+                        dataType = "float32",
+                        elementCount = 2,
+                        readOptions = new { },
+                    },
+                },
+            },
+        });
+        var task = new CollectorTaskEnvelope("task-1", "project-1", "agent-1", "point.read", "running", request, "2026-07-23 12:00:00");
+
+        var result = await new CollectorTaskExecutor(
+            new DriverRegistry([() => new TestDriver(state)]))
+            .ExecuteAsync(task, CancellationToken.None);
+
+        Assert.Equal("succeeded", result.Status);
+        Assert.Equal("modbus", state.Profile?.ProtocolFamily);
+        Assert.Equal("CDAB", state.Profile?.Config.GetProperty("dataFormat").GetString());
+        var point = Assert.Single(state.Request!.Points);
+        Assert.Equal("holdingRegister", point.Address.GetProperty("area").GetString());
+        Assert.Equal("float32", point.DataType);
+        Assert.Equal(2, point.ElementCount);
+    }
+
+    [Fact]
     public async Task ExecutePointReadKeepsValidPointsWhenOneAddressIsInvalid()
     {
         var request = JsonSerializer.SerializeToElement(new
@@ -61,9 +106,9 @@ public sealed class CollectorTaskExecutorTests
             {
                 points = new object[]
                 {
-                    new { pointId = "point-1", address = new { nodeId = "ns=2;s=Temperature" } },
-                    new { pointId = "point-2", address = new { nodeId = "111" } },
-                    new { pointId = "point-3", address = new { nodeId = "i=32851" } },
+                    new { pointId = "point-1", address = new { nodeId = "ns=2;s=Temperature" }, dataType = "float64", elementCount = 1, readOptions = new { } },
+                    new { pointId = "point-2", address = new { nodeId = "111" }, dataType = "float64", elementCount = 1, readOptions = new { } },
+                    new { pointId = "point-3", address = new { nodeId = "i=32851" }, dataType = "float64", elementCount = 1, readOptions = new { } },
                 },
             },
         });
@@ -142,6 +187,9 @@ public sealed class CollectorTaskExecutorTests
                         {
                             pointId = "point-1",
                             address = new { nodeId = "ns=2;s=Temperature" },
+                            dataType = "float64",
+                            elementCount = 1,
+                            readOptions = new { },
                         },
                     },
                 }),
@@ -268,24 +316,6 @@ public sealed class CollectorTaskExecutorTests
     }
     private static DriverRegistry CreateRegistry() => new([() => new TestDriver()]);
 
-    [Theory]
-    [InlineData("127.0.0.1", 4840, "/factory/server", "opc.tcp://127.0.0.1:4840/factory/server")]
-    [InlineData("plc.local", 4840, "factory/server", "opc.tcp://plc.local:4840/factory/server")]
-    [InlineData("2001:db8::1", 4840, "/", "opc.tcp://[2001:db8::1]:4840/")]
-    public void OpcUaEndpointBuilderCombinesStructuredConfiguration(string host, int port, string path, string expected)
-    {
-        Assert.Equal(expected, OpcUaEndpointBuilder.Build(host, port, path));
-    }
-
-    [Theory]
-    [InlineData("opc.tcp://127.0.0.1", 4840)]
-    [InlineData("", 4840)]
-    [InlineData("127.0.0.1", 0)]
-    public void OpcUaEndpointBuilderRejectsInvalidConfiguration(string host, int port)
-    {
-        Assert.Throws<CollectorTaskExecutionException>(() => OpcUaEndpointBuilder.Build(host, port, "/"));
-    }
-
     private sealed class SessionDriverState
     {
         public int OpenCount { get; set; }
@@ -377,28 +407,69 @@ public sealed class CollectorTaskExecutorTests
     }
     private static ReadResult CreateReadResult(ReadRequest request) =>
         new(
-            request.NodeIds
-                .Select(nodeId => new IndustrialDataValue(
-                    nodeId,
-                    12.5,
-                    "float64",
-                    "Good",
-                    DateTimeOffset.UtcNow,
-                    DateTimeOffset.UtcNow))
+            request.Points
+                .Select(CreateReadValue)
                 .ToArray(),
             []);
 
-    private sealed class TestDriver : IIndustrialDriver, IPointReader
+    private static PointReadValue CreateReadValue(PointReadRequest point)
+    {
+        var nodeId = point.Address.TryGetProperty("nodeId", out var nodeIdElement)
+            ? nodeIdElement.GetString()
+            : null;
+        if (nodeId == "111")
+        {
+            return new PointReadValue(
+                point.Key,
+                false,
+                null,
+                point.DataType,
+                "Bad",
+                null,
+                null,
+                "OPCUA_NODE_ID_INVALID",
+                "OPC UA NodeId 无效");
+        }
+
+        return new PointReadValue(
+            point.Key,
+            true,
+            12.5,
+            "float64",
+            "Good",
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            null,
+            null);
+    }
+
+    private sealed class TestDriverState
+    {
+        public ConnectionProfile? Profile { get; set; }
+        public ReadRequest? Request { get; set; }
+    }
+
+    private sealed class TestDriver(TestDriverState? state = null) : IIndustrialDriver, IPointReader
     {
         public DriverDescriptor Descriptor { get; } = new(
             "opcua", "test.driver", "1.0.0", [1],
             [DriverOperations.ConnectionTest, DriverOperations.PointRead]);
 
-        public Task<ConnectionTestResult> TestConnectionAsync(ConnectionProfile profile, CancellationToken cancellationToken) =>
-            Task.FromResult(new ConnectionTestResult(true, TimeSpan.Zero, "test", []));
+        public Task<ConnectionTestResult> TestConnectionAsync(ConnectionProfile profile, CancellationToken cancellationToken)
+        {
+            if (state is not null) state.Profile = profile;
+            return Task.FromResult(new ConnectionTestResult(true, TimeSpan.Zero, "test", []));
+        }
 
-        public Task<ReadResult> ReadAsync(ConnectionProfile profile, ReadRequest request, CancellationToken cancellationToken) =>
-            Task.FromResult(new ReadResult(request.NodeIds.Select(nodeId => new IndustrialDataValue(nodeId, 12.5, "float64", "Good", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow)).ToArray(), []));
+        public Task<ReadResult> ReadAsync(ConnectionProfile profile, ReadRequest request, CancellationToken cancellationToken)
+        {
+            if (state is not null)
+            {
+                state.Profile = profile;
+                state.Request = request;
+            }
+            return Task.FromResult(CreateReadResult(request));
+        }
     }
 
     [Fact]

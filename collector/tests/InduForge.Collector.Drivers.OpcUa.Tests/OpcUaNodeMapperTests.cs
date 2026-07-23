@@ -1,3 +1,4 @@
+using System.Text.Json;
 using InduForge.Collector.Contracts;
 using Opc.Ua;
 
@@ -63,15 +64,23 @@ public sealed class OpcUaNodeMapperTests
     }
 
     [Fact]
-    public void MapsDataValueWithoutTimestampToMinimumTimestamp()
+    public void MapsDataValueWithoutTimestampToNullTimestamp()
     {
         var value = new DataValue(new Variant(12.5), StatusCodes.Good, DateTime.MinValue, DateTime.MinValue);
+        var point = new PointReadRequest(
+            "point-1",
+            JsonSerializer.SerializeToElement(new { nodeId = "ns=2;s=Pressure" }),
+            "float64",
+            1,
+            JsonSerializer.SerializeToElement(new { }));
 
-        var result = OpcUaNodeMapper.MapDataValue("ns=2;s=Pressure", value);
+        var result = OpcUaNodeMapper.MapDataValue(point, value);
 
+        Assert.Equal("point-1", result.Key);
+        Assert.True(result.Succeeded);
         Assert.Equal(12.5, result.Value);
         Assert.Equal("float64", result.DataType);
         Assert.Equal("Good", result.Quality);
-        Assert.Equal(DateTimeOffset.MinValue, result.SourceTimestamp);
+        Assert.Null(result.SourceTimestamp);
     }
 }

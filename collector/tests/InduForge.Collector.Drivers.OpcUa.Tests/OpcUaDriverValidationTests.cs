@@ -4,12 +4,7 @@ namespace InduForge.Collector.Drivers.OpcUa.Tests;
 
 public sealed class OpcUaDriverValidationTests
 {
-    private static readonly ConnectionProfile ValidProfile = new(
-        "opcua",
-        "opc.tcp://127.0.0.1:18540/induforge/sim",
-        "None",
-        "None",
-        new ConnectionAuthentication(AuthenticationType.Anonymous));
+    private static readonly ConnectionProfile ValidProfile = OpcUaTestProfile.Create();
 
     [Fact]
     public async Task RejectsNestedBrowseUntilRecursiveContractExists()
