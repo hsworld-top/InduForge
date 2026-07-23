@@ -50,6 +50,50 @@ func TestCollectorPointServiceCreatesOpcUaAddressText(t *testing.T) {
 	}
 }
 
+func TestCollectorPointServiceValidatesModbusAddressAndDataTypeCombinations(t *testing.T) {
+	tests := []struct {
+		name        string
+		address     map[string]any
+		dataType    string
+		wantFailure string
+	}{
+		{name: "coil rejects numeric type", address: map[string]any{"station": 1, "area": "coil", "address": 10}, dataType: "int16", wantFailure: "线圈和离散输入只支持 bool 数据类型"},
+		{name: "coil rejects bit index", address: map[string]any{"station": 1, "area": "coil", "address": 10, "bitIndex": 1}, dataType: "bool", wantFailure: "线圈和离散输入不能配置寄存器位索引"},
+		{name: "register bool requires bit index", address: map[string]any{"station": 1, "area": "holdingRegister", "address": 10}, dataType: "bool", wantFailure: "寄存器 bool 变量必须配置位索引"},
+		{name: "register numeric rejects bit index", address: map[string]any{"station": 1, "area": "holdingRegister", "address": 10, "bitIndex": 1}, dataType: "int16", wantFailure: "只有寄存器 bool 变量可以配置位索引"},
+		{name: "holding register accepts numeric type", address: map[string]any{"station": 1, "area": "holdingRegister", "address": 10}, dataType: "int16"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &fakeCollectorPointStore{connection: repository.CollectorConnectionRecord{
+				ID: "550e8400-e29b-41d4-a716-446655440002", ProjectID: "550e8400-e29b-41d4-a716-446655440000",
+				DriverID: "modbus.tcp", DriverVersion: "1.0.0", SchemaVersion: 2,
+			}}
+			service := newRepositoryCollectorPointService(t, store)
+			result, err := service.CreatePointsBatch(
+				context.Background(),
+				store.connection.ProjectID,
+				store.connection.ID,
+				"550e8400-e29b-41d4-a716-446655440001",
+				[]CreateCollectorPointInput{{Name: "测试变量", Address: tt.address, DataType: tt.dataType, ElementCount: 1}},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.wantFailure == "" {
+				if len(result.List) != 1 || len(result.Failed) != 0 {
+					t.Fatalf("合法变量未创建: %+v", result)
+				}
+				return
+			}
+			if len(result.List) != 0 || len(result.Failed) != 1 || !strings.Contains(result.Failed[0].Message, tt.wantFailure) {
+				t.Fatalf("非法组合未返回预期错误 %q: %+v", tt.wantFailure, result)
+			}
+		})
+	}
+}
+
 func TestCollectorPointServiceFindsExistingAddressIndexes(t *testing.T) {
 	store := &fakeCollectorPointStore{
 		connection:           repository.CollectorConnectionRecord{ID: "550e8400-e29b-41d4-a716-446655440002", ProjectID: "550e8400-e29b-41d4-a716-446655440000", DriverID: "opcua.standard", SchemaVersion: 1},

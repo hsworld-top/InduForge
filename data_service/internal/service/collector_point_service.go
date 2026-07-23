@@ -454,6 +454,11 @@ func (s *CollectorPointService) buildPointParams(connection *repository.Collecto
 	if err := s.addressSchemas[connection.DriverID].Validate(input.Address); err != nil {
 		return repository.CreateCollectorPointParams{}, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "采集点地址不符合驱动 Schema", err)
 	}
+	if connection.DriverID == "modbus.tcp" || connection.DriverID == "modbus.rtu" {
+		if err := validateModbusPointAddress(input.Address, input.DataType); err != nil {
+			return repository.CreateCollectorPointParams{}, err
+		}
+	}
 	addressText, err := formatCollectorAddress(connection.DriverID, input.Address)
 	if err != nil {
 		return repository.CreateCollectorPointParams{}, err
@@ -471,6 +476,31 @@ func (s *CollectorPointService) buildPointParams(connection *repository.Collecto
 		acquisition = map[string]any{"mode": "polling", "intervalMs": 1000, "timeoutMs": 3000, "deadband": nil, "changeOnly": false, "priority": "normal"}
 	}
 	return repository.CreateCollectorPointParams{ID: id, ProjectID: connection.ProjectID, ConnectionID: connection.ID, ConnectionCode: connection.Code, UserID: userID, GroupID: input.GroupID, Code: code, Name: name, Description: input.Description, Address: cloneCollectorMap(input.Address), AddressText: addressText, AddressSchemaVersion: connection.SchemaVersion, DataType: input.DataType, ElementCount: elementCount, ReadOptions: cloneCollectorMap(input.ReadOptions), Acquisition: acquisition, Enabled: enabled, SortOrder: input.SortOrder, Metadata: cloneCollectorMap(input.Metadata)}, nil
+}
+
+// validateModbusPointAddress 校验 Modbus 区域、平台数据类型和寄存器位索引的组合，避免保存驱动无法读取的变量。
+func validateModbusPointAddress(address map[string]any, dataType string) error {
+	area, _ := address["area"].(string)
+	_, hasBitIndex := address["bitIndex"]
+	isBoolean := strings.EqualFold(dataType, "bool")
+
+	switch area {
+	case "coil", "discreteInput":
+		if !isBoolean {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "线圈和离散输入只支持 bool 数据类型")
+		}
+		if hasBitIndex {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "线圈和离散输入不能配置寄存器位索引")
+		}
+	case "inputRegister", "holdingRegister":
+		if isBoolean && !hasBitIndex {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "寄存器 bool 变量必须配置位索引")
+		}
+		if !isBoolean && hasBitIndex {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "只有寄存器 bool 变量可以配置位索引")
+		}
+	}
+	return nil
 }
 
 // normalizeOpcUaNodeID 在保存阶段校验 OPC UA NodeId，避免无效地址进入变量模型后才在调试读取时失败。
