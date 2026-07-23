@@ -52,16 +52,19 @@ func TestCollectorPointServiceCreatesOpcUaAddressText(t *testing.T) {
 
 func TestCollectorPointServiceValidatesModbusAddressAndDataTypeCombinations(t *testing.T) {
 	tests := []struct {
-		name        string
-		address     map[string]any
-		dataType    string
-		wantFailure string
+		name         string
+		address      map[string]any
+		dataType     string
+		elementCount int
+		wantFailure  string
 	}{
-		{name: "coil rejects numeric type", address: map[string]any{"station": 1, "area": "coil", "address": 10}, dataType: "int16", wantFailure: "线圈和离散输入只支持 bool 数据类型"},
-		{name: "coil rejects bit index", address: map[string]any{"station": 1, "area": "coil", "address": 10, "bitIndex": 1}, dataType: "bool", wantFailure: "线圈和离散输入不能配置寄存器位索引"},
-		{name: "register bool requires bit index", address: map[string]any{"station": 1, "area": "holdingRegister", "address": 10}, dataType: "bool", wantFailure: "寄存器 bool 变量必须配置位索引"},
-		{name: "register numeric rejects bit index", address: map[string]any{"station": 1, "area": "holdingRegister", "address": 10, "bitIndex": 1}, dataType: "int16", wantFailure: "只有寄存器 bool 变量可以配置位索引"},
-		{name: "holding register accepts numeric type", address: map[string]any{"station": 1, "area": "holdingRegister", "address": 10}, dataType: "int16"},
+		{name: "coil rejects numeric type", address: map[string]any{"station": 1, "area": "coil", "address": 10}, dataType: "int16", elementCount: 1, wantFailure: "线圈和离散输入只支持 bool 数据类型"},
+		{name: "coil rejects bit index", address: map[string]any{"station": 1, "area": "coil", "address": 10, "bitIndex": 1}, dataType: "bool", elementCount: 1, wantFailure: "线圈和离散输入不能配置寄存器位索引"},
+		{name: "register bool requires bit index", address: map[string]any{"station": 1, "area": "holdingRegister", "address": 10}, dataType: "bool", elementCount: 1, wantFailure: "寄存器 bool 变量必须配置位索引"},
+		{name: "register numeric rejects bit index", address: map[string]any{"station": 1, "area": "holdingRegister", "address": 10, "bitIndex": 1}, dataType: "int16", elementCount: 1, wantFailure: "只有寄存器 bool 变量可以配置位索引"},
+		{name: "register rejects oversized value", address: map[string]any{"station": 1, "area": "holdingRegister", "address": 10}, dataType: "int32", elementCount: 63, wantFailure: "Modbus 单变量读取长度超过协议上限"},
+		{name: "register bit rejects oversized value", address: map[string]any{"station": 1, "area": "holdingRegister", "address": 10, "bitIndex": 15}, dataType: "bool", elementCount: 1986, wantFailure: "Modbus 单变量读取长度超过协议上限"},
+		{name: "holding register accepts numeric type", address: map[string]any{"station": 1, "area": "holdingRegister", "address": 10}, dataType: "int16", elementCount: 1},
 	}
 
 	for _, tt := range tests {
@@ -76,7 +79,7 @@ func TestCollectorPointServiceValidatesModbusAddressAndDataTypeCombinations(t *t
 				store.connection.ProjectID,
 				store.connection.ID,
 				"550e8400-e29b-41d4-a716-446655440001",
-				[]CreateCollectorPointInput{{Name: "测试变量", Address: tt.address, DataType: tt.dataType, ElementCount: 1}},
+				[]CreateCollectorPointInput{{Name: "测试变量", Address: tt.address, DataType: tt.dataType, ElementCount: tt.elementCount}},
 			)
 			if err != nil {
 				t.Fatal(err)

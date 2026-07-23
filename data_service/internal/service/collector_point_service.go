@@ -455,7 +455,7 @@ func (s *CollectorPointService) buildPointParams(connection *repository.Collecto
 		return repository.CreateCollectorPointParams{}, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "采集点地址不符合驱动 Schema", err)
 	}
 	if connection.DriverID == "modbus.tcp" || connection.DriverID == "modbus.rtu" {
-		if err := validateModbusPointAddress(input.Address, input.DataType); err != nil {
+		if err := validateModbusPointAddress(input.Address, input.DataType, input.ElementCount); err != nil {
 			return repository.CreateCollectorPointParams{}, err
 		}
 	}
@@ -484,7 +484,7 @@ func (s *CollectorPointService) buildPointParams(connection *repository.Collecto
 }
 
 // validateModbusPointAddress 校验 Modbus 区域、平台数据类型和寄存器位索引的组合，避免保存驱动无法读取的变量。
-func validateModbusPointAddress(address map[string]any, dataType string) error {
+func validateModbusPointAddress(address map[string]any, dataType string, elementCount int) error {
 	area, _ := address["area"].(string)
 	_, hasBitIndex := address["bitIndex"]
 	isBoolean := strings.EqualFold(dataType, "bool")
@@ -505,7 +505,45 @@ func validateModbusPointAddress(address map[string]any, dataType string) error {
 			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "只有寄存器 bool 变量可以配置位索引")
 		}
 	}
+	if elementCount < 1 {
+		elementCount = 1
+	}
+	protocolUnits := int64(elementCount)
+	switch strings.ToLower(dataType) {
+	case "bool":
+		if hasBitIndex {
+			bitIndex, _ := collectorNumericInt(address["bitIndex"])
+			protocolUnits = (int64(bitIndex) + int64(elementCount) + 15) / 16
+		}
+	case "int8", "uint8", "string", "bytes":
+		protocolUnits = (int64(elementCount) + 1) / 2
+	case "int32", "uint32", "float32":
+		protocolUnits = int64(elementCount) * 2
+	case "int64", "uint64", "float64":
+		protocolUnits = int64(elementCount) * 4
+	}
+	maximumUnits := int64(125)
+	if area == "coil" || area == "discreteInput" {
+		maximumUnits = 2000
+	}
+	if protocolUnits > maximumUnits {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Modbus 单变量读取长度超过协议上限")
+	}
 	return nil
+}
+
+func collectorNumericInt(value any) (int, bool) {
+	switch typed := value.(type) {
+	case int:
+		return typed, true
+	case float64:
+		return int(typed), true
+	case json.Number:
+		parsed, err := strconv.Atoi(typed.String())
+		return parsed, err == nil
+	default:
+		return 0, false
+	}
 }
 
 // validateSiemensS7PointAddress 校验 S7 区域、数据类型和位偏移组合，规则与 DevAgent 驱动保持一致。
