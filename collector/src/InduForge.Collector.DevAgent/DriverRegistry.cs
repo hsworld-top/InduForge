@@ -3,6 +3,7 @@ using System.Text.Json;
 using InduForge.Collector.Contracts;
 using InduForge.Collector.Drivers.ModbusTcp;
 using InduForge.Collector.Drivers.OpcUa;
+using InduForge.Collector.Drivers.SiemensS7Tcp;
 
 namespace InduForge.Collector.DevAgent;
 
@@ -10,6 +11,7 @@ internal sealed class DriverRegistry
 {
     private const string OpcUaManifestResource = "InduForge.Collector.DevAgent.CollectorProtocols.opcua.standard.manifest.json";
     private const string ModbusTcpManifestResource = "InduForge.Collector.DevAgent.CollectorProtocols.modbus.tcp.manifest.json";
+    private const string SiemensS7TcpManifestResource = "InduForge.Collector.DevAgent.CollectorProtocols.siemens.s7-tcp.manifest.json";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly Dictionary<string, Func<IIndustrialDriver>> _factories;
     private readonly Dictionary<string, DriverDescriptor> _descriptors;
@@ -61,15 +63,18 @@ internal sealed class DriverRegistry
         var assembly = Assembly.GetExecutingAssembly();
         var opcUaManifest = LoadManifest(assembly, OpcUaManifestResource);
         var modbusTcpManifest = LoadManifest(assembly, ModbusTcpManifestResource);
+        var siemensS7TcpManifest = LoadManifest(assembly, SiemensS7TcpManifestResource);
         return new DriverRegistry(
         [
             () => new OpcUaDriver(),
             () => new ModbusTcpDriver(),
+            () => new SiemensS7TcpDriver(),
         ],
         new Dictionary<string, DriverManifest>(StringComparer.Ordinal)
         {
             [opcUaManifest.DriverId] = opcUaManifest,
             [modbusTcpManifest.DriverId] = modbusTcpManifest,
+            [siemensS7TcpManifest.DriverId] = siemensS7TcpManifest,
         });
     }
 

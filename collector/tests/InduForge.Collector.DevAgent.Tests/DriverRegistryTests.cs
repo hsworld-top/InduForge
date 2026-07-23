@@ -56,6 +56,20 @@ public sealed class DriverRegistryTests
         Assert.DoesNotContain(DriverOperations.DeviceBrowse, descriptor.Operations);
     }
 
+    [Fact]
+    public void DefaultRegistryLoadsSiemensS7TcpManifest()
+    {
+        var descriptor = DriverRegistry.CreateDefault().Describe("siemens.s7-tcp");
+
+        Assert.Equal("siemens", descriptor.ProtocolFamily);
+        Assert.Equal("1.0.0", descriptor.DriverVersion);
+        Assert.Equal([2], descriptor.SchemaVersions);
+        Assert.Contains(DriverOperations.ConnectionOpen, descriptor.Operations);
+        Assert.Contains(DriverOperations.ConnectionClose, descriptor.Operations);
+        Assert.Contains(DriverOperations.PointRead, descriptor.Operations);
+        Assert.DoesNotContain(DriverOperations.DeviceBrowse, descriptor.Operations);
+    }
+
     private sealed class SessionDriver : IIndustrialDriver, IConnectionSessionDriver
     {
         public DriverDescriptor Descriptor { get; } = new(

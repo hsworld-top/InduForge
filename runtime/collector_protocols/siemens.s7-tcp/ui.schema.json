@@ -1,6 +1,6 @@
 {
   "connection": {
-    "order": ["host", "port", "rack", "slot", "localTsap", "remoteTsap", "connectTimeoutMs"]
+    "order": ["host", "port", "plcType", "rack", "slot", "localTsap", "remoteTsap", "connectTimeoutMs"]
   },
   "address": { "order": ["area", "dbNumber", "byteOffset", "bitOffset"] }
 }

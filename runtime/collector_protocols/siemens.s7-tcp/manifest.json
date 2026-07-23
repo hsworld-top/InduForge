@@ -2,11 +2,16 @@
   "protocolFamily": "siemens",
   "driverId": "siemens.s7-tcp",
   "driverVersion": "1.0.0",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "displayName": "Siemens S7 TCP",
   "category": "plc",
   "transports": ["tcp"],
-  "operations": [],
+  "operations": [
+    "connection.test",
+    "connection.open",
+    "connection.close",
+    "point.read"
+  ],
   "features": ["point.elementCount"],
   "dataTypes": [
     "bool",
@@ -26,7 +31,7 @@
   ],
   "acquisitionModes": ["polling"],
   "platforms": {
-    "devAgent": [],
+    "devAgent": ["windows-x64"],
     "runtime": []
   }
 }

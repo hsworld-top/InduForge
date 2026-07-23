@@ -4,6 +4,7 @@
     <ProjectReference Include="..\InduForge.Collector.Contracts\InduForge.Collector.Contracts.csproj" />
     <ProjectReference Include="..\InduForge.Collector.Drivers.ModbusTcp\InduForge.Collector.Drivers.ModbusTcp.csproj" />
     <ProjectReference Include="..\InduForge.Collector.Drivers.OpcUa\InduForge.Collector.Drivers.OpcUa.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.SiemensS7Tcp\InduForge.Collector.Drivers.SiemensS7Tcp.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -11,6 +12,8 @@
                       LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.opcua.standard.manifest.json" />
     <EmbeddedResource Include="..\..\..\runtime\collector_protocols\modbus.tcp\manifest.json"
                       LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.modbus.tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\siemens.s7-tcp\manifest.json"
+                      LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.siemens.s7-tcp.manifest.json" />
   </ItemGroup>
 
   <PropertyGroup>
