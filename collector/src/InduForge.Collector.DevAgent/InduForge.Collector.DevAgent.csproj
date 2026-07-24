@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\InduForge.Collector.Adapters.Hsl\InduForge.Collector.Adapters.Hsl.csproj" />
     <ProjectReference Include="..\InduForge.Collector.Contracts\InduForge.Collector.Contracts.csproj" />
     <ProjectReference Include="..\InduForge.Collector.Drivers.ModbusTcp\InduForge.Collector.Drivers.ModbusTcp.csproj" />
     <ProjectReference Include="..\InduForge.Collector.Drivers.OpcUa\InduForge.Collector.Drivers.OpcUa.csproj" />

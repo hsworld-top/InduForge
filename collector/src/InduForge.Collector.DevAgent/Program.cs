@@ -1,3 +1,5 @@
+using InduForge.Collector.Adapters.Hsl;
+
 namespace InduForge.Collector.DevAgent;
 
 internal static class Program
@@ -28,6 +30,7 @@ internal static class Program
             MessageBoxButtons.OK,
             MessageBoxIcon.Warning);
         logger.Info("agent.start", $"version={Application.ProductVersion} processId={Environment.ProcessId} baseDirectory={AppContext.BaseDirectory}");
+        InitializeHslAuthorization(logger);
         try
         {
             RunApplication(logger);
@@ -40,6 +43,31 @@ internal static class Program
         finally
         {
             logger.Info("agent.exit", "采集调试代理已退出");
+        }
+    }
+
+    private static void InitializeHslAuthorization(AgentFileLogger logger)
+    {
+        try
+        {
+            var result = HslAuthorizationInitializer.Initialize(HslAuthorizationSettings.AuthorizationCode);
+            switch (result.Status)
+            {
+                case HslAuthorizationStatus.Activated:
+                    logger.Info("hsl.authorization.activated", "HSL 通信组件授权成功");
+                    break;
+                case HslAuthorizationStatus.Rejected:
+                    logger.Warn("hsl.authorization.rejected", "HSL 授权码无效，HSL 驱动将继续受试用时长限制");
+                    break;
+                default:
+                    logger.Warn("hsl.authorization.not_configured", "未配置 HSL 授权码，HSL 驱动将使用试用模式");
+                    break;
+            }
+        }
+        catch (Exception exception)
+        {
+            // 授权初始化异常不阻止代理启动，OPC UA 等非 HSL 驱动仍应保持可用。
+            logger.Error("hsl.authorization.failed", "HSL 授权初始化异常，HSL 驱动将使用试用模式", exception);
         }
     }
 

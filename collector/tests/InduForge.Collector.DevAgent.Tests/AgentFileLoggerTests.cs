@@ -13,7 +13,7 @@ public sealed class AgentFileLoggerTests
             var logger = new AgentFileLogger(baseDirectory);
             var exception = new InvalidOperationException("outer failure", new HttpRequestException("inner failure"));
 
-            logger.Error("test.failure", "Bearer secret-token registrationCode=register-me agentToken=agent-secret", exception);
+            logger.Error("test.failure", "Bearer secret-token registrationCode=register-me agentToken=agent-secret authorizationCode=hsl-secret", exception);
 
             var content = File.ReadAllText(Assert.Single(Directory.GetFiles(logger.LogDirectory, "collector-dev-agent-*.log")));
             Assert.Contains("test.failure", content);
@@ -23,6 +23,7 @@ public sealed class AgentFileLoggerTests
             Assert.DoesNotContain("secret-token", content);
             Assert.DoesNotContain("register-me", content);
             Assert.DoesNotContain("agent-secret", content);
+            Assert.DoesNotContain("hsl-secret", content);
         }
         finally
         {

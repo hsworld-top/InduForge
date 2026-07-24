@@ -51,4 +51,13 @@ public sealed class HslPublicContractTests
         Assert.IsAssignableFrom<IHslS7TcpClient>(client);
         await client.DisposeAsync();
     }
+
+    [Fact]
+    public void BlankAuthorizationCodeKeepsTrialModeWithoutActivationRequest()
+    {
+        var result = HslAuthorizationInitializer.Initialize("  ");
+
+        Assert.Equal(HslAuthorizationStatus.NotConfigured, result.Status);
+        Assert.False(result.IsActivated);
+    }
 }

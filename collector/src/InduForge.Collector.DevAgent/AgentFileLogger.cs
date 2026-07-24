@@ -66,6 +66,6 @@ internal sealed partial class AgentFileLogger
 
     internal static string Sanitize(string value) => SensitiveValuePattern().Replace(value, match => $"{match.Groups[1].Value}[REDACTED]");
 
-    [GeneratedRegex("(?i)(Bearer\\s+|[\"']?(?:registrationCode|agentToken)[\"']?\\s*[=:]\\s*[\"']?)[^\\s,;\"']+")]
+    [GeneratedRegex("(?i)(Bearer\\s+|[\"']?(?:registrationCode|agentToken|authorizationCode|hslLicense)[\"']?\\s*[=:]\\s*[\"']?)[^\\s,;\"']+")]
     private static partial Regex SensitiveValuePattern();
 }
