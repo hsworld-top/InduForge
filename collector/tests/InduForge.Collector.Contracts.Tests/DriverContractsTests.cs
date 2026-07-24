@@ -9,7 +9,7 @@ public sealed class DriverContractsTests
     public void DriverDescriptorUsesStablePublicNames()
     {
         var descriptor = new DriverDescriptor(
-            "opcua", "opcua.standard", "1.0.0", [2],
+            "opcua", "opcua.standard", "1.0.0", [1],
             [DriverOperations.ConnectionTest, DriverOperations.DeviceBrowse, DriverOperations.PointRead]);
 
         Assert.Equal("opcua.standard", descriptor.DriverId);

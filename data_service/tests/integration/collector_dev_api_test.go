@@ -44,7 +44,7 @@ func TestCollectorDevVerticalLoop(t *testing.T) {
 		"os":               "windows",
 		"arch":             "x64",
 		"version":          "0.1.0",
-		"capabilities":     []map[string]any{{"driverId": "opcua.standard", "driverVersion": "1.0.0", "schemaVersions": []int{2}, "operations": []string{"connection.test", "device.browse", "point.read"}}},
+		"capabilities":     []map[string]any{{"driverId": "opcua.standard", "driverVersion": "1.0.0", "schemaVersions": []int{1}, "operations": []string{"connection.test", "device.browse", "point.read"}}},
 	})
 	var agent struct {
 		AgentID    string `json:"agentId"`
@@ -54,7 +54,7 @@ func TestCollectorDevVerticalLoop(t *testing.T) {
 	if agent.AgentID == "" || agent.AgentToken == "" {
 		t.Fatal("期望注册返回 agentId 和 agentToken")
 	}
-	capabilities := []map[string]any{{"driverId": "opcua.standard", "driverVersion": "1.0.0", "schemaVersions": []int{2}, "operations": []string{"connection.test", "device.browse", "point.read"}}}
+	capabilities := []map[string]any{{"driverId": "opcua.standard", "driverVersion": "1.0.0", "schemaVersions": []int{1}, "operations": []string{"connection.test", "device.browse", "point.read"}}}
 	doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/agent/heartbeat", agent.AgentToken, map[string]any{"capabilities": capabilities})
 	agentsResponse := doJSONRequest(t, http.MethodGet, server.URL+"/api/v1/data/collector-dev/agents?page=1&pageSize=10", adminToken, nil)
 	var agentsPage struct {

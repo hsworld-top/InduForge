@@ -23,7 +23,7 @@ public sealed class ModbusTcpDriver : IIndustrialDriver, IConnectionSessionDrive
         ProtocolFamily: "modbus",
         DriverId: "modbus.tcp",
         DriverVersion: "1.0.0",
-        SchemaVersions: [2],
+        SchemaVersions: [1],
         Operations:
         [
             DriverOperations.ConnectionTest,

@@ -23,7 +23,7 @@ public sealed class SiemensS7TcpDriver : IIndustrialDriver, IConnectionSessionDr
         ProtocolFamily: "siemens",
         DriverId: "siemens.s7-tcp",
         DriverVersion: "1.0.0",
-        SchemaVersions: [2],
+        SchemaVersions: [1],
         Operations:
         [
             DriverOperations.ConnectionTest,

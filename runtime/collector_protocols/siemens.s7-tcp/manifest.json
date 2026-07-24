@@ -2,7 +2,7 @@
   "protocolFamily": "siemens",
   "driverId": "siemens.s7-tcp",
   "driverVersion": "1.0.0",
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "displayName": "Siemens S7 TCP",
   "category": "plc",
   "transports": ["tcp"],

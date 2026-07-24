@@ -2,7 +2,7 @@
   "protocolFamily": "opcua",
   "driverId": "opcua.standard",
   "driverVersion": "1.0.0",
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "displayName": "OPC UA",
   "category": "opc",
   "transports": ["tcp"],

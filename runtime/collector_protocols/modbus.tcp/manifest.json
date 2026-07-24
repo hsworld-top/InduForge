@@ -2,7 +2,7 @@
   "protocolFamily": "modbus",
   "driverId": "modbus.tcp",
   "driverVersion": "1.0.0",
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "displayName": "Modbus TCP",
   "category": "fieldbus",
   "transports": ["tcp"],

@@ -39,7 +39,7 @@ public sealed class DriverRegistryTests
     public void DefaultOpcUaDriverUsesStructuredConnectionSchemaVersion()
     {
         var descriptor = DriverRegistry.CreateDefault().Describe("opcua.standard");
-        Assert.Equal([2], descriptor.SchemaVersions);
+        Assert.Equal([1], descriptor.SchemaVersions);
     }
 
     [Fact]
@@ -49,7 +49,7 @@ public sealed class DriverRegistryTests
 
         Assert.Equal("modbus", descriptor.ProtocolFamily);
         Assert.Equal("1.0.0", descriptor.DriverVersion);
-        Assert.Equal([2], descriptor.SchemaVersions);
+        Assert.Equal([1], descriptor.SchemaVersions);
         Assert.Contains(DriverOperations.ConnectionOpen, descriptor.Operations);
         Assert.Contains(DriverOperations.ConnectionClose, descriptor.Operations);
         Assert.Contains(DriverOperations.PointRead, descriptor.Operations);
@@ -63,7 +63,7 @@ public sealed class DriverRegistryTests
 
         Assert.Equal("siemens", descriptor.ProtocolFamily);
         Assert.Equal("1.0.0", descriptor.DriverVersion);
-        Assert.Equal([2], descriptor.SchemaVersions);
+        Assert.Equal([1], descriptor.SchemaVersions);
         Assert.Contains(DriverOperations.ConnectionOpen, descriptor.Operations);
         Assert.Contains(DriverOperations.ConnectionClose, descriptor.Operations);
         Assert.Contains(DriverOperations.PointRead, descriptor.Operations);
