@@ -300,6 +300,16 @@ export type CollectorPointCreateDefaults = {
   address: Record<string, unknown>
 }
 
+export function validateCollectorConnectionName(value: string) {
+  const name = value.trim().replace(/\s+/g, ' ')
+  if (!name) return { name, error: '请填写连接名称' }
+  if ([...name].length > 50) return { name, error: '连接名称最多 50 个字符' }
+  if (![...name].every((char) => char === ' ' || /[\p{L}\p{N}]/u.test(char))) {
+    return { name, error: '连接名称只能包含文字、数字和空格' }
+  }
+  return { name, error: null }
+}
+
 const opcuaDataTypeMap: Record<string, string> = {
   boolean: 'bool',
   sbyte: 'int8',

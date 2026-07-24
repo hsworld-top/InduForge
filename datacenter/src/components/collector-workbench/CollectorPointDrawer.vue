@@ -148,8 +148,11 @@
           v-if="driver"
           v-model="draft.address"
           :schema="driver.addressSchema"
-          :ui-schema="{}"
+          :ui-schema="driver.uiSchema"
+          section="address"
           :disabled="sourceLocked"
+          :visible-field-names="pointFormState.visibleAddressFields"
+          :required-field-names="pointFormState.requiredAddressFields"
         />
         <el-skeleton v-else :rows="3" animated />
       </section>
@@ -193,6 +196,7 @@ import {
   type CollectorPointCreateDefaults,
 } from './collector-workbench-model'
 import CollectorSchemaForm from './CollectorSchemaForm.vue'
+import { resolveCollectorPointFormState } from './collector-point-form-rules'
 import {
   collectorDebugFailureText,
   collectorDebugQualityLabel,
@@ -238,9 +242,27 @@ const draft = reactive({
 const drawerTitle = computed(() =>
   mode.value === 'create' ? '新建变量' : mode.value === 'edit' ? '编辑变量' : '变量详情',
 )
-const dataTypes = computed(() => driver.value?.dataTypes || [])
+const driverDataTypes = computed(() => driver.value?.dataTypes || [])
+const pointFormState = computed(() =>
+  resolveCollectorPointFormState({
+    driverId: props.driverId,
+    address: draft.address,
+    dataType: draft.dataType,
+    driverDataTypes: driverDataTypes.value,
+  }),
+)
+const dataTypes = computed(() => pointFormState.value.allowedDataTypes)
 const supportsElementCount = computed(() =>
   collectorDriverSupportsFeature(driver.value, collectorDriverFeatures.pointElementCount),
+)
+
+watch(
+  pointFormState,
+  (state) => {
+    if (draft.dataType !== state.dataType) draft.dataType = state.dataType
+    if (!sameRecord(draft.address, state.address)) draft.address = state.address
+  },
+  { deep: true },
 )
 
 watch(
@@ -261,7 +283,7 @@ function resetDraft() {
   draft.groupId = point?.groupId ?? props.defaultGroupId ?? null
   draft.name = point?.name || defaults?.name || ''
   draft.description = point?.description || defaults?.description || ''
-  draft.dataType = point?.dataType || defaults?.dataType || driver.value?.dataTypes[0] || 'float32'
+  draft.dataType = point?.dataType || defaults?.dataType || driverDataTypes.value[0] || 'float32'
   draft.elementCount = supportsElementCount.value
     ? point?.elementCount || defaults?.elementCount || 1
     : 1
@@ -288,8 +310,8 @@ function buildPayload() {
     groupId: draft.groupId,
     name: draft.name.trim(),
     description: draft.description.trim() || null,
-    address: draft.address,
-    dataType: draft.dataType,
+    address: pointFormState.value.address,
+    dataType: pointFormState.value.dataType,
     elementCount: supportsElementCount.value ? draft.elementCount : 1,
     readOptions: props.point?.readOptions || {},
     acquisition: { ...(props.point?.acquisition || {}), intervalMs: draft.intervalMs },
@@ -301,6 +323,10 @@ function buildPayload() {
 async function save() {
   if (!draft.name.trim()) {
     ElMessage.warning('请填写变量名称')
+    return
+  }
+  if (pointFormState.value.error) {
+    ElMessage.warning(pointFormState.value.error)
     return
   }
   saving.value = true
@@ -329,6 +355,17 @@ async function save() {
   } finally {
     saving.value = false
   }
+}
+
+function sameRecord(left: Record<string, unknown>, right: Record<string, unknown>) {
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key) => Object.prototype.hasOwnProperty.call(right, key) && left[key] === right[key],
+    )
+  )
 }
 function flattenGroups(groups: CollectorPointGroupNode[]): CollectorPointGroupNode[] {
   return groups.flatMap((group) => [group, ...flattenGroups(group.children || [])])

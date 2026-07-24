@@ -16,9 +16,21 @@ import {
   groupCollectorConnections,
   resolveCollectorEnumOptionLabel,
   resolveCollectorDriverIconKey,
+  validateCollectorConnectionName,
 } from '@/components/collector-workbench/collector-workbench-model'
 
 describe('industrial collector workbench model', () => {
+  it('normalizes valid connection names and rejects special characters', () => {
+    expect(validateCollectorConnectionName('  1号产线   Modbus  ')).toEqual({
+      name: '1号产线 Modbus',
+      error: null,
+    })
+    expect(validateCollectorConnectionName('line_1')).toEqual({
+      name: 'line_1',
+      error: '连接名称只能包含文字、数字和空格',
+    })
+  })
+
   const agent = {
     id: 'agent-1',
     name: 'dev',
@@ -31,30 +43,30 @@ describe('industrial collector workbench model', () => {
       {
         driverId: 'opcua.standard',
         driverVersion: '1.0.0',
-        schemaVersions: [2],
+        schemaVersions: [1],
         operations: ['connection.test', 'device.browse', 'point.read'],
       },
     ],
     createdAt: '2026-07-15 10:00:00',
   }
   it('allows offline editing while device operations require a compatible agent', () => {
-    expect(agentSupportsOperation(undefined, 'opcua.standard', '1.0.0', 2, 'device.browse')).toBe(
+    expect(agentSupportsOperation(undefined, 'opcua.standard', '1.0.0', 1, 'device.browse')).toBe(
       false,
     )
-    expect(agentSupportsOperation(agent, 'opcua.standard', '1.0.0', 2, 'device.browse')).toBe(true)
+    expect(agentSupportsOperation(agent, 'opcua.standard', '1.0.0', 1, 'device.browse')).toBe(true)
     expect(
       agentSupportsOperation(
         { ...agent, status: 'offline' },
         'opcua.standard',
         '1.0.0',
-        2,
+        1,
         'device.browse',
       ),
     ).toBe(false)
   })
   it('rejects mismatched driver versions and operations', () => {
-    expect(agentSupportsOperation(agent, 'opcua.standard', '2.0.0', 2, 'point.read')).toBe(false)
-    expect(agentSupportsOperation(agent, 'opcua.standard', '1.0.0', 2, 'point.write')).toBe(false)
+    expect(agentSupportsOperation(agent, 'opcua.standard', '2.0.0', 1, 'point.read')).toBe(false)
+    expect(agentSupportsOperation(agent, 'opcua.standard', '1.0.0', 1, 'point.write')).toBe(false)
   })
   it('recursively collects only variables that have not been modeled', async () => {
     const branches = new Map([
@@ -295,7 +307,7 @@ describe('industrial collector workbench model', () => {
       protocolFamily: 'opcua',
       driverId: 'opcua.standard',
       driverVersion: '1.0.0',
-      schemaVersion: 2,
+      schemaVersion: 1,
       config: { host: 'fe80::1', port: 4840, endpointPath: '/induforge/sim' },
       metadata: {},
       secretStatus: {},

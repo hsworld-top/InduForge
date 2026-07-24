@@ -71,7 +71,7 @@ func TestCollectorPointServiceValidatesModbusAddressAndDataTypeCombinations(t *t
 		t.Run(tt.name, func(t *testing.T) {
 			store := &fakeCollectorPointStore{connection: repository.CollectorConnectionRecord{
 				ID: "550e8400-e29b-41d4-a716-446655440002", ProjectID: "550e8400-e29b-41d4-a716-446655440000",
-				DriverID: "modbus.tcp", DriverVersion: "1.0.0", SchemaVersion: 2,
+				DriverID: "modbus.tcp", DriverVersion: "1.0.0", SchemaVersion: 1,
 			}}
 			service := newRepositoryCollectorPointService(t, store)
 			result, err := service.CreatePointsBatch(
@@ -108,6 +108,8 @@ func TestCollectorPointServiceValidatesSiemensS7AddressAndDataTypeCombinations(t
 		{name: "bool requires bit offset", address: map[string]any{"area": "marker", "byteOffset": 10}, dataType: "bool", elementCount: 1, wantFailure: "Siemens S7 bool 变量必须配置可位寻址区域和位偏移"},
 		{name: "numeric rejects bit offset", address: map[string]any{"area": "marker", "byteOffset": 10, "bitOffset": 1}, dataType: "int16", elementCount: 1, wantFailure: "只有 Siemens S7 bool 变量可以配置位偏移"},
 		{name: "timer rejects float", address: map[string]any{"area": "timer", "byteOffset": 10}, dataType: "float32", elementCount: 1, wantFailure: "定时器和计数器只支持 int16 或 uint16 数据类型"},
+		{name: "data block requires number", address: map[string]any{"area": "dataBlock", "byteOffset": 10}, dataType: "int16", elementCount: 1, wantFailure: "采集点地址不符合驱动 Schema"},
+		{name: "marker rejects data block number", address: map[string]any{"area": "marker", "dbNumber": 1, "byteOffset": 10}, dataType: "int16", elementCount: 1, wantFailure: "采集点地址不符合驱动 Schema"},
 		{name: "datetime rejects array", address: map[string]any{"area": "dataBlock", "dbNumber": 1, "byteOffset": 10}, dataType: "datetime", elementCount: 2, wantFailure: "Siemens S7 datetime 变量只支持单元素读取"},
 		{name: "data block accepts numeric type", address: map[string]any{"area": "dataBlock", "dbNumber": 1, "byteOffset": 10}, dataType: "int16", elementCount: 1},
 	}
@@ -116,7 +118,7 @@ func TestCollectorPointServiceValidatesSiemensS7AddressAndDataTypeCombinations(t
 		t.Run(tt.name, func(t *testing.T) {
 			store := &fakeCollectorPointStore{connection: repository.CollectorConnectionRecord{
 				ID: "550e8400-e29b-41d4-a716-446655440002", ProjectID: "550e8400-e29b-41d4-a716-446655440000",
-				DriverID: "siemens.s7-tcp", DriverVersion: "1.0.0", SchemaVersion: 2,
+				DriverID: "siemens.s7-tcp", DriverVersion: "1.0.0", SchemaVersion: 1,
 			}}
 			service := newRepositoryCollectorPointService(t, store)
 			result, err := service.CreatePointsBatch(
@@ -176,7 +178,7 @@ func TestCollectorPointServiceReturnsInvalidAddressAsBatchFailure(t *testing.T) 
 }
 
 func TestCollectorPointServiceRejectsMalformedOpcUaNodeID(t *testing.T) {
-	store := &fakeCollectorPointStore{connection: repository.CollectorConnectionRecord{ID: "550e8400-e29b-41d4-a716-446655440002", ProjectID: "550e8400-e29b-41d4-a716-446655440000", DriverID: "opcua.standard", SchemaVersion: 2}}
+	store := &fakeCollectorPointStore{connection: repository.CollectorConnectionRecord{ID: "550e8400-e29b-41d4-a716-446655440002", ProjectID: "550e8400-e29b-41d4-a716-446655440000", DriverID: "opcua.standard", SchemaVersion: 1}}
 	service := newRepositoryCollectorPointService(t, store)
 
 	result, err := service.CreatePointsBatch(context.Background(), store.connection.ProjectID, store.connection.ID, "550e8400-e29b-41d4-a716-446655440001", []CreateCollectorPointInput{{Name: "LastChange", Address: map[string]any{"nodeId": "111"}, DataType: "bool", ElementCount: 1}})

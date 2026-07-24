@@ -142,6 +142,7 @@ import {
   buildCollectorDriverTree,
   formatCollectorCategoryLabel,
   formatCollectorDriverDisplayName,
+  validateCollectorConnectionName,
   type CollectorDriverTreeNode,
 } from './collector-workbench-model'
 import IconTablerSearch from '~icons/tabler/search'
@@ -219,11 +220,16 @@ async function handleNodeClick(node: CollectorDriverTreeNode) {
 
 async function save() {
   if (!driverDetail.value) return
+  const validatedName = validateCollectorConnectionName(name.value)
+  if (validatedName.error) {
+    ElMessage.warning(validatedName.error)
+    return
+  }
   saving.value = true
   try {
     const payload = splitCollectorFormValues(driverDetail.value.connectionSchema, values.value)
     const connection = await createCollectorConnection(props.projectId, {
-      name: name.value.trim(),
+      name: validatedName.name,
       driverId: driverDetail.value.driverId,
       ...payload,
       metadata: {},
@@ -231,6 +237,8 @@ async function save() {
     emit('created', connection.id)
     emit('update:modelValue', false)
     ElMessage.success('工业采集连接已创建')
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '工业采集连接创建失败'))
   } finally {
     saving.value = false
   }

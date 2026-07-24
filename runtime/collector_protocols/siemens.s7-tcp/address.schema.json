@@ -9,6 +9,7 @@
       "title": "存储区域（area）",
       "description": "选择变量所在的 Siemens S7 存储区域",
       "enum": ["input", "output", "marker", "dataBlock", "timer", "counter"],
+      "default": "dataBlock",
       "x-induforge-enum-labels": {
         "input": "输入区 I（input）",
         "output": "输出区 Q（output）",
@@ -23,13 +24,15 @@
       "title": "数据块编号（dbNumber）",
       "description": "仅数据块区域需要，例如 DB1 的编号为 1",
       "minimum": 1,
-      "maximum": 65535
+      "maximum": 65535,
+      "default": 1
     },
     "byteOffset": {
       "type": "integer",
       "title": "字节偏移（byteOffset）",
       "description": "变量在存储区域内的起始字节位置",
       "minimum": 0,
+      "default": 0,
       "x-induforge-address-text": true
     },
     "bitOffset": {
@@ -37,7 +40,8 @@
       "title": "位偏移（bitOffset）",
       "description": "bool 变量必填，范围为 0 到 7",
       "minimum": 0,
-      "maximum": 7
+      "maximum": 7,
+      "default": 0
     }
   },
   "allOf": [

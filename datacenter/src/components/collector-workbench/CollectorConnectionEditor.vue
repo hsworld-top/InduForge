@@ -31,12 +31,14 @@
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getCollectorDriver, updateCollectorConnection } from '@/api/collector.api'
+import { getApiErrorMessage } from '@/utils/request'
 import {
   splitCollectorFormValues,
   type CollectorConnection,
   type CollectorDriverDetail,
 } from '@/api/schemas/collector.schema'
 import CollectorSchemaForm from './CollectorSchemaForm.vue'
+import { validateCollectorConnectionName } from './collector-workbench-model'
 
 const props = defineProps<{ projectId: string; connection: CollectorConnection | null }>()
 const emit = defineEmits<{ saved: [connection: CollectorConnection] }>()
@@ -62,15 +64,22 @@ watch(
 )
 async function save() {
   if (!props.connection || !driver.value) return
+  const validatedName = validateCollectorConnectionName(name.value)
+  if (validatedName.error) {
+    ElMessage.warning(validatedName.error)
+    return
+  }
   saving.value = true
   try {
     const payload = splitCollectorFormValues(driver.value.connectionSchema, values.value)
     const result = await updateCollectorConnection(props.projectId, props.connection.id, {
-      name: name.value,
+      name: validatedName.name,
       ...payload,
     })
     emit('saved', result)
     ElMessage.success('连接配置已保存')
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '连接配置保存失败'))
   } finally {
     saving.value = false
   }

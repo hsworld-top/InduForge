@@ -144,19 +144,24 @@ const props = withDefaults(
     uiSchema?: Record<string, unknown>
     section?: string
     disabled?: boolean
+    visibleFieldNames?: string[]
+    requiredFieldNames?: string[]
   }>(),
   { uiSchema: () => ({}), section: 'connection', disabled: false },
 )
 
 const emit = defineEmits<{ 'update:modelValue': [value: Record<string, unknown>] }>()
 const model = computed(() => props.modelValue || {})
-const requiredFields = computed(() => new Set(props.schema.required || []))
+const requiredFields = computed(
+  () => new Set([...(props.schema.required || []), ...(props.requiredFieldNames || [])]),
+)
 const fields = computed(() => {
   const properties = props.schema.properties || {}
   const section = props.uiSchema?.[props.section] as { order?: string[] } | undefined
   const order = section?.order || Object.keys(properties)
+  const visibleFieldNames = props.visibleFieldNames ? new Set(props.visibleFieldNames) : null
   return order
-    .filter((name) => properties[name])
+    .filter((name) => properties[name] && (!visibleFieldNames || visibleFieldNames.has(name)))
     .map((name) => ({ name, property: properties[name] as CollectorJsonSchemaProperty }))
 })
 const visibleFields = computed(() =>
