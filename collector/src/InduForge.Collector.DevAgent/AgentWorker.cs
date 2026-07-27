@@ -9,17 +9,22 @@ internal sealed class AgentWorker : IAsyncDisposable
     private static readonly TimeSpan FailedClaimRetryInterval = TimeSpan.FromSeconds(1);
     private readonly CenterApiClient _apiClient;
     private readonly CollectorTaskExecutor _taskExecutor;
-    private readonly IReadOnlyList<AgentProtocolCapability> _capabilities;
+    private readonly Func<IReadOnlyList<AgentProtocolCapability>> _capabilitiesProvider;
     private readonly Func<AgentWorkerUpdate, Task> _onUpdate;
     private readonly AgentFileLogger? _logger;
     private CancellationTokenSource? _runCancellation;
     private Task? _runTask;
 
-    public AgentWorker(CenterApiClient apiClient, CollectorTaskExecutor taskExecutor, IReadOnlyList<AgentProtocolCapability> capabilities, Func<AgentWorkerUpdate, Task> onUpdate, AgentFileLogger? logger = null)
+    public AgentWorker(
+        CenterApiClient apiClient,
+        CollectorTaskExecutor taskExecutor,
+        Func<IReadOnlyList<AgentProtocolCapability>> capabilitiesProvider,
+        Func<AgentWorkerUpdate, Task> onUpdate,
+        AgentFileLogger? logger = null)
     {
         _apiClient = apiClient;
         _taskExecutor = taskExecutor;
-        _capabilities = capabilities;
+        _capabilitiesProvider = capabilitiesProvider;
         _onUpdate = onUpdate;
         _logger = logger;
     }
@@ -61,7 +66,10 @@ internal sealed class AgentWorker : IAsyncDisposable
             {
                 try
                 {
-                    await _apiClient.HeartbeatAsync(credentials, new AgentHeartbeatRequest(_capabilities), cancellationToken).ConfigureAwait(false);
+                    await _apiClient.HeartbeatAsync(
+                        credentials,
+                        new AgentHeartbeatRequest(_capabilitiesProvider()),
+                        cancellationToken).ConfigureAwait(false);
                     if (!connected || heartbeatFailureCount > 0)
                     {
                         _logger?.Info("center.heartbeat.connected", $"agentId={credentials.AgentId}");

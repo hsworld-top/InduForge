@@ -129,7 +129,13 @@ internal sealed class CenterApiException(HttpStatusCode statusCode, string messa
 internal sealed record ApiEnvelope<T>(int Code, string Msg, T? Data, string ReqId);
 internal sealed record AgentRegistrationRequest(string RegistrationCode, string MachineId, string Name, string OS, string Arch, string Version, IReadOnlyList<AgentProtocolCapability> Capabilities);
 internal sealed record AgentRegistration(string AgentId, string AgentToken, string TenantId);
-internal sealed record AgentProtocolCapability(string DriverId, string DriverVersion, IReadOnlyList<int> SchemaVersions, IReadOnlyList<string> Operations);
+internal sealed record AgentProtocolCapability(
+    string DriverId,
+    string DriverVersion,
+    IReadOnlyList<int> SchemaVersions,
+    IReadOnlyList<string> Operations,
+    AgentProtocolResources? Resources = null);
+internal sealed record AgentProtocolResources(IReadOnlyList<string> SerialPorts);
 internal sealed record AgentHeartbeatRequest(IReadOnlyList<AgentProtocolCapability> Capabilities);
 internal sealed record AgentCredentials(string CenterUrl, string AgentId, string AgentToken, string TenantId, string AgentName);
 internal sealed record CollectorTaskEnvelope(string TaskId, string ProjectId, string AgentId, string Operation, string Status, JsonElement Request, string DeadlineAt);

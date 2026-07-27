@@ -16,6 +16,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _clearRegistrationMenuItem;
     private readonly SingleInstanceCoordinator _singleInstance;
     private readonly AgentFileLogger _logger;
+    private readonly SerialPortCatalog _serialPortCatalog;
     private readonly OpcUaSelfTestService _selfTestService = new();
     private readonly CenterApiClient _apiClient;
     private readonly AgentWorker _worker;
@@ -28,6 +29,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         _singleInstance = singleInstance;
         _logger = logger;
+        _serialPortCatalog = new SerialPortCatalog(logger: logger);
         _apiClient = new CenterApiClient(new HttpClient { Timeout = TimeSpan.FromSeconds(35) }, logger);
         _credentials = LoadCredentialsSafely();
         _snapshot = new AgentStatusSnapshot(
@@ -45,8 +47,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _statusForm.ConnectionToggleRequested += OnConnectionToggleRequested;
         _statusForm.ClearRegistrationRequested += OnClearRegistrationRequested;
         _statusForm.SelfTestRequested += OnSelfTestRequested;
-        var capabilities = _driverRegistry.Descriptors.Select(ToAgentCapability).ToArray();
-        _worker = new AgentWorker(_apiClient, new CollectorTaskExecutor(_driverRegistry, logger), capabilities, OnWorkerUpdateAsync, logger);
+        _worker = new AgentWorker(
+            _apiClient,
+            new CollectorTaskExecutor(_driverRegistry, logger),
+            BuildCapabilities,
+            OnWorkerUpdateAsync,
+            logger);
 
         _trayMenu = new ContextMenuStrip();
         _trayMenu.Items.Add("打开状态", null, (_, _) => ShowStatus());
@@ -95,7 +101,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _logger.Info("agent.registration.started", $"center={value.CenterUrl} agentName={value.AgentName}");
         try
         {
-            var capabilities = _driverRegistry.Descriptors.Select(ToAgentCapability).ToArray();
+            var capabilities = BuildCapabilities();
             var registration = await _apiClient.RegisterAsync(value.CenterUrl, new AgentRegistrationRequest(value.RegistrationCode, MachineIdentityProvider.GetMachineId(), value.AgentName, "windows", RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(), Application.ProductVersion, capabilities), _applicationCancellation.Token);
             _credentials = new AgentCredentials(value.CenterUrl, registration.AgentId, registration.AgentToken, registration.TenantId, value.AgentName);
             _credentialStore.Save(_credentials);
@@ -277,8 +283,22 @@ internal sealed class TrayApplicationContext : ApplicationContext
         ExitThread();
     }
 
-    private static AgentProtocolCapability ToAgentCapability(InduForge.Collector.Contracts.DriverDescriptor descriptor) =>
-        new(descriptor.DriverId, descriptor.DriverVersion, descriptor.SchemaVersions, descriptor.Operations);
+    private AgentProtocolCapability[] BuildCapabilities()
+    {
+        var serialPorts = _driverRegistry.Descriptors.Any(descriptor => _driverRegistry.UsesTransport(descriptor.DriverId, "serial"))
+            ? _serialPortCatalog.List()
+            : [];
+        return _driverRegistry.Descriptors
+            .Select(descriptor => new AgentProtocolCapability(
+                descriptor.DriverId,
+                descriptor.DriverVersion,
+                descriptor.SchemaVersions,
+                descriptor.Operations,
+                _driverRegistry.UsesTransport(descriptor.DriverId, "serial")
+                    ? new AgentProtocolResources(serialPorts)
+                    : null))
+            .ToArray();
+    }
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

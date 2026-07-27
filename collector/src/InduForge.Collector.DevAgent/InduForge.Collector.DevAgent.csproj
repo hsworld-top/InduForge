@@ -1,20 +1,191 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="openssl-native" Version="3.5.5" GeneratePathProperty="true" ExcludeAssets="all" />
     <ProjectReference Include="..\InduForge.Collector.Adapters.Hsl\InduForge.Collector.Adapters.Hsl.csproj" />
     <ProjectReference Include="..\InduForge.Collector.Contracts\InduForge.Collector.Contracts.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.AllenBradleyEtherNetIp\InduForge.Collector.Drivers.AllenBradleyEtherNetIp.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.BeckhoffAds\InduForge.Collector.Drivers.BeckhoffAds.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.Cimon\InduForge.Collector.Drivers.Cimon.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.Dcs\InduForge.Collector.Drivers.Dcs.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.Delta\InduForge.Collector.Drivers.Delta.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.FatekProgramTcp\InduForge.Collector.Drivers.FatekProgramTcp.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.Freedom\InduForge.Collector.Drivers.Freedom.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.Fuji\InduForge.Collector.Drivers.Fuji.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.GeSrtpTcp\InduForge.Collector.Drivers.GeSrtpTcp.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.Iec104\InduForge.Collector.Drivers.Iec104.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.InstrumentMeters\InduForge.Collector.Drivers.InstrumentMeters.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.InovanceModbusTcp\InduForge.Collector.Drivers.InovanceModbusTcp.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.Keyence\InduForge.Collector.Drivers.Keyence.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.LsisFastEnet\InduForge.Collector.Drivers.LsisFastEnet.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.MegMeet\InduForge.Collector.Drivers.MegMeet.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.PanasonicMewtocolTcp\InduForge.Collector.Drivers.PanasonicMewtocolTcp.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.PanasonicMcBinary\InduForge.Collector.Drivers.PanasonicMcBinary.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.MitsubishiMc3ETcp\InduForge.Collector.Drivers.MitsubishiMc3ETcp.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.ModbusRtu\InduForge.Collector.Drivers.ModbusRtu.csproj" />
     <ProjectReference Include="..\InduForge.Collector.Drivers.ModbusTcp\InduForge.Collector.Drivers.ModbusTcp.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.MqttRpc\InduForge.Collector.Drivers.MqttRpc.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.OmronFins\InduForge.Collector.Drivers.OmronFins.csproj" />
     <ProjectReference Include="..\InduForge.Collector.Drivers.OpcUa\InduForge.Collector.Drivers.OpcUa.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.OrientalMotor\InduForge.Collector.Drivers.OrientalMotor.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.Robots\InduForge.Collector.Drivers.Robots.csproj" />
     <ProjectReference Include="..\InduForge.Collector.Drivers.SiemensS7Tcp\InduForge.Collector.Drivers.SiemensS7Tcp.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.ToyoPuc\InduForge.Collector.Drivers.ToyoPuc.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.Turck\InduForge.Collector.Drivers.Turck.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.Xinje\InduForge.Collector.Drivers.Xinje.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.Vigor\InduForge.Collector.Drivers.Vigor.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.Yamatake\InduForge.Collector.Drivers.Yamatake.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.Yaskawa\InduForge.Collector.Drivers.Yaskawa.csproj" />
+    <ProjectReference Include="..\InduForge.Collector.Drivers.Yokogawa\InduForge.Collector.Drivers.Yokogawa.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="$(Pkgopenssl-native)\runtimes\win-x64\native\libcrypto-3-x64.dll">
+      <Link>libcrypto-3-x64.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="$(Pkgopenssl-native)\runtimes\win-x64\native\libssl-3-x64.dll">
+      <Link>libssl-3-x64.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\allen-bradley.ethernet-ip\manifest.json"
+                      LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.allen-bradley.ethernet-ip.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\allen-bradley.connected-cip\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.allen-bradley.connected-cip.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\allen-bradley.micro-cip\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.allen-bradley.micro-cip.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\allen-bradley.pccc\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.allen-bradley.pccc.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\allen-bradley.slc\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.allen-bradley.slc.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\allen-bradley.df1-serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.allen-bradley.df1-serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\beckhoff.ads-tcp\manifest.json"
+                      LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.beckhoff.ads-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\cimon.hmi-protocol\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.cimon.hmi-protocol.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\cjt188.serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.cjt188.serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\cjt188.tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.cjt188.tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\dam3601.serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.dam3601.serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\ec-fan.machine-serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.ec-fan.machine-serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\dcs.nanjing-auto\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.dcs.nanjing-auto.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\delixi.dtsu6606\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.delixi.dtsu6606.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\dlt645.2007-serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.dlt645.2007-serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\dlt645.2007-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.dlt645.2007-over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\dlt645.1997-serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.dlt645.1997-serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\dlt645.1997-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.dlt645.1997-over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\dlt698.serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.dlt698.serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\dlt698.over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.dlt698.over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\dlt698.tcp-net\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.dlt698.tcp-net.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\delta.tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.delta.tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\delta.rtu-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.delta.rtu-over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\delta.ascii-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.delta.ascii-over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\delta.rtu\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.delta.rtu.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\delta.ascii\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.delta.ascii.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\fatek.program-tcp\manifest.json"
+                      LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.fatek.program-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\fatek.program-serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.fatek.program-serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\freedom.tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.freedom.tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\freedom.udp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.freedom.udp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\freedom.serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.freedom.serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\fuji.command-setting-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.fuji.command-setting-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\fuji.sph-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.fuji.sph-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\fuji.spb-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.fuji.spb-over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\fuji.spb\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.fuji.spb.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\ge.srtp-tcp\manifest.json"
+                      LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.ge.srtp-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\iec.60870-5-104\manifest.json"
+                      LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.iec.60870-5-104.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\inovance.modbus-tcp\manifest.json"
+                      LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.inovance.modbus-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\inovance.modbus-serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.inovance.modbus-serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\inovance.modbus-rtu-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.inovance.modbus-rtu-over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\inovance.connected-cip\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.inovance.connected-cip.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\inovance.easy-net\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.inovance.easy-net.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\inovance.computer-link\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.inovance.computer-link.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\keyence.mc-3e-tcp\manifest.json"
+                      LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.keyence.mc-3e-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\keyence.mc-ascii-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.keyence.mc-ascii-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\keyence.kv-old-tcp\manifest.json"
+                      LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.keyence.kv-old-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\keyence.nano-tcp\manifest.json"
+                      LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.keyence.nano-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\keyence.nano-serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.keyence.nano-serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\keyence.nano-serial-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.keyence.nano-serial-over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\lsis.fast-enet\manifest.json"
+                      LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.lsis.fast-enet.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\lsis.cnet\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.lsis.cnet.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\lsis.cnet-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.lsis.cnet-over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\lsis.cpu-serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.lsis.cpu-serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\megmeet.tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.megmeet.tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\megmeet.rtu-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.megmeet.rtu-over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\megmeet.rtu\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.megmeet.rtu.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\panasonic.mewtocol-tcp\manifest.json"
+                      LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.panasonic.mewtocol-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\panasonic.mewtocol-serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.panasonic.mewtocol-serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\panasonic.mc-binary-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.panasonic.mc-binary-tcp.manifest.json" />
     <EmbeddedResource Include="..\..\..\runtime\collector_protocols\opcua.standard\manifest.json"
                       LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.opcua.standard.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\mitsubishi.mc-3e-tcp\manifest.json"
+                      LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.mitsubishi.mc-3e-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\mitsubishi.a1e-ascii-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.mitsubishi.a1e-ascii-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\mitsubishi.a1e-binary-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.mitsubishi.a1e-binary-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\mitsubishi.mc-ascii-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.mitsubishi.mc-ascii-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\mitsubishi.mc-ascii-udp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.mitsubishi.mc-ascii-udp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\mitsubishi.mc-binary-udp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.mitsubishi.mc-binary-udp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\mitsubishi.mc-r-binary-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.mitsubishi.mc-r-binary-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\mitsubishi.cip\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.mitsubishi.cip.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\mitsubishi.a3c-serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.mitsubishi.a3c-serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\mitsubishi.a3c-serial-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.mitsubishi.a3c-serial-over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\mitsubishi.fx-links-serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.mitsubishi.fx-links-serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\mitsubishi.fx-links-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.mitsubishi.fx-links-over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\mitsubishi.fx-serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.mitsubishi.fx-serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\mitsubishi.fx-serial-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.mitsubishi.fx-serial-over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\modbus.rtu\manifest.json"
+                      LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.modbus.rtu.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\modbus.rtu-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.modbus.rtu-over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\modbus.ascii\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.modbus.ascii.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\modbus.ascii-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.modbus.ascii-over-tcp.manifest.json" />
     <EmbeddedResource Include="..\..\..\runtime\collector_protocols\modbus.tcp\manifest.json"
                       LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.modbus.tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\modbus.udp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.modbus.udp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\mqtt.rpc-device\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.mqtt.rpc-device.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\omron.fins-tcp\manifest.json"
+                      LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.omron.fins-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\omron.fins-udp\manifest.json"
+                      LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.omron.fins-udp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\omron.cip\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.omron.cip.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\omron.connected-cip\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.omron.connected-cip.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\omron.hostlink\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.omron.hostlink.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\omron.hostlink-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.omron.hostlink-over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\omron.hostlink-cmode\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.omron.hostlink-cmode.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\omron.hostlink-cmode-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.omron.hostlink-cmode-over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\oriental-motor.eip\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.oriental-motor.eip.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\rkc.temperature-controller-serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.rkc.temperature-controller-serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\rkc.temperature-controller-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.rkc.temperature-controller-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\robot.estun-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.robot.estun-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\robot.fanuc-interface\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.robot.fanuc-interface.manifest.json" />
     <EmbeddedResource Include="..\..\..\runtime\collector_protocols\siemens.s7-tcp\manifest.json"
                       LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.siemens.s7-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\siemens.s7-plus\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.siemens.s7-plus.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\siemens.ppi\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.siemens.ppi.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\siemens.ppi-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.siemens.ppi-over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\siemens.mpi\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.siemens.mpi.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\siemens.fetch-write\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.siemens.fetch-write.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\siemens.web-api\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.siemens.web-api.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\toyo.puc\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.toyo.puc.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\turck.reader-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.turck.reader-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\xinje.tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.xinje.tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\xinje.rtu-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.xinje.rtu-over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\xinje.rtu\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.xinje.rtu.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\xinje.internal-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.xinje.internal-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\vigor.serial-over-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.vigor.serial-over-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\vigor.serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.vigor.serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\yamatake.digitron-serial\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.yamatake.digitron-serial.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\yamatake.digitron-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.yamatake.digitron-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\yudian.ai-bus\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.yudian.ai-bus.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\yaskawa.memobus-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.yaskawa.memobus-tcp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\yaskawa.memobus-udp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.yaskawa.memobus-udp.manifest.json" />
+    <EmbeddedResource Include="..\..\..\runtime\collector_protocols\yokogawa.link-tcp\manifest.json" LogicalName="InduForge.Collector.DevAgent.CollectorProtocols.yokogawa.link-tcp.manifest.json" />
   </ItemGroup>
 
   <PropertyGroup>
