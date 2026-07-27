@@ -18,6 +18,8 @@
       v-model="values"
       :schema="driver.connectionSchema"
       :ui-schema="driver.uiSchema"
+      :string-field-options="stringFieldOptions"
+      @refresh-options="emit('refresh-agent')"
     />
     <div class="collector-editor__actions">
       <el-button data-test="save-connection" type="primary" :loading="saving" @click="save"
@@ -28,7 +30,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getCollectorDriver, updateCollectorConnection } from '@/api/collector.api'
 import { getApiErrorMessage } from '@/utils/request'
@@ -37,16 +39,34 @@ import {
   type CollectorConnection,
   type CollectorDriverDetail,
 } from '@/api/schemas/collector.schema'
+import type { CollectorAgent } from '@/api/schemas/collector-dev.schema'
 import CollectorSchemaForm from './CollectorSchemaForm.vue'
 import { validateCollectorConnectionName } from './collector-workbench-model'
 
-const props = defineProps<{ projectId: string; connection: CollectorConnection | null }>()
-const emit = defineEmits<{ saved: [connection: CollectorConnection] }>()
+const props = defineProps<{
+  projectId: string
+  connection: CollectorConnection | null
+  agent?: CollectorAgent
+}>()
+const emit = defineEmits<{
+  saved: [connection: CollectorConnection]
+  'refresh-agent': []
+}>()
 const driver = ref<CollectorDriverDetail | null>(null)
 const name = ref('')
 const values = ref<Record<string, unknown>>({})
 const loading = ref(false)
 const saving = ref(false)
+const stringFieldOptions = computed<Record<string, string[]>>(() => {
+  if (!driver.value?.connectionSchema.properties?.portName) return {}
+  const capability = props.agent?.capabilities.find(
+    (item) =>
+      item.driverId === driver.value?.driverId &&
+      item.driverVersion === driver.value?.driverVersion &&
+      item.schemaVersions.includes(driver.value?.schemaVersion || 0),
+  )
+  return { portName: capability?.resources?.serialPorts || [] }
+})
 watch(
   () => props.connection,
   async (connection) => {

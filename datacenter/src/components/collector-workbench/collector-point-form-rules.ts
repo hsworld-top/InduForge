@@ -22,7 +22,7 @@ const s7WordAreas = new Set(['timer', 'counter'])
 export function resolveCollectorPointFormState(
   context: CollectorPointFormContext,
 ): CollectorPointFormState {
-  if (context.driverId === 'modbus.tcp') return resolveModbusState(context)
+  if (context.driverId.startsWith('modbus.')) return resolveModbusState(context)
   if (context.driverId === 'siemens.s7-tcp') return resolveSiemensS7State(context)
   return {
     visibleAddressFields: undefined,

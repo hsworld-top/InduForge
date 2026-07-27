@@ -88,6 +88,8 @@
                 v-model="values"
                 :schema="driverDetail.connectionSchema"
                 :ui-schema="driverDetail.uiSchema"
+                :string-field-options="stringFieldOptions"
+                @refresh-options="emit('refresh-agent')"
               />
             </el-form>
           </div>
@@ -138,6 +140,7 @@ import {
   type CollectorDriverDetail,
   type CollectorDriverSummary,
 } from '@/api/schemas/collector.schema'
+import type { CollectorAgent } from '@/api/schemas/collector-dev.schema'
 import {
   buildCollectorDriverTree,
   formatCollectorCategoryLabel,
@@ -151,10 +154,11 @@ import DcDialog from '@/components/shared/DcDialog.vue'
 import CollectorDriverIcon from './CollectorDriverIcon.vue'
 import CollectorSchemaForm from './CollectorSchemaForm.vue'
 
-const props = defineProps<{ modelValue: boolean; projectId: string }>()
+const props = defineProps<{ modelValue: boolean; projectId: string; agent?: CollectorAgent }>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   created: [connectionId: string]
+  'refresh-agent': []
 }>()
 const drivers = ref<CollectorDriverSummary[]>([])
 const driverId = ref('')
@@ -172,6 +176,16 @@ const expandedFamilyKeys = computed(() => driverTree.value.map((node) => node.id
 const selectedDriver = computed(() =>
   drivers.value.find((driver) => driver.driverId === driverId.value),
 )
+const stringFieldOptions = computed<Record<string, string[]>>(() => {
+  if (!driverDetail.value?.connectionSchema.properties?.portName) return {}
+  const capability = props.agent?.capabilities.find(
+    (item) =>
+      item.driverId === driverDetail.value?.driverId &&
+      item.driverVersion === driverDetail.value?.driverVersion &&
+      item.schemaVersions.includes(driverDetail.value?.schemaVersion || 0),
+  )
+  return { portName: capability?.resources?.serialPorts || [] }
+})
 
 watch(
   () => props.modelValue,

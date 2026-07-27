@@ -48,6 +48,33 @@
           :disabled="disabled"
           @update:model-value="setValue(field.name, $event)"
         />
+        <div v-else-if="hasStringOptions(field.name)" class="collector-schema-form__resource">
+          <el-select
+            :model-value="stringValue(model[field.name])"
+            :disabled="disabled"
+            :placeholder="field.property.description"
+            allow-create
+            clearable
+            default-first-option
+            filterable
+            @update:model-value="setValue(field.name, $event)"
+          >
+            <el-option
+              v-for="option in stringOptions(field.name)"
+              :key="option"
+              :label="option"
+              :value="option"
+            />
+          </el-select>
+          <el-tooltip content="刷新调试代理资源" placement="top">
+            <el-button
+              :disabled="disabled"
+              :icon="IconTablerRefresh"
+              aria-label="刷新可用选项"
+              @click="emit('refresh-options', field.name)"
+            />
+          </el-tooltip>
+        </div>
         <el-input
           v-else
           :model-value="stringValue(model[field.name])"
@@ -109,6 +136,33 @@
             :disabled="disabled"
             @update:model-value="setValue(field.name, $event)"
           />
+          <div v-else-if="hasStringOptions(field.name)" class="collector-schema-form__resource">
+            <el-select
+              :model-value="stringValue(model[field.name])"
+              :disabled="disabled"
+              :placeholder="field.property.description"
+              allow-create
+              clearable
+              default-first-option
+              filterable
+              @update:model-value="setValue(field.name, $event)"
+            >
+              <el-option
+                v-for="option in stringOptions(field.name)"
+                :key="option"
+                :label="option"
+                :value="option"
+              />
+            </el-select>
+            <el-tooltip content="刷新调试代理资源" placement="top">
+              <el-button
+                :disabled="disabled"
+                :icon="IconTablerRefresh"
+                aria-label="刷新可用选项"
+                @click="emit('refresh-options', field.name)"
+              />
+            </el-tooltip>
+          </div>
           <el-input
             v-else
             :model-value="stringValue(model[field.name])"
@@ -134,6 +188,7 @@ import type {
   CollectorJsonSchemaProperty,
 } from '@/api/schemas/collector.schema'
 import { resolveCollectorEnumOptionLabel } from './collector-workbench-model'
+import IconTablerRefresh from '~icons/tabler/refresh'
 
 defineOptions({ name: 'CollectorSchemaForm' })
 
@@ -146,11 +201,15 @@ const props = withDefaults(
     disabled?: boolean
     visibleFieldNames?: string[]
     requiredFieldNames?: string[]
+    stringFieldOptions?: Record<string, string[]>
   }>(),
   { uiSchema: () => ({}), section: 'connection', disabled: false },
 )
 
-const emit = defineEmits<{ 'update:modelValue': [value: Record<string, unknown>] }>()
+const emit = defineEmits<{
+  'update:modelValue': [value: Record<string, unknown>]
+  'refresh-options': [fieldName: string]
+}>()
 const model = computed(() => props.modelValue || {})
 const requiredFields = computed(
   () => new Set([...(props.schema.required || []), ...(props.requiredFieldNames || [])]),
@@ -177,6 +236,12 @@ function setValue(name: string, value: unknown) {
 }
 function stringValue(value: unknown) {
   return value === undefined || value === null ? '' : String(value)
+}
+function hasStringOptions(name: string) {
+  return Object.prototype.hasOwnProperty.call(props.stringFieldOptions || {}, name)
+}
+function stringOptions(name: string) {
+  return props.stringFieldOptions?.[name] || []
 }
 function numberValue(value: unknown) {
   return typeof value === 'number' ? value : undefined
@@ -211,6 +276,16 @@ function objectValue(value: unknown) {
   width: 100%;
   align-items: center;
   gap: 10px;
+}
+.collector-schema-form__resource {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 8px;
+}
+.collector-schema-form__resource :deep(.el-button) {
+  width: 34px;
+  padding: 0;
 }
 .collector-schema-form__unit {
   flex: 0 0 auto;

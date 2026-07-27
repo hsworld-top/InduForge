@@ -11,6 +11,7 @@
             ><i :class="{ 'is-online': selectedAgent?.status === 'online' }" />采集调试代理</span
           >
           <CollectorAgentSelector
+            ref="agentSelector"
             v-model="agentId"
             :project-id="projectId"
             @change="selectedAgent = $event"
@@ -101,7 +102,9 @@
                 <CollectorConnectionEditor
                   :project-id="projectId"
                   :connection="activeConnection"
+                  :agent="selectedAgent"
                   @saved="onConnectionSaved"
+                  @refresh-agent="refreshAgentResources"
                 />
               </el-tab-pane>
               <el-tab-pane label="变量配置" name="points">
@@ -178,7 +181,9 @@
     <CollectorConnectionWizard
       v-model="wizardVisible"
       :project-id="projectId"
+      :agent="selectedAgent"
       @created="onCreated"
+      @refresh-agent="refreshAgentResources"
     />
     <CollectorImportDialog
       v-if="activeConnection"
@@ -264,6 +269,7 @@ const batchFailures = ref<CollectorPointBatchFailure[]>([])
 const groupId = ref<string | null>(null)
 const connectionListCollapsed = ref(false)
 const connectionList = ref<InstanceType<typeof CollectorConnectionList>>()
+const agentSelector = ref<InstanceType<typeof CollectorAgentSelector>>()
 const pointTable = ref<InstanceType<typeof CollectorPointTable>>()
 const discoveryPanel = ref<InstanceType<typeof CollectorDiscoveryPanel>>()
 const discoveryBatchLoading = ref(false)
@@ -614,6 +620,9 @@ async function createDiscoveredPoints(points: Record<string, unknown>[]) {
 }
 function openDiscoveredPoint(defaults: CollectorPointCreateDefaults) {
   pointTable.value?.openCreate(groupId.value, defaults, true)
+}
+function refreshAgentResources() {
+  void agentSelector.value?.reload()
 }
 async function onPointGroupsChanged() {
   await Promise.all([pointTable.value?.reloadGroups(), pointTable.value?.reload(1)])

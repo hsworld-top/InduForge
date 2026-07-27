@@ -17,10 +17,11 @@ describe('collector dev schemas', () => {
       status: 'online',
       capabilities: [
         {
-          driverId: 'opcua.standard',
+          driverId: 'modbus.rtu',
           driverVersion: '1.0.0',
           schemaVersions: [1],
-          operations: ['connection.test', 'device.browse', 'point.read'],
+          operations: ['connection.test', 'connection.open', 'connection.close', 'point.read'],
+          resources: { serialPorts: ['COM2', 'COM10'] },
         },
       ],
       lastSeenAt: '2026-07-13 12:00:00',
@@ -29,6 +30,7 @@ describe('collector dev schemas', () => {
     expect(agent.status).toBe('online')
     expect(agent.ipAddress).toBe('192.168.1.10')
     expect(agent.capabilities[0]?.operations).toContain('point.read')
+    expect(agent.capabilities[0]?.resources?.serialPorts).toEqual(['COM2', 'COM10'])
   })
 
   it('requires one-time registration code fields', () => {

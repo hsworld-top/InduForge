@@ -5,6 +5,11 @@ export const CollectorProtocolCapabilitySchema = z.object({
   driverVersion: z.string(),
   schemaVersions: z.array(z.number().int().positive()),
   operations: z.array(z.string()),
+  resources: z
+    .object({
+      serialPorts: z.array(z.string()),
+    })
+    .optional(),
 })
 
 export const CollectorAgentSchema = z.object({

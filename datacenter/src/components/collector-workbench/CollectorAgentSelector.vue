@@ -79,6 +79,7 @@ onBeforeUnmount(() => {
   if (refreshTimer !== undefined) window.clearInterval(refreshTimer)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
+defineExpose({ reload: load })
 </script>
 
 <style scoped>
