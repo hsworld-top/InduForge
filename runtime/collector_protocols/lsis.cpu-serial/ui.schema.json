@@ -1,0 +1,1 @@
+{"connection":{"order":["portName","baudRate","dataBits","parity","stopBits","station","receiveTimeoutMs"]},"address":{"order":["address"]}}

@@ -8,9 +8,13 @@ internal sealed record ModbusTcpConnectionOptions(
     string Host,
     int Port,
     int ConnectTimeoutMilliseconds,
-    HslDataFormat DataFormat)
+    int ReceiveTimeoutMilliseconds,
+    HslDataFormat DataFormat,
+    HslModbusNetworkProtocol Protocol)
 {
-    public static ModbusTcpConnectionOptions Parse(ConnectionProfile profile)
+    public static ModbusTcpConnectionOptions Parse(
+        ConnectionProfile profile,
+        HslModbusNetworkProtocol protocol = HslModbusNetworkProtocol.Tcp)
     {
         if (!string.Equals(profile.ProtocolFamily, "modbus", StringComparison.OrdinalIgnoreCase))
         {
@@ -39,16 +43,28 @@ internal sealed record ModbusTcpConnectionOptions(
             throw new ModbusTcpDriverException("MODBUS_TIMEOUT_INVALID", "Modbus TCP 连接超时必须在 100 到 120000 毫秒之间", retryable: false);
         }
 
-        var dataFormatText = OptionalString(profile.Config, "dataFormat") ?? "ABCD";
+        var receiveTimeoutMilliseconds = OptionalInt32(profile.Config, "receiveTimeoutMs") ?? 10000;
+        if (receiveTimeoutMilliseconds is < 100 or > 120000)
+        {
+            throw new ModbusTcpDriverException("MODBUS_RECEIVE_TIMEOUT_INVALID", "Modbus 网络接收超时必须在 100 到 120000 毫秒之间", retryable: false);
+        }
+
+        var dataFormatText = OptionalString(profile.Config, "dataFormat") ?? "CDAB";
         if (!Enum.TryParse<HslDataFormat>(dataFormatText, ignoreCase: false, out var dataFormat))
         {
             throw new ModbusTcpDriverException("MODBUS_DATA_FORMAT_INVALID", "Modbus TCP 数据格式无效", retryable: false);
         }
 
-        return new ModbusTcpConnectionOptions(host, port, timeoutMilliseconds, dataFormat);
+        return new ModbusTcpConnectionOptions(host, port, timeoutMilliseconds, receiveTimeoutMilliseconds, dataFormat, protocol);
     }
 
-    public HslModbusTcpClientOptions ToHslOptions() => new(Host, Port, ConnectTimeoutMilliseconds, DataFormat);
+    public HslModbusTcpClientOptions ToHslOptions() => new(
+        Host,
+        Port,
+        ConnectTimeoutMilliseconds,
+        DataFormat,
+        Protocol,
+        ReceiveTimeoutMilliseconds);
 
     private static string? OptionalString(JsonElement config, string name) =>
         config.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String

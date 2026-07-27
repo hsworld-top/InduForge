@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["address"],"properties":{"address":{"type":"string","title":"PLC 地址（address）","description":"支持 M1/M3/M10 存储区以及 I/Q，例如 M1.1000、M10.100.5、I0","minLength":2,"maxLength":128,"x-induforge-address-text":true}}}

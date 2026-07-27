@@ -1,0 +1,1 @@
+{"order":["host","port","station","enableCodeFE","checkDataId","connectTimeoutMs","receiveTimeoutMs"],"groups":[{"title":"网络配置","fields":["host","port"]},{"title":"规约配置","fields":["station","enableCodeFE","checkDataId"]},{"title":"高级配置","fields":["connectTimeoutMs","receiveTimeoutMs"],"advanced":true}]}

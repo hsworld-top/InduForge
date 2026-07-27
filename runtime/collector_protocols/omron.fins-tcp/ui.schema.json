@@ -1,0 +1,9 @@
+{
+  "connection": {
+    "order": [
+      "host", "port", "plcType", "connectTimeoutMs", "receiveTimeoutMs", "readSplits",
+      "gct", "sid", "dataFormat", "stringReverseByteWord", "receiveUntilEmpty"
+    ]
+  },
+  "address": { "order": ["address"] }
+}

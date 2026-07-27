@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["address"],"properties":{"address":{"type":"string","title":"温度通道（address）","description":"例如 temperature[0]；覆盖站号时使用 s=2;temperature[0]","pattern":"^(?:[sS]=[0-9]{1,3};)?temperature\\[[0-9]{1,3}\\]$","maxLength":48,"x-induforge-address-text":true}}}

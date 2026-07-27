@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["tag"],"properties":{"tag":{"type":"string","title":"PLC 标签（tag）","description":"填写已在 PLC Web API 中共享开放的标签名称","minLength":1,"maxLength":512,"x-induforge-address-text":true}}}

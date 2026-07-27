@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["address"],"properties":{"address":{"type":"string","title":"PLC 地址（address）","description":"例如 X0、R2.1、D0、DM100.0、F0 或 s=2;D100","minLength":1,"maxLength":128,"x-induforge-address-text":true}}}

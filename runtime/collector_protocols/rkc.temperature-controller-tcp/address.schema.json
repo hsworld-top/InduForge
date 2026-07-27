@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["address"],"properties":{"address":{"type":"string","title":"参数代码（address）","description":"例如 M1、AA、ER；覆盖站号时使用 s=2;M1","pattern":"^(?:[sS]=[0-9]{1,2};)?[A-Za-z][A-Za-z0-9]$","maxLength":16,"x-induforge-address-text":true}}}

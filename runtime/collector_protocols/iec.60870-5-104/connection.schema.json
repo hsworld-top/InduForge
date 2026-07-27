@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["host", "port", "commonAddress"],
+  "properties": {
+    "host": {
+      "type": "string",
+      "title": "设备 IP / 主机名（host）",
+      "description": "请输入 IEC 104 远动设备的 IPv4、IPv6 或主机名",
+      "minLength": 1
+    },
+    "port": {
+      "type": "integer",
+      "title": "端口（port）",
+      "description": "IEC 60870-5-104 标准 TCP 端口",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 2404
+    },
+    "commonAddress": {
+      "type": "integer",
+      "title": "公共地址（commonAddress）",
+      "description": "目标站的公共 ASDU 地址",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 1
+    },
+    "connectTimeoutMs": {
+      "type": "integer",
+      "title": "连接超时（connectTimeoutMs）",
+      "minimum": 100,
+      "maximum": 120000,
+      "default": 5000,
+      "x-induforge-unit": "ms",
+      "x-induforge-advanced": true
+    },
+    "receiveTimeoutMs": {
+      "type": "integer",
+      "title": "接收超时（receiveTimeoutMs）",
+      "minimum": 100,
+      "maximum": 120000,
+      "default": 10000,
+      "x-induforge-unit": "ms",
+      "x-induforge-advanced": true
+    },
+    "interrogationCode": {
+      "type": "integer",
+      "title": "召唤限定词（interrogationCode）",
+      "enum": [20, 1, 3],
+      "default": 20,
+      "x-induforge-enum-labels": {
+        "20": "响应总召唤（20）",
+        "1": "定时主动上送（1）",
+        "3": "越限上送（3）"
+      },
+      "x-induforge-advanced": true
+    },
+    "interrogationReason": {
+      "type": "integer",
+      "title": "召唤传送原因（interrogationReason）",
+      "description": "通常使用激活原因 6",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 6,
+      "x-induforge-advanced": true
+    },
+    "interrogationTimeoutMs": {
+      "type": "integer",
+      "title": "总召唤等待超时（interrogationTimeoutMs）",
+      "minimum": 100,
+      "maximum": 120000,
+      "default": 3000,
+      "x-induforge-unit": "ms",
+      "x-induforge-advanced": true
+    }
+  }
+}

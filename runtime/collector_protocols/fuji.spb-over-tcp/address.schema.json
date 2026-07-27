@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["address"],"properties":{"address":{"type":"string","title":"PLC 地址（address）","description":"支持 X/Y/L/M/D/TN/CN/TC/CC/R/W；寄存器位示例 D10.12；可覆盖站号 s=2;D100","minLength":2,"maxLength":128,"x-induforge-address-text":true}}}

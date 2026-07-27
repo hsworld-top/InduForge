@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["address"],"properties":{"address":{"type":"string","title":"S7 Plus 变量地址（address）","description":"例如 8A0E0001.A，地址可从 S7 Plus 变量浏览器获取","minLength":1,"maxLength":256,"pattern":"^\\S+$","x-induforge-address-text":true}}}

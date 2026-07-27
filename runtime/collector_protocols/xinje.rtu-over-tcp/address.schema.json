@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["address"],"properties":{"address":{"type":"string","title":"PLC 地址（address）","description":"XC 与 XD/XL 支持的软元件区不同；可覆盖站号，例如 s=2;D100","minLength":2,"maxLength":128,"x-induforge-address-text":true}}}

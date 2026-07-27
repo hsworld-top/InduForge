@@ -1,0 +1,1 @@
+{"order":["host","port","runIdleHeader","rpiTimeMs","actualTimeoutSeconds","connectTimeoutMs","receiveTimeoutMs"],"groups":[{"title":"网络配置","fields":["host","port"]},{"title":"隐式 I/O 配置","fields":["runIdleHeader","rpiTimeMs","actualTimeoutSeconds"]},{"title":"高级配置","fields":["connectTimeoutMs","receiveTimeoutMs"],"advanced":true}]}

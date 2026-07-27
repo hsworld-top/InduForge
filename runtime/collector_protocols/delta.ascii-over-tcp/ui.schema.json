@@ -1,0 +1,1 @@
+{"connection":{"order":["host","port","station","series","connectTimeoutMs","receiveTimeoutMs"]},"address":{"order":["address"]}}

@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["address"],"properties":{"address":{"type":"string","title":"远程设备地址（address）","description":"填写远程 RPC 设备所支持的原始变量地址，例如 100、DB1.0","minLength":1,"maxLength":256,"pattern":"^\\S+$","x-induforge-address-text":true}}}

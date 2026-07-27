@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["address"],
+  "properties": {
+    "address": {
+      "type": "string",
+      "title": "设备地址（address）",
+      "description": "例如 D100、M0、X0、Y0 或 D100.3",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-induforge-address-text": true
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["address"],
+  "properties": {
+    "address": {
+      "type": "string",
+      "title": "PLC 标签（address）",
+      "description": "例如 Temperature、ArrayTag[10]、Program:MainProgram.LocalTag 或 slot=2;TagName",
+      "minLength": 1,
+      "maxLength": 512,
+      "x-induforge-address-text": true
+    }
+  }
+}

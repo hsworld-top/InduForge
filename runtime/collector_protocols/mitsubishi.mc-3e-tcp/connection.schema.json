@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["host", "port"],
+  "properties": {
+    "host": {
+      "type": "string",
+      "title": "设备 IP / 主机名（host）",
+      "description": "请输入 Mitsubishi PLC 的 IPv4、IPv6 或主机名",
+      "minLength": 1
+    },
+    "port": {
+      "type": "integer",
+      "title": "端口（port）",
+      "description": "PLC 中配置的 MC 3E Binary TCP 监听端口",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 6000
+    },
+    "networkNumber": {
+      "type": "integer",
+      "title": "网络号（networkNumber）",
+      "minimum": 0,
+      "maximum": 255,
+      "default": 0,
+      "x-induforge-advanced": true
+    },
+    "networkStationNumber": {
+      "type": "integer",
+      "title": "网络站号（networkStationNumber）",
+      "minimum": 0,
+      "maximum": 255,
+      "default": 0,
+      "x-induforge-advanced": true
+    },
+    "targetIoStation": {
+      "type": "integer",
+      "title": "目标模块 I/O 号（targetIoStation）",
+      "description": "默认 1023 对应 0x03FF",
+      "minimum": 0,
+      "maximum": 65535,
+      "default": 1023,
+      "x-induforge-advanced": true
+    },
+    "connectTimeoutMs": {
+      "type": "integer",
+      "title": "连接超时（connectTimeoutMs）",
+      "minimum": 100,
+      "maximum": 120000,
+      "default": 5000,
+      "x-induforge-unit": "ms",
+      "x-induforge-advanced": true
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,
+  "required":["portName","baudRate","dataBits","parity","stopBits","station","series"],
+  "properties":{
+    "portName":{"type":"string","title":"串口名称（portName）","minLength":1},
+    "baudRate":{"type":"integer","title":"波特率（baudRate）","enum":[1200,2400,4800,9600,19200,38400,57600,115200],"default":9600},
+    "dataBits":{"type":"integer","title":"数据位（dataBits）","enum":[7,8],"default":8},
+    "parity":{"type":"string","title":"校验方式（parity）","enum":["none","odd","even"],"default":"none","x-induforge-enum-labels":{"none":"无校验（none）","odd":"奇校验（odd）","even":"偶校验（even）"}},
+    "stopBits":{"type":"string","title":"停止位（stopBits）","enum":["one","two"],"default":"one","x-induforge-enum-labels":{"one":"1 位（one）","two":"2 位（two）"}},
+    "station":{"type":"integer","title":"PLC 站号（station）","minimum":0,"maximum":255,"default":1},
+    "series":{"type":"string","title":"PLC 系列（series）","enum":["AM","H3U","H5U","Easy"],"default":"AM"},
+    "addressStartWithZero":{"type":"boolean","title":"首地址从 0 开始（addressStartWithZero）","default":true,"x-induforge-advanced":true},
+    "receiveTimeoutMs":{"type":"integer","title":"接收超时（receiveTimeoutMs）","minimum":100,"maximum":120000,"default":10000,"x-induforge-unit":"ms","x-induforge-advanced":true},
+    "dataFormat":{"type":"string","title":"数据格式（dataFormat）","enum":["ABCD","BADC","CDAB","DCBA"],"default":"CDAB","x-induforge-advanced":true},
+    "stringReverse":{"type":"boolean","title":"字符串字内反转（stringReverse）","default":false,"x-induforge-advanced":true}
+  }
+}

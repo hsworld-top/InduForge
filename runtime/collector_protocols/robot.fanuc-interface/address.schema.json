@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["address"],"properties":{"address":{"type":"string","title":"机器人数据地址（address）","description":"支持 SDO、SDI、RDI、RDO、UI、UO、SI、SO、GI、GO、D、R、SR 地址或机器人快照属性名","minLength":1,"maxLength":128,"pattern":"^\\S+$","x-induforge-address-text":true}}}

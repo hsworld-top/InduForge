@@ -1,0 +1,4 @@
+{
+  "connection": { "order": ["host", "port", "station", "series", "addressStartWithZero", "connectTimeoutMs", "receiveTimeoutMs", "dataFormat", "stringReverse"] },
+  "address": { "order": ["address"] }
+}

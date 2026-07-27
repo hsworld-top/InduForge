@@ -1,0 +1,1 @@
+{"order":["portName","baudRate","dataBits","parity","stopBits","station","receiveTimeoutMs"],"groups":[{"title":"串口配置","fields":["portName","baudRate","dataBits","parity","stopBits"]},{"title":"协议配置","fields":["station"]},{"title":"高级配置","fields":["receiveTimeoutMs"],"advanced":true}]}

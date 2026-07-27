@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["address"],"properties":{"address":{"type":"string","title":"PLC 地址（address）","description":"支持 X/Y/M/SM/S/T/C 位区和 D/SD/Z/R/T/C 字区；C200 及以上使用 int32/uint32；可覆盖站号，例如 s=2;D100","minLength":2,"maxLength":128,"x-induforge-address-text":true}}}

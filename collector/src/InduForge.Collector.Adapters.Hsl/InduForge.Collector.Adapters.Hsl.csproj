@@ -1,7 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <PackageReference Include="HslCommunication" Version="12.9.1" />
+    <PackageReference
+      Include="HslCommunication"
+      Version="12.9.1"
+      GeneratePathProperty="true"
+      ExcludeAssets="compile;runtime" />
+    <PackageReference Include="System.IO.Ports" Version="6.0.0" />
+    <Reference Include="HslCommunication">
+      <HintPath>$(PkgHslCommunication)\lib\net451\HslCommunication.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
   </ItemGroup>
 
   <PropertyGroup>

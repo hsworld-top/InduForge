@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["address"],"properties":{"address":{"type":"string","title":"对象属性标识（address）","description":"例如 20-00-02-00；覆盖表地址时使用 s=2;20-00-02-00","pattern":"^(?:[sS]=[0-9Aa]{1,12};)?(?:[0-9A-Fa-f]{2}-){3}[0-9A-Fa-f]{2}$","maxLength":64,"x-induforge-address-text":true}}}

@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["address"],"properties":{"address":{"type":"string","title":"PLC 地址（address）","description":"支持 R015、MR015、LR015、CR015、CM0、DM100、EM100、FM100、ZF100、W1A0、TN0、TS0、CN0、CS0","minLength":2,"maxLength":128,"x-induforge-address-text":true}}}

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["informationType", "informationObjectAddress"],
+  "properties": {
+    "informationType": {
+      "type": "string",
+      "title": "信息类型（informationType）",
+      "enum": [
+        "singlePoint", "doublePoint", "normalizedMeasured", "scaledMeasured",
+        "shortFloatMeasured", "bitString32", "integratedTotal"
+      ],
+      "x-induforge-enum-labels": {
+        "singlePoint": "单点遥信",
+        "doublePoint": "双点遥信",
+        "normalizedMeasured": "归一化遥测值",
+        "scaledMeasured": "标度化遥测值",
+        "shortFloatMeasured": "短浮点遥测值",
+        "bitString32": "32 位比特串",
+        "integratedTotal": "累计量"
+      }
+    },
+    "informationObjectAddress": {
+      "type": "integer",
+      "title": "信息对象地址（informationObjectAddress）",
+      "minimum": 0,
+      "maximum": 16777215,
+      "x-induforge-address-text": true
+    }
+  }
+}

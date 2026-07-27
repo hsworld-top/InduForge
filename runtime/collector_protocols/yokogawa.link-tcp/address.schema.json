@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["address"],
+  "properties": {
+    "address": {
+      "type": "string",
+      "title": "PLC 地址（address）",
+      "description": "位区 X/Y/I/E/M/T/C/L，字区 D/B/F/R/V/Z/W/TN/CN；支持 cpu=2;D100；特殊模块使用 Special:unit=0;slot=1;100",
+      "minLength": 2,
+      "maxLength": 128,
+      "x-induforge-address-text": true
+    }
+  }
+}

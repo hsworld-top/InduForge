@@ -118,7 +118,7 @@ internal sealed record SiemensS7TcpAddress(
 
     public HslS7ReadRequest ToHslRequest() => new(HslAddress, ValueType, ElementCount);
 
-    private static HslValueType ParseValueType(string dataType) => dataType switch
+    internal static HslValueType ParseValueType(string dataType) => dataType switch
     {
         "bool" => HslValueType.Boolean,
         "int8" => HslValueType.Signed8,

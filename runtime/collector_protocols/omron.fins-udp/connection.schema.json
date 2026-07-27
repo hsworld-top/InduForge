@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["host", "port"],
+  "properties": {
+    "host": {
+      "type": "string",
+      "title": "设备 IP / 主机名（host）",
+      "description": "请输入 Omron PLC 的 IPv4、IPv6 或主机名",
+      "minLength": 1
+    },
+    "port": {
+      "type": "integer",
+      "title": "端口（port）",
+      "description": "PLC 中配置的 FINS UDP 端口",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 9600
+    },
+    "plcType": {
+      "type": "string",
+      "title": "PLC 系列（plcType）",
+      "enum": ["CSCJ", "CV"],
+      "default": "CSCJ",
+      "x-induforge-enum-labels": {
+        "CSCJ": "CS / CJ 系列（CSCJ）",
+        "CV": "CV 系列（CV）"
+      }
+    },
+    "receiveTimeoutMs": {
+      "type": "integer",
+      "title": "接收超时（receiveTimeoutMs）",
+      "minimum": 100,
+      "maximum": 120000,
+      "default": 5000,
+      "x-induforge-unit": "ms",
+      "x-induforge-advanced": true
+    },
+    "readSplits": {
+      "type": "integer",
+      "title": "分段读取长度（readSplits）",
+      "description": "默认 500；非 CP1H 场景可按 PLC 能力提高到 999",
+      "minimum": 1,
+      "maximum": 999,
+      "default": 500,
+      "x-induforge-advanced": true
+    },
+    "gct": {
+      "type": "integer",
+      "title": "网关计数（GCT / gct）",
+      "minimum": 0,
+      "maximum": 255,
+      "default": 2,
+      "x-induforge-advanced": true
+    },
+    "sid": {
+      "type": "integer",
+      "title": "服务标识（SID / sid）",
+      "minimum": 0,
+      "maximum": 255,
+      "default": 0,
+      "x-induforge-advanced": true
+    },
+    "dataFormat": {
+      "type": "string",
+      "title": "数据格式（dataFormat）",
+      "enum": ["ABCD", "BADC", "CDAB", "DCBA"],
+      "default": "CDAB",
+      "x-induforge-advanced": true
+    },
+    "stringReverseByteWord": {
+      "type": "boolean",
+      "title": "字符串字内反转（stringReverseByteWord）",
+      "default": true,
+      "x-induforge-advanced": true
+    }
+  }
+}

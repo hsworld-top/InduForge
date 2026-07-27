@@ -1,0 +1,1 @@
+{"order":["host","port","cpuFrom","cpuTo","dataFormat","connectTimeoutMs","receiveTimeoutMs"],"groups":[{"title":"网络配置","fields":["host","port"]},{"title":"协议配置","fields":["cpuFrom","cpuTo","dataFormat"]},{"title":"高级配置","fields":["connectTimeoutMs","receiveTimeoutMs"],"advanced":true}]}

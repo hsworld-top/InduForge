@@ -1,0 +1,16 @@
+using System.Text.Json;
+using InduForge.Collector.Adapters.Hsl;
+using InduForge.Collector.Contracts;
+namespace InduForge.Collector.Drivers.Freedom.Tests;
+
+public sealed class FreedomTests
+{
+    [Fact] public void UsesDemoDefaults() { var tcp = FreedomOptions.Parse(Profile(new { host = "127.0.0.1" }), HslFreedomTransport.Tcp); var serial = FreedomOptions.Parse(Profile(new { portName = "COM3" }), HslFreedomTransport.Serial); Assert.Equal(6000, tcp.Port); Assert.Equal(5000, tcp.ConnectTimeoutMilliseconds); Assert.Equal(HslDataFormat.DCBA, tcp.DataFormat); Assert.Equal(9600, serial.BaudRate); Assert.Equal(8, serial.DataBits); Assert.Equal(HslSerialParity.None, serial.Parity); Assert.Equal(HslSerialStopBits.One, serial.StopBits); Assert.False(serial.RtsEnable); }
+    [Fact] public void BuildsRawFrameAddress() { var address = FreedomAddress.Parse(Point("p", new { requestHex = "00 00 00 00 00 06 01 03 00 00 00 01", responseOffset = 6 }, "int16")); Assert.Equal("stx=6;00 00 00 00 00 06 01 03 00 00 00 01", address.ProtocolAddress); }
+    [Fact] public async Task ReusesConnectionAndIsolatesInvalidPoint() { var client = new FakeClient(); var driver = new FreedomTcpDriver(new Factory(client)); await using var session = await driver.OpenSessionAsync(Profile(new { host = "127.0.0.1" }), CancellationToken.None); var result = await ((IPointReaderSession)session).ReadAsync(new ReadRequest([Point("ok", new { requestHex = "0103", responseOffset = 0 }, "int16"), Point("invalid", new { requestHex = "XYZ" }, "int16")]), CancellationToken.None); Assert.Single(client.Requests); Assert.True(result.Values[0].Succeeded); Assert.False(result.Values[1].Succeeded); }
+    [Fact] public void ExposesDescriptors() { Assert.Equal("freedom.tcp", new FreedomTcpDriver().Descriptor.DriverId); Assert.Equal("freedom.udp", new FreedomUdpDriver().Descriptor.DriverId); Assert.Equal("freedom.serial", new FreedomSerialDriver().Descriptor.DriverId); }
+    private static ConnectionProfile Profile(object config) => new("freedom", JsonSerializer.SerializeToElement(config), JsonSerializer.SerializeToElement(new { }));
+    private static PointReadRequest Point(string key, object address, string type) => new(key, JsonSerializer.SerializeToElement(address), type, 1, JsonSerializer.SerializeToElement(new { }));
+    private sealed class Factory(IHslFreedomClient client) : IHslFreedomClientFactory { public IHslFreedomClient Create(HslFreedomClientOptions options) => client; }
+    private sealed class FakeClient : IHslFreedomClient { public List<HslFreedomReadRequest> Requests { get; } = []; public bool IsConnected { get; private set; } public Task<HslOperationResult> ConnectAsync(CancellationToken token) { IsConnected = true; return Task.FromResult(HslOperationResult.Success()); } public Task<HslOperationResult> CloseAsync(CancellationToken token) { IsConnected = false; return Task.FromResult(HslOperationResult.Success()); } public Task<HslReadResult> ReadAsync(HslFreedomReadRequest request, CancellationToken token) { Requests.Add(request); return Task.FromResult(HslReadResult.Success((short)1)); } public async ValueTask DisposeAsync() { if (IsConnected) await CloseAsync(CancellationToken.None); } }
+}

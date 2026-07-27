@@ -67,8 +67,22 @@
       "description": "串口读写操作的最大等待时间",
       "minimum": 100,
       "maximum": 120000,
-      "default": 3000,
+      "default": 10000,
       "x-induforge-unit": "ms",
+      "x-induforge-advanced": true
+    },
+    "dataFormat": {
+      "type": "string",
+      "title": "数据格式（dataFormat）",
+      "description": "32 位及以上寄存器值的字节与字顺序",
+      "enum": ["ABCD", "BADC", "CDAB", "DCBA"],
+      "default": "CDAB",
+      "x-induforge-enum-labels": {
+        "ABCD": "大端顺序（ABCD）",
+        "BADC": "字节交换（BADC）",
+        "CDAB": "字交换（CDAB）",
+        "DCBA": "完全反转（DCBA）"
+      },
       "x-induforge-advanced": true
     }
   }

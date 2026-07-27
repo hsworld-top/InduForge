@@ -1,0 +1,9 @@
+{
+  "connection": {
+    "order": [
+      "host", "port", "commonAddress", "connectTimeoutMs", "receiveTimeoutMs",
+      "interrogationCode", "interrogationReason", "interrogationTimeoutMs"
+    ]
+  },
+  "address": { "order": ["informationType", "informationObjectAddress"] }
+}

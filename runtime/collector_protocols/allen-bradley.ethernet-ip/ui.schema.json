@@ -1,0 +1,9 @@
+{
+  "connection": {
+    "order": [
+      "host", "port", "slot", "messageRouter", "connectTimeoutMs", "receiveTimeoutMs",
+      "contextCheck", "readArrayUseSegment", "dataFormat"
+    ]
+  },
+  "address": { "order": ["address"] }
+}

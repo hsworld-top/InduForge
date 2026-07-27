@@ -1,0 +1,1 @@
+{"connection":{"order":["host","port","frameFormat","networkNumber","networkStationNumber","targetIoStation","enableWriteBitToWordRegister","stringReverse","connectTimeoutMs","receiveTimeoutMs"]},"address":{"order":["address"]}}

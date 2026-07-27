@@ -1,0 +1,9 @@
+{
+  "connection": {
+    "order": [
+      "host", "port", "useAutoAmsNetId", "amsPort", "targetAmsNetId", "senderAmsNetId",
+      "useTagCache", "connectTimeoutMs", "receiveTimeoutMs", "dataFormat"
+    ]
+  },
+  "address": { "order": ["address"] }
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["address"],
+  "properties": {
+    "address": {
+      "type": "string",
+      "title": "ADS 地址（address）",
+      "description": "例如 M100、M100.0、s=MAIN.a、i=1235467; 或 IG=0xF020;0",
+      "minLength": 1,
+      "maxLength": 512,
+      "x-induforge-address-text": true
+    }
+  }
+}

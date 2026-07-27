@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["address"],
+  "properties": {
+    "address": {
+      "type": "string",
+      "title": "PLC 地址（address）",
+      "description": "位/字节区：I、Q、M、T、SA、SB、SC、S、G；字寄存器区：AI、AQ、R。地址从 1 开始，例如 M1、R1、AI1",
+      "pattern": "^(?:AI|AQ|SA|SB|SC|I|Q|M|T|S|G|R)[1-9][0-9]*$",
+      "maxLength": 128,
+      "x-induforge-address-text": true
+    }
+  }
+}

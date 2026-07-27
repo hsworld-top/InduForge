@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["address"],"properties":{"address":{"type":"string","title":"DCS 数据地址（address）","description":"例如 100；覆盖站号或功能码时可使用 s=2;x=3;100","minLength":1,"maxLength":128,"pattern":"^\\S+$","x-induforge-address-text":true}}}

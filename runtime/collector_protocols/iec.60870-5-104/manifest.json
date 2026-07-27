@@ -1,0 +1,22 @@
+{
+  "protocolFamily": "iec",
+  "driverId": "iec.60870-5-104",
+  "driverVersion": "1.0.0",
+  "schemaVersion": 1,
+  "displayName": "IEC 60870-5-104",
+  "category": "instrument",
+  "transports": ["tcp"],
+  "operations": [
+    "connection.test",
+    "connection.open",
+    "connection.close",
+    "point.read"
+  ],
+  "features": [],
+  "dataTypes": ["bool", "uint8", "int16", "uint32", "float32"],
+  "acquisitionModes": ["polling"],
+  "platforms": {
+    "devAgent": ["windows-x64"],
+    "runtime": []
+  }
+}

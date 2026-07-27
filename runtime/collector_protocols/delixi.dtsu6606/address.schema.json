@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["address"],"properties":{"address":{"type":"string","title":"Modbus 地址（address）","description":"例如 768、x=3;768 或 s=2;x=3;768","pattern":"^[^\\s]{1,128}$","maxLength":128,"x-induforge-address-text":true}}}

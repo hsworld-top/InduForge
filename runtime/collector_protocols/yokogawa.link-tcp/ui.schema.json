@@ -1,0 +1,4 @@
+{
+  "connection": { "order": ["host", "port", "cpuNumber", "connectTimeoutMs", "receiveTimeoutMs"] },
+  "address": { "order": ["address"] }
+}

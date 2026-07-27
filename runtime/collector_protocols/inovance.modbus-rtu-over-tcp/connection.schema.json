@@ -1,0 +1,15 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,
+  "required":["host","port","station","series"],
+  "properties":{
+    "host":{"type":"string","title":"设备 IP / 主机名（host）","minLength":1},
+    "port":{"type":"integer","title":"端口（port）","minimum":1,"maximum":65535,"default":502},
+    "station":{"type":"integer","title":"PLC 站号（station）","minimum":0,"maximum":255,"default":1},
+    "series":{"type":"string","title":"PLC 系列（series）","enum":["AM","H3U","H5U","Easy"],"default":"AM"},
+    "addressStartWithZero":{"type":"boolean","title":"首地址从 0 开始（addressStartWithZero）","default":true,"x-induforge-advanced":true},
+    "connectTimeoutMs":{"type":"integer","title":"连接超时（connectTimeoutMs）","minimum":100,"maximum":120000,"default":5000,"x-induforge-unit":"ms","x-induforge-advanced":true},
+    "receiveTimeoutMs":{"type":"integer","title":"接收超时（receiveTimeoutMs）","minimum":100,"maximum":120000,"default":10000,"x-induforge-unit":"ms","x-induforge-advanced":true},
+    "dataFormat":{"type":"string","title":"数据格式（dataFormat）","enum":["ABCD","BADC","CDAB","DCBA"],"default":"CDAB","x-induforge-advanced":true},
+    "stringReverse":{"type":"boolean","title":"字符串字内反转（stringReverse）","default":false,"x-induforge-advanced":true}
+  }
+}

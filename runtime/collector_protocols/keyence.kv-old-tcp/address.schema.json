@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["address"],"properties":{"address":{"type":"string","title":"PLC 地址（address）","description":"适用于 KV-10xx、16xx、24xx、40xx、KV-80、KV-300 系列的软元件地址","minLength":2,"maxLength":128,"x-induforge-address-text":true}}}

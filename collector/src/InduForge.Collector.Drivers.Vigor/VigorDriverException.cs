@@ -1,0 +1,1 @@
+namespace InduForge.Collector.Drivers.Vigor; internal sealed class VigorDriverException(string code, string message, bool retryable) : Exception(message) { public string Code { get; } = code; public bool Retryable { get; } = retryable; }

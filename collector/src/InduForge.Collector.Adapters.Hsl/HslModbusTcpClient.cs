@@ -1,13 +1,14 @@
 using System.Text;
 using HslCommunication;
 using HslCommunication.Core;
+using HslCommunication.Core.Device;
 using HslCommunication.ModBus;
 
 namespace InduForge.Collector.Adapters.Hsl;
 
 public sealed class HslModbusTcpClient : IHslModbusTcpClient
 {
-    private readonly ModbusTcpNet _client;
+    private readonly DeviceTcpNet _client;
     private readonly SemaphoreSlim _operationGate = new(1, 1);
     private bool _connected;
     private bool _disposed;
@@ -15,12 +16,7 @@ public sealed class HslModbusTcpClient : IHslModbusTcpClient
     public HslModbusTcpClient(HslModbusTcpClientOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        _client = new ModbusTcpNet(options.Host, options.Port, station: 1)
-        {
-            ConnectTimeOut = options.TimeoutMilliseconds,
-            ReceiveTimeOut = options.TimeoutMilliseconds,
-            DataFormat = MapDataFormat(options.DataFormat),
-        };
+        _client = CreateClient(options);
     }
 
     public bool IsConnected => _connected && !_disposed;
@@ -135,15 +131,9 @@ public sealed class HslModbusTcpClient : IHslModbusTcpClient
         {
             HslValueType.Boolean => request.Area switch
             {
-                HslModbusReadArea.Coil => request.ElementCount == 1
-                    ? Map(await _client.ReadCoilAsync(request.Address).WaitAsync(cancellationToken).ConfigureAwait(false))
-                    : Map(await _client.ReadCoilAsync(request.Address, count).WaitAsync(cancellationToken).ConfigureAwait(false)),
-                HslModbusReadArea.DiscreteInput => request.ElementCount == 1
-                    ? Map(await _client.ReadDiscreteAsync(request.Address).WaitAsync(cancellationToken).ConfigureAwait(false))
-                    : Map(await _client.ReadDiscreteAsync(request.Address, count).WaitAsync(cancellationToken).ConfigureAwait(false)),
                 _ => request.ElementCount == 1
-                    ? Map(await _client.ReadBoolAsync(request.Address).WaitAsync(cancellationToken).ConfigureAwait(false))
-                    : Map(await _client.ReadBoolAsync(request.Address, count).WaitAsync(cancellationToken).ConfigureAwait(false)),
+                    ? Map(await _client.ReadBoolAsync(WithFunctionCode(request.Address, request.Area)).WaitAsync(cancellationToken).ConfigureAwait(false))
+                    : Map(await _client.ReadBoolAsync(WithFunctionCode(request.Address, request.Area), count).WaitAsync(cancellationToken).ConfigureAwait(false)),
             },
             HslValueType.Signed8 => await ReadRawAsync(
                 request,
@@ -207,6 +197,51 @@ public sealed class HslModbusTcpClient : IHslModbusTcpClient
         string.IsNullOrWhiteSpace(result.Message)
             ? $"HSL 操作失败，错误码 {result.ErrorCode}"
             : $"{result.Message}（HSL 错误码 {result.ErrorCode}）";
+
+    private static DeviceTcpNet CreateClient(HslModbusTcpClientOptions options)
+    {
+        DeviceTcpNet client = options.Protocol switch
+        {
+            HslModbusNetworkProtocol.Tcp => new ModbusTcpNet(options.Host, options.Port, station: 1),
+            HslModbusNetworkProtocol.RtuOverTcp => new ModbusRtuOverTcp(options.Host, options.Port, station: 1),
+            HslModbusNetworkProtocol.AsciiOverTcp => new ModbusAsciiOverTcp(options.Host, options.Port, station: 1),
+            HslModbusNetworkProtocol.Udp => new ModbusUdpNet(options.Host, options.Port, station: 1),
+            _ => throw new ArgumentOutOfRangeException(nameof(options), "不支持的 Modbus 网络协议"),
+        };
+        client.ConnectTimeOut = options.TimeoutMilliseconds;
+        client.ReceiveTimeOut = options.ReceiveTimeoutMilliseconds;
+
+        var modbus = (IModbus)client;
+        modbus.AddressStartWithZero = true;
+        modbus.DataFormat = MapDataFormat(options.DataFormat);
+        modbus.IsStringReverse = false;
+        switch (client)
+        {
+            case ModbusRtuOverTcp rtuOverTcp:
+                rtuOverTcp.StationCheckMatch = true;
+                break;
+            case ModbusTcpNet tcp:
+                tcp.StationCheckMatch = true;
+                break;
+        }
+        return client;
+    }
+
+    // 统一通过功能码前缀读取线圈和离散输入，使所有 Modbus 网络变体复用同一读取实现。
+    private static string WithFunctionCode(string address, HslModbusReadArea area)
+    {
+        var functionCode = area switch
+        {
+            HslModbusReadArea.Coil => 1,
+            HslModbusReadArea.DiscreteInput => 2,
+            _ => 0,
+        };
+        if (functionCode == 0) return address;
+        var separator = address.IndexOf(';');
+        return separator < 0
+            ? $"x={functionCode};{address}"
+            : address.Insert(separator + 1, $"x={functionCode};");
+    }
 
     private static DataFormat MapDataFormat(HslDataFormat dataFormat) => dataFormat switch
     {

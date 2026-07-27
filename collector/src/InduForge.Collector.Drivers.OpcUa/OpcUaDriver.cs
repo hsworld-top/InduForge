@@ -60,6 +60,15 @@ public sealed class OpcUaDriver : IIndustrialDriver, IConnectionSessionDriver, I
         BrowseRequest request,
         CancellationToken cancellationToken)
     {
+        // 请求能力校验必须先于网络连接，避免无效请求被连接状态掩盖。
+        if (request.MaxDepth != 1)
+        {
+            throw new OpcUaDriverException(
+                "OPCUA_BROWSE_DEPTH_UNSUPPORTED",
+                "当前版本只支持浏览指定父节点的直接子节点",
+                retryable: false);
+        }
+
         await using var session = await OpenSessionAsync(profile, cancellationToken).ConfigureAwait(false);
         return await ((IDeviceBrowserSession)session).BrowseAsync(request, cancellationToken).ConfigureAwait(false);
     }
@@ -69,6 +78,11 @@ public sealed class OpcUaDriver : IIndustrialDriver, IConnectionSessionDriver, I
         ReadRequest request,
         CancellationToken cancellationToken)
     {
+        if (request.Points.Count == 0)
+        {
+            return new ReadResult([], NoDiagnostics);
+        }
+
         await using var session = await OpenSessionAsync(profile, cancellationToken).ConfigureAwait(false);
         return await ((IPointReaderSession)session).ReadAsync(request, cancellationToken).ConfigureAwait(false);
     }

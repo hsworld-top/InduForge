@@ -1,0 +1,1 @@
+{"connection":{"order":["portName","baudRate","dataBits","parity","stopBits","rtsEnable","dataFormat","stringReverse","receiveTimeoutMs"]},"address":{"order":["requestHex","responseOffset"]}}

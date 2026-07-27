@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["address"],
+  "properties": {
+    "address": { "type": "string", "title": "PLC 地址（address）", "description": "位地址：M、X、Y、S、T、C；字地址：RT、RC、D、R；可覆盖站号，例如 s=2;D100", "minLength": 2, "maxLength": 128, "x-induforge-address-text": true }
+  }
+}

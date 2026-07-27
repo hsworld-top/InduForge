@@ -1,0 +1,1 @@
+{"order":["host","port","clientId","userName","password","deviceTopic","useRsa"],"groups":[{"title":"Broker 配置","fields":["host","port","clientId"]},{"title":"认证配置","fields":["userName","password","useRsa"]},{"title":"RPC 设备配置","fields":["deviceTopic"]}]}

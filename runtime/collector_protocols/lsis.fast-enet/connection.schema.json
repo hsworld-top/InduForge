@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["host", "port", "cpuType", "companyId", "baseNumber", "slotNumber"],
+  "properties": {
+    "host": {
+      "type": "string",
+      "title": "设备 IP / 主机名（host）",
+      "description": "请输入 LS 产电 PLC 的 IPv4、IPv6 或主机名",
+      "minLength": 1
+    },
+    "port": {
+      "type": "integer",
+      "title": "端口（port）",
+      "description": "Fast Enet 以太网通信端口",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 2004
+    },
+    "cpuType": {
+      "type": "string",
+      "title": "CPU 类型（cpuType）",
+      "enum": ["XGK", "XGI", "XGR", "XGB_MK", "XGB_IEC", "XGB"],
+      "default": "XGK",
+      "x-induforge-enum-labels": {
+        "XGK": "XGK",
+        "XGI": "XGI",
+        "XGR": "XGR",
+        "XGB_MK": "XGB（MASTER-K）",
+        "XGB_IEC": "XGB（IEC）",
+        "XGB": "XGB"
+      }
+    },
+    "companyId": {
+      "type": "string",
+      "title": "公司标识（companyId）",
+      "enum": ["LSIS-XGT", "LGIS-GLOGA", "MASTER-K"],
+      "default": "LSIS-XGT",
+      "x-induforge-enum-labels": {
+        "LSIS-XGT": "LSIS-XGT（XGT 系列）",
+        "LGIS-GLOGA": "LGIS-GLOGA（GLOFA 系列）",
+        "MASTER-K": "MASTER-K（MASTER-K 系列）"
+      }
+    },
+    "baseNumber": {
+      "type": "integer",
+      "title": "基板号（baseNumber）",
+      "minimum": 0,
+      "maximum": 255,
+      "default": 0
+    },
+    "slotNumber": {
+      "type": "integer",
+      "title": "槽位号（slotNumber）",
+      "minimum": 0,
+      "maximum": 255,
+      "default": 3
+    },
+    "connectTimeoutMs": {
+      "type": "integer",
+      "title": "连接超时（connectTimeoutMs）",
+      "minimum": 100,
+      "maximum": 120000,
+      "default": 5000,
+      "x-induforge-unit": "ms",
+      "x-induforge-advanced": true
+    },
+    "receiveTimeoutMs": {
+      "type": "integer",
+      "title": "接收超时（receiveTimeoutMs）",
+      "minimum": 100,
+      "maximum": 120000,
+      "default": 5000,
+      "x-induforge-unit": "ms",
+      "x-induforge-advanced": true
+    },
+    "dataFormat": {
+      "type": "string",
+      "title": "数据格式（dataFormat）",
+      "enum": ["ABCD", "BADC", "CDAB", "DCBA"],
+      "default": "DCBA",
+      "x-induforge-advanced": true
+    }
+  }
+}

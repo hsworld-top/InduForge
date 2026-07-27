@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["address"],"properties":{"address":{"type":"string","title":"PLC 地址（address）","description":"位地址 R/B/MR/LR/CR/VB；字地址 DM/EM/FM/ZF/W/TM/Z/AT/CM/VM；扩展单元示例 unit=1;100","minLength":2,"maxLength":128,"x-induforge-address-text":true}}}

@@ -1,4 +1,3 @@
-using System.Text;
 using HslCommunication;
 using HslCommunication.Profinet.Siemens;
 
@@ -105,7 +104,12 @@ public sealed class HslS7TcpClient : IHslS7TcpClient
             {
                 return HslReadResult.Failure("HSL_NOT_CONNECTED", "HSL S7 通信连接尚未建立", retryable: true);
             }
-            return await ReadCoreAsync(request, cancellationToken).ConfigureAwait(false);
+            return await HslSiemensReader.ReadAsync(
+                _client,
+                request,
+                "HSL_S7_READ_FAILED",
+                "Siemens S7 TCP",
+                cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -129,70 +133,6 @@ public sealed class HslS7TcpClient : IHslS7TcpClient
         (_client as IDisposable)?.Dispose();
         _operationGate.Dispose();
     }
-
-    private async Task<HslReadResult> ReadCoreAsync(HslS7ReadRequest request, CancellationToken cancellationToken)
-    {
-        var count = checked((ushort)request.ElementCount);
-        return request.DataType switch
-        {
-            HslValueType.Boolean => request.ElementCount == 1
-                ? Map(await _client.ReadBoolAsync(request.Address).WaitAsync(cancellationToken).ConfigureAwait(false))
-                : Map(await _client.ReadBoolAsync(request.Address, count).WaitAsync(cancellationToken).ConfigureAwait(false)),
-            HslValueType.Signed8 => await ReadRawAsync(
-                request,
-                value => request.ElementCount == 1 ? unchecked((sbyte)value[0]) : value.Select(item => unchecked((sbyte)item)).ToArray(),
-                cancellationToken).ConfigureAwait(false),
-            HslValueType.Unsigned8 => await ReadRawAsync(
-                request,
-                value => request.ElementCount == 1 ? value[0] : value,
-                cancellationToken).ConfigureAwait(false),
-            HslValueType.Signed16 => request.ElementCount == 1
-                ? Map(await _client.ReadInt16Async(request.Address).WaitAsync(cancellationToken).ConfigureAwait(false))
-                : Map(await _client.ReadInt16Async(request.Address, count).WaitAsync(cancellationToken).ConfigureAwait(false)),
-            HslValueType.Unsigned16 => request.ElementCount == 1
-                ? Map(await _client.ReadUInt16Async(request.Address).WaitAsync(cancellationToken).ConfigureAwait(false))
-                : Map(await _client.ReadUInt16Async(request.Address, count).WaitAsync(cancellationToken).ConfigureAwait(false)),
-            HslValueType.Signed32 => request.ElementCount == 1
-                ? Map(await _client.ReadInt32Async(request.Address).WaitAsync(cancellationToken).ConfigureAwait(false))
-                : Map(await _client.ReadInt32Async(request.Address, count).WaitAsync(cancellationToken).ConfigureAwait(false)),
-            HslValueType.Unsigned32 => request.ElementCount == 1
-                ? Map(await _client.ReadUInt32Async(request.Address).WaitAsync(cancellationToken).ConfigureAwait(false))
-                : Map(await _client.ReadUInt32Async(request.Address, count).WaitAsync(cancellationToken).ConfigureAwait(false)),
-            HslValueType.Signed64 => request.ElementCount == 1
-                ? Map(await _client.ReadInt64Async(request.Address).WaitAsync(cancellationToken).ConfigureAwait(false))
-                : Map(await _client.ReadInt64Async(request.Address, count).WaitAsync(cancellationToken).ConfigureAwait(false)),
-            HslValueType.Unsigned64 => request.ElementCount == 1
-                ? Map(await _client.ReadUInt64Async(request.Address).WaitAsync(cancellationToken).ConfigureAwait(false))
-                : Map(await _client.ReadUInt64Async(request.Address, count).WaitAsync(cancellationToken).ConfigureAwait(false)),
-            HslValueType.SinglePrecision => request.ElementCount == 1
-                ? Map(await _client.ReadFloatAsync(request.Address).WaitAsync(cancellationToken).ConfigureAwait(false))
-                : Map(await _client.ReadFloatAsync(request.Address, count).WaitAsync(cancellationToken).ConfigureAwait(false)),
-            HslValueType.DoublePrecision => request.ElementCount == 1
-                ? Map(await _client.ReadDoubleAsync(request.Address).WaitAsync(cancellationToken).ConfigureAwait(false))
-                : Map(await _client.ReadDoubleAsync(request.Address, count).WaitAsync(cancellationToken).ConfigureAwait(false)),
-            HslValueType.Text => Map(await _client.ReadStringAsync(request.Address, count, Encoding.UTF8).WaitAsync(cancellationToken).ConfigureAwait(false)),
-            HslValueType.Binary => await ReadRawAsync(request, value => value, cancellationToken).ConfigureAwait(false),
-            HslValueType.DateTime => Map(await _client.ReadDateTimeAsync(request.Address).WaitAsync(cancellationToken).ConfigureAwait(false)),
-            _ => HslReadResult.Failure("HSL_DATA_TYPE_UNSUPPORTED", "HSL S7 读取数据类型不受支持", retryable: false),
-        };
-    }
-
-    private async Task<HslReadResult> ReadRawAsync(
-        HslS7ReadRequest request,
-        Func<byte[], object> convert,
-        CancellationToken cancellationToken)
-    {
-        var result = await _client.ReadAsync(request.Address, checked((ushort)request.ElementCount))
-            .WaitAsync(cancellationToken)
-            .ConfigureAwait(false);
-        return result.IsSuccess
-            ? HslReadResult.Success(convert(result.Content))
-            : HslReadResult.Failure("HSL_S7_READ_FAILED", FormatError(result), retryable: true);
-    }
-
-    private static HslReadResult Map<T>(OperateResult<T> result) => result.IsSuccess
-        ? HslReadResult.Success(result.Content)
-        : HslReadResult.Failure("HSL_S7_READ_FAILED", FormatError(result), retryable: true);
 
     private static string FormatError(OperateResult result) =>
         string.IsNullOrWhiteSpace(result.Message)

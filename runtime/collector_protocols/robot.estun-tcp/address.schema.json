@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["address"],"properties":{"address":{"type":"string","title":"机器人数据地址（address）","description":"埃斯顿底层使用 Modbus TCP，例如 0、51、99","minLength":1,"maxLength":128,"pattern":"^\\S+$","x-induforge-address-text":true}}}

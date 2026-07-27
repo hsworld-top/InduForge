@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["host", "port"],
+  "properties": {
+    "host": {
+      "type": "string",
+      "title": "设备 IP / 主机名（host）",
+      "description": "请输入 Allen-Bradley PLC 的 IPv4、IPv6 或主机名",
+      "minLength": 1
+    },
+    "port": {
+      "type": "integer",
+      "title": "端口（port）",
+      "description": "EtherNet/IP 标准端口",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 44818
+    },
+    "slot": {
+      "type": "integer",
+      "title": "CPU 槽位（slot）",
+      "minimum": 0,
+      "maximum": 255,
+      "default": 0
+    },
+    "messageRouter": {
+      "type": "string",
+      "title": "自定义消息路由（messageRouter）",
+      "description": "例如 1.15.2.18.1.12；配置后按自定义背板和网络路径访问",
+      "pattern": "^[0-9]+(?:\\.[0-9]+)+$",
+      "maxLength": 128,
+      "x-induforge-advanced": true
+    },
+    "connectTimeoutMs": {
+      "type": "integer",
+      "title": "连接超时（connectTimeoutMs）",
+      "minimum": 100,
+      "maximum": 120000,
+      "default": 10000,
+      "x-induforge-unit": "ms",
+      "x-induforge-advanced": true
+    },
+    "receiveTimeoutMs": {
+      "type": "integer",
+      "title": "接收超时（receiveTimeoutMs）",
+      "minimum": 100,
+      "maximum": 120000,
+      "default": 5000,
+      "x-induforge-unit": "ms",
+      "x-induforge-advanced": true
+    },
+    "contextCheck": {
+      "type": "boolean",
+      "title": "响应上下文校验（contextCheck）",
+      "default": false,
+      "x-induforge-advanced": true
+    },
+    "readArrayUseSegment": {
+      "type": "boolean",
+      "title": "数组分片读取（readArrayUseSegment）",
+      "default": true,
+      "x-induforge-advanced": true
+    },
+    "dataFormat": {
+      "type": "string",
+      "title": "数据格式（dataFormat）",
+      "enum": ["ABCD", "BADC", "CDAB", "DCBA"],
+      "default": "DCBA",
+      "x-induforge-advanced": true
+    }
+  }
+}

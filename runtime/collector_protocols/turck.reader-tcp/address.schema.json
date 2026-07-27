@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,"required":["address"],"properties":{"address":{"type":"string","title":"数据偏移地址（address）","description":"例如 100","pattern":"^[0-9]+$","maxLength":64,"x-induforge-address-text":true}}}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["address"],
+  "properties": {
+    "address": {
+      "type": "string",
+      "title": "FINS 设备地址（address）",
+      "description": "例如 D100、C100、W100、H100、A100、D100.0 或 E0.100",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-induforge-address-text": true
+    }
+  }
+}
