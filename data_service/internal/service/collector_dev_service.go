@@ -39,10 +39,14 @@ func NewCollectorDevService(repository *repository.CollectorDevRepository) *Coll
 }
 
 type CollectorProtocolCapability struct {
-	DriverID       string   `json:"driverId"`
-	DriverVersion  string   `json:"driverVersion"`
-	SchemaVersions []int    `json:"schemaVersions"`
-	Operations     []string `json:"operations"`
+	DriverID       string                      `json:"driverId"`
+	DriverVersion  string                      `json:"driverVersion"`
+	SchemaVersions []int                       `json:"schemaVersions"`
+	Operations     []string                    `json:"operations"`
+	Resources      *CollectorProtocolResources `json:"resources,omitempty"`
+}
+type CollectorProtocolResources struct {
+	SerialPorts []string `json:"serialPorts"`
 }
 type CollectorRegistrationCode struct {
 	Code      string `json:"code"`
@@ -395,6 +399,16 @@ func validateCapabilities(capabilities []CollectorProtocolCapability) error {
 			if !map[string]bool{"connection.test": true, "connection.open": true, "connection.close": true, "device.browse": true, "point.read": true, "point.write": true, "point.subscribe.preview": true}[operation] {
 				return badCollectorRequest("Agent capability 包含不支持的操作")
 			}
+			if capability.Resources != nil {
+				if len(capability.Resources.SerialPorts) > 256 {
+					return badCollectorRequest("Agent capability 串口资源数量超过上限")
+				}
+				for _, portName := range capability.Resources.SerialPorts {
+					if strings.TrimSpace(portName) == "" || len(portName) > 128 {
+						return badCollectorRequest("Agent capability 包含无效串口名称")
+					}
+				}
+			}
 		}
 	}
 	return nil
@@ -435,6 +449,9 @@ func toCollectorAgent(record repository.CollectorDevAgentRecord, now time.Time) 
 		}
 		if capabilities[index].Operations == nil {
 			capabilities[index].Operations = []string{}
+		}
+		if capabilities[index].Resources != nil && capabilities[index].Resources.SerialPorts == nil {
+			capabilities[index].Resources.SerialPorts = []string{}
 		}
 	}
 	return CollectorAgent{ID: record.ID, Name: record.Name, OS: record.OS, Arch: record.Arch, Version: record.Version, IPAddress: record.LastIP, Status: collectorAgentStatus(record, now), Capabilities: capabilities, LastSeenAt: optionalCollectorTime(record.LastSeenAt), CreatedAt: formatCollectorTime(record.CreatedAt)}

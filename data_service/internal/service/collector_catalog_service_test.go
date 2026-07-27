@@ -15,7 +15,7 @@ func TestCollectorCatalogListUsesServerPagination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.List) != 2 || result.Pagination.Total != 4 || result.Pagination.TotalPages != 2 {
+	if len(result.List) != 2 || result.Pagination.Total != 115 || result.Pagination.TotalPages != 58 {
 		t.Fatalf("unexpected page: %#v", result)
 	}
 }
@@ -26,7 +26,7 @@ func TestCollectorCatalogListFiltersProtocolAndTransport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.List) != 1 || result.List[0].DriverID != "modbus.rtu" {
+	if len(result.List) != 2 || result.List[0].DriverID != "modbus.ascii" || result.List[1].DriverID != "modbus.rtu" {
 		t.Fatalf("unexpected result: %#v", result.List)
 	}
 }

@@ -2,11 +2,42 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/indu-forge/data_service/internal/repository"
 )
+
+func TestCollectorAgentKeepsSerialPortResources(t *testing.T) {
+	now := time.Now()
+	payload, err := json.Marshal([]CollectorProtocolCapability{{
+		DriverID:       "modbus.rtu",
+		DriverVersion:  "1.0.0",
+		SchemaVersions: []int{1},
+		Operations:     []string{"connection.test", "point.read"},
+		Resources:      &CollectorProtocolResources{SerialPorts: []string{"COM2", "COM10"}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	agent := toCollectorAgent(repository.CollectorDevAgentRecord{
+		ID:           "agent-1",
+		Name:         "测试代理",
+		Capabilities: payload,
+		LastSeenAt:   &now,
+		CreatedAt:    now,
+	}, now)
+
+	if len(agent.Capabilities) != 1 || agent.Capabilities[0].Resources == nil {
+		t.Fatalf("unexpected capabilities: %#v", agent.Capabilities)
+	}
+	ports := agent.Capabilities[0].Resources.SerialPorts
+	if len(ports) != 2 || ports[0] != "COM2" || ports[1] != "COM10" {
+		t.Fatalf("unexpected serial ports: %#v", ports)
+	}
+}
 
 func TestValidateCollectorTaskInputUsesSavedObjectReferences(t *testing.T) {
 	err := validateCollectorTaskInput(CollectorTaskInput{AgentID: "agent-1", ConnectionID: "550e8400-e29b-41d4-a716-446655440002", Operation: "point.read", Input: map[string]any{"pointIds": []any{"550e8400-e29b-41d4-a716-446655440003"}}, TimeoutSeconds: 30})
