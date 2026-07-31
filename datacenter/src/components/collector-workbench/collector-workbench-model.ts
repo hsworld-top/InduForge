@@ -87,6 +87,30 @@ const categoryLabels: Record<string, string> = {
   industrial: 'Industrial [工业协议]',
 }
 
+const preferredProtocolFamilies = [
+  'modbus',
+  'opcua',
+  'siemens',
+  'mitsubishi',
+  'omron',
+  'allen-bradley',
+]
+
+const preferredDrivers = [
+  'modbus.tcp',
+  'modbus.rtu',
+  'siemens.s7-tcp',
+  'mitsubishi.mc-3e-tcp',
+  'omron.fins-tcp',
+  'omron.fins-udp',
+  'allen-bradley.ethernet-ip',
+]
+
+function resolvePreferredOrder(values: string[], value: string) {
+  const index = values.indexOf(value)
+  return index === -1 ? values.length : index
+}
+
 const driverChineseLabels: Record<string, string> = {
   'allen-bradley.ethernet-ip': '罗克韦尔 EtherNet/IP',
   'allen-bradley.connected-cip': '罗克韦尔 Connected CIP',
@@ -301,8 +325,11 @@ export function buildCollectorDriverTree(
   }
 
   return [...families.entries()]
-    .sort(([left], [right]) =>
-      formatCollectorProtocolFamily(left).localeCompare(formatCollectorProtocolFamily(right)),
+    .sort(
+      ([left], [right]) =>
+        resolvePreferredOrder(preferredProtocolFamilies, left) -
+          resolvePreferredOrder(preferredProtocolFamilies, right) ||
+        formatCollectorProtocolFamily(left).localeCompare(formatCollectorProtocolFamily(right)),
     )
     .map(([family, familyDrivers]) => ({
       id: `family:${family}`,
@@ -310,7 +337,12 @@ export function buildCollectorDriverTree(
       label: formatCollectorProtocolFamily(family),
       protocolFamily: family,
       children: familyDrivers
-        .sort((left, right) => left.displayName.localeCompare(right.displayName))
+        .sort(
+          (left, right) =>
+            resolvePreferredOrder(preferredDrivers, left.driverId) -
+              resolvePreferredOrder(preferredDrivers, right.driverId) ||
+            left.displayName.localeCompare(right.displayName),
+        )
         .map((driver) => ({
           id: driver.driverId,
           type: 'driver' as const,

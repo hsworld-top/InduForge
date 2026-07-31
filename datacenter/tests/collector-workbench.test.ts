@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { CollectorDriverSummary } from '@/api/schemas/collector.schema'
 import {
   agentSupportsOperation,
   buildCollectorPointCreateDefaults,
@@ -18,6 +19,27 @@ import {
   resolveCollectorDriverIconKey,
   validateCollectorConnectionName,
 } from '@/components/collector-workbench/collector-workbench-model'
+
+function createDriverSummary(
+  protocolFamily: string,
+  driverId: string,
+  displayName: string,
+): CollectorDriverSummary {
+  return {
+    protocolFamily,
+    driverId,
+    driverVersion: '1.0.0',
+    schemaVersion: 1,
+    displayName,
+    category: 'plc',
+    transports: ['tcp'],
+    operations: [],
+    features: [],
+    dataTypes: ['bool'],
+    acquisitionModes: ['polling'],
+    platforms: { devAgent: [], runtime: [] },
+  }
+}
 
 describe('industrial collector workbench model', () => {
   it('normalizes valid connection names and rejects special characters', () => {
@@ -212,6 +234,58 @@ describe('industrial collector workbench model', () => {
     expect(siemens?.children?.[0]?.label).toBe('Siemens S7 TCP [西门子 S7 以太网]')
     expect(buildCollectorDriverTree(drivers, 'PLC')[0]?.protocolFamily).toBe('siemens')
     expect(buildCollectorDriverTree(drivers, '串口')[0]?.protocolFamily).toBe('modbus')
+  })
+  it('places common protocol families and their primary drivers first', () => {
+    const drivers = [
+      createDriverSummary('beckhoff', 'beckhoff.ads-tcp', 'Beckhoff ADS TCP'),
+      createDriverSummary('allen-bradley', 'allen-bradley.pccc', 'Allen-Bradley PCCC'),
+      createDriverSummary(
+        'allen-bradley',
+        'allen-bradley.ethernet-ip',
+        'Allen-Bradley EtherNet/IP',
+      ),
+      createDriverSummary('omron', 'omron.hostlink', 'Omron HostLink'),
+      createDriverSummary('omron', 'omron.fins-udp', 'Omron FINS UDP'),
+      createDriverSummary('omron', 'omron.fins-tcp', 'Omron FINS TCP'),
+      createDriverSummary('mitsubishi', 'mitsubishi.cip', 'Mitsubishi CIP'),
+      createDriverSummary('mitsubishi', 'mitsubishi.mc-3e-tcp', 'Mitsubishi MC 3E TCP'),
+      createDriverSummary('siemens', 'siemens.web-api', 'Siemens Web API'),
+      createDriverSummary('siemens', 'siemens.s7-tcp', 'Siemens S7 TCP'),
+      createDriverSummary('opcua', 'opcua.standard', 'OPC UA'),
+      createDriverSummary('modbus', 'modbus.udp', 'Modbus UDP'),
+      createDriverSummary('modbus', 'modbus.rtu', 'Modbus RTU'),
+      createDriverSummary('modbus', 'modbus.tcp', 'Modbus TCP'),
+      createDriverSummary('yokogawa', 'yokogawa.link-tcp', 'Yokogawa Link TCP'),
+    ]
+
+    const tree = buildCollectorDriverTree(drivers)
+
+    expect(tree.map((node) => node.protocolFamily)).toEqual([
+      'modbus',
+      'opcua',
+      'siemens',
+      'mitsubishi',
+      'omron',
+      'allen-bradley',
+      'beckhoff',
+      'yokogawa',
+    ])
+    expect(
+      tree.find((node) => node.protocolFamily === 'modbus')?.children?.map((node) => node.id),
+    ).toEqual(['modbus.tcp', 'modbus.rtu', 'modbus.udp'])
+    expect(
+      tree.find((node) => node.protocolFamily === 'omron')?.children?.map((node) => node.id),
+    ).toEqual(['omron.fins-tcp', 'omron.fins-udp', 'omron.hostlink'])
+    expect(buildCollectorDriverTree(drivers, 'PLC').map((node) => node.protocolFamily)).toEqual([
+      'modbus',
+      'opcua',
+      'siemens',
+      'mitsubishi',
+      'omron',
+      'allen-bradley',
+      'beckhoff',
+      'yokogawa',
+    ])
   })
   it('resolves optional point fields from driver features', () => {
     expect(
