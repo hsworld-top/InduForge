@@ -44,6 +44,18 @@ export async function listCollectorDrivers(
   )
 }
 
+const collectorDriverCatalogPageSize = 100
+
+export async function listAllCollectorDrivers(): Promise<CollectorDriverSummary[]> {
+  const firstPage = await listCollectorDrivers({ page: 1, pageSize: collectorDriverCatalogPageSize })
+  const remainingPages = await Promise.all(
+    Array.from({ length: Math.max(0, firstPage.pagination.totalPages - 1) }, (_, index) =>
+      listCollectorDrivers({ page: index + 2, pageSize: collectorDriverCatalogPageSize }),
+    ),
+  )
+  return [firstPage, ...remainingPages].flatMap((page) => page.list)
+}
+
 export async function getCollectorDriver(driverId: string): Promise<CollectorDriverDetail> {
   return CollectorDriverDetailSchema.parse(
     await requestData({ url: `/data/collector/drivers/${driverId}`, method: 'get' }),

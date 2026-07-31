@@ -133,7 +133,7 @@ import { getApiErrorMessage } from '@/utils/request'
 import {
   createCollectorConnection,
   getCollectorDriver,
-  listCollectorDrivers,
+  listAllCollectorDrivers,
 } from '@/api/collector.api'
 import {
   splitCollectorFormValues,
@@ -204,7 +204,7 @@ async function loadDrivers() {
   loadingDrivers.value = true
   loadError.value = ''
   try {
-    drivers.value = (await listCollectorDrivers({ page: 1, pageSize: 100 })).list
+    drivers.value = await listAllCollectorDrivers()
     if (!drivers.value.length) loadError.value = '当前没有可用的工业采集驱动。'
   } catch (error) {
     drivers.value = []
