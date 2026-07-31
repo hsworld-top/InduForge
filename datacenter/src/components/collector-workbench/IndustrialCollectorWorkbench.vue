@@ -110,6 +110,7 @@
               <el-tab-pane label="变量配置" name="points">
                 <div class="industrial-workbench__points">
                   <CollectorPointGroupTree
+                    :key="activeConnection.id"
                     :project-id="projectId"
                     :connection-id="activeConnection.id"
                     @select="groupId = $event"
