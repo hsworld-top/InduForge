@@ -3,17 +3,18 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
-	"html"
-	"math/big"
 	"strings"
 	"time"
 )
 
 type ServiceConfig struct {
-	AppName    string
-	CaptchaTTL time.Duration
+	AppName           string
+	CaptchaTTL        time.Duration
+	LoginChallengeTTL time.Duration
 }
 
 type Service struct {
@@ -30,12 +31,12 @@ type AssetSigner interface {
 }
 
 type LoginInput struct {
-	Username    string
-	Password    string
-	TenantCode  string
-	CaptchaKey  string
-	CaptchaCode string
-	LoginIP     string
+	Username          string
+	Password          string
+	TenantCode        string
+	SliderChallengeID string
+	SliderOffset      int
+	LoginIP           string
 }
 
 func (s *Service) SetAssetSigner(signer AssetSigner) { s.assets = signer }
@@ -59,6 +60,9 @@ func NewService(repository Repository, cache CaptchaStore, tokens *TokenManager,
 	if config.CaptchaTTL <= 0 {
 		config.CaptchaTTL = 5 * time.Minute
 	}
+	if config.LoginChallengeTTL <= 0 {
+		config.LoginChallengeTTL = 10 * time.Minute
+	}
 	service := &Service{repository: repository, cache: cache, tokens: tokens, config: config}
 	if len(revocations) > 0 {
 		service.revocations = revocations[0]
@@ -66,34 +70,44 @@ func NewService(repository Repository, cache CaptchaStore, tokens *TokenManager,
 	return service
 }
 
-func (s *Service) Captcha(ctx context.Context) (map[string]any, error) {
-	code, err := randomDigits(4)
-	if err != nil {
-		return nil, err
+const (
+	sliderTrackWidth = 280
+	sliderThumbWidth = 44
+	sliderTolerance  = 5
+)
+
+func (s *Service) Captcha(ctx context.Context, username, tenantCode, loginIP string) (map[string]any, error) {
+	contextKey := loginChallengeContextKey(username, tenantCode, loginIP)
+	if _, err := s.cache.Get(ctx, contextKey); err != nil {
+		return nil, ErrInvalidCaptcha
 	}
 	keyBytes := make([]byte, 16)
 	if _, err := rand.Read(keyBytes); err != nil {
-		return nil, fmt.Errorf("生成验证码标识失败: %w", err)
+		return nil, fmt.Errorf("生成滑块挑战标识失败: %w", err)
 	}
-	key := hex.EncodeToString(keyBytes)
-	if err := s.cache.Put(ctx, key, code, s.config.CaptchaTTL); err != nil {
-		return nil, fmt.Errorf("保存验证码失败: %w", err)
+	challengeID := hex.EncodeToString(keyBytes)
+	if err := s.cache.Put(ctx, sliderChallengeCacheKey(challengeID), contextKey, s.config.CaptchaTTL); err != nil {
+		return nil, fmt.Errorf("保存滑块挑战失败: %w", err)
 	}
-	svg := fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="128" height="40"><rect width="100%%" height="100%%" fill="#f4f6f8"/><text x="64" y="27" text-anchor="middle" font-family="monospace" font-size="24" letter-spacing="6" fill="#1f2937">%s</text></svg>`, html.EscapeString(code))
 	return map[string]any{
-		"key":           key,
-		"image":         "data:image/svg+xml;utf8," + svg,
+		"challengeId":   challengeID,
+		"trackWidth":    sliderTrackWidth,
+		"thumbWidth":    sliderThumbWidth,
 		"expireSeconds": int64(s.config.CaptchaTTL.Seconds()),
 	}, nil
 }
 
 func (s *Service) Config(ctx context.Context, tenantCode string) map[string]any {
+	multiTenant := true
+	if activeTenantCount, err := s.repository.CountActiveTenants(ctx); err == nil {
+		multiTenant = activeTenantCount > 1
+	}
 	result := map[string]any{
 		"name":        s.config.AppName,
 		"title":       s.config.AppName,
 		"appName":     s.config.AppName,
 		"tenantCode":  tenantCode,
-		"multiTenant": true,
+		"multiTenant": multiTenant,
 	}
 	repository, ok := s.repository.(interface {
 		GetTenantBranding(context.Context, string) (TenantBranding, error)
@@ -117,19 +131,28 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (LoginResult, err
 	if input.Username == "" || input.Password == "" {
 		return LoginResult{}, ErrInvalidCredentials
 	}
-	if err := s.verifyCaptcha(ctx, input.CaptchaKey, input.CaptchaCode); err != nil {
-		return LoginResult{}, err
+	challengeContextKey := loginChallengeContextKey(input.Username, input.TenantCode, input.LoginIP)
+	if _, err := s.cache.Get(ctx, challengeContextKey); err == nil {
+		if err := s.verifySliderCaptcha(ctx, challengeContextKey, input.SliderChallengeID, input.SliderOffset); err != nil {
+			return LoginResult{}, err
+		}
 	}
 	user, err := s.repository.FindLoginUser(ctx, input.Username, input.TenantCode)
 	if err != nil {
+		if errors.Is(err, ErrInvalidCredentials) {
+			s.requireSliderCaptcha(ctx, challengeContextKey)
+		}
 		return LoginResult{}, err
 	}
 	if user.Status != "active" || user.TenantStatus != "active" {
 		return LoginResult{}, ErrForbidden
 	}
 	if !VerifyPassword(input.Password, user.PasswordHash) {
+		s.requireSliderCaptcha(ctx, challengeContextKey)
 		return LoginResult{}, ErrInvalidCredentials
 	}
+	// 验证状态仅用于限流式人机校验，清理失败不应影响已经通过的凭据登录。
+	_ = s.cache.Delete(ctx, challengeContextKey)
 	pair, refresh, err := s.issueTokenPair(user)
 	if err != nil {
 		return LoginResult{}, err
@@ -252,16 +275,32 @@ func (s *Service) issueTokenPair(user User) (TokenPair, RefreshToken, error) {
 	return TokenPair{AccessToken: access, Token: access, RefreshToken: rawRefresh, ExpiresIn: int64(time.Until(expiresAt).Seconds())}, RefreshToken{TenantID: user.TenantID, UserID: user.ID, Hash: refreshHash, ExpiresAt: refreshExpiresAt}, nil
 }
 
-func (s *Service) verifyCaptcha(ctx context.Context, key, code string) error {
-	if strings.TrimSpace(key) == "" || strings.TrimSpace(code) == "" {
+func (s *Service) requireSliderCaptcha(ctx context.Context, contextKey string) {
+	// 标记只用于控制下一次同一登录上下文是否要求人机验证；缓存失败不应掩盖凭据错误。
+	_ = s.cache.Put(ctx, contextKey, "1", s.config.LoginChallengeTTL)
+}
+
+func (s *Service) verifySliderCaptcha(ctx context.Context, contextKey, challengeID string, offset int) error {
+	if strings.TrimSpace(challengeID) == "" || offset < 0 || offset > sliderTrackWidth-sliderThumbWidth {
 		return ErrInvalidCaptcha
 	}
-	expected, err := s.cache.Take(ctx, strings.TrimSpace(key))
-	if err != nil || !strings.EqualFold(expected, strings.TrimSpace(code)) {
+	challengeContextKey, err := s.cache.Take(ctx, sliderChallengeCacheKey(strings.TrimSpace(challengeID)))
+	if err != nil {
+		return ErrInvalidCaptcha
+	}
+	if challengeContextKey != contextKey || offset < sliderTrackWidth-sliderThumbWidth-sliderTolerance {
 		return ErrInvalidCaptcha
 	}
 	return nil
 }
+
+func loginChallengeContextKey(username, tenantCode, loginIP string) string {
+	value := strings.Join([]string{strings.TrimSpace(username), strings.TrimSpace(tenantCode), strings.TrimSpace(loginIP)}, "\n")
+	sum := sha256.Sum256([]byte(value))
+	return "login-challenge:" + hex.EncodeToString(sum[:])
+}
+
+func sliderChallengeCacheKey(challengeID string) string { return "slider-challenge:" + challengeID }
 
 func publicUser(user User) map[string]any {
 	return map[string]any{
@@ -280,16 +319,4 @@ func (s *Service) signAsset(ctx context.Context, objectKey string) string {
 		return ""
 	}
 	return url
-}
-
-func randomDigits(length int) (string, error) {
-	result := make([]byte, length)
-	for index := range result {
-		value, err := rand.Int(rand.Reader, big.NewInt(10))
-		if err != nil {
-			return "", fmt.Errorf("生成验证码失败: %w", err)
-		}
-		result[index] = byte('0' + value.Int64())
-	}
-	return string(result), nil
 }

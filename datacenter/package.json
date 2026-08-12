@@ -10,8 +10,10 @@
     "test": "vitest --run",
     "test:watch": "vitest",
     "preview": "vite preview",
-    "lint": "eslint . --fix",
-    "format": "prettier --write \"src/**/*.{js,ts,vue,css}\" \"tests/**/*.{js,ts,vue}\" \"*.{json,js,ts,mjs,cjs}\""
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"src/**/*.{js,ts,vue,css}\" \"tests/**/*.{js,ts,vue}\" \"*.{json,js,ts,mjs,cjs}\"",
+    "format:check": "prettier --check \"src/**/*.{js,ts,vue,css}\" \"tests/**/*.{js,ts,vue}\" \"*.{json,js,ts,mjs,cjs}\""
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",

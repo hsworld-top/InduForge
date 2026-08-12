@@ -69,7 +69,7 @@ type CreateProjectParams struct {
 	ProjectID     pgtype.UUID `json:"project_id"`
 	TenantID      pgtype.UUID `json:"tenant_id"`
 	Name          string      `json:"name"`
-	Code          pgtype.Text `json:"code"`
+	Code          string      `json:"code"`
 	Description   pgtype.Text `json:"description"`
 	Icon          pgtype.Text `json:"icon"`
 	WorkspacePath string      `json:"workspace_path"`
@@ -533,7 +533,7 @@ type ListProjectsRow struct {
 	ID            pgtype.UUID        `json:"id"`
 	TenantID      pgtype.UUID        `json:"tenant_id"`
 	Name          string             `json:"name"`
-	Code          pgtype.Text        `json:"code"`
+	Code          string             `json:"code"`
 	Description   pgtype.Text        `json:"description"`
 	Icon          pgtype.Text        `json:"icon"`
 	WorkspacePath string             `json:"workspace_path"`
@@ -664,15 +664,14 @@ func (q *Queries) SoftDeleteProject(ctx context.Context, arg SoftDeleteProjectPa
 
 const updateProject = `-- name: UpdateProject :one
 UPDATE projects
-SET name = $1, code = $2, description = $3,
-    icon = $4, visibility = $5, updated_by = $6, updated_at = now()
-WHERE id = $7 AND tenant_id = $8 AND status <> 'deleted'
+SET name = $1, description = $2,
+    icon = $3, visibility = $4, updated_by = $5, updated_at = now()
+WHERE id = $6 AND tenant_id = $7 AND status <> 'deleted'
 RETURNING id, tenant_id, name, code, description, icon, workspace_path, status, visibility, created_by, updated_by, archived_at, created_at, updated_at
 `
 
 type UpdateProjectParams struct {
 	Name        string      `json:"name"`
-	Code        pgtype.Text `json:"code"`
 	Description pgtype.Text `json:"description"`
 	Icon        pgtype.Text `json:"icon"`
 	Visibility  string      `json:"visibility"`
@@ -684,7 +683,6 @@ type UpdateProjectParams struct {
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
 	row := q.db.QueryRow(ctx, updateProject,
 		arg.Name,
-		arg.Code,
 		arg.Description,
 		arg.Icon,
 		arg.Visibility,

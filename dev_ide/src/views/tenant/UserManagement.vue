@@ -726,9 +726,9 @@ export default {
         const listPayload = payload?.list || payload
         const paginationPayload = payload?.pagination || response?.pagination || {}
 
-        userList.value = listPayload?.users || []
+        userList.value = Array.isArray(listPayload) ? listPayload : []
         pagination.total = paginationPayload?.total || 0
-        pagination.totalPages = paginationPayload?.totalPages || 0
+        pagination.totalPages = paginationPayload?.pages || 0
       } catch (error) {
         ElMessage.error(
           t('userManagement.fetchUsersFailed', {

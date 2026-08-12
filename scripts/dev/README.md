@@ -42,3 +42,7 @@ Node 依赖由根目录 pnpm workspace 统一管理。只在仓库根目录执�
 脚本不会启动任何业务项目。
 
 开发人员需要自行启动后端和前端模块。
+
+从仓库根目录执行任一 `pnpm run dev:*` 前，会自动检查根 `.env`：文件不存在时从 `.env.development.example` 生成，文件已存在时不覆盖本机配置。
+
+`pnpm run dev:core` 使用 Air 监听 `dev_core` 源码变更并自动重新编译、重启服务。Air 需要预先安装并可通过 `air` 命令调用。

@@ -75,7 +75,7 @@ CREATE TABLE projects (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
   name text NOT NULL,
-  code text,
+  code text NOT NULL,
   description text,
   icon text,
   workspace_path text NOT NULL UNIQUE,
@@ -86,7 +86,7 @@ CREATE TABLE projects (
   archived_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE NULLS NOT DISTINCT (tenant_id, code)
+  UNIQUE (tenant_id, code)
 );
 CREATE INDEX projects_tenant_status_idx ON projects (tenant_id, status, updated_at DESC);
 

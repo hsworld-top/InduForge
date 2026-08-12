@@ -310,8 +310,8 @@ func (h *Handler) ListRecentActivities(w http.ResponseWriter, r *http.Request) {
 	h.auditLog.ListRecentActivities(w, r)
 }
 
-func (h *Handler) GetAuthCaptcha(w http.ResponseWriter, r *http.Request) {
-	h.auth.GetAuthCaptcha(w, r)
+func (h *Handler) GetAuthCaptcha(w http.ResponseWriter, r *http.Request, params platformapi.GetAuthCaptchaParams) {
+	h.auth.GetAuthCaptcha(w, r, params)
 }
 
 func (h *Handler) GetAuthConfig(w http.ResponseWriter, r *http.Request) {

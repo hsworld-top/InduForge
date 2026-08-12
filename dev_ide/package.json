@@ -11,8 +11,10 @@
     "typecheck:migration": "tsc -p tsconfig.migration.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint . --fix",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.{js,ts,vue,css,md}\" \"tests/**/*.{js,ts,vue}\" \"*.{json,js,ts,mjs,cjs}\"",
+    "format:check": "prettier --check \"src/**/*.{js,ts,vue,css,md}\" \"tests/**/*.{js,ts,vue}\" \"*.{json,js,ts,mjs,cjs}\"",
     "deploy": "node ./scripts/deploy.cjs"
   },
   "dependencies": {

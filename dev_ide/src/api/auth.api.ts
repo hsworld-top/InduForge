@@ -4,8 +4,8 @@ import type { ApiResponse, ApiRecord } from '@/types/api'
 type LoginCredentials = {
   username: string
   password: string
-  captchaKey?: string
-  captchaCode?: string
+  sliderChallengeId?: string
+  sliderOffset?: number
   tenantCode?: string
 }
 
@@ -54,8 +54,9 @@ export interface AuthUserPayload extends ApiRecord {
 export type AuthChangePasswordPayload = ApiRecord
 
 export interface AuthCaptchaPayload extends ApiRecord {
-  key?: string
-  image?: string
+  challengeId?: string
+  trackWidth?: number
+  thumbWidth?: number
   expireSeconds?: number
 }
 
@@ -68,26 +69,23 @@ export const authAPI = {
    * @param {object} credentials - 登录凭证
    * @param {string} credentials.username - 用户名
    * @param {string} credentials.password - 密码
-   * @param {string} credentials.captchaKey - 验证码Key
-   * @param {string} credentials.captchaCode - 验证码内容
+   * @param {string} credentials.sliderChallengeId - 滑块挑战标识
+   * @param {number} credentials.sliderOffset - 滑块停留位置
    * @param {string} credentials.tenantCode - 租户代码（多租户模式下可选）
    * @returns {Promise} 登录结果
    */
   login(credentials: LoginCredentials) {
-    const { captchaKey, captchaCode, ...others } = credentials
-    return request.post<ApiResponse<AuthLoginPayload>>('/auth/login', {
-      ...others,
-      captchaKey,
-      captchaCode,
-    })
+    return request.post<ApiResponse<AuthLoginPayload>>('/auth/login', credentials)
   },
 
   /**
-   * 获取验证码
-   * @returns {Promise} 验证码数据 (key, image, expireSeconds)
+   * 获取登录滑块挑战。仅在同一登录上下文已触发人机验证时可用。
+   * @returns {Promise} 滑块挑战数据 (challengeId, trackWidth, thumbWidth, expireSeconds)
    */
-  getCaptcha() {
-    return request.get<ApiResponse<AuthCaptchaPayload>>('/auth/captcha')
+  getCaptcha(username: string, tenantCode?: string) {
+    return request.get<ApiResponse<AuthCaptchaPayload>>('/auth/captcha', {
+      params: { username, tenantCode: tenantCode || undefined },
+    })
   },
 
   /**

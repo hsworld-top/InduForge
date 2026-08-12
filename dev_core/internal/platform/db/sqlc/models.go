@@ -123,7 +123,7 @@ type Project struct {
 	ID            pgtype.UUID        `json:"id"`
 	TenantID      pgtype.UUID        `json:"tenant_id"`
 	Name          string             `json:"name"`
-	Code          pgtype.Text        `json:"code"`
+	Code          string             `json:"code"`
 	Description   pgtype.Text        `json:"description"`
 	Icon          pgtype.Text        `json:"icon"`
 	WorkspacePath string             `json:"workspace_path"`

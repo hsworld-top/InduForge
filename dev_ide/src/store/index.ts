@@ -12,8 +12,8 @@ type TenantId = string | number
 type LoginCredentials = {
   username: string
   password: string
-  captchaKey?: string
-  captchaCode?: string
+  sliderChallengeId?: string
+  sliderOffset?: number
   tenantCode?: string
 }
 

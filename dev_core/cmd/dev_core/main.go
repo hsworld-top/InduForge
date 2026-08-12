@@ -189,12 +189,17 @@ func initializeDatabase(ctx context.Context, pool *pgxpool.Pool, cfg config.Conf
 	if err := platformdb.EnsureSchema(ctx, pool, allowCreate); err != nil {
 		return err
 	}
-	initialPasswordHash, err := auth.HashPassword(cfg.SuperAdminPassword)
+	superAdminPasswordHash, err := auth.HashPassword(cfg.SuperAdminPassword)
+	if err != nil {
+		return err
+	}
+	defaultAdminPasswordHash, err := auth.HashPassword(cfg.DefaultAdminPassword)
 	if err != nil {
 		return err
 	}
 	return platformdb.EnsureInitialData(ctx, pool, platformdb.SeedConfig{
 		TenantID: cfg.DefaultTenantID, TenantName: cfg.AppName, TenantCode: cfg.DefaultTenantCode,
-		UserID: cfg.SuperAdminUserID, Username: cfg.SuperAdminUsername, PasswordHash: initialPasswordHash,
+		SuperAdminUserID: cfg.SuperAdminUserID, SuperAdminUsername: cfg.SuperAdminUsername, SuperAdminPasswordHash: superAdminPasswordHash,
+		DefaultAdminUsername: cfg.DefaultAdminUsername, DefaultAdminPasswordHash: defaultAdminPasswordHash,
 	})
 }

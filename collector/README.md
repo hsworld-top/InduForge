@@ -35,7 +35,7 @@ EXE 所在目录必须可写。旧版 `LocalAppData` 凭据不再读取，升级
 生成自包含单文件：
 
 ```powershell
-pnpm dotnet:publish:collector-dev
+pnpm collector:publish:dev
 ```
 
 输出位于本地忽略目录 `collector/artifacts/win-x64/`。

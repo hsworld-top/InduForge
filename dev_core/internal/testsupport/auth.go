@@ -39,6 +39,10 @@ type authRepository struct {
 	tokens map[string]auth.RefreshToken
 }
 
+func (r *authRepository) CountActiveTenants(context.Context) (int64, error) {
+	return 1, nil
+}
+
 func (r *authRepository) FindLoginUser(context.Context, string, string) (auth.User, error) {
 	return r.user, nil
 }

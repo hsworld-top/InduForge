@@ -49,12 +49,12 @@ SELECT * FROM projects WHERE id = sqlc.arg(project_id) AND tenant_id = sqlc.arg(
 
 -- name: CreateProject :one
 INSERT INTO projects (id, tenant_id, name, code, description, icon, workspace_path, status, visibility, created_by)
-VALUES (sqlc.arg(project_id), sqlc.arg(tenant_id), sqlc.arg(name), sqlc.narg(code), sqlc.narg(description), sqlc.narg(icon), sqlc.arg(workspace_path), 'active', sqlc.arg(visibility), sqlc.arg(user_id))
+VALUES (sqlc.arg(project_id), sqlc.arg(tenant_id), sqlc.arg(name), sqlc.arg(code), sqlc.narg(description), sqlc.narg(icon), sqlc.arg(workspace_path), 'active', sqlc.arg(visibility), sqlc.arg(user_id))
 RETURNING *;
 
 -- name: UpdateProject :one
 UPDATE projects
-SET name = sqlc.arg(name), code = sqlc.narg(code), description = sqlc.narg(description),
+SET name = sqlc.arg(name), description = sqlc.narg(description),
     icon = sqlc.narg(icon), visibility = sqlc.arg(visibility), updated_by = sqlc.arg(user_id), updated_at = now()
 WHERE id = sqlc.arg(project_id) AND tenant_id = sqlc.arg(tenant_id) AND status <> 'deleted'
 RETURNING *;

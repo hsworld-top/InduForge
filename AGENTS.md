@@ -15,8 +15,8 @@
 ## 仓库约定
 
 - 默认从仓库根目录执行命令。Windows 优先使用 PowerShell、cmd、模块脚本或 Makefile。
-- Node 依赖和脚本统一使用根目录 pnpm workspace：仅在根目录执行 `pnpm install`，仅提交根目录 `pnpm-lock.yaml`。常用校验入口为 `pnpm lint`、`pnpm typecheck`、`pnpm go:test`。
-- 环境变量统一使用根目录 `.env`；端口以 `.env`、环境模板和 [环境端口规划](docs/06-运维与安全/环境端口规划.md) 为准。
+- Node 依赖和脚本统一使用根目录 pnpm workspace：仅在根目录执行 `pnpm install`，仅提交根目录 `pnpm-lock.yaml`。常用校验入口为 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm format:check`。
+- 环境变量统一使用根目录 `.env`；根 `pnpm run dev:*` 会在 `.env` 缺失时从 `.env.development.example` 自动生成。端口以 `.env`、环境模板和 [环境端口规划](docs/06-运维与安全/环境端口规划.md) 为准。
 - 正式设计、契约和研发规范放在 `docs/`；临时过程文档放在 `.superpower/`，默认不提交。除非任务明确点名，不修改 `scripts/docker/` 或 `scripts/nginx/`。
 - 不创建、合并或删除分支，除非用户明确要求。提交信息使用中文，推荐 `type(scope): subject`；不得提交本地产物、日志或环境文件。
 
@@ -30,4 +30,5 @@
 ## 交付要求
 
 - 修改后执行与变更面最接近的静态检查、编译或测试；TypeScript 改动必须通过相应类型检查，不得交付基础编译错误。
+- 未经用户明确要求，不得自主启动、重启或保持运行任何业务项目、前端开发服务器或本地服务进程。接口验证优先使用用户已启动的服务；没有可用服务时，说明未验证原因，不得为验证而自行启动项目。
 - 完成时说明修改范围、已执行验证、未验证项和剩余风险；无法验证时说明原因，并列出建议人工验收的成功与失败路径。

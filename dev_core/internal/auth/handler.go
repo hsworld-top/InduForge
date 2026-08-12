@@ -19,8 +19,12 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
-func (h *Handler) GetAuthCaptcha(w http.ResponseWriter, r *http.Request) {
-	result, err := h.service.Captcha(r.Context())
+func (h *Handler) GetAuthCaptcha(w http.ResponseWriter, r *http.Request, params platformapi.GetAuthCaptchaParams) {
+	tenantCode := ""
+	if params.TenantCode != nil {
+		tenantCode = *params.TenantCode
+	}
+	result, err := h.service.Captcha(r.Context(), strings.TrimSpace(params.Username), strings.TrimSpace(tenantCode), clientIP(r))
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -34,11 +38,11 @@ func (h *Handler) GetAuthConfig(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Username    string `json:"username"`
-		Password    string `json:"password"`
-		TenantCode  string `json:"tenantCode"`
-		CaptchaKey  string `json:"captchaKey"`
-		CaptchaCode string `json:"captchaCode"`
+		Username          string `json:"username"`
+		Password          string `json:"password"`
+		TenantCode        string `json:"tenantCode"`
+		SliderChallengeID string `json:"sliderChallengeId"`
+		SliderOffset      int    `json:"sliderOffset"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		platformapi.WriteError(w, r, http.StatusBadRequest, platformapi.ErrorCodeInvalidRequest, "请求体格式错误")
@@ -46,7 +50,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := h.service.Login(r.Context(), LoginInput{
 		Username: body.Username, Password: body.Password, TenantCode: body.TenantCode,
-		CaptchaKey: body.CaptchaKey, CaptchaCode: body.CaptchaCode, LoginIP: clientIP(r),
+		SliderChallengeID: body.SliderChallengeID, SliderOffset: body.SliderOffset, LoginIP: clientIP(r),
 	})
 	if err != nil {
 		h.writeError(w, r, err)

@@ -1,7 +1,7 @@
 -- name: ListTenants :many
 SELECT
   t.*,
-  (SELECT count(*) FROM users u WHERE u.tenant_id = t.id) AS user_count,
+  (SELECT count(*) FROM users u WHERE u.tenant_id = t.id AND u.role <> 'SUPER_ADMIN') AS user_count,
   (SELECT count(*) FROM projects p WHERE p.tenant_id = t.id AND p.status <> 'deleted') AS project_count
 FROM tenants t
 WHERE (sqlc.arg(keyword)::text = '' OR t.name ILIKE '%' || sqlc.arg(keyword) || '%' OR t.code ILIKE '%' || sqlc.arg(keyword) || '%')
@@ -18,7 +18,7 @@ WHERE (sqlc.arg(keyword)::text = '' OR t.name ILIKE '%' || sqlc.arg(keyword) || 
 -- name: GetTenantByIdentifier :one
 SELECT
   t.*,
-  (SELECT count(*) FROM users u WHERE u.tenant_id = t.id) AS user_count,
+  (SELECT count(*) FROM users u WHERE u.tenant_id = t.id AND u.role <> 'SUPER_ADMIN') AS user_count,
   (SELECT count(*) FROM projects p WHERE p.tenant_id = t.id AND p.status <> 'deleted') AS project_count
 FROM tenants t
 WHERE t.id::text = sqlc.arg(identifier)::text OR lower(t.code) = lower(sqlc.arg(identifier)::text)
@@ -100,6 +100,7 @@ SELECT u.id, u.tenant_id, u.username, u.email, u.phone, u.full_name, u.avatar,
        u.password_changed_at, u.created_at, u.updated_at
 FROM users u
 WHERE u.tenant_id = sqlc.arg(tenant_id)
+  AND u.role <> 'SUPER_ADMIN'
   AND (sqlc.arg(keyword)::text = '' OR u.username ILIKE '%' || sqlc.arg(keyword) || '%' OR u.full_name ILIKE '%' || sqlc.arg(keyword) || '%' OR u.email ILIKE '%' || sqlc.arg(keyword) || '%')
   AND (sqlc.arg(role)::text = '' OR u.role = sqlc.arg(role))
   AND (sqlc.arg(status)::text = '' OR u.status = sqlc.arg(status))
@@ -110,6 +111,7 @@ LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 SELECT count(*)
 FROM users u
 WHERE u.tenant_id = sqlc.arg(tenant_id)
+  AND u.role <> 'SUPER_ADMIN'
   AND (sqlc.arg(keyword)::text = '' OR u.username ILIKE '%' || sqlc.arg(keyword) || '%' OR u.full_name ILIKE '%' || sqlc.arg(keyword) || '%' OR u.email ILIKE '%' || sqlc.arg(keyword) || '%')
   AND (sqlc.arg(role)::text = '' OR u.role = sqlc.arg(role))
   AND (sqlc.arg(status)::text = '' OR u.status = sqlc.arg(status));
@@ -136,4 +138,4 @@ RETURNING *;
 DELETE FROM users WHERE id = sqlc.arg(user_id) AND tenant_id = sqlc.arg(tenant_id);
 
 -- name: CountTenantUsers :one
-SELECT count(*) FROM users WHERE tenant_id = sqlc.arg(tenant_id);
+SELECT count(*) FROM users WHERE tenant_id = sqlc.arg(tenant_id) AND role <> 'SUPER_ADMIN';

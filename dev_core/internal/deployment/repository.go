@@ -33,7 +33,7 @@ func (r *PostgreSQLRepository) GetProject(ctx context.Context, tenantID, project
 	if err != nil {
 		return Project{}, mapNotFound(err)
 	}
-	return Project{ID: uuidString(row.ID), TenantID: uuidString(row.TenantID), Name: row.Name, Code: textString(row.Code), WorkspacePath: row.WorkspacePath, CreatedBy: uuidString(row.CreatedBy), Visibility: row.Visibility}, nil
+	return Project{ID: uuidString(row.ID), TenantID: uuidString(row.TenantID), Name: row.Name, Code: row.Code, WorkspacePath: row.WorkspacePath, CreatedBy: uuidString(row.CreatedBy), Visibility: row.Visibility}, nil
 }
 
 func (r *PostgreSQLRepository) ListVersions(ctx context.Context, tenantID, projectID string, page, limit int) ([]Version, int64, error) {
@@ -258,7 +258,7 @@ func deploymentFromList(row dbsqlc.ListProjectNodeDeploymentsRow) Deployment {
 		ID: uuidString(row.ID), TenantID: uuidString(row.TenantID), NodeID: uuidString(row.NodeID), ProjectID: uuidString(row.ProjectID),
 		ApplicationVersionID: uuidString(row.ApplicationVersionID), Version: textString(row.Version), Mode: row.Mode, Status: row.Status,
 		ErrorMessage: textString(row.ErrorMessage), NodeName: row.NodeName, NodeStatus: row.NodeStatus,
-		IPAddress: textString(row.IpAddress), ProjectName: row.ProjectName, ProjectCode: textString(row.ProjectCode),
+		IPAddress: textString(row.IpAddress), ProjectName: row.ProjectName, ProjectCode: row.ProjectCode,
 		ArtifactHash: textString(row.ArtifactHash), CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
 	}
 	decodeJSONValue(row.RuntimeConfig, &item.RuntimeConfig)

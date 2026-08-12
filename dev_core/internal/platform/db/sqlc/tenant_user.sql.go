@@ -31,7 +31,7 @@ func (q *Queries) CountFilteredTenants(ctx context.Context, arg CountFilteredTen
 }
 
 const countTenantUsers = `-- name: CountTenantUsers :one
-SELECT count(*) FROM users WHERE tenant_id = $1
+SELECT count(*) FROM users WHERE tenant_id = $1 AND role <> 'SUPER_ADMIN'
 `
 
 func (q *Queries) CountTenantUsers(ctx context.Context, tenantID pgtype.UUID) (int64, error) {
@@ -45,6 +45,7 @@ const countUsers = `-- name: CountUsers :one
 SELECT count(*)
 FROM users u
 WHERE u.tenant_id = $1
+  AND u.role <> 'SUPER_ADMIN'
   AND ($2::text = '' OR u.username ILIKE '%' || $2 || '%' OR u.full_name ILIKE '%' || $2 || '%' OR u.email ILIKE '%' || $2 || '%')
   AND ($3::text = '' OR u.role = $3)
   AND ($4::text = '' OR u.status = $4)
@@ -317,7 +318,7 @@ func (q *Queries) GetManagedUser(ctx context.Context, arg GetManagedUserParams) 
 const getTenantByIdentifier = `-- name: GetTenantByIdentifier :one
 SELECT
   t.id, t.name, t.code, t.description, t.status, t.contact_email, t.contact_phone, t.max_users, t.max_projects, t.max_storage, t.used_storage, t.logo_object_key, t.login_background_object_key, t.company_name, t.company_address, t.company_phone, t.company_website, t.settings, t.expires_at, t.created_at, t.updated_at,
-  (SELECT count(*) FROM users u WHERE u.tenant_id = t.id) AS user_count,
+  (SELECT count(*) FROM users u WHERE u.tenant_id = t.id AND u.role <> 'SUPER_ADMIN') AS user_count,
   (SELECT count(*) FROM projects p WHERE p.tenant_id = t.id AND p.status <> 'deleted') AS project_count
 FROM tenants t
 WHERE t.id::text = $1::text OR lower(t.code) = lower($1::text)
@@ -437,7 +438,7 @@ func (q *Queries) ListDashboardNotes(ctx context.Context, tenantID pgtype.UUID) 
 const listTenants = `-- name: ListTenants :many
 SELECT
   t.id, t.name, t.code, t.description, t.status, t.contact_email, t.contact_phone, t.max_users, t.max_projects, t.max_storage, t.used_storage, t.logo_object_key, t.login_background_object_key, t.company_name, t.company_address, t.company_phone, t.company_website, t.settings, t.expires_at, t.created_at, t.updated_at,
-  (SELECT count(*) FROM users u WHERE u.tenant_id = t.id) AS user_count,
+  (SELECT count(*) FROM users u WHERE u.tenant_id = t.id AND u.role <> 'SUPER_ADMIN') AS user_count,
   (SELECT count(*) FROM projects p WHERE p.tenant_id = t.id AND p.status <> 'deleted') AS project_count
 FROM tenants t
 WHERE ($1::text = '' OR t.name ILIKE '%' || $1 || '%' OR t.code ILIKE '%' || $1 || '%')
@@ -534,6 +535,7 @@ SELECT u.id, u.tenant_id, u.username, u.email, u.phone, u.full_name, u.avatar,
        u.password_changed_at, u.created_at, u.updated_at
 FROM users u
 WHERE u.tenant_id = $1
+  AND u.role <> 'SUPER_ADMIN'
   AND ($2::text = '' OR u.username ILIKE '%' || $2 || '%' OR u.full_name ILIKE '%' || $2 || '%' OR u.email ILIKE '%' || $2 || '%')
   AND ($3::text = '' OR u.role = $3)
   AND ($4::text = '' OR u.status = $4)

@@ -35,7 +35,7 @@ pnpm install
 ### 2. 启动开发服务器
 
 ```bash
-pnpm dev:agent-front
+pnpm dev:node-agent-front
 ```
 
 服务默认读取仓库根目录 `.env`，通过 `VITE_NODE_AGENT_FRONT_PORT` 决定前端端口，当前统一默认访问地址是 `http://localhost:18604`。
@@ -47,7 +47,7 @@ pnpm dev:agent-front
 ### 1. 构建生产版本
 
 ```bash
-pnpm build:agent-front
+pnpm build:node-agent-front
 ```
 
 构建产物将输出到 `dist/` 目录。

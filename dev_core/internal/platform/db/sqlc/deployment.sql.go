@@ -463,7 +463,7 @@ type ListProjectNodeDeploymentsRow struct {
 	NodeStatus           string             `json:"node_status"`
 	IpAddress            pgtype.Text        `json:"ip_address"`
 	ProjectName          string             `json:"project_name"`
-	ProjectCode          pgtype.Text        `json:"project_code"`
+	ProjectCode          string             `json:"project_code"`
 	ArtifactHash         pgtype.Text        `json:"artifact_hash"`
 	Manifest             []byte             `json:"manifest"`
 }

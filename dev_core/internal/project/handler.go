@@ -353,7 +353,6 @@ func decodeJSON(r *http.Request, target any) error {
 func decodeProjectInput(r *http.Request) (ProjectInput, error) {
 	var body struct {
 		Name        *string `json:"name"`
-		Code        *string `json:"code"`
 		Description *string `json:"description"`
 		Icon        *string `json:"icon"`
 		Visibility  *string `json:"visibility"`
@@ -361,7 +360,7 @@ func decodeProjectInput(r *http.Request) (ProjectInput, error) {
 	if err := decodeJSON(r, &body); err != nil {
 		return ProjectInput{}, err
 	}
-	return ProjectInput{Name: body.Name, Code: body.Code, Description: body.Description, Icon: body.Icon, Visibility: body.Visibility}, nil
+	return ProjectInput{Name: body.Name, Description: body.Description, Icon: body.Icon, Visibility: body.Visibility}, nil
 }
 func decodeTagInput(r *http.Request) (TagInput, error) {
 	var body struct {

@@ -68,6 +68,7 @@ runtime/node_agent_front/dist/
 # ============================================
 data_service/*.exe
 data_service/tmp/
+dev_core/tmp/
 runtime/node_agent/build/
 runtime/node_agent/data/
 runtime/node_agent/logs/

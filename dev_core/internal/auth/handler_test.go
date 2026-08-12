@@ -7,7 +7,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"regexp"
 	"testing"
 	"time"
 
@@ -29,8 +28,11 @@ func TestAuthHTTPInterfaces(t *testing.T) {
 
 	config := performJSON(t, server, http.MethodGet, "/api/v1/auth/config?tenantCode=default", nil, "")
 	assertSuccess(t, config)
+	if multiTenant, ok := config.Data["multiTenant"].(bool); !ok || multiTenant {
+		t.Fatalf("单租户配置应关闭多租户登录: %#v", config.Data["multiTenant"])
+	}
 
-	login := performJSON(t, server, http.MethodPost, "/api/v1/auth/login", loginBody(t, server, "admin123"), "")
+	login := performJSON(t, server, http.MethodPost, "/api/v1/auth/login", loginBody("admin123"), "")
 	assertSuccess(t, login)
 	accessToken := nestedString(t, login, "data", "accessToken")
 	refreshToken := nestedString(t, login, "data", "refreshToken")
@@ -61,37 +63,93 @@ func TestAuthHTTPInterfaces(t *testing.T) {
 
 func TestLoginRejectsInvalidPassword(t *testing.T) {
 	server, _ := newAuthServer(t)
-	response := performJSON(t, server, http.MethodPost, "/api/v1/auth/login", loginBody(t, server, "wrong"), "")
+	response := performJSON(t, server, http.MethodPost, "/api/v1/auth/login", loginBody("wrong"), "")
 	if response.Code != platformapi.ErrorCodeInvalidCredentials {
 		t.Fatalf("错误码不正确: got %d", response.Code)
 	}
 }
 
-func TestLoginRequiresAndConsumesCaptcha(t *testing.T) {
+func TestSingleTenantLoginDoesNotRequireTenantCode(t *testing.T) {
 	server, _ := newAuthServer(t)
-	missing := performJSON(t, server, http.MethodPost, "/api/v1/auth/login", map[string]any{"username": "admin", "password": "admin123", "tenantCode": "default"}, "")
-	if missing.Code != platformapi.ErrorCodeInvalidCaptcha {
-		t.Fatalf("缺少验证码应失败，实际 code=%d", missing.Code)
-	}
-	body := loginBody(t, server, "admin123")
+	body := loginBody("admin123")
+	delete(body, "tenantCode")
 	assertSuccess(t, performJSON(t, server, http.MethodPost, "/api/v1/auth/login", body, ""))
-	reused := performJSON(t, server, http.MethodPost, "/api/v1/auth/login", body, "")
-	if reused.Code != platformapi.ErrorCodeInvalidCaptcha {
-		t.Fatalf("验证码重复使用应失败，实际 code=%d", reused.Code)
+}
+
+func TestAuthConfigEnablesTenantCodeForMultipleActiveTenants(t *testing.T) {
+	server, repository := newAuthServer(t)
+	repository.activeTenantCount = 2
+
+	config := performJSON(t, server, http.MethodGet, "/api/v1/auth/config", nil, "")
+	assertSuccess(t, config)
+	if multiTenant, ok := config.Data["multiTenant"].(bool); !ok || !multiTenant {
+		t.Fatalf("多租户配置应开启多租户登录: %#v", config.Data["multiTenant"])
 	}
 }
 
-func loginBody(t *testing.T, server http.Handler, password string) map[string]any {
-	t.Helper()
-	captcha := performJSON(t, server, http.MethodGet, "/api/v1/auth/captcha", nil, "")
-	assertSuccess(t, captcha)
-	key := nestedString(t, captcha, "data", "key")
-	image := nestedString(t, captcha, "data", "image")
-	match := regexp.MustCompile(`>(\d{4})</text>`).FindStringSubmatch(image)
-	if len(match) != 2 {
-		t.Fatalf("无法从测试验证码中解析数字: %s", image)
+func TestLoginRequiresSliderAfterFirstCredentialFailure(t *testing.T) {
+	server, _ := newAuthServer(t)
+	firstFailure := performJSON(t, server, http.MethodPost, "/api/v1/auth/login", loginBody("wrong"), "")
+	if firstFailure.Code != platformapi.ErrorCodeInvalidCredentials {
+		t.Fatalf("首次凭据错误应直接返回凭据错误，实际 code=%d", firstFailure.Code)
 	}
-	return map[string]any{"username": "admin", "password": password, "tenantCode": "default", "captchaKey": key, "captchaCode": match[1]}
+
+	missing := performJSON(t, server, http.MethodPost, "/api/v1/auth/login", loginBody("admin123"), "")
+	if missing.Code != platformapi.ErrorCodeInvalidCaptcha {
+		t.Fatalf("触发后缺少滑块挑战应失败，实际 code=%d", missing.Code)
+	}
+
+	challenge := getSliderChallenge(t, server)
+	body := loginBody("admin123")
+	body["sliderChallengeId"] = nestedString(t, challenge, "data", "challengeId")
+	body["sliderOffset"] = sliderEndOffset(t, challenge)
+	assertSuccess(t, performJSON(t, server, http.MethodPost, "/api/v1/auth/login", body, ""))
+}
+
+func TestSliderChallengeIsBoundToLoginContextAndConsumed(t *testing.T) {
+	server, _ := newAuthServer(t)
+	performJSON(t, server, http.MethodPost, "/api/v1/auth/login", loginBody("wrong"), "")
+	challenge := getSliderChallenge(t, server)
+	body := loginBody("admin123")
+	body["sliderChallengeId"] = nestedString(t, challenge, "data", "challengeId")
+	body["sliderOffset"] = sliderEndOffset(t, challenge) - 20
+	invalid := performJSON(t, server, http.MethodPost, "/api/v1/auth/login", body, "")
+	if invalid.Code != platformapi.ErrorCodeInvalidCaptcha {
+		t.Fatalf("错误位置应被拒绝，实际 code=%d", invalid.Code)
+	}
+
+	body["sliderOffset"] = sliderEndOffset(t, challenge)
+	reused := performJSON(t, server, http.MethodPost, "/api/v1/auth/login", body, "")
+	if reused.Code != platformapi.ErrorCodeInvalidCaptcha {
+		t.Fatalf("滑块挑战重复使用应失败，实际 code=%d", reused.Code)
+	}
+}
+
+func loginBody(password string) map[string]any {
+	return map[string]any{"username": "admin", "password": password, "tenantCode": "default"}
+}
+
+func getSliderChallenge(t *testing.T, server http.Handler) envelope {
+	t.Helper()
+	challenge := performJSON(t, server, http.MethodGet, "/api/v1/auth/captcha?username=admin&tenantCode=default", nil, "")
+	assertSuccess(t, challenge)
+	if nestedString(t, challenge, "data", "challengeId") == "" {
+		t.Fatal("滑块挑战缺少标识")
+	}
+	return challenge
+}
+
+func sliderEndOffset(t *testing.T, challenge envelope) int {
+	t.Helper()
+	trackWidth, ok := challenge.Data["trackWidth"].(float64)
+	if !ok {
+		t.Fatalf("滑块挑战缺少轨道宽度: %#v", challenge.Data["trackWidth"])
+	}
+	thumbWidth, ok := challenge.Data["thumbWidth"].(float64)
+	if !ok {
+		t.Fatalf("滑块挑战缺少滑块宽度: %#v", challenge.Data["thumbWidth"])
+	}
+	return int(trackWidth - thumbWidth)
 }
 
 func TestCurrentUserRequiresBearerToken(t *testing.T) {
@@ -129,7 +187,8 @@ func newAuthServer(t *testing.T) (http.Handler, *fakeRepository) {
 			Email: "admin@example.com", FullName: "管理员", Role: "SYSTEM_ADMIN", Status: "active",
 			TenantCode: "default", TenantName: "默认租户", TenantStatus: "active",
 		},
-		tokens: make(map[string]auth.RefreshToken),
+		tokens:            make(map[string]auth.RefreshToken),
+		activeTenantCount: 1,
 	}
 	tokens, err := auth.NewTokenManager("test-jwt-secret-long-enough", "induforge", "induforge-api", time.Hour, 24*time.Hour)
 	if err != nil {
@@ -200,12 +259,17 @@ func nestedString(t *testing.T, response envelope, keys ...string) string {
 }
 
 type fakeRepository struct {
-	user   auth.User
-	tokens map[string]auth.RefreshToken
+	user              auth.User
+	tokens            map[string]auth.RefreshToken
+	activeTenantCount int64
+}
+
+func (r *fakeRepository) CountActiveTenants(context.Context) (int64, error) {
+	return r.activeTenantCount, nil
 }
 
 func (r *fakeRepository) FindLoginUser(_ context.Context, username, tenantCode string) (auth.User, error) {
-	if username != r.user.Username || tenantCode != r.user.TenantCode {
+	if username != r.user.Username || (tenantCode != "" && tenantCode != r.user.TenantCode) {
 		return auth.User{}, auth.ErrInvalidCredentials
 	}
 	return r.user, nil

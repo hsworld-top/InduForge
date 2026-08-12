@@ -12,7 +12,7 @@ import (
 
 var (
 	ErrNotFound      = errors.New("工程不存在")
-	ErrAlreadyExists = errors.New("工程编码或名称已存在")
+	ErrAlreadyExists = errors.New("工程编码已存在")
 	ErrTagNotFound   = errors.New("工程标签不存在")
 	ErrGroupNotFound = errors.New("工程分组不存在")
 )
@@ -78,7 +78,6 @@ type ListFilter struct {
 }
 type ProjectInput struct {
 	Name        *string
-	Code        *string
 	Description *string
 	Icon        *string
 	Visibility  *string
@@ -169,6 +168,8 @@ func (s *Service) Create(ctx context.Context, actor auth.User, input ProjectInpu
 		return Project{}, fmt.Errorf("工程名称不能为空")
 	}
 	item.ID = newID()
+	// 工程编码是系统内部稳定标识，由服务端生成，避免前端输入与重复校验耦合。
+	item.Code = generateProjectCode()
 	workspacePath, err := s.workspace.Initialize(item.ID)
 	if err != nil {
 		return Project{}, err
@@ -275,7 +276,7 @@ func (s *Service) Import(ctx context.Context, actor auth.User, name string, payl
 			files[key] = text
 		}
 	}
-	item := Project{ID: newID(), TenantID: actor.TenantID, Name: strings.TrimSpace(name), Visibility: "private", Status: "active"}
+	item := Project{ID: newID(), TenantID: actor.TenantID, Name: strings.TrimSpace(name), Code: generateProjectCode(), Visibility: "private", Status: "active"}
 	if item.Name == "" {
 		item.Name, _ = projectData["name"].(string)
 	}
@@ -400,9 +401,6 @@ func applyProjectInput(item *Project, input ProjectInput) {
 	if input.Name != nil {
 		item.Name = strings.TrimSpace(*input.Name)
 	}
-	if input.Code != nil {
-		item.Code = strings.TrimSpace(*input.Code)
-	}
 	if input.Description != nil {
 		item.Description = *input.Description
 	}
@@ -412,6 +410,10 @@ func applyProjectInput(item *Project, input ProjectInput) {
 	if input.Visibility != nil {
 		item.Visibility = *input.Visibility
 	}
+}
+
+func generateProjectCode() string {
+	return "PRJ-" + strings.ToUpper(strings.ReplaceAll(newID(), "-", ""))
 }
 func applyTagInput(item *Tag, input TagInput) {
 	if input.Name != nil {

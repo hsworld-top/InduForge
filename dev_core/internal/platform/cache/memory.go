@@ -31,6 +31,17 @@ func (m *Memory) Put(_ context.Context, key, value string, ttl time.Duration) er
 	return nil
 }
 
+func (m *Memory) Get(_ context.Context, key string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	item, exists := m.items[key]
+	if !exists || !m.now().Before(item.expiresAt) {
+		delete(m.items, key)
+		return "", ErrMiss
+	}
+	return item.value, nil
+}
+
 func (m *Memory) Take(_ context.Context, key string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -40,4 +51,11 @@ func (m *Memory) Take(_ context.Context, key string) (string, error) {
 		return "", ErrMiss
 	}
 	return item.value, nil
+}
+
+func (m *Memory) Delete(_ context.Context, key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.items, key)
+	return nil
 }

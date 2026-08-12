@@ -24,8 +24,8 @@ describe('authAPI', () => {
     const credentials = {
       username: 'tester',
       password: 'secret',
-      captchaKey: 'captcha-key',
-      captchaCode: '1234',
+      sliderChallengeId: 'challenge-id',
+      sliderOffset: 116,
       tenantCode: 'tenant-a',
     }
 
@@ -43,8 +43,8 @@ describe('authAPI', () => {
       username: 'tester',
       password: 'secret',
       tenantCode: 'tenant-a',
-      captchaKey: 'captcha-key',
-      captchaCode: '1234',
+      sliderChallengeId: 'challenge-id',
+      sliderOffset: 116,
     })
     expect(result).toEqual({
       code: 0,
@@ -61,5 +61,15 @@ describe('authAPI', () => {
 
     expect(getMock).toHaveBeenCalledTimes(1)
     expect(getMock).toHaveBeenCalledWith('/auth/config')
+  })
+
+  it('getCaptcha 应携带当前登录上下文', async () => {
+    getMock.mockResolvedValueOnce({ data: {} })
+
+    await authAPI.getCaptcha('tester', 'tenant-a')
+
+    expect(getMock).toHaveBeenCalledWith('/auth/captcha', {
+      params: { username: 'tester', tenantCode: 'tenant-a' },
+    })
   })
 })

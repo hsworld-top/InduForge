@@ -42,13 +42,13 @@ go build -o node_agent ./cmd/main.go
 
 ```yaml
 agent:
-  id: "node-001"
+  id: 'node-001'
   executor:
-    type: "process"  # process | docker | systemd
+    type: 'process' # process | docker | systemd
     process:
-      workDir: "/var/lib/node_agent/runtime"
-      logDir: "/var/log/node_agent/runtime"
-      binary: "runtime_engine"
+      workDir: '/var/lib/node_agent/runtime'
+      logDir: '/var/log/node_agent/runtime'
+      binary: 'runtime_engine'
 ```
 
 ### 4. 运行
@@ -62,6 +62,7 @@ agent:
 ```
 
 首次运行时，程序会：
+
 1. 自动生成默认配置文件（如果不存在）
 2. 引导您完成交互式配置（开机自启动、端口设置等）
 3. 启动后台服务进程
@@ -117,7 +118,7 @@ NodeAgent 提供了完整的 Web 管理界面，基于 Vue 3 开发，位于独�
 
 ```bash
 pnpm install
-pnpm dev:agent-front
+pnpm dev:node-agent-front
 ```
 
 前端默认在 `http://localhost:18604` 启动，并通过根目录 `.env` 的 `NODE_AGENT_PORT` 代理访问 NodeAgent API，默认后端地址是 `http://localhost:18103`。
@@ -176,11 +177,11 @@ curl -X POST http://127.0.0.1:18103/api/v1/projects/demo/start
 
 ```yaml
 executor:
-  type: "process"
+  type: 'process'
   process:
-    workDir: "/var/lib/node_agent/runtime"
-    logDir: "/var/log/node_agent/runtime"
-    binary: "runtime_engine"
+    workDir: '/var/lib/node_agent/runtime'
+    logDir: '/var/log/node_agent/runtime'
+    binary: 'runtime_engine'
 ```
 
 ### Docker 模式
@@ -189,11 +190,11 @@ executor:
 
 ```yaml
 executor:
-  type: "docker"
+  type: 'docker'
   docker:
     enabled: true
-    socket: "/var/run/docker.sock"
-    network: "node_agent"
+    socket: '/var/run/docker.sock'
+    network: 'node_agent'
 ```
 
 ### Systemd 模式（Linux）
@@ -202,10 +203,10 @@ executor:
 
 ```yaml
 executor:
-  type: "systemd"
+  type: 'systemd'
   systemd:
     enabled: true
-    unitTemplate: "/etc/systemd/system/node_agent_{project}.service"
+    unitTemplate: '/etc/systemd/system/node_agent_{project}.service'
 ```
 
 ## 故障排查
@@ -247,11 +248,10 @@ curl http://127.0.0.1:18103/api/v1/node/status
 使用以下命令构建：
 
 ```bash
-cd internal/web/static
-npm run build
+pnpm build:node-agent-front
 ```
 
-然后将构建产物复制到 `dist/` 目录。
+构建产物位于 `runtime/node_agent_front/dist/`；节点打包脚本会将其复制到 NodeAgent 静态资源目录。
 
 ## 许可证
 

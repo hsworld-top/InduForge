@@ -86,7 +86,7 @@ if not exist "%FRONTEND_DIR%" (
 
         REM 构建前端
         echo 构建前端...
-        call pnpm build:agent-front
+        call pnpm build:node-agent-front
 
         if %errorlevel% neq 0 (
             echo 错误: 前端构建失败！

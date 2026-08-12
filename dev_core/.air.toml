@@ -1,0 +1,27 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/dev_core.exe ./cmd/dev_core"
+bin = "./tmp/dev_core.exe"
+delay = 1000
+exclude_dir = ["tmp", "vendor", "tests"]
+exclude_file = []
+exclude_regex = ["_test.go"]
+include_dir = ["api", "cmd", "db", "internal"]
+include_ext = ["go", "json", "sql", "yaml", "yml"]
+kill_delay = "500ms"
+poll = false
+poll_interval = 500
+rerun = false
+send_interrupt = true
+stop_on_error = true
+
+[log]
+time = true
+
+[misc]
+clean_on_exit = true
+
+[screen]
+clear_on_rebuild = false

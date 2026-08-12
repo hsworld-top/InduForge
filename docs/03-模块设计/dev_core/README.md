@@ -8,7 +8,7 @@
 
 - HTTP：Chi + OpenAPI + oapi-codegen，统一前缀 `/api/v1`，健康检查 `/health`。
 - 数据库：PostgreSQL + `pgx/v5` + sqlc，只维护从零创建最终结构的建库基线。
-- 缓存：Redis，用于验证码、Token 吊销和节点在线 TTL。
+- 缓存：Redis，用于登录滑块挑战、Token 吊销和节点在线 TTL。
 - 对象存储：SeaweedFS S3，设计资源与 `.ifp` 工件使用独立桶。
 - 实时事件：Socket.IO v4 协议，路径 `/socket.io`，按认证用户的租户隔离房间。
 - 工程源码：`CODE_WORKSPACE_ROOT/{projectId}`，客户侧工程固定为 Vue 3 + JavaScript。
@@ -42,6 +42,6 @@ go test ./...
 go vet ./...
 ```
 
-根目录统一验证入口为 `pnpm go:test` 与 `pnpm typecheck`。
+根目录统一验证入口为 `pnpm test:core`、`pnpm lint:core` 与 `pnpm typecheck`。
 
-生产或离线安装使用镜像内的 `/app/dev_core init` 命令，只允许在空库中创建最终结构和默认管理员；已有业务表时不会自动迁移或修补。
+生产或离线安装使用镜像内的 `/app/dev_core init` 命令，只允许在空库中创建最终结构、默认租户、超级管理员和默认租户管理员；已有业务表时不会自动迁移或修补。

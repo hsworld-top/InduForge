@@ -117,14 +117,13 @@ Node 依赖由根目录 pnpm workspace 统一管理，只在仓库根目录执�
 Prettier 配置统一放在根目录 `.prettierrc.json`。ESLint 公共全局变量、忽略目录和基础规则放在根目录 `eslint.shared.mjs`；`dev_ide`、`datacenter`、`designer` 都从各自模块的 `eslint.config.*` 引入共享配置。
 
 ```powershell
-# 统一格式化三个前端工作区
-pnpm format
-
-# 统一执行 JS/Vue 工作区的 ESLint 修复
+# 检查格式、静态规则和默认测试（均不修改文件）
+pnpm format:check
 pnpm lint
+pnpm test
 
-# 统一执行 Go 模块测试
-pnpm go:test
+# 显式修复 lint 和格式问题
+pnpm fix
 ```
 
 ```powershell
@@ -159,8 +158,7 @@ Set-Location ..\..
 pnpm dev:core
 
 # 2. 启动数据域服务（新终端，可选）
-Set-Location .\data_service
-go run .\cmd
+pnpm dev:data
 
 # 3. 启动 IDE（新终端）
 pnpm dev:ide
@@ -172,7 +170,7 @@ pnpm dev:datacenter
 pnpm dev:designer
 
 # 6. 启动节点本地管理前端（新终端，可选）
-pnpm dev:agent-front
+pnpm dev:node-agent-front
 ```
 
 访问地址：
@@ -279,19 +277,7 @@ chore: 构建/工具链相关
 
 ```powershell
 # 构建所有前端应用
-Set-Location .\dev_ide
-pnpm build
-
-Set-Location ..\datacenter
-pnpm build
-
-Set-Location ..\designer
-pnpm build
-
-Set-Location ..\runtime\node_agent_front
-pnpm build
-
-Set-Location ..\..
+pnpm build:frontend
 ```
 
 ### Nginx 配置
@@ -308,16 +294,7 @@ Set-Location ..\..
 
 ### 后端部署
 
-```powershell
-Set-Location .\dev_core
-pnpm start
-```
-
-建议使用 PM2 进行进程管理：
-
-```powershell
-pm2 start src/index.js --name induforge-api
-```
+生产和离线环境通过 Docker 镜像与安装脚本交付，不使用历史 Node.js `pnpm start` 或 PM2 入口。具体流程以 `scripts/release/` 与 `scripts/offline/` 文档为准。
 
 ## 常见问题
 

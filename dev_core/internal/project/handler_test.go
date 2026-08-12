@@ -31,9 +31,19 @@ func TestProjectHTTPInterfaces(t *testing.T) {
 	groupID := dataID(t, group)
 	assertOK(t, call(t, handler, http.MethodGet, "/api/v1/projects/groups", nil, token))
 	assertOK(t, call(t, handler, http.MethodPut, "/api/v1/projects/groups/"+groupID, map[string]any{"name": "产线更新"}, token))
-	created := call(t, handler, http.MethodPost, "/api/v1/projects", map[string]any{"name": "演示工程", "code": "demo", "visibility": "private"}, token)
+	created := call(t, handler, http.MethodPost, "/api/v1/projects", map[string]any{"name": "演示工程", "code": "ignored", "visibility": "private"}, token)
 	assertOK(t, created)
+	if code := dataString(t, created, "code"); len(code) != len("PRJ-")+32 || code[:4] != "PRJ-" {
+		t.Fatalf("工程编码未由后端生成: %q", code)
+	}
 	projectID := dataID(t, created)
+	first := call(t, handler, http.MethodPost, "/api/v1/projects", map[string]any{"name": "未填编码工程一"}, token)
+	second := call(t, handler, http.MethodPost, "/api/v1/projects", map[string]any{"name": "未填编码工程二"}, token)
+	assertOK(t, first)
+	assertOK(t, second)
+	if dataString(t, first, "code") == dataString(t, second, "code") {
+		t.Fatal("工程编码必须唯一")
+	}
 	assertOK(t, call(t, handler, http.MethodPut, "/api/v1/projects/"+projectID+"/tags", map[string]any{"tagIds": []string{tagID}}, token))
 	assertOK(t, call(t, handler, http.MethodPut, "/api/v1/projects/"+projectID+"/group", map[string]any{"groupId": groupID}, token))
 	assertOK(t, call(t, handler, http.MethodPut, "/api/v1/projects/"+projectID, map[string]any{"name": "演示工程更新"}, token))
@@ -110,6 +120,18 @@ func dataID(t *testing.T, response envelope) string {
 	value, _ := data["id"].(string)
 	if value == "" {
 		t.Fatal("响应缺少 id")
+	}
+	return value
+}
+func dataString(t *testing.T, response envelope, key string) string {
+	t.Helper()
+	var data map[string]any
+	if err := json.Unmarshal(response.Data, &data); err != nil {
+		t.Fatal(err)
+	}
+	value, _ := data[key].(string)
+	if value == "" {
+		t.Fatalf("响应缺少 %s", key)
 	}
 	return value
 }

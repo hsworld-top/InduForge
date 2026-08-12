@@ -12,7 +12,7 @@ var (
 	ErrUnauthorized       = errors.New("未登录或登录已失效")
 	ErrForbidden          = errors.New("当前账号不可用")
 	ErrInvalidRefresh     = errors.New("刷新令牌无效或已过期")
-	ErrInvalidCaptcha     = errors.New("验证码错误或已过期")
+	ErrInvalidCaptcha     = errors.New("滑块验证错误或已过期")
 	ErrPermissionDenied   = errors.New("无权执行当前操作")
 	ErrNotFound           = errors.New("资源不存在")
 )
@@ -52,6 +52,7 @@ type RefreshToken struct {
 }
 
 type Repository interface {
+	CountActiveTenants(ctx context.Context) (int64, error)
 	FindLoginUser(ctx context.Context, username, tenantCode string) (User, error)
 	GetUser(ctx context.Context, userID string) (User, error)
 	UpdateLogin(ctx context.Context, userID, loginIP string) error
@@ -65,7 +66,9 @@ type Repository interface {
 
 type CaptchaStore interface {
 	Put(ctx context.Context, key, value string, ttl time.Duration) error
+	Get(ctx context.Context, key string) (string, error)
 	Take(ctx context.Context, key string) (string, error)
+	Delete(ctx context.Context, key string) error
 }
 
 type RevocationStore interface {

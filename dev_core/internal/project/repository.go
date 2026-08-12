@@ -79,7 +79,7 @@ func (r *PostgreSQLRepository) Create(ctx context.Context, item Project, actor a
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	queries := r.queries.WithTx(tx)
-	created, err := queries.CreateProject(ctx, dbsqlc.CreateProjectParams{ProjectID: projectUUID, TenantID: tenantUUID, Name: item.Name, Code: nullableText(item.Code), Description: nullableText(item.Description), Icon: nullableText(item.Icon), WorkspacePath: item.WorkspacePath, Visibility: item.Visibility, UserID: userUUID})
+	created, err := queries.CreateProject(ctx, dbsqlc.CreateProjectParams{ProjectID: projectUUID, TenantID: tenantUUID, Name: item.Name, Code: item.Code, Description: nullableText(item.Description), Icon: nullableText(item.Icon), WorkspacePath: item.WorkspacePath, Visibility: item.Visibility, UserID: userUUID})
 	if err != nil {
 		return Project{}, mapConstraintError(err)
 	}
@@ -111,7 +111,7 @@ func (r *PostgreSQLRepository) Update(ctx context.Context, item Project, actor a
 	if err != nil {
 		return Project{}, err
 	}
-	row, err := r.queries.UpdateProject(ctx, dbsqlc.UpdateProjectParams{Name: item.Name, Code: nullableText(item.Code), Description: nullableText(item.Description), Icon: nullableText(item.Icon), Visibility: item.Visibility, UserID: userUUID, ProjectID: projectUUID, TenantID: tenantUUID})
+	row, err := r.queries.UpdateProject(ctx, dbsqlc.UpdateProjectParams{Name: item.Name, Description: nullableText(item.Description), Icon: nullableText(item.Icon), Visibility: item.Visibility, UserID: userUUID, ProjectID: projectUUID, TenantID: tenantUUID})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Project{}, ErrNotFound
@@ -365,10 +365,10 @@ func (r *PostgreSQLRepository) SetGroup(ctx context.Context, tenantID, projectID
 }
 
 func projectFromModel(row dbsqlc.Project) Project {
-	return Project{ID: uuidString(row.ID), TenantID: uuidString(row.TenantID), Name: row.Name, Code: textString(row.Code), Description: textString(row.Description), Icon: textString(row.Icon), WorkspacePath: row.WorkspacePath, Status: row.Status, Visibility: row.Visibility, CreatedBy: uuidString(row.CreatedBy), UpdatedBy: uuidString(row.UpdatedBy), CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
+	return Project{ID: uuidString(row.ID), TenantID: uuidString(row.TenantID), Name: row.Name, Code: row.Code, Description: textString(row.Description), Icon: textString(row.Icon), WorkspacePath: row.WorkspacePath, Status: row.Status, Visibility: row.Visibility, CreatedBy: uuidString(row.CreatedBy), UpdatedBy: uuidString(row.UpdatedBy), CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
 }
 func projectFromListRow(row dbsqlc.ListProjectsRow) Project {
-	item := Project{ID: uuidString(row.ID), TenantID: uuidString(row.TenantID), Name: row.Name, Code: textString(row.Code), Description: textString(row.Description), Icon: textString(row.Icon), WorkspacePath: row.WorkspacePath, Status: row.Status, Visibility: row.Visibility, CreatedBy: uuidString(row.CreatedBy), CreatedByName: row.CreatedByName, UpdatedBy: uuidString(row.UpdatedBy), CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
+	item := Project{ID: uuidString(row.ID), TenantID: uuidString(row.TenantID), Name: row.Name, Code: row.Code, Description: textString(row.Description), Icon: textString(row.Icon), WorkspacePath: row.WorkspacePath, Status: row.Status, Visibility: row.Visibility, CreatedBy: uuidString(row.CreatedBy), CreatedByName: row.CreatedByName, UpdatedBy: uuidString(row.UpdatedBy), CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
 	if row.GroupID.Valid {
 		item.Group = &Group{ID: uuidString(row.GroupID), Name: textString(row.GroupName)}
 	}

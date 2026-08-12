@@ -21,6 +21,14 @@ func NewPostgreSQLRepository(pool *pgxpool.Pool) *PostgreSQLRepository {
 	return &PostgreSQLRepository{pool: pool, queries: dbsqlc.New(pool)}
 }
 
+func (r *PostgreSQLRepository) CountActiveTenants(ctx context.Context) (int64, error) {
+	count, err := r.queries.CountFilteredTenants(ctx, dbsqlc.CountFilteredTenantsParams{Status: "active"})
+	if err != nil {
+		return 0, fmt.Errorf("统计活跃租户失败: %w", err)
+	}
+	return count, nil
+}
+
 func (r *PostgreSQLRepository) FindLoginUser(ctx context.Context, username, tenantCode string) (User, error) {
 	if tenantCode != "" {
 		row, err := r.queries.FindAuthUserByTenantCode(ctx, dbsqlc.FindAuthUserByTenantCodeParams{Username: username, TenantCode: tenantCode})

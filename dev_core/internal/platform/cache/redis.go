@@ -38,12 +38,24 @@ func (r *Redis) Put(ctx context.Context, key, value string, ttl time.Duration) e
 	return r.client.Set(ctx, "captcha:"+key, value, ttl).Err()
 }
 
+func (r *Redis) Get(ctx context.Context, key string) (string, error) {
+	value, err := r.client.Get(ctx, "captcha:"+key).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", ErrMiss
+	}
+	return value, err
+}
+
 func (r *Redis) Take(ctx context.Context, key string) (string, error) {
 	value, err := r.client.GetDel(ctx, "captcha:"+key).Result()
 	if errors.Is(err, redis.Nil) {
 		return "", ErrMiss
 	}
 	return value, err
+}
+
+func (r *Redis) Delete(ctx context.Context, key string) error {
+	return r.client.Del(ctx, "captcha:"+key).Err()
 }
 
 func (r *Redis) Revoke(ctx context.Context, tokenID string, ttl time.Duration) error {

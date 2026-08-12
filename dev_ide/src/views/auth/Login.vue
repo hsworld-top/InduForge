@@ -260,52 +260,53 @@
               </div>
             </div>
 
-            <!-- 验证码 -->
+            <!-- 滑块验证 -->
             <div v-if="showCaptcha" class="space-y-2">
-              <label
-                for="captcha"
-                class="block text-sm font-semibold text-gray-700 dark:text-gray-300"
-              >
+              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300">
                 {{ $t('auth.captcha') }}
               </label>
-              <div class="flex space-x-3">
-                <div class="relative flex-1">
-                  <input
-                    id="captcha"
-                    v-model="form.captcha"
-                    type="text"
-                    class="input-field"
-                    :placeholder="$t('auth.captcha')"
-                  />
-                  <svg
-                    class="absolute right-3 top-3.5 h-5 w-5 input-icon"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                    />
-                  </svg>
-                </div>
-                <img
-                  v-if="captchaData?.image"
-                  :src="captchaData.image"
-                  :alt="$t('auth.captchaAlt')"
-                  class="h-12 w-28 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer captcha-img"
-                  @click="refreshCaptcha"
-                />
+              <div class="flex items-center gap-2">
                 <div
-                  v-else
-                  class="h-12 w-28 border border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center text-gray-400 text-sm cursor-pointer"
+                  ref="sliderTrack"
+                  class="slider-captcha-track"
+                  :class="{ 'is-dragging': sliderDragging, 'is-ready': sliderCompleted }"
+                  :style="sliderTrackStyle"
+                  @pointermove="moveSlider"
+                  @pointerup="endSlider"
+                  @pointercancel="endSlider"
+                >
+                  <div class="slider-captcha-progress" :style="sliderProgressStyle"></div>
+                  <button
+                    type="button"
+                    class="slider-captcha-thumb"
+                    :style="sliderThumbStyle"
+                    role="slider"
+                    :aria-label="$t('auth.captcha')"
+                    aria-valuemin="0"
+                    :aria-valuemax="sliderMaxOffset"
+                    :aria-valuenow="sliderOffset"
+                    @pointerdown="startSlider"
+                    @keydown="moveSliderByKeyboard"
+                  >
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m9 5 7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  class="slider-captcha-refresh"
+                  :title="$t('auth.refreshCaptcha')"
                   @click="refreshCaptcha"
                 >
-                  {{ $t('auth.captchaLoading') }}
-                </div>
+                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 0 0 4.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 0 1-15.357-2M15 15h-4" />
+                  </svg>
+                </button>
               </div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                {{ sliderCompleted ? $t('auth.sliderCaptchaReady') : $t('auth.sliderCaptchaHint') }}
+              </p>
             </div>
 
             <!-- 记住我选项 -->
@@ -329,7 +330,7 @@
             <!-- 登录按钮 -->
             <button
               type="submit"
-              :disabled="loading"
+              :disabled="loading || (showCaptcha && !sliderCompleted)"
               class="login-button group relative w-full flex justify-center py-4 px-4 border border-transparent text-sm font-semibold rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
             >
               <span v-if="loading" class="flex items-center">
@@ -426,13 +427,16 @@ export default {
       tenantCode: '',
       username: '',
       password: '',
-      captcha: '',
       rememberMe: false,
     })
 
     const loading = ref(false)
     const showCaptcha = ref(false)
-    const captchaData = ref(null) // { key, image, expireSeconds }
+    const captchaData = ref(null) // { challengeId, trackWidth, thumbWidth, expireSeconds }
+    const sliderTrack = ref(null)
+    const sliderOffset = ref(0)
+    const sliderCompleted = ref(false)
+    const sliderDragging = ref(false)
     const showPassword = ref(false) // 密码可见性
     let tenantConfigTimer = null
 
@@ -513,10 +517,77 @@ export default {
       showPassword.value = !showPassword.value
     }
 
+    const sliderTrackWidth = computed(() => captchaData.value?.trackWidth || 280)
+    const sliderThumbWidth = computed(() => captchaData.value?.thumbWidth || 44)
+    const sliderMaxOffset = computed(() => Math.max(0, sliderTrackWidth.value - sliderThumbWidth.value))
+    const sliderTrackStyle = computed(() => ({
+      '--slider-thumb-width': `${(sliderThumbWidth.value / sliderTrackWidth.value) * 100}%`,
+    }))
+    const sliderThumbStyle = computed(() => ({
+      left: `${(sliderOffset.value / Math.max(1, sliderTrackWidth.value)) * 100}%`,
+    }))
+    const sliderProgressStyle = computed(() => ({
+      width: `${((sliderOffset.value + sliderThumbWidth.value / 2) / sliderTrackWidth.value) * 100}%`,
+    }))
+
+    const resetSlider = () => {
+      sliderOffset.value = 0
+      sliderCompleted.value = false
+      sliderDragging.value = false
+    }
+
+    const setSliderOffset = (clientX) => {
+      const track = sliderTrack.value
+      if (!track) {
+        return
+      }
+      const rect = track.getBoundingClientRect()
+      if (!rect.width) {
+        return
+      }
+      const position = ((clientX - rect.left) / rect.width) * sliderTrackWidth.value
+      sliderOffset.value = Math.round(
+        Math.min(sliderMaxOffset.value, Math.max(0, position - sliderThumbWidth.value / 2)),
+      )
+      sliderCompleted.value = sliderOffset.value >= sliderMaxOffset.value
+    }
+
+    const startSlider = (event) => {
+      if (!captchaData.value?.challengeId) {
+        return
+      }
+      sliderDragging.value = true
+      event.currentTarget.setPointerCapture?.(event.pointerId)
+    }
+
+    const moveSlider = (event) => {
+      if (sliderDragging.value) {
+        setSliderOffset(event.clientX)
+      }
+    }
+
+    const endSlider = () => {
+      sliderDragging.value = false
+    }
+
+    const moveSliderByKeyboard = (event) => {
+      const moves = { ArrowLeft: -8, ArrowRight: 8, Home: -sliderMaxOffset.value, End: sliderMaxOffset.value }
+      if (!(event.key in moves)) {
+        return
+      }
+      event.preventDefault()
+      sliderOffset.value = Math.min(
+        sliderMaxOffset.value,
+        Math.max(0, sliderOffset.value + moves[event.key]),
+      )
+      sliderCompleted.value = sliderOffset.value >= sliderMaxOffset.value
+    }
+
     const refreshCaptcha = async () => {
+      resetSlider()
       try {
         const { authAPI } = await import('@/api')
-        const result = await authAPI.getCaptcha()
+        const result = await authAPI.getCaptcha(form.username, form.tenantCode || undefined)
         captchaData.value = result.data // 提取响应中的data部分
       } catch (error) {
         console.error('获取验证码失败:', error)
@@ -530,7 +601,7 @@ export default {
         return
       }
 
-      if (showCaptcha.value && !form.captcha) {
+      if (showCaptcha.value && (!sliderCompleted.value || !captchaData.value?.challengeId)) {
         ElMessage.warning(t('auth.pleaseInputCaptcha'))
         return
       }
@@ -544,8 +615,8 @@ export default {
         const loginParams = {
           username: form.username,
           password: form.password,
-          captchaKey: captchaData.value?.key || '',
-          captchaCode: form.captcha || '',
+          sliderChallengeId: showCaptcha.value ? captchaData.value?.challengeId : undefined,
+          sliderOffset: showCaptcha.value ? sliderOffset.value : undefined,
           tenantCode: form.tenantCode || undefined, // 多租户时可选
         }
 
@@ -583,7 +654,7 @@ export default {
         // 登录成功后清除验证码状态
         showCaptcha.value = false
         captchaData.value = null
-        form.captcha = ''
+        resetSlider()
 
         ElMessage.success(t('auth.loginSuccess'))
 
@@ -598,24 +669,23 @@ export default {
         const errorStatus = error?.response?.status
         const errorCode = getApiErrorCode(error)
         const isCaptchaError = errorCode === AUTH_INVALID_CAPTCHA_CODE
-        const isAuthBusinessError =
-          typeof errorCode === 'number' && errorCode >= 10000 && errorCode < 11000
+        const isCredentialError = errorCode === 10007
 
         if (errorStatus === 429) {
           ElMessage.error(t('auth.tooManyRequests'))
         } else {
           const fallbackMessage =
-            errorStatus === 401 || isAuthBusinessError
+            errorStatus === 401 || isCredentialError || isCaptchaError
               ? t('auth.invalidCredentials')
               : t('auth.retry')
           ElMessage.error(getApiErrorMessage(error, fallbackMessage))
 
-          // 登录失败后需要展示验证码；验证码错误时刷新验证码图片。
-          if (errorStatus === 401 || isAuthBusinessError || isCaptchaError) {
+          // 首次凭据错误后才显示滑块；滑块验证失败后必须获取一次新挑战。
+          if (isCredentialError || isCaptchaError) {
             if (!showCaptcha.value) {
               showCaptcha.value = true
               await refreshCaptcha()
-            } else if (isCaptchaError) {
+            } else if (isCaptchaError || errorCode === 10007) {
               await refreshCaptcha()
             }
           }
@@ -660,11 +730,31 @@ export default {
       },
     )
 
+    watch(
+      () => [form.username, form.tenantCode],
+      () => {
+        // 挑战与用户名、租户编码及客户端 IP 绑定，修改登录上下文后必须重新触发验证。
+        if (showCaptcha.value) {
+          showCaptcha.value = false
+          captchaData.value = null
+          resetSlider()
+        }
+      },
+    )
+
     return {
       form,
       loading,
       showCaptcha,
       captchaData,
+      sliderTrack,
+      sliderOffset,
+      sliderCompleted,
+      sliderDragging,
+      sliderMaxOffset,
+      sliderTrackStyle,
+      sliderThumbStyle,
+      sliderProgressStyle,
       showPassword,
       locale,
       backgroundImageUrl,
@@ -675,6 +765,10 @@ export default {
       languages,
       handleLogin,
       refreshCaptcha,
+      startSlider,
+      moveSlider,
+      endSlider,
+      moveSliderByKeyboard,
       toggleTheme,
       selectLanguage,
       togglePasswordVisibility,
@@ -733,14 +827,79 @@ input:focus + .input-icon {
   pointer-events: auto !important;
 }
 
-/* 验证码图片悬停效果 */
-.captcha-img {
-  transition: all 0.2s ease;
+.slider-captcha-track {
+  --slider-thumb-width: 16%;
+  position: relative;
+  flex: 1;
+  height: 48px;
+  overflow: hidden;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #eef2f5;
+  touch-action: none;
 }
 
-.captcha-img:hover {
-  transform: scale(1.02);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+.slider-captcha-progress {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(20, 184, 166, 0.18);
+  border-right: 1px solid rgba(13, 148, 136, 0.5);
+  pointer-events: none;
+}
+
+.slider-captcha-thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: var(--slider-thumb-width);
+  min-width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #0f766e;
+  border-radius: 5px;
+  color: #0f766e;
+  background: #ffffff;
+  cursor: grab;
+  touch-action: none;
+  transform: translateX(0);
+}
+
+.slider-captcha-thumb:active,
+.slider-captcha-track.is-dragging .slider-captcha-thumb {
+  cursor: grabbing;
+}
+
+.slider-captcha-thumb svg {
+  width: 18px;
+  height: 18px;
+}
+
+.slider-captcha-track.is-ready .slider-captcha-thumb {
+  color: #047857;
+  border-color: #047857;
+}
+
+.slider-captcha-refresh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  color: #4b5563;
+  background: transparent;
+}
+
+.slider-captcha-refresh:hover {
+  color: #0f766e;
+  border-color: #0f766e;
+}
+
+.slider-captcha-refresh svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* 记住我复选框样式 */
