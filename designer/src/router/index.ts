@@ -47,7 +47,7 @@ export function createDesignerRoutes(enableDebugRoute?: boolean) {
     {
       path: '/',
       name: 'Designer',
-      component: () => import('@/ui/shell/DesignerView.vue'),
+      component: () => import('@/ui/workspaces/DesignerWorkspaceView.vue'),
       meta: {
         title: '设计器',
         requiresAuth: true,
@@ -59,23 +59,13 @@ export function createDesignerRoutes(enableDebugRoute?: boolean) {
     routes.push({
       path: '/debug',
       name: 'DesignerDebug',
-      component: () => import('@/ui/shell/DesignerView.vue'),
+      component: () => import('@/ui/workspaces/DesignerWorkspaceView.vue'),
       meta: {
         title: '设计器调试',
         requiresAuth: false,
       },
     })
   }
-
-  routes.push({
-    path: '/preview',
-    name: 'Preview',
-    component: () => import('@/ui/editors/page/preview/PreviewView.vue'),
-    meta: {
-      title: '预览',
-      requiresAuth: true,
-    },
-  })
 
   return routes
 }
@@ -286,7 +276,7 @@ export function registerDesignerBeforeEachGuard(
         )
       }
 
-      if (!entrypointPlan.isDebugRoute && (to.name === 'Designer' || to.name === 'Preview')) {
+      if (!entrypointPlan.isDebugRoute && to.name === 'Designer') {
         applyProjectContextFromRouteQuery(to)
       }
 

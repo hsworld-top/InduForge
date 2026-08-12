@@ -5,6 +5,116 @@ export const RUNTIME_ACCESS_TABS = {
 
 export const RUNTIME_ROLE_CODE_PREFIX = 'PROJECT_'
 
+type AnyRecord = Record<string, any>
+type RuntimeStatus = 'active' | 'disabled'
+
+interface RuntimeRole extends AnyRecord {
+  id?: string
+  code?: string
+  name?: string
+  description?: string
+  status?: RuntimeStatus | string
+  isSystem?: boolean
+  bindingCount?: number
+  userCount?: number
+  binding_count?: number
+  grantCount?: number
+  grants?: unknown[]
+}
+
+interface RuntimeUser extends AnyRecord {
+  id?: string
+  username?: string
+  displayName?: string
+  status?: RuntimeStatus | string
+  roleIds?: string[]
+  roles?: RuntimeRole[]
+}
+
+interface RuntimeUserForm {
+  id: string
+  username: string
+  displayName: string
+  initialPassword: string
+  roleIds: string[]
+  status: RuntimeStatus
+}
+
+interface RuntimeRoleForm {
+  id: string
+  code: string
+  name: string
+  description: string
+  status: RuntimeStatus
+  isSystem: boolean
+}
+
+type RuntimeUserPayload = Record<string, unknown> & {
+  username?: string
+  displayName?: string
+  initialPassword?: string
+  roleIds?: string[]
+  status?: RuntimeStatus
+}
+
+type RuntimeRolePayload = Record<string, unknown> & {
+  name: string
+  code: string
+  description: string
+  status?: RuntimeStatus
+}
+
+type Translator = (key: string, params?: Record<string, unknown>) => string
+
+interface RuntimeAccessApi {
+  listRuntimeUsers: (projectId: string) => Promise<unknown>
+  createRuntimeUser: (projectId: string, payload: Record<string, unknown>) => Promise<unknown>
+  updateRuntimeUserStatus: (
+    projectId: string,
+    userId: string,
+    payload: Record<string, unknown>,
+  ) => Promise<unknown>
+  deleteRuntimeUser: (projectId: string, userId: string) => Promise<unknown>
+  updateRuntimeUserRoles: (
+    projectId: string,
+    userId: string,
+    payload: Record<string, unknown>,
+  ) => Promise<unknown>
+  resetRuntimeUserPassword: (
+    projectId: string,
+    userId: string,
+    payload: Record<string, unknown>,
+  ) => Promise<unknown>
+  listRuntimeRoles: (projectId: string) => Promise<unknown>
+  createRuntimeRole: (projectId: string, payload: Record<string, unknown>) => Promise<unknown>
+  updateRuntimeRole: (
+    projectId: string,
+    roleId: string,
+    payload: Record<string, unknown>,
+  ) => Promise<unknown>
+  deleteRuntimeRole: (projectId: string, roleId: string) => Promise<unknown>
+}
+
+interface RuntimeAccessDependencies {
+  visibleRef: { value: boolean }
+  projectRef: { value: { id?: string } | null | undefined }
+  t: Translator
+  api: RuntimeAccessApi
+  ref: (...args: any[]) => any
+  reactive: (...args: any[]) => any
+  computed: (...args: any[]) => any
+  watch: (...args: any[]) => any
+  message: {
+    error: (message: string) => unknown
+    warning: (message: string) => unknown
+    success: (message: string) => unknown
+  }
+  messageBox: {
+    confirm: (...args: any[]) => Promise<unknown>
+    prompt: (...args: any[]) => Promise<{ value: string }>
+  }
+}
+
 const RUNTIME_STATUS_META = {
   active: {
     value: 'active',
@@ -18,26 +128,26 @@ const RUNTIME_STATUS_META = {
   },
 }
 
-const trimText = (value) => (typeof value === 'string' ? value.trim() : '')
+const trimText = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
 
-const normalizeCode = (value) => trimText(value).replace(/\s+/g, '_').toUpperCase()
+const normalizeCode = (value: unknown) => trimText(value).replace(/\s+/g, '_').toUpperCase()
 
-export const isDefaultRuntimeAdminUser = (user) =>
+export const isDefaultRuntimeAdminUser = (user?: RuntimeUser | null) =>
   trimText(user?.username).toLowerCase() === 'admin'
 
-export const stripRuntimeRoleCodePrefix = (value) => {
+export const stripRuntimeRoleCodePrefix = (value: unknown) => {
   const normalizedCode = normalizeCode(value)
   return normalizedCode.startsWith(RUNTIME_ROLE_CODE_PREFIX)
     ? normalizedCode.slice(RUNTIME_ROLE_CODE_PREFIX.length)
     : normalizedCode
 }
 
-export const normalizeRuntimeRoleCode = (value) => {
+export const normalizeRuntimeRoleCode = (value: unknown) => {
   const suffix = stripRuntimeRoleCodePrefix(value)
   return suffix ? `${RUNTIME_ROLE_CODE_PREFIX}${suffix}` : ''
 }
 
-const normalizeIdList = (values) => {
+const normalizeIdList = (values: unknown): string[] => {
   if (!Array.isArray(values)) {
     return []
   }
@@ -45,12 +155,12 @@ const normalizeIdList = (values) => {
   return [...new Set(values.map((item) => trimText(item)).filter(Boolean))]
 }
 
-const normalizeCount = (value) => {
+const normalizeCount = (value: unknown) => {
   const parsed = Number(value)
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
 }
 
-const createEmptyUserForm = () => ({
+const createEmptyUserForm = (): RuntimeUserForm => ({
   id: '',
   username: '',
   displayName: '',
@@ -59,7 +169,7 @@ const createEmptyUserForm = () => ({
   status: 'active',
 })
 
-const createEmptyRoleForm = () => ({
+const createEmptyRoleForm = (): RuntimeRoleForm => ({
   id: '',
   code: '',
   name: '',
@@ -68,32 +178,38 @@ const createEmptyRoleForm = () => ({
   isSystem: false,
 })
 
-export const resolveRuntimeAccessStatusMeta = (status) =>
-  RUNTIME_STATUS_META[status] || RUNTIME_STATUS_META.disabled
+export const resolveRuntimeAccessStatusMeta = (status: unknown) =>
+  RUNTIME_STATUS_META[status as RuntimeStatus] || RUNTIME_STATUS_META.disabled
 
-const resolveOptionalRuntimeStatus = (status) => {
+const resolveOptionalRuntimeStatus = (status: unknown): RuntimeStatus | '' => {
   const normalized = trimText(status)
-  return normalized && RUNTIME_STATUS_META[normalized] ? normalized : ''
+  return normalized && normalized in RUNTIME_STATUS_META ? (normalized as RuntimeStatus) : ''
 }
 
-export const buildRuntimeRolePayload = (form = {}, options = {}) => {
+export const buildRuntimeRolePayload = (
+  form: Partial<RuntimeRoleForm> = {},
+  options: { includeStatus?: boolean } = {},
+): RuntimeRolePayload => {
   const { includeStatus = true } = options
-  const payload = {
+  const payload: RuntimeRolePayload = {
     name: trimText(form.name),
     code: normalizeRuntimeRoleCode(form.code),
     description: trimText(form.description),
   }
 
   if (includeStatus) {
-    payload.status = resolveRuntimeAccessStatusMeta(form.status).value
+    payload.status = resolveRuntimeAccessStatusMeta(form.status).value as RuntimeStatus
   }
 
   return payload
 }
 
-export const buildRuntimeUserPayload = (form = {}, options = {}) => {
+export const buildRuntimeUserPayload = (
+  form: Partial<RuntimeUserForm> = {},
+  options: { includeStatus?: boolean } = {},
+): RuntimeUserPayload => {
   const { includeStatus = true } = options
-  const payload = {}
+  const payload: RuntimeUserPayload = {}
 
   const username = trimText(form.username)
   if (username) {
@@ -123,7 +239,7 @@ export const buildRuntimeUserPayload = (form = {}, options = {}) => {
   return payload
 }
 
-export const buildRuntimeUserRoleBindingPayload = (form = {}) => ({
+export const buildRuntimeUserRoleBindingPayload = (form: Partial<RuntimeUserForm> = {}) => ({
   roleIds: normalizeIdList(form.roleIds),
 })
 
@@ -131,6 +247,10 @@ export const resolveRuntimeUserBindingPlan = ({
   selectedRoleIds = [],
   createdUserId = '',
   fallbackUserId = '',
+}: {
+  selectedRoleIds?: unknown
+  createdUserId?: unknown
+  fallbackUserId?: unknown
 }) => {
   const normalizedRoleIds = normalizeIdList(selectedRoleIds)
   if (normalizedRoleIds.length === 0) {
@@ -160,6 +280,12 @@ export const shouldApplyRuntimeAccessLoadResult = ({
   requestToken = 0,
   activeToken = 0,
   visible = false,
+}: {
+  requestProjectId?: unknown
+  activeProjectId?: unknown
+  requestToken?: number
+  activeToken?: number
+  visible?: boolean
 }) =>
   Boolean(
     visible &&
@@ -168,7 +294,7 @@ export const shouldApplyRuntimeAccessLoadResult = ({
     requestToken === activeToken,
   )
 
-export const isRuntimeAccessDialogCancelled = (error) => {
+export const isRuntimeAccessDialogCancelled = (error: any) => {
   if (error === 'cancel' || error === 'close') {
     return true
   }
@@ -177,21 +303,22 @@ export const isRuntimeAccessDialogCancelled = (error) => {
   return action === 'cancel' || action === 'close'
 }
 
-export const summarizeRuntimeGrantCount = (roleLike) => {
+export const summarizeRuntimeGrantCount = (roleLike: unknown) => {
   if (!roleLike || typeof roleLike !== 'object') {
     return 0
   }
 
-  const directCount = normalizeCount(roleLike.grantCount)
+  const roleRecord = roleLike as AnyRecord
+  const directCount = normalizeCount(roleRecord.grantCount)
   if (directCount > 0) {
     return directCount
   }
 
-  if (!Array.isArray(roleLike.grants)) {
+  if (!Array.isArray(roleRecord.grants)) {
     return 0
   }
 
-  return roleLike.grants.reduce((total, item) => {
+  return roleRecord.grants.reduce((total: number, item: unknown) => {
     if (item && typeof item === 'object' && 'count' in item) {
       return total + normalizeCount(item.count)
     }
@@ -200,14 +327,14 @@ export const summarizeRuntimeGrantCount = (roleLike) => {
   }, 0)
 }
 
-const unwrapPayload = (response) => response?.data ?? response ?? {}
+const unwrapPayload = (response: any): any => response?.data ?? response ?? {}
 
-const unwrapData = (response) => {
+const unwrapData = (response: any): any => {
   const payload = unwrapPayload(response)
   return payload?.data ?? payload
 }
 
-const extractList = (response, candidateKeys = []) => {
+const extractList = (response: any, candidateKeys: string[] = []): AnyRecord[] => {
   const payload = unwrapPayload(response)
   const data = unwrapData(response)
 
@@ -227,7 +354,7 @@ const extractList = (response, candidateKeys = []) => {
   return []
 }
 
-const extractSingle = (response, candidateKeys = []) => {
+const extractSingle = (response: any, candidateKeys: string[] = []): AnyRecord | null => {
   const payload = unwrapPayload(response)
   const data = unwrapData(response)
 
@@ -251,7 +378,7 @@ const extractSingle = (response, candidateKeys = []) => {
   return null
 }
 
-const normalizeRuntimeRoleRecord = (role = {}) => ({
+const normalizeRuntimeRoleRecord = (role: RuntimeRole = {}): RuntimeRole => ({
   ...role,
   id: role.id,
   code: trimText(role.code),
@@ -263,7 +390,7 @@ const normalizeRuntimeRoleRecord = (role = {}) => ({
   grantCount: summarizeRuntimeGrantCount(role),
 })
 
-const normalizeRuntimeUserRecord = (user = {}) => {
+const normalizeRuntimeUserRecord = (user: RuntimeUser = {}): RuntimeUser => {
   const roles = Array.isArray(user.roles) ? user.roles.filter(Boolean) : []
   const roleIds =
     normalizeIdList(user.roleIds) || normalizeIdList(roles.map((role) => role?.id || role?.roleId))
@@ -280,14 +407,14 @@ const normalizeRuntimeUserRecord = (user = {}) => {
   }
 }
 
-const getErrorMessage = (error, fallback) => {
+const getErrorMessage = (error: any, fallback: string): string => {
   const responseMessage =
     error?.response?.data?.msg || error?.response?.data?.error || error?.message
 
   return responseMessage || fallback
 }
 
-const applyUserForm = (target, user) => {
+const applyUserForm = (target: RuntimeUserForm, user: RuntimeUser | null = null) => {
   Object.assign(target, createEmptyUserForm(), {
     id: user?.id || '',
     username: user?.username || '',
@@ -299,7 +426,7 @@ const applyUserForm = (target, user) => {
   })
 }
 
-const applyRoleForm = (target, role) => {
+const applyRoleForm = (target: RuntimeRoleForm, role: RuntimeRole | null = null) => {
   Object.assign(target, createEmptyRoleForm(), {
     id: role?.id || '',
     code: stripRuntimeRoleCodePrefix(role?.code || ''),
@@ -310,7 +437,11 @@ const applyRoleForm = (target, role) => {
   })
 }
 
-const validateUserPayload = (payload, t, { requirePassword }) => {
+const validateUserPayload = (
+  payload: RuntimeUserPayload,
+  t: Translator,
+  { requirePassword }: { requirePassword: boolean },
+) => {
   if (!payload.username) {
     throw new Error(t('projectManagement.runtimeAccess.users.usernameRequired'))
   }
@@ -322,7 +453,7 @@ const validateUserPayload = (payload, t, { requirePassword }) => {
   }
 }
 
-const validateRolePayload = (payload, t) => {
+const validateRolePayload = (payload: RuntimeRolePayload, t: Translator) => {
   if (!payload.name) {
     throw new Error(t('projectManagement.runtimeAccess.roles.nameRequired'))
   }
@@ -331,7 +462,7 @@ const validateRolePayload = (payload, t) => {
   }
 }
 
-const createRuntimeUserPartialSuccessError = (type, cause = null) => ({
+const createRuntimeUserPartialSuccessError = (type: string, cause: unknown = null) => ({
   kind: 'runtime_user_partial_success',
   type,
   cause,
@@ -348,14 +479,14 @@ export const useProjectRuntimeAccessState = ({
   watch,
   message,
   messageBox,
-}) => {
+}: RuntimeAccessDependencies) => {
   const activeTab = ref(RUNTIME_ACCESS_TABS.USERS)
   const userLoading = ref(false)
   const roleLoading = ref(false)
   const userSubmitting = ref(false)
   const roleSubmitting = ref(false)
-  const runtimeUsers = ref([])
-  const runtimeRoles = ref([])
+  const runtimeUsers = ref([] as RuntimeUser[])
+  const runtimeRoles = ref([] as RuntimeRole[])
   const userEditorVisible = ref(false)
   const roleEditorVisible = ref(false)
   const userEditorMode = ref('create')
@@ -366,7 +497,7 @@ export const useProjectRuntimeAccessState = ({
   const runtimeRolesRequestToken = ref(0)
 
   const roleOptions = computed(() =>
-    runtimeRoles.value.map((role) => ({
+    runtimeRoles.value.map((role: RuntimeRole) => ({
       value: role.id,
       label: role.name || role.code || role.id,
       disabled: role.status === 'disabled',
@@ -375,7 +506,7 @@ export const useProjectRuntimeAccessState = ({
 
   const roleNameMap = computed(() => {
     const map = new Map()
-    runtimeRoles.value.forEach((role) => {
+    runtimeRoles.value.forEach((role: RuntimeRole) => {
       map.set(role.id, role.name || role.code || role.id)
     })
     return map
@@ -536,7 +667,8 @@ export const useProjectRuntimeAccessState = ({
 
   watch(
     () => [visibleRef.value, projectId.value],
-    ([visible, id], [previousVisible, previousProjectId] = []) => {
+    ([visible, id]: [boolean, string], previousValue: [boolean, string] | undefined) => {
+      const [previousVisible, previousProjectId] = previousValue ?? [false, '']
       if (!visible || !id) {
         resetRuntimeAccessState()
         activeTab.value = RUNTIME_ACCESS_TABS.USERS
@@ -560,7 +692,7 @@ export const useProjectRuntimeAccessState = ({
     userEditorVisible.value = true
   }
 
-  const openEditUserEditor = (user) => {
+  const openEditUserEditor = (user: RuntimeUser) => {
     userEditorMode.value = 'edit'
     applyUserForm(userForm, user)
     userEditorVisible.value = true
@@ -583,7 +715,7 @@ export const useProjectRuntimeAccessState = ({
       if (userEditorMode.value === 'create') {
         validateUserPayload(payload, t, { requirePassword: true })
       }
-    } catch (error) {
+    } catch (error: any) {
       message.warning(error.message)
       return
     }
@@ -609,8 +741,9 @@ export const useProjectRuntimeAccessState = ({
         if (roleBindingPayload.roleIds.length > 0 && !createdUser?.id) {
           const refreshedUsers = await loadRuntimeUsers()
           fallbackUserId =
-            refreshedUsers.find((user) => user.username === payload.username)?.id ||
-            runtimeUsers.value.find((user) => user.username === payload.username)?.id ||
+            refreshedUsers.find((user: RuntimeUser) => user.username === payload.username)?.id ||
+            runtimeUsers.value.find((user: RuntimeUser) => user.username === payload.username)
+              ?.id ||
             ''
         }
 
@@ -627,7 +760,7 @@ export const useProjectRuntimeAccessState = ({
               bindingPlan.userId,
               roleBindingPayload,
             )
-          } catch (error) {
+          } catch (error: any) {
             throw createRuntimeUserPartialSuccessError('role_binding_failed', error)
           }
         } else if (bindingPlan.type === 'partial_success_missing_user_id') {
@@ -646,7 +779,7 @@ export const useProjectRuntimeAccessState = ({
 
       userEditorVisible.value = false
       await Promise.all([loadRuntimeUsers(), loadRuntimeRoles()])
-    } catch (error) {
+    } catch (error: any) {
       if (error?.kind === 'runtime_user_partial_success') {
         userEditorVisible.value = false
         await Promise.all([loadRuntimeUsers(), loadRuntimeRoles()])
@@ -672,7 +805,7 @@ export const useProjectRuntimeAccessState = ({
     }
   }
 
-  const toggleRuntimeUserStatus = async (user) => {
+  const toggleRuntimeUserStatus = async (user: RuntimeUser) => {
     if (!projectId.value || !user?.id) {
       return
     }
@@ -693,7 +826,7 @@ export const useProjectRuntimeAccessState = ({
         }),
       )
       await loadRuntimeUsers()
-    } catch (error) {
+    } catch (error: any) {
       message.error(
         t('projectManagement.runtimeAccess.users.toggleStatusFailed', {
           message: getErrorMessage(error, t('common.error')),
@@ -702,7 +835,7 @@ export const useProjectRuntimeAccessState = ({
     }
   }
 
-  const deleteRuntimeUser = async (user) => {
+  const deleteRuntimeUser = async (user: RuntimeUser) => {
     if (!projectId.value || !user?.id) {
       return
     }
@@ -723,7 +856,7 @@ export const useProjectRuntimeAccessState = ({
       await api.deleteRuntimeUser(projectId.value, user.id)
       message.success(t('projectManagement.runtimeAccess.users.deleteSuccess'))
       await Promise.all([loadRuntimeUsers(), loadRuntimeRoles()])
-    } catch (error) {
+    } catch (error: any) {
       if (isRuntimeAccessDialogCancelled(error)) {
         return
       }
@@ -736,7 +869,7 @@ export const useProjectRuntimeAccessState = ({
     }
   }
 
-  const resetRuntimeUserPassword = async (user) => {
+  const resetRuntimeUserPassword = async (user: RuntimeUser) => {
     if (!projectId.value || !user?.id) {
       return
     }
@@ -750,7 +883,7 @@ export const useProjectRuntimeAccessState = ({
         {
           inputType: 'password',
           inputPlaceholder: t('projectManagement.runtimeAccess.users.inputInitialPassword'),
-          inputValidator(inputValue) {
+          inputValidator(inputValue: string) {
             return trimText(inputValue)
               ? true
               : t('projectManagement.runtimeAccess.users.passwordRequired')
@@ -762,7 +895,7 @@ export const useProjectRuntimeAccessState = ({
         newPassword: trimText(value),
       })
       message.success(t('projectManagement.runtimeAccess.users.resetPasswordSuccess'))
-    } catch (error) {
+    } catch (error: any) {
       if (isRuntimeAccessDialogCancelled(error)) {
         return
       }
@@ -781,7 +914,7 @@ export const useProjectRuntimeAccessState = ({
     roleEditorVisible.value = true
   }
 
-  const openEditRoleEditor = (role) => {
+  const openEditRoleEditor = (role: RuntimeRole) => {
     roleEditorMode.value = 'edit'
     applyRoleForm(roleForm, role)
     roleEditorVisible.value = true
@@ -802,7 +935,7 @@ export const useProjectRuntimeAccessState = ({
 
     try {
       validateRolePayload(payload, t)
-    } catch (error) {
+    } catch (error: any) {
       message.warning(error.message)
       return
     }
@@ -819,7 +952,7 @@ export const useProjectRuntimeAccessState = ({
 
       roleEditorVisible.value = false
       await Promise.all([loadRuntimeRoles(), loadRuntimeUsers()])
-    } catch (error) {
+    } catch (error: any) {
       message.error(
         t('projectManagement.runtimeAccess.roles.saveFailed', {
           message: getErrorMessage(error, t('common.error')),
@@ -830,7 +963,7 @@ export const useProjectRuntimeAccessState = ({
     }
   }
 
-  const deleteRuntimeRole = async (role) => {
+  const deleteRuntimeRole = async (role: RuntimeRole) => {
     if (!projectId.value || !role?.id) {
       return
     }
@@ -851,7 +984,7 @@ export const useProjectRuntimeAccessState = ({
       await api.deleteRuntimeRole(projectId.value, role.id)
       message.success(t('projectManagement.runtimeAccess.roles.deleteSuccess'))
       await Promise.all([loadRuntimeRoles(), loadRuntimeUsers()])
-    } catch (error) {
+    } catch (error: any) {
       if (isRuntimeAccessDialogCancelled(error)) {
         return
       }
@@ -864,7 +997,7 @@ export const useProjectRuntimeAccessState = ({
     }
   }
 
-  const resolveUserRoleNames = (user) => {
+  const resolveUserRoleNames = (user: RuntimeUser) => {
     const ids = normalizeIdList(user?.roleIds)
     if (ids.length > 0) {
       return ids.map((id) => roleNameMap.value.get(id) || id)
@@ -877,12 +1010,12 @@ export const useProjectRuntimeAccessState = ({
     return []
   }
 
-  const upsertRuntimeUser = (response) => {
+  const upsertRuntimeUser = (response: unknown) => {
     const user = extractSingle(response, ['runtimeUser', 'user'])
     return user ? normalizeRuntimeUserRecord(user) : null
   }
 
-  const upsertRuntimeRole = (response) => {
+  const upsertRuntimeRole = (response: unknown) => {
     const role = extractSingle(response, ['runtimeRole', 'role'])
     return role ? normalizeRuntimeRoleRecord(role) : null
   }

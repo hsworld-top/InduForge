@@ -6,11 +6,20 @@ import type {
   ProjectVisibility,
 } from '@/api/project.api'
 import type {
+  ProjectOverviewCompositeFilters,
   ProjectOverviewFiltersState,
   ProjectOverviewGroupContext,
   ProjectOverviewPaginationState,
   ProjectOverviewQueryParams,
 } from './project-overview.types'
+
+interface ProjectOverviewFiltersInput {
+  search?: unknown
+  composite?: Partial<Record<keyof ProjectOverviewCompositeFilters, unknown>> | null
+  tagIds?: unknown
+  sortBy?: unknown
+  sortOrder?: unknown
+}
 
 const DEFAULT_PAGE = 1
 const DEFAULT_LIMIT = 20
@@ -120,9 +129,9 @@ export const normalizeProjectOverviewGroupContext = (
 })
 
 export const normalizeProjectOverviewFilters = (
-  candidate: Partial<ProjectOverviewFiltersState> = {},
+  candidate: ProjectOverviewFiltersInput = {},
 ): ProjectOverviewFiltersState => {
-  const composite = candidate.composite || {}
+  const composite = candidate.composite ?? {}
 
   return {
     search: normalizeTextValue(candidate.search),
@@ -146,7 +155,7 @@ export const buildProjectOverviewQueryParams = ({
   pagination,
   groupContext,
 }: {
-  filters: Partial<ProjectOverviewFiltersState>
+  filters: ProjectOverviewFiltersInput
   pagination: Pick<ProjectOverviewPaginationState, 'page' | 'limit'>
   groupContext?: Partial<ProjectOverviewGroupContext> | null
 }): ProjectOverviewQueryParams => {

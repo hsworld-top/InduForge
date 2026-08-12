@@ -25,7 +25,6 @@ ENV_FILE="$PACKAGE_ROOT/.env"
 COMPOSE_FILE="$PACKAGE_ROOT/scripts/docker/docker-compose.offline.yml"
 IMAGE_DIR="$PACKAGE_ROOT/scripts/docker/images"
 META_CONTAINER="induforge-meta-store"
-CONTROL_CONTAINER="induforge-control"
 
 require_command() {
   local command_name="$1"
@@ -168,10 +167,17 @@ enable_timeseries_extension() {
 }
 
 init_control_schema() {
-  # 控制面镜像内已经包含 dev_core 的数据库初始化脚本和生产依赖。
-  # 这里在数据库可用后显式执行一次，确保正式安装后核心表和默认管理员数据存在。
+  local compose
+  compose="$(compose_command)"
+
+  # 使用 Go 控制面的安装命令创建空库最终基线和默认管理员，然后恢复正式服务。
   echo "初始化控制面数据库结构..."
-  docker exec "$CONTROL_CONTAINER" node scripts/bootstrap/init-core-database.js init
+  # shellcheck disable=SC2086
+  $compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" stop control >/dev/null 2>&1 || true
+  # shellcheck disable=SC2086
+  $compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" run --rm control init
+  # shellcheck disable=SC2086
+  $compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d control
 }
 
 init_infra() {

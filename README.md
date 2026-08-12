@@ -68,7 +68,7 @@ InduForge 是一个面向工业互联网场景的多模块单仓低代码平台�
 
 ## 当前模块现状
 
-- `dev_core/`：平台控制面后端，负责认证、工程管理、发布部署、节点调度和聚合 API。
+- `dev_core/`：Go 平台控制面后端，负责认证、工程管理、发布部署、节点调度和聚合 API。
 - `data_service/`：平台侧与开发态数据域服务，负责连接、查询、数据点、协议接入、计算与预览会话。
 - `dev_ide/`：平台管理与运维前端。
 - `datacenter/`：数据接入、查询管理与数据语义建模前端。
@@ -112,7 +112,7 @@ InduForge 是一个面向工业互联网场景的多模块单仓低代码平台�
 pnpm install
 ```
 
-Node 依赖由根目录 pnpm workspace 统一管理，只在仓库根目录执行 `pnpm install`，并只提交根目录 `pnpm-lock.yaml`。pnpm 可能会在各 workspace 子目录生成 `node_modules/` 链接或提升目录，这是安装产物，不表示子项目独立安装；不要在 `dev_core/`、`dev_ide/`、`datacenter/`、`designer/`、`runtime/node_agent_front/` 下单独执行 `pnpm install`。
+Node 依赖由根目录 pnpm workspace 统一管理，只在仓库根目录执行 `pnpm install`，并只提交根目录 `pnpm-lock.yaml`。pnpm 可能会在各 workspace 子目录生成 `node_modules/` 链接或提升目录，这是安装产物，不表示子项目独立安装；不要在 `dev_ide/`、`datacenter/`、`designer/`、`runtime/node_agent_front/` 下单独执行 `pnpm install`。
 
 Prettier 配置统一放在根目录 `.prettierrc.json`。ESLint 公共全局变量、忽略目录和基础规则放在根目录 `eslint.shared.mjs`；`dev_ide`、`datacenter`、`designer` 都从各自模块的 `eslint.config.*` 引入共享配置。
 
@@ -150,7 +150,7 @@ Set-Location ..\..
 
 该脚本只启动基础设施容器，创建 `if_core`、`if_data`、`if_dev_data`，并为开发态数据域库启用时序扩展；不会安装 Node 依赖，也不会启动 `dev_core`、`data_service` 或前端项目。
 
-控制面和设计中心长期共用 `dev_core` 与 `if_core`，不再创建或预留 `if_design`。控制面数据库 bootstrap 资产位于 `dev_core/scripts/bootstrap/`，开发人员不需要手动执行 `db:init` 或 `db:reset`。
+控制面和设计中心长期共用 `dev_core` 与 `if_core`，不再创建或预留 `if_design`。控制面最终结构基线位于 `dev_core/db/schema/core-schema.sql`，开发环境由服务启动同步空库，生产和离线安装由镜像内 `dev_core init` 命令初始化。
 
 ### 启动开发服务器
 
@@ -194,9 +194,11 @@ pnpm dev:agent-front
 
 ```
 InduForge/
-├── dev_core/           # 后端 API 服务
-│   ├── src/            # 源代码
-│   └── scripts/        # 控制面数据库 bootstrap 等内部脚本
+├── dev_core/      # Go 后端 API 服务
+│   ├── cmd/            # 命令入口
+│   ├── internal/       # 内部领域实现
+│   ├── db/             # 数据库最终结构基线
+│   └── api/            # OpenAPI 契约
 ├── data_service/       # 平台侧与开发态数据域服务（Go）
 │   ├── cmd/            # 启动入口
 │   ├── internal/       # 内部领域实现

@@ -26,6 +26,7 @@ $imageDir = Join-Path $packageDir "scripts/docker/images"
 $requiredImages = @(
   "induforge/edge:latest",
   "induforge/control:latest",
+  "induforge/designer-code-server:4.131.0-node22-pnpm10.19.0",
   "induforge/data:latest",
   "induforge/meta-store:latest",
   "induforge/cache-store:latest",

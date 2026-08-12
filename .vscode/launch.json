@@ -15,46 +15,14 @@
       }
     },
     {
-      "name": "启动后端服务 (Dev Core)",
-      "type": "node",
+      "name": "调试 Go 控制面 (Dev Core)",
+      "type": "go",
       "request": "launch",
-      "program": "${workspaceFolder}/dev_core/src/index.js",
+      "mode": "debug",
+      "program": "${workspaceFolder}/dev_core/cmd/dev_core",
       "cwd": "${workspaceFolder}/dev_core",
-      "env": {
-        "NODE_ENV": "development"
-      },
       "envFile": "${workspaceFolder}/.env",
-      "console": "integratedTerminal",
-      "restart": true,
-      "runtimeExecutable": "node",
-      "skipFiles": ["<node_internals>/**"],
-      "outputCapture": "std"
-    },
-    {
-      "name": "调试后端服务 (使用 nodemon)",
-      "type": "node",
-      "request": "launch",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["run", "dev"],
-      "cwd": "${workspaceFolder}/dev_core",
-      "env": {
-        "NODE_ENV": "development"
-      },
-      "envFile": "${workspaceFolder}/.env",
-      "console": "integratedTerminal",
-      "restart": true,
-      "skipFiles": ["<node_internals>/**"],
-      "outputCapture": "std"
-    },
-    {
-      "name": "附加到后端进程",
-      "type": "node",
-      "request": "attach",
-      "port": 9229,
-      "restart": true,
-      "localRoot": "${workspaceFolder}/dev_core",
-      "remoteRoot": "${workspaceFolder}/dev_core",
-      "skipFiles": ["<node_internals>/**"]
+      "console": "integratedTerminal"
     },
     {
       "name": "启动 IDE 前端 (pnpm dev)",

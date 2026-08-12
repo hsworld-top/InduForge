@@ -87,17 +87,6 @@ export function shouldSyncEditorUiForPath(pathname: string): boolean {
 }
 
 /**
- * 应用级 i18n locale 在 preview 路由下回退到默认值，避免继承编辑器壳层语言状态。
- */
-export function resolveAppLocaleForPath(
-  pathname: string,
-  editorLocale: EditorLocale,
-  fallbackLocale: EditorLocale = 'zh',
-): EditorLocale {
-  return shouldSyncEditorUiForPath(pathname) ? editorLocale : fallbackLocale
-}
-
-/**
  * 预览路由下 Element Plus locale 使用应用级兜底值，避免继承编辑器壳层状态。
  */
 export function resolveScopedLocaleForPath<T>(

@@ -1,20 +1,28 @@
-FROM node:22-alpine
+FROM golang:1.26-alpine AS builder
 
-ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+ARG GOPROXY=https://goproxy.cn,direct
+ENV GOPROXY=${GOPROXY}
+
+WORKDIR /src
+
+COPY dev_core/go.mod dev_core/go.sum ./
+RUN go mod download
+
+COPY dev_core ./
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/dev_core ./cmd/dev_core
+
+FROM alpine:3.23
+
+RUN addgroup -g 1000 -S induforge && adduser -u 1000 -S induforge -G induforge \
+    && mkdir -p /var/lib/induforge/workspaces \
+    && chown -R induforge:induforge /var/lib/induforge
 
 WORKDIR /app
+COPY --from=builder /out/dev_core /app/dev_core
 
-RUN npm install -g pnpm@10.19.0 --registry=https://registry.npmmirror.com
-RUN pnpm config set registry https://registry.npmmirror.com
-
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
-COPY dev_core/package.json ./dev_core/package.json
-RUN pnpm install --filter dev_core --prod --frozen-lockfile
-
-COPY dev_core ./dev_core
-
+ENV DEV_CORE_ADDR=:18101
+ENV CODE_WORKSPACE_ROOT=/var/lib/induforge/workspaces
 EXPOSE 18101
 
-WORKDIR /app/dev_core
-
-CMD ["node", "src/index.js"]
+USER induforge
+ENTRYPOINT ["/app/dev_core"]

@@ -69,7 +69,7 @@
 - Unix 命令不可用时，改用 PowerShell。
 - Node 模块统一使用 pnpm。
 - Node 依赖由根目录 pnpm workspace 统一管理，只在仓库根目录执行 `pnpm install`，只提交根目录 `pnpm-lock.yaml`，不要在子项目目录单独安装依赖。pnpm 在 workspace 子目录生成的 `node_modules/` 属于安装产物，不代表子项目独立安装。
-- Prettier 配置统一维护在根目录；ESLint 公共全局变量、忽略目录和基础规则统一维护在根目录 `eslint.shared.mjs`。`dev_core`、`dev_ide`、`datacenter`、`designer`、`runtime/node_agent_front` 都从各自模块的 `eslint.config.*` 引入共享配置。
+- Prettier 配置统一维护在根目录；ESLint 公共全局变量、忽略目录和基础规则统一维护在根目录 `eslint.shared.mjs`。`dev_ide`、`datacenter`、`designer`、`runtime/node_agent_front` 都从各自模块的 `eslint.config.*` 引入共享配置。
 - 根目录统一入口：`pnpm format`、`pnpm lint`、`pnpm typecheck`、`pnpm go:test`。子模块脚本仅作为根 workspace 调度入口，不要求开发人员进入子目录安装依赖。
 - Go 模块遵循 Makefile 或 go 命令。
 - 统一使用根目录 `.env`。
@@ -92,8 +92,8 @@
 - `scripts/dev/init-linux.sh` 只检测 Docker、生成 `.env`、启动开发基础设施容器、创建 `if_core`/`if_data`/`if_dev_data` 并启用开发态时序扩展。
 - 开发初始化脚本不安装 Node 依赖，不启动 `dev_core`、`data_service` 或前端项目。
 - `dev_core` 开发环境通过 `DB_AUTO_SCHEMA_SYNC=true` 在启动时同步 `if_core` 表结构和默认数据。
-- 控制面数据库 bootstrap 文件位于 `dev_core/scripts/bootstrap/`，结构 SQL 位于 `dev_core/scripts/bootstrap/sql/core-schema.sql`。
-- 不再使用 `db:init`、`db:reset` 或 `dev_core/database/` 作为日常入口。
+- 控制面最终结构基线位于 `dev_core/db/schema/core-schema.sql`。
+- 不再使用 Node.js 版 `dev_core` 的数据库脚本作为日常入口。
 - 生产/离线环境保持 `DB_AUTO_SCHEMA_SYNC=false`，数据库结构只允许安装阶段通过安装脚本初始化。
 - 测试打包入口是 `scripts/release/build-offline-package-linux.sh`，目标安装入口是 `scripts/offline/install.sh` / `scripts/offline/install.ps1`。
 - 离线镜像缓存目录是 `scripts/docker/images/`；镜像 tar 不提交 Git。
@@ -139,7 +139,7 @@ YYYY-MM-DD HH:mm:ss
 
 ## 目录
 
-- `dev_core/`：平台控制面后端与发布部署聚合能力。
+- `dev_core/`：Go 平台控制面后端与发布部署聚合能力。
 - `data_service/`：平台侧与开发态数据域服务。
 - `collector/`：采集调试代理、运行采集器共享契约与工业协议适配器。
 - `dev_ide/`：平台管理与运维前端。

@@ -736,6 +736,14 @@ func mountDataRoutes(mux *http.ServeMux, opts options) {
 
 	if opts.dataPointHandler != nil {
 		mux.Handle(
+			"GET /api/v1/data/projects/{projectId}/datapoints/development-contract",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:read")(
+					middleware.ErrorHandler(opts.dataPointHandler.DevelopmentContract),
+				),
+			),
+		)
+		mux.Handle(
 			"GET /api/v1/data/projects/{projectId}/datapoints",
 			middleware.Authenticate(opts.jwtValidator)(
 				middleware.RequireCapability("project:read")(

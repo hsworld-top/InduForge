@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createEditorUiStore, getEditorUiStore } from './editor-ui-store'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import en from 'element-plus/es/locale/lang/en'
-import { i18n } from '@/i18n'
 const store: Record<string, string> = {}
 
 function stubStorage() {
@@ -25,7 +24,6 @@ describe('editor-ui-store', () => {
     vi.unstubAllGlobals()
     document.documentElement.className = ''
     document.documentElement.removeAttribute('data-theme')
-    i18n.global.locale.value = 'zh'
     Object.keys(store).forEach((key) => delete store[key])
   })
 
@@ -40,7 +38,6 @@ describe('editor-ui-store', () => {
     expect(ui.theme.value).toBe('dark')
     expect(ui.locale.value).toBe('en')
     expect(ui.elementLocale.value).toBe(en)
-    expect(i18n.global.locale.value).toBe('en')
   })
 
   it('非法输入会固定回退到默认值', () => {
@@ -54,7 +51,6 @@ describe('editor-ui-store', () => {
     expect(ui.theme.value).toBe('light')
     expect(ui.locale.value).toBe('zh')
     expect(ui.elementLocale.value).toBe(zhCn)
-    expect(i18n.global.locale.value).toBe('zh')
   })
 
   it('切换主题时只更新 DOM，不写 designer 专属缓存', () => {
@@ -69,7 +65,7 @@ describe('editor-ui-store', () => {
     expect(Object.keys(store)).toEqual([])
   })
 
-  it('切换语言时不写 designer 专属缓存，但会更新 Element Plus locale', () => {
+  it('切换语言时不写 designer 专属缓存，并更新 Element Plus locale', () => {
     stubStorage()
 
     const ui = createEditorUiStore()
@@ -78,7 +74,6 @@ describe('editor-ui-store', () => {
 
     expect(ui.locale.value).toBe('en')
     expect(ui.elementLocale.value).toBe(en)
-    expect(i18n.global.locale.value).toBe('en')
     expect(Object.keys(store)).toEqual([])
   })
 
@@ -111,6 +106,5 @@ describe('editor-ui-store', () => {
 
     expect(second.theme.value).toBe('dark')
     expect(second.locale.value).toBe('en')
-    expect(i18n.global.locale.value).toBe('en')
   })
 })

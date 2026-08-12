@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   parseRuntimeSettings,
-  resolveAppLocaleForPath,
   resolveRuntimeRouteSyncPlan,
   resolveScopedLocaleForPath,
   shouldSyncEditorUiForPath,
@@ -21,12 +20,6 @@ describe('runtime-settings', () => {
     expect(shouldSyncEditorUiForPath('/')).toBe(true)
     expect(shouldSyncEditorUiForPath('/preview')).toBe(false)
     expect(shouldSyncEditorUiForPath('/designer/preview')).toBe(false)
-  })
-
-  it('preview 路由会回退到默认应用语言，避免继承编辑器语言残留', () => {
-    expect(resolveAppLocaleForPath('/', 'en')).toBe('en')
-    expect(resolveAppLocaleForPath('/preview', 'en')).toBe('zh')
-    expect(resolveAppLocaleForPath('/designer/preview', 'en')).toBe('zh')
   })
 
   it('preview 路由下 Element Plus locale 会回退到应用级默认值', () => {

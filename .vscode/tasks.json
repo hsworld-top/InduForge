@@ -88,8 +88,8 @@
     {
       "label": "启动后端开发服务器",
       "type": "shell",
-      "command": "pnpm",
-      "args": ["run", "dev"],
+      "command": "go",
+      "args": ["run", "./cmd/dev_core"],
       "options": {
         "cwd": "${workspaceFolder}/dev_core"
       },
@@ -104,7 +104,7 @@
         "background": {
           "activeOnStart": true,
           "beginsPattern": ".*",
-          "endsPattern": "(Server started|listening).*"
+          "endsPattern": ".*dev_core.*已启动.*"
         }
       },
       "presentation": {

@@ -11,10 +11,13 @@ const originalPromiseLookup = dns.promises.lookup.bind(dns.promises)
 const normalizeHost = (hostname: string) => (hostname === 'localhost' ? '127.0.0.1' : hostname)
 
 dns.lookup = ((hostname: string, ...rest: unknown[]) =>
-  originalLookup(normalizeHost(hostname), ...(rest as []))) as typeof dns.lookup
+  Reflect.apply(originalLookup, undefined, [normalizeHost(hostname), ...rest])) as typeof dns.lookup
 
 dns.promises.lookup = ((hostname: string, ...rest: unknown[]) =>
-  originalPromiseLookup(normalizeHost(hostname), ...(rest as []))) as typeof dns.promises.lookup
+  Reflect.apply(originalPromiseLookup, undefined, [
+    normalizeHost(hostname),
+    ...rest,
+  ])) as typeof dns.promises.lookup
 
 export default defineConfig({
   plugins: [vue()],

@@ -5,7 +5,7 @@ import {
   normalizeRuntimeRoleCode,
   stripRuntimeRoleCodePrefix,
   useProjectRuntimeAccessState,
-} from '@/views/tenant/components/project-runtime-access-state.ts'
+} from '@/views/tenant/components/project-runtime-access-state'
 
 describe('project-runtime-access-state', () => {
   test('运行态角色编码会统一规范化为 PROJECT_ 前缀', () => {
@@ -55,6 +55,7 @@ describe('project-runtime-access-state', () => {
       createRuntimeUser: vi.fn(),
       updateRuntimeUserRoles: vi.fn(),
       updateRuntimeUserStatus: vi.fn(),
+      deleteRuntimeUser: vi.fn(),
       resetRuntimeUserPassword: vi.fn(),
       createRuntimeRole: vi.fn(),
       updateRuntimeRole: vi.fn(),

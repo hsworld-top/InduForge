@@ -28,12 +28,19 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
-        '/api': {
+		'/api': {
           target: env.VITE_API_URL,
           changeOrigin: true,
           secure: false,
-        },
-        '/socket.io': {
+		},
+		'/control-socket.io': {
+			target: env.VITE_API_URL,
+			changeOrigin: true,
+			secure: false,
+			ws: true,
+			rewriteWsOrigin: true,
+		},
+		'/socket.io': {
           target: env.VITE_DATA_SERVICE_URL,
           changeOrigin: true,
           secure: false,

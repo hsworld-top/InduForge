@@ -39,7 +39,6 @@ yarn.lock
 docker/
 docker/images/
 minio/data*/
-dev_core/artifacts/
 
 # Claude 本地配置
 .claude/settings.local.json

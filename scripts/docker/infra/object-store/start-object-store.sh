@@ -11,6 +11,7 @@ exec weed server \
   -master.port=${IF_OBJECT_STORE_MASTER_PORT:-18333} \
   -master.volumeSizeLimitMB=1024 \
   -volume.port=${IF_OBJECT_STORE_VOLUME_PORT:-18081} \
+  -volume.max=0 \
   -dir=/data/volume \
   -filer \
   -filer.port=${IF_OBJECT_STORE_FILER_PORT:-18888} \

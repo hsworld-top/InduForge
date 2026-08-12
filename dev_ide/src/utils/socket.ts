@@ -18,7 +18,7 @@ export const initSocket = (tenantId?: string | null): Socket => {
 
   socket = io(socketHost, {
     auth: { token },
-    path: '/socket.io',
+	path: '/control-socket.io',
     transports: ['websocket', 'polling'],
     timeout: 8000,
   })

@@ -29,7 +29,7 @@ Windows 原生 Collector 通过 `nats://127.0.0.1:18222` 连接 WSL2 Docker 中�
 
 Node 依赖由根目录 pnpm workspace 统一管理。只在仓库根目录执行一次 `pnpm install`，只提交根目录 `pnpm-lock.yaml`，不要在各业务子目录单独安装依赖。pnpm 在 workspace 子目录生成的 `node_modules/` 链接或提升目录属于安装产物。
 
-脚本只处理基础设施。控制面和设计中心长期共用 `if_core`，不会创建 `if_design`。控制面结构 SQL 位于 `dev_core/scripts/bootstrap/sql/core-schema.sql`，由 `dev_core` 启动或离线安装脚本内部调用。
+脚本只处理基础设施。控制面和设计中心长期共用 `if_core`，不会创建 `if_design`。控制面结构 SQL 位于 `dev_core/db/schema/core-schema.sql`，由 `dev_core` 启动或离线安装命令调用。
 
 ## 内部脚本
 

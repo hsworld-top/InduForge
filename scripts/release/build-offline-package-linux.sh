@@ -45,6 +45,7 @@ PRODUCT_INFRA_IMAGES=(
 PACKAGE_IMAGES=(
   "induforge/edge:latest"
   "induforge/control:latest"
+  "induforge/designer-code-server:4.131.0-node22-pnpm10.19.0"
   "induforge/data:latest"
   "induforge/meta-store:latest"
   "induforge/cache-store:latest"
@@ -111,6 +112,11 @@ save_cached_image() {
 build_business_images() {
   echo "构建控制面镜像..."
   docker build -t induforge/control:latest -f "$REPO_ROOT/dev_core/Dockerfile" "$REPO_ROOT"
+
+  docker build \
+    -t induforge/designer-code-server:4.131.0-node22-pnpm10.19.0 \
+    -f "$REPO_ROOT/designer/code-workspace/Dockerfile" \
+    "$REPO_ROOT"
 
   echo "构建数据服务镜像..."
   docker build -t induforge/data:latest -f "$REPO_ROOT/data_service/Dockerfile" "$REPO_ROOT/data_service"

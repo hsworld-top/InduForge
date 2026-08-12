@@ -59,15 +59,12 @@ export default defineConfig(({ mode }) => {
           manualChunks: {
             vendor: ['vue', 'vue-router', 'pinia'],
             ui: ['element-plus'],
-            /** 大体积依赖单独分包，减轻主设计器 chunk */
-            monaco: ['monaco-editor'],
-            charts: ['echarts', 'vue-echarts'],
           },
         },
       },
     },
     optimizeDeps: {
-      include: ['vue', '@vueuse/core'],
+      include: ['vue'],
     },
   }
 })

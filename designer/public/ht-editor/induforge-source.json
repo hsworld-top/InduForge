@@ -1,0 +1,5 @@
+{
+  "sourceRoot": "E:\\personal_dev\\test\\kf\\kingdevopscenter\\kingclient\\exe\\public\\javascripts\\HT3DEditor",
+  "sourceLayout": "HT3DEditor/client + HT3DEditor/instance/custom",
+  "integration": "InduForgeService REST adapter"
+}

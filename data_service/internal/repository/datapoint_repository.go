@@ -127,6 +127,34 @@ func (r *DataPointRepository) ListByProject(ctx context.Context, projectID strin
 	return records, total, nil
 }
 
+// ListAllByProject 仅供生成开发契约快照使用，按路径稳定排序返回完整内部记录。
+// 上层必须负责过滤私有字段，仓储层不直接面向 HTTP 暴露结果。
+func (r *DataPointRepository) ListAllByProject(ctx context.Context, projectID string) ([]DataPointRecord, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+dataPointSelectColumns+`
+		FROM data_points
+		WHERE project_id = $1
+		ORDER BY path ASC, id ASC
+	`, projectID)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询数据点开发契约失败", err)
+	}
+	defer rows.Close()
+
+	records := make([]DataPointRecord, 0)
+	for rows.Next() {
+		record, scanErr := scanDataPointRecord(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历数据点开发契约失败", err)
+	}
+	return records, nil
+}
+
 // GetByProjectAndID 按项目与主键读取单条数据点。
 // 查询路径：project_id + id，主命中 data_points_pkey；project_id 作为边界约束避免跨项目误读。
 // 潜在性能风险：单条主键读取性能稳定，但高频调用 value 接口时应关注上游查询执行成本而非此处扫描成本。

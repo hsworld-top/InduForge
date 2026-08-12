@@ -65,7 +65,7 @@ scripts/docker/
 ## 控制面数据库 bootstrap
 
 ```text
-dev_core/scripts/bootstrap/
+dev_core/db/schema/core-schema.sql
   init-core-database.js        # 安装阶段和开发启动时复用的控制面数据库 bootstrap
   sql/core-schema.sql          # if_core 表结构
 ```

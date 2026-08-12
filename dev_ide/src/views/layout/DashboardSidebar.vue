@@ -437,7 +437,7 @@ const closeSidebar = () => {
   appStore.setSidebarCollapsed(true)
 }
 
-const handleOpenTab = (tabKey) => {
+const handleOpenTab = (tabKey: string) => {
   emit('open-tab', tabKey)
   // 移动端/窄屏模式下，点击菜单后自动收起侧边栏
   // 这里作为通用交互，点击导航后关闭抽屉更符合专注模式
@@ -463,20 +463,20 @@ const tenantLogoUrl = computed(() => {
 })
 
 // 权限检查
-const hasTabPermission = (tabKey) => canAccessTab(tabKey, authStore.userInfo?.role)
+const hasTabPermission = (tabKey: string) => canAccessTab(tabKey, authStore.userInfo?.role)
 
 // 操作
 const toggleTheme = () => {
   appStore.setTheme(isDark.value ? 'light' : 'dark')
 }
 
-const changeLanguage = (lang) => {
+const changeLanguage = (lang: string) => {
   locale.value = lang
   appStore.setLanguage(lang)
 }
 const currentLanguage = computed(() => appStore.language || 'zh')
 
-const handleUserMenuCommand = async (command) => {
+const handleUserMenuCommand = async (command: string) => {
   if (command === 'profile') {
     emit('open-profile')
   } else if (command === 'settings') {

@@ -436,7 +436,7 @@ const normalizeRuntimeMode = (value: unknown): 'DEV' | 'RELEASE' | '' => {
   return ''
 }
 
-const hasRuntimeModeCount = (modeCounts: Record<string, unknown>, mode: 'DEV' | 'RELEASE') =>
+const hasRuntimeModeCount = (modeCounts: object, mode: 'DEV' | 'RELEASE') =>
   Object.entries(modeCounts).some(
     ([key, value]) => normalizeRuntimeMode(key) === mode && Number(value || 0) > 0,
   )

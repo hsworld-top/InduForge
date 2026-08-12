@@ -10,12 +10,7 @@
 import ElementPlus from 'element-plus'
 import { createPinia } from 'pinia'
 import { createApp } from 'vue'
-import { i18n } from './i18n'
 import App from './App.vue'
-import { registerAllDescriptors } from './materials'
-import * as descriptorRegistry from './editor-core/descriptors/registry'
-import { initDescriptorRegistry } from './editor-core/document/factory'
-import { registerBuiltinComponents } from './editor-core/registry/builtin-manifests'
 import router from './router'
 import {
   getTrustedHostOriginSet,
@@ -57,7 +52,6 @@ function isLocaleUpdatePayload(data: unknown): data is {
 
 type RuntimeMessageHandlerDependencies = {
   editorUi: ReturnType<typeof getEditorUiStore>
-  i18n: typeof i18n
   getPathname?: () => string
   getTrustedOriginSet?: () => Set<string>
   getTrustedSources?: () => TrustedMessageSource[]
@@ -87,7 +81,6 @@ export function resolveTrustedMessageSources({
 
 export function createRuntimeMessageHandler({
   editorUi,
-  i18n,
   getPathname = () => window.location.pathname,
   getTrustedOriginSet = () => getTrustedHostOriginSet(),
   getTrustedSources = () => getTrustedHostSources(),
@@ -128,8 +121,6 @@ export function createRuntimeMessageHandler({
 
     if (isLocaleUpdatePayload(data)) {
       editorUi.setLocale(data.locale)
-      i18n.global.locale.value = data.locale
-      registerBuiltinComponents()
       return
     }
   }
@@ -151,15 +142,10 @@ export function bootstrapDesignerApp(): void {
 
   const editorUi = getEditorUiStore()
 
-  registerBuiltinComponents()
-  registerAllDescriptors()
-  initDescriptorRegistry(descriptorRegistry)
-
   window.addEventListener(
     'message',
     createRuntimeMessageHandler({
       editorUi,
-      i18n,
       getPathname: () => window.location.pathname,
       getTrustedOriginSet: () => getTrustedHostOriginSet(),
       getTrustedSources: () => getTrustedHostSources(),
@@ -167,7 +153,6 @@ export function bootstrapDesignerApp(): void {
   )
 
   app.use(router)
-  app.use(i18n)
   app.use(ElementPlus)
   app.provide('editorUi', editorUi)
 

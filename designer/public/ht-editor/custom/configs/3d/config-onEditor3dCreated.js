@@ -1,0 +1,16 @@
+(function () {
+    window.hteditor_config.onEditor3dCreated = function (editor3d, params) {
+        addMainMenu(editor3d);
+        (function(){var workspace=new URLSearchParams(window.location.search).get('workspace'),tabs=editor3d.leftTopTabView.getTabModel().getDatas(),targetTab=tabs.get(workspace==='model'?1:0);targetTab&&editor3d.leftTopTabView.getTabModel().sm().ss(targetTab)})()
+    };
+
+    function addMainMenu(editor3d) {
+        const items = editor3d.mainMenu.getItems();
+        items[1].items.push({
+            label: '高炉模型',
+            action: function () {
+                editor3d.getModelDialog('gaolu').open();
+            }
+        });
+    }
+})();

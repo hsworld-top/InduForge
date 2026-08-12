@@ -1,20 +1,18 @@
 <!--
-  App.vue - 设计器根组件
-  职责：路由视图、全局加载态（设计页切换时显示，预览页不显示）
+  App.vue - 设计中心根组件
+  职责：路由视图与工作区切换加载态。
 -->
 <script setup lang="ts">
 /**
  * 根组件脚本
  * - loading: 全局加载态
  * - 路由切换时显示至少 minLoadingMs 的加载动画，避免闪烁
- * - 从预览页返回设计页时跳过加载（skipNextLoading）
  */
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import type { Language } from 'element-plus/es/locale'
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { resolveAppLocaleForPath, resolveScopedLocaleForPath } from '@/router/runtime-settings'
+import { resolveScopedLocaleForPath } from '@/router/runtime-settings'
 import { getEditorUiStore } from '@/stores/editor-ui-store'
 
 /** 是否处于加载中 */
@@ -26,13 +24,8 @@ const minLoadingMs = 500
 const router = useRouter()
 const route = useRoute()
 const editorUi = getEditorUiStore()
-const { locale } = useI18n()
-/** 当前是否为预览路由 */
-const isPreviewRoute = computed(
-  () => route?.name === 'Preview' || String(route?.path || '').includes('/preview'),
-)
-/** 是否显示加载遮罩（设计页加载时显示，预览页不显示） */
-const showLoading = computed(() => loading.value && !isPreviewRoute.value)
+/** 是否显示加载遮罩 */
+const showLoading = computed(() => loading.value)
 const elementLocale = computed<Language>(() =>
   resolveScopedLocaleForPath(
     route.path,
@@ -41,16 +34,8 @@ const elementLocale = computed<Language>(() =>
   ),
 )
 
-/** 是否跳过下一次加载（从预览返回设计时使用） */
-const skipNextLoading = ref(false)
-
 /** 开始加载，重置计时 */
 function startLoading() {
-  if (skipNextLoading.value) {
-    skipNextLoading.value = false
-    loading.value = false
-    return
-  }
   loadingStartAt = Date.now()
   loading.value = true
 }
@@ -67,10 +52,7 @@ async function stopLoading() {
 }
 
 /** 路由进入前：启动加载 */
-const removeBefore = router.beforeEach((to, from, next) => {
-  if (from?.name === 'Preview' || String(from?.path || '').includes('/preview')) {
-    skipNextLoading.value = true
-  }
+const removeBefore = router.beforeEach((_to, _from, next) => {
   startLoading()
   next()
 })
@@ -86,14 +68,6 @@ const removeError = router.onError(() => {
 /** 应用就绪时结束初始加载 */
 router.isReady().then(() => stopLoading())
 
-watch(
-  [() => editorUi.locale.value, () => route.path],
-  ([value, path]) => {
-    locale.value = resolveAppLocaleForPath(path, value)
-  },
-  { immediate: true },
-)
-
 onBeforeUnmount(() => {
   removeBefore()
   removeAfter()
@@ -105,7 +79,6 @@ onBeforeUnmount(() => {
   <el-config-provider :locale="elementLocale">
     <div id="app">
       <router-view />
-      <!-- 设计态路由切换时显示加载动画，预览态不显示 -->
       <div v-if="showLoading" class="app-loading">
         <div class="loading-card">
           <div class="loading-mark">

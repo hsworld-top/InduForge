@@ -24,7 +24,6 @@ $envFile = Join-Path $packageRoot ".env"
 $composeFile = Join-Path $packageRoot "scripts/docker/docker-compose.offline.yml"
 $imageDir = Join-Path $packageRoot "scripts/docker/images"
 $metaContainer = "induforge-meta-store"
-$controlContainer = "induforge-control"
 
 function Test-Command {
   param([string]$Name)
@@ -155,10 +154,19 @@ function Enable-TimeSeriesExtension {
 }
 
 function Initialize-ControlSchema {
-  # 控制面镜像内已经包含 dev_core 的数据库初始化脚本和生产依赖。
-  # 这里在数据库可用后显式执行一次，确保正式安装后核心表和默认管理员数据存在。
+  $compose = Get-ComposeCommand
+
+  # 使用 Go 控制面的安装命令创建空库最终基线和默认管理员，然后恢复正式服务。
   Write-Host "初始化控制面数据库结构..."
-  docker exec $controlContainer node scripts/bootstrap/init-core-database.js init
+  if ($compose.Count -eq 2) {
+    docker compose --env-file $envFile -f $composeFile stop control *> $null
+    docker compose --env-file $envFile -f $composeFile run --rm control init
+    docker compose --env-file $envFile -f $composeFile up -d control
+  } else {
+    docker-compose --env-file $envFile -f $composeFile stop control *> $null
+    docker-compose --env-file $envFile -f $composeFile run --rm control init
+    docker-compose --env-file $envFile -f $composeFile up -d control
+  }
 }
 
 function Invoke-InfraInit {

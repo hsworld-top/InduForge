@@ -1,0 +1,2394 @@
+openapi: 3.0.3
+info:
+  title: InduForge Control Plane API
+  version: 0.1.0
+  description: dev_core 面向 dev_ide 的控制面契约。
+servers:
+  - url: /api/v1
+tags:
+  - name: auth
+  - name: tenant
+  - name: user
+  - name: project
+  - name: runtimeAccess
+  - name: node
+  - name: deployment
+  - name: auditLog
+paths:
+  /auth/captcha:
+    get:
+      operationId: getAuthCaptcha
+      tags: [auth]
+      summary: getAuthCaptcha
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /auth/config:
+    get:
+      operationId: getAuthConfig
+      tags: [auth]
+      summary: getAuthConfig
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /auth/refresh:
+    post:
+      operationId: refreshAuthToken
+      tags: [auth]
+      summary: refreshAuthToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: logout
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /auth/me:
+    get:
+      operationId: getCurrentAuthUser
+      tags: [auth]
+      summary: getCurrentAuthUser
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /auth/password:
+    put:
+      operationId: changeAuthPassword
+      tags: [auth]
+      summary: changeAuthPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /tenants:
+    get:
+      operationId: listTenants
+      tags: [tenant]
+      summary: listTenants
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    post:
+      operationId: createTenant
+      tags: [tenant]
+      summary: createTenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/TenantCreateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /tenants/{tenantId}:
+    get:
+      operationId: getTenant
+      tags: [tenant]
+      summary: getTenant
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    put:
+      operationId: updateTenant
+      tags: [tenant]
+      summary: updateTenant
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/TenantUpdateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    delete:
+      operationId: deleteTenant
+      tags: [tenant]
+      summary: deleteTenant
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /tenants/current:
+    get:
+      operationId: getCurrentTenant
+      tags: [tenant]
+      summary: getCurrentTenant
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /tenants/current/dashboard-notes:
+    get:
+      operationId: listDashboardNotes
+      tags: [tenant]
+      summary: listDashboardNotes
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    post:
+      operationId: createDashboardNote
+      tags: [tenant]
+      summary: createDashboardNote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/NoteRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /tenants/current/dashboard-notes/{noteId}:
+    put:
+      operationId: updateDashboardNote
+      tags: [tenant]
+      summary: updateDashboardNote
+      parameters:
+        - name: noteId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/NoteRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    delete:
+      operationId: deleteDashboardNote
+      tags: [tenant]
+      summary: deleteDashboardNote
+      parameters:
+        - name: noteId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /tenants/{tenantId}/activate:
+    post:
+      operationId: activateTenant
+      tags: [tenant]
+      summary: activateTenant
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /tenants/{tenantId}/suspend:
+    post:
+      operationId: suspendTenant
+      tags: [tenant]
+      summary: suspendTenant
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /tenants/{tenantId}/upload:
+    post:
+      operationId: uploadTenantAsset
+      tags: [tenant]
+      summary: uploadTenantAsset
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /users:
+    get:
+      operationId: listUsers
+      tags: [user]
+      summary: listUsers
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    post:
+      operationId: createUser
+      tags: [user]
+      summary: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/UserCreateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /users/{userId}:
+    put:
+      operationId: updateUser
+      tags: [user]
+      summary: updateUser
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/UserUpdateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    delete:
+      operationId: deleteUser
+      tags: [user]
+      summary: deleteUser
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /users/{userId}/password:
+    put:
+      operationId: changeUserPassword
+      tags: [user]
+      summary: changeUserPassword
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects:
+    get:
+      operationId: listProjects
+      tags: [project]
+      summary: listProjects
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    post:
+      operationId: createProject
+      tags: [project]
+      summary: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/ProjectCreateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/tags:
+    get:
+      operationId: listProjectTags
+      tags: [project]
+      summary: listProjectTags
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    post:
+      operationId: createProjectTag
+      tags: [project]
+      summary: createProjectTag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/NamedResourceRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/tags/{tagId}:
+    put:
+      operationId: updateProjectTag
+      tags: [project]
+      summary: updateProjectTag
+      parameters:
+        - name: tagId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/NamedResourceRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    delete:
+      operationId: deleteProjectTag
+      tags: [project]
+      summary: deleteProjectTag
+      parameters:
+        - name: tagId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/groups:
+    get:
+      operationId: listProjectGroups
+      tags: [project]
+      summary: listProjectGroups
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    post:
+      operationId: createProjectGroup
+      tags: [project]
+      summary: createProjectGroup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/NamedResourceRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/groups/{groupId}:
+    put:
+      operationId: updateProjectGroup
+      tags: [project]
+      summary: updateProjectGroup
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/NamedResourceRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    delete:
+      operationId: deleteProjectGroup
+      tags: [project]
+      summary: deleteProjectGroup
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/tags:
+    put:
+      operationId: replaceProjectTags
+      tags: [project]
+      summary: replaceProjectTags
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/ReplaceIDsRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/group:
+    put:
+      operationId: setProjectGroup
+      tags: [project]
+      summary: setProjectGroup
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/SetProjectGroupRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}:
+    put:
+      operationId: updateProject
+      tags: [project]
+      summary: updateProject
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/ProjectUpdateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    delete:
+      operationId: deleteProject
+      tags: [project]
+      summary: deleteProject
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/ProjectDeleteRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/delete-impact:
+    get:
+      operationId: getProjectDeleteImpact
+      tags: [project]
+      summary: getProjectDeleteImpact
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/operations/{operation}:
+    post:
+      operationId: operateProject
+      tags: [project]
+      summary: operateProject
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: operation
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/ProjectOperationRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/export:
+    get:
+      operationId: exportProject
+      tags: [project]
+      summary: exportProject
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/import:
+    post:
+      operationId: importProject
+      tags: [project]
+      summary: importProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/ProjectImportRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/runtime-users:
+    get:
+      operationId: listRuntimeUsers
+      tags: [runtimeAccess]
+      summary: listRuntimeUsers
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    post:
+      operationId: createRuntimeUser
+      tags: [runtimeAccess]
+      summary: createRuntimeUser
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/RuntimeUserCreateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/runtime-users/{userId}/status:
+    patch:
+      operationId: updateRuntimeUserStatus
+      tags: [runtimeAccess]
+      summary: updateRuntimeUserStatus
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/RuntimeUserStatusRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/runtime-users/{userId}:
+    delete:
+      operationId: deleteRuntimeUser
+      tags: [runtimeAccess]
+      summary: deleteRuntimeUser
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/runtime-users/{userId}/roles:
+    put:
+      operationId: replaceRuntimeUserRoles
+      tags: [runtimeAccess]
+      summary: replaceRuntimeUserRoles
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/ReplaceIDsRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/runtime-users/{userId}/reset-password:
+    post:
+      operationId: resetRuntimeUserPassword
+      tags: [runtimeAccess]
+      summary: resetRuntimeUserPassword
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/runtime-roles:
+    get:
+      operationId: listRuntimeRoles
+      tags: [runtimeAccess]
+      summary: listRuntimeRoles
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    post:
+      operationId: createRuntimeRole
+      tags: [runtimeAccess]
+      summary: createRuntimeRole
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/RuntimeRoleCreateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/runtime-roles/{roleId}:
+    put:
+      operationId: updateRuntimeRole
+      tags: [runtimeAccess]
+      summary: updateRuntimeRole
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/RuntimeRoleUpdateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    delete:
+      operationId: deleteRuntimeRole
+      tags: [runtimeAccess]
+      summary: deleteRuntimeRole
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /nodes:
+    get:
+      operationId: listNodes
+      tags: [node]
+      summary: listNodes
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /nodes/{nodeId}/approve:
+    put:
+      operationId: approveNode
+      tags: [node]
+      summary: approveNode
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/NodeApprovalRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /nodes/{nodeId}/reject:
+    put:
+      operationId: rejectNode
+      tags: [node]
+      summary: rejectNode
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/NodeApprovalRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /nodes/{nodeId}:
+    delete:
+      operationId: deleteNode
+      tags: [node]
+      summary: deleteNode
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /deployments/project/{projectId}/nodes:
+    get:
+      operationId: listProjectDeploymentNodes
+      tags: [deployment]
+      summary: listProjectDeploymentNodes
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /publish/{projectId}/versions:
+    get:
+      operationId: listProjectVersions
+      tags: [deployment]
+      summary: listProjectVersions
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /publish/deployment/{deploymentId}:
+    delete:
+      operationId: deletePublishedVersion
+      tags: [deployment]
+      summary: deletePublishedVersion
+      parameters:
+        - name: deploymentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /publish/{projectId}:
+    post:
+      operationId: publishProjectVersion
+      tags: [deployment]
+      summary: publishProjectVersion
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/PublishVersionRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /deployments/{deploymentId}/deploy:
+    post:
+      operationId: deployPublishedVersion
+      tags: [deployment]
+      summary: deployPublishedVersion
+      parameters:
+        - name: deploymentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/DeployRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /deployments/project/{projectId}/deploy-dev:
+    post:
+      operationId: deployProjectDevelopment
+      tags: [deployment]
+      summary: deployProjectDevelopment
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/DeployRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /deployments/node-deployment/{nodeDeploymentId}:
+    delete:
+      operationId: deleteNodeDeployment
+      tags: [deployment]
+      summary: deleteNodeDeployment
+      parameters:
+        - name: nodeDeploymentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /deployments/node-deployment/{nodeDeploymentId}/restart:
+    post:
+      operationId: restartNodeDeployment
+      tags: [deployment]
+      summary: restartNodeDeployment
+      parameters:
+        - name: nodeDeploymentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /deployments/node-deployment/{nodeDeploymentId}/start:
+    post:
+      operationId: startNodeDeployment
+      tags: [deployment]
+      summary: startNodeDeployment
+      parameters:
+        - name: nodeDeploymentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /deployments/node-deployment/{nodeDeploymentId}/stop:
+    post:
+      operationId: stopNodeDeployment
+      tags: [deployment]
+      summary: stopNodeDeployment
+      parameters:
+        - name: nodeDeploymentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /deployments/{deploymentId}/rollback:
+    post:
+      operationId: rollbackDeployment
+      tags: [deployment]
+      summary: rollbackDeployment
+      parameters:
+        - name: deploymentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                $ref: '#/components/schemas/RollbackRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /logs:
+    get:
+      operationId: listAuditLogs
+      tags: [auditLog]
+      summary: listAuditLogs
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    delete:
+      operationId: deleteAuditLogs
+      tags: [auditLog]
+      summary: deleteAuditLogs
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /logs/{logId}:
+    get:
+      operationId: getAuditLog
+      tags: [auditLog]
+      summary: getAuditLog
+      parameters:
+        - name: logId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /logs/export:
+    get:
+      operationId: exportAuditLogs
+      tags: [auditLog]
+      summary: exportAuditLogs
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /logs/stats:
+    get:
+      operationId: getAuditLogStats
+      tags: [auditLog]
+      summary: getAuditLogStats
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /logs/recent-activities:
+    get:
+      operationId: listRecentActivities
+      tags: [auditLog]
+      summary: listRecentActivities
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/code-workspace:
+    get:
+      operationId: getCodeWorkspace
+      tags: [codeWorkspace]
+      x-client: designer
+      summary: 查询工程代码工作区状态
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/code-workspace/start:
+    post:
+      operationId: startCodeWorkspace
+      tags: [codeWorkspace]
+      x-client: designer
+      summary: 创建或启动工程代码工作区
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/code-workspace/stop:
+    post:
+      operationId: stopCodeWorkspace
+      tags: [codeWorkspace]
+      x-client: designer
+      summary: 停止工程代码工作区
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/code-workspace/rebuild:
+    post:
+      operationId: rebuildCodeWorkspace
+      tags: [codeWorkspace]
+      x-client: designer
+      summary: 重建工程代码工作区容器
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/design-files/actions:
+    post:
+      operationId: executeDesignFileAction
+      tags: [designWorkspace]
+      x-client: designer
+      summary: 执行 HT 设计文件操作
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesignFileActionRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/design-files/export:
+    post:
+      operationId: exportDesignFiles
+      tags: [designWorkspace]
+      x-client: designer
+      summary: 导出 HT 设计资源归档
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesignFileExportRequest'
+      responses:
+        '200':
+          description: ZIP 文件或标准错误响应
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/design-files/content:
+    get:
+      operationId: getDesignFileContent
+      tags: [designWorkspace]
+      x-client: designer
+      summary: 读取 HT 设计资源内容
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 文件内容或标准错误响应
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/scene-contracts:
+    get:
+      operationId: listSceneContracts
+      tags: [sceneContract]
+      x-client: designer
+      summary: 查询工程全部 2D 和 3D 场景公开契约
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/workspace-context/refresh:
+    post:
+      operationId: refreshWorkspaceContext
+      tags: [workspaceContext]
+      x-client: designer
+      summary: 刷新工程代码工作区的只读开发上下文包
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /projects/{projectId}/scene-contracts/{kind}/{sceneId}:
+    get:
+      operationId: getSceneContract
+      tags: [sceneContract]
+      x-client: designer
+      summary: 查询单个场景公开契约
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: kind
+          in: path
+          required: true
+          schema: {type: string, enum: ['2d', '3d']}
+        - name: sceneId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    put:
+      operationId: putSceneContract
+      tags: [sceneContract]
+      x-client: designer
+      summary: 保存场景公开契约并同步工程上下文
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: kind
+          in: path
+          required: true
+          schema: {type: string, enum: ['2d', '3d']}
+        - name: sceneId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    delete:
+      operationId: deleteSceneContract
+      tags: [sceneContract]
+      x-client: designer
+      summary: 删除场景公开契约并同步工程上下文
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: kind
+          in: path
+          required: true
+          schema: {type: string, enum: ['2d', '3d']}
+        - name: sceneId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        default:
+          description: 失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    LoginRequest:
+      type: object
+      required: [username, password, captchaKey, captchaCode]
+      properties:
+        username: {type: string}
+        password: {type: string, format: password}
+        tenantCode: {type: string}
+        captchaKey: {type: string}
+        captchaCode: {type: string}
+    RefreshTokenRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: {type: string}
+    ChangePasswordRequest:
+      type: object
+      properties:
+        oldPassword: {type: string, format: password}
+        newPassword: {type: string, format: password, minLength: 8}
+    TenantCreateRequest:
+      type: object
+      required: [name, code]
+      properties:
+        name: {type: string}
+        code: {type: string}
+        description: {type: string}
+        status: {type: string}
+    TenantUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/TenantCreateRequest'
+    NoteRequest:
+      type: object
+      required: [content]
+      properties:
+        content: {type: string, maxLength: 2000}
+    UserCreateRequest:
+      type: object
+      required: [username, password, role]
+      properties:
+        username: {type: string}
+        password: {type: string, format: password, minLength: 8}
+        role: {type: string}
+        status: {type: string}
+    UserUpdateRequest:
+      type: object
+      properties:
+        email: {type: string}
+        phone: {type: string}
+        fullName: {type: string}
+        role: {type: string}
+        status: {type: string}
+    ProjectCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string}
+        code: {type: string}
+        description: {type: string}
+    ProjectUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/ProjectCreateRequest'
+    ProjectDeleteRequest:
+      type: object
+      properties:
+        confirmation: {type: string}
+    ProjectOperationRequest:
+      type: object
+      properties:
+        operation: {type: string}
+    DesignFileActionRequest:
+      type: object
+      required: [command, data]
+      properties:
+        command:
+          type: string
+          enum: [explore, upload, source, remove, rename, mkdir, locate, paste, import]
+        data:
+          nullable: true
+    DesignFileExportRequest:
+      type: object
+      required: [paths]
+      properties:
+        paths:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items:
+            type: string
+    ProjectImportRequest:
+      type: object
+      properties:
+        files: {type: object, additionalProperties: {type: string}}
+    NamedResourceRequest:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string}
+        description: {type: string}
+    ReplaceIDsRequest:
+      type: object
+      properties:
+        ids: {type: array, items: {type: string, format: uuid}}
+        roleIds: {type: array, items: {type: string, format: uuid}}
+        tagIds: {type: array, items: {type: string, format: uuid}}
+    SetProjectGroupRequest:
+      type: object
+      properties:
+        groupId: {type: string, format: uuid, nullable: true}
+    RuntimeUserCreateRequest:
+      type: object
+      required: [username, initialPassword]
+      properties:
+        username: {type: string}
+        initialPassword: {type: string, format: password, minLength: 8}
+        roleIds: {type: array, items: {type: string, format: uuid}}
+    RuntimeUserStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [active, disabled]}
+    ResetPasswordRequest:
+      type: object
+      required: [newPassword]
+      properties:
+        newPassword: {type: string, format: password, minLength: 8}
+    RuntimeRoleCreateRequest:
+      type: object
+      required: [code, name]
+      properties:
+        code: {type: string}
+        name: {type: string}
+        description: {type: string}
+        capabilities: {type: array, items: {type: string}}
+    RuntimeRoleUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/RuntimeRoleCreateRequest'
+    NodeApprovalRequest:
+      type: object
+      properties:
+        reason: {type: string}
+    PublishVersionRequest:
+      type: object
+      required: [version]
+      properties:
+        version: {type: string}
+        name: {type: string}
+        description: {type: string}
+    DeployRequest:
+      type: object
+      required: [nodeIds]
+      properties:
+        nodeIds: {type: array, items: {type: string, format: uuid}}
+        runtimeConfig: {type: object, additionalProperties: true}
+    RollbackRequest:
+      type: object
+      required: [nodeId]
+      properties:
+        nodeId: {type: string, format: uuid}
+    ApiResponse:
+      type: object
+      required: [code, msg, data, reqId]
+      properties:
+        code:
+          type: integer
+        msg:
+          type: string
+        data:
+          nullable: true
+        reqId:
+          type: string
+security:
+  - bearerAuth: []

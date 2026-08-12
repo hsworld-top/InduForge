@@ -1,7 +1,6 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
 import enLocale from 'element-plus/es/locale/lang/en'
 import zhLocale from 'element-plus/es/locale/lang/zh-cn'
-import { i18n } from '@/i18n'
 
 export type EditorTheme = 'light' | 'dark'
 export type EditorLocale = 'zh' | 'en'
@@ -35,10 +34,6 @@ export interface EditorUiStore {
  */
 let editorUiStore: EditorUiStore | null = null
 
-const syncLocaleToI18n = (nextLocale: EditorLocale): void => {
-  i18n.global.locale.value = nextLocale
-}
-
 const createEditorUiStoreImpl = (): EditorUiStore => {
   const theme = ref<EditorTheme>('light')
   const locale = ref<EditorLocale>('zh')
@@ -58,7 +53,6 @@ const createEditorUiStoreImpl = (): EditorUiStore => {
     locale.value = isEditorLocale(input?.locale) ? input.locale : 'zh'
 
     applyThemeToDom(theme.value)
-    syncLocaleToI18n(locale.value)
   }
 
   const setTheme = (nextTheme: EditorTheme): void => {
@@ -76,7 +70,6 @@ const createEditorUiStoreImpl = (): EditorUiStore => {
     }
 
     locale.value = nextLocale
-    syncLocaleToI18n(nextLocale)
   }
 
   const elementLocale = computed(() => (locale.value === 'en' ? enLocale : zhLocale))
