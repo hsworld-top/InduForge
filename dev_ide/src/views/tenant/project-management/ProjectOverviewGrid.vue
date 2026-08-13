@@ -107,6 +107,7 @@
             +{{ group.projects.length - 5 }} ...
           </div>
         </div>
+
         <div v-else class="folder-inline-empty">
           {{ t('projectManagement.emptyProjects') }}
         </div>
@@ -283,6 +284,10 @@
               </el-tooltip>
             </slot>
           </div>
+        </div>
+
+        <div class="project-overview-grid__entry-actions" @click.stop>
+          <slot name="entry-actions" :project="project" />
         </div>
       </article>
     </div>
@@ -765,6 +770,15 @@ const handleSelectionChange = (projectId: string, value: string | number | boole
   box-shadow: none;
 }
 
+.project-overview-grid__entry-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+}
+
 /* ─── 暗色模式 ─── */
 html.dark .project-overview-grid__card,
 [data-theme='dark'] .project-overview-grid__card {
@@ -858,6 +872,11 @@ html.dark .project-overview-grid__footer,
 
   .project-overview-grid__actions {
     width: auto;
+    justify-content: flex-start;
+  }
+
+  .project-overview-grid__entry-actions {
+    width: 100%;
   }
 }
 

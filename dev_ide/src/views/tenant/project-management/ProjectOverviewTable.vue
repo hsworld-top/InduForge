@@ -133,7 +133,7 @@
       v-if="showActionColumn"
       prop="actions"
       :label="t('projectManagement.actions')"
-      width="240"
+      width="430"
       fixed="right"
     >
       <template #default="{ row }">
@@ -665,7 +665,8 @@ const handleSelectionChange = (projectId: string, value: string | number | boole
   display: inline-flex;
   width: 100%;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
   gap: 2px;
 }
 
