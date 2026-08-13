@@ -32,33 +32,44 @@ func TestAuthHTTPInterfaces(t *testing.T) {
 		t.Fatalf("单租户配置应关闭多租户登录: %#v", config.Data["multiTenant"])
 	}
 
-	login := performJSON(t, server, http.MethodPost, "/api/v1/auth/login", loginBody("admin123"), "")
+	login, loginResponse := performJSONResponse(t, server, http.MethodPost, "/api/v1/auth/login", loginBody("admin123"), "", nil)
 	assertSuccess(t, login)
-	accessToken := nestedString(t, login, "data", "accessToken")
-	refreshToken := nestedString(t, login, "data", "refreshToken")
+	if _, exists := login.Data["accessToken"]; exists {
+		t.Fatal("登录响应不应暴露访问令牌")
+	}
+	accessCookie := responseCookie(t, loginResponse, "if_access")
+	refreshCookie := responseCookie(t, loginResponse, "if_refresh")
+	if !accessCookie.HttpOnly || !refreshCookie.HttpOnly {
+		t.Fatal("会话 Cookie 必须为 HttpOnly")
+	}
 
-	currentUser := performJSON(t, server, http.MethodGet, "/api/v1/auth/me", nil, accessToken)
+	currentUser, _ := performJSONResponse(t, server, http.MethodGet, "/api/v1/auth/me", nil, "", []*http.Cookie{accessCookie})
 	assertSuccess(t, currentUser)
 	if got := nestedString(t, currentUser, "data", "username"); got != "admin" {
 		t.Fatalf("当前用户错误: got %q", got)
 	}
 
-	refresh := performJSON(t, server, http.MethodPost, "/api/v1/auth/refresh", map[string]any{"refreshToken": refreshToken}, "")
+	refresh, refreshResponse := performJSONResponse(t, server, http.MethodPost, "/api/v1/auth/refresh", nil, "", []*http.Cookie{refreshCookie})
 	assertSuccess(t, refresh)
-	if nestedString(t, refresh, "data", "accessToken") == accessToken {
-		t.Fatal("刷新后应签发新的访问令牌")
+	refreshedAccessCookie := responseCookie(t, refreshResponse, "if_access")
+	refreshedRefreshCookie := responseCookie(t, refreshResponse, "if_refresh")
+	if refreshedAccessCookie.Value == accessCookie.Value || refreshedRefreshCookie.Value == refreshCookie.Value {
+		t.Fatal("刷新后应轮换会话 Cookie")
 	}
 
-	changePassword := performJSON(t, server, http.MethodPut, "/api/v1/auth/password", map[string]any{
+	changePassword, _ := performJSONResponse(t, server, http.MethodPut, "/api/v1/auth/password", map[string]any{
 		"oldPassword": "admin123", "newPassword": "new-admin-123",
-	}, accessToken)
+	}, "", []*http.Cookie{refreshedAccessCookie})
 	assertSuccess(t, changePassword)
 	if !auth.VerifyPassword("new-admin-123", repository.user.PasswordHash) {
 		t.Fatal("密码未更新为 Argon2id 哈希")
 	}
 
-	logout := performJSON(t, server, http.MethodPost, "/api/v1/auth/logout", nil, accessToken)
+	logout, logoutResponse := performJSONResponse(t, server, http.MethodPost, "/api/v1/auth/logout", nil, "", []*http.Cookie{refreshedAccessCookie, refreshedRefreshCookie})
 	assertSuccess(t, logout)
+	if responseCookie(t, logoutResponse, "if_access").MaxAge >= 0 || responseCookie(t, logoutResponse, "if_refresh").MaxAge >= 0 {
+		t.Fatal("登出后必须清除会话 Cookie")
+	}
 }
 
 func TestLoginRejectsInvalidPassword(t *testing.T) {
@@ -152,7 +163,7 @@ func sliderEndOffset(t *testing.T, challenge envelope) int {
 	return int(trackWidth - thumbWidth)
 }
 
-func TestCurrentUserRequiresBearerToken(t *testing.T) {
+func TestCurrentUserRequiresSession(t *testing.T) {
 	server, _ := newAuthServer(t)
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
 	response := httptest.NewRecorder()
@@ -207,6 +218,12 @@ func newAuthServer(t *testing.T) (http.Handler, *fakeRepository) {
 
 func performJSON(t *testing.T, handler http.Handler, method, path string, body any, accessToken string) envelope {
 	t.Helper()
+	result, _ := performJSONResponse(t, handler, method, path, body, accessToken, nil)
+	return result
+}
+
+func performJSONResponse(t *testing.T, handler http.Handler, method, path string, body any, accessToken string, cookies []*http.Cookie) (envelope, *httptest.ResponseRecorder) {
+	t.Helper()
 	var payload []byte
 	if body != nil {
 		var err error
@@ -222,6 +239,9 @@ func performJSON(t *testing.T, handler http.Handler, method, path string, body a
 	if accessToken != "" {
 		request.Header.Set("Authorization", "Bearer "+accessToken)
 	}
+	for _, cookie := range cookies {
+		request.AddCookie(cookie)
+	}
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
@@ -231,7 +251,18 @@ func performJSON(t *testing.T, handler http.Handler, method, path string, body a
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 		t.Fatalf("解析响应失败: %v, body=%s", err, response.Body.String())
 	}
-	return result
+	return result, response
+}
+
+func responseCookie(t *testing.T, response *httptest.ResponseRecorder, name string) *http.Cookie {
+	t.Helper()
+	for _, cookie := range response.Result().Cookies() {
+		if cookie.Name == name {
+			return cookie
+		}
+	}
+	t.Fatalf("响应缺少 Cookie %q", name)
+	return nil
 }
 
 func assertSuccess(t *testing.T, response envelope) {

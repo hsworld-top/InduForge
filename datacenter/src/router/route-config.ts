@@ -26,18 +26,6 @@ export const V2_MODULE_IDS: readonly V2ModuleId[] = [
   MODULE_ALARM,
 ] as const
 
-/**
- * 旧模块 ID → v2 模块 ID 映射表（用于向后兼容 redirect）。
- * 旧路由访问时自动 redirect 到新 ID，避免旧链接白屏。
- */
-export const LEGACY_MODULE_ID_MAP: Record<string, V2ModuleId> = {
-  datapoints: MODULE_DATAPOINT,
-  'access-sources': MODULE_ACCESS_SOURCE,
-  'storage-policies': MODULE_STORAGE_POLICY,
-  'compute-units': MODULE_COMPUTE,
-  'alarm-units': MODULE_ALARM,
-}
-
 /** 默认模块 */
 export const DEFAULT_MODULE: V2ModuleId = MODULE_DATAPOINT
 
@@ -53,9 +41,6 @@ const DEFAULT_DEBUG_ROUTE_ENABLED =
  *   /datacenter/:module(datapoint|access-source|industrial-collector|storage-policy|compute|alarm)/:objectId?/:tab?
  *   /datacenter/debug/:module(...)/:objectId?/:tab?
  *
- * 旧模块 ID 通过 redirect 兼容：
- *   /datacenter/:legacyModule(datapoints|access-sources|storage-policies|compute-units|alarm-units)
- *   → /datacenter/:newModule
  */
 export function createDatacenterRoutes({
   DataCenterComponent,
@@ -84,16 +69,6 @@ export function createDatacenterRoutes({
         requiresAuth: true,
       },
     },
-    // 旧模块 ID 兼容 redirect（旧链接不白屏）
-    {
-      path: '/:legacyModule(datapoints|access-sources|storage-policies|compute-units|alarm-units)/:rest(.*)?',
-      redirect: (to: { params: Record<string, string> }) => {
-        const legacyId = to.params.legacyModule as string
-        const newId = LEGACY_MODULE_ID_MAP[legacyId] ?? DEFAULT_MODULE
-        const rest = to.params.rest ? `/${to.params.rest}` : ''
-        return { path: `/${newId}${rest}` }
-      },
-    },
   ]
 
   if (enableDebugRoute) {
@@ -111,16 +86,6 @@ export function createDatacenterRoutes({
         meta: {
           titleKey: 'route.datacenterDebug',
           requiresAuth: false,
-        },
-      },
-      // debug 旧模块 ID 兼容 redirect
-      {
-        path: '/debug/:legacyModule(datapoints|access-sources|storage-policies|compute-units|alarm-units)/:rest(.*)?',
-        redirect: (to: { params: Record<string, string> }) => {
-          const legacyId = to.params.legacyModule as string
-          const newId = LEGACY_MODULE_ID_MAP[legacyId] ?? DEFAULT_MODULE
-          const rest = to.params.rest ? `/${to.params.rest}` : ''
-          return { path: `/debug/${newId}${rest}` }
         },
       },
     )

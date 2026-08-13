@@ -493,7 +493,7 @@ const handleUserMenuCommand = async (command: string) => {
         cancelButtonText: t('common.cancel'),
         type: 'warning',
       })
-      authStore.logout()
+      await authStore.logout()
       router.push({ name: 'login' })
     } catch {
       // 用户取消操作

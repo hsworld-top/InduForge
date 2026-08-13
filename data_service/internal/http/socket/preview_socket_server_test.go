@@ -112,25 +112,25 @@ func TestPreviewSocketServer_AuthorizeSocketRejectsInvalidHandshake(t *testing.T
 			expectedError: "socket not initialized",
 		},
 		{
-			name:          "missing token",
+			name:          "missing session cookie",
 			socket:        &socketio.Socket{},
 			params:        map[string]string{"projectId": "project-1", "previewSessionId": "session-1"},
 			expectedOK:    false,
-			expectedError: "missing token",
+			expectedError: "missing session cookie",
 		},
 		{
 			name:          "missing project id",
 			socket:        &socketio.Socket{},
-			params:        map[string]string{"token": "jwt-token", "previewSessionId": "session-1"},
+			params:        map[string]string{"previewSessionId": "session-1"},
 			expectedOK:    false,
-			expectedError: "missing projectId",
+			expectedError: "missing session cookie",
 		},
 		{
 			name:          "missing preview session id",
 			socket:        &socketio.Socket{},
-			params:        map[string]string{"token": "jwt-token", "projectId": "project-1"},
+			params:        map[string]string{"projectId": "project-1"},
 			expectedOK:    false,
-			expectedError: "missing previewSessionId",
+			expectedError: "missing session cookie",
 		},
 	}
 

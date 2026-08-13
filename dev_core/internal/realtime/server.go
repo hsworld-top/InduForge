@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/indu-forge/dev_core/internal/auth"
@@ -44,7 +45,7 @@ func (s *Server) onConnection(arguments ...any) {
 	if !ok {
 		return
 	}
-	token := handshakeToken(client.Handshake().Auth)
+	token := handshakeToken(client.Handshake())
 	actor, err := s.authService.Authenticate(context.Background(), token)
 	if err != nil {
 		client.Disconnect(true)
@@ -85,10 +86,17 @@ func (s *Server) emit(tenantID, event string, payload map[string]any) {
 	}
 }
 
-func handshakeToken(raw any) string {
-	if payload, ok := raw.(map[string]any); ok {
-		token, _ := payload["token"].(string)
-		return token
+func handshakeToken(handshake *socket.Handshake) string {
+	if handshake == nil {
+		return ""
+	}
+	for _, rawCookie := range handshake.Headers["Cookie"] {
+		for _, item := range strings.Split(rawCookie, ";") {
+			pair := strings.SplitN(strings.TrimSpace(item), "=", 2)
+			if len(pair) == 2 && pair[0] == "if_access" {
+				return strings.TrimSpace(pair[1])
+			}
+		}
 	}
 	return ""
 }

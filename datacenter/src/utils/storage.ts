@@ -60,38 +60,6 @@ export class Storage {
   }
 
   /**
-   * 获取认证令牌
-   * @returns {string|null} 令牌
-   */
-  static getToken() {
-    return localStorage.getItem(STORAGE_KEYS.TOKEN)
-  }
-
-  /**
-   * 设置认证令牌
-   * @param {string} token - 令牌
-   */
-  static setToken(token) {
-    localStorage.setItem(STORAGE_KEYS.TOKEN, token)
-  }
-
-  /**
-   * 获取刷新令牌
-   * @returns {string|null} 刷新令牌
-   */
-  static getRefreshToken() {
-    return localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
-  }
-
-  /**
-   * 设置刷新令牌
-   * @param {string} refreshToken - 刷新令牌
-   */
-  static setRefreshToken(refreshToken) {
-    localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken)
-  }
-
-  /**
    * 获取用户信息
    * @returns {object|null} 用户信息
    */

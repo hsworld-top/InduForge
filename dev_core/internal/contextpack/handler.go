@@ -22,7 +22,7 @@ func (h *Handler) RefreshWorkspaceContext(w http.ResponseWriter, r *http.Request
 		platformapi.WriteError(w, r, http.StatusUnauthorized, platformapi.ErrorCodeTokenRequired, "缺少访问令牌")
 		return
 	}
-	result, err := h.service.Sync(r.Context(), actor, projectID, r.Header.Get("Authorization"))
+	result, err := h.service.Sync(r.Context(), actor, projectID, auth.ForwardAuthorization(r))
 	if err != nil {
 		platformapi.WriteError(w, r, http.StatusOK, platformapi.ErrorCodeInvalidRequest, err.Error())
 		return

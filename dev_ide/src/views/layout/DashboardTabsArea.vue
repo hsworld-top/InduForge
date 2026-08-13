@@ -44,14 +44,7 @@
               class="!p-0 !w-5 !h-5 !ml-2 opacity-60 hover:opacity-100 transition-opacity"
               @click.stop="$emit('open-external-tab', tab)"
             >
-              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M14 3h7v7m0-7L10 14m-4 7h11a2 2 0 002-2V8"
-                />
-              </svg>
+              <el-icon class="text-xs"><TopRight /></el-icon>
             </el-button>
             <el-button
               v-if="!isTabMaximized && tab.key !== 'dashboard'"
@@ -73,8 +66,6 @@
             :key="tab.key"
             :tab-key="tab.key"
             @open-tab="$emit('open-tab', $event)"
-            @embedded-register="$emit('embedded-register', $event)"
-            @embedded-unregister="$emit('embedded-unregister', $event)"
             v-bind="tab.props"
           />
         </div>
@@ -109,7 +100,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useAppStore } from '@/store'
-import { FullScreen, Expand } from '@element-plus/icons-vue'
+import { FullScreen, Expand, TopRight } from '@element-plus/icons-vue'
 
 const props = defineProps({
   tabs: {
@@ -145,8 +136,6 @@ const emit = defineEmits([
   'maximize-tab',
   'restore-tab',
   'open-tab',
-  'embedded-register',
-  'embedded-unregister',
 ])
 
 const appStore = useAppStore()

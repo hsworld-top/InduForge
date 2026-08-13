@@ -8,7 +8,7 @@ import IconLucideLayers3 from '~icons/lucide/layers-3'
 import IconLucideRefreshCw from '~icons/lucide/refresh-cw'
 import IconLucideRoute from '~icons/lucide/route'
 import { getApiErrorMessage } from '@/utils/request'
-import { Storage } from '@/utils/storage'
+import { getCurrentProjectId } from '@/runtime/wujie-context'
 import CodeWorkspacePanel from './code/CodeWorkspacePanel.vue'
 import { contextPackApi } from './code/context-pack-api'
 import SceneContractPanel from './SceneContractPanel.vue'
@@ -61,7 +61,15 @@ const workspaces: WorkspaceItem[] = [
 ]
 
 const activeWorkspace = ref(resolveWorkspaceKey(route.query.workspace))
-const projectId = computed(() => route.meta.project?.id ?? Storage.getProjectId() ?? '')
+const projectId = computed(() => {
+  const fromRoute = route.meta.project?.id
+  if (fromRoute) return String(fromRoute)
+
+  const fromMicroApp = getCurrentProjectId()
+  if (fromMicroApp) return fromMicroApp
+
+  return ''
+})
 const currentWorkspace = computed<WorkspaceItem>(
   () => workspaces.find((item) => item.key === activeWorkspace.value) ?? workspaces[0]!,
 )

@@ -47,7 +47,7 @@ export default defineConfig(({ mode }) => {
           ws: true,
           rewriteWsOrigin: true,
         },
-        // 前端子应用代理到各自 dev server，保持同源访问以共享 LocalStorage
+        // Wujie 子应用通过 IDE 同源路径加载，浏览器只携带 HttpOnly Cookie。
         '/datacenter': {
           target: `http://localhost:${env.VITE_DATACENTER_PORT || 18602}`,
           changeOrigin: true,

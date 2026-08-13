@@ -6,7 +6,6 @@
  */
 
 import request from '@/utils/request'
-import { Storage } from '@/utils/storage'
 
 export interface DebugProjectSummary {
   id: string
@@ -63,11 +62,6 @@ export const debugProjectApi = {
   async resolveDefaultProjectByName(
     projectName = DEFAULT_DEBUG_PROJECT_NAME,
   ): Promise<DebugProjectSummary | null> {
-    // 调试默认工程依赖登录态；无 token 时直接跳过，避免独立入口主动触发 401/跳登录。
-    if (!Storage.getToken()) {
-      return null
-    }
-
     const response = await request.get<DebugProjectListPayload>('/projects', {
       params: {
         page: 1,

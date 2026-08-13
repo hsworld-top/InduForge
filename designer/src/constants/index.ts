@@ -7,8 +7,6 @@ export const API_BASE_URL = '/api/v1'
 export const TIME_FORMAT = 'YYYY-MM-DD HH:mm:ss'
 
 export const STORAGE_KEYS = {
-  TOKEN: 'auth_token',
-  REFRESH_TOKEN: 'refresh_token',
   USER_INFO: 'user_info',
   THEME: 'theme',
   LANGUAGE: 'language',

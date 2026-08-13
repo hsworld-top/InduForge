@@ -7,37 +7,12 @@ import 'element-plus/dist/index.css'
 import router from './router'
 import App from './App.vue'
 import './assets/styles/main.css'
-import {
-  applyThemeToDocument,
-  getTrustedHostOriginSet,
-  getTrustedHostSources,
-  handleAuthRefreshedMessage,
-  handleBootstrapResponseMessage,
-  initializeHostBootstrap,
-  isTrustedHostMessage,
-  postAppBootstrapRequest,
-} from './runtime/host-bootstrap'
 import { setDatacenterLocale } from './i18n/runtime'
-import { createRuntimeMessageHandler } from './runtime/runtime-message-handler'
-import { initMessageHandler } from './utils/messageHandler'
 import { Storage } from './utils/storage'
+import { initializeWujieContext } from './runtime/wujie-context'
 
-const hostBootstrap = initializeHostBootstrap({
-  currentUrl: window.location.href,
-  isTopLevelWindow: window.parent === window,
-  referrer: document.referrer,
-})
-const runtimeMessageHandler = createRuntimeMessageHandler({
-  getTrustedOriginSet: () => getTrustedHostOriginSet(),
-  getTrustedSources: () => getTrustedHostSources(),
-  isTrustedHostMessage,
-  handleBootstrapResponseMessage,
-  handleAuthRefreshedMessage,
-})
-
-applyThemeToDocument(Storage.getTheme())
-setDatacenterLocale(Storage.getLanguage())
-window.addEventListener('message', runtimeMessageHandler)
+const microAppContext = initializeWujieContext()
+setDatacenterLocale(microAppContext?.locale ?? Storage.getLanguage())
 
 const app = createApp(App)
 
@@ -52,13 +27,6 @@ app.use(ElementPlus)
 // }
 
 app.mount('#app')
-
-// Designer 与宿主都依赖这条桥接链路，因此初始化放在挂载后立即执行。
-initMessageHandler()
-
-if (hostBootstrap.shouldWaitForBootstrap) {
-  postAppBootstrapRequest()
-}
 
 const initialLoading = document.getElementById('app-loading')
 if (initialLoading) {

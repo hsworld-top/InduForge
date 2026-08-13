@@ -2,7 +2,6 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { ROLES, ROUTE_NAMES } from '@/constants'
 import type { Role, UserInfo } from '@/types/auth'
 import { Storage } from '@/utils/storage'
-import { buildDashboardRedirectLocation } from '@/utils/dashboardEntryHandoff'
 import { hasRole } from '@/permissions'
 
 declare module 'vue-router' {
@@ -17,6 +16,7 @@ declare module 'vue-router' {
 // 路由组件懒加载
 const Login = () => import('@/views/auth/Login.vue')
 const Dashboard = () => import('@/views/Dashboard.vue')
+const WorkspaceMicroApp = () => import('@/views/WorkspaceMicroApp.vue')
 
 // 管理员路由
 const AdminDashboard = () => import('@/views/admin/AdminDashboard.vue')
@@ -45,7 +45,17 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/',
-    redirect: (to) => buildDashboardRedirectLocation(to),
+    redirect: '/dashboard',
+  },
+  {
+    path: '/workspace/:projectId/:appType(designer|datacenter)',
+    name: 'workspace-micro-app',
+    component: WorkspaceMicroApp,
+    meta: {
+      title: '工程工作区',
+      requiresAuth: true,
+      roles: [ROLES.SYSTEM_ADMIN, ROLES.PROJECT_ADMIN, ROLES.OPS_ADMIN],
+    },
   },
   {
     path: '/dashboard',
@@ -171,8 +181,7 @@ const getCurrentUserRole = (): Role | null => {
 // 路由守卫
 router.beforeEach((to, from, next) => {
   // 检查认证
-  const token = Storage.getToken()
-  const isAuthenticated = !!token
+  const isAuthenticated = Boolean(Storage.getUserInfo())
 
   // 如果需要认证但未登录，重定向到登录页
   if (to.meta.requiresAuth && !isAuthenticated) {

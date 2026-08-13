@@ -20,6 +20,8 @@ require (
 	github.com/tidwall/gjson v1.18.0
 )
 
+replace github.com/ismhdez/socket.io-golang/v4 => ./third_party/socket.io-golang
+
 require (
 	dario.cat/mergo v1.0.2 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect

@@ -12,7 +12,6 @@ describe('InduForgeService', () => {
     fetchMock.mockReset()
     window.history.replaceState({}, '', '/ht-editor/index.html?projectId=project-1')
     window.localStorage.clear()
-    window.localStorage.setItem('auth_token', 'token-1')
     URL.createObjectURL = vi.fn(() => 'blob:design-export')
     URL.revokeObjectURL = vi.fn()
   })
@@ -54,7 +53,8 @@ describe('InduForgeService', () => {
       }),
     )
     const request = fetchMock.mock.calls[0][1]
-    expect(request.headers.get('Authorization')).toBe('Bearer token-1')
+    expect(request.credentials).toBe('same-origin')
+    expect(request.headers.get('Authorization')).toBeNull()
     expect(handler).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'contextSync', message: '工程上下文已同步' }),
     )

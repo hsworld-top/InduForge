@@ -56,23 +56,25 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, err)
 		return
 	}
-	platformapi.WriteSuccess(w, r, result)
+	h.setSessionCookies(w, r, result.TokenPair)
+	platformapi.WriteSuccess(w, r, map[string]any{"user": result.User})
 }
 
 func (h *Handler) RefreshAuthToken(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		RefreshToken string `json:"refreshToken"`
-	}
-	if err := decodeJSON(r, &body); err != nil {
-		platformapi.WriteError(w, r, http.StatusBadRequest, platformapi.ErrorCodeInvalidRequest, "请求体格式错误")
+	cookie, err := r.Cookie(refreshCookieName)
+	if err != nil || strings.TrimSpace(cookie.Value) == "" {
+		h.clearSessionCookies(w, r)
+		platformapi.WriteError(w, r, http.StatusUnauthorized, platformapi.ErrorCodeTokenRequired, "缺少刷新会话")
 		return
 	}
-	result, err := h.service.Refresh(r.Context(), body.RefreshToken)
+	result, err := h.service.Refresh(r.Context(), strings.TrimSpace(cookie.Value))
 	if err != nil {
+		h.clearSessionCookies(w, r)
 		h.writeError(w, r, err)
 		return
 	}
-	platformapi.WriteSuccess(w, r, result)
+	h.setSessionCookies(w, r, result)
+	platformapi.WriteSuccess(w, r, map[string]any{})
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
@@ -80,24 +82,36 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var body struct {
-		RefreshToken string `json:"refreshToken"`
+	refreshToken := ""
+	if cookie, err := r.Cookie(refreshCookieName); err == nil {
+		refreshToken = cookie.Value
 	}
-	if r.Body != nil && r.ContentLength != 0 {
-		if err := decodeJSON(r, &body); err != nil {
-			platformapi.WriteError(w, r, http.StatusBadRequest, platformapi.ErrorCodeInvalidRequest, "请求体格式错误")
-			return
-		}
-	}
-	if err := h.service.Logout(r.Context(), user.ID, body.RefreshToken); err != nil {
+	if err := h.service.Logout(r.Context(), user.ID, refreshToken); err != nil {
 		h.writeError(w, r, err)
 		return
 	}
-	if err := h.service.RevokeAccessToken(r.Context(), bearerToken(r.Header.Get("Authorization"))); err != nil {
+	if err := h.service.RevokeAccessToken(r.Context(), AccessTokenFromRequest(r)); err != nil {
 		h.writeError(w, r, err)
 		return
 	}
+	h.clearSessionCookies(w, r)
 	platformapi.WriteSuccess(w, r, map[string]any{})
+}
+
+func (h *Handler) sessionCookie(r *http.Request, name, value string, maxAge int) *http.Cookie {
+	secure := r.TLS != nil || strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https")
+	return &http.Cookie{Name: name, Value: value, Path: "/", HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode, MaxAge: maxAge}
+}
+
+func (h *Handler) setSessionCookies(w http.ResponseWriter, r *http.Request, pair TokenPair) {
+	http.SetCookie(w, h.sessionCookie(r, accessCookieName, pair.AccessToken, int(pair.ExpiresIn)))
+	// 刷新令牌的过期时间由服务端存储校验；浏览器 Cookie 仅作为同源会话载体。
+	http.SetCookie(w, h.sessionCookie(r, refreshCookieName, pair.RefreshToken, 30*24*60*60))
+}
+
+func (h *Handler) clearSessionCookies(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, h.sessionCookie(r, accessCookieName, "", -1))
+	http.SetCookie(w, h.sessionCookie(r, refreshCookieName, "", -1))
 }
 
 func (h *Handler) GetCurrentAuthUser(w http.ResponseWriter, r *http.Request) {
@@ -132,7 +146,7 @@ func (h *Handler) requireUser(w http.ResponseWriter, r *http.Request) (User, boo
 	if user, ok := UserFromContext(r.Context()); ok {
 		return user, true
 	}
-	token := bearerToken(r.Header.Get("Authorization"))
+	token := AccessTokenFromRequest(r)
 	if token == "" {
 		platformapi.WriteError(w, r, http.StatusUnauthorized, platformapi.ErrorCodeTokenRequired, "缺少访问令牌")
 		return User{}, false

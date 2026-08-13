@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { Storage } from '@/utils'
 import type { Role, UserInfo } from '@/types/auth'
-import type { AuthConfigPayload, AuthLoginPayload } from '@/api/auth.api'
+import type { AuthConfigPayload, AuthLoginPayload, AuthUserPayload } from '@/api/auth.api'
 import { getApiErrorMessage } from '@/utils/request'
 import { applyTenantBrowserBrand } from '@/utils/tenantBrand'
 import defaultLogoUrl from '@/assets/images/default-logo.svg'
@@ -47,8 +47,6 @@ type AppConfig = Record<string, unknown> & {
 }
 
 type AuthStoreState = {
-  token: string | null
-  refreshToken: string | null
   userInfo: UserInfo | null
   isAuthenticated: boolean
 }
@@ -126,13 +124,31 @@ const unwrapApiData = <T>(response: unknown): T | null => {
   return (currentData as T | undefined) ?? null
 }
 
+const normalizeAuthUser = (user: AuthUserPayload): UserInfo | null => {
+  const nestedTenantId =
+    typeof user === 'object' && user !== null && 'tenant' in user
+      ? ((user as { tenant?: { id?: TenantId } }).tenant?.id ?? null)
+      : null
+
+  if (!user?.id || !user.username || !user.role) {
+    return null
+  }
+
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    role: user.role as Role,
+    tenantId: nestedTenantId ?? user.tenantId ?? null,
+    tenant: user.tenant,
+  }
+}
+
 // 认证状态管理
 export const useAuthStore = defineStore('auth', {
   state: (): AuthStoreState => ({
-    token: Storage.getToken(),
-    refreshToken: Storage.getRefreshToken(),
     userInfo: normalizeStoredUserInfo(),
-    isAuthenticated: !!Storage.getToken(),
+    isAuthenticated: Boolean(normalizeStoredUserInfo()),
   }),
 
   getters: {
@@ -152,25 +168,12 @@ export const useAuthStore = defineStore('auth', {
         const response = await authAPI.login(credentials)
         const payload = unwrapApiData<AuthLoginPayload>(response)
         const user = payload?.user
-        const token = payload?.accessToken || payload?.token
-        const refreshToken = payload?.refreshToken ?? null
-        const nestedTenantId =
-          typeof user === 'object' && user !== null && 'tenant' in user
-            ? ((user as { tenant?: { id?: TenantId } }).tenant?.id ?? null)
-            : null
-
-        if (!token || !user?.id || !user.username || !user.role) {
+        const normalizedUser = user ? normalizeAuthUser(user) : null
+        if (!normalizedUser) {
           throw new Error('登录响应缺少必要字段')
         }
 
-        this.setAuthData(token, refreshToken, {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          role: user.role as Role,
-          tenantId: nestedTenantId ?? user.tenantId ?? null,
-          tenant: user.tenant,
-        })
+        this.setAuthData(normalizedUser)
 
         return { success: true }
       } catch (error) {
@@ -178,24 +181,37 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    logout(): void {
-      this.clearAuthData()
+    async restoreSession(): Promise<boolean> {
+      try {
+        const { authAPI } = await import('@/api')
+        const response = await authAPI.getCurrentUser({ skipAuthRedirect: true })
+        const user = unwrapApiData<AuthUserPayload>(response)
+        const normalizedUser = user ? normalizeAuthUser(user) : null
+        if (!normalizedUser) {
+          this.clearAuthData()
+          return false
+        }
+        this.setAuthData(normalizedUser)
+        return true
+      } catch {
+        this.clearAuthData()
+        return false
+      }
     },
 
-    refreshAuthToken(): void {
-      // 预留：token 刷新逻辑由请求拦截器统一处理，这里保留 store API 兼容旧调用方。
+    async logout(): Promise<void> {
+      try {
+        const { authAPI } = await import('@/api')
+        await authAPI.logout()
+      } finally {
+        this.clearAuthData()
+      }
     },
 
-    setAuthData(token: string, refreshToken: string | null, userInfo: UserInfo): void {
-      this.token = token
-      this.refreshToken = refreshToken
+    setAuthData(userInfo: UserInfo): void {
       this.userInfo = userInfo
       this.isAuthenticated = true
 
-      Storage.setToken(token)
-      if (refreshToken) {
-        Storage.setRefreshToken(refreshToken)
-      }
       Storage.setUserInfo(userInfo as unknown as Record<string, unknown>)
       if (userInfo.tenantId !== null && userInfo.tenantId !== undefined) {
         Storage.setTenantId(String(userInfo.tenantId))
@@ -203,13 +219,9 @@ export const useAuthStore = defineStore('auth', {
     },
 
     clearAuthData(): void {
-      this.token = null
-      this.refreshToken = null
       this.userInfo = null
       this.isAuthenticated = false
 
-      Storage.remove('auth_token')
-      Storage.remove('refresh_token')
       Storage.remove('user_info')
       Storage.remove('tenant_id')
     },

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { restoreDashboardTabState, serializeDashboardTabState } from '@/utils/dashboardTabState'
 
 describe('dashboardTabState', () => {
-  it('可序列化并恢复 embedded tab 状态', () => {
+  it('可序列化并恢复 Wujie 子应用标签状态', () => {
     const tabConfigMap = {
       dashboard: {
         titleKey: 'dashboard.title',
@@ -24,7 +24,7 @@ describe('dashboardTabState', () => {
           key: 'data-center-p2',
           titleKey: 'projectManagement.dataCenter',
           titlePrefix: '项目二',
-          component: { name: 'EmbeddedApp' },
+          component: { name: 'WujieMicroApp' },
           icon: 'database',
           props: {
             appType: 'datacenter',
@@ -44,7 +44,7 @@ describe('dashboardTabState', () => {
     const restored = restoreDashboardTabState(savedState, {
       tabConfigMap,
       hasTabPermission: () => true,
-      embeddedComponent: { name: 'EmbeddedApp' },
+      microAppComponent: { name: 'WujieMicroApp' },
       translate(key: string) {
         if (key === 'dashboard.title') return '仪表盘'
         if (key === 'projectManagement.dataCenter') return '数据中心'

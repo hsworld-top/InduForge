@@ -901,16 +901,10 @@ async function connectActive() {
     saved = result
   }
   const sessionId = String(saved.id)
-  const token = Storage.getToken()
-  if (!token) {
-    ElMessage.error('请先登录后再连接 WebSocket')
-    return
-  }
-
   beginConnect(tab)
   const epoch = tab.streamEpoch
   const timeoutMs = Math.max(1000, Math.min(30000, tab.draft.settings.timeoutMs || 5000))
-  const socket = new WebSocket(buildStreamURL(props.projectId, sessionId, token))
+  const socket = new WebSocket(buildStreamURL(props.projectId, sessionId))
   tab.socket = socket
   tab.connectTimer = setTimeout(() => {
     if (tab.streamEpoch !== epoch || tab.socket !== socket || tab.streamStatus !== 'connecting') {
@@ -1055,11 +1049,10 @@ function closeStream(tab: SessionTab) {
   }
 }
 
-function buildStreamURL(projectId: string, sessionId: string, token: string) {
+function buildStreamURL(projectId: string, sessionId: string) {
   const base = `/api/v1/data/projects/${projectId}/websocket/sessions/${sessionId}/stream`
   const url = new URL(base, window.location.origin)
   url.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  url.searchParams.set('token', token)
   return url.toString()
 }
 

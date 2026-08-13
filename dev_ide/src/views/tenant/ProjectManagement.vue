@@ -2447,14 +2447,13 @@ export default {
     // 打开设计中心
     const openDesignCenter = (project) => {
       projectDialogVisible.value = false
-      // 在标签页内打开设计中心（使用 iframe 嵌入）
-      import('@/components/EmbeddedApp.vue').then((module) => {
-        const EmbeddedApp = module.default
+      import('@/components/WujieMicroApp.vue').then((module) => {
+        const WujieMicroApp = module.default
         emit('open-tab', {
           key: `design-center-${project.id}`,
           titlePrefix: project.name,
           titleKey: 'projectManagement.designCenter',
-          component: EmbeddedApp,
+          component: WujieMicroApp,
           props: {
             appType: 'designer',
             project: project,
@@ -2467,14 +2466,13 @@ export default {
     // 打开数据中心
     const openDataCenter = (project) => {
       projectDialogVisible.value = false
-      // 在标签页内打开数据中心（使用 iframe 嵌入）
-      import('@/components/EmbeddedApp.vue').then((module) => {
-        const EmbeddedApp = module.default
+      import('@/components/WujieMicroApp.vue').then((module) => {
+        const WujieMicroApp = module.default
         emit('open-tab', {
           key: `data-center-${project.id}`,
           titlePrefix: project.name,
           titleKey: 'projectManagement.dataCenter',
-          component: EmbeddedApp,
+          component: WujieMicroApp,
           props: {
             appType: 'datacenter',
             project: project,

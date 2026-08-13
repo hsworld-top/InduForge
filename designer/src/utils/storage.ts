@@ -52,22 +52,6 @@ export class Storage {
     }
   }
 
-  static getToken(): string | null {
-    return localStorage.getItem(STORAGE_KEYS.TOKEN)
-  }
-
-  static setToken(token: string): void {
-    localStorage.setItem(STORAGE_KEYS.TOKEN, token)
-  }
-
-  static getRefreshToken(): string | null {
-    return localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
-  }
-
-  static setRefreshToken(refreshToken: string): void {
-    localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken)
-  }
-
   static getUserInfo(): unknown {
     return this.get(STORAGE_KEYS.USER_INFO)
   }

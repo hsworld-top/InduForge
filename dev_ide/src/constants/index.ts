@@ -56,8 +56,6 @@ export const LANGUAGES = {
 
 // 本地存储键名常量
 export const STORAGE_KEYS = {
-  TOKEN: 'auth_token',
-  REFRESH_TOKEN: 'refresh_token',
   USER_INFO: 'user_info',
   THEME: 'theme',
   LANGUAGE: 'language',

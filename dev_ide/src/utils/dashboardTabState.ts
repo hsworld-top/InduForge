@@ -1,10 +1,10 @@
 import { resolveDashboardTabTitle } from './dashboardTabTitle'
 
-const SUPPORTED_EMBEDDED_APP_TYPES = new Set(['designer', 'datacenter'])
+const SUPPORTED_MICRO_APP_TYPES = new Set(['designer', 'datacenter'])
 
 type Translate = (key: string, params?: Record<string, unknown>) => string
 
-interface EmbeddedProps {
+interface MicroAppProps {
   appType: 'designer' | 'datacenter'
   project: Record<string, any> & { id: unknown; projectId?: unknown }
 }
@@ -17,7 +17,7 @@ interface DashboardTab {
   titleParams: Record<string, unknown> | null
   component: unknown
   icon: unknown
-  props: EmbeddedProps | null
+  props: MicroAppProps | null
 }
 
 type PersistedTab =
@@ -26,14 +26,14 @@ type PersistedTab =
       key: string
     }
   | {
-      type: 'embedded'
+      type: 'micro-app'
       key: string
       titleKey: string | null
       titlePrefix: string
       titleParams: Record<string, unknown> | null
       title: string
       icon: string
-      props: EmbeddedProps
+      props: MicroAppProps
     }
 
 interface SerializedDashboardTabState {
@@ -51,7 +51,7 @@ interface SerializeOptions {
 interface RestoreOptions {
   tabConfigMap?: Record<string, Record<string, any>>
   hasTabPermission?: (key: string) => boolean
-  embeddedComponent?: unknown
+  microAppComponent?: unknown
   translate?: Translate
 }
 
@@ -81,17 +81,17 @@ const normalizeTitleParams = (titleParams: unknown): Record<string, unknown> | n
   isPlainObject(titleParams) ? { ...titleParams } : null
 
 /**
- * 校验并复制嵌入工程所需的 props。
+ * 校验并复制 Wujie 子应用所需的 props。
  * 当前仅设计中心与数据中心支持刷新后自动恢复，工程对象至少要保留 id。
  *
  * @param {unknown} props - 标签 props
  * @returns {{appType: string, project: Record<string, unknown>}|null} 安全 props
  */
-const normalizeEmbeddedProps = (props: unknown): EmbeddedProps | null => {
+const normalizeMicroAppProps = (props: unknown): MicroAppProps | null => {
   if (!isPlainObject(props)) return null
 
   const appType = typeof props.appType === 'string' ? props.appType : ''
-  if (!SUPPORTED_EMBEDDED_APP_TYPES.has(appType)) return null
+  if (!SUPPORTED_MICRO_APP_TYPES.has(appType)) return null
 
   const project = isPlainObject(props.project) ? { ...props.project } : null
   const projectId = project?.id ?? project?.projectId ?? null
@@ -102,8 +102,8 @@ const normalizeEmbeddedProps = (props: unknown): EmbeddedProps | null => {
   }
 
   return {
-    appType: appType as EmbeddedProps['appType'],
-    project: project as EmbeddedProps['project'],
+    appType: appType as MicroAppProps['appType'],
+    project: project as MicroAppProps['project'],
   }
 }
 
@@ -143,22 +143,22 @@ const buildStandardTab = (
 }
 
 /**
- * 构造嵌入工程标签的运行态对象。
+ * 构造 Wujie 子应用工程标签的运行态对象。
  *
  * @param {Record<string, any>} record - 持久化记录
- * @param {any} embeddedComponent - 嵌入应用组件
+ * @param {any} microAppComponent - Wujie 子应用组件
  * @param {(key: string, params?: Record<string, unknown>) => string} translate - 翻译函数
  * @returns {object|null} 可渲染标签
  */
-const buildEmbeddedTab = (
+const buildMicroAppTab = (
   record: Record<string, any>,
-  embeddedComponent: unknown,
+  microAppComponent: unknown,
   translate: Translate,
 ): DashboardTab | null => {
-  if (!isPlainObject(record) || !embeddedComponent) return null
+  if (!isPlainObject(record) || !microAppComponent) return null
 
   const key = typeof record.key === 'string' ? record.key : ''
-  const props = normalizeEmbeddedProps(record.props)
+  const props = normalizeMicroAppProps(record.props)
   if (!key || !props) return null
 
   const normalizedTab: DashboardTab = {
@@ -167,7 +167,7 @@ const buildEmbeddedTab = (
     titleKey: typeof record.titleKey === 'string' ? record.titleKey : null,
     titlePrefix: typeof record.titlePrefix === 'string' ? record.titlePrefix : '',
     titleParams: normalizeTitleParams(record.titleParams),
-    component: embeddedComponent,
+    component: microAppComponent,
     icon:
       typeof record.icon === 'string' && record.icon
         ? record.icon
@@ -184,8 +184,8 @@ const buildEmbeddedTab = (
 
 /**
  * 序列化 Dashboard 标签状态。
- * 标准菜单页仍只保存 key；工程嵌入页额外保存 appType、project 和标题元数据，
- * 这样刷新后既能恢复 iframe，又能继续跟随宿主语言切换实时重算标题。
+ * 标准菜单页仍只保存 key；Wujie 工程页额外保存 appType、project 和标题元数据，
+ * 这样刷新后能恢复子应用，并继续跟随宿主语言切换实时重算标题。
  *
  * @param {object} options - 序列化选项
  * @param {Array<object>} options.tabs - 当前标签列表
@@ -213,18 +213,18 @@ export const serializeDashboardTabState = ({
       continue
     }
 
-    const embeddedProps = normalizeEmbeddedProps(tab.props)
-    if (!embeddedProps) continue
+    const microAppProps = normalizeMicroAppProps(tab.props)
+    if (!microAppProps) continue
 
     persistedTabs.push({
-      type: 'embedded',
+      type: 'micro-app',
       key: tab.key,
       titleKey: typeof tab.titleKey === 'string' ? tab.titleKey : null,
       titlePrefix: typeof tab.titlePrefix === 'string' ? tab.titlePrefix : '',
       titleParams: normalizeTitleParams(tab.titleParams),
       title: typeof tab.title === 'string' ? tab.title : '',
       icon: typeof tab.icon === 'string' ? tab.icon : '',
-      props: embeddedProps,
+      props: microAppProps,
     })
   }
 
@@ -238,13 +238,12 @@ export const serializeDashboardTabState = ({
 
 /**
  * 从持久化结果恢复 Dashboard 标签状态。
- * 同时兼容历史仅保存字符串 key 的旧格式，避免老用户现有 localStorage 直接失效。
  *
  * @param {object|null|undefined} savedState - localStorage 中的原始状态
  * @param {object} options - 恢复选项
  * @param {Record<string, any>} options.tabConfigMap - 标准标签配置映射
  * @param {(key: string) => boolean} options.hasTabPermission - 权限校验函数
- * @param {any} options.embeddedComponent - 工程嵌入组件
+ * @param {any} options.microAppComponent - Wujie 子应用组件
  * @param {(key: string, params?: Record<string, unknown>) => string} options.translate - 翻译函数
  * @returns {{tabs: Array<object>, activeTab: string}|null} 恢复结果
  */
@@ -253,7 +252,7 @@ export const restoreDashboardTabState = (
   {
     tabConfigMap = {},
     hasTabPermission = () => true,
-    embeddedComponent = null,
+    microAppComponent = null,
     translate = (key: string) => key,
   }: RestoreOptions = {},
 ): { tabs: DashboardTab[]; activeTab: string } | null => {
@@ -281,9 +280,9 @@ export const restoreDashboardTabState = (
       continue
     }
 
-    if (record.type === 'embedded') {
-      const embeddedTab = buildEmbeddedTab(record, embeddedComponent, translate)
-      if (embeddedTab) restoredTabs.push(embeddedTab)
+    if (record.type === 'micro-app') {
+      const microAppTab = buildMicroAppTab(record, microAppComponent, translate)
+      if (microAppTab) restoredTabs.push(microAppTab)
     }
   }
 

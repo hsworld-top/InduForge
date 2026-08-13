@@ -1,12 +1,10 @@
 import { io, type Socket } from 'socket.io-client'
-import { Storage } from './storage'
 
 let socket: Socket | null = null
 
 export const initSocket = (tenantId?: string | null): Socket => {
   if (socket) return socket
 
-  const token = Storage.getToken()
   const apiURL = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '').trim()
   // 提取 socket.io 的 host，兼容 /api 或 /api/v1 结尾
   const socketHost = apiURL
@@ -17,7 +15,7 @@ export const initSocket = (tenantId?: string | null): Socket => {
   console.log('[Socket] init host:', socketHost || '(same-origin)')
 
   socket = io(socketHost, {
-    auth: { token },
+	withCredentials: true,
 	path: '/control-socket.io',
     transports: ['websocket', 'polling'],
     timeout: 8000,

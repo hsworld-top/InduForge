@@ -216,9 +216,12 @@ func (s *PreviewSocketServer) authorizeSocket(socket *socketio.Socket, params ma
 		return false, "socket not initialized"
 	}
 
-	token := normalizeSocketToken(params["token"])
+	token := ""
+	if socket.Conn != nil {
+		token = normalizeSocketToken(socket.Conn.Cookies("if_access"))
+	}
 	if token == "" {
-		return false, "missing token"
+		return false, "missing session cookie"
 	}
 
 	projectID := strings.TrimSpace(params["projectId"])

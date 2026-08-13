@@ -47,15 +47,8 @@
     return new URLSearchParams(window.location.search).get('apiBase') || '/api/v1'
   }
 
-  function readAccessToken() {
-    return window.localStorage.getItem('auth_token') || ''
-  }
-
-  function authorizationHeaders(headers) {
-    const result = new Headers(headers || undefined)
-    const token = readAccessToken()
-    if (token) result.set('Authorization', 'Bearer ' + token)
-    return result
+  function requestHeaders(headers) {
+    return new Headers(headers || undefined)
   }
 
   function normalizeWorkspacePath(value) {
@@ -104,7 +97,7 @@
       const resolvedUrl = resolveDesignFileUrl(sourceUrl)
       if (resolvedUrl === sourceUrl) return originalFetch(input, init)
 
-      const requestInit = { ...(init || {}), headers: authorizationHeaders(init && init.headers) }
+      const requestInit = { ...(init || {}), credentials: 'same-origin', headers: requestHeaders(init && init.headers) }
       return originalFetch(resolvedUrl, requestInit)
     }
 
@@ -118,10 +111,7 @@
       return originalOpen.apply(this, args)
     }
     XMLHttpRequest.prototype.send = function () {
-      if (this.__induforgeDesignFileRequest) {
-        const token = readAccessToken()
-        if (token) this.setRequestHeader('Authorization', 'Bearer ' + token)
-      }
+      if (this.__induforgeDesignFileRequest) this.withCredentials = true
       return originalSend.apply(this, arguments)
     }
 
@@ -138,7 +128,7 @@
             return
           }
 
-          originalFetch(resolvedUrl, { headers: authorizationHeaders() })
+          originalFetch(resolvedUrl, { credentials: 'same-origin', headers: requestHeaders() })
             .then((response) => {
               if (!response.ok) throw new Error('设计资源读取失败')
               return response.blob()
@@ -221,7 +211,8 @@
           {
             method: 'POST',
             credentials: 'same-origin',
-            headers: authorizationHeaders({ 'Content-Type': 'application/json' }),
+            credentials: 'same-origin',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ command: command, data: data }),
           },
         )
@@ -269,7 +260,8 @@
           {
             method: 'POST',
             credentials: 'same-origin',
-            headers: authorizationHeaders({ 'Content-Type': 'application/json' }),
+            credentials: 'same-origin',
+            headers: requestHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ paths: Array.isArray(paths) ? paths : [] }),
           },
         )

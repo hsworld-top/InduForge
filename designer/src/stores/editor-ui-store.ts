@@ -29,7 +29,7 @@ export interface EditorUiStore {
  * 编辑器 UI 状态单元。
  *
  * 只负责编辑器壳层的主题、语言状态与 DOM 同步，不触碰页面 Schema。
- * 主题/语言的来源只允许是宿主 bootstrap、宿主 postMessage 或显式运行时入参，
+ * 主题/语言的来源只允许是 Wujie 宿主 props 或显式运行时入参，
  * 不再从设计器本地缓存恢复，也不再把切换结果写回 localStorage。
  */
 let editorUiStore: EditorUiStore | null = null

@@ -11,6 +11,7 @@ import './assets/styles/main.css'
 import './assets/styles/cockpit-design-tokens.css'
 import { Storage } from './utils/storage'
 import { applyTenantBrowserBrand } from './utils/tenantBrand'
+import { useAuthStore } from './store'
 
 const initialTheme = Storage.getTheme()
 document.documentElement.classList.toggle('dark', initialTheme === 'dark')
@@ -19,7 +20,10 @@ applyTenantBrowserBrand()
 
 const app = createApp(App)
 
-app.use(createPinia())
+const pinia = createPinia()
+app.use(pinia)
+const authStore = useAuthStore(pinia)
+await authStore.restoreSession()
 app.use(router)
 app.use(ElementPlus)
 app.use(i18n)

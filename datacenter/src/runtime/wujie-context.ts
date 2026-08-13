@@ -1,0 +1,66 @@
+import { setDatacenterLocale } from '@/i18n/runtime'
+
+export type MicroAppContext = {
+  instanceName?: string | undefined
+  projectId?: string | undefined
+  tenantId?: string | undefined
+  theme?: 'light' | 'dark' | undefined
+  locale?: 'zh' | 'en' | undefined
+  onStateChange?: ((payload: { title?: string; dirty?: boolean }) => void) | undefined
+}
+
+let currentContext: MicroAppContext | null = null
+let contextListenerBound = false
+
+const normalizeContext = (value: unknown): MicroAppContext | null => {
+  if (!value || typeof value !== 'object') return null
+  const input = value as Record<string, unknown>
+  const projectId = typeof input.projectId === 'string' ? input.projectId.trim() : ''
+  if (!projectId) return null
+
+  return {
+    instanceName: typeof input.instanceName === 'string' ? input.instanceName : undefined,
+    projectId,
+    tenantId: typeof input.tenantId === 'string' ? input.tenantId : undefined,
+    theme: input.theme === 'dark' ? 'dark' : 'light',
+    locale: input.locale === 'en' ? 'en' : 'zh',
+    onStateChange:
+      typeof input.onStateChange === 'function'
+        ? (input.onStateChange as MicroAppContext['onStateChange'])
+        : undefined,
+  }
+}
+
+export const isWujieMicroApp = (): boolean => Boolean(window.__POWERED_BY_WUJIE__)
+
+export const applyMicroAppContext = (value: unknown): MicroAppContext | null => {
+  const nextContext = normalizeContext(value)
+  if (!nextContext) return currentContext
+
+  currentContext = nextContext
+  document.documentElement.classList.toggle('dark', nextContext.theme === 'dark')
+  setDatacenterLocale(nextContext.locale ?? 'zh')
+  return currentContext
+}
+
+export const initializeWujieContext = (): MicroAppContext | null => {
+  if (!isWujieMicroApp()) return null
+
+  applyMicroAppContext(window.$wujie?.props)
+  if (!contextListenerBound && window.$wujie?.bus) {
+    contextListenerBound = true
+    const instanceName = currentContext?.instanceName
+    if (instanceName) {
+      window.$wujie.bus.$on(`micro-app:${instanceName}:context`, applyMicroAppContext)
+    }
+  }
+  return currentContext
+}
+
+export const getMicroAppContext = (): MicroAppContext | null => currentContext
+export const getCurrentProjectId = (): string | null => currentContext?.projectId ?? null
+export const getCurrentTenantId = (): string | null => currentContext?.tenantId ?? null
+
+export const reportMicroAppState = (payload: { title?: string; dirty?: boolean }): void => {
+  currentContext?.onStateChange?.(payload)
+}

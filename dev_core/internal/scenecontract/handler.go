@@ -90,7 +90,7 @@ func (h *Handler) syncContext(r *http.Request, actor auth.User, projectID string
 	if h.contextSync == nil {
 		return map[string]any{"status": "not-configured"}
 	}
-	result, err := h.contextSync.Sync(r.Context(), actor, projectID, r.Header.Get("Authorization"))
+	result, err := h.contextSync.Sync(r.Context(), actor, projectID, auth.ForwardAuthorization(r))
 	if err != nil {
 		return map[string]any{"status": "stale", "message": err.Error()}
 	}

@@ -11,15 +11,15 @@ test('生产态不会注册 datacenter debug 路由', () => {
     enableDebugRoute: false,
   })
 
-  // v2 路由结构：根 redirect + 模块路由 + 旧 ID 兼容 redirect
-  assert.equal(routes.length, 3)
+  // 路由结构：根 redirect + 正式模块路由
+  assert.equal(routes.length, 2)
 
   // 根路径 redirect
   assert.equal(routes[0].path, '/')
   assert.equal(typeof routes[0].redirect, 'function')
-  assert.deepEqual(routes[0].redirect({ query: { handoff: 'handoff-1' } }), {
+  assert.deepEqual(routes[0].redirect({ query: { keyword: 'demo' } }), {
     path: '/datapoint',
-    query: { handoff: 'handoff-1' },
+    query: { keyword: 'demo' },
   })
 
   // 正式模块路由
@@ -33,10 +33,4 @@ test('生产态不会注册 datacenter debug 路由', () => {
     },
   })
 
-  // 旧模块 ID 兼容 redirect（函数类型，只检查路径）
-  assert.equal(
-    routes[2].path,
-    '/:legacyModule(datapoints|access-sources|storage-policies|compute-units|alarm-units)/:rest(.*)?',
-  )
-  assert.equal(typeof routes[2].redirect, 'function')
 })

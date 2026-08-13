@@ -90,12 +90,14 @@
 | 方法   | 路径                    | 功能概要             |
 | ------ | ----------------------- | -------------------- |
 | `GET`  | `/api/v1/auth/captcha`  | 获取登录滑块挑战（拖至最右侧） |
-| `POST` | `/api/v1/auth/login`    | 登录并返回访问令牌   |
-| `POST` | `/api/v1/auth/refresh`  | 刷新访问令牌         |
-| `POST` | `/api/v1/auth/logout`   | 注销并撤销令牌       |
+| `POST` | `/api/v1/auth/login`    | 登录并设置 HttpOnly 会话 Cookie |
+| `POST` | `/api/v1/auth/refresh`  | 使用刷新 Cookie 轮换会话 |
+| `POST` | `/api/v1/auth/logout`   | 注销、撤销会话并清除 Cookie |
 | `PUT`  | `/api/v1/auth/password` | 当前用户修改密码     |
 | `GET`  | `/api/v1/auth/me`       | 获取当前用户信息     |
 | `GET`  | `/api/v1/auth/config`   | 获取登录页和应用配置 |
+
+浏览器调用认证接口时由同源 `HttpOnly` Cookie 承载会话，响应体不返回访问令牌或刷新令牌；浏览器前端不得保存 JWT。
 
 典型业务失败：
 

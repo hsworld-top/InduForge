@@ -4,26 +4,25 @@ const DEFAULT_SOCKET_PATH = '/socket.io/'
 
 /**
  * 构建共享连接键，确保同一 preview session 只复用同一条底层 socket。
- * token 也纳入键值，避免登录态变化后沿用旧连接。
+ * 认证由浏览器同源 Cookie 自动发送，前端不读取或持有令牌。
  *
- * @param {{ token: string, projectId: string, previewSessionId: string }} params
+ * @param {{ projectId: string, previewSessionId: string }} params
  * @returns {string}
  */
-export function buildMqttSocketSharedKey({ token, projectId, previewSessionId }) {
-  return [token, projectId, previewSessionId].join('::')
+export function buildMqttSocketSharedKey({ projectId, previewSessionId }) {
+  return [projectId, previewSessionId].join('::')
 }
 
 /**
  * 创建 datacenter 侧的 MQTT preview 共享连接注册表。
  * 该注册表负责：
- * 1. 按 token + projectId + previewSessionId 复用底层 socket
+ * 1. 按 projectId + previewSessionId 复用底层 socket
  * 2. 对 mqtt:subscribe / mqtt:tag:subscribe 做引用计数，避免多个组件互相提前 unsubscribe
  * 3. 在连接重建或重连后恢复共享订阅
  *
  * @param {{
  *   ioFactory: Function,
  *   getApiUrl?: (() => string) | string,
- *   getToken?: () => string,
  *   notifier?: (payload: { type: string, message: string }) => void,
  *   logger?: Pick<Console, "log" | "warn" | "error">
  * }} options
@@ -33,7 +32,6 @@ export function createMqttSocketSharedRegistry(options = {}) {
   const {
     ioFactory,
     getApiUrl = () => DEFAULT_SOCKET_URL,
-    getToken = () => '',
     notifier = null,
     logger = console,
   } = options
@@ -118,7 +116,7 @@ export function createMqttSocketSharedRegistry(options = {}) {
     }
   }
 
-  const createEntry = ({ key, token, projectId, previewSessionId }) => {
+  const createEntry = ({ key, projectId, previewSessionId }) => {
     const socketUrl = resolveSocketUrl()
     const socket = ioFactory(socketUrl, {
       path: DEFAULT_SOCKET_PATH,
@@ -127,13 +125,8 @@ export function createMqttSocketSharedRegistry(options = {}) {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: Infinity,
+      withCredentials: true,
       query: {
-        token,
-        projectId,
-        previewSessionId,
-      },
-      auth: {
-        token,
         projectId,
         previewSessionId,
       },
@@ -141,7 +134,6 @@ export function createMqttSocketSharedRegistry(options = {}) {
 
     const entry = {
       key,
-      token,
       projectId,
       previewSessionId,
       socket,
@@ -202,14 +194,8 @@ export function createMqttSocketSharedRegistry(options = {}) {
   }
 
   const ensureEntry = ({ projectId, previewSessionId }) => {
-    const token = String(getToken?.() || '').trim()
     const normalizedProjectId = String(projectId || '').trim()
     const normalizedPreviewSessionId = String(previewSessionId || '').trim()
-
-    if (!token) {
-      logger.warn?.('[MqttSocket] 缺少 token，跳过连接。请确认 Storage.getToken() 已就绪。')
-      return null
-    }
 
     if (!normalizedProjectId) {
       logger.warn?.('[MqttSocket] 缺少 projectId，跳过连接。当前不会发起 socket 握手。')
@@ -224,7 +210,6 @@ export function createMqttSocketSharedRegistry(options = {}) {
     }
 
     const key = buildMqttSocketSharedKey({
-      token,
       projectId: normalizedProjectId,
       previewSessionId: normalizedPreviewSessionId,
     })
@@ -232,7 +217,6 @@ export function createMqttSocketSharedRegistry(options = {}) {
       entries.get(key) ||
       createEntry({
         key,
-        token,
         projectId: normalizedProjectId,
         previewSessionId: normalizedPreviewSessionId,
       })

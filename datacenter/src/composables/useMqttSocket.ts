@@ -4,13 +4,11 @@
 import { ref, watch, unref, onBeforeUnmount } from 'vue'
 import { io } from 'socket.io-client'
 import { ElMessage } from 'element-plus'
-import { Storage } from '@/utils/storage'
 import { buildMqttSocketSharedKey, createMqttSocketSharedRegistry } from './mqtt-socket-shared'
 
 const sharedRegistry = createMqttSocketSharedRegistry({
   ioFactory: io,
   getApiUrl: () => window.location.origin,
-  getToken: () => Storage.getToken(),
   notifier: ({ type, message }) => {
     ElMessage({
       type,
@@ -29,7 +27,7 @@ let nextTagHandleId = 1
 /**
  * MQTT Socket.IO Composable
  * 负责在 datacenter 内复用 preview session 对应的共享 socket：
- * 1. 同一 projectId + previewSessionId + token 只建立一条底层连接
+ * 1. 同一 projectId + previewSessionId 只建立一条底层连接
  * 2. 多个组件共享 mqtt 订阅与 tag 订阅时做引用计数，避免互相提前解绑
  * 3. 对组件暴露的 API 尽量保持不变，降低页面改造成本
  *
@@ -56,19 +54,15 @@ export function useMqttSocket(projectIdSource, previewSessionIdSource = null) {
 
   const readProjectId = () => readSource(projectIdSource) || ''
   const readPreviewSessionId = () => readSource(previewSessionIdSource) || ''
-  const readToken = () => String(Storage.getToken() || '').trim()
-
   const resolveDesiredConnectionKey = () => {
-    const token = readToken()
     const projectId = String(readProjectId() || '').trim()
     const previewSessionId = String(readPreviewSessionId() || '').trim()
 
-    if (!token || !projectId || !previewSessionId) {
+    if (!projectId || !previewSessionId) {
       return ''
     }
 
     return buildMqttSocketSharedKey({
-      token,
       projectId,
       previewSessionId,
     })
@@ -279,7 +273,7 @@ export function useMqttSocket(projectIdSource, previewSessionIdSource = null) {
   }
 
   watch(
-    () => [readProjectId(), readPreviewSessionId(), Storage.getToken()],
+    () => [readProjectId(), readPreviewSessionId()],
     () => {
       connect()
     },

@@ -10,14 +10,11 @@ import type {
   AxiosError,
   AxiosInstance,
   AxiosRequestConfig,
-  AxiosResponse,
   InternalAxiosRequestConfig,
 } from 'axios'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
-import { STORAGE_KEYS } from '@/constants'
-import { postMessageToHost } from '@/runtime/host-bootstrap'
-import { Storage } from '@/utils/storage'
+import { getCurrentTenantId } from '@/runtime/wujie-context'
 
 const DEFAULT_BUSINESS_ERROR_CODE = 30000
 const DIGITS_ONLY_RE = /^\d+$/
@@ -55,17 +52,6 @@ export interface UnwrappedHttpClient {
   interceptors: AxiosInstance['interceptors']
   defaults: AxiosInstance['defaults']
 }
-
-interface QueueItem {
-  resolve: (token: string | null) => void
-  reject: (err: unknown) => void
-}
-
-interface RetriableRequestConfig extends InternalAxiosRequestConfig {
-  _retry?: boolean
-}
-
-const REFRESHABLE_AUTH_CODES = new Set([10001, 10002, 10003])
 
 /** Element Plus 的 ElMessage 选项类型在部分 TS 配置下过窄，此处收窄为运行时实际用法 */
 function notifyRequestError(message: string): void {
@@ -227,157 +213,19 @@ export const getApiErrorData = (error: unknown): unknown => {
 const requestCore = axios.create({
   baseURL: '/api/v1',
   timeout: 30000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
-let isRefreshing = false
-let failedQueue: QueueItem[] = []
-
-function processQueue(error: unknown, token: string | null = null): void {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error)
-    } else {
-      prom.resolve(token)
-    }
-  })
-  failedQueue = []
-}
-
-function refreshAccessToken(refreshToken: string) {
-  return axios.post('/api/v1/auth/refresh', { refreshToken })
-}
-
-function extractRefreshTokens(result: AxiosResponse<unknown>): {
-  accessToken: string | undefined
-  refreshToken: string | undefined
-} {
-  const normalized = normalizeApiResponsePayload<Record<string, unknown>>(result?.data)
-  if (normalized) {
-    if (normalized.code !== 0) {
-      throw new ApiBusinessError(normalized, result.status)
-    }
-    const payload = asRecord(normalized.data) || {}
-    return {
-      accessToken:
-        typeof payload.accessToken === 'string'
-          ? payload.accessToken
-          : typeof payload.token === 'string'
-            ? payload.token
-            : undefined,
-      refreshToken: typeof payload.refreshToken === 'string' ? payload.refreshToken : undefined,
-    }
-  }
-
-  // 兼容兜底：若刷新接口仍返回旧格式，继续尝试 data/body 取 token，避免中断登录态续期。
-  const body = asRecord(result?.data) || {}
-  const payload = asRecord(body.data) || body
-  return {
-    accessToken:
-      typeof payload.accessToken === 'string'
-        ? payload.accessToken
-        : typeof payload.token === 'string'
-          ? payload.token
-          : undefined,
-    refreshToken: typeof payload.refreshToken === 'string' ? payload.refreshToken : undefined,
-  }
-}
-
 function handleLogout(): void {
-  Storage.remove(STORAGE_KEYS.TOKEN)
-  Storage.remove(STORAGE_KEYS.REFRESH_TOKEN)
-  Storage.remove(STORAGE_KEYS.USER_INFO)
-  Storage.remove(STORAGE_KEYS.TENANT_ID)
-  Storage.remove(STORAGE_KEYS.PROJECT_ID)
-
-  postMessageToHost({ type: 'AUTH_EXPIRED' })
-}
-
-function retryWithRefreshedToken(
-  config: RetriableRequestConfig | undefined,
-  originalError: unknown,
-): Promise<unknown> {
-  const requestUrl = config?.url || ''
-  if (config?._retry || requestUrl.includes('/auth/refresh')) {
-    handleLogout()
-    return Promise.reject(originalError)
-  }
-  if (requestUrl.includes('/auth/login')) {
-    return Promise.reject(originalError)
-  }
-
-  const refreshToken = Storage.getRefreshToken()
-  if (!refreshToken || !config) {
-    handleLogout()
-    return Promise.reject(originalError)
-  }
-
-  if (!isRefreshing) {
-    isRefreshing = true
-
-    return refreshAccessToken(refreshToken)
-      .then((result) => {
-        const { accessToken, refreshToken: newRefreshToken } = extractRefreshTokens(result)
-        if (!accessToken) {
-          throw new Error('刷新令牌响应缺少 accessToken/token 字段')
-        }
-
-        Storage.setToken(accessToken)
-        if (newRefreshToken) {
-          Storage.setRefreshToken(newRefreshToken)
-        }
-
-        postMessageToHost({
-          type: 'AUTH_REFRESHED',
-          payload: {
-            token: accessToken,
-            accessToken,
-            refreshToken: newRefreshToken ?? refreshToken,
-          },
-        })
-
-        processQueue(null, accessToken)
-
-        config._retry = true
-        config.headers = config.headers || {}
-        config.headers.Authorization = `Bearer ${accessToken}`
-        return requestCore(config)
-      })
-      .catch((refreshError: unknown) => {
-        processQueue(refreshError, null)
-        handleLogout()
-        return Promise.reject(refreshError)
-      })
-      .finally(() => {
-        isRefreshing = false
-      })
-  }
-
-  return new Promise((resolve, reject) => {
-    failedQueue.push({
-      resolve: (token) => {
-        if (!token) {
-          reject(new Error('刷新令牌后未获取到 access token'))
-          return
-        }
-        config.headers = config.headers || {}
-        config.headers.Authorization = `Bearer ${token}`
-        resolve(requestCore(config))
-      },
-      reject,
-    })
-  })
+  window.location.assign('/login')
 }
 
 requestCore.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = Storage.getToken()
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    const tenantId = Storage.getTenantId()
+    const tenantId = getCurrentTenantId()
     if (tenantId) {
       config.headers['X-Tenant-ID'] = tenantId
     }
@@ -392,9 +240,6 @@ requestCore.interceptors.response.use(
     if (normalizedPayload) {
       if (normalizedPayload.code !== 0) {
         const error = new ApiBusinessError(normalizedPayload, response.status)
-        if (REFRESHABLE_AUTH_CODES.has(normalizedPayload.code)) {
-          return retryWithRefreshedToken(response.config as RetriableRequestConfig, error)
-        }
         return Promise.reject(error)
       }
       return normalizedPayload
@@ -403,14 +248,13 @@ requestCore.interceptors.response.use(
   },
   (error: AxiosError<ErrorResponseData>) => {
     const response = error.response
-    const config = error.config as RetriableRequestConfig | undefined
-
     if (response) {
       const { status, data } = response
 
       switch (status) {
         case 401: {
-          return retryWithRefreshedToken(config, error)
+          handleLogout()
+          break
         }
         case 403:
           notifyRequestError(typeof data?.msg === 'string' ? data.msg : '没有权限访问此资源')

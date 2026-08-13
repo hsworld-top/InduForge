@@ -12,153 +12,23 @@ import { createPinia } from 'pinia'
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
-import {
-  getTrustedHostOriginSet,
-  getTrustedHostSources,
-  handleAuthRefreshedMessage,
-  handleBootstrapResponseMessage,
-  initializeDesignerHostBootstrap,
-  isTrustedHostMessage,
-  postAppBootstrapRequest,
-  resolveDesignerIdeOriginFromRuntime,
-  type TrustedMessageSource,
-} from './runtime/host-bootstrap'
 import { getEditorUiStore } from './stores/editor-ui-store'
-import { shouldSyncEditorUiForPath } from './router/runtime-settings'
+import { initializeWujieContext } from './runtime/wujie-context'
 import 'element-plus/dist/index.css'
 import './assets/styles/main.css'
 
-function isThemeUpdatePayload(data: unknown): data is {
-  type: string
-  theme: 'light' | 'dark'
-} {
-  if (data === null || typeof data !== 'object') return false
-  const o = data as Record<string, unknown>
-  if (o.type !== 'THEME_UPDATE') return false
-  const theme = o.theme
-  return theme === 'light' || theme === 'dark'
-}
-
-function isLocaleUpdatePayload(data: unknown): data is {
-  type: string
-  locale: 'zh' | 'en'
-} {
-  if (data === null || typeof data !== 'object') return false
-  const o = data as Record<string, unknown>
-  if (o.type !== 'LOCALE_UPDATE') return false
-  const locale = o.locale
-  return locale === 'zh' || locale === 'en'
-}
-
-type RuntimeMessageHandlerDependencies = {
-  editorUi: ReturnType<typeof getEditorUiStore>
-  getPathname?: () => string
-  getTrustedOriginSet?: () => Set<string>
-  getTrustedSources?: () => TrustedMessageSource[]
-}
-
-export function resolveTrustedMessageSources({
-  locationOrigin,
-  referrer,
-}: {
-  locationOrigin: string
-  referrer: string
-}): Set<string> {
-  const trustedOrigins = new Set<string>([locationOrigin])
-
-  if (!referrer) {
-    return trustedOrigins
-  }
-
-  try {
-    trustedOrigins.add(new URL(referrer).origin)
-  } catch {
-    // referrer 不可解析时回退到当前 origin，避免把异常输入放大成信任边界。
-  }
-
-  return trustedOrigins
-}
-
-export function createRuntimeMessageHandler({
-  editorUi,
-  getPathname = () => window.location.pathname,
-  getTrustedOriginSet = () => getTrustedHostOriginSet(),
-  getTrustedSources = () => getTrustedHostSources(),
-}: RuntimeMessageHandlerDependencies): (event: MessageEvent) => void {
-  return (event: MessageEvent) => {
-    if (
-      !isTrustedHostMessage(event, {
-        trustedOrigins: getTrustedOriginSet(),
-        trustedSources: getTrustedSources(),
-      })
-    ) {
-      return
-    }
-
-    const data = event.data
-
-    if (
-      handleBootstrapResponseMessage(data, {
-        allowUiSync: shouldSyncEditorUiForPath(getPathname()),
-        editorUi,
-      })
-    ) {
-      return
-    }
-
-    if (handleAuthRefreshedMessage(data)) {
-      return
-    }
-
-    if (!shouldSyncEditorUiForPath(getPathname())) {
-      return
-    }
-
-    if (isThemeUpdatePayload(data)) {
-      editorUi.setTheme(data.theme)
-      return
-    }
-
-    if (isLocaleUpdatePayload(data)) {
-      editorUi.setLocale(data.locale)
-      return
-    }
-  }
-}
-
 export function bootstrapDesignerApp(): void {
-  const hostBootstrap = initializeDesignerHostBootstrap({
-    ideOrigin: resolveDesignerIdeOriginFromRuntime(),
-  })
-  if (hostBootstrap.plan.shouldRedirectToIde && hostBootstrap.plan.ideRedirectUrl) {
-    window.location.replace(hostBootstrap.plan.ideRedirectUrl)
-    return
-  }
-
   const app = createApp(App)
   const pinia = createPinia()
 
   app.use(pinia)
 
   const editorUi = getEditorUiStore()
-
-  window.addEventListener(
-    'message',
-    createRuntimeMessageHandler({
-      editorUi,
-      getPathname: () => window.location.pathname,
-      getTrustedOriginSet: () => getTrustedHostOriginSet(),
-      getTrustedSources: () => getTrustedHostSources(),
-    }),
-  )
+  editorUi.initFromRuntime(initializeWujieContext() ?? undefined)
 
   app.use(router)
   app.use(ElementPlus)
   app.provide('editorUi', editorUi)
-
-  if (hostBootstrap.plan.shouldWaitForBootstrap) {
-    postAppBootstrapRequest()
-  }
 
   app.mount('#app')
 

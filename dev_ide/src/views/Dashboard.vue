@@ -28,8 +28,6 @@
         @maximize-tab="maximizeTab"
         @restore-tab="restoreTab"
         @open-tab="openTab"
-        @embedded-register="registerEmbeddedApp"
-        @embedded-unregister="unregisterEmbeddedApp"
       />
     </div>
 
@@ -66,22 +64,6 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore, useTenantStore } from '@/store'
 import { Storage } from '@/utils/storage'
 import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
-import { buildAppUrl } from '@/utils/appUrl'
-import { resolveRestorePayload } from '@/utils/embeddedAppBridge'
-import {
-  createRestoredEmbeddedTab,
-  EMBEDDED_APP_COMPONENT,
-  extractDashboardHandoffId,
-  stripDashboardHandoffQuery,
-} from '@/utils/dashboardEntryHandoff'
-import {
-  createEmbeddedUpdateMessage,
-  broadcastToEmbeddedIframes,
-  handleEmbeddedWindowMessage,
-  registerEmbeddedIframe,
-  syncLocaleToEmbeddedIframes,
-  unregisterEmbeddedIframe,
-} from '@/utils/embeddedIframeSync'
 import { resolveDashboardTabTitle } from '@/utils/dashboardTabTitle'
 import { restoreDashboardTabState, serializeDashboardTabState } from '@/utils/dashboardTabState'
 import { resolveTenantBrandLogo } from '@/utils/tenantBrand'
@@ -109,7 +91,7 @@ const SystemSettings = markRaw(
   defineAsyncComponent(() => import('@/views/tenant/SystemSettings.vue')),
 )
 const Profile = markRaw(defineAsyncComponent(() => import('@/views/profile/Profile.vue')))
-const EmbeddedApp = markRaw(defineAsyncComponent(() => import('@/components/EmbeddedApp.vue')))
+const WujieMicroApp = markRaw(defineAsyncComponent(() => import('@/components/WujieMicroApp.vue')))
 
 import DashboardSidebar from './layout/DashboardSidebar.vue'
 import DashboardTabsArea from './layout/DashboardTabsArea.vue'
@@ -139,7 +121,6 @@ export default {
     const lastPendingCount = ref(0)
     const opsSocket = ref(null)
     const wsConnectCheckTimer = ref(null)
-    const embeddedRegistry = new Map()
 
     // 侧边栏折叠状态（持久化）
     const sidebarCollapsed = computed({
@@ -226,25 +207,6 @@ export default {
       }
     })
 
-    /**
-     * 通知嵌入应用更新主题。
-     * @param {string} theme - 主题
-     */
-    const syncEmbeddedTheme = (theme) => {
-      broadcastToEmbeddedIframes(
-        embeddedRegistry.values(),
-        createEmbeddedUpdateMessage('THEME_UPDATE', 'theme', theme),
-      )
-    }
-
-    /**
-     * 通知嵌入应用更新语言。
-     * @param {string} localeValue - 语言
-     */
-    const syncEmbeddedLocale = (localeValue) => {
-      syncLocaleToEmbeddedIframes(embeddedRegistry.values(), localeValue)
-    }
-
     // 租户相关计算属性
     const currentTenant = computed(() => tenantStore.currentTenant)
     const tenantLogoUrl = computed(() => {
@@ -288,90 +250,11 @@ export default {
           type: 'warning',
         })
 
-        authStore.logout()
+        await authStore.logout()
         router.push({ name: 'login' })
       } catch {
         // 用户取消操作
       }
-    }
-
-    /**
-     * 在 iframe load 后登记嵌入应用，供宿主后续按 source + origin 匹配 bootstrap 请求。
-     * 这里故意按最新 load 结果覆盖，兼容同一标签页内 iframe 重载或并行改动后的 src 更新。
-     * @param {object} payload - 注册信息
-     */
-    const registerEmbeddedApp = (payload) => {
-      registerEmbeddedIframe(embeddedRegistry, payload)
-    }
-
-    /**
-     * 标签页销毁时移除嵌入登记，避免旧 contentWindow 继续命中宿主匹配。
-     * @param {object} payload - 卸载信息
-     */
-    const unregisterEmbeddedApp = (payload = {}) => {
-      if (!payload?.iframe) return
-      unregisterEmbeddedIframe(embeddedRegistry, payload.iframe)
-    }
-
-    /**
-     * 基于当前宿主态生成 bootstrap 载荷。
-     * 敏感信息只在已登记 iframe 的定向响应里返回，不放进正式入口 URL 查询串。
-     * @param {object} entry - 已匹配的嵌入注册项
-     * @returns {object} bootstrap 宿主态
-     */
-    const resolveEmbeddedBootstrapState = (entry) => ({
-      token: Storage.getToken(),
-      refreshToken: Storage.getRefreshToken(),
-      theme: appStore.theme,
-      locale: appStore.language,
-      // iframe 可能持有上一个工程的本地缓存，bootstrap 必须显式下发当前标签的工程边界。
-      projectId: entry?.project?.id ?? entry?.project?.projectId ?? null,
-      tenantId: entry?.project?.tenantId ?? Storage.getTenantId(),
-    })
-
-    /**
-     * 接收嵌入应用刷新后的 token，并同步回宿主缓存。
-     * 这里只更新当前前端会直接读取的 token/refreshToken，避免重做整套登录流程。
-     * @param {object} payload - 认证刷新载荷
-     */
-    const handleEmbeddedAuthRefreshed = (payload = {}) => {
-      const nextToken = payload.token ?? payload.accessToken
-      const nextRefreshToken = payload.refreshToken
-
-      if (!nextToken) return
-
-      Storage.setToken(nextToken)
-      authStore.token = nextToken
-      authStore.isAuthenticated = true
-
-      if (nextRefreshToken) {
-        Storage.setRefreshToken(nextRefreshToken)
-        authStore.refreshToken = nextRefreshToken
-      }
-    }
-
-    /**
-     * 嵌入应用认证失效后，沿用宿主已有登出与路由清理流程。
-     * 这里不再弹确认框，避免已失效会话把用户卡在不可用页面。
-     */
-    const handleEmbeddedAuthExpired = () => {
-      authStore.logout()
-      router.push({ name: 'login' })
-    }
-
-    /**
-     * 处理来自嵌入应用的消息。
-     * 只有 source + origin 能匹配已登记 iframe 时才会处理，避免未知窗口冒充宿主协议。
-     * @param {MessageEvent} event - 浏览器消息事件
-     */
-    const handleEmbeddedMessage = (event) => {
-      handleEmbeddedWindowMessage({
-        event,
-        registry: embeddedRegistry,
-        resolveBootstrapState: resolveEmbeddedBootstrapState,
-        onAuthRefreshed: handleEmbeddedAuthRefreshed,
-        onAuthExpired: handleEmbeddedAuthExpired,
-      })
     }
 
     // 打开标签页
@@ -666,7 +549,7 @@ export default {
       const restoredState = restoreDashboardTabState(Storage.get(getTabStateStorageKey(), null), {
         tabConfigMap: getTabConfigMap(),
         hasTabPermission,
-        embeddedComponent: EmbeddedApp,
+        microAppComponent: WujieMicroApp,
         translate: t,
       })
       if (!restoredState) return false
@@ -675,32 +558,6 @@ export default {
       activeTab.value = restoredState.activeTab
 
       return true
-    }
-
-    /**
-     * 消费地址栏中的 handoffId，并恢复独立标签页对应的嵌入应用标签。
-     * 这里在 Dashboard 挂载后执行，确保设计中心/数据中心独立打开时能落到正确标签，而不是停留在 IDE 首页。
-     */
-    const restoreEmbeddedTabFromRoute = async () => {
-      const handoffId = extractDashboardHandoffId(route.query)
-      if (!handoffId) return
-
-      const restoredPayload = resolveRestorePayload(handoffId)
-      const restoredTab = createRestoredEmbeddedTab(restoredPayload)
-
-      if (restoredTab) {
-        openTab({
-          ...restoredTab,
-          component:
-            restoredTab.component === EMBEDDED_APP_COMPONENT ? EmbeddedApp : restoredTab.component,
-        })
-      }
-
-      await router.replace({
-        path: route.path || '/dashboard',
-        query: stripDashboardHandoffQuery(route.query),
-        hash: route.hash,
-      })
     }
 
     // 关闭标签页
@@ -752,7 +609,6 @@ export default {
     onMounted(async () => {
       // 添加全局点击事件监听
       document.addEventListener('click', handleClickOutside)
-      window.addEventListener('message', handleEmbeddedMessage)
       window.addEventListener('keydown', handleKeyDown)
 
       // 优先恢复历史标签状态，未恢复成功时按角色打开默认标签
@@ -764,7 +620,6 @@ export default {
           openTab('dashboard')
         }
       }
-      await restoreEmbeddedTabFromRoute()
       tabsInitialized.value = true
       persistTabState()
       setupOpsPendingSubscription()
@@ -783,9 +638,7 @@ export default {
     // 组件卸载时移除事件监听
     onUnmounted(() => {
       document.removeEventListener('click', handleClickOutside)
-      window.removeEventListener('message', handleEmbeddedMessage)
       window.removeEventListener('keydown', handleKeyDown)
-      embeddedRegistry.clear()
       const socket = getSocket()
       if (socket) {
         socket.off('connect', handleOpsSocketConnect)
@@ -877,7 +730,13 @@ export default {
      */
     const openExternalTab = (tab) => {
       if (!tab?.props?.appType) return
-      const url = buildAppUrl(tab.props.appType, tab.props.project)
+      const url = router.resolve({
+        name: 'workspace-micro-app',
+        params: {
+          projectId: String(tab.props.project.id),
+          appType: tab.props.appType,
+        },
+      }).href
       const newWindow = window.open(url, '_blank', 'noopener')
       if (newWindow) newWindow.opener = null
     }
@@ -889,11 +748,6 @@ export default {
       appStore.toggleSidebar()
     }
 
-    watch(isDark, (nextIsDark) => {
-      const theme = nextIsDark ? 'dark' : 'light'
-      syncEmbeddedTheme(theme)
-    })
-
     watch(locale, () => {
       tabs.value = tabs.value.map((tab) => {
         return {
@@ -901,7 +755,6 @@ export default {
           title: resolveDashboardTabTitle(tab, t),
         }
       })
-      syncEmbeddedLocale(locale.value)
     })
 
     watch(
@@ -941,8 +794,6 @@ export default {
       openProfileDialog,
       openSystemSettingsDialog,
       handleLogout,
-      registerEmbeddedApp,
-      unregisterEmbeddedApp,
       openTab,
       closeTab,
       maximizeTab,

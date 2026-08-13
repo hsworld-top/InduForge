@@ -2,7 +2,7 @@
 
 ## 概述
 
-InduForge 使用 JWT (JSON Web Token) 进行身份认证，基于 RBAC (Role-Based Access Control) 进行权限控制。登录支持验证码校验（可选）。
+InduForge 使用 JWT (JSON Web Token) 作为服务端会话凭据，浏览器通过同源 `HttpOnly` Cookie 使用会话；前端不读取、保存或传递 JWT。权限控制基于 RBAC (Role-Based Access Control)，登录支持滑块验证（按需触发）。
 
 本文档只描述用户登录、角色权限和接口访问控制，不描述产品商务授权、节点运行授权和工程资产授权。离线授权设计见 [离线授权与工程资产保护设计](../../06-运维与安全/离线授权与工程资产保护设计.md)。
 
@@ -20,14 +20,13 @@ Content-Type: application/json
 }
 ```
 
-响应：
+成功后服务端设置 `if_access`、`if_refresh` 两个同源 `HttpOnly` Cookie，响应只返回用户资料：
 
 ```json
 {
-  "success": true,
+  "code": 0,
+  "msg": "success",
   "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "user": {
       "id": "user_001",
       "username": "admin",
@@ -39,33 +38,27 @@ Content-Type: application/json
 }
 ```
 
-### 2. 使用 Token
+### 2. 使用会话
 
-在后续请求中携带 Token：
+浏览器后续同源请求自动携带 `HttpOnly` Cookie，前端不应手写 `Authorization` 请求头。服务间调用可从可信服务端提取 JWT 后构造内部 Bearer 请求头。
 
 ```javascript
 GET /api/v1/users
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
-### 3. Token 刷新
+### 3. 会话刷新
 
-Token 过期后使用 refreshToken 获取新 Token：
+浏览器调用刷新接口时自动携带 `if_refresh` Cookie，服务端轮换访问与刷新 Cookie：
 
 ```javascript
 POST /api/v1/auth/refresh
 Content-Type: application/json
-
-{
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
 ```
 
 ### 4. 用户登出
 
 ```javascript
 POST /api/v1/auth/logout
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 ## JWT Token
@@ -161,7 +154,7 @@ const rolePermissions = {
 ```javascript
 // 检查是否已认证
 const requireAuth = (req, res, next) => {
-  const token = req.headers.authorization?.replace('Bearer ', '')
+  const token = req.cookies.if_access
   if (!token) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
@@ -256,12 +249,12 @@ const hashedPassword = await bcrypt.hash(password, 10)
 const isValid = await bcrypt.compare(password, hashedPassword)
 ```
 
-### 2. Token 安全
+### 2. 会话安全
 
 - 使用强随机密钥
 - 设置合理的过期时间
 - 使用 HTTPS 传输
-- 不在 URL 中传递 Token
+- 不在 URL、`localStorage` 或跨窗口消息中传递 JWT
 
 ### 3. 防止攻击
 
@@ -285,9 +278,9 @@ logger.info('User login', {
 
 ## 常见问题
 
-### Q: Token 过期怎么办？
+### Q: 会话过期怎么办？
 
-A: 使用 refreshToken 获取新的 Token。
+A: 浏览器调用 `/api/v1/auth/refresh`，由 `if_refresh` Cookie 自动携带刷新凭据并轮换会话。
 
 ### Q: 如何实现单点登录（SSO）？
 
@@ -297,14 +290,14 @@ A: 可以集成 OAuth 2.0 或 SAML 协议。
 
 A: 在数据库查询时自动添加 tenantId 过滤条件。
 
-### Q: 如何防止 Token 被盗用？
+### Q: 如何降低会话被盗用风险？
 
 A:
 
 1. 使用 HTTPS
 2. 设置短过期时间
 3. 绑定 IP 地址
-4. 实现 Token 黑名单
+4. 服务端撤销访问令牌和刷新会话
 
 ## 相关资源
 
@@ -315,5 +308,5 @@ A:
 
 ---
 
-**版本**: 2.0.0  
-**最后更新**: 2025-12-08
+**版本**: 2.1.0
+**最后更新**: 2026-08-12

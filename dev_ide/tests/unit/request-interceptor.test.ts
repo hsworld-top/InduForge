@@ -32,18 +32,8 @@ vi.mock('element-plus', () => ({
 
 vi.mock('@/utils/storage', () => ({
   Storage: {
-    getToken: vi.fn(() => null),
     getTenantId: vi.fn(() => null),
-    getRefreshToken: vi.fn(() => null),
-    setToken: vi.fn(),
-    setRefreshToken: vi.fn(),
     remove: vi.fn(),
-  },
-}))
-
-vi.mock('@/api/auth.api', () => ({
-  authAPI: {
-    refreshToken: vi.fn(),
   },
 }))
 
@@ -54,7 +44,6 @@ describe('request interceptor', () => {
     responseUseMock.mockClear()
     vi.resetModules()
     vi.mocked(Storage.remove).mockClear()
-    vi.mocked(Storage.getRefreshToken).mockReturnValue(null)
     vi.mocked(ElMessage.error).mockClear()
   })
 
@@ -81,7 +70,7 @@ describe('request interceptor', () => {
     expect(nextConfig).toBe(config)
   })
 
-  it('401 且缺少 refreshToken 时应清理登录态', async () => {
+  it('401 时应清理本地展示态', async () => {
     await import('@/utils/request')
 
     const responseRejected = responseUseMock.mock.calls[0]?.[1] as
@@ -104,7 +93,7 @@ describe('request interceptor', () => {
     await expect(responseRejected!(error)).rejects.toBe(error)
 
     expect(Storage.remove).toHaveBeenCalled()
-    expect(Storage.remove).toHaveBeenCalledTimes(4)
+    expect(Storage.remove).toHaveBeenCalledTimes(2)
   })
 
   it('2xx 且业务 code!=0 时应抛出 ApiBusinessError', async () => {

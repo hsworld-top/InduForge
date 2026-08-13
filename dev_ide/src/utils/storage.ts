@@ -86,56 +86,6 @@ export class Storage {
   }
 
   /**
-   * 获取认证令牌
-   * @returns 令牌
-   */
-  static getToken(): string | null {
-    try {
-      return localStorage.getItem(STORAGE_KEYS.TOKEN)
-    } catch (error) {
-      console.warn(`Storage getToken error for key "${STORAGE_KEYS.TOKEN}":`, error)
-      return null
-    }
-  }
-
-  /**
-   * 设置认证令牌
-   * @param token 令牌
-   */
-  static setToken(token: string): void {
-    try {
-      localStorage.setItem(STORAGE_KEYS.TOKEN, token)
-    } catch (error) {
-      console.warn(`Storage setToken error for key "${STORAGE_KEYS.TOKEN}":`, error)
-    }
-  }
-
-  /**
-   * 获取刷新令牌
-   * @returns 刷新令牌
-   */
-  static getRefreshToken(): string | null {
-    try {
-      return localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
-    } catch (error) {
-      console.warn(`Storage getRefreshToken error for key "${STORAGE_KEYS.REFRESH_TOKEN}":`, error)
-      return null
-    }
-  }
-
-  /**
-   * 设置刷新令牌
-   * @param refreshToken 刷新令牌
-   */
-  static setRefreshToken(refreshToken: string): void {
-    try {
-      localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken)
-    } catch (error) {
-      console.warn(`Storage setRefreshToken error for key "${STORAGE_KEYS.REFRESH_TOKEN}":`, error)
-    }
-  }
-
-  /**
    * 获取用户信息
    * @returns 用户信息
    */

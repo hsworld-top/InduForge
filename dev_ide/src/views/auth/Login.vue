@@ -622,17 +622,15 @@ export default {
 
         const result = await authAPI.login(loginParams)
 
-        // 登录成功，保存token和用户信息
+        // 登录成功后由服务端写入 HttpOnly Cookie，前端只保存用户资料。
         const user = result.data?.user
-        const accessToken = result.data?.accessToken || result.data?.token
-        const refreshToken = result.data?.refreshToken
 
-        if (!user || !accessToken) {
+        if (!user) {
           throw new Error('登录返回数据格式不正确')
         }
 
         // 更新store状态
-        authStore.setAuthData(accessToken, refreshToken, {
+        authStore.setAuthData({
           id: user.id,
           username: user.username,
           role: user.role,

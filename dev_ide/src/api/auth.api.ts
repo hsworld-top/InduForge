@@ -1,4 +1,5 @@
 import request from '@/utils/request'
+import type { AxiosRequestConfig } from 'axios'
 import type { ApiResponse, ApiRecord } from '@/types/api'
 
 type LoginCredentials = {
@@ -14,14 +15,7 @@ type PasswordData = {
   newPassword: string
 }
 
-export interface AuthTokenPayload {
-  token?: string
-  accessToken?: string
-  refreshToken?: string
-  expiresIn?: number
-}
-
-export interface AuthLoginPayload extends AuthTokenPayload {
+export interface AuthLoginPayload {
   user: AuthUserPayload
 }
 
@@ -101,15 +95,9 @@ export const authAPI = {
     })
   },
 
-  /**
-   * 刷新访问令牌
-   * @param {string} refreshToken - 刷新令牌
-   * @returns {Promise} 新的访问令牌
-   */
-  refreshToken(refreshToken: string) {
-    return request.post<ApiResponse<AuthTokenPayload>>('/auth/refresh', {
-      refreshToken,
-    })
+  /** 刷新同源 Cookie 会话。 */
+  refreshToken() {
+    return request.post<ApiResponse<ApiRecord>>('/auth/refresh')
   },
 
   /**
@@ -124,8 +112,8 @@ export const authAPI = {
    * 获取当前用户信息
    * @returns {Promise} 用户信息
    */
-  getCurrentUser() {
-    return request.get<ApiResponse<AuthUserPayload>>('/auth/me')
+  getCurrentUser(config?: AxiosRequestConfig & { skipAuthRedirect?: boolean }) {
+    return request.get<ApiResponse<AuthUserPayload>>('/auth/me', config)
   },
 
   /**

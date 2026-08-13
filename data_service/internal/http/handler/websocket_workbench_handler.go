@@ -187,7 +187,13 @@ func (h *WebSocketWorkbenchHandler) StreamSessionWithQueryToken(validator *auth.
 			response.WriteAppError(w, http.StatusInternalServerError, middleware.RequestID(r.Context()), apperrors.ErrorCodeAuthSecretRequired, "JWT 校验器未初始化")
 			return
 		}
-		token := normalizeWorkbenchStreamToken(r.URL.Query().Get("token"))
+		token := ""
+		if cookie, err := r.Cookie("if_access"); err == nil {
+			token = normalizeWorkbenchStreamToken(cookie.Value)
+		}
+		if token == "" {
+			token = normalizeWorkbenchStreamToken(r.Header.Get("Authorization"))
+		}
 		if token == "" {
 			response.WriteAppError(w, http.StatusUnauthorized, middleware.RequestID(r.Context()), apperrors.ErrorCodeAuthTokenRequired, "请提供 Bearer JWT")
 			return

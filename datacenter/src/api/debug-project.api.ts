@@ -1,6 +1,5 @@
 // @ts-nocheck
 import request from '@/utils/request'
-import { Storage } from '@/utils/storage'
 
 const DEFAULT_DEBUG_PROJECT_NAME = 'test'
 const DEBUG_PROJECT_QUERY_LIMIT = 50
@@ -59,10 +58,6 @@ const normalizeProjectList = (payload) => {
  */
 export const debugProjectAPI = {
   async resolveDefaultProjectByName(projectName = DEFAULT_DEBUG_PROJECT_NAME) {
-    if (!Storage.getToken()) {
-      return null
-    }
-
     const response = await request.get('/projects', {
       params: {
         page: 1,

@@ -3,7 +3,7 @@
  *
  * 正式入口和独立调试入口的行为完全不同：
  * - 开发态 `/designer/debug` 允许独立打开，不要求宿主 bootstrap；
- * - 其他正式入口路径必须走 IDE handoff + bootstrap 流程；
+ * - 其他正式入口路径必须由 IDE 通过 Wujie 创建；
  * - 生产构建不注册 `/debug`，也不再把该路径视为合法调试入口。
  */
 

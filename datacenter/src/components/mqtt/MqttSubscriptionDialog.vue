@@ -97,6 +97,7 @@ import DcDialog from '@/components/shared/DcDialog.vue'
 import IconTablerQuestionMark from '~icons/tabler/question-mark'
 import dataAPI from '@/api/data.api'
 import { Storage } from '@/utils/storage'
+import { getCurrentProjectId, isWujieMicroApp } from '@/runtime/wujie-context'
 import { t } from '@/i18n/runtime'
 import { getApiErrorMessage } from '@/utils/request'
 
@@ -192,9 +193,13 @@ const visible = computed({
 const formSnapshot = computed(() => JSON.stringify(formData.value))
 const isDirty = computed(() => visible.value && formSnapshot.value !== initialFormSnapshot.value)
 
-// 获取项目 ID。
-// 正式入口下优先使用宿主 bootstrap 已写入的本地上下文，仅在独立调试态下回退到旧 URL 参数。
+// 正式入口由 Wujie 上下文提供工程 ID；debug 才允许从 URL 或本地调试缓存回退。
 const getProjectId = () => {
+  const projectId = getCurrentProjectId()
+  if (projectId) return projectId
+
+  if (isWujieMicroApp()) return null
+
   const projectIdFromStorage = Storage.getProjectId()
   if (projectIdFromStorage) {
     return projectIdFromStorage

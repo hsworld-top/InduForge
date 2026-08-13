@@ -2,27 +2,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { watch } from 'vue'
 import { debugProjectAPI } from '@/api/debug-project.api'
-import { STORAGE_KEYS } from '@/constants/index'
 import { Storage } from '@/utils/storage'
 import { datacenterLocale, getDatacenterRouteTitle } from '@/i18n/runtime'
 // import DataCenter from "../views/DataCenter.vue"; // 原版本
 import DataCenter from '../views/DataCenterNew.vue' // 重构版本
-import { buildRouteRuntimeUrl } from './entrypoint-url'
 import { resolveDatacenterDebugProjectMeta } from './debug-project'
 import { createDatacenterRoutes } from './route-config'
-import {
-  applyThemeToDocument,
-  buildIdeLoginUrl,
-  buildIdeRestoreUrl,
-  getCurrentHostContext,
-  hasReusableTopLevelSession,
-  resolveIdeOriginFromRuntime,
-  restoreTopLevelHandoffRecord,
-  shouldRedirectTopLevelToIde,
-  shouldUseDebugMode,
-  waitForHostBootstrap,
-} from '../runtime/host-bootstrap'
-import { resolveRouteProjectContext } from './project-context'
+import { getMicroAppContext, isWujieMicroApp } from '../runtime/wujie-context'
 
 const routes = createDatacenterRoutes({
   DataCenterComponent: DataCenter,
@@ -36,44 +22,21 @@ const router = createRouter({
 export function registerDatacenterBeforeEachGuard(
   targetRouter,
   {
-    getCurrentUrl = () => window.location.href,
-    getIdeOrigin = (currentUrl) =>
-      resolveIdeOriginFromRuntime({
-        currentUrl,
-        referrer: document.referrer,
-      }),
-    isTopLevelWindow = () => window.parent === window,
     navigateToUrl = (url) => {
       window.location.href = url
     },
     resolveDefaultDebugProject = () => debugProjectAPI.resolveDefaultProjectByName(),
-    waitForBootstrap = waitForHostBootstrap,
   } = {},
 ) {
   return targetRouter.beforeEach(async (to, from, next) => {
     document.title = `${getDatacenterRouteTitle(to.name)} - ProjectIDE`
-    applyThemeToDocument(Storage.getTheme())
+    document.documentElement.classList.toggle('dark', Storage.getTheme() === 'dark')
 
-    const runtimeUrl = buildRouteRuntimeUrl(getCurrentUrl(), to.path)
-    const ideOrigin = getIdeOrigin(runtimeUrl.toString())
-    const handoff = runtimeUrl.searchParams.get('handoff')
-    const isDebugRoute = shouldUseDebugMode(runtimeUrl.pathname) || to.meta.requiresAuth === false
-    const isTopLevel = isTopLevelWindow()
-    const restoredTopLevelHandoff =
-      isTopLevel && Boolean(handoff) && restoreTopLevelHandoffRecord(handoff)
-    const currentHostContext = getCurrentHostContext()
-    const allowReusableSession = hasReusableTopLevelSession({
-      handoff: restoredTopLevelHandoff ? null : handoff,
-    })
-
-    if (shouldRedirectTopLevelToIde(runtimeUrl.pathname, isTopLevel, allowReusableSession)) {
-      navigateToUrl(buildIdeRestoreUrl(handoff, ideOrigin))
-      return
-    }
+    const isDebugRoute = shouldUseDebugMode(`/datacenter${to.path}`) || to.meta.requiresAuth === false
 
     if (isDebugRoute) {
       to.meta.project = await resolveDatacenterDebugProjectMeta({
-        targetUrl: runtimeUrl.toString(),
+        targetUrl: window.location.href,
         resolveDefaultDebugProject,
         getStoredProjectId: () => Storage.getProjectId(),
         getStoredTenantId: () => Storage.getTenantId(),
@@ -84,45 +47,16 @@ export function registerDatacenterBeforeEachGuard(
       return
     }
 
-    let token = Storage.getToken()
-    let bootstrapReady = true
-    if (handoff && !isTopLevel && !currentHostContext.projectId) {
-      /**
-       * handoff 表示宿主要求恢复新的工程上下文。
-       * 等待 bootstrap 前先清掉旧工程与租户，避免超时时继续读到上一工程残留。
-       * 如果 main.ts 已经从当前 handoff 票据恢复到 iframe 内存上下文，就不能再清理，
-       * 否则同源多数据中心标签会重新落回其它 iframe 写入的 projectId。
-       * 顶层独立打开时，main.ts 已经尝试从同源 handoff 票据恢复工程上下文，
-       * 这里不能再清理，否则会再次触发回 IDE 恢复。
-       */
-      Storage.removeProjectId()
-      Storage.remove(STORAGE_KEYS.TENANT_ID)
-    }
-
-    if (!token || (handoff && !currentHostContext.projectId)) {
-      bootstrapReady = await waitForBootstrap()
-      token = Storage.getToken()
-    }
-
-    if (!token) {
-      navigateToUrl(buildIdeLoginUrl(runtimeUrl.toString(), ideOrigin))
-      return
-    }
-
-    if (!bootstrapReady) {
-      // handoff 超时只负责解除等待；后续由 projectId 缺失分支回到 IDE 恢复，不再误导到登录页。
-    }
-
-    const { id: projectId, tenantId } = resolveRouteProjectContext(getCurrentHostContext(), Storage)
-
-    if (!projectId) {
-      navigateToUrl(buildIdeRestoreUrl(handoff, ideOrigin))
+    const context = getMicroAppContext()
+    if (!isWujieMicroApp() || !context?.projectId) {
+      next(false)
+      navigateToUrl('/dashboard')
       return
     }
 
     to.meta.project = {
-      id: projectId,
-      tenantId,
+      id: context.projectId,
+      tenantId: context.tenantId ?? null,
     }
 
     next()

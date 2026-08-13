@@ -18,7 +18,7 @@ func Authenticate(validator *auth.JWTValidator) func(http.Handler) http.Handler 
 				return
 			}
 
-			token, ok := bearerTokenFromHeader(r.Header.Get("Authorization"))
+			token, ok := tokenFromRequest(r)
 			if !ok {
 				writeAuthError(w, r, apperrors.NewAppError(apperrors.ErrorCodeAuthTokenRequired, http.StatusUnauthorized, "请提供 Bearer JWT"))
 				return
@@ -38,6 +38,16 @@ func Authenticate(validator *auth.JWTValidator) func(http.Handler) http.Handler 
 			next.ServeHTTP(w, r.WithContext(auth.WithClaims(r.Context(), claims)))
 		})
 	}
+}
+
+// tokenFromRequest 优先读取同源 BFF 会话 Cookie；Authorization 仅保留服务间调用与测试使用。
+func tokenFromRequest(r *http.Request) (string, bool) {
+	if cookie, err := r.Cookie("if_access"); err == nil {
+		if token := strings.TrimSpace(cookie.Value); token != "" {
+			return token, true
+		}
+	}
+	return bearerTokenFromHeader(r.Header.Get("Authorization"))
 }
 
 func bearerTokenFromHeader(header string) (string, bool) {

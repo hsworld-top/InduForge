@@ -16,14 +16,6 @@ export const ROLE_OPTIONS = [
 export type Role = (typeof ROLE_OPTIONS)[number]
 
 /**
- * 登录态 token 数据。
- */
-export interface AuthTokens {
-  token: string
-  refreshToken?: string
-}
-
-/**
  * 用户所属租户的精简信息。
  */
 export interface UserTenant {

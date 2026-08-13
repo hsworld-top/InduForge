@@ -77,6 +77,9 @@ importers:
       vue-router:
         specifier: ^4.6.3
         version: 4.6.4(vue@3.5.34(typescript@5.9.3))
+      wujie:
+        specifier: 2.1.0
+        version: 2.1.0
       xlsx:
         specifier: ^0.18.5
         version: 0.18.5
@@ -156,6 +159,9 @@ importers:
       vue-router:
         specifier: ^4.6.3
         version: 4.6.4(vue@3.5.34(typescript@5.9.3))
+      wujie:
+        specifier: 2.1.0
+        version: 2.1.0
     devDependencies:
       '@eslint/js':
         specifier: ^9.39.1
@@ -241,6 +247,12 @@ importers:
       vue-router:
         specifier: ^4.6.3
         version: 4.6.4(vue@3.5.34(typescript@5.9.3))
+      wujie:
+        specifier: 2.1.0
+        version: 2.1.0
+      wujie-vue3:
+        specifier: 2.1.0
+        version: 2.1.0(vue@3.5.34(typescript@5.9.3))
     devDependencies:
       '@eslint/js':
         specifier: ^9.39.1
@@ -379,6 +391,10 @@ packages:
     resolution: {integrity: sha512-b3ctpQwp+PROvU/cttc4OYl4MzfJUWy6FZg+PMXfzmt/+39iHVF0sDfqay8TQM3JA2EUOyKcFZt75jWriQijsA==}
     engines: {node: '>=6.0.0'}
     hasBin: true
+
+  '@babel/runtime@7.29.7':
+    resolution: {integrity: sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw==}
+    engines: {node: '>=6.9.0'}
 
   '@babel/types@7.29.0':
     resolution: {integrity: sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A==}
@@ -3157,6 +3173,14 @@ packages:
       utf-8-validate:
         optional: true
 
+  wujie-vue3@2.1.0:
+    resolution: {integrity: sha512-GLTiSPnjb33MAjiuDOQyDlLlIvj8h5GvUX6K3GUP6XXUQ2k/RkDcr9uGodvTwSJktxP0zEQzTASkOFXCDndk9A==}
+    peerDependencies:
+      vue: ^3.0.0
+
+  wujie@2.1.0:
+    resolution: {integrity: sha512-qLkI9M30WRlQGlqJJKUDz0FJon30XnH0amUepOaCWwOohhqhvgfP7jeLTykuQfoGm1R7tnqvB7U59G/DW+ud4A==}
+
   xlsx@0.18.5:
     resolution: {integrity: sha512-dmg3LCjBPHZnQp5/F/+nnTa+miPJxUXB6vtk42YjBBKayDNagxGEeIdWApkYPOf3Z3pm3k62Knjzp7lMeTEtFQ==}
     engines: {node: '>=0.8'}
@@ -3242,6 +3266,8 @@ snapshots:
   '@babel/parser@7.29.3':
     dependencies:
       '@babel/types': 7.29.0
+
+  '@babel/runtime@7.29.7': {}
 
   '@babel/types@7.29.0':
     dependencies:
@@ -5852,6 +5878,15 @@ snapshots:
   ws@8.20.1: {}
 
   ws@8.21.0: {}
+
+  wujie-vue3@2.1.0(vue@3.5.34(typescript@5.9.3)):
+    dependencies:
+      vue: 3.5.34(typescript@5.9.3)
+      wujie: 2.1.0
+
+  wujie@2.1.0:
+    dependencies:
+      '@babel/runtime': 7.29.7
 
   xlsx@0.18.5:
     dependencies:
