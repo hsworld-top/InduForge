@@ -146,7 +146,7 @@ func (h *Handler) ListDashboardNotes(w http.ResponseWriter, r *http.Request) {
 	for _, item := range items {
 		list = append(list, notePayload(item))
 	}
-	platformapi.WriteSuccess(w, r, list)
+	platformapi.WriteSuccess(w, r, map[string]any{"notes": list})
 }
 
 func (h *Handler) CreateDashboardNote(w http.ResponseWriter, r *http.Request) {
@@ -164,7 +164,8 @@ func (h *Handler) CreateDashboardNote(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, err)
 		return
 	}
-	platformapi.WriteSuccess(w, r, notePayload(item))
+	item.CreatedByUsername = actorDisplayName(user)
+	platformapi.WriteSuccess(w, r, map[string]any{"note": notePayload(item)})
 }
 
 func (h *Handler) UpdateDashboardNote(w http.ResponseWriter, r *http.Request, noteID string) {
@@ -182,7 +183,8 @@ func (h *Handler) UpdateDashboardNote(w http.ResponseWriter, r *http.Request, no
 		h.writeError(w, r, err)
 		return
 	}
-	platformapi.WriteSuccess(w, r, notePayload(item))
+	item.UpdatedByUsername = actorDisplayName(user)
+	platformapi.WriteSuccess(w, r, map[string]any{"note": notePayload(item)})
 }
 
 func (h *Handler) DeleteDashboardNote(w http.ResponseWriter, r *http.Request, noteID string) {
@@ -194,7 +196,7 @@ func (h *Handler) DeleteDashboardNote(w http.ResponseWriter, r *http.Request, no
 		h.writeError(w, r, err)
 		return
 	}
-	platformapi.WriteSuccess(w, r, map[string]any{})
+	platformapi.WriteSuccess(w, r, map[string]any{"deletedId": noteID})
 }
 
 func (h *Handler) UploadTenantAsset(w http.ResponseWriter, r *http.Request, tenantID string, assetType string) {
@@ -383,5 +385,12 @@ func tenantPayload(item Tenant) map[string]any {
 }
 
 func notePayload(item Note) map[string]any {
-	return map[string]any{"id": item.ID, "tenantId": item.TenantID, "content": item.Content, "createdBy": item.CreatedBy, "updatedBy": item.UpdatedBy, "createdByUsername": item.CreatedByUsername, "updatedByUsername": item.UpdatedByUsername, "createdAt": item.CreatedAt.Format(timeFormat), "updatedAt": item.UpdatedAt.Format(timeFormat)}
+	return map[string]any{"id": item.ID, "tenantId": item.TenantID, "content": item.Content, "createdBy": item.CreatedBy, "updatedBy": item.UpdatedBy, "createdByName": item.CreatedByUsername, "updatedByName": item.UpdatedByUsername, "createdAt": item.CreatedAt.Format(timeFormat), "updatedAt": item.UpdatedAt.Format(timeFormat)}
+}
+
+func actorDisplayName(user auth.User) string {
+	if name := strings.TrimSpace(user.FullName); name != "" {
+		return name
+	}
+	return user.Username
 }

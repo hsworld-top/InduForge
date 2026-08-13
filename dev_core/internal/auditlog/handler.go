@@ -134,7 +134,7 @@ func (h *Handler) GetAuditLogStats(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListRecentActivities(w http.ResponseWriter, r *http.Request) {
-	actor, ok := h.requireCapability(w, r, auth.CapabilityAuditLogRead)
+	actor, ok := h.requireUser(w, r)
 	if !ok {
 		return
 	}
@@ -146,9 +146,17 @@ func (h *Handler) ListRecentActivities(w http.ResponseWriter, r *http.Request) {
 	}
 	list := make([]map[string]any, 0, len(items))
 	for _, item := range items {
-		list = append(list, logPayload(item))
+		list = append(list, activityPayload(item))
 	}
 	platformapi.WriteSuccess(w, r, map[string]any{"activities": list})
+}
+
+func activityPayload(item Log) map[string]any {
+	return map[string]any{
+		"id": item.ID, "action": item.Action, "resource": item.Resource, "path": item.Path,
+		"createdAt": item.CreatedAt.Format(timeFormat),
+		"user":      map[string]any{"id": item.UserID, "username": item.Username, "fullName": item.FullName},
+	}
 }
 
 func (h *Handler) requireCapability(w http.ResponseWriter, r *http.Request, capability auth.Capability) (auth.User, bool) {

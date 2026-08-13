@@ -89,9 +89,12 @@ ORDER BY count(*) DESC
 LIMIT 10;
 
 -- name: ListRecentAuditActivities :many
-SELECT l.id, l.message, l.action, l.created_at, u.id AS user_id, u.username, u.full_name
+SELECT l.id, l.action, l.resource, l.path, l.created_at, u.id AS user_id, u.username, u.full_name
 FROM audit_logs l
 LEFT JOIN users u ON u.id = l.user_id
 WHERE l.tenant_id = sqlc.arg(tenant_id)
+  AND l.result = 'success'
+  AND l.action IN ('create', 'update', 'delete')
+  AND l.resource NOT IN ('auth', 'logs')
 ORDER BY l.created_at DESC
 LIMIT sqlc.arg(item_limit);

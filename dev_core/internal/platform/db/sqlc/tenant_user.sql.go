@@ -384,8 +384,8 @@ func (q *Queries) GetTenantByIdentifier(ctx context.Context, identifier string) 
 
 const listDashboardNotes = `-- name: ListDashboardNotes :many
 SELECT n.id, n.tenant_id, n.content, n.created_by, n.updated_by, n.created_at, n.updated_at,
-       creator.username AS created_by_username,
-       updater.username AS updated_by_username
+       COALESCE(NULLIF(creator.full_name, ''), creator.username) AS created_by_username,
+       COALESCE(NULLIF(updater.full_name, ''), updater.username, '') AS updated_by_username
 FROM tenant_dashboard_notes n
 JOIN users creator ON creator.id = n.created_by
 LEFT JOIN users updater ON updater.id = n.updated_by
@@ -402,7 +402,7 @@ type ListDashboardNotesRow struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 	CreatedByUsername string             `json:"created_by_username"`
-	UpdatedByUsername pgtype.Text        `json:"updated_by_username"`
+	UpdatedByUsername string             `json:"updated_by_username"`
 }
 
 func (q *Queries) ListDashboardNotes(ctx context.Context, tenantID pgtype.UUID) ([]ListDashboardNotesRow, error) {

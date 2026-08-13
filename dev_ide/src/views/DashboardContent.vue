@@ -441,6 +441,7 @@ import { userAPI, projectAPI, tenantAPI, logAPI } from '@/api'
 import request from '@/utils/request'
 import { formatDateTime } from '@/utils/date'
 import { getApiErrorMessage } from '@/utils/request'
+import { formatDashboardActivity } from '@/utils/dashboard-activity'
 import { canAccessTab, canRequestTenantStats } from '@/permissions'
 
 export default {
@@ -503,10 +504,9 @@ export default {
           requestEntries.push(['projects', projectAPI.getProjects({ page: 1, limit: 1 })])
         }
         if (canAccessSystemLogs.value) {
-          requestEntries.push(['logs', logAPI.getLogs({ page: 1, limit: 5 })])
-        } else {
-          requestEntries.push(['recentActivities', logAPI.getRecentActivities({ limit: 5 })])
+          requestEntries.push(['logs', logAPI.getLogs({ page: 1, limit: 1 })])
         }
+        requestEntries.push(['recentActivities', logAPI.getRecentActivities({ limit: 5 })])
         if (canAccessOpsManagement.value) {
           requestEntries.push([
             'nodes',
@@ -556,30 +556,15 @@ export default {
             ? getPaginationTotal(tenantsResult.value)
             : 0
 
-        if (logsResult?.status === 'fulfilled') {
-          const logs = logsResult.value?.data?.list?.logs || logsResult.value?.data?.logs || []
-          recentActivities.value = logs.slice(0, 5).map((log, index) => ({
-            id: log.id || `${log.createdAt}-${index}`,
-            description:
-              log.message ||
-              t('dashboard.activityFallback', {
-                action: log.action || t('dashboard.systemAction'),
-              }),
-            time: log.createdAt || '',
-          }))
-        } else if (recentActivitiesResult?.status === 'fulfilled') {
+        if (recentActivitiesResult?.status === 'fulfilled') {
           const activities =
             recentActivitiesResult.value?.data?.list?.activities ||
             recentActivitiesResult.value?.data?.activities ||
             []
-          recentActivities.value = activities.slice(0, 5).map((log, index) => ({
-            id: log.id || `${log.createdAt}-${index}`,
-            description:
-              log.message ||
-              t('dashboard.activityFallback', {
-                action: log.action || t('dashboard.systemAction'),
-              }),
-            time: log.createdAt || '',
+          recentActivities.value = activities.slice(0, 5).map((activity, index) => ({
+            id: activity.id || `${activity.createdAt}-${index}`,
+            description: formatDashboardActivity(activity, t),
+            time: activity.createdAt || '',
           }))
         } else {
           recentActivities.value = []
@@ -687,7 +672,13 @@ export default {
         const response = await tenantAPI.updateDashboardNote(note.id, editingNoteDraft.value.trim())
         const updatedNote = normalizeTenantNote(response?.data?.note || {})
         tenantNotes.value = tenantNotes.value.map((item) =>
-          item.id === updatedNote.id ? updatedNote : item,
+          item.id === updatedNote.id
+            ? {
+                ...item,
+                ...updatedNote,
+                createdByName: updatedNote.createdByName || item.createdByName,
+              }
+            : item,
         )
         cancelEditTenantNote()
         ElMessage.success(t('dashboard.noteSaved'))

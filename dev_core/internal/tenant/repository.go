@@ -141,7 +141,7 @@ func (r *PostgreSQLRepository) ListNotes(ctx context.Context, tenantID string) (
 		result = append(result, Note{
 			ID: uuidString(row.ID), TenantID: uuidString(row.TenantID), Content: row.Content,
 			CreatedBy: uuidString(row.CreatedBy), UpdatedBy: uuidString(row.UpdatedBy),
-			CreatedByUsername: row.CreatedByUsername, UpdatedByUsername: textString(row.UpdatedByUsername),
+			CreatedByUsername: row.CreatedByUsername, UpdatedByUsername: row.UpdatedByUsername,
 			CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
 		})
 	}

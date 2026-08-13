@@ -45,6 +45,7 @@ func TestAuditLogPermissionDenied(t *testing.T) {
 	if response.Code != platformapi.ErrorCodePermissionDenied {
 		t.Fatalf("USER_ADMIN 不应读取审计日志，实际 code=%d msg=%s", response.Code, response.Msg)
 	}
+	assertOK(t, call(t, handler, http.MethodGet, "/api/v1/logs/recent-activities?limit=5", token))
 }
 
 func TestAuditLogDeleteRequiresDeleteCapability(t *testing.T) {

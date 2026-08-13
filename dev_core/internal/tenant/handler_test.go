@@ -29,13 +29,26 @@ func TestTenantHTTPInterfaces(t *testing.T) {
 
 	assertOK(t, requestJSON(t, handler, http.MethodGet, "/api/v1/tenants", nil, token))
 	assertOK(t, requestJSON(t, handler, http.MethodGet, "/api/v1/tenants/current", nil, token))
-	assertOK(t, requestJSON(t, handler, http.MethodGet, "/api/v1/tenants/current/dashboard-notes", nil, token))
+	notes := requestJSON(t, handler, http.MethodGet, "/api/v1/tenants/current/dashboard-notes", nil, token)
+	assertOK(t, notes)
+	assertDataArray(t, notes, "notes")
 
 	createdNote := requestJSON(t, handler, http.MethodPost, "/api/v1/tenants/current/dashboard-notes", map[string]any{"content": "测试便签"}, token)
 	assertOK(t, createdNote)
-	noteID := dataString(t, createdNote, "id")
-	assertOK(t, requestJSON(t, handler, http.MethodPut, "/api/v1/tenants/current/dashboard-notes/"+noteID, map[string]any{"content": "更新便签"}, token))
-	assertOK(t, requestJSON(t, handler, http.MethodDelete, "/api/v1/tenants/current/dashboard-notes/"+noteID, nil, token))
+	noteID := nestedDataString(t, createdNote, "note", "id")
+	if content := nestedDataString(t, createdNote, "note", "content"); content != "测试便签" {
+		t.Fatalf("新增便签内容错误: %s", content)
+	}
+	updatedNote := requestJSON(t, handler, http.MethodPut, "/api/v1/tenants/current/dashboard-notes/"+noteID, map[string]any{"content": "更新便签"}, token)
+	assertOK(t, updatedNote)
+	if content := nestedDataString(t, updatedNote, "note", "content"); content != "更新便签" {
+		t.Fatalf("更新便签内容错误: %s", content)
+	}
+	deletedNote := requestJSON(t, handler, http.MethodDelete, "/api/v1/tenants/current/dashboard-notes/"+noteID, nil, token)
+	assertOK(t, deletedNote)
+	if deletedID := dataString(t, deletedNote, "deletedId"); deletedID != noteID {
+		t.Fatalf("删除便签 ID 错误: %s", deletedID)
+	}
 
 	createdTenant := requestJSON(t, handler, http.MethodPost, "/api/v1/tenants", map[string]any{"name": "第二租户", "code": "second"}, token)
 	assertOK(t, createdTenant)
@@ -128,6 +141,35 @@ func dataString(t *testing.T, response responseEnvelope, key string) string {
 		t.Fatalf("字段 %s 为空", key)
 	}
 	return value
+}
+
+func nestedDataString(t *testing.T, response responseEnvelope, objectKey, key string) string {
+	t.Helper()
+	var data map[string]json.RawMessage
+	if err := json.Unmarshal(response.Data, &data); err != nil {
+		t.Fatal(err)
+	}
+	var nested map[string]any
+	if err := json.Unmarshal(data[objectKey], &nested); err != nil {
+		t.Fatalf("解析字段 %s 失败: %v", objectKey, err)
+	}
+	value, _ := nested[key].(string)
+	if value == "" {
+		t.Fatalf("字段 %s.%s 为空", objectKey, key)
+	}
+	return value
+}
+
+func assertDataArray(t *testing.T, response responseEnvelope, key string) {
+	t.Helper()
+	var data map[string]json.RawMessage
+	if err := json.Unmarshal(response.Data, &data); err != nil {
+		t.Fatal(err)
+	}
+	var items []any
+	if err := json.Unmarshal(data[key], &items); err != nil {
+		t.Fatalf("字段 %s 不是数组: %v", key, err)
+	}
 }
 
 type fakeRepository struct {

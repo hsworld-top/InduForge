@@ -154,7 +154,7 @@ func (r *PostgreSQLRepository) Recent(ctx context.Context, tenantID string, limi
 	}
 	items := make([]Log, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, Log{ID: uuidString(row.ID), UserID: uuidString(row.UserID), Username: textString(row.Username), FullName: textString(row.FullName), Message: row.Message, Action: textString(row.Action), CreatedAt: row.CreatedAt.Time})
+		items = append(items, Log{ID: uuidString(row.ID), UserID: uuidString(row.UserID), Username: textString(row.Username), FullName: textString(row.FullName), Action: textString(row.Action), Resource: textString(row.Resource), Path: textString(row.Path), Result: "success", CreatedAt: row.CreatedAt.Time})
 	}
 	return items, nil
 }

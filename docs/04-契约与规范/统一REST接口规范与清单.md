@@ -351,6 +351,16 @@
 | `GET` | `/api/v1/logs/stats`             | 获取日志统计     |
 | `GET` | `/api/v1/logs/recent-activities` | 获取近期活动     |
 
+#### 仪表盘最近活动
+
+`GET /api/v1/logs/recent-activities?limit=5`
+
+- 鉴权：必须登录，不要求系统日志管理权限。
+- 租户范围：只读取当前登录用户所属租户。
+- 只返回执行成功的业务写操作，包括新增、更新、删除以及启停、审批、发布部署等动作。
+- 不返回查询请求、登录刷新等认证请求或系统日志清理操作；完整请求审计仍通过系统日志接口查询。
+- 成功响应 `data.activities`，单项包含 `id`、`action`、`resource`、`path`、`createdAt` 和 `user`。
+
 ## 5. data_service 接口清单
 
 ### 5.1 模块功能概要

@@ -17,7 +17,7 @@ describe('Wujie 子应用高度约束', () => {
   })
 
   it('子应用主框架必须使用父容器高度，不得使用浏览器视口高度', () => {
-    const constrainedRoots = [
+    const constrainedRoots: Array<[string, RegExp]> = [
       ['datacenter/src/App.vue', /#app\s*\{([^}]*)\}/],
       [
         'datacenter/src/components/datapoint/DataPointWorkspace.vue',
