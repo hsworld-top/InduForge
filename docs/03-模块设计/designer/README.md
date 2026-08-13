@@ -1,67 +1,64 @@
-# 设计器概览
+# Designer 模块设计
 
-## 模块定位
+Designer 是 AI 页面开发工作台。页面布局、路由和组件由 AI 直接维护 Vue/Vite 源码；Designer
+负责组织 Pi Web、页面预览、2D/3D 产物、源码编辑器和工程上下文摘要。
 
-- `designer` 是平台设计层的核心前端，负责低代码页面、组件、变量、交互和工程内容的设计与组织。
+## 模块职责
 
-## 核心能力
+- 左侧只承载 Pi Web。
+- 中间菜单提供“页面 / 2D / 3D / 编辑器”四个工作台视图。
+- 预览视图承载 Vite iframe、设备尺寸、刷新、全屏、进程控制和开发控制台。
+- 2D/3D 视图按公开场景契约展示产物卡片，并在顶部提供对应 HT 编辑器入口。
+- 编辑器视图承载精简 code-server，使用其原生文件、搜索、Git、运行、扩展和终端。
+- 底部展示上下文版本、2D/3D 场景数、数据点数和更新时间。
+- 向 `dev_ide` 发送受控的 2D/3D 标签打开请求。
 
-- 页面设计与组件编排
-- 属性、变量、绑定与表达式配置
-- 工程结构组织与设计态内容管理
-- 设计态预览接入
-- 发布态结构输出准备
-- 编辑器壳层主题与国际化同步
+## 边界
 
-## 正式边界
+- Designer 不维护页面 Schema 或页面解释器。
+- Designer 不读取或修改 Pi Web、Preview、code-server 和 HT 编辑器的跨域 DOM。
+- AI 读取平台生成的 HT 场景契约与数据点上下文，不直接操作 HT 编辑器。
+- Runtime SDK 是工程页面访问鉴权、权限、数据点和场景能力的唯一前端抽象。
+- Preview Control 只管理开发态 `5173` 端口，不参与工程发布和运行站点。
 
-- `designer` 负责设计态与发布态内容组织，不承担平台治理与数据域后端职责。
-- `designer` 通过 `dev_core` 获取设计中心与工程管理接口。
-- 运行态页面解释与节点运行承载不在本模块内完成。
+## 嵌入方式
 
-## 关键交付件
+| 关系 | 方式 |
+| --- | --- |
+| `dev_ide -> Designer` | Wujie，注入工程上下文与工具回调。 |
+| `Designer -> Pi Web` | 原生 iframe。 |
+| `Designer -> Vite Preview` | 原生 iframe。 |
+| `Designer -> code-server` | 原生 iframe。 |
+| `dev_ide -> HT 2D/3D` | 独立保活 iframe 标签。 |
 
-- 工程定义
-- 页面定义
-- 组件与交互定义
-- 发布态结构输入
+Preview 与 code-server iframe 初始化后始终存在。页面、2D、3D、编辑器切换只改变可见性和交互状态，不能修改
+`src` 或销毁实例，以保留 HMR、页面状态、Canvas、编辑缓冲区和终端进程。
 
-## 质量关注点
+## 服务契约
 
-- 设计态定义与发布态结构必须稳定对齐。
-- 设计态预览与运行态行为不能长期分叉。
-- 组件、页面树、属性编辑与绑定机制需要稳定回归。
-- 编辑器壳层主题与语言切换只能作用于设计器自身，不能误伤画布内用户页面。
+Designer 消费严格的四服务工作空间状态：
 
-## 入口与调试
+```ts
+services: {
+  ai: WorkspaceServiceState
+  code: WorkspaceServiceState
+  preview: WorkspaceServiceState
+  previewControl: WorkspaceServiceState
+}
+```
 
-### 正式入口
+开发环境从根 `.env` 读取四个地址并直连 WSL 容器。生产环境由 `dev_core` 和 Traefik 返回受控
+URL，前端不得推导端口或域名。
 
-- 正式入口应由 `dev_ide` 通过 iframe 打开，设计器启动后向宿主发送 `APP_BOOTSTRAP_REQUEST`，再由宿主回发 `APP_BOOTSTRAP_RESPONSE` 注入鉴权、工程、主题与语言上下文。
-- 正式入口不再依赖 URL 里的 `token`、`refreshToken`、`pid`、`tenant` 等敏感参数。
-- 用户直接访问正式入口且本地缺少可复用工程会话时，页面会带着 `handoff` 回跳 `dev_ide`，而不是继续裸跑。
+## 开发链路
 
-### 独立调试
+```text
+用户描述需求
+-> Pi Web 修改 /workspace 源码
+-> Vite HMR 更新 Preview iframe
+-> 用户可切换设备、刷新或打开 Eruda
+-> code-server 随时编辑文件、运行 Git 或终端命令
+```
 
-- 需要单独调试设计器时，使用 `/designer/debug`。
-- `/designer/debug` 允许本地 mock、手动准备 Storage 或按调试需要附带非正式参数；这条链路不代表正式宿主协议。
-- 调试正式链路时，优先从 `dev_ide` 中打开对应标签页，再在开发者工具中观察 bootstrap 消息、主题语言同步与续租回传；若正式入口已持有可复用的 token 与 projectId，则允许作为独立标签页继续运行。
-
-### 预览与边界
-
-- 画布预览不应继承编辑器壳层的主题、语言同步副作用，调试时需要分别验证编辑态与预览态。
-- 如果正式入口顶层刷新后未能恢复，优先排查 `handoff` 是否存在、是否过期，以及宿主是否正确返回 bootstrap 响应。
-
-## 关联文档
-
-- [产品定义](../../01-产品与架构/产品定义.md)
-- [平台系统架构](../../01-产品与架构/平台系统架构.md)
-- [系统设计文档](../../02-系统设计/README.md)
-- [测试与质量策略](../../05-研发与交付/测试与质量策略.md)
-- [发布态 Schema 契约](../../04-契约与规范/跨模块契约/designer-publish-schema.md)
-- [编辑器主题与国际化同步](./editor-shell-theme-i18n.md)
-- [低代码页面国际化设计](./低代码页面国际化设计.md)
-- [组件开发](./component-development.md)
-- [层级约定](./layer-order-convention.md)
-- [尺寸约定](./size-convention.md)
-- [IDE 管理端概览](../dev_ide/README.md)
+发布链路仍为 `pnpm build -> dist -> client-assets -> project-nginx`，不携带 Pi Web、code-server、
+Preview Control 或 Eruda。

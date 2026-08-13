@@ -3,6 +3,18 @@
 /** 部分构建脚本注入的全局（与 getApiBase 一致） */
 declare const __VITE_API_URL__: string | undefined
 
+interface ImportMetaEnv {
+  readonly VITE_DESIGNER_AI_URL?: string
+  readonly VITE_DESIGNER_CODE_URL?: string
+  readonly VITE_DESIGNER_PREVIEW_URL?: string
+  readonly VITE_DESIGNER_PREVIEW_CONTROL_URL?: string
+  readonly VITE_DESIGNER_WORKSPACE_INSTANCE_ID?: string
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv
+}
+
 /** DataService 仅声明预览运行时用到的方法，完整实现见 src/data */
 declare module '@/data' {
   export class DataService {

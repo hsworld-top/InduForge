@@ -11,10 +11,14 @@ vi.mock('@/utils/request', () => ({
 
 const workspace = {
   status: 'running' as const,
-  url: 'http://127.0.0.1:18080/',
-  hostPort: 18080,
   containerName: 'induforge-code-project-1',
   onlineUsers: [],
+  services: {
+    ai: { url: 'http://127.0.0.1:18081/', hostPort: 18081 },
+    code: { url: 'http://127.0.0.1:18080/', hostPort: 18080 },
+    preview: { url: 'http://127.0.0.1:18082/', hostPort: 18082 },
+    previewControl: { url: 'http://127.0.0.1:18083/', hostPort: 18083 },
+  },
 }
 
 describe('codeWorkspaceApi', () => {
@@ -23,7 +27,7 @@ describe('codeWorkspaceApi', () => {
     vi.mocked(request.post).mockReset()
   })
 
-  it('使用工程级状态接口并解包 data', async () => {
+  it('使用工程级状态接口并严格解包四服务契约', async () => {
     vi.mocked(request.get).mockResolvedValue({ code: 0, msg: 'ok', data: workspace })
 
     await expect(codeWorkspaceApi.get('project/1')).resolves.toEqual(workspace)
@@ -41,5 +45,21 @@ describe('codeWorkspaceApi', () => {
     vi.mocked(request.get).mockResolvedValue({ code: 0, msg: 'ok' })
 
     await expect(codeWorkspaceApi.get('project-1')).rejects.toThrow('代码工作区接口未返回 data')
+  })
+
+  it('拒绝旧版单地址结构', async () => {
+    vi.mocked(request.get).mockResolvedValue({
+      code: 0,
+      msg: 'ok',
+      data: {
+        status: 'running',
+        url: 'http://127.0.0.1:18080/',
+        hostPort: 18080,
+        containerName: 'induforge-code-project-1',
+        onlineUsers: [],
+      },
+    })
+
+    await expect(codeWorkspaceApi.get('project-1')).rejects.toThrow('代码工作区缺少 services')
   })
 })

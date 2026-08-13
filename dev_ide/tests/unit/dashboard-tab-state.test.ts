@@ -67,4 +67,61 @@ describe('dashboardTabState', () => {
       },
     })
   })
+
+  it('工具标签只持久化工程与目标并在恢复时重新创建组件', () => {
+    const savedState = serializeDashboardTabState({
+      tabs: [
+        {
+          key: 'p1:2d',
+          title: '项目一 · 2D',
+          component: { name: 'WorkspaceToolFrame' },
+          icon: 'design',
+          props: {
+            target: '2d',
+            project: { id: 'p1', name: '项目一', tenantId: 't1' },
+            url: 'https://must-not-persist.example.test',
+          },
+        },
+      ],
+      activeTab: 'p1:2d',
+    })
+
+    expect(JSON.stringify(savedState)).not.toContain('must-not-persist')
+    const restored = restoreDashboardTabState(savedState, {
+      workspaceToolComponent: { name: 'WorkspaceToolFrame' },
+    })
+    expect(restored).toMatchObject({
+      activeTab: 'p1:2d',
+      tabs: [
+        {
+          key: 'p1:2d',
+          title: '项目一 · 2D',
+          props: {
+            target: '2d',
+            project: { id: 'p1', name: '项目一', tenantId: 't1' },
+          },
+        },
+      ],
+    })
+  })
+
+  it('不会恢复已取消的源码顶层标签', () => {
+    const restored = restoreDashboardTabState(
+      {
+        tabs: [
+          {
+            type: 'workspace-tool',
+            key: 'p1:code',
+            title: '项目一 · 源码',
+            icon: 'code',
+            props: { target: 'code', project: { id: 'p1', name: '项目一' } },
+          },
+        ],
+        activeTab: 'p1:code',
+      },
+      { workspaceToolComponent: { name: 'WorkspaceToolFrame' } },
+    )
+
+    expect(restored).toBeNull()
+  })
 })

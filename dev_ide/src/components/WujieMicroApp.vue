@@ -17,6 +17,7 @@ import WujieVue from 'wujie-vue3'
 import { useAppStore } from '@/store'
 import { Storage } from '@/utils/storage'
 import type { MicroAppType, MicroAppProjectContext } from '@/types/micro-app'
+import type { WorkspaceOpenRequest } from '@/types/workspace-tool'
 
 const props = defineProps<{
   appType: MicroAppType
@@ -25,6 +26,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   stateChange: [payload: { instanceName: string; title?: string; dirty?: boolean }]
+  openWorkspace: [request: WorkspaceOpenRequest]
 }>()
 
 const appStore = useAppStore()
@@ -38,12 +40,14 @@ const buildContext = () => ({
   instanceName: instanceName.value,
   project: { ...props.project, id: String(props.project.id) },
   projectId: String(props.project.id),
+  projectName: props.project.name ? String(props.project.name) : undefined,
   tenantId: props.project.tenantId ? String(props.project.tenantId) : Storage.getTenantId(),
   theme: appStore.theme === 'dark' ? 'dark' : 'light',
   locale: appStore.language === 'en' ? 'en' : 'zh',
   onStateChange: (payload: { title?: string; dirty?: boolean } = {}) => {
     emit('stateChange', { instanceName: instanceName.value, ...payload })
   },
+  onOpenWorkspace: (request: WorkspaceOpenRequest) => emit('openWorkspace', request),
 })
 
 const initialProps = computed(buildContext)
@@ -52,10 +56,7 @@ const syncContext = () => {
   WujieVue.bus.$emit(contextEventName.value, buildContext())
 }
 
-watch(
-  () => [appStore.theme, appStore.language],
-  syncContext,
-)
+watch(() => [appStore.theme, appStore.language], syncContext)
 
 onBeforeUnmount(() => {
   WujieVue.bus.$emit(contextEventName.value, null)

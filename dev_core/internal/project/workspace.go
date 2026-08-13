@@ -1,7 +1,6 @@
 package project
 
 import (
-	"embed"
 	"encoding/base64"
 	"fmt"
 	"io/fs"
@@ -12,20 +11,24 @@ import (
 	"github.com/google/uuid"
 )
 
-type FileWorkspace struct{ root string }
-
-//go:embed all:template
-var workspaceTemplate embed.FS
+type FileWorkspace struct {
+	root       string
+	templateFS fs.FS
+}
 
 const (
 	maxWorkspaceFileSize  int64 = 32 << 20
 	maxWorkspaceTotalSize int64 = 512 << 20
 )
 
-func NewFileWorkspace(root string) (*FileWorkspace, error) {
+func NewFileWorkspace(root, templateRoot string) (*FileWorkspace, error) {
 	root = strings.TrimSpace(root)
 	if root == "" {
 		return nil, fmt.Errorf("工程工作空间根目录不能为空")
+	}
+	templateRoot = strings.TrimSpace(templateRoot)
+	if templateRoot == "" {
+		return nil, fmt.Errorf("工程模板根目录不能为空")
 	}
 	absolute, err := filepath.Abs(root)
 	if err != nil {
@@ -34,13 +37,31 @@ func NewFileWorkspace(root string) (*FileWorkspace, error) {
 	if err := os.MkdirAll(absolute, 0o755); err != nil {
 		return nil, fmt.Errorf("创建工作空间根目录失败: %w", err)
 	}
-	return &FileWorkspace{root: absolute}, nil
+	templateAbsolute, err := filepath.Abs(templateRoot)
+	if err != nil {
+		return nil, fmt.Errorf("解析工程模板根目录失败: %w", err)
+	}
+	if info, err := os.Stat(filepath.Join(templateAbsolute, "package.json")); err != nil || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("工程模板无效，缺少 package.json: %s", templateAbsolute)
+	}
+	return &FileWorkspace{root: absolute, templateFS: os.DirFS(templateAbsolute)}, nil
 }
 
 func (w *FileWorkspace) Initialize(projectID string) (string, error) {
 	projectDirectory, workspacePath, err := w.paths(projectID)
 	if err != nil {
 		return "", err
+	}
+	projectExisted := false
+	if _, statErr := os.Stat(projectDirectory); statErr == nil {
+		projectExisted = true
+	} else if !os.IsNotExist(statErr) {
+		return "", fmt.Errorf("检查工程目录失败: %w", statErr)
+	}
+	cleanupNewProject := func() {
+		if !projectExisted {
+			_ = os.RemoveAll(projectDirectory)
+		}
 	}
 	directories := []string{
 		filepath.Join(projectDirectory, "code-server-data"),
@@ -51,37 +72,43 @@ func (w *FileWorkspace) Initialize(projectID string) (string, error) {
 	}
 	for _, directory := range directories {
 		if err := os.MkdirAll(directory, 0o755); err != nil {
-			_ = os.RemoveAll(projectDirectory)
+			cleanupNewProject()
 			return "", fmt.Errorf("创建工程工作空间失败: %w", err)
 		}
 	}
-	if entries, readErr := os.ReadDir(workspacePath); readErr == nil && len(entries) > 0 {
+	if info, statErr := os.Stat(filepath.Join(workspacePath, "package.json")); statErr == nil && info.Mode().IsRegular() {
 		return workspacePath, nil
-	} else if readErr != nil && !os.IsNotExist(readErr) {
-		return "", fmt.Errorf("检查工程工作空间失败: %w", readErr)
+	} else if statErr != nil && !os.IsNotExist(statErr) {
+		return "", fmt.Errorf("检查工程工作空间失败: %w", statErr)
 	}
 	if err := os.MkdirAll(workspacePath, 0o755); err != nil {
 		return "", fmt.Errorf("创建工程源码目录失败: %w", err)
 	}
-	if err := copyWorkspaceTemplate(workspacePath); err != nil {
-		_ = os.RemoveAll(projectDirectory)
+	if err := copyWorkspaceTemplate(w.templateFS, workspacePath); err != nil {
+		cleanupNewProject()
 		return "", err
 	}
 	for _, relative := range []string{"assets", "components", "displays", "materials", "models", "previews", "scenes", "symbols"} {
 		if err := os.MkdirAll(filepath.Join(workspacePath, relative), 0o755); err != nil {
-			_ = os.RemoveAll(projectDirectory)
+			cleanupNewProject()
 			return "", fmt.Errorf("创建工程资源目录失败: %w", err)
 		}
 	}
 	return workspacePath, nil
 }
 
-func copyWorkspaceTemplate(workspacePath string) error {
-	return fs.WalkDir(workspaceTemplate, "template", func(source string, entry fs.DirEntry, walkErr error) error {
+func copyWorkspaceTemplate(templateFS fs.FS, workspacePath string) error {
+	return fs.WalkDir(templateFS, ".", func(source string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		relative, err := filepath.Rel("template", source)
+		if entry.IsDir() && source != "." {
+			name := filepath.Base(source)
+			if name == "node_modules" || name == "dist" {
+				return fs.SkipDir
+			}
+		}
+		relative, err := filepath.Rel(".", source)
 		if err != nil || relative == "." {
 			return err
 		}
@@ -89,14 +116,25 @@ func copyWorkspaceTemplate(workspacePath string) error {
 		if entry.IsDir() {
 			return os.MkdirAll(target, 0o755)
 		}
-		content, err := workspaceTemplate.ReadFile(source)
+		content, err := fs.ReadFile(templateFS, source)
 		if err != nil {
 			return err
 		}
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
 		}
-		if err := os.WriteFile(target, content, 0o644); err != nil {
+		file, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if os.IsExist(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if _, err := file.Write(content); err != nil {
+			_ = file.Close()
+			return err
+		}
+		if err := file.Close(); err != nil {
 			return err
 		}
 		return nil

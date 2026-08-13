@@ -9,8 +9,7 @@ import { RouterLink, RouterView } from 'vue-router'
       <nav>
         <RouterLink to="/">页面</RouterLink>
         <RouterLink to="/2d/main">2D</RouterLink>
-        <RouterLink to="/3d/main">3D 场景</RouterLink>
-        <RouterLink to="/3d-model/main">3D 模型</RouterLink>
+        <RouterLink to="/3d/main">3D</RouterLink>
       </nav>
     </header>
     <RouterView />

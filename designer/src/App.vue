@@ -86,8 +86,8 @@ onBeforeUnmount(() => {
             <div class="loading-dot"></div>
           </div>
           <div class="loading-content">
-            <div class="loading-title">设计器加载中</div>
-            <div class="loading-subtitle">正在准备画布与资源...</div>
+            <div class="loading-title">正在进入 AI 页面开发</div>
+            <div class="loading-subtitle">正在准备工程工作空间...</div>
           </div>
         </div>
       </div>
@@ -109,7 +109,7 @@ onBeforeUnmount(() => {
 .app-loading {
   position: fixed;
   inset: 0;
-  background: radial-gradient(circle at 30% 20%, rgba(37, 99, 235, 0.12), rgba(15, 23, 42, 0.2));
+  background: linear-gradient(180deg, rgba(248, 247, 244, 0.96), rgba(238, 241, 246, 0.96));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -122,9 +122,10 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 16px;
   padding: 18px 22px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, #ffffff, #f5f7ff);
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.2);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
 }
 
 .loading-mark {
@@ -137,8 +138,8 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 3px solid rgba(37, 99, 235, 0.2);
-  border-top-color: #2563eb;
+  border: 3px solid rgba(29, 78, 216, 0.14);
+  border-top-color: #1d4ed8;
   animation: loading-spin 0.9s linear infinite;
 }
 
@@ -147,7 +148,7 @@ onBeforeUnmount(() => {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #2563eb;
+  background: #60a5fa;
   top: 2px;
   left: 50%;
   transform: translateX(-50%);

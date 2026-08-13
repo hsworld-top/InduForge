@@ -1,17 +1,18 @@
-# InduForge - 工业应用低代码开发平台
+# InduForge - 工业应用 AI 开发与运行平台
 
 ## 项目简介
 
-InduForge 是一个面向工业互联网场景的多模块单仓低代码平台，覆盖平台治理、数据域、可视化设计、发布部署和节点执行链路。当前仓库同时包含 Node.js 后端、多个 Vue 前端以及 Go 运行时服务，开发时应按模块分别处理，而不是把整仓当成单一应用。
+InduForge 是面向工业互联网场景的多模块单仓平台，覆盖 AI 页面开发、HT 2D/3D 场景、数据域、工程构建发布、节点运行和运维管理。工程页面使用标准 Vue/Vite 源码，开发时应按模块职责处理，而不是把整仓当成单一应用。
 
 ## 核心特性
 
-- 🎨 **可视化设计器** - 拖拽式页面设计，支持实时预览
+- **AI 页面开发** - Pi Web 修改 Vue/Vite 源码，code-server Simple Browser 通过 Vite HMR 实时预览
+- **HT 场景编辑** - 独立维护 2D/3D 场景、模型、材质和资源
 - 📊 **数据中心** - 多数据源管理，支持 MySQL、PostgreSQL、SQL Server
 - 🔧 **工程管理** - 项目、租户、用户统一管理
-- 🚀 **微前端架构** - 独立开发、独立部署、灵活扩展
-- 🔌 **数据绑定** - 强大的表达式系统，支持实时数据订阅
-- 🎭 **组件库** - 丰富的工业组件和图表组件
+- **工程源码编辑** - 通过 code-server 直接维护标准前端工程
+- **Runtime SDK** - 统一接入鉴权、权限、数据点和场景能力
+- **不可变 Release** - 构建、签名、部署和回滚按工程版本管理
 
 ## 整体架构
 
@@ -27,9 +28,9 @@ InduForge 是一个面向工业互联网场景的多模块单仓低代码平台�
 │   IDE 主应用  │  数据中心     │  设计中心     │  控制面后端    │  数据域服务    │
 │   (dev_ide)  │ (datacenter) │  (designer)  │  (dev_core)  │ (data_service)│
 │              │              │              │              │              │
-│  - 工程管理   │  - 数据连接   │  - 页面设计   │  - 用户认证   │  - 数据连接   │
-│  - 用户管理   │  - SQL 查询   │  - 组件库     │  - 租户管理   │  - 查询与数据点│
-│  - 部署运维   │  - MQTT/数据点│  - 数据绑定   │  - 发布部署   │  - 协议与预览 │
+│  - 工程管理   │  - 数据连接   │  - AI 对话    │  - 用户认证   │  - 数据连接   │
+│  - 用户管理   │  - SQL 查询   │  - Vite 预览  │  - 租户管理   │  - 查询与数据点│
+│  - 部署运维   │  - MQTT/数据点│  - 开发工作台 │  - 发布部署   │  - 协议与预览 │
 │              │              │              │              │              │
 │  Vue 3       │  Vue 3       │  Vue 3       │  Node.js     │  Go          │
 │ Port: 18601  │ Port: 18602  │ Port: 18603  │ Port: 18101  │ Port: 18102  │
@@ -44,19 +45,15 @@ InduForge 是一个面向工业互联网场景的多模块单仓低代码平台�
 - **状态管理**: Pinia
 - **UI 组件**: Element Plus
 - **样式**: Tailwind CSS
-- **Canvas 渲染**: Konva.js
-- **图表**: ECharts
-- **代码编辑器**: Monaco Editor
-- **动画**: GSAP
+- **工程开发**: Pi Web + code-server + Vite
+- **工业场景**: HT 2D/3D 编辑器
+- **运行接入**: `@induforge/runtime-sdk`
 
-### 后端
+### 平台与服务
 
-- **运行时**: Node.js 18+
-- **框架**: Express
-- **ORM**: Sequelize
+- **控制面**: Go (`dev_core`)
 - **平台元数据**: PostgreSQL/TimescaleDB（开发环境由 Docker 提供）
 - **认证**: JWT
-- **国际化**: i18next
 
 ### 数据域与运行时
 
@@ -72,7 +69,7 @@ InduForge 是一个面向工业互联网场景的多模块单仓低代码平台�
 - `data_service/`：平台侧与开发态数据域服务，负责连接、查询、数据点、协议接入、计算与预览会话。
 - `dev_ide/`：平台管理与运维前端。
 - `datacenter/`：数据接入、查询管理与数据语义建模前端。
-- `designer/`：低代码页面设计器，当前是前端模块里最重的编辑器工程。
+- `designer/`：AI 页面开发工作台，嵌入 Pi Web 和单实例 code-server；Vite 预览由 code-server Simple Browser 加载。
 - `runtime/node_agent/`：节点执行器后端，独立部署在节点侧。
 - `runtime/node_agent_front/`：节点本地管理前端。
 - `scripts/`：本地开发、基础设施、离线打包、安装卸载和模拟数据脚本。
@@ -207,10 +204,9 @@ InduForge/
 ├── datacenter/         # 数据中心应用
 │   ├── src/            # 源代码
 │   └── public/         # 静态资源
-├── designer/           # 设计中心应用
-│   ├── src/            # 源代码
-│   ├── engine/         # 核心引擎
-│   └── registry/       # 组件注册
+├── designer/           # AI 页面开发工作台
+│   ├── src/            # 工作台前端源码
+│   └── code-workspace/ # Pi Web、code-server 与 Vite 开发容器定义
 ├── runtime/            # 运行时相关模块
 │   ├── node_agent/     # 节点执行器后端（Go）
 │   └── node_agent_front/ # 节点本地管理前端

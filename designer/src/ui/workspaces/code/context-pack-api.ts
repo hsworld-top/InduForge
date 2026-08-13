@@ -4,6 +4,8 @@ export interface WorkspaceContextRefreshResult {
   contractVersion: string
   pointCount: number
   roleCount: number
+  sceneCount?: number
+  sceneContractVersion?: string
   updatedAt: string
 }
 

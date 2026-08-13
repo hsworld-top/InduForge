@@ -8,14 +8,17 @@ const require = createRequire(import.meta.url)
 const Icons = require('unplugin-icons/vite').default
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url))
+const envDir = path.resolve(rootDir, '../')
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // 从项目根目录加载环境变量
-  const env = loadEnv(mode, path.resolve(rootDir, '../'), '')
+  const env = loadEnv(mode, envDir, '')
 
   return {
     base: '/designer/', // 部署到 /designer/ 路径
+    // Vite 客户端环境变量也必须从仓库根目录注入，和代理配置保持同一来源。
+    envDir,
     define: {
       __DESIGNER_DEBUG_ROUTE_ENABLED__: JSON.stringify(mode !== 'production'),
     },

@@ -28,6 +28,7 @@
         @maximize-tab="maximizeTab"
         @restore-tab="restoreTab"
         @open-tab="openTab"
+        @open-workspace="handleWorkspaceOpenRequest"
       />
     </div>
 
@@ -67,10 +68,16 @@ import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { resolveDashboardTabTitle } from '@/utils/dashboardTabTitle'
 import { restoreDashboardTabState, serializeDashboardTabState } from '@/utils/dashboardTabState'
 import { resolveTenantBrandLogo } from '@/utils/tenantBrand'
-import { canAccessTab, getTabAccessDeniedMessage } from '@/permissions'
+import { can, canAccessTab, getTabAccessDeniedMessage } from '@/permissions'
 import { ROLES, STORAGE_KEYS } from '@/constants'
 import { initSocket, getSocket } from '@/utils/socket'
 import request from '@/utils/request'
+import {
+  isWorkspaceOpenRequest,
+  matchesWorkspaceRequestProject,
+  workspaceToolTabKey,
+  workspaceToolTitle,
+} from '@/types/workspace-tool'
 
 // 标签页组件懒加载，提升首次加载速度
 const DashboardContent = markRaw(defineAsyncComponent(() => import('@/views/DashboardContent.vue')))
@@ -92,6 +99,9 @@ const SystemSettings = markRaw(
 )
 const Profile = markRaw(defineAsyncComponent(() => import('@/views/profile/Profile.vue')))
 const WujieMicroApp = markRaw(defineAsyncComponent(() => import('@/components/WujieMicroApp.vue')))
+const WorkspaceToolFrame = markRaw(
+  defineAsyncComponent(() => import('@/components/WorkspaceToolFrame.vue')),
+)
 
 import DashboardSidebar from './layout/DashboardSidebar.vue'
 import DashboardTabsArea from './layout/DashboardTabsArea.vue'
@@ -329,6 +339,38 @@ export default {
     }
 
     /**
+     * 只接受当前 Designer 实例为自身工程发起的受控工具打开请求。
+     */
+    const handleWorkspaceOpenRequest = ({ tab, request }) => {
+      if (!isWorkspaceOpenRequest(request) || tab?.props?.appType !== 'designer') return
+      if (!can(authStore.userInfo?.role, 'project:read')) {
+        ElMessage.error('当前用户没有工程工具访问权限')
+        return
+      }
+      const project = tab.props.project
+      const projectId = String(project?.id || '')
+      if (!matchesWorkspaceRequestProject(request, projectId)) {
+        ElMessage.error('工程工具请求与当前工程不一致')
+        return
+      }
+
+      openTab({
+        key: workspaceToolTabKey(projectId, request.target),
+        title: `${project.name || projectId} · ${workspaceToolTitle(request.target)}`,
+        component: WorkspaceToolFrame,
+        props: {
+          target: request.target,
+          project: {
+            id: projectId,
+            name: project.name,
+            tenantId: project.tenantId,
+          },
+        },
+        icon: 'design',
+      })
+    }
+
+    /**
      * 打开运维待审核申请界面。
      */
     const openOpsPendingRequests = () => {
@@ -550,6 +592,7 @@ export default {
         tabConfigMap: getTabConfigMap(),
         hasTabPermission,
         microAppComponent: WujieMicroApp,
+        workspaceToolComponent: WorkspaceToolFrame,
         translate: t,
       })
       if (!restoredState) return false
@@ -795,6 +838,7 @@ export default {
       openSystemSettingsDialog,
       handleLogout,
       openTab,
+      handleWorkspaceOpenRequest,
       closeTab,
       maximizeTab,
       restoreTab,

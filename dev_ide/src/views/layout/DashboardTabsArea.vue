@@ -66,6 +66,7 @@
             :key="tab.key"
             :tab-key="tab.key"
             @open-tab="$emit('open-tab', $event)"
+            @open-workspace="$emit('open-workspace', { tab, request: $event })"
             v-bind="tab.props"
           />
         </div>
@@ -136,6 +137,7 @@ const emit = defineEmits([
   'maximize-tab',
   'restore-tab',
   'open-tab',
+  'open-workspace',
 ])
 
 const appStore = useAppStore()

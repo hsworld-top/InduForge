@@ -19,9 +19,11 @@ RUN addgroup -g 1000 -S induforge && adduser -u 1000 -S induforge -G induforge \
 
 WORKDIR /app
 COPY --from=builder /out/dev_core /app/dev_core
+COPY --chown=induforge:induforge contracts/project-templates/vue-vite /app/contracts/project-templates/vue-vite
 
 ENV DEV_CORE_ADDR=:18101
 ENV CODE_WORKSPACE_ROOT=/var/lib/induforge/workspaces
+ENV PROJECT_TEMPLATE_ROOT=/app/contracts/project-templates/vue-vite
 EXPOSE 18101
 
 USER induforge

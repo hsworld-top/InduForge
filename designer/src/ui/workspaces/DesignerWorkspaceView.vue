@@ -1,646 +1,926 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import IconLucideBox from '~icons/lucide/box'
 import IconLucideCode2 from '~icons/lucide/code-2'
-import IconLucideExternalLink from '~icons/lucide/external-link'
-import IconLucideLayers3 from '~icons/lucide/layers-3'
+import IconLucideMonitorPlay from '~icons/lucide/monitor-play'
 import IconLucideRefreshCw from '~icons/lucide/refresh-cw'
 import IconLucideRoute from '~icons/lucide/route'
-import { getApiErrorMessage } from '@/utils/request'
-import { getCurrentProjectId } from '@/runtime/wujie-context'
-import CodeWorkspacePanel from './code/CodeWorkspacePanel.vue'
-import { contextPackApi } from './code/context-pack-api'
-import SceneContractPanel from './SceneContractPanel.vue'
+import { useRoute } from 'vue-router'
 import {
-  buildHtWorkspaceUrl,
-  resolveWorkspaceKey,
-  type DesignerWorkspaceKey,
-} from './workspace-links'
+  getCurrentProjectId,
+  requestWorkspaceOpen,
+  type WorkspaceOpenTarget,
+} from '@/runtime/wujie-context'
+import { getApiErrorMessage } from '@/utils/request'
+import type { CodeWorkspaceState } from './code/code-workspace-api'
+import { contextPackApi } from './code/context-pack-api'
+import { resolveWorkspaceState } from './code/workspace-runtime'
+import PreviewPanel from './PreviewPanel.vue'
+import SceneArtifactsPanel from './SceneArtifactsPanel.vue'
+import { sceneContractApi, type SceneContract } from './scene-contract-api'
+import {
+  clampAiPaneWidth,
+  MAX_AI_PANE_WIDTH,
+  MIN_AI_PANE_WIDTH,
+  shouldUseCompactLayout,
+} from './workspace-layout'
 
-type WorkspaceItem = {
-  key: DesignerWorkspaceKey
-  label: string
-  description: string
-  icon: typeof IconLucideCode2
-}
+type VisiblePane = 'ai' | 'workbench'
+type ContextStatus = 'syncing' | 'synced' | 'error'
+type WorkbenchView = 'page' | '2d' | '3d' | 'editor'
 
 const route = useRoute()
-const router = useRouter()
-const refreshKey = ref(0)
-const codeWorkspaceUrl = ref<string | null>(null)
-const contextRefreshing = ref(false)
-const contextMessage = ref('')
-const sceneContractOpen = ref(false)
+const stageRef = ref<HTMLElement | null>(null)
+const workspace = ref<CodeWorkspaceState | null>(null)
+const workspaceLoading = ref(true)
+const workspaceError = ref('')
+const contextStatus = ref<ContextStatus>('syncing')
+const contextError = ref('')
+const contextVersion = ref('—')
+const contextUpdatedAt = ref('')
+const pointCount = ref<number | null>(null)
+const scene2dCount = ref<number | null>(null)
+const scene3dCount = ref<number | null>(null)
+const sceneContracts = ref<SceneContract[]>([])
+const compactLayout = ref(false)
+const visiblePane = ref<VisiblePane>('ai')
+const activeWorkbenchView = ref<WorkbenchView>('page')
+const aiPaneWidth = ref(MIN_AI_PANE_WIDTH)
+const aiFrameLoaded = ref(false)
+const codeFrameLoaded = ref(false)
+const toolError = ref('')
+let resizeObserver: ResizeObserver | null = null
+let workspacePollTimer: ReturnType<typeof setTimeout> | null = null
+let workspaceRequestSequence = 0
 
-const workspaces: WorkspaceItem[] = [
-  {
-    key: 'code',
-    label: '页面工程',
-    description: '共享 code-server 工作空间',
-    icon: IconLucideCode2,
-  },
-  {
-    key: '2d',
-    label: '2D 编辑器',
-    description: 'HMI、大屏与工艺流程',
-    icon: IconLucideRoute,
-  },
-  {
-    key: '3d-scene',
-    label: '3D 场景',
-    description: '数字孪生场景编排',
-    icon: IconLucideLayers3,
-  },
-  {
-    key: '3d-model',
-    label: '3D 模型',
-    description: '模型与材质资源维护',
-    icon: IconLucideBox,
-  },
-]
-
-const activeWorkspace = ref(resolveWorkspaceKey(route.query.workspace))
 const projectId = computed(() => {
   const fromRoute = route.meta.project?.id
-  if (fromRoute) return String(fromRoute)
-
-  const fromMicroApp = getCurrentProjectId()
-  if (fromMicroApp) return fromMicroApp
-
+  return fromRoute ? String(fromRoute) : getCurrentProjectId() || ''
+})
+const aiUrl = computed(() =>
+  workspace.value?.status === 'running' ? workspace.value.services.ai.url : null,
+)
+const codeUrl = computed(() =>
+  workspace.value?.status === 'running' ? workspace.value.services.code.url : null,
+)
+const previewUrl = computed(() =>
+  workspace.value?.status === 'running' ? workspace.value.services.preview.url : null,
+)
+const previewControlUrl = computed(() =>
+  workspace.value?.status === 'running' ? workspace.value.services.previewControl.url : null,
+)
+const scene2dContracts = computed(() =>
+  sceneContracts.value.filter((contract) => contract.kind === '2d'),
+)
+const scene3dContracts = computed(() =>
+  sceneContracts.value.filter((contract) => contract.kind === '3d'),
+)
+const splitStyle = computed(() => ({
+  gridTemplateColumns: `${aiPaneWidth.value}px 6px minmax(0, 1fr)`,
+}))
+const contextStatusLabel = computed(() => {
+  if (contextStatus.value === 'syncing') return '同步中'
+  if (contextStatus.value === 'error') return '同步失败'
+  return contextUpdatedAt.value ? `已同步 ${formatTime(contextUpdatedAt.value)}` : '已同步'
+})
+const workspaceStateLabel = computed(() => {
+  if (workspaceLoading.value) return '正在读取开发环境'
+  if (workspaceError.value) return '开发环境连接失败'
+  if (workspace.value?.status === 'starting') return '正在启动开发环境'
+  if (workspace.value?.status === 'missing' || workspace.value?.status === 'stopped') {
+    return '开发环境尚未运行'
+  }
+  if (workspace.value?.status === 'error') return '开发环境异常'
   return ''
 })
-const currentWorkspace = computed<WorkspaceItem>(
-  () => workspaces.find((item) => item.key === activeWorkspace.value) ?? workspaces[0]!,
-)
-const currentFrameUrl = computed(() => {
-  if (!projectId.value) return null
-  if (activeWorkspace.value === 'code') return codeWorkspaceUrl.value
-  return buildHtWorkspaceUrl(import.meta.env.BASE_URL, projectId.value, activeWorkspace.value)
-})
-const frameKey = computed(
-  () => `${activeWorkspace.value}:${currentFrameUrl.value ?? 'empty'}:${refreshKey.value}`,
-)
 
-watch(
-  () => route.query.workspace,
-  (value) => {
-    activeWorkspace.value = resolveWorkspaceKey(value)
-  },
-)
-
-onMounted(() => window.addEventListener('message', handleHtContextSync))
-onUnmounted(() => window.removeEventListener('message', handleHtContextSync))
-
-function handleHtContextSync(event: MessageEvent<unknown>): void {
-  if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return
-  const payload = event.data as { source?: string; type?: string; status?: string; message?: string }
-  if (payload.source !== 'induforge-ht' || payload.type !== 'context-sync') return
-  contextMessage.value =
-    payload.status === 'updated' ? '场景已保存，工程上下文已同步' : payload.message || '场景已保存，工程上下文待刷新'
-}
-
-function selectWorkspace(key: DesignerWorkspaceKey): void {
-  activeWorkspace.value = key
-  if (key === 'code') sceneContractOpen.value = false
-  void router.replace({
-    query: {
-      ...route.query,
-      workspace: key,
-    },
+onMounted(() => {
+  restoreAiPaneWidth()
+  resizeObserver = new ResizeObserver(([entry]) => {
+    const width = entry?.contentRect.width ?? 0
+    compactLayout.value = shouldUseCompactLayout(width)
+    if (!compactLayout.value) aiPaneWidth.value = clampAiPaneWidth(aiPaneWidth.value, width)
   })
+  if (stageRef.value) resizeObserver.observe(stageRef.value)
+  void Promise.allSettled([loadWorkspace(true), runContextRefresh()])
+})
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  clearWorkspacePoll()
+  workspaceRequestSequence += 1
+})
+
+function formatTime(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
 }
 
-function refreshWorkspace(): void {
-  refreshKey.value += 1
+function restoreAiPaneWidth(): void {
+  if (!projectId.value) return
+  const stored = Number.parseInt(
+    localStorage.getItem(`designer:ai-pane:${projectId.value}`) || '',
+    10,
+  )
+  if (Number.isFinite(stored)) {
+    aiPaneWidth.value = Math.min(Math.max(stored, MIN_AI_PANE_WIDTH), MAX_AI_PANE_WIDTH)
+  }
 }
 
-function sceneKind(): '2d' | '3d' {
-  return activeWorkspace.value === '2d' ? '2d' : '3d'
+function persistAiPaneWidth(): void {
+  if (projectId.value) {
+    localStorage.setItem(
+      `designer:ai-pane:${projectId.value}`,
+      String(Math.round(aiPaneWidth.value)),
+    )
+  }
 }
 
-async function refreshProjectContext(): Promise<void> {
-  if (!projectId.value || contextRefreshing.value) return
-  contextRefreshing.value = true
-  contextMessage.value = ''
+function beginResize(event: PointerEvent): void {
+  if (compactLayout.value || !stageRef.value) return
+  const startX = event.clientX
+  const startWidth = aiPaneWidth.value
+  const containerWidth = stageRef.value.clientWidth
+  const target = event.currentTarget as HTMLElement
+  target.setPointerCapture(event.pointerId)
+
+  const move = (moveEvent: PointerEvent) => {
+    aiPaneWidth.value = clampAiPaneWidth(startWidth + moveEvent.clientX - startX, containerWidth)
+  }
+  const end = () => {
+    persistAiPaneWidth()
+    target.removeEventListener('pointermove', move)
+    target.removeEventListener('pointerup', end)
+    target.removeEventListener('pointercancel', end)
+  }
+  target.addEventListener('pointermove', move)
+  target.addEventListener('pointerup', end)
+  target.addEventListener('pointercancel', end)
+}
+
+function resizeWithKeyboard(event: KeyboardEvent): void {
+  if (!stageRef.value || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return
+  event.preventDefault()
+  const delta = event.key === 'ArrowLeft' ? -24 : 24
+  aiPaneWidth.value = clampAiPaneWidth(aiPaneWidth.value + delta, stageRef.value.clientWidth)
+  persistAiPaneWidth()
+}
+
+function clearWorkspacePoll(): void {
+  if (workspacePollTimer) clearTimeout(workspacePollTimer)
+  workspacePollTimer = null
+}
+
+function scheduleWorkspacePoll(): void {
+  clearWorkspacePoll()
+  if (workspace.value?.status === 'starting') {
+    workspacePollTimer = setTimeout(() => void loadWorkspace(false), 1500)
+  }
+}
+
+async function loadWorkspace(autoStart: boolean): Promise<void> {
+  if (!projectId.value) return
+  const sequence = ++workspaceRequestSequence
+  clearWorkspacePoll()
+  workspaceLoading.value = true
+  workspaceError.value = ''
   try {
-    const result = await contextPackApi.refresh(projectId.value)
-    contextMessage.value = `上下文已刷新：${result.pointCount} 个数据点、${result.roleCount} 个角色`
+    const nextWorkspace = await resolveWorkspaceState(projectId.value, autoStart)
+    if (sequence !== workspaceRequestSequence) return
+    if (workspace.value?.services.ai.url !== nextWorkspace.services.ai.url)
+      aiFrameLoaded.value = false
+    if (workspace.value?.services.code.url !== nextWorkspace.services.code.url) {
+      codeFrameLoaded.value = false
+    }
+    workspace.value = nextWorkspace
+    scheduleWorkspacePoll()
   } catch (error) {
-    contextMessage.value = getApiErrorMessage(error, '工程上下文刷新失败')
+    if (sequence !== workspaceRequestSequence) return
+    workspaceError.value = getApiErrorMessage(error, '读取工程开发环境失败')
   } finally {
-    contextRefreshing.value = false
+    if (sequence === workspaceRequestSequence) workspaceLoading.value = false
   }
 }
 
-function openWorkspaceInNewWindow(): void {
-  if (currentFrameUrl.value) {
-    window.open(currentFrameUrl.value, '_blank', 'noopener,noreferrer')
+async function runContextRefresh(): Promise<void> {
+  if (!projectId.value) return
+  contextStatus.value = 'syncing'
+  contextError.value = ''
+  const [contextResult, sceneResult] = await Promise.allSettled([
+    contextPackApi.refresh(projectId.value),
+    sceneContractApi.list(projectId.value),
+  ])
+
+  const errors: string[] = []
+  if (contextResult.status === 'fulfilled') {
+    contextVersion.value = contextResult.value.contractVersion || '—'
+    contextUpdatedAt.value = contextResult.value.updatedAt
+    pointCount.value = contextResult.value.pointCount
+  } else {
+    errors.push(getApiErrorMessage(contextResult.reason, '上下文刷新失败'))
   }
+
+  if (sceneResult.status === 'fulfilled') {
+    sceneContracts.value = sceneResult.value.contracts
+    scene2dCount.value = scene2dContracts.value.length
+    scene3dCount.value = scene3dContracts.value.length
+  } else {
+    errors.push(getApiErrorMessage(sceneResult.reason, '场景摘要读取失败'))
+  }
+
+  contextError.value = errors.join('；')
+  contextStatus.value = errors.length > 0 ? 'error' : 'synced'
+}
+
+async function retryContext(): Promise<void> {
+  if (contextStatus.value === 'syncing') return
+  await runContextRefresh()
+}
+
+function openWorkspace(target: WorkspaceOpenTarget): void {
+  toolError.value = ''
+  if (!requestWorkspaceOpen(target)) {
+    toolError.value = '当前未连接工程工具宿主'
+    window.setTimeout(() => {
+      toolError.value = ''
+    }, 2400)
+  }
+}
+
+async function retryWorkspace(): Promise<void> {
+  await nextTick()
+  await loadWorkspace(true)
 }
 </script>
 
 <template>
-  <main class="workspace-shell">
-    <header class="workspace-header">
-      <div class="brand-block">
-        <span class="brand-mark" aria-hidden="true">IF</span>
-        <div>
-          <p class="eyebrow">INDUSTRIAL APPLICATION STUDIO</p>
-          <h1>设计中心</h1>
-        </div>
-      </div>
-
-      <div class="header-meta">
-        <span class="shared-status"><i />多人共享 · 最后保存生效</span>
-        <span v-if="projectId" class="project-id" :title="projectId">{{ projectId }}</span>
-      </div>
-    </header>
-
-    <section class="workspace-body">
-      <nav class="workspace-nav" aria-label="设计工作区">
-        <div class="nav-heading">
-          <span>WORKSPACES</span>
-          <strong>04</strong>
-        </div>
-        <button
-          v-for="(item, index) in workspaces"
-          :key="item.key"
-          type="button"
-          class="workspace-nav-item"
-          :class="{ active: activeWorkspace === item.key }"
-          @click="selectWorkspace(item.key)"
+  <main class="ai-workbench">
+    <section
+      ref="stageRef"
+      class="workbench-stage"
+      :class="{ compact: compactLayout }"
+      :style="compactLayout ? undefined : splitStyle"
+    >
+      <div class="left-workspace">
+        <section
+          class="service-pane ai-pane"
+          :class="{ hidden: compactLayout && visiblePane !== 'ai' }"
         >
-          <span class="workspace-index">0{{ index + 1 }}</span>
-          <component :is="item.icon" class="workspace-icon" />
-          <span class="workspace-copy">
-            <strong>{{ item.label }}</strong>
-            <small>{{ item.description }}</small>
-          </span>
-        </button>
+          <iframe
+            v-if="aiUrl"
+            class="service-frame"
+            :class="{ loaded: aiFrameLoaded }"
+            :src="aiUrl"
+            title="Pi Web AI 对话"
+            @load="aiFrameLoaded = true"
+          />
+          <div v-if="aiUrl && !aiFrameLoaded" class="pane-state subtle-state">
+            <span class="loading-line" />
+            <strong>正在连接 Pi Web</strong>
+          </div>
+          <div v-else-if="!aiUrl" class="pane-state">
+            <span class="state-kicker">PI WEB</span>
+            <strong>{{ workspaceStateLabel || 'AI 服务尚未接入' }}</strong>
+            <p>{{ workspaceError || '控制面返回 Pi Web 受控地址后，对话将在此处加载。' }}</p>
+            <button
+              v-if="workspaceError || workspace?.status === 'error'"
+              type="button"
+              @click="retryWorkspace"
+            >
+              重新连接
+            </button>
+          </div>
+        </section>
+      </div>
 
-        <div class="nav-note">
-          <span>工程事实</span>
-          <p>Vue 源码与 HT 场景文件统一保存在工程工作空间。</p>
-        </div>
+      <nav v-if="compactLayout" class="compact-tabs" aria-label="工作台视图">
+        <button type="button" :class="{ active: visiblePane === 'ai' }" @click="visiblePane = 'ai'">
+          AI
+        </button>
+        <button
+          type="button"
+          :class="{ active: visiblePane === 'workbench' }"
+          @click="visiblePane = 'workbench'"
+        >
+          工作台
+        </button>
       </nav>
 
-      <section class="workspace-stage">
-        <div class="stage-toolbar">
-          <div>
-            <p>{{ currentWorkspace.description }}</p>
-            <h2>{{ currentWorkspace.label }}</h2>
+      <div
+        v-if="!compactLayout"
+        class="split-handle"
+        role="separator"
+        aria-label="调整 AI 与工作台区域宽度"
+        aria-orientation="vertical"
+        :aria-valuemin="MIN_AI_PANE_WIDTH"
+        :aria-valuemax="MAX_AI_PANE_WIDTH"
+        :aria-valuenow="Math.round(aiPaneWidth)"
+        tabindex="0"
+        @pointerdown="beginResize"
+        @keydown="resizeWithKeyboard"
+      >
+        <span />
+      </div>
+
+      <section
+        class="workbench-pane"
+        :class="{ hidden: compactLayout && visiblePane !== 'workbench' }"
+      >
+        <nav class="workbench-menu" aria-label="工程开发工具">
+          <div class="workbench-menu-main">
+            <button
+              type="button"
+              :class="{ active: activeWorkbenchView === 'page' }"
+              title="页面"
+              aria-label="页面"
+              @click="activeWorkbenchView = 'page'"
+            >
+              <IconLucideMonitorPlay />
+              <span>页面</span>
+            </button>
+            <button
+              type="button"
+              :class="{ active: activeWorkbenchView === '2d' }"
+              title="2D 产物"
+              aria-label="2D"
+              @click="activeWorkbenchView = '2d'"
+            >
+              <IconLucideRoute />
+              <span>2D</span>
+            </button>
+            <button
+              type="button"
+              :class="{ active: activeWorkbenchView === '3d' }"
+              title="3D 产物"
+              aria-label="3D"
+              @click="activeWorkbenchView = '3d'"
+            >
+              <IconLucideBox />
+              <span>3D</span>
+            </button>
+            <button
+              type="button"
+              :class="{ active: activeWorkbenchView === 'editor' }"
+              :disabled="!codeUrl"
+              title="编辑器"
+              aria-label="编辑器"
+              @click="activeWorkbenchView = 'editor'"
+            >
+              <IconLucideCode2 />
+              <span>编辑器</span>
+            </button>
           </div>
-          <div class="stage-actions">
-            <button
-              v-if="activeWorkspace !== 'code'"
-              type="button"
-              title="维护场景提供给 Vue 页面和运行时的公开接口"
-              @click="sceneContractOpen = !sceneContractOpen"
-            >
-              {{ sceneContractOpen ? '关闭场景接口' : '场景公开接口' }}
-            </button>
-            <button
-              type="button"
-              :disabled="!projectId || contextRefreshing"
-              title="刷新代码工作区中的工程上下文包"
-              @click="refreshProjectContext"
-            >
-              <IconLucideRefreshCw />
-              {{ contextRefreshing ? '刷新上下文中' : '刷新工程上下文' }}
-            </button>
-            <button type="button" title="刷新当前工作区" @click="refreshWorkspace">
-              <IconLucideRefreshCw />
-              刷新
-            </button>
-            <button
-              type="button"
-              title="在新窗口打开"
-              :disabled="!currentFrameUrl"
-              @click="openWorkspaceInNewWindow"
-            >
-              <IconLucideExternalLink />
-              新窗口
-            </button>
+        </nav>
+
+        <p v-if="toolError" class="tool-error" role="alert">{{ toolError }}</p>
+
+        <div class="workbench-content">
+          <div
+            class="workbench-view preview-workbench-view"
+            :class="{ active: activeWorkbenchView === 'page' }"
+          >
+            <PreviewPanel
+              :preview-url="previewUrl"
+              :control-url="previewControlUrl"
+              :active="activeWorkbenchView === 'page'"
+            />
           </div>
-        </div>
-
-        <div class="stage-content">
-          <p v-if="contextMessage" class="context-message">{{ contextMessage }}</p>
-          <CodeWorkspacePanel
-            v-if="projectId && activeWorkspace === 'code'"
-            :project-id="projectId"
-            :refresh-key="refreshKey"
-            @url-change="codeWorkspaceUrl = $event"
-          />
-
-          <iframe
-            v-else-if="currentFrameUrl"
-            :key="frameKey"
-            class="workspace-frame"
-            :src="currentFrameUrl"
-            :title="currentWorkspace.label"
-          />
-
-          <SceneContractPanel
-            v-if="projectId && activeWorkspace !== 'code' && sceneContractOpen"
-            :project-id="projectId"
-            :kind="sceneKind()"
-            @close="sceneContractOpen = false"
-            @synced="contextMessage = $event"
-          />
-
-          <div v-else-if="!projectId" class="empty-state danger-state">
-            <span>PROJECT CONTEXT MISSING</span>
-            <h3>未获取到工程上下文</h3>
-            <p>请从工程管理入口重新进入 Designer。</p>
+          <div class="workbench-view" :class="{ active: activeWorkbenchView === '2d' }">
+            <SceneArtifactsPanel
+              kind="2d"
+              :contracts="scene2dContracts"
+              @open-editor="openWorkspace('2d')"
+            />
+          </div>
+          <div class="workbench-view" :class="{ active: activeWorkbenchView === '3d' }">
+            <SceneArtifactsPanel
+              kind="3d"
+              :contracts="scene3dContracts"
+              @open-editor="openWorkspace('3d')"
+            />
+          </div>
+          <div
+            class="workbench-view code-server-shell"
+            :class="{ active: activeWorkbenchView === 'editor' }"
+          >
+            <iframe
+              v-if="codeUrl"
+              class="service-frame code-server-frame"
+              :class="{ loaded: codeFrameLoaded }"
+              :src="codeUrl"
+              title="工程开发工作台"
+              @load="codeFrameLoaded = true"
+            />
+            <div v-if="codeUrl && !codeFrameLoaded" class="pane-state subtle-state">
+              <span class="loading-line" />
+              <strong>正在连接工程工作台</strong>
+            </div>
+            <div v-else-if="!codeUrl" class="pane-state">
+              <span class="state-kicker">CODE-SERVER</span>
+              <strong>{{ workspaceStateLabel || '工程工作台尚未接入' }}</strong>
+              <p>
+                {{
+                  workspaceError || '控制面返回 code-server 受控地址后，源码开发环境将在此处加载。'
+                }}
+              </p>
+              <button
+                v-if="workspaceError || workspace?.status === 'error'"
+                type="button"
+                @click="retryWorkspace"
+              >
+                重新连接
+              </button>
+            </div>
           </div>
         </div>
       </section>
     </section>
+
+    <footer class="context-summary" :title="contextError">
+      <span><b>上下文</b> {{ contextVersion }}</span>
+      <i />
+      <span><b>2D</b> {{ scene2dCount ?? '—' }} 个</span>
+      <i />
+      <span><b>3D</b> {{ scene3dCount ?? '—' }} 个</span>
+      <i />
+      <span><b>数据点位</b> {{ pointCount ?? '—' }} 个</span>
+      <span class="summary-time">{{
+        contextUpdatedAt ? `更新于 ${formatTime(contextUpdatedAt)}` : ''
+      }}</span>
+      <span v-if="contextStatus === 'error'" class="summary-error">部分摘要更新失败</span>
+      <button
+        type="button"
+        class="summary-sync"
+        :class="`status-${contextStatus}`"
+        :title="contextError || '刷新 AI 使用的工程上下文'"
+        :disabled="contextStatus === 'syncing'"
+        @click="retryContext"
+      >
+        <IconLucideRefreshCw :class="{ spinning: contextStatus === 'syncing' }" />
+        {{ contextStatusLabel }}
+      </button>
+    </footer>
   </main>
 </template>
 
 <style scoped>
-.workspace-shell {
-  --ink: #111b1e;
-  --paper: #edf0eb;
-  --panel: #f8faf6;
-  --line: #c8cec6;
-  --signal: #d8ff36;
-  --signal-ink: #172000;
-  min-width: 1180px;
+.ai-workbench {
+  --surface: #ffffff;
+  --surface-subtle: #f6f7f9;
+  --surface-hover: #eef2f7;
+  --ink: #172033;
+  --muted: #64748b;
+  --muted-light: #94a3b8;
+  --line: #d8dee8;
+  --line-light: #e8ecf2;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-light: #eaf1ff;
+  --success: #16803a;
+  --danger: #dc2626;
+  width: 100%;
   height: 100%;
   min-height: 0;
-  color: var(--ink);
-  background:
-    linear-gradient(rgba(17, 27, 30, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(17, 27, 30, 0.035) 1px, transparent 1px), var(--paper);
-  background-size: 24px 24px;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 32px;
   overflow: hidden;
+  color: var(--ink);
+  background: #edf0f4;
 }
 
-.workspace-header {
-  height: 76px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
+.workbench-stage {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  overflow: hidden;
   border-bottom: 1px solid var(--line);
-  background: rgba(248, 250, 246, 0.94);
+  background: var(--surface);
 }
 
-.brand-block,
-.header-meta,
-.stage-actions {
-  display: flex;
-  align-items: center;
+.left-workspace {
+  min-width: 0;
+  min-height: 0;
+  display: block;
 }
 
-.brand-block {
-  gap: 14px;
-}
-
-.brand-mark {
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--ink);
-  background: var(--ink);
-  color: var(--signal);
-  font-family: 'Bahnschrift', 'DIN Alternate', sans-serif;
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-}
-
-.eyebrow,
-.nav-heading span,
-.empty-state > span {
-  margin: 0;
-  font-family: 'Bahnschrift', 'DIN Alternate', sans-serif;
-  font-size: 10px;
-  letter-spacing: 0.18em;
-  color: #66716f;
-}
-
-h1,
-h2,
-h3,
-p {
-  margin: 0;
-}
-
-h1 {
-  margin-top: 2px;
-  font-size: 22px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-}
-
-.header-meta {
-  gap: 12px;
-  font-size: 12px;
-}
-
-.shared-status,
-.project-id {
-  height: 30px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  background: #fff;
-}
-
-.shared-status i {
-  width: 7px;
-  height: 7px;
-  margin-right: 8px;
-  border-radius: 50%;
-  background: #33a457;
-  box-shadow: 0 0 0 3px rgba(51, 164, 87, 0.14);
-}
-
-.project-id {
-  max-width: 220px;
-  overflow: hidden;
-  color: #5c6765;
-  font-family: Consolas, monospace;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.workspace-body {
-  height: calc(100vh - 76px);
-  display: grid;
-  grid-template-columns: 292px minmax(0, 1fr);
-}
-
-.workspace-nav {
-  position: relative;
-  padding: 22px 16px;
-  border-right: 1px solid var(--line);
-  background: rgba(238, 242, 235, 0.96);
-}
-
-.nav-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 0 8px 18px;
-}
-
-.nav-heading strong {
-  color: #7d8784;
-  font:
-    500 12px Consolas,
-    monospace;
-}
-
-.workspace-nav-item {
+.left-workspace .service-pane {
   width: 100%;
-  min-height: 76px;
-  display: grid;
-  grid-template-columns: 26px 28px 1fr;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-  padding: 10px 12px;
-  border: 1px solid transparent;
-  color: inherit;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    transform 150ms ease,
-    border-color 150ms ease,
-    background 150ms ease;
+  height: 100%;
 }
 
-.workspace-nav-item:hover {
-  transform: translateX(3px);
-  border-color: #abb4ae;
-  background: rgba(255, 255, 255, 0.58);
-}
-
-.workspace-nav-item.active {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: #fff;
-  box-shadow: 5px 5px 0 var(--signal);
-}
-
-.workspace-index {
-  align-self: start;
-  padding-top: 3px;
-  color: #818b88;
-  font:
-    500 10px Consolas,
-    monospace;
-}
-
-.active .workspace-index {
-  color: var(--signal);
-}
-
-.workspace-icon {
-  width: 20px;
-  height: 20px;
-}
-
-.workspace-copy {
-  min-width: 0;
-  display: grid;
-  gap: 5px;
-}
-
-.workspace-copy strong {
-  font-size: 14px;
-  font-weight: 650;
-}
-
-.workspace-copy small {
-  overflow: hidden;
-  color: #74807c;
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.active .workspace-copy small {
-  color: #b8c0bc;
-}
-
-.nav-note {
-  position: absolute;
-  right: 22px;
-  bottom: 22px;
-  left: 22px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
-}
-
-.nav-note span {
-  color: #66716f;
-  font:
-    600 10px 'Bahnschrift',
-    sans-serif;
-  letter-spacing: 0.12em;
-}
-
-.nav-note p {
-  margin-top: 7px;
-  color: #66716f;
-  font-size: 11px;
-  line-height: 1.55;
-}
-
-.workspace-stage {
-  min-width: 0;
-  display: grid;
-  grid-template-rows: 64px minmax(0, 1fr);
-  padding: 14px 16px 16px;
-}
-
-.stage-toolbar {
+.context-summary,
+.summary-sync {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 4px;
 }
 
-.stage-toolbar p {
-  color: #6d7774;
-  font-size: 11px;
-}
-
-.stage-toolbar h2 {
-  margin-top: 3px;
-  font-size: 20px;
-  font-weight: 650;
-}
-
-.stage-actions {
-  gap: 8px;
-}
-
-.stage-actions button {
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 11px;
-  border: 1px solid #aeb6b1;
-  color: var(--ink);
-  background: #fff;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.stage-actions button:hover:not(:disabled) {
-  border-color: var(--ink);
-  background: var(--signal);
-}
-
-.stage-actions button:disabled {
-  opacity: 0.42;
-  cursor: not-allowed;
-}
-
-.stage-actions svg {
+.summary-sync svg {
   width: 14px;
   height: 14px;
 }
 
-.stage-content {
-  min-height: 0;
-  position: relative;
-  border: 1px solid var(--ink);
-  background: var(--panel);
-  box-shadow: 8px 8px 0 rgba(17, 27, 30, 0.1);
-  overflow: hidden;
-}
-
-.stage-content::before {
-  content: '';
+.tool-error {
   position: absolute;
-  z-index: 2;
-  top: 0;
-  right: 0;
-  width: 18px;
-  height: 18px;
-  background: linear-gradient(135deg, transparent 48%, var(--signal) 49%);
-  pointer-events: none;
-}
-
-.context-message {
-  position: absolute;
-  z-index: 4;
-  right: 18px;
-  bottom: 14px;
-  max-width: min(580px, calc(100% - 36px));
+  z-index: 8;
   margin: 0;
-  padding: 8px 10px;
-  border: 1px solid #aeb6b1;
-  color: #34403c;
-  background: rgba(255, 255, 255, 0.94);
+  padding: 7px 10px;
+  border: 1px solid #fecaca;
+  border-radius: 5px;
+  color: var(--danger);
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
   font-size: 11px;
 }
 
-.workspace-frame {
+.tool-error {
+  top: 8px;
+  left: 62px;
+}
+
+.service-pane,
+.workbench-content,
+.code-server-shell {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.service-pane.hidden,
+.workbench-pane.hidden {
+  display: none;
+}
+
+.service-frame {
   width: 100%;
   height: 100%;
   display: block;
   border: 0;
-  background: #fff;
+  opacity: 0;
+  background: var(--surface);
 }
 
-.empty-state {
-  width: min(520px, 80%);
+.service-frame.loaded {
+  opacity: 1;
+}
+
+.split-handle {
+  position: relative;
+  z-index: 2;
+  cursor: col-resize;
+  touch-action: none;
+  background: #e6eaf0;
+  outline: none;
+}
+
+.split-handle span {
   position: absolute;
   top: 50%;
-  left: 50%;
-  padding: 34px 36px;
-  border-left: 5px solid var(--signal);
-  background: #111b1e;
-  color: #fff;
-  transform: translate(-50%, -50%);
+  left: 2px;
+  width: 2px;
+  height: 34px;
+  border-radius: 2px;
+  background: #aeb8c7;
+  transform: translateY(-50%);
 }
 
-.empty-state h3 {
-  margin: 10px 0 8px;
-  font-size: 22px;
-  font-weight: 620;
+.split-handle:hover span,
+.split-handle:focus span {
+  background: var(--primary);
 }
 
-.empty-state p {
-  color: #bec7c3;
-  font-size: 13px;
-  line-height: 1.7;
+.workbench-pane {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  background: #1f1f1f;
 }
 
-.empty-state small {
+.workbench-menu {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  border-right: 1px solid #d7dde6;
+  background: #f7f8fa;
+}
+
+.workbench-menu-main {
+  display: flex;
+  flex-direction: column;
+}
+
+.workbench-menu button {
+  width: 53px;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 2px;
+  border: 0;
+  border-left: 2px solid transparent;
+  color: #667085;
+  background: transparent;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.workbench-menu button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.workbench-menu button:hover:not(:disabled) {
+  color: #26344d;
+  background: #e9edf3;
+}
+
+.workbench-menu button.active {
+  border-left-color: var(--primary);
+  color: var(--primary);
+  background: #eaf1ff;
+}
+
+.workbench-menu button:disabled {
+  color: #b2bac7;
+  cursor: default;
+}
+
+.workbench-content {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workbench-view {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.workbench-view.active {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.preview-workbench-view {
+  background: #eef1f5;
+}
+
+.code-server-frame {
+  background: #1f1f1f;
+}
+
+.pane-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  color: var(--muted);
+  text-align: center;
+  background: var(--surface-subtle);
+}
+
+.pane-state strong {
+  margin-top: 8px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.pane-state p {
+  max-width: 420px;
+  margin: 7px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.pane-state button {
+  margin-top: 16px;
+  height: 32px;
+  padding: 0 13px;
+  border: 1px solid #bfd0ee;
+  border-radius: 5px;
+  color: var(--primary);
+  background: var(--primary-light);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.state-kicker {
+  color: var(--muted-light);
+  font:
+    600 10px Inter,
+    'Helvetica Neue',
+    sans-serif;
+  letter-spacing: 0.12em;
+}
+
+.subtle-state {
+  z-index: 1;
+  background: var(--surface);
+}
+
+.loading-line {
+  width: 120px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #e2e8f0;
+}
+
+.loading-line::after {
+  content: '';
   display: block;
-  margin-top: 18px;
-  color: var(--signal);
-  font-family: Consolas, monospace;
+  width: 42px;
+  height: 100%;
+  background: var(--primary);
+  animation: loading-line 1.1s ease-in-out infinite;
+}
+
+.compact-tabs {
+  height: 36px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--line-light);
+  background: var(--surface);
+}
+
+.compact-tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.compact-tabs button.active {
+  border-bottom-color: var(--primary);
+  color: var(--primary);
+  font-weight: 650;
+}
+
+.workbench-stage.compact {
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: 36px minmax(0, 1fr);
+}
+
+.workbench-stage.compact .left-workspace {
+  display: contents;
+}
+
+.workbench-stage.compact .compact-tabs {
+  grid-row: 1;
+}
+
+.workbench-stage.compact .service-pane,
+.workbench-stage.compact .workbench-pane {
+  grid-row: 2;
+}
+
+.context-summary {
+  min-width: 0;
+  gap: 10px;
+  padding: 0 12px;
+  color: var(--muted);
+  background: #f8f9fb;
   font-size: 11px;
+  white-space: nowrap;
 }
 
-.danger-state {
-  border-left-color: #ff684f;
+.context-summary b {
+  color: var(--ink);
+  font-weight: 600;
 }
 
-@media (max-width: 1300px) {
-  .workspace-body {
-    grid-template-columns: 252px minmax(0, 1fr);
+.context-summary i {
+  width: 1px;
+  height: 12px;
+  background: var(--line);
+}
+
+.summary-time {
+  margin-left: auto;
+}
+
+.summary-error {
+  color: var(--danger);
+}
+
+.summary-sync {
+  height: 25px;
+  gap: 5px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.summary-sync:hover:not(:disabled) {
+  color: var(--primary);
+  background: var(--primary-light);
+}
+
+.summary-sync.status-synced {
+  color: var(--success);
+}
+
+.summary-sync.status-error {
+  color: var(--danger);
+}
+
+.spinning {
+  animation: spin 0.9s linear infinite;
+}
+
+:global(html.dark) .ai-workbench,
+:global([data-theme='dark']) .ai-workbench {
+  --surface: #20242b;
+  --surface-subtle: #171a20;
+  --surface-hover: #2d333d;
+  --ink: #eef2f7;
+  --muted: #a8b0bd;
+  --muted-light: #788292;
+  --line: #3c434e;
+  --line-light: #303640;
+  --primary: #75a7ff;
+  --primary-hover: #9abfff;
+  --primary-light: #263958;
+  background: #171a20;
+}
+
+:global(html.dark) .workbench-menu,
+:global([data-theme='dark']) .workbench-menu,
+:global(html.dark) .context-summary,
+:global([data-theme='dark']) .context-summary {
+  border-color: #3c434e;
+  background: #242930;
+}
+
+:global(html.dark) .workbench-menu button:hover:not(:disabled),
+:global([data-theme='dark']) .workbench-menu button:hover:not(:disabled) {
+  color: #e8edf5;
+  background: #303640;
+}
+
+:global(html.dark) .workbench-menu button.active,
+:global([data-theme='dark']) .workbench-menu button.active {
+  color: #8db5ff;
+  background: #263958;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes loading-line {
+  from {
+    transform: translateX(-42px);
+  }
+  to {
+    transform: translateX(120px);
+  }
+}
+
+@media (max-width: 660px) {
+  .context-summary {
+    gap: 7px;
+    overflow-x: auto;
   }
 
-  .workspace-copy small,
-  .nav-note {
-    display: none;
+  .summary-time {
+    margin-left: 0;
+  }
+
+  .summary-sync {
+    position: sticky;
+    right: 0;
+    flex: 0 0 auto;
+    background: var(--surface);
   }
 }
 </style>

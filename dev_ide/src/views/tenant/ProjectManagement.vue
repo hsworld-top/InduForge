@@ -57,7 +57,7 @@
           @group-delete="deleteProjectGroup" @group-remove-project="removeProjectFromGroup">
           <template #entry-actions="{ project }">
             <div class="project-entry-actions project-entry-actions--card">
-              <el-button data-testid="project-design-center-action" size="small"
+              <el-button data-testid="project-ai-workbench-action" size="small"
                 class="project-entry-button project-entry-button--designer" @click.stop="openDesignCenter(project)">
                 <el-icon>
                   <EditPen />
@@ -144,7 +144,7 @@
           " @group-delete="(row) => deleteProjectGroup({ id: row.groupId, name: row.groupName })">
           <template #actions="{ project }">
             <div class="project-entry-actions project-entry-actions--table">
-              <el-button data-testid="project-design-center-action" size="small"
+              <el-button data-testid="project-ai-workbench-action" size="small"
                 class="project-entry-button project-entry-button--designer" @click.stop="openDesignCenter(project)">
                 <el-icon>
                   <EditPen />
@@ -2064,9 +2064,8 @@ export default {
       import('@/components/WujieMicroApp.vue').then((module) => {
         const WujieMicroApp = module.default
         emit('open-tab', {
-          key: `design-center-${project.id}`,
-          titlePrefix: project.name,
-          titleKey: 'projectManagement.designCenter',
+          key: `${project.id}:ai`,
+          title: `${project.name} · AI开发`,
           component: WujieMicroApp,
           props: {
             appType: 'designer',

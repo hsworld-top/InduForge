@@ -9,6 +9,11 @@ interface MicroAppProps {
   project: Record<string, any> & { id: unknown; projectId?: unknown }
 }
 
+interface WorkspaceToolProps {
+  target: '2d' | '3d'
+  project: Record<string, any> & { id: unknown; projectId?: unknown }
+}
+
 interface DashboardTab {
   key: string
   title: string
@@ -17,7 +22,7 @@ interface DashboardTab {
   titleParams: Record<string, unknown> | null
   component: unknown
   icon: unknown
-  props: MicroAppProps | null
+  props: MicroAppProps | WorkspaceToolProps | null
 }
 
 type PersistedTab =
@@ -34,6 +39,13 @@ type PersistedTab =
       title: string
       icon: string
       props: MicroAppProps
+    }
+  | {
+      type: 'workspace-tool'
+      key: string
+      title: string
+      icon: string
+      props: WorkspaceToolProps
     }
 
 interface SerializedDashboardTabState {
@@ -52,6 +64,7 @@ interface RestoreOptions {
   tabConfigMap?: Record<string, Record<string, any>>
   hasTabPermission?: (key: string) => boolean
   microAppComponent?: unknown
+  workspaceToolComponent?: unknown
   translate?: Translate
 }
 
@@ -104,6 +117,21 @@ const normalizeMicroAppProps = (props: unknown): MicroAppProps | null => {
   return {
     appType: appType as MicroAppProps['appType'],
     project: project as MicroAppProps['project'],
+  }
+}
+
+/**
+ * 工具标签只持久化工程身份与目标类型，受控访问 URL 必须在恢复后重新获取。
+ */
+const normalizeWorkspaceToolProps = (props: unknown): WorkspaceToolProps | null => {
+  if (!isPlainObject(props) || !['2d', '3d'].includes(String(props.target))) return null
+  const project = isPlainObject(props.project) ? { ...props.project } : null
+  const projectId = project?.id ?? project?.projectId ?? null
+  if (!project || !projectId) return null
+  project.id = projectId
+  return {
+    target: props.target as WorkspaceToolProps['target'],
+    project: project as WorkspaceToolProps['project'],
   }
 }
 
@@ -182,6 +210,26 @@ const buildMicroAppTab = (
   return normalizedTab
 }
 
+const buildWorkspaceToolTab = (
+  record: Record<string, any>,
+  workspaceToolComponent: unknown,
+): DashboardTab | null => {
+  if (!isPlainObject(record) || !workspaceToolComponent) return null
+  const key = typeof record.key === 'string' ? record.key : ''
+  const props = normalizeWorkspaceToolProps(record.props)
+  if (!key || !props) return null
+  return {
+    key,
+    title: typeof record.title === 'string' ? record.title : '',
+    titleKey: null,
+    titlePrefix: null,
+    titleParams: null,
+    component: workspaceToolComponent,
+    icon: typeof record.icon === 'string' && record.icon ? record.icon : 'design',
+    props,
+  }
+}
+
 /**
  * 序列化 Dashboard 标签状态。
  * 标准菜单页仍只保存 key；Wujie 工程页额外保存 appType、project 和标题元数据，
@@ -214,18 +262,30 @@ export const serializeDashboardTabState = ({
     }
 
     const microAppProps = normalizeMicroAppProps(tab.props)
-    if (!microAppProps) continue
+    if (microAppProps) {
+      persistedTabs.push({
+        type: 'micro-app',
+        key: tab.key,
+        titleKey: typeof tab.titleKey === 'string' ? tab.titleKey : null,
+        titlePrefix: typeof tab.titlePrefix === 'string' ? tab.titlePrefix : '',
+        titleParams: normalizeTitleParams(tab.titleParams),
+        title: typeof tab.title === 'string' ? tab.title : '',
+        icon: typeof tab.icon === 'string' ? tab.icon : '',
+        props: microAppProps,
+      })
+      continue
+    }
 
-    persistedTabs.push({
-      type: 'micro-app',
-      key: tab.key,
-      titleKey: typeof tab.titleKey === 'string' ? tab.titleKey : null,
-      titlePrefix: typeof tab.titlePrefix === 'string' ? tab.titlePrefix : '',
-      titleParams: normalizeTitleParams(tab.titleParams),
-      title: typeof tab.title === 'string' ? tab.title : '',
-      icon: typeof tab.icon === 'string' ? tab.icon : '',
-      props: microAppProps,
-    })
+    const workspaceToolProps = normalizeWorkspaceToolProps(tab.props)
+    if (workspaceToolProps) {
+      persistedTabs.push({
+        type: 'workspace-tool',
+        key: tab.key,
+        title: typeof tab.title === 'string' ? tab.title : '',
+        icon: typeof tab.icon === 'string' ? tab.icon : '',
+        props: workspaceToolProps,
+      })
+    }
   }
 
   const persistedKeys = persistedTabs.map((tab) => tab.key).filter((key) => typeof key === 'string')
@@ -253,6 +313,7 @@ export const restoreDashboardTabState = (
     tabConfigMap = {},
     hasTabPermission = () => true,
     microAppComponent = null,
+    workspaceToolComponent = null,
     translate = (key: string) => key,
   }: RestoreOptions = {},
 ): { tabs: DashboardTab[]; activeTab: string } | null => {
@@ -283,6 +344,12 @@ export const restoreDashboardTabState = (
     if (record.type === 'micro-app') {
       const microAppTab = buildMicroAppTab(record, microAppComponent, translate)
       if (microAppTab) restoredTabs.push(microAppTab)
+      continue
+    }
+
+    if (record.type === 'workspace-tool') {
+      const workspaceToolTab = buildWorkspaceToolTab(record, workspaceToolComponent)
+      if (workspaceToolTab) restoredTabs.push(workspaceToolTab)
     }
   }
 

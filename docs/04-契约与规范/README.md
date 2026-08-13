@@ -9,7 +9,7 @@
 
 ## 跨模块契约
 
-- [Designer 发布态 Schema](./跨模块契约/designer-publish-schema.md)
+- [工程前端源码与构建产物契约](./跨模块契约/工程前端源码与构建产物契约.md)
 - [IFP Manifest](./跨模块契约/ifp-manifest-contract.md)
 - [NodeAgent 与运行系统协议](./跨模块契约/node-agent-runtime-protocol.md)
 - [Runtime 健康检查与状态协议](./跨模块契约/runtime-health-status-contract.md)

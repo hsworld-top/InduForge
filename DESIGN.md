@@ -1,6 +1,6 @@
 ---
 name: InduForge
-description: 工业应用低代码开发平台的产品工作台视觉系统
+description: 工业应用 AI 开发与运行平台的产品工作台视觉系统
 colors:
   primary: '#1d4ed8'
   primary-hover: '#1e40af'

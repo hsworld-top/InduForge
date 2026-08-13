@@ -43,8 +43,8 @@
 <rect x="775.0" y="303.0" width="60" height="21" rx="4" fill="#FBFCFE"/>
 <text x="805.0" y="318.0" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="12" fill="#475569">事件桥接</text>
 <rect x="60" y="130" width="220" height="90" rx="10" fill="#F0ECFF" stroke="#7567C7" stroke-width="2" filter="url(#s)"/>
-<text x="170.0" y="170.125" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">client_engine</text>
-<text x="170.0" y="190.375" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">浏览器静态运行时</text>
+<text x="170.0" y="170.125" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">工程前端</text>
+<text x="170.0" y="190.375" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">Vue/Vite 静态应用</text>
 <rect x="360" y="130" width="220" height="90" rx="10" fill="#F0ECFF" stroke="#7567C7" stroke-width="2" filter="url(#s)"/>
 <text x="470.0" y="170.125" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">project-nginx</text>
 <text x="470.0" y="190.375" text-anchor="middle" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#243142">工程入口</text>

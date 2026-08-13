@@ -2,109 +2,88 @@
 
 ## 1. 文档定位
 
-- 本文档定义 `dev_core` 发布出的 `.ifp` 制品结构和 `manifest.json` 契约。
-- 本文档是 `dev_core`、`runtime/node_agent`、`client_engine`、`runtime_api` 和运行态数据引擎的共同输入。
+本文档定义工程不可变 Release 的 Manifest。该 Manifest 是 `dev_core`、NodeAgent、
+Release Loader、`project-nginx`、`runtime-api` 和运行数据引擎的共同输入。
 
-## 2. 当前已实现
-
-### 2.1 已有基础
-
-- 平台已能生成版本包并进入部署流程。
-
-### 2.2 当前缺口
-
-- 包结构、资源索引、能力声明和摘要字段尚未冻结。
-
-## 3. 标准制品结构
+## 2. 标准 Release 结构
 
 ```text
-project.ifp
-  manifest.json
-  project/project.json
-  project/pages/*.json
-  project/assets/**
-  project/data/points.json
-  project/data/queries.json
-  project/data/connections.json
+releases/<projectId>/<releaseId>/
+├─ release-manifest.json
+├─ client-assets.tar.zst
+├─ runtime-artifact.tar.zst
+├─ collector-artifact.tar.zst
+├─ checksums.json
+└─ signature.sig
 ```
 
-## 4. `manifest.json` 最小结构
+- `client-assets.tar.zst` 是工程 Vue/Vite 的 `dist` 静态产物。
+- `runtime-artifact.tar.zst` 包含 HT 2D/3D 场景与资源、运行安全快照及运行配置。
+- `collector-artifact.tar.zst` 包含当前工程的采集配置，不包含 Collector 程序和驱动二进制。
+
+## 3. `release-manifest.json`
 
 ```json
 {
-  "schemaVersion": "1.1",
+  "schemaVersion": "2.0",
   "projectId": "proj_xxx",
   "projectCode": "factory_dashboard",
-  "version": "2026.03.06-001",
-  "entryPageId": "page_home",
-  "pages": [
-    {
-      "id": "page_home",
-      "routePath": "/home",
-      "file": "project/pages/page_home.json"
+  "releaseId": "release_xxx",
+  "version": "2026.08.13-001",
+  "artifacts": {
+    "client": {
+      "file": "client-assets.tar.zst",
+      "checksum": "sha256:client"
+    },
+    "runtime": {
+      "file": "runtime-artifact.tar.zst",
+      "checksum": "sha256:runtime"
+    },
+    "collector": {
+      "file": "collector-artifact.tar.zst",
+      "checksum": "sha256:collector"
     }
-  ],
-  "assets": [
-    {
-      "path": "project/assets/logo.png",
-      "checksum": "sha256:xxxx"
-    }
-  ],
-  "capabilities": ["render.basic", "data.datapoint", "data.query"],
-  "buildTime": "2026-03-06T10:00:00Z",
-  "checksum": "sha256:package_xxx"
+  },
+  "capabilities": ["runtime.auth", "runtime.datapoint", "runtime.scene"],
+  "buildTime": "2026-08-13T10:00:00Z"
 }
 ```
 
-## 5. 字段说明
+## 4. 字段约束
 
-| 字段            | 必填 | 说明           |
-| --------------- | ---- | -------------- |
-| `schemaVersion` | 是   | 制品协议版本   |
-| `projectId`     | 是   | 工程 ID        |
-| `projectCode`   | 是   | 工程编码       |
-| `version`       | 是   | 发布版本号     |
-| `entryPageId`   | 是   | 入口页         |
-| `pages`         | 是   | 页面清单       |
-| `assets`        | 否   | 资源清单       |
-| `capabilities`  | 否   | 运行时能力声明 |
-| `buildTime`     | 是   | 打包时间       |
-| `checksum`      | 是   | 包摘要         |
+| 字段                  | 必填 | 说明                         |
+| --------------------- | ---- | ---------------------------- |
+| `schemaVersion`       | 是   | Release Manifest 协议版本    |
+| `projectId`           | 是   | 工程 ID                      |
+| `projectCode`         | 是   | 工程编码                     |
+| `releaseId`           | 是   | 不可变 Release ID            |
+| `version`             | 是   | 用户可识别版本号             |
+| `artifacts.client`    | 是   | 工程前端静态资源包           |
+| `artifacts.runtime`   | 是   | 工程运行配置和 HT 场景资源包 |
+| `artifacts.collector` | 否   | 工程包含采集任务时的配置包   |
+| `capabilities`        | 否   | Release 需要的运行能力声明   |
+| `buildTime`           | 是   | 构建完成时间，UTC RFC 3339   |
 
-## 6. 子对象约束
+每个 Artifact 必须声明包内相对路径和 SHA-256 摘要。`checksums.json` 覆盖 Manifest 与全部
+Artifact，`signature.sig` 对摘要清单签名。
 
-### `pages[]`
+## 5. 校验规则
 
-| 字段        | 必填 | 说明         |
-| ----------- | ---- | ------------ |
-| `id`        | 是   | 页面 ID      |
-| `routePath` | 是   | 路由路径     |
-| `file`      | 是   | 页面文件路径 |
+- `projectId`、`releaseId` 和目标部署计划必须一致。
+- Artifact 文件必须存在，摘要和签名必须验证通过。
+- 不支持的 `schemaVersion` 或能力声明必须阻止部署。
+- `client` 解压后必须包含 `index.html`，且只能包含静态发布文件。
+- `runtime` 中引用的场景和资源必须完整，前端声明的场景 ID 必须可解析。
+- 下载、校验、展开或探活失败时不得切换当前 Release。
 
-### `assets[]`
+## 6. 非目标
 
-| 字段       | 必填 | 说明       |
-| ---------- | ---- | ---------- |
-| `path`     | 是   | 资源路径   |
-| `checksum` | 否   | 单文件摘要 |
+- Manifest 不描述 Vue 路由、页面清单或组件结构。
+- Release 不包含开发态上下文、Pi 会话、code-server 数据或依赖缓存。
+- 本契约不定义差分包；升级和回滚均以完整不可变 Release 为单位。
 
-## 7. 校验规则
+## 7. 关联文档
 
-- `entryPageId` 必须存在于 `pages` 中。
-- `pages.file` 必须指向制品内真实文件。
-- `checksum` 必须覆盖整个包。
-- `schemaVersion` 不兼容时，NodeAgent 或 Runtime 必须拒绝启动。
-
-## 8. 非目标
-
-- 不做差分包。
-- 不做复杂多包依赖。
-- 不强制引入数字签名。
-
-## 9. 关联文档
-
-- [产品定义](../../01-产品与架构/产品定义.md)
-- [平台系统架构](../../01-产品与架构/平台系统架构.md)
-- [系统设计文档](../../02-系统设计/README.md)
-- [dev_core 后端概览](../../03-模块设计/dev_core/README.md)
-- [测试与质量策略](../../05-研发与交付/测试与质量策略.md)
+- [工程前端源码与构建产物契约](./工程前端源码与构建产物契约.md)
+- [工程发布与资源分发架构](../../02-系统设计/工程发布与资源分发架构.md)
+- [工程运行系统架构](../../02-系统设计/工程运行系统架构.md)
