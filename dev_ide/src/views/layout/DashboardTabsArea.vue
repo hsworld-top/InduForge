@@ -178,11 +178,21 @@ const handleCloseTab = (targetName: string) => {
 }
 .dashboard-tabs .el-tabs__content {
   flex: 1 !important;
+  height: 0 !important;
   min-height: 0 !important;
   padding: 0 !important;
+  overflow: hidden !important;
 }
 .dashboard-tabs .el-tab-pane {
   height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.dashboard-tab-panel-shell {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 /* 去除默认底线和游标 */

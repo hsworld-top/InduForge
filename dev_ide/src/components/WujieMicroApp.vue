@@ -6,6 +6,8 @@
     :props="initialProps"
     :alive="true"
     :sync="false"
+    width="100%"
+    height="100%"
   />
 </template>
 
@@ -65,5 +67,15 @@ onBeforeUnmount(() => {
   display: block;
   width: 100%;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.wujie-micro-app :deep(wujie-app),
+.wujie-micro-app :deep(iframe) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 </style>

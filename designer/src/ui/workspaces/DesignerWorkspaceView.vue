@@ -270,8 +270,8 @@ function openWorkspaceInNewWindow(): void {
   --signal: #d8ff36;
   --signal-ink: #172000;
   min-width: 1180px;
-  min-height: 720px;
-  height: 100vh;
+  height: 100%;
+  min-height: 0;
   color: var(--ink);
   background:
     linear-gradient(rgba(17, 27, 30, 0.035) 1px, transparent 1px),

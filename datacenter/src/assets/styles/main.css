@@ -59,11 +59,16 @@
   }
 
   html {
+    width: 100%;
+    height: 100%;
     font-family: var(--dc-font-sans);
   }
 
   body {
+    width: 100%;
+    height: 100%;
     margin: 0;
+    overflow: hidden;
     background: var(--dc-bg);
     color: var(--dc-text);
     font-family: var(--dc-font-sans);

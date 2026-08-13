@@ -102,7 +102,7 @@ function handleNavigate(payload: { module: string; objectId: string; tab?: strin
 
 <style scoped>
 .datapoint-workspace {
-  height: calc(100vh - 32px);
+  height: 100%;
   min-height: 0;
   overflow: hidden;
 }
