@@ -81,21 +81,21 @@
 
 - 认证与租户治理
 - 用户、角色、工程管理
-- Designer 页面与资源管理
+- 工程开发工作空间、上下文和发布资源管理
 - 节点注册、部署、发布、日志与运维聚合
 - 运行态账号与角色的项目侧治理
 
 ### 4.2 认证模块 `/api/v1/auth`
 
-| 方法   | 路径                    | 功能概要             |
-| ------ | ----------------------- | -------------------- |
-| `GET`  | `/api/v1/auth/captcha`  | 获取登录滑块挑战（拖至最右侧） |
+| 方法   | 路径                    | 功能概要                        |
+| ------ | ----------------------- | ------------------------------- |
+| `GET`  | `/api/v1/auth/captcha`  | 获取登录滑块挑战（拖至最右侧）  |
 | `POST` | `/api/v1/auth/login`    | 登录并设置 HttpOnly 会话 Cookie |
-| `POST` | `/api/v1/auth/refresh`  | 使用刷新 Cookie 轮换会话 |
-| `POST` | `/api/v1/auth/logout`   | 注销、撤销会话并清除 Cookie |
-| `PUT`  | `/api/v1/auth/password` | 当前用户修改密码     |
-| `GET`  | `/api/v1/auth/me`       | 获取当前用户信息     |
-| `GET`  | `/api/v1/auth/config`   | 获取登录页和应用配置 |
+| `POST` | `/api/v1/auth/refresh`  | 使用刷新 Cookie 轮换会话        |
+| `POST` | `/api/v1/auth/logout`   | 注销、撤销会话并清除 Cookie     |
+| `PUT`  | `/api/v1/auth/password` | 当前用户修改密码                |
+| `GET`  | `/api/v1/auth/me`       | 获取当前用户信息                |
+| `GET`  | `/api/v1/auth/config`   | 获取登录页和应用配置            |
 
 浏览器调用认证接口时由同源 `HttpOnly` Cookie 承载会话，响应体不返回访问令牌或刷新令牌；浏览器前端不得保存 JWT。
 
@@ -225,25 +225,25 @@
 
 ### 4.6 工程模块 `/api/v1/projects`
 
-| 方法     | 路径                                                               | 功能概要                            |
-| -------- | ------------------------------------------------------------------ | ----------------------------------- |
-| `GET`    | `/api/v1/projects`                                                 | 获取工程列表                        |
-| `GET`    | `/api/v1/projects/:id/export`                                      | 导出工程及 Designer/DataCenter 数据 |
-| `POST`   | `/api/v1/projects/import`                                          | 导入工程包                          |
-| `POST`   | `/api/v1/projects`                                                 | 创建工程                            |
-| `PUT`    | `/api/v1/projects/:id`                                             | 更新工程                            |
-| `DELETE` | `/api/v1/projects/:id`                                             | 删除工程                            |
-| `GET`    | `/api/v1/projects/:id/delete-impact`                               | 获取删除影响评估                    |
-| `POST`   | `/api/v1/projects/:id/operations/:operation`                       | 执行工程运维操作                    |
-| `GET`    | `/api/v1/projects/:id/runtime-users`                               | 获取运行态用户列表                  |
-| `POST`   | `/api/v1/projects/:id/runtime-users`                               | 创建运行态用户                      |
-| `PATCH`  | `/api/v1/projects/:id/runtime-users/:runtimeUserId/status`         | 更新运行态用户状态                  |
-| `POST`   | `/api/v1/projects/:id/runtime-users/:runtimeUserId/reset-password` | 重置运行态用户密码                  |
-| `PUT`    | `/api/v1/projects/:id/runtime-users/:runtimeUserId/roles`          | 绑定运行态用户角色                  |
-| `GET`    | `/api/v1/projects/:id/runtime-roles`                               | 获取运行态角色列表                  |
-| `POST`   | `/api/v1/projects/:id/runtime-roles`                               | 创建运行态角色                      |
-| `PUT`    | `/api/v1/projects/:id/runtime-roles/:roleId`                       | 更新运行态角色                      |
-| `DELETE` | `/api/v1/projects/:id/runtime-roles/:roleId`                       | 删除运行态角色                      |
+| 方法     | 路径                                                               | 功能概要                         |
+| -------- | ------------------------------------------------------------------ | -------------------------------- |
+| `GET`    | `/api/v1/projects`                                                 | 获取工程列表                     |
+| `GET`    | `/api/v1/projects/:id/export`                                      | 导出工程源码、场景与数据中心数据 |
+| `POST`   | `/api/v1/projects/import`                                          | 导入工程包                       |
+| `POST`   | `/api/v1/projects`                                                 | 创建工程                         |
+| `PUT`    | `/api/v1/projects/:id`                                             | 更新工程                         |
+| `DELETE` | `/api/v1/projects/:id`                                             | 删除工程                         |
+| `GET`    | `/api/v1/projects/:id/delete-impact`                               | 获取删除影响评估                 |
+| `POST`   | `/api/v1/projects/:id/operations/:operation`                       | 执行工程运维操作                 |
+| `GET`    | `/api/v1/projects/:id/runtime-users`                               | 获取运行态用户列表               |
+| `POST`   | `/api/v1/projects/:id/runtime-users`                               | 创建运行态用户                   |
+| `PATCH`  | `/api/v1/projects/:id/runtime-users/:runtimeUserId/status`         | 更新运行态用户状态               |
+| `POST`   | `/api/v1/projects/:id/runtime-users/:runtimeUserId/reset-password` | 重置运行态用户密码               |
+| `PUT`    | `/api/v1/projects/:id/runtime-users/:runtimeUserId/roles`          | 绑定运行态用户角色               |
+| `GET`    | `/api/v1/projects/:id/runtime-roles`                               | 获取运行态角色列表               |
+| `POST`   | `/api/v1/projects/:id/runtime-roles`                               | 创建运行态角色                   |
+| `PUT`    | `/api/v1/projects/:id/runtime-roles/:roleId`                       | 更新运行态角色                   |
+| `DELETE` | `/api/v1/projects/:id/runtime-roles/:roleId`                       | 删除运行态角色                   |
 
 典型业务失败：
 
