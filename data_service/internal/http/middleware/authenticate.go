@@ -9,7 +9,7 @@ import (
 	"github.com/indu-forge/data_service/internal/http/response"
 )
 
-// Authenticate 校验 Bearer JWT，并将解析后的 claims 注入上下文。
+// Authenticate 校验同源登录 Cookie 或服务间 Bearer JWT，并将解析后的 claims 注入上下文。
 func Authenticate(validator *auth.JWTValidator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -20,7 +20,7 @@ func Authenticate(validator *auth.JWTValidator) func(http.Handler) http.Handler 
 
 			token, ok := tokenFromRequest(r)
 			if !ok {
-				writeAuthError(w, r, apperrors.NewAppError(apperrors.ErrorCodeAuthTokenRequired, http.StatusUnauthorized, "请提供 Bearer JWT"))
+				writeAuthError(w, r, apperrors.NewAppError(apperrors.ErrorCodeAuthTokenRequired, http.StatusUnauthorized, "请先登录或提供 Bearer JWT"))
 				return
 			}
 

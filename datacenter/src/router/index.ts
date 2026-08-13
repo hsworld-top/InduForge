@@ -32,7 +32,7 @@ export function registerDatacenterBeforeEachGuard(
     document.title = `${getDatacenterRouteTitle(to.name)} - ProjectIDE`
     document.documentElement.classList.toggle('dark', Storage.getTheme() === 'dark')
 
-    const isDebugRoute = shouldUseDebugMode(`/datacenter${to.path}`) || to.meta.requiresAuth === false
+    const isDebugRoute = to.meta.requiresAuth === false
 
     if (isDebugRoute) {
       to.meta.project = await resolveDatacenterDebugProjectMeta({

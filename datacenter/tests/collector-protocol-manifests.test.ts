@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 function readProtocolJson(protocol: string, fileName: string) {
   return JSON.parse(
     readFileSync(
-      new URL(`../../runtime/collector_protocols/${protocol}/${fileName}`, import.meta.url),
+      new URL(`../../contracts/collector-protocols/${protocol}/${fileName}`, import.meta.url),
       'utf8',
     ),
   ) as Record<string, any>

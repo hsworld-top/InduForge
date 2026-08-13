@@ -52,6 +52,41 @@ func TestAuthenticate_AllowsValidBearerJWT(t *testing.T) {
 	}
 }
 
+func TestAuthenticate_AllowsSharedAccessJWTFromSessionCookie(t *testing.T) {
+	const sharedSecret = "shared-access-secret"
+	validator := mustNewJWTValidator(t, sharedSecret)
+	now := time.Now().UTC()
+	token := mustSignJWT(
+		t,
+		sharedSecret,
+		&auth.Claims{UserID: "admin-1", TenantID: "tenant-1", Role: "SYSTEM_ADMIN"},
+		now.Add(time.Minute),
+		now.Add(-time.Minute),
+		now.Add(-time.Minute),
+	)
+
+	handler := middleware.Authenticate(validator)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			t.Fatal("expected claims in context")
+		}
+		if claims.UserID != "admin-1" || claims.Role != "SYSTEM_ADMIN" {
+			t.Fatalf("unexpected claims: %#v", claims)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "if_access", Value: token})
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+}
+
 func TestAuthenticate_RejectsExpiredToken(t *testing.T) {
 	validator := mustNewJWTValidator(t, "secret-123")
 	now := time.Now().UTC()
@@ -181,6 +216,7 @@ func mustSignJWT(t *testing.T, secret string, claims *auth.Claims, exp, nbf, iat
 	payload := map[string]any{
 		"userId":       claims.UserID,
 		"tenantId":     claims.TenantID,
+		"role":         claims.Role,
 		"projectIds":   claims.ProjectIDs,
 		"capabilities": claims.Capabilities,
 		"exp":          exp.Unix(),

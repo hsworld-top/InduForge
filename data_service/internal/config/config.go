@@ -66,7 +66,7 @@ func Load() (Config, error) {
 		DatabaseURL:                  buildDatabaseURL(),
 		DevDatabaseURL:               buildDevDatabaseURL(),
 		DatabaseSearchPath:           strings.TrimSpace(firstEnv("IF_META_STORE_DATA_SCHEMA", "DATA_SERVICE_DATABASE_SCHEMA")),
-		JWTSecret:                    strings.TrimSpace(os.Getenv("DATA_SERVICE_JWT_SECRET")),
+		JWTSecret:                    strings.TrimSpace(os.Getenv("JWT_ACCESS_SECRET")),
 		RedisAddr:                    buildRedisAddr(),
 		RedisPassword:                strings.TrimSpace(firstEnv("IF_CACHE_STORE_PASSWORD", "DATA_SERVICE_REDIS_PASSWORD")),
 		RedisDB:                      redisDB,
@@ -82,13 +82,19 @@ func Load() (Config, error) {
 }
 
 func ResolveCollectorProtocolCatalogPath(configured string) string {
-	if configured = strings.TrimSpace(configured); configured != "" {
+	configured = strings.TrimSpace(configured)
+	if configured == "" {
+		configured = filepath.Join("contracts", "collector-protocols")
+	}
+	if filepath.IsAbs(configured) {
 		return filepath.Clean(configured)
 	}
+
+	// 开发态可能从仓库根目录、data_service 或 Air 的 tmp 目录启动，逐级向上定位仓库公共契约。
 	current, err := os.Getwd()
 	if err == nil {
 		for {
-			candidate := filepath.Join(current, "runtime", "collector_protocols")
+			candidate := filepath.Join(current, configured)
 			if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
 				return candidate
 			}
@@ -99,7 +105,7 @@ func ResolveCollectorProtocolCatalogPath(configured string) string {
 			current = parent
 		}
 	}
-	return filepath.Clean(filepath.Join("runtime", "collector_protocols"))
+	return filepath.Clean(configured)
 }
 
 // ValidateCollectorSecretKey 校验统一采集连接密钥服务是否具备启动条件。
@@ -151,10 +157,10 @@ func ValidateConnectionsDependencies(cfg Config) error {
 func ValidateJWTSecret(secret string) error {
 	secret = strings.TrimSpace(secret)
 	if secret == "" {
-		return fmt.Errorf("缺少 DATA_SERVICE_JWT_SECRET，connections 路由不会挂载")
+		return fmt.Errorf("缺少 JWT_ACCESS_SECRET，connections 路由不会挂载")
 	}
 	if len(secret) < minJWTSecretLength {
-		return fmt.Errorf("DATA_SERVICE_JWT_SECRET 长度不能少于 %d 个字符", minJWTSecretLength)
+		return fmt.Errorf("JWT_ACCESS_SECRET 长度不能少于 %d 个字符", minJWTSecretLength)
 	}
 	return nil
 }

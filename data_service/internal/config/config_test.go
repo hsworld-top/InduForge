@@ -71,7 +71,7 @@ func TestLoad_ReadsOptionalDependencyConfig(t *testing.T) {
 	t.Setenv("IF_META_STORE_DATA_DB", "if_data")
 	t.Setenv("IF_META_STORE_SSL", "false")
 	t.Setenv("IF_META_STORE_DATA_SCHEMA", "tenant_a")
-	t.Setenv("DATA_SERVICE_JWT_SECRET", "secret-123")
+	t.Setenv("JWT_ACCESS_SECRET", "shared-access-secret")
 	t.Setenv("IF_CACHE_STORE_HOST", "cache-store")
 	t.Setenv("IF_CACHE_STORE_PORT", "18379")
 	t.Setenv("IF_CACHE_STORE_PASSWORD", "cache-pass")
@@ -87,7 +87,7 @@ func TestLoad_ReadsOptionalDependencyConfig(t *testing.T) {
 	if cfg.DatabaseSearchPath != "tenant_a" {
 		t.Fatalf("expected search path to be loaded, got %q", cfg.DatabaseSearchPath)
 	}
-	if cfg.JWTSecret != "secret-123" {
+	if cfg.JWTSecret != "shared-access-secret" {
 		t.Fatalf("expected jwt secret to be loaded, got %q", cfg.JWTSecret)
 	}
 	if cfg.RedisAddr != "cache-store:18379" {
@@ -125,7 +125,7 @@ func TestLoad_ReadsDataServiceConfigFromParentDotEnv(t *testing.T) {
 		"IF_META_STORE_PASSWORD=dotenv-pass\n" +
 		"IF_META_STORE_DATA_DB=if_data\n" +
 		"IF_META_STORE_DATA_SCHEMA=dotenv_schema\n" +
-		"DATA_SERVICE_JWT_SECRET=dotenv-secret-1234\n" +
+		"JWT_ACCESS_SECRET=dotenv-secret-1234\n" +
 		"IF_CACHE_STORE_HOST=dotenv-cache\n" +
 		"IF_CACHE_STORE_PORT=18379\n" +
 		"IF_CACHE_STORE_PASSWORD=dotenv-cache-pass\n" +
@@ -147,7 +147,7 @@ func TestLoad_ReadsDataServiceConfigFromParentDotEnv(t *testing.T) {
 		"IF_META_STORE_PASSWORD",
 		"IF_META_STORE_DATA_DB",
 		"IF_META_STORE_DATA_SCHEMA",
-		"DATA_SERVICE_JWT_SECRET",
+		"JWT_ACCESS_SECRET",
 		"IF_CACHE_STORE_HOST",
 		"IF_CACHE_STORE_PORT",
 		"IF_CACHE_STORE_PASSWORD",
@@ -194,12 +194,74 @@ func TestLoad_ReadsDataServiceConfigFromParentDotEnv(t *testing.T) {
 	}
 }
 
+func TestResolveCollectorProtocolCatalogPathFindsPublicContractFromChildDirectory(t *testing.T) {
+	rootDir := t.TempDir()
+	catalogDir := filepath.Join(rootDir, "contracts", "collector-protocols")
+	childDir := filepath.Join(rootDir, "data_service", "tmp")
+	if err := os.MkdirAll(catalogDir, 0o755); err != nil {
+		t.Fatalf("create catalog dir failed: %v", err)
+	}
+	if err := os.MkdirAll(childDir, 0o755); err != nil {
+		t.Fatalf("create child dir failed: %v", err)
+	}
+
+	currentDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd failed: %v", err)
+	}
+	if err := os.Chdir(childDir); err != nil {
+		t.Fatalf("chdir failed: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(currentDir)
+	})
+
+	resolved := ResolveCollectorProtocolCatalogPath(filepath.Join("contracts", "collector-protocols"))
+	if resolved != catalogDir {
+		t.Fatalf("expected catalog path %q, got %q", catalogDir, resolved)
+	}
+}
+
+func TestResolveCollectorProtocolCatalogPathUsesPublicContractByDefault(t *testing.T) {
+	rootDir := t.TempDir()
+	catalogDir := filepath.Join(rootDir, "contracts", "collector-protocols")
+	childDir := filepath.Join(rootDir, "data_service", "tmp")
+	if err := os.MkdirAll(catalogDir, 0o755); err != nil {
+		t.Fatalf("create catalog dir failed: %v", err)
+	}
+	if err := os.MkdirAll(childDir, 0o755); err != nil {
+		t.Fatalf("create child dir failed: %v", err)
+	}
+
+	currentDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd failed: %v", err)
+	}
+	if err := os.Chdir(childDir); err != nil {
+		t.Fatalf("chdir failed: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(currentDir)
+	})
+
+	if resolved := ResolveCollectorProtocolCatalogPath(""); resolved != catalogDir {
+		t.Fatalf("expected default catalog path %q, got %q", catalogDir, resolved)
+	}
+}
+
+func TestResolveCollectorProtocolCatalogPathKeepsAbsolutePath(t *testing.T) {
+	configured := filepath.Join(t.TempDir(), "collector-protocols")
+	if resolved := ResolveCollectorProtocolCatalogPath(configured); resolved != configured {
+		t.Fatalf("expected absolute path %q, got %q", configured, resolved)
+	}
+}
+
 func TestValidateJWTSecret_RejectsWeakSecret(t *testing.T) {
 	err := ValidateJWTSecret("short-secret")
 	if err == nil {
 		t.Fatal("expected weak secret to be rejected")
 	}
-	if got := err.Error(); got != "DATA_SERVICE_JWT_SECRET 长度不能少于 16 个字符" {
+	if got := err.Error(); got != "JWT_ACCESS_SECRET 长度不能少于 16 个字符" {
 		t.Fatalf("unexpected error message: %q", got)
 	}
 }

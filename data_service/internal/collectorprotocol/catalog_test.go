@@ -56,7 +56,7 @@ func TestLoadCatalogLoadsCertifiedDrivers(t *testing.T) {
 }
 
 func TestRepositoryCatalogLoadsCertifiedDrivers(t *testing.T) {
-	root := filepath.Clean(filepath.Join("..", "..", "..", "runtime", "collector_protocols"))
+	root := filepath.Clean(filepath.Join("..", "..", "..", "contracts", "collector-protocols"))
 	catalog, err := LoadCatalog(os.DirFS(root))
 	if err != nil {
 		t.Fatal(err)
