@@ -4,7 +4,7 @@
 
 - `designer` 是 AI 页面开发工作台，负责承载 Pi Web、Vite 预览外壳、精简 code-server、工程上下文摘要和 2D/3D 工具入口。
 - Vite Preview 与 code-server 使用两个持续存活的 iframe；预览设备、刷新、进程启停和开发控制台由 Designer 管理。
-- 工程页面是标准 Vue 3 + Vite 源码，源码和路由是页面行为的唯一事实。
+- 工程页面是标准 Vue 或 React Vite 源码，源码和路由是页面行为的唯一事实。
 
 ## 进入前先看
 
@@ -29,7 +29,7 @@
 
 ## 禁止事项
 
-- 不新增与 Vue/Vite 源码并行的页面配置模型。
+- 不新增与工程前端源码并行的页面配置模型。
 - 不在 Designer 中实现页面运行解释器、HT 私有数据编辑或数据中心业务逻辑。
 - 不把长期 token、模型密钥或 refresh token 放入 iframe URL。
 - 不把 HT 场景、模型和材质重复复制到工程前端构建产物。

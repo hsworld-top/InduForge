@@ -2,11 +2,11 @@
 
 ## 项目简介
 
-InduForge 是面向工业互联网场景的多模块单仓平台，覆盖 AI 页面开发、HT 2D/3D 场景、数据域、工程构建发布、节点运行和运维管理。工程页面使用标准 Vue/Vite 源码，开发时应按模块职责处理，而不是把整仓当成单一应用。
+InduForge 是面向工业互联网场景的多模块单仓平台，覆盖 AI 页面开发、HT 2D/3D 场景、数据域、工程构建发布、节点运行和运维管理。工程页面使用标准 Vue/React Vite 源码，开发时应按模块职责处理，而不是把整仓当成单一应用。
 
 ## 核心特性
 
-- **AI 页面开发** - Pi Web 修改 Vue/Vite 源码，code-server Simple Browser 通过 Vite HMR 实时预览
+- **AI 页面开发** - Pi Web 修改 Vue/React Vite 源码，Designer 通过受控 Vite iframe 实时预览
 - **HT 场景编辑** - 独立维护 2D/3D 场景、模型、材质和资源
 - 📊 **数据中心** - 多数据源管理，支持 MySQL、PostgreSQL、SQL Server
 - 🔧 **工程管理** - 项目、租户、用户统一管理
@@ -69,7 +69,7 @@ InduForge 是面向工业互联网场景的多模块单仓平台，覆盖 AI 页
 - `data_service/`：平台侧与开发态数据域服务，负责连接、查询、数据点、协议接入、计算与预览会话。
 - `dev_ide/`：平台管理与运维前端。
 - `datacenter/`：数据接入、查询管理与数据语义建模前端。
-- `designer/`：AI 页面开发工作台，嵌入 Pi Web 和单实例 code-server；Vite 预览由 code-server Simple Browser 加载。
+- `designer/`：AI 页面开发工作台，嵌入仓库内维护的 Pi Web、受控 Vite 预览和单实例 code-server。
 - `runtime/node_agent/`：节点执行器后端，独立部署在节点侧。
 - `runtime/node_agent_front/`：节点本地管理前端。
 - `scripts/`：本地开发、基础设施、离线打包、安装卸载和模拟数据脚本。
@@ -90,8 +90,9 @@ InduForge 是面向工业互联网场景的多模块单仓平台，覆盖 AI 页
 
 ### 环境要求
 
-- Node.js >= 18.0.0
-- pnpm >= 8.0.0
+- Node.js `24.19.0`（LTS）
+- npm `11.17.0`
+- pnpm `11.21.0`
 - Go >= 1.25.0（用于 `data_service` 与 `runtime/node_agent`）
 - Docker 与 Docker Compose（用于开发基础设施和离线交付验证）
 

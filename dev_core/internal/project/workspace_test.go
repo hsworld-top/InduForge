@@ -1,32 +1,13 @@
 package project
 
 import (
-	"bytes"
 	"encoding/base64"
-	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 )
-
-func TestProjectTemplateRuntimeSDKMatchesCanonicalSource(t *testing.T) {
-	for _, name := range []string{"package.json", "index.js", "index.d.ts"} {
-		template, err := os.ReadFile(filepath.Join(testProjectTemplateRoot(), ".induforge", "runtime-sdk", name))
-		if err != nil {
-			t.Fatalf("读取模板 SDK 失败 %s: %v", name, err)
-		}
-		canonical, err := os.ReadFile(filepath.Join("..", "..", "..", "runtime", "web-sdk", name))
-		if err != nil {
-			t.Fatalf("读取 canonical SDK 失败 %s: %v", name, err)
-		}
-		if !bytes.Equal(template, canonical) {
-			t.Fatalf("模板 SDK 与 canonical SDK 不一致: %s", name)
-		}
-	}
-}
 
 func TestWorkspaceExportRegularFiles(t *testing.T) {
 	root := t.TempDir()
@@ -37,7 +18,7 @@ func TestWorkspaceExportRegularFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(projectPath, "app.js"), []byte("console.log('ok')"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	workspace, err := NewFileWorkspace(root, testProjectTemplateRoot())
+	workspace, err := NewFileWorkspace(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +34,7 @@ func TestWorkspaceExportRegularFiles(t *testing.T) {
 
 func TestWorkspaceInitializeCreatesFinalDirectoryLayout(t *testing.T) {
 	root := t.TempDir()
-	workspace, err := NewFileWorkspace(root, testProjectTemplateRoot())
+	workspace, err := NewFileWorkspace(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,11 +47,7 @@ func TestWorkspaceInitializeCreatesFinalDirectoryLayout(t *testing.T) {
 		t.Fatalf("工作空间路径不正确: %s", workspacePath)
 	}
 	for _, relative := range []string{
-		"workspace/src",
-		"workspace/displays",
-		"workspace/scenes",
-		"workspace/models",
-		"workspace/materials",
+		"workspace",
 		"code-server-data",
 		"code-server-config",
 		"cache",
@@ -81,15 +58,12 @@ func TestWorkspaceInitializeCreatesFinalDirectoryLayout(t *testing.T) {
 			t.Fatalf("缺少工程目录 %s: %v", relative, statErr)
 		}
 	}
-	packageJSON, err := os.ReadFile(filepath.Join(workspacePath, "package.json"))
+	entries, err := os.ReadDir(workspacePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(packageJSON), "latest") || !strings.Contains(string(packageJSON), "@induforge/runtime-sdk") {
-		t.Fatalf("工程模板依赖必须固定且包含运行时 SDK: %s", packageJSON)
-	}
-	if _, err := os.Stat(filepath.Join(workspacePath, "src", "router", "index.js")); err != nil {
-		t.Fatalf("工程模板缺少 JavaScript 路由: %v", err)
+	if len(entries) != 0 {
+		t.Fatalf("首次选择模板前源码目录必须为空: %v", entries)
 	}
 }
 
@@ -104,7 +78,7 @@ func TestWorkspaceInitializeDoesNotOverwriteExistingFiles(t *testing.T) {
 	if err := os.WriteFile(customFile, []byte("{\"name\":\"customer-project\"}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	workspace, err := NewFileWorkspace(root, testProjectTemplateRoot())
+	workspace, err := NewFileWorkspace(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +94,7 @@ func TestWorkspaceInitializeDoesNotOverwriteExistingFiles(t *testing.T) {
 	}
 }
 
-func TestWorkspaceInitializeCompletesTemplateWithoutOverwritingUnrelatedFiles(t *testing.T) {
+func TestWorkspaceInitializeKeepsExistingWorkspaceUntouched(t *testing.T) {
 	root := t.TempDir()
 	projectID := "11111111-1111-4111-8111-111111111111"
 	workspacePath := filepath.Join(root, projectID, "workspace")
@@ -131,40 +105,16 @@ func TestWorkspaceInitializeCompletesTemplateWithoutOverwritingUnrelatedFiles(t 
 	if err := os.WriteFile(customFile, []byte("customer content"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	workspace, err := NewFileWorkspace(root, testProjectTemplateRoot())
+	workspace, err := NewFileWorkspace(root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := workspace.Initialize(projectID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(workspacePath, "package.json")); err != nil {
-		t.Fatalf("未补齐公共模板: %v", err)
-	}
 	content, err := os.ReadFile(customFile)
 	if err != nil || string(content) != "customer content" {
 		t.Fatalf("已有文件被覆盖: content=%q err=%v", content, err)
-	}
-}
-
-func TestWorkspaceInitializeFailureKeepsExistingProjectDirectory(t *testing.T) {
-	root := t.TempDir()
-	projectID := "11111111-1111-4111-8111-111111111111"
-	workspacePath := filepath.Join(root, projectID, "workspace")
-	if err := os.MkdirAll(workspacePath, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	customFile := filepath.Join(workspacePath, "customer.txt")
-	if err := os.WriteFile(customFile, []byte("keep"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	workspace := &FileWorkspace{root: root, templateFS: failingTemplateFS{}}
-	if _, err := workspace.Initialize(projectID); err == nil {
-		t.Fatal("模板复制失败时应返回错误")
-	}
-	content, err := os.ReadFile(customFile)
-	if err != nil || string(content) != "keep" {
-		t.Fatalf("模板复制失败不应删除已有工程: content=%q err=%v", content, err)
 	}
 }
 
@@ -181,7 +131,7 @@ func TestWorkspaceExportRejectsFileSymlink(t *testing.T) {
 	if err := os.Symlink(target, filepath.Join(projectPath, "link.txt")); err != nil {
 		t.Skipf("当前环境无法创建符号链接: %v", err)
 	}
-	workspace, _ := NewFileWorkspace(root, testProjectTemplateRoot())
+	workspace, _ := NewFileWorkspace(root)
 	files, err := workspace.Export(projectPath)
 	if err == nil || !strings.Contains(err.Error(), "符号链接") {
 		t.Fatalf("文件符号链接应被拒绝: files=%v err=%v", files, err)
@@ -204,7 +154,7 @@ func TestWorkspaceExportRejectsDirectorySymlink(t *testing.T) {
 	if err := os.Symlink(target, filepath.Join(projectPath, "linked-dir")); err != nil {
 		t.Skipf("当前环境无法创建目录符号链接: %v", err)
 	}
-	workspace, _ := NewFileWorkspace(root, testProjectTemplateRoot())
+	workspace, _ := NewFileWorkspace(root)
 	if _, err := workspace.Export(projectPath); err == nil || !strings.Contains(err.Error(), "符号链接") {
 		t.Fatalf("目录符号链接应被拒绝: %v", err)
 	}
@@ -258,7 +208,7 @@ func TestWorkspaceExportExcludesGeneratedDirectories(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(projectPath, "kept.txt"), []byte("kept"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	workspace, _ := NewFileWorkspace(root, testProjectTemplateRoot())
+	workspace, _ := NewFileWorkspace(root)
 	files, err := workspace.Export(projectPath)
 	if err != nil {
 		t.Fatal(err)
@@ -275,14 +225,4 @@ func TestWorkspaceLimitsMatchProductContract(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Log("Windows 特殊文件创建能力有限，Linux CI 继续覆盖符号链接路径")
 	}
-}
-
-func testProjectTemplateRoot() string {
-	return filepath.Join("..", "..", "..", "contracts", "project-templates", "vue-vite")
-}
-
-type failingTemplateFS struct{}
-
-func (failingTemplateFS) Open(string) (fs.File, error) {
-	return nil, errors.New("template unavailable")
 }

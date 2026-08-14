@@ -2,17 +2,24 @@ import { execFile, spawn } from 'node:child_process'
 import { createServer } from 'node:http'
 import process from 'node:process'
 import { promisify } from 'node:util'
+import {
+  createWorkspaceInitializer,
+  WorkspaceInitializationError,
+} from './workspace-initializer.mjs'
 
 const execFileAsync = promisify(execFile)
 const controlPort = Number.parseInt(process.env.PREVIEW_CONTROL_PORT || '5174', 10)
 const previewPort = Number.parseInt(process.env.VITE_PORT || '5173', 10)
 const workspaceRoot = process.env.WORKSPACE_ROOT || '/workspace'
+const templatesRoot = process.env.WORKSPACE_TEMPLATES_ROOT || '/opt/induforge/templates'
+const storeDir = process.env.npm_config_store_dir || '/cache/pnpm-store'
 const allowedOrigins = new Set(
   (process.env.PREVIEW_CONTROL_ALLOWED_ORIGINS || '')
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean),
 )
+const workspaceInitializer = createWorkspaceInitializer({ workspaceRoot, templatesRoot, storeDir })
 
 let managedProcess = null
 let operation = Promise.resolve()
@@ -57,6 +64,22 @@ function sendJson(response, statusCode, body) {
   response.end(JSON.stringify(body))
 }
 
+async function readJson(request) {
+  const chunks = []
+  let size = 0
+  for await (const chunk of request) {
+    size += chunk.length
+    if (size > 16 * 1024) throw new WorkspaceInitializationError('请求体过大', 413)
+    chunks.push(chunk)
+  }
+  if (chunks.length === 0) return {}
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'))
+  } catch {
+    throw new WorkspaceInitializationError('请求体不是有效 JSON', 400)
+  }
+}
+
 async function listenPids() {
   try {
     const { stdout } = await execFileAsync('fuser', ['-n', 'tcp', String(previewPort)], {
@@ -88,6 +111,15 @@ async function isManagedListener(pids) {
 }
 
 async function resolveState() {
+  const workspace = await workspaceInitializer.status()
+  if (workspace.status !== 'initialized') {
+    return updateState(
+      'stopped',
+      null,
+      workspace.status === 'initializing' ? '工程正在初始化' : workspace.message || '工程尚未初始化',
+    )
+  }
+
   const pids = await listenPids()
   if (pids.length === 0) {
     if (!['starting', 'stopping', 'error'].includes(state.status)) {
@@ -159,19 +191,27 @@ async function stopCurrentProcess() {
   return updateState('stopped', null)
 }
 
+async function requireInitializedWorkspace() {
+  const workspace = await workspaceInitializer.status()
+  if (workspace.status !== 'initialized') {
+    throw new WorkspaceInitializationError(workspace.message || '工程尚未初始化', 409)
+  }
+}
+
 async function startManagedProcess() {
+  await requireInitializedWorkspace()
   const pids = await listenPids()
   if (pids.length > 0) {
     return updateState('running', (await isManagedListener(pids)) ? 'managed' : 'external')
   }
 
   updateState('starting', 'managed')
-  const child = spawn('pnpm', ['dev'], {
-    cwd: workspaceRoot,
-    env: process.env,
-    detached: true,
-    stdio: ['ignore', 'inherit', 'inherit'],
-  })
+  const child = spawn('node', ['/opt/induforge/vite-runner.mjs'], {
+      cwd: workspaceRoot,
+      env: process.env,
+      detached: true,
+      stdio: ['ignore', 'inherit', 'inherit'],
+    })
   managedProcess = child
   child.once('error', (error) => {
     if (managedProcess !== child) return
@@ -201,7 +241,7 @@ function serializeOperation(task) {
   return operation
 }
 
-async function handleOperation(pathname) {
+async function handlePreviewOperation(pathname) {
   if (pathname.endsWith('/start')) return serializeOperation(startManagedProcess)
   if (pathname.endsWith('/stop')) return serializeOperation(stopCurrentProcess)
   if (pathname.endsWith('/restart')) {
@@ -230,26 +270,44 @@ const server = createServer(async (request, response) => {
       sendJson(response, 200, envelope({ status: 'ok' }))
       return
     }
+    if (request.method === 'GET' && url.pathname === '/api/v1/workspace/status') {
+      sendJson(response, 200, envelope(await workspaceInitializer.status()))
+      return
+    }
+    if (request.method === 'GET' && url.pathname === '/api/v1/workspace/templates') {
+      sendJson(response, 200, envelope(await workspaceInitializer.templates()))
+      return
+    }
+    if (request.method === 'POST' && url.pathname === '/api/v1/workspace/initialize') {
+      const body = await readJson(request)
+      const workspace = await workspaceInitializer.initialize(body.templateId)
+      const preview = await serializeOperation(startManagedProcess)
+      sendJson(response, 200, envelope({ workspace, preview }))
+      return
+    }
     if (request.method === 'GET' && url.pathname === '/api/v1/preview/status') {
       sendJson(response, 200, envelope(await resolveState()))
       return
     }
     if (request.method === 'POST' && /^\/api\/v1\/preview\/(start|stop|restart)$/.test(url.pathname)) {
-      sendJson(response, 200, envelope(await handleOperation(url.pathname)))
+      sendJson(response, 200, envelope(await handlePreviewOperation(url.pathname)))
       return
     }
     sendJson(response, 404, envelope(null, '接口不存在', 10003))
   } catch (error) {
     const message = error instanceof Error ? error.message : '预览控制失败'
-    updateState('error', null, message)
-    sendJson(response, 500, envelope(state, message, 30000))
+    const statusCode = error instanceof WorkspaceInitializationError ? error.statusCode : 500
+    if (url.pathname.startsWith('/api/v1/preview/')) updateState('error', null, message)
+    sendJson(response, statusCode, envelope(null, message, statusCode >= 500 ? 30000 : 10001))
   }
 })
 
 server.listen(controlPort, '0.0.0.0', async () => {
   console.log(`Preview Control listening on 0.0.0.0:${controlPort}`)
   try {
-    await serializeOperation(startManagedProcess)
+    if ((await workspaceInitializer.status()).status === 'initialized') {
+      await serializeOperation(startManagedProcess)
+    }
   } catch (error) {
     console.error(error)
   }

@@ -1,6 +1,6 @@
 # Designer 模块设计
 
-Designer 是 AI 页面开发工作台。页面布局、路由和组件由 AI 直接维护 Vue/Vite 源码；Designer
+Designer 是 AI 页面开发工作台。页面布局、路由和组件由 AI 直接维护 Vue/React Vite 源码；Designer
 负责组织 Pi Web、页面预览、2D/3D 产物、源码编辑器和工程上下文摘要。
 
 ## 模块职责
@@ -12,6 +12,7 @@ Designer 是 AI 页面开发工作台。页面布局、路由和组件由 AI 直
 - 编辑器视图承载精简 code-server，使用其原生文件、搜索、Git、运行、扩展和终端。
 - 底部展示上下文版本、2D/3D 场景数、数据点数和更新时间。
 - 向 `dev_ide` 发送受控的 2D/3D 标签打开请求。
+- 空工作区首次进入时展示四套官方 Vite 模板，初始化完成前不创建任何工程 iframe。
 
 ## 边界
 
@@ -53,6 +54,9 @@ URL，前端不得推导端口或域名。
 ## 开发链路
 
 ```text
+用户首次选择 Vue/React 与 JavaScript/TypeScript 模板
+-> Preview Control 初始化 /workspace 和本地 Git
+-> 启动受控 Vite Runner
 用户描述需求
 -> Pi Web 修改 /workspace 源码
 -> Vite HMR 更新 Preview iframe

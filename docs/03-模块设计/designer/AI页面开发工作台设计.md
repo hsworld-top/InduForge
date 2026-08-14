@@ -19,6 +19,18 @@
 - 页面和编辑器 iframe 初始化后持续存活，切换视图不销毁实例。
 - 2D、3D 视图按公开场景契约展示产物卡片，顶部按钮通过 `dev_ide` 打开对应 HT 编辑器。
 
+### 1.1 首次模板选择
+
+空工作区首次进入时，Designer 使用 Preview Control 查询初始化状态，并展示 Vite 官方模板：
+
+- Vue + JavaScript
+- Vue + TypeScript
+- React + JavaScript
+- React + TypeScript
+
+初始化完成前不创建 Pi Web、Preview 和 code-server iframe，避免 AI 或编辑器提前写入文件。模板只能
+选择一次；非空且没有平台初始化标记的工作区必须报错，不得覆盖已有内容。
+
 ## 2. 预览视图
 
 ### 2.1 工具栏
@@ -38,12 +50,12 @@ Preview Control 独立运行于容器 `5174`，Vite 使用 `5173`。状态包括
 
 Designer 在预览激活时每 3 秒轮询，状态变化时每秒轮询，切到编辑器后降低为每 10 秒。
 停止 Vite 后显示平台停止态，不能暴露浏览器连接失败页。重启会清理当前 `5173` 进程并统一执行
-`pnpm dev`。
+平台 Vite Runner。用户在终端自行执行 `pnpm dev` 时识别为 `external`。
 
 ### 2.3 控制台
 
-底部只保留“控制台”。点击后向 Preview Origin 发送固定消息，公共模板在开发态动态加载并打开
-完整 Eruda。再次点击同一入口会折叠控制台。
+底部只保留“控制台”。点击后向 Preview Origin 发送固定消息，平台 Vite Runner 在开发态注入并
+打开完整 Eruda，不修改官方模板源码。再次点击同一入口会折叠控制台。
 
 Eruda 使用 Preview 页面内部的固定底部抽屉承载：默认高度约为可视区域的三分之一，顶部拖拽条
 支持鼠标、触控笔和键盘调整，高度限制在 `160px` 到视口高度的 `80%`。抽屉折叠后不销毁
@@ -52,7 +64,8 @@ Eruda 实例，Console、Elements、Network 和 Resources 继续调试当前 Pre
 模板校验 Origin 与 `document.referrer` 一致，并允许消息来自直接父窗口或受控的 Wujie 宿主 frame。
 Designer 只发送固定的 `PREVIEW_DEVTOOLS_COMMAND/toggle` 消息，不读取 Preview DOM。
 
-Eruda 不显示默认悬浮按钮，不进入生产构建。终端、Problems 和 Output 使用 code-server 原生能力。
+Eruda 不显示默认悬浮按钮，不进入工程源码和生产构建。终端自行启动的外部 Vite 不注入 Eruda；
+重启为平台受控进程后恢复。终端、Problems 和 Output 使用 code-server 原生能力。
 
 ## 3. 2D/3D 产物视图
 
@@ -78,7 +91,35 @@ Problems、Output 和状态栏；隐藏菜单栏、命令中心、布局控制�
 - Preview Control 不可用时禁用进程按钮，Preview 与编辑器其他能力保持可用。
 - 上下文或场景摘要部分失败时保留其他已成功数据。
 
-## 6. Wujie 工具协议
+## 6. InduForge AI 嵌入协议
+
+左侧 AI 使用仓库内 `designer/pi-web` 维护的 `@induforge/pi-web`，基于上游 Pi Web `v0.8.8`。嵌入版固定工作目录为
+`/workspace`，不提供品牌顶栏、项目选择、语言/主题选择、Plugins、系统提示词查看和 Worktree。
+
+保留模型与 Provider 配置、用户 API Key、会话及会话分叉、文件浏览、Diff、工具调用和 Project
+Skills。Skills 只允许读写 `/workspace/.pi/skills/`；用户及工程插件不自动发现，仅允许镜像内
+`/opt/induforge/pi/extensions` 的平台只读 Extension。
+
+Designer 在 AI iframe URL 上只附加 `induforgeProjectId`，服务地址仍完整使用
+`services.ai.url`，不得推导端口或路径。Pi iframe 加载、发送 READY 或 IDE 设置变化时，Designer
+向 Pi Origin 发送：
+
+```ts
+interface InduForgePiContext {
+  type: 'INDUFORGE_PI_CONTEXT'
+  version: 1
+  projectId: string
+  workspaceRoot: '/workspace'
+  locale: 'zh' | 'en'
+  theme: 'light' | 'dark'
+}
+```
+
+Pi Web 加载配置后发送 `INDUFORGE_PI_READY`。双方同时校验消息类型、版本、工程 ID、精确
+Origin 和 iframe/父窗口引用。语言与主题只跟随 `dev_ide`，Pi Web 不提供选择入口，也不持久化
+独立偏好。
+
+## 7. Wujie 工具协议
 
 Designer 只向宿主发送工程 ID 与 `2d | 3d` 目标，不传递工具 URL。`dev_ide` 校验消息类型、目标
 白名单和当前工程后创建或激活独立标签。源码编辑不再创建宿主标签，统一使用右侧 code-server。

@@ -17,7 +17,7 @@ releases/<projectId>/<releaseId>/
 └─ signature.sig
 ```
 
-- `client-assets.tar.zst` 是工程 Vue/Vite 的 `dist` 静态产物。
+- `client-assets.tar.zst` 是工程 Vite 的 `dist` 静态产物。
 - `runtime-artifact.tar.zst` 包含 HT 2D/3D 场景与资源、运行安全快照及运行配置。
 - `collector-artifact.tar.zst` 包含当前工程的采集配置，不包含 Collector 程序和驱动二进制。
 

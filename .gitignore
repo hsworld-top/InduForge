@@ -103,6 +103,8 @@ designer/designer-next-iteration.plan.md
 designer/testing/local/
 designer/testing/evidence/
 designer/testing/tmp/
+designer/code-workspace/local-packages/
+contracts/project-templates/vue-vite/
 .cache/
 
 # ============================================

@@ -5,6 +5,7 @@ import { contextPackApi } from './code/context-pack-api'
 import { resolveWorkspaceState } from './code/workspace-runtime'
 import { sceneContractApi } from './scene-contract-api'
 import { requestWorkspaceOpen } from '@/runtime/wujie-context'
+import { getEditorUiStore } from '@/stores/editor-ui-store'
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ meta: { project: { id: 'project-1' } } }),
@@ -42,6 +43,9 @@ class ResizeObserverStub {
   disconnect() {}
 }
 
+let workspaceInitializationStatus: 'uninitialized' | 'initialized'
+let initializeTemplateId: string | null
+
 describe('DesignerWorkspaceView', () => {
   beforeEach(() => {
     vi.stubGlobal('ResizeObserver', ResizeObserverStub)
@@ -50,21 +54,89 @@ describe('DesignerWorkspaceView', () => {
     vi.mocked(sceneContractApi.list).mockReset()
     vi.mocked(requestWorkspaceOpen).mockReset()
     vi.mocked(requestWorkspaceOpen).mockReturnValue(true)
+    getEditorUiStore().initFromRuntime({ theme: 'light', locale: 'zh' })
+    workspaceInitializationStatus = 'initialized'
+    initializeTemplateId = null
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          code: 0,
-          msg: 'ok',
-          data: {
+      vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+        const url = new URL(String(input))
+        let data: unknown
+        if (url.pathname === '/api/v1/workspace/status') {
+          data = {
+            status: workspaceInitializationStatus,
+            templateId: workspaceInitializationStatus === 'initialized' ? 'vite-vue-ts' : null,
+            initializedAt:
+              workspaceInitializationStatus === 'initialized' ? '2026-08-14T02:00:00Z' : null,
+            message: null,
+          }
+        } else if (url.pathname === '/api/v1/workspace/templates') {
+          data = {
+            version: 1,
+            generator: 'create-vite@9.1.2',
+            templates: [
+              {
+                id: 'vite-vue-js',
+                name: 'Vue + JavaScript',
+                description: 'Vite 官方 Vue JavaScript 模板',
+                framework: 'vue',
+                language: 'javascript',
+              },
+              {
+                id: 'vite-vue-ts',
+                name: 'Vue + TypeScript',
+                description: 'Vite 官方 Vue TypeScript 模板',
+                framework: 'vue',
+                language: 'typescript',
+              },
+              {
+                id: 'vite-react-js',
+                name: 'React + JavaScript',
+                description: 'Vite 官方 React JavaScript 模板',
+                framework: 'react',
+                language: 'javascript',
+              },
+              {
+                id: 'vite-react-ts',
+                name: 'React + TypeScript',
+                description: 'Vite 官方 React TypeScript 模板',
+                framework: 'react',
+                language: 'typescript',
+              },
+            ],
+          }
+        } else if (url.pathname === '/api/v1/workspace/initialize') {
+          initializeTemplateId = JSON.parse(String(options?.body)).templateId
+          workspaceInitializationStatus = 'initialized'
+          data = {
+            workspace: {
+              status: 'initialized',
+              templateId: initializeTemplateId,
+              initializedAt: '2026-08-14T02:00:00Z',
+              message: null,
+            },
+            preview: {
+              status: 'running',
+              ownership: 'managed',
+              port: 5173,
+              updatedAt: '2026-08-14T02:00:00Z',
+              message: null,
+            },
+          }
+        } else {
+          data = {
             status: 'running',
             ownership: 'managed',
             port: 5173,
             updatedAt: '2026-08-13T12:00:00Z',
             message: null,
-          },
-        }),
+          }
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ code: 0, msg: 'ok', data }),
+        } as Response
       }),
     )
     vi.mocked(resolveWorkspaceState).mockResolvedValue(workspace)
@@ -112,12 +184,116 @@ describe('DesignerWorkspaceView', () => {
     expect(menuLabels).toEqual(['页面', '2D', '3D', '编辑器'])
     expect(wrapper.text()).not.toContain('源码')
     expect(wrapper.findAll('iframe')).toHaveLength(3)
+    expect(wrapper.get('iframe[title="Pi Web AI 对话"]').attributes('src')).toBe(
+      'https://ai.workspace.test/?induforgeProjectId=project-1',
+    )
     expect(wrapper.get('iframe[title="工程开发工作台"]').attributes('src')).toBe(
       'https://code.workspace.test/',
     )
     expect(wrapper.get('iframe[title="Vite 实时预览"]').attributes('src')).toBe(
       'https://preview.workspace.test/',
     )
+  })
+
+  it('空工作区先选择官方模板，初始化完成后再创建工作台 iframe', async () => {
+    workspaceInitializationStatus = 'uninitialized'
+    const wrapper = mount(DesignerWorkspaceView)
+    await flushPromises()
+
+    expect(wrapper.findAll('iframe')).toHaveLength(0)
+    expect(wrapper.findAll('.template-option')).toHaveLength(4)
+    expect(wrapper.text()).toContain('Vue + JavaScript')
+    expect(wrapper.text()).toContain('React + TypeScript')
+
+    await wrapper
+      .findAll('.template-option')
+      .find((option) => option.text().includes('React + TypeScript'))!
+      .trigger('click')
+    await wrapper.get('.initialize-button').trigger('click')
+    await flushPromises()
+
+    expect(initializeTemplateId).toBe('vite-react-ts')
+    expect(wrapper.findAll('iframe')).toHaveLength(3)
+  })
+
+  it('Pi iframe 加载、READY 与 IDE 设置变化时发送严格宿主上下文', async () => {
+    const wrapper = mount(DesignerWorkspaceView)
+    await flushPromises()
+    const frame = wrapper.get('iframe[title="Pi Web AI 对话"]')
+    const postMessage = vi.fn()
+    const frameWindow = { postMessage } as unknown as Window
+    Object.defineProperty(frame.element, 'contentWindow', {
+      configurable: true,
+      value: frameWindow,
+    })
+
+    await frame.trigger('load')
+    expect(postMessage).toHaveBeenLastCalledWith(
+      {
+        type: 'INDUFORGE_PI_CONTEXT',
+        version: 1,
+        projectId: 'project-1',
+        workspaceRoot: '/workspace',
+        locale: 'zh',
+        theme: 'light',
+      },
+      'https://ai.workspace.test',
+    )
+
+    postMessage.mockClear()
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'INDUFORGE_PI_READY', version: 1, projectId: 'project-1' },
+        origin: 'https://ai.workspace.test',
+        source: frameWindow,
+      }),
+    )
+    expect(postMessage).toHaveBeenCalledTimes(1)
+
+    postMessage.mockClear()
+    getEditorUiStore().setTheme('dark')
+    getEditorUiStore().setLocale('en')
+    await flushPromises()
+    expect(postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ theme: 'dark', locale: 'en' }),
+      'https://ai.workspace.test',
+    )
+  })
+
+  it('忽略伪造来源、错误工程和错误消息结构', async () => {
+    const wrapper = mount(DesignerWorkspaceView)
+    await flushPromises()
+    const frame = wrapper.get('iframe[title="Pi Web AI 对话"]')
+    const postMessage = vi.fn()
+    const frameWindow = { postMessage } as unknown as Window
+    Object.defineProperty(frame.element, 'contentWindow', {
+      configurable: true,
+      value: frameWindow,
+    })
+    await frame.trigger('load')
+    postMessage.mockClear()
+
+    for (const message of [
+      new MessageEvent('message', {
+        data: { type: 'INDUFORGE_PI_READY', version: 1, projectId: 'project-1' },
+        origin: 'https://forged.test',
+        source: frameWindow,
+      }),
+      new MessageEvent('message', {
+        data: { type: 'INDUFORGE_PI_READY', version: 1, projectId: 'other-project' },
+        origin: 'https://ai.workspace.test',
+        source: frameWindow,
+      }),
+      new MessageEvent('message', {
+        data: { type: 'INDUFORGE_PI_READY', version: 2, projectId: 'project-1' },
+        origin: 'https://ai.workspace.test',
+        source: frameWindow,
+      }),
+    ]) {
+      window.dispatchEvent(message)
+    }
+
+    expect(postMessage).not.toHaveBeenCalled()
   })
 
   it('预览和编辑器切换不销毁或修改 iframe', async () => {

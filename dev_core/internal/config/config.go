@@ -39,7 +39,6 @@ type Config struct {
 	SuperAdminUsername      string
 	SuperAdminPassword      string
 	WorkspaceRoot           string
-	ProjectTemplateRoot     string
 	CodeWorkspaceVolume     string
 	CodeServerDockerHost    string
 	CodeServerImage         string
@@ -83,10 +82,6 @@ func Load() (Config, error) {
 	}
 
 	workspaceRoot := firstEnvWithDefault("CODE_WORKSPACE_ROOT", filepath.Join(".data", "workspaces"))
-	projectTemplateRoot, err := resolveProjectTemplateRoot(firstEnv("PROJECT_TEMPLATE_ROOT"))
-	if err != nil {
-		return Config{}, err
-	}
 	return Config{
 		Addr: addr, DatabaseURL: databaseURL, DBAutoSchemaSync: autoSchema,
 		JWTSecret: jwtSecret, JWTIssuer: firstEnvWithDefault("JWT_ISSUER", "induforge"),
@@ -108,42 +103,15 @@ func Load() (Config, error) {
 		SuperAdminUsername:      firstEnvWithDefault("SUPER_ADMIN_USERNAME", "superadmin"),
 		SuperAdminPassword:      firstEnvWithDefault("SUPER_ADMIN_PASSWORD", "admin123"),
 		WorkspaceRoot:           workspaceRoot,
-		ProjectTemplateRoot:     projectTemplateRoot,
 		CodeWorkspaceVolume:     firstEnvWithDefault("CODE_WORKSPACE_VOLUME", "induforge-control-workspaces"),
 		CodeServerDockerHost:    firstEnvWithDefault("CODE_SERVER_DOCKER_HOST", "unix:///var/run/docker.sock"),
-		CodeServerImage:         firstEnvWithDefault("CODE_SERVER_IMAGE", "induforge/designer-code-server:4.131.0-node22.19-pnpm10.19-piweb0.8.8-beta.1"),
+		CodeServerImage:         firstEnvWithDefault("CODE_SERVER_IMAGE", "induforge/designer-code-server:workspace-templates-source"),
 		CodeServerBindHost:      firstEnvWithDefault("CODE_SERVER_BIND_HOST", "127.0.0.1"),
 		DataServiceURL:          strings.TrimRight(firstEnv("DATA_SERVICE_URL"), "/"),
 		CacheAddress:            net.JoinHostPort(firstEnvWithDefault("IF_CACHE_STORE_HOST", "127.0.0.1"), firstEnvWithDefault("IF_CACHE_STORE_PORT", "18379")),
 		CachePassword:           firstEnv("IF_CACHE_STORE_PASSWORD"),
 		CacheDB:                 cacheDB,
 	}, nil
-}
-
-// 工程模板在仓库中只有 contracts 一份；容器环境通过绝对路径显式指定。
-func resolveProjectTemplateRoot(configured string) (string, error) {
-	if configured != "" {
-		absolute, err := filepath.Abs(configured)
-		if err != nil {
-			return "", fmt.Errorf("解析 PROJECT_TEMPLATE_ROOT 失败: %w", err)
-		}
-		return absolute, nil
-	}
-	workingDir, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("获取当前目录失败: %w", err)
-	}
-	for current := filepath.Clean(workingDir); ; current = filepath.Dir(current) {
-		candidate := filepath.Join(current, "contracts", "project-templates", "vue-vite")
-		if info, statErr := os.Stat(filepath.Join(candidate, "package.json")); statErr == nil && info.Mode().IsRegular() {
-			return candidate, nil
-		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			break
-		}
-	}
-	return "", fmt.Errorf("未找到公共工程模板 contracts/project-templates/vue-vite，请配置 PROJECT_TEMPLATE_ROOT")
 }
 
 func buildDatabaseURL() string {

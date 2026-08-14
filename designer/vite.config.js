@@ -59,9 +59,9 @@ export default defineConfig(({ mode }) => {
       sourcemap: false,
       rollupOptions: {
         output: {
-          manualChunks: {
-            vendor: ['vue', 'vue-router', 'pinia'],
-            ui: ['element-plus'],
+          manualChunks(id) {
+            if (id.includes('/node_modules/element-plus/')) return 'ui'
+            if (/\/node_modules\/(vue|vue-router|pinia)\//.test(id)) return 'vendor'
           },
         },
       },

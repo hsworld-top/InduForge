@@ -2,11 +2,25 @@ packages:
   - dev_ide
   - datacenter
   - designer
+  - designer/pi-web
+  - contracts/project-templates/*
   - runtime/node_agent_front
 
-onlyBuiltDependencies:
-  - '@parcel/watcher'
-  - '@scarf/scarf'
-  - esbuild
-  - sharp
-  - vue-demi
+sharedWorkspaceLockfile: true
+recursiveInstall: true
+nodeLinker: hoisted
+trustLockfile: true
+
+publicHoistPattern:
+  - typescript
+  - '@typescript-eslint/*'
+
+allowBuilds:
+  '@google/genai': false
+  '@parcel/watcher': true
+  '@scarf/scarf': true
+  esbuild: true
+  protobufjs: false
+  sharp: true
+  unrs-resolver: false
+  vue-demi: true

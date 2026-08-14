@@ -98,7 +98,7 @@ func main() {
 	tenantService := tenant.NewService(tenant.NewPostgreSQLRepository(pool), designObjects, tenant.ServiceConfig{DefaultAdminUsername: cfg.DefaultAdminUsername, DefaultAdminPassword: cfg.DefaultAdminPassword})
 	controlPlane := controlplane.NewHandler(auth.NewHandler(authService), tenant.NewHandler(tenantService, authService))
 	controlPlane.SetUserHandler(user.NewHandler(user.NewService(user.NewPostgreSQLRepository(pool), authService), authService))
-	workspace, err := project.NewFileWorkspace(cfg.WorkspaceRoot, cfg.ProjectTemplateRoot)
+	workspace, err := project.NewFileWorkspace(cfg.WorkspaceRoot)
 	if err != nil {
 		logger.Error("初始化工程工作空间失败", "error", err)
 		os.Exit(1)

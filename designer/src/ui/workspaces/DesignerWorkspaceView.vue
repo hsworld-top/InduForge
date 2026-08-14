@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import IconLucideBox from '~icons/lucide/box'
+import IconLucideBraces from '~icons/lucide/braces'
 import IconLucideCode2 from '~icons/lucide/code-2'
+import IconLucideFileCode2 from '~icons/lucide/file-code-2'
 import IconLucideMonitorPlay from '~icons/lucide/monitor-play'
 import IconLucideRefreshCw from '~icons/lucide/refresh-cw'
 import IconLucideRoute from '~icons/lucide/route'
@@ -12,8 +14,14 @@ import {
   type WorkspaceOpenTarget,
 } from '@/runtime/wujie-context'
 import { getApiErrorMessage } from '@/utils/request'
+import { getEditorUiStore } from '@/stores/editor-ui-store'
 import type { CodeWorkspaceState } from './code/code-workspace-api'
 import { contextPackApi } from './code/context-pack-api'
+import {
+  previewControlApi,
+  type WorkspaceInitializationState,
+  type WorkspaceTemplate,
+} from './code/preview-control-api'
 import { resolveWorkspaceState } from './code/workspace-runtime'
 import PreviewPanel from './PreviewPanel.vue'
 import SceneArtifactsPanel from './SceneArtifactsPanel.vue'
@@ -30,10 +38,18 @@ type ContextStatus = 'syncing' | 'synced' | 'error'
 type WorkbenchView = 'page' | '2d' | '3d' | 'editor'
 
 const route = useRoute()
+const editorUi = getEditorUiStore()
 const stageRef = ref<HTMLElement | null>(null)
+const aiFrameRef = ref<HTMLIFrameElement | null>(null)
 const workspace = ref<CodeWorkspaceState | null>(null)
 const workspaceLoading = ref(true)
 const workspaceError = ref('')
+const projectWorkspace = ref<WorkspaceInitializationState | null>(null)
+const projectWorkspaceLoading = ref(true)
+const projectWorkspaceError = ref('')
+const workspaceTemplates = ref<WorkspaceTemplate[]>([])
+const selectedTemplateId = ref('')
+const templateInitializing = ref(false)
 const contextStatus = ref<ContextStatus>('syncing')
 const contextError = ref('')
 const contextVersion = ref('—')
@@ -60,6 +76,13 @@ const projectId = computed(() => {
 const aiUrl = computed(() =>
   workspace.value?.status === 'running' ? workspace.value.services.ai.url : null,
 )
+const aiFrameUrl = computed(() => {
+  if (!aiUrl.value || !projectId.value) return null
+  const url = new URL(aiUrl.value)
+  url.searchParams.set('induforgeProjectId', projectId.value)
+  return url.toString()
+})
+const aiOrigin = computed(() => (aiFrameUrl.value ? new URL(aiFrameUrl.value).origin : null))
 const codeUrl = computed(() =>
   workspace.value?.status === 'running' ? workspace.value.services.code.url : null,
 )
@@ -69,6 +92,14 @@ const previewUrl = computed(() =>
 const previewControlUrl = computed(() =>
   workspace.value?.status === 'running' ? workspace.value.services.previewControl.url : null,
 )
+const workspaceInitialized = computed(() => projectWorkspace.value?.status === 'initialized')
+const workspaceSetupMessage = computed(() => {
+  if (projectWorkspaceError.value) return projectWorkspaceError.value
+  if (projectWorkspace.value?.status === 'error') {
+    return projectWorkspace.value.message || '工程工作区当前不可初始化'
+  }
+  return projectWorkspace.value?.message || ''
+})
 const scene2dContracts = computed(() =>
   sceneContracts.value.filter((contract) => contract.kind === '2d'),
 )
@@ -101,7 +132,7 @@ onMounted(() => {
     compactLayout.value = shouldUseCompactLayout(width)
     if (!compactLayout.value) aiPaneWidth.value = clampAiPaneWidth(aiPaneWidth.value, width)
   })
-  if (stageRef.value) resizeObserver.observe(stageRef.value)
+  window.addEventListener('message', handlePiMessage)
   void Promise.allSettled([loadWorkspace(true), runContextRefresh()])
 })
 
@@ -109,7 +140,55 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   clearWorkspacePoll()
   workspaceRequestSequence += 1
+  window.removeEventListener('message', handlePiMessage)
 })
+
+watch(
+  [editorUi.theme, editorUi.locale, aiFrameUrl, projectId],
+  () => postPiContext(),
+  { flush: 'post' },
+)
+
+watch(stageRef, (stage) => {
+  resizeObserver?.disconnect()
+  if (stage) resizeObserver?.observe(stage)
+})
+
+function postPiContext(): void {
+  const target = aiFrameRef.value?.contentWindow
+  if (!target || !aiFrameLoaded.value || !aiOrigin.value || !projectId.value) return
+  target.postMessage(
+    {
+      type: 'INDUFORGE_PI_CONTEXT',
+      version: 1,
+      projectId: projectId.value,
+      workspaceRoot: '/workspace',
+      locale: editorUi.locale.value,
+      theme: editorUi.theme.value,
+    },
+    aiOrigin.value,
+  )
+}
+
+function handleAiFrameLoad(): void {
+  aiFrameLoaded.value = true
+  postPiContext()
+}
+
+function handlePiMessage(event: MessageEvent): void {
+  const target = aiFrameRef.value?.contentWindow
+  if (!target || event.source !== target || event.origin !== aiOrigin.value) return
+  if (!event.data || typeof event.data !== 'object') return
+  const message = event.data as Record<string, unknown>
+  if (
+    message.type !== 'INDUFORGE_PI_READY' ||
+    message.version !== 1 ||
+    message.projectId !== projectId.value
+  ) {
+    return
+  }
+  postPiContext()
+}
 
 function formatTime(value: string): string {
   const date = new Date(value)
@@ -198,12 +277,66 @@ async function loadWorkspace(autoStart: boolean): Promise<void> {
       codeFrameLoaded.value = false
     }
     workspace.value = nextWorkspace
+    await loadProjectWorkspace(nextWorkspace.services.previewControl.url)
     scheduleWorkspacePoll()
   } catch (error) {
     if (sequence !== workspaceRequestSequence) return
     workspaceError.value = getApiErrorMessage(error, '读取工程开发环境失败')
+    projectWorkspaceLoading.value = false
   } finally {
     if (sequence === workspaceRequestSequence) workspaceLoading.value = false
+  }
+}
+
+async function loadProjectWorkspace(controlUrl: string | null): Promise<void> {
+  projectWorkspaceLoading.value = true
+  projectWorkspaceError.value = ''
+  if (!controlUrl) {
+    projectWorkspace.value = null
+    projectWorkspaceError.value = '工程初始化服务尚未接入'
+    projectWorkspaceLoading.value = false
+    return
+  }
+  try {
+    const nextState = await previewControlApi.workspaceStatus(controlUrl)
+    projectWorkspace.value = nextState
+    if (nextState.status === 'uninitialized') {
+      const catalog = await previewControlApi.templates(controlUrl)
+      workspaceTemplates.value = catalog.templates
+      if (!catalog.templates.some((template) => template.id === selectedTemplateId.value)) {
+        selectedTemplateId.value = catalog.templates[0]?.id || ''
+      }
+    }
+  } catch (error) {
+    projectWorkspaceError.value = getApiErrorMessage(error, '读取工程初始化状态失败')
+  } finally {
+    projectWorkspaceLoading.value = false
+  }
+}
+
+async function initializeProjectWorkspace(): Promise<void> {
+  if (!previewControlUrl.value || !selectedTemplateId.value || templateInitializing.value) return
+  templateInitializing.value = true
+  projectWorkspaceError.value = ''
+  projectWorkspace.value = {
+    status: 'initializing',
+    templateId: null,
+    initializedAt: null,
+    message: null,
+  }
+  try {
+    const result = await previewControlApi.initialize(
+      previewControlUrl.value,
+      selectedTemplateId.value,
+    )
+    projectWorkspace.value = result.workspace
+    aiFrameLoaded.value = false
+    codeFrameLoaded.value = false
+  } catch (error) {
+    projectWorkspaceError.value = getApiErrorMessage(error, '工程初始化失败')
+    await loadProjectWorkspace(previewControlUrl.value)
+  } finally {
+    templateInitializing.value = false
   }
 }
 
@@ -259,8 +392,93 @@ async function retryWorkspace(): Promise<void> {
 </script>
 
 <template>
-  <main class="ai-workbench">
+  <main class="ai-workbench" :class="{ 'setup-mode': !workspaceInitialized }">
     <section
+      v-if="workspaceLoading || projectWorkspaceLoading"
+      class="workspace-setup workspace-setup-loading"
+    >
+      <span class="loading-line" />
+      <strong>正在准备工程工作空间</strong>
+      <p>正在读取可用模板和初始化状态。</p>
+    </section>
+
+    <section v-else-if="!workspaceInitialized" class="workspace-setup">
+      <div class="workspace-setup-content">
+        <span class="workspace-setup-kicker">PROJECT TEMPLATE</span>
+        <h1>选择工程技术栈</h1>
+        <p class="workspace-setup-description">
+          工程只在首次创建时选择模板，初始化完成后由 AI 和编辑器共同维护源码。
+        </p>
+
+        <div
+          v-if="projectWorkspace?.status === 'uninitialized' && workspaceTemplates.length > 0"
+          class="template-grid"
+          role="radiogroup"
+          aria-label="工程模板"
+        >
+          <button
+            v-for="template in workspaceTemplates"
+            :key="template.id"
+            type="button"
+            class="template-option"
+            :class="{ selected: selectedTemplateId === template.id }"
+            role="radio"
+            :aria-checked="selectedTemplateId === template.id"
+            @click="selectedTemplateId = template.id"
+          >
+            <span class="template-icon" :class="`framework-${template.framework}`">
+              <IconLucideBraces v-if="template.framework === 'react'" />
+              <IconLucideFileCode2 v-else />
+            </span>
+            <span class="template-copy">
+              <strong>{{ template.name }}</strong>
+              <small>{{ template.description }}</small>
+            </span>
+            <span class="template-language">{{ template.language === 'typescript' ? 'TS' : 'JS' }}</span>
+          </button>
+        </div>
+
+        <div v-else class="workspace-setup-state">
+          <span v-if="projectWorkspace?.status === 'initializing'" class="loading-line" />
+          <strong>
+            {{
+              projectWorkspace?.status === 'initializing'
+                ? '正在创建工程'
+                : workspaceError
+                  ? '开发环境连接失败'
+                  : '工程工作区不可初始化'
+            }}
+          </strong>
+          <p>{{ workspaceSetupMessage || workspaceError || '没有可用的工程模板。' }}</p>
+        </div>
+
+        <p v-if="workspaceSetupMessage" class="workspace-setup-error" role="alert">
+          {{ workspaceSetupMessage }}
+        </p>
+        <div class="workspace-setup-actions">
+          <button
+            v-if="projectWorkspace?.status === 'uninitialized' && workspaceTemplates.length > 0"
+            type="button"
+            class="initialize-button"
+            :disabled="!selectedTemplateId || templateInitializing"
+            @click="initializeProjectWorkspace"
+          >
+            {{ templateInitializing ? '正在初始化' : '创建工程' }}
+          </button>
+          <button
+            v-else-if="projectWorkspace?.status !== 'initializing'"
+            type="button"
+            class="retry-setup-button"
+            @click="retryWorkspace"
+          >
+            重新检查
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section
+      v-else
       ref="stageRef"
       class="workbench-stage"
       :class="{ compact: compactLayout }"
@@ -272,14 +490,15 @@ async function retryWorkspace(): Promise<void> {
           :class="{ hidden: compactLayout && visiblePane !== 'ai' }"
         >
           <iframe
-            v-if="aiUrl"
+            v-if="aiFrameUrl"
+            ref="aiFrameRef"
             class="service-frame"
             :class="{ loaded: aiFrameLoaded }"
-            :src="aiUrl"
+            :src="aiFrameUrl"
             title="Pi Web AI 对话"
-            @load="aiFrameLoaded = true"
+            @load="handleAiFrameLoad"
           />
-          <div v-if="aiUrl && !aiFrameLoaded" class="pane-state subtle-state">
+          <div v-if="aiFrameUrl && !aiFrameLoaded" class="pane-state subtle-state">
             <span class="loading-line" />
             <strong>正在连接 Pi Web</strong>
           </div>
@@ -441,7 +660,7 @@ async function retryWorkspace(): Promise<void> {
       </section>
     </section>
 
-    <footer class="context-summary" :title="contextError">
+    <footer v-if="workspaceInitialized" class="context-summary" :title="contextError">
       <span><b>上下文</b> {{ contextVersion }}</span>
       <i />
       <span><b>2D</b> {{ scene2dCount ?? '—' }} 个</span>
@@ -492,6 +711,209 @@ async function retryWorkspace(): Promise<void> {
   overflow: hidden;
   color: var(--ink);
   background: #edf0f4;
+}
+
+.ai-workbench.setup-mode {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.workspace-setup {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: 36px;
+  background: var(--surface-subtle);
+}
+
+.workspace-setup-content {
+  width: min(760px, 100%);
+}
+
+.workspace-setup-loading,
+.workspace-setup-state {
+  flex-direction: column;
+  color: var(--muted);
+  text-align: center;
+}
+
+.workspace-setup-loading strong,
+.workspace-setup-state strong {
+  margin-top: 12px;
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.workspace-setup-loading p,
+.workspace-setup-state p {
+  margin: 7px 0 0;
+  font-size: 12px;
+}
+
+.workspace-setup-kicker {
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.workspace-setup h1 {
+  margin: 8px 0 0;
+  color: var(--ink);
+  font-size: 24px;
+  font-weight: 680;
+  letter-spacing: 0;
+}
+
+.workspace-setup-description {
+  margin: 8px 0 24px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.template-option {
+  position: relative;
+  min-width: 0;
+  min-height: 92px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.template-option:hover {
+  border-color: #aebbd0;
+  background: var(--surface-hover);
+}
+
+.template-option.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.template-icon {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: #e9f8f2;
+  color: #087f5b;
+}
+
+.template-icon.framework-react {
+  color: #087ea4;
+  background: #e7f7fb;
+}
+
+.template-icon svg {
+  width: 21px;
+  height: 21px;
+}
+
+.template-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.template-copy strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-copy small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-language {
+  align-self: start;
+  padding: 3px 5px;
+  border: 1px solid var(--line-light);
+  border-radius: 4px;
+  color: var(--muted);
+  background: var(--surface-subtle);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.workspace-setup-state {
+  min-height: 164px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.workspace-setup-error {
+  margin: 12px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.workspace-setup-actions {
+  min-height: 34px;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.initialize-button,
+.retry-setup-button {
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.initialize-button {
+  border: 1px solid var(--primary);
+  color: #fff;
+  background: var(--primary);
+}
+
+.initialize-button:hover:not(:disabled) {
+  border-color: var(--primary-hover);
+  background: var(--primary-hover);
+}
+
+.initialize-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.retry-setup-button {
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: var(--surface);
 }
 
 .workbench-stage {
@@ -874,7 +1296,11 @@ async function retryWorkspace(): Promise<void> {
 :global(html.dark) .workbench-menu,
 :global([data-theme='dark']) .workbench-menu,
 :global(html.dark) .context-summary,
-:global([data-theme='dark']) .context-summary {
+:global([data-theme='dark']) .context-summary,
+:global(html.dark) .template-option,
+:global([data-theme='dark']) .template-option,
+:global(html.dark) .workspace-setup-state,
+:global([data-theme='dark']) .workspace-setup-state {
   border-color: #3c434e;
   background: #242930;
 }
@@ -907,6 +1333,19 @@ async function retryWorkspace(): Promise<void> {
 }
 
 @media (max-width: 660px) {
+  .workspace-setup {
+    align-items: flex-start;
+    padding: 24px 16px;
+  }
+
+  .template-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .template-option {
+    min-height: 82px;
+  }
+
   .context-summary {
     gap: 7px;
     overflow-x: auto;

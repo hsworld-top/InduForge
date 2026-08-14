@@ -56,7 +56,7 @@ const syncContext = () => {
   WujieVue.bus.$emit(contextEventName.value, buildContext())
 }
 
-watch(() => [appStore.theme, appStore.language], syncContext)
+watch([() => appStore.theme, () => appStore.language], syncContext, { flush: 'post' })
 
 onBeforeUnmount(() => {
   WujieVue.bus.$emit(contextEventName.value, null)

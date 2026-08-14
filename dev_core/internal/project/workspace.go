@@ -12,8 +12,7 @@ import (
 )
 
 type FileWorkspace struct {
-	root       string
-	templateFS fs.FS
+	root string
 }
 
 const (
@@ -21,14 +20,10 @@ const (
 	maxWorkspaceTotalSize int64 = 512 << 20
 )
 
-func NewFileWorkspace(root, templateRoot string) (*FileWorkspace, error) {
+func NewFileWorkspace(root string) (*FileWorkspace, error) {
 	root = strings.TrimSpace(root)
 	if root == "" {
 		return nil, fmt.Errorf("工程工作空间根目录不能为空")
-	}
-	templateRoot = strings.TrimSpace(templateRoot)
-	if templateRoot == "" {
-		return nil, fmt.Errorf("工程模板根目录不能为空")
 	}
 	absolute, err := filepath.Abs(root)
 	if err != nil {
@@ -37,14 +32,7 @@ func NewFileWorkspace(root, templateRoot string) (*FileWorkspace, error) {
 	if err := os.MkdirAll(absolute, 0o755); err != nil {
 		return nil, fmt.Errorf("创建工作空间根目录失败: %w", err)
 	}
-	templateAbsolute, err := filepath.Abs(templateRoot)
-	if err != nil {
-		return nil, fmt.Errorf("解析工程模板根目录失败: %w", err)
-	}
-	if info, err := os.Stat(filepath.Join(templateAbsolute, "package.json")); err != nil || !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("工程模板无效，缺少 package.json: %s", templateAbsolute)
-	}
-	return &FileWorkspace{root: absolute, templateFS: os.DirFS(templateAbsolute)}, nil
+	return &FileWorkspace{root: absolute}, nil
 }
 
 func (w *FileWorkspace) Initialize(projectID string) (string, error) {
@@ -76,69 +64,19 @@ func (w *FileWorkspace) Initialize(projectID string) (string, error) {
 			return "", fmt.Errorf("创建工程工作空间失败: %w", err)
 		}
 	}
-	if info, statErr := os.Stat(filepath.Join(workspacePath, "package.json")); statErr == nil && info.Mode().IsRegular() {
+	if info, statErr := os.Stat(workspacePath); statErr == nil {
+		if !info.IsDir() {
+			return "", fmt.Errorf("工程源码路径不是目录: %s", workspacePath)
+		}
 		return workspacePath, nil
-	} else if statErr != nil && !os.IsNotExist(statErr) {
+	} else if !os.IsNotExist(statErr) {
 		return "", fmt.Errorf("检查工程工作空间失败: %w", statErr)
 	}
 	if err := os.MkdirAll(workspacePath, 0o755); err != nil {
+		cleanupNewProject()
 		return "", fmt.Errorf("创建工程源码目录失败: %w", err)
 	}
-	if err := copyWorkspaceTemplate(w.templateFS, workspacePath); err != nil {
-		cleanupNewProject()
-		return "", err
-	}
-	for _, relative := range []string{"assets", "components", "displays", "materials", "models", "previews", "scenes", "symbols"} {
-		if err := os.MkdirAll(filepath.Join(workspacePath, relative), 0o755); err != nil {
-			cleanupNewProject()
-			return "", fmt.Errorf("创建工程资源目录失败: %w", err)
-		}
-	}
 	return workspacePath, nil
-}
-
-func copyWorkspaceTemplate(templateFS fs.FS, workspacePath string) error {
-	return fs.WalkDir(templateFS, ".", func(source string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() && source != "." {
-			name := filepath.Base(source)
-			if name == "node_modules" || name == "dist" {
-				return fs.SkipDir
-			}
-		}
-		relative, err := filepath.Rel(".", source)
-		if err != nil || relative == "." {
-			return err
-		}
-		target := filepath.Join(workspacePath, relative)
-		if entry.IsDir() {
-			return os.MkdirAll(target, 0o755)
-		}
-		content, err := fs.ReadFile(templateFS, source)
-		if err != nil {
-			return err
-		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return err
-		}
-		file, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-		if os.IsExist(err) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if _, err := file.Write(content); err != nil {
-			_ = file.Close()
-			return err
-		}
-		if err := file.Close(); err != nil {
-			return err
-		}
-		return nil
-	})
 }
 
 func (w *FileWorkspace) Remove(path string) error {
@@ -250,12 +188,6 @@ func (w *FileWorkspace) Import(projectID string, files map[string]string) (strin
 	if len(files) == 0 {
 		_ = os.RemoveAll(projectDirectory)
 		return w.Initialize(projectID)
-	}
-	for _, directory := range []string{"assets", "components", "displays", "materials", "models", "previews", "scenes", "symbols"} {
-		if err := os.MkdirAll(filepath.Join(path, directory), 0o755); err != nil {
-			_ = os.RemoveAll(projectDirectory)
-			return "", err
-		}
 	}
 	return path, nil
 }

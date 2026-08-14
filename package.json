@@ -2,7 +2,17 @@
   "name": "induforge",
   "version": "0.0.0",
   "private": true,
-  "packageManager": "pnpm@10.19.0",
+  "packageManager": "pnpm@11.21.0",
+  "engines": {
+    "node": "24.19.0",
+    "npm": "11.17.0",
+    "pnpm": "11.21.0"
+  },
+  "volta": {
+    "node": "24.19.0",
+    "npm": "11.17.0",
+    "pnpm": "11.21.0"
+  },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@typescript-eslint/eslint-plugin": "^8.46.2",
@@ -22,6 +32,7 @@
     "dev:ide": "pnpm dev:env && pnpm --filter ide dev",
     "dev:datacenter": "pnpm dev:env && pnpm --filter datacenter dev",
     "dev:designer": "pnpm dev:env && pnpm --filter designer dev",
+    "dev:pi-web": "pnpm --filter @induforge/pi-web dev",
     "dev:node-agent-front": "pnpm dev:env && pnpm --filter node_agent_front dev",
     "build:core": "cd dev_core && go build ./...",
     "build:data": "cd data_service && go build ./...",
@@ -29,6 +40,7 @@
     "build:ide": "pnpm --filter ide build",
     "build:datacenter": "pnpm --filter datacenter build",
     "build:designer": "pnpm --filter designer build",
+    "build:pi-web": "pnpm --filter @induforge/pi-web build",
     "build:node-agent-front": "pnpm --filter node_agent_front build",
     "build:go": "pnpm build:core && pnpm build:data && pnpm build:node-agent",
     "build:frontend": "pnpm build:ide && pnpm build:datacenter && pnpm build:designer && pnpm build:node-agent-front",
@@ -39,6 +51,7 @@
     "test:ide": "pnpm --filter ide test",
     "test:datacenter": "pnpm --filter datacenter test",
     "test:designer": "pnpm --filter designer test",
+    "test:pi-web": "pnpm --filter @induforge/pi-web test",
     "test:go": "pnpm test:core && pnpm test:data && pnpm test:node-agent",
     "test:frontend": "pnpm test:ide && pnpm test:datacenter && pnpm test:designer",
     "test": "pnpm test:frontend && pnpm test:go",
@@ -48,6 +61,7 @@
     "lint:ide": "pnpm --filter ide lint",
     "lint:datacenter": "pnpm --filter datacenter lint",
     "lint:designer": "pnpm --filter designer lint",
+    "lint:pi-web": "pnpm --filter @induforge/pi-web lint",
     "lint:node-agent-front": "pnpm --filter node_agent_front lint",
     "lint:go": "pnpm lint:core && pnpm lint:data && pnpm lint:node-agent",
     "lint:frontend": "pnpm lint:ide && pnpm lint:datacenter && pnpm lint:designer && pnpm lint:node-agent-front",
@@ -77,6 +91,7 @@
     "typecheck:ide": "pnpm --filter ide typecheck",
     "typecheck:datacenter": "pnpm --filter datacenter typecheck",
     "typecheck:designer": "pnpm --filter designer typecheck",
+    "typecheck:pi-web": "pnpm --filter @induforge/pi-web typecheck",
     "typecheck:frontend": "pnpm typecheck:ide && pnpm typecheck:datacenter && pnpm typecheck:designer",
     "typecheck": "pnpm typecheck:frontend",
     "collector:restore": "dotnet restore collector/InduForge.Collector.slnx",

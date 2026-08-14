@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "generator": "create-vite@9.1.2",
+  "templates": [
+    {
+      "id": "vite-vue-js",
+      "name": "Vue + JavaScript",
+      "description": "Vite 官方 Vue JavaScript 模板",
+      "framework": "vue",
+      "language": "javascript",
+      "directory": "vite-vue-js"
+    },
+    {
+      "id": "vite-vue-ts",
+      "name": "Vue + TypeScript",
+      "description": "Vite 官方 Vue TypeScript 模板",
+      "framework": "vue",
+      "language": "typescript",
+      "directory": "vite-vue-ts"
+    },
+    {
+      "id": "vite-react-js",
+      "name": "React + JavaScript",
+      "description": "Vite 官方 React JavaScript 模板",
+      "framework": "react",
+      "language": "javascript",
+      "directory": "vite-react-js"
+    },
+    {
+      "id": "vite-react-ts",
+      "name": "React + TypeScript",
+      "description": "Vite 官方 React TypeScript 模板",
+      "framework": "react",
+      "language": "typescript",
+      "directory": "vite-react-ts"
+    }
+  ]
+}
