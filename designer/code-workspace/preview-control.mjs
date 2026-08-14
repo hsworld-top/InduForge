@@ -12,7 +12,7 @@ const controlPort = Number.parseInt(process.env.PREVIEW_CONTROL_PORT || '5174', 
 const previewPort = Number.parseInt(process.env.VITE_PORT || '5173', 10)
 const workspaceRoot = process.env.WORKSPACE_ROOT || '/workspace'
 const templatesRoot = process.env.WORKSPACE_TEMPLATES_ROOT || '/opt/induforge/templates'
-const storeDir = process.env.npm_config_store_dir || '/cache/pnpm-store'
+const storeDir = process.env.PNPM_CONFIG_STORE_DIR || '/cache/pnpm-store'
 const allowedOrigins = new Set(
   (process.env.PREVIEW_CONTROL_ALLOWED_ORIGINS || '')
     .split(',')

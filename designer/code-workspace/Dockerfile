@@ -18,13 +18,6 @@ RUN pnpm install --frozen-lockfile \
       --filter vite-react-js \
       --filter vite-react-ts \
       --store-dir /opt/induforge/pnpm-store \
-    && for template in vite-vue-js vite-vue-ts vite-react-js vite-react-ts; do \
-      pnpm --dir "contracts/project-templates/$template" install \
-        --frozen-lockfile \
-        --lockfile-only \
-        --ignore-workspace \
-        --offline; \
-    done \
     && pnpm --dir designer/pi-web build \
     && mkdir -p /tmp/induforge-pi-web \
     && pnpm --dir designer/pi-web pack --pack-destination /tmp/induforge-pi-web \
@@ -60,7 +53,11 @@ COPY --from=workspace-assets /source/contracts/project-templates/vite-vue-js/pnp
 COPY --from=workspace-assets /source/contracts/project-templates/vite-vue-ts/pnpm-lock.yaml /opt/induforge/templates/vite-vue-ts/pnpm-lock.yaml
 COPY --from=workspace-assets /source/contracts/project-templates/vite-react-js/pnpm-lock.yaml /opt/induforge/templates/vite-react-js/pnpm-lock.yaml
 COPY --from=workspace-assets /source/contracts/project-templates/vite-react-ts/pnpm-lock.yaml /opt/induforge/templates/vite-react-ts/pnpm-lock.yaml
-RUN find /opt/induforge/templates -type d -exec chmod 755 {} + \
+RUN rm -rf \
+      /opt/induforge/templates/*/node_modules \
+      /opt/induforge/templates/*/dist \
+      /opt/induforge/templates/*/.pnpm-store \
+    && find /opt/induforge/templates -type d -exec chmod 755 {} + \
     && find /opt/induforge/templates -type f -exec chmod 644 {} + \
     && chown -R root:root /opt/induforge/templates /opt/induforge/pnpm-store /opt/induforge/pnpm-store.version /opt/induforge/pi \
     && chmod -R a-w /opt/induforge/templates /opt/induforge/pnpm-store /opt/induforge/pnpm-store.version /opt/induforge/pi
@@ -87,6 +84,8 @@ ENV PI_CODING_AGENT_DIR=/home/coder/.pi/agent \
     PI_WEB_PORT=30141 \
     WORKSPACE_ROOT=/workspace \
     WORKSPACE_TEMPLATES_ROOT=/opt/induforge/templates \
+    PNPM_CONFIG_STORE_DIR=/cache/pnpm-store \
+    PNPM_CONFIG_TRUST_LOCKFILE=true \
     PREVIEW_CONTROL_ALLOWED_ORIGINS=http://127.0.0.1:18601,http://localhost:18601,http://127.0.0.1:18603,http://localhost:18603
 
 EXPOSE 3000 30141 5173 5174

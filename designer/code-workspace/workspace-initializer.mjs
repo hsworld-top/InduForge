@@ -69,6 +69,14 @@ async function defaultRunCommand(command, args, options = {}) {
   })
 }
 
+function commandErrorMessage(command, args, error) {
+  const stderr = typeof error?.stderr === 'string' ? error.stderr.trim() : ''
+  const stdout = typeof error?.stdout === 'string' ? error.stdout.trim() : ''
+  const fallback = error instanceof Error ? error.message.trim() : ''
+  const detail = stderr || stdout || fallback || '未知错误'
+  return `命令执行失败: ${command} ${args.join(' ')}\n${detail}`
+}
+
 async function makeWorkspaceWritable(root) {
   for (const entry of await readdir(root, { withFileTypes: true })) {
     const target = path.join(root, entry.name)
@@ -86,9 +94,17 @@ export function createWorkspaceInitializer(options = {}) {
   const workspaceRoot = path.resolve(options.workspaceRoot || '/workspace')
   const templatesRoot = path.resolve(options.templatesRoot || '/opt/induforge/templates')
   const storeDir = path.resolve(options.storeDir || '/cache/pnpm-store')
-  const runCommand = options.runCommand || defaultRunCommand
+  const commandRunner = options.runCommand || defaultRunCommand
   let initialization = null
   let lastError = null
+
+  async function runCommand(command, args, commandOptions = {}) {
+    try {
+      return await commandRunner(command, args, commandOptions)
+    } catch (error) {
+      throw new Error(commandErrorMessage(command, args, error), { cause: error })
+    }
+  }
 
   const markerPath = path.join(workspaceRoot, '.induforge', 'project.json')
   const catalogPath = path.join(templatesRoot, 'catalog.json')
@@ -195,6 +211,7 @@ export function createWorkspaceInitializer(options = {}) {
           '--offline',
           '--frozen-lockfile',
           '--ignore-workspace',
+          '--config.trust-lockfile=true',
           '--store-dir',
           storeDir,
         ],

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -55,7 +55,62 @@ test('空工作区可以列出模板并完成一次初始化', async () => {
   assert.equal((await initializer.status()).templateId, 'vite-vue-js')
   assert.match(await readFile(path.join(workspaceRoot, 'package.json'), 'utf8'), /fixture/)
   assert.equal(JSON.parse(await readFile(path.join(workspaceRoot, '.induforge/project.json'))).version, 1)
+  assert.deepEqual(commands[0], [
+    'pnpm',
+    'install',
+    '--offline',
+    '--frozen-lockfile',
+    '--ignore-workspace',
+    '--config.trust-lockfile=true',
+    '--store-dir',
+    path.join(path.dirname(workspaceRoot), 'store'),
+  ])
   assert.deepEqual(commands.at(-1), ['git', 'commit', '-m', 'chore: 初始化工程模板'])
+})
+
+test('命令失败时保留 stderr 诊断信息并清理暂存目录', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'induforge-workspace-error-'))
+  const workspaceRoot = path.join(root, 'workspace')
+  const templatesRoot = path.join(root, 'templates')
+  const templateRoot = path.join(templatesRoot, 'vite-vue-js')
+  await mkdir(workspaceRoot)
+  await mkdir(templateRoot, { recursive: true })
+  await writeFile(
+    path.join(templatesRoot, 'catalog.json'),
+    JSON.stringify({
+      version: 1,
+      templates: [
+        {
+          id: 'vite-vue-js',
+          name: 'Vue + JavaScript',
+          description: 'Vue',
+          framework: 'vue',
+          language: 'javascript',
+          directory: 'vite-vue-js',
+        },
+      ],
+    }),
+  )
+  await writeFile(path.join(templateRoot, 'package.json'), '{"name":"fixture","private":true}\n')
+  await writeFile(path.join(templateRoot, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n')
+
+  const initializer = createWorkspaceInitializer({
+    workspaceRoot,
+    templatesRoot,
+    storeDir: path.join(root, 'store'),
+    runCommand: async () => {
+      const error = new Error('Command failed')
+      error.stderr = '[ERR_PNPM_NO_OFFLINE_META] 缺少离线元数据'
+      throw error
+    },
+  })
+
+  await assert.rejects(
+    () => initializer.initialize('vite-vue-js'),
+    (error) => /ERR_PNPM_NO_OFFLINE_META/.test(error.message),
+  )
+  assert.deepEqual(await readdir(workspaceRoot), [])
+  assert.match((await initializer.status()).message, /ERR_PNPM_NO_OFFLINE_META/)
 })
 
 test('已初始化工作区拒绝再次选择模板', async () => {
