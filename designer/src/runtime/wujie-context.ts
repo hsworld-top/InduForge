@@ -66,6 +66,7 @@ export const initializeWujieContext = (): MicroAppContext | null => {
     const instanceName = currentContext?.instanceName
     if (instanceName) {
       window.$wujie.bus.$on(`micro-app:${instanceName}:context`, applyMicroAppContext)
+      window.$wujie.bus.$emit(`micro-app:${instanceName}:context-ready`)
     }
   }
   return currentContext

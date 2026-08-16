@@ -7,7 +7,6 @@ import IconLucideMonitorSmartphone from '~icons/lucide/monitor-smartphone'
 import IconLucidePower from '~icons/lucide/power'
 import IconLucideRefreshCw from '~icons/lucide/refresh-cw'
 import IconLucideRotateCcw from '~icons/lucide/rotate-ccw'
-import IconLucideTerminalSquare from '~icons/lucide/square-terminal'
 import { getApiErrorMessage } from '@/utils/request'
 import { previewControlApi, type PreviewControlState } from './code/preview-control-api'
 
@@ -35,7 +34,6 @@ const devices: DevicePreset[] = [
 
 const panelRef = ref<HTMLElement | null>(null)
 const canvasRef = ref<HTMLElement | null>(null)
-const previewFrameRef = ref<HTMLIFrameElement | null>(null)
 const selectedDevice = ref<DeviceMode>('web')
 const deviceMenuOpen = ref(false)
 const frameLoaded = ref(false)
@@ -193,19 +191,6 @@ function openPreviewWindow(): void {
 async function enterFullscreen(): Promise<void> {
   await panelRef.value?.requestFullscreen?.()
 }
-
-function openDevtools(): void {
-  const target = previewFrameRef.value?.contentWindow
-  if (!target || !props.previewUrl || !processRunning.value) return
-  target.postMessage(
-    {
-      source: 'induforge-designer',
-      type: 'PREVIEW_DEVTOOLS_COMMAND',
-      command: 'toggle',
-    },
-    new URL(props.previewUrl).origin,
-  )
-}
 </script>
 
 <template>
@@ -306,7 +291,6 @@ function openDevtools(): void {
           <iframe
             v-if="previewUrl"
             :key="frameKey"
-            ref="previewFrameRef"
             class="preview-frame"
             :class="{ loaded: frameLoaded }"
             :src="previewUrl"
@@ -337,13 +321,6 @@ function openDevtools(): void {
         {{ processError }}
       </p>
     </div>
-
-    <footer class="preview-footer">
-      <button type="button" :disabled="!previewUrl || !processRunning" @click="openDevtools">
-        <IconLucideTerminalSquare />
-        控制台
-      </button>
-    </footer>
   </section>
 </template>
 
@@ -354,7 +331,7 @@ function openDevtools(): void {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 40px minmax(0, 1fr) 30px;
+  grid-template-rows: 40px minmax(0, 1fr);
   color: #273142;
   background: #eef1f5;
 }
@@ -364,8 +341,7 @@ function openDevtools(): void {
 .preview-toolbar-actions,
 .command-button,
 .icon-button,
-.process-status,
-.preview-footer button {
+.process-status {
   display: flex;
   align-items: center;
 }
@@ -419,15 +395,13 @@ function openDevtools(): void {
 }
 
 .icon-button:disabled,
-.command-button:disabled,
-.preview-footer button:disabled {
+.command-button:disabled {
   opacity: 0.42;
   cursor: default;
 }
 
 .icon-button svg,
-.command-button svg,
-.preview-footer svg {
+.command-button svg {
   width: 15px;
   height: 15px;
 }
@@ -651,25 +625,6 @@ function openDevtools(): void {
   background: #fff;
   font-size: 10px;
   box-shadow: 0 7px 18px rgba(20, 31, 51, 0.12);
-}
-
-.preview-footer {
-  display: flex;
-  align-items: center;
-  border-top: 1px solid #d8dee7;
-  background: #f7f8fa;
-}
-
-.preview-footer button {
-  height: 29px;
-  gap: 6px;
-  padding: 0 12px;
-  border: 0;
-  border-bottom: 2px solid #2563eb;
-  color: #344258;
-  background: #fff;
-  font-size: 11px;
-  cursor: pointer;
 }
 
 .spinning {

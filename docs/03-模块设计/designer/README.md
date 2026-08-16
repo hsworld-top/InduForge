@@ -7,7 +7,7 @@ Designer 是 AI 页面开发工作台。页面布局、路由和组件由 AI 直
 
 - 左侧只承载 Pi Web。
 - 中间菜单提供“页面 / 2D / 3D / 编辑器”四个工作台视图。
-- 预览视图承载 Vite iframe、设备尺寸、刷新、全屏、进程控制和开发控制台。
+- 预览视图承载 Vite iframe、设备尺寸、刷新、全屏、新标签打开和进程控制。
 - 2D/3D 视图按公开场景契约展示产物卡片，并在顶部提供对应 HT 编辑器入口。
 - 编辑器视图承载精简 code-server，使用其原生文件、搜索、Git、运行、扩展和终端。
 - 底部展示上下文版本、2D/3D 场景数、数据点数和更新时间。
@@ -60,9 +60,9 @@ URL，前端不得推导端口或域名。
 用户描述需求
 -> Pi Web 修改 /workspace 源码
 -> Vite HMR 更新 Preview iframe
--> 用户可切换设备、刷新或打开 Eruda
+-> 用户可切换设备、刷新或在新标签中打开 Preview 并使用浏览器开发者工具
 -> code-server 随时编辑文件、运行 Git 或终端命令
 ```
 
 发布链路仍为 `pnpm build -> dist -> client-assets -> project-nginx`，不携带 Pi Web、code-server、
-Preview Control 或 Eruda。
+Preview Control 或开发工作空间能力。

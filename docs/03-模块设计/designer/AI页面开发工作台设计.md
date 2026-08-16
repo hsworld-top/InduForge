@@ -52,20 +52,14 @@ Designer 在预览激活时每 3 秒轮询，状态变化时每秒轮询，切�
 停止 Vite 后显示平台停止态，不能暴露浏览器连接失败页。重启会清理当前 `5173` 进程并统一执行
 平台 Vite Runner。用户在终端自行执行 `pnpm dev` 时识别为 `external`。
 
-### 2.3 控制台
+### 2.3 新标签调试
 
-底部只保留“控制台”。点击后向 Preview Origin 发送固定消息，平台 Vite Runner 在开发态注入并
-打开完整 Eruda，不修改官方模板源码。再次点击同一入口会折叠控制台。
+“新窗口”使用 `services.preview.url` 打开同一 Preview 页面。开发环境直接打开本机映射地址；生产与
+离线环境打开 Traefik 返回的受控 HTTPS 地址，并复用当前工作空间的 HttpOnly 会话。用户在新标签中
+使用浏览器原生开发者工具进行 Console、Elements、Network 和存储调试。
 
-Eruda 使用 Preview 页面内部的固定底部抽屉承载：默认高度约为可视区域的三分之一，顶部拖拽条
-支持鼠标、触控笔和键盘调整，高度限制在 `160px` 到视口高度的 `80%`。抽屉折叠后不销毁
-Eruda 实例，Console、Elements、Network 和 Resources 继续调试当前 Preview 页面。
-
-模板校验 Origin 与 `document.referrer` 一致，并允许消息来自直接父窗口或受控的 Wujie 宿主 frame。
-Designer 只发送固定的 `PREVIEW_DEVTOOLS_COMMAND/toggle` 消息，不读取 Preview DOM。
-
-Eruda 不显示默认悬浮按钮，不进入工程源码和生产构建。终端自行启动的外部 Vite 不注入 Eruda；
-重启为平台受控进程后恢复。终端、Problems 和 Output 使用 code-server 原生能力。
+Designer 不再注入 Eruda、调试桥或跨 iframe 控制台消息。平台 Vite Runner 只负责加载工程 Vite
+配置并固定监听地址和端口；终端、Problems 和 Output 使用 code-server 原生能力。
 
 ## 3. 2D/3D 产物视图
 

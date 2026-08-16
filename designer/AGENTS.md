@@ -3,7 +3,7 @@
 ## 模块定位
 
 - `designer` 是 AI 页面开发工作台，负责承载 Pi Web、Vite 预览外壳、精简 code-server、工程上下文摘要和 2D/3D 工具入口。
-- Vite Preview 与 code-server 使用两个持续存活的 iframe；预览设备、刷新、进程启停和开发控制台由 Designer 管理。
+- Vite Preview 与 code-server 使用两个持续存活的 iframe；预览设备、刷新和进程启停由 Designer 管理。
 - 工程页面是标准 Vue 或 React Vite 源码，源码和路由是页面行为的唯一事实。
 
 ## 进入前先看
@@ -22,7 +22,7 @@
 - 子应用 URL 由 `dev_core` 返回并由 `dev_ide` 注入，Designer 不拼接容器端口；开发环境可直接读取四个固定 URL。
 - 打开 2D、3D 时发送受控宿主消息，由 `dev_ide` 校验工程和权限后处理。
 - Pi Web、Vite Preview 和 code-server 使用原生 iframe，不作为 Wujie 子应用；Designer 自身由 `dev_ide` 通过 Wujie 承载。
-- 预览控制只调用 Preview Control 固定 REST 接口，开发控制台只向 Preview Origin 发送固定 `postMessage`。
+- 预览控制只调用 Preview Control 固定 REST 接口；浏览器调试通过受控 Preview URL 在新标签中完成。
 - 标签切换必须保留 iframe 状态；只有用户关闭标签或权限失效时才销毁实例。
 - AI 只读取 HT 场景公开契约和数据点上下文，不直接操作 HT 编辑器或修改平台生成的只读上下文。
 - 复杂状态变更统一走 store action，跨 iframe 消息必须校验来源、类型和 `projectId`。

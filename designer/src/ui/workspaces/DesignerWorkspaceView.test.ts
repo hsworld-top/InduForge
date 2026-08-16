@@ -39,8 +39,24 @@ const workspace = {
 }
 
 class ResizeObserverStub {
-  observe() {}
+  static workspace: ResizeObserverStub | null = null
+
+  constructor(
+    private readonly callback: (
+      entries: Array<{ contentRect: { width: number } }>,
+      observer: ResizeObserverStub,
+    ) => void,
+  ) {}
+
+  observe(target: Element) {
+    if (target.classList.contains('workbench-stage')) ResizeObserverStub.workspace = this
+  }
+  unobserve() {}
   disconnect() {}
+
+  emit(width: number) {
+    this.callback([{ contentRect: { width } }], this)
+  }
 }
 
 let workspaceInitializationStatus: 'uninitialized' | 'initialized'
@@ -49,6 +65,8 @@ let initializeTemplateId: string | null
 describe('DesignerWorkspaceView', () => {
   beforeEach(() => {
     vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+    ResizeObserverStub.workspace = null
+    localStorage.clear()
     vi.mocked(resolveWorkspaceState).mockReset()
     vi.mocked(contextPackApi.refresh).mockReset()
     vi.mocked(sceneContractApi.list).mockReset()
@@ -307,6 +325,33 @@ describe('DesignerWorkspaceView', () => {
     expect(wrapper.get('iframe[title="Vite 实时预览"]').element).toBe(preview)
     expect(wrapper.get('iframe[title="工程开发工作台"]').element).toBe(editor)
     expect(wrapper.get('.code-server-shell').classes()).toContain('active')
+  })
+
+  it('折叠后只保留窄菜单，点击菜单恢复工作台且 iframe 不销毁', async () => {
+    localStorage.setItem(
+      'designer:workspace-layout:project-1',
+      JSON.stringify({
+        version: 1,
+        aiPaneWidth: 1348,
+        lastExpandedAiPaneWidth: 720,
+        workbenchCollapsed: true,
+      }),
+    )
+    const wrapper = mount(DesignerWorkspaceView)
+    await flushPromises()
+    ResizeObserverStub.workspace?.emit(1400)
+    await wrapper.vm.$nextTick()
+
+    const preview = wrapper.get('iframe[title="Vite 实时预览"]').element
+    expect(wrapper.get('.workbench-pane').classes()).toContain('collapsed')
+    expect(wrapper.get('.workbench-stage').attributes('style')).toContain('1348px')
+
+    await wrapper.get('button[aria-label="2D"]').trigger('click')
+
+    expect(wrapper.get('.workbench-pane').classes()).not.toContain('collapsed')
+    expect(wrapper.get('.workbench-stage').attributes('style')).toContain('720px')
+    expect(wrapper.get('iframe[title="Vite 实时预览"]').element).toBe(preview)
+    expect(wrapper.get('.workbench-view.active').text()).toContain('产线总览')
   })
 
   it('2D 和 3D 页面展示场景契约卡片，并通过宿主打开对应编辑器', async () => {

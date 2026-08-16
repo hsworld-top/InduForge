@@ -42,15 +42,12 @@ for (let index = 0; index < 60; index += 1) {
     const response = await fetch('http://127.0.0.1:5173')
     if (response.ok) {
       const html = await response.text()
-      if (!html.includes('/__induforge/eruda.js')) process.exit(2)
-      if (!html.includes('/__induforge/preview-devtools.js')) process.exit(3)
-      const bridge = await fetch('http://127.0.0.1:5173/__induforge/preview-devtools.js')
-      process.exit(bridge.ok ? 0 : 4)
+      process.exit(html.includes('id="root"') || html.includes('id="app"') ? 0 : 2)
     }
   } catch {}
   await wait(250)
 }
-process.exit(5)
+process.exit(3)
 "
   kill "$vite_pid"
   wait "$vite_pid" 2>/dev/null || true

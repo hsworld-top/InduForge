@@ -27,15 +27,25 @@ import PreviewPanel from './PreviewPanel.vue'
 import SceneArtifactsPanel from './SceneArtifactsPanel.vue'
 import { sceneContractApi, type SceneContract } from './scene-contract-api'
 import {
-  clampAiPaneWidth,
-  MAX_AI_PANE_WIDTH,
+  clampExpandedAiPaneWidth,
+  getCollapsedAiPaneWidth,
   MIN_AI_PANE_WIDTH,
+  resolveAiPaneLayout,
   shouldUseCompactLayout,
+  SPLIT_HANDLE_WIDTH,
+  WORKBENCH_MENU_WIDTH,
 } from './workspace-layout'
 
 type VisiblePane = 'ai' | 'workbench'
 type ContextStatus = 'syncing' | 'synced' | 'error'
 type WorkbenchView = 'page' | '2d' | '3d' | 'editor'
+
+interface PersistedWorkspaceLayout {
+  version: 1
+  aiPaneWidth: number
+  lastExpandedAiPaneWidth: number
+  workbenchCollapsed: boolean
+}
 
 const route = useRoute()
 const editorUi = getEditorUiStore()
@@ -62,6 +72,9 @@ const compactLayout = ref(false)
 const visiblePane = ref<VisiblePane>('ai')
 const activeWorkbenchView = ref<WorkbenchView>('page')
 const aiPaneWidth = ref(MIN_AI_PANE_WIDTH)
+const lastExpandedAiPaneWidth = ref(MIN_AI_PANE_WIDTH)
+const workbenchCollapsed = ref(false)
+const stageWidth = ref(0)
 const aiFrameLoaded = ref(false)
 const codeFrameLoaded = ref(false)
 const toolError = ref('')
@@ -107,8 +120,12 @@ const scene3dContracts = computed(() =>
   sceneContracts.value.filter((contract) => contract.kind === '3d'),
 )
 const splitStyle = computed(() => ({
-  gridTemplateColumns: `${aiPaneWidth.value}px 6px minmax(0, 1fr)`,
+  gridTemplateColumns: `${aiPaneWidth.value}px ${SPLIT_HANDLE_WIDTH}px minmax(${WORKBENCH_MENU_WIDTH}px, 1fr)`,
+  '--workbench-menu-width': `${WORKBENCH_MENU_WIDTH}px`,
 }))
+const aiPaneMaximum = computed(() =>
+  stageWidth.value > 0 ? getCollapsedAiPaneWidth(stageWidth.value) : MIN_AI_PANE_WIDTH,
+)
 const contextStatusLabel = computed(() => {
   if (contextStatus.value === 'syncing') return '同步中'
   if (contextStatus.value === 'error') return '同步失败'
@@ -129,8 +146,14 @@ onMounted(() => {
   restoreAiPaneWidth()
   resizeObserver = new ResizeObserver(([entry]) => {
     const width = entry?.contentRect.width ?? 0
+    stageWidth.value = width
     compactLayout.value = shouldUseCompactLayout(width)
-    if (!compactLayout.value) aiPaneWidth.value = clampAiPaneWidth(aiPaneWidth.value, width)
+    if (!compactLayout.value) {
+      aiPaneWidth.value = workbenchCollapsed.value
+        ? getCollapsedAiPaneWidth(width)
+        : clampExpandedAiPaneWidth(aiPaneWidth.value, width)
+      if (!workbenchCollapsed.value) lastExpandedAiPaneWidth.value = aiPaneWidth.value
+    }
   })
   window.addEventListener('message', handlePiMessage)
   void Promise.allSettled([loadWorkspace(true), runContextRefresh()])
@@ -143,11 +166,9 @@ onBeforeUnmount(() => {
   window.removeEventListener('message', handlePiMessage)
 })
 
-watch(
-  [editorUi.theme, editorUi.locale, aiFrameUrl, projectId],
-  () => postPiContext(),
-  { flush: 'post' },
-)
+watch([editorUi.theme, editorUi.locale, aiFrameUrl, projectId], () => postPiContext(), {
+  flush: 'post',
+})
 
 watch(stageRef, (stage) => {
   resizeObserver?.disconnect()
@@ -202,36 +223,67 @@ function formatTime(value: string): string {
 
 function restoreAiPaneWidth(): void {
   if (!projectId.value) return
-  const stored = Number.parseInt(
-    localStorage.getItem(`designer:ai-pane:${projectId.value}`) || '',
-    10,
-  )
-  if (Number.isFinite(stored)) {
-    aiPaneWidth.value = Math.min(Math.max(stored, MIN_AI_PANE_WIDTH), MAX_AI_PANE_WIDTH)
+  try {
+    const stored = JSON.parse(
+      localStorage.getItem(`designer:workspace-layout:${projectId.value}`) || 'null',
+    ) as PersistedWorkspaceLayout | null
+    if (stored?.version !== 1) return
+    aiPaneWidth.value = Math.max(stored.aiPaneWidth, MIN_AI_PANE_WIDTH)
+    lastExpandedAiPaneWidth.value = Math.max(stored.lastExpandedAiPaneWidth, MIN_AI_PANE_WIDTH)
+    workbenchCollapsed.value = stored.workbenchCollapsed === true
+  } catch {
+    // 损坏的本地布局状态直接忽略，避免阻止工作台进入。
   }
 }
 
 function persistAiPaneWidth(): void {
   if (projectId.value) {
     localStorage.setItem(
-      `designer:ai-pane:${projectId.value}`,
-      String(Math.round(aiPaneWidth.value)),
+      `designer:workspace-layout:${projectId.value}`,
+      JSON.stringify({
+        version: 1,
+        aiPaneWidth: Math.round(aiPaneWidth.value),
+        lastExpandedAiPaneWidth: Math.round(lastExpandedAiPaneWidth.value),
+        workbenchCollapsed: workbenchCollapsed.value,
+      } satisfies PersistedWorkspaceLayout),
     )
   }
+}
+
+function getStageWidth(): number {
+  return stageWidth.value || stageRef.value?.clientWidth || 0
 }
 
 function beginResize(event: PointerEvent): void {
   if (compactLayout.value || !stageRef.value) return
   const startX = event.clientX
   const startWidth = aiPaneWidth.value
-  const containerWidth = stageRef.value.clientWidth
+  const containerWidth = getStageWidth()
+  const startedCollapsed = workbenchCollapsed.value
   const target = event.currentTarget as HTMLElement
-  target.setPointerCapture(event.pointerId)
+  target.setPointerCapture?.(event.pointerId)
 
   const move = (moveEvent: PointerEvent) => {
-    aiPaneWidth.value = clampAiPaneWidth(startWidth + moveEvent.clientX - startX, containerWidth)
+    const delta = moveEvent.clientX - startX
+    if (startedCollapsed) {
+      if (delta >= -8) return
+      workbenchCollapsed.value = false
+      aiPaneWidth.value = clampExpandedAiPaneWidth(
+        lastExpandedAiPaneWidth.value + delta + 8,
+        containerWidth,
+      )
+      return
+    }
+
+    const layout = resolveAiPaneLayout(startWidth + delta, containerWidth)
+    if (layout.workbenchCollapsed && !workbenchCollapsed.value) {
+      lastExpandedAiPaneWidth.value = startWidth
+    }
+    workbenchCollapsed.value = layout.workbenchCollapsed
+    aiPaneWidth.value = layout.width
   }
   const end = () => {
+    if (!workbenchCollapsed.value) lastExpandedAiPaneWidth.value = aiPaneWidth.value
     persistAiPaneWidth()
     target.removeEventListener('pointermove', move)
     target.removeEventListener('pointerup', end)
@@ -245,9 +297,30 @@ function beginResize(event: PointerEvent): void {
 function resizeWithKeyboard(event: KeyboardEvent): void {
   if (!stageRef.value || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return
   event.preventDefault()
+  if (workbenchCollapsed.value) {
+    if (event.key === 'ArrowLeft') restoreWorkbench()
+    return
+  }
   const delta = event.key === 'ArrowLeft' ? -24 : 24
-  aiPaneWidth.value = clampAiPaneWidth(aiPaneWidth.value + delta, stageRef.value.clientWidth)
+  const layout = resolveAiPaneLayout(aiPaneWidth.value + delta, getStageWidth())
+  if (layout.workbenchCollapsed) lastExpandedAiPaneWidth.value = aiPaneWidth.value
+  workbenchCollapsed.value = layout.workbenchCollapsed
+  aiPaneWidth.value = layout.width
+  if (!workbenchCollapsed.value) lastExpandedAiPaneWidth.value = aiPaneWidth.value
   persistAiPaneWidth()
+}
+
+function restoreWorkbench(): void {
+  if (!stageRef.value) return
+  workbenchCollapsed.value = false
+  aiPaneWidth.value = clampExpandedAiPaneWidth(lastExpandedAiPaneWidth.value, getStageWidth())
+  lastExpandedAiPaneWidth.value = aiPaneWidth.value
+  persistAiPaneWidth()
+}
+
+function selectWorkbenchView(view: WorkbenchView): void {
+  activeWorkbenchView.value = view
+  if (workbenchCollapsed.value && !compactLayout.value) restoreWorkbench()
 }
 
 function clearWorkspacePoll(): void {
@@ -434,7 +507,9 @@ async function retryWorkspace(): Promise<void> {
               <strong>{{ template.name }}</strong>
               <small>{{ template.description }}</small>
             </span>
-            <span class="template-language">{{ template.language === 'typescript' ? 'TS' : 'JS' }}</span>
+            <span class="template-language">{{
+              template.language === 'typescript' ? 'TS' : 'JS'
+            }}</span>
           </button>
         </div>
 
@@ -537,7 +612,7 @@ async function retryWorkspace(): Promise<void> {
         aria-label="调整 AI 与工作台区域宽度"
         aria-orientation="vertical"
         :aria-valuemin="MIN_AI_PANE_WIDTH"
-        :aria-valuemax="MAX_AI_PANE_WIDTH"
+        :aria-valuemax="Math.round(aiPaneMaximum)"
         :aria-valuenow="Math.round(aiPaneWidth)"
         tabindex="0"
         @pointerdown="beginResize"
@@ -548,7 +623,10 @@ async function retryWorkspace(): Promise<void> {
 
       <section
         class="workbench-pane"
-        :class="{ hidden: compactLayout && visiblePane !== 'workbench' }"
+        :class="{
+          hidden: compactLayout && visiblePane !== 'workbench',
+          collapsed: workbenchCollapsed && !compactLayout,
+        }"
       >
         <nav class="workbench-menu" aria-label="工程开发工具">
           <div class="workbench-menu-main">
@@ -557,7 +635,7 @@ async function retryWorkspace(): Promise<void> {
               :class="{ active: activeWorkbenchView === 'page' }"
               title="页面"
               aria-label="页面"
-              @click="activeWorkbenchView = 'page'"
+              @click="selectWorkbenchView('page')"
             >
               <IconLucideMonitorPlay />
               <span>页面</span>
@@ -567,7 +645,7 @@ async function retryWorkspace(): Promise<void> {
               :class="{ active: activeWorkbenchView === '2d' }"
               title="2D 产物"
               aria-label="2D"
-              @click="activeWorkbenchView = '2d'"
+              @click="selectWorkbenchView('2d')"
             >
               <IconLucideRoute />
               <span>2D</span>
@@ -577,7 +655,7 @@ async function retryWorkspace(): Promise<void> {
               :class="{ active: activeWorkbenchView === '3d' }"
               title="3D 产物"
               aria-label="3D"
-              @click="activeWorkbenchView = '3d'"
+              @click="selectWorkbenchView('3d')"
             >
               <IconLucideBox />
               <span>3D</span>
@@ -588,7 +666,7 @@ async function retryWorkspace(): Promise<void> {
               :disabled="!codeUrl"
               title="编辑器"
               aria-label="编辑器"
-              @click="activeWorkbenchView = 'editor'"
+              @click="selectWorkbenchView('editor')"
             >
               <IconLucideCode2 />
               <span>编辑器</span>
@@ -702,6 +780,7 @@ async function retryWorkspace(): Promise<void> {
   --primary-light: #eaf1ff;
   --success: #16803a;
   --danger: #dc2626;
+  --workbench-menu-width: 46px;
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -1023,8 +1102,17 @@ async function retryWorkspace(): Promise<void> {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: 54px minmax(0, 1fr);
+  grid-template-columns: var(--workbench-menu-width) minmax(0, 1fr);
   background: #1f1f1f;
+}
+
+.workbench-pane.collapsed {
+  grid-template-columns: var(--workbench-menu-width) 0;
+}
+
+.workbench-pane.collapsed .workbench-content {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .workbench-menu {
@@ -1042,8 +1130,8 @@ async function retryWorkspace(): Promise<void> {
 }
 
 .workbench-menu button {
-  width: 53px;
-  min-height: 52px;
+  width: calc(var(--workbench-menu-width) - 1px);
+  min-height: 48px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1054,7 +1142,7 @@ async function retryWorkspace(): Promise<void> {
   border-left: 2px solid transparent;
   color: #667085;
   background: transparent;
-  font-size: 10px;
+  font-size: 9px;
   cursor: pointer;
 }
 

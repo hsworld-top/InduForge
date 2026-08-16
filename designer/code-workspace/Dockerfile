@@ -37,7 +37,7 @@ COPY --from=workspace-assets /tmp/induforge-pi-web/ /tmp/induforge-pi-web/
 
 RUN pi_web_package="$(find /tmp/induforge-pi-web -maxdepth 1 -type f -name '*.tgz' -print -quit)" \
     && test -n "$pi_web_package" \
-    && npm install --global pnpm@11.21.0 eruda@3.4.3 "$pi_web_package" \
+    && npm install --global pnpm@11.21.0 "$pi_web_package" \
     && npm cache clean --force \
     && rm -rf /tmp/induforge-pi-web \
     && apt-get update \
@@ -65,7 +65,6 @@ RUN rm -rf \
 COPY --chown=coder:coder designer/code-workspace/preview-control.mjs /opt/induforge/preview-control.mjs
 COPY --chown=coder:coder designer/code-workspace/workspace-initializer.mjs /opt/induforge/workspace-initializer.mjs
 COPY --chown=coder:coder designer/code-workspace/vite-runner.mjs /opt/induforge/vite-runner.mjs
-COPY --chown=coder:coder designer/code-workspace/preview-devtools-client.js /opt/induforge/preview-devtools-client.js
 COPY --chown=coder:coder designer/code-workspace/code-server-settings.json /opt/induforge/code-server-settings.json
 COPY --chown=coder:coder --chmod=755 designer/code-workspace/initialize-cache.sh /home/coder/entrypoint.d/10-induforge-cache.sh
 COPY --chown=coder:coder --chmod=755 designer/code-workspace/workspace-entrypoint.sh /usr/local/bin/induforge-workspace-entrypoint

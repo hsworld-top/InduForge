@@ -3,16 +3,18 @@
     class="wujie-micro-app"
     :name="instanceName"
     :url="appUrl"
-    :props="initialProps"
+    :props="contextProps"
     :alive="true"
     :sync="false"
+    :after-mount="syncContext"
+    :activated="syncContext"
     width="100%"
     height="100%"
   />
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, shallowReactive, watch } from 'vue'
 import WujieVue from 'wujie-vue3'
 import { useAppStore } from '@/store'
 import { Storage } from '@/utils/storage'
@@ -34,6 +36,7 @@ const appStore = useAppStore()
 const instanceName = computed(() => `${props.appType}-${props.project.id}`)
 const appUrl = computed(() => `/${props.appType}/`)
 const contextEventName = computed(() => `micro-app:${instanceName.value}:context`)
+const contextReadyEventName = computed(() => `micro-app:${instanceName.value}:context-ready`)
 
 const buildContext = () => ({
   appType: props.appType,
@@ -50,15 +53,23 @@ const buildContext = () => ({
   onOpenWorkspace: (request: WorkspaceOpenRequest) => emit('openWorkspace', request),
 })
 
-const initialProps = computed(buildContext)
+const contextProps = shallowReactive(buildContext())
 
 const syncContext = () => {
-  WujieVue.bus.$emit(contextEventName.value, buildContext())
+  const nextContext = buildContext()
+  Object.assign(contextProps, nextContext)
+  WujieVue.bus.$emit(contextEventName.value, nextContext)
 }
 
 watch([() => appStore.theme, () => appStore.language], syncContext, { flush: 'post' })
 
+onMounted(() => {
+  WujieVue.bus.$on(contextReadyEventName.value, syncContext)
+  syncContext()
+})
+
 onBeforeUnmount(() => {
+  WujieVue.bus.$off(contextReadyEventName.value, syncContext)
   WujieVue.bus.$emit(contextEventName.value, null)
 })
 </script>

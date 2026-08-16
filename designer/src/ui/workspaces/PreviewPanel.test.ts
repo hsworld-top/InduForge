@@ -64,6 +64,26 @@ describe('PreviewPanel', () => {
     expect(wrapper.get('iframe[title="Vite 实时预览"]').element).not.toBe(frame)
   })
 
+  it('新标签直接打开工作空间返回的 Preview URL', async () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    const wrapper = mount(PreviewPanel, {
+      props: {
+        previewUrl: 'https://preview.workspace.test/project/',
+        controlUrl: 'https://control.workspace.test/',
+        active: true,
+      },
+    })
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="在新窗口打开"]').trigger('click')
+
+    expect(open).toHaveBeenCalledWith(
+      'https://preview.workspace.test/project/',
+      '_blank',
+      'noopener,noreferrer',
+    )
+  })
+
   it('停止操作调用控制接口并展示停止状态', async () => {
     const fetchMock = vi
       .fn()
@@ -94,32 +114,5 @@ describe('PreviewPanel', () => {
       expect.objectContaining({ method: 'POST' }),
     )
     expect(wrapper.text()).toContain('预览服务已停止')
-  })
-
-  it('控制台消息只发送到预览 Origin', async () => {
-    const wrapper = mount(PreviewPanel, {
-      props: {
-        previewUrl: 'https://preview.workspace.test/path',
-        controlUrl: 'https://control.workspace.test/',
-        active: true,
-      },
-    })
-    await flushPromises()
-    const targetWindow = { postMessage: vi.fn() } as unknown as Window
-    Object.defineProperty(wrapper.get('iframe').element, 'contentWindow', {
-      configurable: true,
-      value: targetWindow,
-    })
-
-    await wrapper.get('.preview-footer button').trigger('click')
-
-    expect(targetWindow.postMessage).toHaveBeenCalledWith(
-      {
-        source: 'induforge-designer',
-        type: 'PREVIEW_DEVTOOLS_COMMAND',
-        command: 'toggle',
-      },
-      'https://preview.workspace.test',
-    )
   })
 })
