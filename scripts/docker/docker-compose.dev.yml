@@ -11,7 +11,7 @@ services:
       POSTGRES_DB: ${IF_META_STORE_ADMIN_DATABASE:-postgres}
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
-      - "${IF_META_STORE_PORT:-18432}:5432"
+      - "127.0.0.1:${IF_META_STORE_PORT:-18432}:5432"
     volumes:
       - induforge-meta-store-data:/var/lib/postgresql/data
     networks:
@@ -32,7 +32,7 @@ services:
     environment:
       IF_CACHE_STORE_PASSWORD: ${IF_CACHE_STORE_PASSWORD:-}
     ports:
-      - "${IF_CACHE_STORE_PORT:-18379}:6379"
+      - "127.0.0.1:${IF_CACHE_STORE_PORT:-18379}:6379"
     volumes:
       - induforge-cache-store-data:/data
     networks:
@@ -46,9 +46,9 @@ services:
       EMQX_NAME: induforge
       EMQX_HOST: 127.0.0.1
     ports:
-      - "${IF_MESSAGE_HUB_MQTT_PORT:-18883}:1883"
-      - "${IF_MESSAGE_HUB_WS_PORT:-18083}:8083"
-      - "${IF_MESSAGE_HUB_DASHBOARD_PORT:-18084}:18083"
+      - "127.0.0.1:${IF_MESSAGE_HUB_MQTT_PORT:-18883}:1883"
+      - "127.0.0.1:${IF_MESSAGE_HUB_WS_PORT:-18083}:8083"
+      - "127.0.0.1:${IF_MESSAGE_HUB_DASHBOARD_PORT:-18084}:18083"
     volumes:
       - induforge-message-hub-data:/opt/emqx/data
       - induforge-message-hub-log:/opt/emqx/log
@@ -61,8 +61,8 @@ services:
     image: nats:2.12.8-alpine
     command: ["-js", "-sd", "/data", "-m", "8222"]
     ports:
-      - "${IF_RUNTIME_BUS_PORT:-18222}:4222"
-      - "${IF_RUNTIME_BUS_MONITOR_PORT:-18223}:8222"
+      - "127.0.0.1:${IF_RUNTIME_BUS_PORT:-18222}:4222"
+      - "127.0.0.1:${IF_RUNTIME_BUS_MONITOR_PORT:-18223}:8222"
     volumes:
       - induforge-runtime-bus-data:/data
     networks:
@@ -83,9 +83,9 @@ services:
       IF_OBJECT_STORE_ACCESS_KEY: ${IF_OBJECT_STORE_ACCESS_KEY:-induforge}
       IF_OBJECT_STORE_SECRET_KEY: ${IF_OBJECT_STORE_SECRET_KEY:-induforge_dev_secret}
     ports:
-      - "${IF_OBJECT_STORE_PORT:-18500}:8333"
-      - "${IF_OBJECT_STORE_MASTER_PORT:-18333}:9333"
-      - "${IF_OBJECT_STORE_FILER_PORT:-18888}:8888"
+      - "127.0.0.1:${IF_OBJECT_STORE_PORT:-18500}:8333"
+      - "127.0.0.1:${IF_OBJECT_STORE_MASTER_PORT:-18333}:9333"
+      - "127.0.0.1:${IF_OBJECT_STORE_FILER_PORT:-18888}:8888"
     volumes:
       - induforge-object-store-master-data:/data
       - induforge-object-store-volume-data:/data/volume
