@@ -88,16 +88,30 @@ type SnapshotMqttTagRecord struct {
 
 // ProjectSnapshot 表示工程级数据域快照。
 type ProjectSnapshot struct {
-	Connections       []ConnectionRecord               `json:"connections"`
-	RelationalConfigs []SnapshotRelationalConfigRecord `json:"relationalConfigs"`
-	Queries           []QueryRecord                    `json:"queries"`
-	MqttConfigs       []SnapshotMqttConfigRecord       `json:"mqttConfigs"`
-	MqttSubscriptions []SnapshotMqttSubscriptionRecord `json:"mqttSubscriptions"`
-	MqttTags          []SnapshotMqttTagRecord          `json:"mqttTags"`
-	DataPoints        []DataPointRecord                `json:"datapoints"`
-	ComputeUnits      []ComputeUnitRecord              `json:"computeUnits"`
-	AlarmRules        []AlarmRuleRecord                `json:"alarmRules"`
-	HistoryStorage    []HistoryStorageConfigRecord     `json:"historyStorage"`
+	Connections         []ConnectionRecord                 `json:"connections"`
+	RelationalConfigs   []SnapshotRelationalConfigRecord   `json:"relationalConfigs"`
+	Queries             []QueryRecord                      `json:"queries"`
+	MqttConfigs         []SnapshotMqttConfigRecord         `json:"mqttConfigs"`
+	MqttSubscriptions   []SnapshotMqttSubscriptionRecord   `json:"mqttSubscriptions"`
+	MqttTags            []SnapshotMqttTagRecord            `json:"mqttTags"`
+	DataPoints          []DataPointRecord                  `json:"datapoints"`
+	ComputeUnits        []ComputeUnitRecord                `json:"computeUnits"`
+	AlarmPolicyGroups   []AlarmPolicyGroupRecord           `json:"alarmPolicyGroups"`
+	AlarmPolicies       []AlarmPolicyRecord                `json:"alarmPolicies"`
+	AlarmSettings       *AlarmProjectSettingsRecord        `json:"alarmSettings"`
+	AlarmChannels       []AlarmNotificationChannelRecord   `json:"alarmChannels"`
+	AlarmChannelSecrets []SnapshotAlarmChannelSecretRecord `json:"alarmChannelSecrets"`
+	HistoryStorage      []HistoryStorageConfigRecord       `json:"historyStorage"`
+}
+
+// SnapshotAlarmChannelSecretRecord 仅保存密文，快照与 API 均不包含渠道密钥明文。
+type SnapshotAlarmChannelSecretRecord struct {
+	ChannelID            string    `json:"channelId"`
+	SecretKey            string    `json:"secretKey"`
+	EncryptedValue       []byte    `json:"encryptedValue"`
+	EncryptionKeyVersion string    `json:"encryptionKeyVersion"`
+	CreatedAt            time.Time `json:"createdAt"`
+	UpdatedAt            time.Time `json:"updatedAt"`
 }
 
 // ProjectArtifactVersionV1 表示 Phase 1 产物契约版本号。
@@ -161,19 +175,20 @@ type ArtifactComputeUnitRecord struct {
 	IsEnabled      bool           `json:"isEnabled"`
 }
 
-// ArtifactAlarmRuleRecord 表示产物层报警规则对象。
-type ArtifactAlarmRuleRecord struct {
-	ID                string         `json:"id"`
-	Name              string         `json:"name"`
-	TargetDataPointID *string        `json:"targetDatapointId,omitempty"`
-	TargetPath        string         `json:"targetPath"`
-	RuleType          string         `json:"ruleType"`
-	Condition         map[string]any `json:"condition"`
-	Severity          string         `json:"severity"`
-	Hysteresis        *float64       `json:"hysteresis,omitempty"`
-	SampleWindowMS    *int           `json:"sampleWindowMs,omitempty"`
-	Contract          map[string]any `json:"contract"`
-	IsEnabled         bool           `json:"isEnabled"`
+type ArtifactAlarmSecretRef struct {
+	ChannelID  string `json:"channelId"`
+	SecretKey  string `json:"secretKey"`
+	KeyVersion string `json:"keyVersion"`
+}
+
+// ArtifactAlarmsPayload 是节点消费的 alarm.policy.v1 完整开发态契约。
+type ArtifactAlarmsPayload struct {
+	SchemaVersion string                           `json:"schemaVersion"`
+	Groups        []AlarmPolicyGroupRecord         `json:"groups"`
+	Policies      []AlarmPolicyRecord              `json:"policies"`
+	Settings      *AlarmProjectSettingsRecord      `json:"settings"`
+	Channels      []AlarmNotificationChannelRecord `json:"channels"`
+	SecretRefs    []ArtifactAlarmSecretRef         `json:"secretRefs"`
 }
 
 // ArtifactMqttConnectionRecord 表示产物层 MQTT 连接对象。
@@ -266,7 +281,7 @@ type ProjectArtifactV1 struct {
 	Queries       []ArtifactQueryRecord        `json:"queries"`
 	DataPoints    []ArtifactDataPointRecord    `json:"datapoints"`
 	Compute       []ArtifactComputeUnitRecord  `json:"compute"`
-	Alarms        []ArtifactAlarmRuleRecord    `json:"alarms"`
+	Alarms        ArtifactAlarmsPayload        `json:"alarms"`
 	Mqtt          ArtifactMqttPayload          `json:"mqtt"`
 	Protocols     ArtifactProtocolsPayload     `json:"protocols"`
 	BuiltinStores ArtifactBuiltinStoresPayload `json:"builtinStores"`
@@ -312,7 +327,24 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 	if err != nil {
 		return nil, err
 	}
-	alarmRules, err := r.listAlarmRules(ctx, projectID)
+	alarmRepository := NewAlarmPolicyRepository(r.pool)
+	alarmGroups, err := alarmRepository.ListAllGroups(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	alarmPolicies, err := alarmRepository.ListAllPolicies(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	alarmSettings, err := alarmRepository.GetProjectSettings(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	alarmChannels, err := alarmRepository.ListChannels(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	alarmChannelSecrets, err := r.listAlarmChannelSecrets(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -322,16 +354,20 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 	}
 
 	return &ProjectSnapshot{
-		Connections:       connections,
-		RelationalConfigs: deriveRelationalConfigs(connections),
-		Queries:           queries,
-		MqttConfigs:       mqttConfigs,
-		MqttSubscriptions: mqttSubscriptions,
-		MqttTags:          mqttTags,
-		DataPoints:        datapoints,
-		ComputeUnits:      computeUnits,
-		AlarmRules:        alarmRules,
-		HistoryStorage:    historyStorage,
+		Connections:         connections,
+		RelationalConfigs:   deriveRelationalConfigs(connections),
+		Queries:             queries,
+		MqttConfigs:         mqttConfigs,
+		MqttSubscriptions:   mqttSubscriptions,
+		MqttTags:            mqttTags,
+		DataPoints:          datapoints,
+		ComputeUnits:        computeUnits,
+		AlarmPolicyGroups:   alarmGroups,
+		AlarmPolicies:       alarmPolicies,
+		AlarmSettings:       alarmSettings,
+		AlarmChannels:       alarmChannels,
+		AlarmChannelSecrets: alarmChannelSecrets,
+		HistoryStorage:      historyStorage,
 	}, nil
 }
 
@@ -372,7 +408,16 @@ func (r *ProjectSnapshotRepository) ReplaceProjectData(ctx context.Context, proj
 	if err := r.insertComputeUnits(ctx, tx, projectID, actorID, snapshot.ComputeUnits); err != nil {
 		return err
 	}
-	if err := r.insertAlarmRules(ctx, tx, projectID, actorID, snapshot.AlarmRules); err != nil {
+	if err := r.insertAlarmPolicyGroups(ctx, tx, projectID, actorID, snapshot.AlarmPolicyGroups); err != nil {
+		return err
+	}
+	if err := r.insertAlarmChannels(ctx, tx, projectID, actorID, snapshot.AlarmChannels, snapshot.AlarmChannelSecrets); err != nil {
+		return err
+	}
+	if err := r.insertAlarmSettings(ctx, tx, projectID, actorID, snapshot.AlarmSettings); err != nil {
+		return err
+	}
+	if err := r.insertAlarmPolicies(ctx, tx, projectID, actorID, snapshot.AlarmPolicies); err != nil {
 		return err
 	}
 
@@ -459,20 +504,12 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 		})
 	}
 
-	alarmRules := make([]ArtifactAlarmRuleRecord, 0, len(snapshot.AlarmRules))
-	for _, rule := range snapshot.AlarmRules {
-		alarmRules = append(alarmRules, ArtifactAlarmRuleRecord{
-			ID:                rule.ID,
-			Name:              rule.Name,
-			TargetDataPointID: rule.TargetDataPointID,
-			TargetPath:        rule.TargetPath,
-			RuleType:          rule.RuleType,
-			Condition:         cloneSnapshotObject(rule.Condition),
-			Severity:          rule.Severity,
-			Hysteresis:        rule.Hysteresis,
-			SampleWindowMS:    rule.SampleWindowMS,
-			Contract:          cloneSnapshotObject(rule.Contract),
-			IsEnabled:         rule.IsEnabled,
+	secretRefs := make([]ArtifactAlarmSecretRef, 0, len(snapshot.AlarmChannelSecrets))
+	for _, secret := range snapshot.AlarmChannelSecrets {
+		secretRefs = append(secretRefs, ArtifactAlarmSecretRef{
+			ChannelID:  secret.ChannelID,
+			SecretKey:  secret.SecretKey,
+			KeyVersion: secret.EncryptionKeyVersion,
 		})
 	}
 
@@ -538,7 +575,14 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 		Queries:     queries,
 		DataPoints:  dataPoints,
 		Compute:     computeUnits,
-		Alarms:      alarmRules,
+		Alarms: ArtifactAlarmsPayload{
+			SchemaVersion: "alarm.policy.v1",
+			Groups:        append([]AlarmPolicyGroupRecord{}, snapshot.AlarmPolicyGroups...),
+			Policies:      append([]AlarmPolicyRecord{}, snapshot.AlarmPolicies...),
+			Settings:      snapshot.AlarmSettings,
+			Channels:      append([]AlarmNotificationChannelRecord{}, snapshot.AlarmChannels...),
+			SecretRefs:    secretRefs,
+		},
 		Mqtt: ArtifactMqttPayload{
 			Connections:   mqttConnections,
 			Subscriptions: append([]SnapshotMqttSubscriptionRecord{}, snapshot.MqttSubscriptions...),
@@ -746,29 +790,30 @@ func (r *ProjectSnapshotRepository) listComputeUnits(ctx context.Context, projec
 	return result, nil
 }
 
-func (r *ProjectSnapshotRepository) listAlarmRules(ctx context.Context, projectID string) ([]AlarmRuleRecord, error) {
+func (r *ProjectSnapshotRepository) listAlarmChannelSecrets(ctx context.Context, projectID string) ([]SnapshotAlarmChannelSecretRecord, error) {
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, project_id, name, description, target_datapoint_id, target_path, rule_type, condition,
-               severity, hysteresis, sample_window_ms, contract, is_enabled, created_at, updated_at
-        FROM data_alarm_rules
-        WHERE project_id = $1
-        ORDER BY created_at ASC
+        SELECT secret.channel_id, secret.secret_key, secret.encrypted_value,
+               secret.encryption_key_version, secret.created_at, secret.updated_at
+        FROM data_alarm_notification_channel_secrets secret
+        JOIN data_alarm_notification_channels channel ON channel.id = secret.channel_id
+        WHERE channel.project_id = $1
+        ORDER BY channel.created_at, secret.secret_key
     `, projectID)
 	if err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询快照报警规则失败", err)
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询快照报警渠道密钥失败", err)
 	}
 	defer rows.Close()
 
-	result := make([]AlarmRuleRecord, 0)
+	result := make([]SnapshotAlarmChannelSecretRecord, 0)
 	for rows.Next() {
-		record, scanErr := scanAlarmRule(rows)
-		if scanErr != nil {
-			return nil, scanErr
+		var record SnapshotAlarmChannelSecretRecord
+		if scanErr := rows.Scan(&record.ChannelID, &record.SecretKey, &record.EncryptedValue, &record.EncryptionKeyVersion, &record.CreatedAt, &record.UpdatedAt); scanErr != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取快照报警渠道密钥失败", scanErr)
 		}
 		result = append(result, record)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历快照报警规则失败", err)
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历快照报警渠道密钥失败", err)
 	}
 	return result, nil
 }
@@ -1022,7 +1067,12 @@ func translateHistoryStorageSnapshotError(message string, err error) error {
 func (r *ProjectSnapshotRepository) deleteProjectSnapshot(ctx context.Context, tx pgx.Tx, projectID string) error {
 	for _, sqlText := range []string{
 		`DELETE FROM data_history_storage_configs WHERE project_id = $1`,
-		`DELETE FROM data_alarm_rules WHERE project_id = $1`,
+		`DELETE FROM data_alarm_policies WHERE project_id = $1`,
+		`DELETE FROM data_alarm_project_settings WHERE project_id = $1`,
+		`DELETE FROM data_alarm_notification_channels WHERE project_id = $1`,
+		`DELETE FROM data_alarm_policy_groups WHERE project_id = $1`,
+		`DELETE FROM data_alarm_config_sync_requests WHERE project_id = $1`,
+		`DELETE FROM data_alarm_config_sync_state WHERE project_id = $1`,
 		`DELETE FROM data_compute_units WHERE project_id = $1`,
 		`DELETE FROM data_mqtt_tags WHERE project_id = $1`,
 		`DELETE FROM data_mqtt_subscriptions WHERE project_id = $1`,
@@ -1220,30 +1270,153 @@ func (r *ProjectSnapshotRepository) insertComputeUnits(ctx context.Context, tx p
 	return nil
 }
 
-func (r *ProjectSnapshotRepository) insertAlarmRules(ctx context.Context, tx pgx.Tx, projectID, actorID string, rules []AlarmRuleRecord) error {
-	for _, rule := range rules {
-		conditionBytes, err := marshalSnapshotObject(rule.Condition)
+func (r *ProjectSnapshotRepository) insertAlarmPolicyGroups(ctx context.Context, tx pgx.Tx, projectID, actorID string, groups []AlarmPolicyGroupRecord) error {
+	pending := append([]AlarmPolicyGroupRecord{}, groups...)
+	inserted := make(map[string]struct{}, len(groups))
+	for len(pending) > 0 {
+		remaining := make([]AlarmPolicyGroupRecord, 0, len(pending))
+		progress := false
+		for _, group := range pending {
+			if group.ParentID != nil {
+				if _, ok := inserted[*group.ParentID]; !ok {
+					remaining = append(remaining, group)
+					continue
+				}
+			}
+			createdAt, updatedAt := coalesceTime(group.CreatedAt), coalesceTime(group.UpdatedAt)
+			if _, err := tx.Exec(ctx, `INSERT INTO data_alarm_policy_groups
+                (id,project_id,parent_id,name,description,sort_order,created_by,updated_by,created_at,updated_at)
+                VALUES($1,$2,$3,$4,$5,$6,$7,$7,$8,$9)`,
+				group.ID, projectID, group.ParentID, group.Name, group.Description, group.SortOrder, actorID, createdAt, updatedAt); err != nil {
+				return translateAlarmSnapshotError("写入快照报警目录失败", err)
+			}
+			inserted[group.ID] = struct{}{}
+			progress = true
+		}
+		if !progress {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照报警目录存在缺失父目录或循环引用")
+		}
+		pending = remaining
+	}
+	return nil
+}
+
+func (r *ProjectSnapshotRepository) insertAlarmChannels(ctx context.Context, tx pgx.Tx, projectID, actorID string, channels []AlarmNotificationChannelRecord, secrets []SnapshotAlarmChannelSecretRecord) error {
+	channelIDs := make(map[string]struct{}, len(channels))
+	for _, channel := range channels {
+		configBytes, err := marshalSnapshotObject(channel.Config)
 		if err != nil {
 			return err
 		}
-		contractBytes, err := marshalSnapshotObject(rule.Contract)
+		statusBytes, err := marshalSnapshotObject(channel.SecretStatus)
 		if err != nil {
 			return err
 		}
-		createdAt := coalesceTime(rule.CreatedAt)
-		updatedAt := coalesceTime(rule.UpdatedAt)
-		if _, err := tx.Exec(ctx, `
-            INSERT INTO data_alarm_rules (
-                id, project_id, name, description, target_datapoint_id, target_path, rule_type, condition,
-                severity, hysteresis, sample_window_ms, contract, is_enabled, created_by, updated_by, created_at, updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12::jsonb, $13, $14, $15, $16, $17)
-        `, rule.ID, projectID, rule.Name, rule.Description, rule.TargetDataPointID, rule.TargetPath, rule.RuleType, string(conditionBytes),
-			rule.Severity, rule.Hysteresis, rule.SampleWindowMS, string(contractBytes), rule.IsEnabled, actorID, actorID, createdAt, updatedAt); err != nil {
-			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入快照报警规则失败", err)
+		createdAt, updatedAt := coalesceTime(channel.CreatedAt), coalesceTime(channel.UpdatedAt)
+		if _, err = tx.Exec(ctx, `INSERT INTO data_alarm_notification_channels
+            (id,project_id,name,channel_type,config,secret_status,is_enabled,created_by,updated_by,created_at,updated_at)
+            VALUES($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$8,$9,$10)`,
+			channel.ID, projectID, channel.Name, channel.ChannelType, string(configBytes), string(statusBytes), channel.IsEnabled, actorID, createdAt, updatedAt); err != nil {
+			return translateAlarmSnapshotError("写入快照报警通知渠道失败", err)
+		}
+		channelIDs[channel.ID] = struct{}{}
+	}
+	for _, secret := range secrets {
+		if _, ok := channelIDs[secret.ChannelID]; !ok || secret.SecretKey == "" || len(secret.EncryptedValue) == 0 || secret.EncryptionKeyVersion == "" {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照报警渠道密钥引用无效")
+		}
+		createdAt, updatedAt := coalesceTime(secret.CreatedAt), coalesceTime(secret.UpdatedAt)
+		if _, err := tx.Exec(ctx, `INSERT INTO data_alarm_notification_channel_secrets
+            (channel_id,secret_key,encrypted_value,encryption_key_version,created_at,updated_at)
+            VALUES($1,$2,$3,$4,$5,$6)`, secret.ChannelID, secret.SecretKey, secret.EncryptedValue, secret.EncryptionKeyVersion, createdAt, updatedAt); err != nil {
+			return translateAlarmSnapshotError("写入快照报警渠道密钥失败", err)
 		}
 	}
 	return nil
+}
+
+func (r *ProjectSnapshotRepository) insertAlarmSettings(ctx context.Context, tx pgx.Tx, projectID, actorID string, settings *AlarmProjectSettingsRecord) error {
+	if settings == nil {
+		return nil
+	}
+	channelIDs, err := json.Marshal(settings.DefaultChannelIDs)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照报警默认渠道格式无效", err)
+	}
+	createdAt, updatedAt := coalesceTime(settings.CreatedAt), coalesceTime(settings.UpdatedAt)
+	_, err = tx.Exec(ctx, `INSERT INTO data_alarm_project_settings
+        (project_id,notify_on_raise,notify_on_clear,repeat_interval_seconds,default_message_template,default_channel_ids,created_by,updated_by,created_at,updated_at)
+        VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,$7,$8,$9)`, projectID, settings.NotifyOnRaise, settings.NotifyOnClear,
+		settings.RepeatIntervalSeconds, settings.DefaultMessageTemplate, string(channelIDs), actorID, createdAt, updatedAt)
+	if err != nil {
+		return translateAlarmSnapshotError("写入快照报警默认设置失败", err)
+	}
+	return nil
+}
+
+func (r *ProjectSnapshotRepository) insertAlarmPolicies(ctx context.Context, tx pgx.Tx, projectID, actorID string, policies []AlarmPolicyRecord) error {
+	for _, policy := range policies {
+		channelIDs, contractBytes, err := marshalAlarmJSON(policy.NotificationChannelIDs, policy.Contract)
+		if err != nil {
+			return err
+		}
+		revision := policy.Revision
+		if revision < 1 {
+			revision = 1
+		}
+		createdAt, updatedAt := coalesceTime(policy.CreatedAt), coalesceTime(policy.UpdatedAt)
+		if _, err = tx.Exec(ctx, `INSERT INTO data_alarm_policies
+            (id,project_id,group_id,name,description,mode,derived_expression,notification_mode,notify_on_raise,notify_on_clear,
+             repeat_interval_seconds,notification_channel_ids,message_template,is_enabled,revision,contract,created_by,updated_by,created_at,updated_at)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$15,$16::jsonb,$17,$17,$18,$19)`,
+			policy.ID, projectID, policy.GroupID, policy.Name, policy.Description, policy.Mode, policy.DerivedExpression,
+			policy.NotificationMode, policy.NotifyOnRaise, policy.NotifyOnClear, policy.RepeatIntervalSeconds, string(channelIDs),
+			policy.MessageTemplate, policy.IsEnabled, revision, string(contractBytes), actorID, createdAt, updatedAt); err != nil {
+			return translateAlarmSnapshotError("写入快照报警策略失败", err)
+		}
+		if err = insertSnapshotAlarmPolicyDetails(ctx, tx, policy.ID, policy.Bindings, policy.Conditions); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func insertSnapshotAlarmPolicyDetails(ctx context.Context, tx pgx.Tx, policyID string, bindings []AlarmPolicyBindingRecord, conditions []AlarmPolicyConditionRecord) error {
+	for index, binding := range bindings {
+		if binding.ID == "" {
+			_, err := tx.Exec(ctx, `INSERT INTO data_alarm_policy_bindings(policy_id,datapoint_id,role,input_key,sort_order) VALUES($1,$2,$3,$4,$5)`, policyID, binding.DatapointID, binding.Role, binding.InputKey, index)
+			if err != nil {
+				return translateAlarmSnapshotError("写入快照报警点位绑定失败", err)
+			}
+			continue
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO data_alarm_policy_bindings(id,policy_id,datapoint_id,role,input_key,sort_order) VALUES($1,$2,$3,$4,$5,$6)`, binding.ID, policyID, binding.DatapointID, binding.Role, binding.InputKey, index); err != nil {
+			return translateAlarmSnapshotError("写入快照报警点位绑定失败", err)
+		}
+	}
+	for index, condition := range conditions {
+		params, err := json.Marshal(condition.Params)
+		if err != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照报警条件参数格式无效", err)
+		}
+		if condition.ID == "" {
+			_, err = tx.Exec(ctx, `INSERT INTO data_alarm_policy_conditions(policy_id,kind,operator,label,severity,params,trigger_delay_ms,clear_delay_ms,deadband,sort_order) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10)`, policyID, condition.Kind, condition.Operator, condition.Label, condition.Severity, string(params), condition.TriggerDelayMS, condition.ClearDelayMS, condition.Deadband, index)
+		} else {
+			_, err = tx.Exec(ctx, `INSERT INTO data_alarm_policy_conditions(id,policy_id,kind,operator,label,severity,params,trigger_delay_ms,clear_delay_ms,deadband,sort_order) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11)`, condition.ID, policyID, condition.Kind, condition.Operator, condition.Label, condition.Severity, string(params), condition.TriggerDelayMS, condition.ClearDelayMS, condition.Deadband, index)
+		}
+		if err != nil {
+			return translateAlarmSnapshotError("写入快照报警条件失败", err)
+		}
+	}
+	return nil
+}
+
+func translateAlarmSnapshotError(message string, err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && (pgErr.Code == "23503" || pgErr.Code == "23505" || pgErr.Code == "23514" || pgErr.Code == "22P02") {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照报警配置引用无效、名称重复或字段不合法")
+	}
+	return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, message, err)
 }
 
 func deriveRelationalConfigs(connections []ConnectionRecord) []SnapshotRelationalConfigRecord {

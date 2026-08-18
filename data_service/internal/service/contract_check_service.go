@@ -61,11 +61,11 @@ type ContractCheckService struct {
 	datapoints *repository.DataPointRepository
 	queries    *repository.QueryRepository
 	compute    *repository.ComputeRepository
-	alarms     *repository.AlarmRuleRepository
+	alarms     *repository.AlarmPolicyRepository
 	checks     *repository.ContractCheckRepository
 }
 
-func NewContractCheckService(datapoints *repository.DataPointRepository, compute *repository.ComputeRepository, alarms *repository.AlarmRuleRepository, deps ...any) *ContractCheckService {
+func NewContractCheckService(datapoints *repository.DataPointRepository, compute *repository.ComputeRepository, alarms *repository.AlarmPolicyRepository, deps ...any) *ContractCheckService {
 	var queries *repository.QueryRepository
 	var checks *repository.ContractCheckRepository
 	for _, dep := range deps {
@@ -128,11 +128,11 @@ func (s *ContractCheckService) Run(ctx context.Context, claims *auth.Claims, pro
 	}
 	items = append(items, checkComputeContracts(computeUnits, datapointByPath, queryByID)...)
 
-	alarmRules, err := s.loadProjectAlarmRules(ctx, projectID)
+	alarmPolicies, err := s.loadProjectAlarmPolicies(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
-	items = append(items, checkAlarmContracts(alarmRules, datapointByPath)...)
+	items = append(items, checkAlarmContracts(alarmPolicies, datapointByPath)...)
 
 	items = filterContractCheckItems(items, input.ObjectType, input.ObjectID)
 	result := buildContractCheckResult(projectID, scope, items)
@@ -250,9 +250,8 @@ func (s *ContractCheckService) loadProjectComputeUnits(ctx context.Context, proj
 	return records, err
 }
 
-func (s *ContractCheckService) loadProjectAlarmRules(ctx context.Context, projectID string) ([]repository.AlarmRuleRecord, error) {
-	records, _, err := s.alarms.ListByProject(ctx, projectID, repository.AlarmRuleListFilter{Page: 1, PageSize: 1000})
-	return records, err
+func (s *ContractCheckService) loadProjectAlarmPolicies(ctx context.Context, projectID string) ([]repository.AlarmPolicyRecord, error) {
+	return s.alarms.ListAllPolicies(ctx, projectID)
 }
 
 func checkComputeContracts(units []repository.ComputeUnitRecord, datapoints map[string]repository.DataPointRecord, queries map[string]repository.QueryRecord) []ContractCheckResultItem {
@@ -323,40 +322,31 @@ func checkComputeContracts(units []repository.ComputeUnitRecord, datapoints map[
 	return items
 }
 
-func checkAlarmContracts(rules []repository.AlarmRuleRecord, datapoints map[string]repository.DataPointRecord) []ContractCheckResultItem {
+func checkAlarmContracts(rules []repository.AlarmPolicyRecord, datapoints map[string]repository.DataPointRecord) []ContractCheckResultItem {
 	items := make([]ContractCheckResultItem, 0)
 	for _, rule := range rules {
-		point, ok := datapoints[rule.TargetPath]
-		if !ok {
-			items = append(items, ContractCheckResultItem{
-				Module:     "alarm",
-				ObjectType: "alarmRule",
-				ObjectID:   rule.ID,
-				Status:     "failed",
-				Title:      "报警目标数据点不存在",
-				Detail:     rule.TargetPath,
-				Action:     "修正 targetPath 或移除规则",
-			})
-			continue
+		for _, binding := range rule.Bindings {
+			point, ok := datapoints[binding.Path]
+			if !ok || point.Status != "active" {
+				items = append(items, ContractCheckResultItem{
+					Module: "alarm", ObjectType: "alarmPolicy", ObjectID: rule.ID, Status: "failed",
+					Title: "报警数据点不可用", Detail: binding.Path, Action: "恢复数据点或解除报警绑定",
+				})
+			}
 		}
-		if point.Status != "active" {
-			items = append(items, ContractCheckResultItem{
-				Module:     "alarm",
-				ObjectType: "alarmRule",
-				ObjectID:   rule.ID,
-				Status:     "failed",
-				Title:      "报警目标数据点不可用",
-				Detail:     rule.TargetPath,
-				Action:     "恢复目标数据点为 active",
-			})
+		if rule.Mode == "derived" && strings.TrimSpace(rule.DerivedExpression) == "" {
+			items = append(items, ContractCheckResultItem{Module: "alarm", ObjectType: "alarmPolicy", ObjectID: rule.ID, Status: "failed", Title: "组合报警表达式为空", Detail: rule.Name})
+		}
+		if len(rule.Conditions) == 0 {
+			items = append(items, ContractCheckResultItem{Module: "alarm", ObjectType: "alarmPolicy", ObjectID: rule.ID, Status: "failed", Title: "报警策略没有条件", Detail: rule.Name})
 		}
 		if !rule.IsEnabled {
 			items = append(items, ContractCheckResultItem{
 				Module:     "alarm",
-				ObjectType: "alarmRule",
+				ObjectType: "alarmPolicy",
 				ObjectID:   rule.ID,
 				Status:     "warning",
-				Title:      "报警规则已禁用",
+				Title:      "报警策略已停用",
 				Detail:     rule.Name,
 			})
 		}

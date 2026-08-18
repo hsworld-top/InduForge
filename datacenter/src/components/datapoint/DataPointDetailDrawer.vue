@@ -185,6 +185,35 @@
           </p>
         </section>
 
+        <section class="dpd__section">
+          <div class="dpd__section-header">
+            <h4 class="dpd__section-title">报警设置</h4>
+            <button
+              type="button"
+              class="dpd__edit-btn"
+              aria-label="新建数据点报警"
+              @click="openAlarmSettings"
+            >
+              新建报警
+            </button>
+          </div>
+          <div class="dpd__perm-summary">
+            <span class="dpd__perm-label">已引用策略：</span>
+            <span class="dpd__perm-value">{{ alarmSummary?.count || 0 }} 条</span>
+          </div>
+          <div v-if="alarmSummary?.policies.length" class="dpd__usage-chips">
+            <LinkChip
+              v-for="policy in alarmSummary.policies"
+              :key="policy.id"
+              module="alarm"
+              :object-id="policy.id"
+              :label="policy.name"
+              @click="handleLinkChipClick"
+            />
+          </div>
+          <p v-else class="dpd__muted">当前数据点尚未配置报警</p>
+        </section>
+
         <!-- 区块 4：引用（D2 占位；usages 为空时不显示） -->
         <section v-if="usages.length > 0" class="dpd__section">
           <h4 class="dpd__section-title">引用</h4>
@@ -260,6 +289,17 @@
     :saving="historyStorageSaving"
     @save="saveHistoryStorage"
   />
+
+  <AlarmPolicyDrawer
+    v-model="alarmDrawerVisible"
+    :project-id="projectId"
+    mode="per_target"
+    :groups="alarmGroups"
+    :channels="alarmChannels"
+    :initial-bindings="alarmInitialBindings"
+    :saving="alarmSaving"
+    @save="saveAlarmPolicyForDatapoint"
+  />
 </template>
 
 <script setup lang="ts">
@@ -280,6 +320,7 @@ import LinkChip from '@/components/shared/LinkChip.vue'
 import DataPointTagDialog from './DataPointTagDialog.vue'
 import RuntimePermissionDialog from './RuntimePermissionDialog.vue'
 import HistoryStorageConfigDrawer from '@/components/history-storage/HistoryStorageConfigDrawer.vue'
+import AlarmPolicyDrawer from '@/components/alarm/AlarmPolicyDrawer.vue'
 import {
   getDatapointHistoryStorage,
   listHistoryStorageTargets,
@@ -291,6 +332,20 @@ import type {
   HistoryStorageTargetOption,
 } from '@/api/schemas/history-storage.schema'
 import { historyStorageModeLabels } from '@/models/history-storage'
+import {
+  createAlarmPolicy,
+  getDatapointAlarmSummary,
+  listAlarmChannels,
+  listAlarmGroupTree,
+} from '@/api/alarm.api'
+import type {
+  AlarmBinding,
+  AlarmDatapointSummary,
+  AlarmNotificationChannel,
+  AlarmPolicyGroup,
+  AlarmPolicySave,
+} from '@/api/schemas/alarm.schema'
+import { ensureBuiltinAlarmNotificationChannel } from '@/models/alarm-policy'
 
 // 扩展类型：除 schema 核心字段外，允许后端额外字段（passthrough）
 interface DataPointExtended {
@@ -368,6 +423,11 @@ const historyStorageTargets = ref<HistoryStorageTargetOption[]>([])
 const historyStorageDrawerVisible = ref(false)
 const historyStorageLoading = ref(false)
 const historyStorageSaving = ref(false)
+const alarmSummary = ref<AlarmDatapointSummary | null>(null)
+const alarmGroups = ref<AlarmPolicyGroup[]>([])
+const alarmChannels = ref<AlarmNotificationChannel[]>([])
+const alarmDrawerVisible = ref(false)
+const alarmSaving = ref(false)
 
 const visible = computed({
   get: () => props.modelValue,
@@ -383,7 +443,10 @@ watch(
   ([id, isVisible]) => {
     configExpanded.value = false
     historyStorageDetail.value = null
-    if (id && isVisible) void loadHistoryStorage(String(id))
+    if (id && isVisible) {
+      void loadHistoryStorage(String(id))
+      void loadAlarmSummary(String(id))
+    }
   },
 )
 
@@ -427,7 +490,7 @@ const usages = computed<UsageItem[]>(() => (props.datapoint as DataPointExtended
 const MODULE_LABELS: Record<string, string> = {
   'access-source': '接入源',
   compute: '计算单元',
-  alarm: '报警规则',
+  alarm: '报警策略',
   datapoint: '数据点',
 }
 
@@ -612,6 +675,63 @@ async function saveHistoryStorage(payload: HistoryStorageSavePayload) {
     ElMessage.error('保存历史存储设置失败')
   } finally {
     historyStorageSaving.value = false
+  }
+}
+
+const alarmInitialBindings = computed<AlarmBinding[]>(() => {
+  const point = props.datapoint
+  if (!point) return []
+  return [
+    {
+      datapointId: String(point.id),
+      path: point.path || '',
+      name: point.name || point.path || '数据点',
+      dataType: point.dataType || '',
+      role: 'target',
+      inputKey: null,
+    },
+  ]
+})
+
+async function loadAlarmSummary(datapointId: string) {
+  try {
+    alarmSummary.value = await getDatapointAlarmSummary(props.projectId, datapointId)
+  } catch {
+    alarmSummary.value = null
+  }
+}
+
+async function openAlarmSettings() {
+  if (!props.datapoint?.id) return
+  try {
+    const [groups, channels] = await Promise.all([
+      alarmGroups.value.length
+        ? Promise.resolve(alarmGroups.value)
+        : listAlarmGroupTree(props.projectId),
+      alarmChannels.value.length
+        ? Promise.resolve(alarmChannels.value)
+        : listAlarmChannels(props.projectId).catch(() => []),
+    ])
+    alarmGroups.value = groups
+    alarmChannels.value = ensureBuiltinAlarmNotificationChannel(props.projectId, channels)
+    alarmDrawerVisible.value = true
+  } catch {
+    ElMessage.error('加载报警设置失败')
+  }
+}
+
+async function saveAlarmPolicyForDatapoint(payload: AlarmPolicySave) {
+  alarmSaving.value = true
+  try {
+    await createAlarmPolicy(props.projectId, payload)
+    alarmDrawerVisible.value = false
+    await loadAlarmSummary(String(props.datapoint?.id || ''))
+    ElMessage.success('报警配置已创建')
+    emit('updated')
+  } catch {
+    ElMessage.error('创建报警配置失败')
+  } finally {
+    alarmSaving.value = false
   }
 }
 

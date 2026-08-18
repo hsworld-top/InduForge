@@ -360,7 +360,7 @@ func TestSchemaInitializer_CreatesBuiltinRuntimeStores(t *testing.T) {
 	}
 }
 
-func TestSchemaInitializer_CreatesAlarmRuleModel(t *testing.T) {
+func TestSchemaInitializer_RemovesLegacyAlarmRuleModel(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -370,42 +370,12 @@ func TestSchemaInitializer_CreatesAlarmRuleModel(t *testing.T) {
 		t.Fatalf("schema initialization failed: %v", err)
 	}
 
-	suppressionType, suppressionDefault := loadColumnTypeAndDefault(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_rules", "suppression")
-	if suppressionType != "jsonb" {
-		t.Fatalf("suppression data_type = %q, want jsonb", suppressionType)
+	var exists bool
+	if err := fixture.pool.QueryRow(ctx, `SELECT to_regclass($1) IS NOT NULL`, fixture.schemaName+".data_alarm_rules").Scan(&exists); err != nil {
+		t.Fatalf("check legacy alarm table failed: %v", err)
 	}
-	if !strings.Contains(suppressionDefault, "'{}'::jsonb") {
-		t.Fatalf("suppression default = %q, want empty jsonb object", suppressionDefault)
-	}
-
-	messageTemplateType, messageTemplateDefault := loadColumnTypeAndDefault(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_rules", "message_template")
-	if messageTemplateType != "text" {
-		t.Fatalf("message_template data_type = %q, want text", messageTemplateType)
-	}
-	if !strings.Contains(messageTemplateDefault, "''") {
-		t.Fatalf("message_template default = %q, want empty string", messageTemplateDefault)
-	}
-
-	assertInsertAlarmRuleWithTypeAndSeverity(ctx, t, fixture.pool, "H", "major")
-	assertInsertAlarmRuleWithTypeAndSeverity(ctx, t, fixture.pool, "cel", "critical")
-
-	if _, err := fixture.pool.Exec(ctx, `
-        INSERT INTO data_alarm_rules (
-            project_id,
-            name,
-            target_path,
-            rule_type,
-            severity,
-            created_by
-        )
-        VALUES (gen_random_uuid(), '非法规则类型', 'metrics.bad_type', 'threshold', 'warning', gen_random_uuid())
-    `); err == nil {
-		t.Fatalf("expected old rule_type to violate check constraint")
-	}
-
-	indexes := loadIndexNames(ctx, t, fixture.pool, fixture.schemaName)
-	if _, ok := indexes["data_alarm_rules_project_updated_idx"]; !ok {
-		t.Fatalf("expected data_alarm_rules_project_updated_idx to exist, got %v", mapsKeys(indexes))
+	if exists {
+		t.Fatal("data_alarm_rules should not exist in final baseline")
 	}
 }
 
@@ -419,12 +389,15 @@ func TestSchemaInitializer_CreatesAlarmPolicyTables(t *testing.T) {
 		t.Fatalf("schema initialization failed: %v", err)
 	}
 
-	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policy_groups", "is_enabled", "boolean")
 	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policy_groups", "parent_id", "uuid")
 	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policies", "group_id", "uuid")
-	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policies", "targets", "jsonb")
-	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policies", "conditions", "jsonb")
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policies", "notification_mode", "character varying")
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policies", "revision", "bigint")
 	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policies", "contract", "jsonb")
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policy_bindings", "datapoint_id", "uuid")
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policy_conditions", "kind", "character varying")
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_notification_channels", "secret_status", "jsonb")
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_config_sync_requests", "idempotency_key", "character varying")
 
 	if _, err := fixture.pool.Exec(ctx, `
         INSERT INTO data_alarm_policies (
@@ -436,6 +409,88 @@ func TestSchemaInitializer_CreatesAlarmPolicyTables(t *testing.T) {
         VALUES (gen_random_uuid(), '非法策略模式', 'single_rule', gen_random_uuid())
     `); err == nil {
 		t.Fatalf("expected invalid policy mode to violate check constraint")
+	}
+}
+
+func TestAlarmConfigSyncIsIdempotentOrderedAndTransactional(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	fixture := setupTestDatabase(t, ctx)
+	initializer := setupSchemaInitializer(t, fixture.pool)
+	if err := initializer.Ensure(ctx); err != nil {
+		t.Fatalf("初始化数据库结构失败: %v", err)
+	}
+
+	projectID := "550e8400-e29b-41d4-a716-446655440100"
+	actorID := "550e8400-e29b-41d4-a716-446655440101"
+	datapointID := "550e8400-e29b-41d4-a716-446655440102"
+	groupID := "550e8400-e29b-41d4-a716-446655440103"
+	policyID := "550e8400-e29b-41d4-a716-446655440104"
+	conditionID := "550e8400-e29b-41d4-a716-446655440105"
+	rollbackGroupID := "550e8400-e29b-41d4-a716-446655440106"
+	invalidPolicyID := "550e8400-e29b-41d4-a716-446655440107"
+	missingDatapointID := "550e8400-e29b-41d4-a716-446655440108"
+
+	if _, err := fixture.pool.Exec(ctx, `
+		INSERT INTO data_points(id,project_id,path,name,source_type,data_type,created_by)
+		VALUES($1,$2,'line.temperature','温度','manual','float64',$3)
+	`, datapointID, projectID, actorID); err != nil {
+		t.Fatalf("准备报警同步数据点失败: %v", err)
+	}
+
+	repo := repository.NewAlarmPolicyRepository(fixture.pool)
+	first, err := repo.ApplyConfigSync(ctx, projectID, actorID, "epoch-1", 1, "request-1", []repository.AlarmConfigSyncOperationParams{{
+		Resource: "group",
+		Action:   "upsert",
+		ID:       groupID,
+		Group: &repository.SaveAlarmPolicyGroupParams{
+			ID: groupID, ProjectID: projectID, UserID: actorID, Name: "生产线",
+		},
+	}})
+	if err != nil {
+		t.Fatalf("首次同步失败: %v", err)
+	}
+	repeated, err := repo.ApplyConfigSync(ctx, projectID, actorID, "epoch-1", 1, "request-1", nil)
+	if err != nil || !repeated.Idempotent || repeated.ConfigRevision != first.ConfigRevision {
+		t.Fatalf("重复同步未命中幂等记录: result=%#v err=%v", repeated, err)
+	}
+	if _, err = repo.ApplyConfigSync(ctx, projectID, actorID, "epoch-1", 1, "request-stale", []repository.AlarmConfigSyncOperationParams{{Resource: "group", Action: "delete", ID: groupID}}); err == nil {
+		t.Fatal("旧同步序号应被拒绝")
+	}
+
+	policy := repository.SaveAlarmPolicyParams{
+		ID: policyID, ProjectID: projectID, UserID: actorID, GroupID: &groupID,
+		Name: "温度高报警", Mode: "per_target", NotificationMode: "inherit", IsEnabled: true,
+		NotificationChannelIDs: []string{}, Contract: map[string]any{"schemaVersion": "alarm.policy.v1", "policyId": policyID},
+		Bindings:   []repository.AlarmPolicyBindingRecord{{DatapointID: datapointID, Role: "target"}},
+		Conditions: []repository.AlarmPolicyConditionRecord{{ID: conditionID, Kind: "threshold", Operator: "gt", Label: "高温", Severity: "warning", Params: map[string]any{"threshold": 80.0}}},
+	}
+	if _, err = repo.ApplyConfigSync(ctx, projectID, actorID, "epoch-1", 2, "request-2", []repository.AlarmConfigSyncOperationParams{{Resource: "policy", Action: "upsert", ID: policyID, Policy: &policy}}); err != nil {
+		t.Fatalf("同步报警策略失败: %v", err)
+	}
+
+	invalidPolicy := policy
+	invalidPolicy.ID = invalidPolicyID
+	invalidPolicy.Name = "无效报警"
+	invalidPolicy.Bindings = []repository.AlarmPolicyBindingRecord{{DatapointID: missingDatapointID, Role: "target"}}
+	if _, err = repo.ApplyConfigSync(ctx, projectID, actorID, "epoch-1", 3, "request-3", []repository.AlarmConfigSyncOperationParams{
+		{Resource: "group", Action: "upsert", ID: rollbackGroupID, Group: &repository.SaveAlarmPolicyGroupParams{ID: rollbackGroupID, ProjectID: projectID, UserID: actorID, Name: "应回滚目录"}},
+		{Resource: "policy", Action: "upsert", ID: invalidPolicyID, Policy: &invalidPolicy},
+	}); err == nil {
+		t.Fatal("包含无效点位的同步批次应失败")
+	}
+
+	var rollbackGroupCount int
+	if err = fixture.pool.QueryRow(ctx, `SELECT count(*) FROM data_alarm_policy_groups WHERE id=$1`, rollbackGroupID).Scan(&rollbackGroupCount); err != nil {
+		t.Fatalf("检查回滚目录失败: %v", err)
+	}
+	state, err := repo.GetSyncState(ctx, projectID)
+	if err != nil {
+		t.Fatalf("查询同步状态失败: %v", err)
+	}
+	if rollbackGroupCount != 0 || state.LastSequence != 2 {
+		t.Fatalf("失败批次未完整回滚: groupCount=%d state=%#v", rollbackGroupCount, state)
 	}
 }
 
@@ -475,24 +530,6 @@ func assertColumnExists(ctx context.Context, t *testing.T, pool *pgxpool.Pool, s
 	dataType, _ := loadColumnTypeAndDefault(ctx, t, pool, schemaName, tableName, columnName)
 	if dataType != wantType {
 		t.Fatalf("column %s.%s data_type = %q, want %q", tableName, columnName, dataType, wantType)
-	}
-}
-
-func assertInsertAlarmRuleWithTypeAndSeverity(ctx context.Context, t *testing.T, pool *pgxpool.Pool, ruleType string, severity string) {
-	t.Helper()
-
-	if _, err := pool.Exec(ctx, `
-        INSERT INTO data_alarm_rules (
-            project_id,
-            name,
-            target_path,
-            rule_type,
-            severity,
-            created_by
-        )
-        VALUES (gen_random_uuid(), $1, $2, $3, $4, gen_random_uuid())
-    `, "规则"+ruleType+severity, "metrics."+strings.ToLower(ruleType)+"."+severity, ruleType, severity); err != nil {
-		t.Fatalf("insert alarm rule ruleType=%s severity=%s failed: %v", ruleType, severity, err)
 	}
 }
 
@@ -624,9 +661,12 @@ func loadIndexNames(ctx context.Context, t *testing.T, pool *pgxpool.Pool, schem
               'data_preview_sessions',
               'data_compute_units',
               'data_compute_runs',
-              'data_alarm_rules',
-              'data_alarm_policy_groups',
-              'data_alarm_policies'
+			  'data_alarm_policy_groups',
+			  'data_alarm_policies',
+			  'data_alarm_policy_bindings',
+			  'data_alarm_policy_conditions',
+			  'data_alarm_notification_channels',
+			  'data_alarm_config_sync_requests'
           )
     `, schemaName)
 	if err != nil {

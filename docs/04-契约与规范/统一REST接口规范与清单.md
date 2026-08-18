@@ -261,10 +261,13 @@
 | 方法 | 路径 | 功能概要 |
 | --- | --- | --- |
 | `GET/PUT` | `/api/v1/scene-provider` | 查询或切换平台唯一 Provider；存在场景时禁止切换 |
-| `GET/POST` | `/api/v1/projects/{projectId}/scenes` | 分页查询或创建场景 |
+| `GET/POST` | `/api/v1/projects/{projectId}/scenes` | 分页查询或按唯一名称创建场景，`sceneId` 由平台生成 |
 | `GET/PUT/DELETE` | `/api/v1/projects/{projectId}/scenes/{sceneId}` | 场景详情、公开契约与墓碑删除 |
 | `POST` | `/api/v1/projects/{projectId}/scenes/{sceneId}/editor-session` | 创建绑定用户、工程、场景、类型和 Provider 的短期会话 |
+| `POST` | `/api/v1/projects/{projectId}/scenes/{sceneId}/viewer-session` | 创建固定到当前已提交 revision 的只读 Viewer 会话 |
 | `POST` | `/api/v1/projects/{projectId}/scenes/{sceneId}/commit` | 将指定草稿版本提交为不可变 revision |
+| `GET/POST` | `/api/v1/scene-viewer-sessions/{sessionId}`、`/heartbeat` | 读取 Viewer 启动信息或延长空闲有效期 |
+| `GET` | `/api/v1/scene-viewer-sessions/{sessionId}/files/content` | 读取 Viewer 会话固定 revision 的文件 |
 | `GET/PUT` | `/api/v1/scene-editor-sessions/{sessionId}/files/content` | 受控读取或保存 Provider 文件 |
 | `POST` | `/api/v1/scene-editor-sessions/{sessionId}/import` | 原子导入场景 ZIP |
 | `POST` | `/api/v1/scene-editor-sessions/{sessionId}/export` | 按当前场景依赖导出 ZIP |
@@ -673,20 +676,34 @@ Wave 2 当前只交付平台侧配置和 artifact 契约：`opcua/s7/modbus/tden
 
 计算脚本支持开发态 `ctx` SDK。后端会根据 `inputBindings` 预取已声明的数据点和 SQL 查询结果，脚本内可使用 `ctx.datapoint.get(path)`、`ctx.datapoint.meta(path)`、`ctx.sql.query(key)`；未命中预取结果时，`ctx.sql.query(key, params)` 可按已声明别名或项目内查询 ID 动态回调后端执行，JavaScript 脚本需要 `await ctx.sql.query(...)`。`ctx.mqtt.publish(source, topic, payload)` 仅在计算单元显式开启 `sideEffects.mqttPublish.enabled=true` 且命中 `sources/sourceIds` 与 `topics` 白名单时真实发布，否则只返回未接受的 side effect。
 
-#### 报警规则
+#### 报警开发态配置
 
-| 方法     | 路径                                                                 | 功能概要               |
-| -------- | -------------------------------------------------------------------- | ---------------------- |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-rules`                      | 查询报警规则列表       |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-rules`                      | 创建报警规则           |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-rules/{id}`                 | 查询报警规则详情       |
-| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-rules/{id}`                 | 更新报警规则           |
-| `DELETE` | `/api/v1/data/projects/{projectId}/alarm-rules/{id}`                 | 删除报警规则           |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-rules/{id}/validate-target` | 校验规则目标数据点     |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-rules/{id}/test`            | 使用样本值试算报警规则 |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-rules/{id}/contract`        | 预览运行态报警契约     |
+| 方法     | 路径                                                                         | 功能概要                         |
+| -------- | ---------------------------------------------------------------------------- | -------------------------------- |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-policies`                            | 分页查询报警，支持目录递归筛选   |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-policies`                            | 创建普通或组合报警               |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-policies/{id}`                       | 查询报警详情                     |
+| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-policies/{id}`                       | 覆盖更新报警                     |
+| `PATCH`  | `/api/v1/data/projects/{projectId}/alarm-policies/{id}/enabled`               | 切换启用状态                     |
+| `DELETE` | `/api/v1/data/projects/{projectId}/alarm-policies/{id}`                       | 删除报警                         |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-policies/validate-draft`             | 校验开发态草稿                   |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-policies/{id}/test`                  | 使用简单模拟值试算               |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-policies/{id}/contract`              | 预览 `alarm.policy.v1` 契约      |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-policy-groups`                       | 分页/按父目录查询目录            |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-policy-groups/tree`                  | 查询目录完整路径                 |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-policy-groups`                       | 创建目录                         |
+| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-policy-groups/{id}`                  | 更新目录                         |
+| `DELETE` | `/api/v1/data/projects/{projectId}/alarm-policy-groups/{id}`                  | 删除空目录                       |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-settings`                            | 查询工程默认通知                 |
+| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-settings`                            | 保存工程默认通知                 |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-channels`                            | 查询站内及外部通知渠道           |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-channels`                            | 新增外部通知渠道                 |
+| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-channels/{id}`                       | 更新外部通知渠道                 |
+| `DELETE` | `/api/v1/data/projects/{projectId}/alarm-channels/{id}`                       | 删除未被引用的外部通知渠道       |
+| `GET`    | `/api/v1/data/projects/{projectId}/datapoints/{datapointId}/alarm-summary`    | 查询数据点引用的报警             |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-config-sync`                         | 原子接收节点报警配置增量回写     |
 
-报警规则支持 `threshold`、`range`、`expression`。`expression` 当前为开发态受控子集，支持 `value > 10`、`value <= 20`、`value == "ON"` 以及 `&&` / `||` 组合。
+报警模式固定为 `per_target` 与 `derived`；条件类型固定为 `threshold/range/state/transition/text_match/rate_of_change/deviation/offline/expression`，等级固定为 `info/warning/major/critical`。目录仅用于整理和递归筛选，不参与启停。同步请求包含 `syncEpoch/sequence/idempotencyKey/operations`，同一请求幂等、旧序号拒绝，整批事务提交。
 
 #### 契约检查
 
@@ -696,8 +713,8 @@ Wave 2 当前只交付平台侧配置和 artifact 契约：`opcua/s7/modbus/tden
 | `GET`  | `/api/v1/data/projects/{projectId}/contract-checks/latest` | 获取最近/实时契约检查结果  |
 | `GET`  | `/api/v1/data/projects/{projectId}/contract-checks/runs`   | 分页获取契约检查历史记录   |
 
-项目 artifact v1 已包含连接、查询、数据点、MQTT、Phase 1 协议、计算单元和报警规则区块；snapshot replace 会同步写回计算单元和报警规则。
-契约检查 `run` 请求体可传 `scope`、`objectType`、`objectId`，用于收窄检查结果范围；检查项覆盖数据点状态、计算输入/输出、计算 SQL 绑定查询、报警目标数据点。每次 `run` 会写入 `data_contract_check_runs`，`latest` 优先返回最近一次历史结果，`runs` 使用 `data.list` 与 `data.pagination` 返回历史分页。
+项目 artifact v1 的 `alarms` 区块使用 `alarm.policy.v1`，包含目录、普通/组合报警、规范化绑定与条件、通知设置、渠道定义和密钥引用，不包含密钥明文或密文。snapshot replace 会在单事务中往返报警开发态配置及渠道密文。
+契约检查 `run` 请求体可传 `scope`、`objectType`、`objectId`，用于收窄检查结果范围；检查项覆盖数据点状态、计算输入/输出、计算 SQL 绑定查询，以及新报警策略的点位、表达式、条件、通知渠道和启用状态。
 
 ## 6. 开发约束
 

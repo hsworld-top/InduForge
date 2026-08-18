@@ -108,7 +108,7 @@ func TestContractCheckServiceListRuns_NilChecks(t *testing.T) {
 	s := &ContractCheckService{
 		datapoints: &repository.DataPointRepository{},
 		compute:    &repository.ComputeRepository{},
-		alarms:     &repository.AlarmRuleRepository{},
+		alarms:     &repository.AlarmPolicyRepository{},
 		checks:     nil,
 	}
 

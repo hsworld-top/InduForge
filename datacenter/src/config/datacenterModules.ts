@@ -42,7 +42,7 @@ export const datacenterModules: DatacenterModuleMeta[] = [
   {
     id: 'alarm',
     label: '报警单元',
-    description: '管理报警规则配置与运行态契约预览。',
+    description: '管理报警策略配置与运行态契约预览。',
   },
 ]
 

@@ -13,7 +13,7 @@ describe('data contract check metadata', () => {
       'designer-reference',
       'runtime-query-subscription',
       'compute-side-effect',
-      'alarm-rule-contract',
+      'alarm-policy-contract',
     ])
   })
 
@@ -31,6 +31,6 @@ describe('data contract check metadata', () => {
     expect(allCopy).toContain('设计中心')
     expect(allCopy).toContain('查询/订阅')
     expect(allCopy).toContain('副作用')
-    expect(allCopy).toContain('报警规则')
+    expect(allCopy).toContain('报警策略')
   })
 })

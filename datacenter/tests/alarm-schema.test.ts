@@ -1,95 +1,81 @@
 import { describe, expect, test } from 'vitest'
+import { reactive } from 'vue'
+import { AlarmPolicySaveSchema, AlarmPolicySchema } from '../src/api/schemas/alarm.schema'
 
-import {
-  AlarmBulkSelectionSchema,
-  AlarmPolicySaveSchema,
-  AlarmPolicySchema,
-  AlarmPolicyTreeSchema,
-} from '../src/api/schemas/alarm.schema'
+const policy = {
+  id: 'policy-1',
+  projectId: 'project-1',
+  groupId: null,
+  groupName: null,
+  name: '温度报警',
+  description: null,
+  mode: 'per_target',
+  derivedExpression: '',
+  bindings: [
+    {
+      datapointId: 'dp-1',
+      path: 'temperature',
+      name: '温度',
+      dataType: 'number',
+      role: 'target',
+      inputKey: null,
+    },
+  ],
+  conditions: [
+    {
+      id: 'condition-1',
+      kind: 'threshold',
+      operator: 'gt',
+      label: '高于',
+      severity: 'warning',
+      params: { threshold: 80 },
+      triggerDelayMs: 0,
+      clearDelayMs: 0,
+      deadband: 0,
+    },
+  ],
+  notification: { mode: 'inherit', channelIds: [], messageTemplate: '' },
+  isEnabled: true,
+  revision: 1,
+  contract: { schemaVersion: 'alarm.policy.v1' },
+  createdAt: null,
+  updatedAt: null,
+}
 
 describe('alarm policy schema', () => {
-  test('解析多条件报警策略', () => {
-    const policy = AlarmPolicySchema.parse({
-      id: 'policy-1',
-      projectId: 'project-1',
-      groupId: null,
-      name: '温度策略',
-      mode: 'per_target',
-      targets: [
-        {
-          datapointId: 'dp-1',
-          path: 'metrics.temperature',
-          dataType: 'number',
-        },
-      ],
-      inputs: [],
-      derivedExpression: '',
-      conditions: [
-        {
-          id: 'c-h',
-          type: 'H',
-          name: '高限',
-          isEnabled: true,
-          severity: 'major',
-          params: { limit: 80 },
-        },
-        {
-          id: 'c-l',
-          type: 'L',
-          name: '低限',
-          isEnabled: true,
-          severity: 'warning',
-          params: { limit: 20 },
-        },
-      ],
-      suppression: {},
-      messageTemplate: '',
-      isEnabled: true,
-      effectiveEnabled: true,
-      contract: {},
-      createdAt: '2026-05-20T00:00:00Z',
-      updatedAt: '2026-05-20T00:00:00Z',
-    })
-
-    expect(policy.conditions).toHaveLength(2)
+  test('解析规范化绑定、条件和通知', () => {
+    const parsed = AlarmPolicySchema.parse(policy)
+    expect(parsed.bindings[0].role).toBe('target')
+    expect(parsed.conditions[0].kind).toBe('threshold')
+    expect(parsed.notification.mode).toBe('inherit')
   })
 
-  test('保存 payload 拒绝旧 targetPath 字段', () => {
+  test('保存 payload 不接受旧 targets/suppression 模型', () => {
     expect(() =>
       AlarmPolicySaveSchema.parse({
-        name: '策略',
-        mode: 'per_target',
-        targets: [],
-        inputs: [],
-        derivedExpression: '',
-        conditions: [],
+        ...policy,
+        targets: policy.bindings,
         suppression: {},
-        messageTemplate: '',
-        isEnabled: true,
-        targetPath: 'metrics.temperature',
+        bindings: undefined,
       }),
     ).toThrow()
   })
 
-  test('解析筛选后全选选择状态', () => {
-    const selection = AlarmBulkSelectionSchema.parse({
-      mode: 'filtered',
-      filters: { search: '温度', enabled: true },
-      excludePolicyIds: ['policy-2'],
+  test('保存契约将响应式草稿转换为可提交的普通对象', () => {
+    const draft = reactive({
+      groupId: policy.groupId,
+      name: policy.name,
+      description: policy.description,
+      mode: policy.mode,
+      bindings: policy.bindings,
+      derivedExpression: policy.derivedExpression,
+      conditions: policy.conditions,
+      notification: policy.notification,
+      isEnabled: policy.isEnabled,
     })
 
-    expect(selection.mode).toBe('filtered')
-  })
+    const payload = AlarmPolicySaveSchema.parse(draft)
 
-  test('解析根目录策略树', () => {
-    const tree = AlarmPolicyTreeSchema.parse({
-      groups: [],
-      rootPolicies: [],
-      policies: [],
-      matchedPolicyCount: 0,
-      totalPolicyCount: 0,
-    })
-
-    expect(tree.rootPolicies).toEqual([])
+    expect(() => structuredClone(payload)).not.toThrow()
   })
 })

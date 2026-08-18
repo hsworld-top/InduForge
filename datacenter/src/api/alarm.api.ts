@@ -1,219 +1,91 @@
 import request from '@/utils/request'
-import { listResponseSchema } from './schemas/common.schema'
 import {
-  AlarmBulkSelectionSchema,
+  AlarmDatapointSummarySchema,
   AlarmDraftValidationSchema,
+  AlarmNotificationChannelSaveSchema,
+  AlarmNotificationChannelSchema,
   AlarmPolicyContractSchema,
-  AlarmPolicyCoverageSchema,
+  AlarmPolicyGroupListSchema,
   AlarmPolicyGroupSaveSchema,
   AlarmPolicyGroupSchema,
-  AlarmPolicyGroupUpdateSchema,
-  AlarmProjectSettingsSaveSchema,
-  AlarmProjectSettingsSchema,
+  AlarmPolicyListSchema,
   AlarmPolicySaveSchema,
   AlarmPolicySchema,
-  AlarmPolicyTreeSchema,
-  AlarmPolicyTrialPayloadSchema,
-  AlarmPolicyTrialResultSchema,
-  AlarmPolicyUpdateSchema,
-  type AlarmBulkSelection,
-  type AlarmDraftValidation,
+  AlarmProjectSettingsSaveSchema,
+  AlarmProjectSettingsSchema,
+  AlarmTrialResultSchema,
+  type AlarmDatapointSummary,
+  type AlarmNotificationChannel,
+  type AlarmNotificationChannelSave,
   type AlarmPolicy,
-  type AlarmPolicyContract,
-  type AlarmPolicyCoverage,
   type AlarmPolicyGroup,
   type AlarmPolicyGroupSave,
-  type AlarmPolicyGroupUpdate,
+  type AlarmPolicyList,
+  type AlarmPolicySave,
   type AlarmProjectSettings,
   type AlarmProjectSettingsSave,
-  type AlarmPolicySave,
-  type AlarmPolicyTree,
-  type AlarmPolicyTrialPayload,
-  type AlarmPolicyTrialResult,
-  type AlarmPolicyUpdate,
+  type AlarmTrialResult,
 } from './schemas/alarm.schema'
 
-const alarmPolicyListSchema = listResponseSchema(AlarmPolicySchema)
-const alarmPolicyGroupListSchema = AlarmPolicyGroupSchema.array()
+const unwrap = (value: unknown) =>
+  value && typeof value === 'object' && 'data' in value ? (value as { data: unknown }).data : value
 
-type AlarmPolicyListResp = {
-  list: AlarmPolicy[]
-  pagination?: {
-    page?: number
-    pageSize?: number
-    total?: number
-  }
-}
-
-const unwrapData = (value: unknown) => {
-  if (value && typeof value === 'object' && 'code' in value && 'data' in value) {
-    return (value as { data?: unknown }).data
-  }
-  return value
-}
-
-export async function getAlarmPolicyGroups(projectId: string): Promise<AlarmPolicyGroup[]> {
-  const res = await request({
-    url: `/data/projects/${projectId}/alarm-policy-groups`,
-    method: 'get',
-  })
-  return alarmPolicyGroupListSchema.parse(unwrapData(res))
-}
-
-export async function getAlarmProjectSettings(projectId: string): Promise<AlarmProjectSettings> {
-  const res = await request({
-    url: `/data/projects/${projectId}/alarm-settings`,
-    method: 'get',
-  })
-  return AlarmProjectSettingsSchema.parse(unwrapData(res))
-}
-
-export async function updateAlarmProjectSettings(
-  projectId: string,
-  data: AlarmProjectSettingsSave,
-): Promise<AlarmProjectSettings> {
-  const body = AlarmProjectSettingsSaveSchema.parse(data)
-  const res = await request({
-    url: `/data/projects/${projectId}/alarm-settings`,
-    method: 'put',
-    data: body,
-  })
-  return AlarmProjectSettingsSchema.parse(unwrapData(res))
-}
-
-export async function createAlarmPolicyGroup(
-  projectId: string,
-  data: AlarmPolicyGroupSave,
-): Promise<AlarmPolicyGroup> {
-  const body = AlarmPolicyGroupSaveSchema.parse(data)
-  const res = await request({
-    url: `/data/projects/${projectId}/alarm-policy-groups`,
-    method: 'post',
-    data: body,
-  })
-  return AlarmPolicyGroupSchema.parse(unwrapData(res))
-}
-
-export async function updateAlarmPolicyGroup(
-  projectId: string,
-  groupId: string,
-  data: AlarmPolicyGroupUpdate,
-): Promise<AlarmPolicyGroup> {
-  const body = AlarmPolicyGroupUpdateSchema.parse(data)
-  const res = await request({
-    url: `/data/projects/${projectId}/alarm-policy-groups/${groupId}`,
-    method: 'put',
-    data: body,
-  })
-  return AlarmPolicyGroupSchema.parse(unwrapData(res))
-}
-
-export async function toggleAlarmPolicyGroup(
-  projectId: string,
-  groupId: string,
-  isEnabled: boolean,
-): Promise<AlarmPolicyGroup> {
-  const res = await request({
-    url: `/data/projects/${projectId}/alarm-policy-groups/${groupId}/enabled`,
-    method: 'patch',
-    data: { isEnabled },
-  })
-  return AlarmPolicyGroupSchema.parse(unwrapData(res))
-}
-
-export async function deleteAlarmPolicyGroup(projectId: string, groupId: string): Promise<void> {
-  await request({
-    url: `/data/projects/${projectId}/alarm-policy-groups/${groupId}`,
-    method: 'delete',
-  })
-}
-
-export async function getAlarmPolicyTree(
+export async function listAlarmPolicies(
   projectId: string,
   params: Record<string, unknown> = {},
-): Promise<AlarmPolicyTree> {
-  const res = await request({
-    url: `/data/projects/${projectId}/alarm-policies/tree`,
-    method: 'get',
-    params,
-  })
-  return AlarmPolicyTreeSchema.parse(unwrapData(res))
-}
-
-export async function getAlarmPolicies(
-  projectId: string,
-  params: Record<string, unknown> = {},
-): Promise<AlarmPolicyListResp> {
-  const res = await request({
+): Promise<AlarmPolicyList> {
+  const response = await request({
     url: `/data/projects/${projectId}/alarm-policies`,
     method: 'get',
     params,
   })
-  return alarmPolicyListSchema.parse(unwrapData(res))
+  return AlarmPolicyListSchema.parse(unwrap(response))
 }
 
 export async function getAlarmPolicy(projectId: string, policyId: string): Promise<AlarmPolicy> {
-  const res = await request({
+  const response = await request({
     url: `/data/projects/${projectId}/alarm-policies/${policyId}`,
     method: 'get',
   })
-  return AlarmPolicySchema.parse(unwrapData(res))
-}
-
-export async function getAlarmPolicyCoverage(
-  projectId: string,
-  params: {
-    datapointId?: string
-    path?: string
-    excludePolicyId?: string
-  },
-): Promise<AlarmPolicyCoverage> {
-  const res = await request({
-    url: `/data/projects/${projectId}/alarm-policies/coverage`,
-    method: 'get',
-    params,
-  })
-  return AlarmPolicyCoverageSchema.parse(unwrapData(res))
+  return AlarmPolicySchema.parse(unwrap(response))
 }
 
 export async function createAlarmPolicy(
   projectId: string,
-  data: AlarmPolicySave,
+  payload: AlarmPolicySave,
 ): Promise<AlarmPolicy> {
-  const body = AlarmPolicySaveSchema.parse(data)
-  const res = await request({
+  const response = await request({
     url: `/data/projects/${projectId}/alarm-policies`,
     method: 'post',
-    data: body,
+    data: AlarmPolicySaveSchema.parse(payload),
   })
-  return AlarmPolicySchema.parse(unwrapData(res))
+  return AlarmPolicySchema.parse(unwrap(response))
 }
 
 export async function updateAlarmPolicy(
   projectId: string,
   policyId: string,
-  data: AlarmPolicyUpdate,
+  payload: AlarmPolicySave,
 ): Promise<AlarmPolicy> {
-  const body = AlarmPolicyUpdateSchema.parse(data)
-  const res = await request({
+  const response = await request({
     url: `/data/projects/${projectId}/alarm-policies/${policyId}`,
     method: 'put',
-    data: body,
+    data: AlarmPolicySaveSchema.parse(payload),
   })
-  return AlarmPolicySchema.parse(unwrapData(res))
+  return AlarmPolicySchema.parse(unwrap(response))
 }
 
-export async function toggleAlarmPolicy(
+export async function setAlarmPolicyEnabled(
   projectId: string,
   policyId: string,
   isEnabled: boolean,
 ): Promise<AlarmPolicy> {
-  const res = await request({
+  const response = await request({
     url: `/data/projects/${projectId}/alarm-policies/${policyId}/enabled`,
     method: 'patch',
     data: { isEnabled },
   })
-  return AlarmPolicySchema.parse(unwrapData(res))
+  return AlarmPolicySchema.parse(unwrap(response))
 }
 
 export async function deleteAlarmPolicy(projectId: string, policyId: string): Promise<void> {
@@ -223,86 +95,147 @@ export async function deleteAlarmPolicy(projectId: string, policyId: string): Pr
   })
 }
 
+export async function validateAlarmPolicy(projectId: string, payload: AlarmPolicySave) {
+  const response = await request({
+    url: `/data/projects/${projectId}/alarm-policies/validate-draft`,
+    method: 'post',
+    data: AlarmPolicySaveSchema.parse(payload),
+  })
+  return AlarmDraftValidationSchema.parse(unwrap(response))
+}
+
 export async function testAlarmPolicy(
   projectId: string,
   policyId: string,
-  payload: AlarmPolicyTrialPayload = { context: {} },
-): Promise<AlarmPolicyTrialResult> {
-  const body = AlarmPolicyTrialPayloadSchema.parse(payload)
-  const res = await request({
+  value: unknown,
+  context: Record<string, unknown> = {},
+): Promise<AlarmTrialResult> {
+  const response = await request({
     url: `/data/projects/${projectId}/alarm-policies/${policyId}/test`,
     method: 'post',
-    data: body,
+    data: { value, context },
   })
-  return AlarmPolicyTrialResultSchema.parse(unwrapData(res))
+  return AlarmTrialResultSchema.parse(unwrap(response))
 }
 
-export async function getAlarmPolicyContract(
-  projectId: string,
-  policyId: string,
-): Promise<AlarmPolicyContract> {
-  const res = await request({
+export async function getAlarmPolicyContract(projectId: string, policyId: string) {
+  const response = await request({
     url: `/data/projects/${projectId}/alarm-policies/${policyId}/contract`,
     method: 'get',
   })
-  return AlarmPolicyContractSchema.parse(unwrapData(res))
+  return AlarmPolicyContractSchema.parse(unwrap(response))
 }
 
-export async function validateAlarmPolicyDraft(
-  projectId: string,
-  data: AlarmPolicySave,
-): Promise<AlarmDraftValidation> {
-  const body = AlarmPolicySaveSchema.parse(data)
-  const res = await request({
-    url: `/data/projects/${projectId}/alarm-policies/validate-draft`,
-    method: 'post',
-    data: body,
+export async function listAlarmGroups(projectId: string, params: Record<string, unknown> = {}) {
+  const response = await request({
+    url: `/data/projects/${projectId}/alarm-policy-groups`,
+    method: 'get',
+    params,
   })
-  return AlarmDraftValidationSchema.parse(unwrapData(res))
+  return AlarmPolicyGroupListSchema.parse(unwrap(response))
 }
 
-export async function batchEnableAlarmPolicies(
+export async function listAlarmGroupTree(projectId: string): Promise<AlarmPolicyGroup[]> {
+  const response = await request({
+    url: `/data/projects/${projectId}/alarm-policy-groups/tree`,
+    method: 'get',
+  })
+  return AlarmPolicyGroupSchema.array().parse(unwrap(response))
+}
+
+export async function createAlarmGroup(projectId: string, payload: AlarmPolicyGroupSave) {
+  const response = await request({
+    url: `/data/projects/${projectId}/alarm-policy-groups`,
+    method: 'post',
+    data: AlarmPolicyGroupSaveSchema.parse(payload),
+  })
+  return AlarmPolicyGroupSchema.parse(unwrap(response))
+}
+
+export async function updateAlarmGroup(
   projectId: string,
-  selection: AlarmBulkSelection,
-): Promise<void> {
+  groupId: string,
+  payload: AlarmPolicyGroupSave,
+) {
+  const response = await request({
+    url: `/data/projects/${projectId}/alarm-policy-groups/${groupId}`,
+    method: 'put',
+    data: AlarmPolicyGroupSaveSchema.parse(payload),
+  })
+  return AlarmPolicyGroupSchema.parse(unwrap(response))
+}
+
+export async function deleteAlarmGroup(projectId: string, groupId: string): Promise<void> {
   await request({
-    url: `/data/projects/${projectId}/alarm-policies/batch-enable`,
-    method: 'post',
-    data: { selection: AlarmBulkSelectionSchema.parse(selection) },
+    url: `/data/projects/${projectId}/alarm-policy-groups/${groupId}`,
+    method: 'delete',
   })
 }
 
-export async function batchDisableAlarmPolicies(
+export async function getAlarmSettings(projectId: string): Promise<AlarmProjectSettings> {
+  const response = await request({
+    url: `/data/projects/${projectId}/alarm-settings`,
+    method: 'get',
+  })
+  return AlarmProjectSettingsSchema.parse(unwrap(response))
+}
+
+export async function saveAlarmSettings(
   projectId: string,
-  selection: AlarmBulkSelection,
-): Promise<void> {
-  await request({
-    url: `/data/projects/${projectId}/alarm-policies/batch-disable`,
+  payload: AlarmProjectSettingsSave,
+): Promise<AlarmProjectSettings> {
+  const response = await request({
+    url: `/data/projects/${projectId}/alarm-settings`,
+    method: 'put',
+    data: AlarmProjectSettingsSaveSchema.parse(payload),
+  })
+  return AlarmProjectSettingsSchema.parse(unwrap(response))
+}
+
+export async function listAlarmChannels(projectId: string): Promise<AlarmNotificationChannel[]> {
+  const response = await request({
+    url: `/data/projects/${projectId}/alarm-channels`,
+    method: 'get',
+  })
+  return AlarmNotificationChannelSchema.array().parse(unwrap(response))
+}
+
+export async function createAlarmChannel(projectId: string, payload: AlarmNotificationChannelSave) {
+  const response = await request({
+    url: `/data/projects/${projectId}/alarm-channels`,
     method: 'post',
-    data: { selection: AlarmBulkSelectionSchema.parse(selection) },
+    data: AlarmNotificationChannelSaveSchema.parse(payload),
+  })
+  return AlarmNotificationChannelSchema.parse(unwrap(response))
+}
+
+export async function updateAlarmChannel(
+  projectId: string,
+  channelId: string,
+  payload: AlarmNotificationChannelSave,
+) {
+  const response = await request({
+    url: `/data/projects/${projectId}/alarm-channels/${channelId}`,
+    method: 'put',
+    data: AlarmNotificationChannelSaveSchema.parse(payload),
+  })
+  return AlarmNotificationChannelSchema.parse(unwrap(response))
+}
+
+export async function deleteAlarmChannel(projectId: string, channelId: string): Promise<void> {
+  await request({
+    url: `/data/projects/${projectId}/alarm-channels/${channelId}`,
+    method: 'delete',
   })
 }
 
-export async function batchMoveAlarmPolicies(
+export async function getDatapointAlarmSummary(
   projectId: string,
-  selection: AlarmBulkSelection,
-  groupId: string | null,
-): Promise<void> {
-  await request({
-    url: `/data/projects/${projectId}/alarm-policies/batch-move`,
-    method: 'post',
-    data: { selection: AlarmBulkSelectionSchema.parse(selection), groupId },
+  datapointId: string,
+): Promise<AlarmDatapointSummary> {
+  const response = await request({
+    url: `/data/projects/${projectId}/datapoints/${datapointId}/alarm-summary`,
+    method: 'get',
   })
-}
-
-export async function batchApplyAlarmConditions(
-  projectId: string,
-  selection: AlarmBulkSelection,
-  conditions: AlarmPolicy['conditions'],
-): Promise<void> {
-  await request({
-    url: `/data/projects/${projectId}/alarm-policies/batch-apply-conditions`,
-    method: 'post',
-    data: { selection: AlarmBulkSelectionSchema.parse(selection), conditions },
-  })
+  return AlarmDatapointSummarySchema.parse(unwrap(response))
 }

@@ -32,6 +32,8 @@ type Config struct {
 	MessageHubPassword           string
 	CollectorSecretKey           []byte
 	CollectorSecretKeyVersion    string
+	AlarmSecretKey               []byte
+	AlarmSecretKeyVersion        string
 	CollectorProtocolCatalogPath string
 }
 
@@ -60,6 +62,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	alarmSecretKey, err := parseAlarmSecretKey(os.Getenv("DATA_SERVICE_ALARM_SECRET_KEY"))
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		Addr:                         addr,
@@ -77,6 +83,8 @@ func Load() (Config, error) {
 		MessageHubPassword:           strings.TrimSpace(firstEnv("IF_MESSAGE_HUB_PASSWORD")),
 		CollectorSecretKey:           collectorSecretKey,
 		CollectorSecretKeyVersion:    firstEnvWithDefault("DATA_SERVICE_COLLECTOR_SECRET_KEY_VERSION", "v1"),
+		AlarmSecretKey:               alarmSecretKey,
+		AlarmSecretKeyVersion:        firstEnvWithDefault("DATA_SERVICE_ALARM_SECRET_KEY_VERSION", "v1"),
 		CollectorProtocolCatalogPath: strings.TrimSpace(os.Getenv("DATA_SERVICE_COLLECTOR_PROTOCOL_CATALOG_PATH")),
 	}, nil
 }
@@ -120,16 +128,24 @@ func ValidateCollectorSecretKey(cfg Config) error {
 }
 
 func parseCollectorSecretKey(value string) ([]byte, error) {
+	return parseAES256SecretKey(value, "DATA_SERVICE_COLLECTOR_SECRET_KEY")
+}
+
+func parseAlarmSecretKey(value string) ([]byte, error) {
+	return parseAES256SecretKey(value, "DATA_SERVICE_ALARM_SECRET_KEY")
+}
+
+func parseAES256SecretKey(value, envName string) ([]byte, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return nil, nil
 	}
 	decoded, err := base64.StdEncoding.DecodeString(value)
 	if err != nil {
-		return nil, fmt.Errorf("DATA_SERVICE_COLLECTOR_SECRET_KEY 必须是 Base64 字符串")
+		return nil, fmt.Errorf("%s 必须是 Base64 字符串", envName)
 	}
 	if len(decoded) != 32 {
-		return nil, fmt.Errorf("DATA_SERVICE_COLLECTOR_SECRET_KEY 解码后必须为 32 字节")
+		return nil, fmt.Errorf("%s 解码后必须为 32 字节", envName)
 	}
 	return decoded, nil
 }

@@ -139,24 +139,26 @@ CREATE TABLE data_alarm_policies (
     name character varying(100) NOT NULL,
     description text,
     mode character varying(20) DEFAULT 'per_target'::character varying NOT NULL,
-    targets jsonb DEFAULT '[]'::jsonb NOT NULL,
-    inputs jsonb DEFAULT '[]'::jsonb NOT NULL,
     derived_expression text DEFAULT ''::text NOT NULL,
-    conditions jsonb DEFAULT '[]'::jsonb NOT NULL,
-    suppression jsonb DEFAULT '{}'::jsonb NOT NULL,
+    notification_mode character varying(20) DEFAULT 'inherit'::character varying NOT NULL,
+    notify_on_raise boolean,
+    notify_on_clear boolean,
+    repeat_interval_seconds integer,
+    notification_channel_ids jsonb DEFAULT '[]'::jsonb NOT NULL,
     message_template text DEFAULT ''::text NOT NULL,
     is_enabled boolean DEFAULT true NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
     contract jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_by uuid,
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT data_alarm_policies_conditions_array_check CHECK ((jsonb_typeof(conditions) = 'array'::text)),
+    CONSTRAINT data_alarm_policies_channel_ids_array_check CHECK ((jsonb_typeof(notification_channel_ids) = 'array'::text)),
     CONSTRAINT data_alarm_policies_contract_object_check CHECK ((jsonb_typeof(contract) = 'object'::text)),
-    CONSTRAINT data_alarm_policies_inputs_array_check CHECK ((jsonb_typeof(inputs) = 'array'::text)),
     CONSTRAINT data_alarm_policies_mode_check CHECK (((mode)::text = ANY ((ARRAY['per_target'::character varying, 'derived'::character varying])::text[]))),
-    CONSTRAINT data_alarm_policies_suppression_object_check CHECK ((jsonb_typeof(suppression) = 'object'::text)),
-    CONSTRAINT data_alarm_policies_targets_array_check CHECK ((jsonb_typeof(targets) = 'array'::text))
+    CONSTRAINT data_alarm_policies_notification_mode_check CHECK (((notification_mode)::text = ANY ((ARRAY['inherit'::character varying, 'off'::character varying, 'custom'::character varying])::text[]))),
+    CONSTRAINT data_alarm_policies_repeat_interval_check CHECK (((repeat_interval_seconds IS NULL) OR (repeat_interval_seconds > 0))),
+    CONSTRAINT data_alarm_policies_revision_check CHECK ((revision > 0))
 );
 
 
@@ -170,7 +172,6 @@ CREATE TABLE data_alarm_policy_groups (
     parent_id uuid,
     name character varying(100) NOT NULL,
     description text,
-    is_enabled boolean DEFAULT true NOT NULL,
     sort_order integer DEFAULT 0 NOT NULL,
     created_by uuid,
     updated_by uuid,
@@ -185,50 +186,128 @@ CREATE TABLE data_alarm_policy_groups (
 
 CREATE TABLE data_alarm_project_settings (
     project_id uuid NOT NULL,
-    escalation_interval_seconds integer DEFAULT 300 NOT NULL,
-    repeat_notification_interval_seconds integer DEFAULT 60 NOT NULL,
+    notify_on_raise boolean DEFAULT true NOT NULL,
+    notify_on_clear boolean DEFAULT true NOT NULL,
+    repeat_interval_seconds integer,
+    default_message_template text DEFAULT '{{pointName}} 当前值 {{value}}，触发 {{conditionLabel}}'::text NOT NULL,
+    default_channel_ids jsonb DEFAULT '["runtime_inapp"]'::jsonb NOT NULL,
     created_by uuid,
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT data_alarm_project_settings_escalation_interval_check CHECK ((escalation_interval_seconds >= 30)),
-    CONSTRAINT data_alarm_project_settings_repeat_interval_check CHECK ((repeat_notification_interval_seconds >= 10))
+    CONSTRAINT data_alarm_project_settings_channel_ids_array_check CHECK ((jsonb_typeof(default_channel_ids) = 'array'::text)),
+    CONSTRAINT data_alarm_project_settings_repeat_interval_check CHECK (((repeat_interval_seconds IS NULL) OR (repeat_interval_seconds > 0)))
 );
 
 
 --
--- Name: data_alarm_rules; Type: TABLE; Schema: public; Owner: -
+-- Name: data_alarm_policy_bindings; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE data_alarm_rules (
+CREATE TABLE data_alarm_policy_bindings (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    policy_id uuid NOT NULL,
+    datapoint_id uuid NOT NULL,
+    role character varying(20) NOT NULL,
+    input_key character varying(100),
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT data_alarm_policy_bindings_role_check CHECK (((role)::text = ANY ((ARRAY['target'::character varying, 'input'::character varying])::text[]))),
+    CONSTRAINT data_alarm_policy_bindings_input_key_check CHECK ((((role)::text = 'input'::text) = (input_key IS NOT NULL)))
+);
+
+
+--
+-- Name: data_alarm_policy_conditions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE data_alarm_policy_conditions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    policy_id uuid NOT NULL,
+    kind character varying(30) NOT NULL,
+    operator character varying(30) NOT NULL,
+    label character varying(100) DEFAULT ''::character varying NOT NULL,
+    severity character varying(20) DEFAULT 'warning'::character varying NOT NULL,
+    params jsonb DEFAULT '{}'::jsonb NOT NULL,
+    trigger_delay_ms bigint DEFAULT 0 NOT NULL,
+    clear_delay_ms bigint DEFAULT 0 NOT NULL,
+    deadband double precision DEFAULT 0 NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT data_alarm_policy_conditions_deadband_check CHECK ((deadband >= (0)::double precision)),
+    CONSTRAINT data_alarm_policy_conditions_delays_check CHECK (((trigger_delay_ms >= 0) AND (clear_delay_ms >= 0))),
+    CONSTRAINT data_alarm_policy_conditions_kind_check CHECK (((kind)::text = ANY ((ARRAY['threshold'::character varying, 'range'::character varying, 'state'::character varying, 'transition'::character varying, 'text_match'::character varying, 'rate_of_change'::character varying, 'deviation'::character varying, 'offline'::character varying, 'expression'::character varying])::text[]))),
+    CONSTRAINT data_alarm_policy_conditions_params_object_check CHECK ((jsonb_typeof(params) = 'object'::text)),
+    CONSTRAINT data_alarm_policy_conditions_severity_check CHECK (((severity)::text = ANY ((ARRAY['info'::character varying, 'warning'::character varying, 'major'::character varying, 'critical'::character varying])::text[])))
+);
+
+
+--
+-- Name: data_alarm_notification_channels; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE data_alarm_notification_channels (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     project_id uuid NOT NULL,
-    name text NOT NULL,
-    description text,
-    target_datapoint_id uuid,
-    target_path text NOT NULL,
-    rule_type text DEFAULT 'H'::text NOT NULL,
-    condition jsonb DEFAULT '{}'::jsonb NOT NULL,
-    severity text DEFAULT 'warning'::text NOT NULL,
-    hysteresis double precision,
-    sample_window_ms integer,
-    suppression jsonb DEFAULT '{}'::jsonb NOT NULL,
-    message_template text DEFAULT ''::text NOT NULL,
-    contract jsonb DEFAULT '{}'::jsonb NOT NULL,
+    name character varying(100) NOT NULL,
+    channel_type character varying(30) NOT NULL,
+    config jsonb DEFAULT '{}'::jsonb NOT NULL,
+    secret_status jsonb DEFAULT '{}'::jsonb NOT NULL,
     is_enabled boolean DEFAULT true NOT NULL,
-    created_by uuid NOT NULL,
+    created_by uuid,
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT data_alarm_rules_condition_check CHECK ((jsonb_typeof(condition) = 'object'::text)),
-    CONSTRAINT data_alarm_rules_contract_check CHECK ((jsonb_typeof(contract) = 'object'::text)),
-    CONSTRAINT data_alarm_rules_hysteresis_check CHECK (((hysteresis IS NULL) OR (hysteresis >= (0)::double precision))),
-    CONSTRAINT data_alarm_rules_name_check CHECK ((char_length(name) <= 100)),
-    CONSTRAINT data_alarm_rules_rule_type_check CHECK ((rule_type = ANY (ARRAY['H'::text, 'L'::text, 'HH'::text, 'LL'::text, 'deviation_high'::text, 'deviation_low'::text, 'rate_of_change'::text, 'cel'::text]))),
-    CONSTRAINT data_alarm_rules_sample_window_ms_check CHECK (((sample_window_ms IS NULL) OR (sample_window_ms >= 0))),
-    CONSTRAINT data_alarm_rules_severity_check CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text, 'major'::text, 'critical'::text]))),
-    CONSTRAINT data_alarm_rules_suppression_check CHECK ((jsonb_typeof(suppression) = 'object'::text)),
-    CONSTRAINT data_alarm_rules_target_path_check CHECK ((char_length(target_path) <= 255))
+    CONSTRAINT data_alarm_notification_channels_config_check CHECK ((jsonb_typeof(config) = 'object'::text)),
+    CONSTRAINT data_alarm_notification_channels_secret_status_check CHECK ((jsonb_typeof(secret_status) = 'object'::text)),
+    CONSTRAINT data_alarm_notification_channels_type_check CHECK (((channel_type)::text = ANY ((ARRAY['webhook'::character varying, 'dingtalk'::character varying, 'wecom'::character varying])::text[])))
+);
+
+
+--
+-- Name: data_alarm_notification_channel_secrets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE data_alarm_notification_channel_secrets (
+    channel_id uuid NOT NULL,
+    secret_key character varying(100) NOT NULL,
+    encrypted_value bytea NOT NULL,
+    encryption_key_version character varying(50) NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: data_alarm_config_sync_state; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE data_alarm_config_sync_state (
+    project_id uuid NOT NULL,
+    config_revision bigint DEFAULT 0 NOT NULL,
+    sync_epoch character varying(100) DEFAULT ''::character varying NOT NULL,
+    last_sequence bigint DEFAULT 0 NOT NULL,
+    last_idempotency_key character varying(200) DEFAULT ''::character varying NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT data_alarm_config_sync_state_revision_check CHECK ((config_revision >= 0)),
+    CONSTRAINT data_alarm_config_sync_state_sequence_check CHECK ((last_sequence >= 0))
+);
+
+
+--
+-- Name: data_alarm_config_sync_requests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE data_alarm_config_sync_requests (
+    project_id uuid NOT NULL,
+    idempotency_key character varying(200) NOT NULL,
+    sync_epoch character varying(100) NOT NULL,
+    sequence bigint NOT NULL,
+    config_revision bigint NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT data_alarm_config_sync_requests_sequence_check CHECK ((sequence > 0)),
+    CONSTRAINT data_alarm_config_sync_requests_revision_check CHECK ((config_revision >= 0))
 );
 
 
@@ -1348,19 +1427,75 @@ ALTER TABLE ONLY data_alarm_project_settings
 
 
 --
--- Name: data_alarm_rules data_alarm_rules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: data_alarm_policy_bindings data_alarm_policy_bindings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY data_alarm_rules
-    ADD CONSTRAINT data_alarm_rules_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY data_alarm_policy_bindings
+    ADD CONSTRAINT data_alarm_policy_bindings_pkey PRIMARY KEY (id);
 
 
 --
--- Name: data_alarm_rules data_alarm_rules_project_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: data_alarm_policy_conditions data_alarm_policy_conditions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY data_alarm_rules
-    ADD CONSTRAINT data_alarm_rules_project_name_key UNIQUE (project_id, name);
+ALTER TABLE ONLY data_alarm_policy_conditions
+    ADD CONSTRAINT data_alarm_policy_conditions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: data_alarm_notification_channels data_alarm_notification_channels_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_alarm_notification_channels
+    ADD CONSTRAINT data_alarm_notification_channels_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: data_alarm_notification_channels data_alarm_notification_channels_project_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_alarm_notification_channels
+    ADD CONSTRAINT data_alarm_notification_channels_project_name_key UNIQUE (project_id, name);
+
+
+--
+-- Name: data_alarm_notification_channel_secrets data_alarm_notification_channel_secrets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_alarm_notification_channel_secrets
+    ADD CONSTRAINT data_alarm_notification_channel_secrets_pkey PRIMARY KEY (channel_id, secret_key);
+
+
+--
+-- Name: data_alarm_config_sync_state data_alarm_config_sync_state_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_alarm_config_sync_state
+    ADD CONSTRAINT data_alarm_config_sync_state_pkey PRIMARY KEY (project_id);
+
+
+--
+-- Name: data_alarm_config_sync_requests data_alarm_config_sync_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_alarm_config_sync_requests
+    ADD CONSTRAINT data_alarm_config_sync_requests_pkey PRIMARY KEY (project_id, idempotency_key);
+
+
+--
+-- Name: data_alarm_config_sync_requests data_alarm_config_sync_requests_epoch_sequence_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_alarm_config_sync_requests
+    ADD CONSTRAINT data_alarm_config_sync_requests_epoch_sequence_key UNIQUE (project_id, sync_epoch, sequence);
+
+
+--
+-- Name: data_alarm_policy_bindings data_alarm_policy_bindings_policy_role_datapoint_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_alarm_policy_bindings
+    ADD CONSTRAINT data_alarm_policy_bindings_policy_role_datapoint_key UNIQUE (policy_id, role, datapoint_id);
 
 
 --
@@ -1953,38 +2088,38 @@ CREATE INDEX data_alarm_policy_groups_project_sort_idx ON data_alarm_policy_grou
 
 
 --
--- Name: data_alarm_rules_condition_gin_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: data_alarm_policy_bindings_datapoint_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX data_alarm_rules_condition_gin_idx ON data_alarm_rules USING gin (condition);
-
-
---
--- Name: data_alarm_rules_project_enabled_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX data_alarm_rules_project_enabled_idx ON data_alarm_rules USING btree (project_id, is_enabled);
+CREATE INDEX data_alarm_policy_bindings_datapoint_idx ON data_alarm_policy_bindings USING btree (datapoint_id, policy_id);
 
 
 --
--- Name: data_alarm_rules_project_target_path_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: data_alarm_policy_bindings_policy_sort_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX data_alarm_rules_project_target_path_idx ON data_alarm_rules USING btree (project_id, target_path);
-
-
---
--- Name: data_alarm_rules_project_updated_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX data_alarm_rules_project_updated_idx ON data_alarm_rules USING btree (project_id, updated_at DESC);
+CREATE INDEX data_alarm_policy_bindings_policy_sort_idx ON data_alarm_policy_bindings USING btree (policy_id, role, sort_order);
 
 
 --
--- Name: data_alarm_rules_target_datapoint_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: data_alarm_policy_bindings_input_key_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX data_alarm_rules_target_datapoint_idx ON data_alarm_rules USING btree (target_datapoint_id);
+CREATE UNIQUE INDEX data_alarm_policy_bindings_input_key_idx ON data_alarm_policy_bindings USING btree (policy_id, input_key) WHERE (role = 'input'::text);
+
+
+--
+-- Name: data_alarm_policy_conditions_policy_sort_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX data_alarm_policy_conditions_policy_sort_idx ON data_alarm_policy_conditions USING btree (policy_id, sort_order, created_at);
+
+
+--
+-- Name: data_alarm_notification_channels_project_type_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX data_alarm_notification_channels_project_type_idx ON data_alarm_notification_channels USING btree (project_id, channel_type, updated_at DESC);
 
 
 --
@@ -2654,7 +2789,7 @@ ALTER TABLE ONLY data_access_source_records
 --
 
 ALTER TABLE ONLY data_alarm_policies
-    ADD CONSTRAINT data_alarm_policies_group_id_fkey FOREIGN KEY (group_id) REFERENCES data_alarm_policy_groups(id) ON DELETE SET NULL;
+    ADD CONSTRAINT data_alarm_policies_group_id_fkey FOREIGN KEY (group_id) REFERENCES data_alarm_policy_groups(id) ON DELETE RESTRICT;
 
 
 --
@@ -2662,15 +2797,39 @@ ALTER TABLE ONLY data_alarm_policies
 --
 
 ALTER TABLE ONLY data_alarm_policy_groups
-    ADD CONSTRAINT data_alarm_policy_groups_parent_fkey FOREIGN KEY (parent_id) REFERENCES data_alarm_policy_groups(id) ON DELETE CASCADE;
+    ADD CONSTRAINT data_alarm_policy_groups_parent_fkey FOREIGN KEY (parent_id) REFERENCES data_alarm_policy_groups(id) ON DELETE RESTRICT;
 
 
 --
--- Name: data_alarm_rules data_alarm_rules_target_datapoint_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: data_alarm_policy_bindings data_alarm_policy_bindings_policy_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY data_alarm_rules
-    ADD CONSTRAINT data_alarm_rules_target_datapoint_fkey FOREIGN KEY (target_datapoint_id) REFERENCES data_points(id) ON DELETE SET NULL;
+ALTER TABLE ONLY data_alarm_policy_bindings
+    ADD CONSTRAINT data_alarm_policy_bindings_policy_id_fkey FOREIGN KEY (policy_id) REFERENCES data_alarm_policies(id) ON DELETE CASCADE;
+
+
+--
+-- Name: data_alarm_policy_bindings data_alarm_policy_bindings_datapoint_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_alarm_policy_bindings
+    ADD CONSTRAINT data_alarm_policy_bindings_datapoint_id_fkey FOREIGN KEY (datapoint_id) REFERENCES data_points(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: data_alarm_policy_conditions data_alarm_policy_conditions_policy_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_alarm_policy_conditions
+    ADD CONSTRAINT data_alarm_policy_conditions_policy_id_fkey FOREIGN KEY (policy_id) REFERENCES data_alarm_policies(id) ON DELETE CASCADE;
+
+
+--
+-- Name: data_alarm_notification_channel_secrets data_alarm_notification_channel_secrets_channel_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_alarm_notification_channel_secrets
+    ADD CONSTRAINT data_alarm_notification_channel_secrets_channel_id_fkey FOREIGN KEY (channel_id) REFERENCES data_alarm_notification_channels(id) ON DELETE CASCADE;
 
 
 --

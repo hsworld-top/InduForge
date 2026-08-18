@@ -300,9 +300,9 @@ func (r *DataPointRepository) Delete(ctx context.Context, projectID, id string) 
 	commandTag, err := r.pool.Exec(ctx, `
         DELETE FROM data_points
         WHERE project_id = $1 AND id = $2
-    `, projectID, id)
+	`, projectID, id)
 	if err != nil {
-		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "删除数据点失败", err)
+		return translateDataPointDeleteError("删除数据点失败", err)
 	}
 	if commandTag.RowsAffected() == 0 {
 		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "数据点不存在")
@@ -321,9 +321,9 @@ func (r *DataPointRepository) DeleteInvalidBatch(ctx context.Context, projectID 
 	commandTag, err := r.pool.Exec(ctx, `
         DELETE FROM data_points
         WHERE project_id = $1 AND id = ANY($2::uuid[]) AND status = 'invalid'
-    `, projectID, ids)
+	`, projectID, ids)
 	if err != nil {
-		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "批量删除数据点失败", err)
+		return 0, translateDataPointDeleteError("批量删除数据点失败", err)
 	}
 	return int(commandTag.RowsAffected()), nil
 }
@@ -345,12 +345,20 @@ func (r *DataPointRepository) DeleteInvalidByFilter(ctx context.Context, project
 
 	commandTag, err := tx.Exec(ctx, `DELETE FROM data_points WHERE `+whereSQL, args...)
 	if err != nil {
-		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "按筛选条件批量删除数据点失败", err)
+		return 0, translateDataPointDeleteError("按筛选条件批量删除数据点失败", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交批量删除数据点事务失败", err)
 	}
 	return int(commandTag.RowsAffected()), nil
+}
+
+func translateDataPointDeleteError(message string, err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusConflict, "数据点正在被报警策略或其他配置引用，请先解除引用")
+	}
+	return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, message, err)
 }
 
 // AppendTagsByFilter 按筛选条件批量追加标签。

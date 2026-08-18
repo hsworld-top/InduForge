@@ -68,12 +68,12 @@ export const dataContractCheckItems: DataContractCheckItem[] = [
     owner: '计算单元',
   },
   {
-    id: 'alarm-rule-contract',
-    title: '报警规则契约',
+    id: 'alarm-policy-contract',
+    title: '报警策略契约',
     scope: '运行态节点',
     status: 'pending',
-    summary: '检查报警目标点、规则表达式、阈值窗口和节点侧执行契约。',
-    checkpoint: '数据中心只做规则契约预览，报警实例、事件、确认和消音留在运行态侧。',
+    summary: '检查报警目标点、组合表达式、条件和通知渠道的节点侧执行契约。',
+    checkpoint: '数据中心只做策略契约预览，报警实例、事件、确认和消音留在运行态侧。',
     owner: '报警单元',
   },
 ]

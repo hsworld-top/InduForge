@@ -2,299 +2,122 @@ package service
 
 import "testing"
 
-func TestEvaluateAlarmPolicyConditions(t *testing.T) {
-	policy := AlarmPolicy{
-		Mode: "per_target",
-		Conditions: []AlarmCondition{
-			{ID: "c-h", Type: "H", Name: "高限", IsEnabled: true, Severity: "major", Params: map[string]any{"limit": 80.0}},
-			{ID: "c-l", Type: "L", Name: "低限", IsEnabled: true, Severity: "warning", Params: map[string]any{"limit": 20.0}},
-		},
+func TestNormalizeConditionsSupportsDevelopmentConditionKinds(t *testing.T) {
+	tests := []struct {
+		name      string
+		category  string
+		condition AlarmCondition
+	}{
+		{name: "threshold", category: "number", condition: AlarmCondition{Kind: "threshold", Operator: "gt", Severity: "warning", Params: map[string]any{"threshold": 80.0}}},
+		{name: "range", category: "number", condition: AlarmCondition{Kind: "range", Operator: "outside", Severity: "major", Params: map[string]any{"lower": 10.0, "upper": 20.0}}},
+		{name: "state", category: "boolean", condition: AlarmCondition{Kind: "state", Operator: "eq", Severity: "info", Params: map[string]any{"expected": true}}},
+		{name: "transition", category: "boolean", condition: AlarmCondition{Kind: "transition", Operator: "changed", Severity: "critical", Params: map[string]any{}}},
+		{name: "text", category: "text", condition: AlarmCondition{Kind: "text_match", Operator: "contains", Severity: "warning", Params: map[string]any{"expected": "fault"}}},
+		{name: "rate", category: "number", condition: AlarmCondition{Kind: "rate_of_change", Operator: "gt", Severity: "major", Params: map[string]any{"limit": 2.0, "windowMs": 1000.0}}},
+		{name: "deviation", category: "number", condition: AlarmCondition{Kind: "deviation", Operator: "gt", Severity: "warning", Params: map[string]any{"baseline": 10.0, "limit": 2.0}}},
+		{name: "offline", category: "number", condition: AlarmCondition{Kind: "offline", Operator: "is_offline", Severity: "critical", Params: map[string]any{}}},
 	}
-
-	result, err := evaluateAlarmPolicy(&policy, 82.0, nil)
-	if err != nil {
-		t.Fatalf("evaluateAlarmPolicy() error = %v", err)
-	}
-	if !result.Triggered {
-		t.Fatalf("Triggered = false, want true")
-	}
-	if len(result.TriggeredConditions) != 1 || result.TriggeredConditions[0].Type != "H" {
-		t.Fatalf("TriggeredConditions = %#v, want only H", result.TriggeredConditions)
-	}
-}
-
-func TestEvaluateAlarmPolicyThresholdDeadbandKeepsAlarmActive(t *testing.T) {
-	policy := AlarmPolicy{
-		Mode: "per_target",
-		Conditions: []AlarmCondition{
-			{ID: "c-h", Type: "H", Name: "高限", IsEnabled: true, Severity: "major", Params: map[string]any{"limit": 80.0, "hysteresis": 5.0}},
-		},
-	}
-
-	result, err := evaluateAlarmPolicy(&policy, 78.0, map[string]any{"conditionStates": map[string]any{"c-h": map[string]any{"alarmActive": true}}})
-	if err != nil {
-		t.Fatalf("evaluateAlarmPolicy() error = %v", err)
-	}
-	if !result.Triggered {
-		t.Fatalf("Triggered = false, want true inside deadband while alarm is active")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			conditions, err := normalizeConditions([]AlarmCondition{test.condition}, test.category, "per_target")
+			if err != nil {
+				t.Fatalf("normalizeConditions() error = %v", err)
+			}
+			if conditions[0].ID == "" || conditions[0].Label == "" {
+				t.Fatalf("condition defaults not generated: %#v", conditions[0])
+			}
+		})
 	}
 }
 
-func TestEvaluateAlarmPolicyUpperLimitDeadbandTriggerBoundary(t *testing.T) {
-	policy := AlarmPolicy{
-		Mode: "per_target",
-		Conditions: []AlarmCondition{
-			{ID: "c-h", Type: "H", Name: "高限", IsEnabled: true, Severity: "major", Params: map[string]any{"limit": 80.0, "hysteresis": 5.0}},
-		},
+func TestNormalizeConditionsRejectsInvalidDelayDeadbandAndSeverity(t *testing.T) {
+	tests := []AlarmCondition{
+		{Kind: "threshold", Operator: "gt", Severity: "unknown", Params: map[string]any{"threshold": 1.0}},
+		{Kind: "threshold", Operator: "gt", Severity: "warning", Params: map[string]any{"threshold": 1.0}, TriggerDelayMS: -1},
+		{Kind: "threshold", Operator: "gt", Severity: "warning", Params: map[string]any{"threshold": 1.0}, Deadband: -1},
+		{Kind: "range", Operator: "between", Severity: "warning", Params: map[string]any{"lower": 2.0, "upper": 1.0}},
 	}
-
-	result, err := evaluateAlarmPolicy(&policy, 84.0, nil)
-	if err != nil {
-		t.Fatalf("evaluateAlarmPolicy() error = %v", err)
-	}
-	if result.Triggered {
-		t.Fatalf("Triggered = true, want false before upper trigger boundary")
-	}
-
-	result, err = evaluateAlarmPolicy(&policy, 85.0, nil)
-	if err != nil {
-		t.Fatalf("evaluateAlarmPolicy() error = %v", err)
-	}
-	if !result.Triggered {
-		t.Fatalf("Triggered = false, want true at upper trigger boundary")
+	for _, condition := range tests {
+		if _, err := normalizeConditions([]AlarmCondition{condition}, "number", "per_target"); err == nil {
+			t.Fatalf("normalizeConditions(%#v) error = nil", condition)
+		}
 	}
 }
 
-func TestEvaluateAlarmPolicyThresholdDeadbandRecoversOutsideBand(t *testing.T) {
-	policy := AlarmPolicy{
-		Mode: "per_target",
-		Conditions: []AlarmCondition{
-			{ID: "c-h", Type: "H", Name: "高限", IsEnabled: true, Severity: "major", Params: map[string]any{"limit": 80.0, "hysteresis": 5.0}},
-		},
-	}
-
-	result, err := evaluateAlarmPolicy(&policy, 75.0, map[string]any{"conditionStates": map[string]any{"c-h": map[string]any{"alarmActive": true}}})
-	if err != nil {
-		t.Fatalf("evaluateAlarmPolicy() error = %v", err)
-	}
-	if result.Triggered {
-		t.Fatalf("Triggered = true, want false when value reaches recover limit")
-	}
-}
-
-func TestEvaluateAlarmPolicyLowerLimitDeadbandTriggerAndRecoverBoundary(t *testing.T) {
-	policy := AlarmPolicy{
-		Mode: "per_target",
-		Conditions: []AlarmCondition{
-			{ID: "c-l", Type: "L", Name: "低限", IsEnabled: true, Severity: "warning", Params: map[string]any{"limit": 20.0, "hysteresis": 5.0}},
-		},
-	}
-
-	result, err := evaluateAlarmPolicy(&policy, 16.0, nil)
-	if err != nil {
-		t.Fatalf("evaluateAlarmPolicy() error = %v", err)
-	}
-	if result.Triggered {
-		t.Fatalf("Triggered = true, want false before lower trigger boundary")
-	}
-
-	result, err = evaluateAlarmPolicy(&policy, 15.0, nil)
-	if err != nil {
-		t.Fatalf("evaluateAlarmPolicy() error = %v", err)
-	}
-	if !result.Triggered {
-		t.Fatalf("Triggered = false, want true at lower trigger boundary")
-	}
-
-	result, err = evaluateAlarmPolicy(&policy, 24.0, map[string]any{"conditionStates": map[string]any{"c-l": map[string]any{"alarmActive": true}}})
-	if err != nil {
-		t.Fatalf("evaluateAlarmPolicy() error = %v", err)
-	}
-	if !result.Triggered {
-		t.Fatalf("Triggered = false, want true inside deadband while alarm is active")
-	}
-
-	result, err = evaluateAlarmPolicy(&policy, 25.0, map[string]any{"conditionStates": map[string]any{"c-l": map[string]any{"alarmActive": true}}})
-	if err != nil {
-		t.Fatalf("evaluateAlarmPolicy() error = %v", err)
-	}
-	if result.Triggered {
-		t.Fatalf("Triggered = true, want false when value reaches lower recover boundary")
-	}
-}
-
-func TestEvaluateAlarmPolicyTextCondition(t *testing.T) {
-	policy := AlarmPolicy{
-		Mode: "per_target",
-		Conditions: []AlarmCondition{
-			{ID: "c-text", Type: "string_contains", Name: "文本包含", IsEnabled: true, Severity: "warning", Params: map[string]any{"expected": "error"}},
-		},
-	}
-
-	result, err := evaluateAlarmPolicy(&policy, "device error", nil)
-	if err != nil {
-		t.Fatalf("evaluateAlarmPolicy() error = %v", err)
-	}
-	if !result.Triggered {
-		t.Fatalf("Triggered = false, want true")
-	}
-}
-
-func TestValidateAlarmConditionsRejectsDeadbandOverAdjacentGap(t *testing.T) {
+func TestEvaluateAlarmConditionsPausesInvalidQualityButKeepsOfflineIndependent(t *testing.T) {
 	conditions := []AlarmCondition{
-		{ID: "c-l", Type: "L", Name: "低限", IsEnabled: true, Severity: "warning", Params: map[string]any{"limit": 20.0, "hysteresis": 3.0}},
-		{ID: "c-h", Type: "H", Name: "高限", IsEnabled: true, Severity: "major", Params: map[string]any{"limit": 25.0, "hysteresis": 3.0}},
+		{ID: "threshold", Kind: "threshold", Operator: "gt", Severity: "warning", Params: map[string]any{"threshold": 10.0}},
+		{ID: "offline", Kind: "offline", Operator: "is_offline", Severity: "critical", Params: map[string]any{}},
 	}
-
-	err := validateAlarmConditions(conditions, policyAllowedConditionTypes("per_target", []AlarmTargetRef{
-		{DatapointID: "dp-1", Path: "metrics.temperature", DataType: "number"},
-	}), true)
-	if err == nil {
-		t.Fatal("validateAlarmConditions() error = nil, want deadband gap error")
+	result := evaluateAlarmConditions(conditions, 20.0, map[string]any{"quality": "bad", "offline": true})
+	if !result.Triggered || len(result.TriggeredConditions) != 1 || result.TriggeredConditions[0].Kind != "offline" {
+		t.Fatalf("result = %#v, want only offline condition triggered", result)
 	}
-}
-
-func TestValidateAlarmConditionsAllowsSeparatedDeadbands(t *testing.T) {
-	conditions := []AlarmCondition{
-		{ID: "c-l", Type: "L", Name: "低限", IsEnabled: true, Severity: "warning", Params: map[string]any{"limit": 20.0, "hysteresis": 2.0}},
-		{ID: "c-h", Type: "H", Name: "高限", IsEnabled: true, Severity: "major", Params: map[string]any{"limit": 25.0, "hysteresis": 2.0}},
-	}
-
-	err := validateAlarmConditions(conditions, policyAllowedConditionTypes("per_target", []AlarmTargetRef{
-		{DatapointID: "dp-1", Path: "metrics.temperature", DataType: "number"},
-	}), true)
-	if err != nil {
-		t.Fatalf("validateAlarmConditions() error = %v", err)
+	if result.ConditionResults[0]["reason"] != "quality_paused" {
+		t.Fatalf("threshold reason = %v", result.ConditionResults[0]["reason"])
 	}
 }
 
-func TestValidateAlarmConditionsRejectsInvalidThresholdOrder(t *testing.T) {
-	conditions := []AlarmCondition{
-		{ID: "c-l", Type: "L", Name: "低限", IsEnabled: true, Severity: "warning", Params: map[string]any{"limit": 30.0}},
-		{ID: "c-h", Type: "H", Name: "高限", IsEnabled: true, Severity: "major", Params: map[string]any{"limit": 25.0}},
+func TestNormalizeNotificationShape(t *testing.T) {
+	inherit, err := normalizeNotificationShape(AlarmNotificationSettings{})
+	if err != nil || inherit.Mode != "inherit" {
+		t.Fatalf("inherit = %#v, err = %v", inherit, err)
 	}
-
-	err := validateAlarmConditions(conditions, policyAllowedConditionTypes("per_target", []AlarmTargetRef{
-		{DatapointID: "dp-1", Path: "metrics.temperature", DataType: "number"},
-	}), true)
-	if err == nil {
-		t.Fatal("validateAlarmConditions() error = nil, want threshold order error")
+	off, err := normalizeNotificationShape(AlarmNotificationSettings{Mode: "off"})
+	if err != nil || off.Mode != "off" {
+		t.Fatalf("off = %#v, err = %v", off, err)
 	}
-}
-
-func TestValidateAlarmConditionsRejectsDuplicateThreshold(t *testing.T) {
-	conditions := []AlarmCondition{
-		{ID: "c-h-1", Type: "H", Name: "高限", IsEnabled: true, Severity: "warning", Params: map[string]any{"limit": 80.0}},
-		{ID: "c-h-2", Type: "H", Name: "高限", IsEnabled: true, Severity: "major", Params: map[string]any{"limit": 90.0}},
+	raise, clear := true, true
+	repeat := 300
+	custom, err := normalizeNotificationShape(AlarmNotificationSettings{Mode: "custom", NotifyOnRaise: &raise, NotifyOnClear: &clear, RepeatIntervalSeconds: &repeat, ChannelIDs: []string{"runtime_inapp", "runtime_inapp"}})
+	if err != nil || len(custom.ChannelIDs) != 1 {
+		t.Fatalf("custom = %#v, err = %v", custom, err)
 	}
-
-	err := validateAlarmConditions(conditions, policyAllowedConditionTypes("per_target", []AlarmTargetRef{
-		{DatapointID: "dp-1", Path: "metrics.temperature", DataType: "number"},
-	}), true)
-	if err == nil {
-		t.Fatal("validateAlarmConditions() error = nil, want duplicate threshold error")
+	invalidRepeat := 0
+	if _, err = normalizeNotificationShape(AlarmNotificationSettings{Mode: "custom", NotifyOnRaise: &raise, NotifyOnClear: &clear, RepeatIntervalSeconds: &invalidRepeat, ChannelIDs: []string{"runtime_inapp"}}); err == nil {
+		t.Fatal("zero repeat interval should be rejected")
 	}
 }
 
-func TestValidateAlarmConditionsAllowsBooleanCondition(t *testing.T) {
-	conditions := []AlarmCondition{
-		{ID: "c-bool", Type: "bool_equal", Name: "状态判断", IsEnabled: true, Severity: "warning", Params: map[string]any{"expected": true}},
-		{ID: "c-transition", Type: "bool_transition", Name: "变化判断", IsEnabled: true, Severity: "major", Params: map[string]any{"from": true, "to": false}},
+func TestBuildAlarmContractUsesFinalSchemaAndModeDefault(t *testing.T) {
+	ordinary := SaveAlarmPolicyInput{Name: "温度高报警", Mode: "per_target", Bindings: []AlarmBinding{{DatapointID: "dp-1", Role: "target"}}, Conditions: []AlarmCondition{{Kind: "threshold", Operator: "gt", Severity: "warning", Params: map[string]any{"threshold": 80.0}}}, Notification: AlarmNotificationSettings{Mode: "inherit"}}
+	contract := buildAlarmContract("project-1", "policy-1", ordinary)
+	if contract["schemaVersion"] != "alarm.policy.v1" || contract["isEnabled"] != true {
+		t.Fatalf("ordinary contract = %#v", contract)
 	}
-
-	err := validateAlarmConditions(conditions, policyAllowedConditionTypes("per_target", []AlarmTargetRef{
-		{DatapointID: "dp-1", Path: "metrics.running", DataType: "boolean"},
-	}), true)
-	if err != nil {
-		t.Fatalf("validateAlarmConditions() error = %v", err)
+	derived := ordinary
+	derived.Mode = "derived"
+	derived.DerivedExpression = "a && b"
+	contract = buildAlarmContract("project-1", "policy-2", derived)
+	if contract["isEnabled"] != false {
+		t.Fatalf("derived default enabled = %v, want false", contract["isEnabled"])
 	}
-}
-
-func TestEvaluateAlarmPolicyBoolTransition(t *testing.T) {
-	policy := AlarmPolicy{
-		Mode: "per_target",
-		Conditions: []AlarmCondition{
-			{ID: "c-transition", Type: "bool_transition", Name: "开到关", IsEnabled: true, Severity: "major", Params: map[string]any{"from": true, "to": false}},
-		},
-	}
-
-	result, err := evaluateAlarmPolicy(&policy, false, map[string]any{"previousValue": true})
-	if err != nil {
-		t.Fatalf("evaluateAlarmPolicy() error = %v", err)
-	}
-	if !result.Triggered {
-		t.Fatalf("Triggered = false, want true")
+	lifecycle := contract["lifecycle"].(map[string]any)
+	if lifecycle["autoClear"] != true || lifecycle["acknowledgement"] != "audit_only" {
+		t.Fatalf("lifecycle = %#v", lifecycle)
 	}
 }
 
-func TestBuildAlarmPolicyContract(t *testing.T) {
-	policy := normalizedAlarmPolicyInput{
-		Name: "温度策略",
-		Mode: "per_target",
-		Targets: []AlarmTargetRef{
-			{DatapointID: "dp-1", Path: "metrics.temperature", DataType: "number"},
-		},
-		Conditions: []AlarmCondition{
-			{ID: "c-h", Type: "H", Name: "高限", IsEnabled: true, Severity: "major", Params: map[string]any{"limit": 80.0}},
-		},
-		IsEnabled: true,
+func TestBuildAlarmContractKeepsAssignedPolicyID(t *testing.T) {
+	input := SaveAlarmPolicyInput{
+		Name:       "温度报警",
+		Mode:       "per_target",
+		Bindings:   []AlarmBinding{{DatapointID: "dp-1", Role: "target"}},
+		Conditions: []AlarmCondition{{Kind: "threshold", Operator: "gt", Severity: "warning", Params: map[string]any{"threshold": 80.0}}},
 	}
-
-	contract := buildAlarmPolicyContract(policy, "policy-1", "project-1", nil, &AlarmProjectSettings{ProjectID: "project-1", EscalationIntervalSeconds: 300, RepeatNotificationIntervalSeconds: 10})
-	if contract["schemaVersion"] != "alarm.policy.v1" {
-		t.Fatalf("schemaVersion = %v", contract["schemaVersion"])
-	}
-	if contract["effectiveEnabled"] != true {
-		t.Fatalf("effectiveEnabled = %v", contract["effectiveEnabled"])
-	}
-	escalation, ok := contract["escalation"].(map[string]any)
-	if !ok {
-		t.Fatalf("escalation = %#v, want object", contract["escalation"])
-	}
-	if escalation["intervalSeconds"] != 300 {
-		t.Fatalf("intervalSeconds = %v, want 300", escalation["intervalSeconds"])
-	}
-	if escalation["emitOnEveryPriorityChange"] != false {
-		t.Fatalf("emitOnEveryPriorityChange = %v, want false", escalation["emitOnEveryPriorityChange"])
-	}
-	repeatNotification, ok := escalation["repeatNotification"].(map[string]any)
-	if !ok {
-		t.Fatalf("repeatNotification = %#v, want object", escalation["repeatNotification"])
-	}
-	if repeatNotification["intervalSeconds"] != 10 {
-		t.Fatalf("repeat intervalSeconds = %v, want 10", repeatNotification["intervalSeconds"])
+	contract := buildAlarmContract("project-1", "policy-1", input)
+	if contract["policyId"] != "policy-1" {
+		t.Fatalf("contract policyId = %v, want policy-1", contract["policyId"])
 	}
 }
 
-func TestPolicyMatchesCoverageTargetOnlyPerTarget(t *testing.T) {
-	policy := AlarmPolicy{
-		Mode: "per_target",
-		Targets: []AlarmTargetRef{
-			{DatapointID: "dp-1", Path: "metrics.temperature", DataType: "number"},
-		},
+func TestValidateChannelConfigOnlyChecksDevelopmentFormat(t *testing.T) {
+	for _, channelType := range []string{"webhook", "dingtalk", "wecom"} {
+		if err := validateChannelConfig(channelType, map[string]any{"webhookUrl": "https://example.com/hook"}); err != nil {
+			t.Fatalf("validateChannelConfig(%s) error = %v", channelType, err)
+		}
 	}
-	if !policyMatchesCoverageTarget(policy, "dp-1", "") {
-		t.Fatal("policyMatchesCoverageTarget() = false, want true by datapoint id")
-	}
-	if !policyMatchesCoverageTarget(policy, "", "metrics.temperature") {
-		t.Fatal("policyMatchesCoverageTarget() = false, want true by path")
-	}
-
-	policy.Mode = "derived"
-	if policyMatchesCoverageTarget(policy, "dp-1", "metrics.temperature") {
-		t.Fatal("policyMatchesCoverageTarget() = true, want false for derived mode")
-	}
-}
-
-func TestEvaluateDerivedValue(t *testing.T) {
-	value, err := evaluateDerivedValue("temperature - pressure * 0.1", map[string]any{
-		"temperature": 90.0,
-		"pressure":    20.0,
-	})
-	if err != nil {
-		t.Fatalf("evaluateDerivedValue() error = %v", err)
-	}
-	if value != 88 {
-		t.Fatalf("value = %v, want 88", value)
+	if err := validateChannelConfig("email", map[string]any{"webhookUrl": "https://example.com"}); err == nil {
+		t.Fatal("unsupported channel type should be rejected")
 	}
 }

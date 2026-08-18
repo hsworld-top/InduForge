@@ -7,9 +7,12 @@ import 'element-plus/dist/index.css'
 import router from './router'
 import App from './App.vue'
 import './assets/styles/main.css'
+import { configureElementPlusPopper } from './config/element-plus'
 import { setDatacenterLocale } from './i18n/runtime'
 import { Storage } from './utils/storage'
 import { initializeWujieContext } from './runtime/wujie-context'
+
+configureElementPlusPopper()
 
 const microAppContext = initializeWujieContext()
 setDatacenterLocale(microAppContext?.locale ?? Storage.getLanguage())

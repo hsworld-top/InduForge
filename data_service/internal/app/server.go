@@ -168,7 +168,6 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 
 	connectionRepository := repository.NewConnectionRepository(pool)
 	accessSourceRepository := repository.NewAccessSourceRepository(pool)
-	alarmRuleRepository := repository.NewAlarmRuleRepository(pool)
 	alarmPolicyRepository := repository.NewAlarmPolicyRepository(pool)
 	historyStorageRepository := repository.NewHistoryStorageRepository(pool)
 	contractCheckRepository := repository.NewContractCheckRepository(pool)
@@ -193,8 +192,15 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	computeRepository := repository.NewComputeRepository(pool)
 
 	accessSourceService := service.NewAccessSourceService(connectionRepository, mqttRepository, accessSourceRepository)
-	alarmRuleService := service.NewAlarmRuleService(alarmRuleRepository, dataPointRepository)
-	alarmPolicyService := service.NewAlarmPolicyService(alarmPolicyRepository, dataPointRepository)
+	var alarmCipher *collectorsecurity.AlarmSecretCipher
+	if len(cfg.AlarmSecretKey) == 32 {
+		alarmCipher, err = collectorsecurity.NewAlarmSecretCipher(cfg.AlarmSecretKey, cfg.AlarmSecretKeyVersion)
+		if err != nil {
+			joinCleanup(cleanupFns...)()
+			return nil, nil, err
+		}
+	}
+	alarmPolicyService := service.NewAlarmPolicyService(alarmPolicyRepository, dataPointRepository, alarmCipher)
 	historyStorageService := service.NewHistoryStorageService(historyStorageRepository)
 	collectorDevService := service.NewCollectorDevService(collectorDevRepository)
 	collectorCatalogService := service.NewCollectorCatalogService(collectorCatalog)
@@ -233,7 +239,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		}
 		collectorImportHandler = handler.NewCollectorImportHandler(collectorImportService)
 	}
-	contractCheckService := service.NewContractCheckService(dataPointRepository, computeRepository, alarmRuleRepository, queryRepository, contractCheckRepository)
+	contractCheckService := service.NewContractCheckService(dataPointRepository, computeRepository, alarmPolicyRepository, queryRepository, contractCheckRepository)
 	builtinRuntimeService := newBuiltinRuntimeServiceFromConfig(cfg, pool, devPool, &cleanupFns)
 	connectionService := service.NewConnectionService(connectionRepository, builtinRuntimeService)
 	queryService := service.NewQueryService(queryRepository, connectionRepository, dataPointRepository)
@@ -263,7 +269,6 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	)
 
 	accessSourceHandler := handler.NewAccessSourceHandler(accessSourceService)
-	alarmRuleHandler := handler.NewAlarmRuleHandler(alarmRuleService)
 	alarmPolicyHandler := handler.NewAlarmPolicyHandler(alarmPolicyService)
 	historyStorageHandler := handler.NewHistoryStorageHandler(historyStorageService)
 	contractCheckHandler := handler.NewContractCheckHandler(contractCheckService)
@@ -285,7 +290,6 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	computeHandler := handler.NewComputeHandler(computeService)
 
 	routeOptions := []router.Option{
-		router.WithAlarmRuleRoutes(alarmRuleHandler, jwtValidator),
 		router.WithAlarmPolicyRoutes(alarmPolicyHandler, jwtValidator),
 		router.WithHistoryStorageRoutes(historyStorageHandler, jwtValidator),
 		router.WithBuiltinRuntimeRoutes(builtinRuntimeHandler, jwtValidator),

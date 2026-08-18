@@ -41,6 +41,28 @@ func TestLoad_RejectsInvalidCollectorSecretKey(t *testing.T) {
 	}
 }
 
+func TestLoad_ReadsIndependentAlarmSecretKey(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString(make([]byte, 32))
+	t.Setenv("DATA_SERVICE_ALARM_SECRET_KEY", encoded)
+	t.Setenv("DATA_SERVICE_ALARM_SECRET_KEY_VERSION", "alarm-v2")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.AlarmSecretKey) != 32 || cfg.AlarmSecretKeyVersion != "alarm-v2" {
+		t.Fatalf("unexpected alarm secret config: length=%d version=%q", len(cfg.AlarmSecretKey), cfg.AlarmSecretKeyVersion)
+	}
+}
+
+func TestLoad_RejectsInvalidAlarmSecretKey(t *testing.T) {
+	t.Setenv("DATA_SERVICE_ALARM_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte("short")))
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected invalid alarm secret key to be rejected")
+	}
+}
+
 func TestValidateCollectorSecretKeyRejectsMissingKey(t *testing.T) {
 	err := ValidateCollectorSecretKey(Config{CollectorSecretKeyVersion: "v1"})
 	if err == nil {

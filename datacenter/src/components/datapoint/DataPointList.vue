@@ -395,6 +395,19 @@
         </button>
         <button
           type="button"
+          class="datapoint-list__bulk-action-btn"
+          :disabled="selectionScope === 'all'"
+          :title="
+            selectionScope === 'all'
+              ? '报警设置只支持当前明确选中的数据点'
+              : '为选中数据点创建统一报警'
+          "
+          @click="openBatchAlarm"
+        >
+          报警设置
+        </button>
+        <button
+          type="button"
           class="datapoint-list__bulk-action-btn is-danger"
           :disabled="!canBatchDelete"
           @click="handleBatchDelete"
@@ -505,6 +518,17 @@
       @save="saveBatchHistoryStorage"
     />
 
+    <AlarmPolicyDrawer
+      v-model="alarmDrawerVisible"
+      :project-id="projectId"
+      mode="per_target"
+      :groups="alarmGroups"
+      :channels="alarmChannels"
+      :initial-bindings="alarmInitialBindings"
+      :saving="alarmSaving"
+      @save="saveBatchAlarm"
+    />
+
     <!-- 详情抽屉（v2 DataPointDetailDrawer） -->
     <DataPointDetailDrawer
       v-model="detailDrawerVisible"
@@ -546,6 +570,7 @@ import BulkActionBar from '@/components/shared/BulkActionBar.vue'
 import DataPointTagDialog from './DataPointTagDialog.vue'
 import RuntimePermissionDialog from './RuntimePermissionDialog.vue'
 import HistoryStorageConfigDrawer from '@/components/history-storage/HistoryStorageConfigDrawer.vue'
+import AlarmPolicyDrawer from '@/components/alarm/AlarmPolicyDrawer.vue'
 import {
   batchConfigureDatapointHistoryStorage,
   listHistoryStorageTargets,
@@ -553,6 +578,14 @@ import {
   type HistoryStorageSavePayload,
 } from '@/api/history-storage.api'
 import type { HistoryStorageTargetOption } from '@/api/schemas/history-storage.schema'
+import { createAlarmPolicy, listAlarmChannels, listAlarmGroupTree } from '@/api/alarm.api'
+import type {
+  AlarmBinding,
+  AlarmNotificationChannel,
+  AlarmPolicyGroup,
+  AlarmPolicySave,
+} from '@/api/schemas/alarm.schema'
+import { ensureBuiltinAlarmNotificationChannel } from '@/models/alarm-policy'
 import DataPointDetailDrawer from './DataPointDetailDrawer.vue'
 
 type DataPointListMode = 'embedded' | 'management'
@@ -711,6 +744,10 @@ const currentTagDatapoint = ref<DataPointRow | null>(null)
 const historyStorageDrawerVisible = ref(false)
 const historyStorageSaving = ref(false)
 const historyStorageTargets = ref<HistoryStorageTargetOption[]>([])
+const alarmDrawerVisible = ref(false)
+const alarmSaving = ref(false)
+const alarmGroups = ref<AlarmPolicyGroup[]>([])
+const alarmChannels = ref<AlarmNotificationChannel[]>([])
 
 /* 详情抽屉状态 */
 const detailDrawerVisible = ref(false)
@@ -1216,6 +1253,66 @@ const saveBatchHistoryStorage = async (payload: HistoryStorageSavePayload) => {
     ElMessage.error('批量设置失败：' + getApiErrorMessage(error, '批量设置历史存储失败'))
   } finally {
     historyStorageSaving.value = false
+  }
+}
+
+const alarmInitialBindings = computed<AlarmBinding[]>(() =>
+  selectedRows.value.map((row) => ({
+    datapointId: row.id,
+    path: row.path || '',
+    name: row.name || row.path || '数据点',
+    dataType: row.dataType || '',
+    role: 'target',
+    inputKey: null,
+  })),
+)
+
+const openBatchAlarm = async () => {
+  if (selectionScope.value === 'all') {
+    ElMessage.warning('报警设置只应用到当前明确选中的数据点')
+    return
+  }
+  if (selectedRows.value.length === 0) return
+  try {
+    const [groups, channels] = await Promise.all([
+      alarmGroups.value.length
+        ? Promise.resolve(alarmGroups.value)
+        : listAlarmGroupTree(props.projectId),
+      alarmChannels.value.length
+        ? Promise.resolve(alarmChannels.value)
+        : listAlarmChannels(props.projectId).catch(() => []),
+    ])
+    alarmGroups.value = groups
+    alarmChannels.value = ensureBuiltinAlarmNotificationChannel(props.projectId, channels)
+    alarmDrawerVisible.value = true
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '加载报警设置失败'))
+  }
+}
+
+const saveBatchAlarm = async (payload: AlarmPolicySave) => {
+  if (selectedRows.value.length === 0 || selectionScope.value === 'all') return
+  const count = selectedRows.value.length
+  const ok = await confirm(
+    `将为当前选中的 ${count} 个数据点创建一条统一维护的报警配置，确认继续？`,
+    {
+      title: '批量设置报警',
+      confirmText: '创建报警',
+      type: 'warning',
+    },
+  )
+  if (!ok) return
+  alarmSaving.value = true
+  try {
+    await createAlarmPolicy(props.projectId, payload)
+    alarmDrawerVisible.value = false
+    clearSelection()
+    ElMessage.success(`已为 ${count} 个数据点创建报警配置`)
+    await loadDataPoints()
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '创建报警配置失败'))
+  } finally {
+    alarmSaving.value = false
   }
 }
 

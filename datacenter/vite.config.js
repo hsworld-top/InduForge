@@ -68,10 +68,14 @@ export default defineConfig(({ mode }) => {
       sourcemap: false,
       rollupOptions: {
         output: {
-          manualChunks: {
-            vendor: ['vue', 'vue-router', 'pinia'],
-            ui: ['element-plus', '@element-plus/icons-vue'],
-            monaco: ['monaco-editor'],
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined
+            if (id.includes('/monaco-editor/')) return 'monaco'
+            if (id.includes('/element-plus/') || id.includes('/@element-plus/')) return 'ui'
+            if (id.includes('/vue/') || id.includes('/vue-router/') || id.includes('/pinia/')) {
+              return 'vendor'
+            }
+            return undefined
           },
         },
       },
