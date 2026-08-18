@@ -17,5 +17,7 @@ fi
 
 # 工程缓存卷首次挂载时为空；只预热固定模板依赖，不删除或重置客户已产生的缓存。
 cp -a "$source_store/." "$target_store/"
-cp "$source_version" "$target_version"
+# 镜像内的缓存种子是只读的，复制后会保留其 555 权限；必须先恢复写权限，
+# 否则下一步写入版本标记以及 pnpm 的 SQLite 索引都会失败。
 chmod -R u+rwX "$target_store"
+cp "$source_version" "$target_version"

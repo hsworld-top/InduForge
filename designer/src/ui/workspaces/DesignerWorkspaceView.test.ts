@@ -23,7 +23,7 @@ vi.mock('./code/context-pack-api', () => ({
 }))
 
 vi.mock('./scene-contract-api', () => ({
-  sceneContractApi: { list: vi.fn() },
+  sceneContractApi: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
 }))
 
 const workspace = {
@@ -70,6 +70,7 @@ describe('DesignerWorkspaceView', () => {
     vi.mocked(resolveWorkspaceState).mockReset()
     vi.mocked(contextPackApi.refresh).mockReset()
     vi.mocked(sceneContractApi.list).mockReset()
+    vi.mocked(sceneContractApi.create).mockReset()
     vi.mocked(requestWorkspaceOpen).mockReset()
     vi.mocked(requestWorkspaceOpen).mockReturnValue(true)
     getEditorUiStore().initFromRuntime({ theme: 'light', locale: 'zh' })
@@ -189,6 +190,13 @@ describe('DesignerWorkspaceView', () => {
         },
       ],
       contractVersion: 'scene-snapshot-version',
+    })
+    vi.mocked(sceneContractApi.create).mockResolvedValue({
+      id: 'new-scene',
+      kind: '2d',
+      name: '新场景',
+      embedMode: 'both',
+      contractVersion: '0',
     })
   })
 
@@ -361,12 +369,51 @@ describe('DesignerWorkspaceView', () => {
     await wrapper.get('button[aria-label="2D"]').trigger('click')
     expect(wrapper.get('.workbench-view.active').text()).toContain('产线总览')
     expect(wrapper.get('.workbench-view.active').text()).toContain('/line-overview')
-    await wrapper.get('.workbench-view.active .scene-editor-button').trigger('click')
-    expect(requestWorkspaceOpen).toHaveBeenCalledWith('2d')
+    await wrapper.get('.workbench-view.active button[aria-label="打开编辑器"]').trigger('click')
+    expect(requestWorkspaceOpen).toHaveBeenCalledWith('2d', 'scene-2d')
 
     await wrapper.get('button[aria-label="3D"]').trigger('click')
     expect(wrapper.get('.workbench-view.active').text()).toContain('厂区场景')
+    await wrapper.get('.workbench-view.active button[aria-label="打开编辑器"]').trigger('click')
+    expect(requestWorkspaceOpen).toHaveBeenCalledWith('3d', 'scene-3d')
+  })
+
+  it('新建场景使用精简表单，创建成功后直接打开对应 HT 编辑器', async () => {
+    const wrapper = mount(DesignerWorkspaceView)
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="2D"]').trigger('click')
     await wrapper.get('.workbench-view.active .scene-editor-button').trigger('click')
-    expect(requestWorkspaceOpen).toHaveBeenCalledWith('3d')
+
+    expect(wrapper.get('[role="dialog"]').text()).toContain('新建2D 画面')
+    expect(wrapper.find('.scene-contract-panel').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('+ 新建接口')
+
+    await wrapper.get('input[placeholder="line-overview"]').setValue('line-main')
+    await wrapper.get('input[placeholder="产线总览"]').setValue('主产线')
+    await wrapper.get('.scene-create-dialog form').trigger('submit')
+    await flushPromises()
+
+    expect(sceneContractApi.create).toHaveBeenCalledWith('project-1', {
+      sceneId: 'line-main',
+      name: '主产线',
+      kind: '2d',
+    })
+    expect(requestWorkspaceOpen).toHaveBeenCalledWith('2d', 'new-scene')
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+  })
+
+  it('场景 ID 非法时留在新建表单且不请求后端', async () => {
+    const wrapper = mount(DesignerWorkspaceView)
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="3D"]').trigger('click')
+    await wrapper.get('.workbench-view.active .scene-editor-button').trigger('click')
+    await wrapper.get('input[placeholder="line-overview"]').setValue('../factory')
+    await wrapper.get('input[placeholder="产线总览"]').setValue('厂区')
+    await wrapper.get('.scene-create-dialog form').trigger('submit')
+
+    expect(wrapper.get('[role="alert"]').text()).toContain('场景 ID')
+    expect(sceneContractApi.create).not.toHaveBeenCalled()
   })
 })

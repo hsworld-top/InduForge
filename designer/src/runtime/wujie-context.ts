@@ -17,6 +17,7 @@ export interface WorkspaceOpenRequest {
   type: 'WORKSPACE_OPEN_REQUEST'
   projectId: string
   target: WorkspaceOpenTarget
+  sceneId: string
 }
 
 let currentContext: MicroAppContext | null = null
@@ -81,10 +82,11 @@ export const reportMicroAppState = (payload: { title?: string; dirty?: boolean }
   currentContext?.onStateChange?.(payload)
 }
 
-export const requestWorkspaceOpen = (target: WorkspaceOpenTarget): boolean => {
+export const requestWorkspaceOpen = (target: WorkspaceOpenTarget, sceneId: string): boolean => {
   if (
     !['2d', '3d'].includes(target) ||
     !currentContext?.projectId ||
+    !sceneId.trim() ||
     !currentContext.onOpenWorkspace
   ) {
     return false
@@ -93,6 +95,7 @@ export const requestWorkspaceOpen = (target: WorkspaceOpenTarget): boolean => {
     type: 'WORKSPACE_OPEN_REQUEST',
     projectId: currentContext.projectId,
     target,
+    sceneId: sceneId.trim(),
   })
   return true
 }

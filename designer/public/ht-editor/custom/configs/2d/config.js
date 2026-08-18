@@ -1,5 +1,3 @@
-window.isPracticing = window.location.host.indexOf('hightopo') >= 0;
-
 window.hteditor_config = {
     // color_select: '#FF7733',
     // explorerMode: 'accordion',
@@ -16,32 +14,31 @@ window.hteditor_config = {
     // fitContentForDisplayView: true,
     // fitContentForSymbolView: true,
     promptBeforeClosing: false,
-    componentsVisible: !isPracticing,
-    displaysEditable: !isPracticing,
-    symbolsEditable: !isPracticing,
-    componentsEditable: !isPracticing,
-    assetsEditable: !isPracticing,
-    locateFileEnabled: !isPracticing,
-    fontPreview: '图扑软件 - Hightopo',
+    symbolsVisible: false,
+    componentsVisible: false,
+    assetsVisible: false,
+    displaysEditable: false,
+    symbolsEditable: false,
+    componentsEditable: false,
+    assetsEditable: false,
+    newIfFailToOpen: false,
+    locateFileEnabled: false,
+    checkForFileChanges: false,
+    fontPreview: 'InduForge',
     expandedTitles: {
         TitleExtension: false
     },
     subConfigs: [
         'custom/configs/2d/config-utils.js',
-        'custom/configs/config-points.js',
         'custom/configs/2d/config-inspectorTab.js',
         'custom/configs/2d/config-handleEvent.js',
         'custom/configs/config-valueTypes.js',
         'custom/configs/config-dataBindings.js',
-        'custom/configs/2d/config-dataBindingsForSymbol.js',
         'custom/configs/2d/config-connectActions.js',
         'custom/configs/2d/config-inspectorFilter.js',
         'custom/configs/config-customProperties.js',
         'custom/configs/2d/config-onEditorCreated.js',
-        'custom/configs/2d/config-onTitleCreating.js',
-        'custom/configs/2d/config-onTitleCreated.js',
         'custom/configs/2d/config-onMainToolbarCreated.js',
-        'custom/configs/2d/config-onMainMenuCreated.js',
         'custom/configs/2d/config-onRightToolbarCreated.js'
     ],
     libs: [

@@ -67,6 +67,22 @@ func (r *Redis) IsRevoked(ctx context.Context, tokenID string) (bool, error) {
 	return count > 0, err
 }
 
+func (r *Redis) PutSceneSession(ctx context.Context, sessionID, value string, ttl time.Duration) error {
+	return r.client.Set(ctx, "scene:session:"+sessionID, value, ttl).Err()
+}
+
+func (r *Redis) GetSceneSession(ctx context.Context, sessionID string) (string, error) {
+	value, err := r.client.Get(ctx, "scene:session:"+sessionID).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", ErrMiss
+	}
+	return value, err
+}
+
+func (r *Redis) DeleteSceneSession(ctx context.Context, sessionID string) error {
+	return r.client.Del(ctx, "scene:session:"+sessionID).Err()
+}
+
 func (r *Redis) TouchNode(ctx context.Context, nodeID string, ttl time.Duration) error {
 	return r.client.Set(ctx, "node:online:"+nodeID, "1", ttl).Err()
 }

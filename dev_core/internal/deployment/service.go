@@ -14,9 +14,10 @@ import (
 )
 
 var (
-	ErrNotFound      = errors.New("发布或部署记录不存在")
-	ErrAlreadyExists = errors.New("版本已存在")
-	ErrVersionInUse  = errors.New("版本正在使用，不能删除")
+	ErrNotFound       = errors.New("发布或部署记录不存在")
+	ErrAlreadyExists  = errors.New("版本已存在")
+	ErrVersionInUse   = errors.New("版本正在使用，不能删除")
+	ErrScenesNotReady = errors.New("场景草稿未提交或运行工件校验失败")
 )
 
 type Project struct {
@@ -124,10 +125,15 @@ type Service struct {
 	store      ArtifactStore
 	config     ServiceConfig
 	events     Events
+	releases   ReleaseValidator
 }
 
 type Events interface {
 	DeployStatus(string, map[string]any)
+}
+
+type ReleaseValidator interface {
+	ValidateRelease(context.Context, auth.User, string) (map[string]any, error)
 }
 
 func NewService(repository Repository, workspace Workspace, store ArtifactStore, config ServiceConfig) *Service {
@@ -135,6 +141,8 @@ func NewService(repository Repository, workspace Workspace, store ArtifactStore,
 }
 
 func (s *Service) SetEvents(events Events) { s.events = events }
+
+func (s *Service) SetReleaseValidator(validator ReleaseValidator) { s.releases = validator }
 
 func (s *Service) ListVersions(ctx context.Context, actor auth.User, projectID string, page, limit int) ([]Version, int64, error) {
 	project, err := s.repository.GetProject(ctx, actor.TenantID, projectID)
@@ -171,11 +179,19 @@ func (s *Service) Publish(ctx context.Context, actor auth.User, projectID string
 	if err := requireProject(actor, project, auth.CapabilityReleasePublish); err != nil {
 		return Version{}, err
 	}
+	var sceneRuntime map[string]any
+	if s.releases != nil {
+		sceneRuntime, err = s.releases.ValidateRelease(ctx, actor, projectID)
+		if err != nil {
+			return Version{}, fmt.Errorf("%w: %v", ErrScenesNotReady, err)
+		}
+	}
 	manifest := map[string]any{
 		"projectId": project.ID, "tenantId": project.TenantID, "name": project.Name,
 		"code": project.Code, "version": input.Version, "schemaVersion": "2.0.0",
 		"buildTime": time.Now().UTC().Format(time.RFC3339), "source": "code-first",
 	}
+	manifest["sceneRuntime"] = sceneRuntime
 	artifact, err := s.buildAndUpload(ctx, project, input.Version, manifest)
 	if err != nil {
 		return Version{}, err

@@ -9,6 +9,7 @@ Designer 是 AI 页面开发工作台。页面布局、路由和组件由 AI 直
 - 中间菜单提供“页面 / 2D / 3D / 编辑器”四个工作台视图。
 - 预览视图承载 Vite iframe、设备尺寸、刷新、全屏、新标签打开和进程控制。
 - 2D/3D 视图按公开场景契约展示产物卡片，并在顶部提供对应 HT 编辑器入口。
+- Designer 只管理场景卡片和公开契约；工程级场景资源库、上传和 Symbol/Component 编辑均在 HT 内完成。
 - 编辑器视图承载精简 code-server，使用其原生文件、搜索、Git、运行、扩展和终端。
 - 底部展示上下文版本、2D/3D 场景数、数据点数和更新时间。
 - 向 `dev_ide` 发送受控的 2D/3D 标签打开请求。
@@ -19,6 +20,7 @@ Designer 是 AI 页面开发工作台。页面布局、路由和组件由 AI 直
 - Designer 不维护页面 Schema 或页面解释器。
 - Designer 不读取或修改 Pi Web、Preview、code-server 和 HT 编辑器的跨域 DOM。
 - AI 读取平台生成的 HT 场景契约与数据点上下文，不直接操作 HT 编辑器。
+- HT 只通过短期场景/资源会话访问 PostgreSQL 与 MinIO，不读取工程工作区中的物理资源目录。
 - Runtime SDK 是工程页面访问鉴权、权限、数据点和场景能力的唯一前端抽象。
 - Preview Control 只管理开发态 `5173` 端口，不参与工程发布和运行站点。
 
@@ -30,7 +32,7 @@ Designer 是 AI 页面开发工作台。页面布局、路由和组件由 AI 直
 | `Designer -> Pi Web` | 原生 iframe。 |
 | `Designer -> Vite Preview` | 原生 iframe。 |
 | `Designer -> code-server` | 原生 iframe。 |
-| `dev_ide -> HT 2D/3D` | 独立保活 iframe 标签。 |
+| `dev_ide -> InduForge 2D/3D Studio` | 独立保活 iframe 标签；浏览器不感知内部 Provider。 |
 
 Preview 与 code-server iframe 初始化后始终存在。页面、2D、3D、编辑器切换只改变可见性和交互状态，不能修改
 `src` 或销毁实例，以保留 HMR、页面状态、Canvas、编辑缓冲区和终端进程。

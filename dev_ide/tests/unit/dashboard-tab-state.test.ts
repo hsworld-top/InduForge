@@ -72,18 +72,19 @@ describe('dashboardTabState', () => {
     const savedState = serializeDashboardTabState({
       tabs: [
         {
-          key: 'p1:2d',
+          key: 'p1:2d:overview',
           title: '项目一 · 2D',
           component: { name: 'WorkspaceToolFrame' },
           icon: 'design',
           props: {
             target: '2d',
+            sceneId: 'overview',
             project: { id: 'p1', name: '项目一', tenantId: 't1' },
             url: 'https://must-not-persist.example.test',
           },
         },
       ],
-      activeTab: 'p1:2d',
+      activeTab: 'p1:2d:overview',
     })
 
     expect(JSON.stringify(savedState)).not.toContain('must-not-persist')
@@ -91,13 +92,14 @@ describe('dashboardTabState', () => {
       workspaceToolComponent: { name: 'WorkspaceToolFrame' },
     })
     expect(restored).toMatchObject({
-      activeTab: 'p1:2d',
+      activeTab: 'p1:2d:overview',
       tabs: [
         {
-          key: 'p1:2d',
+          key: 'p1:2d:overview',
           title: '项目一 · 2D',
           props: {
             target: '2d',
+            sceneId: 'overview',
             project: { id: 'p1', name: '项目一', tenantId: 't1' },
           },
         },

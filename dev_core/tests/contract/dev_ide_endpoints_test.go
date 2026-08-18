@@ -25,8 +25,8 @@ func TestDevIDEEndpointsMatchOpenAPI(t *testing.T) {
 	if !reflect.DeepEqual(frontendKeys, contractKeys) {
 		t.Fatalf("dev_ide 与 OpenAPI 接口不一致\ndev_ide 独有: %v\nOpenAPI 独有: %v", difference(frontendKeys, contractKeys), difference(contractKeys, frontendKeys))
 	}
-	if len(contract) != 74 {
-		t.Fatalf("OpenAPI 操作数量错误: got %d, want 74", len(contract))
+	if len(contract) != 75 {
+		t.Fatalf("OpenAPI 操作数量错误: got %d, want 75", len(contract))
 	}
 }
 

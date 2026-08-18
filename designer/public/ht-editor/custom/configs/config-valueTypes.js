@@ -13,7 +13,6 @@
         };
     };
     window.hteditor_config.valueTypes = {
-        '测点': createPointsValueType(),
         AlarmSeverity: {
             type: 'enum',
             values: [500, 400, 300, 200, 100, 0],

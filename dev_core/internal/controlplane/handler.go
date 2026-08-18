@@ -8,30 +8,26 @@ import (
 	"github.com/indu-forge/dev_core/internal/codeworkspace"
 	"github.com/indu-forge/dev_core/internal/contextpack"
 	"github.com/indu-forge/dev_core/internal/deployment"
-	"github.com/indu-forge/dev_core/internal/designworkspace"
 	"github.com/indu-forge/dev_core/internal/node"
 	platformapi "github.com/indu-forge/dev_core/internal/platform/api"
 	"github.com/indu-forge/dev_core/internal/project"
 	"github.com/indu-forge/dev_core/internal/runtimeaccess"
-	"github.com/indu-forge/dev_core/internal/scenecontract"
 	"github.com/indu-forge/dev_core/internal/tenant"
 	"github.com/indu-forge/dev_core/internal/user"
 )
 
 type Handler struct {
 	platformapi.Unimplemented
-	auth            *auth.Handler
-	tenant          *tenant.Handler
-	user            *user.Handler
-	project         *project.Handler
-	codeWorkspace   *codeworkspace.Handler
-	runtimeAccess   *runtimeaccess.Handler
-	node            *node.Handler
-	deployment      *deployment.Handler
-	designWorkspace *designworkspace.Handler
-	sceneContract   *scenecontract.Handler
-	contextPack     *contextpack.Handler
-	auditLog        *auditlog.Handler
+	auth          *auth.Handler
+	tenant        *tenant.Handler
+	user          *user.Handler
+	project       *project.Handler
+	codeWorkspace *codeworkspace.Handler
+	runtimeAccess *runtimeaccess.Handler
+	node          *node.Handler
+	deployment    *deployment.Handler
+	contextPack   *contextpack.Handler
+	auditLog      *auditlog.Handler
 }
 
 func (h *Handler) SetUserHandler(handler *user.Handler) {
@@ -51,14 +47,6 @@ func (h *Handler) SetRuntimeAccessHandler(handler *runtimeaccess.Handler) {
 func (h *Handler) SetNodeHandler(handler *node.Handler) { h.node = handler }
 
 func (h *Handler) SetDeploymentHandler(handler *deployment.Handler) { h.deployment = handler }
-
-func (h *Handler) SetDesignWorkspaceHandler(handler *designworkspace.Handler) {
-	h.designWorkspace = handler
-}
-
-func (h *Handler) SetSceneContractHandler(handler *scenecontract.Handler) {
-	h.sceneContract = handler
-}
 
 func (h *Handler) SetContextPackHandler(handler *contextpack.Handler) { h.contextPack = handler }
 
@@ -189,28 +177,6 @@ func (h *Handler) ReplaceProjectTags(w http.ResponseWriter, r *http.Request, pro
 	h.project.ReplaceProjectTags(w, r, projectID)
 }
 
-func (h *Handler) ExecuteDesignFileAction(w http.ResponseWriter, r *http.Request, projectID string) {
-	h.designWorkspace.ExecuteDesignFileAction(w, r, projectID)
-}
-func (h *Handler) ExportDesignFiles(w http.ResponseWriter, r *http.Request, projectID string) {
-	h.designWorkspace.ExportDesignFiles(w, r, projectID)
-}
-func (h *Handler) GetDesignFileContent(w http.ResponseWriter, r *http.Request, projectID string, params platformapi.GetDesignFileContentParams) {
-	h.designWorkspace.GetDesignFileContent(w, r, projectID, params)
-}
-
-func (h *Handler) ListSceneContracts(w http.ResponseWriter, r *http.Request, projectID string) {
-	h.sceneContract.ListSceneContracts(w, r, projectID)
-}
-func (h *Handler) DeleteSceneContract(w http.ResponseWriter, r *http.Request, projectID string, kind platformapi.DeleteSceneContractParamsKind, sceneID string) {
-	h.sceneContract.DeleteSceneContract(w, r, projectID, string(kind), sceneID)
-}
-func (h *Handler) GetSceneContract(w http.ResponseWriter, r *http.Request, projectID string, kind platformapi.GetSceneContractParamsKind, sceneID string) {
-	h.sceneContract.GetSceneContract(w, r, projectID, string(kind), sceneID)
-}
-func (h *Handler) PutSceneContract(w http.ResponseWriter, r *http.Request, projectID string, kind platformapi.PutSceneContractParamsKind, sceneID string) {
-	h.sceneContract.PutSceneContract(w, r, projectID, string(kind), sceneID)
-}
 func (h *Handler) RefreshWorkspaceContext(w http.ResponseWriter, r *http.Request, projectID string) {
 	h.contextPack.RefreshWorkspaceContext(w, r, projectID)
 }

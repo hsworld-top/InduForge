@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath, URL } from 'node:url'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig, loadEnv } from 'vite'
+import { htProductionPolicy } from './scripts/ht-editor/production-policy.mjs'
 
 const require = createRequire(import.meta.url)
 const Icons = require('unplugin-icons/vite').default
@@ -29,6 +30,7 @@ export default defineConfig(({ mode }) => {
         compiler: 'vue3',
         defaultStyle: 'display: inline-block; vertical-align: middle;',
       }),
+      htProductionPolicy(rootDir),
     ],
     resolve: {
       alias: {

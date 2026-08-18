@@ -11,6 +11,7 @@ interface MicroAppProps {
 
 interface WorkspaceToolProps {
   target: '2d' | '3d'
+  sceneId: string
   project: Record<string, any> & { id: unknown; projectId?: unknown }
 }
 
@@ -124,13 +125,20 @@ const normalizeMicroAppProps = (props: unknown): MicroAppProps | null => {
  * 工具标签只持久化工程身份与目标类型，受控访问 URL 必须在恢复后重新获取。
  */
 const normalizeWorkspaceToolProps = (props: unknown): WorkspaceToolProps | null => {
-  if (!isPlainObject(props) || !['2d', '3d'].includes(String(props.target))) return null
+  if (
+    !isPlainObject(props) ||
+    !['2d', '3d'].includes(String(props.target)) ||
+    typeof props.sceneId !== 'string' ||
+    !props.sceneId.trim()
+  )
+    return null
   const project = isPlainObject(props.project) ? { ...props.project } : null
   const projectId = project?.id ?? project?.projectId ?? null
   if (!project || !projectId) return null
   project.id = projectId
   return {
     target: props.target as WorkspaceToolProps['target'],
+    sceneId: props.sceneId.trim(),
     project: project as WorkspaceToolProps['project'],
   }
 }

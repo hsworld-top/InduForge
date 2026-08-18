@@ -1,6 +1,26 @@
 (function() {
 
     window.hteditor_config.onEditorCreated = function(editor, params) {
+        // 平台场景是唯一作品边界，固定入口只用于内部加载，不向用户暴露 HT 图纸管理。
+        if (editor.displaysTab && editor.displaysTab.setVisible) {
+            editor.displaysTab.setVisible(false);
+        }
+        if (editor.mainMenu && editor.mainMenu.setItems) {
+            editor.mainMenu.setItems([]);
+        }
+        if (editor.mainToolbar && editor.mainToolbar.setItemVisible) {
+            editor.mainToolbar.setItemVisible('menu', false);
+        }
+        [editor.displays && editor.displays.tree,
+         editor.displays && editor.displays.list,
+         editor.displays && editor.displays.accordion].forEach(function(view) {
+            if (view && view.menu && view.menu.setItems) {
+                view.menu.setItems([]);
+            }
+        });
+        if (window.InduForgeAssets) {
+            window.InduForgeAssets.mount(editor, '2d');
+        }
         // editor.leftTopTabView.select(editor.assetsTab);
         // editor.displays.list.menu.setItemVisible('rename', false);
         // editor.symbols.list.menu.setItemVisible('rename', false);
@@ -55,9 +75,6 @@
     };
 
 })();
-
-
-
 
 
 

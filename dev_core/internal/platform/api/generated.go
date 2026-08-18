@@ -24,45 +24,6 @@ const (
 	BearerAuthScopes = "bearerAuth.Scopes"
 )
 
-// Defines values for DesignFileActionRequestCommand.
-const (
-	Explore DesignFileActionRequestCommand = "explore"
-	Import  DesignFileActionRequestCommand = "import"
-	Locate  DesignFileActionRequestCommand = "locate"
-	Mkdir   DesignFileActionRequestCommand = "mkdir"
-	Paste   DesignFileActionRequestCommand = "paste"
-	Remove  DesignFileActionRequestCommand = "remove"
-	Rename  DesignFileActionRequestCommand = "rename"
-	Source  DesignFileActionRequestCommand = "source"
-	Upload  DesignFileActionRequestCommand = "upload"
-)
-
-// Valid indicates whether the value is a known member of the DesignFileActionRequestCommand enum.
-func (e DesignFileActionRequestCommand) Valid() bool {
-	switch e {
-	case Explore:
-		return true
-	case Import:
-		return true
-	case Locate:
-		return true
-	case Mkdir:
-		return true
-	case Paste:
-		return true
-	case Remove:
-		return true
-	case Rename:
-		return true
-	case Source:
-		return true
-	case Upload:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for RuntimeUserStatusRequestStatus.
 const (
 	Active   RuntimeUserStatusRequestStatus = "active"
@@ -81,54 +42,378 @@ func (e RuntimeUserStatusRequestStatus) Valid() bool {
 	}
 }
 
-// Defines values for DeleteSceneContractParamsKind.
+// Defines values for SceneAssetActionRequestAction.
 const (
-	DeleteSceneContractParamsKindN2d DeleteSceneContractParamsKind = "2d"
-	DeleteSceneContractParamsKindN3d DeleteSceneContractParamsKind = "3d"
+	Attach SceneAssetActionRequestAction = "attach"
+	Detach SceneAssetActionRequestAction = "detach"
+	Update SceneAssetActionRequestAction = "update"
 )
 
-// Valid indicates whether the value is a known member of the DeleteSceneContractParamsKind enum.
-func (e DeleteSceneContractParamsKind) Valid() bool {
+// Valid indicates whether the value is a known member of the SceneAssetActionRequestAction enum.
+func (e SceneAssetActionRequestAction) Valid() bool {
 	switch e {
-	case DeleteSceneContractParamsKindN2d:
+	case Attach:
 		return true
-	case DeleteSceneContractParamsKindN3d:
+	case Detach:
+		return true
+	case Update:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for GetSceneContractParamsKind.
+// Defines values for SceneCreateRequestKind.
 const (
-	GetSceneContractParamsKindN2d GetSceneContractParamsKind = "2d"
-	GetSceneContractParamsKindN3d GetSceneContractParamsKind = "3d"
+	SceneCreateRequestKindN2d SceneCreateRequestKind = "2d"
+	SceneCreateRequestKindN3d SceneCreateRequestKind = "3d"
 )
 
-// Valid indicates whether the value is a known member of the GetSceneContractParamsKind enum.
-func (e GetSceneContractParamsKind) Valid() bool {
+// Valid indicates whether the value is a known member of the SceneCreateRequestKind enum.
+func (e SceneCreateRequestKind) Valid() bool {
 	switch e {
-	case GetSceneContractParamsKindN2d:
+	case SceneCreateRequestKindN2d:
 		return true
-	case GetSceneContractParamsKindN3d:
+	case SceneCreateRequestKindN3d:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for PutSceneContractParamsKind.
+// Defines values for SceneProviderRequestProvider.
 const (
-	N2d PutSceneContractParamsKind = "2d"
-	N3d PutSceneContractParamsKind = "3d"
+	Induforge SceneProviderRequestProvider = "induforge"
 )
 
-// Valid indicates whether the value is a known member of the PutSceneContractParamsKind enum.
-func (e PutSceneContractParamsKind) Valid() bool {
+// Valid indicates whether the value is a known member of the SceneProviderRequestProvider enum.
+func (e SceneProviderRequestProvider) Valid() bool {
 	switch e {
-	case N2d:
+	case Induforge:
 		return true
-	case N3d:
+	default:
+		return false
+	}
+}
+
+// Defines values for AssetType.
+const (
+	AssetTypeComponent AssetType = "component"
+	AssetTypeFont      AssetType = "font"
+	AssetTypeImage     AssetType = "image"
+	AssetTypeMaterial  AssetType = "material"
+	AssetTypeModel     AssetType = "model"
+	AssetTypeSymbol    AssetType = "symbol"
+)
+
+// Valid indicates whether the value is a known member of the AssetType enum.
+func (e AssetType) Valid() bool {
+	switch e {
+	case AssetTypeComponent:
+		return true
+	case AssetTypeFont:
+		return true
+	case AssetTypeImage:
+		return true
+	case AssetTypeMaterial:
+		return true
+	case AssetTypeModel:
+		return true
+	case AssetTypeSymbol:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SceneKind.
+const (
+	SceneKindN2d SceneKind = "2d"
+	SceneKindN3d SceneKind = "3d"
+)
+
+// Valid indicates whether the value is a known member of the SceneKind enum.
+func (e SceneKind) Valid() bool {
+	switch e {
+	case SceneKindN2d:
+		return true
+	case SceneKindN3d:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListSceneAssetsParamsType.
+const (
+	ListSceneAssetsParamsTypeComponent ListSceneAssetsParamsType = "component"
+	ListSceneAssetsParamsTypeFont      ListSceneAssetsParamsType = "font"
+	ListSceneAssetsParamsTypeImage     ListSceneAssetsParamsType = "image"
+	ListSceneAssetsParamsTypeMaterial  ListSceneAssetsParamsType = "material"
+	ListSceneAssetsParamsTypeModel     ListSceneAssetsParamsType = "model"
+	ListSceneAssetsParamsTypeSymbol    ListSceneAssetsParamsType = "symbol"
+)
+
+// Valid indicates whether the value is a known member of the ListSceneAssetsParamsType enum.
+func (e ListSceneAssetsParamsType) Valid() bool {
+	switch e {
+	case ListSceneAssetsParamsTypeComponent:
+		return true
+	case ListSceneAssetsParamsTypeFont:
+		return true
+	case ListSceneAssetsParamsTypeImage:
+		return true
+	case ListSceneAssetsParamsTypeMaterial:
+		return true
+	case ListSceneAssetsParamsTypeModel:
+		return true
+	case ListSceneAssetsParamsTypeSymbol:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListSceneAssetsParamsKind.
+const (
+	ListSceneAssetsParamsKindN2d ListSceneAssetsParamsKind = "2d"
+	ListSceneAssetsParamsKindN3d ListSceneAssetsParamsKind = "3d"
+)
+
+// Valid indicates whether the value is a known member of the ListSceneAssetsParamsKind enum.
+func (e ListSceneAssetsParamsKind) Valid() bool {
+	switch e {
+	case ListSceneAssetsParamsKindN2d:
+		return true
+	case ListSceneAssetsParamsKindN3d:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListSceneAssetsParamsSort.
+const (
+	ListSceneAssetsParamsSortCreatedAt ListSceneAssetsParamsSort = "createdAt"
+	ListSceneAssetsParamsSortName      ListSceneAssetsParamsSort = "name"
+	ListSceneAssetsParamsSortType      ListSceneAssetsParamsSort = "type"
+	ListSceneAssetsParamsSortUpdatedAt ListSceneAssetsParamsSort = "updatedAt"
+)
+
+// Valid indicates whether the value is a known member of the ListSceneAssetsParamsSort enum.
+func (e ListSceneAssetsParamsSort) Valid() bool {
+	switch e {
+	case ListSceneAssetsParamsSortCreatedAt:
+		return true
+	case ListSceneAssetsParamsSortName:
+		return true
+	case ListSceneAssetsParamsSortType:
+		return true
+	case ListSceneAssetsParamsSortUpdatedAt:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListSceneAssetsParamsOrder.
+const (
+	ListSceneAssetsParamsOrderAsc  ListSceneAssetsParamsOrder = "asc"
+	ListSceneAssetsParamsOrderDesc ListSceneAssetsParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListSceneAssetsParamsOrder enum.
+func (e ListSceneAssetsParamsOrder) Valid() bool {
+	switch e {
+	case ListSceneAssetsParamsOrderAsc:
+		return true
+	case ListSceneAssetsParamsOrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ImportSceneAssetParamsType.
+const (
+	ImportSceneAssetParamsTypeComponent ImportSceneAssetParamsType = "component"
+	ImportSceneAssetParamsTypeFont      ImportSceneAssetParamsType = "font"
+	ImportSceneAssetParamsTypeImage     ImportSceneAssetParamsType = "image"
+	ImportSceneAssetParamsTypeMaterial  ImportSceneAssetParamsType = "material"
+	ImportSceneAssetParamsTypeModel     ImportSceneAssetParamsType = "model"
+	ImportSceneAssetParamsTypeSymbol    ImportSceneAssetParamsType = "symbol"
+)
+
+// Valid indicates whether the value is a known member of the ImportSceneAssetParamsType enum.
+func (e ImportSceneAssetParamsType) Valid() bool {
+	switch e {
+	case ImportSceneAssetParamsTypeComponent:
+		return true
+	case ImportSceneAssetParamsTypeFont:
+		return true
+	case ImportSceneAssetParamsTypeImage:
+		return true
+	case ImportSceneAssetParamsTypeMaterial:
+		return true
+	case ImportSceneAssetParamsTypeModel:
+		return true
+	case ImportSceneAssetParamsTypeSymbol:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListScenesParamsKind.
+const (
+	ListScenesParamsKindN2d ListScenesParamsKind = "2d"
+	ListScenesParamsKindN3d ListScenesParamsKind = "3d"
+)
+
+// Valid indicates whether the value is a known member of the ListScenesParamsKind enum.
+func (e ListScenesParamsKind) Valid() bool {
+	switch e {
+	case ListScenesParamsKindN2d:
+		return true
+	case ListScenesParamsKindN3d:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CommitSceneParamsKind.
+const (
+	CommitSceneParamsKindN2d CommitSceneParamsKind = "2d"
+	CommitSceneParamsKindN3d CommitSceneParamsKind = "3d"
+)
+
+// Valid indicates whether the value is a known member of the CommitSceneParamsKind enum.
+func (e CommitSceneParamsKind) Valid() bool {
+	switch e {
+	case CommitSceneParamsKindN2d:
+		return true
+	case CommitSceneParamsKindN3d:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateSceneEditorSessionParamsKind.
+const (
+	CreateSceneEditorSessionParamsKindN2d CreateSceneEditorSessionParamsKind = "2d"
+	CreateSceneEditorSessionParamsKindN3d CreateSceneEditorSessionParamsKind = "3d"
+)
+
+// Valid indicates whether the value is a known member of the CreateSceneEditorSessionParamsKind enum.
+func (e CreateSceneEditorSessionParamsKind) Valid() bool {
+	switch e {
+	case CreateSceneEditorSessionParamsKindN2d:
+		return true
+	case CreateSceneEditorSessionParamsKindN3d:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListSceneEditorAssetsParamsType.
+const (
+	ListSceneEditorAssetsParamsTypeComponent ListSceneEditorAssetsParamsType = "component"
+	ListSceneEditorAssetsParamsTypeFont      ListSceneEditorAssetsParamsType = "font"
+	ListSceneEditorAssetsParamsTypeImage     ListSceneEditorAssetsParamsType = "image"
+	ListSceneEditorAssetsParamsTypeMaterial  ListSceneEditorAssetsParamsType = "material"
+	ListSceneEditorAssetsParamsTypeModel     ListSceneEditorAssetsParamsType = "model"
+	ListSceneEditorAssetsParamsTypeSymbol    ListSceneEditorAssetsParamsType = "symbol"
+)
+
+// Valid indicates whether the value is a known member of the ListSceneEditorAssetsParamsType enum.
+func (e ListSceneEditorAssetsParamsType) Valid() bool {
+	switch e {
+	case ListSceneEditorAssetsParamsTypeComponent:
+		return true
+	case ListSceneEditorAssetsParamsTypeFont:
+		return true
+	case ListSceneEditorAssetsParamsTypeImage:
+		return true
+	case ListSceneEditorAssetsParamsTypeMaterial:
+		return true
+	case ListSceneEditorAssetsParamsTypeModel:
+		return true
+	case ListSceneEditorAssetsParamsTypeSymbol:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListSceneEditorAssetsParamsSort.
+const (
+	ListSceneEditorAssetsParamsSortCreatedAt ListSceneEditorAssetsParamsSort = "createdAt"
+	ListSceneEditorAssetsParamsSortName      ListSceneEditorAssetsParamsSort = "name"
+	ListSceneEditorAssetsParamsSortType      ListSceneEditorAssetsParamsSort = "type"
+	ListSceneEditorAssetsParamsSortUpdatedAt ListSceneEditorAssetsParamsSort = "updatedAt"
+)
+
+// Valid indicates whether the value is a known member of the ListSceneEditorAssetsParamsSort enum.
+func (e ListSceneEditorAssetsParamsSort) Valid() bool {
+	switch e {
+	case ListSceneEditorAssetsParamsSortCreatedAt:
+		return true
+	case ListSceneEditorAssetsParamsSortName:
+		return true
+	case ListSceneEditorAssetsParamsSortType:
+		return true
+	case ListSceneEditorAssetsParamsSortUpdatedAt:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListSceneEditorAssetsParamsOrder.
+const (
+	ListSceneEditorAssetsParamsOrderAsc  ListSceneEditorAssetsParamsOrder = "asc"
+	ListSceneEditorAssetsParamsOrderDesc ListSceneEditorAssetsParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListSceneEditorAssetsParamsOrder enum.
+func (e ListSceneEditorAssetsParamsOrder) Valid() bool {
+	switch e {
+	case ListSceneEditorAssetsParamsOrderAsc:
+		return true
+	case ListSceneEditorAssetsParamsOrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ImportSceneEditorAssetParamsType.
+const (
+	Component ImportSceneEditorAssetParamsType = "component"
+	Font      ImportSceneEditorAssetParamsType = "font"
+	Image     ImportSceneEditorAssetParamsType = "image"
+	Material  ImportSceneEditorAssetParamsType = "material"
+	Model     ImportSceneEditorAssetParamsType = "model"
+	Symbol    ImportSceneEditorAssetParamsType = "symbol"
+)
+
+// Valid indicates whether the value is a known member of the ImportSceneEditorAssetParamsType enum.
+func (e ImportSceneEditorAssetParamsType) Valid() bool {
+	switch e {
+	case Component:
+		return true
+	case Font:
+		return true
+	case Image:
+		return true
+	case Material:
+		return true
+	case Model:
+		return true
+	case Symbol:
 		return true
 	default:
 		return false
@@ -153,20 +438,6 @@ type ChangePasswordRequest struct {
 type DeployRequest struct {
 	NodeIds       []openapi_types.UUID    `json:"nodeIds"`
 	RuntimeConfig *map[string]interface{} `json:"runtimeConfig,omitempty"`
-}
-
-// DesignFileActionRequest defines model for DesignFileActionRequest.
-type DesignFileActionRequest struct {
-	Command DesignFileActionRequestCommand `json:"command"`
-	Data    interface{}                    `json:"data"`
-}
-
-// DesignFileActionRequestCommand defines model for DesignFileActionRequest.Command.
-type DesignFileActionRequestCommand string
-
-// DesignFileExportRequest defines model for DesignFileExportRequest.
-type DesignFileExportRequest struct {
-	Paths []string `json:"paths"`
 }
 
 // LoginRequest defines model for LoginRequest.
@@ -196,7 +467,6 @@ type NoteRequest struct {
 
 // ProjectCreateRequest defines model for ProjectCreateRequest.
 type ProjectCreateRequest struct {
-	Code        *string `json:"code,omitempty"`
 	Description *string `json:"description,omitempty"`
 	Name        string  `json:"name"`
 }
@@ -217,7 +487,10 @@ type ProjectOperationRequest struct {
 }
 
 // ProjectUpdateRequest defines model for ProjectUpdateRequest.
-type ProjectUpdateRequest = ProjectCreateRequest
+type ProjectUpdateRequest struct {
+	Description *string `json:"description,omitempty"`
+	Name        *string `json:"name,omitempty"`
+}
 
 // PublishVersionRequest defines model for PublishVersionRequest.
 type PublishVersionRequest struct {
@@ -274,6 +547,51 @@ type RuntimeUserStatusRequest struct {
 // RuntimeUserStatusRequestStatus defines model for RuntimeUserStatusRequest.Status.
 type RuntimeUserStatusRequestStatus string
 
+// SceneAssetActionRequest defines model for SceneAssetActionRequest.
+type SceneAssetActionRequest struct {
+	Action           SceneAssetActionRequestAction `json:"action"`
+	AssetId          openapi_types.UUID            `json:"assetId"`
+	BaseDraftVersion int64                         `json:"baseDraftVersion"`
+}
+
+// SceneAssetActionRequestAction defines model for SceneAssetActionRequest.Action.
+type SceneAssetActionRequestAction string
+
+// SceneAssetUpdateRequest defines model for SceneAssetUpdateRequest.
+type SceneAssetUpdateRequest struct {
+	Name string `json:"name"`
+}
+
+// SceneCommitRequest defines model for SceneCommitRequest.
+type SceneCommitRequest struct {
+	BaseDraftVersion int64 `json:"baseDraftVersion"`
+}
+
+// SceneCreateRequest defines model for SceneCreateRequest.
+type SceneCreateRequest struct {
+	Kind           SceneCreateRequestKind  `json:"kind"`
+	Name           string                  `json:"name"`
+	PublicContract *map[string]interface{} `json:"publicContract,omitempty"`
+	SceneId        string                  `json:"sceneId"`
+}
+
+// SceneCreateRequestKind defines model for SceneCreateRequest.Kind.
+type SceneCreateRequestKind string
+
+// SceneProviderRequest defines model for SceneProviderRequest.
+type SceneProviderRequest struct {
+	Provider SceneProviderRequestProvider `json:"provider"`
+}
+
+// SceneProviderRequestProvider defines model for SceneProviderRequest.Provider.
+type SceneProviderRequestProvider string
+
+// SceneUpdateRequest defines model for SceneUpdateRequest.
+type SceneUpdateRequest struct {
+	Name           *string                 `json:"name,omitempty"`
+	PublicContract *map[string]interface{} `json:"publicContract,omitempty"`
+}
+
 // SetProjectGroupRequest defines model for SetProjectGroupRequest.
 type SetProjectGroupRequest struct {
 	GroupId *openapi_types.UUID `json:"groupId,omitempty"`
@@ -307,28 +625,207 @@ type UserUpdateRequest struct {
 	Status   *string `json:"status,omitempty"`
 }
 
+// AssetId defines model for AssetId.
+type AssetId = openapi_types.UUID
+
+// AssetType defines model for AssetType.
+type AssetType string
+
+// Limit defines model for Limit.
+type Limit = int
+
+// Page defines model for Page.
+type Page = int
+
+// ProjectId defines model for ProjectId.
+type ProjectId = openapi_types.UUID
+
+// SceneId defines model for SceneId.
+type SceneId = string
+
+// SceneKind defines model for SceneKind.
+type SceneKind string
+
+// SessionId defines model for SessionId.
+type SessionId = openapi_types.UUID
+
 // GetAuthCaptchaParams defines parameters for GetAuthCaptcha.
 type GetAuthCaptchaParams struct {
 	Username   string  `form:"username" json:"username"`
 	TenantCode *string `form:"tenantCode,omitempty" json:"tenantCode,omitempty"`
 }
 
-// GetDesignFileContentParams defines parameters for GetDesignFileContent.
-type GetDesignFileContentParams struct {
+// ListSceneAssetsParams defines parameters for ListSceneAssets.
+type ListSceneAssetsParams struct {
+	Type     *ListSceneAssetsParamsType  `form:"type,omitempty" json:"type,omitempty"`
+	Kind     *ListSceneAssetsParamsKind  `form:"kind,omitempty" json:"kind,omitempty"`
+	Keyword  *string                     `form:"keyword,omitempty" json:"keyword,omitempty"`
+	Sort     *ListSceneAssetsParamsSort  `form:"sort,omitempty" json:"sort,omitempty"`
+	Order    *ListSceneAssetsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+	Archived *bool                       `form:"archived,omitempty" json:"archived,omitempty"`
+	Page     *Page                       `form:"page,omitempty" json:"page,omitempty"`
+	Limit    *Limit                      `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListSceneAssetsParamsType defines parameters for ListSceneAssets.
+type ListSceneAssetsParamsType string
+
+// ListSceneAssetsParamsKind defines parameters for ListSceneAssets.
+type ListSceneAssetsParamsKind string
+
+// ListSceneAssetsParamsSort defines parameters for ListSceneAssets.
+type ListSceneAssetsParamsSort string
+
+// ListSceneAssetsParamsOrder defines parameters for ListSceneAssets.
+type ListSceneAssetsParamsOrder string
+
+// ImportSceneAssetParams defines parameters for ImportSceneAsset.
+type ImportSceneAssetParams struct {
+	Name     string                     `form:"name" json:"name"`
+	Type     ImportSceneAssetParamsType `form:"type" json:"type"`
+	Filename string                     `form:"filename" json:"filename"`
+}
+
+// ImportSceneAssetParamsType defines parameters for ImportSceneAsset.
+type ImportSceneAssetParamsType string
+
+// ReplaceSceneAssetParams defines parameters for ReplaceSceneAsset.
+type ReplaceSceneAssetParams struct {
+	Filename string `form:"filename" json:"filename"`
+}
+
+// ListScenesParams defines parameters for ListScenes.
+type ListScenesParams struct {
+	Kind    *ListScenesParamsKind `form:"kind,omitempty" json:"kind,omitempty"`
+	Keyword *string               `form:"keyword,omitempty" json:"keyword,omitempty"`
+	Page    *Page                 `form:"page,omitempty" json:"page,omitempty"`
+	Limit   *Limit                `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListScenesParamsKind defines parameters for ListScenes.
+type ListScenesParamsKind string
+
+// DeleteSceneParams defines parameters for DeleteScene.
+type DeleteSceneParams struct {
+	Kind SceneKind `form:"kind" json:"kind"`
+}
+
+// GetSceneParams defines parameters for GetScene.
+type GetSceneParams struct {
+	Kind SceneKind `form:"kind" json:"kind"`
+}
+
+// UpdateSceneParams defines parameters for UpdateScene.
+type UpdateSceneParams struct {
+	Kind SceneKind `form:"kind" json:"kind"`
+}
+
+// CommitSceneParams defines parameters for CommitScene.
+type CommitSceneParams struct {
+	Kind CommitSceneParamsKind `form:"kind" json:"kind"`
+}
+
+// CommitSceneParamsKind defines parameters for CommitScene.
+type CommitSceneParamsKind string
+
+// CreateSceneEditorSessionParams defines parameters for CreateSceneEditorSession.
+type CreateSceneEditorSessionParams struct {
+	Kind CreateSceneEditorSessionParamsKind `form:"kind" json:"kind"`
+}
+
+// CreateSceneEditorSessionParamsKind defines parameters for CreateSceneEditorSession.
+type CreateSceneEditorSessionParamsKind string
+
+// ListSceneAssetEditorFilesParams defines parameters for ListSceneAssetEditorFiles.
+type ListSceneAssetEditorFilesParams struct {
+	Directory *string `form:"directory,omitempty" json:"directory,omitempty"`
+	Keyword   *string `form:"keyword,omitempty" json:"keyword,omitempty"`
+	Page      *Page   `form:"page,omitempty" json:"page,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetSceneAssetEditorFileContentParams defines parameters for GetSceneAssetEditorFileContent.
+type GetSceneAssetEditorFileContentParams struct {
 	Path string `form:"path" json:"path"`
 }
 
-// DeleteSceneContractParamsKind defines parameters for DeleteSceneContract.
-type DeleteSceneContractParamsKind string
+// PutSceneAssetEditorFileContentParams defines parameters for PutSceneAssetEditorFileContent.
+type PutSceneAssetEditorFileContentParams struct {
+	BaseDraftVersion int64  `form:"baseDraftVersion" json:"baseDraftVersion"`
+	Path             string `form:"path" json:"path"`
+}
 
-// GetSceneContractParamsKind defines parameters for GetSceneContract.
-type GetSceneContractParamsKind string
+// ListSceneEditorAssetsParams defines parameters for ListSceneEditorAssets.
+type ListSceneEditorAssetsParams struct {
+	Type    *ListSceneEditorAssetsParamsType  `form:"type,omitempty" json:"type,omitempty"`
+	Keyword *string                           `form:"keyword,omitempty" json:"keyword,omitempty"`
+	Sort    *ListSceneEditorAssetsParamsSort  `form:"sort,omitempty" json:"sort,omitempty"`
+	Order   *ListSceneEditorAssetsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+	Page    *Page                             `form:"page,omitempty" json:"page,omitempty"`
+	Limit   *Limit                            `form:"limit,omitempty" json:"limit,omitempty"`
+}
 
-// PutSceneContractJSONBody defines parameters for PutSceneContract.
-type PutSceneContractJSONBody = map[string]interface{}
+// ListSceneEditorAssetsParamsType defines parameters for ListSceneEditorAssets.
+type ListSceneEditorAssetsParamsType string
 
-// PutSceneContractParamsKind defines parameters for PutSceneContract.
-type PutSceneContractParamsKind string
+// ListSceneEditorAssetsParamsSort defines parameters for ListSceneEditorAssets.
+type ListSceneEditorAssetsParamsSort string
+
+// ListSceneEditorAssetsParamsOrder defines parameters for ListSceneEditorAssets.
+type ListSceneEditorAssetsParamsOrder string
+
+// ImportSceneEditorAssetParams defines parameters for ImportSceneEditorAsset.
+type ImportSceneEditorAssetParams struct {
+	Name     string                           `form:"name" json:"name"`
+	Type     ImportSceneEditorAssetParamsType `form:"type" json:"type"`
+	Filename string                           `form:"filename" json:"filename"`
+}
+
+// ImportSceneEditorAssetParamsType defines parameters for ImportSceneEditorAsset.
+type ImportSceneEditorAssetParamsType string
+
+// ReplaceSceneEditorAssetParams defines parameters for ReplaceSceneEditorAsset.
+type ReplaceSceneEditorAssetParams struct {
+	Filename string `form:"filename" json:"filename"`
+}
+
+// ListSceneEditorDatapointsParams defines parameters for ListSceneEditorDatapoints.
+type ListSceneEditorDatapointsParams struct {
+	Page  *Page  `form:"page,omitempty" json:"page,omitempty"`
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListSceneEditorDependenciesParams defines parameters for ListSceneEditorDependencies.
+type ListSceneEditorDependenciesParams struct {
+	Directory *string `form:"directory,omitempty" json:"directory,omitempty"`
+	Keyword   *string `form:"keyword,omitempty" json:"keyword,omitempty"`
+	Page      *Page   `form:"page,omitempty" json:"page,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListSceneEditorFilesParams defines parameters for ListSceneEditorFiles.
+type ListSceneEditorFilesParams struct {
+	Directory *string `form:"directory,omitempty" json:"directory,omitempty"`
+	Keyword   *string `form:"keyword,omitempty" json:"keyword,omitempty"`
+	Page      *Page   `form:"page,omitempty" json:"page,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetSceneEditorFileContentParams defines parameters for GetSceneEditorFileContent.
+type GetSceneEditorFileContentParams struct {
+	Path string `form:"path" json:"path"`
+}
+
+// PutSceneEditorFileContentParams defines parameters for PutSceneEditorFileContent.
+type PutSceneEditorFileContentParams struct {
+	BaseDraftVersion int64  `form:"baseDraftVersion" json:"baseDraftVersion"`
+	Path             string `form:"path" json:"path"`
+}
+
+// ImportSceneEditorFilesParams defines parameters for ImportSceneEditorFiles.
+type ImportSceneEditorFilesParams struct {
+	BaseDraftVersion int64 `form:"baseDraftVersion" json:"baseDraftVersion"`
+}
 
 // UploadTenantAssetMultipartBody defines parameters for UploadTenantAsset.
 type UploadTenantAssetMultipartBody struct {
@@ -388,12 +885,6 @@ type DeleteProjectJSONRequestBody = ProjectDeleteRequest
 // UpdateProjectJSONRequestBody defines body for UpdateProject for application/json ContentType.
 type UpdateProjectJSONRequestBody = ProjectUpdateRequest
 
-// ExecuteDesignFileActionJSONRequestBody defines body for ExecuteDesignFileAction for application/json ContentType.
-type ExecuteDesignFileActionJSONRequestBody = DesignFileActionRequest
-
-// ExportDesignFilesJSONRequestBody defines body for ExportDesignFiles for application/json ContentType.
-type ExportDesignFilesJSONRequestBody = DesignFileExportRequest
-
 // SetProjectGroupJSONRequestBody defines body for SetProjectGroup for application/json ContentType.
 type SetProjectGroupJSONRequestBody = SetProjectGroupRequest
 
@@ -418,14 +909,35 @@ type ReplaceRuntimeUserRolesJSONRequestBody = ReplaceIDsRequest
 // UpdateRuntimeUserStatusJSONRequestBody defines body for UpdateRuntimeUserStatus for application/json ContentType.
 type UpdateRuntimeUserStatusJSONRequestBody = RuntimeUserStatusRequest
 
-// PutSceneContractJSONRequestBody defines body for PutSceneContract for application/json ContentType.
-type PutSceneContractJSONRequestBody = PutSceneContractJSONBody
+// UpdateSceneAssetJSONRequestBody defines body for UpdateSceneAsset for application/json ContentType.
+type UpdateSceneAssetJSONRequestBody = SceneAssetUpdateRequest
+
+// CreateSceneJSONRequestBody defines body for CreateScene for application/json ContentType.
+type CreateSceneJSONRequestBody = SceneCreateRequest
+
+// UpdateSceneJSONRequestBody defines body for UpdateScene for application/json ContentType.
+type UpdateSceneJSONRequestBody = SceneUpdateRequest
+
+// CommitSceneJSONRequestBody defines body for CommitScene for application/json ContentType.
+type CommitSceneJSONRequestBody = SceneCommitRequest
 
 // ReplaceProjectTagsJSONRequestBody defines body for ReplaceProjectTags for application/json ContentType.
 type ReplaceProjectTagsJSONRequestBody = ReplaceIDsRequest
 
 // PublishProjectVersionJSONRequestBody defines body for PublishProjectVersion for application/json ContentType.
 type PublishProjectVersionJSONRequestBody = PublishVersionRequest
+
+// CommitSceneAssetEditorSessionJSONRequestBody defines body for CommitSceneAssetEditorSession for application/json ContentType.
+type CommitSceneAssetEditorSessionJSONRequestBody = SceneCommitRequest
+
+// ExecuteSceneAssetActionJSONRequestBody defines body for ExecuteSceneAssetAction for application/json ContentType.
+type ExecuteSceneAssetActionJSONRequestBody = SceneAssetActionRequest
+
+// CommitSceneEditorSessionJSONRequestBody defines body for CommitSceneEditorSession for application/json ContentType.
+type CommitSceneEditorSessionJSONRequestBody = SceneCommitRequest
+
+// UpdateSceneProviderJSONRequestBody defines body for UpdateSceneProvider for application/json ContentType.
+type UpdateSceneProviderJSONRequestBody = SceneProviderRequest
 
 // CreateTenantJSONRequestBody defines body for CreateTenant for application/json ContentType.
 type CreateTenantJSONRequestBody = TenantCreateRequest
@@ -453,7 +965,7 @@ type ChangeUserPasswordJSONRequestBody = ChangePasswordRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// 获取登录滑块挑战
+	// 获取登录滑块挑战（拖至最右侧）
 	// (GET /auth/captcha)
 	GetAuthCaptcha(w http.ResponseWriter, r *http.Request, params GetAuthCaptchaParams)
 	// getAuthConfig
@@ -582,15 +1094,6 @@ type ServerInterface interface {
 	// getProjectDeleteImpact
 	// (GET /projects/{projectId}/delete-impact)
 	GetProjectDeleteImpact(w http.ResponseWriter, r *http.Request, projectId string)
-	// 执行 HT 设计文件操作
-	// (POST /projects/{projectId}/design-files/actions)
-	ExecuteDesignFileAction(w http.ResponseWriter, r *http.Request, projectId string)
-	// 读取 HT 设计资源内容
-	// (GET /projects/{projectId}/design-files/content)
-	GetDesignFileContent(w http.ResponseWriter, r *http.Request, projectId string, params GetDesignFileContentParams)
-	// 导出 HT 设计资源归档
-	// (POST /projects/{projectId}/design-files/export)
-	ExportDesignFiles(w http.ResponseWriter, r *http.Request, projectId string)
 	// exportProject
 	// (GET /projects/{projectId}/export)
 	ExportProject(w http.ResponseWriter, r *http.Request, projectId string)
@@ -630,18 +1133,51 @@ type ServerInterface interface {
 	// updateRuntimeUserStatus
 	// (PATCH /projects/{projectId}/runtime-users/{userId}/status)
 	UpdateRuntimeUserStatus(w http.ResponseWriter, r *http.Request, projectId string, userId string)
-	// 查询工程全部 2D 和 3D 场景公开契约
-	// (GET /projects/{projectId}/scene-contracts)
-	ListSceneContracts(w http.ResponseWriter, r *http.Request, projectId string)
-	// 删除场景公开契约并同步工程上下文
-	// (DELETE /projects/{projectId}/scene-contracts/{kind}/{sceneId})
-	DeleteSceneContract(w http.ResponseWriter, r *http.Request, projectId string, kind DeleteSceneContractParamsKind, sceneId string)
-	// 查询单个场景公开契约
-	// (GET /projects/{projectId}/scene-contracts/{kind}/{sceneId})
-	GetSceneContract(w http.ResponseWriter, r *http.Request, projectId string, kind GetSceneContractParamsKind, sceneId string)
-	// 保存场景公开契约并同步工程上下文
-	// (PUT /projects/{projectId}/scene-contracts/{kind}/{sceneId})
-	PutSceneContract(w http.ResponseWriter, r *http.Request, projectId string, kind PutSceneContractParamsKind, sceneId string)
+	// 分页查询工程级场景资源
+	// (GET /projects/{projectId}/scene-assets)
+	ListSceneAssets(w http.ResponseWriter, r *http.Request, projectId ProjectId, params ListSceneAssetsParams)
+	// 上传单文件或 ZIP 并创建资源首个内部代次
+	// (POST /projects/{projectId}/scene-assets/import)
+	ImportSceneAsset(w http.ResponseWriter, r *http.Request, projectId ProjectId, params ImportSceneAssetParams)
+	// 归档资源并从新选择列表隐藏
+	// (DELETE /projects/{projectId}/scene-assets/{assetId})
+	ArchiveSceneAsset(w http.ResponseWriter, r *http.Request, projectId ProjectId, assetId AssetId)
+	// 查询资源详情
+	// (GET /projects/{projectId}/scene-assets/{assetId})
+	GetSceneAsset(w http.ResponseWriter, r *http.Request, projectId ProjectId, assetId AssetId)
+	// 重命名资源
+	// (PUT /projects/{projectId}/scene-assets/{assetId})
+	UpdateSceneAsset(w http.ResponseWriter, r *http.Request, projectId ProjectId, assetId AssetId)
+	// 为 Symbol 或 Component 创建短期编辑会话
+	// (POST /projects/{projectId}/scene-assets/{assetId}/editor-session)
+	CreateSceneAssetEditorSession(w http.ResponseWriter, r *http.Request, projectId ProjectId, assetId AssetId)
+	// 上传替换内容并创建新的内部代次
+	// (POST /projects/{projectId}/scene-assets/{assetId}/replace)
+	ReplaceSceneAsset(w http.ResponseWriter, r *http.Request, projectId ProjectId, assetId AssetId, params ReplaceSceneAssetParams)
+	// 受控读取资源缩略图
+	// (GET /projects/{projectId}/scene-assets/{assetId}/thumbnail)
+	GetSceneAssetThumbnail(w http.ResponseWriter, r *http.Request, projectId ProjectId, assetId AssetId)
+	// 分页查询工程场景
+	// (GET /projects/{projectId}/scenes)
+	ListScenes(w http.ResponseWriter, r *http.Request, projectId ProjectId, params ListScenesParams)
+	// 创建场景记录和初始入口草稿
+	// (POST /projects/{projectId}/scenes)
+	CreateScene(w http.ResponseWriter, r *http.Request, projectId ProjectId)
+	// 墓碑删除场景
+	// (DELETE /projects/{projectId}/scenes/{sceneId})
+	DeleteScene(w http.ResponseWriter, r *http.Request, projectId ProjectId, sceneId SceneId, params DeleteSceneParams)
+	// 查询场景详情和公开契约
+	// (GET /projects/{projectId}/scenes/{sceneId})
+	GetScene(w http.ResponseWriter, r *http.Request, projectId ProjectId, sceneId SceneId, params GetSceneParams)
+	// 修改场景名称或公开契约
+	// (PUT /projects/{projectId}/scenes/{sceneId})
+	UpdateScene(w http.ResponseWriter, r *http.Request, projectId ProjectId, sceneId SceneId, params UpdateSceneParams)
+	// 将指定草稿版本提交为不可变 revision
+	// (POST /projects/{projectId}/scenes/{sceneId}/commit)
+	CommitScene(w http.ResponseWriter, r *http.Request, projectId ProjectId, sceneId SceneId, params CommitSceneParams)
+	// 创建绑定用户和场景的短期编辑会话
+	// (POST /projects/{projectId}/scenes/{sceneId}/editor-session)
+	CreateSceneEditorSession(w http.ResponseWriter, r *http.Request, projectId ProjectId, sceneId SceneId, params CreateSceneEditorSessionParams)
 	// replaceProjectTags
 	// (PUT /projects/{projectId}/tags)
 	ReplaceProjectTags(w http.ResponseWriter, r *http.Request, projectId string)
@@ -657,6 +1193,66 @@ type ServerInterface interface {
 	// listProjectVersions
 	// (GET /publish/{projectId}/versions)
 	ListProjectVersions(w http.ResponseWriter, r *http.Request, projectId string)
+	// 发布资源工作副本为新的内部代次
+	// (POST /scene-asset-editor-sessions/{sessionId}/commit)
+	CommitSceneAssetEditorSession(w http.ResponseWriter, r *http.Request, sessionId SessionId)
+	// 分页读取资源编辑工作副本
+	// (GET /scene-asset-editor-sessions/{sessionId}/files)
+	ListSceneAssetEditorFiles(w http.ResponseWriter, r *http.Request, sessionId SessionId, params ListSceneAssetEditorFilesParams)
+	// 受控读取资源工作副本文件
+	// (GET /scene-asset-editor-sessions/{sessionId}/files/content)
+	GetSceneAssetEditorFileContent(w http.ResponseWriter, r *http.Request, sessionId SessionId, params GetSceneAssetEditorFileContentParams)
+	// 以乐观锁保存资源工作副本 JSON
+	// (PUT /scene-asset-editor-sessions/{sessionId}/files/content)
+	PutSceneAssetEditorFileContent(w http.ResponseWriter, r *http.Request, sessionId SessionId, params PutSceneAssetEditorFileContentParams)
+	// 分页查询与当前场景兼容的资源和绑定状态
+	// (GET /scene-editor-sessions/{sessionId}/assets)
+	ListSceneEditorAssets(w http.ResponseWriter, r *http.Request, sessionId SessionId, params ListSceneEditorAssetsParams)
+	// 挂载、更新或移除当前场景资源绑定
+	// (POST /scene-editor-sessions/{sessionId}/assets/actions)
+	ExecuteSceneAssetAction(w http.ResponseWriter, r *http.Request, sessionId SessionId)
+	// 从场景编辑器上传工程资源
+	// (POST /scene-editor-sessions/{sessionId}/assets/import)
+	ImportSceneEditorAsset(w http.ResponseWriter, r *http.Request, sessionId SessionId, params ImportSceneEditorAssetParams)
+	// 从场景编辑器归档资源
+	// (DELETE /scene-editor-sessions/{sessionId}/assets/{assetId})
+	ArchiveSceneEditorAsset(w http.ResponseWriter, r *http.Request, sessionId SessionId, assetId AssetId)
+	// 从场景编辑器打开 Symbol 或 Component 工作副本
+	// (POST /scene-editor-sessions/{sessionId}/assets/{assetId}/editor-session)
+	CreateSceneEditorAssetEditorSession(w http.ResponseWriter, r *http.Request, sessionId SessionId, assetId AssetId)
+	// 从场景编辑器替换资源内容
+	// (POST /scene-editor-sessions/{sessionId}/assets/{assetId}/replace)
+	ReplaceSceneEditorAsset(w http.ResponseWriter, r *http.Request, sessionId SessionId, assetId AssetId, params ReplaceSceneEditorAssetParams)
+	// 通过绑定场景的编辑会话提交 revision
+	// (POST /scene-editor-sessions/{sessionId}/commit)
+	CommitSceneEditorSession(w http.ResponseWriter, r *http.Request, sessionId SessionId)
+	// 通过控制面代理分页查询数据点
+	// (GET /scene-editor-sessions/{sessionId}/datapoints)
+	ListSceneEditorDatapoints(w http.ResponseWriter, r *http.Request, sessionId SessionId, params ListSceneEditorDatapointsParams)
+	// 分页读取当前场景依赖诊断
+	// (GET /scene-editor-sessions/{sessionId}/dependencies)
+	ListSceneEditorDependencies(w http.ResponseWriter, r *http.Request, sessionId SessionId, params ListSceneEditorDependenciesParams)
+	// 流式导出 ZIP
+	// (POST /scene-editor-sessions/{sessionId}/export)
+	ExportSceneEditorFiles(w http.ResponseWriter, r *http.Request, sessionId SessionId)
+	// 按目录分页查询 Provider 草稿文件
+	// (GET /scene-editor-sessions/{sessionId}/files)
+	ListSceneEditorFiles(w http.ResponseWriter, r *http.Request, sessionId SessionId, params ListSceneEditorFilesParams)
+	// 受控流式读取草稿文件
+	// (GET /scene-editor-sessions/{sessionId}/files/content)
+	GetSceneEditorFileContent(w http.ResponseWriter, r *http.Request, sessionId SessionId, params GetSceneEditorFileContentParams)
+	// 以乐观锁写入草稿文件
+	// (PUT /scene-editor-sessions/{sessionId}/files/content)
+	PutSceneEditorFileContent(w http.ResponseWriter, r *http.Request, sessionId SessionId, params PutSceneEditorFileContentParams)
+	// 流式导入 ZIP
+	// (POST /scene-editor-sessions/{sessionId}/import)
+	ImportSceneEditorFiles(w http.ResponseWriter, r *http.Request, sessionId SessionId, params ImportSceneEditorFilesParams)
+	// 查询平台当前场景 Provider 及运行能力
+	// (GET /scene-provider)
+	GetSceneProvider(w http.ResponseWriter, r *http.Request)
+	// 切换平台场景 Provider（仅平台管理员且场景库为空）
+	// (PUT /scene-provider)
+	UpdateSceneProvider(w http.ResponseWriter, r *http.Request)
 	// listTenants
 	// (GET /tenants)
 	ListTenants(w http.ResponseWriter, r *http.Request)
@@ -717,7 +1313,7 @@ type ServerInterface interface {
 
 type Unimplemented struct{}
 
-// 获取登录滑块挑战
+// 获取登录滑块挑战（拖至最右侧）
 // (GET /auth/captcha)
 func (_ Unimplemented) GetAuthCaptcha(w http.ResponseWriter, r *http.Request, params GetAuthCaptchaParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -975,24 +1571,6 @@ func (_ Unimplemented) GetProjectDeleteImpact(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// 执行 HT 设计文件操作
-// (POST /projects/{projectId}/design-files/actions)
-func (_ Unimplemented) ExecuteDesignFileAction(w http.ResponseWriter, r *http.Request, projectId string) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 读取 HT 设计资源内容
-// (GET /projects/{projectId}/design-files/content)
-func (_ Unimplemented) GetDesignFileContent(w http.ResponseWriter, r *http.Request, projectId string, params GetDesignFileContentParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 导出 HT 设计资源归档
-// (POST /projects/{projectId}/design-files/export)
-func (_ Unimplemented) ExportDesignFiles(w http.ResponseWriter, r *http.Request, projectId string) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
 // exportProject
 // (GET /projects/{projectId}/export)
 func (_ Unimplemented) ExportProject(w http.ResponseWriter, r *http.Request, projectId string) {
@@ -1071,27 +1649,93 @@ func (_ Unimplemented) UpdateRuntimeUserStatus(w http.ResponseWriter, r *http.Re
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// 查询工程全部 2D 和 3D 场景公开契约
-// (GET /projects/{projectId}/scene-contracts)
-func (_ Unimplemented) ListSceneContracts(w http.ResponseWriter, r *http.Request, projectId string) {
+// 分页查询工程级场景资源
+// (GET /projects/{projectId}/scene-assets)
+func (_ Unimplemented) ListSceneAssets(w http.ResponseWriter, r *http.Request, projectId ProjectId, params ListSceneAssetsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// 删除场景公开契约并同步工程上下文
-// (DELETE /projects/{projectId}/scene-contracts/{kind}/{sceneId})
-func (_ Unimplemented) DeleteSceneContract(w http.ResponseWriter, r *http.Request, projectId string, kind DeleteSceneContractParamsKind, sceneId string) {
+// 上传单文件或 ZIP 并创建资源首个内部代次
+// (POST /projects/{projectId}/scene-assets/import)
+func (_ Unimplemented) ImportSceneAsset(w http.ResponseWriter, r *http.Request, projectId ProjectId, params ImportSceneAssetParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// 查询单个场景公开契约
-// (GET /projects/{projectId}/scene-contracts/{kind}/{sceneId})
-func (_ Unimplemented) GetSceneContract(w http.ResponseWriter, r *http.Request, projectId string, kind GetSceneContractParamsKind, sceneId string) {
+// 归档资源并从新选择列表隐藏
+// (DELETE /projects/{projectId}/scene-assets/{assetId})
+func (_ Unimplemented) ArchiveSceneAsset(w http.ResponseWriter, r *http.Request, projectId ProjectId, assetId AssetId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// 保存场景公开契约并同步工程上下文
-// (PUT /projects/{projectId}/scene-contracts/{kind}/{sceneId})
-func (_ Unimplemented) PutSceneContract(w http.ResponseWriter, r *http.Request, projectId string, kind PutSceneContractParamsKind, sceneId string) {
+// 查询资源详情
+// (GET /projects/{projectId}/scene-assets/{assetId})
+func (_ Unimplemented) GetSceneAsset(w http.ResponseWriter, r *http.Request, projectId ProjectId, assetId AssetId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 重命名资源
+// (PUT /projects/{projectId}/scene-assets/{assetId})
+func (_ Unimplemented) UpdateSceneAsset(w http.ResponseWriter, r *http.Request, projectId ProjectId, assetId AssetId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 为 Symbol 或 Component 创建短期编辑会话
+// (POST /projects/{projectId}/scene-assets/{assetId}/editor-session)
+func (_ Unimplemented) CreateSceneAssetEditorSession(w http.ResponseWriter, r *http.Request, projectId ProjectId, assetId AssetId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 上传替换内容并创建新的内部代次
+// (POST /projects/{projectId}/scene-assets/{assetId}/replace)
+func (_ Unimplemented) ReplaceSceneAsset(w http.ResponseWriter, r *http.Request, projectId ProjectId, assetId AssetId, params ReplaceSceneAssetParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 受控读取资源缩略图
+// (GET /projects/{projectId}/scene-assets/{assetId}/thumbnail)
+func (_ Unimplemented) GetSceneAssetThumbnail(w http.ResponseWriter, r *http.Request, projectId ProjectId, assetId AssetId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 分页查询工程场景
+// (GET /projects/{projectId}/scenes)
+func (_ Unimplemented) ListScenes(w http.ResponseWriter, r *http.Request, projectId ProjectId, params ListScenesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 创建场景记录和初始入口草稿
+// (POST /projects/{projectId}/scenes)
+func (_ Unimplemented) CreateScene(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 墓碑删除场景
+// (DELETE /projects/{projectId}/scenes/{sceneId})
+func (_ Unimplemented) DeleteScene(w http.ResponseWriter, r *http.Request, projectId ProjectId, sceneId SceneId, params DeleteSceneParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 查询场景详情和公开契约
+// (GET /projects/{projectId}/scenes/{sceneId})
+func (_ Unimplemented) GetScene(w http.ResponseWriter, r *http.Request, projectId ProjectId, sceneId SceneId, params GetSceneParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 修改场景名称或公开契约
+// (PUT /projects/{projectId}/scenes/{sceneId})
+func (_ Unimplemented) UpdateScene(w http.ResponseWriter, r *http.Request, projectId ProjectId, sceneId SceneId, params UpdateSceneParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 将指定草稿版本提交为不可变 revision
+// (POST /projects/{projectId}/scenes/{sceneId}/commit)
+func (_ Unimplemented) CommitScene(w http.ResponseWriter, r *http.Request, projectId ProjectId, sceneId SceneId, params CommitSceneParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 创建绑定用户和场景的短期编辑会话
+// (POST /projects/{projectId}/scenes/{sceneId}/editor-session)
+func (_ Unimplemented) CreateSceneEditorSession(w http.ResponseWriter, r *http.Request, projectId ProjectId, sceneId SceneId, params CreateSceneEditorSessionParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1122,6 +1766,126 @@ func (_ Unimplemented) PublishProjectVersion(w http.ResponseWriter, r *http.Requ
 // listProjectVersions
 // (GET /publish/{projectId}/versions)
 func (_ Unimplemented) ListProjectVersions(w http.ResponseWriter, r *http.Request, projectId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 发布资源工作副本为新的内部代次
+// (POST /scene-asset-editor-sessions/{sessionId}/commit)
+func (_ Unimplemented) CommitSceneAssetEditorSession(w http.ResponseWriter, r *http.Request, sessionId SessionId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 分页读取资源编辑工作副本
+// (GET /scene-asset-editor-sessions/{sessionId}/files)
+func (_ Unimplemented) ListSceneAssetEditorFiles(w http.ResponseWriter, r *http.Request, sessionId SessionId, params ListSceneAssetEditorFilesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 受控读取资源工作副本文件
+// (GET /scene-asset-editor-sessions/{sessionId}/files/content)
+func (_ Unimplemented) GetSceneAssetEditorFileContent(w http.ResponseWriter, r *http.Request, sessionId SessionId, params GetSceneAssetEditorFileContentParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 以乐观锁保存资源工作副本 JSON
+// (PUT /scene-asset-editor-sessions/{sessionId}/files/content)
+func (_ Unimplemented) PutSceneAssetEditorFileContent(w http.ResponseWriter, r *http.Request, sessionId SessionId, params PutSceneAssetEditorFileContentParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 分页查询与当前场景兼容的资源和绑定状态
+// (GET /scene-editor-sessions/{sessionId}/assets)
+func (_ Unimplemented) ListSceneEditorAssets(w http.ResponseWriter, r *http.Request, sessionId SessionId, params ListSceneEditorAssetsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 挂载、更新或移除当前场景资源绑定
+// (POST /scene-editor-sessions/{sessionId}/assets/actions)
+func (_ Unimplemented) ExecuteSceneAssetAction(w http.ResponseWriter, r *http.Request, sessionId SessionId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 从场景编辑器上传工程资源
+// (POST /scene-editor-sessions/{sessionId}/assets/import)
+func (_ Unimplemented) ImportSceneEditorAsset(w http.ResponseWriter, r *http.Request, sessionId SessionId, params ImportSceneEditorAssetParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 从场景编辑器归档资源
+// (DELETE /scene-editor-sessions/{sessionId}/assets/{assetId})
+func (_ Unimplemented) ArchiveSceneEditorAsset(w http.ResponseWriter, r *http.Request, sessionId SessionId, assetId AssetId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 从场景编辑器打开 Symbol 或 Component 工作副本
+// (POST /scene-editor-sessions/{sessionId}/assets/{assetId}/editor-session)
+func (_ Unimplemented) CreateSceneEditorAssetEditorSession(w http.ResponseWriter, r *http.Request, sessionId SessionId, assetId AssetId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 从场景编辑器替换资源内容
+// (POST /scene-editor-sessions/{sessionId}/assets/{assetId}/replace)
+func (_ Unimplemented) ReplaceSceneEditorAsset(w http.ResponseWriter, r *http.Request, sessionId SessionId, assetId AssetId, params ReplaceSceneEditorAssetParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 通过绑定场景的编辑会话提交 revision
+// (POST /scene-editor-sessions/{sessionId}/commit)
+func (_ Unimplemented) CommitSceneEditorSession(w http.ResponseWriter, r *http.Request, sessionId SessionId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 通过控制面代理分页查询数据点
+// (GET /scene-editor-sessions/{sessionId}/datapoints)
+func (_ Unimplemented) ListSceneEditorDatapoints(w http.ResponseWriter, r *http.Request, sessionId SessionId, params ListSceneEditorDatapointsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 分页读取当前场景依赖诊断
+// (GET /scene-editor-sessions/{sessionId}/dependencies)
+func (_ Unimplemented) ListSceneEditorDependencies(w http.ResponseWriter, r *http.Request, sessionId SessionId, params ListSceneEditorDependenciesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 流式导出 ZIP
+// (POST /scene-editor-sessions/{sessionId}/export)
+func (_ Unimplemented) ExportSceneEditorFiles(w http.ResponseWriter, r *http.Request, sessionId SessionId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 按目录分页查询 Provider 草稿文件
+// (GET /scene-editor-sessions/{sessionId}/files)
+func (_ Unimplemented) ListSceneEditorFiles(w http.ResponseWriter, r *http.Request, sessionId SessionId, params ListSceneEditorFilesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 受控流式读取草稿文件
+// (GET /scene-editor-sessions/{sessionId}/files/content)
+func (_ Unimplemented) GetSceneEditorFileContent(w http.ResponseWriter, r *http.Request, sessionId SessionId, params GetSceneEditorFileContentParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 以乐观锁写入草稿文件
+// (PUT /scene-editor-sessions/{sessionId}/files/content)
+func (_ Unimplemented) PutSceneEditorFileContent(w http.ResponseWriter, r *http.Request, sessionId SessionId, params PutSceneEditorFileContentParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 流式导入 ZIP
+// (POST /scene-editor-sessions/{sessionId}/import)
+func (_ Unimplemented) ImportSceneEditorFiles(w http.ResponseWriter, r *http.Request, sessionId SessionId, params ImportSceneEditorFilesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 查询平台当前场景 Provider 及运行能力
+// (GET /scene-provider)
+func (_ Unimplemented) GetSceneProvider(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 切换平台场景 Provider（仅平台管理员且场景库为空）
+// (PUT /scene-provider)
+func (_ Unimplemented) UpdateSceneProvider(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2383,117 +3147,6 @@ func (siw *ServerInterfaceWrapper) GetProjectDeleteImpact(w http.ResponseWriter,
 	handler.ServeHTTP(w, r)
 }
 
-// ExecuteDesignFileAction operation middleware
-func (siw *ServerInterfaceWrapper) ExecuteDesignFileAction(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "projectId" -------------
-	var projectId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ExecuteDesignFileAction(w, r, projectId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetDesignFileContent operation middleware
-func (siw *ServerInterfaceWrapper) GetDesignFileContent(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "projectId" -------------
-	var projectId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetDesignFileContentParams
-
-	// ------------- Required query parameter "path" -------------
-
-	if paramValue := r.URL.Query().Get("path"); paramValue != "" {
-
-	} else {
-		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "path"})
-		return
-	}
-
-	err = runtime.BindQueryParameterWithOptions("form", true, true, "path", r.URL.Query(), &params.Path, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "path", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetDesignFileContent(w, r, projectId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ExportDesignFiles operation middleware
-func (siw *ServerInterfaceWrapper) ExportDesignFiles(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "projectId" -------------
-	var projectId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ExportDesignFiles(w, r, projectId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // ExportProject operation middleware
 func (siw *ServerInterfaceWrapper) ExportProject(w http.ResponseWriter, r *http.Request) {
 
@@ -2960,15 +3613,516 @@ func (siw *ServerInterfaceWrapper) UpdateRuntimeUserStatus(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
-// ListSceneContracts operation middleware
-func (siw *ServerInterfaceWrapper) ListSceneContracts(w http.ResponseWriter, r *http.Request) {
+// ListSceneAssets operation middleware
+func (siw *ServerInterfaceWrapper) ListSceneAssets(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 
 	// ------------- Path parameter "projectId" -------------
-	var projectId string
+	var projectId ProjectId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSceneAssetsParams
+
+	// ------------- Optional query parameter "type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "keyword" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "keyword", r.URL.Query(), &params.Keyword, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "keyword", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "archived", r.URL.Query(), &params.Archived, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "archived", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSceneAssets(w, r, projectId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ImportSceneAsset operation middleware
+func (siw *ServerInterfaceWrapper) ImportSceneAsset(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ImportSceneAssetParams
+
+	// ------------- Required query parameter "name" -------------
+
+	if paramValue := r.URL.Query().Get("name"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "name"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "name", r.URL.Query(), &params.Name, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "type" -------------
+
+	if paramValue := r.URL.Query().Get("type"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "filename" -------------
+
+	if paramValue := r.URL.Query().Get("filename"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "filename"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "filename", r.URL.Query(), &params.Filename, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "filename", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ImportSceneAsset(w, r, projectId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveSceneAsset operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveSceneAsset(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "assetId" -------------
+	var assetId AssetId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "assetId", chi.URLParam(r, "assetId"), &assetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "assetId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveSceneAsset(w, r, projectId, assetId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSceneAsset operation middleware
+func (siw *ServerInterfaceWrapper) GetSceneAsset(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "assetId" -------------
+	var assetId AssetId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "assetId", chi.URLParam(r, "assetId"), &assetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "assetId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSceneAsset(w, r, projectId, assetId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateSceneAsset operation middleware
+func (siw *ServerInterfaceWrapper) UpdateSceneAsset(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "assetId" -------------
+	var assetId AssetId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "assetId", chi.URLParam(r, "assetId"), &assetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "assetId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateSceneAsset(w, r, projectId, assetId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateSceneAssetEditorSession operation middleware
+func (siw *ServerInterfaceWrapper) CreateSceneAssetEditorSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "assetId" -------------
+	var assetId AssetId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "assetId", chi.URLParam(r, "assetId"), &assetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "assetId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSceneAssetEditorSession(w, r, projectId, assetId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReplaceSceneAsset operation middleware
+func (siw *ServerInterfaceWrapper) ReplaceSceneAsset(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "assetId" -------------
+	var assetId AssetId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "assetId", chi.URLParam(r, "assetId"), &assetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "assetId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReplaceSceneAssetParams
+
+	// ------------- Required query parameter "filename" -------------
+
+	if paramValue := r.URL.Query().Get("filename"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "filename"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "filename", r.URL.Query(), &params.Filename, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "filename", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReplaceSceneAsset(w, r, projectId, assetId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSceneAssetThumbnail operation middleware
+func (siw *ServerInterfaceWrapper) GetSceneAssetThumbnail(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "assetId" -------------
+	var assetId AssetId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "assetId", chi.URLParam(r, "assetId"), &assetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "assetId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSceneAssetThumbnail(w, r, projectId, assetId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListScenes operation middleware
+func (siw *ServerInterfaceWrapper) ListScenes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListScenesParams
+
+	// ------------- Optional query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "keyword" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "keyword", r.URL.Query(), &params.Keyword, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "keyword", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListScenes(w, r, projectId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateScene operation middleware
+func (siw *ServerInterfaceWrapper) CreateScene(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
 		return
@@ -2981,7 +4135,7 @@ func (siw *ServerInterfaceWrapper) ListSceneContracts(w http.ResponseWriter, r *
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListSceneContracts(w, r, projectId)
+		siw.Handler.CreateScene(w, r, projectId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2991,31 +4145,22 @@ func (siw *ServerInterfaceWrapper) ListSceneContracts(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
-// DeleteSceneContract operation middleware
-func (siw *ServerInterfaceWrapper) DeleteSceneContract(w http.ResponseWriter, r *http.Request) {
+// DeleteScene operation middleware
+func (siw *ServerInterfaceWrapper) DeleteScene(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 
 	// ------------- Path parameter "projectId" -------------
-	var projectId string
+	var projectId ProjectId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
 		return
 	}
 
-	// ------------- Path parameter "kind" -------------
-	var kind DeleteSceneContractParamsKind
-
-	err = runtime.BindStyledParameterWithOptions("simple", "kind", chi.URLParam(r, "kind"), &kind, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
-		return
-	}
-
 	// ------------- Path parameter "sceneId" -------------
-	var sceneId string
+	var sceneId SceneId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "sceneId", chi.URLParam(r, "sceneId"), &sceneId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
 	if err != nil {
@@ -3029,8 +4174,26 @@ func (siw *ServerInterfaceWrapper) DeleteSceneContract(w http.ResponseWriter, r 
 
 	r = r.WithContext(ctx)
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteSceneParams
+
+	// ------------- Required query parameter "kind" -------------
+
+	if paramValue := r.URL.Query().Get("kind"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteSceneContract(w, r, projectId, kind, sceneId)
+		siw.Handler.DeleteScene(w, r, projectId, sceneId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3040,31 +4203,22 @@ func (siw *ServerInterfaceWrapper) DeleteSceneContract(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
-// GetSceneContract operation middleware
-func (siw *ServerInterfaceWrapper) GetSceneContract(w http.ResponseWriter, r *http.Request) {
+// GetScene operation middleware
+func (siw *ServerInterfaceWrapper) GetScene(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 
 	// ------------- Path parameter "projectId" -------------
-	var projectId string
+	var projectId ProjectId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
 		return
 	}
 
-	// ------------- Path parameter "kind" -------------
-	var kind GetSceneContractParamsKind
-
-	err = runtime.BindStyledParameterWithOptions("simple", "kind", chi.URLParam(r, "kind"), &kind, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
-		return
-	}
-
 	// ------------- Path parameter "sceneId" -------------
-	var sceneId string
+	var sceneId SceneId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "sceneId", chi.URLParam(r, "sceneId"), &sceneId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
 	if err != nil {
@@ -3078,8 +4232,26 @@ func (siw *ServerInterfaceWrapper) GetSceneContract(w http.ResponseWriter, r *ht
 
 	r = r.WithContext(ctx)
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSceneParams
+
+	// ------------- Required query parameter "kind" -------------
+
+	if paramValue := r.URL.Query().Get("kind"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetSceneContract(w, r, projectId, kind, sceneId)
+		siw.Handler.GetScene(w, r, projectId, sceneId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3089,31 +4261,22 @@ func (siw *ServerInterfaceWrapper) GetSceneContract(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
-// PutSceneContract operation middleware
-func (siw *ServerInterfaceWrapper) PutSceneContract(w http.ResponseWriter, r *http.Request) {
+// UpdateScene operation middleware
+func (siw *ServerInterfaceWrapper) UpdateScene(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 
 	// ------------- Path parameter "projectId" -------------
-	var projectId string
+	var projectId ProjectId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
 		return
 	}
 
-	// ------------- Path parameter "kind" -------------
-	var kind PutSceneContractParamsKind
-
-	err = runtime.BindStyledParameterWithOptions("simple", "kind", chi.URLParam(r, "kind"), &kind, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
-		return
-	}
-
 	// ------------- Path parameter "sceneId" -------------
-	var sceneId string
+	var sceneId SceneId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "sceneId", chi.URLParam(r, "sceneId"), &sceneId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
 	if err != nil {
@@ -3127,8 +4290,142 @@ func (siw *ServerInterfaceWrapper) PutSceneContract(w http.ResponseWriter, r *ht
 
 	r = r.WithContext(ctx)
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateSceneParams
+
+	// ------------- Required query parameter "kind" -------------
+
+	if paramValue := r.URL.Query().Get("kind"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.PutSceneContract(w, r, projectId, kind, sceneId)
+		siw.Handler.UpdateScene(w, r, projectId, sceneId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CommitScene operation middleware
+func (siw *ServerInterfaceWrapper) CommitScene(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "sceneId" -------------
+	var sceneId SceneId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sceneId", chi.URLParam(r, "sceneId"), &sceneId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sceneId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CommitSceneParams
+
+	// ------------- Required query parameter "kind" -------------
+
+	if paramValue := r.URL.Query().Get("kind"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CommitScene(w, r, projectId, sceneId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateSceneEditorSession operation middleware
+func (siw *ServerInterfaceWrapper) CreateSceneEditorSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "sceneId" -------------
+	var sceneId SceneId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sceneId", chi.URLParam(r, "sceneId"), &sceneId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sceneId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateSceneEditorSessionParams
+
+	// ------------- Required query parameter "kind" -------------
+
+	if paramValue := r.URL.Query().Get("kind"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSceneEditorSession(w, r, projectId, sceneId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3284,6 +4581,992 @@ func (siw *ServerInterfaceWrapper) ListProjectVersions(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListProjectVersions(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CommitSceneAssetEditorSession operation middleware
+func (siw *ServerInterfaceWrapper) CommitSceneAssetEditorSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CommitSceneAssetEditorSession(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSceneAssetEditorFiles operation middleware
+func (siw *ServerInterfaceWrapper) ListSceneAssetEditorFiles(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSceneAssetEditorFilesParams
+
+	// ------------- Optional query parameter "directory" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "directory", r.URL.Query(), &params.Directory, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "directory", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "keyword" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "keyword", r.URL.Query(), &params.Keyword, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "keyword", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSceneAssetEditorFiles(w, r, sessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSceneAssetEditorFileContent operation middleware
+func (siw *ServerInterfaceWrapper) GetSceneAssetEditorFileContent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSceneAssetEditorFileContentParams
+
+	// ------------- Required query parameter "path" -------------
+
+	if paramValue := r.URL.Query().Get("path"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "path"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "path", r.URL.Query(), &params.Path, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "path", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSceneAssetEditorFileContent(w, r, sessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutSceneAssetEditorFileContent operation middleware
+func (siw *ServerInterfaceWrapper) PutSceneAssetEditorFileContent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PutSceneAssetEditorFileContentParams
+
+	// ------------- Required query parameter "baseDraftVersion" -------------
+
+	if paramValue := r.URL.Query().Get("baseDraftVersion"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "baseDraftVersion"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "baseDraftVersion", r.URL.Query(), &params.BaseDraftVersion, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "baseDraftVersion", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "path" -------------
+
+	if paramValue := r.URL.Query().Get("path"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "path"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "path", r.URL.Query(), &params.Path, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "path", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutSceneAssetEditorFileContent(w, r, sessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSceneEditorAssets operation middleware
+func (siw *ServerInterfaceWrapper) ListSceneEditorAssets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSceneEditorAssetsParams
+
+	// ------------- Optional query parameter "type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "keyword" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "keyword", r.URL.Query(), &params.Keyword, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "keyword", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSceneEditorAssets(w, r, sessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ExecuteSceneAssetAction operation middleware
+func (siw *ServerInterfaceWrapper) ExecuteSceneAssetAction(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExecuteSceneAssetAction(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ImportSceneEditorAsset operation middleware
+func (siw *ServerInterfaceWrapper) ImportSceneEditorAsset(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ImportSceneEditorAssetParams
+
+	// ------------- Required query parameter "name" -------------
+
+	if paramValue := r.URL.Query().Get("name"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "name"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "name", r.URL.Query(), &params.Name, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "type" -------------
+
+	if paramValue := r.URL.Query().Get("type"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "type"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "type", r.URL.Query(), &params.Type, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "filename" -------------
+
+	if paramValue := r.URL.Query().Get("filename"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "filename"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "filename", r.URL.Query(), &params.Filename, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "filename", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ImportSceneEditorAsset(w, r, sessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveSceneEditorAsset operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveSceneEditorAsset(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "assetId" -------------
+	var assetId AssetId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "assetId", chi.URLParam(r, "assetId"), &assetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "assetId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveSceneEditorAsset(w, r, sessionId, assetId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateSceneEditorAssetEditorSession operation middleware
+func (siw *ServerInterfaceWrapper) CreateSceneEditorAssetEditorSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "assetId" -------------
+	var assetId AssetId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "assetId", chi.URLParam(r, "assetId"), &assetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "assetId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSceneEditorAssetEditorSession(w, r, sessionId, assetId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReplaceSceneEditorAsset operation middleware
+func (siw *ServerInterfaceWrapper) ReplaceSceneEditorAsset(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "assetId" -------------
+	var assetId AssetId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "assetId", chi.URLParam(r, "assetId"), &assetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "assetId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReplaceSceneEditorAssetParams
+
+	// ------------- Required query parameter "filename" -------------
+
+	if paramValue := r.URL.Query().Get("filename"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "filename"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "filename", r.URL.Query(), &params.Filename, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "filename", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReplaceSceneEditorAsset(w, r, sessionId, assetId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CommitSceneEditorSession operation middleware
+func (siw *ServerInterfaceWrapper) CommitSceneEditorSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CommitSceneEditorSession(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSceneEditorDatapoints operation middleware
+func (siw *ServerInterfaceWrapper) ListSceneEditorDatapoints(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSceneEditorDatapointsParams
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSceneEditorDatapoints(w, r, sessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSceneEditorDependencies operation middleware
+func (siw *ServerInterfaceWrapper) ListSceneEditorDependencies(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSceneEditorDependenciesParams
+
+	// ------------- Optional query parameter "directory" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "directory", r.URL.Query(), &params.Directory, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "directory", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "keyword" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "keyword", r.URL.Query(), &params.Keyword, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "keyword", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSceneEditorDependencies(w, r, sessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ExportSceneEditorFiles operation middleware
+func (siw *ServerInterfaceWrapper) ExportSceneEditorFiles(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExportSceneEditorFiles(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSceneEditorFiles operation middleware
+func (siw *ServerInterfaceWrapper) ListSceneEditorFiles(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSceneEditorFilesParams
+
+	// ------------- Optional query parameter "directory" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "directory", r.URL.Query(), &params.Directory, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "directory", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "keyword" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "keyword", r.URL.Query(), &params.Keyword, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "keyword", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSceneEditorFiles(w, r, sessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSceneEditorFileContent operation middleware
+func (siw *ServerInterfaceWrapper) GetSceneEditorFileContent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSceneEditorFileContentParams
+
+	// ------------- Required query parameter "path" -------------
+
+	if paramValue := r.URL.Query().Get("path"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "path"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "path", r.URL.Query(), &params.Path, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "path", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSceneEditorFileContent(w, r, sessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutSceneEditorFileContent operation middleware
+func (siw *ServerInterfaceWrapper) PutSceneEditorFileContent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PutSceneEditorFileContentParams
+
+	// ------------- Required query parameter "baseDraftVersion" -------------
+
+	if paramValue := r.URL.Query().Get("baseDraftVersion"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "baseDraftVersion"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "baseDraftVersion", r.URL.Query(), &params.BaseDraftVersion, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "baseDraftVersion", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "path" -------------
+
+	if paramValue := r.URL.Query().Get("path"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "path"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "path", r.URL.Query(), &params.Path, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "path", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutSceneEditorFileContent(w, r, sessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ImportSceneEditorFiles operation middleware
+func (siw *ServerInterfaceWrapper) ImportSceneEditorFiles(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ImportSceneEditorFilesParams
+
+	// ------------- Required query parameter "baseDraftVersion" -------------
+
+	if paramValue := r.URL.Query().Get("baseDraftVersion"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "baseDraftVersion"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "baseDraftVersion", r.URL.Query(), &params.BaseDraftVersion, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "baseDraftVersion", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ImportSceneEditorFiles(w, r, sessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSceneProvider operation middleware
+func (siw *ServerInterfaceWrapper) GetSceneProvider(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSceneProvider(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateSceneProvider operation middleware
+func (siw *ServerInterfaceWrapper) UpdateSceneProvider(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateSceneProvider(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4035,15 +6318,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/projects/{projectId}/delete-impact", wrapper.GetProjectDeleteImpact)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/projects/{projectId}/design-files/actions", wrapper.ExecuteDesignFileAction)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/projects/{projectId}/design-files/content", wrapper.GetDesignFileContent)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/projects/{projectId}/design-files/export", wrapper.ExportDesignFiles)
-	})
-	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/export", wrapper.ExportProject)
 	})
 	r.Group(func(r chi.Router) {
@@ -4082,18 +6356,7 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/projects/{projectId}/runtime-users/{userId}/status", wrapper.UpdateRuntimeUserStatus)
 	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/projects/{projectId}/scene-contracts", wrapper.ListSceneContracts)
-	})
-	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/projects/{projectId}/scene-contracts/{kind}/{sceneId}", wrapper.DeleteSceneContract)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/projects/{projectId}/scene-contracts/{kind}/{sceneId}", wrapper.GetSceneContract)
-	})
-	r.Group(func(r chi.Router) {
-		r.Put(options.BaseURL+"/projects/{projectId}/scene-contracts/{kind}/{sceneId}", wrapper.PutSceneContract)
-	})
+
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/projects/{projectId}/tags", wrapper.ReplaceProjectTags)
 	})
@@ -4109,6 +6372,7 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/publish/{projectId}/versions", wrapper.ListProjectVersions)
 	})
+
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/tenants", wrapper.ListTenants)
 	})
@@ -4170,69 +6434,96 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"AAD//8w4vGCKvgAA",
+	"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",
+	"HwAA//92H7ktJPkAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

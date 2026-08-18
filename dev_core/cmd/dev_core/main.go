@@ -19,7 +19,6 @@ import (
 	"github.com/indu-forge/dev_core/internal/contextpack"
 	"github.com/indu-forge/dev_core/internal/controlplane"
 	"github.com/indu-forge/dev_core/internal/deployment"
-	"github.com/indu-forge/dev_core/internal/designworkspace"
 	"github.com/indu-forge/dev_core/internal/node"
 	"github.com/indu-forge/dev_core/internal/objectstore"
 	platformapi "github.com/indu-forge/dev_core/internal/platform/api"
@@ -28,7 +27,7 @@ import (
 	"github.com/indu-forge/dev_core/internal/project"
 	"github.com/indu-forge/dev_core/internal/realtime"
 	"github.com/indu-forge/dev_core/internal/runtimeaccess"
-	"github.com/indu-forge/dev_core/internal/scenecontract"
+	"github.com/indu-forge/dev_core/internal/sceneasset"
 	"github.com/indu-forge/dev_core/internal/tenant"
 	"github.com/indu-forge/dev_core/internal/user"
 	"github.com/indu-forge/dev_core/internal/worker"
@@ -119,18 +118,16 @@ func main() {
 	}
 	codeWorkspaceService.SetPresence(cacheStore)
 	controlPlane.SetCodeWorkspaceHandler(codeworkspace.NewHandler(codeWorkspaceService, authService))
-	sceneContractService := scenecontract.NewService(projectRepository)
-	sceneContractHandler := scenecontract.NewHandler(sceneContractService, authService)
-	controlPlane.SetSceneContractHandler(sceneContractHandler)
-	designWorkspaceHandler := designworkspace.NewHandler(designworkspace.NewService(projectRepository), authService)
-	controlPlane.SetDesignWorkspaceHandler(designWorkspaceHandler)
 	controlPlane.SetRuntimeAccessHandler(runtimeaccess.NewHandler(runtimeaccess.NewService(runtimeaccess.NewPostgreSQLRepository(pool)), authService))
 	contextPackService := contextpack.NewService(project.NewService(projectRepository, workspace, cfg.DefaultAdminPassword), runtimeaccess.NewService(runtimeaccess.NewPostgreSQLRepository(pool)), workspace, cfg.DataServiceURL)
-	contextPackService.SetSceneContracts(sceneContractService)
 	contextPackHandler := contextpack.NewHandler(contextPackService)
 	controlPlane.SetContextPackHandler(contextPackHandler)
-	sceneContractHandler.SetContextSynchronizer(contextPackService)
-	designWorkspaceHandler.SetContextSynchronizer(contextPackService)
+	sceneAssetService := sceneasset.NewService(
+		sceneasset.NewPostgreSQLRepository(pool), projectRepository, designObjects, cacheStore,
+		sceneasset.NewRegistry(sceneasset.NewHTProvider()),
+	)
+	sceneAssetHandler := sceneasset.NewHandler(sceneAssetService, cfg.DataServiceURL)
+	contextPackService.SetSceneContracts(sceneAssetService)
 	realtimeServer := realtime.New(authService, logger)
 	defer realtimeServer.Close()
 	nodeService := node.NewService(node.NewPostgreSQLRepository(pool), cacheStore)
@@ -141,6 +138,7 @@ func main() {
 		deployment.NewPostgreSQLRepository(pool), workspace, ifpObjects,
 		deployment.ServiceConfig{ArtifactBucket: cfg.ObjectStoreIFPBucket},
 	)
+	deploymentService.SetReleaseValidator(sceneAssetService)
 	deploymentService.SetEvents(realtimeServer)
 	controlPlane.SetDeploymentHandler(deployment.NewHandler(deploymentService, authService))
 	auditLogRepository := auditlog.NewPostgreSQLRepository(pool)
@@ -152,6 +150,7 @@ func main() {
 			router.Handle("/control-socket.io", realtimeServer.Handler())
 			router.Handle("/control-socket.io/*", realtimeServer.Handler())
 			nodeHandler.MountAgentRoutes(router)
+			router.Route("/api/v1", sceneAssetHandler.MountRoutes)
 			platformapi.HandlerFromMuxWithBaseURL(controlPlane, router, "/api/v1")
 		},
 	})
@@ -167,6 +166,7 @@ func main() {
 	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go worker.New(worker.NewPostgreSQLRepository(pool), ifpObjects, logger, 10*time.Second).Run(signalCtx)
+	go runSceneObjectCleanup(signalCtx, sceneAssetService, logger)
 
 	go func() {
 		logger.Info("dev_core 已启动", "addr", cfg.Addr)
@@ -181,6 +181,21 @@ func main() {
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error("HTTP 服务关闭失败", "error", err)
+	}
+}
+
+func runSceneObjectCleanup(ctx context.Context, service *sceneasset.Service, logger *slog.Logger) {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := service.CleanupOrphans(ctx, time.Hour); err != nil {
+				logger.Warn("清理场景孤立对象失败", "error", err)
+			}
+		}
 	}
 }
 

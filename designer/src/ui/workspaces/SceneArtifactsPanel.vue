@@ -2,6 +2,10 @@
 import { computed } from 'vue'
 import IconLucideBox from '~icons/lucide/box'
 import IconLucideExternalLink from '~icons/lucide/external-link'
+import IconLucideFileCode2 from '~icons/lucide/file-code-2'
+import IconLucidePlay from '~icons/lucide/play'
+import IconLucideRefreshCw from '~icons/lucide/refresh-cw'
+import IconLucideTrash2 from '~icons/lucide/trash-2'
 import IconLucideRoute from '~icons/lucide/route'
 import type { SceneContract, SceneKind } from './scene-contract-api'
 
@@ -11,7 +15,12 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  openEditor: []
+  create: []
+  openEditor: [contract: SceneContract]
+  editContract: [contract: SceneContract]
+  preview: [contract: SceneContract]
+  remove: [contract: SceneContract]
+  refresh: []
 }>()
 
 const title = computed(() => (props.kind === '2d' ? '2D 画面' : '3D 场景'))
@@ -32,9 +41,6 @@ function embedModeLabel(contract: SceneContract): string {
   return '独立 / 嵌入'
 }
 
-function shortVersion(version: string): string {
-  return version ? version.slice(0, 8) : '—'
-}
 </script>
 
 <template>
@@ -44,10 +50,15 @@ function shortVersion(version: string): string {
         <strong>{{ title }}</strong>
         <span>{{ contracts.length }} 个产物</span>
       </div>
-      <button type="button" class="scene-editor-button" @click="emit('openEditor')">
-        <IconLucideExternalLink />
-        打开{{ title }}编辑器
+      <div class="scene-header-actions">
+      <button type="button" class="icon-button" title="刷新场景" aria-label="刷新场景" @click="emit('refresh')">
+        <IconLucideRefreshCw />
       </button>
+      <button type="button" class="scene-editor-button" @click="emit('create')">
+        <IconLucideExternalLink />
+        新建{{ title }}
+      </button>
+      </div>
     </header>
 
     <div v-if="contracts.length" class="scene-card-grid">
@@ -76,8 +87,15 @@ function shortVersion(version: string): string {
           <footer>
             <span>公开能力 {{ interfaceCount(contract) }}</span>
             <span>数据点 {{ contract.datapointRefs?.length ?? 0 }}</span>
-            <span>v {{ shortVersion(contract.contractVersion) }}</span>
+            <span>r{{ contract.currentRevision ?? 0 }}</span>
           </footer>
+          <div class="scene-card-actions">
+            <button type="button" title="打开编辑器" aria-label="打开编辑器" @click="emit('openEditor', contract)"><IconLucideExternalLink /></button>
+            <button type="button" title="编辑公开契约" aria-label="编辑公开契约" @click="emit('editContract', contract)"><IconLucideFileCode2 /></button>
+            <button type="button" title="预览已提交版本" aria-label="预览已提交版本" :disabled="!contract.currentRevision" @click="emit('preview', contract)"><IconLucidePlay /></button>
+            <button type="button" class="danger" title="删除场景" aria-label="删除场景" @click="emit('remove', contract)"><IconLucideTrash2 /></button>
+            <span v-if="contract.draftVersion !== contract.committedDraftVersion">草稿未提交</span>
+          </div>
         </div>
       </article>
     </div>
@@ -88,7 +106,7 @@ function shortVersion(version: string): string {
         <IconLucideBox v-else />
       </div>
       <strong>{{ emptyTitle }}</strong>
-      <p>进入 HT 编辑器创建并保存产物后，公开场景契约会在这里形成卡片。</p>
+      <p>新建场景后即可进入编辑器，显式保存会形成不可变 revision。</p>
     </div>
   </section>
 </template>
@@ -156,6 +174,52 @@ function shortVersion(version: string): string {
 .scene-editor-button svg {
   width: 14px;
   height: 14px;
+}
+
+.scene-header-actions,
+.scene-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icon-button,
+.scene-card-actions button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #d1d8e2;
+  border-radius: 5px;
+  color: #50617a;
+  background: #fff;
+  cursor: pointer;
+}
+
+.icon-button svg,
+.scene-card-actions svg {
+  width: 14px;
+  height: 14px;
+}
+
+.scene-card-actions {
+  min-height: 31px;
+}
+
+.scene-card-actions .danger {
+  color: #a3342b;
+}
+
+.scene-card-actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.scene-card-actions > span {
+  margin-left: auto;
+  color: #a85f18;
+  font-size: 10px;
 }
 
 .scene-card-grid {

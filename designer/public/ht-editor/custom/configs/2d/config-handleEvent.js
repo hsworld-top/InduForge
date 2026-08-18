@@ -55,15 +55,10 @@
                 params.url === 'displays/basic') {
                 params.preventDefault = true;
             }
-        } else if ((type === 'displayViewSaved' || type === 'symbolViewSaved') && editor.isSaveInKP) {
-            // 在KP界面上触发的保存,需要将编辑器界面关闭
-            window.parent.postMessage('closed', editor.parentHref);
-            window.parent.postMessage('closedIn2d', editor.parentHref);
         }
     };
 
 })();
-
 
 
 

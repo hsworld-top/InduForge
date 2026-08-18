@@ -14,6 +14,7 @@ tags:
   - name: node
   - name: deployment
   - name: auditLog
+  - name: scene
 paths:
   /auth/captcha:
     get:
@@ -1972,131 +1973,418 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
-  /projects/{projectId}/design-files/actions:
-    post:
-      operationId: executeDesignFileAction
-      tags: [designWorkspace]
-      x-client: designer
-      summary: 执行 HT 设计文件操作
-      parameters:
-        - name: projectId
-          in: path
-          required: true
-          schema:
-            type: string
+  /scene-provider:
+    get:
+      operationId: getSceneProvider
+      tags: [scene]
+      x-client: platform
+      summary: 查询平台当前场景 Provider 及运行能力
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+    put:
+      operationId: updateSceneProvider
+      tags: [scene]
+      x-client: platform
+      summary: 切换平台场景 Provider（仅平台管理员且场景库为空）
       requestBody:
         required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DesignFileActionRequest'
+        content: {application/json: {schema: {$ref: '#/components/schemas/SceneProviderRequest'}}}
       responses:
-        '200':
-          description: 成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
-        default:
-          description: 失败
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
-  /projects/{projectId}/design-files/export:
-    post:
-      operationId: exportDesignFiles
-      tags: [designWorkspace]
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /projects/{projectId}/scenes:
+    parameters:
+      - {$ref: '#/components/parameters/ProjectId'}
+    get:
+      operationId: listScenes
+      tags: [scene]
       x-client: designer
-      summary: 导出 HT 设计资源归档
+      summary: 分页查询工程场景
       parameters:
-        - name: projectId
-          in: path
-          required: true
-          schema:
-            type: string
+        - {name: kind, in: query, schema: {type: string, enum: ['2d', '3d']}}
+        - {name: keyword, in: query, schema: {type: string}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Limit'}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+    post:
+      operationId: createScene
+      tags: [scene]
+      x-client: designer
+      summary: 创建场景记录和初始入口草稿
       requestBody:
         required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DesignFileExportRequest'
+        content: {application/json: {schema: {$ref: '#/components/schemas/SceneCreateRequest'}}}
       responses:
-        '200':
-          description: ZIP 文件或标准错误响应
-          content:
-            application/zip:
-              schema:
-                type: string
-                format: binary
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
-        default:
-          description: 失败
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
-  /projects/{projectId}/design-files/content:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /projects/{projectId}/scenes/{sceneId}:
+    parameters:
+      - {$ref: '#/components/parameters/ProjectId'}
+      - {$ref: '#/components/parameters/SceneId'}
+      - {$ref: '#/components/parameters/SceneKind'}
     get:
-      operationId: getDesignFileContent
-      tags: [designWorkspace]
+      operationId: getScene
+      tags: [scene]
       x-client: designer
-      summary: 读取 HT 设计资源内容
-      parameters:
-        - name: projectId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: path
-          in: query
-          required: true
-          schema:
-            type: string
+      summary: 查询场景详情和公开契约
       responses:
-        '200':
-          description: 文件内容或标准错误响应
-          content:
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
-        default:
-          description: 失败
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
-  /projects/{projectId}/scene-contracts:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+    put:
+      operationId: updateScene
+      tags: [scene]
+      x-client: designer
+      summary: 修改场景名称或公开契约
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SceneUpdateRequest'}}}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+    delete:
+      operationId: deleteScene
+      tags: [scene]
+      x-client: designer
+      summary: 墓碑删除场景
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /projects/{projectId}/scenes/{sceneId}/editor-session:
+    post:
+      operationId: createSceneEditorSession
+      tags: [scene]
+      x-client: dev_ide
+      summary: 创建绑定用户和场景的短期编辑会话
+      parameters:
+        - {$ref: '#/components/parameters/ProjectId'}
+        - {$ref: '#/components/parameters/SceneId'}
+        - {$ref: '#/components/parameters/SceneKind'}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /projects/{projectId}/scenes/{sceneId}/commit:
+    post:
+      operationId: commitScene
+      tags: [scene]
+      x-client: designer
+      summary: 将指定草稿版本提交为不可变 revision
+      parameters:
+        - {$ref: '#/components/parameters/ProjectId'}
+        - {$ref: '#/components/parameters/SceneId'}
+        - {$ref: '#/components/parameters/SceneKind'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SceneCommitRequest'}}}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-editor-sessions/{sessionId}/files:
     get:
-      operationId: listSceneContracts
-      tags: [sceneContract]
-      x-client: designer
-      summary: 查询工程全部 2D 和 3D 场景公开契约
+      operationId: listSceneEditorFiles
+      tags: [scene]
+      x-client: ht-editor
+      summary: 按目录分页查询 Provider 草稿文件
       parameters:
-        - name: projectId
-          in: path
-          required: true
-          schema:
-            type: string
+        - {$ref: '#/components/parameters/SessionId'}
+        - {name: directory, in: query, schema: {type: string}}
+        - {name: keyword, in: query, schema: {type: string}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Limit'}
       responses:
-        '200':
-          description: 成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
-        default:
-          description: 失败
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-editor-sessions/{sessionId}/files/content:
+    parameters:
+      - {$ref: '#/components/parameters/SessionId'}
+      - {name: path, in: query, required: true, schema: {type: string}}
+    get:
+      operationId: getSceneEditorFileContent
+      tags: [scene]
+      x-client: ht-editor
+      summary: 受控流式读取草稿文件
+      responses:
+        '200': {description: 文件流, content: {application/octet-stream: {schema: {type: string, format: binary}}}}
+    put:
+      operationId: putSceneEditorFileContent
+      tags: [scene]
+      x-client: ht-editor
+      summary: 以乐观锁写入草稿文件
+      parameters:
+        - {name: baseDraftVersion, in: query, required: true, schema: {type: integer, format: int64}}
+      requestBody:
+        required: true
+        content: {application/octet-stream: {schema: {type: string, format: binary}}}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-editor-sessions/{sessionId}/import:
+    post:
+      operationId: importSceneEditorFiles
+      tags: [scene]
+      x-client: ht-editor
+      summary: 流式导入 ZIP
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+        - {name: baseDraftVersion, in: query, required: true, schema: {type: integer, format: int64}}
+      requestBody: {required: true, content: {application/zip: {schema: {type: string, format: binary}}}}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-editor-sessions/{sessionId}/export:
+    post:
+      operationId: exportSceneEditorFiles
+      tags: [scene]
+      x-client: ht-editor
+      summary: 流式导出 ZIP
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+      responses:
+        '200': {description: ZIP 文件, content: {application/zip: {schema: {type: string, format: binary}}}}
+  /scene-editor-sessions/{sessionId}/commit:
+    post:
+      operationId: commitSceneEditorSession
+      tags: [scene]
+      x-client: ht-editor
+      summary: 通过绑定场景的编辑会话提交 revision
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SceneCommitRequest'}}}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-editor-sessions/{sessionId}/datapoints:
+    get:
+      operationId: listSceneEditorDatapoints
+      tags: [scene]
+      x-client: ht-editor
+      summary: 通过控制面代理分页查询数据点
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Limit'}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /projects/{projectId}/scene-assets:
+    get:
+      operationId: listSceneAssets
+      tags: [scene]
+      x-client: ht-editor
+      summary: 分页查询工程级场景资源
+      parameters:
+        - {$ref: '#/components/parameters/ProjectId'}
+        - {$ref: '#/components/parameters/AssetType'}
+        - {name: kind, in: query, schema: {type: string, enum: ['2d', '3d']}}
+        - {name: keyword, in: query, schema: {type: string}}
+        - {name: sort, in: query, schema: {type: string, enum: [name, type, createdAt, updatedAt]}}
+        - {name: order, in: query, schema: {type: string, enum: [asc, desc]}}
+        - {name: archived, in: query, schema: {type: boolean, default: false}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Limit'}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /projects/{projectId}/scene-assets/import:
+    post:
+      operationId: importSceneAsset
+      tags: [scene]
+      x-client: ht-editor
+      summary: 上传单文件或 ZIP 并创建资源首个内部代次
+      parameters:
+        - {$ref: '#/components/parameters/ProjectId'}
+        - {name: name, in: query, required: true, schema: {type: string, maxLength: 200}}
+        - {name: type, in: query, required: true, schema: {type: string, enum: [image, font, model, material, symbol, component]}}
+        - {name: filename, in: query, required: true, schema: {type: string}}
+      requestBody: {required: true, content: {application/octet-stream: {schema: {type: string, format: binary}}, application/zip: {schema: {type: string, format: binary}}}}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /projects/{projectId}/scene-assets/{assetId}:
+    parameters:
+      - {$ref: '#/components/parameters/ProjectId'}
+      - {$ref: '#/components/parameters/AssetId'}
+    get:
+      operationId: getSceneAsset
+      tags: [scene]
+      x-client: ht-editor
+      summary: 查询资源详情
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+    put:
+      operationId: updateSceneAsset
+      tags: [scene]
+      x-client: ht-editor
+      summary: 重命名资源
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SceneAssetUpdateRequest'}}}}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+    delete:
+      operationId: archiveSceneAsset
+      tags: [scene]
+      x-client: ht-editor
+      summary: 归档资源并从新选择列表隐藏
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /projects/{projectId}/scene-assets/{assetId}/replace:
+    post:
+      operationId: replaceSceneAsset
+      tags: [scene]
+      x-client: ht-editor
+      summary: 上传替换内容并创建新的内部代次
+      parameters:
+        - {$ref: '#/components/parameters/ProjectId'}
+        - {$ref: '#/components/parameters/AssetId'}
+        - {name: filename, in: query, required: true, schema: {type: string}}
+      requestBody: {required: true, content: {application/octet-stream: {schema: {type: string, format: binary}}, application/zip: {schema: {type: string, format: binary}}}}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /projects/{projectId}/scene-assets/{assetId}/thumbnail:
+    get:
+      operationId: getSceneAssetThumbnail
+      tags: [scene]
+      x-client: ht-editor
+      summary: 受控读取资源缩略图
+      parameters:
+        - {$ref: '#/components/parameters/ProjectId'}
+        - {$ref: '#/components/parameters/AssetId'}
+      responses:
+        '200': {description: 图片流, content: {image/png: {schema: {type: string, format: binary}}, image/jpeg: {schema: {type: string, format: binary}}, image/webp: {schema: {type: string, format: binary}}}}
+  /projects/{projectId}/scene-assets/{assetId}/editor-session:
+    post:
+      operationId: createSceneAssetEditorSession
+      tags: [scene]
+      x-client: ht-editor
+      summary: 为 Symbol 或 Component 创建短期编辑会话
+      parameters:
+        - {$ref: '#/components/parameters/ProjectId'}
+        - {$ref: '#/components/parameters/AssetId'}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-editor-sessions/{sessionId}/assets:
+    get:
+      operationId: listSceneEditorAssets
+      tags: [scene]
+      x-client: ht-editor
+      summary: 分页查询与当前场景兼容的资源和绑定状态
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+        - {$ref: '#/components/parameters/AssetType'}
+        - {name: keyword, in: query, schema: {type: string}}
+        - {name: sort, in: query, schema: {type: string, enum: [name, type, createdAt, updatedAt]}}
+        - {name: order, in: query, schema: {type: string, enum: [asc, desc]}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Limit'}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-editor-sessions/{sessionId}/assets/import:
+    post:
+      operationId: importSceneEditorAsset
+      tags: [scene]
+      x-client: ht-editor
+      summary: 从场景编辑器上传工程资源
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+        - {name: name, in: query, required: true, schema: {type: string, maxLength: 200}}
+        - {name: type, in: query, required: true, schema: {type: string, enum: [image, font, model, material, symbol, component]}}
+        - {name: filename, in: query, required: true, schema: {type: string}}
+      requestBody: {required: true, content: {application/octet-stream: {schema: {type: string, format: binary}}, application/zip: {schema: {type: string, format: binary}}}}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-editor-sessions/{sessionId}/assets/actions:
+    post:
+      operationId: executeSceneAssetAction
+      tags: [scene]
+      x-client: ht-editor
+      summary: 挂载、更新或移除当前场景资源绑定
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SceneAssetActionRequest'}}}}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-editor-sessions/{sessionId}/assets/{assetId}/replace:
+    post:
+      operationId: replaceSceneEditorAsset
+      tags: [scene]
+      x-client: ht-editor
+      summary: 从场景编辑器替换资源内容
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+        - {$ref: '#/components/parameters/AssetId'}
+        - {name: filename, in: query, required: true, schema: {type: string}}
+      requestBody: {required: true, content: {application/octet-stream: {schema: {type: string, format: binary}}, application/zip: {schema: {type: string, format: binary}}}}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-editor-sessions/{sessionId}/assets/{assetId}:
+    delete:
+      operationId: archiveSceneEditorAsset
+      tags: [scene]
+      x-client: ht-editor
+      summary: 从场景编辑器归档资源
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+        - {$ref: '#/components/parameters/AssetId'}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-editor-sessions/{sessionId}/assets/{assetId}/editor-session:
+    post:
+      operationId: createSceneEditorAssetEditorSession
+      tags: [scene]
+      x-client: ht-editor
+      summary: 从场景编辑器打开 Symbol 或 Component 工作副本
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+        - {$ref: '#/components/parameters/AssetId'}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-editor-sessions/{sessionId}/dependencies:
+    get:
+      operationId: listSceneEditorDependencies
+      tags: [scene]
+      x-client: ht-editor
+      summary: 分页读取当前场景依赖诊断
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+        - {name: directory, in: query, schema: {type: string}}
+        - {name: keyword, in: query, schema: {type: string}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Limit'}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-asset-editor-sessions/{sessionId}/files:
+    get:
+      operationId: listSceneAssetEditorFiles
+      tags: [scene]
+      x-client: ht-editor
+      summary: 分页读取资源编辑工作副本
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+        - {name: directory, in: query, schema: {type: string}}
+        - {name: keyword, in: query, schema: {type: string}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Limit'}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-asset-editor-sessions/{sessionId}/files/content:
+    parameters:
+      - {$ref: '#/components/parameters/SessionId'}
+      - {name: path, in: query, required: true, schema: {type: string}}
+    get:
+      operationId: getSceneAssetEditorFileContent
+      tags: [scene]
+      x-client: ht-editor
+      summary: 受控读取资源工作副本文件
+      responses:
+        '200': {description: 文件流, content: {application/octet-stream: {schema: {type: string, format: binary}}}}
+    put:
+      operationId: putSceneAssetEditorFileContent
+      tags: [scene]
+      x-client: ht-editor
+      summary: 以乐观锁保存资源工作副本 JSON
+      parameters:
+        - {name: baseDraftVersion, in: query, required: true, schema: {type: integer, format: int64}}
+      requestBody: {required: true, content: {application/octet-stream: {schema: {type: string, format: binary}}}}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-asset-editor-sessions/{sessionId}/commit:
+    post:
+      operationId: commitSceneAssetEditorSession
+      tags: [scene]
+      x-client: ht-editor
+      summary: 发布资源工作副本为新的内部代次
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SceneCommitRequest'}}}}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
   /projects/{projectId}/workspace-context/refresh:
     post:
       operationId: refreshWorkspaceContext
@@ -2122,107 +2410,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
-  /projects/{projectId}/scene-contracts/{kind}/{sceneId}:
-    get:
-      operationId: getSceneContract
-      tags: [sceneContract]
-      x-client: designer
-      summary: 查询单个场景公开契约
-      parameters:
-        - name: projectId
-          in: path
-          required: true
-          schema: {type: string}
-        - name: kind
-          in: path
-          required: true
-          schema: {type: string, enum: ['2d', '3d']}
-        - name: sceneId
-          in: path
-          required: true
-          schema: {type: string}
-      responses:
-        '200':
-          description: 成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
-        default:
-          description: 失败
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
-    put:
-      operationId: putSceneContract
-      tags: [sceneContract]
-      x-client: designer
-      summary: 保存场景公开契约并同步工程上下文
-      parameters:
-        - name: projectId
-          in: path
-          required: true
-          schema: {type: string}
-        - name: kind
-          in: path
-          required: true
-          schema: {type: string, enum: ['2d', '3d']}
-        - name: sceneId
-          in: path
-          required: true
-          schema: {type: string}
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: 成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
-        default:
-          description: 失败
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
-    delete:
-      operationId: deleteSceneContract
-      tags: [sceneContract]
-      x-client: designer
-      summary: 删除场景公开契约并同步工程上下文
-      parameters:
-        - name: projectId
-          in: path
-          required: true
-          schema: {type: string}
-        - name: kind
-          in: path
-          required: true
-          schema: {type: string, enum: ['2d', '3d']}
-        - name: sceneId
-          in: path
-          required: true
-          schema: {type: string}
-      responses:
-        '200':
-          description: 成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
-        default:
-          description: 失败
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiResponse'
 components:
+  parameters:
+    ProjectId: {name: projectId, in: path, required: true, schema: {type: string, format: uuid}}
+    SceneId: {name: sceneId, in: path, required: true, schema: {type: string}}
+    SceneKind: {name: kind, in: query, required: true, schema: {type: string, enum: ['2d', '3d']}}
+    SessionId: {name: sessionId, in: path, required: true, schema: {type: string, format: uuid}}
+    AssetId: {name: assetId, in: path, required: true, schema: {type: string, format: uuid}}
+    AssetType: {name: type, in: query, schema: {type: string, enum: [image, font, model, material, symbol, component]}}
+    Page: {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+    Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 20}}
   securitySchemes:
     bearerAuth:
       type: http
@@ -2299,25 +2496,39 @@ components:
       type: object
       properties:
         operation: {type: string}
-    DesignFileActionRequest:
+    SceneProviderRequest:
       type: object
-      required: [command, data]
-      properties:
-        command:
-          type: string
-          enum: [explore, upload, source, remove, rename, mkdir, locate, paste, import]
-        data:
-          nullable: true
-    DesignFileExportRequest:
+      required: [provider]
+      properties: {provider: {type: string, enum: [induforge]}}
+    SceneCreateRequest:
       type: object
-      required: [paths]
+      required: [sceneId, kind, name]
       properties:
-        paths:
-          type: array
-          minItems: 1
-          maxItems: 1000
-          items:
-            type: string
+        sceneId: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$'}
+        kind: {type: string, enum: ['2d', '3d']}
+        name: {type: string, maxLength: 200}
+        publicContract: {type: object, additionalProperties: true}
+    SceneUpdateRequest:
+      type: object
+      properties:
+        name: {type: string, maxLength: 200}
+        publicContract: {type: object, additionalProperties: true}
+    SceneCommitRequest:
+      type: object
+      required: [baseDraftVersion]
+      properties: {baseDraftVersion: {type: integer, format: int64, minimum: 0}}
+    SceneAssetUpdateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+    SceneAssetActionRequest:
+      type: object
+      required: [action, assetId, baseDraftVersion]
+      properties:
+        action: {type: string, enum: [attach, update, detach]}
+        assetId: {type: string, format: uuid}
+        baseDraftVersion: {type: integer, format: int64, minimum: 0}
     ProjectImportRequest:
       type: object
       properties:

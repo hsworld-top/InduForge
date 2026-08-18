@@ -251,7 +251,41 @@
 - `24003` 工程创建失败
 - `24006` 工程运维操作失败
 
-### 4.7 设计页面模块 `/api/v1/design`
+### 4.7 2D/3D 场景与资源库
+
+场景与资源接口统一使用短期编辑会话。除缩略图、文件内容和 ZIP 流外，响应均使用
+`code/msg/data/reqId` 包络；浏览器不得直接访问 MinIO 或传入 Provider URL。对外 Provider
+标识固定为 `induforge`，内部 Provider 类型及版本仅在服务端会话、存储和构建流程中使用。
+普通场景、资源和 revision 响应不返回内部 Provider、Provider 版本、入口路径或内容摘要。
+
+| 方法 | 路径 | 功能概要 |
+| --- | --- | --- |
+| `GET/PUT` | `/api/v1/scene-provider` | 查询或切换平台唯一 Provider；存在场景时禁止切换 |
+| `GET/POST` | `/api/v1/projects/{projectId}/scenes` | 分页查询或创建场景 |
+| `GET/PUT/DELETE` | `/api/v1/projects/{projectId}/scenes/{sceneId}` | 场景详情、公开契约与墓碑删除 |
+| `POST` | `/api/v1/projects/{projectId}/scenes/{sceneId}/editor-session` | 创建绑定用户、工程、场景、类型和 Provider 的短期会话 |
+| `POST` | `/api/v1/projects/{projectId}/scenes/{sceneId}/commit` | 将指定草稿版本提交为不可变 revision |
+| `GET/PUT` | `/api/v1/scene-editor-sessions/{sessionId}/files/content` | 受控读取或保存 Provider 文件 |
+| `POST` | `/api/v1/scene-editor-sessions/{sessionId}/import` | 原子导入场景 ZIP |
+| `POST` | `/api/v1/scene-editor-sessions/{sessionId}/export` | 按当前场景依赖导出 ZIP |
+| `GET` | `/api/v1/scene-editor-sessions/{sessionId}/datapoints` | 代理分页查询平台数据点 |
+| `GET` | `/api/v1/projects/{projectId}/scene-assets` | 按分类、关键字、场景类型分页查询工程资源 |
+| `POST` | `/api/v1/projects/{projectId}/scene-assets/import` | 上传单文件或 ZIP 并创建资源首个内部代次 |
+| `GET/PUT/DELETE` | `/api/v1/projects/{projectId}/scene-assets/{assetId}` | 资源详情、重命名与归档 |
+| `POST` | `/api/v1/projects/{projectId}/scene-assets/{assetId}/replace` | 创建新的内部资源代次 |
+| `GET` | `/api/v1/projects/{projectId}/scene-assets/{assetId}/thumbnail` | 平台代理资源缩略图 |
+| `POST` | `/api/v1/projects/{projectId}/scene-assets/{assetId}/editor-session` | 创建 Symbol/Component 工作副本会话 |
+| `GET` | `/api/v1/scene-editor-sessions/{sessionId}/assets` | 场景工作室内分页查询兼容资源及绑定/更新状态 |
+| `POST` | `/api/v1/scene-editor-sessions/{sessionId}/assets/actions` | 以乐观锁执行 `attach/update/detach` |
+| `GET` | `/api/v1/scene-editor-sessions/{sessionId}/dependencies` | 只读分页查询场景依赖诊断 |
+| `GET/PUT` | `/api/v1/scene-asset-editor-sessions/{sessionId}/files/content` | 读取或保存资源工作副本 |
+| `POST` | `/api/v1/scene-asset-editor-sessions/{sessionId}/commit` | 发布资源工作副本为新内部代次 |
+
+读取资源要求 `project:read`；上传、替换、归档、编辑、挂载、更新和场景提交要求
+`project:write`。上传单文件上限为 `64 MiB`；ZIP 请求上限为 `512 MiB`、最多 `10,000`
+个条目，并拒绝绝对路径、路径逃逸、符号链接、重复逻辑路径和不完整依赖。
+
+### 4.8 设计页面模块 `/api/v1/design`
 
 | 方法     | 路径                                                       | 功能概要       |
 | -------- | ---------------------------------------------------------- | -------------- |
@@ -267,7 +301,7 @@
 | `GET`    | `/api/v1/design/projects/:projectId/settings`              | 获取设计设置   |
 | `PUT`    | `/api/v1/design/projects/:projectId/settings`              | 更新设计设置   |
 
-### 4.8 设计资源模块 `/api/v1/design`
+### 4.9 设计资源模块 `/api/v1/design`
 
 | 方法     | 路径                                                      | 功能概要           |
 | -------- | --------------------------------------------------------- | ------------------ |
@@ -282,7 +316,7 @@
 | `POST`   | `/api/v1/design/projects/:projectId/assets/move`          | 批量移动资源       |
 | `DELETE` | `/api/v1/design/projects/:projectId/folders/:folderId`    | 删除资源目录       |
 
-### 4.9 页面锁模块 `/api/v1/pages`
+### 4.10 页面锁模块 `/api/v1/pages`
 
 | 方法     | 路径                                   | 功能概要              |
 | -------- | -------------------------------------- | --------------------- |
@@ -293,7 +327,7 @@
 | `POST`   | `/api/v1/pages/:pageId/lock/release`   | Beacon 方式释放页面锁 |
 | `DELETE` | `/api/v1/pages/:pageId/lock/force`     | 强制释放页面锁        |
 
-### 4.10 节点与注册模块
+### 4.11 节点与注册模块
 
 #### `/api/v1/node-register`
 
@@ -316,7 +350,7 @@
 | `PUT`    | `/api/v1/nodes/:nodeId/approve`           | 审批节点     |
 | `PUT`    | `/api/v1/nodes/:nodeId/reject`            | 拒绝节点     |
 
-### 4.11 部署模块 `/api/v1/deployments`
+### 4.12 部署模块 `/api/v1/deployments`
 
 | 方法     | 路径                                                  | 功能概要           |
 | -------- | ----------------------------------------------------- | ------------------ |
@@ -333,7 +367,7 @@
 | `GET`    | `/api/v1/deployments/project/:projectId/nodes`        | 获取可部署节点列表 |
 | `GET`    | `/api/v1/deployments/node/:nodeId/history`            | 获取节点部署历史   |
 
-### 4.12 发布模块 `/api/v1/publish`
+### 4.13 发布模块 `/api/v1/publish`
 
 | 方法     | 路径                                      | 功能概要     |
 | -------- | ----------------------------------------- | ------------ |
@@ -343,7 +377,7 @@
 | `GET`    | `/api/v1/publish/deployment/:id/download` | 下载发布包   |
 | `DELETE` | `/api/v1/publish/deployment/:id`          | 删除发布版本 |
 
-### 4.13 日志模块 `/api/v1/logs`
+### 4.14 日志模块 `/api/v1/logs`
 
 | 方法  | 路径                             | 功能概要         |
 | ----- | -------------------------------- | ---------------- |

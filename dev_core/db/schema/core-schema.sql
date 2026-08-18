@@ -90,6 +90,272 @@ CREATE TABLE projects (
 );
 CREATE INDEX projects_tenant_status_idx ON projects (tenant_id, status, updated_at DESC);
 
+CREATE TABLE scene_provider_state (
+  id smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE RESTRICT,
+  provider text NOT NULL CHECK (provider ~ '^[a-z][a-z0-9_-]{1,31}$'),
+  provider_version text NOT NULL,
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  updated_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE scene_documents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+  scene_id text NOT NULL CHECK (scene_id ~ '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$'),
+  kind text NOT NULL CHECK (kind IN ('2d', '3d')),
+  name text NOT NULL CHECK (char_length(name) BETWEEN 1 AND 200),
+  provider text NOT NULL CHECK (provider ~ '^[a-z][a-z0-9_-]{1,31}$'),
+  entry_path text NOT NULL,
+  public_contract jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(public_contract) = 'object'),
+  datapoint_refs jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(datapoint_refs) = 'array'),
+  current_revision bigint NOT NULL DEFAULT 0 CHECK (current_revision >= 0),
+  draft_version bigint NOT NULL DEFAULT 0 CHECK (draft_version >= 0),
+  committed_draft_version bigint NOT NULL DEFAULT 0 CHECK (committed_draft_version >= 0 AND committed_draft_version <= draft_version),
+  deleted_at timestamptz,
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  updated_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (project_id, kind, scene_id),
+  UNIQUE (id, tenant_id),
+  UNIQUE (id, project_id),
+  CHECK (entry_path <> '' AND entry_path !~ '(^|/)\.\.(/|$)' AND left(entry_path, 1) <> '/')
+);
+CREATE INDEX scene_documents_project_idx ON scene_documents (project_id, kind, updated_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX scene_documents_uncommitted_idx ON scene_documents (project_id) WHERE deleted_at IS NULL AND draft_version <> committed_draft_version;
+
+CREATE TABLE scene_content_objects (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  provider text NOT NULL CHECK (provider ~ '^[a-z][a-z0-9_-]{1,31}$'),
+  content_hash text NOT NULL CHECK (content_hash ~ '^[0-9a-f]{64}$'),
+  content_size bigint NOT NULL CHECK (content_size >= 0),
+  content_type text NOT NULL,
+  json_content jsonb,
+  object_key text,
+  orphaned_at timestamptz,
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  updated_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, provider, content_hash),
+  UNIQUE (id, tenant_id),
+  CHECK ((json_content IS NOT NULL AND object_key IS NULL) OR (json_content IS NULL AND object_key IS NOT NULL)),
+  CHECK (object_key IS NULL OR object_key <> '')
+);
+CREATE INDEX scene_content_objects_orphan_idx ON scene_content_objects (orphaned_at) WHERE orphaned_at IS NOT NULL;
+
+CREATE TABLE scene_assets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+  provider text NOT NULL CHECK (provider ~ '^[a-z][a-z0-9_-]{1,31}$'),
+  asset_type text NOT NULL CHECK (asset_type IN ('image', 'font', 'model', 'material', 'symbol', 'component')),
+  compatible_kind text NOT NULL CHECK (compatible_kind IN ('2d', '3d', 'both')),
+  name text NOT NULL CHECK (char_length(name) BETWEEN 1 AND 200),
+  entry_path text NOT NULL,
+  current_generation bigint NOT NULL DEFAULT 0 CHECK (current_generation >= 0),
+  draft_version bigint NOT NULL DEFAULT 0 CHECK (draft_version >= 0),
+  committed_draft_version bigint NOT NULL DEFAULT 0 CHECK (committed_draft_version >= 0 AND committed_draft_version <= draft_version),
+  archived_at timestamptz,
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  updated_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (id, tenant_id),
+  UNIQUE (id, project_id),
+  CHECK (entry_path <> '' AND entry_path !~ '(^|/)\.\.(/|$)' AND left(entry_path, 1) <> '/')
+);
+CREATE UNIQUE INDEX scene_assets_active_name_uidx
+  ON scene_assets (project_id, provider, asset_type, lower(name)) WHERE archived_at IS NULL;
+CREATE INDEX scene_assets_project_idx
+  ON scene_assets (project_id, provider, asset_type, updated_at DESC) WHERE archived_at IS NULL;
+
+CREATE TABLE scene_asset_generations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+  asset_id uuid NOT NULL,
+  generation bigint NOT NULL CHECK (generation > 0),
+  entry_path text NOT NULL,
+  root_hash text NOT NULL CHECK (root_hash ~ '^[0-9a-f]{64}$'),
+  manifest jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(manifest) = 'object'),
+  thumbnail_content_object_id uuid,
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  updated_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (asset_id, generation),
+  UNIQUE (id, tenant_id),
+  UNIQUE (id, tenant_id, asset_id),
+  FOREIGN KEY (asset_id, tenant_id) REFERENCES scene_assets (id, tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY (asset_id, project_id) REFERENCES scene_assets (id, project_id) ON DELETE CASCADE,
+  FOREIGN KEY (thumbnail_content_object_id, tenant_id) REFERENCES scene_content_objects (id, tenant_id) ON DELETE RESTRICT,
+  CHECK (entry_path <> '' AND entry_path !~ '(^|/)\.\.(/|$)' AND left(entry_path, 1) <> '/')
+);
+CREATE INDEX scene_asset_generations_asset_idx ON scene_asset_generations (asset_id, generation DESC);
+
+CREATE TABLE scene_asset_generation_files (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+  asset_id uuid NOT NULL,
+  generation_id uuid NOT NULL,
+  logical_path text NOT NULL,
+  file_role text NOT NULL DEFAULT 'dependency' CHECK (file_role IN ('entry', 'dependency')),
+  content_object_id uuid NOT NULL,
+  content_hash text NOT NULL CHECK (content_hash ~ '^[0-9a-f]{64}$'),
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  updated_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (generation_id, logical_path),
+  FOREIGN KEY (asset_id, tenant_id) REFERENCES scene_assets (id, tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY (generation_id, tenant_id) REFERENCES scene_asset_generations (id, tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY (content_object_id, tenant_id) REFERENCES scene_content_objects (id, tenant_id) ON DELETE RESTRICT,
+  CHECK (logical_path <> '' AND logical_path !~ '(^|/)\.\.(/|$)' AND left(logical_path, 1) <> '/')
+);
+CREATE INDEX scene_asset_generation_files_content_idx ON scene_asset_generation_files (content_object_id);
+
+CREATE TABLE scene_asset_draft_files (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+  asset_id uuid NOT NULL,
+  logical_path text NOT NULL,
+  content_object_id uuid NOT NULL,
+  content_hash text NOT NULL CHECK (content_hash ~ '^[0-9a-f]{64}$'),
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  updated_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (asset_id, logical_path),
+  FOREIGN KEY (asset_id, tenant_id) REFERENCES scene_assets (id, tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY (content_object_id, tenant_id) REFERENCES scene_content_objects (id, tenant_id) ON DELETE RESTRICT,
+  CHECK (logical_path <> '' AND logical_path !~ '(^|/)\.\.(/|$)' AND left(logical_path, 1) <> '/')
+);
+CREATE INDEX scene_asset_draft_files_content_idx ON scene_asset_draft_files (content_object_id);
+
+CREATE TABLE scene_file_nodes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+  scene_document_id uuid NOT NULL,
+  provider text NOT NULL CHECK (provider ~ '^[a-z][a-z0-9_-]{1,31}$'),
+  logical_path text NOT NULL,
+  parent_path text NOT NULL DEFAULT '',
+  node_type text NOT NULL CHECK (node_type IN ('file', 'directory')),
+  content_object_id uuid,
+  content_hash text,
+  deleted_at timestamptz,
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  updated_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (scene_document_id, logical_path),
+  FOREIGN KEY (scene_document_id, tenant_id) REFERENCES scene_documents (id, tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY (scene_document_id, project_id) REFERENCES scene_documents (id, project_id) ON DELETE CASCADE,
+  FOREIGN KEY (content_object_id, tenant_id) REFERENCES scene_content_objects (id, tenant_id) ON DELETE RESTRICT,
+  CHECK (logical_path <> '' AND logical_path !~ '(^|/)\.\.(/|$)' AND left(logical_path, 1) <> '/'),
+  CHECK (parent_path = '' OR (parent_path !~ '(^|/)\.\.(/|$)' AND left(parent_path, 1) <> '/')),
+  CHECK ((node_type = 'directory' AND content_object_id IS NULL AND content_hash IS NULL) OR (node_type = 'file' AND content_object_id IS NOT NULL AND content_hash ~ '^[0-9a-f]{64}$'))
+);
+CREATE INDEX scene_file_nodes_directory_idx ON scene_file_nodes (scene_document_id, parent_path, logical_path) WHERE deleted_at IS NULL;
+CREATE INDEX scene_file_nodes_content_idx ON scene_file_nodes (content_object_id) WHERE deleted_at IS NULL;
+
+CREATE TABLE scene_asset_bindings (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+  scene_document_id uuid NOT NULL,
+  asset_id uuid NOT NULL,
+  generation_id uuid NOT NULL,
+  mount_path text NOT NULL,
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  updated_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (scene_document_id, asset_id),
+  UNIQUE (scene_document_id, mount_path),
+  FOREIGN KEY (scene_document_id, tenant_id) REFERENCES scene_documents (id, tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY (scene_document_id, project_id) REFERENCES scene_documents (id, project_id) ON DELETE CASCADE,
+  FOREIGN KEY (asset_id, tenant_id) REFERENCES scene_assets (id, tenant_id) ON DELETE RESTRICT,
+  FOREIGN KEY (generation_id, tenant_id, asset_id) REFERENCES scene_asset_generations (id, tenant_id, asset_id) ON DELETE RESTRICT,
+  CHECK (mount_path <> '' AND mount_path !~ '(^|/)\.\.(/|$)' AND left(mount_path, 1) <> '/')
+);
+CREATE INDEX scene_asset_bindings_asset_idx ON scene_asset_bindings (asset_id, generation_id);
+
+CREATE TABLE scene_revisions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+  scene_document_id uuid NOT NULL,
+  revision bigint NOT NULL CHECK (revision > 0),
+  draft_version bigint NOT NULL CHECK (draft_version >= 0),
+  provider text NOT NULL,
+  provider_version text NOT NULL,
+  entry_path text NOT NULL,
+  public_contract jsonb NOT NULL CHECK (jsonb_typeof(public_contract) = 'object'),
+  datapoint_refs jsonb NOT NULL CHECK (jsonb_typeof(datapoint_refs) = 'array'),
+  root_hash text NOT NULL CHECK (root_hash ~ '^[0-9a-f]{64}$'),
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  updated_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (scene_document_id, revision),
+  UNIQUE (id, tenant_id),
+  FOREIGN KEY (scene_document_id, tenant_id) REFERENCES scene_documents (id, tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY (scene_document_id, project_id) REFERENCES scene_documents (id, project_id) ON DELETE CASCADE
+);
+CREATE INDEX scene_revisions_scene_idx ON scene_revisions (scene_document_id, revision DESC);
+
+CREATE TABLE scene_revision_files (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+  scene_document_id uuid NOT NULL,
+  revision_id uuid NOT NULL,
+  logical_path text NOT NULL,
+  content_object_id uuid NOT NULL,
+  content_hash text NOT NULL CHECK (content_hash ~ '^[0-9a-f]{64}$'),
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  updated_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (revision_id, logical_path),
+  FOREIGN KEY (scene_document_id, tenant_id) REFERENCES scene_documents (id, tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY (revision_id, tenant_id) REFERENCES scene_revisions (id, tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY (content_object_id, tenant_id) REFERENCES scene_content_objects (id, tenant_id) ON DELETE RESTRICT,
+  CHECK (logical_path <> '' AND logical_path !~ '(^|/)\.\.(/|$)' AND left(logical_path, 1) <> '/')
+);
+CREATE INDEX scene_revision_files_content_idx ON scene_revision_files (content_object_id);
+
+CREATE TABLE scene_revision_assets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  project_id uuid NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+  scene_document_id uuid NOT NULL,
+  revision_id uuid NOT NULL,
+  asset_id uuid NOT NULL,
+  generation_id uuid NOT NULL,
+  mount_path text NOT NULL,
+  created_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  updated_by uuid NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (revision_id, asset_id),
+  FOREIGN KEY (scene_document_id, tenant_id) REFERENCES scene_documents (id, tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY (revision_id, tenant_id) REFERENCES scene_revisions (id, tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY (asset_id, tenant_id) REFERENCES scene_assets (id, tenant_id) ON DELETE RESTRICT,
+  FOREIGN KEY (generation_id, tenant_id, asset_id) REFERENCES scene_asset_generations (id, tenant_id, asset_id) ON DELETE RESTRICT,
+  CHECK (mount_path <> '' AND mount_path !~ '(^|/)\.\.(/|$)' AND left(mount_path, 1) <> '/')
+);
+CREATE INDEX scene_revision_assets_generation_idx ON scene_revision_assets (generation_id);
+
 CREATE TABLE project_tags (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,

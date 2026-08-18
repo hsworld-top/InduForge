@@ -4,6 +4,7 @@ export interface WorkspaceOpenRequest {
   type: 'WORKSPACE_OPEN_REQUEST'
   projectId: string
   target: WorkspaceToolTarget
+  sceneId: string
 }
 
 export interface WorkspaceToolProject {
@@ -15,6 +16,7 @@ export interface WorkspaceToolProject {
 export interface WorkspaceToolTabProps {
   target: WorkspaceToolTarget
   project: WorkspaceToolProject
+  sceneId: string
 }
 
 export function isWorkspaceOpenRequest(value: unknown): value is WorkspaceOpenRequest {
@@ -23,12 +25,18 @@ export function isWorkspaceOpenRequest(value: unknown): value is WorkspaceOpenRe
   return (
     request.type === 'WORKSPACE_OPEN_REQUEST' &&
     typeof request.projectId === 'string' &&
+    typeof request.sceneId === 'string' &&
+    request.sceneId.trim().length > 0 &&
     ['2d', '3d'].includes(String(request.target))
   )
 }
 
-export function workspaceToolTabKey(projectId: string, target: WorkspaceToolTarget): string {
-  return `${projectId}:${target}`
+export function workspaceToolTabKey(
+  projectId: string,
+  target: WorkspaceToolTarget,
+  sceneId: string,
+): string {
+  return `${projectId}:${target}:${sceneId}`
 }
 
 export function workspaceToolTitle(target: WorkspaceToolTarget): string {
@@ -41,11 +49,4 @@ export function matchesWorkspaceRequestProject(
   projectId: string,
 ): boolean {
   return Boolean(projectId) && request.projectId === projectId
-}
-
-export function buildWorkspaceToolUrl(target: WorkspaceToolTarget, projectId: string): string {
-  const params = new URLSearchParams({ projectId })
-  if (target === '3d') params.set('workspace', 'scene')
-  const entry = target === '2d' ? 'index.html' : 'index3d.html'
-  return `/designer/ht-editor/${entry}?${params.toString()}`
 }

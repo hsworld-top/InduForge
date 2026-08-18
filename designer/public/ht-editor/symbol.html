@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>Preview Symbol</title>
+        <title>InduForge 资源预览</title>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=0">
-        <link rel="shortcut icon" href="custom/images/favicon.ico" />
+        <link rel="icon" href="custom/images/induforge.svg" />
         <style>
             html, body {
                 padding: 0px;
@@ -12,21 +12,21 @@
             }
         </style>
 
-        <script src='custom/configs/htconfig.js'></script>
-        <script src='libs/core/ht.js'></script>
+        <script src='config/engine.js'></script>
+        <script src='runtime/core.js'></script>
 
         <script>
             function init() {
-                dataModel = new ht.DataModel();
-                graphView = new ht.graph.GraphView(dataModel);
+                dataModel = new InduSceneEngine.DataModel();
+                graphView = new InduSceneEngine.graph.GraphView(dataModel);
                 graphView.addToDOM();
                 graphView.setEditable(true);
 
-                ht.Default.xhrLoad('previews/symbol.json', function(text) {
-                    var json = ht.Default.parse(text);
+                InduSceneEngine.Default.xhrLoad('previews/symbol.json', function(text) {
+                    var json = InduSceneEngine.Default.parse(text);
                     if (json.title) document.title = json.title;
                     dataModel.setBackground(json.background);
-                    node = new ht.Node();
+                    node = new InduSceneEngine.Node();
                     node.setImage(json);
                     node.setPosition(graphView.getWidth()/2, graphView.getHeight()/2);
                     dataModel.add(node);

@@ -40,7 +40,7 @@ hteditor.customStrings = {
 
     // --- help menu ---
     Help: 'Help',
-    Hightopo: 'Hightopo',
+    Hightopo: 'InduForge',
     Home: 'Home',
     GetStarted: 'Get Started',
     Blog: 'Blog',
@@ -165,7 +165,7 @@ hteditor.customStrings = {
     NumPaneIconHeight: 'Icon Height',
     NumPaneDigitCount: 'Digit',
     NumPaneDigitFixed: 'Fixed',
-    'editor.title': 'HT for Web Editor',
+    'editor.title': 'InduForge Editor',
 
     'editor.align.cluster': 'Cluster',
     'editor.showaxis': 'Show Axis',

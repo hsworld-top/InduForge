@@ -18,24 +18,25 @@ describe('Wujie 工程工具请求', () => {
       onOpenWorkspace,
     })
 
-    expect(requestWorkspaceOpen('3d')).toBe(true)
+    expect(requestWorkspaceOpen('3d', 'factory')).toBe(true)
     expect(onOpenWorkspace).toHaveBeenCalledWith({
       type: 'WORKSPACE_OPEN_REQUEST',
       projectId: 'project-1',
       target: '3d',
+      sceneId: 'factory',
     })
   })
 
   it('宿主未注入回调时拒绝伪造打开行为', () => {
     applyMicroAppContext({ projectId: 'project-1' })
-    expect(requestWorkspaceOpen('2d')).toBe(false)
+    expect(requestWorkspaceOpen('2d', 'overview')).toBe(false)
   })
 
   it('拒绝白名单之外的工具目标', () => {
     const onOpenWorkspace = vi.fn()
     applyMicroAppContext({ projectId: 'project-1', onOpenWorkspace })
 
-    expect(requestWorkspaceOpen('code' as never)).toBe(false)
+    expect(requestWorkspaceOpen('code' as never, 'overview')).toBe(false)
     expect(onOpenWorkspace).not.toHaveBeenCalled()
   })
 

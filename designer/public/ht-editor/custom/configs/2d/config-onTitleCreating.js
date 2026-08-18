@@ -119,7 +119,7 @@
         items.push(button);
 
         label = null;
-        toolTip = 'HT for Web';
+        toolTip = 'InduForge';
         icon = 'symbols/basic/red.json';
         onClicked = function() { setTimeout(function() {
             alert('HIGHTOPO is AWESOME!!!');
@@ -146,7 +146,6 @@
         });
     }
 })();
-
 
 
 

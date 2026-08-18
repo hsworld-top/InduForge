@@ -343,7 +343,7 @@ export default {
      */
     const handleWorkspaceOpenRequest = ({ tab, request }) => {
       if (!isWorkspaceOpenRequest(request) || tab?.props?.appType !== 'designer') return
-      if (!can(authStore.userInfo?.role, 'project:read')) {
+      if (!can(authStore.userInfo?.role, 'project:write')) {
         ElMessage.error('当前用户没有工程工具访问权限')
         return
       }
@@ -355,11 +355,12 @@ export default {
       }
 
       openTab({
-        key: workspaceToolTabKey(projectId, request.target),
+        key: workspaceToolTabKey(projectId, request.target, request.sceneId),
         title: `${project.name || projectId} · ${workspaceToolTitle(request.target)}`,
         component: WorkspaceToolFrame,
         props: {
           target: request.target,
+          sceneId: request.sceneId,
           project: {
             id: projectId,
             name: project.name,

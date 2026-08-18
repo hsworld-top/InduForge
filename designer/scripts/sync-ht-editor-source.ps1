@@ -1,5 +1,5 @@
 param(
-    [string]$SourceRoot = 'E:\personal_dev\test\kf\kingdevopscenter\kingclient\exe\public\javascripts\HT3DEditor'
+    [Parameter(Mandatory = $true)][string]$SourceRoot
 )
 
 $ErrorActionPreference = 'Stop'
@@ -101,13 +101,6 @@ $editorVariable = $focusCall.Groups[1].Value
 $focusLogic = "(function(){var workspace=new URLSearchParams(window.location.search).get('workspace'),tabs=$editorVariable.leftTopTabView.getTabModel().getDatas(),targetTab=tabs.get(workspace==='model'?1:0);targetTab&&$editorVariable.leftTopTabView.getTabModel().sm().ss(targetTab)})()"
 $hookContent = $hookContent.Remove($focusCall.Index, $focusCall.Length).Insert($focusCall.Index, $focusLogic)
 Write-Utf8NoBom -Path $createdHook -Content $hookContent
-
-$metadata = [ordered]@{
-    sourceRoot = $source
-    sourceLayout = 'HT3DEditor/client + HT3DEditor/instance/custom'
-    integration = 'InduForgeService REST adapter'
-}
-Write-Utf8NoBom -Path (Join-Path $destination 'induforge-source.json') -Content ($metadata | ConvertTo-Json)
 
 $socketReferences = Get-ChildItem -LiteralPath $destination -Recurse -File -Filter '*.html' | Select-String -Pattern 'socket\.io'
 if (@($socketReferences).Count -gt 0) {

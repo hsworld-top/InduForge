@@ -2,10 +2,10 @@
 <html>
 
 <head>
-    <title>HT for Web</title>
+    <title>InduForge 2D 编辑器</title>
     <meta charset="UTF-8">
     <meta name='viewport' content='user-scalable=no'>
-    <link rel="shortcut icon" href="custom/images/favicon_2d.ico" />
+    <link rel="icon" href="custom/images/induforge.svg">
     <style>
         html,
         body {
@@ -14,79 +14,62 @@
         }
     </style>
 
-    <!-- ht config -->
-    <script src='custom/configs/htconfig.js'></script>
+    <script src='config/engine.js'></script>
     <script src='custom/configs/config-transform.js'></script>
     <script src='custom/configs/config-service.js'></script>
 
     <!-- configuration for editor -->
     <script src='custom/configs/2d/config.js'></script>
 
-    <!-- ht core -->
-    <script src='libs/core/ht.js'></script>
+    <script src='runtime/core.js'></script>
     <script src='custom/configs/buckle.js'></script>
-    <script src="libs/core/ht-ui.js"></script>
-    <!-- ht plugins -->
-    <script src="libs/plugin/ht-cssanimation.js"></script>
-    <script src='libs/plugin/ht-contextmenu.js'></script>
-    <script src='libs/plugin/ht-dialog.js'></script>
-    <script src='libs/plugin/ht-edgetype.js'></script>
-    <script src='libs/plugin/ht-form.js'></script>
-    <script src='libs/plugin/ht-overview.js'></script>
-    <script src="libs/plugin/ht-autolayout.js"></script>
-    <script src="libs/plugin/ht-obj.js"></script>
-    <script src="libs/plugin/ht-historymanager.js"></script>
-    <script src="libs/plugin/ht-vector.js"></script>
-
-    <!-- KF3.6中使用 -->
-    <!-- KP2.0中使用 -->
+    <script src="runtime/ui.js"></script>
+    <script src="runtime/extensions/css-animation.js"></script>
+    <script src='runtime/extensions/context-menu.js'></script>
+    <script src='runtime/extensions/dialog.js'></script>
+    <script src='runtime/extensions/edge-type.js'></script>
+    <script src='runtime/extensions/form.js'></script>
+    <script src='runtime/extensions/overview.js'></script>
+    <script src="runtime/extensions/auto-layout.js"></script>
+    <script src="runtime/extensions/object-model.js"></script>
+    <script src="runtime/extensions/history.js"></script>
+    <script src="runtime/extensions/vector.js"></script>
 
     <script>
         function init() {
-            var urls = hteditor_config.subConfigs || [];
-            urls.push('libs/client.js');
-            ht.Default.loadJS(urls, function () {
+            var urls = InduSceneStudioConfig.subConfigs || [];
+            urls.push('runtime/studio-2d.js');
+            InduSceneEngine.Default.loadJS(urls, function () {
                 urls = [
-                    'locales/' + hteditor_config.locale + '.js',
-                    'custom/locales/' + hteditor_config.locale + '.js'
+                    'locales/' + InduSceneStudioConfig.locale + '.js',
+                    'custom/locales/' + InduSceneStudioConfig.locale + '.js'
                 ];
-                if (hteditor_config.libs) {
-                    urls = urls.concat(hteditor_config.libs);
-                }
-                ht.Default.loadJS(urls, function () {
-                    hteditor.init();
-                    window.editor = hteditor.createEditor();
-                    window.editor.isSaveInKP = false;
-                    // 重写preview方法 add by lei.zhang
+                if (InduSceneStudioConfig.libs) {
+                    urls = urls.concat(InduSceneStudioConfig.libs);
+                    }
+                    InduSceneEngine.Default.loadJS(urls, function () {
+                        InduSceneStudio.init();
+                        var entryPath = new URLSearchParams(window.location.search).get('open');
+                        window.editor = InduSceneStudio.createEditor({ open: entryPath || undefined });
+                    if (window.InduForgeAssets) {
+                        window.InduForgeAssets.openAssetDraft(window.editor);
+                    }
                     window.editor.preview = function () {
-                        var previewURL = "display.html";
-                        previewURL += "?tag=" + encodeURI(this.url);
-                        // 获取工程信息 add by lei.zhang
-                        var searchArr = window.location.search ? window.location.search.split('=') : [''];
-                        var projectInfo = searchArr[searchArr.length - 1];
-                        if (-1 !== previewURL.indexOf("?")) {
-                            previewURL += '&projectInfo=' + projectInfo;
-                        } else {
-                            previewURL += '?projectInfo=' + projectInfo;
-                        }
-                        window.open(previewURL, previewURL);
+                        var sessionId = new URLSearchParams(window.location.search).get('sessionId');
+                        var params = new URLSearchParams({ sessionId: sessionId || '', open: entryPath || '', mode: 'draft' });
+                        window.open('display.html?' + params.toString(), 'induforge-2d-preview');
                     }
                 });
                 window.addEventListener('message', function (e) {
-                    if (e.source !== window.parent) return;
-                    if (e.data === 'save') {
+                    if (e.source !== window.parent || e.origin !== window.location.origin) return;
+                    if (e.data && e.data.source === 'induforge-host' && e.data.type === 'save') {
                         // 父页面触发保存
                         if (window.editor.mainTabView.currentTab) {
                             window.editor.save();
-                            window.editor.isSaveInKP = true;
                         } else {
                             // 没有打开图纸时退出
-                            window.parent.postMessage('closed', editor.parentHref);
-                            window.parent.postMessage('closedIn2d', editor.parentHref);
+                            window.parent.postMessage({ source: 'induforge-scene', type: 'closed' }, window.location.origin);
                         }
-                    } else if (typeof e.data === 'string' && e.data.indexOf('http') !== -1) {
-                        // 记录父级页面的href,用来和父级页面进行通讯
-                        window.editor.parentHref = e.data;
                     }
                 })
             });

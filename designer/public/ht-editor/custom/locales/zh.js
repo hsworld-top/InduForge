@@ -40,7 +40,7 @@ hteditor.customStrings = {
 
     // --- help menu ---
     Help: '帮助',
-    Hightopo: '图扑软件',
+    Hightopo: 'InduForge',
     Home: '官网首页',
     GetStarted: '入门手册',
     Blog: '博客文章',
@@ -167,7 +167,7 @@ hteditor.customStrings = {
     NumPaneDigitFixed: '小数位',
 
 
-    'editor.title': 'HT for Web 编辑器',
+    'editor.title': 'InduForge 编辑器',
 
     'editor.align.cluster': '成串均分',
     'editor.showaxis': '显示编辑轴',

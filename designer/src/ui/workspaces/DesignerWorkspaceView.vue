@@ -25,6 +25,8 @@ import {
 import { resolveWorkspaceState } from './code/workspace-runtime'
 import PreviewPanel from './PreviewPanel.vue'
 import SceneArtifactsPanel from './SceneArtifactsPanel.vue'
+import SceneContractPanel from './SceneContractPanel.vue'
+import SceneCreateDialog from './SceneCreateDialog.vue'
 import { sceneContractApi, type SceneContract } from './scene-contract-api'
 import {
   clampExpandedAiPaneWidth,
@@ -78,6 +80,11 @@ const stageWidth = ref(0)
 const aiFrameLoaded = ref(false)
 const codeFrameLoaded = ref(false)
 const toolError = ref('')
+const contractPanelKind = ref<WorkspaceOpenTarget | null>(null)
+const contractPanelSceneId = ref('')
+const createDialogKind = ref<WorkspaceOpenTarget | null>(null)
+const sceneCreating = ref(false)
+const sceneCreateError = ref('')
 let resizeObserver: ResizeObserver | null = null
 let workspacePollTimer: ReturnType<typeof setTimeout> | null = null
 let workspaceRequestSequence = 0
@@ -448,14 +455,55 @@ async function retryContext(): Promise<void> {
   await runContextRefresh()
 }
 
-function openWorkspace(target: WorkspaceOpenTarget): void {
+function openWorkspace(target: WorkspaceOpenTarget, sceneId: string): void {
   toolError.value = ''
-  if (!requestWorkspaceOpen(target)) {
+  if (!requestWorkspaceOpen(target, sceneId)) {
     toolError.value = '当前未连接工程工具宿主'
     window.setTimeout(() => {
       toolError.value = ''
     }, 2400)
   }
+}
+
+function createScene(kind: WorkspaceOpenTarget): void {
+  createDialogKind.value = kind
+  sceneCreateError.value = ''
+}
+
+async function submitSceneCreation(input: { sceneId: string; name: string }): Promise<void> {
+  if (!projectId.value || !createDialogKind.value || sceneCreating.value) return
+  const kind = createDialogKind.value
+  sceneCreating.value = true
+  sceneCreateError.value = ''
+  try {
+    const scene = await sceneContractApi.create(projectId.value, { ...input, kind })
+    createDialogKind.value = null
+    await runContextRefresh()
+    openWorkspace(kind, scene.id)
+  } catch (error) {
+    sceneCreateError.value = getApiErrorMessage(error, '创建场景失败')
+  } finally {
+    sceneCreating.value = false
+  }
+}
+
+function editSceneContract(contract: SceneContract): void {
+  contractPanelKind.value = contract.kind
+  contractPanelSceneId.value = contract.id
+}
+
+async function removeScene(contract: SceneContract): Promise<void> {
+  if (!projectId.value || !window.confirm(`确认删除场景“${contract.name}”吗？`)) return
+  try {
+    await sceneContractApi.remove(projectId.value, contract.kind, contract.id)
+    await runContextRefresh()
+  } catch (error) {
+    toolError.value = getApiErrorMessage(error, '删除场景失败')
+  }
+}
+
+function previewScene(contract: SceneContract): void {
+  openWorkspace(contract.kind, contract.id)
 }
 
 async function retryWorkspace(): Promise<void> {
@@ -691,16 +739,42 @@ async function retryWorkspace(): Promise<void> {
             <SceneArtifactsPanel
               kind="2d"
               :contracts="scene2dContracts"
-              @open-editor="openWorkspace('2d')"
+              @create="createScene('2d')"
+              @open-editor="(contract) => openWorkspace('2d', contract.id)"
+              @edit-contract="editSceneContract"
+              @preview="previewScene"
+              @remove="removeScene"
+              @refresh="runContextRefresh"
             />
           </div>
           <div class="workbench-view" :class="{ active: activeWorkbenchView === '3d' }">
             <SceneArtifactsPanel
               kind="3d"
               :contracts="scene3dContracts"
-              @open-editor="openWorkspace('3d')"
+              @create="createScene('3d')"
+              @open-editor="(contract) => openWorkspace('3d', contract.id)"
+              @edit-contract="editSceneContract"
+              @preview="previewScene"
+              @remove="removeScene"
+              @refresh="runContextRefresh"
             />
           </div>
+          <SceneContractPanel
+            v-if="contractPanelKind"
+            :project-id="projectId"
+            :kind="contractPanelKind"
+            :scene-id="contractPanelSceneId"
+            @close="contractPanelKind = null"
+            @synced="runContextRefresh"
+          />
+          <SceneCreateDialog
+            v-if="createDialogKind"
+            :kind="createDialogKind"
+            :loading="sceneCreating"
+            :error="sceneCreateError"
+            @cancel="createDialogKind = null"
+            @submit="submitSceneCreation"
+          />
           <div
             class="workbench-view code-server-shell"
             :class="{ active: activeWorkbenchView === 'editor' }"

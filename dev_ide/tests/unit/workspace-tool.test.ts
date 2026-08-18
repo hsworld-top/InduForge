@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildWorkspaceToolUrl,
   isWorkspaceOpenRequest,
   matchesWorkspaceRequestProject,
   workspaceToolTabKey,
@@ -14,6 +13,7 @@ describe('workspace tool contract', () => {
         type: 'WORKSPACE_OPEN_REQUEST',
         projectId: 'project-1',
         target: '2d',
+        sceneId: 'overview',
       }),
     ).toBe(true)
     expect(
@@ -21,13 +21,14 @@ describe('workspace tool contract', () => {
         type: 'WORKSPACE_OPEN_REQUEST',
         projectId: 'project-1',
         target: 'code',
+        sceneId: 'overview',
       }),
     ).toBe(false)
   })
 
   it('生成工程隔离的稳定标签键和标题', () => {
-    expect(workspaceToolTabKey('project-1', '2d')).toBe('project-1:2d')
-    expect(workspaceToolTabKey('project-2', '2d')).toBe('project-2:2d')
+    expect(workspaceToolTabKey('project-1', '2d', 'overview')).toBe('project-1:2d:overview')
+    expect(workspaceToolTabKey('project-2', '2d', 'overview')).toBe('project-2:2d:overview')
     expect(workspaceToolTitle('3d')).toBe('3D')
   })
 
@@ -36,14 +37,9 @@ describe('workspace tool contract', () => {
       type: 'WORKSPACE_OPEN_REQUEST' as const,
       projectId: 'project/1',
       target: '3d' as const,
+      sceneId: 'factory',
     }
     expect(matchesWorkspaceRequestProject(request, 'project/1')).toBe(true)
     expect(matchesWorkspaceRequestProject(request, 'project-2')).toBe(false)
-    expect(buildWorkspaceToolUrl('2d', 'project/1')).toBe(
-      '/designer/ht-editor/index.html?projectId=project%2F1',
-    )
-    expect(buildWorkspaceToolUrl('3d', 'project/1')).toBe(
-      '/designer/ht-editor/index3d.html?projectId=project%2F1&workspace=scene',
-    )
   })
 })

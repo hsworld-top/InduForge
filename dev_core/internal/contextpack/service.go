@@ -43,14 +43,18 @@ type Service struct {
 	workspace      *project.FileWorkspace
 	dataServiceURL string
 	httpClient     *http.Client
-	scenes         *scenecontract.Service
+	scenes         SceneContractSource
+}
+
+type SceneContractSource interface {
+	List(context.Context, auth.User, string) (scenecontract.Snapshot, error)
 }
 
 func NewService(projects *project.Service, runtime *runtimeaccess.Service, workspace *project.FileWorkspace, dataServiceURL string) *Service {
 	return &Service{projects: projects, runtimeAccess: runtime, workspace: workspace, dataServiceURL: strings.TrimRight(dataServiceURL, "/"), httpClient: &http.Client{Timeout: 20 * time.Second}}
 }
 
-func (s *Service) SetSceneContracts(scenes *scenecontract.Service) { s.scenes = scenes }
+func (s *Service) SetSceneContracts(scenes SceneContractSource) { s.scenes = scenes }
 
 func (s *Service) Sync(ctx context.Context, actor auth.User, projectID, authorization string) (map[string]any, error) {
 	if s == nil || s.projects == nil || s.runtimeAccess == nil || s.workspace == nil {

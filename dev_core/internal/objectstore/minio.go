@@ -31,6 +31,12 @@ type ObjectRef struct {
 	ContentType string
 }
 
+type ObjectReader struct {
+	Reader      io.ReadCloser
+	Size        int64
+	ContentType string
+}
+
 func NewMinIO(ctx context.Context, config Config) (*MinIO, error) {
 	client, err := minio.New(config.Endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(config.AccessKey, config.SecretKey, ""),
@@ -69,6 +75,19 @@ func (store *MinIO) PresignGet(ctx context.Context, objectKey string, ttl time.D
 		return "", fmt.Errorf("生成对象下载地址失败: %w", err)
 	}
 	return signed.String(), nil
+}
+
+// Open 仅供服务端受控流式读取，避免浏览器直接持有 MinIO 地址或长期凭证。
+func (store *MinIO) Open(ctx context.Context, objectKey string) (ObjectReader, error) {
+	info, err := store.client.StatObject(ctx, store.bucket, objectKey, minio.StatObjectOptions{})
+	if err != nil {
+		return ObjectReader{}, fmt.Errorf("读取对象元数据失败: %w", err)
+	}
+	object, err := store.client.GetObject(ctx, store.bucket, objectKey, minio.GetObjectOptions{})
+	if err != nil {
+		return ObjectReader{}, fmt.Errorf("打开对象失败: %w", err)
+	}
+	return ObjectReader{Reader: object, Size: info.Size, ContentType: info.ContentType}, nil
 }
 
 func (store *MinIO) Delete(ctx context.Context, objectKey string) error {

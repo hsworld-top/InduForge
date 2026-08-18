@@ -23,6 +23,26 @@ func TestSchemaDoesNotContainLegacyDesignerTables(t *testing.T) {
 	}
 }
 
+func TestSceneContentUsesExactlyOneStorageBackend(t *testing.T) {
+	expected := "CHECK ((json_content IS NOT NULL AND object_key IS NULL) OR (json_content IS NULL AND object_key IS NOT NULL))"
+	if !strings.Contains(coreschema.CoreSQL, expected) {
+		t.Fatal("scene content objects must use exactly one storage backend")
+	}
+}
+
+func TestSceneDraftFilesAreScopedToOneScene(t *testing.T) {
+	for _, expected := range []string{
+		"scene_document_id uuid NOT NULL",
+		"UNIQUE (scene_document_id, logical_path)",
+		"CREATE TABLE scene_asset_bindings",
+		"CREATE TABLE scene_revision_assets",
+	} {
+		if !strings.Contains(coreschema.CoreSQL, expected) {
+			t.Fatalf("scene asset schema missing %q", expected)
+		}
+	}
+}
+
 func TestSchemaDoesNotContainRuntimeMigrationStatements(t *testing.T) {
 	upper := strings.ToUpper(coreschema.CoreSQL)
 	for _, statement := range []string{"ALTER TABLE", "DROP TABLE", "UPDATE ", "DELETE FROM"} {
