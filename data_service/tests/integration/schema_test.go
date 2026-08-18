@@ -186,6 +186,8 @@ func TestSchemaInitializer_CreatesCoreTables(t *testing.T) {
 		"collector_dev_registration_codes",
 		"collector_dev_tasks",
 		"data_table_group_members",
+		"data_history_storage_configs",
+		"data_history_storage_targets",
 	} {
 		if !tableExists(ctx, t, fixture.pool, fixture.schemaName, tableName) {
 			t.Fatalf("expected table %s to exist", tableName)
@@ -230,6 +232,10 @@ func TestSchemaInitializer_CreatesIndexes(t *testing.T) {
 		"data_points_source_idx",
 		"data_points_source_config_gin_idx",
 		"data_points_tags_gin_idx",
+		"data_history_storage_configs_access_source_key",
+		"data_history_storage_configs_collector_key",
+		"data_history_storage_configs_datapoint_key",
+		"data_history_storage_targets_primary_key",
 		"data_mqtt_configs_protocol_idx",
 		"data_mqtt_subscriptions_project_connection_name_key",
 		"data_mqtt_subscriptions_project_connection_idx",

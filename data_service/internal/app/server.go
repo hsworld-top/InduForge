@@ -170,7 +170,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	accessSourceRepository := repository.NewAccessSourceRepository(pool)
 	alarmRuleRepository := repository.NewAlarmRuleRepository(pool)
 	alarmPolicyRepository := repository.NewAlarmPolicyRepository(pool)
-	storagePolicyRepository := repository.NewStoragePolicyRepository(pool)
+	historyStorageRepository := repository.NewHistoryStorageRepository(pool)
 	contractCheckRepository := repository.NewContractCheckRepository(pool)
 	collectorDevRepository := repository.NewCollectorDevRepository(pool)
 	collectorRepository := repository.NewCollectorRepository(pool)
@@ -195,7 +195,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	accessSourceService := service.NewAccessSourceService(connectionRepository, mqttRepository, accessSourceRepository)
 	alarmRuleService := service.NewAlarmRuleService(alarmRuleRepository, dataPointRepository)
 	alarmPolicyService := service.NewAlarmPolicyService(alarmPolicyRepository, dataPointRepository)
-	storagePolicyService := service.NewStoragePolicyService(storagePolicyRepository, dataPointRepository)
+	historyStorageService := service.NewHistoryStorageService(historyStorageRepository)
 	collectorDevService := service.NewCollectorDevService(collectorDevRepository)
 	collectorCatalogService := service.NewCollectorCatalogService(collectorCatalog)
 	var collectorHandler *handler.CollectorHandler
@@ -265,7 +265,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	accessSourceHandler := handler.NewAccessSourceHandler(accessSourceService)
 	alarmRuleHandler := handler.NewAlarmRuleHandler(alarmRuleService)
 	alarmPolicyHandler := handler.NewAlarmPolicyHandler(alarmPolicyService)
-	storagePolicyHandler := handler.NewStoragePolicyHandler(storagePolicyService)
+	historyStorageHandler := handler.NewHistoryStorageHandler(historyStorageService)
 	contractCheckHandler := handler.NewContractCheckHandler(contractCheckService)
 	collectorDevHandler := handler.NewCollectorDevHandler(collectorDevService)
 	collectorCatalogHandler := handler.NewCollectorCatalogHandler(collectorCatalogService)
@@ -287,7 +287,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	routeOptions := []router.Option{
 		router.WithAlarmRuleRoutes(alarmRuleHandler, jwtValidator),
 		router.WithAlarmPolicyRoutes(alarmPolicyHandler, jwtValidator),
-		router.WithStoragePolicyRoutes(storagePolicyHandler, jwtValidator),
+		router.WithHistoryStorageRoutes(historyStorageHandler, jwtValidator),
 		router.WithBuiltinRuntimeRoutes(builtinRuntimeHandler, jwtValidator),
 		router.WithAccessSourceRoutes(accessSourceHandler, jwtValidator),
 		router.WithContractCheckRoutes(contractCheckHandler, jwtValidator),
@@ -326,7 +326,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		"websocketWorkbench=enabled",
 		"realtimeStore=enabled",
 		"compute=enabled",
-		"storagePolicy=enabled",
+		"historyStorage=enabled",
 		"preview=disabled",
 	}
 

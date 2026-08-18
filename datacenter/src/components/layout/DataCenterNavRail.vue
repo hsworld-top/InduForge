@@ -45,7 +45,7 @@ const moduleIcons: Record<string, unknown> = {
   datapoint: IconTablerChartDots3,
   'access-source': IconTablerRouter,
   'industrial-collector': IconTablerCpu,
-  'storage-policy': IconTablerDatabaseCog,
+  'history-storage': IconTablerDatabaseCog,
   compute: IconTablerFunction,
   alarm: IconTablerBellRinging,
 }

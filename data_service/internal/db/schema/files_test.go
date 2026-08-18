@@ -18,7 +18,8 @@ func TestEmbeddedSchemaContainsFinalStructure(t *testing.T) {
 		"data_collector_points",
 		"data_collector_point_debug_snapshots",
 		"collector_dev_agents",
-		"data_storage_policies",
+		"data_history_storage_configs",
+		"data_history_storage_targets",
 	} {
 		if !strings.Contains(baseline, "CREATE TABLE "+table+" (") {
 			t.Fatalf("数据库结构基线缺少表 %s", table)

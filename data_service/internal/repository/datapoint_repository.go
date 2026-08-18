@@ -548,15 +548,20 @@ func buildDataPointWhereClause(projectID string, filter DataPointListFilter) (st
 	if strings.TrimSpace(filter.AccessSourceID) != "" {
 		args = append(args, strings.TrimSpace(filter.AccessSourceID))
 		argIndex := len(args)
-		// 接入源筛选是用户可见维度；不同来源数据点的连接 ID 可能存于 source_config 或 source_id。
-		clauses = append(clauses, fmt.Sprintf(`(
-            source_config->>'connectionId' = $%d
-            OR source_config->>'sourceConnectionId' = $%d
-            OR (
-                source_type IN ('http.request', 'websocket.session', 'realtime.key', 'kafka.field')
-                AND source_id = $%d::uuid
-            )
-        )`, argIndex, argIndex, argIndex))
+		// 接入源筛选是用户可见维度；连接 ID 可能存于 source_config、结构化来源表或 source_id。
+		clauses = append(clauses, fmt.Sprintf(`COALESCE(
+            NULLIF(BTRIM(source_config->>'connectionId'), ''),
+            NULLIF(BTRIM(source_config->>'sourceConnectionId'), ''),
+            (SELECT source_query.connection_id::text FROM data_queries source_query
+             WHERE data_points.source_type='db.query' AND source_query.project_id=data_points.project_id AND source_query.id=data_points.source_id),
+            (SELECT subscription.connection_id::text FROM data_mqtt_subscriptions subscription
+             WHERE data_points.source_type='mqtt.subscription' AND subscription.project_id=data_points.project_id AND subscription.id=data_points.source_id),
+            (SELECT subscription.connection_id::text FROM data_mqtt_tags tag
+             JOIN data_mqtt_subscriptions subscription
+               ON subscription.project_id=tag.project_id AND subscription.id=tag.subscription_id
+             WHERE data_points.source_type='mqtt.tag' AND tag.project_id=data_points.project_id AND tag.id=data_points.source_id),
+            source_id::text
+        ) = $%d`, argIndex))
 	}
 	if err := addStringClause("source_id", filter.SourceID); err != nil {
 		return "", nil, err

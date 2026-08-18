@@ -30,9 +30,9 @@ export const datacenterModules: DatacenterModuleMeta[] = [
     description: '管理工业协议连接、采集点位与开发态调试。',
   },
   {
-    id: 'storage-policy',
-    label: '存储策略',
-    description: '配置统一数据点的历史归档目标、写入模式、保留策略和容量预估。',
+    id: 'history-storage',
+    label: '历史存储',
+    description: '按接入源或工业采集连接设置数据点历史保存方式。',
   },
   {
     id: 'compute',

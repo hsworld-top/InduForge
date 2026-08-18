@@ -4,7 +4,7 @@
 export const MODULE_DATAPOINT = 'datapoint' as const
 export const MODULE_ACCESS_SOURCE = 'access-source' as const
 export const MODULE_INDUSTRIAL_COLLECTOR = 'industrial-collector' as const
-export const MODULE_STORAGE_POLICY = 'storage-policy' as const
+export const MODULE_HISTORY_STORAGE = 'history-storage' as const
 export const MODULE_COMPUTE = 'compute' as const
 export const MODULE_ALARM = 'alarm' as const
 
@@ -12,7 +12,7 @@ export type V2ModuleId =
   | typeof MODULE_DATAPOINT
   | typeof MODULE_ACCESS_SOURCE
   | typeof MODULE_INDUSTRIAL_COLLECTOR
-  | typeof MODULE_STORAGE_POLICY
+  | typeof MODULE_HISTORY_STORAGE
   | typeof MODULE_COMPUTE
   | typeof MODULE_ALARM
 
@@ -21,7 +21,7 @@ export const V2_MODULE_IDS: readonly V2ModuleId[] = [
   MODULE_DATAPOINT,
   MODULE_ACCESS_SOURCE,
   MODULE_INDUSTRIAL_COLLECTOR,
-  MODULE_STORAGE_POLICY,
+  MODULE_HISTORY_STORAGE,
   MODULE_COMPUTE,
   MODULE_ALARM,
 ] as const
@@ -38,7 +38,7 @@ const DEFAULT_DEBUG_ROUTE_ENABLED =
  * 数据中心路由配置工厂。
  *
  * v2 路由结构：
- *   /datacenter/:module(datapoint|access-source|industrial-collector|storage-policy|compute|alarm)/:objectId?/:tab?
+ *   /datacenter/:module(datapoint|access-source|industrial-collector|history-storage|compute|alarm)/:objectId?/:tab?
  *   /datacenter/debug/:module(...)/:objectId?/:tab?
  *
  */
@@ -61,7 +61,7 @@ export function createDatacenterRoutes({
     },
     // v2 正式模块路由
     {
-      path: '/:module(datapoint|access-source|industrial-collector|storage-policy|compute|alarm)/:objectId?/:tab?',
+      path: '/:module(datapoint|access-source|industrial-collector|history-storage|compute|alarm)/:objectId?/:tab?',
       name: 'datacenter',
       component: DataCenterComponent,
       meta: {
@@ -80,7 +80,7 @@ export function createDatacenterRoutes({
       },
       // v2 debug 模块路由
       {
-        path: '/debug/:module(datapoint|access-source|industrial-collector|storage-policy|compute|alarm)/:objectId?/:tab?',
+        path: '/debug/:module(datapoint|access-source|industrial-collector|history-storage|compute|alarm)/:objectId?/:tab?',
         name: 'datacenter-debug',
         component: DataCenterComponent,
         meta: {

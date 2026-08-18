@@ -3,12 +3,14 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -95,6 +97,7 @@ type ProjectSnapshot struct {
 	DataPoints        []DataPointRecord                `json:"datapoints"`
 	ComputeUnits      []ComputeUnitRecord              `json:"computeUnits"`
 	AlarmRules        []AlarmRuleRecord                `json:"alarmRules"`
+	HistoryStorage    []HistoryStorageConfigRecord     `json:"historyStorage"`
 }
 
 // ProjectArtifactVersionV1 表示 Phase 1 产物契约版本号。
@@ -313,6 +316,10 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 	if err != nil {
 		return nil, err
 	}
+	historyStorage, err := r.listHistoryStorageConfigs(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
 
 	return &ProjectSnapshot{
 		Connections:       connections,
@@ -324,6 +331,7 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 		DataPoints:        datapoints,
 		ComputeUnits:      computeUnits,
 		AlarmRules:        alarmRules,
+		HistoryStorage:    historyStorage,
 	}, nil
 }
 
@@ -356,6 +364,9 @@ func (r *ProjectSnapshotRepository) ReplaceProjectData(ctx context.Context, proj
 		return err
 	}
 	if err := r.insertDataPoints(ctx, tx, projectID, actorID, snapshot.DataPoints); err != nil {
+		return err
+	}
+	if err := r.insertHistoryStorageConfigs(ctx, tx, projectID, actorID, snapshot.HistoryStorage); err != nil {
 		return err
 	}
 	if err := r.insertComputeUnits(ctx, tx, projectID, actorID, snapshot.ComputeUnits); err != nil {
@@ -908,8 +919,109 @@ func (r *ProjectSnapshotRepository) listMqttTags(ctx context.Context, projectID 
 	return result, nil
 }
 
+func (r *ProjectSnapshotRepository) listHistoryStorageConfigs(ctx context.Context, projectID string) ([]HistoryStorageConfigRecord, error) {
+	rows, err := r.pool.Query(ctx, `SELECT `+historyStorageConfigColumns+`
+        FROM data_history_storage_configs WHERE project_id=$1 ORDER BY created_at,id`, projectID)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取快照历史存储配置失败", err)
+	}
+	defer rows.Close()
+	result := make([]HistoryStorageConfigRecord, 0)
+	for rows.Next() {
+		config, err := scanHistoryStorageConfig(rows)
+		if err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "解析快照历史存储配置失败", err)
+		}
+		config.Targets, err = r.listHistoryStorageTargets(ctx, projectID, config.ID)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, config)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历快照历史存储配置失败", err)
+	}
+	return result, nil
+}
+
+func (r *ProjectSnapshotRepository) listHistoryStorageTargets(ctx context.Context, projectID, configID string) ([]HistoryStorageTargetRecord, error) {
+	rows, err := r.pool.Query(ctx, `SELECT target.id,target.project_id,target.config_id,target.connection_id,
+        connection.name,connection.type,connection.status,target.is_primary,target.sort_order,target.retention_days,
+        target.created_at,target.updated_at
+      FROM data_history_storage_targets target
+      JOIN data_connections connection ON connection.id=target.connection_id
+      WHERE target.project_id=$1 AND target.config_id=$2
+      ORDER BY target.is_primary DESC,target.sort_order,target.id`, projectID, configID)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取快照历史存储目标失败", err)
+	}
+	defer rows.Close()
+	result := make([]HistoryStorageTargetRecord, 0)
+	for rows.Next() {
+		var target HistoryStorageTargetRecord
+		if err := rows.Scan(&target.ID, &target.ProjectID, &target.ConfigID, &target.ConnectionID, &target.ConnectionName, &target.ConnectionType, &target.ConnectionStatus, &target.IsPrimary, &target.SortOrder, &target.RetentionDays, &target.CreatedAt, &target.UpdatedAt); err != nil {
+			return nil, err
+		}
+		result = append(result, target)
+	}
+	return result, rows.Err()
+}
+
+func (r *ProjectSnapshotRepository) insertHistoryStorageConfigs(ctx context.Context, tx pgx.Tx, projectID, actorID string, configs []HistoryStorageConfigRecord) error {
+	for _, config := range configs {
+		createdAt := coalesceTime(config.CreatedAt)
+		updatedAt := coalesceTime(config.UpdatedAt)
+		if config.IsEnabled && len(config.Targets) == 0 {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照中已开启的历史存储配置缺少目标")
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO data_history_storage_configs
+            (id,project_id,access_source_id,collector_connection_id,datapoint_id,is_enabled,write_mode,
+             interval_ms,deadband,max_silence_ms,offline_behavior,created_by,updated_by,created_at,updated_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12,$13,$14)`,
+			config.ID, projectID, config.AccessSourceID, config.CollectorConnectionID, config.DatapointID,
+			config.IsEnabled, config.WriteMode, config.IntervalMS, config.Deadband, config.MaxSilenceMS,
+			config.OfflineBehavior, actorID, createdAt, updatedAt); err != nil {
+			return translateHistoryStorageSnapshotError("写入快照历史存储配置失败", err)
+		}
+		primaryCount := 0
+		for _, target := range config.Targets {
+			if target.IsPrimary {
+				primaryCount++
+			}
+			targetCreatedAt := coalesceTime(target.CreatedAt)
+			targetUpdatedAt := coalesceTime(target.UpdatedAt)
+			tag, err := tx.Exec(ctx, `INSERT INTO data_history_storage_targets
+                (id,project_id,config_id,connection_id,is_primary,sort_order,retention_days,created_at,updated_at)
+                SELECT $1,$2,$3,connection.id,$4,$5,$6,$7,$8
+                FROM data_connections connection
+                WHERE connection.project_id=$2 AND connection.id=$9 AND connection.type IN ('builtin.timeseries','tdengine')`,
+				target.ID, projectID, config.ID, target.IsPrimary, target.SortOrder, target.RetentionDays,
+				targetCreatedAt, targetUpdatedAt, target.ConnectionID)
+			if err != nil {
+				return translateHistoryStorageSnapshotError("写入快照历史存储目标失败", err)
+			}
+			if tag.RowsAffected() == 0 {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照历史存储目标不存在或类型不受支持")
+			}
+		}
+		if config.IsEnabled && primaryCount != 1 {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照历史存储配置必须且只能有一个主目标")
+		}
+	}
+	return nil
+}
+
+func translateHistoryStorageSnapshotError(message string, err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && (pgErr.Code == "23503" || pgErr.Code == "23505" || pgErr.Code == "23514") {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照历史存储配置引用的来源、数据点或目标无效")
+	}
+	return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, message, err)
+}
+
 func (r *ProjectSnapshotRepository) deleteProjectSnapshot(ctx context.Context, tx pgx.Tx, projectID string) error {
 	for _, sqlText := range []string{
+		`DELETE FROM data_history_storage_configs WHERE project_id = $1`,
 		`DELETE FROM data_alarm_rules WHERE project_id = $1`,
 		`DELETE FROM data_compute_units WHERE project_id = $1`,
 		`DELETE FROM data_mqtt_tags WHERE project_id = $1`,

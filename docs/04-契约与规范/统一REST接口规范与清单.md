@@ -467,7 +467,65 @@
 | `PUT`    | `/api/v1/data/projects/{projectId}/datapoints/{id}/runtime-permissions` | 更新运行态权限       |
 | `GET`    | `/api/v1/data/projects/{projectId}/datapoints/{id}/usages`              | 获取数据点引用关系   |
 
-### 5.5 MQTT 管理
+### 5.5 历史存储 `/api/v1/data/projects/{projectId}/history-storage`
+
+历史存储接口只维护开发态配置，不执行历史写入、建表或历史查询。来源级配置自动作用于后续新增数据点，数据点配置可覆盖来源设置。
+
+| 方法   | 路径                                                                                         | 功能概要                         |
+| ------ | -------------------------------------------------------------------------------------------- | -------------------------------- |
+| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/sources`                                  | 分页查询接入源和工业采集历史状态 |
+| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/sources/{scopeType}/{scopeId}`             | 获取来源历史设置                 |
+| `PUT`  | `/api/v1/data/projects/{projectId}/history-storage/sources/{scopeType}/{scopeId}`             | 保存来源历史设置                 |
+| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/targets`                                  | 获取 IF 时序库和 TDengine 目标   |
+| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/datapoints/{datapointId}`                  | 获取单点覆盖及最终生效设置       |
+| `PUT`  | `/api/v1/data/projects/{projectId}/history-storage/datapoints/{datapointId}`                  | 保存单点覆盖或恢复沿用来源       |
+| `POST` | `/api/v1/data/projects/{projectId}/history-storage/datapoints/batch-configure`                | 按 ID 或筛选条件批量设置数据点   |
+
+`GET /sources` 查询参数为 `page`、`pageSize`、`search`、`scopeType` 和 `historyState`。`scopeType` 可取
+`access_source`、`collector_connection`；`historyState` 可取 `enabled`、`disabled`。列表项固定返回
+`scope`、`datapointCount`、`historyState`、`pointOverrideCount`、写入方式和目标摘要，零数据点来源也必须返回。
+
+来源和数据点保存请求统一使用以下结构：
+
+```json
+{
+  "behavior": "custom",
+  "configuration": {
+    "writeMode": "on_change",
+    "intervalMs": null,
+    "deadband": 0,
+    "maxSilenceMs": 3600000,
+    "offlineBehavior": "store_stale",
+    "targets": [
+      {
+        "connectionId": "00000000-0000-0000-0000-000000000001",
+        "isPrimary": true,
+        "sortOrder": 0,
+        "retentionDays": 30
+      }
+    ]
+  }
+}
+```
+
+- 来源 `behavior` 只允许 `off`、`custom`；数据点额外允许 `inherit`，此时删除单点覆盖。
+- `every_sample` 不接受模式参数；`interval_latest` 和 `periodic_snapshot` 必须提供正数 `intervalMs`。
+- `on_change` 可提供非负 `deadband`，`maxSilenceMs` 为 `null` 或正数；质量变化始终触发保存。
+- 只有 `periodic_snapshot` 可将 `offlineBehavior` 设为 `skip`，默认值为 `store_stale`。
+- 开启配置必须提供至少一个目标，且必须恰有一个 `isPrimary=true`；目标不可重复，只能引用本工程的
+  `builtin.timeseries` 或 `tdengine` 连接。
+- `retentionDays=null` 表示永久保留，否则必须为正整数；各目标独立配置保留时间。
+- 关闭已有配置只改变启用状态，保留模式参数和目标；删除配置不会删除目标库中的表或历史数据。
+
+批量请求的 `selection` 二选一：`{"mode":"ids","datapointIds":[...]}`，或
+`{"mode":"filtered","filters":{...},"excludeDatapointIds":[...]}`。筛选模式由后端按数据点列表同口径执行，
+不得由前端拉取全部 ID。响应 `data.updatedCount` 返回实际处理数量。
+
+最终生效优先级为“单点覆盖 > 所属来源 > 默认关闭”。单点 `off` 是显式关闭；无单点记录表示沿用来源。
+普通数据点归属由 `sourceConfig`、查询/MQTT 结构化关联和直接连接 ID 统一解析，Collector 点通过
+`data_collector_points.connection_id` 归属工业采集连接。
+
+### 5.6 MQTT 管理
 
 | 方法     | 路径                                                                               | 功能概要              |
 | -------- | ---------------------------------------------------------------------------------- | --------------------- |
@@ -505,7 +563,7 @@
 | `GET`    | `/api/v1/data/projects/{projectId}/mqtt/tags/{tagId}/value`                        | 获取 Tag 当前值       |
 | `POST`   | `/api/v1/data/projects/{projectId}/mqtt/tags/values`                               | 批量获取 Tag 值       |
 
-### 5.6 项目快照与工件
+### 5.7 项目快照与工件
 
 | 方法  | 路径                                         | 功能概要       |
 | ----- | -------------------------------------------- | -------------- |
@@ -513,7 +571,7 @@
 | `PUT` | `/api/v1/data/projects/{projectId}/snapshot` | 替换项目快照   |
 | `GET` | `/api/v1/data/projects/{projectId}/artifact` | 获取数据域工件 |
 
-### 5.7 协议接入
+### 5.8 协议接入
 
 #### 协议 Wave 1
 
@@ -587,7 +645,7 @@ Kafka 工作台接口：
 
 Wave 2 当前只交付平台侧配置和 artifact 契约：`opcua/s7/modbus/tdengine` 保存连接配置，`opcda` 校验合约字段；工业协议真实连接、轮询采集和运行态诊断由节点侧运行器负责。
 
-### 5.8 预览会话与计算
+### 5.9 预览会话与计算
 
 #### 预览
 

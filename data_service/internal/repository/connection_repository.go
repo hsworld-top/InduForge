@@ -449,6 +449,10 @@ func (r *ConnectionRepository) Delete(ctx context.Context, projectID, connection
         WHERE project_id = $1 AND id = $2
     `, projectID, connectionID)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" && pgErr.ConstraintName == "data_history_storage_targets_connection_fkey" {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusConflict, "该连接正在被历史存储配置使用，请先更换或删除对应存储目标")
+		}
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "删除连接失败", err)
 	}
 	if commandTag.RowsAffected() == 0 {

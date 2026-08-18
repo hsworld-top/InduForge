@@ -221,8 +221,8 @@
       </div>
     </template>
 
-    <div v-else-if="activeModule === 'storage-policy'" class="h-full overflow-hidden">
-      <StoragePolicyWorkspace v-if="projectId" :project-id="projectId" />
+    <div v-else-if="activeModule === 'history-storage'" class="h-full overflow-hidden">
+      <HistoryStorageWorkspace v-if="projectId" :project-id="projectId" />
     </div>
 
     <div v-else-if="activeModule === 'compute'" class="h-full overflow-hidden">
@@ -328,7 +328,7 @@ import DataPointWorkspace from '@/components/datapoint/DataPointWorkspace.vue'
 import AlarmWorkspace from '@/components/alarm/AlarmWorkspace.vue'
 import ComputeUnitPanel from '@/components/compute/ComputeUnitPanel.vue'
 import ComputeWorkspace from '@/components/compute/ComputeWorkspace.vue'
-import StoragePolicyWorkspace from '@/views/storage-policy/StoragePolicyWorkspace.vue'
+import HistoryStorageWorkspace from '@/views/history-storage/HistoryStorageWorkspace.vue'
 import DataContractCheckDialog from '@/components/contract/DataContractCheckDialog.vue'
 import CollectorAgentManager from '@/components/collector/CollectorAgentManager.vue'
 import DataCenterShell from '@/components/layout/DataCenterShell.vue'
@@ -356,7 +356,7 @@ const VALID_MODULES = new Set<V2ModuleId>([
   'datapoint',
   'access-source',
   'industrial-collector',
-  'storage-policy',
+  'history-storage',
   'compute',
   'alarm',
 ])

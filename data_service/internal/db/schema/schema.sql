@@ -1092,61 +1092,50 @@ CREATE TABLE data_relational_configs (
 
 
 --
--- Name: data_storage_policies; Type: TABLE; Schema: public; Owner: -
+-- Name: data_history_storage_configs; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE data_storage_policies (
+CREATE TABLE data_history_storage_configs (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     project_id uuid NOT NULL,
-    name text NOT NULL,
-    description text,
-    target_connection_id uuid NOT NULL,
-    target_capability text NOT NULL,
-    binding_mode text NOT NULL,
-    binding_filter jsonb DEFAULT '{}'::jsonb NOT NULL,
-    write_mode text NOT NULL,
-    min_interval_ms integer,
+    access_source_id uuid,
+    collector_connection_id uuid,
+    datapoint_id uuid,
+    is_enabled boolean DEFAULT true NOT NULL,
+    write_mode text DEFAULT 'on_change'::text NOT NULL,
+    interval_ms bigint,
     deadband numeric(20,6),
-    snapshot_interval_ms integer,
-    include_qualities jsonb DEFAULT '["Good", "Uncertain"]'::jsonb NOT NULL,
-    retention_days integer NOT NULL,
-    target_table_mode text DEFAULT 'auto_create'::text NOT NULL,
-    target_table_config jsonb DEFAULT '{}'::jsonb NOT NULL,
-    status text DEFAULT 'enabled'::text NOT NULL,
-    diagnostics jsonb DEFAULT '[]'::jsonb NOT NULL,
+    max_silence_ms bigint,
+    offline_behavior text DEFAULT 'store_stale'::text NOT NULL,
     created_by uuid NOT NULL,
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT data_storage_policies_binding_filter_check CHECK ((jsonb_typeof(binding_filter) = 'object'::text)),
-    CONSTRAINT data_storage_policies_binding_mode_check CHECK ((binding_mode = ANY (ARRAY['static'::text, 'dynamic'::text]))),
-    CONSTRAINT data_storage_policies_deadband_check CHECK (((deadband IS NULL) OR (deadband >= (0)::numeric))),
-    CONSTRAINT data_storage_policies_diagnostics_check CHECK ((jsonb_typeof(diagnostics) = 'array'::text)),
-    CONSTRAINT data_storage_policies_include_qualities_check CHECK ((jsonb_typeof(include_qualities) = 'array'::text)),
-    CONSTRAINT data_storage_policies_min_interval_ms_check CHECK (((min_interval_ms IS NULL) OR (min_interval_ms >= 0))),
-    CONSTRAINT data_storage_policies_name_check CHECK ((char_length(name) <= 100)),
-    CONSTRAINT data_storage_policies_retention_days_check CHECK ((retention_days > 0)),
-    CONSTRAINT data_storage_policies_snapshot_interval_ms_check CHECK (((snapshot_interval_ms IS NULL) OR (snapshot_interval_ms > 0))),
-    CONSTRAINT data_storage_policies_status_check CHECK ((status = ANY (ARRAY['enabled'::text, 'disabled'::text, 'error'::text]))),
-    CONSTRAINT data_storage_policies_target_capability_check CHECK ((target_capability = ANY (ARRAY['timeseriesAppend'::text, 'relationalAppend'::text]))),
-    CONSTRAINT data_storage_policies_target_table_config_check CHECK ((jsonb_typeof(target_table_config) = 'object'::text)),
-    CONSTRAINT data_storage_policies_target_table_mode_check CHECK ((target_table_mode = ANY (ARRAY['auto_create'::text, 'existing_mapping'::text]))),
-    CONSTRAINT data_storage_policies_write_mode_check CHECK ((write_mode = ANY (ARRAY['every_sample'::text, 'on_change'::text, 'periodic_snapshot'::text])))
+    CONSTRAINT data_history_storage_configs_scope_check CHECK ((num_nonnulls(access_source_id, collector_connection_id, datapoint_id) = 1)),
+    CONSTRAINT data_history_storage_configs_write_mode_check CHECK ((write_mode = ANY (ARRAY['every_sample'::text, 'interval_latest'::text, 'on_change'::text, 'periodic_snapshot'::text]))),
+    CONSTRAINT data_history_storage_configs_interval_check CHECK (((interval_ms IS NULL) OR (interval_ms > 0))),
+    CONSTRAINT data_history_storage_configs_deadband_check CHECK (((deadband IS NULL) OR (deadband >= (0)::numeric))),
+    CONSTRAINT data_history_storage_configs_max_silence_check CHECK (((max_silence_ms IS NULL) OR (max_silence_ms > 0))),
+    CONSTRAINT data_history_storage_configs_offline_behavior_check CHECK ((offline_behavior = ANY (ARRAY['store_stale'::text, 'skip'::text])))
 );
 
 
 --
--- Name: data_storage_policy_bindings; Type: TABLE; Schema: public; Owner: -
+-- Name: data_history_storage_targets; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE data_storage_policy_bindings (
+CREATE TABLE data_history_storage_targets (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     project_id uuid NOT NULL,
-    policy_id uuid NOT NULL,
-    datapoint_id uuid NOT NULL,
-    datapoint_path text NOT NULL,
+    config_id uuid NOT NULL,
+    connection_id uuid NOT NULL,
+    is_primary boolean DEFAULT false NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL,
+    retention_days bigint,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT data_storage_policy_bindings_datapoint_path_check CHECK ((char_length(datapoint_path) <= 255))
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT data_history_storage_targets_retention_check CHECK (((retention_days IS NULL) OR (retention_days > 0))),
+    CONSTRAINT data_history_storage_targets_sort_order_check CHECK ((sort_order >= 0))
 );
 
 
@@ -1764,35 +1753,27 @@ ALTER TABLE ONLY data_relational_configs
 
 
 --
--- Name: data_storage_policies data_storage_policies_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: data_history_storage_configs data_history_storage_configs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY data_storage_policies
-    ADD CONSTRAINT data_storage_policies_pkey PRIMARY KEY (id);
-
-
---
--- Name: data_storage_policies data_storage_policies_project_name_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY data_storage_policies
-    ADD CONSTRAINT data_storage_policies_project_name_key UNIQUE (project_id, name);
+ALTER TABLE ONLY data_history_storage_configs
+    ADD CONSTRAINT data_history_storage_configs_pkey PRIMARY KEY (id);
 
 
 --
--- Name: data_storage_policy_bindings data_storage_policy_bindings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: data_history_storage_targets data_history_storage_targets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY data_storage_policy_bindings
-    ADD CONSTRAINT data_storage_policy_bindings_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY data_history_storage_targets
+    ADD CONSTRAINT data_history_storage_targets_pkey PRIMARY KEY (id);
 
 
 --
--- Name: data_storage_policy_bindings data_storage_policy_bindings_policy_datapoint_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: data_history_storage_targets data_history_storage_targets_config_connection_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY data_storage_policy_bindings
-    ADD CONSTRAINT data_storage_policy_bindings_policy_datapoint_key UNIQUE (policy_id, datapoint_id);
+ALTER TABLE ONLY data_history_storage_targets
+    ADD CONSTRAINT data_history_storage_targets_config_connection_key UNIQUE (config_id, connection_id);
 
 
 --
@@ -2532,38 +2513,38 @@ CREATE INDEX data_relational_configs_ssl_config_gin_idx ON data_relational_confi
 
 
 --
--- Name: data_storage_policies_binding_filter_gin_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: data_history_storage_configs_access_source_key; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX data_storage_policies_binding_filter_gin_idx ON data_storage_policies USING gin (binding_filter);
-
-
---
--- Name: data_storage_policies_project_status_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX data_storage_policies_project_status_idx ON data_storage_policies USING btree (project_id, status);
+CREATE UNIQUE INDEX data_history_storage_configs_access_source_key ON data_history_storage_configs USING btree (project_id, access_source_id) WHERE (access_source_id IS NOT NULL);
 
 
 --
--- Name: data_storage_policies_target_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: data_history_storage_configs_collector_key; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX data_storage_policies_target_idx ON data_storage_policies USING btree (project_id, target_connection_id);
-
-
---
--- Name: data_storage_policy_bindings_datapoint_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX data_storage_policy_bindings_datapoint_idx ON data_storage_policy_bindings USING btree (project_id, datapoint_id);
+CREATE UNIQUE INDEX data_history_storage_configs_collector_key ON data_history_storage_configs USING btree (project_id, collector_connection_id) WHERE (collector_connection_id IS NOT NULL);
 
 
 --
--- Name: data_storage_policy_bindings_project_policy_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: data_history_storage_configs_datapoint_key; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX data_storage_policy_bindings_project_policy_idx ON data_storage_policy_bindings USING btree (project_id, policy_id);
+CREATE UNIQUE INDEX data_history_storage_configs_datapoint_key ON data_history_storage_configs USING btree (project_id, datapoint_id) WHERE (datapoint_id IS NOT NULL);
+
+
+--
+-- Name: data_history_storage_targets_config_order_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX data_history_storage_targets_config_order_idx ON data_history_storage_targets USING btree (project_id, config_id, is_primary DESC, sort_order, id);
+
+
+--
+-- Name: data_history_storage_targets_primary_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX data_history_storage_targets_primary_key ON data_history_storage_targets USING btree (config_id) WHERE is_primary;
 
 
 --
@@ -3005,27 +2986,43 @@ ALTER TABLE ONLY data_relational_configs
 
 
 --
--- Name: data_storage_policies data_storage_policies_target_connection_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: data_history_storage_configs data_history_storage_configs_access_source_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY data_storage_policies
-    ADD CONSTRAINT data_storage_policies_target_connection_fkey FOREIGN KEY (target_connection_id) REFERENCES data_connections(id) ON DELETE RESTRICT;
-
-
---
--- Name: data_storage_policy_bindings data_storage_policy_bindings_datapoint_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY data_storage_policy_bindings
-    ADD CONSTRAINT data_storage_policy_bindings_datapoint_fkey FOREIGN KEY (datapoint_id) REFERENCES data_points(id) ON DELETE CASCADE;
+ALTER TABLE ONLY data_history_storage_configs
+    ADD CONSTRAINT data_history_storage_configs_access_source_fkey FOREIGN KEY (access_source_id) REFERENCES data_connections(id) ON DELETE CASCADE;
 
 
 --
--- Name: data_storage_policy_bindings data_storage_policy_bindings_policy_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: data_history_storage_configs data_history_storage_configs_collector_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY data_storage_policy_bindings
-    ADD CONSTRAINT data_storage_policy_bindings_policy_fkey FOREIGN KEY (policy_id) REFERENCES data_storage_policies(id) ON DELETE CASCADE;
+ALTER TABLE ONLY data_history_storage_configs
+    ADD CONSTRAINT data_history_storage_configs_collector_fkey FOREIGN KEY (collector_connection_id) REFERENCES data_collector_connections(id) ON DELETE CASCADE;
+
+
+--
+-- Name: data_history_storage_configs data_history_storage_configs_datapoint_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_history_storage_configs
+    ADD CONSTRAINT data_history_storage_configs_datapoint_fkey FOREIGN KEY (datapoint_id) REFERENCES data_points(id) ON DELETE CASCADE;
+
+
+--
+-- Name: data_history_storage_targets data_history_storage_targets_config_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_history_storage_targets
+    ADD CONSTRAINT data_history_storage_targets_config_fkey FOREIGN KEY (config_id) REFERENCES data_history_storage_configs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: data_history_storage_targets data_history_storage_targets_connection_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_history_storage_targets
+    ADD CONSTRAINT data_history_storage_targets_connection_fkey FOREIGN KEY (connection_id) REFERENCES data_connections(id) ON DELETE RESTRICT;
 
 
 --
@@ -3103,6 +3100,3 @@ ALTER TABLE ONLY data_workbench_object_groups
 --
 -- PostgreSQL database dump complete
 --
-
-
-

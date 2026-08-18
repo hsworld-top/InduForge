@@ -24,7 +24,7 @@ test('生产态不会注册 datacenter debug 路由', () => {
 
   // 正式模块路由
   assert.deepEqual(routes[1], {
-    path: '/:module(datapoint|access-source|industrial-collector|storage-policy|compute|alarm)/:objectId?/:tab?',
+    path: '/:module(datapoint|access-source|industrial-collector|history-storage|compute|alarm)/:objectId?/:tab?',
     name: 'datacenter',
     component: DataCenterComponent,
     meta: {
@@ -32,5 +32,4 @@ test('生产态不会注册 datacenter debug 路由', () => {
       requiresAuth: true,
     },
   })
-
 })

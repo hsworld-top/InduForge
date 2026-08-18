@@ -21,7 +21,7 @@ type options struct {
 	collectorPointHandler     *handler.CollectorPointHandler
 	collectorImportHandler    *handler.CollectorImportHandler
 	collectorAuthenticator    middleware.CollectorAgentAuthenticator
-	storagePolicyHandler      *handler.StoragePolicyHandler
+	historyStorageHandler     *handler.HistoryStorageHandler
 	queryHandler              *handler.QueryHandler
 	workbenchGroupHandler     *handler.WorkbenchGroupHandler
 	realtimeStoreHandler      *handler.RealtimeStoreHandler
@@ -66,10 +66,10 @@ func WithAlarmPolicyRoutes(alarmPolicyHandler *handler.AlarmPolicyHandler, jwtVa
 	}
 }
 
-// WithStoragePolicyRoutes wires data storage policy routes.
-func WithStoragePolicyRoutes(storagePolicyHandler *handler.StoragePolicyHandler, jwtValidator *auth.JWTValidator) Option {
+// WithHistoryStorageRoutes wires development-time history storage routes.
+func WithHistoryStorageRoutes(historyStorageHandler *handler.HistoryStorageHandler, jwtValidator *auth.JWTValidator) Option {
 	return func(opts *options) {
-		opts.storagePolicyHandler = storagePolicyHandler
+		opts.historyStorageHandler = historyStorageHandler
 		opts.jwtValidator = jwtValidator
 	}
 }
@@ -246,7 +246,7 @@ func NewRouter(routeOptions ...Option) http.Handler {
 
 	mountAlarmRuleRoutes(mux, opts)
 	mountAlarmPolicyRoutes(mux, opts)
-	mountStoragePolicyRoutes(mux, opts)
+	mountHistoryStorageRoutes(mux, opts)
 	mountBuiltinRuntimeRoutes(mux, opts)
 	mountAccessSourceRoutes(mux, opts)
 	mountContractCheckRoutes(mux, opts)
@@ -272,8 +272,8 @@ func NewRouter(routeOptions ...Option) http.Handler {
 	return mux
 }
 
-func mountStoragePolicyRoutes(mux *http.ServeMux, opts options) {
-	if mux == nil || opts.storagePolicyHandler == nil || opts.jwtValidator == nil {
+func mountHistoryStorageRoutes(mux *http.ServeMux, opts options) {
+	if mux == nil || opts.historyStorageHandler == nil || opts.jwtValidator == nil {
 		return
 	}
 
@@ -292,15 +292,14 @@ func mountStoragePolicyRoutes(mux *http.ServeMux, opts options) {
 		)
 	}
 
-	base := "/api/v1/data/projects/{projectId}/data-storage-policies"
-	mux.Handle("GET "+base, read(opts.storagePolicyHandler.List))
-	mux.Handle("POST "+base, write(opts.storagePolicyHandler.Create))
-	mux.Handle("GET "+base+"/targets", read(opts.storagePolicyHandler.Targets))
-	mux.Handle("POST "+base+"/estimate", read(opts.storagePolicyHandler.Estimate))
-	mux.Handle("GET "+base+"/coverage", read(opts.storagePolicyHandler.Coverage))
-	mux.Handle("GET "+base+"/{id}", read(opts.storagePolicyHandler.Get))
-	mux.Handle("PUT "+base+"/{id}", write(opts.storagePolicyHandler.Update))
-	mux.Handle("DELETE "+base+"/{id}", write(opts.storagePolicyHandler.Delete))
+	base := "/api/v1/data/projects/{projectId}/history-storage"
+	mux.Handle("GET "+base+"/sources", read(opts.historyStorageHandler.ListSources))
+	mux.Handle("GET "+base+"/sources/{scopeType}/{scopeId}", read(opts.historyStorageHandler.GetSource))
+	mux.Handle("PUT "+base+"/sources/{scopeType}/{scopeId}", write(opts.historyStorageHandler.SaveSource))
+	mux.Handle("GET "+base+"/targets", read(opts.historyStorageHandler.ListTargets))
+	mux.Handle("GET "+base+"/datapoints/{datapointId}", read(opts.historyStorageHandler.GetDatapoint))
+	mux.Handle("PUT "+base+"/datapoints/{datapointId}", write(opts.historyStorageHandler.SaveDatapoint))
+	mux.Handle("POST "+base+"/datapoints/batch-configure", write(opts.historyStorageHandler.BatchConfigure))
 }
 
 func mountBuiltinRuntimeRoutes(mux *http.ServeMux, opts options) {

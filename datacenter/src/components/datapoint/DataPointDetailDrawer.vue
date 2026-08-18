@@ -135,6 +135,9 @@
               @click="handleLinkChipClick"
             />
           </div>
+          <p v-else-if="collectorSourceName" class="dpd__muted">
+            工业采集 · {{ collectorSourceName }}
+          </p>
           <p v-else class="dpd__muted">无来源信息</p>
 
           <!-- 失效原因（仅 invalid 时显示；无 invalidReason 时给兜底文案） -->
@@ -159,6 +162,27 @@
               formatSourceConfig((datapoint as DataPointExtended)?.sourceConfig)
             }}</pre>
           </div>
+        </section>
+
+        <section class="dpd__section">
+          <div class="dpd__section-header">
+            <h4 class="dpd__section-title">历史存储</h4>
+            <button
+              type="button"
+              class="dpd__edit-btn"
+              aria-label="编辑历史存储"
+              @click="openHistoryStorage"
+            >
+              编辑
+            </button>
+          </div>
+          <div class="dpd__perm-summary">
+            <span class="dpd__perm-label">保存方式：</span>
+            <span class="dpd__perm-value">{{ historyStorageSummaryText }}</span>
+          </div>
+          <p v-if="historyStorageDetail?.source" class="dpd__muted">
+            来源：{{ historyStorageDetail.source.name || '所属来源' }}
+          </p>
         </section>
 
         <!-- 区块 4：引用（D2 占位；usages 为空时不显示） -->
@@ -225,6 +249,17 @@
     @submit="handlePermSubmit"
     @cancel="permDialogVisible = false"
   />
+
+  <HistoryStorageConfigDrawer
+    v-model="historyStorageDrawerVisible"
+    title="数据点历史存储"
+    allow-inherit
+    :behavior="historyStorageDetail?.behavior || 'inherit'"
+    :configuration="historyStorageDetail?.configuration"
+    :targets="historyStorageTargets"
+    :saving="historyStorageSaving"
+    @save="saveHistoryStorage"
+  />
 </template>
 
 <script setup lang="ts">
@@ -244,6 +279,18 @@ import StatusBadge from '@/components/shared/StatusBadge.vue'
 import LinkChip from '@/components/shared/LinkChip.vue'
 import DataPointTagDialog from './DataPointTagDialog.vue'
 import RuntimePermissionDialog from './RuntimePermissionDialog.vue'
+import HistoryStorageConfigDrawer from '@/components/history-storage/HistoryStorageConfigDrawer.vue'
+import {
+  getDatapointHistoryStorage,
+  listHistoryStorageTargets,
+  saveDatapointHistoryStorage,
+  type HistoryStorageSavePayload,
+} from '@/api/history-storage.api'
+import type {
+  HistoryStorageDatapointDetail,
+  HistoryStorageTargetOption,
+} from '@/api/schemas/history-storage.schema'
+import { historyStorageModeLabels } from '@/models/history-storage'
 
 // 扩展类型：除 schema 核心字段外，允许后端额外字段（passthrough）
 interface DataPointExtended {
@@ -316,6 +363,12 @@ const permDialogVisible = ref(false)
 const permDialogDatapoint = ref<DataPointExtended | null>(null)
 const permSaving = ref(false)
 
+const historyStorageDetail = ref<HistoryStorageDatapointDetail | null>(null)
+const historyStorageTargets = ref<HistoryStorageTargetOption[]>([])
+const historyStorageDrawerVisible = ref(false)
+const historyStorageLoading = ref(false)
+const historyStorageSaving = ref(false)
+
 const visible = computed({
   get: () => props.modelValue,
   set: (val: boolean) => {
@@ -326,11 +379,23 @@ const visible = computed({
 
 // 折叠重置（切换数据点时）
 watch(
-  () => props.datapoint?.id,
-  () => {
+  () => [props.datapoint?.id, props.modelValue] as const,
+  ([id, isVisible]) => {
     configExpanded.value = false
+    historyStorageDetail.value = null
+    if (id && isVisible) void loadHistoryStorage(String(id))
   },
 )
+
+const historyStorageSummaryText = computed(() => {
+  if (historyStorageLoading.value) return '加载中'
+  const detail = historyStorageDetail.value
+  if (!detail) return '未保存'
+  if (detail.behavior === 'off') return '不保存'
+  if (!detail.effectiveEnabled || !detail.configuration) return '沿用来源 · 未保存'
+  const mode = historyStorageModeLabels[detail.configuration.writeMode]
+  return detail.behavior === 'custom' ? `单独设置 · ${mode}` : `沿用来源 · ${mode}`
+})
 
 // ── 来源配置相关 ──────────────────────────────────────────────────────────
 
@@ -340,6 +405,10 @@ const hasSourceConfig = computed(() => {
 })
 
 const accessSourceId = computed(() => resolveAccessSourceId(props.datapoint))
+const collectorSourceName = computed(() => {
+  const source = historyStorageDetail.value?.source
+  return source?.type === 'collector_connection' ? source.name || '所属采集连接' : ''
+})
 
 function formatSourceConfig(value?: Record<string, unknown>): string {
   if (!value || Object.keys(value).length === 0) return '{}'
@@ -494,6 +563,55 @@ async function copyPath() {
     ElMessage.success('已复制数据点路径')
   } catch {
     ElMessage.error('复制失败，请手动复制')
+  }
+}
+
+async function loadHistoryStorage(datapointId: string) {
+  historyStorageLoading.value = true
+  try {
+    historyStorageDetail.value = await getDatapointHistoryStorage(props.projectId, datapointId)
+  } catch {
+    historyStorageDetail.value = null
+  } finally {
+    historyStorageLoading.value = false
+  }
+}
+
+async function openHistoryStorage() {
+  const datapointId = props.datapoint?.id
+  if (!datapointId) return
+  try {
+    const [detail, targets] = await Promise.all([
+      getDatapointHistoryStorage(props.projectId, String(datapointId)),
+      historyStorageTargets.value.length > 0
+        ? Promise.resolve(historyStorageTargets.value)
+        : listHistoryStorageTargets(props.projectId),
+    ])
+    historyStorageDetail.value = detail
+    historyStorageTargets.value = targets
+    historyStorageDrawerVisible.value = true
+  } catch {
+    ElMessage.error('加载历史存储设置失败')
+  }
+}
+
+async function saveHistoryStorage(payload: HistoryStorageSavePayload) {
+  const datapointId = props.datapoint?.id
+  if (!datapointId) return
+  historyStorageSaving.value = true
+  try {
+    historyStorageDetail.value = await saveDatapointHistoryStorage(
+      props.projectId,
+      String(datapointId),
+      payload,
+    )
+    historyStorageDrawerVisible.value = false
+    ElMessage.success('历史存储设置已保存')
+    emit('updated')
+  } catch {
+    ElMessage.error('保存历史存储设置失败')
+  } finally {
+    historyStorageSaving.value = false
   }
 }
 

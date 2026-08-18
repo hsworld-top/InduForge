@@ -8,7 +8,7 @@ describe('datacenterModules', () => {
       'datapoint',
       'access-source',
       'industrial-collector',
-      'storage-policy',
+      'history-storage',
       'compute',
       'alarm',
     ])
@@ -17,7 +17,7 @@ describe('datacenterModules', () => {
   test('getDatacenterModule 根据 v2 模块 ID 返回元数据', () => {
     expect(getDatacenterModule('datapoint')?.label).toBe('数据点')
     expect(getDatacenterModule('industrial-collector')?.label).toBe('工业采集')
-    expect(getDatacenterModule('storage-policy')?.label).toBe('存储策略')
+    expect(getDatacenterModule('history-storage')?.label).toBe('历史存储')
     expect(getDatacenterModule('compute')?.label).toBe('计算单元')
     expect(getDatacenterModule('alarm')?.label).toBe('报警单元')
     expect(getDatacenterModule('missing')).toBeNull()

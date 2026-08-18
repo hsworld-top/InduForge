@@ -158,28 +158,26 @@
       </div>
 
       <div class="datapoint-list__toolbar-right">
-        <el-tooltip content="刷新数据点" placement="bottom">
-          <button
-            type="button"
-            class="datapoint-list__icon-button"
-            aria-label="刷新数据点"
-            @click="handleRefresh"
-          >
-            <Refresh />
-          </button>
-        </el-tooltip>
-        <el-tooltip content="批量清理失效数据点" placement="bottom">
-          <button
-            type="button"
-            class="datapoint-list__icon-button is-danger"
-            :class="{ 'is-disabled': !canBatchDelete }"
-            :disabled="!canBatchDelete"
-            aria-label="批量清理失效数据点"
-            @click="handleBatchDelete"
-          >
-            <Delete />
-          </button>
-        </el-tooltip>
+        <button
+          type="button"
+          class="datapoint-list__icon-button"
+          title="刷新数据点"
+          aria-label="刷新数据点"
+          @click="handleRefresh"
+        >
+          <Refresh />
+        </button>
+        <button
+          type="button"
+          class="datapoint-list__icon-button is-danger"
+          :class="{ 'is-disabled': !canBatchDelete }"
+          :disabled="!canBatchDelete"
+          title="批量清理失效数据点"
+          aria-label="批量清理失效数据点"
+          @click="handleBatchDelete"
+        >
+          <Delete />
+        </button>
       </div>
     </div>
 
@@ -210,11 +208,9 @@
           <el-table-column label="名称" width="220" fixed="left">
             <template #default="{ row }">
               <div class="datapoint-list__name-cell">
-                <el-tooltip :content="row.name || '-'" placement="top" :show-after="400">
-                  <span class="datapoint-list__name">
-                    {{ row.name || '-' }}
-                  </span>
-                </el-tooltip>
+                <span class="datapoint-list__name" :title="row.name || '-'">
+                  {{ row.name || '-' }}
+                </span>
               </div>
             </template>
           </el-table-column>
@@ -223,9 +219,9 @@
           <el-table-column label="路径" min-width="280">
             <template #default="{ row }">
               <div class="datapoint-list__path-cell">
-                <el-tooltip :content="row.path || '-'" placement="top" :show-after="300">
-                  <span class="datapoint-list__path">{{ row.path || '-' }}</span>
-                </el-tooltip>
+                <span class="datapoint-list__path" :title="row.path || '-'">
+                  {{ row.path || '-' }}
+                </span>
               </div>
             </template>
           </el-table-column>
@@ -277,13 +273,13 @@
                 >
                   {{ tag }}
                 </el-tag>
-                <el-tooltip
+                <span
                   v-if="getHiddenTagCount(row) > 0"
-                  :content="getHiddenTags(row).join('、')"
-                  placement="top"
+                  class="datapoint-list__tag-more"
+                  :title="getHiddenTags(row).join('、')"
                 >
-                  <span class="datapoint-list__tag-more"> +{{ getHiddenTagCount(row) }} </span>
-                </el-tooltip>
+                  +{{ getHiddenTagCount(row) }}
+                </span>
                 <button
                   v-if="normalizeTags(row.tags).length === 0"
                   type="button"
@@ -316,53 +312,46 @@
             <template #default="{ row }">
               <div class="datapoint-list__row-actions">
                 <!-- 查看详情 -->
-                <el-tooltip content="查看详情" placement="top">
-                  <button
-                    type="button"
-                    class="datapoint-list__table-action"
-                    aria-label="查看数据点详情"
-                    @click.stop="openDetailDrawer(row)"
-                  >
-                    <View />
-                  </button>
-                </el-tooltip>
-                <!-- 打开接入源工作台 -->
-                <el-tooltip content="打开接入源" placement="top">
-                  <button
-                    type="button"
-                    class="datapoint-list__table-action"
-                    aria-label="打开接入源"
-                    @click.stop="handleJumpToSource(row)"
-                  >
-                    <Connection />
-                  </button>
-                </el-tooltip>
-                <!-- 复制路径 -->
-                <el-tooltip content="复制路径" placement="top">
-                  <button
-                    type="button"
-                    class="datapoint-list__table-action"
-                    aria-label="复制数据点路径"
-                    @click.stop="copyPath(row.path)"
-                  >
-                    <CopyDocument />
-                  </button>
-                </el-tooltip>
-                <!-- 清理失效（仅 invalid 行可见） -->
-                <el-tooltip
-                  v-if="row.status === 'invalid'"
-                  content="清理失效数据点"
-                  placement="top"
+                <button
+                  type="button"
+                  class="datapoint-list__table-action"
+                  title="查看详情"
+                  aria-label="查看数据点详情"
+                  @click.stop="openDetailDrawer(row)"
                 >
-                  <button
-                    type="button"
-                    class="datapoint-list__table-action is-danger"
-                    aria-label="清理失效数据点"
-                    @click.stop="handleDelete(row)"
-                  >
-                    <Delete />
-                  </button>
-                </el-tooltip>
+                  <View />
+                </button>
+                <!-- 打开接入源工作台 -->
+                <button
+                  type="button"
+                  class="datapoint-list__table-action"
+                  title="打开接入源"
+                  aria-label="打开接入源"
+                  @click.stop="handleJumpToSource(row)"
+                >
+                  <Connection />
+                </button>
+                <!-- 复制路径 -->
+                <button
+                  type="button"
+                  class="datapoint-list__table-action"
+                  title="复制路径"
+                  aria-label="复制数据点路径"
+                  @click.stop="copyPath(row.path)"
+                >
+                  <CopyDocument />
+                </button>
+                <!-- 清理失效（仅 invalid 行可见） -->
+                <button
+                  v-if="row.status === 'invalid'"
+                  type="button"
+                  class="datapoint-list__table-action is-danger"
+                  title="清理失效数据点"
+                  aria-label="清理失效数据点"
+                  @click.stop="handleDelete(row)"
+                >
+                  <Delete />
+                </button>
               </div>
             </template>
           </el-table-column>
@@ -396,6 +385,13 @@
         </button>
         <button type="button" class="datapoint-list__bulk-action-btn" @click="openBatchTagDialog">
           打标签
+        </button>
+        <button
+          type="button"
+          class="datapoint-list__bulk-action-btn"
+          @click="openBatchHistoryStorage"
+        >
+          历史存储
         </button>
         <button
           type="button"
@@ -498,6 +494,17 @@
       @cancel="permissionDialogVisible = false"
     />
 
+    <HistoryStorageConfigDrawer
+      v-model="historyStorageDrawerVisible"
+      title="批量设置历史存储"
+      allow-inherit
+      behavior="inherit"
+      :configuration="null"
+      :targets="historyStorageTargets"
+      :saving="historyStorageSaving"
+      @save="saveBatchHistoryStorage"
+    />
+
     <!-- 详情抽屉（v2 DataPointDetailDrawer） -->
     <DataPointDetailDrawer
       v-model="detailDrawerVisible"
@@ -538,6 +545,14 @@ import StatusBadge from '@/components/shared/StatusBadge.vue'
 import BulkActionBar from '@/components/shared/BulkActionBar.vue'
 import DataPointTagDialog from './DataPointTagDialog.vue'
 import RuntimePermissionDialog from './RuntimePermissionDialog.vue'
+import HistoryStorageConfigDrawer from '@/components/history-storage/HistoryStorageConfigDrawer.vue'
+import {
+  batchConfigureDatapointHistoryStorage,
+  listHistoryStorageTargets,
+  type HistoryStorageBulkSelection,
+  type HistoryStorageSavePayload,
+} from '@/api/history-storage.api'
+import type { HistoryStorageTargetOption } from '@/api/schemas/history-storage.schema'
 import DataPointDetailDrawer from './DataPointDetailDrawer.vue'
 
 type DataPointListMode = 'embedded' | 'management'
@@ -691,6 +706,11 @@ const tagDialogVisible = ref(false)
 const tagSaving = ref(false)
 const tagEditMode = ref<'single' | 'batch'>('single')
 const currentTagDatapoint = ref<DataPointRow | null>(null)
+
+/* 历史存储批量设置 */
+const historyStorageDrawerVisible = ref(false)
+const historyStorageSaving = ref(false)
+const historyStorageTargets = ref<HistoryStorageTargetOption[]>([])
 
 /* 详情抽屉状态 */
 const detailDrawerVisible = ref(false)
@@ -1152,6 +1172,51 @@ const openBatchTagDialog = async () => {
   currentTagDatapoint.value = null
   tagEditMode.value = 'batch'
   tagDialogVisible.value = true
+}
+
+const openBatchHistoryStorage = async () => {
+  if (bulkSelectedCount.value === 0) return
+  try {
+    if (historyStorageTargets.value.length === 0) {
+      historyStorageTargets.value = await listHistoryStorageTargets(props.projectId)
+    }
+    historyStorageDrawerVisible.value = true
+  } catch (error) {
+    ElMessage.error('加载历史存储目标失败：' + getApiErrorMessage(error, '加载历史存储目标失败'))
+  }
+}
+
+const saveBatchHistoryStorage = async (payload: HistoryStorageSavePayload) => {
+  if (bulkSelectedCount.value === 0) return
+  const selectedCount = bulkSelectedCount.value
+  const action =
+    payload.behavior === 'inherit'
+      ? '恢复沿用来源设置'
+      : payload.behavior === 'off'
+        ? '关闭历史存储'
+        : '应用新的历史存储设置'
+  const ok = await confirm(`将为 ${bulkSelectedCount.value} 个数据点${action}，确认继续？`, {
+    title: '批量设置历史存储',
+    confirmText: '确认应用',
+    type: 'warning',
+  })
+  if (!ok) return
+  const selection: HistoryStorageBulkSelection =
+    selectionScope.value === 'all'
+      ? { mode: 'filtered', filters: buildSelectionFilterPayload() }
+      : { mode: 'ids', datapointIds: selectedRows.value.map((row) => row.id) }
+  historyStorageSaving.value = true
+  try {
+    await batchConfigureDatapointHistoryStorage(props.projectId, selection, payload)
+    ElMessage.success(`已为 ${selectedCount} 个数据点应用历史存储设置`)
+    historyStorageDrawerVisible.value = false
+    clearSelection()
+    await loadDataPoints()
+  } catch (error) {
+    ElMessage.error('批量设置失败：' + getApiErrorMessage(error, '批量设置历史存储失败'))
+  } finally {
+    historyStorageSaving.value = false
+  }
 }
 
 const handleDeleteTagOption = async (tag: string) => {
