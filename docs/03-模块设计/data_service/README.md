@@ -12,7 +12,7 @@
 - 开发态历史存储配置、来源继承与单点覆盖
 - MQTT 与多协议数据接入
 - 计算单元与数据处理
-- 报警开发态配置、工程通知与节点配置回写接收
+- 报警开发态配置、工程通知、报警历史设置与节点配置回写接收
 - 预览会话与开发态数据支撑
 - 数据域 API 与数据域存储能力
 
@@ -67,13 +67,13 @@
 - 协议接入：wave1 / wave2
 - 预览会话：preview sessions
 - 计算能力：compute units
-- 报警配置：alarm-policies / alarm-policy-groups / alarm-settings / alarm-channels
+- 报警配置：alarm-policies / alarm-policy-groups / alarm-settings / alarm-history-settings / alarm-channels
 
 历史存储按接入源、工业采集连接或数据点保存配置。来源配置自动作用于后续新增点，单点可沿用、关闭或自定义；
 写入方式固定为每次采样、间隔末值、变化保存和周期快照，目标限定为本工程 IF 时序库与 TDengine。工程快照包含
 这些开发态配置和目标绑定，发布工件与本轮运行态链路不包含历史存储配置。
 
-报警以 `data_alarm_policies` 为唯一模型，普通报警明确绑定一个或多个兼容数据点，组合报警保存输入点、表达式和结果条件；目录仅用于整理。通知采用工程默认与策略覆盖，外部渠道密钥使用 AES-GCM 密文保存。工程快照与 Artifact 使用 `alarm.policy.v1`，其中 Artifact 只携带密钥引用。本模块仅提供开发态配置、契约检查和 `alarm-config-sync` 接收机制，不执行节点侧报警判断、实例处置或通知投递。
+报警以 `data_alarm_policies` 为唯一模型，普通报警明确绑定一个或多个兼容数据点，组合报警保存输入点、表达式和结果条件；目录仅用于整理。通知采用工程默认与策略覆盖，外部渠道密钥使用 AES-GCM 密文保存。工程级报警历史默认开启、保留 30 天并保存通知投递记录，`NULL` 期限表示永久；这里只保存开发态设置，不保存或查询运行历史。工程快照与 Artifact 使用 `alarm.policy.v1`，其中 Artifact 只携带密钥引用并始终包含有效 `historyStorage`。本模块仅提供开发态配置、契约检查和 `alarm-config-sync` 接收机制，不执行节点侧报警判断、实例处置、历史写入或通知投递。
 
 ## 质量关注点
 

@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'vitest'
 import { reactive } from 'vue'
-import { AlarmPolicySaveSchema, AlarmPolicySchema } from '../src/api/schemas/alarm.schema'
+import {
+  AlarmHistorySettingsSaveSchema,
+  AlarmHistorySettingsSchema,
+  AlarmPolicySaveSchema,
+  AlarmPolicySchema,
+} from '../src/api/schemas/alarm.schema'
 
 const policy = {
   id: 'policy-1',
@@ -77,5 +82,29 @@ describe('alarm policy schema', () => {
     const payload = AlarmPolicySaveSchema.parse(draft)
 
     expect(() => structuredClone(payload)).not.toThrow()
+  })
+})
+
+describe('alarm history settings schema', () => {
+  test('解析默认和永久保留语义', () => {
+    const parsed = AlarmHistorySettingsSchema.parse({
+      projectId: 'project-1',
+      isEnabled: true,
+      retentionDays: null,
+      storeNotificationDeliveries: true,
+      createdAt: null,
+      updatedAt: null,
+    })
+    expect(parsed.retentionDays).toBeNull()
+  })
+
+  test('拒绝非正整数保留时间', () => {
+    expect(() =>
+      AlarmHistorySettingsSaveSchema.parse({
+        isEnabled: true,
+        retentionDays: 0,
+        storeNotificationDeliveries: true,
+      }),
+    ).toThrow()
   })
 })

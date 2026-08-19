@@ -88,20 +88,21 @@ type SnapshotMqttTagRecord struct {
 
 // ProjectSnapshot 表示工程级数据域快照。
 type ProjectSnapshot struct {
-	Connections         []ConnectionRecord                 `json:"connections"`
-	RelationalConfigs   []SnapshotRelationalConfigRecord   `json:"relationalConfigs"`
-	Queries             []QueryRecord                      `json:"queries"`
-	MqttConfigs         []SnapshotMqttConfigRecord         `json:"mqttConfigs"`
-	MqttSubscriptions   []SnapshotMqttSubscriptionRecord   `json:"mqttSubscriptions"`
-	MqttTags            []SnapshotMqttTagRecord            `json:"mqttTags"`
-	DataPoints          []DataPointRecord                  `json:"datapoints"`
-	ComputeUnits        []ComputeUnitRecord                `json:"computeUnits"`
-	AlarmPolicyGroups   []AlarmPolicyGroupRecord           `json:"alarmPolicyGroups"`
-	AlarmPolicies       []AlarmPolicyRecord                `json:"alarmPolicies"`
-	AlarmSettings       *AlarmProjectSettingsRecord        `json:"alarmSettings"`
-	AlarmChannels       []AlarmNotificationChannelRecord   `json:"alarmChannels"`
-	AlarmChannelSecrets []SnapshotAlarmChannelSecretRecord `json:"alarmChannelSecrets"`
-	HistoryStorage      []HistoryStorageConfigRecord       `json:"historyStorage"`
+	Connections          []ConnectionRecord                 `json:"connections"`
+	RelationalConfigs    []SnapshotRelationalConfigRecord   `json:"relationalConfigs"`
+	Queries              []QueryRecord                      `json:"queries"`
+	MqttConfigs          []SnapshotMqttConfigRecord         `json:"mqttConfigs"`
+	MqttSubscriptions    []SnapshotMqttSubscriptionRecord   `json:"mqttSubscriptions"`
+	MqttTags             []SnapshotMqttTagRecord            `json:"mqttTags"`
+	DataPoints           []DataPointRecord                  `json:"datapoints"`
+	ComputeUnits         []ComputeUnitRecord                `json:"computeUnits"`
+	AlarmPolicyGroups    []AlarmPolicyGroupRecord           `json:"alarmPolicyGroups"`
+	AlarmPolicies        []AlarmPolicyRecord                `json:"alarmPolicies"`
+	AlarmSettings        *AlarmProjectSettingsRecord        `json:"alarmSettings"`
+	AlarmHistorySettings *AlarmHistorySettingsRecord        `json:"alarmHistorySettings"`
+	AlarmChannels        []AlarmNotificationChannelRecord   `json:"alarmChannels"`
+	AlarmChannelSecrets  []SnapshotAlarmChannelSecretRecord `json:"alarmChannelSecrets"`
+	HistoryStorage       []HistoryStorageConfigRecord       `json:"historyStorage"`
 }
 
 // SnapshotAlarmChannelSecretRecord 仅保存密文，快照与 API 均不包含渠道密钥明文。
@@ -181,14 +182,21 @@ type ArtifactAlarmSecretRef struct {
 	KeyVersion string `json:"keyVersion"`
 }
 
+type ArtifactAlarmHistoryStorage struct {
+	Enabled                     bool `json:"enabled"`
+	RetentionDays               *int `json:"retentionDays"`
+	StoreNotificationDeliveries bool `json:"storeNotificationDeliveries"`
+}
+
 // ArtifactAlarmsPayload 是节点消费的 alarm.policy.v1 完整开发态契约。
 type ArtifactAlarmsPayload struct {
-	SchemaVersion string                           `json:"schemaVersion"`
-	Groups        []AlarmPolicyGroupRecord         `json:"groups"`
-	Policies      []AlarmPolicyRecord              `json:"policies"`
-	Settings      *AlarmProjectSettingsRecord      `json:"settings"`
-	Channels      []AlarmNotificationChannelRecord `json:"channels"`
-	SecretRefs    []ArtifactAlarmSecretRef         `json:"secretRefs"`
+	SchemaVersion  string                           `json:"schemaVersion"`
+	HistoryStorage ArtifactAlarmHistoryStorage      `json:"historyStorage"`
+	Groups         []AlarmPolicyGroupRecord         `json:"groups"`
+	Policies       []AlarmPolicyRecord              `json:"policies"`
+	Settings       *AlarmProjectSettingsRecord      `json:"settings"`
+	Channels       []AlarmNotificationChannelRecord `json:"channels"`
+	SecretRefs     []ArtifactAlarmSecretRef         `json:"secretRefs"`
 }
 
 // ArtifactMqttConnectionRecord 表示产物层 MQTT 连接对象。
@@ -340,6 +348,10 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 	if err != nil {
 		return nil, err
 	}
+	alarmHistorySettings, err := alarmRepository.GetHistorySettings(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
 	alarmChannels, err := alarmRepository.ListChannels(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -354,20 +366,21 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 	}
 
 	return &ProjectSnapshot{
-		Connections:         connections,
-		RelationalConfigs:   deriveRelationalConfigs(connections),
-		Queries:             queries,
-		MqttConfigs:         mqttConfigs,
-		MqttSubscriptions:   mqttSubscriptions,
-		MqttTags:            mqttTags,
-		DataPoints:          datapoints,
-		ComputeUnits:        computeUnits,
-		AlarmPolicyGroups:   alarmGroups,
-		AlarmPolicies:       alarmPolicies,
-		AlarmSettings:       alarmSettings,
-		AlarmChannels:       alarmChannels,
-		AlarmChannelSecrets: alarmChannelSecrets,
-		HistoryStorage:      historyStorage,
+		Connections:          connections,
+		RelationalConfigs:    deriveRelationalConfigs(connections),
+		Queries:              queries,
+		MqttConfigs:          mqttConfigs,
+		MqttSubscriptions:    mqttSubscriptions,
+		MqttTags:             mqttTags,
+		DataPoints:           datapoints,
+		ComputeUnits:         computeUnits,
+		AlarmPolicyGroups:    alarmGroups,
+		AlarmPolicies:        alarmPolicies,
+		AlarmSettings:        alarmSettings,
+		AlarmHistorySettings: alarmHistorySettings,
+		AlarmChannels:        alarmChannels,
+		AlarmChannelSecrets:  alarmChannelSecrets,
+		HistoryStorage:       historyStorage,
 	}, nil
 }
 
@@ -415,6 +428,9 @@ func (r *ProjectSnapshotRepository) ReplaceProjectData(ctx context.Context, proj
 		return err
 	}
 	if err := r.insertAlarmSettings(ctx, tx, projectID, actorID, snapshot.AlarmSettings); err != nil {
+		return err
+	}
+	if err := r.insertAlarmHistorySettings(ctx, tx, projectID, actorID, snapshot.AlarmHistorySettings); err != nil {
 		return err
 	}
 	if err := r.insertAlarmPolicies(ctx, tx, projectID, actorID, snapshot.AlarmPolicies); err != nil {
@@ -513,6 +529,17 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 		})
 	}
 
+	alarmHistoryStorage := ArtifactAlarmHistoryStorage{
+		Enabled:                     true,
+		RetentionDays:               alarmHistoryDefaultRetentionDays(),
+		StoreNotificationDeliveries: true,
+	}
+	if snapshot.AlarmHistorySettings != nil {
+		alarmHistoryStorage.Enabled = snapshot.AlarmHistorySettings.IsEnabled
+		alarmHistoryStorage.RetentionDays = snapshot.AlarmHistorySettings.RetentionDays
+		alarmHistoryStorage.StoreNotificationDeliveries = snapshot.AlarmHistorySettings.StoreNotificationDeliveries
+	}
+
 	mqttConnections := make([]ArtifactMqttConnectionRecord, 0, len(snapshot.MqttConfigs))
 	for _, mqttConfig := range snapshot.MqttConfigs {
 		connection := connectionIndex[mqttConfig.ConnectionID]
@@ -576,12 +603,13 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 		DataPoints:  dataPoints,
 		Compute:     computeUnits,
 		Alarms: ArtifactAlarmsPayload{
-			SchemaVersion: "alarm.policy.v1",
-			Groups:        append([]AlarmPolicyGroupRecord{}, snapshot.AlarmPolicyGroups...),
-			Policies:      append([]AlarmPolicyRecord{}, snapshot.AlarmPolicies...),
-			Settings:      snapshot.AlarmSettings,
-			Channels:      append([]AlarmNotificationChannelRecord{}, snapshot.AlarmChannels...),
-			SecretRefs:    secretRefs,
+			SchemaVersion:  "alarm.policy.v1",
+			HistoryStorage: alarmHistoryStorage,
+			Groups:         append([]AlarmPolicyGroupRecord{}, snapshot.AlarmPolicyGroups...),
+			Policies:       append([]AlarmPolicyRecord{}, snapshot.AlarmPolicies...),
+			Settings:       snapshot.AlarmSettings,
+			Channels:       append([]AlarmNotificationChannelRecord{}, snapshot.AlarmChannels...),
+			SecretRefs:     secretRefs,
 		},
 		Mqtt: ArtifactMqttPayload{
 			Connections:   mqttConnections,
@@ -1068,6 +1096,7 @@ func (r *ProjectSnapshotRepository) deleteProjectSnapshot(ctx context.Context, t
 	for _, sqlText := range []string{
 		`DELETE FROM data_history_storage_configs WHERE project_id = $1`,
 		`DELETE FROM data_alarm_policies WHERE project_id = $1`,
+		`DELETE FROM data_alarm_history_settings WHERE project_id = $1`,
 		`DELETE FROM data_alarm_project_settings WHERE project_id = $1`,
 		`DELETE FROM data_alarm_notification_channels WHERE project_id = $1`,
 		`DELETE FROM data_alarm_policy_groups WHERE project_id = $1`,
@@ -1352,6 +1381,29 @@ func (r *ProjectSnapshotRepository) insertAlarmSettings(ctx context.Context, tx 
 		return translateAlarmSnapshotError("写入快照报警默认设置失败", err)
 	}
 	return nil
+}
+
+func (r *ProjectSnapshotRepository) insertAlarmHistorySettings(ctx context.Context, tx pgx.Tx, projectID, actorID string, settings *AlarmHistorySettingsRecord) error {
+	if settings == nil {
+		return nil
+	}
+	if settings.RetentionDays != nil && *settings.RetentionDays <= 0 {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照报警历史保留天数必须为正整数或永久")
+	}
+	createdAt, updatedAt := coalesceTime(settings.CreatedAt), coalesceTime(settings.UpdatedAt)
+	_, err := tx.Exec(ctx, `INSERT INTO data_alarm_history_settings
+	    (project_id,is_enabled,retention_days,store_notification_deliveries,created_by,updated_by,created_at,updated_at)
+	    VALUES($1,$2,$3,$4,$5,$5,$6,$7)`, projectID, settings.IsEnabled, settings.RetentionDays,
+		settings.StoreNotificationDeliveries, actorID, createdAt, updatedAt)
+	if err != nil {
+		return translateAlarmSnapshotError("写入快照报警历史设置失败", err)
+	}
+	return nil
+}
+
+func alarmHistoryDefaultRetentionDays() *int {
+	value := 30
+	return &value
 }
 
 func (r *ProjectSnapshotRepository) insertAlarmPolicies(ctx context.Context, tx pgx.Tx, projectID, actorID string, policies []AlarmPolicyRecord) error {

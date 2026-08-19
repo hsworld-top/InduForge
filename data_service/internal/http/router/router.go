@@ -373,6 +373,8 @@ func mountAlarmPolicyRoutes(mux *http.ServeMux, opts options) {
 
 	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-settings", read(opts.alarmPolicyHandler.GetSettings))
 	mux.Handle("PUT /api/v1/data/projects/{projectId}/alarm-settings", write(opts.alarmPolicyHandler.UpdateSettings))
+	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-history-settings", read(opts.alarmPolicyHandler.GetHistorySettings))
+	mux.Handle("PUT /api/v1/data/projects/{projectId}/alarm-history-settings", write(opts.alarmPolicyHandler.UpdateHistorySettings))
 	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-channels", read(opts.alarmPolicyHandler.ListChannels))
 	mux.Handle("POST /api/v1/data/projects/{projectId}/alarm-channels", write(opts.alarmPolicyHandler.CreateChannel))
 	mux.Handle("PUT /api/v1/data/projects/{projectId}/alarm-channels/{id}", write(opts.alarmPolicyHandler.UpdateChannel))

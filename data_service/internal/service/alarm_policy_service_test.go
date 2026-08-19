@@ -1,6 +1,9 @@
 package service
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestNormalizeConditionsSupportsDevelopmentConditionKinds(t *testing.T) {
 	tests := []struct {
@@ -119,5 +122,39 @@ func TestValidateChannelConfigOnlyChecksDevelopmentFormat(t *testing.T) {
 	}
 	if err := validateChannelConfig("email", map[string]any{"webhookUrl": "https://example.com"}); err == nil {
 		t.Fatal("unsupported channel type should be rejected")
+	}
+}
+
+func TestAlarmHistorySettingsDefaultsAndValidation(t *testing.T) {
+	settings := defaultAlarmHistorySettings("project-1")
+	if !settings.IsEnabled || settings.RetentionDays == nil || *settings.RetentionDays != 30 || !settings.StoreNotificationDeliveries {
+		t.Fatalf("default history settings = %#v", settings)
+	}
+	permanent := SaveAlarmHistorySettingsInput{IsEnabled: true, RetentionDays: nil, StoreNotificationDeliveries: true}
+	if err := validateAlarmHistorySettings(permanent); err != nil {
+		t.Fatalf("permanent history settings rejected: %v", err)
+	}
+	zero := 0
+	if err := validateAlarmHistorySettings(SaveAlarmHistorySettingsInput{RetentionDays: &zero}); err == nil {
+		t.Fatal("zero retention should be rejected")
+	}
+}
+
+func TestNormalizeSyncOperationSupportsAlarmHistorySettings(t *testing.T) {
+	service := &AlarmPolicyService{}
+	retentionDays := 90
+	payload, err := json.Marshal(SaveAlarmHistorySettingsInput{IsEnabled: false, RetentionDays: &retentionDays, StoreNotificationDeliveries: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation, err := service.normalizeSyncOperation(nil, "project-1", "actor-1", AlarmConfigSyncOperation{Resource: "history_settings", Action: "upsert", ID: "history", Data: payload})
+	if err != nil {
+		t.Fatalf("normalize history settings: %v", err)
+	}
+	if operation.HistorySettings == nil || operation.HistorySettings.IsEnabled || operation.HistorySettings.RetentionDays == nil || *operation.HistorySettings.RetentionDays != 90 {
+		t.Fatalf("normalized history settings = %#v", operation.HistorySettings)
+	}
+	if _, err = service.normalizeSyncOperation(nil, "project-1", "actor-1", AlarmConfigSyncOperation{Resource: "history_settings", Action: "delete", ID: "other"}); err == nil {
+		t.Fatal("history settings sync id other than history should be rejected")
 	}
 }

@@ -88,6 +88,15 @@ type AlarmProjectSettingsRecord struct {
 	UpdatedAt              time.Time `json:"updatedAt"`
 }
 
+type AlarmHistorySettingsRecord struct {
+	ProjectID                   string    `json:"projectId"`
+	IsEnabled                   bool      `json:"isEnabled"`
+	RetentionDays               *int      `json:"retentionDays"`
+	StoreNotificationDeliveries bool      `json:"storeNotificationDeliveries"`
+	CreatedAt                   time.Time `json:"createdAt"`
+	UpdatedAt                   time.Time `json:"updatedAt"`
+}
+
 type AlarmNotificationChannelRecord struct {
 	ID           string         `json:"id"`
 	ProjectID    string         `json:"projectId"`
@@ -149,6 +158,13 @@ type SaveAlarmProjectSettingsParams struct {
 	DefaultChannelIDs                         []string
 }
 
+type SaveAlarmHistorySettingsParams struct {
+	ProjectID, UserID           string
+	IsEnabled                   bool
+	RetentionDays               *int
+	StoreNotificationDeliveries bool
+}
+
 type SaveAlarmNotificationChannelParams struct {
 	ID, ProjectID, UserID, Name, ChannelType string
 	Config, SecretStatus                     map[string]any
@@ -164,13 +180,14 @@ type AlarmConfigSyncStateRecord struct {
 }
 
 type AlarmConfigSyncOperationParams struct {
-	Resource string
-	Action   string
-	ID       string
-	Group    *SaveAlarmPolicyGroupParams
-	Policy   *SaveAlarmPolicyParams
-	Settings *SaveAlarmProjectSettingsParams
-	Channel  *SaveAlarmNotificationChannelParams
+	Resource        string
+	Action          string
+	ID              string
+	Group           *SaveAlarmPolicyGroupParams
+	Policy          *SaveAlarmPolicyParams
+	Settings        *SaveAlarmProjectSettingsParams
+	HistorySettings *SaveAlarmHistorySettingsParams
+	Channel         *SaveAlarmNotificationChannelParams
 }
 
 type AlarmConfigSyncResultRecord struct {
@@ -491,6 +508,36 @@ func (r *AlarmPolicyRepository) SaveProjectSettings(ctx context.Context, p SaveA
 	return r.GetProjectSettings(ctx, p.ProjectID)
 }
 
+func (r *AlarmPolicyRepository) GetHistorySettings(ctx context.Context, projectID string) (*AlarmHistorySettingsRecord, error) {
+	item, err := scanAlarmHistorySettings(r.pool.QueryRow(ctx, `SELECT project_id,is_enabled,retention_days,store_notification_deliveries,created_at,updated_at FROM data_alarm_history_settings WHERE project_id=$1`, projectID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *AlarmPolicyRepository) SaveHistorySettings(ctx context.Context, p SaveAlarmHistorySettingsParams) (*AlarmHistorySettingsRecord, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, wrapAlarmRepo("开启报警历史设置事务失败", err)
+	}
+	defer tx.Rollback(ctx)
+	_, err = tx.Exec(ctx, `INSERT INTO data_alarm_history_settings(project_id,is_enabled,retention_days,store_notification_deliveries,created_by,updated_by) VALUES($1,$2,$3,$4,$5,$5) ON CONFLICT(project_id) DO UPDATE SET is_enabled=EXCLUDED.is_enabled,retention_days=EXCLUDED.retention_days,store_notification_deliveries=EXCLUDED.store_notification_deliveries,updated_by=EXCLUDED.updated_by,updated_at=now()`, p.ProjectID, p.IsEnabled, p.RetentionDays, p.StoreNotificationDeliveries, p.UserID)
+	if err != nil {
+		return nil, translateAlarmWrite("保存报警历史设置失败", err)
+	}
+	if _, err = incrementAlarmConfigRevision(ctx, tx, p.ProjectID); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, wrapAlarmRepo("提交报警历史设置失败", err)
+	}
+	return r.GetHistorySettings(ctx, p.ProjectID)
+}
+
 func (r *AlarmPolicyRepository) ListChannels(ctx context.Context, projectID string) ([]AlarmNotificationChannelRecord, error) {
 	rows, err := r.pool.Query(ctx, `SELECT id,project_id,name,channel_type,config,secret_status,is_enabled,created_at,updated_at FROM data_alarm_notification_channels WHERE project_id=$1 ORDER BY updated_at DESC`, projectID)
 	if err != nil {
@@ -706,6 +753,12 @@ func applyAlarmSyncOperation(ctx context.Context, tx pgx.Tx, projectID, actorID 
 		if err != nil {
 			return translateAlarmWrite("同步报警默认设置失败", err)
 		}
+	case "history_settings":
+		p := operation.HistorySettings
+		_, err := tx.Exec(ctx, `INSERT INTO data_alarm_history_settings(project_id,is_enabled,retention_days,store_notification_deliveries,created_by,updated_by) VALUES($1,$2,$3,$4,$5,$5) ON CONFLICT(project_id) DO UPDATE SET is_enabled=EXCLUDED.is_enabled,retention_days=EXCLUDED.retention_days,store_notification_deliveries=EXCLUDED.store_notification_deliveries,updated_by=EXCLUDED.updated_by,updated_at=now()`, projectID, p.IsEnabled, p.RetentionDays, p.StoreNotificationDeliveries, actorID)
+		if err != nil {
+			return translateAlarmWrite("同步报警历史设置失败", err)
+		}
 	case "channel":
 		p := operation.Channel
 		config, status, err := marshalAlarmJSON(p.Config, p.SecretStatus)
@@ -741,6 +794,8 @@ func deleteAlarmSyncResource(ctx context.Context, tx pgx.Tx, projectID, resource
 		sqlText = `DELETE FROM data_alarm_policies WHERE project_id=$1 AND id=$2`
 	case "settings":
 		sqlText = `DELETE FROM data_alarm_project_settings WHERE project_id=$1`
+	case "history_settings":
+		sqlText = `DELETE FROM data_alarm_history_settings WHERE project_id=$1`
 	case "channel":
 		var used bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM data_alarm_project_settings WHERE project_id=$1 AND default_channel_ids ? $2) OR EXISTS(SELECT 1 FROM data_alarm_policies WHERE project_id=$1 AND notification_channel_ids ? $2)`, projectID, id).Scan(&used); err != nil {
@@ -755,7 +810,7 @@ func deleteAlarmSyncResource(ctx context.Context, tx pgx.Tx, projectID, resource
 	}
 	var tag pgconn.CommandTag
 	var err error
-	if resource == "settings" {
+	if resource == "settings" || resource == "history_settings" {
 		tag, err = tx.Exec(ctx, sqlText, projectID)
 	} else {
 		tag, err = tx.Exec(ctx, sqlText, projectID, id)
@@ -764,6 +819,10 @@ func deleteAlarmSyncResource(ctx context.Context, tx pgx.Tx, projectID, resource
 		return translateAlarmWrite("同步删除报警配置失败", err)
 	}
 	if tag.RowsAffected() == 0 {
+		// 报警历史无显式记录本身就表示使用默认值，删除操作因此天然幂等。
+		if resource == "history_settings" {
+			return nil
+		}
 		return alarmNotFound("同步删除的报警配置不存在")
 	}
 	return nil
@@ -974,6 +1033,17 @@ func scanAlarmProjectSettings(s alarmScanner) (AlarmProjectSettingsRecord, error
 	}
 	if err = json.Unmarshal(ids, &item.DefaultChannelIDs); err != nil {
 		return item, wrapAlarmRepo("解析默认通知渠道失败", err)
+	}
+	return item, nil
+}
+func scanAlarmHistorySettings(s alarmScanner) (AlarmHistorySettingsRecord, error) {
+	var item AlarmHistorySettingsRecord
+	err := s.Scan(&item.ProjectID, &item.IsEnabled, &item.RetentionDays, &item.StoreNotificationDeliveries, &item.CreatedAt, &item.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return item, err
+	}
+	if err != nil {
+		return item, wrapAlarmRepo("读取报警历史设置失败", err)
 	}
 	return item, nil
 }

@@ -201,6 +201,23 @@ CREATE TABLE data_alarm_project_settings (
 
 
 --
+-- Name: data_alarm_history_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE data_alarm_history_settings (
+    project_id uuid NOT NULL,
+    is_enabled boolean DEFAULT true NOT NULL,
+    retention_days integer DEFAULT 30,
+    store_notification_deliveries boolean DEFAULT true NOT NULL,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT data_alarm_history_settings_retention_days_check CHECK (((retention_days IS NULL) OR (retention_days > 0)))
+);
+
+
+--
 -- Name: data_alarm_policy_bindings; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1424,6 +1441,14 @@ ALTER TABLE ONLY data_alarm_policy_groups
 
 ALTER TABLE ONLY data_alarm_project_settings
     ADD CONSTRAINT data_alarm_project_settings_pkey PRIMARY KEY (project_id);
+
+
+--
+-- Name: data_alarm_history_settings data_alarm_history_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY data_alarm_history_settings
+    ADD CONSTRAINT data_alarm_history_settings_pkey PRIMARY KEY (project_id);
 
 
 --

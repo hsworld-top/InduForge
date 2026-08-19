@@ -145,6 +145,23 @@ export const AlarmProjectSettingsSaveSchema = AlarmProjectSettingsSchema.pick({
 })
 export type AlarmProjectSettingsSave = z.infer<typeof AlarmProjectSettingsSaveSchema>
 
+export const AlarmHistorySettingsSchema = z.object({
+  projectId: z.string(),
+  isEnabled: z.boolean(),
+  retentionDays: z.number().int().positive().nullable(),
+  storeNotificationDeliveries: z.boolean(),
+  createdAt: TimeFieldSchema,
+  updatedAt: TimeFieldSchema,
+})
+export type AlarmHistorySettings = z.infer<typeof AlarmHistorySettingsSchema>
+
+export const AlarmHistorySettingsSaveSchema = AlarmHistorySettingsSchema.pick({
+  isEnabled: true,
+  retentionDays: true,
+  storeNotificationDeliveries: true,
+})
+export type AlarmHistorySettingsSave = z.infer<typeof AlarmHistorySettingsSaveSchema>
+
 export const AlarmNotificationChannelSchema = z.object({
   id: z.string(),
   projectId: z.string(),

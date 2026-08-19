@@ -2,6 +2,8 @@ import request from '@/utils/request'
 import {
   AlarmDatapointSummarySchema,
   AlarmDraftValidationSchema,
+  AlarmHistorySettingsSaveSchema,
+  AlarmHistorySettingsSchema,
   AlarmNotificationChannelSaveSchema,
   AlarmNotificationChannelSchema,
   AlarmPolicyContractSchema,
@@ -15,6 +17,8 @@ import {
   AlarmProjectSettingsSchema,
   AlarmTrialResultSchema,
   type AlarmDatapointSummary,
+  type AlarmHistorySettings,
+  type AlarmHistorySettingsSave,
   type AlarmNotificationChannel,
   type AlarmNotificationChannelSave,
   type AlarmPolicy,
@@ -190,6 +194,26 @@ export async function saveAlarmSettings(
     data: AlarmProjectSettingsSaveSchema.parse(payload),
   })
   return AlarmProjectSettingsSchema.parse(unwrap(response))
+}
+
+export async function getAlarmHistorySettings(projectId: string): Promise<AlarmHistorySettings> {
+  const response = await request({
+    url: `/data/projects/${projectId}/alarm-history-settings`,
+    method: 'get',
+  })
+  return AlarmHistorySettingsSchema.parse(unwrap(response))
+}
+
+export async function saveAlarmHistorySettings(
+  projectId: string,
+  payload: AlarmHistorySettingsSave,
+): Promise<AlarmHistorySettings> {
+  const response = await request({
+    url: `/data/projects/${projectId}/alarm-history-settings`,
+    method: 'put',
+    data: AlarmHistorySettingsSaveSchema.parse(payload),
+  })
+  return AlarmHistorySettingsSchema.parse(unwrap(response))
 }
 
 export async function listAlarmChannels(projectId: string): Promise<AlarmNotificationChannel[]> {

@@ -289,6 +289,36 @@ func (h *AlarmPolicyHandler) UpdateSettings(w http.ResponseWriter, r *http.Reque
 	return nil
 }
 
+func (h *AlarmPolicyHandler) GetHistorySettings(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	result, err := h.service.GetHistorySettings(r.Context(), claims, r.PathValue("projectId"))
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+func (h *AlarmPolicyHandler) UpdateHistorySettings(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var input service.SaveAlarmHistorySettingsInput
+	if err = decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	result, err := h.service.UpdateHistorySettings(r.Context(), claims, r.PathValue("projectId"), input)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 func (h *AlarmPolicyHandler) ListChannels(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {

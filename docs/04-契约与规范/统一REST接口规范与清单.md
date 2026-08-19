@@ -280,6 +280,7 @@
 | `POST` | `/api/v1/projects/{projectId}/scene-assets/{assetId}/editor-session` | 创建 Symbol/Component 工作副本会话 |
 | `GET` | `/api/v1/scene-editor-sessions/{sessionId}/assets` | 场景工作室内分页查询兼容资源及绑定/更新状态 |
 | `POST` | `/api/v1/scene-editor-sessions/{sessionId}/assets/actions` | 以乐观锁执行 `attach/update/detach` |
+| `POST` | `/api/v1/scene-editor-sessions/{sessionId}/assets/from-selection` | 将画布选中内容保存为图形模板或业务组件 |
 | `GET` | `/api/v1/scene-editor-sessions/{sessionId}/dependencies` | 只读分页查询场景依赖诊断 |
 | `GET/PUT` | `/api/v1/scene-asset-editor-sessions/{sessionId}/files/content` | 读取或保存资源工作副本 |
 | `POST` | `/api/v1/scene-asset-editor-sessions/{sessionId}/commit` | 发布资源工作副本为新内部代次 |
@@ -467,6 +468,7 @@
 | `POST`   | `/api/v1/data/projects/{projectId}/datapoints/status`                   | 批量查询数据点状态   |
 | `POST`   | `/api/v1/data/projects/{projectId}/datapoints/values`                   | 批量查询数据点值     |
 | `POST`   | `/api/v1/data/projects/{projectId}/datapoints/{id}/write`               | 写入数据点值         |
+| `POST`   | `/api/v1/data/projects/{projectId}/datapoints/write-by-path`            | 按稳定 path 写入数据点值，并校验类型、范围和运行角色 |
 | `PUT`    | `/api/v1/data/projects/{projectId}/datapoints/{id}/runtime-permissions` | 更新运行态权限       |
 | `GET`    | `/api/v1/data/projects/{projectId}/datapoints/{id}/usages`              | 获取数据点引用关系   |
 
@@ -696,6 +698,8 @@ Wave 2 当前只交付平台侧配置和 artifact 契约：`opcua/s7/modbus/tden
 | `DELETE` | `/api/v1/data/projects/{projectId}/alarm-policy-groups/{id}`                  | 删除空目录                       |
 | `GET`    | `/api/v1/data/projects/{projectId}/alarm-settings`                            | 查询工程默认通知                 |
 | `PUT`    | `/api/v1/data/projects/{projectId}/alarm-settings`                            | 保存工程默认通知                 |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-history-settings`                    | 查询工程报警历史设置             |
+| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-history-settings`                    | 保存工程报警历史设置             |
 | `GET`    | `/api/v1/data/projects/{projectId}/alarm-channels`                            | 查询站内及外部通知渠道           |
 | `POST`   | `/api/v1/data/projects/{projectId}/alarm-channels`                            | 新增外部通知渠道                 |
 | `PUT`    | `/api/v1/data/projects/{projectId}/alarm-channels/{id}`                       | 更新外部通知渠道                 |
@@ -703,7 +707,7 @@ Wave 2 当前只交付平台侧配置和 artifact 契约：`opcua/s7/modbus/tden
 | `GET`    | `/api/v1/data/projects/{projectId}/datapoints/{datapointId}/alarm-summary`    | 查询数据点引用的报警             |
 | `POST`   | `/api/v1/data/projects/{projectId}/alarm-config-sync`                         | 原子接收节点报警配置增量回写     |
 
-报警模式固定为 `per_target` 与 `derived`；条件类型固定为 `threshold/range/state/transition/text_match/rate_of_change/deviation/offline/expression`，等级固定为 `info/warning/major/critical`。目录仅用于整理和递归筛选，不参与启停。同步请求包含 `syncEpoch/sequence/idempotencyKey/operations`，同一请求幂等、旧序号拒绝，整批事务提交。
+报警模式固定为 `per_target` 与 `derived`；条件类型固定为 `threshold/range/state/transition/text_match/rate_of_change/deviation/offline/expression`，等级固定为 `info/warning/major/critical`。目录仅用于整理和递归筛选，不参与启停。报警历史无显式记录时使用“开启、保留 30 天、保存通知投递记录”的默认值，`retentionDays: null` 表示永久。同步请求包含 `syncEpoch/sequence/idempotencyKey/operations`，同一请求幂等、旧序号拒绝，整批事务提交；`history_settings` 资源固定使用 `id: history`。
 
 #### 契约检查
 
@@ -713,7 +717,7 @@ Wave 2 当前只交付平台侧配置和 artifact 契约：`opcua/s7/modbus/tden
 | `GET`  | `/api/v1/data/projects/{projectId}/contract-checks/latest` | 获取最近/实时契约检查结果  |
 | `GET`  | `/api/v1/data/projects/{projectId}/contract-checks/runs`   | 分页获取契约检查历史记录   |
 
-项目 artifact v1 的 `alarms` 区块使用 `alarm.policy.v1`，包含目录、普通/组合报警、规范化绑定与条件、通知设置、渠道定义和密钥引用，不包含密钥明文或密文。snapshot replace 会在单事务中往返报警开发态配置及渠道密文。
+项目 artifact v1 的 `alarms` 区块使用 `alarm.policy.v1`，包含目录、普通/组合报警、规范化绑定与条件、通知设置、报警历史设置、渠道定义和密钥引用，不包含密钥明文或密文。`historyStorage` 始终输出有效值；snapshot replace 会在单事务中往返报警开发态配置、可空的报警历史显式设置及渠道密文。
 契约检查 `run` 请求体可传 `scope`、`objectType`、`objectId`，用于收窄检查结果范围；检查项覆盖数据点状态、计算输入/输出、计算 SQL 绑定查询，以及新报警策略的点位、表达式、条件、通知渠道和启用状态。
 
 ## 6. 开发约束

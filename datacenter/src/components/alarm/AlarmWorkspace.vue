@@ -1,10 +1,7 @@
 <template>
   <div class="alarm-workspace">
     <section class="alarm-workspace__panel">
-      <header
-        class="alarm-workspace__head"
-        :class="{ 'is-notifications': activeTab === 'notifications' }"
-      >
+      <header class="alarm-workspace__head" :class="{ 'is-settings': activeTab !== 'policies' }">
         <el-segmented v-model="activeTab" :options="tabOptions" size="small" />
 
         <div v-if="activeTab === 'policies'" class="alarm-workspace__toolbar">
@@ -195,7 +192,12 @@
           </div>
         </template>
 
-        <AlarmNotificationSettings v-else :project-id="projectId" @changed="channels = $event" />
+        <AlarmNotificationSettings
+          v-else-if="activeTab === 'notifications'"
+          :project-id="projectId"
+          @changed="channels = $event"
+        />
+        <AlarmHistorySettings v-else :project-id="projectId" />
       </section>
     </section>
 
@@ -223,6 +225,7 @@ import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerTrash from '~icons/tabler/trash'
 import AlarmDirectoryPanel from './AlarmDirectoryPanel.vue'
+import AlarmHistorySettings from './AlarmHistorySettings.vue'
 import AlarmNotificationSettings from './AlarmNotificationSettings.vue'
 import AlarmPolicyDrawer from './AlarmPolicyDrawer.vue'
 import DataCenterPagination from '@/components/shared/DataCenterPagination.vue'
@@ -257,10 +260,11 @@ import { useConfirm } from '@/composables/useConfirm'
 
 const props = defineProps<{ projectId: string }>()
 const { confirm } = useConfirm()
-const activeTab = ref<'policies' | 'notifications'>('policies')
+const activeTab = ref<'policies' | 'notifications' | 'history'>('policies')
 const tabOptions = [
   { label: '报警配置', value: 'policies' },
   { label: '通知设置', value: 'notifications' },
+  { label: '报警历史', value: 'history' },
 ]
 const policies = ref<AlarmPolicy[]>([])
 const groups = ref<AlarmPolicyGroup[]>([])
@@ -689,7 +693,7 @@ watch(search, () => {
     width: 100%;
     flex: 0 0 auto;
   }
-  .alarm-workspace__head.is-notifications {
+  .alarm-workspace__head.is-settings {
     min-height: 56px;
     align-items: center;
     flex-direction: row;
@@ -701,7 +705,7 @@ watch(search, () => {
     min-height: 154px;
     align-items: stretch;
   }
-  .alarm-workspace__head.is-notifications {
+  .alarm-workspace__head.is-settings {
     min-height: 56px;
   }
   .alarm-workspace__toolbar {

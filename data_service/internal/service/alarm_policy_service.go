@@ -21,6 +21,7 @@ import (
 )
 
 const defaultAlarmMessageTemplate = "{{pointName}} 当前值 {{value}}，触发 {{conditionLabel}}"
+const defaultAlarmHistoryRetentionDays = 30
 
 var (
 	alarmModes      = map[string]bool{"per_target": true, "derived": true}
@@ -151,6 +152,21 @@ type SaveAlarmProjectSettingsInput struct {
 	RepeatIntervalSeconds  *int     `json:"repeatIntervalSeconds"`
 	DefaultMessageTemplate string   `json:"defaultMessageTemplate"`
 	DefaultChannelIDs      []string `json:"defaultChannelIds"`
+}
+
+type AlarmHistorySettings struct {
+	ProjectID                   string    `json:"projectId"`
+	IsEnabled                   bool      `json:"isEnabled"`
+	RetentionDays               *int      `json:"retentionDays"`
+	StoreNotificationDeliveries bool      `json:"storeNotificationDeliveries"`
+	CreatedAt                   time.Time `json:"createdAt"`
+	UpdatedAt                   time.Time `json:"updatedAt"`
+}
+
+type SaveAlarmHistorySettingsInput struct {
+	IsEnabled                   bool `json:"isEnabled"`
+	RetentionDays               *int `json:"retentionDays"`
+	StoreNotificationDeliveries bool `json:"storeNotificationDeliveries"`
 }
 
 type AlarmNotificationChannel struct {
@@ -445,6 +461,43 @@ func (s *AlarmPolicyService) UpdateSettings(ctx context.Context, claims *auth.Cl
 	return &item, nil
 }
 
+func (s *AlarmPolicyService) GetHistorySettings(ctx context.Context, claims *auth.Claims, projectID string) (*AlarmHistorySettings, error) {
+	if err := s.readAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	record, err := s.repository.GetHistorySettings(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if record == nil {
+		item := defaultAlarmHistorySettings(projectID)
+		return &item, nil
+	}
+	item := toAlarmHistorySettings(*record)
+	return &item, nil
+}
+
+func (s *AlarmPolicyService) UpdateHistorySettings(ctx context.Context, claims *auth.Claims, projectID string, input SaveAlarmHistorySettingsInput) (*AlarmHistorySettings, error) {
+	if err := s.writeAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	if err := validateAlarmHistorySettings(input); err != nil {
+		return nil, err
+	}
+	record, err := s.repository.SaveHistorySettings(ctx, repository.SaveAlarmHistorySettingsParams{
+		ProjectID:                   projectID,
+		UserID:                      claims.UserID,
+		IsEnabled:                   input.IsEnabled,
+		RetentionDays:               input.RetentionDays,
+		StoreNotificationDeliveries: input.StoreNotificationDeliveries,
+	})
+	if err != nil {
+		return nil, err
+	}
+	item := toAlarmHistorySettings(*record)
+	return &item, nil
+}
+
 func (s *AlarmPolicyService) ListChannels(ctx context.Context, claims *auth.Claims, projectID string) ([]AlarmNotificationChannel, error) {
 	if err := s.readAccess(claims, projectID); err != nil {
 		return nil, err
@@ -576,15 +629,18 @@ func (s *AlarmPolicyService) normalizeSyncOperation(ctx context.Context, project
 		return repository.AlarmConfigSyncOperationParams{}, badAlarm("同步操作 action 仅支持 upsert 或 delete")
 	}
 	id := strings.TrimSpace(operation.ID)
-	if resource != "settings" {
+	if resource != "settings" && resource != "history_settings" {
 		if _, err := uuid.Parse(id); err != nil {
 			return repository.AlarmConfigSyncOperationParams{}, badAlarm("同步操作 id 格式无效")
 		}
 	}
 	result := repository.AlarmConfigSyncOperationParams{Resource: resource, Action: action, ID: id}
 	if action == "delete" {
-		if resource != "group" && resource != "policy" && resource != "settings" && resource != "channel" {
+		if resource != "group" && resource != "policy" && resource != "settings" && resource != "history_settings" && resource != "channel" {
 			return result, badAlarm("同步资源类型不受支持")
+		}
+		if resource == "history_settings" && id != "history" {
+			return result, badAlarm("报警历史同步资源 id 必须为 history")
 		}
 		return result, nil
 	}
@@ -628,6 +684,18 @@ func (s *AlarmPolicyService) normalizeSyncOperation(ctx context.Context, project
 			template = defaultAlarmMessageTemplate
 		}
 		result.Settings = &repository.SaveAlarmProjectSettingsParams{ProjectID: projectID, UserID: actorID, NotifyOnRaise: data.NotifyOnRaise, NotifyOnClear: data.NotifyOnClear, RepeatIntervalSeconds: data.RepeatIntervalSeconds, DefaultMessageTemplate: template, DefaultChannelIDs: alarmUniqueStrings(data.DefaultChannelIDs)}
+	case "history_settings":
+		if id != "history" {
+			return result, badAlarm("报警历史同步资源 id 必须为 history")
+		}
+		var data SaveAlarmHistorySettingsInput
+		if err := decodeAlarmSyncData(operation.Data, &data); err != nil {
+			return result, err
+		}
+		if err := validateAlarmHistorySettings(data); err != nil {
+			return result, err
+		}
+		result.HistorySettings = &repository.SaveAlarmHistorySettingsParams{ProjectID: projectID, UserID: actorID, IsEnabled: data.IsEnabled, RetentionDays: data.RetentionDays, StoreNotificationDeliveries: data.StoreNotificationDeliveries}
 	case "channel":
 		var data struct {
 			SaveAlarmNotificationChannelInput
@@ -1174,6 +1242,20 @@ func toAlarmGroup(record repository.AlarmPolicyGroupRecord) AlarmPolicyGroup {
 }
 func toAlarmSettings(record repository.AlarmProjectSettingsRecord) AlarmProjectSettings {
 	return AlarmProjectSettings{ProjectID: record.ProjectID, NotifyOnRaise: record.NotifyOnRaise, NotifyOnClear: record.NotifyOnClear, RepeatIntervalSeconds: record.RepeatIntervalSeconds, DefaultMessageTemplate: record.DefaultMessageTemplate, DefaultChannelIDs: record.DefaultChannelIDs, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
+}
+func toAlarmHistorySettings(record repository.AlarmHistorySettingsRecord) AlarmHistorySettings {
+	return AlarmHistorySettings{ProjectID: record.ProjectID, IsEnabled: record.IsEnabled, RetentionDays: record.RetentionDays, StoreNotificationDeliveries: record.StoreNotificationDeliveries, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
+}
+
+func validateAlarmHistorySettings(input SaveAlarmHistorySettingsInput) error {
+	if input.RetentionDays != nil && *input.RetentionDays <= 0 {
+		return badAlarm("报警历史保留天数必须为正整数或永久")
+	}
+	return nil
+}
+func defaultAlarmHistorySettings(projectID string) AlarmHistorySettings {
+	retentionDays := defaultAlarmHistoryRetentionDays
+	return AlarmHistorySettings{ProjectID: projectID, IsEnabled: true, RetentionDays: &retentionDays, StoreNotificationDeliveries: true}
 }
 func toAlarmChannel(record repository.AlarmNotificationChannelRecord) AlarmNotificationChannel {
 	return AlarmNotificationChannel{ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, ChannelType: record.ChannelType, Config: alarmCloneMap(record.Config), SecretStatus: alarmCloneMap(record.SecretStatus), IsEnabled: record.IsEnabled, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
