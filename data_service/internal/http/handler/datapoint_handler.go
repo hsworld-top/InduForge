@@ -128,6 +128,39 @@ func (h *DataPointHandler) UpdateRuntimePermissions(w http.ResponseWriter, r *ht
 	return nil
 }
 
+// GetCustomAttributes 返回数据点开发态自定义属性默认值。
+func (h *DataPointHandler) GetCustomAttributes(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	result, err := h.service.GetDataPointCustomAttributes(r.Context(), r.PathValue("projectId"), r.PathValue("id"))
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// UpdateCustomAttributes 原子替换数据点开发态自定义属性默认值。
+func (h *DataPointHandler) UpdateCustomAttributes(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Attributes map[string]string `json:"attributes"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.UpdateDataPointCustomAttributes(r.Context(), r.PathValue("projectId"), r.PathValue("id"), claims.UserID, request.Attributes)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 // Delete 删除单个无效数据点。
 func (h *DataPointHandler) Delete(w http.ResponseWriter, r *http.Request) error {
 	if _, err := requireClaims(r); err != nil {

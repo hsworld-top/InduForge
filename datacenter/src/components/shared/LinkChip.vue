@@ -8,9 +8,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ArrowRight, Bell, Connection, Cpu, DataLine } from '@element-plus/icons-vue'
+import { ArrowRight, Bell, Connection, Cpu, DataLine, Monitor } from '@element-plus/icons-vue'
 
-type LinkChipModule = 'datapoint' | 'access-source' | 'compute' | 'alarm'
+type LinkChipModule = 'datapoint' | 'access-source' | 'industrial-collector' | 'compute' | 'alarm'
 
 const props = defineProps<{
   module: LinkChipModule
@@ -25,6 +25,7 @@ defineEmits<{
 const moduleIconMap = {
   datapoint: DataLine,
   'access-source': Connection,
+  'industrial-collector': Monitor,
   compute: Cpu,
   alarm: Bell,
 }

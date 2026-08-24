@@ -2,7 +2,6 @@
   <DcDrawer
     v-model="visible"
     :width="uiPrefs.prefs.drawerWidth"
-    :pinned="uiPrefs.prefs.pinnedDrawer"
     title=""
     @resize="uiPrefs.setDrawerWidth"
   >
@@ -20,21 +19,6 @@
             />
           </div>
           <div class="dpd__header-right">
-            <!-- 钉住按钮 -->
-            <el-tooltip
-              :content="uiPrefs.prefs.pinnedDrawer ? '取消钉住' : '钉住为旁路面板'"
-              placement="bottom"
-            >
-              <button
-                type="button"
-                class="dpd__icon-btn"
-                :class="{ 'is-active': uiPrefs.prefs.pinnedDrawer }"
-                :aria-label="uiPrefs.prefs.pinnedDrawer ? '取消钉住' : '钉住为旁路面板'"
-                @click="togglePin"
-              >
-                <Paperclip />
-              </button>
-            </el-tooltip>
             <!-- 关闭按钮 -->
             <el-tooltip content="关闭" placement="bottom">
               <button
@@ -127,11 +111,11 @@
           </div>
 
           <!-- 来源 LinkChip -->
-          <div v-if="accessSourceId" class="dpd__source-chip">
+          <div v-if="sourceNavigation" class="dpd__source-chip">
             <LinkChip
-              module="access-source"
-              :object-id="accessSourceId"
-              label="接入源"
+              :module="sourceNavigation.module"
+              :object-id="sourceNavigation.objectId"
+              :label="sourceNavigation.label"
               @click="handleLinkChipClick"
             />
           </div>
@@ -191,30 +175,30 @@
             <button
               type="button"
               class="dpd__edit-btn"
-              aria-label="新建数据点报警"
-              @click="openAlarmSettings"
+              aria-label="前往报警单元"
+              @click="openAlarmWorkspace"
             >
-              新建报警
+              前往报警单元
             </button>
           </div>
           <div class="dpd__perm-summary">
-            <span class="dpd__perm-label">已引用策略：</span>
+            <span class="dpd__perm-label">有效报警：</span>
             <span class="dpd__perm-value">{{ alarmSummary?.count || 0 }} 条</span>
           </div>
-          <div v-if="alarmSummary?.policies.length" class="dpd__usage-chips">
+          <div v-if="alarmSummary?.items.length" class="dpd__usage-chips">
             <LinkChip
-              v-for="policy in alarmSummary.policies"
-              :key="policy.id"
+              v-for="item in alarmSummary.items"
+              :key="item.id"
               module="alarm"
-              :object-id="policy.id"
-              :label="policy.name"
+              :object-id="item.id"
+              :label="item.displayName"
               @click="handleLinkChipClick"
             />
           </div>
           <p v-else class="dpd__muted">当前数据点尚未配置报警</p>
         </section>
 
-        <!-- 区块 4：引用（D2 占位；usages 为空时不显示） -->
+        <!-- 区块 4：引用 -->
         <section v-if="usages.length > 0" class="dpd__section">
           <h4 class="dpd__section-title">引用</h4>
           <div v-for="group in usageGroups" :key="group.module" class="dpd__usage-group">
@@ -289,23 +273,12 @@
     :saving="historyStorageSaving"
     @save="saveHistoryStorage"
   />
-
-  <AlarmPolicyDrawer
-    v-model="alarmDrawerVisible"
-    :project-id="projectId"
-    mode="per_target"
-    :groups="alarmGroups"
-    :channels="alarmChannels"
-    :initial-bindings="alarmInitialBindings"
-    :saving="alarmSaving"
-    @save="saveAlarmPolicyForDatapoint"
-  />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { ArrowDown, Close, CopyDocument, Paperclip } from '@element-plus/icons-vue'
+import { ArrowDown, Close, CopyDocument } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { TIME_FORMAT } from '@/constants'
 import { updateDatapoint, updateDatapointRuntimeGrant } from '@/api/datapoint.api'
@@ -320,7 +293,6 @@ import LinkChip from '@/components/shared/LinkChip.vue'
 import DataPointTagDialog from './DataPointTagDialog.vue'
 import RuntimePermissionDialog from './RuntimePermissionDialog.vue'
 import HistoryStorageConfigDrawer from '@/components/history-storage/HistoryStorageConfigDrawer.vue'
-import AlarmPolicyDrawer from '@/components/alarm/AlarmPolicyDrawer.vue'
 import {
   getDatapointHistoryStorage,
   listHistoryStorageTargets,
@@ -332,20 +304,9 @@ import type {
   HistoryStorageTargetOption,
 } from '@/api/schemas/history-storage.schema'
 import { historyStorageModeLabels } from '@/models/history-storage'
-import {
-  createAlarmPolicy,
-  getDatapointAlarmSummary,
-  listAlarmChannels,
-  listAlarmGroupTree,
-} from '@/api/alarm.api'
-import type {
-  AlarmBinding,
-  AlarmDatapointSummary,
-  AlarmNotificationChannel,
-  AlarmPolicyGroup,
-  AlarmPolicySave,
-} from '@/api/schemas/alarm.schema'
-import { ensureBuiltinAlarmNotificationChannel } from '@/models/alarm-policy'
+import { getDatapointAlarmSummary } from '@/api/alarm.api'
+import type { AlarmDatapointSummary } from '@/api/schemas/alarm.schema'
+import { resolveDatapointSourceNavigation } from '@/models/datapoint-source'
 
 // 扩展类型：除 schema 核心字段外，允许后端额外字段（passthrough）
 interface DataPointExtended {
@@ -369,18 +330,18 @@ interface DataPointExtended {
   runtimeGrant?: Record<string, unknown>
   sourceConfig?: Record<string, unknown>
   invalidReason?: string | null
-  /** 引用列表（后端未实现时为空数组） */
+  /** 报警策略与计算单元引用列表 */
   usages?: UsageItem[]
 }
 
 interface UsageItem {
-  module: 'access-source' | 'compute' | 'alarm' | 'datapoint'
+  module: 'access-source' | 'industrial-collector' | 'compute' | 'alarm' | 'datapoint'
   objectId: string
   label: string
 }
 
 // LinkChip 的 module 类型
-type LinkChipModule = 'datapoint' | 'access-source' | 'compute' | 'alarm'
+type LinkChipModule = 'datapoint' | 'access-source' | 'industrial-collector' | 'compute' | 'alarm'
 
 const props = defineProps<{
   /** 是否显示 */
@@ -400,7 +361,7 @@ const emit = defineEmits<{
   /** 数据已更新，通知父组件刷新 */
   updated: []
   /** 跳转到另一个模块 */
-  navigate: [payload: { module: LinkChipModule; objectId: string; tab?: string }]
+  navigate: [payload: { module: LinkChipModule; objectId?: string; tab?: string }]
 }>()
 
 const uiPrefs = useUiPrefsStore()
@@ -424,10 +385,6 @@ const historyStorageDrawerVisible = ref(false)
 const historyStorageLoading = ref(false)
 const historyStorageSaving = ref(false)
 const alarmSummary = ref<AlarmDatapointSummary | null>(null)
-const alarmGroups = ref<AlarmPolicyGroup[]>([])
-const alarmChannels = ref<AlarmNotificationChannel[]>([])
-const alarmDrawerVisible = ref(false)
-const alarmSaving = ref(false)
 
 const visible = computed({
   get: () => props.modelValue,
@@ -467,7 +424,7 @@ const hasSourceConfig = computed(() => {
   return !!cfg && Object.keys(cfg).length > 0
 })
 
-const accessSourceId = computed(() => resolveAccessSourceId(props.datapoint))
+const sourceNavigation = computed(() => resolveDatapointSourceNavigation(props.datapoint))
 const collectorSourceName = computed(() => {
   const source = historyStorageDetail.value?.source
   return source?.type === 'collector_connection' ? source.name || '所属采集连接' : ''
@@ -489,8 +446,9 @@ const usages = computed<UsageItem[]>(() => (props.datapoint as DataPointExtended
 // 按模块分组
 const MODULE_LABELS: Record<string, string> = {
   'access-source': '接入源',
+  'industrial-collector': '工业采集连接',
   compute: '计算单元',
-  alarm: '报警策略',
+  alarm: '报警项',
   datapoint: '数据点',
 }
 
@@ -556,8 +514,14 @@ const sourceTypeLabels: Record<string, string> = {
   'db.query': '数据库查询',
   'mqtt.tag': 'MQTT 变量',
   'mqtt.subscription': 'MQTT 订阅',
+  'http.request': 'HTTP 请求',
+  'websocket.session': 'WebSocket 会话',
+  'realtime.key': '实时库 Key',
+  'kafka.field': 'Kafka 字段',
+  'kafka.raw': 'Kafka 整包',
   'calc.output': '计算输出',
   'static.var': '静态变量',
+  'collector.point': '工业采集点',
 }
 
 function formatSourceType(sourceType?: string): string {
@@ -592,27 +556,7 @@ function normalizeTags(value: unknown): string[] {
   return result
 }
 
-function resolveAccessSourceId(dp: DataPointExtended | null): string {
-  if (!dp) return ''
-  const config = dp.sourceConfig || {}
-  const connectionId = String(config.connectionId || config.sourceConnectionId || '').trim()
-  if (connectionId) return connectionId
-  if (
-    dp.sourceId &&
-    ['http.request', 'websocket.session', 'realtime.key', 'kafka.field'].includes(
-      dp.sourceType || '',
-    )
-  ) {
-    return String(dp.sourceId)
-  }
-  return ''
-}
-
 // ── 交互 ──────────────────────────────────────────────────────────────────
-
-function togglePin() {
-  uiPrefs.setPinnedDrawer(!uiPrefs.prefs.pinnedDrawer)
-}
 
 function handleClose() {
   visible.value = false
@@ -678,21 +622,6 @@ async function saveHistoryStorage(payload: HistoryStorageSavePayload) {
   }
 }
 
-const alarmInitialBindings = computed<AlarmBinding[]>(() => {
-  const point = props.datapoint
-  if (!point) return []
-  return [
-    {
-      datapointId: String(point.id),
-      path: point.path || '',
-      name: point.name || point.path || '数据点',
-      dataType: point.dataType || '',
-      role: 'target',
-      inputKey: null,
-    },
-  ]
-})
-
 async function loadAlarmSummary(datapointId: string) {
   try {
     alarmSummary.value = await getDatapointAlarmSummary(props.projectId, datapointId)
@@ -701,38 +630,8 @@ async function loadAlarmSummary(datapointId: string) {
   }
 }
 
-async function openAlarmSettings() {
-  if (!props.datapoint?.id) return
-  try {
-    const [groups, channels] = await Promise.all([
-      alarmGroups.value.length
-        ? Promise.resolve(alarmGroups.value)
-        : listAlarmGroupTree(props.projectId),
-      alarmChannels.value.length
-        ? Promise.resolve(alarmChannels.value)
-        : listAlarmChannels(props.projectId).catch(() => []),
-    ])
-    alarmGroups.value = groups
-    alarmChannels.value = ensureBuiltinAlarmNotificationChannel(props.projectId, channels)
-    alarmDrawerVisible.value = true
-  } catch {
-    ElMessage.error('加载报警设置失败')
-  }
-}
-
-async function saveAlarmPolicyForDatapoint(payload: AlarmPolicySave) {
-  alarmSaving.value = true
-  try {
-    await createAlarmPolicy(props.projectId, payload)
-    alarmDrawerVisible.value = false
-    await loadAlarmSummary(String(props.datapoint?.id || ''))
-    ElMessage.success('报警配置已创建')
-    emit('updated')
-  } catch {
-    ElMessage.error('创建报警配置失败')
-  } finally {
-    alarmSaving.value = false
-  }
+function openAlarmWorkspace() {
+  emit('navigate', { module: 'alarm' })
 }
 
 // ── 标签 dialog ────────────────────────────────────────────────────────────

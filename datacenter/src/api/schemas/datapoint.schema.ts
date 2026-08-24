@@ -6,6 +6,14 @@ export const DatapointStatusSchema = z.enum(['active', 'inactive', 'invalid', 'e
 
 export type DatapointStatus = z.infer<typeof DatapointStatusSchema>
 
+export const DatapointAttributeDefaultsSchema = z.record(z.string(), z.string())
+
+export const DatapointCustomAttributesSchema = z.object({
+  attributes: DatapointAttributeDefaultsSchema,
+})
+
+export type DatapointCustomAttributes = z.infer<typeof DatapointCustomAttributesSchema>
+
 // 单个数据点
 export const DatapointSchema = z
   .object({
@@ -20,6 +28,7 @@ export const DatapointSchema = z
     sourceError: z.string().optional().nullable(),
     invalidReason: z.string().optional().nullable(),
     runtimeGrant: RuntimeGrantSchema.optional(),
+    attributeDefaults: DatapointAttributeDefaultsSchema.optional(),
     createdAt: TimeFieldSchema,
     updatedAt: TimeFieldSchema,
   })

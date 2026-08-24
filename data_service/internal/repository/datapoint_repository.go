@@ -37,6 +37,7 @@ type DataPointRecord struct {
 	AlarmLow                  *float64
 	AlarmHigh                 *float64
 	Tags                      []any
+	AttributeDefaults         map[string]string
 	RuntimePermissions        DataPointRuntimePermissions
 	RuntimePermissionsDefined bool
 	RefreshMode               string
@@ -50,7 +51,7 @@ type DataPointRecord struct {
 }
 
 const dataPointSelectColumns = `id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-       unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
+       unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, attribute_defaults, runtime_permissions,
        refresh_mode, refresh_interval_ms, status, display_order, created_by, updated_by, created_at, updated_at`
 
 // DataPointListFilter 表示数据点列表的过滤条件。
@@ -66,6 +67,19 @@ type DataPointListFilter struct {
 	SortOrder      string
 	Page           int
 	PageSize       int
+}
+
+// DataPointUsageRecord 表示一个会阻止数据点删除或需要向用户展示的配置引用。
+type DataPointUsageRecord struct {
+	Module   string
+	ObjectID string
+	Label    string
+}
+
+// DataPointTagSummary 表示工程内标签及其真实引用数据点数量。
+type DataPointTagSummary struct {
+	Tag   string
+	Count int
 }
 
 // DataPointRepository 封装 data_points 的参数化 SQL 访问。
@@ -125,6 +139,146 @@ func (r *DataPointRepository) ListByProject(ctx context.Context, projectID strin
 	}
 
 	return records, total, nil
+}
+
+// ListUsageCounts 批量统计报警配置和计算单元对当前页数据点的引用数。
+func (r *DataPointRepository) ListUsageCounts(ctx context.Context, projectID string, ids []string) (map[string]int, error) {
+	result := make(map[string]int, len(ids))
+	if len(ids) == 0 {
+		return result, nil
+	}
+	rows, err := r.pool.Query(ctx, `
+		WITH usages AS (
+			SELECT item.datapoint_id, 'alarm:' || item.id::text AS usage_key
+			FROM data_alarm_items item
+			WHERE item.project_id = $1 AND item.datapoint_id = ANY($2::uuid[])
+			UNION
+			SELECT input.datapoint_id, 'alarm:' || input.alarm_item_id::text AS usage_key
+			FROM data_alarm_item_inputs input
+			JOIN data_alarm_items item ON item.id = input.alarm_item_id
+			WHERE item.project_id = $1 AND input.datapoint_id = ANY($2::uuid[])
+			UNION
+			SELECT datapoint.id, 'compute:' || unit.id::text AS usage_key
+			FROM data_compute_units unit
+			JOIN LATERAL jsonb_array_elements(
+				CASE WHEN jsonb_typeof(unit.input_bindings->'datapointVariables') = 'array'
+					THEN unit.input_bindings->'datapointVariables' ELSE '[]'::jsonb END
+			) variable ON true
+			JOIN data_points datapoint
+			  ON datapoint.project_id = unit.project_id
+			 AND datapoint.path = COALESCE(variable->>'path', variable->>'datapointPath')
+			WHERE unit.project_id = $1 AND datapoint.id = ANY($2::uuid[])
+		)
+		SELECT datapoint_id, COUNT(*) FROM usages GROUP BY datapoint_id
+	`, projectID, ids)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "统计数据点引用失败", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var count int
+		if err := rows.Scan(&id, &count); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取数据点引用统计失败", err)
+		}
+		result[id] = count
+	}
+	return result, rows.Err()
+}
+
+// ListUsages 返回单个数据点的报警和计算引用明细。
+func (r *DataPointRepository) ListUsages(ctx context.Context, projectID, datapointID string) ([]DataPointUsageRecord, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT module, object_id, label FROM (
+			SELECT 'alarm'::text AS module, item.id::text AS object_id, item.display_name AS label
+			FROM data_alarm_items item
+			WHERE item.project_id = $1 AND item.datapoint_id = $2
+			UNION
+			SELECT 'alarm'::text AS module, item.id::text AS object_id, item.display_name AS label
+			FROM data_alarm_item_inputs input
+			JOIN data_alarm_items item ON item.id = input.alarm_item_id
+			WHERE item.project_id = $1 AND input.datapoint_id = $2
+			UNION
+			SELECT 'compute'::text AS module, unit.id::text AS object_id, unit.name AS label
+			FROM data_compute_units unit
+			JOIN LATERAL jsonb_array_elements(
+				CASE WHEN jsonb_typeof(unit.input_bindings->'datapointVariables') = 'array'
+					THEN unit.input_bindings->'datapointVariables' ELSE '[]'::jsonb END
+			) variable ON true
+			JOIN data_points datapoint
+			  ON datapoint.project_id = unit.project_id
+			 AND datapoint.path = COALESCE(variable->>'path', variable->>'datapointPath')
+			WHERE unit.project_id = $1 AND datapoint.id = $2
+		) usages
+		ORDER BY module, label, object_id
+	`, projectID, datapointID)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询数据点引用失败", err)
+	}
+	defer rows.Close()
+	result := make([]DataPointUsageRecord, 0)
+	for rows.Next() {
+		var item DataPointUsageRecord
+		if err := rows.Scan(&item.Module, &item.ObjectID, &item.Label); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取数据点引用失败", err)
+		}
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}
+
+// ListTagSummaries 按工程统计全部标签，避免前端只看到当前页标签。
+func (r *DataPointRepository) ListTagSummaries(ctx context.Context, projectID string) ([]DataPointTagSummary, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT tag.value, COUNT(*)
+		FROM data_points datapoint
+		JOIN LATERAL jsonb_array_elements_text(
+			CASE WHEN jsonb_typeof(datapoint.tags) = 'array' THEN datapoint.tags ELSE '[]'::jsonb END
+		) tag(value) ON true
+		WHERE datapoint.project_id = $1
+		GROUP BY tag.value
+		ORDER BY tag.value
+	`, projectID)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询数据点标签失败", err)
+	}
+	defer rows.Close()
+	result := make([]DataPointTagSummary, 0)
+	for rows.Next() {
+		var item DataPointTagSummary
+		if err := rows.Scan(&item.Tag, &item.Count); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取数据点标签失败", err)
+		}
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}
+
+// RemoveTagByProject 在单个事务中移除工程内所有数据点上的指定标签。
+func (r *DataPointRepository) RemoveTagByProject(ctx context.Context, projectID, tag, userID string) (int, error) {
+	payload, err := json.Marshal([]string{tag})
+	if err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "标签格式无效", err)
+	}
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开始删除数据点标签事务失败", err)
+	}
+	defer rollbackDataPointTxQuietly(ctx, tx)
+	commandTag, err := tx.Exec(ctx, `
+		UPDATE data_points
+		SET tags = tags - $2,
+			updated_by = NULLIF($3, '')::uuid,
+			updated_at = now()
+		WHERE project_id = $1 AND tags @> $4::jsonb
+	`, projectID, tag, userID, string(payload))
+	if err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "删除数据点标签失败", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交删除数据点标签事务失败", err)
+	}
+	return int(commandTag.RowsAffected()), nil
 }
 
 // ListAllByProject 仅供生成开发契约快照使用，按路径稳定排序返回完整内部记录。
@@ -293,6 +447,29 @@ func (r *DataPointRepository) UpdateRuntimePermissions(ctx context.Context, para
 	return &record, nil
 }
 
+// UpdateAttributeDefaults 原子替换单个数据点的开发态自定义属性默认值。
+func (r *DataPointRepository) UpdateAttributeDefaults(ctx context.Context, params UpdateDataPointAttributeDefaultsParams) (*DataPointRecord, error) {
+	attributeDefaultsBytes, err := json.Marshal(params.AttributeDefaults)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "自定义属性格式无效", err)
+	}
+
+	row := r.pool.QueryRow(ctx, `
+        UPDATE data_points
+        SET attribute_defaults = $3::jsonb,
+            updated_by = $4,
+            updated_at = now()
+        WHERE project_id = $1 AND id = $2
+        RETURNING `+dataPointSelectColumns+`
+    `, params.ProjectID, params.ID, string(attributeDefaultsBytes), params.UserID)
+
+	record, err := scanDataPointRecord(row)
+	if err != nil {
+		return nil, translateDataPointWriteError(err)
+	}
+	return &record, nil
+}
+
 // Delete 按项目与主键删除单条数据点。
 // 查询路径：project_id + id，主命中 data_points_pkey；项目边界与主键组合可避免误删其他项目记录。
 // 潜在性能风险：单条删除通常很轻量，但如果未来引入批量级联同步，应注意不要在这里堆叠额外循环。
@@ -436,6 +613,14 @@ type UpdateDataPointRuntimePermissionsParams struct {
 	RuntimePermissions DataPointRuntimePermissions
 }
 
+// UpdateDataPointAttributeDefaultsParams 表示自定义属性默认值更新参数。
+type UpdateDataPointAttributeDefaultsParams struct {
+	ID                string
+	ProjectID         string
+	UserID            string
+	AttributeDefaults map[string]string
+}
+
 type dataPointScannable interface {
 	Scan(dest ...any) error
 }
@@ -457,6 +642,7 @@ func scanDataPointRecord(row dataPointScannable) (DataPointRecord, error) {
 		updatedBy               pgtype.UUID
 		sourceConfigBytes       []byte
 		tagsBytes               []byte
+		attributeDefaultsBytes  []byte
 		runtimePermissionsBytes []byte
 	)
 
@@ -478,6 +664,7 @@ func scanDataPointRecord(row dataPointScannable) (DataPointRecord, error) {
 		&alarmLow,
 		&alarmHigh,
 		&tagsBytes,
+		&attributeDefaultsBytes,
 		&runtimePermissionsBytes,
 		&record.RefreshMode,
 		&refreshIntervalMS,
@@ -524,6 +711,15 @@ func scanDataPointRecord(row dataPointScannable) (DataPointRecord, error) {
 			record.Tags = make([]any, 0)
 		}
 	}
+	record.AttributeDefaults = map[string]string{}
+	if len(attributeDefaultsBytes) > 0 {
+		if err := json.Unmarshal(attributeDefaultsBytes, &record.AttributeDefaults); err != nil {
+			return DataPointRecord{}, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "解析数据点 attribute_defaults 失败", err)
+		}
+		if record.AttributeDefaults == nil {
+			record.AttributeDefaults = map[string]string{}
+		}
+	}
 	runtimePermissions, err := unmarshalDataPointRuntimePermissions(runtimePermissionsBytes)
 	if err != nil {
 		return DataPointRecord{}, err
@@ -564,11 +760,13 @@ func buildDataPointWhereClause(projectID string, filter DataPointListFilter) (st
              WHERE data_points.source_type='db.query' AND source_query.project_id=data_points.project_id AND source_query.id=data_points.source_id),
             (SELECT subscription.connection_id::text FROM data_mqtt_subscriptions subscription
              WHERE data_points.source_type='mqtt.subscription' AND subscription.project_id=data_points.project_id AND subscription.id=data_points.source_id),
-            (SELECT subscription.connection_id::text FROM data_mqtt_tags tag
+			(SELECT subscription.connection_id::text FROM data_mqtt_tags tag
              JOIN data_mqtt_subscriptions subscription
                ON subscription.project_id=tag.project_id AND subscription.id=tag.subscription_id
-             WHERE data_points.source_type='mqtt.tag' AND tag.project_id=data_points.project_id AND tag.id=data_points.source_id),
-            source_id::text
+			 WHERE data_points.source_type='mqtt.tag' AND tag.project_id=data_points.project_id AND tag.id=data_points.source_id),
+			(SELECT collector_point.connection_id::text FROM data_collector_points collector_point
+			 WHERE data_points.source_type='collector.point' AND collector_point.project_id=data_points.project_id AND collector_point.id=data_points.source_id),
+			source_id::text
         ) = $%d`, argIndex))
 	}
 	if err := addStringClause("source_id", filter.SourceID); err != nil {

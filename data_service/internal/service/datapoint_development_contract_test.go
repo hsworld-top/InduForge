@@ -17,7 +17,10 @@ func TestBuildDataPointDevelopmentContract_OnlyExposesPublicContract(t *testing.
 		Description: &description,
 		DataType:    "number",
 		Status:      "active",
-		SourceType:  "db.query",
+		AttributeDefaults: map[string]string{
+			"asset_code": "PUMP-001",
+		},
+		SourceType: "db.query",
 		SourceConfig: map[string]any{
 			"sql": "SELECT secret_value FROM private_table",
 		},
@@ -33,6 +36,9 @@ func TestBuildDataPointDevelopmentContract_OnlyExposesPublicContract(t *testing.
 	}
 	if len(contract.Methods) != 3 || contract.Methods[0].Name != "get" || contract.Methods[1].Name != "set" || contract.Methods[2].Name != "sub" {
 		t.Fatalf("methods = %#v, want get/set/sub", contract.Methods)
+	}
+	if contract.Attributes["asset_code"] != "PUMP-001" {
+		t.Fatalf("attributes = %#v, want asset_code default", contract.Attributes)
 	}
 }
 

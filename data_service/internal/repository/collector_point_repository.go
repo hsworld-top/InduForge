@@ -502,6 +502,15 @@ func (r *CollectorRepository) GetPointsByIDs(ctx context.Context, projectID, con
 	return r.listPointsByIDs(ctx, projectID, connectionID, ids)
 }
 
+// GetPointByID 按项目和采集点主键解析所属连接，供数据点列表统一展示来源。
+func (r *CollectorRepository) GetPointByID(ctx context.Context, projectID, pointID string) (*CollectorPointRecord, error) {
+	record, err := scanCollectorPoint(r.pool.QueryRow(ctx, `SELECT id,project_id,connection_id,group_id,code,name,description,address,address_text,address_schema_version,data_type,element_count,read_options,acquisition,enabled,sort_order,metadata,created_at,updated_at FROM data_collector_points WHERE project_id=$1 AND id=$2`, projectID, pointID))
+	if err != nil {
+		return nil, wrapUnifiedCollectorRepositoryError("读取采集点失败", err)
+	}
+	return &record, nil
+}
+
 type unifiedCollectorPointRow interface{ Scan(...any) error }
 
 func scanCollectorPointGroup(row unifiedCollectorPointRow) (CollectorPointGroupRecord, error) {

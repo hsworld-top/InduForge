@@ -84,11 +84,32 @@ func (h *DataPointHandler) WriteValue(w http.ResponseWriter, r *http.Request) er
 		return err
 	}
 
-	result, err := h.service.WriteDataPointValue(r.Context(), r.PathValue("projectId"), r.PathValue("id"), claims.UserID, request.Value)
+	result, err := h.service.WriteDataPointValue(r.Context(), r.PathValue("projectId"), r.PathValue("id"), claims.UserID, claims.Role, request.Value)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
 
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// WriteValueByPath 使用稳定路径写入数据点，场景 revision 不依赖数据库内部主键。
+func (h *DataPointHandler) WriteValueByPath(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Path  string `json:"path"`
+		Value any    `json:"value"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.WriteDataPointValueByPath(r.Context(), r.PathValue("projectId"), request.Path, claims.UserID, claims.Role, request.Value)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
 }
@@ -107,5 +128,38 @@ func (h *DataPointHandler) Usages(w http.ResponseWriter, r *http.Request) error 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{
 		"usages": usages,
 	})
+	return nil
+}
+
+// ListTags 返回工程内全部数据点标签及引用数量。
+func (h *DataPointHandler) ListTags(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	tags, err := h.service.ListDataPointTags(r.Context(), r.PathValue("projectId"))
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"tags": tags})
+	return nil
+}
+
+// RemoveTag 从工程内所有数据点移除指定标签。
+func (h *DataPointHandler) RemoveTag(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Tag string `json:"tag"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	updatedCount, err := h.service.RemoveDataPointTag(r.Context(), r.PathValue("projectId"), claims.UserID, request.Tag)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]int{"updatedCount": updatedCount})
 	return nil
 }

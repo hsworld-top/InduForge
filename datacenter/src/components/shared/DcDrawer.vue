@@ -2,7 +2,6 @@
   <el-drawer
     v-model="visible"
     class="dc-drawer"
-    :class="{ 'is-pinned': pinned }"
     :size="`${drawerWidth}px`"
     :with-header="false"
     destroy-on-close
@@ -38,13 +37,11 @@ const props = withDefaults(
     modelValue: boolean
     width?: number
     max?: number
-    pinned?: boolean
     title: string
   }>(),
   {
     width: 480,
     max: 720,
-    pinned: false,
   },
 )
 
@@ -167,10 +164,6 @@ onBeforeUnmount(() => {
 :global(.dc-drawer.el-drawer.rtl) {
   border-left: 1px solid var(--dc-border);
   box-shadow: var(--dc-shadow-popover);
-}
-
-:global(.dc-drawer.el-drawer.is-pinned) {
-  box-shadow: none;
 }
 
 :global(.dc-drawer-resizing) {

@@ -23,7 +23,7 @@ func TestCollectorDevVerticalLoop(t *testing.T) {
 	}
 	projectID, userID, tenantID := uuid.NewString(), uuid.NewString(), "tenant-collector"
 	secret := "collector-dev-secret-123"
-	srv, err := app.NewServer(config.Config{Addr: ":0", DatabaseURL: fixture.databaseURL, DatabaseSearchPath: fixture.schemaName, JWTSecret: secret, CollectorSecretKey: []byte("0123456789abcdef0123456789abcdef"), CollectorSecretKeyVersion: "v1", CollectorProtocolCatalogPath: "../../../contracts/collector-protocols"})
+	srv, err := app.NewServer(config.Config{Addr: ":0", DatabaseURL: fixture.databaseURL, DatabaseSearchPath: fixture.schemaName, JWTSecret: secret, CollectorSecretKey: []byte("0123456789abcdef0123456789abcdef"), CollectorSecretKeyVersion: "v1", ConnectionSecretKey: []byte("0123456789abcdef0123456789abcdef"), ConnectionSecretKeyVersion: "v1", CollectorProtocolCatalogPath: "../../../contracts/collector-protocols"})
 	if err != nil {
 		t.Fatalf("创建服务失败: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestCollectorDevVerticalLoop(t *testing.T) {
 	}
 	doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/collector-dev/agent/heartbeat", agent.AgentToken, map[string]any{"capabilities": capabilities})
 	connectionResponse := doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/collector/connections", adminToken, map[string]any{
-		"name": "integration-opcua", "driverId": "opcua.standard",
+		"name": "integration opcua", "driverId": "opcua.standard",
 		"config":  map[string]any{"host": "127.0.0.1", "port": 18540, "endpointPath": "/induforge/sim", "securityMode": "None", "securityPolicy": "None", "authenticationType": "anonymous"},
 		"secrets": map[string]string{}, "metadata": map[string]any{},
 	})

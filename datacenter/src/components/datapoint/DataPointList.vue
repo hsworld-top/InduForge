@@ -14,7 +14,12 @@
         />
 
         <!-- 状态筛选 pill -->
-        <el-popover placement="bottom-start" :width="150" trigger="click">
+        <el-popover
+          v-model:visible="statusPopoverVisible"
+          placement="bottom-start"
+          :width="150"
+          trigger="click"
+        >
           <template #reference>
             <PillButton :active="statusFilter !== ''">
               <template #icon><Filter /></template>
@@ -28,7 +33,7 @@
               type="button"
               class="datapoint-list__popover-item"
               :class="{ 'is-active': statusFilter === option.value }"
-              @click="statusFilter = option.value"
+              @click="selectStatusFilter(option.value)"
             >
               {{ option.label }}
             </button>
@@ -36,7 +41,12 @@
         </el-popover>
 
         <!-- 接入源筛选 pill（动态来自当前列表） -->
-        <el-popover placement="bottom-start" :width="180" trigger="click">
+        <el-popover
+          v-model:visible="sourcePopoverVisible"
+          placement="bottom-start"
+          :width="180"
+          trigger="click"
+        >
           <template #reference>
             <PillButton :active="sourceFilter !== ''">
               <template #icon><Connection /></template>
@@ -48,7 +58,7 @@
               type="button"
               class="datapoint-list__popover-item"
               :class="{ 'is-active': sourceFilter === '' }"
-              @click="sourceFilter = ''"
+              @click="selectSourceFilter('')"
             >
               全部接入源
             </button>
@@ -58,7 +68,7 @@
               type="button"
               class="datapoint-list__popover-item"
               :class="{ 'is-active': sourceFilter === option.value }"
-              @click="sourceFilter = option.value"
+              @click="selectSourceFilter(option.value)"
             >
               {{ option.label }}
             </button>
@@ -226,12 +236,12 @@
             </template>
           </el-table-column>
 
-          <!-- 接入源列 -->
-          <el-table-column label="接入源" width="160">
+          <!-- 来源列 -->
+          <el-table-column label="来源" width="160">
             <template #default="{ row }">
               <div class="datapoint-list__source-cell">
                 <span class="datapoint-list__source-text">
-                  {{ row.accessSourceName || '-' }}
+                  {{ resolveDatapointSourceDisplayName(row) }}
                 </span>
               </div>
             </template>
@@ -251,7 +261,7 @@
             </template>
           </el-table-column>
 
-          <!-- 引用列（D2 完整实现，D1 占位显示 `-`） -->
+          <!-- 引用列 -->
           <el-table-column label="引用" width="96" align="center" header-align="center">
             <template #default="{ row }">
               <span class="datapoint-list__ref-count">
@@ -301,10 +311,10 @@
             </template>
           </el-table-column>
 
-          <!-- 操作列（4 个按钮） -->
+          <!-- 操作列 -->
           <el-table-column
             label="操作"
-            width="164"
+            width="242"
             fixed="right"
             align="center"
             header-align="center"
@@ -321,15 +331,49 @@
                 >
                   <View />
                 </button>
-                <!-- 打开接入源工作台 -->
+                <!-- 历史存储 -->
                 <button
                   type="button"
                   class="datapoint-list__table-action"
-                  title="打开接入源"
-                  aria-label="打开接入源"
+                  title="历史存储"
+                  aria-label="设置数据点历史存储"
+                  @click.stop="openDatapointHistoryStorage(row)"
+                >
+                  <Timer />
+                </button>
+                <!-- 报警设置 -->
+                <button
+                  type="button"
+                  class="datapoint-list__table-action"
+                  title="查看报警配置"
+                  aria-label="查看数据点报警配置"
+                  @click.stop="openDatapointAlarm(row)"
+                >
+                  <Bell />
+                </button>
+                <!-- 自定义属性 -->
+                <button
+                  type="button"
+                  class="datapoint-list__table-action"
+                  :disabled="customAttributesLoadingId === row.id"
+                  title="自定义属性"
+                  aria-label="配置数据点自定义属性"
+                  @click.stop="openCustomAttributesDialog(row)"
+                >
+                  <Key />
+                </button>
+                <!-- 打开数据点来源 -->
+                <button
+                  type="button"
+                  class="datapoint-list__table-action"
+                  :class="{ 'is-disabled': !getSourceNavigation(row) }"
+                  :disabled="!getSourceNavigation(row)"
+                  :title="getSourceNavigation(row)?.actionLabel || '暂无可打开来源'"
+                  :aria-label="getSourceNavigation(row)?.actionLabel || '暂无可打开来源'"
                   @click.stop="handleJumpToSource(row)"
                 >
-                  <Connection />
+                  <Cpu v-if="getSourceNavigation(row)?.module === 'compute'" />
+                  <Connection v-else />
                 </button>
                 <!-- 复制路径 -->
                 <button
@@ -399,12 +443,12 @@
           :disabled="selectionScope === 'all'"
           :title="
             selectionScope === 'all'
-              ? '报警设置只支持当前明确选中的数据点'
+              ? '创建报警只支持当前明确选中的数据点'
               : '为选中数据点创建统一报警'
           "
           @click="openBatchAlarm"
         >
-          报警设置
+          创建报警
         </button>
         <button
           type="button"
@@ -507,26 +551,45 @@
       @cancel="permissionDialogVisible = false"
     />
 
+    <DataPointCustomAttributesDialog
+      ref="customAttributesDialogRef"
+      :visible="customAttributesDialogVisible"
+      :datapoint-name="customAttributesDatapoint?.name || customAttributesDatapoint?.path"
+      :attributes="customAttributeDefaults"
+      :saving="customAttributesSaving"
+      @submit="saveCustomAttributes"
+      @cancel="customAttributesDialogVisible = false"
+    />
+
+    <AlarmDatapointSummaryDialog
+      :visible="alarmSummaryDialogVisible"
+      :datapoint-name="alarmSummaryDatapoint?.name || alarmSummaryDatapoint?.path"
+      :items="alarmDatapointSummary?.items || []"
+      :loading="alarmSummaryLoading"
+      @cancel="alarmSummaryDialogVisible = false"
+      @navigate="navigateFromAlarmSummary"
+    />
+
     <HistoryStorageConfigDrawer
       v-model="historyStorageDrawerVisible"
-      title="批量设置历史存储"
+      :title="historyStorageDrawerTitle"
       allow-inherit
-      behavior="inherit"
-      :configuration="null"
+      :behavior="historyStorageDrawerBehavior"
+      :configuration="historyStorageDrawerConfiguration"
       :targets="historyStorageTargets"
       :saving="historyStorageSaving"
-      @save="saveBatchHistoryStorage"
+      @save="saveHistoryStorage"
     />
 
     <AlarmPolicyDrawer
       v-model="alarmDrawerVisible"
       :project-id="projectId"
-      mode="per_target"
+      mode="point"
       :groups="alarmGroups"
       :channels="alarmChannels"
-      :initial-bindings="alarmInitialBindings"
+      :initial-points="alarmInitialPoints"
       :saving="alarmSaving"
-      @save="saveBatchAlarm"
+      @save="saveAlarmSettings"
     />
 
     <!-- 详情抽屉（v2 DataPointDetailDrawer） -->
@@ -535,7 +598,7 @@
       :datapoint="detailDatapoint"
       :project-id="projectId"
       :tag-options="tagOptions"
-      @updated="loadDataPoints"
+      @updated="handleDetailUpdated"
       @navigate="handleDrawerNavigate"
     />
   </div>
@@ -543,21 +606,25 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useConfirm } from '@/composables/useConfirm'
 import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
+  Bell,
   CollectionTag,
   Connection,
   CopyDocument,
+  Cpu,
   Delete,
   Filter,
+  Key,
   Refresh,
   Search,
   SortDown,
   SortUp,
+  Timer,
   View,
 } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
@@ -569,24 +636,46 @@ import StatusBadge from '@/components/shared/StatusBadge.vue'
 import BulkActionBar from '@/components/shared/BulkActionBar.vue'
 import DataPointTagDialog from './DataPointTagDialog.vue'
 import RuntimePermissionDialog from './RuntimePermissionDialog.vue'
+import DataPointCustomAttributesDialog from './DataPointCustomAttributesDialog.vue'
+import { getDatapointCustomAttributes, updateDatapointCustomAttributes } from '@/api/datapoint.api'
 import HistoryStorageConfigDrawer from '@/components/history-storage/HistoryStorageConfigDrawer.vue'
 import AlarmPolicyDrawer from '@/components/alarm/AlarmPolicyDrawer.vue'
 import {
   batchConfigureDatapointHistoryStorage,
+  getDatapointHistoryStorage,
   listHistoryStorageTargets,
+  saveDatapointHistoryStorage,
   type HistoryStorageBulkSelection,
   type HistoryStorageSavePayload,
 } from '@/api/history-storage.api'
-import type { HistoryStorageTargetOption } from '@/api/schemas/history-storage.schema'
-import { createAlarmPolicy, listAlarmChannels, listAlarmGroupTree } from '@/api/alarm.api'
 import type {
-  AlarmBinding,
+  HistoryStorageDatapointDetail,
+  HistoryStorageTargetOption,
+} from '@/api/schemas/history-storage.schema'
+import {
+  batchCreateAlarmItems,
+  getDatapointAlarmSummary,
+  listAlarmChannels,
+  listAlarmGroupTree,
+} from '@/api/alarm.api'
+import type {
+  AlarmDatapointSummary,
   AlarmNotificationChannel,
-  AlarmPolicyGroup,
-  AlarmPolicySave,
+  AlarmGroup,
+  AlarmItemSave,
 } from '@/api/schemas/alarm.schema'
-import { ensureBuiltinAlarmNotificationChannel } from '@/models/alarm-policy'
+import {
+  ensureBuiltinAlarmNotificationChannel,
+  type AlarmPointSelection,
+} from '@/models/alarm-policy'
+import {
+  resolveDatapointSourceDisplayName,
+  resolveDatapointSourceNavigation,
+  type DatapointSourceNavigation,
+} from '@/models/datapoint-source'
+import { listCollectorConnections } from '@/api/collector.api'
 import DataPointDetailDrawer from './DataPointDetailDrawer.vue'
+import AlarmDatapointSummaryDialog from '@/components/alarm/AlarmDatapointSummaryDialog.vue'
 
 type DataPointListMode = 'embedded' | 'management'
 type SortField = 'createdAt' | 'name' | 'path'
@@ -609,6 +698,7 @@ interface DataPointRow {
   sourceConfig?: Record<string, unknown>
   dataType?: string
   runtimePermissions?: Record<string, unknown>
+  attributeDefaults?: Record<string, string>
   runtimePermissionGrants?: Record<string, unknown>
   writePermission?: Record<string, unknown>
   tags?: unknown[]
@@ -619,13 +709,22 @@ interface DataPointRow {
   updated_at?: string
   createdAt?: string
   created_at?: string
-  /** 引用数（后端暂未返回，D2 补全） */
+  /** 报警策略和计算单元引用总数 */
   refCount?: number
 }
 
 interface AccessSourceOption {
   id: string
   name: string
+}
+
+const sourceNavigationCache = new WeakMap<DataPointRow, DatapointSourceNavigation | null>()
+
+function getSourceNavigation(row: DataPointRow): DatapointSourceNavigation | null {
+  if (sourceNavigationCache.has(row)) return sourceNavigationCache.get(row) || null
+  const target = resolveDatapointSourceNavigation(row)
+  sourceNavigationCache.set(row, target)
+  return target
 }
 
 const props = withDefaults(
@@ -679,7 +778,7 @@ const emit = defineEmits<{
   /** 关闭详情抽屉，通知 Workspace 清除 URL objectId */
   'close-detail': []
   /** LinkChip 跳转，通知 Workspace 做路由跳转 */
-  navigate: [payload: { module: string; objectId: string; tab?: string }]
+  navigate: [payload: { module: string; objectId?: string; tab?: string }]
 }>()
 
 const { confirm } = useConfirm()
@@ -689,6 +788,10 @@ const { confirm } = useConfirm()
 const loading = ref(false)
 const datapoints = ref<DataPointRow[]>([])
 const accessSources = ref<AccessSourceOption[]>([])
+const projectTagSummaries = ref<Array<{ tag: string; count: number }>>([])
+let dataPointRequestSequence = 0
+let accessSourceRequestSequence = 0
+let tagRequestSequence = 0
 const tableRef = ref()
 const syncingSelection = ref(false)
 
@@ -696,8 +799,10 @@ const syncingSelection = ref(false)
 const searchText = ref(props.filterQ || '')
 /* 状态筛选（'' = 全部） */
 const statusFilter = ref(props.filterStatus || '')
+const statusPopoverVisible = ref(false)
 /* 接入源筛选 */
 const sourceFilter = ref(props.filterSource || '')
+const sourcePopoverVisible = ref(false)
 
 /* 标签筛选 */
 const tagFilterValues = ref<string[]>(props.filterTags || [])
@@ -734,20 +839,39 @@ const permissionDialogVisible = ref(false)
 const permissionSaving = ref(false)
 const currentPermissionDatapoint = ref<DataPointRow | null>(null)
 
+/* 自定义属性 dialog 状态 */
+const customAttributesDialogVisible = ref(false)
+const customAttributesSaving = ref(false)
+const customAttributesLoadingId = ref('')
+const customAttributesDatapoint = ref<DataPointRow | null>(null)
+const customAttributeDefaults = ref<Record<string, string>>({})
+const customAttributesDialogRef = ref<{
+  closeAfterSave: () => void
+} | null>(null)
+
 /* 标签 dialog 状态 */
 const tagDialogVisible = ref(false)
 const tagSaving = ref(false)
 const tagEditMode = ref<'single' | 'batch'>('single')
 const currentTagDatapoint = ref<DataPointRow | null>(null)
 
-/* 历史存储批量设置 */
+/* 历史存储与报警设置 */
 const historyStorageDrawerVisible = ref(false)
 const historyStorageSaving = ref(false)
 const historyStorageTargets = ref<HistoryStorageTargetOption[]>([])
+const historyStorageContext = ref<'single' | 'batch'>('batch')
+const historyStorageDatapoint = ref<DataPointRow | null>(null)
+const historyStorageDetail = ref<HistoryStorageDatapointDetail | null>(null)
+let historyStorageLoadSequence = 0
 const alarmDrawerVisible = ref(false)
 const alarmSaving = ref(false)
-const alarmGroups = ref<AlarmPolicyGroup[]>([])
+const alarmGroups = ref<AlarmGroup[]>([])
 const alarmChannels = ref<AlarmNotificationChannel[]>([])
+const alarmTargetRows = ref<DataPointRow[]>([])
+const alarmSummaryDialogVisible = ref(false)
+const alarmSummaryLoading = ref(false)
+const alarmSummaryDatapoint = ref<DataPointRow | null>(null)
+const alarmDatapointSummary = ref<AlarmDatapointSummary | null>(null)
 
 /* 详情抽屉状态 */
 const detailDrawerVisible = ref(false)
@@ -772,15 +896,6 @@ const sortFieldOptions: Array<{ label: string; value: SortField }> = [
 
 const pageSizeOptions = [20, 50, 100, 200, 500]
 
-/** 来源类型标签映射：仅用于详情/内部类型展示，工具栏接入源筛选不使用它。 */
-const sourceTypeLabels: Record<string, string> = {
-  'db.query': '数据库查询',
-  'mqtt.tag': 'MQTT 变量',
-  'mqtt.subscription': 'MQTT 订阅',
-  'calc.output': '计算输出',
-  'static.var': '静态变量',
-}
-
 // ── 接入源筛选选项 ──────────────────────────────────────────────────────
 
 const dynamicSourceOptions = computed(() => {
@@ -792,23 +907,15 @@ const dynamicSourceOptions = computed(() => {
     }))
 })
 
-// ── 标签选项（从当前数据点列表提取） ─────────────────────────────────────
+// ── 标签选项（工程级统计） ─────────────────────────────────────────────
 
 const tagOptions = computed(() => {
-  const tags = new Map<string, number>()
-  datapoints.value.forEach((item) => {
-    normalizeTags(item.tags).forEach((tag) => {
-      tags.set(tag, (tags.get(tag) || 0) + 1)
-    })
-  })
-  return Array.from(tags.entries())
-    .sort((a, b) => a[0].localeCompare(b[0], 'zh-Hans-CN'))
-    .map(([value, count]) => ({
-      value,
-      name: value,
-      count,
-      label: `${value} (${count})`,
-    }))
+  return projectTagSummaries.value.map(({ tag: value, count }) => ({
+    value,
+    name: value,
+    count,
+    label: `${value} (${count})`,
+  }))
 })
 
 const filteredTagOptions = computed(() => {
@@ -841,6 +948,16 @@ const currentSortFieldLabel = computed(
 
 const currentSortOrderLabel = computed(() => (sortOrderValue.value === 'desc' ? '降序' : '升序'))
 
+const selectStatusFilter = (value: string) => {
+  statusFilter.value = value
+  statusPopoverVisible.value = false
+}
+
+const selectSourceFilter = (value: string) => {
+  sourceFilter.value = value
+  sourcePopoverVisible.value = false
+}
+
 const tagFilterLabel = computed(() =>
   tagFilterValues.value.length > 0 ? `标签 (${tagFilterValues.value.length})` : '标签',
 )
@@ -848,8 +965,6 @@ const tagFilterLabel = computed(() =>
 const selectedInvalidRows = computed(() =>
   selectedRows.value.filter((item) => item.status === 'invalid'),
 )
-
-const effectiveStatusFilter = computed(() => props.status ?? statusFilter.value)
 
 const bulkSelectedCount = computed(() => {
   if (selectionScope.value === 'all') return totalVisibleCount.value
@@ -860,6 +975,24 @@ const canBatchDelete = computed(() => {
   if (selectionScope.value === 'all') return totalVisibleCount.value > 0
   return selectedInvalidRows.value.length > 0
 })
+
+const historyStorageDrawerTitle = computed(() =>
+  historyStorageContext.value === 'single'
+    ? `历史存储 · ${historyStorageDatapoint.value?.name || historyStorageDatapoint.value?.path || '数据点'}`
+    : '批量设置历史存储',
+)
+
+const historyStorageDrawerBehavior = computed(() =>
+  historyStorageContext.value === 'single'
+    ? historyStorageDetail.value?.behavior || 'inherit'
+    : 'inherit',
+)
+
+const historyStorageDrawerConfiguration = computed(() =>
+  historyStorageContext.value === 'single'
+    ? historyStorageDetail.value?.configuration || null
+    : null,
+)
 
 // ── 数据过滤 / 分页展示 ─────────────────────────────────────────────────
 
@@ -956,30 +1089,81 @@ const loadAccessSources = async () => {
     accessSources.value = []
     return
   }
+  const projectId = props.projectId
+  const requestSequence = ++accessSourceRequestSequence
+  const [connectionResult, collectorResult] = await Promise.allSettled([
+    dataAPI.getConnections(projectId),
+    listCollectorConnections(projectId, { page: 1, pageSize: 100 }),
+  ])
+  if (requestSequence !== accessSourceRequestSequence || projectId !== props.projectId) return
+
   try {
-    const response = await dataAPI.getConnections(props.projectId)
+    const response = connectionResult.status === 'fulfilled' ? connectionResult.value : null
     const list = Array.isArray(response?.data?.connections)
       ? response.data.connections
       : Array.isArray(response?.data)
         ? response.data
         : []
-    accessSources.value = list
+    const firstCollectorPage = collectorResult.status === 'fulfilled' ? collectorResult.value : null
+    const remainingCollectorPages = firstCollectorPage
+      ? await Promise.all(
+          Array.from(
+            { length: Math.max(0, firstCollectorPage.pagination.totalPages - 1) },
+            (_, index) => listCollectorConnections(projectId, { page: index + 2, pageSize: 100 }),
+          ),
+        )
+      : []
+    if (requestSequence !== accessSourceRequestSequence || projectId !== props.projectId) return
+    const collectorConnections = firstCollectorPage
+      ? [firstCollectorPage, ...remainingCollectorPages].flatMap((page) => page.list)
+      : []
+    const byId = new Map<string, AccessSourceOption>()
+    ;[...list, ...collectorConnections]
       .map((item: Record<string, unknown>) => ({
         id: String(item.id || '').trim(),
         name: String(item.name || item.id || '').trim(),
       }))
       .filter((item: AccessSourceOption) => item.id)
+      .forEach((item: AccessSourceOption) => byId.set(item.id, item))
+    accessSources.value = Array.from(byId.values())
+    if (connectionResult.status === 'rejected' || collectorResult.status === 'rejected') {
+      console.warn('部分接入源筛选项加载失败')
+    }
   } catch (error) {
+    if (requestSequence !== accessSourceRequestSequence || projectId !== props.projectId) return
     console.error('加载接入源筛选项失败:', error)
-    accessSources.value = []
+  }
+}
+
+const loadDataPointTags = async () => {
+  if (!props.projectId) return
+  const projectId = props.projectId
+  const requestSequence = ++tagRequestSequence
+  try {
+    const response = await dataAPI.getDataPointTags(projectId)
+    if (requestSequence !== tagRequestSequence || projectId !== props.projectId) return
+    const rows = response.data?.tags || []
+    projectTagSummaries.value = rows
+      .map((item: Record<string, unknown>) => ({
+        tag: String(item.tag || '').trim(),
+        count: Number(item.count || 0),
+      }))
+      .filter((item: { tag: string }) => item.tag)
+      .sort((a: { tag: string }, b: { tag: string }) => a.tag.localeCompare(b.tag, 'zh-Hans-CN'))
+  } catch (error) {
+    if (requestSequence !== tagRequestSequence || projectId !== props.projectId) return
+    console.error('加载数据点标签失败:', error)
   }
 }
 
 const loadDataPoints = async () => {
   if (!props.projectId) return
+  const projectId = props.projectId
+  const requestSequence = ++dataPointRequestSequence
   loading.value = true
   try {
-    const response = await dataAPI.getDataPoints(props.projectId, buildQueryParams())
+    const response = await dataAPI.getDataPoints(projectId, buildQueryParams())
+    if (requestSequence !== dataPointRequestSequence || projectId !== props.projectId) return
     datapoints.value = response.data?.datapoints || []
     const pageInfo = response.data?.pagination || {}
     pagination.value.total = Number(pageInfo.total ?? datapoints.value.length)
@@ -993,9 +1177,12 @@ const loadDataPoints = async () => {
     pagination.value.pageSize = Number(pageInfo.pageSize ?? pagination.value.pageSize)
     clearSelection()
   } catch (error) {
+    if (requestSequence !== dataPointRequestSequence || projectId !== props.projectId) return
     ElMessage.error('加载数据点失败：' + getApiErrorMessage(error, '加载数据点失败'))
   } finally {
-    loading.value = false
+    if (requestSequence === dataPointRequestSequence && projectId === props.projectId) {
+      loading.value = false
+    }
   }
 }
 
@@ -1131,14 +1318,15 @@ const handleRowClick = (row: DataPointRow) => {
   if (!isManagementMode.value) emit('select', row)
 }
 
-/** 打开数据点所属接入源工作台。 */
+/** 打开数据点所属的接入源、工业采集连接或计算单元。 */
 const handleJumpToSource = (row: DataPointRow) => {
-  const connectionId = resolveAccessSourceId(row)
-  if (!connectionId) {
-    ElMessage.info('该数据点暂无来源信息')
-    return
-  }
-  emit('navigate', { module: 'access-source', objectId: connectionId, tab: 'workbench' })
+  const target = getSourceNavigation(row)
+  if (!target) return
+  emit('navigate', {
+    module: target.module,
+    objectId: target.objectId,
+    tab: 'workbench',
+  })
 }
 
 const handleDelete = async (datapoint: DataPointRow) => {
@@ -1150,7 +1338,7 @@ const handleDelete = async (datapoint: DataPointRow) => {
   try {
     await dataAPI.deleteDataPoint(props.projectId, datapoint.id)
     ElMessage.success('数据点已清理')
-    await loadDataPoints()
+    await Promise.all([loadDataPoints(), loadDataPointTags()])
   } catch (error) {
     ElMessage.error('删除数据点失败：' + getApiErrorMessage(error, '删除数据点失败'))
   }
@@ -1213,17 +1401,66 @@ const openBatchTagDialog = async () => {
 
 const openBatchHistoryStorage = async () => {
   if (bulkSelectedCount.value === 0) return
+  const loadSequence = ++historyStorageLoadSequence
+  historyStorageContext.value = 'batch'
+  historyStorageDatapoint.value = null
+  historyStorageDetail.value = null
   try {
     if (historyStorageTargets.value.length === 0) {
       historyStorageTargets.value = await listHistoryStorageTargets(props.projectId)
     }
+    if (loadSequence !== historyStorageLoadSequence) return
     historyStorageDrawerVisible.value = true
   } catch (error) {
+    if (loadSequence !== historyStorageLoadSequence) return
     ElMessage.error('加载历史存储目标失败：' + getApiErrorMessage(error, '加载历史存储目标失败'))
   }
 }
 
-const saveBatchHistoryStorage = async (payload: HistoryStorageSavePayload) => {
+const openDatapointHistoryStorage = async (row: DataPointRow) => {
+  const loadSequence = ++historyStorageLoadSequence
+  historyStorageContext.value = 'single'
+  historyStorageDatapoint.value = row
+  historyStorageDetail.value = null
+  try {
+    const [detail, targets] = await Promise.all([
+      getDatapointHistoryStorage(props.projectId, row.id),
+      historyStorageTargets.value.length > 0
+        ? Promise.resolve(historyStorageTargets.value)
+        : listHistoryStorageTargets(props.projectId),
+    ])
+    if (loadSequence !== historyStorageLoadSequence) return
+    historyStorageDetail.value = detail
+    historyStorageTargets.value = targets
+    historyStorageDrawerVisible.value = true
+  } catch (error) {
+    if (loadSequence !== historyStorageLoadSequence) return
+    ElMessage.error('加载历史存储设置失败：' + getApiErrorMessage(error, '加载历史存储设置失败'))
+  }
+}
+
+const saveHistoryStorage = async (payload: HistoryStorageSavePayload) => {
+  if (historyStorageContext.value === 'single') {
+    const datapoint = historyStorageDatapoint.value
+    if (!datapoint) return
+    historyStorageSaving.value = true
+    try {
+      historyStorageDetail.value = await saveDatapointHistoryStorage(
+        props.projectId,
+        datapoint.id,
+        payload,
+      )
+      historyStorageDrawerVisible.value = false
+      ElMessage.success('历史存储设置已保存')
+      await loadDataPoints()
+    } catch (error) {
+      ElMessage.error('保存历史存储设置失败：' + getApiErrorMessage(error, '保存历史存储设置失败'))
+    } finally {
+      historyStorageSaving.value = false
+    }
+    return
+  }
+
   if (bulkSelectedCount.value === 0) return
   const selectedCount = bulkSelectedCount.value
   const action =
@@ -1256,23 +1493,50 @@ const saveBatchHistoryStorage = async (payload: HistoryStorageSavePayload) => {
   }
 }
 
-const alarmInitialBindings = computed<AlarmBinding[]>(() =>
-  selectedRows.value.map((row) => ({
+const alarmInitialPoints = computed<AlarmPointSelection[]>(() =>
+  alarmTargetRows.value.map((row) => ({
     datapointId: row.id,
     path: row.path || '',
     name: row.name || row.path || '数据点',
     dataType: row.dataType || '',
-    role: 'target',
-    inputKey: null,
   })),
 )
 
 const openBatchAlarm = async () => {
   if (selectionScope.value === 'all') {
-    ElMessage.warning('报警设置只应用到当前明确选中的数据点')
+    ElMessage.warning('创建报警只应用到当前明确选中的数据点')
     return
   }
   if (selectedRows.value.length === 0) return
+  alarmTargetRows.value = [...selectedRows.value]
+  await openAlarmDrawer()
+}
+
+const openDatapointAlarm = async (row: DataPointRow) => {
+  alarmSummaryDatapoint.value = row
+  alarmDatapointSummary.value = null
+  alarmSummaryDialogVisible.value = true
+  alarmSummaryLoading.value = true
+  try {
+    alarmDatapointSummary.value = await getDatapointAlarmSummary(props.projectId, row.id)
+  } catch (error) {
+    alarmSummaryDialogVisible.value = false
+    ElMessage.error(getApiErrorMessage(error, '加载报警配置失败'))
+  } finally {
+    alarmSummaryLoading.value = false
+  }
+}
+
+const navigateFromAlarmSummary = (policyId?: string) => {
+  alarmSummaryDialogVisible.value = false
+  emit('navigate', {
+    module: 'alarm',
+    objectId: policyId || '',
+    tab: policyId ? 'workbench' : undefined,
+  })
+}
+
+const openAlarmDrawer = async () => {
   try {
     const [groups, channels] = await Promise.all([
       alarmGroups.value.length
@@ -1290,13 +1554,13 @@ const openBatchAlarm = async () => {
   }
 }
 
-const saveBatchAlarm = async (payload: AlarmPolicySave) => {
-  if (selectedRows.value.length === 0 || selectionScope.value === 'all') return
-  const count = selectedRows.value.length
+const saveAlarmSettings = async (payload: AlarmItemSave, datapointIds: string[]) => {
+  const count = alarmTargetRows.value.length
+  if (count === 0) return
   const ok = await confirm(
-    `将为当前选中的 ${count} 个数据点创建一条统一维护的报警配置，确认继续？`,
+    `将为当前选中的 ${count} 个数据点创建 ${count} 条独立报警项，确认继续？`,
     {
-      title: '批量设置报警',
+      title: '创建报警',
       confirmText: '创建报警',
       type: 'warning',
     },
@@ -1304,10 +1568,11 @@ const saveBatchAlarm = async (payload: AlarmPolicySave) => {
   if (!ok) return
   alarmSaving.value = true
   try {
-    await createAlarmPolicy(props.projectId, payload)
+    const { datapointId: _datapointId, ...draft } = payload
+    await batchCreateAlarmItems(props.projectId, { datapointIds, draft })
     alarmDrawerVisible.value = false
     clearSelection()
-    ElMessage.success(`已为 ${count} 个数据点创建报警配置`)
+    ElMessage.success(`已创建 ${count} 条独立报警项`)
     await loadDataPoints()
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '创建报警配置失败'))
@@ -1317,25 +1582,19 @@ const saveBatchAlarm = async (payload: AlarmPolicySave) => {
 }
 
 const handleDeleteTagOption = async (tag: string) => {
-  const affectedRows = datapoints.value.filter((row) => normalizeTags(row.tags).includes(tag))
-  if (affectedRows.length === 0) return
+  const affectedCount = tagOptions.value.find((item) => item.value === tag)?.count || 0
+  if (affectedCount === 0) return
 
   try {
     await ElMessageBox.confirm(
-      `确认从 ${affectedRows.length} 个数据点中移除标签「${tag}」？`,
+      `确认从工程内 ${affectedCount} 个数据点中移除标签「${tag}」？`,
       '删除标签',
       { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' },
     )
-    await Promise.all(
-      affectedRows.map((row) =>
-        dataAPI.updateDataPoint(props.projectId, row.id, {
-          tags: normalizeTags(row.tags).filter((item) => item !== tag),
-        }),
-      ),
-    )
+    await dataAPI.removeDataPointTag(props.projectId, tag)
     tagFilterValues.value = tagFilterValues.value.filter((item) => item !== tag)
     ElMessage.success('标签已删除')
-    await loadDataPoints()
+    await Promise.all([loadDataPoints(), loadDataPointTags()])
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除标签失败：' + getApiErrorMessage(error, '删除标签失败'))
@@ -1373,7 +1632,7 @@ const handleTagDialogSubmit = async (tags: string[], mode: 'single' | 'batch') =
     }
     tagDialogVisible.value = false
     clearSelection()
-    await loadDataPoints()
+    await Promise.all([loadDataPoints(), loadDataPointTags()])
   } catch (error) {
     ElMessage.error('保存标签失败：' + getApiErrorMessage(error, '保存标签失败'))
   } finally {
@@ -1404,14 +1663,24 @@ const handlePermissionDialogSubmit = async (grant: Record<string, unknown>) => {
 
 // ── 抽屉 navigate 回调 ─────────────────────────────────────────────────────
 
-const handleDrawerNavigate = (payload: { module: string; objectId: string; tab?: string }) => {
+const handleDrawerNavigate = (payload: { module: string; objectId?: string; tab?: string }) => {
   emit('navigate', payload)
+}
+
+const handleDetailUpdated = () => {
+  void Promise.all([loadDataPoints(), loadDataPointTags()])
 }
 
 const loadDataPointDetail = async (id: string) => {
   try {
-    const response = await dataAPI.getDataPoint(props.projectId, id)
-    detailDatapoint.value = response.data || response
+    const [response, usageResponse] = await Promise.all([
+      dataAPI.getDataPoint(props.projectId, id),
+      dataAPI.getDataPointUsages(props.projectId, id),
+    ])
+    detailDatapoint.value = {
+      ...(response.data || response),
+      usages: usageResponse.data?.usages || [],
+    }
   } catch (error) {
     ElMessage.error('加载数据点详情失败：' + getApiErrorMessage(error, '加载数据点详情失败'))
   }
@@ -1420,6 +1689,38 @@ const loadDataPointDetail = async (id: string) => {
 const openPermissionDialog = (row: DataPointRow) => {
   currentPermissionDatapoint.value = row
   permissionDialogVisible.value = true
+}
+
+const openCustomAttributesDialog = async (row: DataPointRow) => {
+  if (!props.projectId || customAttributesLoadingId.value) return
+  customAttributesLoadingId.value = row.id
+  try {
+    const result = await getDatapointCustomAttributes(props.projectId, row.id)
+    customAttributesDatapoint.value = row
+    customAttributeDefaults.value = { ...result.attributes }
+    customAttributesDialogVisible.value = true
+  } catch (error) {
+    ElMessage.error('加载自定义属性失败：' + getApiErrorMessage(error, '加载自定义属性失败'))
+  } finally {
+    customAttributesLoadingId.value = ''
+  }
+}
+
+const saveCustomAttributes = async (attributes: Record<string, string>) => {
+  const datapoint = customAttributesDatapoint.value
+  if (!props.projectId || !datapoint?.id) return
+  customAttributesSaving.value = true
+  try {
+    const result = await updateDatapointCustomAttributes(props.projectId, datapoint.id, attributes)
+    customAttributeDefaults.value = { ...result.attributes }
+    datapoint.attributeDefaults = { ...result.attributes }
+    customAttributesDialogRef.value?.closeAfterSave()
+    ElMessage.success('自定义属性已保存')
+  } catch (error) {
+    ElMessage.error('保存自定义属性失败：' + getApiErrorMessage(error, '保存自定义属性失败'))
+  } finally {
+    customAttributesSaving.value = false
+  }
 }
 
 // ── 工具函数 ──────────────────────────────────────────────────────────────
@@ -1471,31 +1772,10 @@ const formatStatus = (status?: string) => {
   }
 }
 
-const formatSourceType = (sourceType?: string) => {
-  if (!sourceType) return '-'
-  return sourceTypeLabels[sourceType] || sourceType
-}
-
-const resolveAccessSourceId = (row: DataPointRow) => {
-  if (row.accessSourceId) return String(row.accessSourceId)
-  const config = row.sourceConfig || {}
-  const connectionId = String(config.connectionId || config.sourceConnectionId || '').trim()
-  if (connectionId) return connectionId
-  if (
-    row.sourceId &&
-    ['http.request', 'websocket.session', 'realtime.key', 'kafka.field'].includes(
-      row.sourceType || '',
-    )
-  ) {
-    return String(row.sourceId)
-  }
-  return ''
-}
-
-/** 引用数（D2 完整实现；D1 全部显示 `-`） */
+/** 引用数由列表接口批量统计返回。 */
 const resolveRefCount = (row: DataPointRow) => {
   const count = (row as DataPointRow & { refCount?: number }).refCount
-  if (typeof count === 'number' && count > 0) return count
+  if (typeof count === 'number') return count
   return '-'
 }
 
@@ -1606,8 +1886,10 @@ watch(
   () => props.projectId,
   () => {
     accessSources.value = []
+    projectTagSummaries.value = []
     sourceFilter.value = ''
     void loadAccessSources()
+    void loadDataPointTags()
   },
 )
 
@@ -1646,6 +1928,7 @@ watch(
 onMounted(() => {
   document.addEventListener('click', handleDocumentClick)
   void loadAccessSources()
+  void loadDataPointTags()
   void loadDataPoints()
 })
 
@@ -2236,6 +2519,17 @@ defineExpose({
   border-color: transparent;
   background: transparent;
   color: #64748b;
+}
+
+.datapoint-list__table-action:disabled {
+  color: var(--dc-text-muted);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.datapoint-list__table-action:disabled:hover {
+  background: transparent;
+  color: var(--dc-text-muted);
 }
 
 .datapoint-list__table-action.is-danger:hover {

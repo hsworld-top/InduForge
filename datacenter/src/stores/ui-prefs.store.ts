@@ -11,21 +11,26 @@ interface UiPrefs {
   pageSize: number
   // 侧边栏是否折叠
   sidebarCollapsed: boolean
-  // 详情抽屉是否处于钉住（旁路面板）状态
-  pinnedDrawer: boolean
 }
 
 const DEFAULT_PREFS: UiPrefs = {
   drawerWidth: 480,
   pageSize: 20,
   sidebarCollapsed: false,
-  pinnedDrawer: false,
 }
 
 function loadFromStorage(): UiPrefs {
   const stored = Storage.get(STORAGE_KEY, null) as Partial<UiPrefs> | null
   if (!stored) return { ...DEFAULT_PREFS }
-  return { ...DEFAULT_PREFS, ...stored }
+  return {
+    drawerWidth:
+      typeof stored.drawerWidth === 'number' ? stored.drawerWidth : DEFAULT_PREFS.drawerWidth,
+    pageSize: typeof stored.pageSize === 'number' ? stored.pageSize : DEFAULT_PREFS.pageSize,
+    sidebarCollapsed:
+      typeof stored.sidebarCollapsed === 'boolean'
+        ? stored.sidebarCollapsed
+        : DEFAULT_PREFS.sidebarCollapsed,
+  }
 }
 
 export const useUiPrefsStore = defineStore('uiPrefs', () => {
@@ -52,10 +57,6 @@ export const useUiPrefsStore = defineStore('uiPrefs', () => {
     prefs.value.sidebarCollapsed = collapsed
   }
 
-  function setPinnedDrawer(pinned: boolean) {
-    prefs.value.pinnedDrawer = pinned
-  }
-
   function reset() {
     prefs.value = { ...DEFAULT_PREFS }
   }
@@ -65,7 +66,6 @@ export const useUiPrefsStore = defineStore('uiPrefs', () => {
     setDrawerWidth,
     setPageSize,
     setSidebarCollapsed,
-    setPinnedDrawer,
     reset,
   }
 })

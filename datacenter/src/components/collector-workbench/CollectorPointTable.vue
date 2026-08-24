@@ -43,27 +43,29 @@
         :data="items"
         height="100%"
         row-key="id"
+        scrollbar-always-on
+        class="collector-point-table__table"
         @selection-change="onSelectionChange"
       >
         <el-table-column type="selection" width="44" />
-        <el-table-column prop="name" label="变量名称" min-width="180">
+        <el-table-column prop="name" label="变量名称" min-width="160">
           <template #default="scope">
             <button
               type="button"
               class="collector-point-table__identity"
               @click="openDetail(scope.row)"
             >
-              <strong>{{ scope.row.name }}</strong>
+              <strong :title="scope.row.name">{{ scope.row.name }}</strong>
             </button>
           </template>
         </el-table-column>
-        <el-table-column prop="addressText" label="变量地址" min-width="190" show-overflow-tooltip>
+        <el-table-column prop="addressText" label="变量地址" min-width="180" show-overflow-tooltip>
           <template #default="scope"
             ><code>{{ scope.row.addressText }}</code></template
           >
         </el-table-column>
-        <el-table-column prop="dataType" label="数据类型" width="112" />
-        <el-table-column label="最近值" min-width="180">
+        <el-table-column prop="dataType" label="数据类型" width="100" />
+        <el-table-column label="最近值" min-width="150">
           <template #default="scope">
             <div class="collector-point-table__debug-value">
               <el-tooltip
@@ -76,7 +78,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="质量" width="118" align="center">
+        <el-table-column label="质量" width="92" align="center">
           <template #default="scope">
             <el-tag
               v-if="tableQuality(scope.row.latestDebugSnapshot?.quality)"
@@ -93,7 +95,7 @@
             <span v-else class="collector-point-table__empty-value">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="数据时间" width="168">
+        <el-table-column label="数据时间" width="160">
           <template #default="scope">
             <span class="collector-point-table__debug-time">{{
               collectorDebugTime(scope.row.latestDebugSnapshot?.sourceTimestamp || null)
@@ -113,7 +115,7 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="168" fixed="right">
+        <el-table-column label="操作" width="144" fixed="right">
           <template #default="scope">
             <div class="collector-point-table__row-actions">
               <el-button link type="primary" @click="openDetail(scope.row)">查看</el-button>
@@ -495,14 +497,18 @@ defineExpose({ reload: load, reloadGroups, openCreate })
 
 <style scoped>
 .collector-point-table {
+  container: collector-point-table / inline-size;
   position: relative;
+  width: 0;
   min-width: 0;
   flex: 1;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   padding-left: 16px;
 }
 .collector-point-table__toolbar {
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -519,6 +525,13 @@ defineExpose({ reload: load, reloadGroups, openCreate })
   align-items: center;
   gap: 8px;
 }
+.collector-point-table__filters {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.collector-point-table__actions {
+  flex: 0 0 auto;
+}
 .collector-point-table__filters span {
   color: var(--dc-text-muted);
   font-size: 11px;
@@ -527,11 +540,21 @@ defineExpose({ reload: load, reloadGroups, openCreate })
   width: min(290px, 34vw);
 }
 .collector-point-table__content {
+  width: 100%;
   min-height: 0;
   flex: 1;
   overflow: hidden;
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-md);
+}
+.collector-point-table__table {
+  width: 100%;
+  height: 100%;
+}
+.collector-point-table__table :deep(.el-table__cell .cell) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .collector-point-table__debug-value {
   display: flex;
@@ -556,10 +579,9 @@ defineExpose({ reload: load, reloadGroups, openCreate })
   font-size: 11px;
 }
 .collector-point-table__identity {
-  display: flex;
+  display: block;
   width: 100%;
-  flex-direction: column;
-  gap: 2px;
+  overflow: hidden;
   padding: 0;
   border: 0;
   background: transparent;
@@ -568,8 +590,12 @@ defineExpose({ reload: load, reloadGroups, openCreate })
   text-align: left;
 }
 .collector-point-table__identity strong {
+  display: block;
+  overflow: hidden;
   color: var(--dc-text);
   font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .collector-point-table__identity:hover strong {
   color: var(--dc-primary);
@@ -579,7 +605,9 @@ defineExpose({ reload: load, reloadGroups, openCreate })
   font-size: 10px;
 }
 .collector-point-table__row-actions {
+  flex-wrap: nowrap;
   padding-right: 4px;
+  white-space: nowrap;
 }
 .collector-point-table__row-actions :deep(.el-button + .el-button) {
   margin-left: 0;
@@ -590,13 +618,20 @@ defineExpose({ reload: load, reloadGroups, openCreate })
   border: 1px solid var(--dc-border);
   border-radius: var(--dc-radius-md);
 }
-@media (max-width: 900px) {
+@container collector-point-table (max-width: 760px) {
   .collector-point-table__toolbar {
     align-items: stretch;
     flex-direction: column;
   }
   .collector-point-table__search {
+    width: auto;
+    min-width: 0;
+    flex: 1;
+  }
+  .collector-point-table__actions {
     width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 }
 </style>

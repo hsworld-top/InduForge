@@ -29,6 +29,7 @@ type DataPointDevelopmentContract struct {
 	Description string                       `json:"description,omitempty"`
 	DataType    string                       `json:"dataType"`
 	Status      string                       `json:"status"`
+	Attributes  map[string]string            `json:"attributes"`
 	Methods     []DataPointDevelopmentMethod `json:"methods"`
 	UpdatedAt   time.Time                    `json:"updatedAt"`
 }
@@ -108,6 +109,7 @@ func buildDataPointDevelopmentContract(record repository.DataPointRecord) DataPo
 		Description: description,
 		DataType:    record.DataType,
 		Status:      record.Status,
+		Attributes:  cloneStringMap(record.AttributeDefaults),
 		Methods:     methods,
 		UpdatedAt:   record.UpdatedAt.UTC(),
 	}

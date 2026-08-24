@@ -45,6 +45,7 @@ type DataPoint struct {
 	AlarmLow           *float64                               `json:"alarmLow"`
 	AlarmHigh          *float64                               `json:"alarmHigh"`
 	Tags               []any                                  `json:"tags"`
+	AttributeDefaults  map[string]string                      `json:"attributeDefaults"`
 	RefreshMode        string                                 `json:"refreshMode"`
 	RefreshIntervalMS  *int                                   `json:"refreshIntervalMs"`
 	Status             string                                 `json:"status"`
@@ -62,18 +63,28 @@ type DataPoint struct {
 // DataPointListItem 是数据点列表页的轻量投影。
 // 列表不返回 lastValue、runtimePermissions、完整 sourceConfig 等大字段，详情接口再按需读取完整数据。
 type DataPointListItem struct {
-	ID               string    `json:"id"`
-	ProjectID        string    `json:"projectId"`
-	Path             string    `json:"path"`
-	Name             string    `json:"name"`
-	SourceType       string    `json:"sourceType"`
-	AccessSourceID   string    `json:"accessSourceId,omitempty"`
-	AccessSourceName string    `json:"accessSourceName,omitempty"`
-	DataType         string    `json:"dataType"`
-	Tags             []any     `json:"tags"`
-	Status           string    `json:"status"`
-	CreatedAt        time.Time `json:"createdAt"`
-	UpdatedAt        time.Time `json:"updatedAt"`
+	ID               string                     `json:"id"`
+	ProjectID        string                     `json:"projectId"`
+	Path             string                     `json:"path"`
+	Name             string                     `json:"name"`
+	SourceType       string                     `json:"sourceType"`
+	SourceID         *string                    `json:"sourceId,omitempty"`
+	AccessSourceID   string                     `json:"accessSourceId,omitempty"`
+	AccessSourceName string                     `json:"accessSourceName,omitempty"`
+	DataType         string                     `json:"dataType"`
+	Tags             []any                      `json:"tags"`
+	Status           string                     `json:"status"`
+	Capabilities     DataPointCapabilitySummary `json:"capabilities"`
+	RefCount         int                        `json:"refCount"`
+	CreatedAt        time.Time                  `json:"createdAt"`
+	UpdatedAt        time.Time                  `json:"updatedAt"`
+}
+
+// DataPointCapabilitySummary 描述场景编辑器可以使用的稳定读写能力，不暴露底层数据源细节。
+type DataPointCapabilitySummary struct {
+	Get bool `json:"get"`
+	Sub bool `json:"sub"`
+	Set bool `json:"set"`
 }
 
 // DataPointPagination 表示数据点列表分页信息。
@@ -141,6 +152,7 @@ type DataPointService struct {
 	websocketWb    *repository.WebSocketWorkbenchRepository
 	realtimeStore  *repository.RealtimeStoreRepository
 	connections    *repository.ConnectionRepository
+	collectors     *repository.CollectorRepository
 	builtinRuntime *BuiltinRuntimeService
 }
 
@@ -162,6 +174,7 @@ func (s *DataPointService) SetGeneratedSourceRepositories(
 	websocketWorkbench *repository.WebSocketWorkbenchRepository,
 	realtimeStore *repository.RealtimeStoreRepository,
 	connections *repository.ConnectionRepository,
+	collectors *repository.CollectorRepository,
 	builtinRuntime *BuiltinRuntimeService,
 ) {
 	s.kafkaWorkbench = kafkaWorkbench
@@ -169,6 +182,7 @@ func (s *DataPointService) SetGeneratedSourceRepositories(
 	s.websocketWb = websocketWorkbench
 	s.realtimeStore = realtimeStore
 	s.connections = connections
+	s.collectors = collectors
 	s.builtinRuntime = builtinRuntime
 }
 
@@ -202,10 +216,19 @@ func (s *DataPointService) ListDataPoints(ctx context.Context, projectID string,
 	if err := s.refreshDataPointValidity(ctx, projectID, records); err != nil {
 		return nil, err
 	}
+	recordIDs := make([]string, 0, len(records))
+	for _, record := range records {
+		recordIDs = append(recordIDs, record.ID)
+	}
+	usageCounts, err := s.repository.ListUsageCounts(ctx, projectID, recordIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	items := make([]DataPointListItem, 0, len(records))
 	for _, record := range records {
 		item := s.toDataPointListItem(ctx, projectID, record)
+		item.RefCount = usageCounts[record.ID]
 		items = append(items, item)
 	}
 
@@ -662,6 +685,7 @@ func toDataPoint(record repository.DataPointRecord) DataPoint {
 		AlarmLow:           cloneOptionalFloat64(record.AlarmLow),
 		AlarmHigh:          cloneOptionalFloat64(record.AlarmHigh),
 		Tags:               cloneJSONArray(record.Tags),
+		AttributeDefaults:  cloneStringMap(record.AttributeDefaults),
 		RefreshMode:        record.RefreshMode,
 		RefreshIntervalMS:  cloneOptionalInt(record.RefreshIntervalMS),
 		Status:             record.Status,
@@ -681,13 +705,17 @@ func (s *DataPointService) toDataPointListItem(ctx context.Context, projectID st
 		Path:             record.Path,
 		Name:             record.Name,
 		SourceType:       record.SourceType,
+		SourceID:         cloneOptionalString(record.SourceID),
 		AccessSourceID:   connectionID,
 		AccessSourceName: connectionName,
 		DataType:         record.DataType,
 		Tags:             cloneJSONArray(record.Tags),
 		Status:           record.Status,
-		CreatedAt:        record.CreatedAt,
-		UpdatedAt:        record.UpdatedAt,
+		Capabilities: DataPointCapabilitySummary{
+			Get: record.Status == "active", Sub: record.Status == "active", Set: record.Status == "active",
+		},
+		CreatedAt: record.CreatedAt,
+		UpdatedAt: record.UpdatedAt,
 	}
 }
 
@@ -1073,6 +1101,19 @@ func (s *DataPointService) resolveDataPointAccessSource(ctx context.Context, pro
 		sourceID = strings.TrimSpace(*record.SourceID)
 	}
 	switch strings.TrimSpace(record.SourceType) {
+	case "collector.point":
+		if s.collectors == nil || sourceID == "" {
+			return "", ""
+		}
+		point, err := s.collectors.GetPointByID(ctx, projectID, sourceID)
+		if err != nil || point == nil {
+			return "", ""
+		}
+		connection, err := s.collectors.GetConnection(ctx, projectID, point.ConnectionID)
+		if err != nil || connection == nil {
+			return point.ConnectionID, ""
+		}
+		return point.ConnectionID, connection.Name
 	case "db.query":
 		if s.queries == nil || s.queries.repository == nil || sourceID == "" {
 			return "", ""
@@ -1131,7 +1172,7 @@ func (s *DataPointService) resolveConnectionName(ctx context.Context, projectID,
 
 func sourceTypeUsesSourceIDAsConnection(sourceType string) bool {
 	switch strings.TrimSpace(sourceType) {
-	case "http.request", "websocket.session", "realtime.key", "kafka.field":
+	case "http.request", "websocket.session", "realtime.key", "kafka.field", "kafka.raw":
 		return true
 	default:
 		return false

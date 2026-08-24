@@ -20,11 +20,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import DataPointList from '@/components/datapoint/DataPointList.vue'
 
-const props = defineProps<{
+defineProps<{
   projectId: string
 }>()
 
@@ -82,19 +82,26 @@ function handleOpenDetail(row: { id: string }) {
 function handleCloseDetail() {
   const params = { ...route.params }
   delete params.objectId
-  void router.replace({ params, query: route.query })
+  void router.replace({
+    name: route.name || 'datacenter',
+    params,
+    query: route.query,
+  })
 }
 
 /* LinkChip 跳转：切换到对应模块 + 打开目标对象 */
-function handleNavigate(payload: { module: string; objectId: string; tab?: string }) {
+function handleNavigate(payload: { module: string; objectId?: string; tab?: string }) {
+  const params: Record<string, string | string[]> = {
+    ...route.params,
+    module: payload.module,
+  }
+  delete params.objectId
+  delete params.tab
+  if (payload.objectId) params.objectId = payload.objectId
+  if (payload.objectId && payload.tab) params.tab = payload.tab
   void router.push({
     name: route.name || 'datacenter',
-    params: {
-      ...route.params,
-      module: payload.module,
-      objectId: payload.objectId,
-      tab: payload.tab || undefined,
-    },
+    params,
     query: route.query,
   })
 }

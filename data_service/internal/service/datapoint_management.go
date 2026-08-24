@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -59,7 +60,7 @@ func (s *DataPointService) GetDataPointStatuses(ctx context.Context, projectID s
 	if len(uniqueSourceIDs) > 0 {
 		loaded, _, err := s.repository.ListByProject(ctx, projectID, repository.DataPointListFilter{
 			Page:      1,
-			PageSize: 5000,
+			PageSize:  5000,
 			SourceIDs: uniqueSourceIDs,
 		})
 		if err != nil {
@@ -151,7 +152,7 @@ func (s *DataPointService) GetDataPointValues(ctx context.Context, projectID str
 }
 
 // WriteDataPointValue 以“更新默认值”的方式承接设计态写入能力。
-func (s *DataPointService) WriteDataPointValue(ctx context.Context, projectID, id, userID string, value any) (*WriteDataPointResult, error) {
+func (s *DataPointService) WriteDataPointValue(ctx context.Context, projectID, id, userID, role string, value any) (*WriteDataPointResult, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
 	}
@@ -167,7 +168,40 @@ func (s *DataPointService) WriteDataPointValue(ctx context.Context, projectID, i
 		return nil, err
 	}
 
-	defaultValue := stringifyDataPointValue(value)
+	return s.writeDataPointRecord(ctx, *record, userID, role, value)
+}
+
+// WriteDataPointValueByPath 使用跨环境稳定的 path 写入，供场景数据桥调用。
+func (s *DataPointService) WriteDataPointValueByPath(ctx context.Context, projectID, path, userID, role string, value any) (*WriteDataPointResult, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "path 不能为空")
+	}
+	if err := validateUserID(userID); err != nil {
+		return nil, err
+	}
+	record, err := s.repository.GetByProjectAndPath(ctx, projectID, path)
+	if err != nil {
+		return nil, err
+	}
+	return s.writeDataPointRecord(ctx, *record, userID, role, value)
+}
+
+func (s *DataPointService) writeDataPointRecord(ctx context.Context, record repository.DataPointRecord, userID, role string, value any) (*WriteDataPointResult, error) {
+	if record.Status != "active" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点不是 active 状态")
+	}
+	if !runtimeWriteAllowed(record.RuntimePermissions.Write, role) {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodePermissionInsufficient, http.StatusForbidden, "当前角色禁止写入该数据点")
+	}
+	normalizedValue, err := normalizeRuntimeWriteValue(record, value)
+	if err != nil {
+		return nil, err
+	}
+	defaultValue := stringifyDataPointValue(normalizedValue)
 	updated, err := s.repository.Update(ctx, repository.UpdateDataPointParams{
 		ID:                record.ID,
 		ProjectID:         record.ProjectID,
@@ -197,12 +231,95 @@ func (s *DataPointService) WriteDataPointValue(ctx context.Context, projectID, i
 	return &WriteDataPointResult{
 		ID:        updated.ID,
 		Path:      updated.Path,
-		Value:     value,
+		Value:     normalizedValue,
 		Timestamp: time.Now().UTC(),
 	}, nil
 }
 
-// GetDataPointUsages 返回数据点使用情况，当前先保持兼容返回空列表。
+func runtimeWriteAllowed(grant repository.RuntimePermissionGrant, role string) bool {
+	role = strings.TrimSpace(role)
+	for _, denied := range grant.DenyRoles {
+		if denied == role {
+			return false
+		}
+	}
+	for _, allowed := range grant.AllowRoles {
+		if allowed == role {
+			return true
+		}
+	}
+	return grant.Inherit
+}
+
+func normalizeRuntimeWriteValue(record repository.DataPointRecord, value any) (any, error) {
+	dataType := strings.ToLower(strings.TrimSpace(record.DataType))
+	badType := func() (any, error) {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "写入值与数据点类型不匹配")
+	}
+	switch dataType {
+	case "bool", "boolean":
+		if _, ok := value.(bool); !ok {
+			return badType()
+		}
+	case "string", "text":
+		if _, ok := value.(string); !ok {
+			return badType()
+		}
+	case "int", "integer", "long", "int32", "int64":
+		number, ok := runtimeNumber(value)
+		if !ok || math.Trunc(number) != number {
+			return badType()
+		}
+		value = number
+	case "number", "float", "double", "float32", "float64", "decimal":
+		number, ok := runtimeNumber(value)
+		if !ok {
+			return badType()
+		}
+		value = number
+	case "object":
+		if _, ok := value.(map[string]any); !ok {
+			return badType()
+		}
+	case "array":
+		if _, ok := value.([]any); !ok {
+			return badType()
+		}
+	case "json":
+		// 任意 JSON 标量、对象或数组均可直接持久化。
+	default:
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点类型不支持场景写入")
+	}
+	if number, ok := runtimeNumber(value); ok {
+		if record.MinValue != nil && number < *record.MinValue {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "写入值小于数据点最小值")
+		}
+		if record.MaxValue != nil && number > *record.MaxValue {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "写入值大于数据点最大值")
+		}
+	}
+	return value, nil
+}
+
+func runtimeNumber(value any) (float64, bool) {
+	switch number := value.(type) {
+	case float64:
+		return number, !math.IsNaN(number) && !math.IsInf(number, 0)
+	case float32:
+		return float64(number), true
+	case int:
+		return float64(number), true
+	case int64:
+		return float64(number), true
+	case json.Number:
+		parsed, err := number.Float64()
+		return parsed, err == nil
+	default:
+		return 0, false
+	}
+}
+
+// GetDataPointUsages 返回报警策略与计算单元对数据点的真实引用。
 func (s *DataPointService) GetDataPointUsages(ctx context.Context, projectID, id string) ([]map[string]any, error) {
 	if err := validateProjectID(projectID); err != nil {
 		return nil, err
@@ -213,7 +330,50 @@ func (s *DataPointService) GetDataPointUsages(ctx context.Context, projectID, id
 	if _, err := s.repository.GetByProjectAndID(ctx, projectID, id); err != nil {
 		return nil, err
 	}
-	return []map[string]any{}, nil
+	records, err := s.repository.ListUsages(ctx, projectID, id)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]map[string]any, 0, len(records))
+	for _, record := range records {
+		result = append(result, map[string]any{
+			"module":   record.Module,
+			"objectId": record.ObjectID,
+			"label":    record.Label,
+		})
+	}
+	return result, nil
+}
+
+// ListDataPointTags 返回工程级标签摘要，GET 不修改任何数据。
+func (s *DataPointService) ListDataPointTags(ctx context.Context, projectID string) ([]map[string]any, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	records, err := s.repository.ListTagSummaries(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]map[string]any, 0, len(records))
+	for _, record := range records {
+		result = append(result, map[string]any{"tag": record.Tag, "count": record.Count})
+	}
+	return result, nil
+}
+
+// RemoveDataPointTag 删除工程内所有数据点上的指定标签。
+func (s *DataPointService) RemoveDataPointTag(ctx context.Context, projectID, userID, tag string) (int, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return 0, err
+	}
+	if err := validateUserID(userID); err != nil {
+		return 0, err
+	}
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return 0, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "标签不能为空")
+	}
+	return s.repository.RemoveTagByProject(ctx, projectID, tag, userID)
 }
 
 func (s *DataPointService) buildValueFromRecord(ctx context.Context, projectID string, record repository.DataPointRecord) (*DataPointValue, error) {

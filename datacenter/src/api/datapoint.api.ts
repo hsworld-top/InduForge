@@ -2,8 +2,10 @@ import request from '@/utils/request'
 import { listResponseSchema } from './schemas/common.schema'
 import {
   DatapointSchema,
+  DatapointCustomAttributesSchema,
   DatapointUpdateSchema,
   type Datapoint,
+  type DatapointCustomAttributes,
   type DatapointUpdate,
 } from './schemas/datapoint.schema'
 
@@ -91,6 +93,33 @@ export async function updateDatapointRuntimeGrant(
     data,
   })
   return DatapointSchema.parse(unwrapData(res))
+}
+
+/** 获取单个数据点的开发态自定义属性默认值。 */
+export async function getDatapointCustomAttributes(
+  projectId: string,
+  datapointId: string,
+): Promise<DatapointCustomAttributes> {
+  const res = await request({
+    url: `/data/projects/${projectId}/datapoints/${datapointId}/custom-attributes`,
+    method: 'get',
+  })
+  return DatapointCustomAttributesSchema.parse(unwrapData(res))
+}
+
+/** 原子替换单个数据点的开发态自定义属性默认值。 */
+export async function updateDatapointCustomAttributes(
+  projectId: string,
+  datapointId: string,
+  attributes: Record<string, string>,
+): Promise<DatapointCustomAttributes> {
+  const body = DatapointCustomAttributesSchema.parse({ attributes })
+  const res = await request({
+    url: `/data/projects/${projectId}/datapoints/${datapointId}/custom-attributes`,
+    method: 'put',
+    data: body,
+  })
+  return DatapointCustomAttributesSchema.parse(unwrapData(res))
 }
 
 /** 删除数据点 */
