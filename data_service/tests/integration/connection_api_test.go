@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,10 +38,12 @@ func TestConnectionsCRUD(t *testing.T) {
 	secret := "connections-secret"
 
 	srv, err := app.NewServer(config.Config{
-		Addr:               ":0",
-		DatabaseURL:        fixture.databaseURL,
-		DatabaseSearchPath: fixture.schemaName,
-		JWTSecret:          secret,
+		Addr:                       ":0",
+		DatabaseURL:                fixture.databaseURL,
+		DatabaseSearchPath:         fixture.schemaName,
+		JWTSecret:                  secret,
+		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
+		ConnectionSecretKeyVersion: "v1",
 	})
 	if err != nil {
 		t.Fatalf("创建默认服务失败: %v", err)
@@ -160,10 +163,12 @@ func TestConnectionsRejectPhase2ReservedTypes(t *testing.T) {
 	secret := "connections-phase2-secret"
 
 	srv, err := app.NewServer(config.Config{
-		Addr:               ":0",
-		DatabaseURL:        fixture.databaseURL,
-		DatabaseSearchPath: fixture.schemaName,
-		JWTSecret:          secret,
+		Addr:                       ":0",
+		DatabaseURL:                fixture.databaseURL,
+		DatabaseSearchPath:         fixture.schemaName,
+		JWTSecret:                  secret,
+		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
+		ConnectionSecretKeyVersion: "v1",
 	})
 	if err != nil {
 		t.Fatalf("创建默认服务失败: %v", err)
@@ -180,14 +185,17 @@ func TestConnectionsRejectPhase2ReservedTypes(t *testing.T) {
 		Capabilities: []string{"project:read", "project:write"},
 	})
 
-	assertPhaseBoundaryError(t, doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/connections", token, map[string]any{
+	rejected := doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/connections", token, map[string]any{
 		"name":   "opcua-legacy",
 		"type":   "opcua",
 		"status": "connected",
 		"config": map[string]any{
 			"endpoint": "opc.tcp://127.0.0.1:4840",
 		},
-	}, http.StatusOK), "OPC UA")
+	}, http.StatusBadRequest)
+	if rejected.Code != apperrors.PublicCodeBadRequest || !strings.Contains(rejected.Msg, "连接类型不受支持") {
+		t.Fatalf("expected generic connection API to reject industrial type, got %#v", rejected)
+	}
 
 	currentList := mustListConnections(t, server.URL, token, projectID)
 	if len(currentList) != 0 {

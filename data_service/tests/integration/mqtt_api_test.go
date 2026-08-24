@@ -31,10 +31,12 @@ func TestMqttConnectionLifecycle(t *testing.T) {
 	secret := "mqtt-lifecycle-secret-01"
 
 	srv, err := app.NewServer(config.Config{
-		Addr:               ":0",
-		DatabaseURL:        fixture.databaseURL,
-		DatabaseSearchPath: fixture.schemaName,
-		JWTSecret:          secret,
+		Addr:                       ":0",
+		DatabaseURL:                fixture.databaseURL,
+		DatabaseSearchPath:         fixture.schemaName,
+		JWTSecret:                  secret,
+		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
+		ConnectionSecretKeyVersion: "v1",
 	})
 	if err != nil {
 		t.Fatalf("create server failed: %v", err)
@@ -57,7 +59,24 @@ func TestMqttConnectionLifecycle(t *testing.T) {
 		"protocol":  "mqtt",
 		"port":      1883,
 		"qos":       1,
+		"secrets":   map[string]string{"password": "mqtt-first-secret"},
 	})
+	updated := doJSONRequest(t, http.MethodPut, server.URL+"/api/v1/data/projects/"+projectID+"/mqtt/connections/"+connection.ID, token, map[string]any{
+		"name": "mqtt-main-updated", "status": "disconnected", "brokerUrl": "tcp://localhost:1883", "protocol": "mqtt", "port": 1883, "qos": 1,
+		"secrets": map[string]string{"password": "mqtt-second-secret"},
+	})
+	var updatedConnection mqttConnectionPayload
+	if err := json.Unmarshal(updated.Data, &updatedConnection); err != nil || updatedConnection.Name != "mqtt-main-updated" {
+		t.Fatalf("expected dedicated MQTT update, got %#v, err=%v", updatedConnection, err)
+	}
+	var encrypted []byte
+	var keyVersion string
+	if err := fixture.pool.QueryRow(ctx, `SELECT encrypted_value, encryption_key_version FROM data_connection_secrets WHERE connection_id = $1 AND secret_key = 'password'`, connection.ID).Scan(&encrypted, &keyVersion); err != nil {
+		t.Fatalf("read encrypted MQTT secret failed: %v", err)
+	}
+	if string(encrypted) == "mqtt-first-secret" || string(encrypted) == "mqtt-second-secret" || keyVersion != "v1" {
+		t.Fatalf("MQTT secret was not encrypted/versioned: value=%q version=%q", string(encrypted), keyVersion)
+	}
 
 	subscriptionID := insertTestMqttSubscription(t, ctx, fixture, projectID, connection.ID, userID)
 
@@ -100,10 +119,12 @@ func TestMqttSubscriptionChineseNameDataPointStaysActive(t *testing.T) {
 	secret := "mqtt-chinese-subscription-secret-01"
 
 	srv, err := app.NewServer(config.Config{
-		Addr:               ":0",
-		DatabaseURL:        fixture.databaseURL,
-		DatabaseSearchPath: fixture.schemaName,
-		JWTSecret:          secret,
+		Addr:                       ":0",
+		DatabaseURL:                fixture.databaseURL,
+		DatabaseSearchPath:         fixture.schemaName,
+		JWTSecret:                  secret,
+		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
+		ConnectionSecretKeyVersion: "v1",
 	})
 	if err != nil {
 		t.Fatalf("create server failed: %v", err)
@@ -184,10 +205,12 @@ func TestMqttSubscriptionDataPointValidWithoutMqttConfig(t *testing.T) {
 	secret := "mqtt-subscription-no-config-secret-01"
 
 	srv, err := app.NewServer(config.Config{
-		Addr:               ":0",
-		DatabaseURL:        fixture.databaseURL,
-		DatabaseSearchPath: fixture.schemaName,
-		JWTSecret:          secret,
+		Addr:                       ":0",
+		DatabaseURL:                fixture.databaseURL,
+		DatabaseSearchPath:         fixture.schemaName,
+		JWTSecret:                  secret,
+		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
+		ConnectionSecretKeyVersion: "v1",
 	})
 	if err != nil {
 		t.Fatalf("create server failed: %v", err)
@@ -245,10 +268,12 @@ func TestMqttTagsListSupportsPaginationAndSearch(t *testing.T) {
 	secret := "mqtt-tag-pagination-secret-01"
 
 	srv, err := app.NewServer(config.Config{
-		Addr:               ":0",
-		DatabaseURL:        fixture.databaseURL,
-		DatabaseSearchPath: fixture.schemaName,
-		JWTSecret:          secret,
+		Addr:                       ":0",
+		DatabaseURL:                fixture.databaseURL,
+		DatabaseSearchPath:         fixture.schemaName,
+		JWTSecret:                  secret,
+		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
+		ConnectionSecretKeyVersion: "v1",
 	})
 	if err != nil {
 		t.Fatalf("create server failed: %v", err)

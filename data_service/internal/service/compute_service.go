@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,9 +32,11 @@ var allowedComputeLanguages = map[string]struct{}{
 
 var allowedComputeTriggerTypes = map[string]struct{}{
 	"manual":           {},
-	"timer":            {},
+	"schedule":         {},
 	"datapoint_change": {},
 }
+
+var computeScheduleTimePattern = regexp.MustCompile(`^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$`)
 
 // ComputeUnit 表示返回给 HTTP 层的计算单元定义。
 type ComputeUnit struct {
@@ -149,6 +154,30 @@ type ComputeSyntaxCheckResult struct {
 	Diagnostics []ComputeSyntaxDiagnostic `json:"diagnostics"`
 }
 
+// ComputeCapabilities 返回独立沙箱声明的真实能力；Available=false 时前端必须禁用调试和语法检查。
+type ComputeCapabilities struct {
+	SandboxStatus    string                               `json:"sandboxStatus"`
+	LanguageVersions []enginecompute.LanguageCapability   `json:"languages"`
+	SDK              []string                             `json:"sdk"`
+	Dependencies     []enginecompute.DependencyCapability `json:"dependencies"`
+	TriggerTypes     []string                             `json:"triggerTypes"`
+	Limits           enginecompute.SandboxLimits          `json:"limits"`
+}
+
+// ComputeSchedulePreview 描述调度配置的规范化结果和未来执行时间；仅用于开发态校验与预览。
+type ComputeSchedulePreview struct {
+	TriggerType   string                      `json:"triggerType"`
+	TriggerConfig map[string]any              `json:"triggerConfig"`
+	Summary       string                      `json:"summary"`
+	NextRuns      []time.Time                 `json:"nextRuns"`
+	Errors        []ComputeScheduleFieldError `json:"errors"`
+}
+
+type ComputeScheduleFieldError struct {
+	Field   string `json:"field"`
+	Message string `json:"message"`
+}
+
 // CreateComputeUnitInput 描述创建计算单元的输入参数。
 type CreateComputeUnitInput struct {
 	Name          string
@@ -234,10 +263,8 @@ type ComputeService struct {
 	repository   *repository.ComputeRepository
 	datapoints   *repository.DataPointRepository
 	queries      *QueryService
-	mqtt         *repository.MqttRepository
 	nodeRunner   enginecompute.Runner
 	pythonRunner enginecompute.Runner
-	scheduler    *enginecompute.Scheduler
 }
 
 // NewComputeService 创建 compute 服务。
@@ -245,30 +272,24 @@ func NewComputeService(
 	repo *repository.ComputeRepository,
 	nodeRunner enginecompute.Runner,
 	pythonRunner enginecompute.Runner,
-	scheduler *enginecompute.Scheduler,
 	deps ...any,
 ) *ComputeService {
 	var datapoints *repository.DataPointRepository
 	var queries *QueryService
-	var mqtt *repository.MqttRepository
 	for _, dep := range deps {
 		switch typed := dep.(type) {
 		case *repository.DataPointRepository:
 			datapoints = typed
 		case *QueryService:
 			queries = typed
-		case *repository.MqttRepository:
-			mqtt = typed
 		}
 	}
 	return &ComputeService{
 		repository:   repo,
 		datapoints:   datapoints,
 		queries:      queries,
-		mqtt:         mqtt,
 		nodeRunner:   nodeRunner,
 		pythonRunner: pythonRunner,
-		scheduler:    scheduler,
 	}
 }
 
@@ -326,12 +347,169 @@ func (s *ComputeService) GetComputeUnit(ctx context.Context, claims *auth.Claims
 	return &unit, nil
 }
 
-// ListComputeDependencies 返回计算运行时内置依赖清单。
+// ListComputeDependencies 返回沙箱真实声明的依赖，不再展示宿主机或前端臆测的能力。
 func (s *ComputeService) ListComputeDependencies(ctx context.Context, claims *auth.Claims, projectID string) (*ComputeDependencyListResult, error) {
 	if err := s.validateReadAccess(claims, projectID); err != nil {
 		return nil, err
 	}
-	return &ComputeDependencyListResult{List: builtInComputeDependencies()}, nil
+	capabilities, err := s.GetComputeCapabilities(ctx, claims, projectID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]ComputeDependency, 0, len(capabilities.Dependencies))
+	for _, dependency := range capabilities.Dependencies {
+		runtimeName := strings.TrimSpace(strings.ToLower(dependency.Language))
+		if runtimeName == "js" {
+			runtimeName = "javascript"
+		}
+		result = append(result, ComputeDependency{
+			ID: dependency.Language + ":" + dependency.Name, Name: dependency.Name,
+			Runtime: runtimeName, Version: dependency.Version, Description: "由独立计算沙箱提供。",
+			Status: "enabled", ImportName: dependency.Name,
+		})
+	}
+	return &ComputeDependencyListResult{List: result}, nil
+}
+
+// GetComputeCapabilities 读取沙箱实时能力；不可用时返回 unavailable，不回退到宿主执行器。
+func (s *ComputeService) GetComputeCapabilities(ctx context.Context, claims *auth.Claims, projectID string) (*ComputeCapabilities, error) {
+	if err := s.validateReadAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	provider, ok := s.nodeRunner.(enginecompute.CapabilityProvider)
+	if !ok || provider == nil {
+		return &ComputeCapabilities{SandboxStatus: "unavailable", LanguageVersions: []enginecompute.LanguageCapability{}, SDK: []string{}, Dependencies: []enginecompute.DependencyCapability{}, TriggerTypes: []string{}}, nil
+	}
+	capabilities, err := provider.Capabilities(ctx)
+	if err != nil || !capabilities.Available {
+		return &ComputeCapabilities{SandboxStatus: "unavailable", LanguageVersions: []enginecompute.LanguageCapability{}, SDK: []string{}, Dependencies: []enginecompute.DependencyCapability{}, TriggerTypes: []string{}, Limits: capabilities.Limits}, nil
+	}
+	return &ComputeCapabilities{
+		SandboxStatus: "available", LanguageVersions: capabilities.Languages, SDK: capabilities.SDK,
+		Dependencies: capabilities.Dependencies, TriggerTypes: capabilities.Triggers, Limits: capabilities.Limits,
+	}, nil
+}
+
+// PreviewComputeSchedule 在不保存、不执行的前提下校验并展示未来五次计划时间。
+func (s *ComputeService) PreviewComputeSchedule(ctx context.Context, claims *auth.Claims, projectID, triggerType string, triggerConfig map[string]any) (*ComputeSchedulePreview, error) {
+	if err := s.validateReadAccess(claims, projectID); err != nil {
+		return nil, err
+	}
+	preview := &ComputeSchedulePreview{TriggerType: strings.TrimSpace(strings.ToLower(triggerType)), TriggerConfig: cloneMap(triggerConfig), NextRuns: []time.Time{}, Errors: []ComputeScheduleFieldError{}}
+	normalizedType, err := normalizeComputeTriggerType(triggerType)
+	if err != nil {
+		preview.Errors = append(preview.Errors, ComputeScheduleFieldError{Field: "triggerType", Message: "触发类型不受支持"})
+		return preview, nil
+	}
+	draft := normalizedComputeUnitInput{TriggerType: normalizedType, TriggerConfig: cloneMap(triggerConfig)}
+	if err := s.validateAndNormalizeTrigger(ctx, projectID, &draft); err != nil {
+		preview.TriggerType = normalizedType
+		preview.Errors = append(preview.Errors, computeScheduleValidationError(normalizedType, triggerConfig, err))
+		return preview, nil
+	}
+	preview.TriggerType, preview.TriggerConfig = draft.TriggerType, draft.TriggerConfig
+	if draft.TriggerType != "schedule" {
+		preview.Summary = "该触发方式不按时间计划自动执行"
+		return preview, nil
+	}
+	preview.Summary, preview.NextRuns = computeScheduleOccurrences(draft.TriggerConfig, time.Now().UTC(), 5)
+	return preview, nil
+}
+
+func computeScheduleValidationError(triggerType string, config map[string]any, validationErr error) ComputeScheduleFieldError {
+	field := "triggerConfig"
+	if triggerType == "datapoint_change" {
+		field = "triggerConfig.datapointId"
+	} else if triggerType == "schedule" {
+		switch strings.ToLower(strings.TrimSpace(toString(config["kind"]))) {
+		case "interval":
+			if _, ok := positiveInteger(config["every"]); !ok {
+				field = "triggerConfig.every"
+			} else {
+				field = "triggerConfig.unit"
+			}
+		case "daily", "weekly":
+			if !computeScheduleTimePattern.MatchString(strings.TrimSpace(toString(config["time"]))) {
+				field = "triggerConfig.time"
+			} else if timezone := strings.TrimSpace(toString(config["timezone"])); timezone == "" {
+				field = "triggerConfig.timezone"
+			} else if _, err := time.LoadLocation(timezone); err != nil {
+				field = "triggerConfig.timezone"
+			} else {
+				field = "triggerConfig.weekdays"
+			}
+		default:
+			field = "triggerConfig.kind"
+		}
+	}
+	return ComputeScheduleFieldError{Field: field, Message: validationErr.Error()}
+}
+
+func computeScheduleOccurrences(config map[string]any, now time.Time, count int) (string, []time.Time) {
+	kind := toString(config["kind"])
+	if kind == "interval" {
+		every, _ := positiveInteger(config["every"])
+		unit := toString(config["unit"])
+		step := time.Duration(every) * time.Second
+		if unit == "minutes" {
+			step = time.Duration(every) * time.Minute
+		}
+		if unit == "hours" {
+			step = time.Duration(every) * time.Hour
+		}
+		result := make([]time.Time, 0, count)
+		for index := 1; index <= count; index++ {
+			result = append(result, now.Add(time.Duration(index)*step))
+		}
+		return fmt.Sprintf("每 %d %s执行一次", every, map[string]string{"seconds": "秒", "minutes": "分钟", "hours": "小时"}[unit]), result
+	}
+	location, _ := time.LoadLocation(toString(config["timezone"]))
+	if location == nil {
+		location = time.UTC
+	}
+	hour, minute, second := parseScheduleClock(toString(config["time"]))
+	localNow := now.In(location)
+	result := make([]time.Time, 0, count)
+	for offset := 0; len(result) < count && offset < 370; offset++ {
+		day := localNow.AddDate(0, 0, offset)
+		if kind == "weekly" && !scheduleContainsWeekday(config["weekdays"], day.Weekday()) {
+			continue
+		}
+		candidate := time.Date(day.Year(), day.Month(), day.Day(), hour, minute, second, 0, location)
+		// 夏令时跳跃导致本地时刻不存在时，time.Date 会自动归一化；契约要求该次跳过而不是补跑。
+		candidateLocal := candidate.In(location)
+		if candidateLocal.Year() != day.Year() || candidateLocal.Month() != day.Month() || candidateLocal.Day() != day.Day() || candidateLocal.Hour() != hour || candidateLocal.Minute() != minute || candidateLocal.Second() != second {
+			continue
+		}
+		if !candidate.After(localNow) {
+			continue
+		}
+		result = append(result, candidate.UTC())
+	}
+	if kind == "weekly" {
+		return "每周指定日期定时执行", result
+	}
+	return "每天定时执行", result
+}
+
+func parseScheduleClock(value string) (int, int, int) {
+	parts := strings.Split(value, ":")
+	if len(parts) != 3 {
+		return 0, 0, 0
+	}
+	hour, _ := strconv.Atoi(parts[0])
+	minute, _ := strconv.Atoi(parts[1])
+	second, _ := strconv.Atoi(parts[2])
+	return hour, minute, second
+}
+
+func scheduleContainsWeekday(value any, weekday time.Weekday) bool {
+	for _, day := range normalizedWeekdays(value) {
+		if day == int(weekday) || (weekday == time.Sunday && day == 7) {
+			return true
+		}
+	}
+	return false
 }
 
 // CreateComputeUnit 创建计算单元定义。
@@ -344,6 +522,9 @@ func (s *ComputeService) CreateComputeUnit(ctx context.Context, claims *auth.Cla
 		return nil, err
 	}
 	if err := s.ensureComputeFolderInProject(ctx, projectID, normalized.FolderID); err != nil {
+		return nil, err
+	}
+	if err := s.validateAndNormalizeTrigger(ctx, projectID, &normalized); err != nil {
 		return nil, err
 	}
 
@@ -508,6 +689,9 @@ func (s *ComputeService) UpdateComputeUnit(ctx context.Context, claims *auth.Cla
 		return nil, err
 	}
 	if err := s.ensureComputeFolderInProject(ctx, projectID, normalized.FolderID); err != nil {
+		return nil, err
+	}
+	if err := s.validateAndNormalizeTrigger(ctx, projectID, &normalized); err != nil {
 		return nil, err
 	}
 
@@ -691,24 +875,12 @@ func (s *ComputeService) executeComputeUnit(ctx context.Context, claims *auth.Cl
 		return nil, err
 	}
 
-	callback, err := s.startComputeSDKCallback(*unit, dryRun)
-	if err != nil {
-		return nil, err
-	}
-	if callback != nil {
-		defer callback.Close()
-	}
-
 	startedAt := time.Now().UTC()
 	request := enginecompute.ExecuteRequest{
 		Script:     unit.ScriptCode,
 		Input:      cloneMap(input.Input),
 		SDKContext: sdkContext,
 		Timeout:    time.Duration(unit.TimeoutMS) * time.Millisecond,
-	}
-	if callback != nil {
-		request.CallbackURL = callback.URL
-		request.CallbackToken = callback.Token
 	}
 	executeResult, executeErr := runner.Run(ctx, request)
 	finishedAt := time.Now().UTC()
@@ -767,7 +939,7 @@ func (s *ComputeService) executeComputeUnit(ctx context.Context, claims *auth.Cl
 }
 
 func (s *ComputeService) validateDependencies() error {
-	if s == nil || s.repository == nil || s.nodeRunner == nil || s.pythonRunner == nil || s.scheduler == nil {
+	if s == nil || s.repository == nil || s.nodeRunner == nil || s.pythonRunner == nil {
 		return apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "compute 服务依赖未初始化")
 	}
 	return nil
@@ -1165,6 +1337,148 @@ func normalizeComputeTriggerType(triggerType string) (string, error) {
 	return triggerType, nil
 }
 
+// validateAndNormalizeTrigger 统一校验未来节点会消费的触发契约；data_service 不负责调度执行。
+func (s *ComputeService) validateAndNormalizeTrigger(ctx context.Context, projectID string, input *normalizedComputeUnitInput) error {
+	if input == nil {
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "trigger 配置不能为空")
+	}
+	config := cloneMap(input.TriggerConfig)
+	switch input.TriggerType {
+	case "manual":
+		input.TriggerConfig = map[string]any{}
+		return nil
+	case "datapoint_change":
+		id := strings.TrimSpace(toString(config["datapointId"]))
+		if id == "" {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点变化触发必须选择数据点")
+		}
+		if _, err := uuid.Parse(id); err != nil {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "datapointId 格式无效")
+		}
+		if s.datapoints == nil {
+			return apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "数据点仓储未初始化")
+		}
+		point, err := s.datapoints.GetByProjectAndID(ctx, projectID, id)
+		if err != nil {
+			return err
+		}
+		if point == nil || !strings.EqualFold(point.Status, "active") {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "变化触发数据点必须是有效数据点")
+		}
+		input.TriggerConfig = map[string]any{"datapointId": point.ID, "path": point.Path}
+		return nil
+	case "schedule":
+		kind := strings.TrimSpace(strings.ToLower(toString(config["kind"])))
+		switch kind {
+		case "interval":
+			every, ok := positiveInteger(config["every"])
+			if !ok {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "周期执行 every 必须为正整数")
+			}
+			unit := strings.TrimSpace(strings.ToLower(toString(config["unit"])))
+			if unit != "seconds" && unit != "minutes" && unit != "hours" {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "周期执行 unit 仅支持 seconds/minutes/hours")
+			}
+			input.TriggerConfig = map[string]any{"kind": kind, "every": every, "unit": unit}
+			return nil
+		case "daily", "weekly":
+			timeOfDay := strings.TrimSpace(toString(config["time"]))
+			if !computeScheduleTimePattern.MatchString(timeOfDay) {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "定时执行 time 必须为 HH:mm:ss")
+			}
+			timezone := strings.TrimSpace(toString(config["timezone"]))
+			if timezone == "" {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "定时执行 timezone 不能为空")
+			}
+			if _, err := time.LoadLocation(timezone); err != nil {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "timezone 必须为有效 IANA 时区")
+			}
+			normalized := map[string]any{"kind": kind, "time": timeOfDay, "timezone": timezone}
+			if kind == "weekly" {
+				if !validWeekdaysInput(config["weekdays"]) {
+					return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "每周定时 weekdays 只能包含 ISO 1-7")
+				}
+				weekdays := normalizedWeekdays(config["weekdays"])
+				if len(weekdays) == 0 {
+					return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "每周定时至少选择一个星期")
+				}
+				normalized["weekdays"] = weekdays
+			}
+			input.TriggerConfig = normalized
+			return nil
+		default:
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "schedule.kind 仅支持 interval/daily/weekly")
+		}
+	default:
+		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "triggerType 不受支持")
+	}
+}
+
+func positiveInteger(value any) (int, bool) {
+	switch typed := value.(type) {
+	case int:
+		return typed, typed > 0
+	case int64:
+		return int(typed), typed > 0 && typed <= int64(^uint(0)>>1)
+	case float64:
+		return int(typed), typed > 0 && typed == float64(int(typed))
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(typed))
+		return parsed, err == nil && parsed > 0
+	default:
+		return 0, false
+	}
+}
+
+func normalizedWeekdays(value any) []int {
+	items, ok := value.([]any)
+	if !ok {
+		if ints, castOK := value.([]int); castOK {
+			items = make([]any, len(ints))
+			for index, item := range ints {
+				items[index] = item
+			}
+		}
+	}
+	seen := map[int]struct{}{}
+	for _, item := range items {
+		day, ok := positiveInteger(item)
+		if ok && day >= 1 && day <= 7 {
+			seen[day] = struct{}{}
+		}
+	}
+	result := make([]int, 0, len(seen))
+	for day := range seen {
+		result = append(result, day)
+	}
+	sort.Ints(result)
+	return result
+}
+
+func validWeekdaysInput(value any) bool {
+	items, ok := value.([]any)
+	if !ok {
+		if ints, castOK := value.([]int); castOK {
+			items = make([]any, len(ints))
+			for index, item := range ints {
+				items[index] = item
+			}
+		} else {
+			return false
+		}
+	}
+	if len(items) == 0 {
+		return false
+	}
+	for _, item := range items {
+		day, valid := positiveInteger(item)
+		if !valid || day < 1 || day > 7 {
+			return false
+		}
+	}
+	return true
+}
+
 func normalizeComputeTimeout(timeout *int, defaultValue int) (int, error) {
 	timeoutMS := defaultValue
 	if timeout != nil {
@@ -1213,47 +1527,6 @@ func normalizeComputeFolderName(name string) (string, error) {
 		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "name 长度不能超过 100")
 	}
 	return name, nil
-}
-
-func builtInComputeDependencies() []ComputeDependency {
-	return []ComputeDependency{
-		{
-			ID:          "js:dayjs",
-			Name:        "dayjs",
-			Runtime:     "javascript",
-			Version:     "1.11.x",
-			Description: "时间解析、格式化和计算。",
-			Status:      "enabled",
-			ImportName:  "dayjs",
-		},
-		{
-			ID:          "js:lodash",
-			Name:        "lodash",
-			Runtime:     "javascript",
-			Version:     "4.17.x",
-			Description: "集合、对象和数组处理工具。",
-			Status:      "enabled",
-			ImportName:  "_",
-		},
-		{
-			ID:          "python:math",
-			Name:        "math",
-			Runtime:     "python",
-			Version:     "stdlib",
-			Description: "Python 标准数学函数库。",
-			Status:      "enabled",
-			ImportName:  "math",
-		},
-		{
-			ID:          "python:statistics",
-			Name:        "statistics",
-			Runtime:     "python",
-			Version:     "stdlib",
-			Description: "Python 标准统计函数库。",
-			Status:      "enabled",
-			ImportName:  "statistics",
-		},
-	}
 }
 
 func findComputeFolderRecord(records []repository.ComputeFolderRecord, folderID string) (repository.ComputeFolderRecord, bool) {

@@ -239,7 +239,11 @@ func TestResolveCollectorProtocolCatalogPathFindsPublicContractFromChildDirector
 	})
 
 	resolved := ResolveCollectorProtocolCatalogPath(filepath.Join("contracts", "collector-protocols"))
-	if resolved != catalogDir {
+	expected, err := filepath.EvalSymlinks(catalogDir)
+	if err != nil {
+		t.Fatalf("resolve expected catalog path failed: %v", err)
+	}
+	if resolved != expected {
 		t.Fatalf("expected catalog path %q, got %q", catalogDir, resolved)
 	}
 }
@@ -266,7 +270,11 @@ func TestResolveCollectorProtocolCatalogPathUsesPublicContractByDefault(t *testi
 		_ = os.Chdir(currentDir)
 	})
 
-	if resolved := ResolveCollectorProtocolCatalogPath(""); resolved != catalogDir {
+	expected, err := filepath.EvalSymlinks(catalogDir)
+	if err != nil {
+		t.Fatalf("resolve expected catalog path failed: %v", err)
+	}
+	if resolved := ResolveCollectorProtocolCatalogPath(""); resolved != expected {
 		t.Fatalf("expected default catalog path %q, got %q", catalogDir, resolved)
 	}
 }

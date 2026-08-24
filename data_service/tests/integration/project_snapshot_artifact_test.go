@@ -31,10 +31,12 @@ func TestProjectArtifactV1Contract(t *testing.T) {
 	secret := "snapshot-artifact-secret-01"
 
 	srv, err := app.NewServer(config.Config{
-		Addr:               ":0",
-		DatabaseURL:        fixture.databaseURL,
-		DatabaseSearchPath: fixture.schemaName,
-		JWTSecret:          secret,
+		Addr:                       ":0",
+		DatabaseURL:                fixture.databaseURL,
+		DatabaseSearchPath:         fixture.schemaName,
+		JWTSecret:                  secret,
+		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
+		ConnectionSecretKeyVersion: "v1",
 	})
 	if err != nil {
 		t.Fatalf("create server failed: %v", err)
@@ -95,6 +97,11 @@ func TestProjectArtifactV1Contract(t *testing.T) {
 		"brokers":       "127.0.0.1:9092",
 		"topic":         "factory.events",
 		"consumerGroup": "artifact-group",
+	})
+	computeUnit := mustCreateComputeUnit(t, server.URL, token, projectID, map[string]any{
+		"name": "weekly-report", "language": "js", "scriptCode": "return null;",
+		"triggerType":   "schedule",
+		"triggerConfig": map[string]any{"kind": "weekly", "weekdays": []int{1, 3, 5}, "time": "08:30:00", "timezone": "Asia/Shanghai"},
 	})
 	mustCreateConnection(t, server.URL, token, projectID, map[string]any{
 		"name": "IF关系库",
@@ -167,6 +174,9 @@ func TestProjectArtifactV1Contract(t *testing.T) {
 	if !artifactHasProtocol(artifact.Protocols.Kafka, kafkaConnection.ID) {
 		t.Fatalf("expected protocols.kafka include %q", kafkaConnection.ID)
 	}
+	if len(artifact.Compute) != 1 || artifact.Compute[0].ID != computeUnit.ID || artifact.Compute[0].TriggerType != "schedule" || artifact.Compute[0].TriggerConfig["kind"] != "weekly" {
+		t.Fatalf("expected weekly compute trigger in artifact, got %#v", artifact.Compute)
+	}
 	if len(artifact.BuiltinStores.Relations) != 1 || artifact.BuiltinStores.Relations[0].RuntimeKey == "" {
 		t.Fatalf("expected relation builtin store contract, got %#v", artifact.BuiltinStores.Relations)
 	}
@@ -200,6 +210,13 @@ type projectArtifactPayload struct {
 	Mqtt          projectArtifactMqttPayload     `json:"mqtt"`
 	Protocols     projectArtifactProtocolPayload `json:"protocols"`
 	BuiltinStores projectArtifactBuiltinStores   `json:"builtinStores"`
+	Compute       []projectArtifactCompute       `json:"compute"`
+}
+
+type projectArtifactCompute struct {
+	ID            string         `json:"id"`
+	TriggerType   string         `json:"triggerType"`
+	TriggerConfig map[string]any `json:"triggerConfig"`
 }
 
 type projectArtifactConnection struct {

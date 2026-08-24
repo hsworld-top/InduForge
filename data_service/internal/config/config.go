@@ -34,6 +34,10 @@ type Config struct {
 	CollectorSecretKeyVersion    string
 	AlarmSecretKey               []byte
 	AlarmSecretKeyVersion        string
+	ConnectionSecretKey          []byte
+	ConnectionSecretKeyVersion   string
+	ComputeSandboxURL            string
+	ComputeSandboxToken          string
 	CollectorProtocolCatalogPath string
 }
 
@@ -66,6 +70,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	connectionSecretKey, err := parseConnectionSecretKey(os.Getenv("DATA_SERVICE_CONNECTION_SECRET_KEY"))
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		Addr:                         addr,
@@ -85,6 +93,10 @@ func Load() (Config, error) {
 		CollectorSecretKeyVersion:    firstEnvWithDefault("DATA_SERVICE_COLLECTOR_SECRET_KEY_VERSION", "v1"),
 		AlarmSecretKey:               alarmSecretKey,
 		AlarmSecretKeyVersion:        firstEnvWithDefault("DATA_SERVICE_ALARM_SECRET_KEY_VERSION", "v1"),
+		ConnectionSecretKey:          connectionSecretKey,
+		ConnectionSecretKeyVersion:   firstEnvWithDefault("DATA_SERVICE_CONNECTION_SECRET_KEY_VERSION", "v1"),
+		ComputeSandboxURL:            strings.TrimSpace(os.Getenv("DATA_SERVICE_COMPUTE_SANDBOX_URL")),
+		ComputeSandboxToken:          strings.TrimSpace(os.Getenv("DATA_SERVICE_COMPUTE_SANDBOX_TOKEN")),
 		CollectorProtocolCatalogPath: strings.TrimSpace(os.Getenv("DATA_SERVICE_COLLECTOR_PROTOCOL_CATALOG_PATH")),
 	}, nil
 }
@@ -135,6 +147,10 @@ func parseAlarmSecretKey(value string) ([]byte, error) {
 	return parseAES256SecretKey(value, "DATA_SERVICE_ALARM_SECRET_KEY")
 }
 
+func parseConnectionSecretKey(value string) ([]byte, error) {
+	return parseAES256SecretKey(value, "DATA_SERVICE_CONNECTION_SECRET_KEY")
+}
+
 func parseAES256SecretKey(value, envName string) ([]byte, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -165,6 +181,9 @@ func ValidateConnectionsDependencies(cfg Config) error {
 	}
 	if err := ValidateJWTSecret(cfg.JWTSecret); err != nil {
 		return err
+	}
+	if len(cfg.ConnectionSecretKey) != 32 || strings.TrimSpace(cfg.ConnectionSecretKeyVersion) == "" {
+		return fmt.Errorf("缺少有效的 DATA_SERVICE_CONNECTION_SECRET_KEY 或密钥版本")
 	}
 	return nil
 }

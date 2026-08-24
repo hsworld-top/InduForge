@@ -1,4 +1,6 @@
 import { spawnSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 const mode = process.argv[2] ?? '--check'
 if (!['--check', '--write'].includes(mode)) {
@@ -17,7 +19,11 @@ if (filesResult.status !== 0) {
   process.exit(filesResult.status ?? 1)
 }
 
-const goFiles = filesResult.stdout.split(/\r?\n/).filter(Boolean)
+// git ls-files 在未提交删除期间仍会返回索引中的旧文件；格式检查应跳过工作树中已经不存在的路径。
+const goFiles = filesResult.stdout
+  .split(/\r?\n/)
+  .filter(Boolean)
+  .filter((file) => existsSync(resolve(process.cwd(), file)))
 const gofmtArgs = mode === '--write' ? ['-w', ...goFiles] : ['-l', ...goFiles]
 const gofmtResult = spawnSync('gofmt', gofmtArgs, {
   cwd: process.cwd(),

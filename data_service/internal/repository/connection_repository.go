@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
+	"github.com/indu-forge/data_service/internal/security"
 )
 
 // ConnectionRecord 表示 data_connections 表在仓储层的投影结果。
@@ -49,25 +50,29 @@ type ConnectionListFilter struct {
 
 // CreateConnectionParams 描述创建连接时需要落库的字段。
 type CreateConnectionParams struct {
-	ProjectID string
-	UserID    string
-	Name      string
-	Type      string
-	Category  string
-	Status    string
-	Config    map[string]any
+	ProjectID       string
+	UserID          string
+	Name            string
+	Type            string
+	Category        string
+	Status          string
+	Config          map[string]any
+	Secrets         map[string]string
+	ClearSecretKeys []string
 }
 
 // UpdateConnectionParams 描述更新连接时需要落库的字段。
 type UpdateConnectionParams struct {
-	ID        string
-	ProjectID string
-	UserID    string
-	Name      string
-	Type      string
-	Category  string
-	Status    string
-	Config    map[string]any
+	ID              string
+	ProjectID       string
+	UserID          string
+	Name            string
+	Type            string
+	Category        string
+	Status          string
+	Config          map[string]any
+	Secrets         map[string]string
+	ClearSecretKeys []string
 }
 
 // UpdateKafkaConnectionParams 描述 Kafka 接入源编辑时需要同步的连接与专用配置表字段。
@@ -79,7 +84,8 @@ type UpdateKafkaConnectionParams struct {
 
 // ConnectionRepository 封装 data_connections 的参数化 SQL 访问。
 type ConnectionRepository struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	cipher *security.ConnectionSecretCipher
 }
 
 type connectionOrderExecutor interface {
@@ -89,6 +95,10 @@ type connectionOrderExecutor interface {
 // NewConnectionRepository 创建连接仓储。
 func NewConnectionRepository(pool *pgxpool.Pool) *ConnectionRepository {
 	return &ConnectionRepository{pool: pool}
+}
+
+func (r *ConnectionRepository) SetSecretCipher(cipher *security.ConnectionSecretCipher) {
+	r.cipher = cipher
 }
 
 func lockProjectConnectionOrder(ctx context.Context, tx pgx.Tx, projectID string) error {
@@ -306,6 +316,9 @@ func (r *ConnectionRepository) Create(ctx context.Context, params CreateConnecti
 	if scanErr != nil {
 		return nil, translateConnectionWriteError("写入连接失败", scanErr)
 	}
+	if err := applyPlainConnectionSecretsTx(ctx, tx, r.cipher, record.ID, params.Secrets, params.ClearSecretKeys); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交连接创建事务失败", err)
 	}
@@ -322,7 +335,12 @@ func (r *ConnectionRepository) Update(ctx context.Context, params UpdateConnecti
 		return nil, err
 	}
 
-	row := r.pool.QueryRow(ctx, `
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启连接更新事务失败", err)
+	}
+	defer tx.Rollback(ctx)
+	row := tx.QueryRow(ctx, `
         UPDATE data_connections
         SET name = $3,
             type = $4,
@@ -338,6 +356,12 @@ func (r *ConnectionRepository) Update(ctx context.Context, params UpdateConnecti
 	record, scanErr := scanConnection(row)
 	if scanErr != nil {
 		return nil, translateConnectionWriteError("更新连接失败", scanErr)
+	}
+	if err := applyPlainConnectionSecretsTx(ctx, tx, r.cipher, record.ID, params.Secrets, params.ClearSecretKeys); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交连接更新事务失败", err)
 	}
 
 	return &record, nil

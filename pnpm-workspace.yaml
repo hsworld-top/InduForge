@@ -5,6 +5,7 @@ packages:
   - designer/pi-web
   - contracts/project-templates/*
   - runtime/node_agent_front
+  - runtime/web-sdk
 
 sharedWorkspaceLockfile: true
 recursiveInstall: true

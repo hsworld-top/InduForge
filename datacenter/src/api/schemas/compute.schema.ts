@@ -141,3 +141,19 @@ export const ComputeSyntaxCheckResultSchema = z
   .passthrough()
 
 export type ComputeSyntaxCheckResult = z.infer<typeof ComputeSyntaxCheckResultSchema>
+
+export const ComputeCapabilitiesSchema = z.object({
+  sandboxStatus: z.enum(['available', 'unavailable']),
+  languages: z.array(z.object({ language: z.string(), version: z.string() })),
+  sdk: z.array(z.string()),
+  dependencies: z.array(z.object({ language: z.string(), name: z.string(), version: z.string() })),
+  triggerTypes: z.array(z.string()),
+  limits: z.object({
+    maxExecutionTimeMs: z.number(),
+    maxInputBytes: z.number(),
+    maxOutputBytes: z.number(),
+    maxLogBytes: z.number(),
+  }),
+})
+
+export type ComputeCapabilities = z.infer<typeof ComputeCapabilitiesSchema>

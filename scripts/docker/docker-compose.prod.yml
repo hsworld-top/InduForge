@@ -63,6 +63,8 @@ services:
       NODE_ENV: production
       DB_AUTO_SCHEMA_SYNC: 'false'
       DATA_SERVICE_ADDR: :18102
+      DATA_SERVICE_COMPUTE_SANDBOX_URL: http://compute-sandbox:18103
+      DATA_SERVICE_COMPUTE_SANDBOX_TOKEN: ${DATA_SERVICE_COMPUTE_SANDBOX_TOKEN}
       IF_META_STORE_HOST: meta-store
       IF_META_STORE_PORT: 18432
       IF_CACHE_STORE_HOST: cache-store
@@ -73,8 +75,42 @@ services:
       - meta-store
       - cache-store
       - message-hub
+      - compute-sandbox
     networks:
       - induforge-prod-net
+      - induforge-compute-net
+    restart: unless-stopped
+
+  compute-sandbox:
+    container_name: induforge-compute-sandbox
+    image: induforge/compute-sandbox:latest
+    build:
+      context: ../../compute_sandbox
+      dockerfile: Dockerfile
+    environment:
+      COMPUTE_SANDBOX_ADDR: :18103
+      COMPUTE_SANDBOX_TOKEN: ${DATA_SERVICE_COMPUTE_SANDBOX_TOKEN}
+    expose:
+      - '18103'
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+      # bubblewrap 需要 mount/pivot_root 创建每次执行的只读根文件系统；用户脚本仍在其新命名空间内运行。
+      - seccomp:unconfined
+    pids_limit: 64
+    mem_limit: 384m
+    cpus: 1.0
+    networks:
+      - induforge-compute-net
     restart: unless-stopped
 
   meta-store:
@@ -151,6 +187,9 @@ services:
 networks:
   induforge-prod-net:
     name: induforge-prod-net
+  induforge-compute-net:
+    name: induforge-compute-net
+    internal: true
 
 volumes:
   induforge-control-workspaces:

@@ -258,32 +258,32 @@
 标识固定为 `induforge`，内部 Provider 类型及版本仅在服务端会话、存储和构建流程中使用。
 普通场景、资源和 revision 响应不返回内部 Provider、Provider 版本、入口路径或内容摘要。
 
-| 方法 | 路径 | 功能概要 |
-| --- | --- | --- |
-| `GET/PUT` | `/api/v1/scene-provider` | 查询或切换平台唯一 Provider；存在场景时禁止切换 |
-| `GET/POST` | `/api/v1/projects/{projectId}/scenes` | 分页查询或按唯一名称创建场景，`sceneId` 由平台生成 |
-| `GET/PUT/DELETE` | `/api/v1/projects/{projectId}/scenes/{sceneId}` | 场景详情、公开契约与墓碑删除 |
-| `POST` | `/api/v1/projects/{projectId}/scenes/{sceneId}/editor-session` | 创建绑定用户、工程、场景、类型和 Provider 的短期会话 |
-| `POST` | `/api/v1/projects/{projectId}/scenes/{sceneId}/viewer-session` | 创建固定到当前已提交 revision 的只读 Viewer 会话 |
-| `POST` | `/api/v1/projects/{projectId}/scenes/{sceneId}/commit` | 将指定草稿版本提交为不可变 revision |
-| `GET/POST` | `/api/v1/scene-viewer-sessions/{sessionId}`、`/heartbeat` | 读取 Viewer 启动信息或延长空闲有效期 |
-| `GET` | `/api/v1/scene-viewer-sessions/{sessionId}/files/content` | 读取 Viewer 会话固定 revision 的文件 |
-| `GET/PUT` | `/api/v1/scene-editor-sessions/{sessionId}/files/content` | 受控读取或保存 Provider 文件 |
-| `POST` | `/api/v1/scene-editor-sessions/{sessionId}/import` | 原子导入场景 ZIP |
-| `POST` | `/api/v1/scene-editor-sessions/{sessionId}/export` | 按当前场景依赖导出 ZIP |
-| `GET` | `/api/v1/scene-editor-sessions/{sessionId}/datapoints` | 代理分页查询平台数据点 |
-| `GET` | `/api/v1/projects/{projectId}/scene-assets` | 按分类、关键字、场景类型分页查询工程资源 |
-| `POST` | `/api/v1/projects/{projectId}/scene-assets/import` | 上传单文件或 ZIP 并创建资源首个内部代次 |
-| `GET/PUT/DELETE` | `/api/v1/projects/{projectId}/scene-assets/{assetId}` | 资源详情、重命名与归档 |
-| `POST` | `/api/v1/projects/{projectId}/scene-assets/{assetId}/replace` | 创建新的内部资源代次 |
-| `GET` | `/api/v1/projects/{projectId}/scene-assets/{assetId}/thumbnail` | 平台代理资源缩略图 |
-| `POST` | `/api/v1/projects/{projectId}/scene-assets/{assetId}/editor-session` | 创建 Symbol/Component 工作副本会话 |
-| `GET` | `/api/v1/scene-editor-sessions/{sessionId}/assets` | 场景工作室内分页查询兼容资源及绑定/更新状态 |
-| `POST` | `/api/v1/scene-editor-sessions/{sessionId}/assets/actions` | 以乐观锁执行 `attach/update/detach` |
-| `POST` | `/api/v1/scene-editor-sessions/{sessionId}/assets/from-selection` | 将画布选中内容保存为图形模板或业务组件 |
-| `GET` | `/api/v1/scene-editor-sessions/{sessionId}/dependencies` | 只读分页查询场景依赖诊断 |
-| `GET/PUT` | `/api/v1/scene-asset-editor-sessions/{sessionId}/files/content` | 读取或保存资源工作副本 |
-| `POST` | `/api/v1/scene-asset-editor-sessions/{sessionId}/commit` | 发布资源工作副本为新内部代次 |
+| 方法             | 路径                                                                 | 功能概要                                             |
+| ---------------- | -------------------------------------------------------------------- | ---------------------------------------------------- |
+| `GET/PUT`        | `/api/v1/scene-provider`                                             | 查询或切换平台唯一 Provider；存在场景时禁止切换      |
+| `GET/POST`       | `/api/v1/projects/{projectId}/scenes`                                | 分页查询或按唯一名称创建场景，`sceneId` 由平台生成   |
+| `GET/PUT/DELETE` | `/api/v1/projects/{projectId}/scenes/{sceneId}`                      | 场景详情、公开契约与墓碑删除                         |
+| `POST`           | `/api/v1/projects/{projectId}/scenes/{sceneId}/editor-session`       | 创建绑定用户、工程、场景、类型和 Provider 的短期会话 |
+| `POST`           | `/api/v1/projects/{projectId}/scenes/{sceneId}/viewer-session`       | 创建固定到当前已提交 revision 的只读 Viewer 会话     |
+| `POST`           | `/api/v1/projects/{projectId}/scenes/{sceneId}/commit`               | 将指定草稿版本提交为不可变 revision                  |
+| `GET/POST`       | `/api/v1/scene-viewer-sessions/{sessionId}`、`/heartbeat`            | 读取 Viewer 启动信息或延长空闲有效期                 |
+| `GET`            | `/api/v1/scene-viewer-sessions/{sessionId}/files/content`            | 读取 Viewer 会话固定 revision 的文件                 |
+| `GET/PUT`        | `/api/v1/scene-editor-sessions/{sessionId}/files/content`            | 受控读取或保存 Provider 文件                         |
+| `POST`           | `/api/v1/scene-editor-sessions/{sessionId}/import`                   | 原子导入场景 ZIP                                     |
+| `POST`           | `/api/v1/scene-editor-sessions/{sessionId}/export`                   | 按当前场景依赖导出 ZIP                               |
+| `GET`            | `/api/v1/scene-editor-sessions/{sessionId}/datapoints`               | 代理分页查询平台数据点                               |
+| `GET`            | `/api/v1/projects/{projectId}/scene-assets`                          | 按分类、关键字、场景类型分页查询工程资源             |
+| `POST`           | `/api/v1/projects/{projectId}/scene-assets/import`                   | 上传单文件或 ZIP 并创建资源首个内部代次              |
+| `GET/PUT/DELETE` | `/api/v1/projects/{projectId}/scene-assets/{assetId}`                | 资源详情、重命名与归档                               |
+| `POST`           | `/api/v1/projects/{projectId}/scene-assets/{assetId}/replace`        | 创建新的内部资源代次                                 |
+| `GET`            | `/api/v1/projects/{projectId}/scene-assets/{assetId}/thumbnail`      | 平台代理资源缩略图                                   |
+| `POST`           | `/api/v1/projects/{projectId}/scene-assets/{assetId}/editor-session` | 创建 Symbol/Component 工作副本会话                   |
+| `GET`            | `/api/v1/scene-editor-sessions/{sessionId}/assets`                   | 场景工作室内分页查询兼容资源及绑定/更新状态          |
+| `POST`           | `/api/v1/scene-editor-sessions/{sessionId}/assets/actions`           | 以乐观锁执行 `attach/update/detach`                  |
+| `POST`           | `/api/v1/scene-editor-sessions/{sessionId}/assets/from-selection`    | 将画布选中内容保存为图形模板或业务组件               |
+| `GET`            | `/api/v1/scene-editor-sessions/{sessionId}/dependencies`             | 只读分页查询场景依赖诊断                             |
+| `GET/PUT`        | `/api/v1/scene-asset-editor-sessions/{sessionId}/files/content`      | 读取或保存资源工作副本                               |
+| `POST`           | `/api/v1/scene-asset-editor-sessions/{sessionId}/commit`             | 发布资源工作副本为新内部代次                         |
 
 读取资源要求 `project:read`；上传、替换、归档、编辑、挂载、更新和场景提交要求
 `project:write`。上传单文件上限为 `64 MiB`；ZIP 请求上限为 `512 MiB`、最多 `10,000`
@@ -457,34 +457,40 @@
 
 #### 数据点 `/api/v1/data`
 
-| 方法     | 路径                                                                    | 功能概要             |
-| -------- | ----------------------------------------------------------------------- | -------------------- |
-| `GET`    | `/api/v1/data/projects/{projectId}/datapoints`                          | 获取数据点列表       |
-| `GET`    | `/api/v1/data/projects/{projectId}/datapoints/{id}`                     | 获取数据点详情       |
-| `GET`    | `/api/v1/data/projects/{projectId}/datapoints/value`                    | 按 path 获取数据点值 |
-| `PUT`    | `/api/v1/data/projects/{projectId}/datapoints/{id}`                     | 更新数据点           |
-| `DELETE` | `/api/v1/data/projects/{projectId}/datapoints/{id}`                     | 删除数据点           |
-| `POST`   | `/api/v1/data/projects/{projectId}/datapoints/delete-batch`             | 批量删除数据点       |
-| `POST`   | `/api/v1/data/projects/{projectId}/datapoints/status`                   | 批量查询数据点状态   |
-| `POST`   | `/api/v1/data/projects/{projectId}/datapoints/values`                   | 批量查询数据点值     |
-| `POST`   | `/api/v1/data/projects/{projectId}/datapoints/{id}/write`               | 写入数据点值         |
+| 方法     | 路径                                                                    | 功能概要                                             |
+| -------- | ----------------------------------------------------------------------- | ---------------------------------------------------- |
+| `GET`    | `/api/v1/data/projects/{projectId}/datapoints`                          | 获取数据点列表                                       |
+| `GET`    | `/api/v1/data/projects/{projectId}/datapoints/{id}`                     | 获取数据点详情                                       |
+| `GET`    | `/api/v1/data/projects/{projectId}/datapoints/value`                    | 按 path 获取数据点值                                 |
+| `PUT`    | `/api/v1/data/projects/{projectId}/datapoints/{id}`                     | 更新数据点                                           |
+| `DELETE` | `/api/v1/data/projects/{projectId}/datapoints/{id}`                     | 删除数据点                                           |
+| `POST`   | `/api/v1/data/projects/{projectId}/datapoints/delete-batch`             | 批量删除数据点                                       |
+| `POST`   | `/api/v1/data/projects/{projectId}/datapoints/status`                   | 批量查询数据点状态                                   |
+| `POST`   | `/api/v1/data/projects/{projectId}/datapoints/values`                   | 批量查询数据点值                                     |
+| `GET`    | `/api/v1/data/projects/{projectId}/datapoints/tags`                     | 获取工程级标签及引用数                               |
+| `POST`   | `/api/v1/data/projects/{projectId}/datapoints/remove-tag`               | 从工程内全部数据点移除标签                           |
+| `POST`   | `/api/v1/data/projects/{projectId}/datapoints/{id}/write`               | 写入数据点值                                         |
 | `POST`   | `/api/v1/data/projects/{projectId}/datapoints/write-by-path`            | 按稳定 path 写入数据点值，并校验类型、范围和运行角色 |
-| `PUT`    | `/api/v1/data/projects/{projectId}/datapoints/{id}/runtime-permissions` | 更新运行态权限       |
-| `GET`    | `/api/v1/data/projects/{projectId}/datapoints/{id}/usages`              | 获取数据点引用关系   |
+| `PUT`    | `/api/v1/data/projects/{projectId}/datapoints/{id}/runtime-permissions` | 更新运行态权限                                       |
+| `GET`    | `/api/v1/data/projects/{projectId}/datapoints/{id}/custom-attributes`   | 获取开发态自定义属性默认值                           |
+| `PUT`    | `/api/v1/data/projects/{projectId}/datapoints/{id}/custom-attributes`   | 原子替换开发态自定义属性默认值                       |
+| `GET`    | `/api/v1/data/projects/{projectId}/datapoints/{id}/usages`              | 获取数据点引用关系                                   |
+
+自定义属性请求与响应均使用 `{"attributes":{"asset_code":"PUMP-001"}}`。Key 必须以小写字母开头，最长 64 个字符，后续只允许小写字母、数字、点、短横线和下划线；值始终为字符串。内置属性名冲突、格式错误和重复 Key 均按参数错误拒绝。
 
 ### 5.5 历史存储 `/api/v1/data/projects/{projectId}/history-storage`
 
 历史存储接口只维护开发态配置，不执行历史写入、建表或历史查询。来源级配置自动作用于后续新增数据点，数据点配置可覆盖来源设置。
 
-| 方法   | 路径                                                                                         | 功能概要                         |
-| ------ | -------------------------------------------------------------------------------------------- | -------------------------------- |
-| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/sources`                                  | 分页查询接入源和工业采集历史状态 |
-| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/sources/{scopeType}/{scopeId}`             | 获取来源历史设置                 |
-| `PUT`  | `/api/v1/data/projects/{projectId}/history-storage/sources/{scopeType}/{scopeId}`             | 保存来源历史设置                 |
-| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/targets`                                  | 获取 IF 时序库和 TDengine 目标   |
-| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/datapoints/{datapointId}`                  | 获取单点覆盖及最终生效设置       |
-| `PUT`  | `/api/v1/data/projects/{projectId}/history-storage/datapoints/{datapointId}`                  | 保存单点覆盖或恢复沿用来源       |
-| `POST` | `/api/v1/data/projects/{projectId}/history-storage/datapoints/batch-configure`                | 按 ID 或筛选条件批量设置数据点   |
+| 方法   | 路径                                                                              | 功能概要                         |
+| ------ | --------------------------------------------------------------------------------- | -------------------------------- |
+| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/sources`                       | 分页查询接入源和工业采集历史状态 |
+| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/sources/{scopeType}/{scopeId}` | 获取来源历史设置                 |
+| `PUT`  | `/api/v1/data/projects/{projectId}/history-storage/sources/{scopeType}/{scopeId}` | 保存来源历史设置                 |
+| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/targets`                       | 获取 IF 时序库和 TDengine 目标   |
+| `GET`  | `/api/v1/data/projects/{projectId}/history-storage/datapoints/{datapointId}`      | 获取单点覆盖及最终生效设置       |
+| `PUT`  | `/api/v1/data/projects/{projectId}/history-storage/datapoints/{datapointId}`      | 保存单点覆盖或恢复沿用来源       |
+| `POST` | `/api/v1/data/projects/{projectId}/history-storage/datapoints/batch-configure`    | 按 ID 或筛选条件批量设置数据点   |
 
 `GET /sources` 查询参数为 `page`、`pageSize`、`search`、`scopeType` 和 `historyState`。`scopeType` 可取
 `access_source`、`collector_connection`；`historyState` 可取 `enabled`、`disabled`。列表项固定返回
@@ -580,14 +586,18 @@
 
 #### 协议 Wave 1
 
-| 方法   | 路径                                                                     | 功能概要            |
-| ------ | ------------------------------------------------------------------------ | ------------------- |
-| `POST` | `/api/v1/data/projects/{projectId}/kafka/configs`                        | 创建 Kafka 配置     |
-| `GET`  | `/api/v1/data/projects/{projectId}/kafka/configs/{connectionId}/preview` | 预览 Kafka Topic    |
-| `POST` | `/api/v1/data/projects/{projectId}/http/configs`                         | 创建 HTTP 配置      |
-| `POST` | `/api/v1/data/projects/{projectId}/websocket/configs`                    | 创建 WebSocket 配置 |
-| `POST` | `/api/v1/data/projects/{projectId}/redis/configs`                        | 创建 Redis 配置     |
-| `POST` | `/api/v1/data/projects/{projectId}/protocols/{connectionId}/preview`     | 统一短时真实抓样    |
+| 方法   | 路径                                                                     | 功能概要              |
+| ------ | ------------------------------------------------------------------------ | --------------------- |
+| `POST` | `/api/v1/data/projects/{projectId}/kafka/configs`                        | 创建 Kafka 配置       |
+| `PUT`  | `/api/v1/data/projects/{projectId}/kafka/configs/{connectionId}`         | 更新 Kafka 配置与密钥 |
+| `GET`  | `/api/v1/data/projects/{projectId}/kafka/configs/{connectionId}/preview` | 预览 Kafka Topic      |
+| `POST` | `/api/v1/data/projects/{projectId}/http/configs`                         | 创建 HTTP 配置        |
+| `PUT`  | `/api/v1/data/projects/{projectId}/http/configs/{connectionId}`          | 更新 HTTP 配置        |
+| `POST` | `/api/v1/data/projects/{projectId}/websocket/configs`                    | 创建 WebSocket 配置   |
+| `PUT`  | `/api/v1/data/projects/{projectId}/websocket/configs/{connectionId}`     | 更新 WebSocket 配置   |
+| `POST` | `/api/v1/data/projects/{projectId}/redis/configs`                        | 创建 Redis 配置       |
+| `PUT`  | `/api/v1/data/projects/{projectId}/redis/configs/{connectionId}`         | 更新 Redis 配置与密钥 |
+| `POST` | `/api/v1/data/projects/{projectId}/protocols/{connectionId}/preview`     | 统一短时真实抓样      |
 
 Kafka 工作台接口：
 
@@ -638,17 +648,15 @@ Kafka 工作台接口：
 
 `limit` 默认 10、最大 100；`timeoutMs` 默认 5000、最大 30000。服务端只持久化接入源预览摘要，不保存 `samples/rawPayload` 原始数据。
 
-#### 协议 Wave 2
+#### TDengine 与工业协议边界
 
-| 方法   | 路径                                                         | 功能概要           |
-| ------ | ------------------------------------------------------------ | ------------------ |
-| `POST` | `/api/v1/data/projects/{projectId}/opcua/configs`            | 创建 OPC UA 配置   |
-| `POST` | `/api/v1/data/projects/{projectId}/s7/configs`               | 创建 S7 配置       |
-| `POST` | `/api/v1/data/projects/{projectId}/modbus/configs`           | 创建 Modbus 配置   |
-| `POST` | `/api/v1/data/projects/{projectId}/tdengine/configs`         | 创建 TDengine 配置 |
-| `POST` | `/api/v1/data/projects/{projectId}/opcda/contracts/validate` | 校验 OPC DA 合同   |
+| 方法   | 路径                                                                | 功能概要                 |
+| ------ | ------------------------------------------------------------------- | ------------------------ |
+| `POST` | `/api/v1/data/projects/{projectId}/tdengine/configs`                | 创建 TDengine 配置       |
+| `PUT`  | `/api/v1/data/projects/{projectId}/tdengine/configs/{connectionId}` | 更新 TDengine 配置与密钥 |
+| `POST` | `/api/v1/data/projects/{projectId}/opcda/contracts/validate`        | 校验 OPC DA 合同         |
 
-Wave 2 当前只交付平台侧配置和 artifact 契约：`opcua/s7/modbus/tdengine` 保存连接配置，`opcda` 校验合约字段；工业协议真实连接、轮询采集和运行态诊断由节点侧运行器负责。
+TDengine 使用结构化 `ws/wss` 配置和独立只读运行时，支持真实连通测试、对象分页、结构、数据预览和 SQL 工作台。OPC UA、S7、Modbus 等工业协议不再使用这里的旧专用路由，统一由 `/collector/connections` 和驱动 Manifest 管理。
 
 ### 5.9 预览会话与计算
 
@@ -664,50 +672,61 @@ Wave 2 当前只交付平台侧配置和 artifact 契约：`opcua/s7/modbus/tden
 
 #### 计算单元
 
-| 方法     | 路径                                                           | 功能概要                     |
-| -------- | -------------------------------------------------------------- | ---------------------------- |
-| `GET`    | `/api/v1/data/projects/{projectId}/compute-units`              | 查询计算单元列表             |
-| `POST`   | `/api/v1/data/projects/{projectId}/compute-units`              | 创建计算单元                 |
-| `GET`    | `/api/v1/data/projects/{projectId}/compute-units/{id}`         | 查询计算单元详情             |
-| `PUT`    | `/api/v1/data/projects/{projectId}/compute-units/{id}`         | 更新计算单元并同步输出数据点 |
-| `DELETE` | `/api/v1/data/projects/{projectId}/compute-units/{id}`         | 删除计算单元并失效输出数据点 |
-| `PATCH`  | `/api/v1/data/projects/{projectId}/compute-units/{id}/enabled` | 切换计算单元启用状态         |
-| `GET`    | `/api/v1/data/projects/{projectId}/compute-units/{id}/runs`    | 查询计算单元运行记录         |
-| `POST`   | `/api/v1/data/projects/{projectId}/compute-units/{id}/run`     | 运行计算单元                 |
-| `POST`   | `/api/v1/data/projects/{projectId}/compute-units/{id}/debug`   | 调试计算单元                 |
+| 方法     | 路径                                                               | 功能概要                     |
+| -------- | ------------------------------------------------------------------ | ---------------------------- |
+| `GET`    | `/api/v1/data/projects/{projectId}/compute-units`                  | 查询计算单元列表             |
+| `POST`   | `/api/v1/data/projects/{projectId}/compute-units`                  | 创建计算单元                 |
+| `GET`    | `/api/v1/data/projects/{projectId}/compute-units/{id}`             | 查询计算单元详情             |
+| `PUT`    | `/api/v1/data/projects/{projectId}/compute-units/{id}`             | 更新计算单元并同步输出数据点 |
+| `DELETE` | `/api/v1/data/projects/{projectId}/compute-units/{id}`             | 删除计算单元并失效输出数据点 |
+| `PATCH`  | `/api/v1/data/projects/{projectId}/compute-units/{id}/enabled`     | 切换计算单元启用状态         |
+| `GET`    | `/api/v1/data/projects/{projectId}/compute-units/{id}/runs`        | 查询计算单元运行记录         |
+| `POST`   | `/api/v1/data/projects/{projectId}/compute-units/{id}/run`         | 运行计算单元                 |
+| `POST`   | `/api/v1/data/projects/{projectId}/compute-units/{id}/debug`       | 调试计算单元                 |
+| `GET`    | `/api/v1/data/projects/{projectId}/compute-units/capabilities`     | 获取独立沙箱真实能力         |
+| `POST`   | `/api/v1/data/projects/{projectId}/compute-units/schedule-preview` | 校验触发并预览未来五次执行   |
 
-计算脚本支持开发态 `ctx` SDK。后端会根据 `inputBindings` 预取已声明的数据点和 SQL 查询结果，脚本内可使用 `ctx.datapoint.get(path)`、`ctx.datapoint.meta(path)`、`ctx.sql.query(key)`；未命中预取结果时，`ctx.sql.query(key, params)` 可按已声明别名或项目内查询 ID 动态回调后端执行，JavaScript 脚本需要 `await ctx.sql.query(...)`。`ctx.mqtt.publish(source, topic, payload)` 仅在计算单元显式开启 `sideEffects.mqttPublish.enabled=true` 且命中 `sources/sourceIds` 与 `topics` 白名单时真实发布，否则只返回未接受的 side effect。
+计算脚本的开发态调试只能通过独立 `compute_sandbox` 执行。后端按 `inputBindings` 预取已声明的数据点和 SQL 查询结果，脚本仅可使用 `ctx.datapoint.get(path)`、`ctx.datapoint.meta(path)` 和 `ctx.sql.query(key)` 读取预取数据；不开放任意 SQL、HTTP、MQTT/Kafka、文件、网络或子进程。沙箱不可用时 capabilities 返回 unavailable，语法检查和试运行禁用，禁止回退到 `data_service` 宿主执行。定时与点变只保存节点运行契约，开发态不自动调度。
 
 #### 报警开发态配置
 
-| 方法     | 路径                                                                         | 功能概要                         |
-| -------- | ---------------------------------------------------------------------------- | -------------------------------- |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-policies`                            | 分页查询报警，支持目录递归筛选   |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-policies`                            | 创建普通或组合报警               |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-policies/{id}`                       | 查询报警详情                     |
-| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-policies/{id}`                       | 覆盖更新报警                     |
-| `PATCH`  | `/api/v1/data/projects/{projectId}/alarm-policies/{id}/enabled`               | 切换启用状态                     |
-| `DELETE` | `/api/v1/data/projects/{projectId}/alarm-policies/{id}`                       | 删除报警                         |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-policies/validate-draft`             | 校验开发态草稿                   |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-policies/{id}/test`                  | 使用简单模拟值试算               |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-policies/{id}/contract`              | 预览 `alarm.policy.v1` 契约      |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-policy-groups`                       | 分页/按父目录查询目录            |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-policy-groups/tree`                  | 查询目录完整路径                 |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-policy-groups`                       | 创建目录                         |
-| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-policy-groups/{id}`                  | 更新目录                         |
-| `DELETE` | `/api/v1/data/projects/{projectId}/alarm-policy-groups/{id}`                  | 删除空目录                       |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-settings`                            | 查询工程默认通知                 |
-| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-settings`                            | 保存工程默认通知                 |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-history-settings`                    | 查询工程报警历史设置             |
-| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-history-settings`                    | 保存工程报警历史设置             |
-| `GET`    | `/api/v1/data/projects/{projectId}/alarm-channels`                            | 查询站内及外部通知渠道           |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-channels`                            | 新增外部通知渠道                 |
-| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-channels/{id}`                       | 更新外部通知渠道                 |
-| `DELETE` | `/api/v1/data/projects/{projectId}/alarm-channels/{id}`                       | 删除未被引用的外部通知渠道       |
-| `GET`    | `/api/v1/data/projects/{projectId}/datapoints/{datapointId}/alarm-summary`    | 查询数据点引用的报警             |
-| `POST`   | `/api/v1/data/projects/{projectId}/alarm-config-sync`                         | 原子接收节点报警配置增量回写     |
+| 方法     | 路径                                                                  | 功能概要                                         |
+| -------- | --------------------------------------------------------------------- | ------------------------------------------------ |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-items`                       | 分页查询独立报警项，支持点位、类型和目录递归筛选 |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items`                       | 创建一条普通或组合报警项                         |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-items/{id}`                  | 查询报警项详情                                   |
+| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-items/{id}`                  | 原子更新单条报警项                               |
+| `PATCH`  | `/api/v1/data/projects/{projectId}/alarm-items/{id}/enabled`          | 切换报警项启用状态                               |
+| `DELETE` | `/api/v1/data/projects/{projectId}/alarm-items/{id}`                  | 删除报警项                                       |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/validate-draft`        | 校验名称、指纹和重叠警告                         |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/test-draft`            | 使用模拟值试算单一生效等级                       |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-items/{id}/contract`         | 预览 `alarm.item.v1` 契约                        |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/batch-create`          | 为明确点位集合原子创建独立报警项                 |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/batch-create/validate` | 逐点预校验整批创建草稿                           |
+| `PATCH`  | `/api/v1/data/projects/{projectId}/alarm-items/batch`                 | 按 ID 或筛选结果字段掩码批量修改                 |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/batch-delete`          | 按 ID 或筛选结果批量删除                         |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/export`                | 导出所选普通报警 XLSX                            |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-items/import-template`       | 下载普通报警导入模板                             |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/import/preview`        | 校验 XLSX 并预览新增、更新和问题                 |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/import/error-workbook` | 下载附带逐行错误原因的工作簿                     |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-items/import/apply`          | 校验摘要和 revision 后事务导入                   |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-groups`                      | 分页/按父目录查询目录                            |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-groups/tree`                 | 查询目录完整路径                                 |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-groups`                      | 创建目录                                         |
+| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-groups/{id}`                 | 更新目录                                         |
+| `DELETE` | `/api/v1/data/projects/{projectId}/alarm-groups/{id}`                 | 删除空目录                                       |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-settings`                    | 查询工程默认通知                                 |
+| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-settings`                    | 保存工程默认通知                                 |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-history-settings`            | 查询工程报警历史设置                             |
+| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-history-settings`            | 保存工程报警历史设置                             |
+| `GET`    | `/api/v1/data/projects/{projectId}/alarm-channels`                    | 查询站内及外部通知渠道                           |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-channels`                    | 新增外部通知渠道                                 |
+| `PUT`    | `/api/v1/data/projects/{projectId}/alarm-channels/{id}`               | 更新外部通知渠道                                 |
+| `DELETE` | `/api/v1/data/projects/{projectId}/alarm-channels/{id}`               | 删除未被引用的外部通知渠道                       |
+| `GET`    | `/api/v1/data/projects/{projectId}/datapoints/{datapointId}/alarms`   | 查询数据点的有效报警摘要                         |
+| `POST`   | `/api/v1/data/projects/{projectId}/alarm-config-sync`                 | 原子接收节点报警配置增量回写                     |
 
-报警模式固定为 `per_target` 与 `derived`；条件类型固定为 `threshold/range/state/transition/text_match/rate_of_change/deviation/offline/expression`，等级固定为 `info/warning/major/critical`。目录仅用于整理和递归筛选，不参与启停。报警历史无显式记录时使用“开启、保留 30 天、保存通知投递记录”的默认值，`retentionDays: null` 表示永久。同步请求包含 `syncEpoch/sequence/idempotencyKey/operations`，同一请求幂等、旧序号拒绝，整批事务提交；`history_settings` 资源固定使用 `id: history`。
+报警模式固定为 `point` 与 `derived`。普通报警项只关联一个数据点，报警项 ID 是稳定运行身份；同一点可拥有多种不同报警，但显示名称和触发指纹分别唯一。多点创建会生成 N 条独立报警项。`single` 必须只有一个条件，数值 `highest_matching` 可配置任意数量的高低限等级且同一时刻只选择最深越限等级。完全重复和同名冲突不可绕过，重叠警告需携带稳定 `ackKey` 确认。Excel 只新增或按 `alarmId + revision` 更新普通报警，不根据缺失行删除，也不执行公式或宏。同步资源为 `alarm_item/group/project_settings/history_settings/channel`；报警历史无显式记录时使用“开启、保留 30 天、保存通知投递记录”的默认值。
 
 #### 契约检查
 
@@ -717,8 +736,8 @@ Wave 2 当前只交付平台侧配置和 artifact 契约：`opcua/s7/modbus/tden
 | `GET`  | `/api/v1/data/projects/{projectId}/contract-checks/latest` | 获取最近/实时契约检查结果  |
 | `GET`  | `/api/v1/data/projects/{projectId}/contract-checks/runs`   | 分页获取契约检查历史记录   |
 
-项目 artifact v1 的 `alarms` 区块使用 `alarm.policy.v1`，包含目录、普通/组合报警、规范化绑定与条件、通知设置、报警历史设置、渠道定义和密钥引用，不包含密钥明文或密文。`historyStorage` 始终输出有效值；snapshot replace 会在单事务中往返报警开发态配置、可空的报警历史显式设置及渠道密文。
-契约检查 `run` 请求体可传 `scope`、`objectType`、`objectId`，用于收窄检查结果范围；检查项覆盖数据点状态、计算输入/输出、计算 SQL 绑定查询，以及新报警策略的点位、表达式、条件、通知渠道和启用状态。
+项目 artifact v1 的 `alarms` 区块使用 `alarm.item.v1`，每个 `items[]` 就是一条稳定报警身份；普通报警直接包含数据点 ID 和路径，组合报警包含输入、别名和表达式。区块还包含目录、分级条件、通知、报警历史、渠道定义和密钥引用，不包含密钥明文或密文。`historyStorage` 始终输出有效值；snapshot replace 在单事务中往返报警项模型并拒绝旧共享结构和名称/指纹冲突。
+契约检查 `run` 请求体可传 `scope`、`objectType`、`objectId`，用于收窄检查结果范围；检查项覆盖数据点状态、计算输入/输出、计算 SQL 绑定查询，以及报警项的点位、表达式、条件、通知渠道和启用状态。
 
 ## 6. 开发约束
 

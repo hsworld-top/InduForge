@@ -80,6 +80,15 @@
           <div v-if="requests.length === 0" class="http-workbench__empty">
             {{ search ? '没有匹配的接口' : '暂无接口' }}
           </div>
+          <button
+            v-if="requests.length < pagination.total"
+            type="button"
+            class="http-workbench__load-more"
+            :disabled="loadingMore"
+            @click="loadMoreRequests"
+          >
+            {{ loadingMore ? '加载中...' : `加载更多（${requests.length}/${pagination.total}）` }}
+          </button>
         </template>
       </div>
     </aside>
@@ -476,7 +485,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineComponent, h, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import IconTablerApi from '~icons/tabler/api'
 import IconTablerApiApp from '~icons/tabler/api-app'
@@ -587,10 +596,11 @@ const activeConfigTab = ref('params')
 const activeResponseTab = ref('body')
 const search = ref('')
 const loading = ref(false)
+const loadingMore = ref(false)
 const saving = ref(false)
 const sending = ref(false)
 const expandedGroups = ref(new Set<string>())
-const pagination = reactive({ page: 1, pageSize: 1000, total: 0 })
+const pagination = reactive({ page: 1, pageSize: 50, total: 0 })
 const groupDialogVisible = ref(false)
 const groupSaving = ref(false)
 const groupForm = reactive({ id: '', name: '', parentId: null as string | null })
@@ -617,6 +627,7 @@ const contextMenu = ref<{
   group: null,
 })
 let searchTimer: number | undefined
+let requestListSequence = 0
 
 const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId.value) || null)
 const sourceMetaRows = computed(() => [
@@ -710,6 +721,8 @@ watch(search, () => {
   searchTimer = window.setTimeout(() => loadRequests(1), 250)
 })
 
+onBeforeUnmount(() => window.clearTimeout(searchTimer))
+
 const reloadWorkbench = async () => {
   loading.value = true
   try {
@@ -723,17 +736,45 @@ const reloadWorkbench = async () => {
   }
 }
 
-const loadRequests = async (page = pagination.page) => {
+const loadRequests = async (page = 1, append = false) => {
+  const requestSequence = ++requestListSequence
+  const projectId = props.projectId
+  const connectionId = props.connection.id
+  if (append) loadingMore.value = true
+  else loadingMore.value = false
   const params: Record<string, any> = {
     page,
     pageSize: pagination.pageSize,
     q: search.value || undefined,
   }
-  const res = await dataAPI.getHttpRequests(props.projectId, props.connection.id, params)
-  requests.value = res.list || []
-  pagination.page = res.pagination?.page || page
-  pagination.pageSize = res.pagination?.pageSize || 1000
-  pagination.total = res.pagination?.total || 0
+  try {
+    const res = await dataAPI.getHttpRequests(projectId, connectionId, params)
+    if (
+      requestSequence !== requestListSequence ||
+      projectId !== props.projectId ||
+      connectionId !== props.connection.id
+    ) {
+      return
+    }
+    const next = res.list || []
+    if (append) {
+      const byId = new Map(requests.value.map((item) => [String(item.id), item]))
+      next.forEach((item) => byId.set(String(item.id), item))
+      requests.value = Array.from(byId.values())
+    } else {
+      requests.value = next
+    }
+    pagination.page = res.pagination?.page || page
+    pagination.pageSize = res.pagination?.pageSize || pagination.pageSize
+    pagination.total = res.pagination?.total ?? requests.value.length
+  } finally {
+    if (append && requestSequence === requestListSequence) loadingMore.value = false
+  }
+}
+
+const loadMoreRequests = () => {
+  if (loadingMore.value || requests.value.length >= pagination.total) return
+  void loadRequests(pagination.page + 1, true)
 }
 
 const openRequest = async (request: HttpRequest) => {
@@ -1114,17 +1155,9 @@ const deleteGroup = async (group: HttpRequestGroupNode) => {
       },
     )
     await dataAPI.deleteHttpRequestGroup(props.projectId, String(group.id))
-    const [groupRes, requestRes] = await Promise.all([
-      dataAPI.getHttpRequestGroups(props.projectId, props.connection.id),
-      dataAPI.getHttpRequests(props.projectId, props.connection.id, {
-        page: pagination.page,
-        pageSize: pagination.pageSize,
-        q: search.value.trim() || undefined,
-      }),
-    ])
+    const groupRes = await dataAPI.getHttpRequestGroups(props.projectId, props.connection.id)
     groups.value = groupRes.list || []
-    requests.value = requestRes.list || []
-    pagination.total = requestRes.pagination?.total || requests.value.length
+    await loadRequests(1)
     ElMessage.success('分组已删除')
   } catch (error) {
     if (error !== 'cancel') {
@@ -1449,6 +1482,29 @@ function countHttpGroupRequests(node: HttpRequestGroupNode): number {
   gap: 2px;
   overflow-y: auto;
   padding: 8px 8px 12px;
+}
+
+.http-workbench__load-more {
+  width: 100%;
+  min-height: 30px;
+  margin-top: 6px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface);
+  color: var(--dc-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.http-workbench__load-more:hover:not(:disabled) {
+  border-color: var(--dc-primary);
+  background: var(--dc-primary-soft);
+}
+
+.http-workbench__load-more:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .http-workbench__group-head,

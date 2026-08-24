@@ -48,7 +48,6 @@ type MqttConnectionDetail struct {
 	Port                int               `json:"port"`
 	ClientID            *string           `json:"clientId"`
 	Username            *string           `json:"username"`
-	Password            *string           `json:"password,omitempty"`
 	Keepalive           int               `json:"keepalive"`
 	CleanSession        bool              `json:"cleanSession"`
 	QOS                 int               `json:"qos"`
@@ -56,6 +55,7 @@ type MqttConnectionDetail struct {
 	ConnectTimeout      int               `json:"connectTimeout"`
 	Will                map[string]any    `json:"will"`
 	SSLConfig           map[string]any    `json:"sslConfig"`
+	SecretStatus        map[string]bool   `json:"secretStatus"`
 	RuntimeStatus       MqttRuntimeStatus `json:"runtimeStatus"`
 	CreatedAt           time.Time         `json:"createdAt"`
 	UpdatedAt           time.Time         `json:"updatedAt"`
@@ -168,8 +168,24 @@ func (s *MqttService) ListMqttConnections(ctx context.Context, projectID string,
 	}
 
 	result := make([]MqttConnectionDetail, 0, len(records))
+	statuses := map[string]map[string]bool{}
+	if s.secrets != nil {
+		ids := make([]string, 0, len(records))
+		for _, record := range records {
+			ids = append(ids, record.ID)
+		}
+		statuses, err = s.secrets.StatusByConnections(ctx, ids)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
 	for _, record := range records {
-		result = append(result, toMqttConnectionDetail(record))
+		item := toMqttConnectionDetail(record)
+		item.SecretStatus = statuses[record.ID]
+		if item.SecretStatus == nil {
+			item.SecretStatus = map[string]bool{}
+		}
+		result = append(result, item)
 	}
 	return result, total, nil
 }
@@ -188,6 +204,12 @@ func (s *MqttService) GetMqttConnection(ctx context.Context, projectID, connecti
 		return nil, err
 	}
 	result := toMqttConnectionDetail(*record)
+	if s.secrets != nil {
+		result.SecretStatus, err = s.secrets.Status(ctx, connectionID)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &result, nil
 }
 
@@ -261,6 +283,7 @@ func (s *MqttService) UpdateMqttConnection(ctx context.Context, projectID, conne
 		cleanSession = *input.CleanSession
 	}
 
+	secrets, sslConfig := extractMqttSecrets(input)
 	record, err := s.repository.UpdateConnectionDetail(ctx, repository.UpdateMqttConnectionParams{
 		ProjectID:             projectID,
 		ConnectionID:          connectionID,
@@ -276,14 +299,15 @@ func (s *MqttService) UpdateMqttConnection(ctx context.Context, projectID, conne
 		Port:                  port,
 		ClientID:              normalizeOptionalText(input.ClientID),
 		Username:              normalizeOptionalText(input.Username),
-		Password:              normalizeOptionalText(input.Password),
+		Secrets:               secrets,
+		ClearSecretKeys:       input.ClearSecretKeys,
 		Keepalive:             keepalive,
 		CleanSession:          cleanSession,
 		QOS:                   qos,
 		ReconnectPeriodMS:     reconnectPeriod,
 		ConnectTimeoutMS:      connectTimeoutMS,
 		Will:                  cloneMap(input.Will),
-		SSLConfig:             cloneMap(input.SSLConfig),
+		SSLConfig:             sslConfig,
 	})
 	if err != nil {
 		return nil, err

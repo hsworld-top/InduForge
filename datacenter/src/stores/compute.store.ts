@@ -33,8 +33,11 @@ interface DebugSession {
 }
 
 export const useComputeStore = defineStore('compute', () => {
+  let listRequestSequence = 0
   const list = ref<ComputeUnit[]>([])
   const total = ref(0)
+  const page = ref(1)
+  const pageSize = ref(50)
   const loading = ref(false)
   const listError = ref('')
   // 文件夹树
@@ -57,20 +60,37 @@ export const useComputeStore = defineStore('compute', () => {
 
   const hasEditing = computed(() => editing.value !== null)
 
-  async function fetchList(projectId: string, params: Record<string, unknown> = {}) {
-    loading.value = true
+  async function fetchList(
+    projectId: string,
+    params: Record<string, unknown> = {},
+    options: { append?: boolean; silent?: boolean } = {},
+  ) {
+    const requestSequence = ++listRequestSequence
+    if (!options.silent) loading.value = true
     listError.value = ''
     try {
       const res = await getComputeUnits(projectId, params)
-      list.value = res.list
+      if (requestSequence !== listRequestSequence) return
+      if (options.append) {
+        const byId = new Map(list.value.map((item) => [String(item.id), item]))
+        res.list.forEach((item) => byId.set(String(item.id), item))
+        list.value = Array.from(byId.values())
+      } else {
+        list.value = res.list
+      }
       total.value = res.pagination?.total ?? res.list.length
+      page.value = res.pagination?.page ?? Number(params.page || 1)
+      pageSize.value = res.pagination?.pageSize ?? Number(params.pageSize || pageSize.value)
     } catch (error) {
-      list.value = []
-      total.value = 0
+      if (requestSequence !== listRequestSequence) return
+      if (!options.append) {
+        list.value = []
+        total.value = 0
+      }
       listError.value = getApiErrorMessage(error, '计算单元能力未启用')
       throw error
     } finally {
-      loading.value = false
+      if (!options.silent && requestSequence === listRequestSequence) loading.value = false
     }
   }
 
@@ -115,7 +135,6 @@ export const useComputeStore = defineStore('compute', () => {
       const unit = await createComputeUnit(projectId, data)
       list.value = [unit, ...list.value.filter((item) => item.id !== unit.id)]
       total.value = Math.max(total.value, list.value.length)
-      fetchList(projectId).catch(() => undefined)
       editing.value = unit
       return unit
     } catch (error) {
@@ -179,11 +198,15 @@ export const useComputeStore = defineStore('compute', () => {
     }
   }
 
-  async function removeFolder(projectId: string, folderId: string) {
+  async function removeFolder(
+    projectId: string,
+    folderId: string,
+    listParams: Record<string, unknown> = {},
+  ) {
     deleting.value = true
     try {
       await deleteComputeFolder(projectId, folderId)
-      await Promise.allSettled([fetchList(projectId), fetchFolders(projectId)])
+      await Promise.allSettled([fetchList(projectId, listParams), fetchFolders(projectId)])
     } finally {
       deleting.value = false
     }
@@ -235,6 +258,8 @@ export const useComputeStore = defineStore('compute', () => {
   return {
     list,
     total,
+    page,
+    pageSize,
     loading,
     listError,
     folders,

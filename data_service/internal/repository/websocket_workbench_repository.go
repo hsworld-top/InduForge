@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
+	"github.com/indu-forge/data_service/internal/security"
 )
 
 // WebSocketSessionGroupRecord 表示 WebSocket 工作台左侧会话分组。
@@ -88,6 +89,7 @@ type CreateWebSocketSessionParams struct {
 	DataPointConfig map[string]any
 	DefaultValue    *string
 	UserID          string
+	Secrets         map[string]string
 }
 
 type UpdateWebSocketSessionParams struct {
@@ -107,6 +109,7 @@ type UpdateWebSocketSessionParams struct {
 	DataPointConfig map[string]any
 	DefaultValue    *string
 	UserID          string
+	Secrets         map[string]string
 }
 
 // WebSocketSessionPreviewSnapshot 描述短连接预览后要持久化的最后消息。
@@ -123,11 +126,16 @@ type WebSocketSessionPreviewSnapshot struct {
 
 // WebSocketWorkbenchRepository 封装 WebSocket 工作台参数化 SQL。
 type WebSocketWorkbenchRepository struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	cipher *security.ConnectionSecretCipher
 }
 
-func NewWebSocketWorkbenchRepository(pool *pgxpool.Pool) *WebSocketWorkbenchRepository {
-	return &WebSocketWorkbenchRepository{pool: pool}
+func NewWebSocketWorkbenchRepository(pool *pgxpool.Pool, cipher ...*security.ConnectionSecretCipher) *WebSocketWorkbenchRepository {
+	repository := &WebSocketWorkbenchRepository{pool: pool}
+	if len(cipher) > 0 {
+		repository.cipher = cipher[0]
+	}
+	return repository
 }
 
 func (r *WebSocketWorkbenchRepository) ListGroups(ctx context.Context, projectID, connectionID string) ([]WebSocketSessionGroupRecord, error) {
@@ -345,6 +353,9 @@ func (r *WebSocketWorkbenchRepository) CreateSessionWithDataPoint(ctx context.Co
 	}
 	record.DataPointID = &dataPointID
 	record.DataPointPath = &dataPointPath
+	if err := replaceScopedConnectionSecretsTx(ctx, tx, r.cipher, record.ConnectionID, "ws."+record.ID+".", params.Secrets); err != nil {
+		return nil, err
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 WebSocket 会话创建事务失败", err)
@@ -398,6 +409,9 @@ func (r *WebSocketWorkbenchRepository) UpdateSessionWithDataPoint(ctx context.Co
 	}
 	record.DataPointID = &dataPointID
 	record.DataPointPath = &dataPointPath
+	if err := replaceScopedConnectionSecretsTx(ctx, tx, r.cipher, record.ConnectionID, "ws."+record.ID+".", params.Secrets); err != nil {
+		return nil, err
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 WebSocket 会话更新事务失败", err)
@@ -411,6 +425,13 @@ func (r *WebSocketWorkbenchRepository) DeleteSessionWithDataPoint(ctx context.Co
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 WebSocket 会话删除事务失败", err)
 	}
 	defer rollbackProtocolTxQuietly(ctx, tx)
+	var connectionID string
+	if err := tx.QueryRow(ctx, `SELECT connection_id FROM data_websocket_sessions WHERE project_id=$1 AND id=$2`, projectID, sessionID).Scan(&connectionID); err != nil {
+		if err == pgx.ErrNoRows {
+			return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "WebSocket 会话不存在")
+		}
+		return err
+	}
 
 	if _, err := tx.Exec(ctx, `
 		UPDATE data_points
@@ -427,6 +448,9 @@ func (r *WebSocketWorkbenchRepository) DeleteSessionWithDataPoint(ctx context.Co
 	}
 	if tag.RowsAffected() == 0 {
 		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "WebSocket 会话不存在")
+	}
+	if err := replaceScopedConnectionSecretsTx(ctx, tx, r.cipher, connectionID, "ws."+sessionID+".", nil); err != nil {
+		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 WebSocket 会话删除事务失败", err)

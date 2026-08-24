@@ -38,13 +38,15 @@ func (h *ProtocolWave1Handler) CreateKafkaConfig(w http.ResponseWriter, r *http.
 	}
 
 	var request struct {
-		Name          string         `json:"name"`
-		Status        string         `json:"status"`
-		Brokers       string         `json:"brokers"`
-		Topic         string         `json:"topic"`
-		ConsumerGroup string         `json:"consumerGroup"`
-		StartPosition string         `json:"startPosition"`
-		Options       map[string]any `json:"options"`
+		Name            string            `json:"name"`
+		Status          string            `json:"status"`
+		Brokers         string            `json:"brokers"`
+		Topic           string            `json:"topic"`
+		ConsumerGroup   string            `json:"consumerGroup"`
+		StartPosition   string            `json:"startPosition"`
+		Options         map[string]any    `json:"options"`
+		Secrets         map[string]string `json:"secrets"`
+		ClearSecretKeys []string          `json:"clearSecretKeys"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
@@ -58,6 +60,7 @@ func (h *ProtocolWave1Handler) CreateKafkaConfig(w http.ResponseWriter, r *http.
 		ConsumerGroup: request.ConsumerGroup,
 		StartPosition: request.StartPosition,
 		Options:       request.Options,
+		Secrets:       request.Secrets, ClearSecretKeys: request.ClearSecretKeys,
 	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
@@ -186,15 +189,17 @@ func (h *ProtocolWave1Handler) CreateRedisConfig(w http.ResponseWriter, r *http.
 	}
 
 	var request struct {
-		Name       string         `json:"name"`
-		Status     string         `json:"status"`
-		Address    string         `json:"address"`
-		DB         *int           `json:"db"`
-		Username   *string        `json:"username"`
-		Password   *string        `json:"password"`
-		KeyPattern string         `json:"keyPattern"`
-		Mode       string         `json:"mode"`
-		Options    map[string]any `json:"options"`
+		Name            string            `json:"name"`
+		Status          string            `json:"status"`
+		Address         string            `json:"address"`
+		DB              *int              `json:"db"`
+		Username        *string           `json:"username"`
+		Password        *string           `json:"password"`
+		KeyPattern      string            `json:"keyPattern"`
+		Mode            string            `json:"mode"`
+		Options         map[string]any    `json:"options"`
+		Secrets         map[string]string `json:"secrets"`
+		ClearSecretKeys []string          `json:"clearSecretKeys"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
@@ -210,12 +215,108 @@ func (h *ProtocolWave1Handler) CreateRedisConfig(w http.ResponseWriter, r *http.
 		KeyPattern: request.KeyPattern,
 		Mode:       request.Mode,
 		Options:    request.Options,
+		Secrets:    request.Secrets, ClearSecretKeys: request.ClearSecretKeys,
 	})
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), connection)
+	return nil
+}
+
+func (h *ProtocolWave1Handler) UpdateKafkaConfig(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Name            string            `json:"name"`
+		Status          string            `json:"status"`
+		Brokers         string            `json:"brokers"`
+		Topic           string            `json:"topic"`
+		ConsumerGroup   string            `json:"consumerGroup"`
+		StartPosition   string            `json:"startPosition"`
+		Options         map[string]any    `json:"options"`
+		Secrets         map[string]string `json:"secrets"`
+		ClearSecretKeys []string          `json:"clearSecretKeys"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.UpdateKafkaConfig(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.CreateKafkaConfigInput{Name: request.Name, Status: request.Status, Brokers: request.Brokers, Topic: request.Topic, ConsumerGroup: request.ConsumerGroup, StartPosition: request.StartPosition, Options: request.Options, Secrets: request.Secrets, ClearSecretKeys: request.ClearSecretKeys})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+func (h *ProtocolWave1Handler) UpdateHTTPConfig(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Name        string `json:"name"`
+		Status      string `json:"status"`
+		Description string `json:"description"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.UpdateHTTPConfig(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.CreateHTTPConfigInput{Name: request.Name, Status: request.Status, Description: request.Description})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+func (h *ProtocolWave1Handler) UpdateWebSocketConfig(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Name        string `json:"name"`
+		Status      string `json:"status"`
+		Description string `json:"description"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.UpdateWebSocketConfig(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.CreateWebSocketConfigInput{Name: request.Name, Status: request.Status, Description: request.Description})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+func (h *ProtocolWave1Handler) UpdateRedisConfig(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Name            string            `json:"name"`
+		Status          string            `json:"status"`
+		Address         string            `json:"address"`
+		DB              *int              `json:"db"`
+		Username        *string           `json:"username"`
+		Password        *string           `json:"password"`
+		KeyPattern      string            `json:"keyPattern"`
+		Mode            string            `json:"mode"`
+		Options         map[string]any    `json:"options"`
+		Secrets         map[string]string `json:"secrets"`
+		ClearSecretKeys []string          `json:"clearSecretKeys"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.UpdateRedisConfig(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.CreateRedisConfigInput{Name: request.Name, Status: request.Status, Address: request.Address, DB: request.DB, Username: request.Username, Password: request.Password, KeyPattern: request.KeyPattern, Mode: request.Mode, Options: request.Options, Secrets: request.Secrets, ClearSecretKeys: request.ClearSecretKeys})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
 }
 

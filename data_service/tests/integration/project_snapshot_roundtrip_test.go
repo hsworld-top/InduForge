@@ -31,10 +31,12 @@ func TestProjectSnapshotGetAndReplaceRoundTrip(t *testing.T) {
 	secret := "snapshot-roundtrip-secret-01"
 
 	srv, err := app.NewServer(config.Config{
-		Addr:               ":0",
-		DatabaseURL:        fixture.databaseURL,
-		DatabaseSearchPath: fixture.schemaName,
-		JWTSecret:          secret,
+		Addr:                       ":0",
+		DatabaseURL:                fixture.databaseURL,
+		DatabaseSearchPath:         fixture.schemaName,
+		JWTSecret:                  secret,
+		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
+		ConnectionSecretKeyVersion: "v1",
 	})
 	if err != nil {
 		t.Fatalf("create server failed: %v", err)
@@ -265,10 +267,12 @@ func TestProjectSnapshotReplaceRejectsIncompleteConnections(t *testing.T) {
 	secret := "snapshot-roundtrip-secret-02"
 
 	srv, err := app.NewServer(config.Config{
-		Addr:               ":0",
-		DatabaseURL:        fixture.databaseURL,
-		DatabaseSearchPath: fixture.schemaName,
-		JWTSecret:          secret,
+		Addr:                       ":0",
+		DatabaseURL:                fixture.databaseURL,
+		DatabaseSearchPath:         fixture.schemaName,
+		JWTSecret:                  secret,
+		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
+		ConnectionSecretKeyVersion: "v1",
 	})
 	if err != nil {
 		t.Fatalf("create server failed: %v", err)
@@ -335,10 +339,12 @@ func TestProjectSnapshotReplaceRejectsPhase2ReservedConnections(t *testing.T) {
 	secret := "snapshot-roundtrip-secret-03"
 
 	srv, err := app.NewServer(config.Config{
-		Addr:               ":0",
-		DatabaseURL:        fixture.databaseURL,
-		DatabaseSearchPath: fixture.schemaName,
-		JWTSecret:          secret,
+		Addr:                       ":0",
+		DatabaseURL:                fixture.databaseURL,
+		DatabaseSearchPath:         fixture.schemaName,
+		JWTSecret:                  secret,
+		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
+		ConnectionSecretKeyVersion: "v1",
 	})
 	if err != nil {
 		t.Fatalf("create server failed: %v", err)
@@ -405,10 +411,12 @@ func TestProjectSnapshotReplacePreservesDataPointRuntimePermissions(t *testing.T
 	secret := "snapshot-roundtrip-secret-04"
 
 	srv, err := app.NewServer(config.Config{
-		Addr:               ":0",
-		DatabaseURL:        fixture.databaseURL,
-		DatabaseSearchPath: fixture.schemaName,
-		JWTSecret:          secret,
+		Addr:                       ":0",
+		DatabaseURL:                fixture.databaseURL,
+		DatabaseSearchPath:         fixture.schemaName,
+		JWTSecret:                  secret,
+		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
+		ConnectionSecretKeyVersion: "v1",
 	})
 	if err != nil {
 		t.Fatalf("create server failed: %v", err)

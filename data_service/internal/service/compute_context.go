@@ -80,11 +80,12 @@ func (s *ComputeService) readComputeSDKDatapoint(ctx context.Context, projectID,
 		value = result.Data
 	}
 	return enginecompute.SDKDataPointValue{
-		Path:      record.Path,
-		Value:     value,
-		Quality:   "good",
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Status:    record.Status,
+		Path:       record.Path,
+		Value:      value,
+		Quality:    "good",
+		Timestamp:  time.Now().UTC().Format(time.RFC3339),
+		Status:     record.Status,
+		Attributes: cloneStringMap(record.AttributeDefaults),
 	}, nil
 }
 

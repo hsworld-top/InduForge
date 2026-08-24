@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
+	"github.com/indu-forge/data_service/internal/security"
 )
 
 // HTTPRequestGroupRecord 表示 HTTP 工作台左侧集合树分组。
@@ -93,6 +94,7 @@ type CreateHTTPRequestParams struct {
 	DataPointConfig map[string]any
 	DefaultValue    *string
 	UserID          string
+	Secrets         map[string]string
 }
 
 // UpdateHTTPRequestParams 描述 HTTP 请求更新参数。
@@ -115,6 +117,7 @@ type UpdateHTTPRequestParams struct {
 	DataPointConfig map[string]any
 	DefaultValue    *string
 	UserID          string
+	Secrets         map[string]string
 }
 
 // HTTPRequestSendSnapshot 描述一次发送后要保存的状态（不含响应内容，前端不展示历史）。
@@ -129,12 +132,17 @@ type HTTPRequestSendSnapshot struct {
 
 // HTTPWorkbenchRepository 封装 HTTP 工作台参数化 SQL。
 type HTTPWorkbenchRepository struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	cipher *security.ConnectionSecretCipher
 }
 
 // NewHTTPWorkbenchRepository 创建 HTTP 工作台仓储。
-func NewHTTPWorkbenchRepository(pool *pgxpool.Pool) *HTTPWorkbenchRepository {
-	return &HTTPWorkbenchRepository{pool: pool}
+func NewHTTPWorkbenchRepository(pool *pgxpool.Pool, cipher ...*security.ConnectionSecretCipher) *HTTPWorkbenchRepository {
+	repository := &HTTPWorkbenchRepository{pool: pool}
+	if len(cipher) > 0 {
+		repository.cipher = cipher[0]
+	}
+	return repository
 }
 
 // ListGroups 返回当前 HTTP 接入源下的请求分组。
@@ -363,6 +371,9 @@ func (r *HTTPWorkbenchRepository) CreateRequestWithDataPoint(ctx context.Context
 	}
 	record.DataPointID = &dataPointID
 	record.DataPointPath = &dataPointPath
+	if err := replaceScopedConnectionSecretsTx(ctx, tx, r.cipher, record.ConnectionID, "http."+record.ID+".", params.Secrets); err != nil {
+		return nil, err
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 HTTP 请求创建事务失败", err)
@@ -418,6 +429,9 @@ func (r *HTTPWorkbenchRepository) UpdateRequestWithDataPoint(ctx context.Context
 	}
 	record.DataPointID = &dataPointID
 	record.DataPointPath = &dataPointPath
+	if err := replaceScopedConnectionSecretsTx(ctx, tx, r.cipher, record.ConnectionID, "http."+record.ID+".", params.Secrets); err != nil {
+		return nil, err
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 HTTP 请求更新事务失败", err)
@@ -432,6 +446,13 @@ func (r *HTTPWorkbenchRepository) DeleteRequestWithDataPoint(ctx context.Context
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 HTTP 请求删除事务失败", err)
 	}
 	defer rollbackProtocolTxQuietly(ctx, tx)
+	var connectionID string
+	if err := tx.QueryRow(ctx, `SELECT connection_id FROM data_http_requests WHERE project_id=$1 AND id=$2`, projectID, requestID).Scan(&connectionID); err != nil {
+		if err == pgx.ErrNoRows {
+			return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "HTTP 请求不存在")
+		}
+		return err
+	}
 
 	if _, err := tx.Exec(ctx, `
 		UPDATE data_points
@@ -448,6 +469,9 @@ func (r *HTTPWorkbenchRepository) DeleteRequestWithDataPoint(ctx context.Context
 	}
 	if tag.RowsAffected() == 0 {
 		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "HTTP 请求不存在")
+	}
+	if err := replaceScopedConnectionSecretsTx(ctx, tx, r.cipher, connectionID, "http."+requestID+".", nil); err != nil {
+		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 HTTP 请求删除事务失败", err)

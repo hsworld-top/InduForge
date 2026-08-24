@@ -132,6 +132,23 @@ type WebSocketStreamEnvelope struct {
 type WebSocketWorkbenchService struct {
 	repository  *repository.WebSocketWorkbenchRepository
 	connections *repository.ConnectionRepository
+	secrets     *repository.ConnectionSecretRepository
+}
+
+func (s *WebSocketWorkbenchService) SetSecretRepository(secrets *repository.ConnectionSecretRepository) {
+	s.secrets = secrets
+}
+
+func (s *WebSocketWorkbenchService) hydrateSessionSecrets(ctx context.Context, record *repository.WebSocketSessionRecord) error {
+	if s.secrets == nil || record == nil {
+		return nil
+	}
+	all, err := s.secrets.ResolveAll(ctx, record.ConnectionID)
+	if err != nil {
+		return err
+	}
+	record.Headers, record.Auth = hydrateWorkbenchSecrets(record.Headers, record.Auth, workbenchScopedSecrets(all, "ws."+record.ID+"."))
+	return nil
 }
 
 func NewWebSocketWorkbenchService(repo *repository.WebSocketWorkbenchRepository, connections *repository.ConnectionRepository) *WebSocketWorkbenchService {
@@ -283,6 +300,9 @@ func (s *WebSocketWorkbenchService) UpdateSession(ctx context.Context, projectID
 	if err != nil {
 		return nil, err
 	}
+	if err := s.hydrateSessionSecrets(ctx, current); err != nil {
+		return nil, err
+	}
 	connection, err := s.loadWebSocketConnection(ctx, projectID, current.ConnectionID)
 	if err != nil {
 		return nil, err
@@ -318,6 +338,9 @@ func (s *WebSocketWorkbenchService) ConnectPreview(ctx context.Context, projectI
 	}
 	record, err := s.repository.GetSession(ctx, projectID, sessionID)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.hydrateSessionSecrets(ctx, record); err != nil {
 		return nil, err
 	}
 	if !record.Enabled {
@@ -379,6 +402,9 @@ func (s *WebSocketWorkbenchService) StreamSession(ctx context.Context, w http.Re
 	}
 	record, err := s.repository.GetSession(ctx, projectID, sessionID)
 	if err != nil {
+		return err
+	}
+	if err := s.hydrateSessionSecrets(ctx, record); err != nil {
 		return err
 	}
 	connection, err := s.loadWebSocketConnection(ctx, projectID, record.ConnectionID)
@@ -573,9 +599,10 @@ func (s *WebSocketWorkbenchService) normalizeCreateSession(ctx context.Context, 
 		return repository.CreateWebSocketSessionParams{}, err
 	}
 	record := repository.WebSocketSessionRecord{ProjectID: projectID, ConnectionID: connection.ID, GroupID: groupID, Name: name, URL: sessionURL}
+	headers, auth, secrets := splitWorkbenchSecrets(normalizeKeyValueRows(input.Headers), normalizeWebSocketAuth(input.Auth))
 	return repository.CreateWebSocketSessionParams{
 		ProjectID: projectID, ConnectionID: connection.ID, GroupID: groupID, Name: name, URL: sessionURL,
-		Headers: normalizeKeyValueRows(input.Headers), Auth: normalizeWebSocketAuth(input.Auth),
+		Headers: headers, Auth: auth, Secrets: secrets,
 		Protocols: normalizeProtocolRows(input.Protocols), Messages: normalizeMessageRows(input.Messages),
 		Settings: normalizeWebSocketSettings(input.Settings), Enabled: true, SortOrder: input.SortOrder,
 		DataPointPath:   buildWebSocketDataPointPath(connection.Name, name),
@@ -598,10 +625,12 @@ func (s *WebSocketWorkbenchService) normalizeUpdateSession(ctx context.Context, 
 	record := current
 	record.Name = name
 	record.URL = sessionURL
+	headers, auth, secrets := splitWorkbenchSecrets(normalizeKeyValueRowsOrDefault(input.Headers, current.Headers), normalizeMapOrDefault(input.Auth, current.Auth, normalizeWebSocketAuth))
 	return repository.UpdateWebSocketSessionParams{
 		ID: current.ID, ProjectID: projectID, GroupID: groupID, Name: name, URL: sessionURL,
-		Headers:   normalizeKeyValueRowsOrDefault(input.Headers, current.Headers),
-		Auth:      normalizeMapOrDefault(input.Auth, current.Auth, normalizeWebSocketAuth),
+		Headers:   headers,
+		Auth:      auth,
+		Secrets:   secrets,
 		Protocols: normalizeProtocolRowsOrDefault(input.Protocols, current.Protocols),
 		Messages:  normalizeMessageRowsOrDefault(input.Messages, current.Messages),
 		Settings:  normalizeMapOrDefault(input.Settings, current.Settings, normalizeWebSocketSettings),

@@ -28,21 +28,23 @@ func (h *MqttHandler) CreateConnection(w http.ResponseWriter, r *http.Request) e
 	}
 
 	var request struct {
-		Name             string         `json:"name"`
-		Status           string         `json:"status"`
-		BrokerURL        string         `json:"brokerUrl"`
-		Protocol         string         `json:"protocol"`
-		Port             *int           `json:"port"`
-		ClientID         *string        `json:"clientId"`
-		Username         *string        `json:"username"`
-		Password         *string        `json:"password"`
-		Keepalive        *int           `json:"keepalive"`
-		CleanSession     *bool          `json:"cleanSession"`
-		QOS              *int           `json:"qos"`
-		ReconnectPeriod  *int           `json:"reconnectPeriod"`
-		ConnectTimeoutMS *int           `json:"connectTimeout"`
-		Will             map[string]any `json:"will"`
-		SSLConfig        map[string]any `json:"sslConfig"`
+		Name             string            `json:"name"`
+		Status           string            `json:"status"`
+		BrokerURL        string            `json:"brokerUrl"`
+		Protocol         string            `json:"protocol"`
+		Port             *int              `json:"port"`
+		ClientID         *string           `json:"clientId"`
+		Username         *string           `json:"username"`
+		Password         *string           `json:"password"`
+		Secrets          map[string]string `json:"secrets"`
+		ClearSecretKeys  []string          `json:"clearSecretKeys"`
+		Keepalive        *int              `json:"keepalive"`
+		CleanSession     *bool             `json:"cleanSession"`
+		QOS              *int              `json:"qos"`
+		ReconnectPeriod  *int              `json:"reconnectPeriod"`
+		ConnectTimeoutMS *int              `json:"connectTimeout"`
+		Will             map[string]any    `json:"will"`
+		SSLConfig        map[string]any    `json:"sslConfig"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
@@ -57,6 +59,8 @@ func (h *MqttHandler) CreateConnection(w http.ResponseWriter, r *http.Request) e
 		ClientID:         request.ClientID,
 		Username:         request.Username,
 		Password:         request.Password,
+		Secrets:          request.Secrets,
+		ClearSecretKeys:  request.ClearSecretKeys,
 		Keepalive:        request.Keepalive,
 		CleanSession:     request.CleanSession,
 		QOS:              request.QOS,

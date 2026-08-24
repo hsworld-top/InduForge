@@ -111,3 +111,6 @@ contracts/project-templates/vue-vite/
 # Claude Code 本地配置
 # ============================================
 .claude/
+
+
+.data/

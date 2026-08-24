@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -64,19 +65,20 @@ var allowedKafkaSaslMechanisms = map[string]struct{}{
 
 // Connection 表示面向 HTTP 层返回的连接对象。
 type Connection struct {
-	ID               string         `json:"id"`
-	ProjectID        string         `json:"projectId"`
-	TenantID         string         `json:"tenantId"`
-	Name             string         `json:"name"`
-	Type             string         `json:"type"`
-	Status           string         `json:"status"`
-	Config           map[string]any `json:"config"`
-	RelationalConfig map[string]any `json:"relationalConfig,omitempty"`
-	MqttConfig       map[string]any `json:"mqttConfig,omitempty"`
-	DisplayOrder     int            `json:"displayOrder"`
-	VariableCount    int            `json:"variableCount"`
-	CreatedAt        time.Time      `json:"createdAt"`
-	UpdatedAt        time.Time      `json:"updatedAt"`
+	ID               string          `json:"id"`
+	ProjectID        string          `json:"projectId"`
+	TenantID         string          `json:"tenantId"`
+	Name             string          `json:"name"`
+	Type             string          `json:"type"`
+	Status           string          `json:"status"`
+	Config           map[string]any  `json:"config"`
+	RelationalConfig map[string]any  `json:"relationalConfig,omitempty"`
+	MqttConfig       map[string]any  `json:"mqttConfig,omitempty"`
+	SecretStatus     map[string]bool `json:"secretStatus"`
+	DisplayOrder     int             `json:"displayOrder"`
+	VariableCount    int             `json:"variableCount"`
+	CreatedAt        time.Time       `json:"createdAt"`
+	UpdatedAt        time.Time       `json:"updatedAt"`
 }
 
 // ConnectionTestResult 表示连接测试响应。
@@ -110,6 +112,7 @@ type ConnectionService struct {
 	repository      *repository.ConnectionRepository
 	builtinRuntime  *BuiltinRuntimeService
 	workbenchGroups *WorkbenchGroupService
+	secrets         *repository.ConnectionSecretRepository
 }
 
 // NewConnectionService 创建连接服务。
@@ -127,6 +130,12 @@ func (s *ConnectionService) SetWorkbenchGroupService(groups *WorkbenchGroupServi
 	}
 }
 
+func (s *ConnectionService) SetSecretRepository(secrets *repository.ConnectionSecretRepository) {
+	if s != nil {
+		s.secrets = secrets
+	}
+}
+
 // ListConnections 查询项目下的连接列表。
 func (s *ConnectionService) ListConnections(ctx context.Context, projectID, tenantID string) ([]Connection, error) {
 	if err := validateProjectID(projectID); err != nil {
@@ -139,8 +148,14 @@ func (s *ConnectionService) ListConnections(ctx context.Context, projectID, tena
 	}
 
 	connections := make([]Connection, 0, len(records))
+	statuses, err := s.connectionSecretStatuses(ctx, records)
+	if err != nil {
+		return nil, err
+	}
 	for _, record := range records {
-		connections = append(connections, toConnection(record, tenantID))
+		connection := toConnection(record, tenantID)
+		connection.SecretStatus = statuses[record.ID]
+		connections = append(connections, connection)
 	}
 
 	return connections, nil
@@ -163,8 +178,14 @@ func (s *ConnectionService) ListConnectionsPage(ctx context.Context, projectID, 
 		return nil, 0, err
 	}
 	connections := make([]Connection, 0, len(records))
+	statuses, err := s.connectionSecretStatuses(ctx, records)
+	if err != nil {
+		return nil, 0, err
+	}
 	for _, record := range records {
-		connections = append(connections, toConnection(record, tenantID))
+		connection := toConnection(record, tenantID)
+		connection.SecretStatus = statuses[record.ID]
+		connections = append(connections, connection)
 	}
 	return connections, total, nil
 }
@@ -181,7 +202,24 @@ func (s *ConnectionService) GetConnection(ctx context.Context, projectID, connec
 		return nil, err
 	}
 	connection := toConnection(*record, tenantID)
+	if s.secrets != nil {
+		connection.SecretStatus, err = s.secrets.Status(ctx, record.ID)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &connection, nil
+}
+
+func (s *ConnectionService) connectionSecretStatuses(ctx context.Context, records []repository.ConnectionRecord) (map[string]map[string]bool, error) {
+	if s == nil || s.secrets == nil {
+		return map[string]map[string]bool{}, nil
+	}
+	ids := make([]string, 0, len(records))
+	for _, record := range records {
+		ids = append(ids, record.ID)
+	}
+	return s.secrets.StatusByConnections(ctx, ids)
 }
 
 // UpdateConnectionOrder 持久化接入源卡片展示顺序。
@@ -271,15 +309,18 @@ func (s *ConnectionService) CreateConnection(ctx context.Context, projectID, ten
 	if err != nil {
 		return nil, err
 	}
+	secrets, clearSecretKeys, config := extractGenericConnectionSecrets(config)
 
 	record, err := s.repository.Create(ctx, repository.CreateConnectionParams{
-		ProjectID: projectID,
-		UserID:    userID,
-		Name:      name,
-		Type:      connectionType,
-		Category:  category,
-		Status:    status,
-		Config:    config,
+		ProjectID:       projectID,
+		UserID:          userID,
+		Name:            name,
+		Type:            connectionType,
+		Category:        category,
+		Status:          status,
+		Config:          config,
+		Secrets:         secrets,
+		ClearSecretKeys: clearSecretKeys,
 	})
 	if err != nil {
 		return nil, err
@@ -307,6 +348,9 @@ func (s *ConnectionService) UpdateConnection(ctx context.Context, projectID, con
 	current, err := s.repository.GetByProjectAndID(ctx, projectID, connectionID)
 	if err != nil {
 		return nil, err
+	}
+	if isStoredProtocolConnectionType(current.Type) {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "该接入源必须使用对应协议的专用更新接口")
 	}
 
 	nextName := current.Name
@@ -363,45 +407,19 @@ func (s *ConnectionService) UpdateConnection(ctx context.Context, projectID, con
 			nextConfig = mergeBuiltinConfigUpdate(current.Config, input.Config)
 		}
 	}
-	if current.Type == "kafka" || nextType == "kafka" {
-		if current.Type != "kafka" || nextType != "kafka" {
-			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka 接入源不支持从其他类型改入或改出")
-		}
-		nextConfig, err = normalizeKafkaConnectionConfig(nextConfig)
-		if err != nil {
-			return nil, err
-		}
-		record, err := s.repository.UpdateKafka(ctx, repository.UpdateKafkaConnectionParams{
-			UpdateConnectionParams: repository.UpdateConnectionParams{
-				ID:        connectionID,
-				ProjectID: projectID,
-				UserID:    userID,
-				Name:      nextName,
-				Type:      nextType,
-				Category:  nextCategory,
-				Status:    nextStatus,
-				Config:    nextConfig,
-			},
-			Brokers: toString(nextConfig["brokers"]),
-			Options: mapFromAny(nextConfig["options"]),
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		connection := toConnection(*record, tenantID)
-		return &connection, nil
-	}
+	secrets, clearSecretKeys, nextConfig := extractGenericConnectionSecrets(nextConfig)
 
 	record, err := s.repository.Update(ctx, repository.UpdateConnectionParams{
-		ID:        connectionID,
-		ProjectID: projectID,
-		UserID:    userID,
-		Name:      nextName,
-		Type:      nextType,
-		Category:  nextCategory,
-		Status:    nextStatus,
-		Config:    nextConfig,
+		ID:              connectionID,
+		ProjectID:       projectID,
+		UserID:          userID,
+		Name:            nextName,
+		Type:            nextType,
+		Category:        nextCategory,
+		Status:          nextStatus,
+		Config:          nextConfig,
+		Secrets:         secrets,
+		ClearSecretKeys: clearSecretKeys,
 	})
 	if err != nil {
 		return nil, err
@@ -444,6 +462,8 @@ func (s *ConnectionService) TestConnection(ctx context.Context, projectID string
 		return testWebSocketConnection(ctx, input.Config)
 	case "redis":
 		return testRedisConnection(ctx, input.Config)
+	case "tdengine":
+		return testTDengineConnection(ctx, input.Config)
 	default:
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前接入源类型暂不支持连接测试")
 	}
@@ -452,7 +472,7 @@ func (s *ConnectionService) TestConnection(ctx context.Context, projectID string
 func normalizeConnectionTestType(connectionType string) (string, error) {
 	connectionType = strings.TrimSpace(strings.ToLower(connectionType))
 	switch connectionType {
-	case "relational", "kafka", "http", "websocket", "redis":
+	case "relational", "kafka", "http", "websocket", "redis", "tdengine":
 		return connectionType, nil
 	default:
 		if displayName, ok := reservedPhase2ConnectionTypes[connectionType]; ok {
@@ -460,6 +480,15 @@ func normalizeConnectionTestType(connectionType string) (string, error) {
 		}
 		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "连接类型不受支持")
 	}
+}
+
+func testTDengineConnection(ctx context.Context, config map[string]any) (*ConnectionTestResult, error) {
+	runtime, err := connectTDengineRuntime(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+	defer runtime.Close()
+	return &ConnectionTestResult{Connected: true, Type: "tdengine", DBType: "tdengine", Message: "TDengine WebSocket 连接成功"}, nil
 }
 
 func testRelationalConnection(ctx context.Context, config map[string]any) (*ConnectionTestResult, error) {
@@ -795,6 +824,9 @@ func (s *ConnectionService) ListTables(ctx context.Context, projectID, connectio
 	if err != nil {
 		return nil, err
 	}
+	if connection.Type == "tdengine" {
+		return listTDengineTables(ctx, connection.Config)
+	}
 	if schemaName, ok, err := builtinSQLSchemaFromRecord(connection); ok || err != nil {
 		if err != nil {
 			return nil, err
@@ -833,6 +865,56 @@ func (s *ConnectionService) ListTables(ctx context.Context, projectID, connectio
 	}
 
 	return tables, nil
+}
+
+// ListTablesPage 在服务端完成对象搜索和分页，供 TDengine 等对象数量可增长的工作台使用。
+func (s *ConnectionService) ListTablesPage(ctx context.Context, projectID, connectionID, search string, page, pageSize int) (*RelationalTablePage, error) {
+	connection, err := s.loadRelationalConnection(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	if page < 1 || pageSize < 1 || pageSize > 200 {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "表对象分页参数无效")
+	}
+	var tables []RelationalTable
+	if connection.Type == "tdengine" {
+		tables, err = listTDengineTables(ctx, connection.Config)
+	} else {
+		tables, err = s.ListTables(ctx, projectID, connectionID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	keyword := strings.ToLower(strings.TrimSpace(search))
+	filtered := make([]RelationalTable, 0, len(tables))
+	for _, table := range tables {
+		if keyword == "" || strings.Contains(strings.ToLower(table.Name), keyword) {
+			filtered = append(filtered, table)
+		}
+	}
+	sort.SliceStable(filtered, func(i, j int) bool {
+		if filtered[i].Kind == filtered[j].Kind {
+			return strings.ToLower(filtered[i].Name) < strings.ToLower(filtered[j].Name)
+		}
+		return filtered[i].Kind < filtered[j].Kind
+	})
+	total := len(filtered)
+	start := (page - 1) * pageSize
+	if start > total {
+		start = total
+	}
+	end := start + pageSize
+	if end > total {
+		end = total
+	}
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + pageSize - 1) / pageSize
+	}
+	return &RelationalTablePage{
+		Items:      filtered[start:end],
+		Pagination: RelationalPagination{Page: page, Limit: pageSize, Total: total, TotalPages: totalPages},
+	}, nil
 }
 
 // CreateTable 按结构化表设计创建物理表。
@@ -980,6 +1062,9 @@ func (s *ConnectionService) GetTableStructure(ctx context.Context, projectID, co
 	if err != nil {
 		return nil, err
 	}
+	if connection.Type == "tdengine" {
+		return getTDengineTableStructure(ctx, connection.Config, normalizedTableName)
+	}
 	if schemaName, ok, err := builtinSQLSchemaFromRecord(connection); ok || err != nil {
 		if err != nil {
 			return nil, err
@@ -1061,6 +1146,9 @@ func (s *ConnectionService) GetTableData(ctx context.Context, projectID, connect
 	}
 
 	page, limit = normalizePageAndSize(page, limit, 100, 500)
+	if connection.Type == "tdengine" {
+		return getTDengineTableData(ctx, connection.Config, normalizedTableName, page, limit)
+	}
 	if schemaName, ok, err := builtinSQLSchemaFromRecord(connection); ok || err != nil {
 		if err != nil {
 			return nil, err
@@ -1161,6 +1249,22 @@ func (s *ConnectionService) ExecuteSQL(ctx context.Context, projectID, connectio
 	}
 	if err := ensureSQLWorkbenchDatabaseBoundary(sqlText); err != nil {
 		return nil, err
+	}
+	if connection.Type == "tdengine" {
+		if err := validateTDengineReadOnlySQL(sqlText); err != nil {
+			return nil, err
+		}
+		runtime, err := connectTDengineRuntime(ctx, connection.Config)
+		if err != nil {
+			return nil, err
+		}
+		defer runtime.Close()
+		startedAt := time.Now()
+		columns, rows, err := runtime.query(ctx, sqlText, parameters...)
+		if err != nil {
+			return nil, err
+		}
+		return &RelationalQueryResult{Columns: columns, Rows: rows, RowCount: len(rows), ExecutionTime: time.Since(startedAt).Milliseconds()}, nil
 	}
 	if schemaName, ok, err := builtinSQLSchemaFromRecord(connection); ok || err != nil {
 		if err != nil {
@@ -1271,7 +1375,75 @@ func (s *ConnectionService) loadRelationalConnection(ctx context.Context, projec
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "当前仅支持关系型连接")
 		}
 	}
+	if s.secrets != nil && (connection.Type == "relational" || connection.Type == "tdengine") {
+		secrets, err := s.secrets.ResolveAll(ctx, connection.ID)
+		if err != nil {
+			return nil, err
+		}
+		connection.Config = injectConnectionSecrets(connection.Config, secrets)
+	}
 	return connection, nil
+}
+
+func injectConnectionSecrets(config map[string]any, secrets map[string]string) map[string]any {
+	result := cloneMap(config)
+	for key, value := range secrets {
+		switch {
+		case key == "password":
+			result["password"] = value
+		case strings.HasPrefix(key, "option."):
+			options := mapFromAny(result["options"])
+			options[strings.TrimPrefix(key, "option.")] = value
+			result["options"] = options
+		case strings.HasPrefix(key, "tls."):
+			sslConfig := mapFromAny(result["sslConfig"])
+			sslConfig[strings.TrimPrefix(key, "tls.")] = value
+			result["sslConfig"] = sslConfig
+		case strings.HasPrefix(key, "header."):
+			headers := mapFromAny(result["headers"])
+			headers[strings.TrimPrefix(key, "header.")] = value
+			result["headers"] = headers
+		}
+	}
+	return result
+}
+
+// extractGenericConnectionSecrets 将关系库等通用连接表单中的敏感字段移出 metadata。
+// 空字符串表示用户明确清除；未出现字段则保持已有密钥不变。
+func extractGenericConnectionSecrets(config map[string]any) (map[string]string, []string, map[string]any) {
+	result := cloneMap(config)
+	secrets := map[string]string{}
+	clearKeys := make([]string, 0)
+	if value, exists := result["password"]; exists {
+		password := toString(value)
+		if password == "" {
+			clearKeys = append(clearKeys, "password")
+		} else {
+			secrets["password"] = password
+		}
+		delete(result, "password")
+	}
+	sslConfig := mapFromAny(result["sslConfig"])
+	for _, key := range []string{"ca", "cert", "key"} {
+		value, exists := sslConfig[key]
+		if !exists {
+			continue
+		}
+		secretKey := "tls." + key
+		textValue := toString(value)
+		if textValue == "" {
+			clearKeys = append(clearKeys, secretKey)
+		} else {
+			secrets[secretKey] = textValue
+		}
+		delete(sslConfig, key)
+	}
+	if len(sslConfig) > 0 {
+		result["sslConfig"] = sslConfig
+	} else {
+		delete(result, "sslConfig")
+	}
+	return secrets, clearKeys, result
 }
 
 func builtinSQLSchemaFromRecord(connection *repository.ConnectionRecord) (string, bool, error) {

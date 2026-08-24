@@ -98,6 +98,48 @@
       color 0.18s ease;
   }
 
+  /* 对话框与抽屉底部共用的标准主次操作按钮。 */
+  .dc-button {
+    height: var(--dc-control-height);
+    min-width: 72px;
+    padding: 0 14px;
+    border: 1px solid var(--dc-border);
+    border-radius: var(--dc-radius-sm);
+    background: var(--dc-surface-raised);
+    color: var(--dc-text-secondary);
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    transition:
+      border-color 0.18s ease,
+      background-color 0.18s ease,
+      color 0.18s ease;
+  }
+
+  .dc-button:hover:not(:disabled) {
+    border-color: color-mix(in oklch, var(--dc-primary) 24%, var(--dc-border));
+    background: var(--dc-primary-soft);
+    color: var(--dc-primary);
+  }
+
+  .dc-button--primary {
+    border-color: var(--dc-primary);
+    background: var(--dc-primary);
+    color: var(--dc-surface-raised);
+  }
+
+  .dc-button--primary:hover:not(:disabled) {
+    border-color: var(--dc-primary-hover);
+    background: var(--dc-primary-hover);
+    color: var(--dc-surface-raised);
+  }
+
+  .dc-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
   .card {
     border: 1px solid var(--dc-border);
     border-radius: var(--dc-radius-md);

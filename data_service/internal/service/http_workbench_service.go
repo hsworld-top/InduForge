@@ -149,6 +149,23 @@ type HTTPWorkbenchService struct {
 	repository  *repository.HTTPWorkbenchRepository
 	connections *repository.ConnectionRepository
 	client      *http.Client
+	secrets     *repository.ConnectionSecretRepository
+}
+
+func (s *HTTPWorkbenchService) SetSecretRepository(secrets *repository.ConnectionSecretRepository) {
+	s.secrets = secrets
+}
+
+func (s *HTTPWorkbenchService) hydrateHTTPRequestSecrets(ctx context.Context, record *repository.HTTPRequestRecord) error {
+	if s.secrets == nil || record == nil {
+		return nil
+	}
+	all, err := s.secrets.ResolveAll(ctx, record.ConnectionID)
+	if err != nil {
+		return err
+	}
+	record.Headers, record.Auth = hydrateWorkbenchSecrets(record.Headers, record.Auth, workbenchScopedSecrets(all, "http."+record.ID+"."))
+	return nil
 }
 
 // NewHTTPWorkbenchService 创建 HTTP 工作台服务。
@@ -322,6 +339,9 @@ func (s *HTTPWorkbenchService) UpdateRequest(ctx context.Context, projectID, req
 	if err != nil {
 		return nil, err
 	}
+	if err := s.hydrateHTTPRequestSecrets(ctx, current); err != nil {
+		return nil, err
+	}
 	connection, err := s.loadHTTPConnection(ctx, projectID, current.ConnectionID)
 	if err != nil {
 		return nil, err
@@ -359,6 +379,9 @@ func (s *HTTPWorkbenchService) SendRequest(ctx context.Context, projectID, reque
 	}
 	record, err := s.repository.GetRequest(ctx, projectID, requestID)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.hydrateHTTPRequestSecrets(ctx, record); err != nil {
 		return nil, err
 	}
 	if !record.Enabled {
@@ -502,6 +525,7 @@ func (s *HTTPWorkbenchService) normalizeCreateRequest(ctx context.Context, proje
 		Method:       method,
 		URL:          requestURL,
 	}
+	headers, auth, secrets := splitWorkbenchSecrets(normalizeKeyValueRows(input.Headers), normalizeHTTPAuth(input.Auth))
 	return repository.CreateHTTPRequestParams{
 		ProjectID:       projectID,
 		ConnectionID:    connection.ID,
@@ -510,8 +534,9 @@ func (s *HTTPWorkbenchService) normalizeCreateRequest(ctx context.Context, proje
 		Method:          method,
 		URL:             requestURL,
 		Params:          normalizeKeyValueRows(input.Params),
-		Headers:         normalizeKeyValueRows(input.Headers),
-		Auth:            normalizeHTTPAuth(input.Auth),
+		Headers:         headers,
+		Auth:            auth,
+		Secrets:         secrets,
 		BodyType:        bodyType,
 		Body:            normalizeHTTPBody(input.Body),
 		Settings:        normalizeHTTPSettings(input.Settings),
@@ -539,6 +564,7 @@ func (s *HTTPWorkbenchService) normalizeUpdateRequest(ctx context.Context, proje
 	record.Name = name
 	record.Method = method
 	record.URL = requestURL
+	headers, auth, secrets := splitWorkbenchSecrets(normalizeKeyValueRowsOrDefault(input.Headers, current.Headers), normalizeMapOrDefault(input.Auth, current.Auth, normalizeHTTPAuth))
 	return repository.UpdateHTTPRequestParams{
 		ID:              current.ID,
 		ProjectID:       projectID,
@@ -547,8 +573,9 @@ func (s *HTTPWorkbenchService) normalizeUpdateRequest(ctx context.Context, proje
 		Method:          method,
 		URL:             requestURL,
 		Params:          normalizeKeyValueRowsOrDefault(input.Params, current.Params),
-		Headers:         normalizeKeyValueRowsOrDefault(input.Headers, current.Headers),
-		Auth:            normalizeMapOrDefault(input.Auth, current.Auth, normalizeHTTPAuth),
+		Headers:         headers,
+		Auth:            auth,
+		Secrets:         secrets,
 		BodyType:        bodyType,
 		Body:            normalizeMapOrDefault(input.Body, current.Body, normalizeHTTPBody),
 		Settings:        normalizeMapOrDefault(input.Settings, current.Settings, normalizeHTTPSettings),
@@ -864,7 +891,6 @@ func httpRequestSourceConfig(connection repository.ConnectionRecord, record repo
 func buildHTTPDataPointPath(connectionName, requestName string) string {
 	return "http." + normalizeDatapointSegment(connectionName) + "." + normalizeDatapointSegment(requestName)
 }
-
 
 func stringifyJSONValue(value any) string {
 	payload, err := json.Marshal(value)

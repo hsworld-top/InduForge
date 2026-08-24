@@ -166,7 +166,14 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		cleanupFns = append(cleanupFns, devPool.Close)
 	}
 
+	connectionCipher, err := collectorsecurity.NewConnectionSecretCipher(cfg.ConnectionSecretKey, cfg.ConnectionSecretKeyVersion)
+	if err != nil {
+		joinCleanup(cleanupFns...)()
+		return nil, nil, err
+	}
 	connectionRepository := repository.NewConnectionRepository(pool)
+	connectionRepository.SetSecretCipher(connectionCipher)
+	connectionSecretRepository := repository.NewConnectionSecretRepository(pool, connectionCipher)
 	accessSourceRepository := repository.NewAccessSourceRepository(pool)
 	alarmPolicyRepository := repository.NewAlarmPolicyRepository(pool)
 	historyStorageRepository := repository.NewHistoryStorageRepository(pool)
@@ -181,13 +188,13 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	queryRepository := repository.NewQueryRepository(pool)
 	workbenchGroupRepository := repository.NewWorkbenchGroupRepository(pool)
 	dataPointRepository := repository.NewDataPointRepository(pool)
-	mqttRepository := repository.NewMqttRepository(pool)
+	mqttRepository := repository.NewMqttRepository(pool, connectionCipher)
 	projectSnapshotRepository := repository.NewProjectSnapshotRepository(pool)
-	protocolWave1Repository := repository.NewProtocolWave1Repository(pool)
-	protocolWave2Repository := repository.NewProtocolWave2Repository(pool)
+	protocolWave1Repository := repository.NewProtocolWave1Repository(pool, connectionCipher)
+	protocolWave2Repository := repository.NewProtocolWave2Repository(pool, connectionCipher)
 	kafkaWorkbenchRepository := repository.NewKafkaWorkbenchRepository(pool)
-	httpWorkbenchRepository := repository.NewHTTPWorkbenchRepository(pool)
-	websocketWorkbenchRepository := repository.NewWebSocketWorkbenchRepository(pool)
+	httpWorkbenchRepository := repository.NewHTTPWorkbenchRepository(pool, connectionCipher)
+	websocketWorkbenchRepository := repository.NewWebSocketWorkbenchRepository(pool, connectionCipher)
 	realtimeStoreRepository := repository.NewRealtimeStoreRepository(pool)
 	computeRepository := repository.NewComputeRepository(pool)
 
@@ -201,6 +208,8 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		}
 	}
 	alarmPolicyService := service.NewAlarmPolicyService(alarmPolicyRepository, dataPointRepository, alarmCipher)
+	alarmItemService := service.NewAlarmItemService(alarmPolicyRepository, dataPointRepository)
+	alarmPolicyService.SetAlarmItemService(alarmItemService)
 	historyStorageService := service.NewHistoryStorageService(historyStorageRepository)
 	collectorDevService := service.NewCollectorDevService(collectorDevRepository)
 	collectorCatalogService := service.NewCollectorCatalogService(collectorCatalog)
@@ -242,34 +251,39 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 	contractCheckService := service.NewContractCheckService(dataPointRepository, computeRepository, alarmPolicyRepository, queryRepository, contractCheckRepository)
 	builtinRuntimeService := newBuiltinRuntimeServiceFromConfig(cfg, pool, devPool, &cleanupFns)
 	connectionService := service.NewConnectionService(connectionRepository, builtinRuntimeService)
+	connectionService.SetSecretRepository(connectionSecretRepository)
 	queryService := service.NewQueryService(queryRepository, connectionRepository, dataPointRepository)
 	queryService.SetBuiltinRuntime(builtinRuntimeService)
+	queryService.SetSecretRepository(connectionSecretRepository)
 	workbenchGroupService := service.NewWorkbenchGroupService(workbenchGroupRepository, connectionRepository)
 	connectionService.SetWorkbenchGroupService(workbenchGroupService)
 	dataPointService := service.NewDataPointService(dataPointRepository, queryService, mqttRepository, computeRepository)
-	dataPointService.SetGeneratedSourceRepositories(kafkaWorkbenchRepository, httpWorkbenchRepository, websocketWorkbenchRepository, realtimeStoreRepository, connectionRepository, builtinRuntimeService)
+	dataPointService.SetGeneratedSourceRepositories(kafkaWorkbenchRepository, httpWorkbenchRepository, websocketWorkbenchRepository, realtimeStoreRepository, connectionRepository, collectorRepository, builtinRuntimeService)
 	mqttService := service.NewMqttService(mqttRepository, connectionRepository, dataPointRepository)
+	mqttService.SetSecretRepository(connectionSecretRepository)
 	mqttService.ConfigureBuiltinMessageHub(cfg.MessageHubAddr, cfg.MessageHubUsername, cfg.MessageHubPassword)
 	projectSnapshotService := service.NewProjectSnapshotService(projectSnapshotRepository)
 	protocolWave1Service := service.NewProtocolWave1Service(protocolWave1Repository)
 	protocolPreviewService := service.NewProtocolPreviewService(protocolWave1Repository, service.NewDefaultProtocolPreviewAdapters())
+	protocolPreviewService.SetSecretRepository(connectionSecretRepository)
 	protocolWave2Service := service.NewProtocolWave2Service(protocolWave2Repository)
 	kafkaWorkbenchService := service.NewKafkaWorkbenchService(kafkaWorkbenchRepository)
 	httpWorkbenchService := service.NewHTTPWorkbenchService(httpWorkbenchRepository, connectionRepository)
+	httpWorkbenchService.SetSecretRepository(connectionSecretRepository)
 	websocketWorkbenchService := service.NewWebSocketWorkbenchService(websocketWorkbenchRepository, connectionRepository)
+	websocketWorkbenchService.SetSecretRepository(connectionSecretRepository)
 	realtimeStoreService := service.NewRealtimeStoreService(realtimeStoreRepository, connectionRepository, builtinRuntimeService)
+	computeSandboxClient := enginecompute.NewSandboxClient(cfg.ComputeSandboxURL, cfg.ComputeSandboxToken)
 	computeService := service.NewComputeService(
 		computeRepository,
-		enginecompute.NewNodeRunner("", ""),
-		enginecompute.NewPythonRunner("", ""),
-		enginecompute.NewScheduler(),
+		computeSandboxClient.Runner("js"),
+		computeSandboxClient.Runner("python"),
 		dataPointRepository,
 		queryService,
-		mqttRepository,
 	)
 
 	accessSourceHandler := handler.NewAccessSourceHandler(accessSourceService)
-	alarmPolicyHandler := handler.NewAlarmPolicyHandler(alarmPolicyService)
+	alarmPolicyHandler := handler.NewAlarmPolicyHandler(alarmPolicyService, alarmItemService)
 	historyStorageHandler := handler.NewHistoryStorageHandler(historyStorageService)
 	contractCheckHandler := handler.NewContractCheckHandler(contractCheckService)
 	collectorDevHandler := handler.NewCollectorDevHandler(collectorDevService)

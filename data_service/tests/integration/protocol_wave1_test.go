@@ -30,10 +30,12 @@ func TestProtocolWave1(t *testing.T) {
 	secret := "protocol-wave1-secret-01"
 
 	srv, err := app.NewServer(config.Config{
-		Addr:               ":0",
-		DatabaseURL:        fixture.databaseURL,
-		DatabaseSearchPath: fixture.schemaName,
-		JWTSecret:          secret,
+		Addr:                       ":0",
+		DatabaseURL:                fixture.databaseURL,
+		DatabaseSearchPath:         fixture.schemaName,
+		JWTSecret:                  secret,
+		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
+		ConnectionSecretKeyVersion: "v1",
 	})
 	if err != nil {
 		t.Fatalf("create server failed: %v", err)
@@ -55,19 +57,26 @@ func TestProtocolWave1(t *testing.T) {
 		"brokers":       "127.0.0.1:9092",
 		"topic":         "factory.events",
 		"consumerGroup": "dc-wave1",
+		"secrets":       map[string]string{"option.password": "kafka-first-secret"},
 	})
 	if kafka.Type != "kafka" {
 		t.Fatalf("expected kafka type, got %q", kafka.Type)
 	}
+	assertUpdatedProtocolConnection(t, doJSONRequest(t, http.MethodPut, server.URL+"/api/v1/data/projects/"+projectID+"/kafka/configs/"+kafka.ID, token, map[string]any{
+		"name": "kafka-source-updated", "status": "disconnected", "brokers": "127.0.0.1:9093", "topic": "factory.events", "consumerGroup": "dc-wave1", "startPosition": "latest",
+		"secrets": map[string]string{"option.password": "kafka-second-secret"},
+	}), "kafka-source-updated")
 
 	httpConn := mustCreateHTTPConfig(t, server.URL, token, projectID, map[string]any{
-		"name":    "http-source-main",
-		"baseUrl": "https://example.com/data",
-		"method":  "GET",
+		"name":        "http-source-main",
+		"description": "请求由开发态 HTTP 工作台维护",
 	})
 	if httpConn.Type != "http" {
 		t.Fatalf("expected http type, got %q", httpConn.Type)
 	}
+	assertUpdatedProtocolConnection(t, doJSONRequest(t, http.MethodPut, server.URL+"/api/v1/data/projects/"+projectID+"/http/configs/"+httpConn.ID, token, map[string]any{
+		"name": "http-source-updated", "status": "disconnected", "description": "updated",
+	}), "http-source-updated")
 
 	wsConn := mustCreateWebSocketConfig(t, server.URL, token, projectID, map[string]any{
 		"name":        "ws-source-main",
@@ -76,14 +85,38 @@ func TestProtocolWave1(t *testing.T) {
 	if wsConn.Type != "websocket" {
 		t.Fatalf("expected websocket type, got %q", wsConn.Type)
 	}
+	assertUpdatedProtocolConnection(t, doJSONRequest(t, http.MethodPut, server.URL+"/api/v1/data/projects/"+projectID+"/websocket/configs/"+wsConn.ID, token, map[string]any{
+		"name": "ws-source-updated", "status": "disconnected", "description": "updated",
+	}), "ws-source-updated")
 
 	redisConn := mustCreateRedisConfig(t, server.URL, token, projectID, map[string]any{
 		"name":       "redis-source-main",
 		"address":    "127.0.0.1:6379",
 		"keyPattern": "factory:*",
+		"secrets":    map[string]string{"password": "redis-first-secret"},
 	})
 	if redisConn.Type != "redis" {
 		t.Fatalf("expected redis type, got %q", redisConn.Type)
+	}
+	assertUpdatedProtocolConnection(t, doJSONRequest(t, http.MethodPut, server.URL+"/api/v1/data/projects/"+projectID+"/redis/configs/"+redisConn.ID, token, map[string]any{
+		"name": "redis-source-updated", "status": "disconnected", "address": "127.0.0.1:6380", "keyPattern": "factory:*", "mode": "standalone",
+		"secrets": map[string]string{"password": "redis-second-secret"},
+	}), "redis-source-updated")
+
+	var plaintextMatches int
+	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM data_connection_secrets WHERE connection_id IN ($1, $2) AND encrypted_value IN (convert_to('kafka-first-secret', 'UTF8'), convert_to('kafka-second-secret', 'UTF8'), convert_to('redis-first-secret', 'UTF8'), convert_to('redis-second-secret', 'UTF8'))`, kafka.ID, redisConn.ID).Scan(&plaintextMatches); err != nil {
+		t.Fatalf("check protocol secret ciphertext failed: %v", err)
+	}
+	if plaintextMatches != 0 {
+		t.Fatal("protocol secrets must not be stored as plaintext")
+	}
+}
+
+func assertUpdatedProtocolConnection(t *testing.T, envelope apiEnvelope, expectedName string) {
+	t.Helper()
+	updated := decodeProtocolWave1Connection(t, envelope.Data)
+	if updated.Name != expectedName {
+		t.Fatalf("expected updated connection name %q, got %q", expectedName, updated.Name)
 	}
 }
 

@@ -3,15 +3,19 @@
     <ComputeTree
       :units="computeStore.list"
       :folders="computeStore.folders"
+      :total="computeStore.total"
       :selected-unit-id="selectedUnitId"
       :dirty-unit-ids="dirtyUnitIds"
       :loading="computeStore.loading || computeStore.foldersLoading"
       :list-error="computeStore.listError"
       :folders-error="computeStore.foldersError"
+      :loading-more="loadingMore"
       @select-unit="selectUnit"
       @create-unit="showCreateUnitDialog = true"
       @create-folder="showCreateFolderDialog = true"
       @refresh="loadWorkspace"
+      @search="handleTreeSearch"
+      @load-more="loadMoreUnits"
       @rename-unit="openRenameUnitDialog"
       @move-unit="openMoveUnitDialog"
       @delete-unit="handleDeleteUnitFromTree"
@@ -32,6 +36,7 @@
       :dependencies="computeStore.dependencies"
       :dependencies-loading="computeStore.dependenciesLoading"
       :dependencies-error="computeStore.dependenciesError"
+      :capabilities="computeCapabilities"
       @activate-tab="activateTab"
       @close-tab="closeTab"
       @save="saveTab"
@@ -95,7 +100,13 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { ComputeUnit, ComputeFolderSave, ComputeUnitSave } from '@/api/schemas/compute.schema'
+import type {
+  ComputeUnit,
+  ComputeFolderSave,
+  ComputeUnitSave,
+  ComputeCapabilities,
+} from '@/api/schemas/compute.schema'
+import { getComputeCapabilities } from '@/api/compute.api'
 import { useComputeStore } from '@/stores/compute.store'
 import { getApiErrorMessage } from '@/utils/request'
 import ComputeEditorShell from './ComputeEditorShell.vue'
@@ -135,6 +146,7 @@ const contextUnit = ref<ComputeUnit | null>(null)
 const contextFolder = ref<ComputeFolderTreeNode | null>(null)
 const drafts = ref<Record<string, ComputeDraft>>({})
 const activeTabId = ref<string | null>(null)
+const computeCapabilities = ref<ComputeCapabilities | null>(null)
 
 const selectedUnitId = computed(() => props.selectedUnitId || null)
 
@@ -162,16 +174,46 @@ const dirtyUnitIds = computed(() =>
     .filter((draft) => draft.dirty)
     .map((draft) => draft.id),
 )
+const computeSearch = ref('')
+const loadingMore = ref(false)
+
+const computeListParams = (page = 1) => ({
+  page,
+  pageSize: computeStore.pageSize || 50,
+  search: computeSearch.value || undefined,
+})
 
 async function loadWorkspace() {
   const projectId = String(props.projectId)
   const results = await Promise.allSettled([
-    computeStore.fetchList(projectId),
+    computeStore.fetchList(projectId, computeListParams(1)),
     computeStore.fetchFolders(projectId),
+    getComputeCapabilities(projectId).then((value) => {
+      computeCapabilities.value = value
+    }),
   ])
   const failed = results.find((result) => result.status === 'rejected')
   if (failed) {
     ElMessage.warning('计算单元部分能力未启用')
+  }
+}
+
+function handleTreeSearch(keyword: string) {
+  computeSearch.value = keyword
+  void computeStore.fetchList(String(props.projectId), computeListParams(1)).catch(() => undefined)
+}
+
+async function loadMoreUnits() {
+  if (loadingMore.value || computeStore.list.length >= computeStore.total) return
+  loadingMore.value = true
+  try {
+    await computeStore.fetchList(
+      String(props.projectId),
+      computeListParams(computeStore.page + 1),
+      { append: true, silent: true },
+    )
+  } finally {
+    loadingMore.value = false
   }
 }
 
@@ -268,7 +310,7 @@ async function saveTab(id: string): Promise<boolean> {
 function refreshComputeTree() {
   const projectId = String(props.projectId)
   return Promise.allSettled([
-    computeStore.fetchList(projectId),
+    computeStore.fetchList(projectId, computeListParams(1)),
     computeStore.fetchFolders(projectId),
   ])
 }
@@ -347,7 +389,7 @@ async function handleDeleteFolder(folder: ComputeFolderTreeNode) {
   if (!ok) return
   try {
     const removedIds = collectComputeFolderUnitIds(folder)
-    await computeStore.removeFolder(String(props.projectId), folder.id)
+    await computeStore.removeFolder(String(props.projectId), folder.id, computeListParams(1))
     if (removedIds.length) {
       const removed = new Set(removedIds)
       const nextDrafts = { ...drafts.value }
@@ -440,6 +482,7 @@ async function handleCreateUnit(data: ComputeUnitSave) {
       ...drafts.value,
       [String(savedUnit.id)]: toComputeDraft(savedUnit),
     }
+    await refreshComputeTree()
     selectUnit(String(savedUnit.id))
     ElMessage.success('计算单元已创建')
   } catch (error) {
@@ -563,6 +606,7 @@ watch(
   () => {
     drafts.value = {}
     activeTabId.value = null
+    computeSearch.value = ''
     void loadWorkspace()
     loadDependencies()
   },

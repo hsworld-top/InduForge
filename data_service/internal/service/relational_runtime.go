@@ -95,6 +95,12 @@ type RelationalPagination struct {
 	TotalPages int `json:"totalPages"`
 }
 
+// RelationalTablePage 表示可增长的数据库对象分页结果。
+type RelationalTablePage struct {
+	Items      []RelationalTable    `json:"items"`
+	Pagination RelationalPagination `json:"pagination"`
+}
+
 // RelationalTableData 表示表数据预览响应。
 type RelationalTableData struct {
 	Columns    []string             `json:"columns"`

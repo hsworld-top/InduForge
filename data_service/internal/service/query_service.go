@@ -118,6 +118,7 @@ type QueryService struct {
 	connections *repository.ConnectionRepository
 	datapoints  *repository.DataPointRepository
 	builtin     *BuiltinRuntimeService
+	secrets     *repository.ConnectionSecretRepository
 }
 
 // NewQueryService 创建查询服务。
@@ -135,6 +136,12 @@ func NewQueryService(repo *repository.QueryRepository, connectionRepo *repositor
 func (s *QueryService) SetBuiltinRuntime(builtin *BuiltinRuntimeService) {
 	if s != nil {
 		s.builtin = builtin
+	}
+}
+
+func (s *QueryService) SetSecretRepository(secrets *repository.ConnectionSecretRepository) {
+	if s != nil {
+		s.secrets = secrets
 	}
 }
 
@@ -484,6 +491,9 @@ func (s *QueryService) executeRecord(ctx context.Context, record repository.Quer
 	if result, ok, err := s.executeBuiltinRecord(execCtx, record, sqlText, args); ok || err != nil {
 		return result, err
 	}
+	if result, ok, err := s.executeTDengineRecord(execCtx, record, sqlText, args); ok || err != nil {
+		return result, err
+	}
 
 	runtime, err := s.executionRuntimeForRecord(execCtx, record)
 	if err != nil {
@@ -538,6 +548,47 @@ func (s *QueryService) executeRecord(ctx context.Context, record repository.Quer
 	}, nil
 }
 
+func (s *QueryService) executeTDengineRecord(ctx context.Context, record repository.QueryRecord, sqlText string, args []any) (*QueryExecutionResult, bool, error) {
+	connection, err := s.connections.GetByProjectAndID(ctx, record.ProjectID, record.ConnectionID)
+	if err != nil {
+		return nil, false, err
+	}
+	if connection.Type != "tdengine" {
+		return nil, false, nil
+	}
+	if err := validateTDengineReadOnlySQL(sqlText); err != nil {
+		return nil, true, err
+	}
+	if s.secrets != nil {
+		values, resolveErr := s.secrets.ResolveAll(ctx, connection.ID)
+		if resolveErr != nil {
+			return nil, true, resolveErr
+		}
+		connection.Config = injectConnectionSecrets(connection.Config, values)
+	}
+	runtime, err := connectTDengineRuntime(ctx, connection.Config)
+	if err != nil {
+		return nil, true, err
+	}
+	defer runtime.Close()
+	started := time.Now()
+	columns, rows, err := runtime.query(ctx, sqlText, args...)
+	if err != nil {
+		return nil, true, err
+	}
+	resultRows := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		item := map[string]any{}
+		for index, column := range columns {
+			if index < len(row) {
+				item[column] = normalizeQueryValue(row[index])
+			}
+		}
+		resultRows = append(resultRows, item)
+	}
+	return &QueryExecutionResult{Data: resultRows, ExecutionTime: time.Since(started).Milliseconds(), RowCount: len(resultRows)}, true, nil
+}
+
 // executionRuntimeForRecord 根据 query 关联的连接配置返回执行 SQL 的目标运行时。
 // 当前保持“每次执行临时建连接”的简单策略，待真实流量确认后再考虑按 dbType 做连接缓存。
 func (s *QueryService) executionRuntimeForRecord(ctx context.Context, record repository.QueryRecord) (*relationalRuntime, error) {
@@ -578,7 +629,7 @@ func (s *QueryService) syncQueryDataPoint(ctx context.Context, record repository
 	if err != nil {
 		return err
 	}
-	if connection.Type != "relational" && connection.Type != "builtin.relation" && connection.Type != "builtin.timeseries" {
+	if connection.Type != "relational" && connection.Type != "tdengine" && connection.Type != "builtin.relation" && connection.Type != "builtin.timeseries" {
 		return nil
 	}
 

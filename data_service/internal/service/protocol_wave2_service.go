@@ -13,12 +13,18 @@ const phase2ProtocolBoundaryMessage = "已进入工业协议配置阶段，请�
 
 // CreateTdengineConfigInput 表示创建 TDengine 配置输入。
 type CreateTdengineConfigInput struct {
-	Name     string
-	Status   string
-	DSN      string
-	Database string
-	Timezone *string
-	Options  map[string]any
+	Name            string
+	Status          string
+	Protocol        string
+	Host            string
+	Port            *int
+	Username        string
+	Database        string
+	Timezone        *string
+	TLSSkipVerify   bool
+	Options         map[string]any
+	Secrets         map[string]string
+	ClearSecretKeys []string
 }
 
 // OpcdaContractValidateInput 表示 OPC DA 合约校验输入。
@@ -58,29 +64,110 @@ func (s *ProtocolWave2Service) CreateTdengineConfig(ctx context.Context, project
 	if err != nil {
 		return nil, err
 	}
-	dsn := strings.TrimSpace(input.DSN)
-	if dsn == "" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "dsn 不能为空")
+	protocol, host, port, username, err := normalizeTDengineConnectionFields(input)
+	if err != nil {
+		return nil, err
 	}
 	database := strings.TrimSpace(input.Database)
 	if database == "" {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "database 不能为空")
 	}
+	if strings.TrimSpace(input.Secrets["password"]) == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "TDengine password 不能为空")
+	}
+	if err := validateConnectionOptionsContainNoSecrets(input.Options); err != nil {
+		return nil, err
+	}
 	record, err := s.repository.CreateTdengineConfig(ctx, repository.CreateTdengineConfigParams{
-		ProjectID:    projectID,
-		UserID:       userID,
-		Name:         name,
-		Status:       status,
-		DSN:          dsn,
-		DatabaseName: database,
-		Timezone:     normalizeOptionalText(input.Timezone),
-		Options:      cloneMap(input.Options),
+		ProjectID: projectID,
+		UserID:    userID,
+		Name:      name,
+		Status:    status,
+		Protocol:  protocol, Host: host, Port: port, Username: username,
+		DatabaseName:  database,
+		Timezone:      normalizeOptionalText(input.Timezone),
+		TLSSkipVerify: input.TLSSkipVerify,
+		Options:       cloneMap(input.Options),
+		Secrets:       normalizeSecretInput(input.Secrets), ClearSecretKeys: input.ClearSecretKeys,
 	})
 	if err != nil {
 		return nil, err
 	}
 	connection := toProtocolConnection(*record)
 	return &connection, nil
+}
+
+func (s *ProtocolWave2Service) UpdateTdengineConfig(ctx context.Context, projectID, connectionID, userID string, input CreateTdengineConfigInput) (*ProtocolConnection, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateConnectionID(connectionID); err != nil {
+		return nil, err
+	}
+	if err := validateUserID(userID); err != nil {
+		return nil, err
+	}
+	name, err := normalizeConnectionName(input.Name)
+	if err != nil {
+		return nil, err
+	}
+	status, err := normalizeProtocolStatus(input.Status)
+	if err != nil {
+		return nil, err
+	}
+	protocol, host, port, username, err := normalizeTDengineConnectionFields(input)
+	if err != nil {
+		return nil, err
+	}
+	database := strings.TrimSpace(input.Database)
+	if database == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "database 不能为空")
+	}
+	if err := validateConnectionOptionsContainNoSecrets(input.Options); err != nil {
+		return nil, err
+	}
+	record, err := s.repository.UpdateTdengineConfig(ctx, connectionID, repository.CreateTdengineConfigParams{ProjectID: projectID, UserID: userID, Name: name, Status: status, Protocol: protocol, Host: host, Port: port, Username: username, DatabaseName: database, Timezone: normalizeOptionalText(input.Timezone), TLSSkipVerify: input.TLSSkipVerify, Options: cloneMap(input.Options), Secrets: normalizeSecretInput(input.Secrets), ClearSecretKeys: input.ClearSecretKeys})
+	if err != nil {
+		return nil, err
+	}
+	connection := toProtocolConnection(*record)
+	return &connection, nil
+}
+
+func normalizeTDengineConnectionFields(input CreateTdengineConfigInput) (string, string, int, string, error) {
+	protocol := strings.ToLower(strings.TrimSpace(input.Protocol))
+	if protocol == "" {
+		protocol = "ws"
+	}
+	if protocol != "ws" && protocol != "wss" {
+		return "", "", 0, "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "protocol 仅支持 ws/wss")
+	}
+	host := strings.TrimSpace(input.Host)
+	if host == "" {
+		return "", "", 0, "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "host 不能为空")
+	}
+	port := 6041
+	if input.Port != nil {
+		port = *input.Port
+	}
+	if port <= 0 || port > 65535 {
+		return "", "", 0, "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "port 必须在 1-65535 之间")
+	}
+	username := strings.TrimSpace(input.Username)
+	if username == "" {
+		return "", "", 0, "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "username 不能为空")
+	}
+	return protocol, host, port, username, nil
+}
+
+func normalizeSecretInput(input map[string]string) map[string]string {
+	result := map[string]string{}
+	for key, value := range input {
+		if key = strings.TrimSpace(key); key != "" && value != "" {
+			result[key] = value
+		}
+	}
+	return result
 }
 
 // ValidateOpcdaContract 校验 OPC DA 发布契约字段。

@@ -305,7 +305,7 @@ const endpointText = computed(() => {
     return [config.address, config.keyPattern || '*'].filter(Boolean).join(' / ') || '未配置'
   }
   if (connection.type === 'tdengine') {
-    return [config.dsn, config.database].filter(Boolean).join(' / ') || '未配置'
+    return [config.host, config.databaseName].filter(Boolean).join(' / ') || '未配置'
   }
 
   return '未配置'
@@ -471,7 +471,13 @@ const configRows = computed(() => {
 
   if (connection.type === 'tdengine') {
     return [
-      { label: 'DSN', value: config.dsn || '-' },
+      {
+        label: '服务地址',
+        value: config.host
+          ? `${config.protocol || 'ws'}://${config.host}:${config.port || 6041}`
+          : '-',
+      },
+      { label: '数据库', value: config.databaseName || '-' },
       { label: 'Database', value: config.database || '-' },
       { label: 'Timezone', value: config.timezone || '-' },
     ]

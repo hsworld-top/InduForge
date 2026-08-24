@@ -24,7 +24,6 @@ type SnapshotRelationalConfigRecord struct {
 	Port         int            `json:"port"`
 	Database     string         `json:"database"`
 	Username     string         `json:"username"`
-	Password     string         `json:"password"`
 	Schema       *string        `json:"schema"`
 	Charset      *string        `json:"charset"`
 	Timezone     *string        `json:"timezone"`
@@ -40,7 +39,6 @@ type SnapshotMqttConfigRecord struct {
 	Port              int            `json:"port"`
 	ClientID          *string        `json:"clientId"`
 	Username          *string        `json:"username"`
-	Password          *string        `json:"password"`
 	Keepalive         int            `json:"keepalive"`
 	CleanSession      bool           `json:"cleanSession"`
 	QOS               int            `json:"qos"`
@@ -89,6 +87,7 @@ type SnapshotMqttTagRecord struct {
 // ProjectSnapshot 表示工程级数据域快照。
 type ProjectSnapshot struct {
 	Connections          []ConnectionRecord                 `json:"connections"`
+	ConnectionSecrets    []SnapshotConnectionSecretRecord   `json:"connectionSecrets"`
 	RelationalConfigs    []SnapshotRelationalConfigRecord   `json:"relationalConfigs"`
 	Queries              []QueryRecord                      `json:"queries"`
 	MqttConfigs          []SnapshotMqttConfigRecord         `json:"mqttConfigs"`
@@ -96,13 +95,23 @@ type ProjectSnapshot struct {
 	MqttTags             []SnapshotMqttTagRecord            `json:"mqttTags"`
 	DataPoints           []DataPointRecord                  `json:"datapoints"`
 	ComputeUnits         []ComputeUnitRecord                `json:"computeUnits"`
-	AlarmPolicyGroups    []AlarmPolicyGroupRecord           `json:"alarmPolicyGroups"`
-	AlarmPolicies        []AlarmPolicyRecord                `json:"alarmPolicies"`
+	AlarmGroups          []AlarmPolicyGroupRecord           `json:"alarmGroups"`
+	AlarmItems           []AlarmItemRecord                  `json:"alarmItems"`
 	AlarmSettings        *AlarmProjectSettingsRecord        `json:"alarmSettings"`
 	AlarmHistorySettings *AlarmHistorySettingsRecord        `json:"alarmHistorySettings"`
 	AlarmChannels        []AlarmNotificationChannelRecord   `json:"alarmChannels"`
 	AlarmChannelSecrets  []SnapshotAlarmChannelSecretRecord `json:"alarmChannelSecrets"`
 	HistoryStorage       []HistoryStorageConfigRecord       `json:"historyStorage"`
+}
+
+// SnapshotConnectionSecretRecord 只往返接入源密文和密钥版本，禁止出现明文。
+type SnapshotConnectionSecretRecord struct {
+	ConnectionID         string    `json:"connectionId"`
+	SecretKey            string    `json:"secretKey"`
+	EncryptedValue       []byte    `json:"encryptedValue"`
+	EncryptionKeyVersion string    `json:"encryptionKeyVersion"`
+	CreatedAt            time.Time `json:"createdAt"`
+	UpdatedAt            time.Time `json:"updatedAt"`
 }
 
 // SnapshotAlarmChannelSecretRecord 仅保存密文，快照与 API 均不包含渠道密钥明文。
@@ -158,6 +167,7 @@ type ArtifactDataPointRecord struct {
 	Unit               *string                     `json:"unit,omitempty"`
 	DefaultValue       *string                     `json:"defaultValue,omitempty"`
 	Tags               []any                       `json:"tags"`
+	AttributeDefaults  map[string]string           `json:"attributeDefaults"`
 }
 
 // ArtifactComputeUnitRecord 表示产物层计算单元对象。
@@ -182,18 +192,51 @@ type ArtifactAlarmSecretRef struct {
 	KeyVersion string `json:"keyVersion"`
 }
 
+type ArtifactConnectionSecretRef struct {
+	ConnectionID string `json:"connectionId"`
+	SecretKey    string `json:"secretKey"`
+	KeyVersion   string `json:"keyVersion"`
+}
+
 type ArtifactAlarmHistoryStorage struct {
 	Enabled                     bool `json:"enabled"`
 	RetentionDays               *int `json:"retentionDays"`
 	StoreNotificationDeliveries bool `json:"storeNotificationDeliveries"`
 }
 
-// ArtifactAlarmsPayload 是节点消费的 alarm.policy.v1 完整开发态契约。
+type ArtifactAlarmNotification struct {
+	Mode                  string   `json:"mode"`
+	NotifyOnRaise         *bool    `json:"notifyOnRaise"`
+	NotifyOnClear         *bool    `json:"notifyOnClear"`
+	RepeatIntervalSeconds *int     `json:"repeatIntervalSeconds"`
+	ChannelIDs            []string `json:"channelIds"`
+	MessageTemplate       string   `json:"messageTemplate"`
+}
+
+type ArtifactAlarmItem struct {
+	AlarmItemID       string                     `json:"alarmItemId"`
+	DatapointID       *string                    `json:"datapointId,omitempty"`
+	Path              *string                    `json:"path,omitempty"`
+	GroupID           *string                    `json:"groupId"`
+	DisplayName       string                     `json:"displayName"`
+	Description       *string                    `json:"description"`
+	Mode              string                     `json:"mode"`
+	AlarmType         string                     `json:"alarmType"`
+	EvaluationMode    string                     `json:"evaluationMode"`
+	Inputs            []AlarmItemInputRecord     `json:"inputs"`
+	DerivedExpression string                     `json:"derivedExpression"`
+	Conditions        []AlarmItemConditionRecord `json:"conditions"`
+	Notification      ArtifactAlarmNotification  `json:"notification"`
+	IsEnabled         bool                       `json:"isEnabled"`
+	Revision          int64                      `json:"revision"`
+}
+
+// ArtifactAlarmsPayload 是节点消费的 alarm.item.v1 完整开发态契约。
 type ArtifactAlarmsPayload struct {
 	SchemaVersion  string                           `json:"schemaVersion"`
 	HistoryStorage ArtifactAlarmHistoryStorage      `json:"historyStorage"`
 	Groups         []AlarmPolicyGroupRecord         `json:"groups"`
-	Policies       []AlarmPolicyRecord              `json:"policies"`
+	Items          []ArtifactAlarmItem              `json:"items"`
 	Settings       *AlarmProjectSettingsRecord      `json:"settings"`
 	Channels       []AlarmNotificationChannelRecord `json:"channels"`
 	SecretRefs     []ArtifactAlarmSecretRef         `json:"secretRefs"`
@@ -210,7 +253,6 @@ type ArtifactMqttConnectionRecord struct {
 	Port              int            `json:"port"`
 	ClientID          *string        `json:"clientId,omitempty"`
 	Username          *string        `json:"username,omitempty"`
-	Password          *string        `json:"password,omitempty"`
 	Keepalive         int            `json:"keepalive"`
 	CleanSession      bool           `json:"cleanSession"`
 	QOS               int            `json:"qos"`
@@ -282,17 +324,18 @@ type ArtifactBuiltinRealtimeStore struct {
 
 // ProjectArtifactV1 表示 Phase 1 项目级数据产物。
 type ProjectArtifactV1 struct {
-	Version       string                       `json:"version"`
-	ProjectID     string                       `json:"projectId"`
-	GeneratedAt   time.Time                    `json:"generatedAt"`
-	Connections   []ArtifactConnectionRecord   `json:"connections"`
-	Queries       []ArtifactQueryRecord        `json:"queries"`
-	DataPoints    []ArtifactDataPointRecord    `json:"datapoints"`
-	Compute       []ArtifactComputeUnitRecord  `json:"compute"`
-	Alarms        ArtifactAlarmsPayload        `json:"alarms"`
-	Mqtt          ArtifactMqttPayload          `json:"mqtt"`
-	Protocols     ArtifactProtocolsPayload     `json:"protocols"`
-	BuiltinStores ArtifactBuiltinStoresPayload `json:"builtinStores"`
+	Version       string                        `json:"version"`
+	ProjectID     string                        `json:"projectId"`
+	GeneratedAt   time.Time                     `json:"generatedAt"`
+	Connections   []ArtifactConnectionRecord    `json:"connections"`
+	Queries       []ArtifactQueryRecord         `json:"queries"`
+	DataPoints    []ArtifactDataPointRecord     `json:"datapoints"`
+	Compute       []ArtifactComputeUnitRecord   `json:"compute"`
+	Alarms        ArtifactAlarmsPayload         `json:"alarms"`
+	Mqtt          ArtifactMqttPayload           `json:"mqtt"`
+	Protocols     ArtifactProtocolsPayload      `json:"protocols"`
+	BuiltinStores ArtifactBuiltinStoresPayload  `json:"builtinStores"`
+	SecretRefs    []ArtifactConnectionSecretRef `json:"secretRefs"`
 }
 
 // ProjectSnapshotRepository 负责项目级数据域快照读写。
@@ -308,6 +351,13 @@ func NewProjectSnapshotRepository(pool *pgxpool.Pool) *ProjectSnapshotRepository
 // GetByProject 读取项目级完整快照。
 func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID string) (*ProjectSnapshot, error) {
 	connections, err := r.listConnections(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	for index := range connections {
+		connections[index].Config = scrubArtifactConnectionSecrets(connections[index].Config)
+	}
+	connectionSecrets, err := r.listConnectionSecrets(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -340,7 +390,7 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 	if err != nil {
 		return nil, err
 	}
-	alarmPolicies, err := alarmRepository.ListAllPolicies(ctx, projectID)
+	alarmItems, err := alarmRepository.ListAllAlarmItems(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -367,6 +417,7 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 
 	return &ProjectSnapshot{
 		Connections:          connections,
+		ConnectionSecrets:    connectionSecrets,
 		RelationalConfigs:    deriveRelationalConfigs(connections),
 		Queries:              queries,
 		MqttConfigs:          mqttConfigs,
@@ -374,8 +425,8 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 		MqttTags:             mqttTags,
 		DataPoints:           datapoints,
 		ComputeUnits:         computeUnits,
-		AlarmPolicyGroups:    alarmGroups,
-		AlarmPolicies:        alarmPolicies,
+		AlarmGroups:          alarmGroups,
+		AlarmItems:           alarmItems,
 		AlarmSettings:        alarmSettings,
 		AlarmHistorySettings: alarmHistorySettings,
 		AlarmChannels:        alarmChannels,
@@ -386,6 +437,11 @@ func (r *ProjectSnapshotRepository) GetByProject(ctx context.Context, projectID 
 
 // ReplaceProjectData 用快照内容覆盖项目下的数据域数据。
 func (r *ProjectSnapshotRepository) ReplaceProjectData(ctx context.Context, projectID, actorID string, snapshot ProjectSnapshot) error {
+	for _, connection := range snapshot.Connections {
+		if connectionConfigContainsPlaintextSecret(connection.Config, "") {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "工程快照连接配置包含明文密钥，请使用 connectionSecrets 密文区块")
+		}
+	}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启快照写入事务失败", err)
@@ -398,6 +454,12 @@ func (r *ProjectSnapshotRepository) ReplaceProjectData(ctx context.Context, proj
 		return err
 	}
 	if err := r.insertConnections(ctx, tx, projectID, actorID, snapshot.Connections); err != nil {
+		return err
+	}
+	if err := r.insertProtocolConnectionConfigs(ctx, tx, snapshot.Connections); err != nil {
+		return err
+	}
+	if err := r.insertConnectionSecrets(ctx, tx, snapshot.ConnectionSecrets); err != nil {
 		return err
 	}
 	if err := r.insertMqttConfigs(ctx, tx, snapshot.MqttConfigs); err != nil {
@@ -421,7 +483,7 @@ func (r *ProjectSnapshotRepository) ReplaceProjectData(ctx context.Context, proj
 	if err := r.insertComputeUnits(ctx, tx, projectID, actorID, snapshot.ComputeUnits); err != nil {
 		return err
 	}
-	if err := r.insertAlarmPolicyGroups(ctx, tx, projectID, actorID, snapshot.AlarmPolicyGroups); err != nil {
+	if err := r.insertAlarmGroups(ctx, tx, projectID, actorID, snapshot.AlarmGroups); err != nil {
 		return err
 	}
 	if err := r.insertAlarmChannels(ctx, tx, projectID, actorID, snapshot.AlarmChannels, snapshot.AlarmChannelSecrets); err != nil {
@@ -433,7 +495,7 @@ func (r *ProjectSnapshotRepository) ReplaceProjectData(ctx context.Context, proj
 	if err := r.insertAlarmHistorySettings(ctx, tx, projectID, actorID, snapshot.AlarmHistorySettings); err != nil {
 		return err
 	}
-	if err := r.insertAlarmPolicies(ctx, tx, projectID, actorID, snapshot.AlarmPolicies); err != nil {
+	if err := r.insertAlarmItems(ctx, tx, projectID, actorID, snapshot.AlarmItems); err != nil {
 		return err
 	}
 
@@ -499,6 +561,7 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 			Unit:               dataPoint.Unit,
 			DefaultValue:       dataPoint.DefaultValue,
 			Tags:               cloneSnapshotAnyArray(dataPoint.Tags),
+			AttributeDefaults:  cloneSnapshotStringMap(dataPoint.AttributeDefaults),
 		})
 	}
 
@@ -528,6 +591,14 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 			KeyVersion: secret.EncryptionKeyVersion,
 		})
 	}
+	connectionSecretRefs := make([]ArtifactConnectionSecretRef, 0, len(snapshot.ConnectionSecrets))
+	for _, secret := range snapshot.ConnectionSecrets {
+		connectionSecretRefs = append(connectionSecretRefs, ArtifactConnectionSecretRef{
+			ConnectionID: secret.ConnectionID,
+			SecretKey:    secret.SecretKey,
+			KeyVersion:   secret.EncryptionKeyVersion,
+		})
+	}
 
 	alarmHistoryStorage := ArtifactAlarmHistoryStorage{
 		Enabled:                     true,
@@ -553,7 +624,6 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 			Port:              mqttConfig.Port,
 			ClientID:          mqttConfig.ClientID,
 			Username:          mqttConfig.Username,
-			Password:          mqttConfig.Password,
 			Keepalive:         mqttConfig.Keepalive,
 			CleanSession:      mqttConfig.CleanSession,
 			QOS:               mqttConfig.QOS,
@@ -578,7 +648,7 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 			Name:   connection.Name,
 			Type:   connection.Type,
 			Status: connection.Status,
-			Config: cloneSnapshotObject(connection.Config),
+			Config: scrubArtifactConnectionSecrets(connection.Config),
 		}
 		switch connection.Type {
 		case "kafka":
@@ -603,10 +673,10 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 		DataPoints:  dataPoints,
 		Compute:     computeUnits,
 		Alarms: ArtifactAlarmsPayload{
-			SchemaVersion:  "alarm.policy.v1",
+			SchemaVersion:  "alarm.item.v1",
 			HistoryStorage: alarmHistoryStorage,
-			Groups:         append([]AlarmPolicyGroupRecord{}, snapshot.AlarmPolicyGroups...),
-			Policies:       append([]AlarmPolicyRecord{}, snapshot.AlarmPolicies...),
+			Groups:         append([]AlarmPolicyGroupRecord{}, snapshot.AlarmGroups...),
+			Items:          buildArtifactAlarmItems(snapshot.AlarmItems),
 			Settings:       snapshot.AlarmSettings,
 			Channels:       append([]AlarmNotificationChannelRecord{}, snapshot.AlarmChannels...),
 			SecretRefs:     secretRefs,
@@ -618,12 +688,44 @@ func BuildProjectArtifactV1(projectID string, snapshot *ProjectSnapshot, generat
 		},
 		Protocols:     protocols,
 		BuiltinStores: builtinStores,
+		SecretRefs:    connectionSecretRefs,
 	}
+}
+
+func buildArtifactAlarmItems(records []AlarmItemRecord) []ArtifactAlarmItem {
+	items := make([]ArtifactAlarmItem, 0, len(records))
+	for _, record := range records {
+		items = append(items, ArtifactAlarmItem{
+			AlarmItemID:       record.ID,
+			DatapointID:       record.DatapointID,
+			Path:              record.Path,
+			GroupID:           record.GroupID,
+			DisplayName:       record.DisplayName,
+			Description:       record.Description,
+			Mode:              record.Mode,
+			AlarmType:         record.AlarmType,
+			EvaluationMode:    record.EvaluationMode,
+			Inputs:            append([]AlarmItemInputRecord{}, record.Inputs...),
+			DerivedExpression: record.DerivedExpression,
+			Conditions:        append([]AlarmItemConditionRecord{}, record.Conditions...),
+			Notification: ArtifactAlarmNotification{
+				Mode:                  record.NotificationMode,
+				NotifyOnRaise:         record.NotifyOnRaise,
+				NotifyOnClear:         record.NotifyOnClear,
+				RepeatIntervalSeconds: record.RepeatIntervalSeconds,
+				ChannelIDs:            append([]string{}, record.NotificationChannelIDs...),
+				MessageTemplate:       record.MessageTemplate,
+			},
+			IsEnabled: record.IsEnabled,
+			Revision:  record.Revision,
+		})
+	}
+	return items
 }
 
 func buildArtifactConnectionConfig(connection ConnectionRecord) map[string]any {
 	if !strings.HasPrefix(connection.Type, "builtin.") {
-		return cloneSnapshotObject(connection.Config)
+		return scrubArtifactConnectionSecrets(connection.Config)
 	}
 	result := map[string]any{}
 	allowedKeys := map[string]struct{}{
@@ -643,6 +745,39 @@ func buildArtifactConnectionConfig(connection ConnectionRecord) map[string]any {
 		}
 	}
 	return result
+}
+
+func scrubArtifactConnectionSecrets(config map[string]any) map[string]any {
+	result := map[string]any{}
+	for key, value := range config {
+		normalized := strings.ToLower(strings.TrimSpace(key))
+		if normalized == "password" || normalized == "token" || normalized == "dsn" || normalized == "privatekey" || normalized == "private_key" {
+			continue
+		}
+		switch typed := value.(type) {
+		case map[string]any:
+			result[key] = scrubArtifactConnectionSecrets(typed)
+		default:
+			result[key] = typed
+		}
+	}
+	return result
+}
+
+func connectionConfigContainsPlaintextSecret(config map[string]any, parent string) bool {
+	for key, value := range config {
+		normalized := strings.ToLower(strings.TrimSpace(key))
+		if normalized == "password" || normalized == "token" || normalized == "dsn" || normalized == "privatekey" || normalized == "private_key" {
+			return true
+		}
+		if strings.EqualFold(parent, "sslConfig") && (normalized == "ca" || normalized == "cert" || normalized == "key") {
+			return true
+		}
+		if nested, ok := value.(map[string]any); ok && connectionConfigContainsPlaintextSecret(nested, key) {
+			return true
+		}
+	}
+	return false
 }
 
 func buildBuiltinStores(connections []ConnectionRecord) ArtifactBuiltinStoresPayload {
@@ -846,6 +981,30 @@ func (r *ProjectSnapshotRepository) listAlarmChannelSecrets(ctx context.Context,
 	return result, nil
 }
 
+func (r *ProjectSnapshotRepository) listConnectionSecrets(ctx context.Context, projectID string) ([]SnapshotConnectionSecretRecord, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT secret.connection_id, secret.secret_key, secret.encrypted_value,
+		       secret.encryption_key_version, secret.created_at, secret.updated_at
+		FROM data_connection_secrets secret
+		JOIN data_connections connection ON connection.id = secret.connection_id
+		WHERE connection.project_id = $1
+		ORDER BY connection.display_order, secret.secret_key
+	`, projectID)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询快照接入源密钥失败", err)
+	}
+	defer rows.Close()
+	result := make([]SnapshotConnectionSecretRecord, 0)
+	for rows.Next() {
+		var record SnapshotConnectionSecretRecord
+		if err := rows.Scan(&record.ConnectionID, &record.SecretKey, &record.EncryptedValue, &record.EncryptionKeyVersion, &record.CreatedAt, &record.UpdatedAt); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取快照接入源密钥失败", err)
+		}
+		result = append(result, record)
+	}
+	return result, rows.Err()
+}
+
 func (r *ProjectSnapshotRepository) listMqttConfigs(ctx context.Context, projectID string) ([]SnapshotMqttConfigRecord, error) {
 	rows, err := r.pool.Query(ctx, `
         SELECT
@@ -853,10 +1012,9 @@ func (r *ProjectSnapshotRepository) listMqttConfigs(ctx context.Context, project
             cfg.broker_url,
             cfg.protocol,
             cfg.port,
-            cfg.client_id,
-            cfg.username,
-            cfg.password,
-            cfg.keepalive,
+			cfg.client_id,
+			cfg.username,
+			cfg.keepalive,
             cfg.clean_session,
             cfg.qos,
             cfg.reconnect_period_ms,
@@ -884,7 +1042,6 @@ func (r *ProjectSnapshotRepository) listMqttConfigs(ctx context.Context, project
 			&record.Port,
 			&record.ClientID,
 			&record.Username,
-			&record.Password,
 			&record.Keepalive,
 			&record.CleanSession,
 			&record.QOS,
@@ -1095,11 +1252,11 @@ func translateHistoryStorageSnapshotError(message string, err error) error {
 func (r *ProjectSnapshotRepository) deleteProjectSnapshot(ctx context.Context, tx pgx.Tx, projectID string) error {
 	for _, sqlText := range []string{
 		`DELETE FROM data_history_storage_configs WHERE project_id = $1`,
-		`DELETE FROM data_alarm_policies WHERE project_id = $1`,
+		`DELETE FROM data_alarm_items WHERE project_id = $1`,
 		`DELETE FROM data_alarm_history_settings WHERE project_id = $1`,
 		`DELETE FROM data_alarm_project_settings WHERE project_id = $1`,
 		`DELETE FROM data_alarm_notification_channels WHERE project_id = $1`,
-		`DELETE FROM data_alarm_policy_groups WHERE project_id = $1`,
+		`DELETE FROM data_alarm_groups WHERE project_id = $1`,
 		`DELETE FROM data_alarm_config_sync_requests WHERE project_id = $1`,
 		`DELETE FROM data_alarm_config_sync_state WHERE project_id = $1`,
 		`DELETE FROM data_compute_units WHERE project_id = $1`,
@@ -1137,6 +1294,56 @@ func (r *ProjectSnapshotRepository) insertConnections(ctx context.Context, tx pg
 	return nil
 }
 
+func (r *ProjectSnapshotRepository) insertConnectionSecrets(ctx context.Context, tx pgx.Tx, secrets []SnapshotConnectionSecretRecord) error {
+	for _, secret := range secrets {
+		if strings.TrimSpace(secret.SecretKey) == "" || len(secret.EncryptedValue) == 0 || strings.TrimSpace(secret.EncryptionKeyVersion) == "" {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照接入源密钥记录不完整")
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO data_connection_secrets
+				(connection_id, secret_key, encrypted_value, encryption_key_version, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, secret.ConnectionID, secret.SecretKey, secret.EncryptedValue, secret.EncryptionKeyVersion, coalesceTime(secret.CreatedAt), coalesceTime(secret.UpdatedAt)); err != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "写入快照接入源密钥失败", err)
+		}
+	}
+	return nil
+}
+
+// insertProtocolConnectionConfigs 从快照中的非敏感结构化 metadata 恢复专用配置表。
+// 密钥由 insertConnectionSecrets 单独恢复，二者都处在同一个覆盖事务中。
+func (r *ProjectSnapshotRepository) insertProtocolConnectionConfigs(ctx context.Context, tx pgx.Tx, connections []ConnectionRecord) error {
+	for _, connection := range connections {
+		config := connection.Config
+		optionsBytes, err := marshalSnapshotObject(parseSnapshotObject(config["options"]))
+		if err != nil {
+			return err
+		}
+		switch connection.Type {
+		case "kafka":
+			_, err = tx.Exec(ctx, `INSERT INTO data_kafka_configs(connection_id,brokers,topic,consumer_group,start_position,options) VALUES($1,$2,$3,$4,$5,$6::jsonb)`, connection.ID, parseSnapshotString(config["brokers"], ""), parseSnapshotOptionalString(config["topic"]), parseSnapshotOptionalString(config["consumerGroup"]), parseSnapshotString(config["startPosition"], "latest"), string(optionsBytes))
+		case "http":
+			_, err = tx.Exec(ctx, `INSERT INTO data_http_configs(connection_id,base_url,method,headers,timeout_ms) VALUES($1,'','GET','{}'::jsonb,30000)`, connection.ID)
+		case "websocket":
+			_, err = tx.Exec(ctx, `INSERT INTO data_websocket_configs(connection_id,url,headers,heartbeat_interval_ms) VALUES($1,NULL,'{}'::jsonb,30000)`, connection.ID)
+		case "redis":
+			_, err = tx.Exec(ctx, `INSERT INTO data_redis_configs(connection_id,address,db,username,key_pattern,mode,options) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb)`, connection.ID, parseSnapshotString(config["address"], ""), parseSnapshotInt(config["db"]), parseSnapshotOptionalString(config["username"]), parseSnapshotString(config["keyPattern"], "*"), parseSnapshotString(config["mode"], "standalone"), string(optionsBytes))
+		case "tdengine":
+			_, err = tx.Exec(ctx, `INSERT INTO data_tdengine_configs(connection_id,protocol,host,port,username,database_name,timezone,tls_skip_verify,options) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)`, connection.ID, parseSnapshotString(config["protocol"], "ws"), parseSnapshotString(config["host"], ""), parseSnapshotInt(config["port"]), parseSnapshotString(config["username"], ""), parseSnapshotString(config["databaseName"], ""), parseSnapshotOptionalString(config["timezone"]), parseSnapshotBool(config["tlsSkipVerify"]), string(optionsBytes))
+		case "relational":
+			sslBytes, marshalErr := marshalSnapshotObject(parseSnapshotObject(config["sslConfig"]))
+			if marshalErr != nil {
+				return marshalErr
+			}
+			_, err = tx.Exec(ctx, `INSERT INTO data_relational_configs(connection_id,db_type,host,port,database,username,schema,charset,timezone,ssl,ssl_config,options) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12::jsonb)`, connection.ID, parseSnapshotString(config["dbType"], "postgresql"), parseSnapshotString(config["host"], ""), parseSnapshotInt(config["port"]), parseSnapshotString(config["database"], ""), parseSnapshotString(config["username"], ""), parseSnapshotOptionalString(config["schema"]), parseSnapshotString(config["charset"], "utf8mb4"), parseSnapshotOptionalString(config["timezone"]), parseSnapshotBool(config["ssl"]), nullableJSONString(sslBytes), string(optionsBytes))
+		}
+		if err != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "恢复快照专用接入源配置失败", err)
+		}
+	}
+	return nil
+}
+
 func (r *ProjectSnapshotRepository) insertMqttConfigs(ctx context.Context, tx pgx.Tx, mqttConfigs []SnapshotMqttConfigRecord) error {
 	for _, config := range mqttConfigs {
 		willBytes, err := marshalSnapshotObject(config.Will)
@@ -1149,11 +1356,11 @@ func (r *ProjectSnapshotRepository) insertMqttConfigs(ctx context.Context, tx pg
 		}
 		if _, err := tx.Exec(ctx, `
             INSERT INTO data_mqtt_configs (
-                connection_id, broker_url, protocol, port, client_id, username, password,
-                keepalive, clean_session, qos, reconnect_period_ms, connect_timeout_ms, will, ssl_config
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb)
-        `, config.ConnectionID, config.BrokerURL, config.Protocol, config.Port, config.ClientID, config.Username, config.Password, config.Keepalive, config.CleanSession, config.QOS, config.ReconnectPeriodMS, config.ConnectTimeoutMS, nullableJSONString(willBytes), nullableJSONString(sslConfigBytes)); err != nil {
+				connection_id, broker_url, protocol, port, client_id, username,
+				keepalive, clean_session, qos, reconnect_period_ms, connect_timeout_ms, will, ssl_config
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb)
+		`, config.ConnectionID, config.BrokerURL, config.Protocol, config.Port, config.ClientID, config.Username, config.Keepalive, config.CleanSession, config.QOS, config.ReconnectPeriodMS, config.ConnectTimeoutMS, nullableJSONString(willBytes), nullableJSONString(sslConfigBytes)); err != nil {
 			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入快照 MQTT 配置失败", err)
 		}
 	}
@@ -1245,6 +1452,10 @@ func (r *ProjectSnapshotRepository) insertDataPoints(ctx context.Context, tx pgx
 		if err != nil {
 			return err
 		}
+		attributeDefaultsBytes, err := json.Marshal(cloneSnapshotStringMap(datapoint.AttributeDefaults))
+		if err != nil {
+			return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点自定义属性格式无效", err)
+		}
 		runtimePermissionsBytes, err := marshalDataPointRuntimePermissions(datapoint.RuntimePermissions)
 		if err != nil {
 			return err
@@ -1254,11 +1465,11 @@ func (r *ProjectSnapshotRepository) insertDataPoints(ctx context.Context, tx pgx
 		if _, err := tx.Exec(ctx, `
             INSERT INTO data_points (
                 id, project_id, path, name, description, source_type, source_id, source_config, data_type,
-                unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, runtime_permissions,
+                unit, precision_num, default_value, min_value, max_value, alarm_low, alarm_high, tags, attribute_defaults, runtime_permissions,
                 refresh_mode, refresh_interval_ms, status, display_order, created_by, updated_by, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19, $20, $21, $22, $23, $24, $25, $26)
-        `, datapoint.ID, projectID, datapoint.Path, datapoint.Name, datapoint.Description, datapoint.SourceType, datapoint.SourceID, string(sourceConfigBytes), datapoint.DataType, datapoint.Unit, datapoint.PrecisionNum, datapoint.DefaultValue, datapoint.MinValue, datapoint.MaxValue, datapoint.AlarmLow, datapoint.AlarmHigh, string(tagsBytes), string(runtimePermissionsBytes), datapoint.RefreshMode, datapoint.RefreshIntervalMS, datapoint.Status, datapoint.DisplayOrder, actorID, actorID, createdAt, updatedAt); err != nil {
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19::jsonb, $20, $21, $22, $23, $24, $25, $26, $27)
+        `, datapoint.ID, projectID, datapoint.Path, datapoint.Name, datapoint.Description, datapoint.SourceType, datapoint.SourceID, string(sourceConfigBytes), datapoint.DataType, datapoint.Unit, datapoint.PrecisionNum, datapoint.DefaultValue, datapoint.MinValue, datapoint.MaxValue, datapoint.AlarmLow, datapoint.AlarmHigh, string(tagsBytes), string(attributeDefaultsBytes), string(runtimePermissionsBytes), datapoint.RefreshMode, datapoint.RefreshIntervalMS, datapoint.Status, datapoint.DisplayOrder, actorID, actorID, createdAt, updatedAt); err != nil {
 			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入快照数据点失败", err)
 		}
 	}
@@ -1299,7 +1510,7 @@ func (r *ProjectSnapshotRepository) insertComputeUnits(ctx context.Context, tx p
 	return nil
 }
 
-func (r *ProjectSnapshotRepository) insertAlarmPolicyGroups(ctx context.Context, tx pgx.Tx, projectID, actorID string, groups []AlarmPolicyGroupRecord) error {
+func (r *ProjectSnapshotRepository) insertAlarmGroups(ctx context.Context, tx pgx.Tx, projectID, actorID string, groups []AlarmPolicyGroupRecord) error {
 	pending := append([]AlarmPolicyGroupRecord{}, groups...)
 	inserted := make(map[string]struct{}, len(groups))
 	for len(pending) > 0 {
@@ -1313,7 +1524,7 @@ func (r *ProjectSnapshotRepository) insertAlarmPolicyGroups(ctx context.Context,
 				}
 			}
 			createdAt, updatedAt := coalesceTime(group.CreatedAt), coalesceTime(group.UpdatedAt)
-			if _, err := tx.Exec(ctx, `INSERT INTO data_alarm_policy_groups
+			if _, err := tx.Exec(ctx, `INSERT INTO data_alarm_groups
                 (id,project_id,parent_id,name,description,sort_order,created_by,updated_by,created_at,updated_at)
                 VALUES($1,$2,$3,$4,$5,$6,$7,$7,$8,$9)`,
 				group.ID, projectID, group.ParentID, group.Name, group.Description, group.SortOrder, actorID, createdAt, updatedAt); err != nil {
@@ -1406,56 +1617,51 @@ func alarmHistoryDefaultRetentionDays() *int {
 	return &value
 }
 
-func (r *ProjectSnapshotRepository) insertAlarmPolicies(ctx context.Context, tx pgx.Tx, projectID, actorID string, policies []AlarmPolicyRecord) error {
-	for _, policy := range policies {
-		channelIDs, contractBytes, err := marshalAlarmJSON(policy.NotificationChannelIDs, policy.Contract)
+func (r *ProjectSnapshotRepository) insertAlarmItems(ctx context.Context, tx pgx.Tx, projectID, actorID string, items []AlarmItemRecord) error {
+	for _, item := range items {
+		channelIDs, contractBytes, err := marshalAlarmJSON(item.NotificationChannelIDs, item.Contract)
 		if err != nil {
 			return err
 		}
-		revision := policy.Revision
+		revision := item.Revision
 		if revision < 1 {
 			revision = 1
 		}
-		createdAt, updatedAt := coalesceTime(policy.CreatedAt), coalesceTime(policy.UpdatedAt)
-		if _, err = tx.Exec(ctx, `INSERT INTO data_alarm_policies
-            (id,project_id,group_id,name,description,mode,derived_expression,notification_mode,notify_on_raise,notify_on_clear,
+		createdAt, updatedAt := coalesceTime(item.CreatedAt), coalesceTime(item.UpdatedAt)
+		if _, err = tx.Exec(ctx, `INSERT INTO data_alarm_items
+            (id,project_id,datapoint_id,group_id,display_name,name_key,description,mode,alarm_type,evaluation_mode,derived_expression,trigger_fingerprint,notification_mode,notify_on_raise,notify_on_clear,
              repeat_interval_seconds,notification_channel_ids,message_template,is_enabled,revision,contract,created_by,updated_by,created_at,updated_at)
-            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$15,$16::jsonb,$17,$17,$18,$19)`,
-			policy.ID, projectID, policy.GroupID, policy.Name, policy.Description, policy.Mode, policy.DerivedExpression,
-			policy.NotificationMode, policy.NotifyOnRaise, policy.NotifyOnClear, policy.RepeatIntervalSeconds, string(channelIDs),
-			policy.MessageTemplate, policy.IsEnabled, revision, string(contractBytes), actorID, createdAt, updatedAt); err != nil {
-			return translateAlarmSnapshotError("写入快照报警策略失败", err)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18,$19,$20,$21::jsonb,$22,$22,$23,$24)`,
+			item.ID, projectID, item.DatapointID, item.GroupID, item.DisplayName, item.NameKey, item.Description, item.Mode, item.AlarmType, item.EvaluationMode, item.DerivedExpression, item.TriggerFingerprint,
+			item.NotificationMode, item.NotifyOnRaise, item.NotifyOnClear, item.RepeatIntervalSeconds, string(channelIDs),
+			item.MessageTemplate, item.IsEnabled, revision, string(contractBytes), actorID, createdAt, updatedAt); err != nil {
+			return translateAlarmSnapshotError("写入快照报警项失败", err)
 		}
-		if err = insertSnapshotAlarmPolicyDetails(ctx, tx, policy.ID, policy.Bindings, policy.Conditions); err != nil {
+		if err = insertSnapshotAlarmItemDetails(ctx, tx, item); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func insertSnapshotAlarmPolicyDetails(ctx context.Context, tx pgx.Tx, policyID string, bindings []AlarmPolicyBindingRecord, conditions []AlarmPolicyConditionRecord) error {
-	for index, binding := range bindings {
-		if binding.ID == "" {
-			_, err := tx.Exec(ctx, `INSERT INTO data_alarm_policy_bindings(policy_id,datapoint_id,role,input_key,sort_order) VALUES($1,$2,$3,$4,$5)`, policyID, binding.DatapointID, binding.Role, binding.InputKey, index)
-			if err != nil {
-				return translateAlarmSnapshotError("写入快照报警点位绑定失败", err)
-			}
-			continue
+func insertSnapshotAlarmItemDetails(ctx context.Context, tx pgx.Tx, item AlarmItemRecord) error {
+	for index, input := range item.Inputs {
+		if input.ID == "" || input.InputKey == "" {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照组合报警输入缺少稳定 ID 或别名")
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO data_alarm_policy_bindings(id,policy_id,datapoint_id,role,input_key,sort_order) VALUES($1,$2,$3,$4,$5,$6)`, binding.ID, policyID, binding.DatapointID, binding.Role, binding.InputKey, index); err != nil {
-			return translateAlarmSnapshotError("写入快照报警点位绑定失败", err)
+		if _, err := tx.Exec(ctx, `INSERT INTO data_alarm_item_inputs(id,alarm_item_id,datapoint_id,input_key,sort_order) VALUES($1,$2,$3,$4,$5)`, input.ID, item.ID, input.DatapointID, input.InputKey, index); err != nil {
+			return translateAlarmSnapshotError("写入快照组合报警输入失败", err)
 		}
 	}
-	for index, condition := range conditions {
+	for index, condition := range item.Conditions {
 		params, err := json.Marshal(condition.Params)
 		if err != nil {
 			return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照报警条件参数格式无效", err)
 		}
 		if condition.ID == "" {
-			_, err = tx.Exec(ctx, `INSERT INTO data_alarm_policy_conditions(policy_id,kind,operator,label,severity,params,trigger_delay_ms,clear_delay_ms,deadband,sort_order) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10)`, policyID, condition.Kind, condition.Operator, condition.Label, condition.Severity, string(params), condition.TriggerDelayMS, condition.ClearDelayMS, condition.Deadband, index)
-		} else {
-			_, err = tx.Exec(ctx, `INSERT INTO data_alarm_policy_conditions(id,policy_id,kind,operator,label,severity,params,trigger_delay_ms,clear_delay_ms,deadband,sort_order) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11)`, condition.ID, policyID, condition.Kind, condition.Operator, condition.Label, condition.Severity, string(params), condition.TriggerDelayMS, condition.ClearDelayMS, condition.Deadband, index)
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "快照报警条件缺少稳定 ID")
 		}
+		_, err = tx.Exec(ctx, `INSERT INTO data_alarm_item_conditions(id,alarm_item_id,kind,operator,label,severity,params,trigger_delay_ms,clear_delay_ms,deadband,sort_order) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11)`, condition.ID, item.ID, condition.Kind, condition.Operator, condition.Label, condition.Severity, string(params), condition.TriggerDelayMS, condition.ClearDelayMS, condition.Deadband, index)
 		if err != nil {
 			return translateAlarmSnapshotError("写入快照报警条件失败", err)
 		}
@@ -1488,7 +1694,6 @@ func deriveRelationalConfigs(connections []ConnectionRecord) []SnapshotRelationa
 			Port:         port,
 			Database:     parseSnapshotString(connection.Config["database"], ""),
 			Username:     parseSnapshotString(connection.Config["username"], ""),
-			Password:     parseSnapshotString(connection.Config["password"], ""),
 			Schema:       parseSnapshotOptionalString(connection.Config["schema"]),
 			Charset:      parseSnapshotOptionalString(connection.Config["charset"]),
 			Timezone:     parseSnapshotOptionalString(connection.Config["timezone"]),
@@ -1516,6 +1721,14 @@ func cloneSnapshotAnyArray(value []any) []any {
 		return []any{}
 	}
 	return append([]any{}, value...)
+}
+
+func cloneSnapshotStringMap(value map[string]string) map[string]string {
+	result := make(map[string]string, len(value))
+	for key, item := range value {
+		result[key] = item
+	}
+	return result
 }
 
 func coalesceProtocolType(value string, fallback string) string {

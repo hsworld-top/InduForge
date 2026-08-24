@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'vitest'
-import { inferKafkaSampleFields, normalizeKafkaSampleEditorText } from '@/components/kafka/kafkaSampleFields'
+import {
+  inferKafkaSampleFields,
+  normalizeKafkaSampleEditorText,
+} from '@/components/kafka/kafkaSampleFields'
 
 describe('kafkaSampleFields', () => {
   test('从 Kafka sample.value 对象展平字段', () => {

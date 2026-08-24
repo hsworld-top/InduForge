@@ -69,7 +69,6 @@ func (r *ProtocolWave1Repository) GetPreviewConnection(ctx context.Context, proj
 		           'address', redis_cfg.address,
 		           'db', redis_cfg.db,
 		           'username', redis_cfg.username,
-		           'password', redis_cfg.password,
 		           'keyPattern', redis_cfg.key_pattern,
 		           'mode', redis_cfg.mode,
 		           'options', redis_cfg.options

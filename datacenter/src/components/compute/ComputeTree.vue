@@ -43,6 +43,7 @@
         size="small"
         placeholder="搜索计算单元"
         :prefix-icon="SearchIcon"
+        @update:model-value="scheduleSearch"
       />
     </div>
 
@@ -97,9 +98,18 @@
         :title="keyword ? '没有匹配的计算单元' : '暂无计算单元'"
         :description="keyword ? '换个关键词再试。' : '新建计算单元后会显示在列表中。'"
       />
+      <button
+        v-if="hasMore && !loading"
+        type="button"
+        class="compute-tree__load-more"
+        :disabled="loadingMore"
+        @click="$emit('loadMore')"
+      >
+        {{ loadingMore ? '加载中...' : `加载更多（${units.length}/${total}）` }}
+      </button>
     </div>
 
-    <footer class="compute-tree__foot">{{ total }} 个单元</footer>
+    <footer class="compute-tree__foot">已加载 {{ units.length }} / 共 {{ total }} 个单元</footer>
 
     <Teleport to="body">
       <div
@@ -132,7 +142,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import IconTablerAlertCircle from '~icons/tabler/alert-circle'
 import IconTablerFileCode from '~icons/tabler/file-code'
@@ -157,11 +167,13 @@ const props = withDefaults(
   defineProps<{
     units: ComputeUnit[]
     folders: ComputeFolder[]
+    total?: number
     selectedUnitId?: string | null
     dirtyUnitIds?: string[]
     loading?: boolean
     listError?: string
     foldersError?: string
+    loadingMore?: boolean
   }>(),
   {
     selectedUnitId: null,
@@ -169,6 +181,8 @@ const props = withDefaults(
     loading: false,
     listError: '',
     foldersError: '',
+    total: 0,
+    loadingMore: false,
   },
 )
 
@@ -177,6 +191,8 @@ const emit = defineEmits<{
   (event: 'createUnit'): void
   (event: 'createFolder'): void
   (event: 'refresh'): void
+  (event: 'search', keyword: string): void
+  (event: 'loadMore'): void
   (event: 'renameUnit', unit: ComputeUnit): void
   (event: 'moveUnit', unit: ComputeUnit): void
   (event: 'deleteUnit', unit: ComputeUnit): void
@@ -202,7 +218,8 @@ const contextMenu = ref<{
   folder: null,
 })
 
-const total = computed(() => props.units.length)
+let searchTimer: number | undefined
+const hasMore = computed(() => props.units.length < props.total)
 const tree = computed(() => buildComputeFolderTree(props.folders, props.units))
 const filteredTree = computed(() =>
   filterComputeTree(tree.value.rootFolders, tree.value.rootUnits, keyword.value),
@@ -210,6 +227,13 @@ const filteredTree = computed(() =>
 const filteredFolders = computed(() => filteredTree.value.folders)
 const filteredRootUnits = computed(() => filteredTree.value.units)
 const dirtyUnitIdSet = computed(() => new Set(props.dirtyUnitIds.map(String)))
+
+function scheduleSearch(value: string) {
+  window.clearTimeout(searchTimer)
+  searchTimer = window.setTimeout(() => emit('search', value.trim()), 250)
+}
+
+onBeforeUnmount(() => window.clearTimeout(searchTimer))
 
 function openUnitMenu(event: MouseEvent, unit: ComputeUnit) {
   contextMenu.value = {
@@ -510,6 +534,29 @@ const unitStatusTone = (unit: ComputeUnit) =>
   color: var(--dc-text-muted);
   font-size: 12px;
   line-height: 1.4;
+}
+
+.compute-tree__load-more {
+  width: calc(100% - 12px);
+  min-height: 30px;
+  margin: 8px 6px 2px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface);
+  color: var(--dc-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.compute-tree__load-more:hover:not(:disabled) {
+  border-color: var(--dc-primary);
+  background: var(--dc-primary-soft);
+}
+
+.compute-tree__load-more:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .compute-tree__menu-mask {

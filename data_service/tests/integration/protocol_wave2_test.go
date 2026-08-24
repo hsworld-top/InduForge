@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,7 +17,7 @@ import (
 	apperrors "github.com/indu-forge/data_service/internal/errors"
 )
 
-func TestProtocolWave2PhaseBoundary(t *testing.T) {
+func TestProtocolWave2DedicatedTDengineAndCollectorBoundary(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -31,10 +32,12 @@ func TestProtocolWave2PhaseBoundary(t *testing.T) {
 	secret := "protocol-wave2-secret-01"
 
 	srv, err := app.NewServer(config.Config{
-		Addr:               ":0",
-		DatabaseURL:        fixture.databaseURL,
-		DatabaseSearchPath: fixture.schemaName,
-		JWTSecret:          secret,
+		Addr:                       ":0",
+		DatabaseURL:                fixture.databaseURL,
+		DatabaseSearchPath:         fixture.schemaName,
+		JWTSecret:                  secret,
+		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
+		ConnectionSecretKeyVersion: "v1",
 	})
 	if err != nil {
 		t.Fatalf("create server failed: %v", err)
@@ -51,35 +54,40 @@ func TestProtocolWave2PhaseBoundary(t *testing.T) {
 		Capabilities: []string{"project:read", "project:write"},
 	})
 
-	assertPhaseBoundaryError(t, doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/opcua/configs", token, map[string]any{
-		"name":     "opcua-main",
-		"endpoint": "opc.tcp://127.0.0.1:4840",
-	}, http.StatusOK), "OPC UA")
+	for _, path := range []string{"opcua/configs", "s7/configs", "modbus/configs"} {
+		doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/"+path, token, map[string]any{"name": "legacy-industrial-source"}, http.StatusNotFound)
+	}
 
-	assertPhaseBoundaryError(t, doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/s7/configs", token, map[string]any{
-		"name": "s7-main",
-		"host": "192.168.0.10",
-		"rack": 0,
-		"slot": 1,
-	}, http.StatusOK), "S7")
+	tdengine := doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/tdengine/configs", token, map[string]any{
+		"name": "td-main", "protocol": "ws", "host": "127.0.0.1", "port": 6041,
+		"username": "root", "databaseName": "factory", "timezone": "Asia/Shanghai",
+		"secrets": map[string]string{"password": "taosdata"},
+	})
+	var created protocolWave1ConnectionPayload
+	if err := json.Unmarshal(tdengine.Data, &created); err != nil || created.ID == "" || created.Type != "tdengine" {
+		t.Fatalf("expected dedicated TDengine connection, got %#v, err=%v", created, err)
+	}
+	updatedTDengine := doJSONRequest(t, http.MethodPut, server.URL+"/api/v1/data/projects/"+projectID+"/tdengine/configs/"+created.ID, token, map[string]any{
+		"name": "td-updated", "status": "disconnected", "protocol": "wss", "host": "td.example.local", "port": 6041,
+		"username": "root", "databaseName": "factory", "timezone": "Asia/Shanghai", "tlsSkipVerify": true,
+		"secrets": map[string]string{"password": "updated-taos-secret"},
+	})
+	var updated protocolWave1ConnectionPayload
+	if err := json.Unmarshal(updatedTDengine.Data, &updated); err != nil || updated.Name != "td-updated" {
+		t.Fatalf("expected dedicated TDengine update, got %#v, err=%v", updated, err)
+	}
+	var plaintextMatches int
+	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM data_connection_secrets WHERE connection_id = $1 AND encrypted_value = convert_to('updated-taos-secret', 'UTF8')`, created.ID).Scan(&plaintextMatches); err != nil || plaintextMatches != 0 {
+		t.Fatalf("TDengine password must be encrypted, matches=%d err=%v", plaintextMatches, err)
+	}
 
-	assertPhaseBoundaryError(t, doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/modbus/configs", token, map[string]any{
-		"name": "modbus-main",
-		"mode": "tcp",
-		"host": "192.168.0.20",
-		"port": 502,
-	}, http.StatusOK), "Modbus")
-
-	assertPhaseBoundaryError(t, doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/tdengine/configs", token, map[string]any{
-		"name":     "td-main",
-		"dsn":      "taos://root:taosdata@127.0.0.1:6030",
-		"database": "factory",
-	}, http.StatusOK), "TDengine")
-
-	assertPhaseBoundaryError(t, doJSONRequestWithStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/opcda/contracts/validate", token, map[string]any{
+	validOpcda := doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/opcda/contracts/validate", token, map[string]any{
 		"itemPath":   "Channel1.Device1.TagA",
 		"samplingMs": 1000,
-	}, http.StatusOK), "OPC DA")
+	})
+	if validOpcda.Code != apperrors.SuccessCode {
+		t.Fatalf("expected OPC DA contract validation success, got %#v", validOpcda)
+	}
 }
 
 func assertPhaseBoundaryError(t *testing.T, envelope apiEnvelope, protocolName string) {

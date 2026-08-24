@@ -60,6 +60,7 @@ type protocolPreviewRepository interface {
 type ProtocolPreviewService struct {
 	repository protocolPreviewRepository
 	adapters   map[string]ProtocolPreviewAdapter
+	secrets    *repository.ConnectionSecretRepository
 }
 
 // NewProtocolPreviewService 创建统一协议抓样服务。
@@ -72,6 +73,12 @@ func NewProtocolPreviewService(repo protocolPreviewRepository, adapters map[stri
 		normalized[strings.ToLower(strings.TrimSpace(protocol))] = adapter
 	}
 	return &ProtocolPreviewService{repository: repo, adapters: normalized}
+}
+
+func (s *ProtocolPreviewService) SetSecretRepository(secrets *repository.ConnectionSecretRepository) {
+	if s != nil {
+		s.secrets = secrets
+	}
 }
 
 // Preview 执行一次短时真实抓样，并写入不含原始样本的接入源记录摘要。
@@ -89,6 +96,13 @@ func (s *ProtocolPreviewService) Preview(ctx context.Context, projectID, connect
 	connection, err := s.repository.GetPreviewConnection(ctx, projectID, connectionID)
 	if err != nil {
 		return nil, err
+	}
+	if s.secrets != nil {
+		values, resolveErr := s.secrets.ResolveAll(ctx, connection.ID)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		connection.Config = injectConnectionSecrets(connection.Config, values)
 	}
 	protocol := strings.ToLower(strings.TrimSpace(connection.Type))
 	adapter := s.adapters[protocol]

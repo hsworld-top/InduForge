@@ -59,7 +59,85 @@ func (s *ProjectSnapshotService) Replace(ctx context.Context, projectID, actorID
 	}
 
 	normalizedSnapshot := normalizeProjectSnapshot(snapshot)
+	for index := range normalizedSnapshot.DataPoints {
+		attributes, err := normalizeDataPointAttributeDefaults(normalizedSnapshot.DataPoints[index].AttributeDefaults)
+		if err != nil {
+			return err
+		}
+		normalizedSnapshot.DataPoints[index].AttributeDefaults = attributes
+	}
+	if err := validateSnapshotAlarmItems(normalizedSnapshot); err != nil {
+		return err
+	}
 	return s.repository.ReplaceProjectData(ctx, projectID, actorID, normalizedSnapshot)
+}
+
+// validateSnapshotAlarmItems 保证快照不能绕过普通 API 的报警语义校验。
+func validateSnapshotAlarmItems(snapshot repository.ProjectSnapshot) error {
+	dataTypes := make(map[string]string, len(snapshot.DataPoints))
+	for _, datapoint := range snapshot.DataPoints {
+		dataTypes[datapoint.ID] = datapoint.DataType
+	}
+	for _, record := range snapshot.AlarmItems {
+		input := SaveAlarmItemInput{DatapointID: valueString(record.DatapointID), DisplayName: record.DisplayName, Mode: record.Mode, EvaluationMode: record.EvaluationMode, DerivedExpression: record.DerivedExpression}
+		for _, condition := range record.Conditions {
+			input.Conditions = append(input.Conditions, AlarmCondition{ID: condition.ID, Kind: condition.Kind, Operator: condition.Operator, Label: condition.Label, Severity: condition.Severity, Params: condition.Params, TriggerDelayMS: condition.TriggerDelayMS, ClearDelayMS: condition.ClearDelayMS, Deadband: condition.Deadband})
+		}
+		if record.Mode == "point" {
+			if record.DatapointID == nil {
+				return badAlarm("快照中的普通报警必须关联一个数据点")
+			}
+			dataType, exists := dataTypes[*record.DatapointID]
+			if !exists {
+				return badAlarm("快照报警引用了不存在的数据点")
+			}
+			category := alarmDataCategory(dataType)
+			if record.EvaluationMode == "single" && len(input.Conditions) != 1 {
+				return badAlarm("快照普通单条件报警必须且只能有一个条件")
+			}
+			if _, err := normalizeConfigurationConditions(input.Conditions, category, record.EvaluationMode, false); err != nil {
+				return err
+			}
+		} else if record.Mode == "derived" {
+			if len(record.Inputs) < 2 || strings.TrimSpace(record.DerivedExpression) == "" || record.EvaluationMode != "single" || len(input.Conditions) != 1 {
+				return badAlarm("快照组合报警结构不完整")
+			}
+			seenPoints, seenKeys := map[string]bool{}, map[string]bool{}
+			for _, item := range record.Inputs {
+				if _, exists := dataTypes[item.DatapointID]; !exists || seenPoints[item.DatapointID] || !alarmInputKeyPattern.MatchString(strings.TrimSpace(item.InputKey)) || seenKeys[item.InputKey] {
+					return badAlarm("快照组合报警输入点或别名不合法")
+				}
+				seenPoints[item.DatapointID], seenKeys[item.InputKey] = true, true
+				input.Inputs = append(input.Inputs, AlarmItemInput{DatapointID: item.DatapointID, InputKey: item.InputKey, DataType: dataTypes[item.DatapointID]})
+			}
+			if err := validateDerivedAlarmExpression(record.DerivedExpression, seenKeys); err != nil {
+				return err
+			}
+			if _, err := normalizeConfigurationConditions(input.Conditions, "", "single", true); err != nil {
+				return err
+			}
+			if err := validateDerivedAlarmExpressionTypes(record.DerivedExpression, input.Inputs, input.Conditions[0]); err != nil {
+				return err
+			}
+		} else {
+			return badAlarm("快照报警模式不受支持")
+		}
+		fingerprint, err := alarmTriggerFingerprint(input)
+		if err != nil {
+			return err
+		}
+		if record.TriggerFingerprint != fingerprint || record.NameKey != normalizeAlarmName(record.DisplayName) {
+			return badAlarm("快照报警名称键或触发指纹不一致")
+		}
+	}
+	return nil
+}
+
+func valueString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 // normalizeProjectSnapshot 在快照导入前补齐数据点运行态权限默认值。

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
+	"github.com/indu-forge/data_service/internal/security"
 )
 
 // MqttConnectionRecord 表示 MQTT 连接在仓储层的返回结构。
@@ -67,7 +68,8 @@ type CreateMqttConnectionParams struct {
 	Port             int
 	ClientID         *string
 	Username         *string
-	Password         *string
+	Secrets          map[string]string
+	ClearSecretKeys  []string
 	Keepalive        int
 	CleanSession     bool
 	QOS              int
@@ -92,12 +94,13 @@ type CreateMqttMessageParams struct {
 }
 
 type MqttRepository struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	cipher *security.ConnectionSecretCipher
 }
 
 // NewMqttRepository 创建 MQTT 仓储。
-func NewMqttRepository(pool *pgxpool.Pool) *MqttRepository {
-	return &MqttRepository{pool: pool}
+func NewMqttRepository(pool *pgxpool.Pool, cipher *security.ConnectionSecretCipher) *MqttRepository {
+	return &MqttRepository{pool: pool, cipher: cipher}
 }
 
 // CreateConnection 创建 MQTT 连接并同步写入 data_connections / data_mqtt_configs。
@@ -183,7 +186,6 @@ func (r *MqttRepository) CreateConnection(ctx context.Context, params CreateMqtt
 			port,
 			client_id,
 			username,
-			password,
 			keepalive,
 			clean_session,
 			qos,
@@ -193,12 +195,15 @@ func (r *MqttRepository) CreateConnection(ctx context.Context, params CreateMqtt
 			ssl_config
 		)
 		VALUES (
-			$1, $2, $3, $4, $5, $6, $7,
-			$8, $9, $10, $11, $12, $13::jsonb, $14::jsonb
+			$1, $2, $3, $4, $5, $6,
+			$7, $8, $9, $10, $11, $12::jsonb, $13::jsonb
 		)
-	`, record.ID, params.BrokerURL, params.Protocol, params.Port, params.ClientID, params.Username, params.Password, params.Keepalive, params.CleanSession, params.QOS, params.ReconnectPeriod, params.ConnectTimeoutMS, willSQL, sslSQL)
+	`, record.ID, params.BrokerURL, params.Protocol, params.Port, params.ClientID, params.Username, params.Keepalive, params.CleanSession, params.QOS, params.ReconnectPeriod, params.ConnectTimeoutMS, willSQL, sslSQL)
 	if err != nil {
 		return nil, wrapMqttWriteError("写入 MQTT 连接配置失败", err)
+	}
+	if err := applyPlainConnectionSecretsTx(ctx, tx, r.cipher, record.ID, params.Secrets, params.ClearSecretKeys); err != nil {
+		return nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -265,7 +270,6 @@ func (r *MqttRepository) GetPublishConnection(ctx context.Context, projectID, co
 			COALESCE(cfg.port, 0),
 			cfg.client_id,
 			cfg.username,
-			cfg.password,
 			COALESCE(cfg.keepalive, 30),
 			COALESCE(cfg.clean_session, true),
 			COALESCE(cfg.qos, 0),
@@ -286,7 +290,6 @@ func (r *MqttRepository) GetPublishConnection(ctx context.Context, projectID, co
 		&record.Port,
 		&record.ClientID,
 		&record.Username,
-		&record.Password,
 		&record.Keepalive,
 		&record.CleanSession,
 		&record.QOS,

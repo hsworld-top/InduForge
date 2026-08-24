@@ -6,13 +6,9 @@
           <IconTablerPlus class="mqtt-tag-list__button-icon" />
           新建变量
         </el-button>
-        <el-button size="small" @click="handleBatchCreate">
-          <IconTablerDocumentAdd class="mqtt-tag-list__button-icon" />
-          批量导入
-        </el-button>
-        <el-button size="small" @click="handleBatchExport">
+        <el-button size="small" :loading="exporting" @click="handleBatchExport">
           <IconTablerDownload class="mqtt-tag-list__button-icon" />
-          批量导出
+          导出结果
         </el-button>
         <el-button
           class="mqtt-tag-list__live-action"
@@ -214,7 +210,6 @@ import { useMqttTagSync } from '@/composables/useMqttTagSync'
 import MqttTagDialog from './MqttTagDialog.vue'
 import BulkActionBar from '@/components/shared/BulkActionBar.vue'
 import IconTablerActivity from '~icons/tabler/activity'
-import IconTablerDocumentAdd from '~icons/tabler/file-plus'
 import IconTablerDownload from '~icons/tabler/download'
 import IconTablerEdit from '~icons/tabler/edit'
 import IconTablerEye from '~icons/tabler/eye'
@@ -227,6 +222,7 @@ import IconTablerTrash from '~icons/tabler/trash'
 import dayjs from 'dayjs'
 import { TIME_FORMAT } from '@/constants'
 import { getApiErrorMessage } from '@/utils/request'
+import { downloadCsv } from '@/utils/tabular-file'
 
 const props = defineProps({
   projectId: {
@@ -246,6 +242,7 @@ const props = defineProps({
 defineEmits(['openMonitor'])
 
 const loading = ref(false)
+const exporting = ref(false)
 const tags = ref<any[]>([])
 const selectedTags = ref<any[]>([])
 const allTagResultsSelected = ref(false)
@@ -409,8 +406,78 @@ const changePageSize = async (pageSize) => {
   await reloadFirstPage()
 }
 
-const handleBatchExport = () => {
-  ElMessage.info('批量导出功能待实现')
+const handleBatchExport = async () => {
+  if (exporting.value) return
+  exporting.value = true
+  try {
+    const pageSize = 100
+    const firstResponse = await getMqttTags(props.projectId, props.subscriptionId, {
+      page: 1,
+      pageSize,
+      q: searchKeyword.value.trim() || undefined,
+      sortBy: sortBy.value,
+      sortOrder: sortOrder.value,
+    })
+    const firstPage = firstResponse.data?.list || []
+    const totalPages = Number(firstResponse.data?.pagination?.totalPages || 1)
+    const remainingResponses = []
+    for (let page = 2; page <= totalPages; page += 1) {
+      remainingResponses.push(
+        await getMqttTags(props.projectId, props.subscriptionId, {
+          page,
+          pageSize,
+          q: searchKeyword.value.trim() || undefined,
+          sortBy: sortBy.value,
+          sortOrder: sortOrder.value,
+        }),
+      )
+    }
+    const exportedTags = [
+      ...firstPage,
+      ...remainingResponses.flatMap((response) => response.data?.list || []),
+    ]
+    const statusMap = new Map<string, any>()
+    for (let offset = 0; offset < exportedTags.length; offset += 500) {
+      const sourceIds = exportedTags.slice(offset, offset + 500).map((tag) => tag.id)
+      const statusResponse = await getDataPointStatuses(props.projectId, { sourceIds })
+      ;(statusResponse.data?.datapoints || []).forEach((item) => {
+        statusMap.set(item.sourceId, item)
+      })
+    }
+    const headers = [
+      '变量名',
+      '编码',
+      '描述',
+      '数据类型',
+      '解析类型',
+      '解析规则',
+      '单位',
+      '状态',
+      '数据点路径',
+      '创建时间',
+    ]
+    const rows = exportedTags.map((tag) => {
+      const datapoint = statusMap.get(tag.id)
+      return {
+        变量名: tag.name,
+        编码: tag.code,
+        描述: tag.description || '',
+        数据类型: getDataTypeLabel(tag.dataType),
+        解析类型: getParseTypeLabel(tag.parseType),
+        解析规则: tag.parseRule || '',
+        单位: tag.unit || '',
+        状态: datapoint?.status === 'invalid' ? '失效' : datapoint?.path ? '活跃' : '未生成',
+        数据点路径: datapoint?.path || '',
+        创建时间: formatTime(tag.createdAt),
+      }
+    })
+    downloadCsv(`mqtt-variables-${dayjs().format('YYYYMMDD-HHmmss')}.csv`, headers, rows)
+    ElMessage.success(`已导出 ${rows.length} 条变量`)
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '导出变量失败'))
+  } finally {
+    exporting.value = false
+  }
 }
 
 const handleCreateTag = () => {
@@ -554,10 +621,6 @@ const handleTagDialogSuccess = async () => {
   notifyTagChange(isCreate ? 'created' : 'updated', {
     tagId: currentTag.value?.id,
   })
-}
-
-const handleBatchCreate = () => {
-  ElMessage.info('批量导入功能开发中...')
 }
 
 const normalizeTagValue = (value) => ({

@@ -234,7 +234,12 @@
     </div>
 
     <div v-else-if="activeModule === 'alarm'" class="h-full overflow-hidden">
-      <AlarmWorkspace v-if="projectId" :project-id="projectId" />
+      <AlarmWorkspace
+        v-if="projectId"
+        :project-id="projectId"
+        :selected-policy-id="selectedAlarmPolicyId"
+        @close-selected-policy="handleCloseAlarmPolicy"
+      />
     </div>
   </DataCenterShell>
 
@@ -383,6 +388,20 @@ const activeObjectId = computed(() => String(route.params.objectId || ''))
 const selectedComputeUnitId = computed(() =>
   route.params.module === 'compute' ? activeObjectId.value : '',
 )
+const selectedAlarmPolicyId = computed(() =>
+  route.params.module === 'alarm' ? activeObjectId.value : '',
+)
+
+const handleCloseAlarmPolicy = () => {
+  const params = { ...route.params }
+  delete params.objectId
+  delete params.tab
+  void router.replace({
+    name: route.name || 'datacenter',
+    params,
+    query: route.query,
+  })
+}
 
 /** 监听路由变化，同步 activeModule（如从 NavRail 外部 push 路由时） */
 watch(
@@ -887,14 +906,15 @@ const activeWorkbenchConnection = ref(null)
 let workbenchConnectionLoadVersion = 0
 watch(
   [
+    () => route.params.module,
     () => route.params.tab,
     () => route.params.objectId,
     () => projectId.value,
     () => connections.value.map((connection) => connection.id).join(','),
   ],
-  async ([tab, objectId, currentProjectId]) => {
+  async ([module, tab, objectId, currentProjectId]) => {
     const loadVersion = ++workbenchConnectionLoadVersion
-    if (tab !== 'workbench' || !objectId || !currentProjectId) {
+    if (module !== 'access-source' || tab !== 'workbench' || !objectId || !currentProjectId) {
       activeWorkbenchConnection.value = null
       return
     }
@@ -1160,7 +1180,15 @@ const protocolCreateHandlers = {
   tdengine: dataAPI.createTdengineConfig,
 }
 
-const protocolUpdateHandlers = {}
+const protocolUpdateHandlers = {
+  mqtt: (targetProjectId, connectionId, data) =>
+    dataAPI.updateMqttConnection(targetProjectId, connectionId, data),
+  tdengine: dataAPI.updateTdengineConfig,
+  kafka: dataAPI.updateKafkaConfig,
+  http: dataAPI.updateHttpConfig,
+  websocket: dataAPI.updateWebSocketConfig,
+  redis: dataAPI.updateRedisConfig,
+}
 
 /**
  * 表双击 - 创建查询
@@ -1211,9 +1239,6 @@ const handleQueryExecute = async (tab) => {
 
   try {
     const parameters = tab.parameters.map((p) => p.value || '')
-    console.log('执行查询 - SQL:', tab.sql)
-    console.log('执行查询 - 参数对象:', tab.parameters)
-    console.log('执行查询 - 参数值:', parameters)
 
     const response = await dataAPI.executeSql(
       projectId.value,

@@ -163,7 +163,13 @@ const protocolConfigRows = computed(() => {
       ]
     case 'tdengine':
       return [
-        { label: 'DSN', value: config.dsn || '-' },
+        {
+          label: '服务地址',
+          value: config.host
+            ? `${config.protocol || 'ws'}://${config.host}:${config.port || 6041}`
+            : '-',
+        },
+        { label: '数据库', value: config.databaseName || '-' },
         { label: 'Database', value: config.database || '-' },
         { label: 'Timezone', value: config.timezone || '-' },
       ]

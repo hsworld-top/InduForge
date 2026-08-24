@@ -267,6 +267,24 @@ func (h *ConnectionHandler) ListTables(w http.ResponseWriter, r *http.Request) e
 		return err
 	}
 
+	query := r.URL.Query()
+	if query.Has("page") || query.Has("pageSize") || query.Has("search") {
+		page, err := parseOptionalInt(query.Get("page"), 1, "page")
+		if err != nil {
+			return err
+		}
+		pageSize, err := parseOptionalInt(query.Get("pageSize"), 50, "pageSize")
+		if err != nil {
+			return err
+		}
+		result, err := h.service.ListTablesPage(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), query.Get("search"), page, pageSize)
+		if err != nil {
+			return normalizeRepresentativeHandlerError(err)
+		}
+		response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"tables": result.Items, "pagination": result.Pagination})
+		return nil
+	}
+
 	tables, err := h.service.ListTables(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"))
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)

@@ -107,6 +107,10 @@
         </div>
       </div>
 
+      <div v-if="!sandboxAvailable" class="compute-editor__sandbox-warning">
+        独立计算沙箱当前不可用，语法检查和开发态试运行已禁用；不会回退到 data_service 宿主执行。
+      </div>
+
       <main class="compute-editor__main">
         <section class="compute-editor__code">
           <div class="compute-editor__code-head">
@@ -138,7 +142,7 @@
                   type="button"
                   class="compute-editor__tool-btn"
                   aria-label="试运行"
-                  :disabled="debugRunning || activeDraft.dirty"
+                  :disabled="debugRunning || activeDraft.dirty || !sandboxAvailable"
                   @click="quickDryRun"
                 >
                   <IconTablerPlayerPlay class="compute-editor__action-icon" />
@@ -453,7 +457,7 @@
                   v-for="item in triggerTypes"
                   :key="item.id"
                   type="button"
-                  :class="{ 'is-active': activeDraft.triggerType === item.id }"
+                  :class="{ 'is-active': isTriggerOptionActive(item.id) }"
                   @click="setTriggerType(item.id)"
                 >
                   <component :is="triggerIcon(item.id)" class="compute-editor__panel-tab-icon" />
@@ -478,29 +482,89 @@
                   </div>
                 </div>
                 <div
-                  v-if="activeDraft.triggerType === 'timer'"
-                  class="compute-editor__trigger-card"
+                  v-if="activeDraft.triggerType === 'schedule'"
+                  class="compute-editor__trigger-card is-schedule"
                 >
                   <label class="compute-editor__field">
-                    <span>间隔秒数</span>
+                    <span v-if="activeDraft.triggerConfig.kind === 'interval'">周期</span>
+                    <span v-else>执行时间</span>
+                    <div
+                      v-if="activeDraft.triggerConfig.kind === 'interval'"
+                      class="compute-editor__field-inline"
+                    >
+                      <input
+                        v-model.number="activeDraft.triggerConfig.every"
+                        type="number"
+                        min="1"
+                        @input="markDirty"
+                      />
+                      <select v-model="activeDraft.triggerConfig.unit" @change="markDirty">
+                        <option value="seconds">秒</option>
+                        <option value="minutes">分钟</option>
+                        <option value="hours">小时</option>
+                      </select>
+                    </div>
                     <input
-                      v-model.number="activeDraft.triggerConfig.intervalSeconds"
-                      type="number"
-                      min="1"
+                      v-else
+                      v-model="activeDraft.triggerConfig.time"
+                      type="time"
+                      step="1"
                       @input="markDirty"
                     />
                   </label>
+                  <label
+                    v-if="activeDraft.triggerConfig.kind === 'weekly'"
+                    class="compute-editor__field"
+                  >
+                    <span>执行星期</span>
+                    <div class="compute-editor__weekday-list">
+                      <label v-for="day in weekdayOptions" :key="day.value">
+                        <input
+                          v-model="activeDraft.triggerConfig.weekdays"
+                          type="checkbox"
+                          :value="day.value"
+                          @change="markDirty"
+                        />
+                        {{ day.label }}
+                      </label>
+                    </div>
+                  </label>
+                  <label
+                    v-if="activeDraft.triggerConfig.kind !== 'interval'"
+                    class="compute-editor__field"
+                  >
+                    <span>时区</span>
+                    <input
+                      v-model="activeDraft.triggerConfig.timezone"
+                      placeholder="Asia/Shanghai"
+                      @input="markDirty"
+                    />
+                  </label>
+                  <p class="compute-editor__trigger-note">
+                    该计划由节点运行时执行；开发态不会自动运行。
+                  </p>
+                  <div class="compute-editor__trigger-preview">
+                    <button
+                      type="button"
+                      class="compute-editor__inline-icon"
+                      title="预览后续执行"
+                      @click="previewSchedule"
+                    >
+                      预览后续执行
+                    </button>
+                    <span v-if="schedulePreviewText">{{ schedulePreviewText }}</span>
+                  </div>
                 </div>
                 <div
                   v-else-if="activeDraft.triggerType === 'datapoint_change'"
                   class="compute-editor__trigger-card"
                 >
                   <label class="compute-editor__field">
-                    <span>数据点路径</span>
+                    <span>数据点</span>
                     <input
                       v-model="activeDraft.triggerConfig.path"
-                      placeholder="db.localhost.temperature"
-                      @input="markDirty"
+                      placeholder="选择数据点"
+                      readonly
                     />
                   </label>
                   <button
@@ -607,7 +671,7 @@
                   <button
                     type="button"
                     class="compute-editor__run-button compute-editor__debug-run-button"
-                    :disabled="debugRunning || activeDraft.dirty"
+                    :disabled="debugRunning || activeDraft.dirty || !sandboxAvailable"
                     @click="executeDebug"
                   >
                     <IconTablerPlayerPlay class="compute-editor__action-icon" />
@@ -699,7 +763,7 @@
                 class="compute-editor__tool-btn"
                 title="重新检查"
                 aria-label="重新检查"
-                :disabled="syntaxStatus === 'checking'"
+                :disabled="syntaxStatus === 'checking' || !sandboxAvailable"
                 @click="runSyntaxCheck"
               >
                 <IconTablerRefresh class="compute-editor__action-icon" />
@@ -955,11 +1019,12 @@ import IconTablerX from '~icons/tabler/x'
 import type { Datapoint } from '@/api/schemas/datapoint.schema'
 import type {
   ComputeDependency,
+  ComputeCapabilities,
   ComputeLang,
   ComputeRunResult,
   ComputeSyntaxDiagnostic,
 } from '@/api/schemas/compute.schema'
-import { checkComputeSyntax, debugComputeUnit } from '@/api/compute.api'
+import { checkComputeSyntax, debugComputeUnit, previewComputeSchedule } from '@/api/compute.api'
 import { getDatapoints } from '@/api/datapoint.api'
 import { getApiErrorMessage } from '@/utils/request'
 import MonacoEditor from '@/components/MonacoEditor.vue'
@@ -993,6 +1058,7 @@ const props = withDefaults(
     dependencies?: ComputeDependency[]
     dependenciesLoading?: boolean
     dependenciesError?: string
+    capabilities?: ComputeCapabilities | null
   }>(),
   {
     loading: false,
@@ -1002,6 +1068,7 @@ const props = withDefaults(
     dependencies: () => [],
     dependenciesLoading: false,
     dependenciesError: '',
+    capabilities: null,
   },
 )
 
@@ -1048,6 +1115,7 @@ let syntaxCheckTimer: ReturnType<typeof window.setTimeout> | null = null
 let syntaxCheckSeq = 0
 const templateDialogVisible = ref(false)
 const activeTemplateId = ref('argv')
+const schedulePreviewText = ref('')
 const activeDebugResultTab = ref('output')
 const cursorInfo = ref<EditorCursorInfo>({
   line: 1,
@@ -1070,6 +1138,8 @@ const debugResultTabs = [
   { id: 'error', label: '错误' },
 ]
 
+const sandboxAvailable = computed(() => props.capabilities?.sandboxStatus === 'available')
+
 const codeTemplates = computed(() => {
   const lang = props.activeDraft?.lang === 'python' ? 'python' : 'javascript'
   const templates = lang === 'python' ? pythonTemplates : javascriptTemplates
@@ -1078,8 +1148,20 @@ const codeTemplates = computed(() => {
 
 const triggerTypes = [
   { id: 'manual', label: '手动' },
-  { id: 'timer', label: '定时' },
+  { id: 'schedule_interval', label: '周期执行' },
+  { id: 'schedule_daily', label: '每日定时' },
+  { id: 'schedule_weekly', label: '每周定时' },
   { id: 'datapoint_change', label: '数据点变化' },
+]
+
+const weekdayOptions = [
+  { value: 1, label: '一' },
+  { value: 2, label: '二' },
+  { value: 3, label: '三' },
+  { value: 4, label: '四' },
+  { value: 5, label: '五' },
+  { value: 6, label: '六' },
+  { value: 7, label: '日' },
 ]
 
 type CodeTemplate = {
@@ -1217,13 +1299,22 @@ const unusedDatapointVariableCount = computed(
 const dependencyCount = computed(() => props.activeDraft?.dependencies.length || 0)
 const triggerText = computed(() => {
   const triggerType = props.activeDraft?.triggerType || 'manual'
+  if (triggerType === 'schedule') {
+    const kind = String(props.activeDraft?.triggerConfig.kind || 'interval')
+    return kind === 'daily' ? '每日定时' : kind === 'weekly' ? '每周定时' : '周期执行'
+  }
   return triggerTypes.find((item) => item.id === triggerType)?.label || '手动'
 })
 
 const triggerSummary = computed(() => {
   if (!props.activeDraft) return '未选择计算单元'
-  if (props.activeDraft.triggerType === 'timer') {
-    return `每 ${props.activeDraft.triggerConfig.intervalSeconds || 60} 秒执行一次`
+  if (props.activeDraft.triggerType === 'schedule') {
+    const config = props.activeDraft.triggerConfig
+    if (config.kind === 'daily')
+      return `每天 ${config.time || '00:00:00'}（${config.timezone || '未设置时区'}）`
+    if (config.kind === 'weekly')
+      return `每周指定日期 ${config.time || '00:00:00'}（${config.timezone || '未设置时区'}）`
+    return `每 ${config.every || 1} ${config.unit === 'hours' ? '小时' : config.unit === 'minutes' ? '分钟' : '秒'}执行一次`
   }
   if (props.activeDraft.triggerType === 'datapoint_change') {
     return props.activeDraft.triggerConfig.path
@@ -1246,6 +1337,7 @@ const debugStateText = computed(() => {
 })
 
 const dryRunTooltip = computed(() => {
+  if (!sandboxAvailable.value) return '独立计算沙箱不可用'
   if (props.activeDraft?.dirty) return '请先保存后再试运行'
   if (debugRunning.value) return '正在试运行'
   return '试运行'
@@ -1403,6 +1495,11 @@ function scheduleSyntaxCheck() {
 }
 
 async function runSyntaxCheck() {
+  if (!sandboxAvailable.value) {
+    syntaxStatus.value = 'failed'
+    syntaxErrorText.value = '独立计算沙箱不可用'
+    return false
+  }
   if (!props.activeDraft) return false
   clearSyntaxCheckTimer()
   const seq = ++syntaxCheckSeq
@@ -1634,6 +1731,7 @@ function confirmSelectedDatapoint(point?: Datapoint) {
     if (props.activeDraft) {
       props.activeDraft.triggerConfig = {
         ...props.activeDraft.triggerConfig,
+        datapointId: target.id,
         path: target.path,
       }
       markDirty()
@@ -1665,6 +1763,10 @@ function insertVariableAlias(alias: string) {
 }
 
 async function executeDebug() {
+  if (!sandboxAvailable.value) {
+    debugError.value = '独立计算沙箱不可用'
+    return
+  }
   if (!props.activeDraft) return
   if (props.activeDraft.dirty) {
     ElMessage.warning('请先保存后再试运行')
@@ -1703,19 +1805,60 @@ async function quickDryRun() {
 
 function setTriggerType(type: string) {
   if (!props.activeDraft) return
-  props.activeDraft.triggerType = type
-  if (type === 'timer') {
+  if (type === 'schedule_interval') {
+    props.activeDraft.triggerType = 'schedule'
     props.activeDraft.triggerConfig = {
-      intervalSeconds: props.activeDraft.triggerConfig.intervalSeconds || 60,
+      kind: 'interval',
+      every: 1,
+      unit: 'minutes',
+    }
+  } else if (type === 'schedule_daily') {
+    props.activeDraft.triggerType = 'schedule'
+    props.activeDraft.triggerConfig = {
+      kind: 'daily',
+      time: '00:00:00',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai',
+    }
+  } else if (type === 'schedule_weekly') {
+    props.activeDraft.triggerType = 'schedule'
+    props.activeDraft.triggerConfig = {
+      kind: 'weekly',
+      weekdays: [1],
+      time: '00:00:00',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai',
     }
   } else if (type === 'datapoint_change') {
+    props.activeDraft.triggerType = type
     props.activeDraft.triggerConfig = {
-      path: props.activeDraft.triggerConfig.path || '',
+      datapointId: '',
+      path: '',
     }
   } else {
+    props.activeDraft.triggerType = 'manual'
     props.activeDraft.triggerConfig = {}
   }
   markDirty()
+  schedulePreviewText.value = ''
+}
+
+async function previewSchedule() {
+  if (!props.activeDraft || props.activeDraft.triggerType !== 'schedule') return
+  try {
+    const preview = await previewComputeSchedule(props.projectId, {
+      triggerType: props.activeDraft.triggerType,
+      triggerConfig: props.activeDraft.triggerConfig,
+    })
+    if (preview.errors.length > 0) {
+      schedulePreviewText.value = preview.errors.map((item) => item.message).join('；')
+      return
+    }
+    const next = preview.nextRuns[0]
+      ? new Date(preview.nextRuns[0]).toLocaleString()
+      : '暂无后续执行时间'
+    schedulePreviewText.value = `${preview.summary}；下次：${next}`
+  } catch (error) {
+    schedulePreviewText.value = getApiErrorMessage(error, '定时配置无效')
+  }
 }
 
 function isDependencyChecked(id: string) {
@@ -1737,15 +1880,27 @@ function dependencyName(id: string) {
 }
 
 function triggerIcon(id: string) {
-  if (id === 'timer') return IconTablerClock
+  if (id.startsWith('schedule_')) return IconTablerClock
   if (id === 'datapoint_change') return IconTablerDatabaseImport
   return IconTablerManualGearbox
 }
 
 function triggerDescription(id: string) {
-  if (id === 'timer') return '按固定间隔执行'
+  if (id === 'schedule_interval') return '每隔一段时间执行'
+  if (id === 'schedule_daily') return '每天指定时间执行'
+  if (id === 'schedule_weekly') return '每周指定日期执行'
   if (id === 'datapoint_change') return '数据点变化时执行'
   return '调用方主动执行'
+}
+
+function isTriggerOptionActive(id: string) {
+  if (!props.activeDraft) return false
+  if (id.startsWith('schedule_'))
+    return (
+      props.activeDraft.triggerType === 'schedule' &&
+      props.activeDraft.triggerConfig.kind === id.replace('schedule_', '')
+    )
+  return props.activeDraft.triggerType === id
 }
 
 function parseDebugInput(): Record<string, unknown> {
@@ -2131,6 +2286,16 @@ const statusTone = (status?: string) => {
   padding: 6px 12px;
   border-bottom: 1px solid var(--dc-border);
   background: var(--dc-surface);
+}
+
+.compute-editor__sandbox-warning {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  color: var(--el-color-warning-dark-2);
+  font-size: 12px;
+  line-height: 20px;
+  background: var(--el-color-warning-light-9);
+  border-bottom: 1px solid var(--el-color-warning-light-7);
 }
 
 .compute-editor__title-wrap {
@@ -3006,6 +3171,12 @@ const statusTone = (status?: string) => {
   background: var(--dc-surface-muted);
 }
 
+.compute-editor__trigger-card.is-schedule {
+  max-width: 620px;
+  align-items: stretch;
+  flex-direction: column;
+}
+
 .compute-editor__trigger-card > .compute-editor__field {
   flex: 1;
   margin-bottom: 0;
@@ -3018,6 +3189,39 @@ const statusTone = (status?: string) => {
 .compute-editor__trigger-card strong,
 .compute-editor__trigger-card span {
   font-size: 13px;
+}
+
+.compute-editor__field-inline,
+.compute-editor__weekday-list,
+.compute-editor__trigger-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.compute-editor__field-inline input {
+  min-width: 120px;
+  flex: 1;
+}
+
+.compute-editor__field-inline select {
+  width: 96px;
+}
+
+.compute-editor__weekday-list label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+}
+
+.compute-editor__trigger-note,
+.compute-editor__trigger-preview span {
+  margin: 0;
+  color: var(--dc-text-muted);
+  font-size: 11px;
 }
 
 .compute-editor__trigger-card strong {

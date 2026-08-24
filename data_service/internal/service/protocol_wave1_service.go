@@ -50,13 +50,15 @@ type KafkaPreview struct {
 
 // CreateKafkaConfigInput 表示创建 Kafka 配置的业务输入。
 type CreateKafkaConfigInput struct {
-	Name          string
-	Status        string
-	Brokers       string
-	Topic         string
-	ConsumerGroup string
-	StartPosition string
-	Options       map[string]any
+	Name            string
+	Status          string
+	Brokers         string
+	Topic           string
+	ConsumerGroup   string
+	StartPosition   string
+	Options         map[string]any
+	Secrets         map[string]string
+	ClearSecretKeys []string
 }
 
 // CreateHTTPConfigInput 表示创建 HTTP 配置的业务输入。
@@ -75,15 +77,17 @@ type CreateWebSocketConfigInput struct {
 
 // CreateRedisConfigInput 表示创建 Redis 配置的业务输入。
 type CreateRedisConfigInput struct {
-	Name       string
-	Status     string
-	Address    string
-	DB         *int
-	Username   *string
-	Password   *string
-	KeyPattern string
-	Mode       string
-	Options    map[string]any
+	Name            string
+	Status          string
+	Address         string
+	DB              *int
+	Username        *string
+	Password        *string
+	KeyPattern      string
+	Mode            string
+	Options         map[string]any
+	Secrets         map[string]string
+	ClearSecretKeys []string
 }
 
 // ProtocolWave1Service 负责第一波协议配置的输入校验和结果映射。
@@ -128,14 +132,15 @@ func (s *ProtocolWave1Service) CreateKafkaConfig(ctx context.Context, projectID,
 	if _, ok := allowedKafkaStartPositions[startPosition]; !ok {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "startPosition 仅支持 latest/earliest")
 	}
+	options, secrets := splitKafkaSecrets(input.Options, input.Secrets)
 	normalizedConfig, err := normalizeKafkaConnectionConfig(map[string]any{
 		"brokers": brokers,
-		"options": cloneMap(input.Options),
+		"options": injectConnectionSecrets(map[string]any{"options": cloneMap(options)}, secrets)["options"],
 	})
 	if err != nil {
 		return nil, err
 	}
-	options := mapFromAny(normalizedConfig["options"])
+	options = scrubKafkaSecretOptions(mapFromAny(normalizedConfig["options"]))
 
 	record, err := s.repository.CreateKafkaConfig(ctx, repository.CreateKafkaConfigParams{
 		ProjectID:     projectID,
@@ -147,6 +152,7 @@ func (s *ProtocolWave1Service) CreateKafkaConfig(ctx context.Context, projectID,
 		ConsumerGroup: consumerGroup,
 		StartPosition: startPosition,
 		Options:       options,
+		Secrets:       secrets, ClearSecretKeys: input.ClearSecretKeys,
 	})
 	if err != nil {
 		return nil, err
@@ -284,6 +290,9 @@ func (s *ProtocolWave1Service) CreateRedisConfig(ctx context.Context, projectID,
 	if _, ok := allowedRedisModes[mode]; !ok {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "redis mode 不受支持")
 	}
+	if err := validateConnectionOptionsContainNoSecrets(input.Options); err != nil {
+		return nil, err
+	}
 
 	record, err := s.repository.CreateRedisConfig(ctx, repository.CreateRedisConfigParams{
 		ProjectID:  projectID,
@@ -293,10 +302,10 @@ func (s *ProtocolWave1Service) CreateRedisConfig(ctx context.Context, projectID,
 		Address:    address,
 		DB:         db,
 		Username:   normalizeOptionalText(input.Username),
-		Password:   normalizeOptionalText(input.Password),
 		KeyPattern: keyPattern,
 		Mode:       mode,
 		Options:    cloneMap(input.Options),
+		Secrets:    mergePasswordSecret(input.Secrets, input.Password), ClearSecretKeys: input.ClearSecretKeys,
 	})
 	if err != nil {
 		return nil, err
@@ -304,6 +313,170 @@ func (s *ProtocolWave1Service) CreateRedisConfig(ctx context.Context, projectID,
 
 	connection := toProtocolConnection(*record)
 	return &connection, nil
+}
+
+func (s *ProtocolWave1Service) UpdateKafkaConfig(ctx context.Context, projectID, connectionID, userID string, input CreateKafkaConfigInput) (*ProtocolConnection, error) {
+	if err := validateConnectionID(connectionID); err != nil {
+		return nil, err
+	}
+	// 复用创建校验但改为调用更新仓储，确保创建和编辑语义一致。
+	name, err := normalizeConnectionName(input.Name)
+	if err != nil {
+		return nil, err
+	}
+	status, err := normalizeProtocolStatus(input.Status)
+	if err != nil {
+		return nil, err
+	}
+	brokers := strings.TrimSpace(input.Brokers)
+	if brokers == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "brokers 不能为空")
+	}
+	start := strings.ToLower(strings.TrimSpace(input.StartPosition))
+	if start == "" {
+		start = "latest"
+	}
+	if _, ok := allowedKafkaStartPositions[start]; !ok {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "startPosition 仅支持 latest/earliest")
+	}
+	options, secrets := splitKafkaSecrets(input.Options, input.Secrets)
+	normalized, err := normalizeKafkaConnectionConfig(map[string]any{"brokers": brokers, "options": injectConnectionSecrets(map[string]any{"options": options}, secrets)["options"]})
+	if err != nil {
+		return nil, err
+	}
+	options = scrubKafkaSecretOptions(mapFromAny(normalized["options"]))
+	record, err := s.repository.UpdateKafkaConfig(ctx, connectionID, repository.CreateKafkaConfigParams{ProjectID: projectID, UserID: userID, Name: name, Status: status, Brokers: brokers, Topic: strings.TrimSpace(input.Topic), ConsumerGroup: strings.TrimSpace(input.ConsumerGroup), StartPosition: start, Options: options, Secrets: secrets, ClearSecretKeys: input.ClearSecretKeys})
+	if err != nil {
+		return nil, err
+	}
+	result := toProtocolConnection(*record)
+	return &result, nil
+}
+
+func (s *ProtocolWave1Service) UpdateHTTPConfig(ctx context.Context, projectID, connectionID, userID string, input CreateHTTPConfigInput) (*ProtocolConnection, error) {
+	return s.updateSimple(ctx, projectID, connectionID, userID, "http", input.Name, input.Status, input.Description)
+}
+func (s *ProtocolWave1Service) UpdateWebSocketConfig(ctx context.Context, projectID, connectionID, userID string, input CreateWebSocketConfigInput) (*ProtocolConnection, error) {
+	return s.updateSimple(ctx, projectID, connectionID, userID, "websocket", input.Name, input.Status, input.Description)
+}
+func (s *ProtocolWave1Service) updateSimple(ctx context.Context, projectID, connectionID, userID, protocolType, rawName, rawStatus, description string) (*ProtocolConnection, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateConnectionID(connectionID); err != nil {
+		return nil, err
+	}
+	if err := validateUserID(userID); err != nil {
+		return nil, err
+	}
+	name, err := normalizeConnectionName(rawName)
+	if err != nil {
+		return nil, err
+	}
+	status, err := normalizeProtocolStatus(rawStatus)
+	if err != nil {
+		return nil, err
+	}
+	record, err := s.repository.UpdateSimpleConfig(ctx, connectionID, protocolType, projectID, userID, name, status, map[string]any{"mode": "workbench", "description": strings.TrimSpace(description)})
+	if err != nil {
+		return nil, err
+	}
+	result := toProtocolConnection(*record)
+	return &result, nil
+}
+
+func (s *ProtocolWave1Service) UpdateRedisConfig(ctx context.Context, projectID, connectionID, userID string, input CreateRedisConfigInput) (*ProtocolConnection, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateConnectionID(connectionID); err != nil {
+		return nil, err
+	}
+	if err := validateUserID(userID); err != nil {
+		return nil, err
+	}
+	name, err := normalizeConnectionName(input.Name)
+	if err != nil {
+		return nil, err
+	}
+	status, err := normalizeProtocolStatus(input.Status)
+	if err != nil {
+		return nil, err
+	}
+	address := strings.TrimSpace(input.Address)
+	if address == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "address 不能为空")
+	}
+	db := 0
+	if input.DB != nil {
+		db = *input.DB
+	}
+	if db < 0 {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "db 不能小于 0")
+	}
+	keyPattern := strings.TrimSpace(input.KeyPattern)
+	if keyPattern == "" {
+		keyPattern = "*"
+	}
+	mode := strings.ToLower(strings.TrimSpace(input.Mode))
+	if mode == "" {
+		mode = "standalone"
+	}
+	if _, ok := allowedRedisModes[mode]; !ok {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "redis mode 不受支持")
+	}
+	if err := validateConnectionOptionsContainNoSecrets(input.Options); err != nil {
+		return nil, err
+	}
+	record, err := s.repository.UpdateRedisConfig(ctx, connectionID, repository.CreateRedisConfigParams{ProjectID: projectID, UserID: userID, Name: name, Status: status, Address: address, DB: db, Username: normalizeOptionalText(input.Username), KeyPattern: keyPattern, Mode: mode, Options: cloneMap(input.Options), Secrets: mergePasswordSecret(input.Secrets, input.Password), ClearSecretKeys: input.ClearSecretKeys})
+	if err != nil {
+		return nil, err
+	}
+	result := toProtocolConnection(*record)
+	return &result, nil
+}
+
+func mergePasswordSecret(input map[string]string, password *string) map[string]string {
+	result := normalizeSecretInput(input)
+	if password != nil && *password != "" {
+		result["password"] = *password
+	}
+	return result
+}
+func splitKafkaSecrets(options map[string]any, input map[string]string) (map[string]any, map[string]string) {
+	result := cloneMap(options)
+	secrets := normalizeSecretInput(input)
+	if value := toString(result["password"]); value != "" {
+		secrets["option.password"] = value
+	}
+	delete(result, "password")
+	ssl := mapFromAny(result["sslConfig"])
+	for _, key := range []string{"ca", "cert", "key"} {
+		if value := toString(ssl[key]); value != "" {
+			secrets["tls."+key] = value
+		}
+		delete(ssl, key)
+	}
+	if len(ssl) > 0 {
+		result["sslConfig"] = ssl
+	} else {
+		delete(result, "sslConfig")
+	}
+	return result, secrets
+}
+func scrubKafkaSecretOptions(options map[string]any) map[string]any {
+	result := cloneMap(options)
+	delete(result, "password")
+	ssl := mapFromAny(result["sslConfig"])
+	delete(ssl, "ca")
+	delete(ssl, "cert")
+	delete(ssl, "key")
+	if len(ssl) > 0 {
+		result["sslConfig"] = ssl
+	} else {
+		delete(result, "sslConfig")
+	}
+	return result
 }
 
 func toProtocolConnection(record repository.ProtocolConnectionRecord) ProtocolConnection {

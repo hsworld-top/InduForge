@@ -50,6 +50,35 @@ type SyntaxCheckResult struct {
 	Diagnostics []SyntaxDiagnostic `json:"diagnostics"`
 }
 
+// SandboxCapabilities 是独立计算沙箱声明的真实能力，data_service 不再维护硬编码能力表。
+type SandboxCapabilities struct {
+	Available      bool                   `json:"available"`
+	ServiceVersion string                 `json:"serviceVersion"`
+	Languages      []LanguageCapability   `json:"languages"`
+	SDK            []string               `json:"sdk"`
+	Dependencies   []DependencyCapability `json:"dependencies"`
+	Triggers       []string               `json:"triggers"`
+	Limits         SandboxLimits          `json:"limits"`
+}
+
+type LanguageCapability struct {
+	Language string `json:"language"`
+	Version  string `json:"version"`
+}
+
+type DependencyCapability struct {
+	Language string `json:"language"`
+	Name     string `json:"name"`
+	Version  string `json:"version"`
+}
+
+type SandboxLimits struct {
+	MaxExecutionTimeMS int `json:"maxExecutionTimeMs"`
+	MaxInputBytes      int `json:"maxInputBytes"`
+	MaxOutputBytes     int `json:"maxOutputBytes"`
+	MaxLogBytes        int `json:"maxLogBytes"`
+}
+
 // SDKContext 是由服务端预取后注入脚本运行时的受控上下文。
 type SDKContext struct {
 	Datapoints map[string]SDKDataPointValue `json:"datapoints"`
@@ -58,13 +87,14 @@ type SDKContext struct {
 	Metadata   map[string]any               `json:"metadata"`
 }
 
-// SDKDataPointValue 是 ctx.datapoint.get 可读取的数据点快照。
+// SDKDataPointValue 是 ctx.datapoint.get/meta 可读取的数据点快照。
 type SDKDataPointValue struct {
-	Path      string `json:"path"`
-	Value     any    `json:"value"`
-	Quality   string `json:"quality"`
-	Timestamp string `json:"timestamp"`
-	Status    string `json:"status"`
+	Path       string            `json:"path"`
+	Value      any               `json:"value"`
+	Quality    string            `json:"quality"`
+	Timestamp  string            `json:"timestamp"`
+	Status     string            `json:"status"`
+	Attributes map[string]string `json:"attributes"`
 }
 
 // Runner 抽象不同脚本语言的执行器。
@@ -75,4 +105,9 @@ type Runner interface {
 // SyntaxChecker 抽象不同脚本语言的语法检查器。
 type SyntaxChecker interface {
 	CheckSyntax(ctx context.Context, request SyntaxCheckRequest) (SyntaxCheckResult, error)
+}
+
+// CapabilityProvider 返回执行器后端的实时能力和健康状态。
+type CapabilityProvider interface {
+	Capabilities(ctx context.Context) (SandboxCapabilities, error)
 }

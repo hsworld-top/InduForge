@@ -191,7 +191,10 @@
                 <template #label>
                   <span class="kafka-topic-dialog__field-label">
                     预览超时
-                    <el-tooltip content="单次拉取样本等待消息的最长时间，单位毫秒。" placement="top">
+                    <el-tooltip
+                      content="单次拉取样本等待消息的最长时间，单位毫秒。"
+                      placement="top"
+                    >
                       <IconTablerHelpCircle class="kafka-topic-dialog__field-help" />
                     </el-tooltip>
                   </span>
@@ -360,7 +363,6 @@ watch(
     }
   },
 )
-
 </script>
 
 <style scoped>

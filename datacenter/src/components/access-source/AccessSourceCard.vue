@@ -185,7 +185,7 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
     )
   }
   if (connection.type === 'tdengine') {
-    return [config['dsn'], config['database']].filter(Boolean).join(' / ') || '未配置 TDengine'
+    return [config['host'], config['databaseName']].filter(Boolean).join(' / ') || '未配置 TDengine'
   }
   return '等待接入配置'
 }

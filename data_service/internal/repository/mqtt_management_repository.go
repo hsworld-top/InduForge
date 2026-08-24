@@ -32,16 +32,17 @@ type MqttConnectionDetailRecord struct {
 	Port                  int
 	ClientID              *string
 	Username              *string
-	Password              *string
-	Keepalive             int
-	CleanSession          bool
-	QOS                   int
-	ReconnectPeriodMS     int
-	ConnectTimeoutMS      int
-	Will                  map[string]any
-	SSLConfig             map[string]any
-	CreatedAt             time.Time
-	UpdatedAt             time.Time
+	// Password 仅在运行连接前由密钥仓储临时注入，不从配置表读取。
+	Password          *string
+	Keepalive         int
+	CleanSession      bool
+	QOS               int
+	ReconnectPeriodMS int
+	ConnectTimeoutMS  int
+	Will              map[string]any
+	SSLConfig         map[string]any
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 // MqttConnectionSummaryRecord 表示 MQTT 连接主表摘要。
@@ -120,7 +121,8 @@ type UpdateMqttConnectionParams struct {
 	Port                  int
 	ClientID              *string
 	Username              *string
-	Password              *string
+	Secrets               map[string]string
+	ClearSecretKeys       []string
 	Keepalive             int
 	CleanSession          bool
 	QOS                   int
@@ -261,10 +263,9 @@ func (r *MqttRepository) ListConnectionDetails(ctx context.Context, projectID st
             cfg.broker_url,
             cfg.protocol,
             cfg.port,
-            cfg.client_id,
-            cfg.username,
-            cfg.password,
-            cfg.keepalive,
+			cfg.client_id,
+			cfg.username,
+			cfg.keepalive,
             cfg.clean_session,
             cfg.qos,
             cfg.reconnect_period_ms,
@@ -337,10 +338,9 @@ func (r *MqttRepository) GetConnectionDetail(ctx context.Context, projectID, con
             COALESCE(cfg.broker_url, ''),
             COALESCE(cfg.protocol, 'mqtt'),
             COALESCE(cfg.port, 0),
-            cfg.client_id,
-            cfg.username,
-            cfg.password,
-            COALESCE(cfg.keepalive, 30),
+			cfg.client_id,
+			cfg.username,
+			COALESCE(cfg.keepalive, 30),
             COALESCE(cfg.clean_session, true),
             COALESCE(cfg.qos, 0),
             COALESCE(cfg.reconnect_period_ms, 5000),
@@ -443,21 +443,23 @@ func (r *MqttRepository) UpdateConnectionDetail(ctx context.Context, params Upda
         UPDATE data_mqtt_configs
         SET broker_url = $2,
             protocol = $3,
-            port = $4,
-            client_id = $5,
-            username = $6,
-            password = $7,
-            keepalive = $8,
-            clean_session = $9,
-            qos = $10,
-            reconnect_period_ms = $11,
-            connect_timeout_ms = $12,
-            will = $13::jsonb,
-            ssl_config = $14::jsonb,
+			port = $4,
+			client_id = $5,
+			username = $6,
+			keepalive = $7,
+			clean_session = $8,
+			qos = $9,
+			reconnect_period_ms = $10,
+			connect_timeout_ms = $11,
+			will = $12::jsonb,
+			ssl_config = $13::jsonb,
             updated_at = now()
         WHERE connection_id = $1
-    `, params.ConnectionID, params.BrokerURL, params.Protocol, params.Port, params.ClientID, params.Username, params.Password, params.Keepalive, params.CleanSession, params.QOS, params.ReconnectPeriodMS, params.ConnectTimeoutMS, nullableMqttJSON(willBytes), nullableMqttJSON(sslBytes)); err != nil {
+	`, params.ConnectionID, params.BrokerURL, params.Protocol, params.Port, params.ClientID, params.Username, params.Keepalive, params.CleanSession, params.QOS, params.ReconnectPeriodMS, params.ConnectTimeoutMS, nullableMqttJSON(willBytes), nullableMqttJSON(sslBytes)); err != nil {
 		return nil, translateMqttWriteError("更新 MQTT 配置失败", err)
+	}
+	if err := applyPlainConnectionSecretsTx(ctx, tx, r.cipher, params.ConnectionID, params.Secrets, params.ClearSecretKeys); err != nil {
+		return nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1214,7 +1216,6 @@ func scanMqttConnectionDetail(row scannable) (MqttConnectionDetailRecord, error)
 		record              MqttConnectionDetailRecord
 		clientID            sql.NullString
 		username            sql.NullString
-		password            sql.NullString
 		willBytes, sslBytes []byte
 	)
 	if err := row.Scan(
@@ -1232,7 +1233,6 @@ func scanMqttConnectionDetail(row scannable) (MqttConnectionDetailRecord, error)
 		&record.Port,
 		&clientID,
 		&username,
-		&password,
 		&record.Keepalive,
 		&record.CleanSession,
 		&record.QOS,
@@ -1250,7 +1250,6 @@ func scanMqttConnectionDetail(row scannable) (MqttConnectionDetailRecord, error)
 	}
 	record.ClientID = nullStringToPtr(clientID)
 	record.Username = nullStringToPtr(username)
-	record.Password = nullStringToPtr(password)
 	record.Will = mustJSONObject(willBytes)
 	record.SSLConfig = mustJSONObject(sslBytes)
 	return record, nil

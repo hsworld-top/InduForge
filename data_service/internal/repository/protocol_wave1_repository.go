@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
+	"github.com/indu-forge/data_service/internal/security"
 )
 
 // ProtocolConnectionRecord 表示协议配置创建后返回的连接基础信息。
@@ -31,15 +32,17 @@ type KafkaPreviewRecord struct {
 
 // CreateKafkaConfigParams 描述 Kafka 配置落库参数。
 type CreateKafkaConfigParams struct {
-	ProjectID     string
-	UserID        string
-	Name          string
-	Status        string
-	Brokers       string
-	Topic         string
-	ConsumerGroup string
-	StartPosition string
-	Options       map[string]any
+	ProjectID       string
+	UserID          string
+	Name            string
+	Status          string
+	Brokers         string
+	Topic           string
+	ConsumerGroup   string
+	StartPosition   string
+	Options         map[string]any
+	Secrets         map[string]string
+	ClearSecretKeys []string
 }
 
 // CreateHTTPConfigParams 描述 HTTP 配置落库参数。
@@ -62,29 +65,35 @@ type CreateWebSocketConfigParams struct {
 
 // CreateRedisConfigParams 描述 Redis 配置落库参数。
 type CreateRedisConfigParams struct {
-	ProjectID  string
-	UserID     string
-	Name       string
-	Status     string
-	Address    string
-	DB         int
-	Username   *string
-	Password   *string
-	KeyPattern string
-	Mode       string
-	Options    map[string]any
+	ProjectID       string
+	UserID          string
+	Name            string
+	Status          string
+	Address         string
+	DB              int
+	Username        *string
+	KeyPattern      string
+	Mode            string
+	Options         map[string]any
+	Secrets         map[string]string
+	ClearSecretKeys []string
 }
 
 // ProtocolWave1Repository 负责第一波协议配置（kafka/http/ws/redis）的参数化 SQL。
 // 说明：Phase 1 对这批协议只冻结配置对象与 artifact 契约，除 Kafka mock preview 外，
 // 不把它们扩成完整运行态采集栈。
 type ProtocolWave1Repository struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	cipher *security.ConnectionSecretCipher
 }
 
 // NewProtocolWave1Repository 创建第一波协议仓储。
-func NewProtocolWave1Repository(pool *pgxpool.Pool) *ProtocolWave1Repository {
-	return &ProtocolWave1Repository{pool: pool}
+func NewProtocolWave1Repository(pool *pgxpool.Pool, ciphers ...*security.ConnectionSecretCipher) *ProtocolWave1Repository {
+	repository := &ProtocolWave1Repository{pool: pool}
+	if len(ciphers) > 0 {
+		repository.cipher = ciphers[0]
+	}
+	return repository
 }
 
 // CreateKafkaConfig 创建 Kafka 配置并写入 data_connections/data_kafka_configs。
@@ -128,6 +137,9 @@ func (r *ProtocolWave1Repository) CreateKafkaConfig(ctx context.Context, params 
 	`, record.ID, params.Brokers, nullIfBlank(params.Topic), nullIfBlank(params.ConsumerGroup), params.StartPosition, optionsPayload)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入 Kafka 配置失败", err)
+	}
+	if err := applyPlainConnectionSecretsTx(ctx, tx, r.cipher, record.ID, params.Secrets, params.ClearSecretKeys); err != nil {
+		return nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -185,6 +197,9 @@ func (r *ProtocolWave1Repository) CreateHTTPConfig(ctx context.Context, params C
 	if err != nil {
 		return nil, err
 	}
+	if _, err := tx.Exec(ctx, `INSERT INTO data_http_configs (connection_id, base_url, method, headers, timeout_ms) VALUES ($1, '', 'GET', '{}'::jsonb, 30000)`, record.ID); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入 HTTP 配置失败", err)
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 HTTP 配置事务失败", err)
@@ -213,6 +228,9 @@ func (r *ProtocolWave1Repository) CreateWebSocketConfig(ctx context.Context, par
 	})
 	if err != nil {
 		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO data_websocket_configs (connection_id, url, headers, heartbeat_interval_ms) VALUES ($1, NULL, '{}'::jsonb, 30000)`, record.ID); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入 WebSocket 配置失败", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -244,7 +262,6 @@ func (r *ProtocolWave1Repository) CreateRedisConfig(ctx context.Context, params 
 			"address":    params.Address,
 			"db":         params.DB,
 			"username":   params.Username,
-			"password":   params.Password,
 			"keyPattern": params.KeyPattern,
 			"mode":       params.Mode,
 			"options":    cloneProtocolMap(params.Options),
@@ -260,19 +277,113 @@ func (r *ProtocolWave1Repository) CreateRedisConfig(ctx context.Context, params 
 			address,
 			db,
 			username,
-			password,
 			key_pattern,
 			mode,
 			options
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
-	`, record.ID, params.Address, params.DB, params.Username, params.Password, params.KeyPattern, params.Mode, optionsPayload)
+		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+	`, record.ID, params.Address, params.DB, params.Username, params.KeyPattern, params.Mode, optionsPayload)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入 Redis 配置失败", err)
+	}
+	if err := applyPlainConnectionSecretsTx(ctx, tx, r.cipher, record.ID, params.Secrets, params.ClearSecretKeys); err != nil {
+		return nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 Redis 配置事务失败", err)
+	}
+	return record, nil
+}
+
+func (r *ProtocolWave1Repository) updateConnectionTx(ctx context.Context, tx pgx.Tx, connectionID, expectedType string, params createConnectionTxParams) (*ProtocolConnectionRecord, error) {
+	metadataPayload, _ := json.Marshal(params.Metadata)
+	record := ProtocolConnectionRecord{}
+	err := tx.QueryRow(ctx, `UPDATE data_connections SET name=$3,status=$4,metadata=$5::jsonb,updated_by=$6,updated_at=now() WHERE project_id=$1 AND id=$2 AND type=$7 RETURNING id,project_id,name,type,status,created_at,updated_at`, params.ProjectID, connectionID, params.Name, params.Status, metadataPayload, params.UserID, expectedType).Scan(&record.ID, &record.ProjectID, &record.Name, &record.Type, &record.Status, &record.CreatedAt, &record.UpdatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "协议接入源不存在")
+	}
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "更新协议接入源失败", err)
+	}
+	return &record, nil
+}
+
+func (r *ProtocolWave1Repository) UpdateKafkaConfig(ctx context.Context, connectionID string, params CreateKafkaConfigParams) (*ProtocolConnectionRecord, error) {
+	optionsPayload, err := marshalProtocolJSONObject(params.Options, true)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, err
+	}
+	defer rollbackProtocolTxQuietly(ctx, tx)
+	record, err := r.updateConnectionTx(ctx, tx, connectionID, "kafka", createConnectionTxParams{ProjectID: params.ProjectID, UserID: params.UserID, Name: params.Name, Status: params.Status, Metadata: map[string]any{"brokers": params.Brokers, "options": cloneProtocolMap(params.Options)}})
+	if err != nil {
+		return nil, err
+	}
+	_, err = tx.Exec(ctx, `UPDATE data_kafka_configs SET brokers=$2,topic=$3,consumer_group=$4,start_position=$5,options=$6::jsonb,updated_at=now() WHERE connection_id=$1`, connectionID, params.Brokers, nullIfBlank(params.Topic), nullIfBlank(params.ConsumerGroup), params.StartPosition, optionsPayload)
+	if err != nil {
+		return nil, err
+	}
+	if err := applyPlainConnectionSecretsTx(ctx, tx, r.cipher, connectionID, params.Secrets, params.ClearSecretKeys); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return record, nil
+}
+
+func (r *ProtocolWave1Repository) UpdateSimpleConfig(ctx context.Context, connectionID, protocolType, projectID, userID, name, status string, metadata map[string]any) (*ProtocolConnectionRecord, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, err
+	}
+	defer rollbackProtocolTxQuietly(ctx, tx)
+	record, err := r.updateConnectionTx(ctx, tx, connectionID, protocolType, createConnectionTxParams{ProjectID: projectID, UserID: userID, Name: name, Status: status, Metadata: metadata})
+	if err != nil {
+		return nil, err
+	}
+	if protocolType == "http" {
+		if _, err := tx.Exec(ctx, `INSERT INTO data_http_configs (connection_id, base_url, method, headers, timeout_ms) VALUES ($1, '', 'GET', '{}'::jsonb, 30000) ON CONFLICT (connection_id) DO UPDATE SET updated_at=now()`, connectionID); err != nil {
+			return nil, err
+		}
+	} else if protocolType == "websocket" {
+		if _, err := tx.Exec(ctx, `INSERT INTO data_websocket_configs (connection_id, url, headers, heartbeat_interval_ms) VALUES ($1, NULL, '{}'::jsonb, 30000) ON CONFLICT (connection_id) DO UPDATE SET updated_at=now()`, connectionID); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return record, nil
+}
+
+func (r *ProtocolWave1Repository) UpdateRedisConfig(ctx context.Context, connectionID string, params CreateRedisConfigParams) (*ProtocolConnectionRecord, error) {
+	optionsPayload, err := marshalProtocolJSONObject(params.Options, true)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, err
+	}
+	defer rollbackProtocolTxQuietly(ctx, tx)
+	record, err := r.updateConnectionTx(ctx, tx, connectionID, "redis", createConnectionTxParams{ProjectID: params.ProjectID, UserID: params.UserID, Name: params.Name, Status: params.Status, Metadata: map[string]any{"address": params.Address, "db": params.DB, "username": params.Username, "keyPattern": params.KeyPattern, "mode": params.Mode, "options": cloneProtocolMap(params.Options)}})
+	if err != nil {
+		return nil, err
+	}
+	_, err = tx.Exec(ctx, `UPDATE data_redis_configs SET address=$2,db=$3,username=$4,key_pattern=$5,mode=$6,options=$7::jsonb,updated_at=now() WHERE connection_id=$1`, connectionID, params.Address, params.DB, params.Username, params.KeyPattern, params.Mode, optionsPayload)
+	if err != nil {
+		return nil, err
+	}
+	if err := applyPlainConnectionSecretsTx(ctx, tx, r.cipher, connectionID, params.Secrets, params.ClearSecretKeys); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
 	}
 	return record, nil
 }

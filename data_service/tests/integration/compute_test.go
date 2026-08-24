@@ -20,10 +20,6 @@ import (
 )
 
 func TestComputeRunTimeout(t *testing.T) {
-	if _, err := exec.LookPath("node"); err != nil {
-		t.Skipf("node binary is not available: %v", err)
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -36,12 +32,17 @@ func TestComputeRunTimeout(t *testing.T) {
 	projectID := uuid.NewString()
 	userID := uuid.NewString()
 	secret := "compute-timeout-secret-01"
+	sandbox := newComputeSandboxStub(t)
 
 	srv, err := app.NewServer(config.Config{
-		Addr:               ":0",
-		DatabaseURL:        fixture.databaseURL,
-		DatabaseSearchPath: fixture.schemaName,
-		JWTSecret:          secret,
+		Addr:                       ":0",
+		DatabaseURL:                fixture.databaseURL,
+		DatabaseSearchPath:         fixture.schemaName,
+		JWTSecret:                  secret,
+		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
+		ConnectionSecretKeyVersion: "v1",
+		ComputeSandboxURL:          sandbox.URL,
+		ComputeSandboxToken:        "integration-sandbox-token",
 	})
 	if err != nil {
 		t.Fatalf("create server failed: %v", err)
@@ -80,13 +81,6 @@ func TestComputeRunTimeout(t *testing.T) {
 }
 
 func TestComputeRunJSPython(t *testing.T) {
-	if _, err := exec.LookPath("node"); err != nil {
-		t.Skipf("node binary is not available: %v", err)
-	}
-	if _, err := findPythonBinaryForTest(); err != nil {
-		t.Skipf("python binary is not available: %v", err)
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -99,12 +93,17 @@ func TestComputeRunJSPython(t *testing.T) {
 	projectID := uuid.NewString()
 	userID := uuid.NewString()
 	secret := "compute-jspy-secret-01"
+	sandbox := newComputeSandboxStub(t)
 
 	srv, err := app.NewServer(config.Config{
-		Addr:               ":0",
-		DatabaseURL:        fixture.databaseURL,
-		DatabaseSearchPath: fixture.schemaName,
-		JWTSecret:          secret,
+		Addr:                       ":0",
+		DatabaseURL:                fixture.databaseURL,
+		DatabaseSearchPath:         fixture.schemaName,
+		JWTSecret:                  secret,
+		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
+		ConnectionSecretKeyVersion: "v1",
+		ComputeSandboxURL:          sandbox.URL,
+		ComputeSandboxToken:        "integration-sandbox-token",
 	})
 	if err != nil {
 		t.Fatalf("create server failed: %v", err)
@@ -154,6 +153,100 @@ func TestComputeRunJSPython(t *testing.T) {
 	}
 }
 
+func TestComputeSchedulePreviewReturnsNormalizedRunsAndFieldErrors(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	fixture := setupTestDatabase(t, ctx)
+	if err := setupSchemaInitializer(t, fixture.pool).Ensure(ctx); err != nil {
+		t.Fatalf("schema initialization failed: %v", err)
+	}
+	projectID, userID, secret := uuid.NewString(), uuid.NewString(), "compute-schedule-preview-secret"
+	srv, err := app.NewServer(config.Config{
+		Addr: ":0", DatabaseURL: fixture.databaseURL, DatabaseSearchPath: fixture.schemaName, JWTSecret: secret,
+		ConnectionSecretKey: []byte("0123456789abcdef0123456789abcdef"), ConnectionSecretKeyVersion: "v1",
+	})
+	if err != nil {
+		t.Fatalf("create server failed: %v", err)
+	}
+	t.Cleanup(srv.Close)
+	server := httptest.NewServer(srv.Handler())
+	t.Cleanup(server.Close)
+	token := mustSignIntegrationJWT(t, secret, &auth.Claims{UserID: userID, TenantID: "tenant-compute", ProjectIDs: []string{projectID}, Capabilities: []string{"project:read", "project:write"}})
+
+	valid := doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/compute-units/schedule-preview", token, map[string]any{
+		"triggerType":   "schedule",
+		"triggerConfig": map[string]any{"kind": "weekly", "weekdays": []int{5, 1, 5}, "time": "08:30:00", "timezone": "Asia/Shanghai"},
+	})
+	var preview struct {
+		TriggerConfig map[string]any `json:"triggerConfig"`
+		Summary       string         `json:"summary"`
+		NextRuns      []time.Time    `json:"nextRuns"`
+		Errors        []struct {
+			Field string `json:"field"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(valid.Data, &preview); err != nil {
+		t.Fatal(err)
+	}
+	if len(preview.Errors) != 0 || len(preview.NextRuns) != 5 || preview.Summary == "" {
+		t.Fatalf("expected five normalized weekly runs, got %#v", preview)
+	}
+	weekdays, ok := preview.TriggerConfig["weekdays"].([]any)
+	if !ok || len(weekdays) != 2 || weekdays[0] != float64(1) || weekdays[1] != float64(5) {
+		t.Fatalf("expected sorted unique weekdays, got %#v", preview.TriggerConfig["weekdays"])
+	}
+
+	invalid := doJSONRequest(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/compute-units/schedule-preview", token, map[string]any{
+		"triggerType":   "schedule",
+		"triggerConfig": map[string]any{"kind": "daily", "time": "08:30", "timezone": "Asia/Shanghai"},
+	})
+	if err := json.Unmarshal(invalid.Data, &preview); err != nil {
+		t.Fatal(err)
+	}
+	if len(preview.Errors) != 1 || preview.Errors[0].Field != "triggerConfig.time" {
+		t.Fatalf("expected field-level time error, got %#v", preview.Errors)
+	}
+}
+
+// newComputeSandboxStub 只验证 data_service 与独立沙箱的 HTTP 边界；脚本隔离和真实语言执行由 compute_sandbox 测试负责。
+func newComputeSandboxStub(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Authorization") != "Bearer integration-sandbox-token" {
+			http.Error(writer, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case "/v1/execute":
+			var payload struct {
+				Language string `json:"language"`
+				Script   string `json:"script"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+				http.Error(writer, `{"error":"invalid request"}`, http.StatusBadRequest)
+				return
+			}
+			if strings.Contains(payload.Script, "while(true)") {
+				writer.WriteHeader(http.StatusRequestTimeout)
+				_, _ = writer.Write([]byte(`{"error":"execution timeout"}`))
+				return
+			}
+			output := 3
+			if payload.Language == "python" {
+				output = 9
+			}
+			_ = json.NewEncoder(writer).Encode(map[string]any{"output": output, "sideEffects": []any{}, "durationMs": 1})
+		case "/v1/capabilities":
+			_ = json.NewEncoder(writer).Encode(map[string]any{"available": true, "languages": []any{}, "sdk": []any{}, "dependencies": []any{}, "triggers": []any{}})
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
 func TestComputeOutputDataPointGeneratedOnSave(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -169,10 +262,12 @@ func TestComputeOutputDataPointGeneratedOnSave(t *testing.T) {
 	secret := "compute-output-datapoint-secret-01"
 
 	srv, err := app.NewServer(config.Config{
-		Addr:               ":0",
-		DatabaseURL:        fixture.databaseURL,
-		DatabaseSearchPath: fixture.schemaName,
-		JWTSecret:          secret,
+		Addr:                       ":0",
+		DatabaseURL:                fixture.databaseURL,
+		DatabaseSearchPath:         fixture.schemaName,
+		JWTSecret:                  secret,
+		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
+		ConnectionSecretKeyVersion: "v1",
 	})
 	if err != nil {
 		t.Fatalf("create server failed: %v", err)
@@ -255,10 +350,12 @@ func TestComputeUnitRenameMoveUpdatesOutputDataPoint(t *testing.T) {
 	secret := "compute-rename-move-secret-01"
 
 	srv, err := app.NewServer(config.Config{
-		Addr:               ":0",
-		DatabaseURL:        fixture.databaseURL,
-		DatabaseSearchPath: fixture.schemaName,
-		JWTSecret:          secret,
+		Addr:                       ":0",
+		DatabaseURL:                fixture.databaseURL,
+		DatabaseSearchPath:         fixture.schemaName,
+		JWTSecret:                  secret,
+		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
+		ConnectionSecretKeyVersion: "v1",
 	})
 	if err != nil {
 		t.Fatalf("create server failed: %v", err)
@@ -337,10 +434,12 @@ func TestDataPointListRefreshMarksMismatchedGeneratedPointInvalid(t *testing.T) 
 	secret := "datapoint-validity-secret-01"
 
 	srv, err := app.NewServer(config.Config{
-		Addr:               ":0",
-		DatabaseURL:        fixture.databaseURL,
-		DatabaseSearchPath: fixture.schemaName,
-		JWTSecret:          secret,
+		Addr:                       ":0",
+		DatabaseURL:                fixture.databaseURL,
+		DatabaseSearchPath:         fixture.schemaName,
+		JWTSecret:                  secret,
+		ConnectionSecretKey:        []byte("0123456789abcdef0123456789abcdef"),
+		ConnectionSecretKeyVersion: "v1",
 	})
 	if err != nil {
 		t.Fatalf("create server failed: %v", err)

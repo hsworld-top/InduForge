@@ -197,7 +197,11 @@
                       type="password"
                       show-password
                       clearable
-                      placeholder="请输入 SASL 密码"
+                      :placeholder="
+                        mode === 'edit' && connection?.secretStatus?.['option.password']
+                          ? '已保存，留空保持不变'
+                          : '请输入 SASL 密码'
+                      "
                     />
                   </el-form-item>
                 </div>
@@ -314,6 +318,14 @@
                   </el-form-item>
                 </el-collapse-item>
               </el-collapse>
+              <el-form-item
+                v-if="mode === 'edit' && Object.keys(connection?.secretStatus || {}).length"
+                label="密钥操作"
+              >
+                <el-checkbox v-model="formData.clearSecrets"
+                  >清除已保存的 Kafka 密码和证书密钥</el-checkbox
+                >
+              </el-form-item>
             </template>
 
             <template v-else-if="connectionType === 'redis'">
@@ -346,19 +358,32 @@
                     v-model="formData.password"
                     type="password"
                     show-password
-                    placeholder="可选"
+                    :placeholder="
+                      mode === 'edit' && connection?.secretStatus?.password
+                        ? '已保存，留空保持不变'
+                        : '可选'
+                    "
                   />
                 </el-form-item>
               </div>
+              <el-form-item
+                v-if="mode === 'edit' && connection?.secretStatus?.password"
+                label="密码操作"
+              >
+                <el-checkbox v-model="formData.clearSecrets">清除已保存密码</el-checkbox>
+              </el-form-item>
             </template>
 
             <template v-else-if="connectionType === 'tdengine'">
               <div class="connection-dialog__form-grid">
-                <el-form-item label="IP 地址" prop="ip">
-                  <el-input v-model="formData.ip" placeholder="127.0.0.1" />
+                <el-form-item label="协议">
+                  <el-segmented v-model="formData.protocol" :options="['ws', 'wss']" />
+                </el-form-item>
+                <el-form-item label="主机" prop="host">
+                  <el-input v-model="formData.host" placeholder="127.0.0.1" />
                 </el-form-item>
                 <el-form-item label="端口">
-                  <el-input v-model.number="formData.port" inputmode="numeric" placeholder="6030" />
+                  <el-input v-model.number="formData.port" inputmode="numeric" placeholder="6041" />
                 </el-form-item>
               </div>
               <div class="connection-dialog__form-grid">
@@ -378,10 +403,25 @@
                     v-model="formData.password"
                     type="password"
                     show-password
-                    placeholder="taosdata"
+                    :placeholder="
+                      mode === 'edit' && connection?.secretStatus?.password
+                        ? '已保存，留空保持不变'
+                        : '请输入密码'
+                    "
                   />
                 </el-form-item>
               </div>
+              <el-form-item
+                v-if="mode === 'edit' && connection?.secretStatus?.password"
+                label="密码操作"
+              >
+                <el-checkbox v-model="formData.clearPassword">清除已保存密码</el-checkbox>
+              </el-form-item>
+              <el-form-item v-if="formData.protocol === 'wss'" label="TLS">
+                <el-checkbox v-model="formData.tlsSkipVerify"
+                  >跳过证书校验（仅开发测试）</el-checkbox
+                >
+              </el-form-item>
               <el-form-item label="扩展参数">
                 <el-input
                   v-model="formData.optionsText"
@@ -643,7 +683,7 @@ const externalSourceOptions = [
   {
     value: 'tdengine',
     label: 'TDengine',
-    description: '时序库连接契约',
+    description: '时序库查询与历史存储',
     icon: markRaw(IconTablerDatabase),
   },
 ]
@@ -695,7 +735,7 @@ const activeFormTitle = computed(() => {
   if (connectionType.value === 'http') return 'HTTP Source'
   if (connectionType.value === 'websocket') return 'WebSocket Source'
   if (connectionType.value === 'redis') return 'Redis Source'
-  if (connectionType.value === 'tdengine') return 'TDengine Source'
+  if (connectionType.value === 'tdengine') return 'TDengine 连接'
   return activeDatabase.value?.label || '数据库连接'
 })
 
@@ -830,7 +870,7 @@ const summaryRows = computed(() => {
     )
   } else if (connectionType.value === 'tdengine') {
     rows.push(
-      { label: '地址', value: formatEndpoint(data.ip, data.port) },
+      { label: '地址', value: formatEndpoint(data.host, data.port) },
       { label: '库名', value: data.database || '未填写' },
       { label: '账号', value: data.username || 'root' },
       { label: '时区', value: data.timezone || '未填写' },
@@ -893,7 +933,7 @@ const checklist = computed(() => {
             ? '可先测试 Broker 连通'
             : '保存后可短时预览'
           : industrialProtocolTypes.includes(connectionType.value)
-            ? '保存为节点侧运行配置'
+            ? '保存后进入只读 SQL 工作台'
             : '连接测试可选完成',
       ready:
         ['http', 'websocket'].includes(connectionType.value) ||
@@ -1021,10 +1061,7 @@ const resolveConnectionConfigForForm = (connection) => {
   return config
 }
 
-const handleValidate = (valid, data) => {
-  // 表单验证回调
-  console.log('表单验证:', valid, data)
-}
+const handleValidate = () => undefined
 
 const validateCurrentForm = async () => {
   const validator = formComponent.value ? formRef.value : protocolFormRef.value
@@ -1133,27 +1170,19 @@ const handleTest = async () => {
     return
   }
 
-  if (!relationalSourceTypes.includes(connectionType.value)) {
-    if (connectionType.value === 'tdengine') {
-      testResult.value = {
-        status: 'idle',
-        title: '节点侧运行配置',
-        message: '工业协议已在开发态保存配置契约，真实连通与采集由节点侧工业协议运行器执行。',
-        detail: '',
-        durationMs: 0,
-      }
-      ElMessage.info('工业协议保存后进入节点侧运行联调')
-      return
-    }
-  }
-
   testing.value = true
   const startAt = performance.now()
   try {
     const payload = buildConnectionPayload()
+    const testConfig = { ...payload.config }
+    if (connectionType.value === 'tdengine') {
+      testConfig.password = String(formData.value.password || '')
+      delete testConfig.secrets
+      delete testConfig.clearSecretKeys
+    }
     const response = await dataAPI.testConnection(props.projectId, {
       type: payload.type,
-      config: payload.config,
+      config: testConfig,
     })
     const result = response?.data || response || {}
 
@@ -1238,6 +1267,7 @@ const getProtocolDefaultConfig = (type) => {
       clientId: '',
       dialTimeoutMs: 5000,
       requestTimeoutMs: 5000,
+      clearSecrets: false,
       sslConfig: {
         ca: '',
         cert: '',
@@ -1262,15 +1292,19 @@ const getProtocolDefaultConfig = (type) => {
       keyPattern: '*',
       mode: 'standalone',
       masterName: '',
+      clearSecrets: false,
     },
     tdengine: {
       name: '',
-      ip: '127.0.0.1',
-      port: 6030,
+      protocol: 'ws',
+      host: '127.0.0.1',
+      port: 6041,
       database: '',
       username: 'root',
-      password: 'taosdata',
+      password: '',
       timezone: 'Asia/Shanghai',
+      tlsSkipVerify: false,
+      clearPassword: false,
       optionsText: '{}',
     },
   }
@@ -1363,9 +1397,6 @@ const normalizeProtocolFormData = (type, config) => {
   if (type === 'kafka' && config.options && typeof config.options === 'object') {
     Object.assign(data, normalizeKafkaOptionsForForm(config.options))
   }
-  if (type === 'tdengine' && config.dsn) {
-    Object.assign(data, parseTdengineDsn(config.dsn))
-  }
   if (data.headers && typeof data.headers === 'object') {
     data.headersText = JSON.stringify(data.headers, null, 2)
   }
@@ -1385,6 +1416,23 @@ const normalizeProtocolFormData = (type, config) => {
 const normalizeProtocolSubmitConfig = (type, config) => {
   if (type === 'kafka') {
     config.options = buildKafkaOptions(config)
+    const secrets: Record<string, string> = {}
+    if (String(config.options.password || ''))
+      secrets['option.password'] = String(config.options.password)
+    delete config.options.password
+    const tls =
+      config.options.sslConfig && typeof config.options.sslConfig === 'object'
+        ? { ...config.options.sslConfig }
+        : {}
+    for (const key of ['ca', 'cert', 'key']) {
+      if (String(tls[key] || '')) secrets[`tls.${key}`] = String(tls[key])
+      delete tls[key]
+    }
+    config.options.sslConfig = tls
+    config.secrets = secrets
+    config.clearSecretKeys = config.clearSecrets
+      ? ['option.password', 'tls.ca', 'tls.cert', 'tls.key']
+      : []
     delete config.securityProtocol
     delete config.saslMechanism
     delete config.username
@@ -1393,6 +1441,7 @@ const normalizeProtocolSubmitConfig = (type, config) => {
     delete config.dialTimeoutMs
     delete config.requestTimeoutMs
     delete config.sslConfig
+    delete config.clearSecrets
     delete config.topic
     delete config.consumerGroup
     delete config.startPosition
@@ -1421,37 +1470,25 @@ const normalizeProtocolSubmitConfig = (type, config) => {
     const options: Record<string, any> = {}
     if (config.masterName) options.masterName = config.masterName
     config.options = options
+    const password = String(config.password || '')
+    config.secrets = password ? { password } : {}
+    config.clearSecretKeys = config.clearSecrets ? ['password'] : []
+    delete config.password
+    delete config.clearSecrets
     delete config.masterName
     return
   }
   if (type === 'tdengine') {
     config.options = parseOptionalJsonObject(config.optionsText, '扩展参数')
-    config.dsn = buildTdengineDsn(config)
-    delete config.ip
-    delete config.port
-    delete config.username
+    config.databaseName = config.database
+    const password = String(config.password || '')
+    config.secrets = password ? { password } : {}
+    config.clearSecretKeys = config.clearPassword ? ['password'] : []
+    delete config.database
     delete config.password
+    delete config.clearPassword
     if (!config.timezone) delete config.timezone
     delete config.optionsText
-  }
-}
-const buildTdengineDsn = (config) => {
-  const username = String(config.username || 'root').trim()
-  const password = String(config.password || 'taosdata').trim()
-  const ip = String(config.ip || '').trim()
-  const port = Number(config.port) || 6030
-  return `${username}:${password}@tcp(${ip}:${port})/`
-}
-
-const parseTdengineDsn = (dsn) => {
-  const text = String(dsn || '').trim()
-  const match = text.match(/^(.*?):(.*?)@tcp\(([^:)]+)(?::(\d+))?\)\//i)
-  if (!match) return {}
-  return {
-    username: match[1] || 'root',
-    password: match[2] || 'taosdata',
-    ip: match[3],
-    port: match[4] ? Number(match[4]) : 6030,
   }
 }
 

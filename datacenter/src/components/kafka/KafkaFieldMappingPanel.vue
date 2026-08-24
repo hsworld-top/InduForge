@@ -25,9 +25,19 @@
       <div class="kafka-variable-panel__result">
         <el-table v-loading="loading" :data="fields" height="100%" empty-text="暂无字段映射">
           <el-table-column prop="name" label="映射名称" min-width="140" show-overflow-tooltip />
-          <el-table-column prop="valuePath" label="字段路径" min-width="170" show-overflow-tooltip />
+          <el-table-column
+            prop="valuePath"
+            label="字段路径"
+            min-width="170"
+            show-overflow-tooltip
+          />
           <el-table-column prop="dataType" label="类型" width="92" />
-          <el-table-column prop="dataPointPath" label="输出数据点" min-width="190" show-overflow-tooltip>
+          <el-table-column
+            prop="dataPointPath"
+            label="输出数据点"
+            min-width="190"
+            show-overflow-tooltip
+          >
             <template #default="{ row }">
               {{ row.dataPointPath || '-' }}
             </template>
@@ -106,7 +116,6 @@
             @size-change="changePageSize"
           />
         </div>
-
       </div>
 
       <div v-if="sampleEditorVisible" class="kafka-variable-panel__editor">
@@ -212,7 +221,6 @@
         </el-button>
       </template>
     </DcDialog>
-
   </section>
 </template>
 
@@ -454,7 +462,9 @@ const parseEditorFields = () => {
       fields.value.map((field) => field.valuePath),
     )
     selectedCandidatePaths.value = new Set(
-      candidateRows.value.filter((candidate) => !candidate.exists).map((candidate) => candidate.path),
+      candidateRows.value
+        .filter((candidate) => !candidate.exists)
+        .map((candidate) => candidate.path),
     )
     candidateDialogVisible.value = true
     ElMessage.success(`已解析 ${candidateRows.value.length} 个字段候选`)
@@ -553,7 +563,6 @@ watch(
     void reloadAll()
   },
 )
-
 </script>
 
 <style scoped>

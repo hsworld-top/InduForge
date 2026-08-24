@@ -9,6 +9,7 @@ import {
   ComputeDependencySchema,
   ComputeRunResultSchema,
   ComputeSyntaxCheckResultSchema,
+  ComputeCapabilitiesSchema,
   type ComputeUnit,
   type ComputeUnitDetail,
   type ComputeUnitSave,
@@ -17,6 +18,7 @@ import {
   type ComputeDependency,
   type ComputeRunResult,
   type ComputeSyntaxCheckResult,
+  type ComputeCapabilities,
 } from './schemas/compute.schema'
 
 const computeListSchema = listResponseSchema(ComputeUnitSchema)
@@ -180,6 +182,46 @@ export async function checkComputeSyntax(
     data,
   })
   return ComputeSyntaxCheckResultSchema.parse(unwrapData(res))
+}
+
+/** 获取独立计算沙箱声明的真实能力。 */
+export async function getComputeCapabilities(projectId: string): Promise<ComputeCapabilities> {
+  const res = await request({
+    url: `/data/projects/${projectId}/compute-units/capabilities`,
+    method: 'get',
+  })
+  return ComputeCapabilitiesSchema.parse(unwrapData(res))
+}
+
+/** 预览未保存的周期、每日或每周触发配置，不会创建节点调度任务。 */
+export async function previewComputeSchedule(
+  projectId: string,
+  data: { triggerType: string; triggerConfig: Record<string, unknown> },
+): Promise<{
+  triggerType: string
+  triggerConfig: Record<string, unknown>
+  summary: string
+  nextRuns: string[]
+  errors: Array<{ field: string; message: string }>
+}> {
+  const res = await request({
+    url: `/data/projects/${projectId}/compute-units/schedule-preview`,
+    method: 'post',
+    data,
+  })
+  const payload = unwrapData(res) as Record<string, unknown>
+  return {
+    triggerType: String(payload.triggerType || ''),
+    triggerConfig: (payload.triggerConfig || {}) as Record<string, unknown>,
+    summary: String(payload.summary || ''),
+    nextRuns: Array.isArray(payload.nextRuns) ? payload.nextRuns.map(String) : [],
+    errors: Array.isArray(payload.errors)
+      ? payload.errors.map((item) => {
+          const error = item as Record<string, unknown>
+          return { field: String(error.field || ''), message: String(error.message || '') }
+        })
+      : [],
+  }
 }
 
 /** 获取计算单元文件夹树 */

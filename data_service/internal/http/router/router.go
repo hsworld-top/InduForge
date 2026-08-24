@@ -365,11 +365,11 @@ func mountAlarmPolicyRoutes(mux *http.ServeMux, opts options) {
 		)
 	}
 
-	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-policy-groups", read(opts.alarmPolicyHandler.ListGroups))
-	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-policy-groups/tree", read(opts.alarmPolicyHandler.GroupTree))
-	mux.Handle("POST /api/v1/data/projects/{projectId}/alarm-policy-groups", write(opts.alarmPolicyHandler.CreateGroup))
-	mux.Handle("PUT /api/v1/data/projects/{projectId}/alarm-policy-groups/{id}", write(opts.alarmPolicyHandler.UpdateGroup))
-	mux.Handle("DELETE /api/v1/data/projects/{projectId}/alarm-policy-groups/{id}", write(opts.alarmPolicyHandler.DeleteGroup))
+	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-groups", read(opts.alarmPolicyHandler.ListGroups))
+	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-groups/tree", read(opts.alarmPolicyHandler.GroupTree))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/alarm-groups", write(opts.alarmPolicyHandler.CreateGroup))
+	mux.Handle("PUT /api/v1/data/projects/{projectId}/alarm-groups/{id}", write(opts.alarmPolicyHandler.UpdateGroup))
+	mux.Handle("DELETE /api/v1/data/projects/{projectId}/alarm-groups/{id}", write(opts.alarmPolicyHandler.DeleteGroup))
 
 	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-settings", read(opts.alarmPolicyHandler.GetSettings))
 	mux.Handle("PUT /api/v1/data/projects/{projectId}/alarm-settings", write(opts.alarmPolicyHandler.UpdateSettings))
@@ -381,16 +381,25 @@ func mountAlarmPolicyRoutes(mux *http.ServeMux, opts options) {
 	mux.Handle("DELETE /api/v1/data/projects/{projectId}/alarm-channels/{id}", write(opts.alarmPolicyHandler.DeleteChannel))
 	mux.Handle("POST /api/v1/data/projects/{projectId}/alarm-config-sync", write(opts.alarmPolicyHandler.SyncConfig))
 
-	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-policies", read(opts.alarmPolicyHandler.List))
-	mux.Handle("POST /api/v1/data/projects/{projectId}/alarm-policies", write(opts.alarmPolicyHandler.Create))
-	mux.Handle("POST /api/v1/data/projects/{projectId}/alarm-policies/validate-draft", read(opts.alarmPolicyHandler.ValidateDraft))
-	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-policies/{id}", read(opts.alarmPolicyHandler.Get))
-	mux.Handle("PUT /api/v1/data/projects/{projectId}/alarm-policies/{id}", write(opts.alarmPolicyHandler.Update))
-	mux.Handle("PATCH /api/v1/data/projects/{projectId}/alarm-policies/{id}/enabled", write(opts.alarmPolicyHandler.ToggleEnabled))
-	mux.Handle("DELETE /api/v1/data/projects/{projectId}/alarm-policies/{id}", write(opts.alarmPolicyHandler.Delete))
-	mux.Handle("POST /api/v1/data/projects/{projectId}/alarm-policies/{id}/test", read(opts.alarmPolicyHandler.Test))
-	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-policies/{id}/contract", read(opts.alarmPolicyHandler.Contract))
-	mux.Handle("GET /api/v1/data/projects/{projectId}/datapoints/{datapointId}/alarm-summary", read(opts.alarmPolicyHandler.DatapointSummary))
+	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-items", read(opts.alarmPolicyHandler.List))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/alarm-items", write(opts.alarmPolicyHandler.Create))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/alarm-items/batch-create", write(opts.alarmPolicyHandler.BatchCreate))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/alarm-items/batch-create/validate", read(opts.alarmPolicyHandler.ValidateBatchCreate))
+	mux.Handle("PATCH /api/v1/data/projects/{projectId}/alarm-items/batch", write(opts.alarmPolicyHandler.BatchUpdate))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/alarm-items/batch-delete", write(opts.alarmPolicyHandler.BatchDelete))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/alarm-items/export", write(opts.alarmPolicyHandler.Export))
+	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-items/import-template", read(opts.alarmPolicyHandler.ImportTemplate))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/alarm-items/import/preview", write(opts.alarmPolicyHandler.ImportPreview))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/alarm-items/import/error-workbook", write(opts.alarmPolicyHandler.ImportErrorWorkbook))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/alarm-items/import/apply", write(opts.alarmPolicyHandler.ImportApply))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/alarm-items/validate-draft", read(opts.alarmPolicyHandler.ValidateDraft))
+	mux.Handle("POST /api/v1/data/projects/{projectId}/alarm-items/test-draft", read(opts.alarmPolicyHandler.TestDraft))
+	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-items/{id}", read(opts.alarmPolicyHandler.Get))
+	mux.Handle("PUT /api/v1/data/projects/{projectId}/alarm-items/{id}", write(opts.alarmPolicyHandler.Update))
+	mux.Handle("PATCH /api/v1/data/projects/{projectId}/alarm-items/{id}/enabled", write(opts.alarmPolicyHandler.ToggleEnabled))
+	mux.Handle("DELETE /api/v1/data/projects/{projectId}/alarm-items/{id}", write(opts.alarmPolicyHandler.Delete))
+	mux.Handle("GET /api/v1/data/projects/{projectId}/alarm-items/{id}/contract", read(opts.alarmPolicyHandler.Contract))
+	mux.Handle("GET /api/v1/data/projects/{projectId}/datapoints/{datapointId}/alarms", read(opts.alarmPolicyHandler.DatapointSummary))
 }
 
 func mountAccessSourceRoutes(mux *http.ServeMux, opts options) {
@@ -712,6 +721,22 @@ func mountDataRoutes(mux *http.ServeMux, opts options) {
 			),
 		)
 		mux.Handle(
+			"GET /api/v1/data/projects/{projectId}/datapoints/tags",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:read")(
+					middleware.ErrorHandler(opts.dataPointHandler.ListTags),
+				),
+			),
+		)
+		mux.Handle(
+			"POST /api/v1/data/projects/{projectId}/datapoints/remove-tag",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:write")(
+					middleware.ErrorHandler(opts.dataPointHandler.RemoveTag),
+				),
+			),
+		)
+		mux.Handle(
 			"POST /api/v1/data/projects/{projectId}/datapoints/status",
 			middleware.Authenticate(opts.jwtValidator)(
 				middleware.RequireCapability("project:read")(
@@ -736,10 +761,34 @@ func mountDataRoutes(mux *http.ServeMux, opts options) {
 			),
 		)
 		mux.Handle(
+			"POST /api/v1/data/projects/{projectId}/datapoints/write-by-path",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:write")(
+					middleware.ErrorHandler(opts.dataPointHandler.WriteValueByPath),
+				),
+			),
+		)
+		mux.Handle(
 			"PUT /api/v1/data/projects/{projectId}/datapoints/{id}/runtime-permissions",
 			middleware.Authenticate(opts.jwtValidator)(
 				middleware.RequireCapability("project:write")(
 					middleware.ErrorHandler(opts.dataPointHandler.UpdateRuntimePermissions),
+				),
+			),
+		)
+		mux.Handle(
+			"GET /api/v1/data/projects/{projectId}/datapoints/{id}/custom-attributes",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:read")(
+					middleware.ErrorHandler(opts.dataPointHandler.GetCustomAttributes),
+				),
+			),
+		)
+		mux.Handle(
+			"PUT /api/v1/data/projects/{projectId}/datapoints/{id}/custom-attributes",
+			middleware.Authenticate(opts.jwtValidator)(
+				middleware.RequireCapability("project:write")(
+					middleware.ErrorHandler(opts.dataPointHandler.UpdateCustomAttributes),
 				),
 			),
 		)
@@ -1233,6 +1282,7 @@ func mountProtocolWave1Routes(mux *http.ServeMux, opts options) {
 			),
 		),
 	)
+	mux.Handle("PUT /api/v1/data/projects/{projectId}/kafka/configs/{connectionId}", middleware.Authenticate(opts.jwtValidator)(middleware.RequireCapability("project:write")(middleware.ErrorHandler(opts.protocolWave1Handler.UpdateKafkaConfig))))
 	mux.Handle(
 		"GET /api/v1/data/projects/{projectId}/kafka/configs/{connectionId}/preview",
 		middleware.Authenticate(opts.jwtValidator)(
@@ -1257,6 +1307,7 @@ func mountProtocolWave1Routes(mux *http.ServeMux, opts options) {
 			),
 		),
 	)
+	mux.Handle("PUT /api/v1/data/projects/{projectId}/http/configs/{connectionId}", middleware.Authenticate(opts.jwtValidator)(middleware.RequireCapability("project:write")(middleware.ErrorHandler(opts.protocolWave1Handler.UpdateHTTPConfig))))
 	mux.Handle(
 		"POST /api/v1/data/projects/{projectId}/websocket/configs",
 		middleware.Authenticate(opts.jwtValidator)(
@@ -1265,6 +1316,7 @@ func mountProtocolWave1Routes(mux *http.ServeMux, opts options) {
 			),
 		),
 	)
+	mux.Handle("PUT /api/v1/data/projects/{projectId}/websocket/configs/{connectionId}", middleware.Authenticate(opts.jwtValidator)(middleware.RequireCapability("project:write")(middleware.ErrorHandler(opts.protocolWave1Handler.UpdateWebSocketConfig))))
 	mux.Handle(
 		"POST /api/v1/data/projects/{projectId}/redis/configs",
 		middleware.Authenticate(opts.jwtValidator)(
@@ -1273,6 +1325,7 @@ func mountProtocolWave1Routes(mux *http.ServeMux, opts options) {
 			),
 		),
 	)
+	mux.Handle("PUT /api/v1/data/projects/{projectId}/redis/configs/{connectionId}", middleware.Authenticate(opts.jwtValidator)(middleware.RequireCapability("project:write")(middleware.ErrorHandler(opts.protocolWave1Handler.UpdateRedisConfig))))
 }
 
 func mountProtocolWave2Routes(mux *http.ServeMux, opts options) {
@@ -1287,6 +1340,10 @@ func mountProtocolWave2Routes(mux *http.ServeMux, opts options) {
 				middleware.ErrorHandler(opts.protocolWave2Handler.CreateTdengineConfig),
 			),
 		),
+	)
+	mux.Handle(
+		"PUT /api/v1/data/projects/{projectId}/tdengine/configs/{connectionId}",
+		middleware.Authenticate(opts.jwtValidator)(middleware.RequireCapability("project:write")(middleware.ErrorHandler(opts.protocolWave2Handler.UpdateTdengineConfig))),
 	)
 	mux.Handle(
 		"POST /api/v1/data/projects/{projectId}/opcda/contracts/validate",
@@ -1306,7 +1363,7 @@ func mountPreviewRoutes(mux *http.ServeMux, opts options) {
 	mux.Handle(
 		"POST /api/v1/data/projects/{projectId}/preview/sessions",
 		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:write")(
+			middleware.RequireCapability("project:read")(
 				middleware.ErrorHandler(opts.previewHandler.Create),
 			),
 		),
@@ -1322,7 +1379,7 @@ func mountPreviewRoutes(mux *http.ServeMux, opts options) {
 	mux.Handle(
 		"POST /api/v1/data/preview/sessions/{sessionId}/heartbeat",
 		middleware.Authenticate(opts.jwtValidator)(
-			middleware.RequireCapability("project:write")(
+			middleware.RequireCapability("project:read")(
 				middleware.ErrorHandler(opts.previewHandler.Heartbeat),
 			),
 		),
@@ -1376,10 +1433,26 @@ func mountComputeRoutes(mux *http.ServeMux, opts options) {
 		),
 	)
 	mux.Handle(
+		"GET /api/v1/data/projects/{projectId}/compute-units/capabilities",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.computeHandler.Capabilities),
+			),
+		),
+	)
+	mux.Handle(
 		"POST /api/v1/data/projects/{projectId}/compute-units/syntax-check",
 		middleware.Authenticate(opts.jwtValidator)(
 			middleware.RequireCapability("project:read")(
 				middleware.ErrorHandler(opts.computeHandler.CheckSyntax),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /api/v1/data/projects/{projectId}/compute-units/schedule-preview",
+		middleware.Authenticate(opts.jwtValidator)(
+			middleware.RequireCapability("project:read")(
+				middleware.ErrorHandler(opts.computeHandler.SchedulePreview),
 			),
 		),
 	)

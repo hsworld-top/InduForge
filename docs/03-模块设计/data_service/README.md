@@ -67,13 +67,21 @@
 - 协议接入：wave1 / wave2
 - 预览会话：preview sessions
 - 计算能力：compute units
-- 报警配置：alarm-policies / alarm-policy-groups / alarm-settings / alarm-history-settings / alarm-channels
+- 报警配置：alarm-items / alarm-groups / alarm-settings / alarm-history-settings / alarm-channels
+
+数据点可独立保存字符串 Key/默认值形式的开发态自定义属性。属性进入快照、Artifact 与开发契约，计算脚本可通过
+`ctx.datapoint.meta(path).attributes` 读取；采集来源刷新数据点时不覆盖这些属性。开发态默认值不承担节点运行值持久化，
+运行态赋值与中心配置相互隔离。
+
+计算触发统一保存为手动、周期、每日、每周或数据点变化配置；每日/每周使用 IANA 时区，并可在保存前预览未来五次计划时间。`data_service` 不承担节点调度，开发态脚本只通过独立 `compute_sandbox` 调试，沙箱不可用时禁用调试且不回退宿主进程。开发态 SDK 仅暴露预取的数据点值/元数据和已声明只读查询。
+
+外部关系库、MQTT、Kafka、HTTP、WebSocket、Redis 和 TDengine 的敏感值统一进入 `data_connection_secrets` AES-GCM 密钥表；API 读取只返回密钥状态，更新使用 `secrets` 与 `clearSecretKeys`。快照只往返密文和密钥版本，Artifact 只输出密钥引用。TDengine 采用结构化 `ws/wss` 配置与独立只读运行时，提供对象分类分页、结构、数据预览、只读 SQL、保存查询和查询数据点。
 
 历史存储按接入源、工业采集连接或数据点保存配置。来源配置自动作用于后续新增点，单点可沿用、关闭或自定义；
 写入方式固定为每次采样、间隔末值、变化保存和周期快照，目标限定为本工程 IF 时序库与 TDengine。工程快照包含
 这些开发态配置和目标绑定，发布工件与本轮运行态链路不包含历史存储配置。
 
-报警以 `data_alarm_policies` 为唯一模型，普通报警明确绑定一个或多个兼容数据点，组合报警保存输入点、表达式和结果条件；目录仅用于整理。通知采用工程默认与策略覆盖，外部渠道密钥使用 AES-GCM 密文保存。工程级报警历史默认开启、保留 30 天并保存通知投递记录，`NULL` 期限表示永久；这里只保存开发态设置，不保存或查询运行历史。工程快照与 Artifact 使用 `alarm.policy.v1`，其中 Artifact 只携带密钥引用并始终包含有效 `historyStorage`。本模块仅提供开发态配置、契约检查和 `alarm-config-sync` 接收机制，不执行节点侧报警判断、实例处置、历史写入或通知投递。
+报警以 `data_alarm_items` 为事实来源，一条普通报警项只关联一个数据点，报警项 ID 同时是未来节点运行时的稳定报警身份。同一点可以分别配置越限、变化率、偏差、离线等多条报警；规范化显示名称和触发指纹在同一点内分别唯一。多点创建在一个事务中生成多条独立报警项，后续可分别维护。数值分级越限使用 `highest_matching`，一组高/高高/低/低低等级只产生一个当前生效等级。组合报警保存至少两个输入点、唯一别名、表达式和一个结果条件。通知采用工程默认与报警项覆盖，外部渠道密钥使用 AES-GCM 密文保存。工程级报警历史默认开启、保留 30 天并保存通知投递记录。工程快照与 Artifact 使用 `alarm.item.v1`，Artifact 只携带密钥引用并始终包含有效 `historyStorage`。本模块还提供 ID/筛选范围批量修改删除，以及普通报警 Excel 模板、导出、预览和事务导入；不执行节点侧报警判断、实例处置、历史写入或通知投递。
 
 ## 质量关注点
 

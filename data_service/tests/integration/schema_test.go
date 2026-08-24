@@ -44,9 +44,9 @@ func TestCollectorPointGroupDeleteMovesSubtreePointsToParent(t *testing.T) {
 
 	_, err := fixture.pool.Exec(ctx, `
 		INSERT INTO data_collector_connections (
-			id, project_id, name, status, display_order, protocol_family, driver_id,
+			id, project_id, name, code, status, display_order, protocol_family, driver_id,
 			driver_version, schema_version, config, metadata, created_by
-		) VALUES ($1,$2,'测试连接','unknown',0,'opcua','opcua.standard','1.0.0',2,'{}','{}',$3);
+		) VALUES ($1,$2,'测试连接','test_connection','unknown',0,'opcua','opcua.standard','1.0.0',2,'{}','{}',$3);
 		INSERT INTO data_collector_point_groups (id,project_id,connection_id,parent_id,name) VALUES
 			($4,$2,$1,NULL,'上级分组'),
 			($5,$2,$1,$4,'待删除分组'),
@@ -178,8 +178,10 @@ func TestSchemaInitializer_CreatesCoreTables(t *testing.T) {
 		"data_compute_folders",
 		"data_compute_units",
 		"data_compute_runs",
-		"data_alarm_policy_groups",
-		"data_alarm_policies",
+		"data_alarm_groups",
+		"data_alarm_items",
+		"data_alarm_item_inputs",
+		"data_alarm_item_conditions",
 		"data_realtime_keys",
 		"data_workbench_object_groups",
 		"collector_dev_agents",
@@ -267,13 +269,14 @@ func TestSchemaInitializer_CreatesIndexes(t *testing.T) {
 		"data_compute_folders_project_parent_name_key",
 		"data_compute_runs_unit_created_idx",
 		"data_compute_runs_project_created_idx",
-		"data_alarm_policy_groups_project_sort_idx",
-		"data_alarm_policy_groups_project_parent_idx",
-		"data_alarm_policy_groups_project_root_name_key",
-		"data_alarm_policy_groups_project_parent_name_key",
-		"data_alarm_policies_project_group_idx",
-		"data_alarm_policies_project_updated_idx",
-		"data_alarm_policies_project_enabled_idx",
+		"data_alarm_groups_project_sort_idx",
+		"data_alarm_groups_project_parent_idx",
+		"data_alarm_groups_project_root_name_key",
+		"data_alarm_groups_project_parent_name_key",
+		"data_alarm_items_project_group_idx",
+		"data_alarm_items_project_updated_idx",
+		"data_alarm_items_project_enabled_idx",
+		"data_alarm_items_datapoint_idx",
 		"data_workbench_object_groups_name_key",
 		"data_workbench_object_groups_connection_scope_idx",
 		"data_queries_project_connection_group_idx",
@@ -306,7 +309,7 @@ func TestSchemaInitializer_CreatesBuiltinRuntimeStores(t *testing.T) {
 	for _, storeType := range storeTypes {
 		_, err := fixture.pool.Exec(ctx, `
 			INSERT INTO data_connections (project_id, name, type, category, status, metadata, created_by, updated_by)
-			VALUES ($1, $2, $3, 'builtin', 'connected', '{}'::jsonb, $4, $4)
+			VALUES ($1, $2, $3, 'builtin', 'connected', jsonb_build_object('runtimeKey', $3 || ':' || $1::text), $4, $4)
 		`, projectID, storeType, storeType, userID)
 		if err != nil {
 			t.Fatalf("insert builtin type %s failed: %v", storeType, err)
@@ -315,7 +318,7 @@ func TestSchemaInitializer_CreatesBuiltinRuntimeStores(t *testing.T) {
 
 	_, err := fixture.pool.Exec(ctx, `
 		INSERT INTO data_connections (project_id, name, type, category, status, metadata, created_by, updated_by)
-		VALUES ($1, 'repeat relation', 'builtin.relation', 'builtin', 'connected', '{}'::jsonb, $2, $2)
+		VALUES ($1, 'repeat relation', 'builtin.relation', 'builtin', 'connected', jsonb_build_object('runtimeKey', 'builtin.relation:repeat'), $2, $2)
 	`, projectID, userID)
 	if err != nil {
 		t.Fatalf("expected duplicate builtin relation type to be allowed: %v", err)
@@ -379,7 +382,7 @@ func TestSchemaInitializer_RemovesLegacyAlarmRuleModel(t *testing.T) {
 	}
 }
 
-func TestSchemaInitializer_CreatesAlarmPolicyTables(t *testing.T) {
+func TestSchemaInitializer_CreatesAlarmItemTables(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -389,26 +392,30 @@ func TestSchemaInitializer_CreatesAlarmPolicyTables(t *testing.T) {
 		t.Fatalf("schema initialization failed: %v", err)
 	}
 
-	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policy_groups", "parent_id", "uuid")
-	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policies", "group_id", "uuid")
-	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policies", "notification_mode", "character varying")
-	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policies", "revision", "bigint")
-	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policies", "contract", "jsonb")
-	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policy_bindings", "datapoint_id", "uuid")
-	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_policy_conditions", "kind", "character varying")
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_groups", "parent_id", "uuid")
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_items", "datapoint_id", "uuid")
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_items", "alarm_type", "character varying")
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_items", "trigger_fingerprint", "character varying")
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_items", "revision", "bigint")
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_item_inputs", "input_key", "character varying")
+	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_item_conditions", "kind", "character varying")
 	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_notification_channels", "secret_status", "jsonb")
 	assertColumnExists(ctx, t, fixture.pool, fixture.schemaName, "data_alarm_config_sync_requests", "idempotency_key", "character varying")
 
 	if _, err := fixture.pool.Exec(ctx, `
-        INSERT INTO data_alarm_policies (
+		INSERT INTO data_alarm_items (
             project_id,
-            name,
+			display_name,
+			name_key,
             mode,
-            created_by
+			alarm_type,
+			evaluation_mode,
+			derived_expression,
+			trigger_fingerprint
         )
-        VALUES (gen_random_uuid(), '非法策略模式', 'single_rule', gen_random_uuid())
+		VALUES (gen_random_uuid(), '非法模式', '非法模式', 'legacy', 'threshold', 'single', '', repeat('a',64))
     `); err == nil {
-		t.Fatalf("expected invalid policy mode to violate check constraint")
+		t.Fatalf("expected invalid configuration mode to violate check constraint")
 	}
 }
 
@@ -426,10 +433,10 @@ func TestAlarmConfigSyncIsIdempotentOrderedAndTransactional(t *testing.T) {
 	actorID := "550e8400-e29b-41d4-a716-446655440101"
 	datapointID := "550e8400-e29b-41d4-a716-446655440102"
 	groupID := "550e8400-e29b-41d4-a716-446655440103"
-	policyID := "550e8400-e29b-41d4-a716-446655440104"
+	alarmItemID := "550e8400-e29b-41d4-a716-446655440104"
 	conditionID := "550e8400-e29b-41d4-a716-446655440105"
 	rollbackGroupID := "550e8400-e29b-41d4-a716-446655440106"
-	invalidPolicyID := "550e8400-e29b-41d4-a716-446655440107"
+	invalidConfigurationID := "550e8400-e29b-41d4-a716-446655440107"
 	missingDatapointID := "550e8400-e29b-41d4-a716-446655440108"
 
 	if _, err := fixture.pool.Exec(ctx, `
@@ -459,30 +466,31 @@ func TestAlarmConfigSyncIsIdempotentOrderedAndTransactional(t *testing.T) {
 		t.Fatal("旧同步序号应被拒绝")
 	}
 
-	policy := repository.SaveAlarmPolicyParams{
-		ID: policyID, ProjectID: projectID, UserID: actorID, GroupID: &groupID,
-		Name: "温度高报警", Mode: "per_target", NotificationMode: "inherit", IsEnabled: true,
-		NotificationChannelIDs: []string{}, Contract: map[string]any{"schemaVersion": "alarm.policy.v1", "policyId": policyID},
-		Bindings:   []repository.AlarmPolicyBindingRecord{{DatapointID: datapointID, Role: "target"}},
-		Conditions: []repository.AlarmPolicyConditionRecord{{ID: conditionID, Kind: "threshold", Operator: "gt", Label: "高温", Severity: "warning", Params: map[string]any{"threshold": 80.0}}},
+	alarmItem := repository.SaveAlarmItemParams{
+		ID: alarmItemID, ProjectID: projectID, UserID: actorID, DatapointID: &datapointID, GroupID: &groupID, IsCreate: true,
+		DisplayName: "温度高报警", NameKey: "温度高报警", Mode: "point", AlarmType: "threshold", EvaluationMode: "single", TriggerFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", NotificationMode: "inherit", IsEnabled: true,
+		NotificationChannelIDs: []string{}, Contract: map[string]any{"schema": "alarm.item.v1", "alarmItemId": alarmItemID},
+		Conditions: []repository.AlarmItemConditionRecord{{ID: conditionID, Kind: "threshold", Operator: "gt", Label: "高温", Severity: "warning", Params: map[string]any{"threshold": 80.0}}},
 	}
-	if _, err = repo.ApplyConfigSync(ctx, projectID, actorID, "epoch-1", 2, "request-2", []repository.AlarmConfigSyncOperationParams{{Resource: "policy", Action: "upsert", ID: policyID, Policy: &policy}}); err != nil {
-		t.Fatalf("同步报警策略失败: %v", err)
+	if _, err = repo.ApplyConfigSync(ctx, projectID, actorID, "epoch-1", 2, "request-2", []repository.AlarmConfigSyncOperationParams{{Resource: "alarm_item", Action: "upsert", ID: alarmItemID, AlarmItem: &alarmItem}}); err != nil {
+		t.Fatalf("同步报警配置失败: %v", err)
 	}
 
-	invalidPolicy := policy
-	invalidPolicy.ID = invalidPolicyID
-	invalidPolicy.Name = "无效报警"
-	invalidPolicy.Bindings = []repository.AlarmPolicyBindingRecord{{DatapointID: missingDatapointID, Role: "target"}}
+	invalidAlarmItem := alarmItem
+	invalidAlarmItem.ID = invalidConfigurationID
+	invalidAlarmItem.DisplayName = "无效报警"
+	invalidAlarmItem.NameKey = "无效报警"
+	invalidAlarmItem.DatapointID = &missingDatapointID
+	invalidAlarmItem.TriggerFingerprint = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	if _, err = repo.ApplyConfigSync(ctx, projectID, actorID, "epoch-1", 3, "request-3", []repository.AlarmConfigSyncOperationParams{
 		{Resource: "group", Action: "upsert", ID: rollbackGroupID, Group: &repository.SaveAlarmPolicyGroupParams{ID: rollbackGroupID, ProjectID: projectID, UserID: actorID, Name: "应回滚目录"}},
-		{Resource: "policy", Action: "upsert", ID: invalidPolicyID, Policy: &invalidPolicy},
+		{Resource: "alarm_item", Action: "upsert", ID: invalidConfigurationID, AlarmItem: &invalidAlarmItem},
 	}); err == nil {
 		t.Fatal("包含无效点位的同步批次应失败")
 	}
 
 	var rollbackGroupCount int
-	if err = fixture.pool.QueryRow(ctx, `SELECT count(*) FROM data_alarm_policy_groups WHERE id=$1`, rollbackGroupID).Scan(&rollbackGroupCount); err != nil {
+	if err = fixture.pool.QueryRow(ctx, `SELECT count(*) FROM data_alarm_groups WHERE id=$1`, rollbackGroupID).Scan(&rollbackGroupCount); err != nil {
 		t.Fatalf("检查回滚目录失败: %v", err)
 	}
 	state, err := repo.GetSyncState(ctx, projectID)
@@ -659,12 +667,17 @@ func loadIndexNames(ctx context.Context, t *testing.T, pool *pgxpool.Pool, schem
               'data_collector_points',
               'data_tdengine_configs',
               'data_preview_sessions',
-              'data_compute_units',
-              'data_compute_runs',
-			  'data_alarm_policy_groups',
-			  'data_alarm_policies',
-			  'data_alarm_policy_bindings',
-			  'data_alarm_policy_conditions',
+			  'data_compute_units',
+			  'data_compute_folders',
+			  'data_compute_runs',
+			  'data_history_storage_configs',
+			  'data_history_storage_targets',
+			  'data_workbench_object_groups',
+			  'data_table_group_members',
+			  'data_alarm_groups',
+			  'data_alarm_items',
+			  'data_alarm_item_inputs',
+			  'data_alarm_item_conditions',
 			  'data_alarm_notification_channels',
 			  'data_alarm_config_sync_requests'
           )

@@ -75,6 +75,8 @@ type CreateMqttConnectionInput struct {
 	ClientID         *string
 	Username         *string
 	Password         *string
+	Secrets          map[string]string
+	ClearSecretKeys  []string
 	Keepalive        *int
 	CleanSession     *bool
 	QOS              *int
@@ -92,10 +94,16 @@ type MqttService struct {
 	connections *repository.ConnectionRepository
 	datapoints  *repository.DataPointRepository
 	runtime     *MqttConnectionRuntimeManager
+	secrets     *repository.ConnectionSecretRepository
 
 	builtinMessageHubAddr     string
 	builtinMessageHubUsername string
 	builtinMessageHubPassword string
+}
+
+// SetSecretRepository 配置 MQTT 运行时密钥解析器；API 响应始终不返回明文。
+func (s *MqttService) SetSecretRepository(secrets *repository.ConnectionSecretRepository) {
+	s.secrets = secrets
 }
 
 // NewMqttService 创建 MQTT 领域服务。
@@ -118,6 +126,48 @@ func (s *MqttService) ConfigureBuiltinMessageHub(addr, username, password string
 	if s.runtime != nil {
 		s.runtime.ConfigureBuiltinMessageHub(addr, username, password)
 	}
+}
+
+func extractMqttSecrets(input CreateMqttConnectionInput) (map[string]string, map[string]any) {
+	secrets := map[string]string{}
+	for key, value := range input.Secrets {
+		if strings.TrimSpace(key) != "" && value != "" {
+			secrets[strings.TrimSpace(key)] = value
+		}
+	}
+	if input.Password != nil && *input.Password != "" {
+		secrets["password"] = *input.Password
+	}
+	sslConfig := cloneMap(input.SSLConfig)
+	for _, key := range []string{"ca", "cert", "key"} {
+		if value := strings.TrimSpace(toString(sslConfig[key])); value != "" {
+			secrets["tls."+key] = value
+		}
+		delete(sslConfig, key)
+	}
+	return secrets, sslConfig
+}
+
+func (s *MqttService) hydrateMqttSecrets(ctx context.Context, connection *repository.MqttConnectionDetailRecord) error {
+	if s.secrets == nil || connection == nil || connection.Type != "mqtt" {
+		return nil
+	}
+	values, err := s.secrets.ResolveAll(ctx, connection.ID)
+	if err != nil {
+		return err
+	}
+	if password, ok := values["password"]; ok {
+		connection.Password = &password
+	}
+	if connection.SSLConfig == nil {
+		connection.SSLConfig = map[string]any{}
+	}
+	for _, key := range []string{"ca", "cert", "key"} {
+		if value, ok := values["tls."+key]; ok {
+			connection.SSLConfig[key] = value
+		}
+	}
+	return nil
 }
 
 // CreateConnection 创建 MQTT 连接。
@@ -171,6 +221,7 @@ func (s *MqttService) CreateConnection(ctx context.Context, projectID, userID st
 		cleanSession = *input.CleanSession
 	}
 
+	secrets, sslConfig := extractMqttSecrets(input)
 	record, err := s.repository.CreateConnection(ctx, repository.CreateMqttConnectionParams{
 		ProjectID:        projectID,
 		UserID:           userID,
@@ -181,14 +232,15 @@ func (s *MqttService) CreateConnection(ctx context.Context, projectID, userID st
 		Port:             port,
 		ClientID:         normalizeOptionalText(input.ClientID),
 		Username:         normalizeOptionalText(input.Username),
-		Password:         normalizeOptionalText(input.Password),
+		Secrets:          secrets,
+		ClearSecretKeys:  input.ClearSecretKeys,
 		Keepalive:        keepalive,
 		CleanSession:     cleanSession,
 		QOS:              qos,
 		ReconnectPeriod:  reconnectPeriod,
 		ConnectTimeoutMS: connectTimeoutMS,
 		Will:             cloneMap(input.Will),
-		SSLConfig:        cloneMap(input.SSLConfig),
+		SSLConfig:        sslConfig,
 	})
 	if err != nil {
 		return nil, err
@@ -219,6 +271,9 @@ func (s *MqttService) StartConnection(ctx context.Context, projectID, connection
 		} else {
 			connection, err := s.repository.GetConnectionDetail(ctx, projectID, connectionID)
 			if err != nil {
+				return nil, err
+			}
+			if err := s.hydrateMqttSecrets(ctx, connection); err != nil {
 				return nil, err
 			}
 			if err := s.runtime.ConnectExternal(ctx, *connection); err != nil {
@@ -328,6 +383,14 @@ func (s *MqttService) PublishMessage(ctx context.Context, projectID, connectionI
 	if connection.Type == "builtin.message" {
 		if err := s.applyBuiltinMessagePublishConnection(connection); err != nil {
 			return nil, err
+		}
+	} else if connection.Type == "mqtt" && s.secrets != nil {
+		password, ok, err := s.secrets.Resolve(ctx, connection.ID, "password")
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			connection.Password = &password
 		}
 	}
 

@@ -118,6 +118,20 @@ func (h *ComputeHandler) Dependencies(w http.ResponseWriter, r *http.Request) er
 	return nil
 }
 
+// Capabilities 返回独立计算沙箱的实时能力。
+func (h *ComputeHandler) Capabilities(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	result, err := h.service.GetComputeCapabilities(r.Context(), claims, r.PathValue("projectId"))
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 // CheckSyntax 检查未保存计算脚本语法。
 func (h *ComputeHandler) CheckSyntax(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
@@ -142,6 +156,27 @@ func (h *ComputeHandler) CheckSyntax(w http.ResponseWriter, r *http.Request) err
 		return normalizeRepresentativeHandlerError(err)
 	}
 
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// SchedulePreview 返回未保存触发配置的规范化结果与未来执行时间，不会启动任何调度任务。
+func (h *ComputeHandler) SchedulePreview(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		TriggerType   string         `json:"triggerType"`
+		TriggerConfig map[string]any `json:"triggerConfig"`
+	}
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.PreviewComputeSchedule(r.Context(), claims, r.PathValue("projectId"), request.TriggerType, request.TriggerConfig)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
 }

@@ -71,6 +71,13 @@ export const createMqttConnection = (projectId, data) => {
   })
 }
 
+export const updateMqttConnection = (projectId, connectionId, data) =>
+  request({
+    url: `/data/projects/${projectId}/mqtt/connections/${connectionId}`,
+    method: 'put',
+    data,
+  })
+
 export const testConnection = (projectId, data) => {
   return request({
     url: `/data/projects/${projectId}/connections/test`,
@@ -94,6 +101,8 @@ export const createKafkaConfig = (projectId, data) => {
     data,
   })
 }
+export const updateKafkaConfig = (projectId, connectionId, data) =>
+  request({ url: `/data/projects/${projectId}/kafka/configs/${connectionId}`, method: 'put', data })
 
 export const createHttpConfig = (projectId, data) => {
   return request({
@@ -102,6 +111,8 @@ export const createHttpConfig = (projectId, data) => {
     data,
   })
 }
+export const updateHttpConfig = (projectId, connectionId, data) =>
+  request({ url: `/data/projects/${projectId}/http/configs/${connectionId}`, method: 'put', data })
 
 export const createWebSocketConfig = (projectId, data) => {
   return request({
@@ -110,6 +121,12 @@ export const createWebSocketConfig = (projectId, data) => {
     data,
   })
 }
+export const updateWebSocketConfig = (projectId, connectionId, data) =>
+  request({
+    url: `/data/projects/${projectId}/websocket/configs/${connectionId}`,
+    method: 'put',
+    data,
+  })
 
 export const createRedisConfig = (projectId, data) => {
   return request({
@@ -118,6 +135,8 @@ export const createRedisConfig = (projectId, data) => {
     data,
   })
 }
+export const updateRedisConfig = (projectId, connectionId, data) =>
+  request({ url: `/data/projects/${projectId}/redis/configs/${connectionId}`, method: 'put', data })
 
 export const createTdengineConfig = (projectId, data) => {
   return request({
@@ -126,6 +145,13 @@ export const createTdengineConfig = (projectId, data) => {
     data,
   })
 }
+
+export const updateTdengineConfig = (projectId, connectionId, data) =>
+  request({
+    url: `/data/projects/${projectId}/tdengine/configs/${connectionId}`,
+    method: 'put',
+    data,
+  })
 
 export const validateOpcdaContract = (projectId, data) => {
   return request({
@@ -547,10 +573,11 @@ export const batchCreateRealtimeStoreKeyDatapoints = (projectId, connectionId, d
   })
 }
 
-export const getConnectionTables = (projectId, connectionId) => {
+export const getConnectionTables = (projectId, connectionId, params = undefined) => {
   return request({
     url: `/data/projects/${projectId}/connections/${connectionId}/tables`,
     method: 'get',
+    params,
   })
 }
 
@@ -848,6 +875,28 @@ export const getDataPoint = (projectId, datapointId) => {
   return request({
     url: `/data/projects/${projectId}/datapoints/${datapointId}`,
     method: 'get',
+  })
+}
+
+export const getDataPointUsages = (projectId, datapointId) => {
+  return request({
+    url: `/data/projects/${projectId}/datapoints/${datapointId}/usages`,
+    method: 'get',
+  })
+}
+
+export const getDataPointTags = (projectId) => {
+  return request({
+    url: `/data/projects/${projectId}/datapoints/tags`,
+    method: 'get',
+  })
+}
+
+export const removeDataPointTag = (projectId, tag) => {
+  return request({
+    url: `/data/projects/${projectId}/datapoints/remove-tag`,
+    method: 'post',
+    data: { tag },
   })
 }
 
@@ -1393,12 +1442,17 @@ export default {
   getConnection,
   createConnection,
   createMqttConnection,
+  updateMqttConnection,
   testConnection,
   testMqttConnection,
   createKafkaConfig,
+  updateKafkaConfig,
   createHttpConfig,
   createWebSocketConfig,
+  updateWebSocketConfig,
   createRedisConfig,
+  updateRedisConfig,
+  updateHttpConfig,
   getRealtimeStoreKeys,
   getRealtimeStoreKey,
   saveRealtimeStoreKey,
@@ -1407,6 +1461,7 @@ export default {
   createRealtimeStoreKeyDatapoint,
   batchCreateRealtimeStoreKeyDatapoints,
   createTdengineConfig,
+  updateTdengineConfig,
   validateOpcdaContract,
   previewProtocol,
   getHttpRequestGroups,
@@ -1481,6 +1536,9 @@ export default {
   // 数据点相关
   getDataPoints,
   getDataPoint,
+  getDataPointUsages,
+  getDataPointTags,
+  removeDataPointTag,
   getDataPointStatuses,
   updateDatapointRuntimePermissions,
   deleteDataPoint,

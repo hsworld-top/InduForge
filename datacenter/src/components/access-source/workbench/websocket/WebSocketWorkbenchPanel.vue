@@ -85,6 +85,15 @@
           <div v-if="sessions.length === 0" class="ws-workbench__empty">
             {{ search ? '没有匹配的会话' : '暂无会话' }}
           </div>
+          <button
+            v-if="sessions.length < pagination.total"
+            type="button"
+            class="ws-workbench__load-more"
+            :disabled="loadingMore"
+            @click="loadMoreSessions"
+          >
+            {{ loadingMore ? '加载中...' : `加载更多（${sessions.length}/${pagination.total}）` }}
+          </button>
         </template>
       </div>
     </aside>
@@ -162,11 +171,7 @@
             placeholder="ws://example.com/stream 或 wss://example.com/stream"
             @input="markDirty"
           />
-          <el-tooltip
-            :content="connectButtonTooltip"
-            placement="top"
-            :show-after="400"
-          >
+          <el-tooltip :content="connectButtonTooltip" placement="top" :show-after="400">
             <el-button
               :type="connectButtonType"
               :loading="activeTab.streamStatus === 'connecting'"
@@ -302,10 +307,7 @@
             </div>
           </header>
           <div class="ws-workbench__response-body">
-            <div
-              v-show="activeTab.streamStatus === 'error'"
-              class="ws-workbench__error-response"
-            >
+            <div v-show="activeTab.streamStatus === 'error'" class="ws-workbench__error-response">
               <IconTablerAlertTriangle />
               <strong>连接失败</strong>
               <span>{{ activeTab.streamError || '未知错误' }}</span>
@@ -323,24 +325,24 @@
               }}
             </div>
             <div v-show="activeTab.streamMessages.length > 0" class="ws-workbench__messages">
-            <article
-              v-for="(message, index) in activeTab.streamMessages"
-              :key="index"
-              class="ws-workbench__message"
-              :class="`is-${message.direction}`"
-            >
-              <div>
-                <el-tag size="small" :type="message.direction === 'in' ? 'success' : 'info'">
-                  {{ message.direction === 'in' ? '接收' : '发送' }}
-                </el-tag>
-                <span>{{ message.type }}</span>
-                <small>{{ message.sizeBytes }} bytes</small>
-              </div>
-              <pre>{{ formatJSON(message.payload ?? message.rawPayload) }}</pre>
-            </article>
-            <pre v-if="activeTab.streamError" class="ws-workbench__diagnostic">{{
-              activeTab.streamError
-            }}</pre>
+              <article
+                v-for="(message, index) in activeTab.streamMessages"
+                :key="index"
+                class="ws-workbench__message"
+                :class="`is-${message.direction}`"
+              >
+                <div>
+                  <el-tag size="small" :type="message.direction === 'in' ? 'success' : 'info'">
+                    {{ message.direction === 'in' ? '接收' : '发送' }}
+                  </el-tag>
+                  <span>{{ message.type }}</span>
+                  <small>{{ message.sizeBytes }} bytes</small>
+                </div>
+                <pre>{{ formatJSON(message.payload ?? message.rawPayload) }}</pre>
+              </article>
+              <pre v-if="activeTab.streamError" class="ws-workbench__diagnostic">{{
+                activeTab.streamError
+              }}</pre>
             </div>
           </div>
         </section>
@@ -621,6 +623,7 @@ const {
 })
 
 const loading = ref(false)
+const loadingMore = ref(false)
 const saving = ref(false)
 const groupSaving = ref(false)
 const search = ref('')
@@ -636,7 +639,7 @@ const messageEditorOptions = {
 const groups = ref<WebSocketSessionGroup[]>([])
 const sessions = ref<WebSocketSession[]>([])
 const expandedGroups = ref(new Set<string>())
-const pagination = reactive({ page: 1, pageSize: 1000, total: 0, totalPages: 0 })
+const pagination = reactive({ page: 1, pageSize: 50, total: 0, totalPages: 0 })
 const tabs = ref<SessionTab[]>([])
 const activeTabId = ref('')
 const groupDialog = reactive({ visible: false, id: '', name: '', parentId: '' })
@@ -663,6 +666,7 @@ const contextMenu = ref<{
   group: null,
 })
 let searchTimer: number | undefined
+let sessionListSequence = 0
 
 const sourceMetaRows = computed(() => [
   { label: '类型', value: 'WebSocket' },
@@ -753,6 +757,7 @@ watch(search, () => {
 })
 
 onBeforeUnmount(() => {
+  window.clearTimeout(searchTimer)
   tabs.value.forEach(closeStream)
 })
 
@@ -768,21 +773,50 @@ async function loadGroups() {
   expandedGroups.value = next
 }
 
-async function loadSessions(page = pagination.page) {
-  loading.value = true
+async function loadSessions(page = 1, append = false) {
+  const requestSequence = ++sessionListSequence
+  const projectId = props.projectId
+  const connectionId = props.connection.id
+  if (append) {
+    loadingMore.value = true
+  } else {
+    loading.value = true
+    loadingMore.value = false
+  }
   try {
     const params: Record<string, any> = {
       page,
       pageSize: pagination.pageSize,
       q: search.value || undefined,
     }
-    const result = await dataAPI.getWebSocketSessions(props.projectId, props.connection.id, params)
-    sessions.value = result.list
+    const result = await dataAPI.getWebSocketSessions(projectId, connectionId, params)
+    if (
+      requestSequence !== sessionListSequence ||
+      projectId !== props.projectId ||
+      connectionId !== props.connection.id
+    ) {
+      return
+    }
+    if (append) {
+      const byId = new Map(sessions.value.map((item) => [String(item.id), item]))
+      result.list.forEach((item) => byId.set(String(item.id), item))
+      sessions.value = Array.from(byId.values())
+    } else {
+      sessions.value = result.list
+    }
     Object.assign(pagination, result.pagination)
-    pagination.pageSize = result.pagination?.pageSize || 1000
+    pagination.pageSize = result.pagination?.pageSize || pagination.pageSize
   } finally {
-    loading.value = false
+    if (requestSequence === sessionListSequence) {
+      if (append) loadingMore.value = false
+      else loading.value = false
+    }
   }
+}
+
+function loadMoreSessions() {
+  if (loadingMore.value || sessions.value.length >= pagination.total) return
+  void loadSessions(pagination.page + 1, true)
 }
 
 function toggleGroup(id: string) {
@@ -929,9 +963,7 @@ async function connectActive() {
     tab.socket = null
     if (tab.streamStatus === 'connecting') {
       const reason =
-        tab.streamError ||
-        normalizeCloseReason(event) ||
-        `连接失败（code ${event.code || 1006}）`
+        tab.streamError || normalizeCloseReason(event) || `连接失败（code ${event.code || 1006}）`
       setStreamFailure(tab, reason, !tab.streamError)
     } else if (tab.streamStatus !== 'error') {
       tab.streamStatus = 'idle'
@@ -1853,6 +1885,29 @@ const WebSocketProtocolEditor = defineComponent({
   min-height: 0;
   overflow: auto;
   padding: 8px;
+}
+
+.ws-workbench__load-more {
+  width: 100%;
+  min-height: 30px;
+  margin-top: 6px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface);
+  color: var(--dc-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.ws-workbench__load-more:hover:not(:disabled) {
+  border-color: var(--dc-primary);
+  background: var(--dc-primary-soft);
+}
+
+.ws-workbench__load-more:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .ws-workbench__group-head,

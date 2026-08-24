@@ -161,10 +161,7 @@ const pullSamples = async () => {
       seen.add(key)
       return true
     })
-    samples.value = [
-      ...uniqueNextSamples,
-      ...samples.value,
-    ]
+    samples.value = [...uniqueNextSamples, ...samples.value]
     emit('samples', { mappingId: String(props.mapping.id), samples: samples.value, preview })
     if (nextSamples.length === 0) {
       ElMessage.warning('本次未拉取到样本，可调整起始位置、样本上限或超时后重试')

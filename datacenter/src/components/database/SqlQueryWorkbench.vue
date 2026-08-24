@@ -49,7 +49,7 @@
             <IconTablerChevronRight v-else />
             <IconTablerFileText class="sql-workbench__category-icon" />
             <span>查询</span>
-            <small>{{ filteredQueries.length }}</small>
+            <small>{{ queryPagination.total }}</small>
           </button>
 
           <div v-if="queriesExpanded" class="sql-workbench__tree-body">
@@ -105,6 +105,19 @@
             >
               暂无保存查询
             </div>
+            <button
+              v-if="!queriesLoading && queries.length < queryPagination.total"
+              type="button"
+              class="sql-workbench__load-more"
+              :disabled="queryLoadingMore"
+              @click="loadMoreQueries"
+            >
+              {{
+                queryLoadingMore
+                  ? '加载中...'
+                  : `加载更多（${queries.length}/${queryPagination.total}）`
+              }}
+            </button>
           </div>
         </section>
 
@@ -120,7 +133,7 @@
             <IconTablerChevronRight v-else />
             <IconTablerTable class="sql-workbench__category-icon" />
             <span>表</span>
-            <small>{{ filteredTables.length }}</small>
+            <small>{{ isReadOnlySource ? tablePagination.total : filteredTables.length }}</small>
           </button>
 
           <div v-if="tablesExpanded" class="sql-workbench__tree-body">
@@ -175,6 +188,19 @@
             <div v-if="!tablesLoading && filteredTables.length === 0" class="sql-workbench__empty">
               暂无表
             </div>
+            <button
+              v-if="isReadOnlySource && !tablesLoading && tables.length < tablePagination.total"
+              type="button"
+              class="sql-workbench__load-more"
+              :disabled="tableLoadingMore"
+              @click="loadTables(tablePagination.page + 1, true)"
+            >
+              {{
+                tableLoadingMore
+                  ? '加载中...'
+                  : `加载更多（${tables.length}/${tablePagination.total}）`
+              }}
+            </button>
           </div>
         </section>
       </div>
@@ -538,6 +564,7 @@
     </aside>
 
     <TableDesignDialog
+      v-if="!isReadOnlySource"
       v-model="tableDesignVisible"
       :project-id="projectId"
       :connection-id="connection.id"
@@ -604,7 +631,7 @@
             <span>删除查询</span>
           </button>
           <button
-            v-if="contextMenu.type === 'table-category'"
+            v-if="contextMenu.type === 'table-category' && !isReadOnlySource"
             type="button"
             @click="openTableDesign"
           >
@@ -665,7 +692,11 @@
             <IconTablerTable />
             <span>查询数据</span>
           </button>
-          <button v-if="contextMenu.type === 'table'" type="button" @click="openContextInsert">
+          <button
+            v-if="contextMenu.type === 'table' && !isReadOnlySource"
+            type="button"
+            @click="openContextInsert"
+          >
             <IconTablerPlus />
             <span>插入数据</span>
           </button>
@@ -693,7 +724,11 @@
             <IconTablerAlertTriangle />
             <span>查询异常质量</span>
           </button>
-          <button v-if="contextMenu.type === 'table'" type="button" @click="renameContextTable">
+          <button
+            v-if="contextMenu.type === 'table' && !isReadOnlySource"
+            type="button"
+            @click="renameContextTable"
+          >
             <IconTablerEdit />
             <span>重命名表</span>
           </button>
@@ -701,7 +736,11 @@
             <IconTablerFolder />
             <span>移动到分组</span>
           </button>
-          <button v-if="contextMenu.type === 'table'" type="button" @click="deleteContextTable">
+          <button
+            v-if="contextMenu.type === 'table' && !isReadOnlySource"
+            type="button"
+            @click="deleteContextTable"
+          >
             <IconTablerTrash />
             <span>删除表</span>
           </button>
@@ -786,7 +825,11 @@ const filterText = ref('')
 const selectedTableName = ref('')
 const selectedExplorerNode = ref('')
 const tablesLoading = ref(false)
+const tableLoadingMore = ref(false)
 const queriesLoading = ref(false)
+const queryLoadingMore = ref(false)
+const queryPagination = ref({ page: 1, pageSize: 50, total: 0 })
+const tablePagination = ref({ page: 1, pageSize: 50, total: 0 })
 const tablesExpanded = ref(true)
 const queriesExpanded = ref(true)
 const expandedObjectGroups = ref<Record<string, boolean>>({})
@@ -827,6 +870,8 @@ const contextMenu = ref<{
   group: null,
 })
 let tabCounter = 0
+let querySearchTimer: number | undefined
+let queryRequestSequence = 0
 const defaultEditorHeight = 270
 const minEditorHeight = 120
 const maxEditorHeight = 560
@@ -855,6 +900,7 @@ const dbType = computed(() => {
   return props.connection.type || dbConfig.value.dbType || 'mysql'
 })
 const supportsHypertable = computed(() => props.connection.type === 'builtin.timeseries')
+const isReadOnlySource = computed(() => props.connection.type === 'tdengine')
 const supportsTableStructureEdit = computed(() =>
   ['builtin.relation', 'builtin.timeseries'].includes(props.connection.type || ''),
 )
@@ -872,18 +918,30 @@ const dbTypeLabel = computed(() => {
 const databaseLabel = computed(() => {
   if (props.connection.type === 'builtin.relation') return '工程内置关系库'
   if (props.connection.type === 'builtin.timeseries') return '工程内置时序库'
-  return dbConfig.value.database || dbConfig.value.schema || '已配置库'
+  return (
+    dbConfig.value.databaseName || dbConfig.value.database || dbConfig.value.schema || '已配置库'
+  )
 })
-const sourceMetaRows = computed(() => [
-  { label: '类型', value: dbTypeLabel.value },
-  {
-    label: props.connection.type?.startsWith('builtin.') ? '标识' : '库',
-    value:
-      props.connection.type?.startsWith('builtin.') && dbConfig.value.schema
-        ? String(dbConfig.value.schema)
-        : databaseLabel.value,
-  },
-])
+const sourceMetaRows = computed(() => {
+  const rows = [
+    { label: '类型', value: dbTypeLabel.value },
+    {
+      label: props.connection.type?.startsWith('builtin.') ? '标识' : '库',
+      value:
+        props.connection.type?.startsWith('builtin.') && dbConfig.value.schema
+          ? String(dbConfig.value.schema)
+          : databaseLabel.value,
+    },
+  ]
+  if (isReadOnlySource.value) {
+    rows.push({
+      label: '地址',
+      value: `${dbConfig.value.protocol || 'ws'}://${dbConfig.value.host || '-'}:${dbConfig.value.port || 6041}`,
+    })
+    rows.push({ label: '时区', value: dbConfig.value.timezone || '未设置' })
+  }
+  return rows
+})
 const editorLanguage = computed(() => {
   if (dbType.value === 'postgresql') return 'pgsql'
   if (dbType.value === 'sqlserver') return 'sql'
@@ -996,12 +1054,26 @@ const buildTreeGroups = (scope: WorkbenchScope, groups: WorkbenchGroup[], items:
 const queryTreeGroups = computed(() =>
   buildTreeGroups('query', queryGroups.value, filteredQueries.value),
 )
-const tableTreeGroups = computed(() =>
-  buildTreeGroups('table', tableGroups.value, filteredTables.value),
-)
+const tableTreeGroups = computed(() => {
+  if (!isReadOnlySource.value) {
+    return buildTreeGroups('table', tableGroups.value, filteredTables.value)
+  }
+  const definitions = [
+    { id: '__tdengine_stables__', name: '超级表', kinds: ['supertable'] },
+    { id: '__tdengine_tables__', name: '普通表', kinds: ['table'] },
+    { id: '__tdengine_children__', name: '子表', kinds: ['child_table'] },
+  ]
+  return definitions.map((definition) => ({
+    id: definition.id,
+    name: definition.name,
+    scope: 'table' as WorkbenchScope,
+    virtual: true,
+    items: filteredTables.value.filter((table) => definition.kinds.includes(String(table.kind))),
+  }))
+})
 
 const resolveTableIcon = (table: any) => {
-  if (table?.kind === 'hypertable') return IconTablerStack2
+  if (['hypertable', 'supertable'].includes(table?.kind)) return IconTablerStack2
   return IconTablerTable
 }
 
@@ -1207,32 +1279,102 @@ const pushExecutionHistory = (record: Record<string, any>) => {
   persistExecutionHistory()
 }
 
-const loadTables = async () => {
-  tablesLoading.value = true
+const loadTables = async (page = 1, append = false) => {
+  if (append) tableLoadingMore.value = true
+  else tablesLoading.value = true
   try {
-    const response = await dataAPI.getConnectionTables(props.projectId, props.connection.id)
-    tables.value = response.data?.tables || []
+    const params = isReadOnlySource.value
+      ? {
+          page,
+          pageSize: tablePagination.value.pageSize,
+          search: filterText.value.trim() || undefined,
+        }
+      : undefined
+    const response = await dataAPI.getConnectionTables(props.projectId, props.connection.id, params)
+    const nextTables = response.data?.tables || []
+    tables.value = append ? [...tables.value, ...nextTables] : nextTables
+    if (isReadOnlySource.value) {
+      const pagination = response.data?.pagination || {}
+      tablePagination.value = {
+        page: Number(pagination.page || page),
+        pageSize: Number(pagination.limit || tablePagination.value.pageSize),
+        total: Number(pagination.total || 0),
+      }
+    } else {
+      tablePagination.value = {
+        page: 1,
+        pageSize: tables.value.length || 50,
+        total: tables.value.length,
+      }
+    }
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '加载表列表失败'))
   } finally {
     tablesLoading.value = false
+    tableLoadingMore.value = false
   }
 }
 
-const loadQueries = async () => {
-  queriesLoading.value = true
+const loadQueries = async (page = 1, append = false) => {
+  const requestSequence = ++queryRequestSequence
+  const projectId = props.projectId
+  const connectionId = props.connection.id
+  if (append) {
+    queryLoadingMore.value = true
+  } else {
+    queriesLoading.value = true
+    queryLoadingMore.value = false
+  }
   try {
-    const response = await dataAPI.getQueries(props.projectId, {
-      connectionId: props.connection.id,
+    const response = await dataAPI.getQueries(projectId, {
+      connectionId,
       queryType: 'sql',
+      search: filterText.value.trim() || undefined,
+      page,
+      pageSize: queryPagination.value.pageSize,
     })
-    queries.value = response.data?.queries || response.data || []
-    await loadQueryDataPoints()
+    if (
+      requestSequence !== queryRequestSequence ||
+      projectId !== props.projectId ||
+      connectionId !== props.connection.id
+    ) {
+      return
+    }
+    const next = response.data?.queries || response.data || []
+    if (append) {
+      const byId = new Map(queries.value.map((query) => [String(query.id), query]))
+      next.forEach((query: any) => byId.set(String(query.id), query))
+      queries.value = Array.from(byId.values())
+    } else {
+      queries.value = next
+    }
+    const pageInfo = response.data?.pagination || {}
+    queryPagination.value = {
+      page: Number(pageInfo.page || page),
+      pageSize: Number(pageInfo.pageSize || queryPagination.value.pageSize),
+      total: Number(pageInfo.total ?? queries.value.length),
+    }
+    await loadQueryDataPoints(requestSequence, projectId, connectionId)
   } catch (error) {
+    if (
+      requestSequence !== queryRequestSequence ||
+      projectId !== props.projectId ||
+      connectionId !== props.connection.id
+    ) {
+      return
+    }
     ElMessage.error(getApiErrorMessage(error, '加载保存查询失败'))
   } finally {
-    queriesLoading.value = false
+    if (requestSequence === queryRequestSequence) {
+      if (append) queryLoadingMore.value = false
+      else queriesLoading.value = false
+    }
   }
+}
+
+const loadMoreQueries = () => {
+  if (queryLoadingMore.value || queries.value.length >= queryPagination.value.total) return
+  void loadQueries(queryPagination.value.page + 1, true)
 }
 
 const loadWorkbenchGroups = async () => {
@@ -1250,22 +1392,38 @@ const loadWorkbenchGroups = async () => {
   }
 }
 
-const loadQueryDataPoints = async () => {
+const loadQueryDataPoints = async (
+  requestSequence = queryRequestSequence,
+  projectId = props.projectId,
+  connectionId = props.connection.id,
+) => {
   const sourceIds = queries.value.map((query) => query.id).filter(Boolean)
   if (sourceIds.length === 0) {
-    queryDataPoints.value = []
+    if (requestSequence === queryRequestSequence) queryDataPoints.value = []
     return
   }
   try {
-    const response = await dataAPI.getDataPoints(props.projectId, {
-      type: 'db.query',
-      sourceIds: sourceIds.join(','),
-      page: 1,
-      pageSize: 200,
-    })
-    queryDataPoints.value = response.data?.datapoints || []
+    const responses = await Promise.all(
+      Array.from({ length: Math.ceil(sourceIds.length / 100) }, (_, index) => {
+        const chunk = sourceIds.slice(index * 100, index * 100 + 100)
+        return dataAPI.getDataPoints(projectId, {
+          type: 'db.query',
+          sourceIds: chunk.join(','),
+          page: 1,
+          pageSize: 100,
+        })
+      }),
+    )
+    if (
+      requestSequence !== queryRequestSequence ||
+      projectId !== props.projectId ||
+      connectionId !== props.connection.id
+    ) {
+      return
+    }
+    queryDataPoints.value = responses.flatMap((response) => response.data?.datapoints || [])
   } catch {
-    queryDataPoints.value = []
+    if (requestSequence === queryRequestSequence) queryDataPoints.value = []
   }
 }
 
@@ -2011,6 +2169,14 @@ watch(
   },
 )
 
+watch(filterText, () => {
+  window.clearTimeout(querySearchTimer)
+  querySearchTimer = window.setTimeout(() => {
+    void loadQueries(1)
+    if (isReadOnlySource.value) void loadTables(1)
+  }, 250)
+})
+
 onMounted(async () => {
   loadExecutionHistory()
   await reloadExplorer()
@@ -2018,6 +2184,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  window.clearTimeout(querySearchTimer)
   stopResultResize()
 })
 </script>
@@ -2095,6 +2262,29 @@ onBeforeUnmount(() => {
 
 .sql-workbench__tree-section + .sql-workbench__tree-section {
   margin-top: 4px;
+}
+
+.sql-workbench__load-more {
+  width: calc(100% - 8px);
+  min-height: 30px;
+  margin: 6px 4px 2px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface);
+  color: var(--dc-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.sql-workbench__load-more:hover:not(:disabled) {
+  border-color: var(--dc-primary);
+  background: var(--dc-primary-soft);
+}
+
+.sql-workbench__load-more:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .sql-workbench__tree-category,

@@ -1,47 +1,47 @@
 import { describe, expect, test } from 'vitest'
 
-import {
-  computeCapabilities,
-  computeTaskModes,
-  computeTriggerModes,
-} from '../src/components/compute/computeCapabilities'
+import { ComputeCapabilitiesSchema } from '../src/api/schemas/compute.schema'
 
-describe('compute workspace metadata', () => {
-  test('明确提供三种计算任务模式，且副作用任务不要求输出数据点', () => {
-    expect(computeTaskModes.map((mode) => mode.id)).toEqual([
-      'output-datapoint',
-      'side-effect',
-      'hybrid',
-    ])
+describe('compute sandbox capabilities', () => {
+  test('只接受后端沙箱真实声明的语言、SDK、依赖和限制', () => {
+    const result = ComputeCapabilitiesSchema.parse({
+      sandboxStatus: 'available',
+      languages: [
+        { language: 'js', version: 'v22' },
+        { language: 'python', version: '3.11' },
+      ],
+      sdk: ['ctx.datapoint.get', 'ctx.datapoint.meta', 'ctx.sql.query'],
+      dependencies: [],
+      triggerTypes: ['manual', 'schedule', 'datapoint_change'],
+      limits: {
+        maxExecutionTimeMs: 120000,
+        maxInputBytes: 1048576,
+        maxOutputBytes: 2097152,
+        maxLogBytes: 65536,
+      },
+    })
 
-    const sideEffectMode = computeTaskModes.find((mode) => mode.id === 'side-effect')
-
-    expect(sideEffectMode?.outputPolicy).toBe('none')
-    expect(sideEffectMode?.summary).toContain('可以不输出数据点')
-    expect(sideEffectMode?.summary).toContain('写库')
-    expect(sideEffectMode?.summary).toContain('MQTT/Kafka')
-    expect(sideEffectMode?.summary).toContain('HTTP')
+    expect(result.sdk).toEqual(['ctx.datapoint.get', 'ctx.datapoint.meta', 'ctx.sql.query'])
+    expect(result.dependencies).toEqual([])
+    expect(result.sdk).not.toContain('ctx.http.post')
+    expect(result.sdk).not.toContain('ctx.mqtt.publish')
   })
 
-  test('触发方式覆盖手动、定时、Bool 点和数据点变化', () => {
-    expect(computeTriggerModes.map((trigger) => trigger.id)).toEqual([
-      'manual-debug',
-      'schedule',
-      'bool-datapoint',
-      'datapoint-change',
-    ])
-  })
-
-  test('能力面板覆盖脚本任务需要展示的封装 API', () => {
-    const signatures = computeCapabilities.map((capability) => capability.signature)
-
-    expect(signatures).toContain('ctx.datapoint.get(path)')
-    expect(signatures).toContain('ctx.sql.query(source, sql, args)')
-    expect(signatures).toContain('ctx.sql.execute(source, sql, args)')
-    expect(signatures).toContain('ctx.math.avg/sum/clamp/round')
-    expect(signatures).toContain('ctx.text.format/regex/trim')
-    expect(signatures).toContain('ctx.json.path/parse/stringify')
-    expect(signatures).toContain('ctx.http.get/post/put')
-    expect(signatures).toContain('ctx.mqtt.publish / ctx.kafka.publish')
+  test('沙箱不可用时使用空能力，不伪装成宿主执行器', () => {
+    const result = ComputeCapabilitiesSchema.parse({
+      sandboxStatus: 'unavailable',
+      languages: [],
+      sdk: [],
+      dependencies: [],
+      triggerTypes: [],
+      limits: {
+        maxExecutionTimeMs: 0,
+        maxInputBytes: 0,
+        maxOutputBytes: 0,
+        maxLogBytes: 0,
+      },
+    })
+    expect(result.sandboxStatus).toBe('unavailable')
+    expect(result.sdk).toEqual([])
   })
 })

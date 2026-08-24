@@ -9,28 +9,40 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
+	"github.com/indu-forge/data_service/internal/security"
 )
 
 // CreateTdengineConfigParams 描述 TDengine 配置落库参数。
 type CreateTdengineConfigParams struct {
-	ProjectID    string
-	UserID       string
-	Name         string
-	Status       string
-	DSN          string
-	DatabaseName string
-	Timezone     *string
-	Options      map[string]any
+	ProjectID       string
+	UserID          string
+	Name            string
+	Status          string
+	Protocol        string
+	Host            string
+	Port            int
+	Username        string
+	DatabaseName    string
+	Timezone        *string
+	TLSSkipVerify   bool
+	Options         map[string]any
+	Secrets         map[string]string
+	ClearSecretKeys []string
 }
 
 // ProtocolWave2Repository 负责 TDengine 配置的参数化 SQL。
 type ProtocolWave2Repository struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	cipher *security.ConnectionSecretCipher
 }
 
 // NewProtocolWave2Repository 创建第二波协议仓储。
-func NewProtocolWave2Repository(pool *pgxpool.Pool) *ProtocolWave2Repository {
-	return &ProtocolWave2Repository{pool: pool}
+func NewProtocolWave2Repository(pool *pgxpool.Pool, ciphers ...*security.ConnectionSecretCipher) *ProtocolWave2Repository {
+	repository := &ProtocolWave2Repository{pool: pool}
+	if len(ciphers) > 0 {
+		repository.cipher = ciphers[0]
+	}
+	return repository
 }
 
 // CreateTdengineConfig 创建 TDengine 配置。
@@ -53,10 +65,10 @@ func (r *ProtocolWave2Repository) CreateTdengineConfig(ctx context.Context, para
 		Type:      "tdengine",
 		Status:    params.Status,
 		Metadata: map[string]any{
-			"dsn":      params.DSN,
-			"database": params.DatabaseName,
-			"timezone": params.Timezone,
-			"options":  cloneWave2Map(params.Options),
+			"protocol": params.Protocol, "host": params.Host, "port": params.Port,
+			"username": params.Username, "databaseName": params.DatabaseName,
+			"timezone": params.Timezone, "tlsSkipVerify": params.TLSSkipVerify,
+			"options": cloneWave2Map(params.Options),
 		},
 	})
 	if err != nil {
@@ -66,21 +78,58 @@ func (r *ProtocolWave2Repository) CreateTdengineConfig(ctx context.Context, para
 	_, err = tx.Exec(ctx, `
 		INSERT INTO data_tdengine_configs (
 			connection_id,
-			dsn,
+			protocol, host, port, username,
 			database_name,
 			timezone,
+			tls_skip_verify,
 			options
 		)
-		VALUES ($1, $2, $3, $4, $5::jsonb)
-	`, record.ID, params.DSN, params.DatabaseName, params.Timezone, optionsPayload)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+	`, record.ID, params.Protocol, params.Host, params.Port, params.Username, params.DatabaseName, params.Timezone, params.TLSSkipVerify, optionsPayload)
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "写入 TDengine 配置失败", err)
+	}
+	if err := applyPlainConnectionSecretsTx(ctx, tx, r.cipher, record.ID, params.Secrets, params.ClearSecretKeys); err != nil {
+		return nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 TDengine 配置事务失败", err)
 	}
 	return record, nil
+}
+
+// UpdateTdengineConfig 原子更新主连接、结构化 TDengine 配置和密钥。
+func (r *ProtocolWave2Repository) UpdateTdengineConfig(ctx context.Context, connectionID string, params CreateTdengineConfigParams) (*ProtocolConnectionRecord, error) {
+	optionsPayload, err := marshalWave2JSONObject(params.Options, true)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 TDengine 更新事务失败", err)
+	}
+	defer rollbackWave2TxQuietly(ctx, tx)
+	metadataPayload, _ := json.Marshal(map[string]any{"protocol": params.Protocol, "host": params.Host, "port": params.Port, "username": params.Username, "databaseName": params.DatabaseName, "timezone": params.Timezone, "tlsSkipVerify": params.TLSSkipVerify, "options": cloneWave2Map(params.Options)})
+	record := ProtocolConnectionRecord{}
+	err = tx.QueryRow(ctx, `UPDATE data_connections SET name=$3,status=$4,metadata=$5::jsonb,updated_by=$6,updated_at=now() WHERE project_id=$1 AND id=$2 AND type='tdengine' RETURNING id,project_id,name,type,status,created_at,updated_at`, params.ProjectID, connectionID, params.Name, params.Status, metadataPayload, params.UserID).Scan(&record.ID, &record.ProjectID, &record.Name, &record.Type, &record.Status, &record.CreatedAt, &record.UpdatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "TDengine 配置不存在")
+	}
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "更新 TDengine 主连接失败", err)
+	}
+	_, err = tx.Exec(ctx, `UPDATE data_tdengine_configs SET protocol=$2,host=$3,port=$4,username=$5,database_name=$6,timezone=$7,tls_skip_verify=$8,options=$9::jsonb,updated_at=now() WHERE connection_id=$1`, connectionID, params.Protocol, params.Host, params.Port, params.Username, params.DatabaseName, params.Timezone, params.TLSSkipVerify, optionsPayload)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "更新 TDengine 配置失败", err)
+	}
+	if err := applyPlainConnectionSecretsTx(ctx, tx, r.cipher, connectionID, params.Secrets, params.ClearSecretKeys); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 TDengine 更新事务失败", err)
+	}
+	return &record, nil
 }
 
 type createWave2ConnectionTxParams struct {
