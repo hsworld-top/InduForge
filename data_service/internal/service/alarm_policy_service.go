@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -24,7 +25,6 @@ const defaultAlarmMessageTemplate = "{{pointName}} 当前值 {{value}}，触发 
 const defaultAlarmHistoryRetentionDays = 30
 
 var (
-	alarmModes      = map[string]bool{"per_target": true, "derived": true}
 	alarmSeverities = map[string]bool{"info": true, "warning": true, "major": true, "critical": true}
 	alarmKinds      = map[string]bool{"threshold": true, "range": true, "state": true, "transition": true, "text_match": true, "rate_of_change": true, "deviation": true, "offline": true, "expression": true}
 	numericTypes    = map[string]bool{"number": true, "integer": true, "float": true, "double": true, "decimal": true, "int": true, "int8": true, "int16": true, "int32": true, "int64": true, "uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true, "float32": true, "float64": true, "numeric": true}
@@ -41,15 +41,6 @@ type AlarmPolicyGroup struct {
 	HasChildren bool      `json:"hasChildren"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
-}
-
-type AlarmBinding struct {
-	DatapointID string  `json:"datapointId"`
-	Path        string  `json:"path"`
-	Name        string  `json:"name"`
-	DataType    string  `json:"dataType"`
-	Role        string  `json:"role"`
-	InputKey    *string `json:"inputKey,omitempty"`
 }
 
 type AlarmCondition struct {
@@ -73,38 +64,6 @@ type AlarmNotificationSettings struct {
 	MessageTemplate       string   `json:"messageTemplate"`
 }
 
-type AlarmPolicy struct {
-	ID                string                    `json:"id"`
-	ProjectID         string                    `json:"projectId"`
-	Name              string                    `json:"name"`
-	Mode              string                    `json:"mode"`
-	DerivedExpression string                    `json:"derivedExpression"`
-	GroupID           *string                   `json:"groupId"`
-	GroupName         *string                   `json:"groupName"`
-	Description       *string                   `json:"description"`
-	Bindings          []AlarmBinding            `json:"bindings"`
-	Conditions        []AlarmCondition          `json:"conditions"`
-	Notification      AlarmNotificationSettings `json:"notification"`
-	IsEnabled         bool                      `json:"isEnabled"`
-	Revision          int64                     `json:"revision"`
-	Contract          map[string]any            `json:"contract"`
-	CreatedAt         time.Time                 `json:"createdAt"`
-	UpdatedAt         time.Time                 `json:"updatedAt"`
-}
-
-type AlarmPolicyListFilter struct {
-	Search, Severity, ConditionKind, Mode string
-	GroupID                               *string
-	Enabled                               *bool
-	DatapointID                           string
-	Page, PageSize                        int
-}
-
-type AlarmPolicyListResult struct {
-	List       []AlarmPolicy `json:"list"`
-	Pagination Pagination    `json:"pagination"`
-}
-
 type AlarmPolicyGroupListResult struct {
 	List       []AlarmPolicyGroup `json:"list"`
 	Pagination Pagination         `json:"pagination"`
@@ -114,18 +73,6 @@ type Pagination struct {
 	Page     int `json:"page"`
 	PageSize int `json:"pageSize"`
 	Total    int `json:"total"`
-}
-
-type SaveAlarmPolicyInput struct {
-	GroupID           *string                   `json:"groupId"`
-	Name              string                    `json:"name"`
-	Description       *string                   `json:"description"`
-	Mode              string                    `json:"mode"`
-	Bindings          []AlarmBinding            `json:"bindings"`
-	DerivedExpression string                    `json:"derivedExpression"`
-	Conditions        []AlarmCondition          `json:"conditions"`
-	Notification      AlarmNotificationSettings `json:"notification"`
-	IsEnabled         *bool                     `json:"isEnabled"`
 }
 
 type SaveAlarmPolicyGroupInput struct {
@@ -210,13 +157,7 @@ type AlarmConfigSyncResult struct {
 	Idempotent       bool  `json:"idempotent"`
 }
 
-type AlarmDatapointSummary struct {
-	DatapointID string        `json:"datapointId"`
-	Policies    []AlarmPolicy `json:"policies"`
-	Count       int           `json:"count"`
-}
-
-type AlarmPolicyTrialResult struct {
+type AlarmConditionTrialResult struct {
 	Triggered           bool             `json:"triggered"`
 	State               string           `json:"state"`
 	TriggeredConditions []AlarmCondition `json:"triggeredConditions"`
@@ -228,6 +169,11 @@ type AlarmPolicyService struct {
 	repository *repository.AlarmPolicyRepository
 	datapoints *repository.DataPointRepository
 	cipher     *security.AlarmSecretCipher
+	alarmItems *AlarmItemService
+}
+
+func (s *AlarmPolicyService) SetAlarmItemService(alarmItems *AlarmItemService) {
+	s.alarmItems = alarmItems
 }
 
 func NewAlarmPolicyService(repo *repository.AlarmPolicyRepository, datapoints *repository.DataPointRepository, ciphers ...*security.AlarmSecretCipher) *AlarmPolicyService {
@@ -308,121 +254,6 @@ func (s *AlarmPolicyService) DeleteGroup(ctx context.Context, claims *auth.Claim
 		return err
 	}
 	return s.repository.DeleteGroup(ctx, projectID, id)
-}
-
-func (s *AlarmPolicyService) List(ctx context.Context, claims *auth.Claims, projectID string, f AlarmPolicyListFilter) (*AlarmPolicyListResult, error) {
-	if err := s.readAccess(claims, projectID); err != nil {
-		return nil, err
-	}
-	if err := validateAlarmFilters(f); err != nil {
-		return nil, err
-	}
-	records, total, err := s.repository.ListPolicies(ctx, projectID, repository.AlarmPolicyListFilter{Search: f.Search, GroupID: f.GroupID, Enabled: f.Enabled, Severity: f.Severity, ConditionKind: f.ConditionKind, Mode: f.Mode, DatapointID: f.DatapointID, Page: f.Page, PageSize: f.PageSize})
-	if err != nil {
-		return nil, err
-	}
-	items := make([]AlarmPolicy, 0, len(records))
-	for _, record := range records {
-		items = append(items, toAlarmPolicy(record))
-	}
-	return &AlarmPolicyListResult{List: items, Pagination: Pagination{Page: positive(f.Page, 1), PageSize: positive(f.PageSize, 20), Total: total}}, nil
-}
-func (s *AlarmPolicyService) Get(ctx context.Context, claims *auth.Claims, projectID, id string) (*AlarmPolicy, error) {
-	if err := s.readAccess(claims, projectID); err != nil {
-		return nil, err
-	}
-	record, err := s.repository.GetPolicy(ctx, projectID, id)
-	if err != nil {
-		return nil, err
-	}
-	item := toAlarmPolicy(*record)
-	return &item, nil
-}
-func (s *AlarmPolicyService) Create(ctx context.Context, claims *auth.Claims, projectID string, input SaveAlarmPolicyInput) (*AlarmPolicy, error) {
-	return s.savePolicy(ctx, claims, projectID, "", input)
-}
-func (s *AlarmPolicyService) Update(ctx context.Context, claims *auth.Claims, projectID, id string, input SaveAlarmPolicyInput) (*AlarmPolicy, error) {
-	return s.savePolicy(ctx, claims, projectID, id, input)
-}
-
-func (s *AlarmPolicyService) savePolicy(ctx context.Context, claims *auth.Claims, projectID, id string, input SaveAlarmPolicyInput) (*AlarmPolicy, error) {
-	if err := s.writeAccess(claims, projectID); err != nil {
-		return nil, err
-	}
-	normalized, err := s.normalizePolicy(ctx, projectID, input)
-	if err != nil {
-		return nil, err
-	}
-	// 创建时先确定策略 ID，确保持久化契约与策略主记录使用同一标识。
-	isCreate := id == ""
-	if isCreate {
-		id = uuid.NewString()
-	}
-	contract := buildAlarmContract(projectID, id, normalized)
-	params := toSaveAlarmPolicyParams(projectID, id, claims.UserID, normalized, contract)
-	params.IsCreate = isCreate
-	record, err := s.repository.SavePolicy(ctx, params)
-	if err != nil {
-		return nil, err
-	}
-	item := toAlarmPolicy(*record)
-	return &item, nil
-}
-
-func (s *AlarmPolicyService) SetEnabled(ctx context.Context, claims *auth.Claims, projectID, id string, enabled bool) (*AlarmPolicy, error) {
-	if err := s.writeAccess(claims, projectID); err != nil {
-		return nil, err
-	}
-	if enabled {
-		record, err := s.repository.GetPolicy(ctx, projectID, id)
-		if err != nil {
-			return nil, err
-		}
-		if err = validatePolicyReady(*record); err != nil {
-			return nil, err
-		}
-	}
-	record, err := s.repository.SetPolicyEnabled(ctx, projectID, id, claims.UserID, enabled)
-	if err != nil {
-		return nil, err
-	}
-	item := toAlarmPolicy(*record)
-	return &item, nil
-}
-func (s *AlarmPolicyService) Delete(ctx context.Context, claims *auth.Claims, projectID, id string) error {
-	if err := s.writeAccess(claims, projectID); err != nil {
-		return err
-	}
-	return s.repository.DeletePolicy(ctx, projectID, id)
-}
-
-func (s *AlarmPolicyService) ValidateDraft(ctx context.Context, claims *auth.Claims, projectID string, input SaveAlarmPolicyInput) (map[string]any, error) {
-	if err := s.readAccess(claims, projectID); err != nil {
-		return nil, err
-	}
-	_, err := s.normalizePolicy(ctx, projectID, input)
-	if err != nil {
-		return map[string]any{"valid": false, "errors": []string{err.Error()}}, nil
-	}
-	return map[string]any{"valid": true, "errors": []string{}}, nil
-}
-
-func (s *AlarmPolicyService) DatapointSummary(ctx context.Context, claims *auth.Claims, projectID, datapointID string) (*AlarmDatapointSummary, error) {
-	if err := s.readAccess(claims, projectID); err != nil {
-		return nil, err
-	}
-	if _, err := s.datapoints.GetByProjectAndID(ctx, projectID, datapointID); err != nil {
-		return nil, err
-	}
-	records, err := s.repository.ListPoliciesByDatapoint(ctx, projectID, datapointID)
-	if err != nil {
-		return nil, err
-	}
-	items := make([]AlarmPolicy, 0, len(records))
-	for _, record := range records {
-		items = append(items, toAlarmPolicy(record))
-	}
-	return &AlarmDatapointSummary{DatapointID: datapointID, Policies: items, Count: len(items)}, nil
 }
 
 func (s *AlarmPolicyService) GetSettings(ctx context.Context, claims *auth.Claims, projectID string) (*AlarmProjectSettings, error) {
@@ -629,14 +460,14 @@ func (s *AlarmPolicyService) normalizeSyncOperation(ctx context.Context, project
 		return repository.AlarmConfigSyncOperationParams{}, badAlarm("同步操作 action 仅支持 upsert 或 delete")
 	}
 	id := strings.TrimSpace(operation.ID)
-	if resource != "settings" && resource != "history_settings" {
+	if resource != "project_settings" && resource != "history_settings" {
 		if _, err := uuid.Parse(id); err != nil {
 			return repository.AlarmConfigSyncOperationParams{}, badAlarm("同步操作 id 格式无效")
 		}
 	}
 	result := repository.AlarmConfigSyncOperationParams{Resource: resource, Action: action, ID: id}
 	if action == "delete" {
-		if resource != "group" && resource != "policy" && resource != "settings" && resource != "history_settings" && resource != "channel" {
+		if resource != "group" && resource != "alarm_item" && resource != "project_settings" && resource != "history_settings" && resource != "channel" {
 			return result, badAlarm("同步资源类型不受支持")
 		}
 		if resource == "history_settings" && id != "history" {
@@ -659,19 +490,40 @@ func (s *AlarmPolicyService) normalizeSyncOperation(ctx context.Context, project
 			return result, badAlarm("目录不能移动到自身")
 		}
 		result.Group = &repository.SaveAlarmPolicyGroupParams{ID: id, ProjectID: projectID, UserID: actorID, Name: name, ParentID: data.ParentID, Description: normalizeText(data.Description), SortOrder: data.SortOrder}
-	case "policy":
-		var data SaveAlarmPolicyInput
+	case "alarm_item":
+		if s.alarmItems == nil {
+			return result, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "报警项同步服务未初始化")
+		}
+		var data SaveAlarmItemInput
 		if err := decodeAlarmSyncData(operation.Data, &data); err != nil {
 			return result, err
 		}
-		normalized, err := s.normalizePolicyForSync(ctx, projectID, data)
+		_, currentErr := s.repository.GetAlarmItem(ctx, projectID, id)
+		isCreate := false
+		if currentErr != nil {
+			var appErr *apperrors.AppError
+			if !errors.As(currentErr, &appErr) || appErr.Code != apperrors.ErrorCodeNotFound {
+				return result, currentErr
+			}
+			isCreate = true
+		}
+		normalizeItemID := id
+		if isCreate {
+			normalizeItemID = ""
+		}
+		normalized, params, validation, err := s.alarmItems.normalize(ctx, projectID, normalizeItemID, data)
 		if err != nil {
 			return result, err
 		}
-		contract := buildAlarmContract(projectID, id, normalized)
-		params := toSaveAlarmPolicyParams(projectID, id, actorID, normalized, contract)
-		result.Policy = &params
-	case "settings":
+		if err = acknowledgeAlarmWarnings(normalized, validation); err != nil {
+			return result, err
+		}
+		params.UserID = actorID
+		params.ID = id
+		params.IsCreate = isCreate
+		params.Contract = buildAlarmItemContract(projectID, id, normalized, params, params.TriggerFingerprint)
+		result.AlarmItem = &params
+	case "project_settings":
 		var data SaveAlarmProjectSettingsInput
 		if err := decodeAlarmSyncData(operation.Data, &data); err != nil {
 			return result, err
@@ -715,42 +567,6 @@ func (s *AlarmPolicyService) normalizeSyncOperation(ctx context.Context, project
 	return result, nil
 }
 
-func (s *AlarmPolicyService) normalizePolicyForSync(ctx context.Context, projectID string, input SaveAlarmPolicyInput) (SaveAlarmPolicyInput, error) {
-	name, err := requiredName(input.Name, "策略名称")
-	if err != nil {
-		return input, err
-	}
-	input.Name = name
-	input.Mode = strings.TrimSpace(input.Mode)
-	if input.Mode == "" {
-		input.Mode = "per_target"
-	}
-	if !alarmModes[input.Mode] {
-		return input, badAlarm("报警类型不受支持")
-	}
-	input.GroupID = normalizeID(input.GroupID)
-	enabled := valueOr(input.IsEnabled, input.Mode == "per_target")
-	input.IsEnabled = &enabled
-	bindings, category, err := s.normalizeBindings(ctx, projectID, input.Mode, input.Bindings)
-	if err != nil {
-		return input, err
-	}
-	input.Bindings = bindings
-	input.DerivedExpression = strings.TrimSpace(input.DerivedExpression)
-	if input.Mode == "derived" && input.DerivedExpression == "" {
-		return input, badAlarm("组合报警必须填写计算表达式")
-	}
-	if input.Mode == "per_target" {
-		input.DerivedExpression = ""
-	}
-	input.Conditions, err = normalizeConditions(input.Conditions, category, input.Mode)
-	if err != nil {
-		return input, err
-	}
-	input.Notification, err = normalizeNotificationShape(input.Notification)
-	return input, err
-}
-
 func (s *AlarmPolicyService) normalizeSyncChannel(projectID, actorID, id string, input SaveAlarmNotificationChannelInput, secretStatus map[string]any) (repository.SaveAlarmNotificationChannelParams, error) {
 	name, err := requiredName(input.Name, "渠道名称")
 	if err != nil {
@@ -792,195 +608,6 @@ func decodeAlarmSyncData(raw json.RawMessage, target any) error {
 		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "同步操作 data 格式无效", err)
 	}
 	return nil
-}
-
-func (s *AlarmPolicyService) Contract(ctx context.Context, claims *auth.Claims, projectID, id string) (map[string]any, error) {
-	policy, err := s.Get(ctx, claims, projectID, id)
-	if err != nil {
-		return nil, err
-	}
-	return alarmCloneMap(policy.Contract), nil
-}
-func (s *AlarmPolicyService) Test(ctx context.Context, claims *auth.Claims, projectID, id string, value any, context map[string]any) (*AlarmPolicyTrialResult, error) {
-	policy, err := s.Get(ctx, claims, projectID, id)
-	if err != nil {
-		return nil, err
-	}
-	return evaluateAlarmConditions(policy.Conditions, value, context), nil
-}
-
-func (s *AlarmPolicyService) normalizePolicy(ctx context.Context, projectID string, input SaveAlarmPolicyInput) (SaveAlarmPolicyInput, error) {
-	name, err := requiredName(input.Name, "策略名称")
-	if err != nil {
-		return input, err
-	}
-	input.Name = name
-	input.Mode = strings.TrimSpace(input.Mode)
-	if input.Mode == "" {
-		input.Mode = "per_target"
-	}
-	if !alarmModes[input.Mode] {
-		return input, badAlarm("报警类型不受支持")
-	}
-	if input.GroupID != nil {
-		input.GroupID = normalizeID(input.GroupID)
-		if input.GroupID != nil {
-			if _, err = s.repository.GetGroup(ctx, projectID, *input.GroupID); err != nil {
-				return input, err
-			}
-		}
-	}
-	enabled := input.Mode == "per_target"
-	if input.IsEnabled != nil {
-		enabled = *input.IsEnabled
-	}
-	input.IsEnabled = &enabled
-	bindings, category, err := s.normalizeBindings(ctx, projectID, input.Mode, input.Bindings)
-	if err != nil {
-		return input, err
-	}
-	input.Bindings = bindings
-	input.DerivedExpression = strings.TrimSpace(input.DerivedExpression)
-	if input.Mode == "derived" && input.DerivedExpression == "" {
-		return input, badAlarm("组合报警必须填写计算表达式")
-	}
-	if input.Mode == "per_target" {
-		input.DerivedExpression = ""
-	}
-	conditions, err := normalizeConditions(input.Conditions, category, input.Mode)
-	if err != nil {
-		return input, err
-	}
-	input.Conditions = conditions
-	notification, err := s.normalizeNotification(ctx, projectID, input.Notification)
-	if err != nil {
-		return input, err
-	}
-	input.Notification = notification
-	return input, nil
-}
-
-func (s *AlarmPolicyService) normalizeBindings(ctx context.Context, projectID, mode string, bindings []AlarmBinding) ([]AlarmBinding, string, error) {
-	if len(bindings) == 0 {
-		return nil, "", badAlarm("请至少选择一个数据点")
-	}
-	ids := make([]string, 0, len(bindings))
-	seen := map[string]bool{}
-	for _, binding := range bindings {
-		id := strings.TrimSpace(binding.DatapointID)
-		if id == "" || seen[id] {
-			if seen[id] {
-				continue
-			}
-			return nil, "", badAlarm("数据点 ID 不能为空")
-		}
-		seen[id] = true
-		ids = append(ids, id)
-	}
-	points, err := s.datapoints.GetByProjectAndIDs(ctx, projectID, ids)
-	if err != nil {
-		return nil, "", err
-	}
-	if len(points) != len(ids) {
-		return nil, "", badAlarm("部分数据点不存在或不属于当前工程")
-	}
-	byID := map[string]repository.DataPointRecord{}
-	for _, point := range points {
-		byID[point.ID] = point
-	}
-	result := make([]AlarmBinding, 0, len(ids))
-	category := ""
-	keys := map[string]bool{}
-	for _, source := range bindings {
-		point, ok := byID[source.DatapointID]
-		if !ok || !seen[source.DatapointID] {
-			continue
-		}
-		seen[source.DatapointID] = false
-		currentCategory := alarmDataCategory(point.DataType)
-		if category == "" {
-			category = currentCategory
-		} else if mode == "per_target" && category != currentCategory {
-			return nil, "", badAlarm("批量报警只能选择兼容的数据类型")
-		}
-		role := "target"
-		var inputKey *string
-		if mode == "derived" {
-			role = "input"
-			key := strings.TrimSpace(valueOrEmpty(source.InputKey))
-			if key == "" || !regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`).MatchString(key) {
-				return nil, "", badAlarm("组合报警输入别名只能使用字母、数字和下划线")
-			}
-			if keys[key] {
-				return nil, "", badAlarm("组合报警输入别名不能重复")
-			}
-			keys[key] = true
-			inputKey = &key
-		}
-		result = append(result, AlarmBinding{DatapointID: point.ID, Path: point.Path, Name: point.Name, DataType: point.DataType, Role: role, InputKey: inputKey})
-	}
-	return result, category, nil
-}
-
-func normalizeConditions(conditions []AlarmCondition, category, mode string) ([]AlarmCondition, error) {
-	if len(conditions) == 0 {
-		return nil, badAlarm("请至少添加一个报警条件")
-	}
-	result := make([]AlarmCondition, 0, len(conditions))
-	ids := map[string]bool{}
-	for _, condition := range conditions {
-		condition.Kind = strings.TrimSpace(condition.Kind)
-		condition.Operator = strings.TrimSpace(condition.Operator)
-		condition.Severity = strings.TrimSpace(condition.Severity)
-		if !alarmKinds[condition.Kind] {
-			return nil, badAlarm("报警条件类型不受支持")
-		}
-		if !alarmSeverities[condition.Severity] {
-			return nil, badAlarm("报警等级不受支持")
-		}
-		if condition.TriggerDelayMS < 0 || condition.ClearDelayMS < 0 {
-			return nil, badAlarm("触发和清除延时不能为负数")
-		}
-		if condition.Deadband < 0 {
-			return nil, badAlarm("恢复死区不能为负数")
-		}
-		if mode == "per_target" && !conditionAllowedForCategory(condition.Kind, category) {
-			return nil, badAlarm("报警条件与数据点类型不兼容")
-		}
-		if mode == "derived" && condition.Kind == "offline" {
-			return nil, badAlarm("组合报警不支持离线条件")
-		}
-		if err := validateConditionParams(condition); err != nil {
-			return nil, err
-		}
-		if condition.ID == "" {
-			condition.ID = uuid.NewString()
-		}
-		if ids[condition.ID] {
-			return nil, badAlarm("报警条件 ID 不能重复")
-		}
-		ids[condition.ID] = true
-		condition.Label = strings.TrimSpace(condition.Label)
-		if condition.Label == "" {
-			condition.Label = defaultConditionLabel(condition)
-		}
-		condition.Params = alarmCloneMap(condition.Params)
-		result = append(result, condition)
-	}
-	return result, nil
-}
-
-func (s *AlarmPolicyService) normalizeNotification(ctx context.Context, projectID string, input AlarmNotificationSettings) (AlarmNotificationSettings, error) {
-	normalized, err := normalizeNotificationShape(input)
-	if err != nil {
-		return normalized, err
-	}
-	if normalized.Mode == "custom" {
-		if err = s.validateChannelIDs(ctx, projectID, normalized.ChannelIDs); err != nil {
-			return normalized, err
-		}
-	}
-	return normalized, nil
 }
 
 func normalizeNotificationShape(input AlarmNotificationSettings) (AlarmNotificationSettings, error) {
@@ -1067,6 +694,13 @@ func validateConditionParams(c AlarmCondition) error {
 		if c.Operator != "changed" && c.Operator != "rising" && c.Operator != "falling" && c.Operator != "from_to" {
 			return badAlarm("变化条件操作符不受支持")
 		}
+		if c.Operator == "from_to" {
+			from, fromOK := params["from"]
+			to, toOK := params["to"]
+			if !fromOK || !toOK || fmt.Sprint(from) == fmt.Sprint(to) {
+				return badAlarm("指定状态变化必须填写不同的起始值和目标值")
+			}
+		}
 	case "text_match":
 		if c.Operator != "eq" && c.Operator != "ne" && c.Operator != "contains" && c.Operator != "regex" {
 			return badAlarm("文本条件操作符不受支持")
@@ -1081,6 +715,9 @@ func validateConditionParams(c AlarmCondition) error {
 			}
 		}
 	case "rate_of_change":
+		if c.Operator != "gt" && c.Operator != "gte" && c.Operator != "lt" && c.Operator != "lte" {
+			return badAlarm("变化率条件操作符不受支持")
+		}
 		limit, lok := number("limit")
 		window, wok := number("windowMs")
 		if !lok || limit < 0 || !wok || window <= 0 {
@@ -1115,8 +752,8 @@ func validateChannelConfig(channelType string, config map[string]any) error {
 	return nil
 }
 
-func evaluateAlarmConditions(conditions []AlarmCondition, value any, context map[string]any) *AlarmPolicyTrialResult {
-	result := &AlarmPolicyTrialResult{State: "not_triggered", TriggeredConditions: []AlarmCondition{}, ConditionResults: []map[string]any{}}
+func evaluateAlarmConditions(conditions []AlarmCondition, value any, context map[string]any) *AlarmConditionTrialResult {
+	result := &AlarmConditionTrialResult{State: "not_triggered", TriggeredConditions: []AlarmCondition{}, ConditionResults: []map[string]any{}}
 	quality, _ := context["quality"].(string)
 	offline, _ := context["offline"].(bool)
 	for _, condition := range conditions {
@@ -1141,6 +778,7 @@ func evaluateAlarmCondition(c AlarmCondition, value any, quality string, offline
 	if offline || (quality != "" && quality != "good") {
 		return false, "quality_paused"
 	}
+	active, _ := context["alarmActive"].(bool)
 	switch c.Kind {
 	case "threshold":
 		v, ok := anyFloat(value)
@@ -1150,12 +788,24 @@ func evaluateAlarmCondition(c AlarmCondition, value any, quality string, offline
 		}
 		switch c.Operator {
 		case "gt":
+			if active {
+				return v > threshold-c.Deadband, "evaluated"
+			}
 			return v > threshold, "evaluated"
 		case "gte":
+			if active {
+				return v >= threshold-c.Deadband, "evaluated"
+			}
 			return v >= threshold, "evaluated"
 		case "lt":
+			if active {
+				return v < threshold+c.Deadband, "evaluated"
+			}
 			return v < threshold, "evaluated"
 		case "lte":
+			if active {
+				return v <= threshold+c.Deadband, "evaluated"
+			}
 			return v <= threshold, "evaluated"
 		}
 	case "range":
@@ -1164,6 +814,12 @@ func evaluateAlarmCondition(c AlarmCondition, value any, quality string, offline
 		upper, uok := anyFloat(c.Params["upper"])
 		if !ok || !lok || !uok {
 			return false, "invalid_numeric_value"
+		}
+		if active {
+			if c.Operator == "outside" {
+				return v < lower+c.Deadband || v > upper-c.Deadband, "evaluated"
+			}
+			return v >= lower-c.Deadband && v <= upper+c.Deadband, "evaluated"
 		}
 		inside := v >= lower && v <= upper
 		return map[string]bool{"between": inside, "outside": !inside}[c.Operator], "evaluated"
@@ -1176,6 +832,9 @@ func evaluateAlarmCondition(c AlarmCondition, value any, quality string, offline
 		return equal, "evaluated"
 	case "transition":
 		previous := context["previousValue"]
+		if _, exists := context["previousValue"]; !exists {
+			return false, "insufficient_previous_value"
+		}
 		switch c.Operator {
 		case "changed":
 			return fmt.Sprint(previous) != fmt.Sprint(value), "evaluated"
@@ -1183,6 +842,8 @@ func evaluateAlarmCondition(c AlarmCondition, value any, quality string, offline
 			return fmt.Sprint(previous) == "false" && fmt.Sprint(value) == "true", "evaluated"
 		case "falling":
 			return fmt.Sprint(previous) == "true" && fmt.Sprint(value) == "false", "evaluated"
+		case "from_to":
+			return fmt.Sprint(previous) == fmt.Sprint(c.Params["from"]) && fmt.Sprint(value) == fmt.Sprint(c.Params["to"]), "evaluated"
 		}
 	case "text_match":
 		actual := fmt.Sprint(value)
@@ -1205,38 +866,40 @@ func evaluateAlarmCondition(c AlarmCondition, value any, quality string, offline
 		if !ok || !bok || !lok {
 			return false, "invalid_numeric_value"
 		}
+		if active {
+			return abs(v-baseline) > max(limit-c.Deadband, 0), "evaluated"
+		}
 		return abs(v-baseline) > limit, "evaluated"
+	case "rate_of_change":
+		previous, exists := context["previousValue"]
+		if !exists {
+			return false, "insufficient_previous_value"
+		}
+		current, currentOK := anyFloat(value)
+		before, beforeOK := anyFloat(previous)
+		limit, limitOK := anyFloat(c.Params["limit"])
+		window, windowOK := anyFloat(c.Params["windowMs"])
+		if !currentOK || !beforeOK || !limitOK || !windowOK || window <= 0 {
+			return false, "invalid_numeric_value"
+		}
+		if sampleInterval, ok := anyFloat(context["sampleIntervalMs"]); ok && sampleInterval > 0 {
+			window = sampleInterval
+		}
+		rate := abs(current-before) / (window / 1000)
+		switch c.Operator {
+		case "gt":
+			return rate > limit, "evaluated"
+		case "gte":
+			return rate >= limit, "evaluated"
+		case "lt":
+			return rate < limit, "evaluated"
+		case "lte":
+			return rate <= limit, "evaluated"
+		}
 	}
 	return false, "unsupported_trial"
 }
 
-func buildAlarmContract(projectID, policyID string, input SaveAlarmPolicyInput) map[string]any {
-	return map[string]any{"schemaVersion": "alarm.policy.v1", "projectId": projectID, "policyId": policyID, "mode": input.Mode, "bindings": input.Bindings, "derivedExpression": input.DerivedExpression, "conditions": input.Conditions, "notification": input.Notification, "isEnabled": valueOr(input.IsEnabled, input.Mode == "per_target"), "qualityBehavior": "pause_invalid", "lifecycle": map[string]any{"autoClear": true, "acknowledgement": "audit_only"}}
-}
-
-func toSaveAlarmPolicyParams(projectID, id, userID string, input SaveAlarmPolicyInput, contract map[string]any) repository.SaveAlarmPolicyParams {
-	bindings := make([]repository.AlarmPolicyBindingRecord, 0, len(input.Bindings))
-	for _, binding := range input.Bindings {
-		bindings = append(bindings, repository.AlarmPolicyBindingRecord{DatapointID: binding.DatapointID, Role: binding.Role, InputKey: binding.InputKey})
-	}
-	conditions := make([]repository.AlarmPolicyConditionRecord, 0, len(input.Conditions))
-	for _, condition := range input.Conditions {
-		conditions = append(conditions, repository.AlarmPolicyConditionRecord{ID: condition.ID, Kind: condition.Kind, Operator: condition.Operator, Label: condition.Label, Severity: condition.Severity, Params: condition.Params, TriggerDelayMS: condition.TriggerDelayMS, ClearDelayMS: condition.ClearDelayMS, Deadband: condition.Deadband})
-	}
-	return repository.SaveAlarmPolicyParams{ID: id, ProjectID: projectID, UserID: userID, GroupID: input.GroupID, Name: input.Name, Description: normalizeText(input.Description), Mode: input.Mode, DerivedExpression: input.DerivedExpression, NotificationMode: input.Notification.Mode, NotifyOnRaise: input.Notification.NotifyOnRaise, NotifyOnClear: input.Notification.NotifyOnClear, RepeatIntervalSeconds: input.Notification.RepeatIntervalSeconds, NotificationChannelIDs: input.Notification.ChannelIDs, MessageTemplate: input.Notification.MessageTemplate, IsEnabled: valueOr(input.IsEnabled, input.Mode == "per_target"), Contract: contract, Bindings: bindings, Conditions: conditions}
-}
-
-func toAlarmPolicy(record repository.AlarmPolicyRecord) AlarmPolicy {
-	bindings := make([]AlarmBinding, 0, len(record.Bindings))
-	for _, binding := range record.Bindings {
-		bindings = append(bindings, AlarmBinding{DatapointID: binding.DatapointID, Path: binding.Path, Name: binding.Name, DataType: binding.DataType, Role: binding.Role, InputKey: binding.InputKey})
-	}
-	conditions := make([]AlarmCondition, 0, len(record.Conditions))
-	for _, condition := range record.Conditions {
-		conditions = append(conditions, AlarmCondition{ID: condition.ID, Kind: condition.Kind, Operator: condition.Operator, Label: condition.Label, Severity: condition.Severity, Params: alarmCloneMap(condition.Params), TriggerDelayMS: condition.TriggerDelayMS, ClearDelayMS: condition.ClearDelayMS, Deadband: condition.Deadband})
-	}
-	return AlarmPolicy{ID: record.ID, ProjectID: record.ProjectID, GroupID: record.GroupID, GroupName: record.GroupName, Name: record.Name, Description: record.Description, Mode: record.Mode, Bindings: bindings, DerivedExpression: record.DerivedExpression, Conditions: conditions, Notification: AlarmNotificationSettings{Mode: record.NotificationMode, NotifyOnRaise: record.NotifyOnRaise, NotifyOnClear: record.NotifyOnClear, RepeatIntervalSeconds: record.RepeatIntervalSeconds, ChannelIDs: record.NotificationChannelIDs, MessageTemplate: record.MessageTemplate}, IsEnabled: record.IsEnabled, Revision: record.Revision, Contract: alarmCloneMap(record.Contract), CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
-}
 func toAlarmGroup(record repository.AlarmPolicyGroupRecord) AlarmPolicyGroup {
 	return AlarmPolicyGroup{ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, ParentID: record.ParentID, Description: record.Description, SortOrder: record.SortOrder, FullPath: record.FullPath, HasChildren: record.HasChildren, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
 }
@@ -1281,27 +944,6 @@ func (s *AlarmPolicyService) writeAccess(claims *auth.Claims, projectID string) 
 		return err
 	}
 	return validateUserID(claims.UserID)
-}
-func validateAlarmFilters(f AlarmPolicyListFilter) error {
-	if f.Mode != "" && !alarmModes[f.Mode] {
-		return badAlarm("报警类型筛选不受支持")
-	}
-	if f.Severity != "" && !alarmSeverities[f.Severity] {
-		return badAlarm("报警等级筛选不受支持")
-	}
-	if f.ConditionKind != "" && !alarmKinds[f.ConditionKind] {
-		return badAlarm("报警条件筛选不受支持")
-	}
-	return nil
-}
-func validatePolicyReady(record repository.AlarmPolicyRecord) error {
-	if len(record.Bindings) == 0 || len(record.Conditions) == 0 {
-		return badAlarm("报警策略尚未配置完整")
-	}
-	if record.Mode == "derived" && strings.TrimSpace(record.DerivedExpression) == "" {
-		return badAlarm("组合报警尚未配置表达式")
-	}
-	return nil
 }
 func conditionAllowedForCategory(kind, category string) bool {
 	if kind == "offline" {

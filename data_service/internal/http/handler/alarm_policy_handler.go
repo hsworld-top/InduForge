@@ -1,7 +1,11 @@
 package handler
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -11,10 +15,19 @@ import (
 	"github.com/indu-forge/data_service/internal/service"
 )
 
-type AlarmPolicyHandler struct{ service *service.AlarmPolicyService }
+const maxAlarmImportFileSize = 20 << 20
 
-func NewAlarmPolicyHandler(alarmService *service.AlarmPolicyService) *AlarmPolicyHandler {
-	return &AlarmPolicyHandler{service: alarmService}
+type AlarmPolicyHandler struct {
+	service     *service.AlarmPolicyService
+	itemService *service.AlarmItemService
+}
+
+func NewAlarmPolicyHandler(alarmService *service.AlarmPolicyService, itemServices ...*service.AlarmItemService) *AlarmPolicyHandler {
+	var itemService *service.AlarmItemService
+	if len(itemServices) > 0 {
+		itemService = itemServices[0]
+	}
+	return &AlarmPolicyHandler{service: alarmService, itemService: itemService}
 }
 
 func (h *AlarmPolicyHandler) ListGroups(w http.ResponseWriter, r *http.Request) error {
@@ -106,11 +119,11 @@ func (h *AlarmPolicyHandler) List(w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return err
 	}
-	filter, err := parseAlarmPolicyFilter(r)
+	filter, err := parseAlarmItemFilter(r)
 	if err != nil {
 		return err
 	}
-	result, err := h.service.List(r.Context(), claims, r.PathValue("projectId"), filter)
+	result, err := h.itemService.List(r.Context(), claims, r.PathValue("projectId"), filter)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -123,7 +136,7 @@ func (h *AlarmPolicyHandler) Get(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	result, err := h.service.Get(r.Context(), claims, r.PathValue("projectId"), r.PathValue("id"))
+	result, err := h.itemService.Get(r.Context(), claims, r.PathValue("projectId"), r.PathValue("id"))
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -136,11 +149,11 @@ func (h *AlarmPolicyHandler) Create(w http.ResponseWriter, r *http.Request) erro
 	if err != nil {
 		return err
 	}
-	var input service.SaveAlarmPolicyInput
+	var input service.SaveAlarmItemInput
 	if err = decodeJSONBody(r, &input); err != nil {
 		return err
 	}
-	result, err := h.service.Create(r.Context(), claims, r.PathValue("projectId"), input)
+	result, err := h.itemService.Create(r.Context(), claims, r.PathValue("projectId"), input)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -153,11 +166,11 @@ func (h *AlarmPolicyHandler) Update(w http.ResponseWriter, r *http.Request) erro
 	if err != nil {
 		return err
 	}
-	var input service.SaveAlarmPolicyInput
+	var input service.SaveAlarmItemInput
 	if err = decodeJSONBody(r, &input); err != nil {
 		return err
 	}
-	result, err := h.service.Update(r.Context(), claims, r.PathValue("projectId"), r.PathValue("id"), input)
+	result, err := h.itemService.Update(r.Context(), claims, r.PathValue("projectId"), r.PathValue("id"), input)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -176,7 +189,7 @@ func (h *AlarmPolicyHandler) ToggleEnabled(w http.ResponseWriter, r *http.Reques
 	if err = decodeJSONBody(r, &input); err != nil {
 		return err
 	}
-	result, err := h.service.SetEnabled(r.Context(), claims, r.PathValue("projectId"), r.PathValue("id"), input.IsEnabled)
+	result, err := h.itemService.SetEnabled(r.Context(), claims, r.PathValue("projectId"), r.PathValue("id"), input.IsEnabled)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -189,7 +202,7 @@ func (h *AlarmPolicyHandler) Delete(w http.ResponseWriter, r *http.Request) erro
 	if err != nil {
 		return err
 	}
-	if err = h.service.Delete(r.Context(), claims, r.PathValue("projectId"), r.PathValue("id")); err != nil {
+	if err = h.itemService.Delete(r.Context(), claims, r.PathValue("projectId"), r.PathValue("id")); err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]bool{"deleted": true})
@@ -201,11 +214,11 @@ func (h *AlarmPolicyHandler) ValidateDraft(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		return err
 	}
-	var input service.SaveAlarmPolicyInput
+	var input service.SaveAlarmItemInput
 	if err = decodeJSONBody(r, &input); err != nil {
 		return err
 	}
-	result, err := h.service.ValidateDraft(r.Context(), claims, r.PathValue("projectId"), input)
+	result, err := h.itemService.ValidateDraft(r.Context(), claims, r.PathValue("projectId"), input)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -213,19 +226,20 @@ func (h *AlarmPolicyHandler) ValidateDraft(w http.ResponseWriter, r *http.Reques
 	return nil
 }
 
-func (h *AlarmPolicyHandler) Test(w http.ResponseWriter, r *http.Request) error {
+func (h *AlarmPolicyHandler) TestDraft(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
 		return err
 	}
 	var input struct {
-		Value   any            `json:"value"`
-		Context map[string]any `json:"context"`
+		Draft   service.SaveAlarmItemInput `json:"draft"`
+		Values  []any                      `json:"values"`
+		Context map[string]any             `json:"context"`
 	}
 	if err = decodeJSONBody(r, &input); err != nil {
 		return err
 	}
-	result, err := h.service.Test(r.Context(), claims, r.PathValue("projectId"), r.PathValue("id"), input.Value, input.Context)
+	result, err := h.itemService.TestDraft(r.Context(), claims, r.PathValue("projectId"), input.Draft, input.Values, input.Context)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -238,7 +252,7 @@ func (h *AlarmPolicyHandler) Contract(w http.ResponseWriter, r *http.Request) er
 	if err != nil {
 		return err
 	}
-	result, err := h.service.Contract(r.Context(), claims, r.PathValue("projectId"), r.PathValue("id"))
+	result, err := h.itemService.Contract(r.Context(), claims, r.PathValue("projectId"), r.PathValue("id"))
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -251,7 +265,7 @@ func (h *AlarmPolicyHandler) DatapointSummary(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		return err
 	}
-	result, err := h.service.DatapointSummary(r.Context(), claims, r.PathValue("projectId"), r.PathValue("datapointId"))
+	result, err := h.itemService.DatapointSummary(r.Context(), claims, r.PathValue("projectId"), r.PathValue("datapointId"))
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
@@ -395,14 +409,195 @@ func (h *AlarmPolicyHandler) SyncConfig(w http.ResponseWriter, r *http.Request) 
 	return nil
 }
 
-func parseAlarmPolicyFilter(r *http.Request) (service.AlarmPolicyListFilter, error) {
+func (h *AlarmPolicyHandler) BatchCreate(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var input service.BatchCreateAlarmItemsInput
+	if err = decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	result, err := h.itemService.BatchCreate(r.Context(), claims, r.PathValue("projectId"), input)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+func (h *AlarmPolicyHandler) ValidateBatchCreate(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var input service.BatchCreateAlarmItemsInput
+	if err = decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	result, err := h.itemService.ValidateBatchCreate(r.Context(), claims, r.PathValue("projectId"), input)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+func (h *AlarmPolicyHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var input service.BatchUpdateAlarmItemsInput
+	if err = decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	result, err := h.itemService.BatchUpdate(r.Context(), claims, r.PathValue("projectId"), input)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+func (h *AlarmPolicyHandler) BatchDelete(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var input service.BatchDeleteAlarmItemsInput
+	if err = decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	result, err := h.itemService.BatchDelete(r.Context(), claims, r.PathValue("projectId"), input)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+func (h *AlarmPolicyHandler) Export(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var input struct {
+		Selection service.AlarmItemSelection `json:"selection"`
+	}
+	if err = decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	workbook, err := h.itemService.ExportWorkbook(r.Context(), claims, r.PathValue("projectId"), input.Selection)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	writeAlarmWorkbook(w, workbook)
+	return nil
+}
+
+func (h *AlarmPolicyHandler) ImportTemplate(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	workbook, err := h.itemService.BuildImportTemplate(r.Context(), claims, r.PathValue("projectId"))
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	writeAlarmWorkbook(w, workbook)
+	return nil
+}
+
+func (h *AlarmPolicyHandler) ImportPreview(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	fileName, content, err := readAlarmImportFile(w, r)
+	if err != nil {
+		return err
+	}
+	result, err := h.itemService.PreviewImport(r.Context(), claims, r.PathValue("projectId"), fileName, content)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+func (h *AlarmPolicyHandler) ImportErrorWorkbook(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	fileName, content, err := readAlarmImportFile(w, r)
+	if err != nil {
+		return err
+	}
+	workbook, err := h.itemService.BuildImportErrorWorkbook(r.Context(), claims, r.PathValue("projectId"), fileName, content)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	writeAlarmWorkbook(w, workbook)
+	return nil
+}
+
+func (h *AlarmPolicyHandler) ImportApply(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	fileName, content, err := readAlarmImportFile(w, r)
+	if err != nil {
+		return err
+	}
+	warningKeys := []string{}
+	if raw := strings.TrimSpace(r.FormValue("acknowledgedWarningKeys")); raw != "" {
+		if err = json.Unmarshal([]byte(raw), &warningKeys); err != nil {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "已确认警告键格式无效")
+		}
+	}
+	result, err := h.itemService.ApplyImport(r.Context(), claims, r.PathValue("projectId"), fileName, content, r.FormValue("digest"), warningKeys)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+func readAlarmImportFile(w http.ResponseWriter, r *http.Request) (string, []byte, error) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxAlarmImportFileSize)
+	if err := r.ParseMultipartForm(maxAlarmImportFileSize); err != nil {
+		return "", nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "导入文件超过 20MB 或表单格式无效", err)
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		return "", nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "缺少导入文件", err)
+	}
+	defer file.Close()
+	content, err := io.ReadAll(file)
+	if err != nil {
+		return "", nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "读取导入文件失败", err)
+	}
+	return header.Filename, content, nil
+}
+
+func writeAlarmWorkbook(w http.ResponseWriter, workbook service.AlarmItemWorkbook) {
+	w.Header().Set("Content-Type", workbook.ContentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename*=UTF-8''%s`, url.PathEscape(workbook.FileName)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(workbook.Content)
+}
+
+func parseAlarmItemFilter(r *http.Request) (service.AlarmItemListFilter, error) {
 	page, err := alarmQueryInt(r, "page", 1)
 	if err != nil {
-		return service.AlarmPolicyListFilter{}, err
+		return service.AlarmItemListFilter{}, err
 	}
 	pageSize, err := alarmQueryInt(r, "pageSize", 20)
 	if err != nil {
-		return service.AlarmPolicyListFilter{}, err
+		return service.AlarmItemListFilter{}, err
 	}
 	var groupID *string
 	if value := strings.TrimSpace(r.URL.Query().Get("groupId")); value != "" {
@@ -412,11 +607,11 @@ func parseAlarmPolicyFilter(r *http.Request) (service.AlarmPolicyListFilter, err
 	if value := strings.TrimSpace(r.URL.Query().Get("enabled")); value != "" {
 		parsed, parseErr := strconv.ParseBool(value)
 		if parseErr != nil {
-			return service.AlarmPolicyListFilter{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "enabled 格式无效")
+			return service.AlarmItemListFilter{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "enabled 格式无效")
 		}
 		enabled = &parsed
 	}
-	return service.AlarmPolicyListFilter{Search: r.URL.Query().Get("search"), GroupID: groupID, Enabled: enabled, Severity: r.URL.Query().Get("severity"), ConditionKind: r.URL.Query().Get("conditionKind"), Mode: r.URL.Query().Get("mode"), DatapointID: r.URL.Query().Get("datapointId"), Page: page, PageSize: pageSize}, nil
+	return service.AlarmItemListFilter{Search: r.URL.Query().Get("search"), GroupID: groupID, Enabled: enabled, Severity: r.URL.Query().Get("severity"), AlarmType: r.URL.Query().Get("alarmType"), Mode: r.URL.Query().Get("mode"), DatapointID: r.URL.Query().Get("datapointId"), Page: page, PageSize: pageSize}, nil
 }
 
 func alarmQueryInt(r *http.Request, key string, fallback int) (int, error) {

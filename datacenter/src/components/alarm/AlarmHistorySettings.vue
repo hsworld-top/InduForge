@@ -149,7 +149,10 @@ async function save() {
   background: var(--dc-surface-raised);
 }
 .alarm-history__section {
-  width: min(720px, 100%);
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  box-sizing: border-box;
   padding: 20px;
 }
 .alarm-history__head {
@@ -262,7 +265,7 @@ async function save() {
   outline: none;
   box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12);
 }
-@media (max-width: 620px) {
+@container alarm-workspace (max-width: 620px) {
   .alarm-history__section {
     padding: 16px;
   }

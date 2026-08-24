@@ -128,11 +128,15 @@ func (s *ContractCheckService) Run(ctx context.Context, claims *auth.Claims, pro
 	}
 	items = append(items, checkComputeContracts(computeUnits, datapointByPath, queryByID)...)
 
-	alarmPolicies, err := s.loadProjectAlarmPolicies(ctx, projectID)
+	alarmItems, err := s.loadProjectAlarmItems(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
-	items = append(items, checkAlarmContracts(alarmPolicies, datapointByPath)...)
+	alarmChannels, err := s.alarms.ListChannels(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	items = append(items, checkAlarmContracts(alarmItems, datapointByPath, alarmChannels)...)
 
 	items = filterContractCheckItems(items, input.ObjectType, input.ObjectID)
 	result := buildContractCheckResult(projectID, scope, items)
@@ -250,8 +254,8 @@ func (s *ContractCheckService) loadProjectComputeUnits(ctx context.Context, proj
 	return records, err
 }
 
-func (s *ContractCheckService) loadProjectAlarmPolicies(ctx context.Context, projectID string) ([]repository.AlarmPolicyRecord, error) {
-	return s.alarms.ListAllPolicies(ctx, projectID)
+func (s *ContractCheckService) loadProjectAlarmItems(ctx context.Context, projectID string) ([]repository.AlarmItemRecord, error) {
+	return s.alarms.ListAllAlarmItems(ctx, projectID)
 }
 
 func checkComputeContracts(units []repository.ComputeUnitRecord, datapoints map[string]repository.DataPointRecord, queries map[string]repository.QueryRecord) []ContractCheckResultItem {
@@ -322,32 +326,91 @@ func checkComputeContracts(units []repository.ComputeUnitRecord, datapoints map[
 	return items
 }
 
-func checkAlarmContracts(rules []repository.AlarmPolicyRecord, datapoints map[string]repository.DataPointRecord) []ContractCheckResultItem {
+func checkAlarmContracts(rules []repository.AlarmItemRecord, datapoints map[string]repository.DataPointRecord, channels []repository.AlarmNotificationChannelRecord) []ContractCheckResultItem {
 	items := make([]ContractCheckResultItem, 0)
+	availableChannels := map[string]bool{"runtime_inapp": true}
+	for _, channel := range channels {
+		availableChannels[channel.ID] = channel.IsEnabled
+	}
 	for _, rule := range rules {
-		for _, binding := range rule.Bindings {
+		bindings := make([]struct{ Path string }, 0, 1+len(rule.Inputs))
+		if rule.Path != nil {
+			bindings = append(bindings, struct{ Path string }{*rule.Path})
+		}
+		for _, input := range rule.Inputs {
+			bindings = append(bindings, struct{ Path string }{input.Path})
+		}
+		for _, binding := range bindings {
 			point, ok := datapoints[binding.Path]
 			if !ok || point.Status != "active" {
 				items = append(items, ContractCheckResultItem{
-					Module: "alarm", ObjectType: "alarmPolicy", ObjectID: rule.ID, Status: "failed",
+					Module: "alarm", ObjectType: "alarmItem", ObjectID: rule.ID, Status: "failed",
 					Title: "报警数据点不可用", Detail: binding.Path, Action: "恢复数据点或解除报警绑定",
 				})
 			}
 		}
-		if rule.Mode == "derived" && strings.TrimSpace(rule.DerivedExpression) == "" {
-			items = append(items, ContractCheckResultItem{Module: "alarm", ObjectType: "alarmPolicy", ObjectID: rule.ID, Status: "failed", Title: "组合报警表达式为空", Detail: rule.Name})
+		conditions := make([]AlarmCondition, 0, len(rule.Conditions))
+		for _, condition := range rule.Conditions {
+			conditions = append(conditions, AlarmCondition{ID: condition.ID, Kind: condition.Kind, Operator: condition.Operator, Label: condition.Label, Severity: condition.Severity, Params: condition.Params, TriggerDelayMS: condition.TriggerDelayMS, ClearDelayMS: condition.ClearDelayMS, Deadband: condition.Deadband})
 		}
-		if len(rule.Conditions) == 0 {
-			items = append(items, ContractCheckResultItem{Module: "alarm", ObjectType: "alarmPolicy", ObjectID: rule.ID, Status: "failed", Title: "报警策略没有条件", Detail: rule.Name})
+		shapeError := ""
+		if rule.Mode == "point" {
+			if rule.DatapointID == nil || rule.Path == nil || rule.DataType == nil {
+				shapeError = "普通报警没有有效数据点"
+			} else if rule.EvaluationMode == "single" && len(rule.Conditions) != 1 {
+				shapeError = "普通单条件报警的条件数量无效"
+			} else if _, err := normalizeConfigurationConditions(conditions, alarmDataCategory(*rule.DataType), rule.EvaluationMode, false); err != nil {
+				shapeError = err.Error()
+			}
+		} else if rule.Mode == "derived" {
+			if len(rule.Inputs) < 2 || strings.TrimSpace(rule.DerivedExpression) == "" || rule.EvaluationMode != "single" || len(rule.Conditions) != 1 {
+				shapeError = "组合报警输入、表达式或结果条件不完整"
+			} else {
+				aliases := map[string]bool{}
+				for _, input := range rule.Inputs {
+					if !alarmInputKeyPattern.MatchString(strings.TrimSpace(input.InputKey)) || aliases[input.InputKey] {
+						shapeError = "组合报警输入别名无效"
+						break
+					}
+					aliases[input.InputKey] = true
+				}
+				if shapeError == "" {
+					if err := validateDerivedAlarmExpression(rule.DerivedExpression, aliases); err != nil {
+						shapeError = err.Error()
+					} else if _, err := normalizeConfigurationConditions(conditions, "", "single", true); err != nil {
+						shapeError = err.Error()
+					} else {
+						inputs := make([]AlarmItemInput, 0, len(rule.Inputs))
+						for _, input := range rule.Inputs {
+							inputs = append(inputs, AlarmItemInput{DatapointID: input.DatapointID, InputKey: input.InputKey, DataType: input.DataType})
+						}
+						if err := validateDerivedAlarmExpressionTypes(rule.DerivedExpression, inputs, conditions[0]); err != nil {
+							shapeError = err.Error()
+						}
+					}
+				}
+			}
+		} else {
+			shapeError = "报警模式无效"
+		}
+		if shapeError != "" {
+			items = append(items, ContractCheckResultItem{Module: "alarm", ObjectType: "alarmItem", ObjectID: rule.ID, Status: "failed", Title: "报警项结构无效", Detail: rule.DisplayName + "：" + shapeError})
+		}
+		if rule.NotificationMode == "custom" {
+			for _, channelID := range rule.NotificationChannelIDs {
+				if !availableChannels[channelID] {
+					items = append(items, ContractCheckResultItem{Module: "alarm", ObjectType: "alarmItem", ObjectID: rule.ID, Status: "failed", Title: "报警通知渠道不可用", Detail: rule.DisplayName + "：" + channelID})
+				}
+			}
 		}
 		if !rule.IsEnabled {
 			items = append(items, ContractCheckResultItem{
 				Module:     "alarm",
-				ObjectType: "alarmPolicy",
+				ObjectType: "alarmItem",
 				ObjectID:   rule.ID,
 				Status:     "warning",
-				Title:      "报警策略已停用",
-				Detail:     rule.Name,
+				Title:      "报警项已停用",
+				Detail:     rule.DisplayName,
 			})
 		}
 	}

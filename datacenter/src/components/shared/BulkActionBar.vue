@@ -1,6 +1,13 @@
 <template>
-  <div v-if="selectedCount > 0" class="dc-bulk-action-bar" role="status">
-    <span class="dc-bulk-action-bar__count"> 已选 {{ selectedCount }} 项 </span>
+  <div
+    v-if="selectedCount > 0"
+    class="dc-bulk-action-bar"
+    :class="{ 'is-inline': placement === 'inline' }"
+    role="status"
+  >
+    <span class="dc-bulk-action-bar__count">
+      {{ summary || `已选 ${selectedCount} ${itemLabel}` }}
+    </span>
     <div class="dc-bulk-action-bar__actions">
       <slot />
     </div>
@@ -11,9 +18,18 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
-  selectedCount: number
-}>()
+withDefaults(
+  defineProps<{
+    selectedCount: number
+    /** 行内模式用于表格上方；默认保持列表页已有的悬浮操作条。 */
+    placement?: 'floating' | 'inline'
+    /** 用于“数据点 / 报警项”等不同资源的数量文案。 */
+    itemLabel?: string
+    /** 有“全部结果”范围时由调用方提供完整摘要。 */
+    summary?: string
+  }>(),
+  { placement: 'floating', itemLabel: '项', summary: '' },
+)
 
 defineEmits<{
   (event: 'clear'): void
@@ -76,5 +92,17 @@ defineEmits<{
   border-color: rgba(29, 78, 216, 0.22);
   background: var(--dc-primary-soft);
   color: var(--dc-primary);
+}
+
+.dc-bulk-action-bar.is-inline {
+  position: static;
+  width: 100%;
+  max-width: none;
+  min-height: 42px;
+  padding: 7px 14px;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  box-shadow: none;
+  transform: none;
 }
 </style>

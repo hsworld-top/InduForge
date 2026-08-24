@@ -1,110 +1,116 @@
-import { describe, expect, test } from 'vitest'
-import { reactive } from 'vue'
+import { describe, expect, it } from 'vitest'
 import {
-  AlarmHistorySettingsSaveSchema,
-  AlarmHistorySettingsSchema,
-  AlarmPolicySaveSchema,
-  AlarmPolicySchema,
+  AlarmBatchUpdateSchema,
+  AlarmDatapointSummarySchema,
+  AlarmExcelPreviewSchema,
+  AlarmItemSaveSchema,
+  AlarmItemSchema,
 } from '../src/api/schemas/alarm.schema'
 
-const policy = {
-  id: 'policy-1',
+const condition = {
+  id: 'condition-1',
+  kind: 'threshold' as const,
+  operator: 'gt',
+  label: '高',
+  severity: 'warning' as const,
+  params: { threshold: 80 },
+  triggerDelayMs: 0,
+  clearDelayMs: 0,
+  deadband: 0,
+}
+const item = {
+  id: 'alarm-1',
   projectId: 'project-1',
+  datapointId: 'dp-1',
+  path: 'line.temperature',
+  datapointName: '温度',
+  dataType: 'float64',
   groupId: null,
   groupName: null,
-  name: '温度报警',
+  displayName: '越限报警',
   description: null,
-  mode: 'per_target',
+  mode: 'point' as const,
+  alarmType: 'threshold' as const,
+  evaluationMode: 'highest_matching' as const,
   derivedExpression: '',
-  bindings: [
-    {
-      datapointId: 'dp-1',
-      path: 'temperature',
-      name: '温度',
-      dataType: 'number',
-      role: 'target',
-      inputKey: null,
-    },
-  ],
-  conditions: [
-    {
-      id: 'condition-1',
-      kind: 'threshold',
-      operator: 'gt',
-      label: '高于',
-      severity: 'warning',
-      params: { threshold: 80 },
-      triggerDelayMs: 0,
-      clearDelayMs: 0,
-      deadband: 0,
-    },
-  ],
-  notification: { mode: 'inherit', channelIds: [], messageTemplate: '' },
+  inputs: [],
+  conditions: [condition],
+  notification: { mode: 'inherit' as const, channelIds: [], messageTemplate: '' },
   isEnabled: true,
   revision: 1,
-  contract: { schemaVersion: 'alarm.policy.v1' },
-  createdAt: null,
-  updatedAt: null,
+  contract: { schemaVersion: 'alarm.item.v1' },
+  createdAt: '2026-08-24T00:00:00Z',
+  updatedAt: '2026-08-24T00:00:00Z',
 }
 
-describe('alarm policy schema', () => {
-  test('解析规范化绑定、条件和通知', () => {
-    const parsed = AlarmPolicySchema.parse(policy)
-    expect(parsed.bindings[0].role).toBe('target')
-    expect(parsed.conditions[0].kind).toBe('threshold')
-    expect(parsed.notification.mode).toBe('inherit')
+describe('alarm item schemas', () => {
+  it('parses one datapoint alarm item without targets', () => {
+    const parsed = AlarmItemSchema.parse(item)
+    expect(parsed.datapointId).toBe('dp-1')
+    expect('targets' in parsed).toBe(false)
   })
-
-  test('保存 payload 不接受旧 targets/suppression 模型', () => {
-    expect(() =>
-      AlarmPolicySaveSchema.parse({
-        ...policy,
-        targets: policy.bindings,
-        suppression: {},
-        bindings: undefined,
-      }),
-    ).toThrow()
-  })
-
-  test('保存契约将响应式草稿转换为可提交的普通对象', () => {
-    const draft = reactive({
-      groupId: policy.groupId,
-      name: policy.name,
-      description: policy.description,
-      mode: policy.mode,
-      bindings: policy.bindings,
-      derivedExpression: policy.derivedExpression,
-      conditions: policy.conditions,
-      notification: policy.notification,
-      isEnabled: policy.isEnabled,
-    })
-
-    const payload = AlarmPolicySaveSchema.parse(draft)
-
-    expect(() => structuredClone(payload)).not.toThrow()
-  })
-})
-
-describe('alarm history settings schema', () => {
-  test('解析默认和永久保留语义', () => {
-    const parsed = AlarmHistorySettingsSchema.parse({
-      projectId: 'project-1',
-      isEnabled: true,
-      retentionDays: null,
-      storeNotificationDeliveries: true,
-      createdAt: null,
-      updatedAt: null,
-    })
-    expect(parsed.retentionDays).toBeNull()
-  })
-
-  test('拒绝非正整数保留时间', () => {
-    expect(() =>
-      AlarmHistorySettingsSaveSchema.parse({
+  it('allows ordinary display name to remain empty for server generation', () => {
+    expect(
+      AlarmItemSaveSchema.parse({
+        datapointId: 'dp-1',
+        displayName: '',
+        mode: 'point',
+        evaluationMode: 'single',
+        inputs: [],
+        derivedExpression: '',
+        conditions: [condition],
+        notification: { mode: 'inherit' },
         isEnabled: true,
-        retentionDays: 0,
-        storeNotificationDeliveries: true,
+        revision: 0,
+        acknowledgedWarningKeys: [],
+      }).displayName,
+    ).toBe('')
+  })
+  it('requires a combined alarm display name', () => {
+    expect(() =>
+      AlarmItemSaveSchema.parse({
+        datapointId: '',
+        displayName: '',
+        mode: 'derived',
+        evaluationMode: 'single',
+        inputs: [
+          { id: '', datapointId: 'a', inputKey: 'a' },
+          { id: '', datapointId: 'b', inputKey: 'b' },
+        ],
+        derivedExpression: 'a && b',
+        conditions: [{ ...condition, kind: 'expression', operator: 'is_true' }],
+        notification: { mode: 'inherit' },
+        isEnabled: false,
+        revision: 0,
+        acknowledgedWarningKeys: [],
       }),
     ).toThrow()
+  })
+  it('validates field-mask batch payloads and datapoint summaries', () => {
+    expect(
+      AlarmBatchUpdateSchema.parse({
+        selection: { ids: ['alarm-1'] },
+        fields: ['isEnabled'],
+        patch: { isEnabled: false },
+        acknowledgedWarningKeys: [],
+      }).fields,
+    ).toEqual(['isEnabled'])
+    expect(
+      AlarmDatapointSummarySchema.parse({ datapointId: 'dp-1', items: [item], count: 1 }).items,
+    ).toHaveLength(1)
+  })
+  it('parses Excel preview counts', () => {
+    expect(
+      AlarmExcelPreviewSchema.parse({
+        digest: 'abc',
+        createCount: 2,
+        updateCount: 1,
+        unchangedCount: 0,
+        errorCount: 0,
+        warningCount: 0,
+        issues: [],
+        warningKeys: [],
+      }).createCount,
+    ).toBe(2)
   })
 })

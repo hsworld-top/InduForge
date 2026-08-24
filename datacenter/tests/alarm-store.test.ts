@@ -1,74 +1,92 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import type { AlarmPolicy } from '../src/api/schemas/alarm.schema'
+import type { AlarmItem } from '../src/api/schemas/alarm.schema'
 
-const policy: AlarmPolicy = {
-  id: 'policy-1',
-  projectId: 'project-1',
+const item: AlarmItem = {
+  id: 'alarm-1',
+  projectId: 'project',
+  datapointId: 'dp-1',
+  path: 'line.temperature',
+  datapointName: '温度',
+  dataType: 'float64',
   groupId: null,
   groupName: null,
-  name: '温度报警',
+  displayName: '越限报警',
   description: null,
-  mode: 'per_target',
+  mode: 'point',
+  alarmType: 'threshold',
+  evaluationMode: 'single',
   derivedExpression: '',
-  bindings: [],
-  conditions: [],
+  inputs: [],
+  conditions: [
+    {
+      id: 'c',
+      kind: 'threshold',
+      operator: 'gt',
+      label: '高',
+      severity: 'warning',
+      params: { threshold: 80 },
+      triggerDelayMs: 0,
+      clearDelayMs: 0,
+      deadband: 0,
+    },
+  ],
   notification: { mode: 'inherit', channelIds: [], messageTemplate: '' },
   isEnabled: true,
   revision: 1,
   contract: {},
-  createdAt: null,
-  updatedAt: null,
+  createdAt: '2026-08-24T00:00:00Z',
+  updatedAt: '2026-08-24T00:00:00Z',
 }
-const listAlarmPolicies = vi.fn(async () => ({
-  list: [policy],
-  pagination: { page: 1, pageSize: 20, total: 1 },
+const mocks = vi.hoisted(() => ({
+  listAlarmItems: vi.fn(),
+  getAlarmItem: vi.fn(),
+  createAlarmItem: vi.fn(),
+  updateAlarmItem: vi.fn(),
+  setAlarmItemEnabled: vi.fn(),
+  deleteAlarmItem: vi.fn(),
 }))
-const listAlarmGroupTree = vi.fn(async () => [])
-const getAlarmPolicy = vi.fn(async () => policy)
-const createAlarmPolicy = vi.fn(async () => ({ ...policy, id: 'policy-2' }))
-const updateAlarmPolicy = vi.fn(async () => ({ ...policy, name: '已修改' }))
-const setAlarmPolicyEnabled = vi.fn(async () => ({ ...policy, isEnabled: false }))
-const deleteAlarmPolicy = vi.fn(async () => undefined)
-
-vi.mock('@/api/alarm.api', () => ({
-  listAlarmPolicies,
-  listAlarmGroupTree,
-  getAlarmPolicy,
-  createAlarmPolicy,
-  updateAlarmPolicy,
-  setAlarmPolicyEnabled,
-  deleteAlarmPolicy,
-}))
+vi.mock('../src/api/alarm.api', () => ({ ...mocks, listAlarmGroupTree: vi.fn(async () => []) }))
+import { useAlarmStore } from '../src/stores/alarm.store'
 
 describe('alarm store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
-  })
-
-  test('分页拉取策略并保留总数', async () => {
-    const { useAlarmStore } = await import('../src/stores/alarm.store')
-    const store = useAlarmStore()
-    await store.fetchList('project-1', { page: 1, search: '温度' })
-    expect(store.list[0].id).toBe('policy-1')
-    expect(store.total).toBe(1)
-  })
-
-  test('读取详情和创建策略', async () => {
-    const { useAlarmStore } = await import('../src/stores/alarm.store')
-    const store = useAlarmStore()
-    await store.fetchDetail('project-1', 'policy-1')
-    expect(store.editing?.id).toBe('policy-1')
-    const created = await store.save('project-1', {
-      name: '温度报警',
-      mode: 'per_target',
-      bindings: [],
-      derivedExpression: '',
-      conditions: [],
-      notification: { mode: 'inherit', channelIds: [], messageTemplate: '' },
-      isEnabled: true,
+    mocks.listAlarmItems.mockResolvedValue({
+      list: [item],
+      pagination: { page: 1, pageSize: 20, total: 1 },
     })
-    expect(created.id).toBe('policy-2')
+    mocks.getAlarmItem.mockResolvedValue(item)
+    mocks.createAlarmItem.mockResolvedValue({ ...item, id: 'alarm-2' })
+    mocks.updateAlarmItem.mockResolvedValue({ ...item, displayName: '已修改' })
+    mocks.setAlarmItemEnabled.mockResolvedValue({ ...item, isEnabled: false })
+    mocks.deleteAlarmItem.mockResolvedValue(undefined)
+  })
+  it('loads, toggles and removes independent alarm items', async () => {
+    const store = useAlarmStore()
+    await store.fetchList('project')
+    expect(store.list).toHaveLength(1)
+    await store.toggle('project', 'alarm-1', false)
+    expect(store.list[0]?.isEnabled).toBe(false)
+    await store.remove('project', 'alarm-1')
+    expect(store.list).toHaveLength(0)
+  })
+  it('saves one item payload', async () => {
+    const store = useAlarmStore()
+    await store.save('project', {
+      datapointId: 'dp-1',
+      displayName: '',
+      mode: 'point',
+      evaluationMode: 'single',
+      inputs: [],
+      derivedExpression: '',
+      conditions: item.conditions,
+      notification: item.notification,
+      isEnabled: true,
+      revision: 0,
+      acknowledgedWarningKeys: [],
+    })
+    expect(mocks.createAlarmItem).toHaveBeenCalledOnce()
   })
 })

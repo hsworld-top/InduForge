@@ -1,32 +1,32 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import {
-  createAlarmPolicy,
-  deleteAlarmPolicy,
-  getAlarmPolicy,
+  createAlarmItem,
+  deleteAlarmItem,
+  getAlarmItem,
   listAlarmGroupTree,
-  listAlarmPolicies,
-  setAlarmPolicyEnabled,
-  updateAlarmPolicy,
+  listAlarmItems,
+  setAlarmItemEnabled,
+  updateAlarmItem,
 } from '@/api/alarm.api'
-import type { AlarmPolicy, AlarmPolicyGroup, AlarmPolicySave } from '@/api/schemas/alarm.schema'
+import type { AlarmItem, AlarmItemSave, AlarmGroup } from '@/api/schemas/alarm.schema'
 import { getApiErrorMessage } from '@/utils/request'
 
 export const useAlarmStore = defineStore('alarm', () => {
-  const list = ref<AlarmPolicy[]>([])
-  const groups = ref<AlarmPolicyGroup[]>([])
+  const list = ref<AlarmItem[]>([])
+  const groups = ref<AlarmGroup[]>([])
   const total = ref(0)
   const loading = ref(false)
   const saving = ref(false)
   const error = ref('')
-  const editing = ref<AlarmPolicy | null>(null)
+  const editing = ref<AlarmItem | null>(null)
   const hasEditing = computed(() => editing.value !== null)
 
   async function fetchList(projectId: string, params: Record<string, unknown> = {}) {
     loading.value = true
     error.value = ''
     try {
-      const result = await listAlarmPolicies(projectId, params)
+      const result = await listAlarmItems(projectId, params)
       list.value = result.list
       total.value = result.pagination.total || 0
       return result
@@ -44,16 +44,16 @@ export const useAlarmStore = defineStore('alarm', () => {
   }
 
   async function fetchDetail(projectId: string, policyId: string) {
-    editing.value = await getAlarmPolicy(projectId, policyId)
+    editing.value = await getAlarmItem(projectId, policyId)
     return editing.value
   }
 
-  async function save(projectId: string, payload: AlarmPolicySave, policyId?: string) {
+  async function save(projectId: string, payload: AlarmItemSave, policyId?: string) {
     saving.value = true
     try {
       const result = policyId
-        ? await updateAlarmPolicy(projectId, policyId, payload)
-        : await createAlarmPolicy(projectId, payload)
+        ? await updateAlarmItem(projectId, policyId, payload)
+        : await createAlarmItem(projectId, payload)
       editing.value = result
       return result
     } finally {
@@ -62,13 +62,13 @@ export const useAlarmStore = defineStore('alarm', () => {
   }
 
   async function toggle(projectId: string, policyId: string, enabled: boolean) {
-    const result = await setAlarmPolicyEnabled(projectId, policyId, enabled)
+    const result = await setAlarmItemEnabled(projectId, policyId, enabled)
     list.value = list.value.map((item) => (item.id === policyId ? result : item))
     return result
   }
 
   async function remove(projectId: string, policyId: string) {
-    await deleteAlarmPolicy(projectId, policyId)
+    await deleteAlarmItem(projectId, policyId)
     list.value = list.value.filter((item) => item.id !== policyId)
     total.value = Math.max(0, total.value - 1)
     if (editing.value?.id === policyId) editing.value = null

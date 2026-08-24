@@ -69,18 +69,18 @@ import IconTablerFolderPlus from '~icons/tabler/folder-plus'
 import IconTablerFolders from '~icons/tabler/folders'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import { createAlarmGroup, deleteAlarmGroup, updateAlarmGroup } from '@/api/alarm.api'
-import type { AlarmPolicyGroup } from '@/api/schemas/alarm.schema'
+import type { AlarmGroup } from '@/api/schemas/alarm.schema'
 import { getApiErrorMessage } from '@/utils/request'
 import { useConfirm } from '@/composables/useConfirm'
 
 const props = withDefaults(
-  defineProps<{ projectId: string; groups?: AlarmPolicyGroup[]; selectedId?: string }>(),
+  defineProps<{ projectId: string; groups?: AlarmGroup[]; selectedId?: string }>(),
   { groups: () => [], selectedId: '' },
 )
 const emit = defineEmits<{ select: [id: string]; changed: [] }>()
 const { confirm } = useConfirm()
 const dialogVisible = ref(false)
-const editing = ref<AlarmPolicyGroup | null>(null)
+const editing = ref<AlarmGroup | null>(null)
 const saving = ref(false)
 const draft = reactive({
   name: '',
@@ -95,7 +95,7 @@ function openCreate() {
   Object.assign(draft, { name: '', parentId: null, description: null, sortOrder: 0 })
   dialogVisible.value = true
 }
-function openEdit(group: AlarmPolicyGroup) {
+function openEdit(group: AlarmGroup) {
   editing.value = group
   Object.assign(draft, {
     name: group.name,
@@ -121,7 +121,7 @@ async function save() {
     saving.value = false
   }
 }
-async function remove(group: AlarmPolicyGroup) {
+async function remove(group: AlarmGroup) {
   if (
     !(await confirm(`确认删除目录「${group.name}」？非空目录不能删除。`, {
       title: '删除目录',
@@ -139,7 +139,7 @@ async function remove(group: AlarmPolicyGroup) {
     ElMessage.error(getApiErrorMessage(error, '删除目录失败'))
   }
 }
-function handleCommand(command: string, group: AlarmPolicyGroup) {
+function handleCommand(command: string, group: AlarmGroup) {
   if (command === 'edit') openEdit(group)
   else void remove(group)
 }
@@ -262,10 +262,20 @@ function handleCommand(command: string, group: AlarmPolicyGroup) {
   background: var(--dc-primary);
   color: white;
 }
-@media (max-width: 760px) {
+@container alarm-workspace (max-width: 760px) {
   .alarm-directories {
     width: 184px;
     min-width: 184px;
+  }
+}
+@container alarm-workspace (max-width: 640px) {
+  .alarm-directories {
+    width: 100%;
+    min-width: 0;
+    max-height: 150px;
+    flex: 0 0 auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--dc-border);
   }
 }
 </style>

@@ -1,31 +1,41 @@
 import request from '@/utils/request'
 import {
+  AlarmBatchCreateSchema,
+  AlarmBatchResultSchema,
+  AlarmBatchUpdateSchema,
   AlarmDatapointSummarySchema,
   AlarmDraftValidationSchema,
+  AlarmExcelPreviewSchema,
+  AlarmGroupListSchema,
+  AlarmGroupSaveSchema,
+  AlarmGroupSchema,
   AlarmHistorySettingsSaveSchema,
   AlarmHistorySettingsSchema,
+  AlarmItemContractSchema,
+  AlarmItemListSchema,
+  AlarmItemSaveSchema,
+  AlarmItemSchema,
+  AlarmItemSelectionSchema,
   AlarmNotificationChannelSaveSchema,
   AlarmNotificationChannelSchema,
-  AlarmPolicyContractSchema,
-  AlarmPolicyGroupListSchema,
-  AlarmPolicyGroupSaveSchema,
-  AlarmPolicyGroupSchema,
-  AlarmPolicyListSchema,
-  AlarmPolicySaveSchema,
-  AlarmPolicySchema,
   AlarmProjectSettingsSaveSchema,
   AlarmProjectSettingsSchema,
   AlarmTrialResultSchema,
+  type AlarmBatchCreate,
+  type AlarmBatchResult,
+  type AlarmBatchUpdate,
   type AlarmDatapointSummary,
+  type AlarmExcelPreview,
+  type AlarmGroup,
+  type AlarmGroupSave,
   type AlarmHistorySettings,
   type AlarmHistorySettingsSave,
+  type AlarmItem,
+  type AlarmItemList,
+  type AlarmItemSave,
+  type AlarmItemSelection,
   type AlarmNotificationChannel,
   type AlarmNotificationChannelSave,
-  type AlarmPolicy,
-  type AlarmPolicyGroup,
-  type AlarmPolicyGroupSave,
-  type AlarmPolicyList,
-  type AlarmPolicySave,
   type AlarmProjectSettings,
   type AlarmProjectSettingsSave,
   type AlarmTrialResult,
@@ -34,232 +44,348 @@ import {
 const unwrap = (value: unknown) =>
   value && typeof value === 'object' && 'data' in value ? (value as { data: unknown }).data : value
 
-export async function listAlarmPolicies(
+export async function listAlarmItems(
   projectId: string,
   params: Record<string, unknown> = {},
-): Promise<AlarmPolicyList> {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-policies`,
-    method: 'get',
-    params,
-  })
-  return AlarmPolicyListSchema.parse(unwrap(response))
+): Promise<AlarmItemList> {
+  return AlarmItemListSchema.parse(
+    unwrap(
+      await request({ url: `/data/projects/${projectId}/alarm-items`, method: 'get', params }),
+    ),
+  )
 }
-
-export async function getAlarmPolicy(projectId: string, policyId: string): Promise<AlarmPolicy> {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-policies/${policyId}`,
-    method: 'get',
-  })
-  return AlarmPolicySchema.parse(unwrap(response))
+export async function getAlarmItem(projectId: string, id: string): Promise<AlarmItem> {
+  return AlarmItemSchema.parse(
+    unwrap(await request({ url: `/data/projects/${projectId}/alarm-items/${id}`, method: 'get' })),
+  )
 }
-
-export async function createAlarmPolicy(
+export async function createAlarmItem(
   projectId: string,
-  payload: AlarmPolicySave,
-): Promise<AlarmPolicy> {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-policies`,
-    method: 'post',
-    data: AlarmPolicySaveSchema.parse(payload),
-  })
-  return AlarmPolicySchema.parse(unwrap(response))
+  payload: AlarmItemSave,
+): Promise<AlarmItem> {
+  return AlarmItemSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-items`,
+        method: 'post',
+        data: AlarmItemSaveSchema.parse(payload),
+      }),
+    ),
+  )
 }
-
-export async function updateAlarmPolicy(
+export async function updateAlarmItem(
   projectId: string,
-  policyId: string,
-  payload: AlarmPolicySave,
-): Promise<AlarmPolicy> {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-policies/${policyId}`,
-    method: 'put',
-    data: AlarmPolicySaveSchema.parse(payload),
-  })
-  return AlarmPolicySchema.parse(unwrap(response))
+  id: string,
+  payload: AlarmItemSave,
+): Promise<AlarmItem> {
+  return AlarmItemSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-items/${id}`,
+        method: 'put',
+        data: AlarmItemSaveSchema.parse(payload),
+      }),
+    ),
+  )
 }
-
-export async function setAlarmPolicyEnabled(
+export async function setAlarmItemEnabled(
   projectId: string,
-  policyId: string,
+  id: string,
   isEnabled: boolean,
-): Promise<AlarmPolicy> {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-policies/${policyId}/enabled`,
-    method: 'patch',
-    data: { isEnabled },
-  })
-  return AlarmPolicySchema.parse(unwrap(response))
+): Promise<AlarmItem> {
+  return AlarmItemSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-items/${id}/enabled`,
+        method: 'patch',
+        data: { isEnabled },
+      }),
+    ),
+  )
 }
-
-export async function deleteAlarmPolicy(projectId: string, policyId: string): Promise<void> {
-  await request({
-    url: `/data/projects/${projectId}/alarm-policies/${policyId}`,
-    method: 'delete',
-  })
+export async function deleteAlarmItem(projectId: string, id: string): Promise<void> {
+  await request({ url: `/data/projects/${projectId}/alarm-items/${id}`, method: 'delete' })
 }
-
-export async function validateAlarmPolicy(projectId: string, payload: AlarmPolicySave) {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-policies/validate-draft`,
-    method: 'post',
-    data: AlarmPolicySaveSchema.parse(payload),
-  })
-  return AlarmDraftValidationSchema.parse(unwrap(response))
+export async function validateAlarmItem(projectId: string, payload: AlarmItemSave) {
+  return AlarmDraftValidationSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-items/validate-draft`,
+        method: 'post',
+        data: AlarmItemSaveSchema.parse(payload),
+      }),
+    ),
+  )
 }
-
-export async function testAlarmPolicy(
+export async function testAlarmItem(
   projectId: string,
-  policyId: string,
-  value: unknown,
+  draft: AlarmItemSave,
+  values: unknown[],
   context: Record<string, unknown> = {},
 ): Promise<AlarmTrialResult> {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-policies/${policyId}/test`,
-    method: 'post',
-    data: { value, context },
-  })
-  return AlarmTrialResultSchema.parse(unwrap(response))
+  return AlarmTrialResultSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-items/test-draft`,
+        method: 'post',
+        data: { draft: AlarmItemSaveSchema.parse(draft), values, context },
+      }),
+    ),
+  )
 }
-
-export async function getAlarmPolicyContract(projectId: string, policyId: string) {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-policies/${policyId}/contract`,
+export async function getAlarmItemContract(projectId: string, id: string) {
+  return AlarmItemContractSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-items/${id}/contract`,
+        method: 'get',
+      }),
+    ),
+  )
+}
+export async function batchCreateAlarmItems(
+  projectId: string,
+  payload: AlarmBatchCreate,
+): Promise<AlarmBatchResult> {
+  return AlarmBatchResultSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-items/batch-create`,
+        method: 'post',
+        data: AlarmBatchCreateSchema.parse(payload),
+      }),
+    ),
+  )
+}
+export async function validateBatchCreateAlarmItems(projectId: string, payload: AlarmBatchCreate) {
+  return AlarmDraftValidationSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-items/batch-create/validate`,
+        method: 'post',
+        data: AlarmBatchCreateSchema.parse(payload),
+      }),
+    ),
+  )
+}
+export async function batchUpdateAlarmItems(
+  projectId: string,
+  payload: AlarmBatchUpdate,
+): Promise<AlarmBatchResult> {
+  return AlarmBatchResultSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-items/batch`,
+        method: 'patch',
+        data: AlarmBatchUpdateSchema.parse(payload),
+      }),
+    ),
+  )
+}
+export async function batchDeleteAlarmItems(
+  projectId: string,
+  selection: AlarmItemSelection,
+): Promise<AlarmBatchResult> {
+  return AlarmBatchResultSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-items/batch-delete`,
+        method: 'post',
+        data: { selection: AlarmItemSelectionSchema.parse(selection) },
+      }),
+    ),
+  )
+}
+export async function exportAlarmItems(
+  projectId: string,
+  selection: AlarmItemSelection,
+): Promise<Blob> {
+  return (await request({
+    url: `/data/projects/${projectId}/alarm-items/export`,
+    method: 'post',
+    data: { selection: AlarmItemSelectionSchema.parse(selection) },
+    responseType: 'blob',
+  })) as Blob
+}
+export async function downloadAlarmImportTemplate(projectId: string): Promise<Blob> {
+  return (await request({
+    url: `/data/projects/${projectId}/alarm-items/import-template`,
     method: 'get',
-  })
-  return AlarmPolicyContractSchema.parse(unwrap(response))
+    responseType: 'blob',
+  })) as Blob
+}
+export async function previewAlarmImport(
+  projectId: string,
+  file: File,
+): Promise<AlarmExcelPreview> {
+  const data = new FormData()
+  data.append('file', file)
+  return AlarmExcelPreviewSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-items/import/preview`,
+        method: 'post',
+        data,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }),
+    ),
+  )
+}
+export async function downloadAlarmImportErrors(projectId: string, file: File): Promise<Blob> {
+  const data = new FormData()
+  data.append('file', file)
+  return (await request({
+    url: `/data/projects/${projectId}/alarm-items/import/error-workbook`,
+    method: 'post',
+    data,
+    headers: { 'Content-Type': 'multipart/form-data' },
+    responseType: 'blob',
+  })) as Blob
+}
+export async function applyAlarmImport(
+  projectId: string,
+  file: File,
+  digest: string,
+  acknowledgedWarningKeys: string[],
+): Promise<AlarmBatchResult> {
+  const data = new FormData()
+  data.append('file', file)
+  data.append('digest', digest)
+  data.append('acknowledgedWarningKeys', JSON.stringify(acknowledgedWarningKeys))
+  return AlarmBatchResultSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-items/import/apply`,
+        method: 'post',
+        data,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }),
+    ),
+  )
 }
 
 export async function listAlarmGroups(projectId: string, params: Record<string, unknown> = {}) {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-policy-groups`,
-    method: 'get',
-    params,
-  })
-  return AlarmPolicyGroupListSchema.parse(unwrap(response))
+  return AlarmGroupListSchema.parse(
+    unwrap(
+      await request({ url: `/data/projects/${projectId}/alarm-groups`, method: 'get', params }),
+    ),
+  )
 }
-
-export async function listAlarmGroupTree(projectId: string): Promise<AlarmPolicyGroup[]> {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-policy-groups/tree`,
-    method: 'get',
-  })
-  return AlarmPolicyGroupSchema.array().parse(unwrap(response))
+export async function listAlarmGroupTree(projectId: string): Promise<AlarmGroup[]> {
+  return AlarmGroupSchema.array().parse(
+    unwrap(await request({ url: `/data/projects/${projectId}/alarm-groups/tree`, method: 'get' })),
+  )
 }
-
-export async function createAlarmGroup(projectId: string, payload: AlarmPolicyGroupSave) {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-policy-groups`,
-    method: 'post',
-    data: AlarmPolicyGroupSaveSchema.parse(payload),
-  })
-  return AlarmPolicyGroupSchema.parse(unwrap(response))
+export async function createAlarmGroup(projectId: string, payload: AlarmGroupSave) {
+  return AlarmGroupSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-groups`,
+        method: 'post',
+        data: AlarmGroupSaveSchema.parse(payload),
+      }),
+    ),
+  )
 }
-
-export async function updateAlarmGroup(
-  projectId: string,
-  groupId: string,
-  payload: AlarmPolicyGroupSave,
-) {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-policy-groups/${groupId}`,
-    method: 'put',
-    data: AlarmPolicyGroupSaveSchema.parse(payload),
-  })
-  return AlarmPolicyGroupSchema.parse(unwrap(response))
+export async function updateAlarmGroup(projectId: string, id: string, payload: AlarmGroupSave) {
+  return AlarmGroupSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-groups/${id}`,
+        method: 'put',
+        data: AlarmGroupSaveSchema.parse(payload),
+      }),
+    ),
+  )
 }
-
-export async function deleteAlarmGroup(projectId: string, groupId: string): Promise<void> {
-  await request({
-    url: `/data/projects/${projectId}/alarm-policy-groups/${groupId}`,
-    method: 'delete',
-  })
+export async function deleteAlarmGroup(projectId: string, id: string): Promise<void> {
+  await request({ url: `/data/projects/${projectId}/alarm-groups/${id}`, method: 'delete' })
 }
 
 export async function getAlarmSettings(projectId: string): Promise<AlarmProjectSettings> {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-settings`,
-    method: 'get',
-  })
-  return AlarmProjectSettingsSchema.parse(unwrap(response))
+  return AlarmProjectSettingsSchema.parse(
+    unwrap(await request({ url: `/data/projects/${projectId}/alarm-settings`, method: 'get' })),
+  )
 }
-
 export async function saveAlarmSettings(
   projectId: string,
   payload: AlarmProjectSettingsSave,
 ): Promise<AlarmProjectSettings> {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-settings`,
-    method: 'put',
-    data: AlarmProjectSettingsSaveSchema.parse(payload),
-  })
-  return AlarmProjectSettingsSchema.parse(unwrap(response))
+  return AlarmProjectSettingsSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-settings`,
+        method: 'put',
+        data: AlarmProjectSettingsSaveSchema.parse(payload),
+      }),
+    ),
+  )
 }
-
 export async function getAlarmHistorySettings(projectId: string): Promise<AlarmHistorySettings> {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-history-settings`,
-    method: 'get',
-  })
-  return AlarmHistorySettingsSchema.parse(unwrap(response))
+  return AlarmHistorySettingsSchema.parse(
+    unwrap(
+      await request({ url: `/data/projects/${projectId}/alarm-history-settings`, method: 'get' }),
+    ),
+  )
 }
-
 export async function saveAlarmHistorySettings(
   projectId: string,
   payload: AlarmHistorySettingsSave,
 ): Promise<AlarmHistorySettings> {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-history-settings`,
-    method: 'put',
-    data: AlarmHistorySettingsSaveSchema.parse(payload),
-  })
-  return AlarmHistorySettingsSchema.parse(unwrap(response))
+  return AlarmHistorySettingsSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-history-settings`,
+        method: 'put',
+        data: AlarmHistorySettingsSaveSchema.parse(payload),
+      }),
+    ),
+  )
 }
-
 export async function listAlarmChannels(projectId: string): Promise<AlarmNotificationChannel[]> {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-channels`,
-    method: 'get',
-  })
-  return AlarmNotificationChannelSchema.array().parse(unwrap(response))
+  return AlarmNotificationChannelSchema.array().parse(
+    unwrap(await request({ url: `/data/projects/${projectId}/alarm-channels`, method: 'get' })),
+  )
 }
-
 export async function createAlarmChannel(projectId: string, payload: AlarmNotificationChannelSave) {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-channels`,
-    method: 'post',
-    data: AlarmNotificationChannelSaveSchema.parse(payload),
-  })
-  return AlarmNotificationChannelSchema.parse(unwrap(response))
+  return AlarmNotificationChannelSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-channels`,
+        method: 'post',
+        data: AlarmNotificationChannelSaveSchema.parse(payload),
+      }),
+    ),
+  )
 }
-
 export async function updateAlarmChannel(
   projectId: string,
-  channelId: string,
+  id: string,
   payload: AlarmNotificationChannelSave,
 ) {
-  const response = await request({
-    url: `/data/projects/${projectId}/alarm-channels/${channelId}`,
-    method: 'put',
-    data: AlarmNotificationChannelSaveSchema.parse(payload),
-  })
-  return AlarmNotificationChannelSchema.parse(unwrap(response))
+  return AlarmNotificationChannelSchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/alarm-channels/${id}`,
+        method: 'put',
+        data: AlarmNotificationChannelSaveSchema.parse(payload),
+      }),
+    ),
+  )
 }
-
-export async function deleteAlarmChannel(projectId: string, channelId: string): Promise<void> {
-  await request({
-    url: `/data/projects/${projectId}/alarm-channels/${channelId}`,
-    method: 'delete',
-  })
+export async function deleteAlarmChannel(projectId: string, id: string): Promise<void> {
+  await request({ url: `/data/projects/${projectId}/alarm-channels/${id}`, method: 'delete' })
 }
-
 export async function getDatapointAlarmSummary(
   projectId: string,
   datapointId: string,
 ): Promise<AlarmDatapointSummary> {
-  const response = await request({
-    url: `/data/projects/${projectId}/datapoints/${datapointId}/alarm-summary`,
-    method: 'get',
-  })
-  return AlarmDatapointSummarySchema.parse(unwrap(response))
+  return AlarmDatapointSummarySchema.parse(
+    unwrap(
+      await request({
+        url: `/data/projects/${projectId}/datapoints/${datapointId}/alarms`,
+        method: 'get',
+      }),
+    ),
+  )
 }

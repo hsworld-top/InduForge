@@ -569,25 +569,47 @@ function secretSummary(channel: AlarmNotificationChannel) {
 .alarm-channel-form .is-wide {
   grid-column: 1 / -1;
 }
-@media (max-width: 1100px) {
+@container alarm-workspace (max-width: 1100px) {
   .alarm-notifications {
     grid-template-columns: minmax(300px, 340px) minmax(0, 1fr);
   }
 }
-@media (max-width: 760px) {
+@container alarm-workspace (max-width: 860px) {
   .alarm-notifications {
-    display: block;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: max-content minmax(280px, max-content);
+    align-content: start;
     overflow: auto;
   }
+  .alarm-notifications__settings,
+  .alarm-notifications__channels {
+    padding: 16px;
+  }
   .alarm-notifications__settings {
+    overflow: visible;
     border-right: 0;
     border-bottom: 1px solid var(--dc-border);
   }
   .alarm-notifications__channels {
-    min-height: 360px;
+    min-height: 280px;
+    overflow: visible;
+  }
+  .alarm-notifications__table {
+    min-height: 220px;
+    flex: 0 0 auto;
+  }
+}
+@container alarm-workspace (max-width: 520px) {
+  .alarm-notifications__head {
+    align-items: stretch;
+    flex-direction: column;
   }
   .alarm-notifications__checks {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .alarm-notifications__primary,
+  .alarm-notifications__secondary {
+    align-self: flex-start;
   }
 }
 </style>

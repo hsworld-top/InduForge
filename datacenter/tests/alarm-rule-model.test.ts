@@ -1,116 +1,91 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
-  alarmBindingPreview,
-  compatibleAlarmBindings,
+  alarmItemConditionSummary,
+  alarmItemPointSummary,
+  buildAlarmItemPayload,
+  compatibleAlarmPoints,
   conditionKindsFor,
-  createAlarmPolicyDraft,
-  ensureBuiltinAlarmNotificationChannel,
-  normalizeAlarmConditionsForBindings,
-  policyToDraft,
+  createAlarmCondition,
+  createAlarmItemDraft,
+  sortAlarmLevels,
 } from '../src/models/alarm-policy'
-import type { AlarmPolicy } from '../src/api/schemas/alarm.schema'
+import type { AlarmItem } from '../src/api/schemas/alarm.schema'
 
-describe('alarm policy model', () => {
-  test('普通报警默认启用并添加一条未填写阈值条件', () => {
-    const draft = createAlarmPolicyDraft('per_target')
+describe('alarm item model', () => {
+  it('creates an enabled point alarm with optional display name', () => {
+    const draft = createAlarmItemDraft('point')
+    expect(draft.displayName).toBe('')
     expect(draft.isEnabled).toBe(true)
-    expect(draft.conditions).toHaveLength(1)
-    expect(draft.conditions[0].kind).toBe('threshold')
-    expect(draft.conditions[0].params.threshold).toBeNull()
-    expect(draft.notification).toMatchObject({
-      mode: 'inherit',
-      notifyOnRaise: true,
-      notifyOnClear: true,
-      repeatIntervalSeconds: null,
-      channelIds: ['runtime_inapp'],
-    })
+    expect(draft.evaluationMode).toBe('highest_matching')
   })
-
-  test('组合报警默认停用', () => {
-    expect(createAlarmPolicyDraft('derived').isEnabled).toBe(false)
+  it('builds one item payload while the caller keeps the selected datapoint IDs for batch creation', () => {
+    const draft = createAlarmItemDraft('point')
+    draft.selectedPoints = [
+      { datapointId: 'dp-1', path: 'a', name: 'A', dataType: 'float64' },
+      { datapointId: 'dp-2', path: 'b', name: 'B', dataType: 'float64' },
+    ]
+    const payload = buildAlarmItemPayload(draft)
+    expect(payload.datapointId).toBe('dp-1')
+    expect(draft.selectedPoints.map((point) => point.datapointId)).toEqual(['dp-1', 'dp-2'])
   })
-
-  test('普通报警拒绝混合不兼容点位', () => {
+  it('keeps different alarm kinds compatible on one point and rejects mixed datapoint categories', () => {
+    expect(createAlarmCondition('rate_of_change').kind).toBe('rate_of_change')
     expect(
-      compatibleAlarmBindings([
-        { datapointId: '1', path: 'a', name: 'a', dataType: 'number', role: 'target' },
-        { datapointId: '2', path: 'b', name: 'b', dataType: 'boolean', role: 'target' },
+      compatibleAlarmPoints([
+        { datapointId: 'a', path: 'a', name: 'A', dataType: 'float64' },
+        { datapointId: 'b', path: 'b', name: 'B', dataType: 'bool' },
       ]),
     ).toBe(false)
   })
-
-  test('点位较多时仅保留紧凑预览', () => {
-    const bindings = Array.from({ length: 11 }, (_, index) => ({
-      datapointId: String(index),
-      path: `point.${index}`,
-      name: `点位 ${index}`,
-      dataType: 'number',
-      role: 'target' as const,
-    }))
-
-    expect(alarmBindingPreview(bindings.slice(0, 5), 'per_target')).toMatchObject({
-      collapsed: false,
-      visible: bindings.slice(0, 5),
-    })
-    expect(alarmBindingPreview(bindings.slice(0, 6), 'per_target')).toMatchObject({
-      collapsed: true,
-      visible: bindings.slice(0, 3),
-    })
-    expect(alarmBindingPreview(bindings.slice(0, 10), 'derived').collapsed).toBe(false)
-    expect(alarmBindingPreview(bindings, 'derived').collapsed).toBe(true)
+  it('keeps threshold levels out of numeric point other-condition options', () => {
+    const point = [{ datapointId: 'dp-1', path: 'a', name: 'A', dataType: 'float64' }]
+    expect(conditionKindsFor(point, 'point', 'single')).not.toContain('threshold')
+    expect(conditionKindsFor(point, 'point', 'highest_matching')).toContain('threshold')
   })
-
-  test('数值点只显示兼容条件并保留编辑 payload', () => {
-    const bindings = [
-      { datapointId: '1', path: 'a', name: 'a', dataType: 'number', role: 'target' as const },
-    ]
-    expect(conditionKindsFor(bindings, 'per_target')).toContain('rate_of_change')
-    const policy = { ...makePolicy(), bindings }
-    expect(policyToDraft(policy).bindings).toEqual(bindings)
+  it('treats a derived expression as input calculation rather than a result condition', () => {
+    const kinds = conditionKindsFor([], 'derived', 'single')
+    expect(kinds).not.toContain('expression')
+    expect(kinds).toContain('threshold')
+    expect(createAlarmCondition('transition').params).toEqual({ from: false, to: true })
   })
-
-  test('选择布尔点后将默认阈值条件调整为状态条件', () => {
-    const draft = createAlarmPolicyDraft('per_target')
-    const bindings = [
-      { datapointId: '1', path: 'a', name: 'a', dataType: 'bool', role: 'target' as const },
-    ]
-
-    const conditions = normalizeAlarmConditionsForBindings(draft.conditions, bindings, 'per_target')
-
-    expect(conditions[0]).toMatchObject({
-      kind: 'state',
-      operator: 'eq',
-      severity: 'warning',
-      params: { expected: true },
-    })
-  })
-
-  test('通知渠道缺少时补齐内置站内通知且不重复', () => {
-    const channels = ensureBuiltinAlarmNotificationChannel('project-1', [])
-    expect(channels).toMatchObject([
-      { id: 'runtime_inapp', projectId: 'project-1', name: '运行端站内通知' },
+  it('sorts threshold levels from high outward and summarizes one item', () => {
+    const high = createAlarmCondition('threshold', '高')
+    high.params.threshold = 80
+    const highHigh = createAlarmCondition('threshold', '高高')
+    highHigh.params.threshold = 90
+    expect(sortAlarmLevels([highHigh, high]).map((condition) => condition.label)).toEqual([
+      '高',
+      '高高',
     ])
-    expect(ensureBuiltinAlarmNotificationChannel('project-1', channels)).toHaveLength(1)
+    const item = makeItem()
+    expect(alarmItemPointSummary(item)).toBe('温度')
+    expect(alarmItemConditionSummary(item)).toContain('高')
   })
 })
 
-function makePolicy(): AlarmPolicy {
+function makeItem(): AlarmItem {
   return {
-    id: 'policy-1',
-    projectId: 'project-1',
+    id: 'alarm-1',
+    projectId: 'project',
+    datapointId: 'dp-1',
+    path: 'line.temperature',
+    datapointName: '温度',
+    dataType: 'float64',
     groupId: null,
     groupName: null,
-    name: '报警',
+    displayName: '越限报警',
     description: null,
-    mode: 'per_target',
+    mode: 'point',
+    alarmType: 'threshold',
+    evaluationMode: 'highest_matching',
     derivedExpression: '',
-    bindings: [],
-    conditions: [],
+    inputs: [],
+    conditions: [{ ...createAlarmCondition('threshold', '高'), params: { threshold: 80 } }],
     notification: { mode: 'inherit', channelIds: [], messageTemplate: '' },
     isEnabled: true,
     revision: 1,
     contract: {},
-    createdAt: null,
-    updatedAt: null,
+    createdAt: '2026-08-24T00:00:00Z',
+    updatedAt: '2026-08-24T00:00:00Z',
   }
 }

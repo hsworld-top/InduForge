@@ -3,7 +3,8 @@ import { PaginationSchema, TimeFieldSchema } from './common.schema'
 
 const ObjectRecordSchema = z.record(z.string(), z.unknown())
 
-export const AlarmPolicyModeSchema = z.enum(['per_target', 'derived'])
+export const AlarmItemModeSchema = z.enum(['point', 'derived'])
+export const AlarmEvaluationModeSchema = z.enum(['single', 'highest_matching'])
 export const AlarmSeveritySchema = z.enum(['info', 'warning', 'major', 'critical'])
 export const AlarmConditionKindSchema = z.enum([
   'threshold',
@@ -19,21 +20,22 @@ export const AlarmConditionKindSchema = z.enum([
 export const AlarmNotificationModeSchema = z.enum(['inherit', 'off', 'custom'])
 export const AlarmChannelTypeSchema = z.enum(['runtime_inapp', 'webhook', 'dingtalk', 'wecom'])
 
-export type AlarmPolicyMode = z.infer<typeof AlarmPolicyModeSchema>
+export type AlarmItemMode = z.infer<typeof AlarmItemModeSchema>
+export type AlarmEvaluationMode = z.infer<typeof AlarmEvaluationModeSchema>
 export type AlarmSeverity = z.infer<typeof AlarmSeveritySchema>
 export type AlarmConditionKind = z.infer<typeof AlarmConditionKindSchema>
 export type AlarmNotificationMode = z.infer<typeof AlarmNotificationModeSchema>
 export type AlarmChannelType = z.infer<typeof AlarmChannelTypeSchema>
 
-export const AlarmBindingSchema = z.object({
+export const AlarmItemInputSchema = z.object({
+  id: z.string().default(''),
   datapointId: z.string(),
   path: z.string().default(''),
   name: z.string().default(''),
   dataType: z.string().default(''),
-  role: z.enum(['target', 'input']),
-  inputKey: z.string().nullable().optional(),
+  inputKey: z.string().min(1),
 })
-export type AlarmBinding = z.infer<typeof AlarmBindingSchema>
+export type AlarmItemInput = z.infer<typeof AlarmItemInputSchema>
 
 export const AlarmConditionSchema = z.object({
   id: z.string().default(''),
@@ -58,7 +60,7 @@ export const AlarmNotificationSchema = z.object({
 })
 export type AlarmNotification = z.infer<typeof AlarmNotificationSchema>
 
-export const AlarmPolicyGroupSchema = z.object({
+export const AlarmGroupSchema = z.object({
   id: z.string(),
   projectId: z.string(),
   name: z.string(),
@@ -70,26 +72,31 @@ export const AlarmPolicyGroupSchema = z.object({
   createdAt: TimeFieldSchema,
   updatedAt: TimeFieldSchema,
 })
-export type AlarmPolicyGroup = z.infer<typeof AlarmPolicyGroupSchema>
-
-export const AlarmPolicyGroupSaveSchema = z.object({
-  name: z.string().min(1),
+export type AlarmGroup = z.infer<typeof AlarmGroupSchema>
+export const AlarmGroupSaveSchema = z.object({
+  name: z.string().trim().min(1),
   parentId: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   sortOrder: z.number().int().default(0),
 })
-export type AlarmPolicyGroupSave = z.infer<typeof AlarmPolicyGroupSaveSchema>
+export type AlarmGroupSave = z.infer<typeof AlarmGroupSaveSchema>
 
-export const AlarmPolicySchema = z.object({
+export const AlarmItemSchema = z.object({
   id: z.string(),
   projectId: z.string(),
+  datapointId: z.string().default(''),
+  path: z.string().default(''),
+  datapointName: z.string().default(''),
+  dataType: z.string().default(''),
   groupId: z.string().nullable().optional(),
   groupName: z.string().nullable().optional(),
-  name: z.string(),
+  displayName: z.string(),
   description: z.string().nullable().optional(),
-  mode: AlarmPolicyModeSchema,
+  mode: AlarmItemModeSchema,
+  alarmType: AlarmConditionKindSchema,
+  evaluationMode: AlarmEvaluationModeSchema,
   derivedExpression: z.string().default(''),
-  bindings: z.array(AlarmBindingSchema).default([]),
+  inputs: z.array(AlarmItemInputSchema).default([]),
   conditions: z.array(AlarmConditionSchema).default([]),
   notification: AlarmNotificationSchema,
   isEnabled: z.boolean(),
@@ -98,31 +105,158 @@ export const AlarmPolicySchema = z.object({
   createdAt: TimeFieldSchema,
   updatedAt: TimeFieldSchema,
 })
-export type AlarmPolicy = z.infer<typeof AlarmPolicySchema>
+export type AlarmItem = z.infer<typeof AlarmItemSchema>
 
-export const AlarmPolicySaveSchema = z.object({
-  groupId: z.string().nullable().optional(),
-  name: z.string().min(1),
-  description: z.string().nullable().optional(),
-  mode: AlarmPolicyModeSchema,
-  bindings: z.array(AlarmBindingSchema),
-  derivedExpression: z.string().default(''),
-  conditions: z.array(AlarmConditionSchema).min(1),
-  notification: AlarmNotificationSchema,
-  isEnabled: z.boolean(),
-})
-export type AlarmPolicySave = z.infer<typeof AlarmPolicySaveSchema>
+export const AlarmItemSaveSchema = z
+  .object({
+    itemId: z.string().optional(),
+    datapointId: z.string().default(''),
+    displayName: z.string().trim().max(100).default(''),
+    groupId: z.string().nullable().optional(),
+    description: z.string().nullable().optional(),
+    mode: AlarmItemModeSchema,
+    evaluationMode: AlarmEvaluationModeSchema,
+    inputs: z.array(AlarmItemInputSchema).default([]),
+    derivedExpression: z.string().default(''),
+    conditions: z.array(AlarmConditionSchema).min(1),
+    notification: AlarmNotificationSchema,
+    isEnabled: z.boolean(),
+    revision: z.number().int().nonnegative().default(0),
+    acknowledgedWarningKeys: z.array(z.string()).default([]),
+  })
+  .superRefine((value, context) => {
+    if (value.mode === 'point' && !value.datapointId)
+      context.addIssue({ code: 'custom', path: ['datapointId'], message: '请选择数据点' })
+    if (
+      value.mode === 'point' &&
+      value.evaluationMode === 'single' &&
+      value.conditions.length !== 1
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['conditions'],
+        message: '普通报警必须且只能配置一个条件',
+      })
+    if (value.mode === 'derived') {
+      if (!value.displayName)
+        context.addIssue({ code: 'custom', path: ['displayName'], message: '组合报警名称不能为空' })
+      if (value.inputs.length < 2)
+        context.addIssue({
+          code: 'custom',
+          path: ['inputs'],
+          message: '组合报警至少需要两个输入点',
+        })
+      if (value.conditions.length !== 1)
+        context.addIssue({
+          code: 'custom',
+          path: ['conditions'],
+          message: '组合报警只能配置一个结果条件',
+        })
+    }
+  })
+export type AlarmItemSave = z.infer<typeof AlarmItemSaveSchema>
 
-export const AlarmPolicyListSchema = z.object({
-  list: z.array(AlarmPolicySchema).default([]),
+export const AlarmItemListSchema = z.object({
+  list: z.array(AlarmItemSchema).default([]),
   pagination: PaginationSchema.default({ page: 1, pageSize: 20, total: 0 }),
 })
-export type AlarmPolicyList = z.infer<typeof AlarmPolicyListSchema>
-
-export const AlarmPolicyGroupListSchema = z.object({
-  list: z.array(AlarmPolicyGroupSchema).default([]),
+export type AlarmItemList = z.infer<typeof AlarmItemListSchema>
+export const AlarmGroupListSchema = z.object({
+  list: z.array(AlarmGroupSchema).default([]),
   pagination: PaginationSchema.default({ page: 1, pageSize: 50, total: 0 }),
 })
+
+export const AlarmDraftIssueSchema = z.object({
+  type: z.enum(['invalid', 'name', 'duplicate', 'overlap']),
+  message: z.string(),
+  datapointId: z.string().optional().default(''),
+  datapointName: z.string().optional().default(''),
+  conflictAlarmItemId: z.string().optional().default(''),
+  conflictAlarmItemName: z.string().optional().default(''),
+  affectedCount: z.number().int().nonnegative().optional().default(0),
+  ackKey: z.string().optional().default(''),
+})
+export type AlarmDraftIssue = z.infer<typeof AlarmDraftIssueSchema>
+export const AlarmDraftValidationSchema = z.object({
+  valid: z.boolean(),
+  errors: z.array(AlarmDraftIssueSchema).default([]),
+  warnings: z.array(AlarmDraftIssueSchema).default([]),
+})
+export type AlarmDraftValidation = z.infer<typeof AlarmDraftValidationSchema>
+export const AlarmTrialResultSchema = z.object({
+  triggered: z.boolean(),
+  state: z.enum(['triggered', 'not_triggered', 'insufficient_input']),
+  selectedCondition: AlarmConditionSchema.nullable().optional(),
+  steps: z.array(ObjectRecordSchema).default([]),
+  message: z.string().optional(),
+})
+export type AlarmTrialResult = z.infer<typeof AlarmTrialResultSchema>
+export const AlarmDatapointSummarySchema = z.object({
+  datapointId: z.string(),
+  items: z.array(AlarmItemSchema).default([]),
+  count: z.number().int().nonnegative(),
+})
+export type AlarmDatapointSummary = z.infer<typeof AlarmDatapointSummarySchema>
+
+export const AlarmItemFilterSchema = z.object({
+  search: z.string().optional(),
+  severity: AlarmSeveritySchema.optional(),
+  alarmType: AlarmConditionKindSchema.optional(),
+  mode: AlarmItemModeSchema.optional(),
+  datapointId: z.string().optional(),
+  groupId: z.string().nullable().optional(),
+  enabled: z.boolean().optional(),
+})
+export const AlarmItemSelectionSchema = z
+  .object({
+    ids: z.array(z.string()).default([]),
+    filter: AlarmItemFilterSchema.optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.ids.length > 0 === Boolean(value.filter))
+      context.addIssue({ code: 'custom', message: '批量范围只能使用 ID 或筛选条件' })
+  })
+export type AlarmItemSelection = z.infer<typeof AlarmItemSelectionSchema>
+export const AlarmBatchResultSchema = z.object({
+  affectedCount: z.number().int().nonnegative(),
+  itemIds: z.array(z.string()).optional().default([]),
+})
+export type AlarmBatchResult = z.infer<typeof AlarmBatchResultSchema>
+export const AlarmBatchCreateSchema = z.object({
+  datapointIds: z.array(z.string()).min(1),
+  draft: z.object(AlarmItemSaveSchema.shape).omit({ datapointId: true }),
+})
+export type AlarmBatchCreate = z.infer<typeof AlarmBatchCreateSchema>
+export const AlarmBatchUpdateSchema = z.object({
+  selection: AlarmItemSelectionSchema,
+  fields: z.array(z.enum(['isEnabled', 'groupId', 'notification', 'conditions'])).min(1),
+  patch: z.object({
+    isEnabled: z.boolean().optional(),
+    groupId: z.string().nullable().optional(),
+    notification: AlarmNotificationSchema.optional(),
+    conditions: z.array(AlarmConditionSchema).optional(),
+  }),
+  acknowledgedWarningKeys: z.array(z.string()).default([]),
+})
+export type AlarmBatchUpdate = z.infer<typeof AlarmBatchUpdateSchema>
+
+export const AlarmExcelIssueSchema = z.object({
+  sheet: z.string(),
+  row: z.number().int().nonnegative(),
+  type: z.enum(['error', 'warning']),
+  message: z.string(),
+})
+export const AlarmExcelPreviewSchema = z.object({
+  digest: z.string(),
+  createCount: z.number().int().nonnegative(),
+  updateCount: z.number().int().nonnegative(),
+  unchangedCount: z.number().int().nonnegative(),
+  errorCount: z.number().int().nonnegative(),
+  warningCount: z.number().int().nonnegative(),
+  issues: z.array(AlarmExcelIssueSchema).default([]),
+  warningKeys: z.array(z.string()).default([]),
+})
+export type AlarmExcelPreview = z.infer<typeof AlarmExcelPreviewSchema>
 
 export const AlarmProjectSettingsSchema = z.object({
   projectId: z.string(),
@@ -135,7 +269,6 @@ export const AlarmProjectSettingsSchema = z.object({
   updatedAt: TimeFieldSchema,
 })
 export type AlarmProjectSettings = z.infer<typeof AlarmProjectSettingsSchema>
-
 export const AlarmProjectSettingsSaveSchema = AlarmProjectSettingsSchema.pick({
   notifyOnRaise: true,
   notifyOnClear: true,
@@ -154,7 +287,6 @@ export const AlarmHistorySettingsSchema = z.object({
   updatedAt: TimeFieldSchema,
 })
 export type AlarmHistorySettings = z.infer<typeof AlarmHistorySettingsSchema>
-
 export const AlarmHistorySettingsSaveSchema = AlarmHistorySettingsSchema.pick({
   isEnabled: true,
   retentionDays: true,
@@ -174,7 +306,6 @@ export const AlarmNotificationChannelSchema = z.object({
   updatedAt: TimeFieldSchema.optional(),
 })
 export type AlarmNotificationChannel = z.infer<typeof AlarmNotificationChannelSchema>
-
 export const AlarmNotificationChannelSaveSchema = z.object({
   name: z.string().min(1),
   channelType: z.enum(['webhook', 'dingtalk', 'wecom']),
@@ -184,26 +315,4 @@ export const AlarmNotificationChannelSaveSchema = z.object({
   isEnabled: z.boolean().default(true),
 })
 export type AlarmNotificationChannelSave = z.infer<typeof AlarmNotificationChannelSaveSchema>
-
-export const AlarmDatapointSummarySchema = z.object({
-  datapointId: z.string(),
-  policies: z.array(AlarmPolicySchema).default([]),
-  count: z.number().int().nonnegative(),
-})
-export type AlarmDatapointSummary = z.infer<typeof AlarmDatapointSummarySchema>
-
-export const AlarmTrialResultSchema = z.object({
-  triggered: z.boolean(),
-  state: z.enum(['triggered', 'not_triggered', 'insufficient_input']),
-  triggeredConditions: z.array(AlarmConditionSchema).default([]),
-  conditionResults: z.array(ObjectRecordSchema).default([]),
-  message: z.string().optional(),
-})
-export type AlarmTrialResult = z.infer<typeof AlarmTrialResultSchema>
-
-export const AlarmDraftValidationSchema = z.object({
-  valid: z.boolean(),
-  errors: z.array(z.string()).default([]),
-})
-
-export const AlarmPolicyContractSchema = ObjectRecordSchema
+export const AlarmItemContractSchema = ObjectRecordSchema

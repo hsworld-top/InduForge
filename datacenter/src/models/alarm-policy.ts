@@ -1,14 +1,27 @@
 import type { Datapoint } from '@/api/schemas/datapoint.schema'
 import type {
-  AlarmBinding,
   AlarmCondition,
   AlarmConditionKind,
+  AlarmItem,
+  AlarmEvaluationMode,
+  AlarmItemInput,
+  AlarmItemMode,
+  AlarmItemSave,
   AlarmNotificationChannel,
-  AlarmPolicy,
-  AlarmPolicyMode,
-  AlarmPolicySave,
   AlarmSeverity,
 } from '@/api/schemas/alarm.schema'
+
+export type AlarmPointCategory = 'number' | 'boolean' | 'text' | 'structured'
+export interface AlarmPointSelection {
+  datapointId: string
+  path: string
+  name: string
+  dataType: string
+  inputKey?: string
+}
+export interface AlarmItemDraft extends AlarmItemSave {
+  selectedPoints: AlarmPointSelection[]
+}
 
 export function builtinAlarmNotificationChannel(projectId: string): AlarmNotificationChannel {
   return {
@@ -21,13 +34,13 @@ export function builtinAlarmNotificationChannel(projectId: string): AlarmNotific
     isEnabled: true,
   }
 }
-
 export function ensureBuiltinAlarmNotificationChannel(
   projectId: string,
   channels: AlarmNotificationChannel[],
-): AlarmNotificationChannel[] {
-  if (channels.some((channel) => channel.id === 'runtime_inapp')) return channels
-  return [builtinAlarmNotificationChannel(projectId), ...channels]
+) {
+  return channels.some((channel) => channel.id === 'runtime_inapp')
+    ? channels
+    : [builtinAlarmNotificationChannel(projectId), ...channels]
 }
 
 export const alarmSeverityLabels: Record<AlarmSeverity, string> = {
@@ -36,20 +49,17 @@ export const alarmSeverityLabels: Record<AlarmSeverity, string> = {
   major: '重要',
   critical: '紧急',
 }
-
 export const alarmConditionLabels: Record<AlarmConditionKind, string> = {
-  threshold: '阈值',
-  range: '区间',
-  state: '状态',
-  transition: '状态变化',
-  text_match: '文本匹配',
-  rate_of_change: '变化率',
-  deviation: '偏差',
-  offline: '离线',
-  expression: '表达式',
+  threshold: '越限报警',
+  range: '区间报警',
+  state: '状态报警',
+  transition: '状态变化报警',
+  text_match: '文本报警',
+  rate_of_change: '变化率报警',
+  deviation: '偏差报警',
+  offline: '离线报警',
+  expression: '组合报警',
 }
-
-export type AlarmPointCategory = 'number' | 'boolean' | 'text' | 'structured'
 
 export function alarmPointCategory(dataType?: string): AlarmPointCategory {
   const value = String(dataType || '').toLowerCase()
@@ -58,57 +68,38 @@ export function alarmPointCategory(dataType?: string): AlarmPointCategory {
   if (value === 'object' || value === 'array' || value === 'json') return 'structured'
   return 'text'
 }
-
-export function compatibleAlarmBindings(bindings: AlarmBinding[]): boolean {
-  if (bindings.length < 2) return true
-  const first = alarmPointCategory(bindings[0]?.dataType)
-  return bindings.every((binding) => alarmPointCategory(binding.dataType) === first)
+export function compatibleAlarmPoints(points: AlarmPointSelection[]) {
+  if (points.length < 2) return true
+  const first = alarmPointCategory(points[0]?.dataType)
+  return points.every((point) => alarmPointCategory(point.dataType) === first)
 }
-
-export function alarmBindingPreview(bindings: AlarmBinding[], mode: AlarmPolicyMode) {
-  const threshold = mode === 'derived' ? 10 : 5
-  const collapsed = bindings.length > threshold
-  return {
-    collapsed,
-    visible: collapsed ? bindings.slice(0, 3) : bindings,
+export function conditionKindsFor(
+  points: AlarmPointSelection[],
+  mode: AlarmItemMode,
+  evaluationMode?: AlarmEvaluationMode,
+): AlarmConditionKind[] {
+  // 组合表达式是输入值的计算方式，不是结果条件本身；结果再用普通条件判断。
+  if (mode === 'derived') return ['threshold', 'range', 'state', 'text_match']
+  if (!points.length || alarmPointCategory(points[0]?.dataType) === 'number') {
+    const kinds: AlarmConditionKind[] = [
+      'threshold',
+      'range',
+      'rate_of_change',
+      'deviation',
+      'offline',
+    ]
+    // 数值点的越限由 highest_matching 统一管理，避免“其他类型”重复创建单阈值越限。
+    return evaluationMode === 'single' ? kinds.filter((kind) => kind !== 'threshold') : kinds
   }
+  if (alarmPointCategory(points[0]?.dataType) === 'boolean')
+    return ['state', 'transition', 'offline']
+  return ['state', 'text_match', 'offline']
 }
 
-export function conditionKindsFor(bindings: AlarmBinding[], mode: AlarmPolicyMode) {
-  if (mode === 'derived')
-    return ['expression', 'threshold', 'range', 'state'] as AlarmConditionKind[]
-  if (!bindings.length) {
-    return ['threshold', 'range', 'rate_of_change', 'deviation', 'offline'] as AlarmConditionKind[]
-  }
-  const category = alarmPointCategory(bindings[0]?.dataType)
-  if (category === 'number') {
-    return ['threshold', 'range', 'rate_of_change', 'deviation', 'offline'] as AlarmConditionKind[]
-  }
-  if (category === 'boolean') return ['state', 'transition', 'offline'] as AlarmConditionKind[]
-  return ['state', 'text_match', 'offline'] as AlarmConditionKind[]
-}
-
-export function normalizeAlarmConditionsForBindings(
-  conditions: AlarmCondition[],
-  bindings: AlarmBinding[],
-  mode: AlarmPolicyMode,
-): AlarmCondition[] {
-  const allowedKinds = conditionKindsFor(bindings, mode)
-  const fallbackKind = allowedKinds[0]
-  return conditions.map((condition) =>
-    allowedKinds.includes(condition.kind)
-      ? condition
-      : {
-          ...createAlarmCondition(fallbackKind),
-          severity: condition.severity,
-          triggerDelayMs: condition.triggerDelayMs,
-          clearDelayMs: condition.clearDelayMs,
-          deadband: condition.deadband,
-        },
-  )
-}
-
-export function createAlarmCondition(kind: AlarmConditionKind = 'threshold'): AlarmCondition {
+export function createAlarmCondition(
+  kind: AlarmConditionKind = 'threshold',
+  label = '',
+): AlarmCondition {
   const operators: Record<AlarmConditionKind, string> = {
     threshold: 'gt',
     range: 'outside',
@@ -124,6 +115,7 @@ export function createAlarmCondition(kind: AlarmConditionKind = 'threshold'): Al
     threshold: { threshold: null },
     range: { lower: null, upper: null },
     state: { expected: true },
+    transition: { from: false, to: true },
     text_match: { expected: '' },
     rate_of_change: { limit: null, windowMs: 60000 },
     deviation: { baseline: null, limit: null },
@@ -133,7 +125,7 @@ export function createAlarmCondition(kind: AlarmConditionKind = 'threshold'): Al
     id: crypto.randomUUID(),
     kind,
     operator: operators[kind],
-    label: alarmConditionLabels[kind],
+    label: label || alarmConditionLabels[kind],
     severity: 'warning',
     params: params[kind] || {},
     triggerDelayMs: 0,
@@ -142,15 +134,22 @@ export function createAlarmCondition(kind: AlarmConditionKind = 'threshold'): Al
   }
 }
 
-export function createAlarmPolicyDraft(mode: AlarmPolicyMode): AlarmPolicySave {
+export function createAlarmItemDraft(mode: AlarmItemMode): AlarmItemDraft {
   return {
+    datapointId: '',
+    displayName: '',
     groupId: null,
-    name: '',
     description: null,
     mode,
-    bindings: [],
+    evaluationMode: mode === 'point' ? 'highest_matching' : 'single',
+    inputs: [],
     derivedExpression: '',
-    conditions: [createAlarmCondition(mode === 'derived' ? 'state' : 'threshold')],
+    conditions: [
+      createAlarmCondition(
+        mode === 'derived' ? 'state' : 'threshold',
+        mode === 'derived' ? '结果条件' : '高',
+      ),
+    ],
     notification: {
       mode: 'inherit',
       notifyOnRaise: true,
@@ -159,32 +158,58 @@ export function createAlarmPolicyDraft(mode: AlarmPolicyMode): AlarmPolicySave {
       channelIds: ['runtime_inapp'],
       messageTemplate: '',
     },
-    isEnabled: mode === 'per_target',
+    isEnabled: mode === 'point',
+    revision: 0,
+    acknowledgedWarningKeys: [],
+    selectedPoints: [],
   }
 }
 
-export function policyToDraft(policy: AlarmPolicy): AlarmPolicySave {
+export function alarmItemToDraft(item: AlarmItem): AlarmItemDraft {
+  const selectedPoints: AlarmPointSelection[] =
+    item.mode === 'point'
+      ? [
+          {
+            datapointId: item.datapointId,
+            path: item.path,
+            name: item.datapointName,
+            dataType: item.dataType,
+          },
+        ]
+      : item.inputs.map((input) => ({
+          datapointId: input.datapointId,
+          path: input.path,
+          name: input.name,
+          dataType: input.dataType,
+          inputKey: input.inputKey,
+        }))
   return {
-    groupId: policy.groupId || null,
-    name: policy.name,
-    description: policy.description || null,
-    mode: policy.mode,
-    bindings: policy.bindings.map((binding) => ({ ...binding })),
-    derivedExpression: policy.derivedExpression,
-    conditions: policy.conditions.map((condition) => ({
+    itemId: item.id,
+    datapointId: item.datapointId,
+    displayName: item.displayName,
+    groupId: item.groupId || null,
+    description: item.description || null,
+    mode: item.mode,
+    evaluationMode: item.evaluationMode,
+    inputs: item.inputs.map((entry) => ({ ...entry })),
+    derivedExpression: item.derivedExpression,
+    conditions: item.conditions.map((condition) => ({
       ...condition,
       params: { ...condition.params },
     })),
-    notification: { ...policy.notification, channelIds: [...policy.notification.channelIds] },
-    isEnabled: policy.isEnabled,
+    notification: { ...item.notification, channelIds: [...item.notification.channelIds] },
+    isEnabled: item.isEnabled,
+    revision: item.revision,
+    acknowledgedWarningKeys: [],
+    selectedPoints,
   }
 }
 
-export function datapointToAlarmBinding(
+export function datapointToAlarmPoint(
   datapoint: Datapoint,
-  mode: AlarmPolicyMode,
+  mode: AlarmItemMode,
   index: number,
-): AlarmBinding {
+): AlarmPointSelection {
   const name = String(datapoint.name || datapoint.path || `变量${index + 1}`)
   const baseKey = name.replace(/[^A-Za-z0-9_]/g, '_').replace(/^[^A-Za-z_]+/, '')
   return {
@@ -192,27 +217,67 @@ export function datapointToAlarmBinding(
     path: datapoint.path,
     name,
     dataType: datapoint.dataType || '',
-    role: mode === 'derived' ? 'input' : 'target',
-    inputKey: mode === 'derived' ? baseKey || `v${index + 1}` : null,
+    inputKey: mode === 'derived' ? baseKey || `v${index + 1}` : undefined,
   }
 }
 
-export function alarmPolicyConditionSummary(policy: AlarmPolicy): string {
-  const labels = policy.conditions.slice(0, 2).map((item) => alarmConditionLabels[item.kind])
-  if (policy.conditions.length > 2) labels.push(`+${policy.conditions.length - 2}`)
-  return labels.join('、') || '未配置'
+export function buildAlarmItemPayload(draft: AlarmItemDraft): AlarmItemSave {
+  const inputs: AlarmItemInput[] =
+    draft.mode === 'derived'
+      ? draft.selectedPoints.map((point, index) => ({
+          id: '',
+          datapointId: point.datapointId,
+          path: point.path,
+          name: point.name,
+          dataType: point.dataType,
+          inputKey: point.inputKey?.trim() || `v${index + 1}`,
+        }))
+      : []
+  return {
+    itemId: draft.itemId,
+    datapointId:
+      draft.mode === 'point' ? draft.selectedPoints[0]?.datapointId || draft.datapointId : '',
+    displayName: draft.displayName.trim(),
+    groupId: draft.groupId,
+    description: draft.description,
+    mode: draft.mode,
+    evaluationMode: draft.evaluationMode,
+    inputs,
+    derivedExpression: draft.derivedExpression.trim(),
+    conditions: sortAlarmLevels(draft.conditions),
+    notification: draft.notification,
+    isEnabled: draft.isEnabled,
+    revision: draft.revision,
+    acknowledgedWarningKeys: draft.acknowledgedWarningKeys,
+  }
 }
 
-export function alarmPolicyPointSummary(policy: AlarmPolicy): string {
-  const first = policy.bindings[0]
-  if (!first) return '未选择数据点'
-  if (policy.bindings.length === 1) return first.name || first.path
-  return `${first.name || first.path} 等 ${policy.bindings.length} 点`
+export function sortAlarmLevels(conditions: AlarmCondition[]) {
+  return [...conditions].sort((left, right) => {
+    const leftHigh = ['gt', 'gte'].includes(left.operator)
+    const rightHigh = ['gt', 'gte'].includes(right.operator)
+    if (leftHigh !== rightHigh) return leftHigh ? -1 : 1
+    const a = Number(left.params.threshold ?? 0)
+    const b = Number(right.params.threshold ?? 0)
+    return leftHigh ? a - b : b - a
+  })
 }
-
-export function alarmPolicyHighestSeverity(policy: AlarmPolicy): AlarmSeverity {
+export function alarmItemConditionSummary(item: AlarmItem) {
+  if (item.evaluationMode === 'highest_matching')
+    return `越限 · ${item.conditions.map((condition) => condition.label).join('/')}`
+  return item.conditions[0] ? alarmConditionLabels[item.conditions[0].kind] : '未配置'
+}
+export function alarmItemPointSummary(item: AlarmItem) {
+  if (item.mode === 'point') return item.datapointName || item.path || '数据点'
+  const first = item.inputs[0]
+  if (!first) return '组合报警'
+  return item.inputs.length === 1
+    ? first.name || first.path
+    : `组合报警 · ${first.name || first.path} 等 ${item.inputs.length} 点`
+}
+export function alarmItemHighestSeverity(item: AlarmItem): AlarmSeverity {
   const order: AlarmSeverity[] = ['info', 'warning', 'major', 'critical']
-  return policy.conditions.reduce<AlarmSeverity>(
+  return item.conditions.reduce<AlarmSeverity>(
     (highest, condition) =>
       order.indexOf(condition.severity) > order.indexOf(highest) ? condition.severity : highest,
     'info',
