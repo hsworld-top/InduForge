@@ -25,7 +25,7 @@ const message = ref('')
 const temperature = ref(null)
 const pressure = ref(null)
 const historyRows = ref([])
-const currentAlarms = ref([])
+const currentAlarms = ref(null)
 const targetValue = ref(80)
 const computeResult = ref(null)
 const latestLineEvent = ref(null)
@@ -71,6 +71,10 @@ async function loadHistory() {
 
 async function loadCurrentAlarms() {
   const result = await alarms.current.list({ status: 'active', page: 1, pageSize: 20 })
+  if (result?.code === 50031) {
+    currentAlarms.value = null
+    return
+  }
   if (!showFailure(result, '读取当前报警失败')) currentAlarms.value = resultItems(result.data)
 }
 
@@ -202,8 +206,8 @@ onBeforeUnmount(() => {
       </article>
       <article class="metric-card metric-card--alarm">
         <div class="metric-card__head"><span>当前报警</span></div>
-        <strong>{{ currentAlarms.length }}<small>条</small></strong>
-        <p>{{ currentAlarms.length ? '请及时处理活动报警' : '当前运行正常' }}</p>
+        <strong>{{ currentAlarms === null ? '--' : currentAlarms.length }}<small v-if="currentAlarms !== null">条</small></strong>
+        <p>{{ currentAlarms === null ? '开发预览暂未接入' : currentAlarms.length ? '请及时处理活动报警' : '当前运行正常' }}</p>
       </article>
     </section>
 
@@ -277,7 +281,7 @@ onBeforeUnmount(() => {
           <p>当前状态来自节点报警存储</p>
         </div>
       </header>
-      <ul v-if="currentAlarms.length" class="alarm-list">
+      <ul v-if="currentAlarms?.length" class="alarm-list">
         <li v-for="alarm in currentAlarms" :key="alarm.id || alarm.alarmId">
           <div>
             <strong>{{ alarm.name || alarm.alarmName || '未命名报警' }}</strong>
@@ -289,7 +293,7 @@ onBeforeUnmount(() => {
           </div>
         </li>
       </ul>
-      <p v-else class="empty-state">暂无活动报警</p>
+      <p v-else class="empty-state">{{ currentAlarms === null ? '开发预览暂未接入报警运行态' : '暂无活动报警' }}</p>
     </section>
   </main>
 </template>
