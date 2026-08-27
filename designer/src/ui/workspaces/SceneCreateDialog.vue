@@ -13,10 +13,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   cancel: []
-  submit: [input: { sceneId: string; name: string }]
+  submit: [input: { name: string }]
 }>()
 
-const sceneId = ref('')
 const name = ref('')
 const validationError = ref('')
 const title = computed(() => `新建${props.kind === '2d' ? '2D 画面' : '3D 场景'}`)
@@ -25,25 +24,19 @@ const message = computed(() => validationError.value || props.error || '')
 watch(
   () => props.kind,
   () => {
-    sceneId.value = ''
     name.value = ''
     validationError.value = ''
   },
 )
 
 function submit(): void {
-  const normalizedId = sceneId.value.trim()
   const normalizedName = name.value.trim()
-  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(normalizedId)) {
-    validationError.value = '场景 ID 只能包含字母、数字、下划线和连字符'
-    return
-  }
   if (!normalizedName) {
     validationError.value = '请输入场景名称'
     return
   }
   validationError.value = ''
-  emit('submit', { sceneId: normalizedId, name: normalizedName })
+  emit('submit', { name: normalizedName })
 }
 </script>
 
@@ -78,22 +71,12 @@ function submit(): void {
 
       <form @submit.prevent="submit">
         <label>
-          <span>场景 ID</span>
-          <input
-            v-model="sceneId"
-            autofocus
-            autocomplete="off"
-            maxlength="128"
-            placeholder="line-overview"
-            :disabled="loading"
-          />
-        </label>
-        <label>
           <span>名称</span>
           <input
             v-model="name"
+            autofocus
             autocomplete="off"
-            maxlength="128"
+            maxlength="200"
             placeholder="产线总览"
             :disabled="loading"
           />

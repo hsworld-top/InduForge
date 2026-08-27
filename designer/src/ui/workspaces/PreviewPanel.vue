@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { io, type Socket } from 'socket.io-client'
 import IconLucideCheck from '~icons/lucide/check'
 import IconLucideExternalLink from '~icons/lucide/external-link'
 import IconLucideMaximize2 from '~icons/lucide/maximize-2'
@@ -7,7 +8,8 @@ import IconLucideMonitorSmartphone from '~icons/lucide/monitor-smartphone'
 import IconLucidePower from '~icons/lucide/power'
 import IconLucideRefreshCw from '~icons/lucide/refresh-cw'
 import IconLucideRotateCcw from '~icons/lucide/rotate-ccw'
-import { getApiErrorMessage } from '@/utils/request'
+import { getApiErrorMessage, resolveApiError } from '@/utils/request'
+import { sceneContractApi, type SceneKind } from './scene-contract-api'
 import { previewControlApi, type PreviewControlState } from './code/preview-control-api'
 
 type DeviceMode = 'web' | 'tablet' | 'mobile'
@@ -21,6 +23,7 @@ interface DevicePreset {
 }
 
 const props = defineProps<{
+  projectId: string
   previewUrl: string | null
   controlUrl: string | null
   active: boolean
@@ -34,6 +37,7 @@ const devices: DevicePreset[] = [
 
 const panelRef = ref<HTMLElement | null>(null)
 const canvasRef = ref<HTMLElement | null>(null)
+const previewFrameRef = ref<HTMLIFrameElement | null>(null)
 const selectedDevice = ref<DeviceMode>('web')
 const deviceMenuOpen = ref(false)
 const frameLoaded = ref(false)
@@ -44,6 +48,19 @@ const processError = ref('')
 const operation = ref<PreviewOperation | null>(null)
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 let resizeObserver: ResizeObserver | null = null
+let revisionChannel: BroadcastChannel | null = null
+let dataSocket: Socket | null = null
+let dataSocketPromise: Promise<Socket> | null = null
+let dataPreviewSessionId = ''
+let dataHeartbeatTimer: number | null = null
+const viewerSessions = new Map<string, { datapointRefs: Set<string> }>()
+const dataSubscriptions = new Map<string, Set<string>>()
+const dataSocketRequests = new Map<
+  string,
+  { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: number }
+>()
+
+const PREVIEW_CHANNEL = 'induforge-preview-runtime'
 
 const currentDevice = computed(
   () => devices.find((device) => device.id === selectedDevice.value) ?? devices[0]!,
@@ -88,11 +105,31 @@ onMounted(() => {
   resizeObserver = new ResizeObserver(() => updateScale())
   if (canvasRef.value) resizeObserver.observe(canvasRef.value)
   void refreshProcessState()
+  window.addEventListener('message', handleRuntimeMessage)
+  if (props.projectId && typeof BroadcastChannel !== 'undefined') {
+    revisionChannel = new BroadcastChannel(`induforge-scene-revisions:${props.projectId}`)
+    revisionChannel.addEventListener('message', handleRevisionBroadcast)
+  }
 })
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   clearPoll()
+  window.removeEventListener('message', handleRuntimeMessage)
+  revisionChannel?.close()
+  revisionChannel = null
+  dataSocket?.disconnect()
+  dataSocket = null
+  dataSocketPromise = null
+  for (const pending of dataSocketRequests.values()) {
+    window.clearTimeout(pending.timer)
+    pending.reject(new Error('场景数据连接已关闭'))
+  }
+  dataSocketRequests.clear()
+  if (dataHeartbeatTimer) clearInterval(dataHeartbeatTimer)
+  dataHeartbeatTimer = null
+  viewerSessions.clear()
+  dataSubscriptions.clear()
 })
 
 watch(
@@ -185,8 +222,289 @@ function reloadPreview(): void {
 }
 
 function openPreviewWindow(): void {
-  if (props.previewUrl) window.open(props.previewUrl, '_blank', 'noopener,noreferrer')
+  if (!props.projectId) return
+  const url = new URL('/designer/preview', window.location.origin)
+  url.searchParams.set('projectId', props.projectId)
+  window.open(url.toString(), '_blank', 'noopener,noreferrer')
 }
+
+async function handleRuntimeMessage(event: MessageEvent): Promise<void> {
+  const frame = previewFrameRef.value
+  if (!frame || event.source !== frame.contentWindow || !props.previewUrl) return
+  if (event.origin !== new URL(props.previewUrl).origin) return
+  const message = event.data as Record<string, unknown>
+  if (
+    message?.channel === PREVIEW_CHANNEL &&
+    message.version === 1 &&
+    message.type === 'SCENE_DATA_REQUEST'
+  ) {
+    await handleSceneDataRequest(message, event.origin)
+    return
+  }
+  if (
+    message?.channel === PREVIEW_CHANNEL &&
+    message.version === 1 &&
+    message.type === 'RELEASE_SCENE_VIEWER' &&
+    typeof message.viewerSessionId === 'string'
+  ) {
+    releaseViewerSession(message.viewerSessionId)
+    return
+  }
+  if (
+    !message ||
+    message.channel !== PREVIEW_CHANNEL ||
+    message.version !== 1 ||
+    message.type !== 'CREATE_SCENE_VIEWER' ||
+    typeof message.requestId !== 'string' ||
+    !message.requestId.trim() ||
+    typeof message.sceneId !== 'string' ||
+    !message.sceneId.trim() ||
+    !['2d', '3d'].includes(String(message.kind))
+  ) return
+  try {
+    const session = await sceneContractApi.viewerSession(
+      props.projectId,
+      message.kind as SceneKind,
+      message.sceneId,
+    )
+    viewerSessions.set(session.sessionId, {
+      datapointRefs: new Set(Array.isArray(session.datapointRefs) ? session.datapointRefs : []),
+    })
+    frame.contentWindow?.postMessage(
+      {
+        channel: PREVIEW_CHANNEL,
+        version: 1,
+        type: 'SCENE_VIEWER_RESULT',
+        requestId: message.requestId,
+        data: { ...session, url: new URL(session.url, window.location.origin).toString() },
+      },
+      event.origin,
+    )
+  } catch (error) {
+    const resolved = resolveApiError(error, '创建场景 Viewer 失败')
+    frame.contentWindow?.postMessage(
+      {
+        channel: PREVIEW_CHANNEL,
+        version: 1,
+        type: 'SCENE_VIEWER_RESULT',
+        requestId: message.requestId,
+        error: { code: resolved.code || 26003, msg: resolved.msg, reqId: resolved.reqId || '' },
+      },
+      event.origin,
+    )
+  }
+}
+
+async function dataEnvelope(response: Response): Promise<unknown> {
+  const payload = (await response.json().catch(() => null)) as {
+    code?: number
+    msg?: string
+    data?: unknown
+  } | null
+  if (!response.ok || !payload || payload.code !== 0) {
+    const error = new Error(payload?.msg || '场景数据操作失败') as Error & { code?: number }
+    if (typeof payload?.code === 'number') error.code = payload.code
+    throw error
+  }
+  return payload.data
+}
+
+async function ensureDataSocket(): Promise<Socket> {
+  if (dataSocket?.connected) return dataSocket
+  if (dataSocketPromise) return dataSocketPromise
+  dataSocketPromise = connectDataSocket()
+  try {
+    return await dataSocketPromise
+  } finally {
+    dataSocketPromise = null
+  }
+}
+
+async function connectDataSocket(): Promise<Socket> {
+  if (!dataPreviewSessionId) {
+    const data = (await dataEnvelope(
+      await fetch(`/api/v1/data/projects/${encodeURIComponent(props.projectId)}/preview/sessions`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meta: { consumer: 'scene-viewer' } }),
+      }),
+    )) as { id?: string; sessionId?: string }
+    dataPreviewSessionId = String(data.sessionId || data.id || '')
+    if (!dataPreviewSessionId) throw new Error('数据预览会话响应无效')
+    dataHeartbeatTimer = window.setInterval(() => {
+      void fetch(
+        `/api/v1/data/preview/sessions/${encodeURIComponent(dataPreviewSessionId)}/heartbeat`,
+        { method: 'POST', credentials: 'same-origin' },
+      )
+    }, 10 * 60 * 1000)
+  }
+  dataSocket = io(window.location.origin, {
+    path: '/socket.io',
+    transports: ['websocket', 'polling'],
+    withCredentials: true,
+    query: { projectId: props.projectId, previewSessionId: dataPreviewSessionId },
+  })
+  dataSocket.on('datapoint:value', (payload: { path?: string }) => forwardDatapointValue(payload))
+  dataSocket.on('datapoint:values', (values: Array<{ path?: string }>) => values.forEach(forwardDatapointValue))
+  dataSocket.on('response', (payload: { requestId?: string; success?: boolean; result?: unknown; error?: string }) => {
+    const pending = dataSocketRequests.get(String(payload.requestId || ''))
+    if (!pending) return
+    window.clearTimeout(pending.timer)
+    dataSocketRequests.delete(String(payload.requestId))
+    if (payload.success) pending.resolve(payload.result)
+    else pending.reject(new Error(payload.error || '数据订阅操作失败'))
+  })
+  dataSocket.on('disconnect', () => {
+    for (const pending of dataSocketRequests.values()) {
+      window.clearTimeout(pending.timer)
+      pending.reject(new Error('数据订阅连接已断开'))
+    }
+    dataSocketRequests.clear()
+  })
+  await new Promise<void>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error('数据订阅连接超时')), 8000)
+    dataSocket?.once('connect', () => { clearTimeout(timer); resolve() })
+    dataSocket?.once('connect_error', (error) => { clearTimeout(timer); reject(error) })
+  })
+  return dataSocket
+}
+
+function requestDataSocket(socket: Socket, event: string, path: string): Promise<unknown> {
+  const requestId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      dataSocketRequests.delete(requestId)
+      reject(new Error('数据订阅操作超时'))
+    }, 8000)
+    dataSocketRequests.set(requestId, { resolve, reject, timer })
+    socket.emit(event, { requestId, path })
+  })
+}
+
+function releaseViewerSession(viewerSessionId: string): void {
+  if (!viewerSessionId) return
+  viewerSessions.delete(viewerSessionId)
+  for (const [path, subscribers] of dataSubscriptions) {
+    subscribers.delete(viewerSessionId)
+    if (subscribers.size) continue
+    dataSubscriptions.delete(path)
+    if (dataSocket?.connected) {
+      void requestDataSocket(dataSocket, 'datapoint:unsubscribe', path).catch(() => {})
+    }
+  }
+}
+
+function forwardDatapointValue(payload: { path?: string }): void {
+  const path = String(payload.path || '')
+  for (const viewerSessionId of dataSubscriptions.get(path) || []) {
+    previewFrameRef.value?.contentWindow?.postMessage(
+      { channel: PREVIEW_CHANNEL, version: 1, type: 'SCENE_DATA_PUSH', viewerSessionId, path, data: payload },
+      props.previewUrl ? new URL(props.previewUrl).origin : '*',
+    )
+  }
+}
+
+async function handleSceneDataRequest(message: Record<string, unknown>, targetOrigin: string): Promise<void> {
+  const requestId = String(message.requestId || '')
+  const viewerSessionId = String(message.viewerSessionId || '')
+  const path = String(message.path || '').trim()
+  const operation = String(message.operation || '')
+  const access = viewerSessions.get(viewerSessionId)
+  const respond = (data?: unknown, error?: { code: number; msg: string }) => {
+    previewFrameRef.value?.contentWindow?.postMessage(
+      { channel: PREVIEW_CHANNEL, version: 1, type: 'SCENE_DATA_RESULT', requestId, viewerSessionId, path, data, error },
+      targetOrigin,
+    )
+  }
+  if (!requestId || !access || !path || !access.datapointRefs.has(path)) {
+    respond(undefined, { code: 26007, msg: '数据点未在当前场景 revision 中声明' })
+    return
+  }
+  try {
+    if (operation === 'get') {
+      const data = (await dataEnvelope(
+        await fetch(`/api/v1/data/projects/${encodeURIComponent(props.projectId)}/datapoints/values`, {
+          method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: [path] }),
+        }),
+      )) as { values?: Record<string, unknown> }
+      respond({ value: data.values?.[path] })
+      return
+    }
+    if (operation === 'set') {
+      const data = await dataEnvelope(
+        await fetch(`/api/v1/data/projects/${encodeURIComponent(props.projectId)}/datapoints/write-by-path`, {
+          method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, value: message.value }),
+        }),
+      )
+      respond(data)
+      return
+    }
+    const socket = await ensureDataSocket()
+    const subscriptions = dataSubscriptions.get(path) || new Set<string>()
+    if (operation === 'sub') {
+      if (subscriptions.has(viewerSessionId)) {
+        respond({ subscribed: true })
+        return
+      }
+      const firstSubscriber = subscriptions.size === 0
+      subscriptions.add(viewerSessionId)
+      dataSubscriptions.set(path, subscriptions)
+      try {
+        if (firstSubscriber) await requestDataSocket(socket, 'datapoint:subscribe', path)
+      } catch (error) {
+        subscriptions.delete(viewerSessionId)
+        if (!subscriptions.size) dataSubscriptions.delete(path)
+        throw error
+      }
+      respond({ subscribed: true })
+      return
+    }
+    if (operation === 'unsub') {
+      subscriptions.delete(viewerSessionId)
+      if (!subscriptions.size) {
+        dataSubscriptions.delete(path)
+        await requestDataSocket(socket, 'datapoint:unsubscribe', path)
+      }
+      respond({ subscribed: false })
+      return
+    }
+    respond(undefined, { code: 26008, msg: '不支持的数据操作' })
+  } catch (error) {
+    const status = (error as { code?: number }).code
+    const code = operation === 'set' ? (status === 403 || status === 11002 ? 26010 : 26011) : operation === 'sub' ? 26009 : 26008
+    respond(undefined, { code, msg: error instanceof Error ? error.message : String(error) })
+  }
+}
+
+function postRevisionChanged(value: unknown): void {
+  if (!value || typeof value !== 'object') return
+  const event = value as Record<string, unknown>
+  if (event.projectId && event.projectId !== props.projectId) return
+  if (typeof event.sceneId !== 'string' || !['2d', '3d'].includes(String(event.target))) return
+  previewFrameRef.value?.contentWindow?.postMessage(
+    {
+      channel: PREVIEW_CHANNEL,
+      version: 1,
+      type: 'SCENE_REVISION_CHANGED',
+      sceneId: event.sceneId,
+      kind: event.target,
+      revision: event.revision,
+    },
+    props.previewUrl ? new URL(props.previewUrl).origin : '*',
+  )
+}
+
+function handleRevisionBroadcast(event: MessageEvent): void {
+  postRevisionChanged(event.data)
+}
+
+function notifySceneRevision(event: unknown): void {
+  postRevisionChanged(event)
+  revisionChannel?.postMessage(event)
+}
+
+defineExpose({ notifySceneRevision })
 
 async function enterFullscreen(): Promise<void> {
   await panelRef.value?.requestFullscreen?.()
@@ -290,6 +608,7 @@ async function enterFullscreen(): Promise<void> {
         <div class="preview-frame-shell" :style="deviceFrameStyle">
           <iframe
             v-if="previewUrl"
+            ref="previewFrameRef"
             :key="frameKey"
             class="preview-frame"
             :class="{ loaded: frameLoaded }"

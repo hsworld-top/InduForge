@@ -7,8 +7,11 @@ export type MicroAppContext = {
   tenantId?: string | undefined
   theme?: 'light' | 'dark' | undefined
   locale?: 'zh' | 'en' | undefined
+  onRefreshAuth?: (() => Promise<boolean>) | undefined
+  onAuthExpired?: (() => void) | undefined
   onStateChange?: ((payload: { title?: string; dirty?: boolean }) => void) | undefined
   onOpenWorkspace?: ((request: WorkspaceOpenRequest) => void) | undefined
+  onCloseWorkspace?: ((request: WorkspaceCloseRequest) => void) | undefined
 }
 
 export type WorkspaceOpenTarget = '2d' | '3d'
@@ -18,10 +21,41 @@ export interface WorkspaceOpenRequest {
   projectId: string
   target: WorkspaceOpenTarget
   sceneId: string
+  sceneName: string
+}
+
+export interface WorkspaceCloseRequest {
+  type: 'WORKSPACE_CLOSE_REQUEST'
+  projectId: string
+  target: WorkspaceOpenTarget
+  sceneId: string
+}
+
+export interface SceneCommittedEvent {
+  projectId: string
+  target: WorkspaceOpenTarget
+  sceneId: string
+  revision: number
 }
 
 let currentContext: MicroAppContext | null = null
 let contextListenerBound = false
+const sceneCommittedListeners = new Set<(event: SceneCommittedEvent) => void>()
+
+const dispatchSceneCommitted = (value: unknown): void => {
+  if (!value || typeof value !== 'object') return
+  const event = value as Record<string, unknown>
+  if (
+    event.projectId !== currentContext?.projectId ||
+    !['2d', '3d'].includes(String(event.target)) ||
+    typeof event.sceneId !== 'string' ||
+    !event.sceneId.trim() ||
+    typeof event.revision !== 'number'
+  ) {
+    return
+  }
+  sceneCommittedListeners.forEach((listener) => listener(event as unknown as SceneCommittedEvent))
+}
 
 const normalizeContext = (value: unknown): MicroAppContext | null => {
   if (!value || typeof value !== 'object') return null
@@ -36,6 +70,14 @@ const normalizeContext = (value: unknown): MicroAppContext | null => {
     tenantId: typeof input.tenantId === 'string' ? input.tenantId : undefined,
     theme: input.theme === 'dark' ? 'dark' : 'light',
     locale: input.locale === 'en' ? 'en' : 'zh',
+    onRefreshAuth:
+      typeof input.onRefreshAuth === 'function'
+        ? (input.onRefreshAuth as MicroAppContext['onRefreshAuth'])
+        : undefined,
+    onAuthExpired:
+      typeof input.onAuthExpired === 'function'
+        ? (input.onAuthExpired as MicroAppContext['onAuthExpired'])
+        : undefined,
     onStateChange:
       typeof input.onStateChange === 'function'
         ? (input.onStateChange as MicroAppContext['onStateChange'])
@@ -43,6 +85,10 @@ const normalizeContext = (value: unknown): MicroAppContext | null => {
     onOpenWorkspace:
       typeof input.onOpenWorkspace === 'function'
         ? (input.onOpenWorkspace as MicroAppContext['onOpenWorkspace'])
+        : undefined,
+    onCloseWorkspace:
+      typeof input.onCloseWorkspace === 'function'
+        ? (input.onCloseWorkspace as MicroAppContext['onCloseWorkspace'])
         : undefined,
   }
 }
@@ -67,6 +113,7 @@ export const initializeWujieContext = (): MicroAppContext | null => {
     const instanceName = currentContext?.instanceName
     if (instanceName) {
       window.$wujie.bus.$on(`micro-app:${instanceName}:context`, applyMicroAppContext)
+      window.$wujie.bus.$on(`micro-app:${instanceName}:scene-committed`, dispatchSceneCommitted)
       window.$wujie.bus.$emit(`micro-app:${instanceName}:context-ready`)
     }
   }
@@ -78,21 +125,52 @@ export const getCurrentProjectId = (): string | null => currentContext?.projectI
 export const getCurrentProjectName = (): string | null => currentContext?.projectName ?? null
 export const getCurrentTenantId = (): string | null => currentContext?.tenantId ?? null
 
+export const subscribeSceneCommitted = (
+  listener: (event: SceneCommittedEvent) => void,
+): (() => void) => {
+  sceneCommittedListeners.add(listener)
+  return () => sceneCommittedListeners.delete(listener)
+}
+
 export const reportMicroAppState = (payload: { title?: string; dirty?: boolean }): void => {
   currentContext?.onStateChange?.(payload)
 }
 
-export const requestWorkspaceOpen = (target: WorkspaceOpenTarget, sceneId: string): boolean => {
+export const requestWorkspaceOpen = (
+  target: WorkspaceOpenTarget,
+  sceneId: string,
+  sceneName: string,
+): boolean => {
   if (
     !['2d', '3d'].includes(target) ||
     !currentContext?.projectId ||
     !sceneId.trim() ||
+    !sceneName.trim() ||
     !currentContext.onOpenWorkspace
   ) {
     return false
   }
   currentContext.onOpenWorkspace({
     type: 'WORKSPACE_OPEN_REQUEST',
+    projectId: currentContext.projectId,
+    target,
+    sceneId: sceneId.trim(),
+    sceneName: sceneName.trim(),
+  })
+  return true
+}
+
+export const requestWorkspaceClose = (target: WorkspaceOpenTarget, sceneId: string): boolean => {
+  if (
+    !['2d', '3d'].includes(target) ||
+    !currentContext?.projectId ||
+    !sceneId.trim() ||
+    !currentContext.onCloseWorkspace
+  ) {
+    return false
+  }
+  currentContext.onCloseWorkspace({
+    type: 'WORKSPACE_CLOSE_REQUEST',
     projectId: currentContext.projectId,
     target,
     sceneId: sceneId.trim(),

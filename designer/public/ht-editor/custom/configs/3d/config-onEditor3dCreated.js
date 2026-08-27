@@ -1,4 +1,22 @@
 (function () {
+    function hidePlatformManagedSceneProperties(editor3d) {
+        var inspector = editor3d.sceneInspector;
+        if (!inspector || inspector.__induforgePlatformPropertiesHidden) return;
+
+        var originalIsPropertyVisible = inspector.isPropertyVisible;
+        inspector.isPropertyVisible = function(row) {
+            var name = row && row.keys && row.keys.name;
+            if (name === 'previewURL' || name === 'snapshotURL') {
+                return false;
+            }
+            return originalIsPropertyVisible.call(this, row);
+        };
+        inspector.__induforgePlatformPropertiesHidden = true;
+        if (inspector.filterProperties) {
+            inspector.filterProperties();
+        }
+    }
+
     window.hteditor_config.onEditor3dCreated = function (editor3d) {
         // 3D 原生作品管理被平台场景和工程资源库取代。
         if (editor3d.mainMenu && editor3d.mainMenu.setItems) {
@@ -26,6 +44,18 @@
         }
         if (window.InduForgeAssets) {
             window.InduForgeAssets.mount(editor3d, '3d');
+        }
+        if (window.InduForgeBindings) {
+            window.InduForgeBindings.mount(editor3d);
+        }
+        hidePlatformManagedSceneProperties(editor3d);
+        if (editor3d.addEventListener) {
+            editor3d.addEventListener(function(event) {
+                if (event.type !== 'sceneSaving') return;
+                // Viewer 入口和缩略图均由平台管理，保存时清除旧场景遗留值。
+                editor3d.dm.a('previewURL', undefined);
+                editor3d.dm.a('snapshotURL', undefined);
+            });
         }
     };
 })();

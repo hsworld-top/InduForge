@@ -1,35 +1,31 @@
 {
-  "background": "rgb(179,179,179)",
-  "gridBlockSize": 2,
-  "gridThickLinesEvery": 10,
-  "gridLightColor": "rgb(51,153,255)",
   "width": 16,
   "height": 16,
-  "blendMode": "override",
   "comps": [
     {
       "type": "shape",
-      "borderWidth": 1,
-      "borderColor": "rgb(138,138,138)",
-      "closePath": true,
+      "borderWidth": 5,
+      "borderColor": "#56615C",
+      "borderCap": "round",
+      "borderJoin": "round",
       "points": [
-        14,
-        14,
-        7,
-        14,
-        7,
-        4,
         2,
         4,
-        2,
-        2,
-        9,
-        2,
-        9,
+        8,
+        4,
+        8,
         12,
         14,
         12
       ]
+    },
+    {
+      "type": "shape",
+      "borderWidth": 2,
+      "borderColor": "#47CFA0",
+      "borderCap": "round",
+      "borderJoin": "round",
+      "points": [2, 4, 8, 4, 8, 12, 14, 12]
     }
   ]
 }

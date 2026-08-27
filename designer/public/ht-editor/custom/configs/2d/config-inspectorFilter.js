@@ -1,4 +1,15 @@
 (function() {
+    var pipeShapeTitles = {
+        TitleShapeBackground: true,
+        TitleShapeForeground: true,
+        TitleShapeBorder: true,
+        TitleShapeDash: true
+    };
+
+    function isPipe(data) {
+        return data instanceof ht.Shape && data.a('induforge.path.type') === 'pipe';
+    }
+
     var detail_data_titles = [
         'TitleNote'
     ];
@@ -37,16 +48,20 @@
 
     ];
     var detail_display_names = [
-
+        'previewURL',
+        'snapshotURL'
     ];
     var detail_symbol_titles = [
 
     ];
     var detail_symbol_names = [
-
+        'previewURL.snapshotURL'
     ];
     window.hteditor_config.detailFilter = {
         isDataTitleVisible: function(editor, data, title) {
+            if (isPipe(data) && pipeShapeTitles[title]) {
+                return false;
+            }
             if (detail_data_titles[title]) {
                 return false;
             }
@@ -164,7 +179,9 @@
 
     ];
     var compact_display_names = [
-        'count'
+        'count',
+        'previewURL',
+        'snapshotURL'
     ];
     var compact_symbol_titles = [
 
@@ -175,10 +192,14 @@
         'clip',
         'attachPoints',
         'attachStyle',
-        'cacheRule'
+        'cacheRule',
+        'previewURL.snapshotURL'
     ];
     window.hteditor_config.compactFilter = {
         isDataTitleVisible: function(editor, data, title) {
+            if (isPipe(data) && pipeShapeTitles[title]) {
+                return false;
+            }
             if (compact_data_titles[title]) {
                 return false;
             }
@@ -266,5 +287,3 @@
     compact_symbol_names = toMap(compact_symbol_names);
 
 })();
-
-

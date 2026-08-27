@@ -4,8 +4,12 @@ import DesignerWorkspaceView from './DesignerWorkspaceView.vue'
 import { contextPackApi } from './code/context-pack-api'
 import { resolveWorkspaceState } from './code/workspace-runtime'
 import { sceneContractApi } from './scene-contract-api'
-import { requestWorkspaceOpen } from '@/runtime/wujie-context'
+import { requestWorkspaceClose, requestWorkspaceOpen } from '@/runtime/wujie-context'
 import { getEditorUiStore } from '@/stores/editor-ui-store'
+
+const runtimeContextMock = vi.hoisted(() => ({
+  sceneCommittedListener: null as null | (() => void),
+}))
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ meta: { project: { id: 'project-1' } } }),
@@ -14,6 +18,13 @@ vi.mock('vue-router', () => ({
 vi.mock('@/runtime/wujie-context', () => ({
   getCurrentProjectId: () => 'project-1',
   requestWorkspaceOpen: vi.fn(() => true),
+  requestWorkspaceClose: vi.fn(() => true),
+  subscribeSceneCommitted: vi.fn((listener: () => void) => {
+    runtimeContextMock.sceneCommittedListener = listener
+    return () => {
+      runtimeContextMock.sceneCommittedListener = null
+    }
+  }),
 }))
 
 vi.mock('./code/workspace-runtime', () => ({ resolveWorkspaceState: vi.fn() }))
@@ -71,8 +82,12 @@ describe('DesignerWorkspaceView', () => {
     vi.mocked(contextPackApi.refresh).mockReset()
     vi.mocked(sceneContractApi.list).mockReset()
     vi.mocked(sceneContractApi.create).mockReset()
+    vi.mocked(sceneContractApi.remove).mockReset()
     vi.mocked(requestWorkspaceOpen).mockReset()
     vi.mocked(requestWorkspaceOpen).mockReturnValue(true)
+    vi.mocked(requestWorkspaceClose).mockReset()
+    vi.mocked(requestWorkspaceClose).mockReturnValue(true)
+    runtimeContextMock.sceneCommittedListener = null
     getEditorUiStore().initFromRuntime({ theme: 'light', locale: 'zh' })
     workspaceInitializationStatus = 'initialized'
     initializeTemplateId = null
@@ -172,12 +187,9 @@ describe('DesignerWorkspaceView', () => {
           kind: '2d',
           name: '产线总览',
           description: '生产线实时状态与关键数据点。',
-          route: '/line-overview',
-          embedMode: 'both',
-          inputs: [],
+          parameters: [],
           events: [],
           commands: [],
-          publicObjects: [],
           datapointRefs: ['line.speed'],
           contractVersion: '2d-contract-version',
         },
@@ -185,7 +197,9 @@ describe('DesignerWorkspaceView', () => {
           id: 'scene-3d',
           kind: '3d',
           name: '厂区场景',
-          embedMode: 'embedded',
+          parameters: [],
+          events: [],
+          commands: [],
           contractVersion: '3d-contract-version',
         },
       ],
@@ -195,7 +209,9 @@ describe('DesignerWorkspaceView', () => {
       id: 'new-scene',
       kind: '2d',
       name: '新场景',
-      embedMode: 'both',
+      parameters: [],
+      events: [],
+      commands: [],
       contractVersion: '0',
     })
   })
@@ -368,17 +384,52 @@ describe('DesignerWorkspaceView', () => {
 
     await wrapper.get('button[aria-label="2D"]').trigger('click')
     expect(wrapper.get('.workbench-view.active').text()).toContain('产线总览')
-    expect(wrapper.get('.workbench-view.active').text()).toContain('/line-overview')
+    expect(wrapper.get('.workbench-view.active').text()).not.toContain('公开能力')
+    expect(wrapper.get('.workbench-view.active').text()).not.toContain('独立 / 嵌入')
+    expect(wrapper.get('.workbench-view.active').text()).toContain('关联数据点 1')
+    expect(wrapper.find('button[aria-label="预览已提交版本"]').exists()).toBe(false)
     await wrapper.get('.workbench-view.active button[aria-label="打开编辑器"]').trigger('click')
-    expect(requestWorkspaceOpen).toHaveBeenCalledWith('2d', 'scene-2d')
+    expect(requestWorkspaceOpen).toHaveBeenCalledWith('2d', 'scene-2d', '产线总览')
 
     await wrapper.get('button[aria-label="3D"]').trigger('click')
     expect(wrapper.get('.workbench-view.active').text()).toContain('厂区场景')
     await wrapper.get('.workbench-view.active button[aria-label="打开编辑器"]').trigger('click')
-    expect(requestWorkspaceOpen).toHaveBeenCalledWith('3d', 'scene-3d')
+    expect(requestWorkspaceOpen).toHaveBeenCalledWith('3d', 'scene-3d', '厂区场景')
+  })
+
+  it('场景设置展示结构化交互和 Provider 提取的数据点', async () => {
+    const wrapper = mount(DesignerWorkspaceView)
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="2D"]').trigger('click')
+    await wrapper.get('.workbench-view.active button[aria-label="场景设置"]').trigger('click')
+    await flushPromises()
+
+    const panel = wrapper.get('.scene-contract-panel')
+    expect(panel.get('h3').text()).toBe('2D 场景设置')
+    expect((panel.get('input[placeholder="产线总览"]').element as HTMLInputElement).value).toBe(
+      '产线总览',
+    )
+    expect(panel.text()).toContain('关联数据点')
+    expect(panel.text()).toContain('参数')
+    expect(panel.text()).toContain('事件')
+    expect(panel.text()).toContain('命令')
+    expect(panel.text()).toContain('line.speed')
+    expect(panel.text()).not.toContain('页面集成')
+    expect(panel.text()).not.toContain('权限引用')
+    expect(panel.get('footer > span').text()).toBe('')
   })
 
   it('新建场景使用精简表单，创建成功后直接打开对应 HT 编辑器', async () => {
+    vi.mocked(sceneContractApi.create).mockResolvedValue({
+      id: 'new-scene',
+      kind: '2d',
+      name: '主产线',
+      parameters: [],
+      events: [],
+      commands: [],
+      contractVersion: '0',
+    })
     const wrapper = mount(DesignerWorkspaceView)
     await flushPromises()
 
@@ -386,34 +437,59 @@ describe('DesignerWorkspaceView', () => {
     await wrapper.get('.workbench-view.active .scene-editor-button').trigger('click')
 
     expect(wrapper.get('[role="dialog"]').text()).toContain('新建2D 画面')
+    expect(wrapper.get('[role="dialog"]').text()).not.toContain('场景 ID')
     expect(wrapper.find('.scene-contract-panel').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('+ 新建接口')
 
-    await wrapper.get('input[placeholder="line-overview"]').setValue('line-main')
     await wrapper.get('input[placeholder="产线总览"]').setValue('主产线')
     await wrapper.get('.scene-create-dialog form').trigger('submit')
     await flushPromises()
 
     expect(sceneContractApi.create).toHaveBeenCalledWith('project-1', {
-      sceneId: 'line-main',
       name: '主产线',
       kind: '2d',
     })
-    expect(requestWorkspaceOpen).toHaveBeenCalledWith('2d', 'new-scene')
+    expect(requestWorkspaceOpen).toHaveBeenCalledWith('2d', 'new-scene', '主产线')
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
   })
 
-  it('场景 ID 非法时留在新建表单且不请求后端', async () => {
+  it('场景名称为空时留在新建表单且不请求后端', async () => {
     const wrapper = mount(DesignerWorkspaceView)
     await flushPromises()
 
     await wrapper.get('button[aria-label="3D"]').trigger('click')
     await wrapper.get('.workbench-view.active .scene-editor-button').trigger('click')
-    await wrapper.get('input[placeholder="line-overview"]').setValue('../factory')
-    await wrapper.get('input[placeholder="产线总览"]').setValue('厂区')
     await wrapper.get('.scene-create-dialog form').trigger('submit')
 
-    expect(wrapper.get('[role="alert"]').text()).toContain('场景 ID')
+    expect(wrapper.get('[role="alert"]').text()).toContain('场景名称')
     expect(sceneContractApi.create).not.toHaveBeenCalled()
+  })
+
+  it('删除场景成功后请求宿主关闭对应编辑器标签', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(sceneContractApi.remove).mockResolvedValue({
+      deleted: true,
+      contextSync: { status: 'updated' },
+    })
+    const wrapper = mount(DesignerWorkspaceView)
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="2D"]').trigger('click')
+    await wrapper.get('.workbench-view.active button[aria-label="删除场景"]').trigger('click')
+    await flushPromises()
+
+    expect(sceneContractApi.remove).toHaveBeenCalledWith('project-1', '2d', 'scene-2d')
+    expect(requestWorkspaceClose).toHaveBeenCalledWith('2d', 'scene-2d')
+  })
+
+  it('HT 提交 revision 后自动刷新场景状态', async () => {
+    mount(DesignerWorkspaceView)
+    await flushPromises()
+    vi.mocked(sceneContractApi.list).mockClear()
+
+    runtimeContextMock.sceneCommittedListener?.()
+    await flushPromises()
+
+    expect(sceneContractApi.list).toHaveBeenCalledWith('project-1')
   })
 })

@@ -14,7 +14,7 @@ import type {
 } from 'axios'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
-import { getCurrentTenantId } from '@/runtime/wujie-context'
+import { getCurrentTenantId, getMicroAppContext } from '@/runtime/wujie-context'
 
 const DEFAULT_BUSINESS_ERROR_CODE = 30000
 const DIGITS_ONLY_RE = /^\d+$/
@@ -26,6 +26,10 @@ type ErrorResponseData = {
   errors?: Record<string, string[]>
   data?: unknown
   [key: string]: unknown
+}
+
+type AuthRetryRequestConfig = InternalAxiosRequestConfig & {
+  _authRetried?: boolean
 }
 
 export interface ApiResponsePayload<T = unknown> {
@@ -219,7 +223,38 @@ const requestCore = axios.create({
   },
 })
 
-function handleLogout(): void {
+let standaloneRefreshPromise: Promise<boolean> | null = null
+
+function refreshStandaloneSession(): Promise<boolean> {
+  if (standaloneRefreshPromise) return standaloneRefreshPromise
+  standaloneRefreshPromise = fetch('/api/v1/auth/refresh', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  }).then(async (response) => {
+    const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null
+    return response.ok && toNumericCode(payload?.code) === 0
+  })
+  standaloneRefreshPromise = standaloneRefreshPromise
+    .catch(() => false)
+    .finally(() => {
+      standaloneRefreshPromise = null
+    })
+  return standaloneRefreshPromise
+}
+
+function refreshSession(): Promise<boolean> {
+  const hostRefresh = getMicroAppContext()?.onRefreshAuth
+  return hostRefresh ? hostRefresh() : refreshStandaloneSession()
+}
+
+function handleAuthExpired(): void {
+  const hostHandler = getMicroAppContext()?.onAuthExpired
+  if (hostHandler) {
+    hostHandler()
+    return
+  }
   window.location.assign('/login')
 }
 
@@ -246,14 +281,26 @@ requestCore.interceptors.response.use(
     }
     return response.data
   },
-  (error: AxiosError<ErrorResponseData>) => {
+  async (error: AxiosError<ErrorResponseData>) => {
     const response = error.response
+    const config = error.config as AuthRetryRequestConfig | undefined
     if (response) {
       const { status, data } = response
 
       switch (status) {
         case 401: {
-          handleLogout()
+          if (
+            config &&
+            !config._authRetried &&
+            !String(config.url || '').includes('/auth/refresh')
+          ) {
+            const refreshed = await refreshSession()
+            if (refreshed) {
+              config._authRetried = true
+              return requestCore(config)
+            }
+          }
+          handleAuthExpired()
           break
         }
         case 403:

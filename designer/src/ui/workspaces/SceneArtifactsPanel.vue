@@ -3,7 +3,6 @@ import { computed } from 'vue'
 import IconLucideBox from '~icons/lucide/box'
 import IconLucideExternalLink from '~icons/lucide/external-link'
 import IconLucideFileCode2 from '~icons/lucide/file-code-2'
-import IconLucidePlay from '~icons/lucide/play'
 import IconLucideRefreshCw from '~icons/lucide/refresh-cw'
 import IconLucideTrash2 from '~icons/lucide/trash-2'
 import IconLucideRoute from '~icons/lucide/route'
@@ -18,29 +17,14 @@ const emit = defineEmits<{
   create: []
   openEditor: [contract: SceneContract]
   editContract: [contract: SceneContract]
-  preview: [contract: SceneContract]
   remove: [contract: SceneContract]
   refresh: []
 }>()
 
 const title = computed(() => (props.kind === '2d' ? '2D 画面' : '3D 场景'))
 const emptyTitle = computed(() => `暂无${title.value}产物`)
-
-function interfaceCount(contract: SceneContract): number {
-  return (
-    (contract.inputs?.length ?? 0) +
-    (contract.events?.length ?? 0) +
-    (contract.commands?.length ?? 0) +
-    (contract.publicObjects?.length ?? 0)
-  )
-}
-
-function embedModeLabel(contract: SceneContract): string {
-  if (contract.embedMode === 'standalone') return '独立运行'
-  if (contract.embedMode === 'embedded') return '页面嵌入'
-  return '独立 / 嵌入'
-}
-
+const interactionCount = (contract: SceneContract) =>
+  (contract.parameters?.length || 0) + (contract.events?.length || 0) + (contract.commands?.length || 0)
 </script>
 
 <template>
@@ -51,13 +35,19 @@ function embedModeLabel(contract: SceneContract): string {
         <span>{{ contracts.length }} 个产物</span>
       </div>
       <div class="scene-header-actions">
-      <button type="button" class="icon-button" title="刷新场景" aria-label="刷新场景" @click="emit('refresh')">
-        <IconLucideRefreshCw />
-      </button>
-      <button type="button" class="scene-editor-button" @click="emit('create')">
-        <IconLucideExternalLink />
-        新建{{ title }}
-      </button>
+        <button
+          type="button"
+          class="icon-button"
+          title="刷新场景"
+          aria-label="刷新场景"
+          @click="emit('refresh')"
+        >
+          <IconLucideRefreshCw />
+        </button>
+        <button type="button" class="scene-editor-button" @click="emit('create')">
+          <IconLucideExternalLink />
+          新建{{ title }}
+        </button>
       </div>
     </header>
 
@@ -71,29 +61,41 @@ function embedModeLabel(contract: SceneContract): string {
         <div class="scene-card-body">
           <div class="scene-card-title">
             <strong>{{ contract.name }}</strong>
-            <span>{{ embedModeLabel(contract) }}</span>
           </div>
           <p>{{ contract.description || '尚未填写产物说明。' }}</p>
-          <dl>
-            <div>
-              <dt>场景 ID</dt>
-              <dd>{{ contract.id }}</dd>
-            </div>
-            <div>
-              <dt>页面路由</dt>
-              <dd>{{ contract.route || '未声明' }}</dd>
-            </div>
-          </dl>
           <footer>
-            <span>公开能力 {{ interfaceCount(contract) }}</span>
-            <span>数据点 {{ contract.datapointRefs?.length ?? 0 }}</span>
+            <span v-if="interactionCount(contract)">交互 {{ interactionCount(contract) }}</span>
+            <span v-if="contract.datapointRefs?.length">
+              关联数据点 {{ contract.datapointRefs.length }}
+            </span>
             <span>r{{ contract.currentRevision ?? 0 }}</span>
           </footer>
           <div class="scene-card-actions">
-            <button type="button" title="打开编辑器" aria-label="打开编辑器" @click="emit('openEditor', contract)"><IconLucideExternalLink /></button>
-            <button type="button" title="编辑公开契约" aria-label="编辑公开契约" @click="emit('editContract', contract)"><IconLucideFileCode2 /></button>
-            <button type="button" title="预览已提交版本" aria-label="预览已提交版本" :disabled="!contract.currentRevision" @click="emit('preview', contract)"><IconLucidePlay /></button>
-            <button type="button" class="danger" title="删除场景" aria-label="删除场景" @click="emit('remove', contract)"><IconLucideTrash2 /></button>
+            <button
+              type="button"
+              title="打开编辑器"
+              aria-label="打开编辑器"
+              @click="emit('openEditor', contract)"
+            >
+              <IconLucideExternalLink />
+            </button>
+            <button
+              type="button"
+              title="场景设置"
+              aria-label="场景设置"
+              @click="emit('editContract', contract)"
+            >
+              <IconLucideFileCode2 />
+            </button>
+            <button
+              type="button"
+              class="danger"
+              title="删除场景"
+              aria-label="删除场景"
+              @click="emit('remove', contract)"
+            >
+              <IconLucideTrash2 />
+            </button>
             <span v-if="contract.draftVersion !== contract.committedDraftVersion">草稿未提交</span>
           </div>
         </div>
@@ -225,17 +227,17 @@ function embedModeLabel(contract: SceneContract): string {
 .scene-card-grid {
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(250px, 320px));
   align-content: start;
-  gap: 12px;
-  padding: 14px;
+  gap: 8px;
+  padding: 10px;
   overflow: auto;
 }
 
 .scene-card {
   min-width: 0;
   display: grid;
-  grid-template-rows: 118px minmax(0, 1fr);
+  grid-template-columns: 64px minmax(0, 1fr);
   overflow: hidden;
   border: 1px solid #d8dee8;
   border-radius: 7px;
@@ -249,7 +251,7 @@ function embedModeLabel(contract: SceneContract): string {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border-bottom: 1px solid #e0e5ec;
+  border-right: 1px solid #e0e5ec;
   color: #50617a;
   background-color: #e9edf3;
   background-image:
@@ -267,15 +269,15 @@ function embedModeLabel(contract: SceneContract): string {
 }
 
 .scene-card-preview svg {
-  width: 34px;
-  height: 34px;
+  width: 24px;
+  height: 24px;
   stroke-width: 1.4;
 }
 
 .scene-card-preview span {
   position: absolute;
-  right: 8px;
-  bottom: 7px;
+  right: 6px;
+  bottom: 6px;
   padding: 2px 5px;
   border: 1px solid rgba(74, 87, 106, 0.24);
   border-radius: 3px;
@@ -288,15 +290,14 @@ function embedModeLabel(contract: SceneContract): string {
 .scene-card-body {
   min-width: 0;
   display: grid;
-  gap: 9px;
-  padding: 12px;
+  gap: 6px;
+  padding: 9px 10px;
 }
 
 .scene-card-title {
   min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
 }
 
@@ -310,17 +311,8 @@ function embedModeLabel(contract: SceneContract): string {
   white-space: nowrap;
 }
 
-.scene-card-title span {
-  flex: 0 0 auto;
-  padding: 2px 5px;
-  border-radius: 3px;
-  color: #50617a;
-  background: #eef2f7;
-  font-size: 9px;
-}
-
 .scene-card-body p {
-  min-height: 32px;
+  min-height: 16px;
   margin: 0;
   display: -webkit-box;
   overflow: hidden;
@@ -328,47 +320,14 @@ function embedModeLabel(contract: SceneContract): string {
   font-size: 11px;
   line-height: 1.45;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.scene-card-body dl {
-  min-width: 0;
-  margin: 0;
-  display: grid;
-  gap: 5px;
-}
-
-.scene-card-body dl div {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
-  gap: 7px;
-}
-
-.scene-card-body dt,
-.scene-card-body dd {
-  margin: 0;
-  overflow: hidden;
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.scene-card-body dt {
-  color: #8a94a4;
-}
-
-.scene-card-body dd {
-  color: #465267;
-  font-family: Consolas, 'SFMono-Regular', monospace;
+  -webkit-line-clamp: 1;
 }
 
 .scene-card-body footer {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding-top: 8px;
-  border-top: 1px solid #edf0f4;
+  padding-top: 0;
   color: #7a8596;
   font-size: 9px;
 }

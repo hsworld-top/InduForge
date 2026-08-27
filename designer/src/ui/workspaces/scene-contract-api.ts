@@ -1,12 +1,21 @@
 import request, { type ApiResponsePayload } from '@/utils/request'
 
 export type SceneKind = '2d' | '3d'
-export type SceneEmbedMode = 'standalone' | 'embedded' | 'both'
-
 export interface SceneContractMember {
   name: string
   description?: string
-  schema?: Record<string, unknown>
+  schema: Record<string, unknown>
+}
+
+export interface SceneContractParameter extends SceneContractMember {
+  required: boolean
+}
+
+export interface SceneContractCommand {
+  name: string
+  description?: string
+  inputSchema: Record<string, unknown>
+  outputSchema: Record<string, unknown>
 }
 
 export interface SceneContract {
@@ -14,14 +23,12 @@ export interface SceneContract {
   kind: SceneKind
   name: string
   description?: string
-  route?: string
-  embedMode: SceneEmbedMode
-  inputs?: SceneContractMember[]
+  parameters?: SceneContractParameter[]
   events?: SceneContractMember[]
-  commands?: SceneContractMember[]
-  publicObjects?: SceneContractMember[]
+  commands?: SceneContractCommand[]
+  managedEvents?: SceneContractMember[]
+  managedCommands?: SceneContractCommand[]
   datapointRefs?: string[]
-  permissionRefs?: string[]
   contractVersion: string
   currentRevision?: number
   draftVersion?: number
@@ -44,7 +51,6 @@ interface SceneContractSaveResult {
 }
 
 export interface SceneCreateInput {
-  sceneId: string
   kind: SceneKind
   name: string
 }
@@ -59,6 +65,7 @@ interface SceneDocumentResponse {
   kind: SceneKind
   name: string
   publicContract: Omit<SceneContract, 'id' | 'kind' | 'name' | 'contractVersion'>
+  managedContract: Omit<SceneContract, 'id' | 'kind' | 'name' | 'contractVersion'>
   datapointRefs: string[]
   currentRevision: number
   draftVersion: number
@@ -76,6 +83,17 @@ interface EditorSessionResponse {
   expiresAt: string
 }
 
+export interface ViewerSessionResponse {
+  sessionId: string
+  url: string
+  expiresAt: string
+  sceneId: string
+  kind: SceneKind
+  revision: number
+  contract: Record<string, unknown>
+  datapointRefs: string[]
+}
+
 function toContract(scene: SceneDocumentResponse): SceneContract {
   return {
     ...scene.publicContract,
@@ -83,7 +101,8 @@ function toContract(scene: SceneDocumentResponse): SceneContract {
     kind: scene.kind,
     name: scene.name,
     datapointRefs: scene.datapointRefs,
-    embedMode: scene.publicContract.embedMode || 'both',
+    managedEvents: scene.managedContract?.events || [],
+    managedCommands: scene.managedContract?.commands || [],
     contractVersion: String(scene.currentRevision),
     currentRevision: scene.currentRevision,
     draftVersion: scene.draftVersion,
@@ -95,7 +114,7 @@ export const sceneContractApi = {
   async list(projectId: string): Promise<SceneContractSnapshot> {
     const response = await request.get<ApiResponsePayload<SceneListResponse>>(
       `/projects/${encodeURIComponent(projectId)}/scenes`,
-      { params: { page: 1, limit: 200, sort: 'sceneId', order: 'asc' } },
+      { params: { page: 1, limit: 200, sort: 'name', order: 'asc' } },
     )
     if (!response.data) throw new Error('场景公开契约接口未返回 data')
     const contracts = response.data.items.map(toContract)
@@ -106,10 +125,9 @@ export const sceneContractApi = {
     const response = await request.post<ApiResponsePayload<SceneDocumentResponse>>(
       `/projects/${encodeURIComponent(projectId)}/scenes`,
       {
-        sceneId: input.sceneId,
         kind: input.kind,
         name: input.name,
-        publicContract: { embedMode: 'both' },
+        publicContract: { description: '', parameters: [], events: [], commands: [] },
       },
     )
     if (!response.data) throw new Error('场景创建接口未返回 data')
@@ -121,7 +139,7 @@ export const sceneContractApi = {
     const encodedSceneId = encodeURIComponent(contract.id)
     const response = await request.put<ApiResponsePayload<SceneDocumentResponse>>(
       `/projects/${encodedProjectId}/scenes/${encodedSceneId}`,
-      { name: contract.name, publicContract: publicContract(contract) },
+      { name: contract.name, publicContract: publicContract(contract), baseDraftVersion: contract.draftVersion },
       { params: { kind: contract.kind } },
     )
     if (!response.data) throw new Error('场景公开契约保存接口未返回 data')
@@ -137,6 +155,16 @@ export const sceneContractApi = {
     return { deleted: response.data.deleted, contextSync: { status: 'updated' } }
   },
 
+  async commit(projectId: string, kind: SceneKind, id: string, baseDraftVersion: number) {
+    const response = await request.post<ApiResponsePayload<{ revision: number }>>(
+      `/projects/${encodeURIComponent(projectId)}/scenes/${encodeURIComponent(id)}/commit`,
+      { baseDraftVersion },
+      { params: { kind } },
+    )
+    if (!response.data) throw new Error('场景提交接口未返回 data')
+    return response.data
+  },
+
   async editorSession(
     projectId: string,
     kind: SceneKind,
@@ -150,17 +178,27 @@ export const sceneContractApi = {
     if (!response.data) throw new Error('编辑会话接口未返回 data')
     return response.data
   },
+
+  async viewerSession(
+    projectId: string,
+    kind: SceneKind,
+    id: string,
+  ): Promise<ViewerSessionResponse> {
+    const response = await request.post<ApiResponsePayload<ViewerSessionResponse>>(
+      `/projects/${encodeURIComponent(projectId)}/scenes/${encodeURIComponent(id)}/viewer-session`,
+      undefined,
+      { params: { kind } },
+    )
+    if (!response.data) throw new Error('Viewer 会话接口未返回 data')
+    return response.data
+  },
 }
 
 function publicContract(contract: SceneContract): Record<string, unknown> {
   return {
     description: contract.description || '',
-    route: contract.route || '',
-    embedMode: contract.embedMode,
-    inputs: contract.inputs || [],
+    parameters: contract.parameters || [],
     events: contract.events || [],
     commands: contract.commands || [],
-    publicObjects: contract.publicObjects || [],
-    permissionRefs: contract.permissionRefs || [],
   }
 }

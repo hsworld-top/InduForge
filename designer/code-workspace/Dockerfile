@@ -10,6 +10,8 @@ WORKDIR /source
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY designer/pi-web ./designer/pi-web
 COPY contracts/project-templates ./contracts/project-templates
+COPY runtime/web-sdk ./runtime/web-sdk
+COPY designer/code-workspace/prepare-runtime-templates.mjs ./designer/code-workspace/prepare-runtime-templates.mjs
 
 RUN pnpm install --frozen-lockfile \
       --filter @induforge/pi-web... \
@@ -17,6 +19,7 @@ RUN pnpm install --frozen-lockfile \
       --filter vite-vue-ts \
       --filter vite-react-js \
       --filter vite-react-ts \
+      --filter @induforge/runtime-sdk \
       --store-dir /opt/induforge/pnpm-store \
     && pnpm --dir designer/pi-web build \
     && mkdir -p /tmp/induforge-pi-web \
@@ -27,6 +30,13 @@ RUN pnpm install --frozen-lockfile \
       "$(pnpm --version)" \
       "$(sha256sum pnpm-lock.yaml | cut -d ' ' -f 1)" \
       > /opt/induforge/pnpm-store.version
+
+RUN mkdir -p /tmp/induforge-runtime-sdk \
+    && pnpm --dir runtime/web-sdk pack --pack-destination /tmp/induforge-runtime-sdk \
+    && node designer/code-workspace/prepare-runtime-templates.mjs \
+      /source/contracts/project-templates \
+      /tmp/induforge-runtime-sdk/induforge-runtime-sdk-0.2.0.tgz \
+      /opt/induforge/pnpm-store
 
 FROM codercom/code-server:4.131.0
 
@@ -48,11 +58,7 @@ RUN pi_web_package="$(find /tmp/induforge-pi-web -maxdepth 1 -type f -name '*.tg
 
 COPY --from=workspace-assets /opt/induforge/pnpm-store /opt/induforge/pnpm-store
 COPY --from=workspace-assets /opt/induforge/pnpm-store.version /opt/induforge/pnpm-store.version
-COPY contracts/project-templates /opt/induforge/templates
-COPY --from=workspace-assets /source/contracts/project-templates/vite-vue-js/pnpm-lock.yaml /opt/induforge/templates/vite-vue-js/pnpm-lock.yaml
-COPY --from=workspace-assets /source/contracts/project-templates/vite-vue-ts/pnpm-lock.yaml /opt/induforge/templates/vite-vue-ts/pnpm-lock.yaml
-COPY --from=workspace-assets /source/contracts/project-templates/vite-react-js/pnpm-lock.yaml /opt/induforge/templates/vite-react-js/pnpm-lock.yaml
-COPY --from=workspace-assets /source/contracts/project-templates/vite-react-ts/pnpm-lock.yaml /opt/induforge/templates/vite-react-ts/pnpm-lock.yaml
+COPY --from=workspace-assets /source/contracts/project-templates /opt/induforge/templates
 RUN rm -rf \
       /opt/induforge/templates/*/node_modules \
       /opt/induforge/templates/*/dist \

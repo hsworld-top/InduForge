@@ -37,6 +37,7 @@ window.hteditor_config = {
         'custom/configs/2d/config-connectActions.js',
         'custom/configs/2d/config-inspectorFilter.js',
         'custom/configs/config-customProperties.js',
+        'custom/configs/2d/config-pipeProperties.js',
         'custom/configs/2d/config-onEditorCreated.js',
         'custom/configs/2d/config-onMainToolbarCreated.js',
         'custom/configs/2d/config-onRightToolbarCreated.js'

@@ -39,6 +39,9 @@
     <script src="runtime/extensions/modeling.js"></script>
     <script src="runtime/extensions/history.js"></script>
     <script src="runtime/extensions/vector.js"></script>
+    <script src="runtime/extensions/animation.js"></script>
+    <script src="custom/libs/InduForgeAnimation.js"></script>
+    <script src="custom/libs/InduForgeBindings.js"></script>
 
 
     <script>
@@ -60,7 +63,7 @@
                         var entryPath = new URLSearchParams(window.location.search).get('open');
                         window.editor3d = InduSceneStudio3D.createEditor3d({ open: entryPath || undefined });
                         window.editor3d.preview = function () {
-                            var previewURL = this.dm.a("previewURL") || "scene.html";
+                            var previewURL = "scene.html";
                             var params = new URLSearchParams({ sessionId: new URLSearchParams(window.location.search).get('sessionId') || '', open: entryPath || '', mode: 'draft' });
                             previewURL += (previewURL.indexOf('?') < 0 ? '?' : '&') + params.toString();
                             var data = {

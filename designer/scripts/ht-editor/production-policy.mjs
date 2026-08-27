@@ -28,12 +28,16 @@ const runtimeAliases = new Map([
   ['runtime/extensions/auto-layout.js', 'libs/plugin/ht-autolayout.js'],
   ['runtime/extensions/context-menu.js', 'libs/plugin/ht-contextmenu.js'],
   ['runtime/extensions/css-animation.js', 'libs/plugin/ht-cssanimation.js'],
+  ['runtime/extensions/dash-flow.js', 'libs/plugin/ht-dashflow.js'],
+  ['runtime/extensions/path-flow.js', 'libs/plugin/ht-flow.js'],
+  ['runtime/extensions/route-planning.js', 'libs/plugin/ht-astar.js'],
   ['runtime/extensions/dialog.js', 'libs/plugin/ht-dialog.js'],
   ['runtime/extensions/edge-type.js', 'libs/plugin/ht-edgetype.js'],
   ['runtime/extensions/fbx-loader.js', 'libs/plugin/ht-fbx.js'],
   ['runtime/extensions/form.js', 'libs/plugin/ht-form.js'],
   ['runtime/extensions/gltf-loader.js', 'libs/plugin/ht-gltf.js'],
   ['runtime/extensions/history.js', 'libs/plugin/ht-historymanager.js'],
+  ['runtime/extensions/live-controls.js', 'libs/plugin/ht-live.js'],
   ['runtime/extensions/modeling.js', 'libs/plugin/ht-modeling.js'],
   ['runtime/extensions/object-model.js', 'libs/plugin/ht-obj.js'],
   ['runtime/extensions/overview.js', 'libs/plugin/ht-overview.js'],
@@ -61,6 +65,7 @@ const directFiles = new Set([
   'custom/configs/2d/config-inspectorTab.js',
   'custom/configs/2d/config-onEditorCreated.js',
   'custom/configs/2d/config-onMainToolbarCreated.js',
+  'custom/configs/2d/config-pipeProperties.js',
   'custom/configs/2d/config-onRightToolbarCreated.js',
   'custom/configs/2d/config-utils.js',
   'custom/configs/3d/config.js',
@@ -73,6 +78,9 @@ const directFiles = new Set([
   'custom/images/table.json',
   'custom/images/vprogressbar.json',
   'custom/libs/InduForgeService.js',
+  'custom/libs/InduForgeAnimation.js',
+  'custom/libs/InduForgeBindings.js',
+  'custom/libs/InduForgeSceneRuntime.js',
   'custom/libs/echarts.js',
   'custom/locales/en.js',
   'custom/locales/zh.js',
@@ -152,8 +160,22 @@ const singleEntryRules = [
     file: 'index.html',
     checks: [
       ['2D 使用白标运行资源', /runtime\/core\.js/],
+      ['2D 加载基础运行控件', /runtime\/extensions\/live-controls\.js/],
+      ['2D 加载管道流动扩展', /runtime\/extensions\/dash-flow\.js/],
+      ['2D 加载路径方向元素扩展', /runtime\/extensions\/path-flow\.js/],
+      ['2D 加载管线自动绕障扩展', /runtime\/extensions\/route-planning\.js/],
       ['2D 受控入口传入编辑器', /createEditor\(\{\s*open:\s*entryPath/],
       ['2D 预览传入固定入口', /open:\s*entryPath/],
+    ],
+  },
+  {
+    file: 'display.html',
+    checks: [
+      ['2D Viewer 加载基础运行控件', /runtime\/extensions\/live-controls\.js/],
+      ['2D Viewer 加载管道流动扩展', /runtime\/extensions\/dash-flow\.js/],
+      ['2D Viewer 加载路径方向元素扩展', /runtime\/extensions\/path-flow\.js/],
+      ['2D Viewer 启用管道流动', /graphView\.enableDashFlow\(50\)/],
+      ['2D Viewer 启用路径方向元素', /graphView\.enableFlow\(50\)/],
     ],
   },
   {
@@ -179,6 +201,35 @@ const singleEntryRules = [
       ['2D 隐藏原生图纸页', /displaysTab\.setVisible\(false\)/],
       ['2D 隐藏原生作品菜单', /mainMenu\.setItems\(\[\]\)/],
       ['2D 清空图纸文件菜单', /view\.menu\.setItems\(\[\]\)/],
+      ['2D 编辑器启用管道流动', /graphView\.enableDashFlow\(50\)/],
+      ['2D 编辑器启用路径方向元素', /graphView\.enableFlow\(50\)/],
+    ],
+  },
+  {
+    file: 'custom/libs/InduForgeService.js',
+    checks: [
+      ['2D 资源库开放控件分类', /\['control', '控件'\]/],
+      ['2D 资源库开放开关控件', /constructorName:\s*'SwitchNode'/],
+      ['2D 资源库开放数字输入控件', /constructorName:\s*'SpinnerNode'/],
+      ['2D 资源库开放单选按钮', /constructorName:\s*'RadioButtonNode'/],
+      ['2D 资源库提供平台图形模板', /induforge\.template\.table/],
+      ['2D 在场景反序列化前注册内置模板', /ensureBuiltInTemplateImages\(\)\s*\n\s*class AssetLibrary/],
+    ],
+  },
+  {
+    file: 'custom/configs/2d/config-onMainToolbarCreated.js',
+    checks: [
+      ['2D 提供可绘制管道', /id\s*=\s*'Pipe'[\s\S]*type\s*=\s*ht\.Shape/],
+      ['2D 管道默认连续流动', /'induforge\.pipe\.flowMode':\s*'continuous'/],
+    ],
+  },
+  {
+    file: 'custom/configs/2d/config-pipeProperties.js',
+    checks: [
+      ['2D 管道提供独立属性组', /PipeSettings/],
+      ['2D 管道支持反向流动', /shape\.dash\.flow\.reverse/],
+      ['2D 管道支持流速设置', /shape\.dash\.flow\.step/],
+      ['2D 管道支持四种产品模式', /\['off', 'continuous', 'segment', 'particle'\]/],
     ],
   },
   {
@@ -394,16 +445,22 @@ function installDevelopmentMiddleware(server, sourceRoot) {
       return
     }
     try {
-      let body = cache.get(relativePath)
-      if (!body) {
-        body = readPublicAsset(sourceRoot, relativePath)
+      const sourceRelativePath = resolveSceneStudioAsset(relativePath)
+      const sourceFilename = sourceRelativePath
+        ? path.join(sourceRoot, sourceRelativePath)
+        : undefined
+      const modifiedAt = sourceFilename ? statSync(sourceFilename).mtimeMs : 0
+      let cached = cache.get(relativePath)
+      if (!cached || cached.modifiedAt !== modifiedAt) {
+        const body = readPublicAsset(sourceRoot, relativePath)
         if (!body) throw new Error('资源不存在')
-        cache.set(relativePath, body)
+        cached = { body, modifiedAt }
+        cache.set(relativePath, cached)
       }
       response.statusCode = 200
       response.setHeader('Content-Type', contentType(relativePath))
       response.setHeader('Cache-Control', 'no-store')
-      response.end(body)
+      response.end(cached.body)
     } catch (_error) {
       response.statusCode = 404
       response.end()

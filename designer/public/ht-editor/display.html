@@ -18,16 +18,36 @@
     <script src="runtime/extensions/object-model.js"></script>
     <script src="runtime/extensions/vector.js"></script>
     <script src="runtime/extensions/animation.js"></script>
+    <script src="runtime/extensions/live-controls.js"></script>
+    <script src="runtime/extensions/dash-flow.js"></script>
+    <script src="runtime/extensions/path-flow.js"></script>
     <script src="custom/libs/InduForgeService.js"></script>
+    <script src="custom/libs/InduForgeAnimation.js"></script>
+    <script src="custom/libs/InduForgeSceneRuntime.js"></script>
+    <script src="custom/configs/2d/config-pipeProperties.js"></script>
     <script>
-      function init() {
+      async function init() {
         var params = new URLSearchParams(window.location.search);
         var entryPath = params.get('open');
+        var viewer = await window.InduForgeViewerSession.bootstrap();
+        if (viewer) {
+          entryPath = viewer.entryPath;
+          window.InduForgeScene.configure({ sceneId: viewer.sceneId });
+          window.setInterval(function () { window.InduForgeViewerSession.heartbeat().catch(window.InduForgeScene.reportError); }, 10 * 60 * 1000);
+        }
         if (!entryPath) throw new Error('缺少场景入口');
         var dataModel = new InduSceneEngine.DataModel();
         var graphView = new InduSceneEngine.graph.GraphView(dataModel);
+        if (graphView.enableDashFlow) graphView.enableDashFlow(50);
+        if (graphView.enableFlow) graphView.enableFlow(50);
         graphView.addToDOM();
-        graphView.deserialize(entryPath, function () { graphView.fitContent(false, 20); });
+        graphView.deserialize(entryPath, function () {
+          dataModel.each(function (data) { if (window.InduForgePipe) window.InduForgePipe.apply(data); });
+          if (window.InduForgeAnimation) window.InduForgeAnimation.applyModel(dataModel);
+          if (window.InduForgeSceneRuntime) window.InduForgeSceneRuntime.bindGraphView(graphView);
+          graphView.fitContent(false, 20);
+          if (viewer) window.InduForgeScene.markReady();
+        });
         if (params.get('mode') === 'draft') {
           var badge = document.createElement('div');
           badge.className = 'viewer-badge';
@@ -37,5 +57,5 @@
       }
     </script>
   </head>
-  <body onload="init()"></body>
+  <body onload="init().catch(window.InduForgeScene.reportError)"></body>
 </html>

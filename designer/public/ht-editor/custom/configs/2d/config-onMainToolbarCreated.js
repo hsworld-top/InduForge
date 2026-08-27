@@ -34,37 +34,6 @@
             }
         });
 
-        id = 'Node';
-        toolTip = S('editor.node');
-        icon = 'editor.display.node';
-        type = ht.Node;
-        initData = function (data) {
-            data.setImage('symbols/basic/node.json');
-        };
-        mainToolbar.addItem(editor.createDisplayItem(id, toolTip, icon, type, initData));
-
-        id = 'Group';
-        toolTip = S('editor.group');
-        icon = 'editor.display.group';
-        type = ht.Group;
-        initData = function (data) {
-            data.setExpanded(true);
-            data.setImage('symbols/basic/group.json');
-            data.s({
-                'label': ' '
-            });
-        };
-        mainToolbar.addItem(editor.createDisplayItem(id, toolTip, icon, type, initData));
-
-        id = 'SubGraph';
-        toolTip = S('editor.subgraph');
-        icon = 'editor.display.subgraph';
-        type = ht.SubGraph;
-        initData = function (data) {
-            data.setImage('symbols/basic/subgraph.json');
-        };
-        mainToolbar.addItem(editor.createDisplayItem(id, toolTip, icon, type, initData));
-
         id = 'Edge';
         toolTip = S('editor.edge');
         icon = 'editor.display.edge';
@@ -77,12 +46,46 @@
         };
         mainToolbar.addItem(editor.createDisplayItem(id, toolTip, icon, type, initData));
 
-        mainToolbar.addItem({
-            separator: true,
-            visible: function () {
-                return !!editor.displayView;
-            }
-        });
+        var autoRouteItem = typeof hteditor.createItem === 'function'
+            ? hteditor.createItem('AutoRoute', S('AutoRoute'), 'editor.changepath')
+            : { id: 'AutoRoute', toolTip: S('AutoRoute'), icon: 'editor.changepath' };
+        autoRouteItem.visible = function() { return !!editor.displayView; };
+        autoRouteItem.action = function() { autoRoute(editor); };
+        mainToolbar.addItem(autoRouteItem);
+
+        id = 'Pipe';
+        toolTip = S('Pipe');
+        icon = 'custom/images/pipe.json';
+        type = ht.Shape;
+        initData = function(data) {
+            data.setDisplayName(S('Pipe'));
+            data.a('induforge.path.type', 'pipe');
+            data.a({
+                'induforge.pipe.flowMode': 'continuous',
+                'induforge.pipe.running': true,
+                'induforge.pipe.reverse': false,
+                'induforge.pipe.speed': 2,
+                'induforge.pipe.elementSize': 12,
+                'induforge.pipe.spacing': 36,
+                'induforge.pipe.count': 6
+            });
+            data.s({
+                'shape.background': null,
+                'shape.border.width': 12,
+                'shape.border.color': '#56615C',
+                'shape.border.cap': 'round',
+                'shape.border.join': 'round',
+                'shape.dash': true,
+                'shape.dash.pattern': [100000, 0],
+                'shape.dash.width': 6,
+                'shape.dash.color': '#47CFA0',
+                'shape.dash.flow': false,
+                'shape.dash.flow.reverse': false,
+                'shape.dash.flow.step': 2
+            });
+            if (window.InduForgePipe) window.InduForgePipe.apply(data);
+        };
+        mainToolbar.addItem(editor.createDisplayItem(id, toolTip, icon, type, initData));
 
         // id = 'VProgressBar';
         // toolTip = S('VProgressBar');
@@ -169,6 +172,64 @@
         // mainToolbar.addItem(editor.createDisplayItem(id, toolTip, icon, type, initData));
     }
 
+    // 自动绕障只在编辑态调用路由插件，计算结果烘焙为普通 Shape 点集。
+    function autoRoute(editor) {
+        var graphView = editor.displayView && editor.displayView.graphView;
+        var dm = graphView && graphView.dm && graphView.dm();
+        var shape = graphView && graphView.sm && graphView.sm().ld();
+        if (!(shape instanceof ht.Shape) || !window.AStar) {
+            editor.showMessage && editor.showMessage(hteditor.getString('AutoRouteSelectPath'), 'warning');
+            return;
+        }
+        var sourcePoints = shape.getPoints && shape.getPoints();
+        var points = sourcePoints && sourcePoints.toArray ? sourcePoints.toArray() : sourcePoints;
+        if (!points || points.length < 2) return;
+        var gridSize = 20;
+        var start = points[0];
+        var end = points[points.length - 1];
+        var minX = Math.min(start.x, end.x) - 400;
+        var minY = Math.min(start.y, end.y) - 400;
+        var maxX = Math.max(start.x, end.x) + 400;
+        var maxY = Math.max(start.y, end.y) + 400;
+        var width = Math.max(2, Math.ceil((maxX - minX) / gridSize));
+        var height = Math.max(2, Math.ceil((maxY - minY) / gridSize));
+        var matrix = [];
+        for (var x = 0; x < width; x++) {
+            matrix[x] = [];
+            for (var y = 0; y < height; y++) matrix[x][y] = 1;
+        }
+        dm.each(function(data) {
+            if (data === shape || !(data instanceof ht.Node) || !data.getRect) return;
+            var rect = data.getRect();
+            var fromX = Math.max(0, Math.floor((rect.x - 10 - minX) / gridSize));
+            var toX = Math.min(width - 1, Math.ceil((rect.x + rect.width + 10 - minX) / gridSize));
+            var fromY = Math.max(0, Math.floor((rect.y - 10 - minY) / gridSize));
+            var toY = Math.min(height - 1, Math.ceil((rect.y + rect.height + 10 - minY) / gridSize));
+            for (var ix = fromX; ix <= toX; ix++) for (var iy = fromY; iy <= toY; iy++) matrix[ix][iy] = 0;
+        });
+        var sx = Math.max(0, Math.min(width - 1, Math.round((start.x - minX) / gridSize)));
+        var sy = Math.max(0, Math.min(height - 1, Math.round((start.y - minY) / gridSize)));
+        var ex = Math.max(0, Math.min(width - 1, Math.round((end.x - minX) / gridSize)));
+        var ey = Math.max(0, Math.min(height - 1, Math.round((end.y - minY) / gridSize)));
+        matrix[sx][sy] = matrix[ex][ey] = 1;
+        var graph = new AStar.Graph(matrix);
+        var route = AStar.search(graph, graph.grid[sx][sy], graph.grid[ex][ey], { closest: false });
+        if (!route.length) {
+            editor.showMessage && editor.showMessage(hteditor.getString('AutoRouteNotFound'), 'warning');
+            return;
+        }
+        var routed = [start];
+        route.forEach(function(item) { routed.push({ x: minX + item.x * gridSize, y: minY + item.y * gridSize }); });
+        routed[routed.length - 1] = end;
+        var compact = routed.filter(function(point, index) {
+            if (index === 0 || index === routed.length - 1) return true;
+            var previous = routed[index - 1];
+            var next = routed[index + 1];
+            return !((previous.x === point.x && point.x === next.x) || (previous.y === point.y && point.y === next.y));
+        });
+        shape.setPoints(new ht.List(compact));
+    }
+
     function addItemsForSymbol(editor) {
         var mainToolbar = editor.mainToolbar;
         var S = hteditor.getString;
@@ -231,5 +292,3 @@
     }
 
 })();
-
-

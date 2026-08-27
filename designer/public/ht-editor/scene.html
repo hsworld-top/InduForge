@@ -19,16 +19,29 @@
     <script src="runtime/extensions/texture-loader.js"></script>
     <script src="runtime/extensions/fbx-loader.js"></script>
     <script src="runtime/extensions/gltf-loader.js"></script>
+    <script src="runtime/extensions/animation.js"></script>
     <script src="custom/libs/InduForgeService.js"></script>
+    <script src="custom/libs/InduForgeAnimation.js"></script>
+    <script src="custom/libs/InduForgeSceneRuntime.js"></script>
     <script>
-      function init() {
+      async function init() {
         var params = new URLSearchParams(window.location.search);
         var entryPath = params.get('open');
+        var viewer = await window.InduForgeViewerSession.bootstrap();
+        if (viewer) {
+          entryPath = viewer.entryPath;
+          window.InduForgeScene.configure({ sceneId: viewer.sceneId });
+          window.setInterval(function () { window.InduForgeViewerSession.heartbeat().catch(window.InduForgeScene.reportError); }, 10 * 60 * 1000);
+        }
         if (!entryPath) throw new Error('缺少场景入口');
         var dataModel = new InduSceneEngine.DataModel();
         var graphView = new InduSceneEngine.graph3d.Graph3dView(dataModel);
         graphView.addToDOM();
-        graphView.deserialize(entryPath);
+        graphView.deserialize(entryPath, function () {
+          if (window.InduForgeAnimation) window.InduForgeAnimation.applyModel(dataModel);
+          if (window.InduForgeSceneRuntime) window.InduForgeSceneRuntime.bindGraphView(graphView);
+          if (viewer) window.InduForgeScene.markReady();
+        });
         if (params.get('mode') === 'draft') {
           var badge = document.createElement('div');
           badge.className = 'viewer-badge';
@@ -38,5 +51,5 @@
       }
     </script>
   </head>
-  <body onload="init()"></body>
+  <body onload="init().catch(window.InduForgeScene.reportError)"></body>
 </html>

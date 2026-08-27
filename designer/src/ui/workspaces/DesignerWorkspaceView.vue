@@ -10,8 +10,11 @@ import IconLucideRoute from '~icons/lucide/route'
 import { useRoute } from 'vue-router'
 import {
   getCurrentProjectId,
+  requestWorkspaceClose,
   requestWorkspaceOpen,
+  subscribeSceneCommitted,
   type WorkspaceOpenTarget,
+  type SceneCommittedEvent,
 } from '@/runtime/wujie-context'
 import { getApiErrorMessage } from '@/utils/request'
 import { getEditorUiStore } from '@/stores/editor-ui-store'
@@ -53,6 +56,7 @@ const route = useRoute()
 const editorUi = getEditorUiStore()
 const stageRef = ref<HTMLElement | null>(null)
 const aiFrameRef = ref<HTMLIFrameElement | null>(null)
+const previewPanelRef = ref<InstanceType<typeof PreviewPanel> | null>(null)
 const workspace = ref<CodeWorkspaceState | null>(null)
 const workspaceLoading = ref(true)
 const workspaceError = ref('')
@@ -88,6 +92,7 @@ const sceneCreateError = ref('')
 let resizeObserver: ResizeObserver | null = null
 let workspacePollTimer: ReturnType<typeof setTimeout> | null = null
 let workspaceRequestSequence = 0
+let unsubscribeSceneCommitted: (() => void) | null = null
 
 const projectId = computed(() => {
   const fromRoute = route.meta.project?.id
@@ -150,6 +155,10 @@ const workspaceStateLabel = computed(() => {
 })
 
 onMounted(() => {
+  unsubscribeSceneCommitted = subscribeSceneCommitted((event: SceneCommittedEvent) => {
+    void runContextRefresh()
+    previewPanelRef.value?.notifySceneRevision(event)
+  })
   restoreAiPaneWidth()
   resizeObserver = new ResizeObserver(([entry]) => {
     const width = entry?.contentRect.width ?? 0
@@ -167,6 +176,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  unsubscribeSceneCommitted?.()
+  unsubscribeSceneCommitted = null
   resizeObserver?.disconnect()
   clearWorkspacePoll()
   workspaceRequestSequence += 1
@@ -455,9 +466,9 @@ async function retryContext(): Promise<void> {
   await runContextRefresh()
 }
 
-function openWorkspace(target: WorkspaceOpenTarget, sceneId: string): void {
+function openWorkspace(target: WorkspaceOpenTarget, sceneId: string, sceneName: string): void {
   toolError.value = ''
-  if (!requestWorkspaceOpen(target, sceneId)) {
+  if (!requestWorkspaceOpen(target, sceneId, sceneName)) {
     toolError.value = '当前未连接工程工具宿主'
     window.setTimeout(() => {
       toolError.value = ''
@@ -470,7 +481,7 @@ function createScene(kind: WorkspaceOpenTarget): void {
   sceneCreateError.value = ''
 }
 
-async function submitSceneCreation(input: { sceneId: string; name: string }): Promise<void> {
+async function submitSceneCreation(input: { name: string }): Promise<void> {
   if (!projectId.value || !createDialogKind.value || sceneCreating.value) return
   const kind = createDialogKind.value
   sceneCreating.value = true
@@ -479,7 +490,7 @@ async function submitSceneCreation(input: { sceneId: string; name: string }): Pr
     const scene = await sceneContractApi.create(projectId.value, { ...input, kind })
     createDialogKind.value = null
     await runContextRefresh()
-    openWorkspace(kind, scene.id)
+    openWorkspace(kind, scene.id, scene.name)
   } catch (error) {
     sceneCreateError.value = getApiErrorMessage(error, '创建场景失败')
   } finally {
@@ -496,14 +507,11 @@ async function removeScene(contract: SceneContract): Promise<void> {
   if (!projectId.value || !window.confirm(`确认删除场景“${contract.name}”吗？`)) return
   try {
     await sceneContractApi.remove(projectId.value, contract.kind, contract.id)
+    requestWorkspaceClose(contract.kind, contract.id)
     await runContextRefresh()
   } catch (error) {
     toolError.value = getApiErrorMessage(error, '删除场景失败')
   }
-}
-
-function previewScene(contract: SceneContract): void {
-  openWorkspace(contract.kind, contract.id)
 }
 
 async function retryWorkspace(): Promise<void> {
@@ -730,6 +738,8 @@ async function retryWorkspace(): Promise<void> {
             :class="{ active: activeWorkbenchView === 'page' }"
           >
             <PreviewPanel
+              ref="previewPanelRef"
+              :project-id="projectId"
               :preview-url="previewUrl"
               :control-url="previewControlUrl"
               :active="activeWorkbenchView === 'page'"
@@ -740,9 +750,8 @@ async function retryWorkspace(): Promise<void> {
               kind="2d"
               :contracts="scene2dContracts"
               @create="createScene('2d')"
-              @open-editor="(contract) => openWorkspace('2d', contract.id)"
+              @open-editor="(contract) => openWorkspace('2d', contract.id, contract.name)"
               @edit-contract="editSceneContract"
-              @preview="previewScene"
               @remove="removeScene"
               @refresh="runContextRefresh"
             />
@@ -752,9 +761,8 @@ async function retryWorkspace(): Promise<void> {
               kind="3d"
               :contracts="scene3dContracts"
               @create="createScene('3d')"
-              @open-editor="(contract) => openWorkspace('3d', contract.id)"
+              @open-editor="(contract) => openWorkspace('3d', contract.id, contract.name)"
               @edit-contract="editSceneContract"
-              @preview="previewScene"
               @remove="removeScene"
               @refresh="runContextRefresh"
             />
@@ -765,6 +773,7 @@ async function retryWorkspace(): Promise<void> {
             :kind="contractPanelKind"
             :scene-id="contractPanelSceneId"
             @close="contractPanelKind = null"
+            @committed="previewPanelRef?.notifySceneRevision($event)"
             @synced="runContextRefresh"
           />
           <SceneCreateDialog

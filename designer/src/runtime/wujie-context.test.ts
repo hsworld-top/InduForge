@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getEditorUiStore } from '@/stores/editor-ui-store'
-import { applyMicroAppContext, initializeWujieContext, requestWorkspaceOpen } from './wujie-context'
+import {
+  applyMicroAppContext,
+  initializeWujieContext,
+  requestWorkspaceClose,
+  requestWorkspaceOpen,
+  subscribeSceneCommitted,
+} from './wujie-context'
 
 describe('Wujie 工程工具请求', () => {
   beforeEach(() => applyMicroAppContext({ projectId: 'reset-project' }))
@@ -18,26 +24,40 @@ describe('Wujie 工程工具请求', () => {
       onOpenWorkspace,
     })
 
-    expect(requestWorkspaceOpen('3d', 'factory')).toBe(true)
+    expect(requestWorkspaceOpen('3d', 'factory', '主厂区')).toBe(true)
     expect(onOpenWorkspace).toHaveBeenCalledWith({
       type: 'WORKSPACE_OPEN_REQUEST',
       projectId: 'project-1',
       target: '3d',
       sceneId: 'factory',
+      sceneName: '主厂区',
     })
   })
 
   it('宿主未注入回调时拒绝伪造打开行为', () => {
     applyMicroAppContext({ projectId: 'project-1' })
-    expect(requestWorkspaceOpen('2d', 'overview')).toBe(false)
+    expect(requestWorkspaceOpen('2d', 'overview', '产线总览')).toBe(false)
   })
 
   it('拒绝白名单之外的工具目标', () => {
     const onOpenWorkspace = vi.fn()
     applyMicroAppContext({ projectId: 'project-1', onOpenWorkspace })
 
-    expect(requestWorkspaceOpen('code' as never, 'overview')).toBe(false)
+    expect(requestWorkspaceOpen('code' as never, 'overview', '产线总览')).toBe(false)
     expect(onOpenWorkspace).not.toHaveBeenCalled()
+  })
+
+  it('删除场景后请求宿主关闭对应工具标签', () => {
+    const onCloseWorkspace = vi.fn()
+    applyMicroAppContext({ projectId: 'project-1', onCloseWorkspace })
+
+    expect(requestWorkspaceClose('2d', 'overview')).toBe(true)
+    expect(onCloseWorkspace).toHaveBeenCalledWith({
+      type: 'WORKSPACE_CLOSE_REQUEST',
+      projectId: 'project-1',
+      target: '2d',
+      sceneId: 'overview',
+    })
   })
 
   it('建立上下文就绪握手并持续应用宿主主题与语言', () => {
@@ -68,5 +88,21 @@ describe('Wujie 工程工具请求', () => {
     })
     expect(getEditorUiStore().theme.value).toBe('dark')
     expect(getEditorUiStore().locale.value).toBe('en')
+
+    const sceneCommitted = vi.fn()
+    const unsubscribe = subscribeSceneCommitted(sceneCommitted)
+    listeners.get('micro-app:designer-project-1:scene-committed')?.({
+      projectId: 'project-1',
+      target: '2d',
+      sceneId: 'overview',
+      revision: 3,
+    })
+    expect(sceneCommitted).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      target: '2d',
+      sceneId: 'overview',
+      revision: 3,
+    })
+    unsubscribe()
   })
 })

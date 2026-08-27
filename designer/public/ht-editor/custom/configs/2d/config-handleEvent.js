@@ -13,12 +13,22 @@
             // addPrintSelectionItem(params.symbolView.graphView, 'editor.symbolView.graphView');
         }
         else if (type === 'displayViewSaving' || type === 'displayViewNewNameInputing') {
+            if (type === 'displayViewSaving') {
+                // 预览与快照均由平台生成，不允许场景 JSON 保留用户可控地址。
+                params.displayView.dm.a('previewURL', undefined);
+                params.displayView.dm.a('snapshotURL', undefined);
+            }
             // if (!params.displayView.dm.size()) {
             //     window.alert(S('NothingToBeSaved'));
             //     params.preventDefault = true;
             // }
         }
         else if (type === 'symbolViewSaving' || type === 'symbolViewNewNameInputing') {
+            if (type === 'symbolViewSaving') {
+                // Symbol 缩略图仍自动生成，但不保存外部预览或快照地址。
+                params.symbolView.dm.a('previewURL', undefined);
+                params.symbolView.dm.a('snapshotURL', undefined);
+            }
             // if (!params.symbolView.dm.size()) {
             //     window.alert(S('NothingToBeSaved'));
             //     params.preventDefault = true;
@@ -59,7 +69,6 @@
     };
 
 })();
-
 
 
 

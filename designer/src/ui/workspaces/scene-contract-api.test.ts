@@ -15,7 +15,7 @@ describe('sceneContractApi', () => {
             sceneId: 'main',
             kind: '2d',
             name: '主画面',
-            publicContract: { embedMode: 'both' },
+            publicContract: { description: '', parameters: [], events: [], commands: [] },
             datapointRefs: [],
             currentRevision: 3,
             draftVersion: 4,
@@ -30,7 +30,7 @@ describe('sceneContractApi', () => {
       contracts: [expect.objectContaining({ id: 'main', kind: '2d', contractVersion: '3' })],
     })
     expect(request.get).toHaveBeenCalledWith('/projects/project%2Fa/scenes', {
-      params: { page: 1, limit: 200, sort: 'sceneId', order: 'asc' },
+      params: { page: 1, limit: 200, sort: 'name', order: 'asc' },
     })
   })
 
@@ -40,7 +40,7 @@ describe('sceneContractApi', () => {
         sceneId: 'factory-main',
         kind: '3d',
         name: '主厂区',
-        publicContract: { embedMode: 'both' },
+        publicContract: { description: '', parameters: [], events: [], commands: [] },
         datapointRefs: [],
         currentRevision: 0,
         draftVersion: 1,
@@ -50,7 +50,6 @@ describe('sceneContractApi', () => {
 
     await expect(
       sceneContractApi.create('project/a', {
-        sceneId: 'factory-main',
         kind: '3d',
         name: '主厂区',
       }),
@@ -62,10 +61,9 @@ describe('sceneContractApi', () => {
       }),
     )
     expect(request.post).toHaveBeenCalledWith('/projects/project%2Fa/scenes', {
-      sceneId: 'factory-main',
       kind: '3d',
       name: '主厂区',
-      publicContract: { embedMode: 'both' },
+      publicContract: { description: '', parameters: [], events: [], commands: [] },
     })
   })
 })

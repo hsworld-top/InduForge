@@ -45,6 +45,12 @@ export function createDesignerRoutes(enableDebugRoute?: boolean) {
         requiresAuth: true,
       },
     },
+    {
+      path: '/preview',
+      name: 'DesignerPreview',
+      component: () => import('@/ui/workspaces/StandalonePreviewView.vue'),
+      meta: { title: '工程预览', requiresAuth: true },
+    },
   ]
 
   if (isDesignerDebugRouteEnabled(enableDebugRoute)) {
@@ -173,6 +179,18 @@ export function registerDesignerBeforeEachGuard(
           window.location.href,
           resolveDefaultDebugProject,
         )
+        next()
+        return
+      }
+
+      if (to.name === 'DesignerPreview') {
+        const projectId = asFirstNonEmptyString(to.query.projectId)
+        if (!projectId) {
+          next(false)
+          navigateToUrl('/dashboard')
+          return
+        }
+        to.meta.project = { id: projectId, tenantId: Storage.getTenantId() }
         next()
         return
       }

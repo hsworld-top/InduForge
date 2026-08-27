@@ -2,6 +2,11 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PreviewPanel from './PreviewPanel.vue'
 
+const { viewerSessionMock } = vi.hoisted(() => ({ viewerSessionMock: vi.fn() }))
+vi.mock('./scene-contract-api', () => ({
+  sceneContractApi: { viewerSession: viewerSessionMock },
+}))
+
 class ResizeObserverStub {
   observe() {}
   disconnect() {}
@@ -19,15 +24,33 @@ const runningState = {
   },
 }
 
+function installFrameWindow(frame: HTMLIFrameElement) {
+  const postMessage = vi.fn()
+  const contentWindow = { postMessage } as unknown as Window
+  Object.defineProperty(frame, 'contentWindow', { configurable: true, value: contentWindow })
+  return { contentWindow, postMessage }
+}
+
 describe('PreviewPanel', () => {
   beforeEach(() => {
     vi.stubGlobal('ResizeObserver', ResizeObserverStub)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => runningState }))
+    viewerSessionMock.mockReset()
+    viewerSessionMock.mockResolvedValue({
+      sessionId: 'viewer-1',
+      sceneId: 'scene-1',
+      kind: '2d',
+      revision: 3,
+      contract: {},
+      expiresAt: '2026-08-18T08:00:00Z',
+      url: '/designer/scene-studio/display.html?viewerSessionId=viewer-1',
+    })
   })
 
   it('设备菜单切换尺寸时不重建预览 iframe', async () => {
     const wrapper = mount(PreviewPanel, {
       props: {
+        projectId: 'project-1',
         previewUrl: 'https://preview.workspace.test/',
         controlUrl: 'https://control.workspace.test/',
         active: true,
@@ -51,6 +74,7 @@ describe('PreviewPanel', () => {
   it('刷新只重建预览 iframe', async () => {
     const wrapper = mount(PreviewPanel, {
       props: {
+        projectId: 'project-1',
         previewUrl: 'https://preview.workspace.test/',
         controlUrl: 'https://control.workspace.test/',
         active: true,
@@ -64,10 +88,11 @@ describe('PreviewPanel', () => {
     expect(wrapper.get('iframe[title="Vite 实时预览"]').element).not.toBe(frame)
   })
 
-  it('新标签直接打开工作空间返回的 Preview URL', async () => {
+  it('新标签打开受控 Designer 预览宿主', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null)
     const wrapper = mount(PreviewPanel, {
       props: {
+        projectId: 'project-1',
         previewUrl: 'https://preview.workspace.test/project/',
         controlUrl: 'https://control.workspace.test/',
         active: true,
@@ -78,7 +103,7 @@ describe('PreviewPanel', () => {
     await wrapper.get('button[aria-label="在新窗口打开"]').trigger('click')
 
     expect(open).toHaveBeenCalledWith(
-      'https://preview.workspace.test/project/',
+      'http://127.0.0.1:3000/designer/preview?projectId=project-1',
       '_blank',
       'noopener,noreferrer',
     )
@@ -98,6 +123,7 @@ describe('PreviewPanel', () => {
     vi.stubGlobal('fetch', fetchMock)
     const wrapper = mount(PreviewPanel, {
       props: {
+        projectId: 'project-1',
         previewUrl: 'https://preview.workspace.test/',
         controlUrl: 'https://control.workspace.test/',
         active: true,
@@ -114,5 +140,115 @@ describe('PreviewPanel', () => {
       expect.objectContaining({ method: 'POST' }),
     )
     expect(wrapper.text()).toContain('预览服务已停止')
+  })
+
+  it('只接受 Vite iframe 的同源版本化 Viewer 请求并忽略页面工程参数', async () => {
+    const wrapper = mount(PreviewPanel, {
+      props: {
+        projectId: 'project-1',
+        previewUrl: 'https://preview.workspace.test/',
+        controlUrl: 'https://control.workspace.test/',
+        active: true,
+      },
+    })
+    await flushPromises()
+    const frame = wrapper.get('iframe[title="Vite 实时预览"]').element as HTMLIFrameElement
+    const { contentWindow, postMessage } = installFrameWindow(frame)
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: contentWindow,
+      origin: 'https://preview.workspace.test',
+      data: {
+        channel: 'induforge-preview-runtime',
+        version: 1,
+        type: 'CREATE_SCENE_VIEWER',
+        requestId: 'request-1',
+        projectId: 'forged-project',
+        sceneId: 'scene-1',
+        kind: '2d',
+      },
+    }))
+    await flushPromises()
+
+    expect(viewerSessionMock).toHaveBeenCalledWith('project-1', '2d', 'scene-1')
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'SCENE_VIEWER_RESULT',
+        requestId: 'request-1',
+        data: expect.objectContaining({
+          url: 'http://127.0.0.1:3000/designer/scene-studio/display.html?viewerSessionId=viewer-1',
+        }),
+      }),
+      'https://preview.workspace.test',
+    )
+  })
+
+  it('拒绝伪造 source、origin 和空请求 ID', async () => {
+    const wrapper = mount(PreviewPanel, {
+      props: {
+        projectId: 'project-1',
+        previewUrl: 'https://preview.workspace.test/',
+        controlUrl: 'https://control.workspace.test/',
+        active: true,
+      },
+    })
+    await flushPromises()
+    const frame = wrapper.get('iframe[title="Vite 实时预览"]').element as HTMLIFrameElement
+    const { contentWindow } = installFrameWindow(frame)
+    const base = {
+      channel: 'induforge-preview-runtime',
+      version: 1,
+      type: 'CREATE_SCENE_VIEWER',
+      requestId: 'request-1',
+      sceneId: 'scene-1',
+      kind: '2d',
+    }
+
+    window.dispatchEvent(new MessageEvent('message', { source: window, origin: 'https://preview.workspace.test', data: base }))
+    window.dispatchEvent(new MessageEvent('message', { source: contentWindow, origin: 'https://evil.test', data: base }))
+    window.dispatchEvent(new MessageEvent('message', { source: contentWindow, origin: 'https://preview.workspace.test', data: { ...base, requestId: '' } }))
+    await flushPromises()
+
+    expect(viewerSessionMock).not.toHaveBeenCalled()
+  })
+
+  it('向页面保留 Viewer API 的统一错误码和请求 ID', async () => {
+    const error = Object.assign(new Error('场景尚无已提交版本'), {
+      isBusinessError: true,
+      code: 26001,
+      reqId: 'backend-request-1',
+    })
+    viewerSessionMock.mockRejectedValue(error)
+    const wrapper = mount(PreviewPanel, {
+      props: {
+        projectId: 'project-1',
+        previewUrl: 'https://preview.workspace.test/',
+        controlUrl: 'https://control.workspace.test/',
+        active: true,
+      },
+    })
+    await flushPromises()
+    const frame = wrapper.get('iframe[title="Vite 实时预览"]').element as HTMLIFrameElement
+    const { contentWindow, postMessage } = installFrameWindow(frame)
+    window.dispatchEvent(new MessageEvent('message', {
+      source: contentWindow,
+      origin: 'https://preview.workspace.test',
+      data: {
+        channel: 'induforge-preview-runtime',
+        version: 1,
+        type: 'CREATE_SCENE_VIEWER',
+        requestId: 'request-2',
+        sceneId: 'scene-1',
+        kind: '2d',
+      },
+    }))
+    await flushPromises()
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: { code: 26001, msg: '场景尚无已提交版本', reqId: 'backend-request-1' },
+      }),
+      'https://preview.workspace.test',
+    )
   })
 })
