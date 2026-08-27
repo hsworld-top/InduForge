@@ -71,3 +71,23 @@ func TestQueryDatasetValueKeepsOnlyReturnedRowCount(t *testing.T) {
 		}
 	}
 }
+
+func TestQueryOutputValidityUsesSavedOutputMapping(t *testing.T) {
+	query := repository.QueryRecord{ID: "query-1", Name: "demo_line_current", Outputs: []repository.SourceOutputMappingRecord{
+		{DataPointID: "temperature-point", DataPointPath: "db.IF关系库.demo_line_current.temperature", DisplayName: "设备温度"},
+		{DataPointID: "history-point", DataPointPath: "db.IF时序库.demo_temperature_history", DisplayName: "温度历史"},
+	}}
+
+	for _, point := range []repository.DataPointRecord{
+		{ID: "temperature-point", Path: "db.IF关系库.demo_line_current.temperature", Name: "设备温度"},
+		{ID: "history-point", Path: "db.IF时序库.demo_temperature_history", Name: "温度历史"},
+	} {
+		if !queryOutputMappingMatchesDataPoint(query, point) {
+			t.Fatalf("saved query output should remain valid: %#v", point)
+		}
+	}
+
+	if queryOutputMappingMatchesDataPoint(query, repository.DataPointRecord{ID: "temperature-point", Path: "db.IF关系库.demo_line_current.wrong", Name: "设备温度"}) {
+		t.Fatal("mismatched generated path must be rejected")
+	}
+}

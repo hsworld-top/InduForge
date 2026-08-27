@@ -864,8 +864,18 @@ func (s *DataPointService) isQueryDataPointValid(ctx context.Context, projectID 
 	if connection.Type != "relational" && connection.Type != "builtin.relation" && connection.Type != "builtin.timeseries" {
 		return false, nil
 	}
-	expectedPath := "db." + normalizeDatapointSegment(connection.Name) + "." + normalizeDatapointSegment(query.Name)
-	return record.Name == query.Name && isGeneratedPathMatch(record.Path, expectedPath, query.ID), nil
+	return queryOutputMappingMatchesDataPoint(*query, record), nil
+}
+
+func queryOutputMappingMatchesDataPoint(query repository.QueryRecord, record repository.DataPointRecord) bool {
+	for _, output := range query.Outputs {
+		// 查询数据点的名称和路径由输出映射决定：字段提取使用显示名称和后缀，
+		// 完整结果则直接占用查询路径。不能再用 query.Name 判断，否则所有字段输出都会被误标失效。
+		if output.DataPointID == record.ID && output.DataPointPath == record.Path && output.DisplayName == record.Name {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *DataPointService) isMqttSubscriptionDataPointValid(ctx context.Context, projectID string, record repository.DataPointRecord) (bool, error) {
