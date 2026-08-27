@@ -95,6 +95,8 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
+    volumes:
+      - compute-dependencies:/dependencies
     cap_drop:
       - ALL
     cap_add:
@@ -110,6 +112,7 @@ services:
     mem_limit: 384m
     cpus: 1.0
     networks:
+      - induforge-prod-net
       - induforge-compute-net
     restart: unless-stopped
 
@@ -192,6 +195,8 @@ networks:
     internal: true
 
 volumes:
+  compute-dependencies:
+    name: induforge-compute-dependencies
   induforge-control-workspaces:
     name: ${CODE_WORKSPACE_VOLUME:-induforge-control-workspaces}
   induforge-meta-store-data:

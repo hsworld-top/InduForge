@@ -106,6 +106,7 @@ designer/testing/tmp/
 designer/code-workspace/local-packages/
 contracts/project-templates/vue-vite/
 .cache/
+.pnpm-store/
 
 # ============================================
 # Claude Code 本地配置

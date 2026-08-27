@@ -46,3 +46,24 @@ Node 依赖由根目录 pnpm workspace 统一管理。只在仓库根目录执�
 从仓库根目录执行任一 `pnpm run dev:*` 前，会自动检查根 `.env`：文件不存在时从 `.env.development.example` 生成，文件已存在时不覆盖本机配置。
 
 `pnpm run dev:core` 使用 Air 监听 `dev_core` 源码变更并自动重新编译、重启服务。Air 需要预先安装并可通过 `air` 命令调用。
+
+## 计算沙箱
+
+本机开发 `data_service` 时，计算脚本仍在独立 Linux 容器中执行。macOS、Windows 和 Linux 均可通过 Docker 启动：
+
+```bash
+pnpm dev:compute-sandbox
+```
+
+脚本从根目录 `.env` 读取 `DATA_SERVICE_COMPUTE_SANDBOX_TOKEN`，构建开发镜像并将服务映射到 `127.0.0.1:18103`。重复执行是幂等的：容器已运行时只验证健康状态、JavaScript/Python 版本和隔离能力，不打印内部令牌。
+
+常用维护命令：
+
+```bash
+pnpm dev:compute-sandbox:status
+pnpm dev:compute-sandbox:logs
+pnpm dev:compute-sandbox:stop
+pnpm dev:compute-sandbox:rebuild
+```
+
+修改 `compute_sandbox/`、Dockerfile 或内部令牌后使用 `rebuild` 重建容器；普通前端和 `data_service` 代码修改不需要重建沙箱。

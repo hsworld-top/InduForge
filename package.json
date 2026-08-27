@@ -27,6 +27,11 @@
   },
   "scripts": {
     "dev:env": "node scripts/dev/ensure-development-env.mjs",
+    "dev:compute-sandbox": "pnpm dev:env && node scripts/dev/compute-sandbox.mjs start",
+    "dev:compute-sandbox:rebuild": "pnpm dev:env && node scripts/dev/compute-sandbox.mjs rebuild",
+    "dev:compute-sandbox:stop": "node scripts/dev/compute-sandbox.mjs stop",
+    "dev:compute-sandbox:status": "node scripts/dev/compute-sandbox.mjs status",
+    "dev:compute-sandbox:logs": "node scripts/dev/compute-sandbox.mjs logs",
     "dev:core": "pnpm dev:env && cd dev_core && air",
     "dev:data": "pnpm dev:env && cd data_service && air",
     "dev:ide": "pnpm dev:env && pnpm --filter ide dev",
