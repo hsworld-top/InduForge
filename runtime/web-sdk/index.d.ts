@@ -17,6 +17,16 @@ export interface RuntimeConfiguration {
   access?: {
     roles?: string[]
   }
+  sceneResolver?: {
+    resolve(input: { sceneId: string; kind: '2d' | '3d' }): Promise<SceneResolution>
+  }
+}
+
+export interface SceneResolution {
+  url: string
+  expiresAt: string
+  revision: number
+  contract: Record<string, unknown>
 }
 
 export interface PointOperations {
