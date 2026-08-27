@@ -45,6 +45,10 @@ type VisiblePane = 'ai' | 'workbench'
 type ContextStatus = 'syncing' | 'synced' | 'error'
 type WorkbenchView = 'page' | '2d' | '3d' | 'editor'
 
+// 仅内置教程工程自动装载示例；其他普通工程仍由用户选择模板。
+const BUILTIN_DEMO_PROJECT_ID = '00000000-0000-4000-8000-000000000001'
+const BUILTIN_DEMO_TEMPLATE_ID = 'vite-vue-js'
+
 interface PersistedWorkspaceLayout {
   version: 1
   aiPaneWidth: number
@@ -397,10 +401,22 @@ async function loadProjectWorkspace(controlUrl: string | null): Promise<void> {
       if (!catalog.templates.some((template) => template.id === selectedTemplateId.value)) {
         selectedTemplateId.value = catalog.templates[0]?.id || ''
       }
+      if (
+        projectId.value === BUILTIN_DEMO_PROJECT_ID &&
+        catalog.templates.some((template) => template.id === BUILTIN_DEMO_TEMPLATE_ID)
+      ) {
+        selectedTemplateId.value = BUILTIN_DEMO_TEMPLATE_ID
+        templateInitializing.value = true
+        const result = await previewControlApi.initialize(controlUrl, BUILTIN_DEMO_TEMPLATE_ID)
+        projectWorkspace.value = result.workspace
+        aiFrameLoaded.value = false
+        codeFrameLoaded.value = false
+      }
     }
   } catch (error) {
     projectWorkspaceError.value = getApiErrorMessage(error, '读取工程初始化状态失败')
   } finally {
+    templateInitializing.value = false
     projectWorkspaceLoading.value = false
   }
 }

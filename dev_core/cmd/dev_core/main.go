@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -212,9 +214,33 @@ func initializeDatabase(ctx context.Context, pool *pgxpool.Pool, cfg config.Conf
 	if err != nil {
 		return err
 	}
-	return platformdb.EnsureInitialData(ctx, pool, platformdb.SeedConfig{
+	workspaceRoot, err := filepath.Abs(cfg.WorkspaceRoot)
+	if err != nil {
+		return fmt.Errorf("解析工程工作区根目录失败: %w", err)
+	}
+	demoWorkspacePath := filepath.Join(workspaceRoot, platformdb.BuiltinDemoProjectID, "workspace")
+	if err := platformdb.EnsureInitialData(ctx, pool, platformdb.SeedConfig{
 		TenantID: cfg.DefaultTenantID, TenantName: cfg.AppName, TenantCode: cfg.DefaultTenantCode,
 		SuperAdminUserID: cfg.SuperAdminUserID, SuperAdminUsername: cfg.SuperAdminUsername, SuperAdminPasswordHash: superAdminPasswordHash,
 		DefaultAdminUsername: cfg.DefaultAdminUsername, DefaultAdminPasswordHash: defaultAdminPasswordHash,
-	})
+		DemoWorkspacePath: demoWorkspacePath,
+	}); err != nil {
+		return err
+	}
+	if err := platformdb.EnsureBuiltinDemoProject(ctx, pool, platformdb.SeedConfig{
+		TenantID: cfg.DefaultTenantID, DefaultAdminUsername: cfg.DefaultAdminUsername,
+		DefaultAdminPasswordHash: defaultAdminPasswordHash, DemoWorkspacePath: demoWorkspacePath,
+	}); err != nil {
+		return err
+	}
+	var demoProjectActive bool
+	if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM projects WHERE id=$1 AND status='active')`, platformdb.BuiltinDemoProjectID).Scan(&demoProjectActive); err != nil {
+		return fmt.Errorf("检查内置教程工程失败: %w", err)
+	}
+	if demoProjectActive {
+		if err := os.MkdirAll(demoWorkspacePath, 0o755); err != nil {
+			return fmt.Errorf("准备内置教程工程工作区失败: %w", err)
+		}
+	}
+	return nil
 }

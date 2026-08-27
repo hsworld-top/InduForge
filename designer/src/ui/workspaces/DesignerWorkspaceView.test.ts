@@ -9,14 +9,15 @@ import { getEditorUiStore } from '@/stores/editor-ui-store'
 
 const runtimeContextMock = vi.hoisted(() => ({
   sceneCommittedListener: null as null | (() => void),
+  projectId: 'project-1',
 }))
 
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ meta: { project: { id: 'project-1' } } }),
+  useRoute: () => ({ meta: { project: { id: runtimeContextMock.projectId } } }),
 }))
 
 vi.mock('@/runtime/wujie-context', () => ({
-  getCurrentProjectId: () => 'project-1',
+  getCurrentProjectId: () => runtimeContextMock.projectId,
   requestWorkspaceOpen: vi.fn(() => true),
   requestWorkspaceClose: vi.fn(() => true),
   subscribeSceneCommitted: vi.fn((listener: () => void) => {
@@ -88,6 +89,7 @@ describe('DesignerWorkspaceView', () => {
     vi.mocked(requestWorkspaceClose).mockReset()
     vi.mocked(requestWorkspaceClose).mockReturnValue(true)
     runtimeContextMock.sceneCommittedListener = null
+    runtimeContextMock.projectId = 'project-1'
     getEditorUiStore().initFromRuntime({ theme: 'light', locale: 'zh' })
     workspaceInitializationStatus = 'initialized'
     initializeTemplateId = null
@@ -256,6 +258,18 @@ describe('DesignerWorkspaceView', () => {
 
     expect(initializeTemplateId).toBe('vite-react-ts')
     expect(wrapper.findAll('iframe')).toHaveLength(3)
+  })
+
+  it('内置教程工程首次打开时自动装载 Vue JavaScript 示例', async () => {
+    runtimeContextMock.projectId = '00000000-0000-4000-8000-000000000001'
+    workspaceInitializationStatus = 'uninitialized'
+
+    const wrapper = mount(DesignerWorkspaceView)
+    await flushPromises()
+
+    expect(initializeTemplateId).toBe('vite-vue-js')
+    expect(wrapper.findAll('iframe')).toHaveLength(3)
+    expect(wrapper.text()).not.toContain('选择工程模板')
   })
 
   it('Pi iframe 加载、READY 与 IDE 设置变化时发送严格宿主上下文', async () => {
