@@ -2,7 +2,7 @@
 
 本教程面向两类用户：在数据中心编写计算脚本的工程师，以及在 AI 开发中心编写 Vue + JavaScript 页面的开发者。两处使用同一数据点语义，方法返回格式也相同。
 
-全新环境默认提供“数据点与报警 Demo”工程。该工程已创建 IF 关系库当前值、IF 时序库历史样本、IF 实时库可写设定值、温度换算计算单元和温度越限报警。首次进入 AI 开发中心时会自动装载 Vue + JavaScript 看板，可直接对照代码和页面学习。它是普通工程，用户可以编辑、复制或删除；删除后不会在服务重启时重新出现。
+全新环境默认提供“数据点与报警 Demo”工程。该工程已创建 IF 关系库当前值、IF 时序库历史样本、IF 实时库可写设定值、IF 消息库可发布订阅事件、温度换算计算单元和温度越限报警。首次进入 AI 开发中心时会自动装载 Vue + JavaScript 看板，可直接对照代码和页面学习。它是普通工程，用户可以编辑、复制或删除；删除后不会在服务重启时重新出现。
 
 ## 1. 先认识返回结果
 
@@ -207,6 +207,7 @@ const POINT_PATHS = {
   pressure: 'db.IF关系库.demo_line_current.pressure',
   history: 'db.IF时序库.demo_temperature_history',
   setpoint: 'realtime.IF实时库.demo.line1.setpoint',
+  lineEvents: 'mqtt.IF消息库.demo_line_events',
 }
 const COMPUTE_REF = 'temperatureConvert'
 ```

@@ -10,6 +10,7 @@ const POINT_PATHS = {
   pressure: 'db.IF关系库.demo_line_current.pressure',
   history: 'db.IF时序库.demo_temperature_history',
   setpoint: 'realtime.IF实时库.demo.line1.setpoint',
+  lineEvents: 'mqtt.IF消息库.demo_line_events',
 }
 const COMPUTE_REF = 'temperatureConvert'
 ```

@@ -9,6 +9,7 @@ const POINT_PATHS = {
   // 查询只有一个完整结果输出时，数据点路径不再追加 output key。
   history: 'db.IF时序库.demo_temperature_history',
   setpoint: 'realtime.IF实时库.demo.line1.setpoint',
+  lineEvents: 'mqtt.IF消息库.demo_line_events',
 }
 const COMPUTE_REF = 'temperatureConvert'
 
@@ -16,6 +17,7 @@ const temperaturePoint = points.byPath(POINT_PATHS.temperature)
 const pressurePoint = points.byPath(POINT_PATHS.pressure)
 const historyPoint = points.byPath(POINT_PATHS.history)
 const setpointPoint = points.byPath(POINT_PATHS.setpoint)
+const lineEventsPoint = points.byPath(POINT_PATHS.lineEvents)
 
 const loading = ref(false)
 const operationLoading = ref(false)
@@ -26,7 +28,8 @@ const historyRows = ref([])
 const currentAlarms = ref([])
 const targetValue = ref(80)
 const computeResult = ref(null)
-let unsubscribePoint = null
+const latestLineEvent = ref(null)
+let unsubscribeLineEvents = null
 let unsubscribeAlarms = null
 
 const qualityClass = computed(() => {
@@ -82,16 +85,33 @@ async function loadDashboard() {
 }
 
 async function subscribeRuntimeChanges() {
-  const pointResult = await temperaturePoint.subscribe((sample) => {
-    temperature.value = sample?.data ?? sample
+  const pointResult = await lineEventsPoint.subscribe((sample) => {
+    latestLineEvent.value = sample?.data ?? sample
   })
   if (pointResult.code === 0 && typeof pointResult.data === 'function') {
-    unsubscribePoint = pointResult.data
+    unsubscribeLineEvents = pointResult.data
   }
 
   const alarmResult = await alarms.changes.subscribe(() => loadCurrentAlarms())
   if (alarmResult.code === 0 && typeof alarmResult.data === 'function') {
     unsubscribeAlarms = alarmResult.data
+  }
+}
+
+async function publishLineEvent() {
+  operationLoading.value = true
+  message.value = ''
+  try {
+    const payload = {
+      line: '一号线',
+      event: 'operator_test',
+      running: true,
+      timestamp: new Date().toISOString(),
+    }
+    const result = await lineEventsPoint.publish(payload)
+    message.value = result.code === 0 ? '测试消息已发布，等待订阅回传' : result.msg
+  } finally {
+    operationLoading.value = false
   }
 }
 
@@ -145,7 +165,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  if (typeof unsubscribePoint === 'function') unsubscribePoint()
+  if (typeof unsubscribeLineEvents === 'function') unsubscribeLineEvents()
   if (typeof unsubscribeAlarms === 'function') unsubscribeAlarms()
 })
 </script>
@@ -235,9 +255,18 @@ onBeforeUnmount(() => {
         <button class="compute-button" :disabled="operationLoading" @click="runCompute">
           运行温度换算计算
         </button>
+        <button class="compute-button" :disabled="operationLoading" @click="publishLineEvent">
+          发布一号线测试消息
+        </button>
         <pre v-if="computeResult" class="result-box">{{
           JSON.stringify(computeResult, null, 2)
         }}</pre>
+        <div class="message-preview">
+          <span>最新订阅消息</span>
+          <pre class="result-box">{{
+            latestLineEvent ? JSON.stringify(latestLineEvent, null, 2) : '等待消息…'
+          }}</pre>
+        </div>
       </aside>
     </section>
 

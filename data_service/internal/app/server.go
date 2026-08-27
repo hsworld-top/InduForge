@@ -280,7 +280,7 @@ func defaultRouteDependenciesFactory(cfg config.Config) ([]router.Option, func()
 		queryService,
 	)
 	computeService.SetDataPointValueResolver(dataPointService)
-	if err := service.NewBuiltinDemoSeeder(connectionService, queryService, realtimeStoreService, computeService, alarmItemService).Ensure(context.Background()); err != nil {
+	if err := service.NewBuiltinDemoSeeder(connectionService, queryService, realtimeStoreService, mqttService, computeService, alarmItemService, cfg.MessageHubTopicPrefix).Ensure(context.Background()); err != nil {
 		// 教程数据不影响业务服务启动；失败原因保留在日志中，便于排查内置运行库配置。
 		logf("warning: data_service 内置教程数据初始化失败 reason=%v", err)
 	} else {

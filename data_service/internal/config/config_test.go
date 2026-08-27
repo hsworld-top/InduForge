@@ -98,6 +98,7 @@ func TestLoad_ReadsOptionalDependencyConfig(t *testing.T) {
 	t.Setenv("IF_CACHE_STORE_PORT", "18379")
 	t.Setenv("IF_CACHE_STORE_PASSWORD", "cache-pass")
 	t.Setenv("IF_CACHE_STORE_DATA_DB", "2")
+	t.Setenv("IF_MESSAGE_HUB_TOPIC_PREFIX", "tenant-dev")
 
 	cfg, err := Load()
 	if err != nil {
@@ -120,6 +121,9 @@ func TestLoad_ReadsOptionalDependencyConfig(t *testing.T) {
 	}
 	if cfg.RedisDB != 2 {
 		t.Fatalf("expected redis db to be loaded as 2, got %d", cfg.RedisDB)
+	}
+	if cfg.MessageHubTopicPrefix != "tenant-dev" {
+		t.Fatalf("expected message topic prefix to be loaded, got %q", cfg.MessageHubTopicPrefix)
 	}
 }
 

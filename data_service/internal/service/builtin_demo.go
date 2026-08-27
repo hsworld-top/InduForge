@@ -19,18 +19,20 @@ type BuiltinDemoSeeder struct {
 	connections *ConnectionService
 	queries     *QueryService
 	realtime    *RealtimeStoreService
+	mqtt        *MqttService
 	computes    *ComputeService
 	alarms      *AlarmItemService
+	topicPrefix string
 }
 
-func NewBuiltinDemoSeeder(connections *ConnectionService, queries *QueryService, realtime *RealtimeStoreService, computes *ComputeService, alarms *AlarmItemService) *BuiltinDemoSeeder {
-	return &BuiltinDemoSeeder{connections: connections, queries: queries, realtime: realtime, computes: computes, alarms: alarms}
+func NewBuiltinDemoSeeder(connections *ConnectionService, queries *QueryService, realtime *RealtimeStoreService, mqtt *MqttService, computes *ComputeService, alarms *AlarmItemService, topicPrefix string) *BuiltinDemoSeeder {
+	return &BuiltinDemoSeeder{connections: connections, queries: queries, realtime: realtime, mqtt: mqtt, computes: computes, alarms: alarms, topicPrefix: strings.Trim(strings.TrimSpace(topicPrefix), "/")}
 }
 
-// Ensure 为内置教程工程创建可直接运行的 IF 关系、时序和实时数据。
+// Ensure 为内置教程工程创建可直接运行的 IF 关系、时序、实时和消息数据。
 // 各步按名称幂等检查，用户编辑后不会在服务重启时被覆盖。
 func (s *BuiltinDemoSeeder) Ensure(ctx context.Context) error {
-	if s == nil || s.connections == nil || s.queries == nil || s.realtime == nil || s.computes == nil || s.alarms == nil {
+	if s == nil || s.connections == nil || s.queries == nil || s.realtime == nil || s.mqtt == nil || s.computes == nil || s.alarms == nil {
 		return fmt.Errorf("内置教程数据初始化器依赖不完整")
 	}
 	claims := &auth.Claims{UserID: builtinDemoUserID, Role: "SYSTEM_ADMIN", TenantID: builtinDemoTenantID, ProjectIDs: []string{BuiltinDemoProjectID}, Capabilities: []string{"*"}}
@@ -51,6 +53,10 @@ func (s *BuiltinDemoSeeder) Ensure(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	message, err := s.ensureConnection(ctx, connections, "IF消息库", "builtin.message")
+	if err != nil {
+		return err
+	}
 	if err := s.ensureRelationData(ctx, relation.ID); err != nil {
 		return err
 	}
@@ -68,11 +74,43 @@ func (s *BuiltinDemoSeeder) Ensure(ctx context.Context) error {
 	if err := s.ensureRealtimeSetpoint(ctx, realtime.ID); err != nil {
 		return err
 	}
+	if err := s.ensureMessageSubscription(ctx, message.ID); err != nil {
+		return err
+	}
 	if err := s.ensureCompute(ctx, claims, temperaturePointID); err != nil {
 		return err
 	}
 	if err := s.ensureAlarm(ctx, claims, temperaturePointID); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (s *BuiltinDemoSeeder) ensureMessageSubscription(ctx context.Context, connectionID string) error {
+	existing, _, err := s.mqtt.ListSubscriptions(ctx, BuiltinDemoProjectID, connectionID, 1, 100)
+	if err != nil {
+		return fmt.Errorf("读取消息库教程订阅失败: %w", err)
+	}
+	for _, subscription := range existing {
+		if subscription.Name == "demo_line_events" {
+			return nil
+		}
+	}
+	topicPrefix := s.topicPrefix
+	if topicPrefix == "" {
+		topicPrefix = "ifdev"
+	}
+	description := "一号线运行事件；页面可发布测试消息并订阅后续变化。"
+	_, err = s.mqtt.CreateSubscription(ctx, BuiltinDemoProjectID, builtinDemoUserID, CreateMqttSubscriptionInput{
+		ConnectionID: connectionID,
+		Name:         "demo_line_events",
+		Topic:        topicPrefix + "/" + BuiltinDemoProjectID + "/event/line-status",
+		QOS:          0,
+		UsageMode:    mqttSubscriptionUsageRawDatapoint,
+		Description:  &description,
+	})
+	if err != nil {
+		return fmt.Errorf("创建消息库教程订阅失败: %w", err)
 	}
 	return nil
 }

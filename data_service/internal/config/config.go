@@ -30,6 +30,7 @@ type Config struct {
 	MessageHubAddr               string
 	MessageHubUsername           string
 	MessageHubPassword           string
+	MessageHubTopicPrefix        string
 	CollectorSecretKey           []byte
 	CollectorSecretKeyVersion    string
 	AlarmSecretKey               []byte
@@ -89,6 +90,7 @@ func Load() (Config, error) {
 		MessageHubAddr:               buildMessageHubAddr(),
 		MessageHubUsername:           strings.TrimSpace(firstEnv("IF_MESSAGE_HUB_USERNAME")),
 		MessageHubPassword:           strings.TrimSpace(firstEnv("IF_MESSAGE_HUB_PASSWORD")),
+		MessageHubTopicPrefix:        firstEnvWithDefault("IF_MESSAGE_HUB_TOPIC_PREFIX", "ifdev"),
 		CollectorSecretKey:           collectorSecretKey,
 		CollectorSecretKeyVersion:    firstEnvWithDefault("DATA_SERVICE_COLLECTOR_SECRET_KEY_VERSION", "v1"),
 		AlarmSecretKey:               alarmSecretKey,
