@@ -436,7 +436,7 @@
                   <button
                     type="button"
                     class="compute-editor__help-dot"
-                    title="插入到脚本中的数据点变量，脚本内可直接按变量名读取。"
+                    title="变量名对应一个数据点对象，可直接调用 get、read、peek 等方法。"
                     aria-label="数据点变量说明"
                   >
                     ?
@@ -1471,8 +1471,8 @@ const javascriptTemplates: CodeTemplate[] = [
   {
     id: 'datapoint',
     name: '读取数据点变量',
-    description: '读取已插入的数据点变量和 dp 命名空间。',
-    code: 'const value = dp.tag1;\nreturn value;\n',
+    description: '变量名对应数据点对象；read 返回值、质量和时间戳。',
+    code: 'const sample = tag1.read();\nif (sample.code !== 0) return sample;\nreturn sample.data.value;\n',
   },
   {
     id: 'output',
@@ -1510,8 +1510,8 @@ const pythonTemplates: CodeTemplate[] = [
   {
     id: 'datapoint',
     name: '读取数据点变量',
-    description: '读取已插入的数据点变量和 dp 命名空间。',
-    code: 'def main(argv, dp, ctx):\n    value = dp.get("tag1")\n    return value\n',
+    description: '变量名对应数据点对象；read 返回值、质量和时间戳。',
+    code: 'def main(argv, dp, ctx):\n    sample = tag1.read()\n    if sample.code != 0:\n        return sample\n    return sample.data["value"]\n',
   },
   {
     id: 'output',
@@ -2468,16 +2468,16 @@ function normalizeVariableName(name: string, lang?: ComputeLang | string) {
 function isVariableNameStart(char: string, lang?: ComputeLang | string) {
   if (!char) return false
   if (char === '_') return true
-  if (lang !== 'python' && char === '$') return true
-  return /\p{ID_Start}/u.test(char)
+  return /^[A-Za-z]$/.test(char)
 }
 
 function isVariableNameChar(char: string, isStart: boolean, lang?: ComputeLang | string) {
   if (isStart) return isVariableNameStart(char, lang)
   if (char === '_') return true
-  if (lang !== 'python' && char === '$') return true
-  return /\p{ID_Continue}/u.test(char)
+  return /^[A-Za-z0-9]$/.test(char)
 }
+
+const platformReservedVariableNames = new Set(['ctx', 'dp', 'argv', 'console', 'require'])
 
 const jsReservedVariableNames = new Set([
   'arguments',
@@ -2566,9 +2566,19 @@ function isValidVariableName(name: string, lang?: ComputeLang | string) {
   const hasValidChars =
     chars.length > 0 && chars.every((char, index) => isVariableNameChar(char, index === 0, lang))
   if (lang === 'python') {
-    return hasValidChars && !name.startsWith('__') && !pythonReservedVariableNames.has(name)
+    return (
+      hasValidChars &&
+      !name.startsWith('__') &&
+      !platformReservedVariableNames.has(name) &&
+      !pythonReservedVariableNames.has(name)
+    )
   }
-  return hasValidChars && !jsReservedVariableNames.has(name)
+  return (
+    hasValidChars &&
+    !name.startsWith('__') &&
+    !platformReservedVariableNames.has(name) &&
+    !jsReservedVariableNames.has(name)
+  )
 }
 
 function isDatapointAliasUsed(name: string) {

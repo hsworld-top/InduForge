@@ -13,7 +13,123 @@ sdk_context = envelope.get("sdkContext") or {}
 user_script = str(envelope.get("script") or "")
 dependencies = envelope.get("dependencies") if isinstance(envelope.get("dependencies"), list) else []
 argv = input_data.get("argv") if isinstance(input_data.get("argv"), list) else []
-dp = sdk_context.get("variables") or {}
+side_effects = []
+
+class SDKResult(dict):
+    def __init__(self, code, msg, data):
+        super().__init__(code=code, msg=msg, data=data)
+
+    def __getattr__(self, name):
+        if name in self:
+            return self[name]
+        raise AttributeError(name)
+
+def sdk_result(code, msg, data):
+    return SDKResult(code, msg, data)
+
+def unsupported(path, operation):
+    return sdk_result(40031, "数据点 " + path + " 在当前开发环境不支持 " + operation, None)
+
+def build_sample(snapshot):
+    return {
+        "path": snapshot.get("path") or "",
+        "value": snapshot.get("value"),
+        "quality": snapshot.get("quality") or "unknown",
+        "timestamp": snapshot.get("timestamp"),
+        "observedAt": snapshot.get("observedAt"),
+        "sourceTimestamp": snapshot.get("sourceTimestamp"),
+        "status": snapshot.get("status"),
+    }
+
+class DataPoint:
+    def __init__(self, snapshot):
+        self._snapshot = snapshot
+        self.id = snapshot.get("id")
+        self.ref = str(snapshot.get("path") or "")
+        self.path = self.ref
+        self.name = snapshot.get("name")
+        self.displayName = snapshot.get("displayName") or self.name
+        self.dataType = snapshot.get("dataType")
+        self.schema = snapshot.get("schema")
+        self.source = {"type": snapshot.get("sourceType"), "id": snapshot.get("sourceId")}
+        self.status = snapshot.get("status")
+        self.unit = snapshot.get("unit")
+        self.precision = snapshot.get("precision")
+        self.min = snapshot.get("min")
+        self.max = snapshot.get("max")
+        self.defaultValue = snapshot.get("defaultValue")
+        self.tags = list(snapshot.get("tags") or [])
+        self.attributes = dict(snapshot.get("attributes") or {})
+        source_capabilities = snapshot.get("capabilities") or {}
+        self.capabilities = {
+            operation: source_capabilities.get(operation) is True
+            for operation in ("get", "read", "peek", "set", "subscribe", "history", "refresh", "run", "execute", "publish")
+        }
+
+    def _read_snapshot(self, operation, data):
+        if not self.capabilities.get(operation):
+            return unsupported(self.path, operation)
+        return sdk_result(0, "ok", data)
+
+    def _effect(self, operation, payload=None):
+        if not self.capabilities.get(operation):
+            return unsupported(self.path, operation)
+        item = {"domain": "point", "operation": operation, "path": self.path, "payload": payload}
+        side_effects.append(item)
+        return sdk_result(0, "开发态副作用已记录", item)
+
+    def get(self, _options=None):
+        return self._read_snapshot("get", self._snapshot.get("value"))
+
+    def read(self, _options=None):
+        return self._read_snapshot("read", build_sample(self._snapshot))
+
+    def peek(self):
+        return self._read_snapshot("peek", build_sample(self._snapshot))
+
+    def set(self, value, _options=None):
+        return self._effect("set", value)
+
+    def subscribe(self, _handler=None, _options=None):
+        return unsupported(self.path, "subscribe")
+
+    def history(self, _query=None):
+        return unsupported(self.path, "history")
+
+    def refresh(self, options=None):
+        return self._effect("refresh", options)
+
+    def run(self, runtime_input=None):
+        return self._effect("run", runtime_input)
+
+    def execute(self, runtime_input=None):
+        return self._effect("execute", runtime_input)
+
+    def publish(self, payload=None, _options=None):
+        return self._effect("publish", payload)
+
+point_bindings = sdk_context.get("pointBindings") or {}
+datapoints = sdk_context.get("datapoints") or {}
+dp = {}
+for alias, point_path in point_bindings.items() if isinstance(point_bindings, dict) else []:
+    snapshot = datapoints.get(point_path)
+    if isinstance(snapshot, dict):
+        dp[alias] = DataPoint(snapshot)
+
+class PointCollection:
+    pass
+
+points = PointCollection()
+for alias, point in dp.items():
+    setattr(points, alias, point)
+
+class LoggerSDK:
+    def log(self, *values):
+        print(*values)
+
+    info = log
+    warn = log
+    error = log
 
 class DatapointSDK:
     def get(self, path):
@@ -42,6 +158,11 @@ class ComputeSDK:
     def __init__(self):
         self.datapoint = DatapointSDK()
         self.sql = SQLSDK()
+        self.points = points
+        self.args = dict(input_data)
+        self.trigger = dict(input_data.get("trigger") or {})
+        self.runtime = dict(sdk_context.get("metadata") or {})
+        self.logger = LoggerSDK()
 
 ctx = ComputeSDK()
 
@@ -106,7 +227,7 @@ try:
             raise RuntimeError("python 脚本必须定义 main(argv, dp, ctx) 函数")
         output = main(argv, dp, ctx)
     logs = [line for line in captured_out.getvalue().splitlines() if line]
-    sys.stdout.write(json.dumps({"output": output, "sideEffects": [], "logs": logs}, ensure_ascii=False))
+    sys.stdout.write(json.dumps({"output": output, "sideEffects": side_effects, "logs": logs}, ensure_ascii=False))
 except Exception:
     traceback.print_exc(file=sys.stderr)
     sys.exit(1)

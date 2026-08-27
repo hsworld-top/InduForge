@@ -108,8 +108,11 @@ func capabilitiesHandler(config Config) http.HandlerFunc {
 		available := len(failures) == 0 && len(languages) == 2
 		writeJSON(w, http.StatusOK, map[string]any{
 			"available": available, "serviceVersion": "1.0.0", "languages": languages,
-			"reason":       strings.Join(failures, "；"),
-			"sdk":          []string{"ctx.datapoint.get", "ctx.datapoint.meta", "ctx.sql.query"},
+			"reason": strings.Join(failures, "；"),
+			"sdk": []string{
+				"point.get", "point.read", "point.peek", "point.set", "point.refresh",
+				"point.run", "point.execute", "point.publish", "ctx.points", "ctx.sql.query",
+			},
 			"dependencies": []any{},
 			"triggers":     []string{"manual", "schedule", "datapoint_change", "condition"},
 			"limits":       map[string]int{"maxExecutionTimeMs": maxTimeoutMS, "maxInputBytes": maxRequestBytes, "maxOutputBytes": maxOutputBytes, "maxLogBytes": maxLogBytes},

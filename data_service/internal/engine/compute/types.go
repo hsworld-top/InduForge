@@ -110,20 +110,50 @@ type SandboxLimits struct {
 
 // SDKContext 是由服务端预取后注入脚本运行时的受控上下文。
 type SDKContext struct {
-	Datapoints map[string]SDKDataPointValue `json:"datapoints"`
-	Variables  map[string]any               `json:"variables"`
-	SQL        map[string]any               `json:"sql"`
-	Metadata   map[string]any               `json:"metadata"`
+	Datapoints    map[string]SDKDataPointValue `json:"datapoints"`
+	PointBindings map[string]string            `json:"pointBindings"`
+	Variables     map[string]any               `json:"variables"`
+	SQL           map[string]any               `json:"sql"`
+	Metadata      map[string]any               `json:"metadata"`
 }
 
-// SDKDataPointValue 是 ctx.datapoint.get/meta 可读取的数据点快照。
+// SDKDataPointValue 是计算开发态预取的数据点契约与当前值快照。
 type SDKDataPointValue struct {
-	Path       string            `json:"path"`
-	Value      any               `json:"value"`
-	Quality    string            `json:"quality"`
-	Timestamp  string            `json:"timestamp"`
-	Status     string            `json:"status"`
-	Attributes map[string]string `json:"attributes"`
+	ID              string                   `json:"id"`
+	Path            string                   `json:"path"`
+	Name            string                   `json:"name"`
+	DisplayName     string                   `json:"displayName"`
+	DataType        string                   `json:"dataType"`
+	SourceType      string                   `json:"sourceType"`
+	SourceID        *string                  `json:"sourceId"`
+	Value           any                      `json:"value"`
+	DefaultValue    *string                  `json:"defaultValue"`
+	Quality         string                   `json:"quality"`
+	Timestamp       string                   `json:"timestamp"`
+	ObservedAt      *string                  `json:"observedAt"`
+	SourceTimestamp *string                  `json:"sourceTimestamp"`
+	Status          string                   `json:"status"`
+	Unit            *string                  `json:"unit"`
+	Precision       *int                     `json:"precision"`
+	Min             *float64                 `json:"min"`
+	Max             *float64                 `json:"max"`
+	Tags            []any                    `json:"tags"`
+	Attributes      map[string]string        `json:"attributes"`
+	Capabilities    SDKDataPointCapabilities `json:"capabilities"`
+}
+
+// SDKDataPointCapabilities 保持稳定方法集合；false 表示方法存在但调用会返回不支持。
+type SDKDataPointCapabilities struct {
+	Get       bool `json:"get"`
+	Read      bool `json:"read"`
+	Peek      bool `json:"peek"`
+	Set       bool `json:"set"`
+	Subscribe bool `json:"subscribe"`
+	History   bool `json:"history"`
+	Refresh   bool `json:"refresh"`
+	Run       bool `json:"run"`
+	Execute   bool `json:"execute"`
+	Publish   bool `json:"publish"`
 }
 
 // Runner 抽象不同脚本语言的执行器。

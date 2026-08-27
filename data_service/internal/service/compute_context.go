@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	enginecompute "github.com/indu-forge/data_service/internal/engine/compute"
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -14,9 +15,10 @@ import (
 // 当前阶段采用“声明式预取”：脚本只能读取已经声明的数据点或查询结果，避免调试态脚本绕过项目边界。
 func (s *ComputeService) prepareComputeSDKContext(ctx context.Context, unit repository.ComputeUnitRecord, runtimeInput map[string]any) (enginecompute.SDKContext, error) {
 	sdk := enginecompute.SDKContext{
-		Datapoints: map[string]enginecompute.SDKDataPointValue{},
-		Variables:  map[string]any{},
-		SQL:        map[string]any{},
+		Datapoints:    map[string]enginecompute.SDKDataPointValue{},
+		PointBindings: map[string]string{},
+		Variables:     map[string]any{},
+		SQL:           map[string]any{},
 		Metadata: map[string]any{
 			"projectId":     unit.ProjectID,
 			"computeUnitId": unit.ID,
@@ -34,6 +36,7 @@ func (s *ComputeService) prepareComputeSDKContext(ctx context.Context, unit repo
 			return sdk, err
 		}
 		sdk.Datapoints[binding.Path] = value
+		sdk.PointBindings[binding.Alias] = binding.Path
 		sdk.Variables[binding.Alias] = value.Value
 	}
 
@@ -77,14 +80,50 @@ func (s *ComputeService) readComputeSDKDatapoint(ctx context.Context, projectID,
 	if resolved.ObservedAt != nil {
 		timestamp = *resolved.ObservedAt
 	}
+	formattedObservedAt := optionalComputeSDKTimestamp(resolved.ObservedAt)
+	formattedSourceTimestamp := optionalComputeSDKTimestamp(resolved.SourceTimestamp)
+	capabilities := dataPointCapabilities(*record)
 	return enginecompute.SDKDataPointValue{
-		Path:       record.Path,
-		Value:      resolved.Value,
-		Quality:    resolved.Quality,
-		Timestamp:  timestamp.UTC().Format("2006-01-02T15:04:05Z07:00"),
-		Status:     record.Status,
-		Attributes: cloneStringMap(record.AttributeDefaults),
+		ID:              record.ID,
+		Path:            record.Path,
+		Name:            record.Name,
+		DisplayName:     record.Name,
+		DataType:        record.DataType,
+		SourceType:      record.SourceType,
+		SourceID:        cloneOptionalString(record.SourceID),
+		Value:           resolved.Value,
+		DefaultValue:    cloneOptionalString(record.DefaultValue),
+		Quality:         resolved.Quality,
+		Timestamp:       timestamp.UTC().Format(time.RFC3339Nano),
+		ObservedAt:      formattedObservedAt,
+		SourceTimestamp: formattedSourceTimestamp,
+		Status:          record.Status,
+		Unit:            cloneOptionalString(record.Unit),
+		Precision:       cloneOptionalInt(record.PrecisionNum),
+		Min:             cloneOptionalFloat64(record.MinValue),
+		Max:             cloneOptionalFloat64(record.MaxValue),
+		Tags:            cloneJSONArray(record.Tags),
+		Attributes:      cloneStringMap(record.AttributeDefaults),
+		Capabilities: enginecompute.SDKDataPointCapabilities{
+			Get:       capabilities.Get.Enabled,
+			Read:      capabilities.Get.Enabled,
+			Peek:      capabilities.Get.Enabled,
+			Set:       capabilities.Set.Enabled,
+			Subscribe: capabilities.Sub.Enabled,
+			Refresh:   record.RefreshMode != "manual",
+			Run:       record.SourceType == "calc.output",
+			Execute:   record.SourceType == "db.query" || record.SourceType == "http.request",
+			Publish:   record.SourceType == "mqtt.tag" || record.SourceType == "mqtt.subscription",
+		},
 	}, nil
+}
+
+func optionalComputeSDKTimestamp(value *time.Time) *string {
+	if value == nil {
+		return nil
+	}
+	formatted := value.UTC().Format(time.RFC3339Nano)
+	return &formatted
 }
 
 func (s *ComputeService) executeComputeSDKQuery(ctx context.Context, projectID string, binding computeSQLBinding) (any, error) {
@@ -142,17 +181,17 @@ func isSafeComputeVariableAlias(alias string) bool {
 	}
 	for index, char := range alias {
 		if index == 0 {
-			if !(char == '_' || char == '$' || char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z') {
+			if !(char == '_' || char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z') {
 				return false
 			}
 			continue
 		}
-		if !(char == '_' || char == '$' || char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z' || char >= '0' && char <= '9') {
+		if !(char == '_' || char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z' || char >= '0' && char <= '9') {
 			return false
 		}
 	}
 	switch alias {
-	case "arguments", "eval", "await", "break", "case", "catch", "class", "const", "continue",
+	case "ctx", "dp", "argv", "console", "require", "arguments", "eval", "await", "break", "case", "catch", "class", "const", "continue",
 		"debugger", "default", "delete", "do", "else", "enum", "export", "extends", "false",
 		"finally", "for", "function", "if", "import", "in", "instanceof", "let", "new", "null",
 		"return", "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void",

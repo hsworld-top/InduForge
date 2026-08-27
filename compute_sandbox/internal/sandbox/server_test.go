@@ -71,6 +71,109 @@ func TestPythonRuntimeBlocksReflectionAndImport(t *testing.T) {
 	}
 }
 
+func TestNodeRuntimeInjectsDataPointObjects(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node unavailable")
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"script": `
+const sample = temperature.read();
+const write = manualPoint.set(1200);
+return {
+  sameObject: temperature === dp.temperature && temperature === ctx.points.temperature,
+  sample,
+  write,
+  unsupported: temperature.history({ limit: 1 }),
+  dataType: temperature.dataType,
+};`,
+		"input":      map[string]any{"trigger": map[string]any{"type": "manual"}},
+		"sdkContext": runtimeSDKContextFixture(),
+	})
+	cmd := exec.Command(node, filepath.Join("..", "..", "runtime", "node_execute.js"))
+	cmd.Stdin = bytes.NewReader(payload)
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRuntimeSDKOutput(t, output)
+}
+
+func TestPythonRuntimeInjectsDataPointObjects(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python unavailable")
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"script": `def main(argv, dp, ctx):
+    sample = temperature.read()
+    write = manualPoint.set(1200)
+    return {
+        "sameObject": temperature is dp["temperature"] and temperature is ctx.points.temperature,
+        "sample": sample,
+        "write": write,
+        "unsupported": temperature.history({"limit": 1}),
+        "dataType": temperature.dataType,
+    }`,
+		"input":      map[string]any{"trigger": map[string]any{"type": "manual"}},
+		"sdkContext": runtimeSDKContextFixture(),
+	})
+	cmd := exec.Command(python, filepath.Join("..", "..", "runtime", "python_execute.py"))
+	cmd.Stdin = bytes.NewReader(payload)
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRuntimeSDKOutput(t, output)
+}
+
+func runtimeSDKContextFixture() map[string]any {
+	capabilities := map[string]bool{"get": true, "read": true, "peek": true}
+	manualCapabilities := map[string]bool{"get": true, "read": true, "peek": true, "set": true}
+	return map[string]any{
+		"pointBindings": map[string]string{"temperature": "factory.temperature", "manualPoint": "manual.speed"},
+		"datapoints": map[string]any{
+			"factory.temperature": map[string]any{
+				"id": "point-temperature", "path": "factory.temperature", "name": "温度", "dataType": "float64",
+				"value": 26.5, "quality": "good", "timestamp": "2026-08-27T12:00:00Z", "status": "active",
+				"attributes": map[string]string{"area": "A"}, "capabilities": capabilities,
+			},
+			"manual.speed": map[string]any{
+				"id": "point-speed", "path": "manual.speed", "name": "速度", "dataType": "int64",
+				"value": 1000, "quality": "good", "timestamp": "2026-08-27T12:00:00Z", "status": "active",
+				"attributes": map[string]string{}, "capabilities": manualCapabilities,
+			},
+		},
+		"metadata": map[string]any{"mode": "development"},
+	}
+}
+
+func assertRuntimeSDKOutput(t *testing.T, output []byte) {
+	t.Helper()
+	var payload struct {
+		Output struct {
+			SameObject  bool           `json:"sameObject"`
+			Sample      map[string]any `json:"sample"`
+			Write       map[string]any `json:"write"`
+			Unsupported map[string]any `json:"unsupported"`
+			DataType    string         `json:"dataType"`
+		} `json:"output"`
+		SideEffects []map[string]any `json:"sideEffects"`
+	}
+	if err := json.Unmarshal(output, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if !payload.Output.SameObject || payload.Output.DataType != "float64" {
+		t.Fatalf("unexpected point object: %+v", payload.Output)
+	}
+	if payload.Output.Sample["code"] != float64(0) || payload.Output.Unsupported["code"] != float64(40031) {
+		t.Fatalf("unexpected SDK results: sample=%+v unsupported=%+v", payload.Output.Sample, payload.Output.Unsupported)
+	}
+	if payload.Output.Write["code"] != float64(0) || len(payload.SideEffects) != 1 || payload.SideEffects[0]["operation"] != "set" {
+		t.Fatalf("unexpected side effects: write=%+v sideEffects=%+v", payload.Output.Write, payload.SideEffects)
+	}
+}
+
 func TestBuildSandboxArgsRequiresIsolationAndNoNetwork(t *testing.T) {
 	tempDir := t.TempDir()
 	for _, name := range []string{"bwrap", "prlimit", "node_execute.js"} {
