@@ -26,24 +26,26 @@ const (
 )
 
 type Config struct {
-	Addr         string
-	Token        string
-	Bubblewrap   string
-	Prlimit      string
-	RuntimeDir   string
-	NodeBinary   string
-	PythonBinary string
+	Addr            string
+	Token           string
+	Bubblewrap      string
+	Prlimit         string
+	RuntimeDir      string
+	NodeBinary      string
+	PythonBinary    string
+	DependenciesDir string
 }
 
 func LoadConfig() (Config, error) {
 	config := Config{
-		Addr:         firstNonEmpty(os.Getenv("COMPUTE_SANDBOX_ADDR"), ":18103"),
-		Token:        strings.TrimSpace(os.Getenv("COMPUTE_SANDBOX_TOKEN")),
-		Bubblewrap:   firstNonEmpty(os.Getenv("COMPUTE_SANDBOX_BWRAP"), "/usr/bin/bwrap"),
-		Prlimit:      firstNonEmpty(os.Getenv("COMPUTE_SANDBOX_PRLIMIT"), "/usr/bin/prlimit"),
-		RuntimeDir:   firstNonEmpty(os.Getenv("COMPUTE_SANDBOX_RUNTIME_DIR"), "/opt/induforge/runtime"),
-		NodeBinary:   firstNonEmpty(os.Getenv("COMPUTE_SANDBOX_NODE"), "/usr/local/bin/node"),
-		PythonBinary: firstNonEmpty(os.Getenv("COMPUTE_SANDBOX_PYTHON"), "/usr/bin/python3"),
+		Addr:            firstNonEmpty(os.Getenv("COMPUTE_SANDBOX_ADDR"), ":18103"),
+		Token:           strings.TrimSpace(os.Getenv("COMPUTE_SANDBOX_TOKEN")),
+		Bubblewrap:      firstNonEmpty(os.Getenv("COMPUTE_SANDBOX_BWRAP"), "/usr/bin/bwrap"),
+		Prlimit:         firstNonEmpty(os.Getenv("COMPUTE_SANDBOX_PRLIMIT"), "/usr/bin/prlimit"),
+		RuntimeDir:      firstNonEmpty(os.Getenv("COMPUTE_SANDBOX_RUNTIME_DIR"), "/opt/induforge/runtime"),
+		NodeBinary:      firstNonEmpty(os.Getenv("COMPUTE_SANDBOX_NODE"), "/usr/local/bin/node"),
+		PythonBinary:    firstNonEmpty(os.Getenv("COMPUTE_SANDBOX_PYTHON"), "/usr/bin/python3"),
+		DependenciesDir: firstNonEmpty(os.Getenv("COMPUTE_SANDBOX_DEPENDENCIES_DIR"), "/dependencies"),
 	}
 	if len(config.Token) < 24 {
 		return Config{}, fmt.Errorf("COMPUTE_SANDBOX_TOKEN 至少需要 24 个字符")
@@ -59,6 +61,9 @@ func NewHandler(config Config) http.Handler {
 	mux.HandleFunc("GET /v1/capabilities", authorize(config, capabilitiesHandler(config)))
 	mux.HandleFunc("POST /v1/syntax-check", authorize(config, syntaxHandler(config)))
 	mux.HandleFunc("POST /v1/execute", authorize(config, executeHandler(config)))
+	mux.HandleFunc("POST /v1/dependencies/install", authorize(config, installDependencyHandler(config)))
+	mux.HandleFunc("POST /v1/dependencies/import", authorize(config, importDependencyHandler(config)))
+	mux.HandleFunc("POST /v1/dependencies/uninstall", authorize(config, uninstallDependencyHandler(config)))
 	return mux
 }
 
@@ -70,23 +75,65 @@ type languageCapability struct {
 func capabilitiesHandler(config Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		languages := []languageCapability{}
+		failures := []string{}
 		for _, item := range []struct{ language, binary string }{{"js", config.NodeBinary}, {"python", config.PythonBinary}} {
 			output, err := exec.CommandContext(r.Context(), item.binary, "--version").CombinedOutput()
 			if err == nil {
 				languages = append(languages, languageCapability{Language: item.language, Version: strings.TrimSpace(string(output))})
+			} else {
+				failures = append(failures, fmt.Sprintf("%s 运行时不可用", item.language))
 			}
 		}
 		_, bubblewrapErr := os.Stat(config.Bubblewrap)
 		_, prlimitErr := os.Stat(config.Prlimit)
-		available := bubblewrapErr == nil && prlimitErr == nil && len(languages) == 2 && runtime.GOOS == "linux"
+		if runtime.GOOS != "linux" {
+			failures = append(failures, "仅支持 Linux 隔离环境")
+		}
+		if bubblewrapErr != nil {
+			failures = append(failures, "bubblewrap 不可用")
+		}
+		if prlimitErr != nil {
+			failures = append(failures, "prlimit 不可用")
+		}
+		if len(failures) == 0 {
+			for _, probe := range []struct {
+				language string
+				script   string
+			}{{"js", `return "ok";`}, {"python", "def main(argv, dp, ctx):\n    return 'ok'"}} {
+				if err := probeIsolatedRuntime(r.Context(), config, probe.language, probe.script); err != nil {
+					failures = append(failures, fmt.Sprintf("%s 隔离执行失败: %v", probe.language, err))
+				}
+			}
+		}
+		available := len(failures) == 0 && len(languages) == 2
 		writeJSON(w, http.StatusOK, map[string]any{
 			"available": available, "serviceVersion": "1.0.0", "languages": languages,
+			"reason":       strings.Join(failures, "；"),
 			"sdk":          []string{"ctx.datapoint.get", "ctx.datapoint.meta", "ctx.sql.query"},
 			"dependencies": []any{},
-			"triggers":     []string{"manual", "schedule", "datapoint_change"},
+			"triggers":     []string{"manual", "schedule", "datapoint_change", "condition"},
 			"limits":       map[string]int{"maxExecutionTimeMs": maxTimeoutMS, "maxInputBytes": maxRequestBytes, "maxOutputBytes": maxOutputBytes, "maxLogBytes": maxLogBytes},
 		})
 	}
+}
+
+// probeIsolatedRuntime 真实启动一次隔离执行，避免仅检测二进制存在却误报沙箱可用。
+func probeIsolatedRuntime(ctx context.Context, config Config, language, script string) error {
+	runtimeScript := "node_execute.js"
+	if language == "python" {
+		runtimeScript = "python_execute.py"
+	}
+	result, err := runIsolated(ctx, config, language, runtimeScript, map[string]any{
+		"script": script, "input": map[string]any{}, "sdkContext": map[string]any{},
+	}, 3*time.Second, "")
+	if err != nil {
+		return err
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(result.Output, &payload); err != nil {
+		return fmt.Errorf("运行结果无效")
+	}
+	return nil
 }
 
 type syntaxRequest struct {
@@ -96,11 +143,13 @@ type syntaxRequest struct {
 }
 
 type executeRequest struct {
-	Language   string         `json:"language"`
-	Script     string         `json:"script"`
-	Input      map[string]any `json:"input"`
-	SDKContext map[string]any `json:"sdkContext"`
-	TimeoutMS  int64          `json:"timeoutMs"`
+	Language     string           `json:"language"`
+	Script       string           `json:"script"`
+	Input        map[string]any   `json:"input"`
+	SDKContext   map[string]any   `json:"sdkContext"`
+	TimeoutMS    int64            `json:"timeoutMs"`
+	ProjectID    string           `json:"projectId"`
+	Dependencies []dependencySpec `json:"dependencies"`
 }
 
 func syntaxHandler(config Config) http.HandlerFunc {
@@ -117,7 +166,7 @@ func syntaxHandler(config Config) http.HandlerFunc {
 		if request.Language == "python" {
 			script = "python_syntax.py"
 		}
-		result, err := runIsolated(r.Context(), config, request.Language, script, map[string]any{"script": request.Script}, normalizedTimeout(request.TimeoutMS, 3000))
+		result, err := runIsolated(r.Context(), config, request.Language, script, map[string]any{"script": request.Script}, normalizedTimeout(request.TimeoutMS, 3000), "")
 		if err != nil {
 			writeExecutionError(w, err)
 			return
@@ -147,8 +196,8 @@ func executeHandler(config Config) http.HandlerFunc {
 		}
 		started := time.Now()
 		result, err := runIsolated(r.Context(), config, request.Language, script, map[string]any{
-			"script": request.Script, "input": request.Input, "sdkContext": request.SDKContext,
-		}, normalizedTimeout(request.TimeoutMS, 3000))
+			"script": request.Script, "input": request.Input, "sdkContext": request.SDKContext, "dependencies": request.Dependencies,
+		}, normalizedTimeout(request.TimeoutMS, 3000), request.ProjectID)
 		if err != nil {
 			writeExecutionError(w, err)
 			return
@@ -177,7 +226,7 @@ type isolatedResult struct {
 	Stderr string
 }
 
-func runIsolated(ctx context.Context, config Config, language, runtimeScript string, input any, timeout time.Duration) (isolatedResult, error) {
+func runIsolated(ctx context.Context, config Config, language, runtimeScript string, input any, timeout time.Duration, projectID string) (isolatedResult, error) {
 	payload, err := json.Marshal(input)
 	if err != nil {
 		return isolatedResult{}, fmt.Errorf("编码沙箱输入失败: %w", err)
@@ -185,7 +234,7 @@ func runIsolated(ctx context.Context, config Config, language, runtimeScript str
 	if len(payload) > maxRequestBytes {
 		return isolatedResult{}, fmt.Errorf("沙箱输入超过 %d 字节", maxRequestBytes)
 	}
-	args, err := buildSandboxArgs(config, language, runtimeScript)
+	args, err := buildSandboxArgs(config, language, runtimeScript, projectID)
 	if err != nil {
 		return isolatedResult{}, err
 	}
@@ -211,7 +260,10 @@ func runIsolated(ctx context.Context, config Config, language, runtimeScript str
 	case <-execCtx.Done():
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		<-done
-		return isolatedResult{}, errExecutionTimeout
+		if errors.Is(execCtx.Err(), context.DeadlineExceeded) {
+			return isolatedResult{}, errExecutionTimeout
+		}
+		return isolatedResult{}, execCtx.Err()
 	}
 	if stdout.overflow {
 		return isolatedResult{}, fmt.Errorf("脚本输出超过 %d 字节", maxOutputBytes)
@@ -219,7 +271,7 @@ func runIsolated(ctx context.Context, config Config, language, runtimeScript str
 	return isolatedResult{Output: stdout.Bytes(), Stderr: stderr.String()}, nil
 }
 
-func buildSandboxArgs(config Config, language, runtimeScript string) ([]string, error) {
+func buildSandboxArgs(config Config, language, runtimeScript, projectID string) ([]string, error) {
 	if _, err := os.Stat(config.Bubblewrap); err != nil {
 		return nil, fmt.Errorf("bubblewrap 不可用")
 	}
@@ -234,16 +286,23 @@ func buildSandboxArgs(config Config, language, runtimeScript string) ([]string, 
 	if language == "python" {
 		binary = config.PythonBinary
 	}
-	return []string{
-		"--as=1073741824", "--nproc=32", "--nofile=64", "--fsize=4194304", "--cpu=120", "--",
+	args := []string{
+		"--as=1073741824", "--nofile=64", "--fsize=4194304", "--cpu=120", "--",
 		config.Bubblewrap, "--die-with-parent", "--new-session", "--unshare-ipc", "--unshare-pid", "--unshare-net", "--unshare-uts", "--unshare-cgroup-try", "--clearenv",
 		"--ro-bind", "/usr", "/usr", "--ro-bind-try", "/bin", "/bin", "--ro-bind-try", "/lib", "/lib",
 		"--ro-bind-try", "/lib64", "/lib64", "--ro-bind-try", "/usr/local", "/usr/local",
 		"--ro-bind", config.RuntimeDir, "/runtime", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
+	}
+	if validDependencyProjectID(projectID) {
+		projectDir := filepath.Join(config.DependenciesDir, projectID)
+		args = append(args, "--ro-bind-try", projectDir, "/dependencies")
+	}
+	args = append(args,
 		"--chdir", "/tmp", "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin", "--setenv", "LANG", "C.UTF-8",
 		"--cap-add", "CAP_SETUID", "--cap-add", "CAP_SETGID",
 		"/usr/bin/setpriv", "--reuid=10001", "--regid=10001", "--clear-groups", "--bounding-set=-all", "--no-new-privs", binary, filepath.Join("/runtime", runtimeScript),
-	}, nil
+	)
+	return args, nil
 }
 
 type limitedBuffer struct {

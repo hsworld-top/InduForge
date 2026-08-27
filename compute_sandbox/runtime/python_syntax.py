@@ -8,8 +8,8 @@ try:
     tree = ast.parse(script, "<compute>", "exec")
     blocked_names = {"__import__", "open", "eval", "exec", "compile", "globals", "locals", "vars", "getattr", "setattr", "delattr", "breakpoint", "help", "input"}
     for node in ast.walk(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom, ast.Global, ast.Nonlocal)):
-            raise SyntaxError("Python 沙箱不允许导入模块或修改外层作用域")
+        if isinstance(node, (ast.Global, ast.Nonlocal)):
+            raise SyntaxError("Python 沙箱不允许修改外层作用域")
         if isinstance(node, ast.Attribute) and node.attr.startswith("__"):
             raise SyntaxError("Python 沙箱不允许访问双下划线反射属性")
         if isinstance(node, ast.Name) and (node.id.startswith("__") or node.id in blocked_names):
