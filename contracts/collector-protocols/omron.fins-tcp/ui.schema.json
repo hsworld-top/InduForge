@@ -1,4 +1,5 @@
 {
+  "addressHelper": "omron",
   "connection": {
     "order": [
       "host", "port", "plcType", "connectTimeoutMs", "receiveTimeoutMs", "readSplits",

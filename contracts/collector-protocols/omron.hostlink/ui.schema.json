@@ -1,1 +1,2 @@
-{"connection":{"order":["portName","baudRate","dataBits","parity","stopBits","unitNumber","plcType","receiveTimeoutMs"]},"address":{"order":["address"]}}
+{
+  "addressHelper": "omron","connection":{"order":["portName","baudRate","dataBits","parity","stopBits","unitNumber","plcType","receiveTimeoutMs"]},"address":{"order":["address"]}}

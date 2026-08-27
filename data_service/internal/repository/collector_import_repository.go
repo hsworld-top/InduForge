@@ -83,7 +83,12 @@ func (r *CollectorRepository) CommitImportSession(ctx context.Context, projectID
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusConflict, "点位导入会话已提交或失效")
 	}
 	if !expiresAt.After(time.Now()) {
-		_, _ = tx.Exec(ctx, `UPDATE data_collector_import_sessions SET status='expired',updated_at=now() WHERE id=$1`, importID)
+		if _, updateErr := tx.Exec(ctx, `UPDATE data_collector_import_sessions SET status='expired',updated_at=now() WHERE id=$1`, importID); updateErr != nil {
+			return nil, wrapUnifiedCollectorRepositoryError("更新过期导入会话失败", updateErr)
+		}
+		if commitErr := tx.Commit(ctx); commitErr != nil {
+			return nil, wrapUnifiedCollectorRepositoryError("提交过期导入会话失败", commitErr)
+		}
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusGone, "点位导入会话已过期")
 	}
 	var candidates []CollectorImportCandidate

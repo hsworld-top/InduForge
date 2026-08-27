@@ -80,8 +80,13 @@ func (s *CollectorImportService) BuildTemplate(driverID, format string) (Collect
 		defer func() { _ = file.Close() }()
 		sheet := file.GetSheetName(0)
 		for index, header := range headers {
-			cell, _ := excelize.CoordinatesToCellName(index+1, 1)
-			_ = file.SetCellValue(sheet, cell, header)
+			cell, err := excelize.CoordinatesToCellName(index+1, 1)
+			if err != nil {
+				return CollectorImportTemplate{}, fmt.Errorf("生成工业点位模板列失败: %w", err)
+			}
+			if err := file.SetCellValue(sheet, cell, header); err != nil {
+				return CollectorImportTemplate{}, fmt.Errorf("写入工业点位模板失败: %w", err)
+			}
 		}
 		buffer, err := file.WriteToBuffer()
 		if err != nil {
@@ -91,7 +96,9 @@ func (s *CollectorImportService) BuildTemplate(driverID, format string) (Collect
 	}
 	buffer := bytes.NewBuffer(nil)
 	writer := csv.NewWriter(buffer)
-	_ = writer.Write(headers)
+	if err := writer.Write(headers); err != nil {
+		return CollectorImportTemplate{}, fmt.Errorf("写入工业点位 CSV 模板失败: %w", err)
+	}
 	writer.Flush()
 	return CollectorImportTemplate{Content: buffer.Bytes(), ContentType: "text/csv; charset=utf-8", FileName: driver.Manifest.DriverID + "-points.csv"}, writer.Error()
 }

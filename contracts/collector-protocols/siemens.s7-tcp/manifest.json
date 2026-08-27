@@ -4,6 +4,7 @@
   "driverVersion": "1.0.0",
   "schemaVersion": 1,
   "displayName": "Siemens S7 TCP",
+  "addressHelper": "siemens",
   "category": "plc",
   "transports": ["tcp"],
   "operations": [

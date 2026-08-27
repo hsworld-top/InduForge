@@ -30,6 +30,16 @@ func TestCollectorServiceCreateSeparatesAndEncryptsSecrets(t *testing.T) {
 	if !created.SecretStatus["password"] {
 		t.Fatal("secret status missing")
 	}
+	if created.ConfigurationState != "ready" || created.Config == nil || created.Metadata == nil || created.DefaultAcquisition == nil {
+		t.Fatalf("collector response defaults are incomplete: %#v", created)
+	}
+}
+
+func TestToCollectorConnectionNormalizesNilMaps(t *testing.T) {
+	value := toCollectorConnection(repository.CollectorConnectionRecord{CreatedAt: time.Now(), UpdatedAt: time.Now()})
+	if value.Config == nil || value.Metadata == nil || value.DefaultAcquisition == nil || value.SecretStatus == nil {
+		t.Fatalf("collector response contains nil maps: %#v", value)
+	}
 }
 
 func TestCollectorServiceCreateRejectsInvalidConfig(t *testing.T) {

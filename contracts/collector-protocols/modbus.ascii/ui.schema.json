@@ -1,1 +1,2 @@
-{"connection":{"order":["portName","baudRate","dataBits","parity","stopBits","timeoutMs","dataFormat"]},"address":{"order":["station","area","address","bitIndex"]}}
+{
+  "addressHelper": "modbus","connection":{"order":["portName","baudRate","dataBits","parity","stopBits","timeoutMs","dataFormat"]},"address":{"order":["station","area","address","bitIndex"]}}

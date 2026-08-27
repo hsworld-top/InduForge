@@ -1,4 +1,5 @@
 {
+  "addressHelper": "siemens",
   "connection": {
     "order": ["host", "port", "plcType", "rack", "slot", "localTsap", "remoteTsap", "connectTimeoutMs"]
   },

@@ -58,6 +58,7 @@
                   ><CollectorDriverIcon
                     :protocol-family="activeConnection.protocolFamily"
                     :driver-id="activeConnection.driverId"
+                    :default-acquisition="activeConnection.defaultAcquisition"
                 /></span>
                 <div>
                   <div class="industrial-workbench__name-row">
@@ -85,14 +86,22 @@
                 <strong><i />{{ connectionStatus.label }}</strong>
                 <time v-if="connectionSessionTime">连接时间：{{ connectionSessionTime }}</time>
               </div>
-              <el-button
-                :type="activeSessionState.status === 'connected' ? 'default' : 'primary'"
-                :disabled="!canManageConnection || connectionSessionBusy"
-                :loading="connectionSessionBusy"
-                @click="toggleActiveConnection"
+              <el-tooltip
+                :disabled="!connectionDisabledReason"
+                :content="connectionDisabledReason"
+                placement="bottom"
               >
-                {{ connectionActionLabel }}
-              </el-button>
+                <span>
+                  <el-button
+                    :type="activeSessionState.status === 'connected' ? 'default' : 'primary'"
+                    :disabled="!canManageConnection || connectionSessionBusy"
+                    :loading="connectionSessionBusy"
+                    @click="toggleActiveConnection"
+                  >
+                    {{ connectionActionLabel }}
+                  </el-button>
+                </span>
+              </el-tooltip>
             </div>
           </header>
 
@@ -148,6 +157,12 @@
                   @points="createDiscoveredPoints"
                   @create-point="openDiscoveredPoint"
                   @session-error="markActiveSessionError"
+                />
+              </el-tab-pane>
+              <el-tab-pane label="连接诊断" name="diagnostic">
+                <CollectorDiagnosticPanel
+                  :project-id="projectId"
+                  :connection-id="activeConnection.id"
                 />
               </el-tab-pane>
             </el-tabs>
@@ -238,6 +253,7 @@ import IconTablerTopologyStar3 from '~icons/tabler/topology-star-3'
 import CollectorAgentSelector from './CollectorAgentSelector.vue'
 import CollectorBatchResultDialog from './CollectorBatchResultDialog.vue'
 import CollectorConnectionEditor from './CollectorConnectionEditor.vue'
+import CollectorDiagnosticPanel from './CollectorDiagnosticPanel.vue'
 import CollectorDriverIcon from './CollectorDriverIcon.vue'
 import CollectorConnectionList from './CollectorConnectionList.vue'
 import CollectorConnectionWizard from './CollectorConnectionWizard.vue'
@@ -317,6 +333,12 @@ const canManageConnection = computed(() =>
       )
     : false,
 )
+const connectionDisabledReason = computed(() => {
+  if (!selectedAgent.value) return '请先选择采集调试代理'
+  if (selectedAgent.value.status !== 'online') return '所选采集调试代理当前离线'
+  if (!canManageConnection.value) return '代理缺少当前驱动、版本或 Schema 能力'
+  return ''
+})
 
 const supportsDeviceBrowse = computed(
   () => activeDriver.value?.operations.includes('device.browse') ?? false,
@@ -354,8 +376,10 @@ const canRead = computed(() =>
     : false,
 )
 const pointReadDisabledReason = computed(() => {
+  if (!selectedAgent.value) return '请先选择采集调试代理'
+  if (selectedAgent.value.status !== 'online') return '所选采集调试代理当前离线'
   if (activeSessionState.value.status !== 'connected') return '请先连接设备'
-  if (!canRead.value) return '当前调试代理不支持变量读取'
+  if (!canRead.value) return '代理缺少当前驱动、版本、Schema 或变量读取能力'
   return ''
 })
 

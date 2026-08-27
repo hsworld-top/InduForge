@@ -24,45 +24,63 @@ type CollectorConnectionStore interface {
 }
 
 type CreateCollectorConnectionInput struct {
-	Name     string            `json:"name"`
-	DriverID string            `json:"driverId"`
-	Config   map[string]any    `json:"config"`
-	Secrets  map[string]string `json:"secrets"`
-	Metadata map[string]any    `json:"metadata"`
+	Name               string            `json:"name"`
+	DriverID           string            `json:"driverId"`
+	Config             map[string]any    `json:"config"`
+	Secrets            map[string]string `json:"secrets"`
+	Metadata           map[string]any    `json:"metadata"`
+	IsEnabled          *bool             `json:"isEnabled"`
+	DefaultAcquisition map[string]any    `json:"defaultAcquisition"`
 }
 
 type UpdateCollectorConnectionInput struct {
-	Name        *string
-	Config      map[string]any
-	HasConfig   bool
-	Metadata    map[string]any
-	HasMetadata bool
-	Secrets     map[string]*string
+	Name                  *string
+	Config                map[string]any
+	HasConfig             bool
+	Metadata              map[string]any
+	HasMetadata           bool
+	Secrets               map[string]*string
+	IsEnabled             *bool
+	DefaultAcquisition    map[string]any
+	HasDefaultAcquisition bool
 }
 
 type CollectorConnection struct {
-	ID             string          `json:"id"`
-	ProjectID      string          `json:"projectId"`
-	Name           string          `json:"name"`
-	Code           string          `json:"code"`
-	Status         string          `json:"status"`
-	DisplayOrder   int             `json:"displayOrder"`
-	ProtocolFamily string          `json:"protocolFamily"`
-	DriverID       string          `json:"driverId"`
-	DriverVersion  string          `json:"driverVersion"`
-	SchemaVersion  int             `json:"schemaVersion"`
-	Config         map[string]any  `json:"config"`
-	Metadata       map[string]any  `json:"metadata"`
-	SecretStatus   map[string]bool `json:"secretStatus"`
-	LastTestStatus *string         `json:"lastTestStatus"`
-	LastTestedAt   *string         `json:"lastTestedAt"`
-	CreatedAt      string          `json:"createdAt"`
-	UpdatedAt      string          `json:"updatedAt"`
+	ID                 string          `json:"id"`
+	ProjectID          string          `json:"projectId"`
+	Name               string          `json:"name"`
+	Code               string          `json:"code"`
+	IsEnabled          bool            `json:"isEnabled"`
+	ConfigurationState string          `json:"configurationState"`
+	DefaultAcquisition map[string]any  `json:"defaultAcquisition"`
+	DisplayOrder       int             `json:"displayOrder"`
+	ProtocolFamily     string          `json:"protocolFamily"`
+	DriverID           string          `json:"driverId"`
+	DriverVersion      string          `json:"driverVersion"`
+	SchemaVersion      int             `json:"schemaVersion"`
+	Config             map[string]any  `json:"config"`
+	Metadata           map[string]any  `json:"metadata"`
+	SecretStatus       map[string]bool `json:"secretStatus"`
+	LastTestStatus     *string         `json:"lastTestStatus"`
+	LastTestedAt       *string         `json:"lastTestedAt"`
+	CreatedAt          string          `json:"createdAt"`
+	UpdatedAt          string          `json:"updatedAt"`
 }
 
 type CollectorConnectionPage struct {
 	List       []CollectorConnection     `json:"list"`
 	Pagination CollectorDriverPagination `json:"pagination"`
+}
+
+type CollectorConnectionDiagnostic struct {
+	Agent                 map[string]any                              `json:"agent"`
+	LastTest              map[string]any                              `json:"lastTest"`
+	PointCount            int                                         `json:"pointCount"`
+	AttemptedPointCount   int                                         `json:"attemptedPointCount"`
+	SucceededPointCount   int                                         `json:"succeededPointCount"`
+	FailedPointCount      int                                         `json:"failedPointCount"`
+	RecentReadSuccessRate *float64                                    `json:"recentReadSuccessRate"`
+	FailedPoints          []repository.CollectorFailedPointDiagnostic `json:"failedPoints"`
 }
 
 type CollectorService struct {
@@ -153,6 +171,14 @@ func (s *CollectorService) CreateConnection(ctx context.Context, projectID, user
 	}
 	config := cloneCollectorMap(input.Config)
 	metadata := cloneCollectorMap(input.Metadata)
+	defaultAcquisition, err := normalizeCollectorDefaultAcquisition(input.DefaultAcquisition)
+	if err != nil {
+		return nil, err
+	}
+	isEnabled := true
+	if input.IsEnabled != nil {
+		isEnabled = *input.IsEnabled
+	}
 	if err := s.validateConnectionConfig(driver.Manifest.DriverID, config, input.Secrets, nil); err != nil {
 		return nil, err
 	}
@@ -161,7 +187,7 @@ func (s *CollectorService) CreateConnection(ctx context.Context, projectID, user
 		return nil, err
 	}
 	connectionID := uuid.NewString()
-	record, err := s.store.CreateConnection(ctx, repository.CreateCollectorConnectionParams{ID: connectionID, ProjectID: projectID, UserID: userID, Name: name, Code: collectorCodeFromName(name, "connection"), ProtocolFamily: driver.Manifest.ProtocolFamily, DriverID: driver.Manifest.DriverID, DriverVersion: driver.Manifest.DriverVersion, SchemaVersion: driver.Manifest.SchemaVersion, Config: config, Metadata: metadata, Secrets: secrets})
+	record, err := s.store.CreateConnection(ctx, repository.CreateCollectorConnectionParams{ID: connectionID, ProjectID: projectID, UserID: userID, Name: name, Code: collectorCodeFromName(name, "connection"), ProtocolFamily: driver.Manifest.ProtocolFamily, DriverID: driver.Manifest.DriverID, DriverVersion: driver.Manifest.DriverVersion, SchemaVersion: driver.Manifest.SchemaVersion, Config: config, Metadata: metadata, DefaultAcquisition: defaultAcquisition, IsEnabled: isEnabled, Secrets: secrets})
 	if err != nil {
 		return nil, err
 	}
@@ -199,6 +225,17 @@ func (s *CollectorService) UpdateConnection(ctx context.Context, projectID, conn
 	if input.HasMetadata {
 		metadata = cloneCollectorMap(input.Metadata)
 	}
+	defaultAcquisition := cloneCollectorMap(current.DefaultAcquisition)
+	if input.HasDefaultAcquisition {
+		defaultAcquisition, err = normalizeCollectorDefaultAcquisition(input.DefaultAcquisition)
+		if err != nil {
+			return nil, err
+		}
+	}
+	isEnabled := current.IsEnabled
+	if input.IsEnabled != nil {
+		isEnabled = *input.IsEnabled
+	}
 	if err := s.validateConnectionConfig(current.DriverID, config, nil, mergeCollectorSecretStatus(current.SecretStatus, input.Secrets)); err != nil {
 		return nil, err
 	}
@@ -206,7 +243,7 @@ func (s *CollectorService) UpdateConnection(ctx context.Context, projectID, conn
 	if err != nil {
 		return nil, err
 	}
-	record, err := s.store.UpdateConnection(ctx, repository.UpdateCollectorConnectionParams{ID: connectionID, ProjectID: projectID, UserID: userID, Name: name, Config: config, Metadata: metadata, Secrets: upserts, DeleteSecretKeys: deletes})
+	record, err := s.store.UpdateConnection(ctx, repository.UpdateCollectorConnectionParams{ID: connectionID, ProjectID: projectID, UserID: userID, Name: name, Config: config, Metadata: metadata, DefaultAcquisition: defaultAcquisition, IsEnabled: isEnabled, Secrets: upserts, DeleteSecretKeys: deletes})
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +258,66 @@ func (s *CollectorService) DeleteConnection(ctx context.Context, projectID, conn
 	if err := validateConnectionID(connectionID); err != nil {
 		return err
 	}
+	if repositoryStore, ok := s.store.(*repository.CollectorRepository); ok {
+		return repositoryStore.DeleteWithImpact(ctx, projectID, connectionID, "")
+	}
 	return s.store.DeleteConnection(ctx, projectID, connectionID)
+}
+
+func (s *CollectorService) GetConnectionDeleteImpact(ctx context.Context, projectID, connectionID string) (*repository.SourceDeleteImpactRecord, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateConnectionID(connectionID); err != nil {
+		return nil, err
+	}
+	repositoryStore, ok := s.store.(*repository.CollectorRepository)
+	if !ok {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "工业采集仓储不支持删除影响检查")
+	}
+	return repositoryStore.GetDeleteImpact(ctx, projectID, connectionID)
+}
+
+func (s *CollectorService) GetConnectionDiagnostic(ctx context.Context, projectID, connectionID string) (*CollectorConnectionDiagnostic, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateConnectionID(connectionID); err != nil {
+		return nil, err
+	}
+	repositoryStore, ok := s.store.(*repository.CollectorRepository)
+	if !ok {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "工业采集仓储不支持诊断摘要")
+	}
+	record, err := repositoryStore.GetConnectionDiagnostic(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	var successRate *float64
+	if record.AttemptedPointCount > 0 {
+		value := float64(record.SucceededPointCount) / float64(record.AttemptedPointCount)
+		successRate = &value
+	}
+	agent := map[string]any{"ready": record.AgentReady, "reason": record.AgentReason}
+	if record.AgentID != "" {
+		agent["id"] = record.AgentID
+		agent["name"] = record.AgentName
+		agent["version"] = record.AgentVersion
+		agent["lastSeenAt"] = record.AgentLastSeenAt
+	}
+	lastTest := map[string]any{"status": record.LastTestStatus, "durationMs": record.LastTestDurationMS}
+	if record.LastTestAt != nil {
+		lastTest["testedAt"] = record.LastTestAt
+	}
+	if record.LastErrorCode != "" {
+		lastTest["errorCode"] = record.LastErrorCode
+	}
+	if record.LastErrorMessage != "" {
+		lastTest["message"] = record.LastErrorMessage
+	}
+	return &CollectorConnectionDiagnostic{Agent: agent, LastTest: lastTest, PointCount: record.PointCount,
+		AttemptedPointCount: record.AttemptedPointCount, SucceededPointCount: record.SucceededPointCount,
+		FailedPointCount: len(record.FailedPoints), RecentReadSuccessRate: successRate, FailedPoints: record.FailedPoints}, nil
 }
 
 func (s *CollectorService) validateConnectionConfig(driverID string, config map[string]any, createSecrets map[string]string, secretStatus map[string]bool) error {
@@ -324,11 +420,37 @@ func cloneCollectorMap(value map[string]any) map[string]any {
 	return result
 }
 
+func cloneCollectorSecretStatus(value map[string]bool) map[string]bool {
+	result := map[string]bool{}
+	for key, item := range value {
+		result[key] = item
+	}
+	return result
+}
+
 func toCollectorConnection(record repository.CollectorConnectionRecord) CollectorConnection {
 	var lastTestedAt *string
 	if record.LastTestedAt != nil {
 		value := record.LastTestedAt.Format("2006-01-02 15:04:05")
 		lastTestedAt = &value
 	}
-	return CollectorConnection{ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, Code: record.Code, Status: record.Status, DisplayOrder: record.DisplayOrder, ProtocolFamily: record.ProtocolFamily, DriverID: record.DriverID, DriverVersion: record.DriverVersion, SchemaVersion: record.SchemaVersion, Config: cloneCollectorMap(record.Config), Metadata: cloneCollectorMap(record.Metadata), SecretStatus: record.SecretStatus, LastTestStatus: record.LastTestStatus, LastTestedAt: lastTestedAt, CreatedAt: record.CreatedAt.Format("2006-01-02 15:04:05"), UpdatedAt: record.UpdatedAt.Format("2006-01-02 15:04:05")}
+	configurationState := "ready"
+	if len(record.Config) == 0 {
+		configurationState = "incomplete"
+	}
+	return CollectorConnection{ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, Code: record.Code, IsEnabled: record.IsEnabled, ConfigurationState: configurationState, DefaultAcquisition: cloneCollectorMap(record.DefaultAcquisition), DisplayOrder: record.DisplayOrder, ProtocolFamily: record.ProtocolFamily, DriverID: record.DriverID, DriverVersion: record.DriverVersion, SchemaVersion: record.SchemaVersion, Config: cloneCollectorMap(record.Config), Metadata: cloneCollectorMap(record.Metadata), SecretStatus: cloneCollectorSecretStatus(record.SecretStatus), LastTestStatus: record.LastTestStatus, LastTestedAt: lastTestedAt, CreatedAt: record.CreatedAt.Format("2006-01-02 15:04:05"), UpdatedAt: record.UpdatedAt.Format("2006-01-02 15:04:05")}
+}
+
+func normalizeCollectorDefaultAcquisition(input map[string]any) (map[string]any, error) {
+	result := map[string]any{"intervalMs": 1000, "timeoutMs": 3000, "retryCount": 0, "deadband": 0, "changeOnly": false, "priority": 0}
+	for key, value := range input {
+		result[key] = value
+	}
+	for _, key := range []string{"intervalMs", "timeoutMs"} {
+		value, ok := result[key].(float64)
+		if ok && value <= 0 {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, key+" 必须为正数")
+		}
+	}
+	return result, nil
 }

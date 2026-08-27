@@ -1,1 +1,2 @@
-{"connection":{"order":["host","port","connectTimeoutMs","receiveTimeoutMs"]},"address":{"order":["area","dbNumber","byteOffset"]}}
+{
+  "addressHelper": "siemens","connection":{"order":["host","port","connectTimeoutMs","receiveTimeoutMs"]},"address":{"order":["area","dbNumber","byteOffset"]}}

@@ -1,4 +1,5 @@
 {
+  "addressHelper": "modbus",
   "connection": { "order": ["host", "port", "connectTimeoutMs", "receiveTimeoutMs", "dataFormat"] },
   "address": { "order": ["station", "area", "address", "bitIndex"] }
 }

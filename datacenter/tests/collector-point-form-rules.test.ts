@@ -7,6 +7,7 @@ describe('collector point form rules', () => {
   it('restricts Modbus bit areas to bool and removes register-only fields', () => {
     const state = resolveCollectorPointFormState({
       driverId: 'modbus.tcp',
+      addressHelper: 'modbus',
       address: { station: 1, area: 'coil', address: 10, bitIndex: 3 },
       dataType: 'int16',
       driverDataTypes: dataTypes,
@@ -22,6 +23,7 @@ describe('collector point form rules', () => {
   it('requires a bit index for Modbus register bool values', () => {
     const state = resolveCollectorPointFormState({
       driverId: 'modbus.tcp',
+      addressHelper: 'modbus',
       address: { station: 1, area: 'holdingRegister', address: 10 },
       dataType: 'bool',
       driverDataTypes: dataTypes,
@@ -34,6 +36,7 @@ describe('collector point form rules', () => {
   it('removes the Modbus bit index from numeric register values', () => {
     const state = resolveCollectorPointFormState({
       driverId: 'modbus.tcp',
+      addressHelper: 'modbus',
       address: { station: 1, area: 'inputRegister', address: 10, bitIndex: 2 },
       dataType: 'int16',
       driverDataTypes: dataTypes,
@@ -46,12 +49,14 @@ describe('collector point form rules', () => {
   it('shows S7 DB number only for data block addresses', () => {
     const dataBlockState = resolveCollectorPointFormState({
       driverId: 'siemens.s7-tcp',
+      addressHelper: 'siemens',
       address: { area: 'dataBlock', dbNumber: 1, byteOffset: 4 },
       dataType: 'int16',
       driverDataTypes: dataTypes,
     })
     const markerState = resolveCollectorPointFormState({
       driverId: 'siemens.s7-tcp',
+      addressHelper: 'siemens',
       address: { area: 'marker', dbNumber: 1, byteOffset: 4 },
       dataType: 'int16',
       driverDataTypes: dataTypes,
@@ -65,12 +70,14 @@ describe('collector point form rules', () => {
   it('shows S7 bit offset only for bool values in bit-addressable areas', () => {
     const boolState = resolveCollectorPointFormState({
       driverId: 'siemens.s7-tcp',
+      addressHelper: 'siemens',
       address: { area: 'input', byteOffset: 4 },
       dataType: 'bool',
       driverDataTypes: dataTypes,
     })
     const numericState = resolveCollectorPointFormState({
       driverId: 'siemens.s7-tcp',
+      addressHelper: 'siemens',
       address: { area: 'input', byteOffset: 4, bitOffset: 2 },
       dataType: 'int16',
       driverDataTypes: dataTypes,
@@ -85,6 +92,7 @@ describe('collector point form rules', () => {
   it('restricts S7 timer and counter values to 16-bit integers', () => {
     const state = resolveCollectorPointFormState({
       driverId: 'siemens.s7-tcp',
+      addressHelper: 'siemens',
       address: { area: 'timer', byteOffset: 2, bitOffset: 1 },
       dataType: 'float32',
       driverDataTypes: dataTypes,

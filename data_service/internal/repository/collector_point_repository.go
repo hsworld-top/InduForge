@@ -43,14 +43,15 @@ type CollectorPointDebugSnapshotRecord struct {
 }
 
 type CollectorPointRecord struct {
-	ID, ProjectID, ConnectionID, Code, Name, AddressText, DataType string
-	GroupID                                                        *string
-	Description                                                    *string
-	Address, ReadOptions, Acquisition, Metadata                    map[string]any
-	AddressSchemaVersion, ElementCount, SortOrder                  int
-	Enabled                                                        bool
-	LatestDebugSnapshot                                            *CollectorPointDebugSnapshotRecord
-	CreatedAt, UpdatedAt                                           time.Time
+	ID, ProjectID, ConnectionID, Code, Name, AddressText, DataType    string
+	GroupID                                                           *string
+	Description                                                       *string
+	Address, ReadOptions, Acquisition, AcquisitionOverrides, Metadata map[string]any
+	AcquisitionMode                                                   string
+	AddressSchemaVersion, ElementCount, SortOrder                     int
+	Enabled                                                           bool
+	LatestDebugSnapshot                                               *CollectorPointDebugSnapshotRecord
+	CreatedAt, UpdatedAt                                              time.Time
 }
 
 type CollectorPointListFilter struct {
@@ -64,7 +65,8 @@ type CreateCollectorPointParams struct {
 	ID, ProjectID, ConnectionID, ConnectionCode, UserID, Code, Name, AddressText, DataType string
 	GroupID                                                                                *string
 	Description                                                                            *string
-	Address, ReadOptions, Acquisition, Metadata                                            map[string]any
+	Address, ReadOptions, Acquisition, AcquisitionOverrides, Metadata                      map[string]any
+	AcquisitionMode                                                                        string
 	AddressSchemaVersion, ElementCount, SortOrder                                          int
 	Enabled                                                                                bool
 }
@@ -250,10 +252,11 @@ func (r *CollectorRepository) ListPoints(ctx context.Context, projectID, connect
 		direction = "DESC"
 	}
 	args = append(args, filter.PageSize, (filter.Page-1)*filter.PageSize)
-	query := fmt.Sprintf(`SELECT point.id,point.project_id,point.connection_id,point.group_id,point.code,point.name,point.description,point.address,point.address_text,point.address_schema_version,point.data_type,point.element_count,point.read_options,point.acquisition,point.enabled,point.sort_order,point.metadata,point.created_at,point.updated_at,
+	query := fmt.Sprintf(`SELECT point.id,point.project_id,point.connection_id,point.group_id,point.code,point.name,point.description,point.address,point.address_text,point.address_schema_version,point.data_type,point.element_count,point.read_options,point.acquisition_mode,point.acquisition_overrides,connection.default_acquisition,point.enabled,point.sort_order,point.metadata,point.created_at,point.updated_at,
 		snapshot.point_id,snapshot.value,snapshot.value_text,snapshot.data_type,snapshot.quality,snapshot.source_timestamp,snapshot.server_timestamp,snapshot.read_at,snapshot.last_attempt_status,snapshot.last_attempt_at,snapshot.last_error_code,snapshot.last_error_message,
 		COUNT(*) OVER()::int
 		FROM data_collector_points point
+		JOIN data_collector_connections connection ON connection.id=point.connection_id AND connection.project_id=point.project_id
 		LEFT JOIN data_collector_point_debug_snapshots snapshot ON snapshot.point_id=point.id
 		WHERE %s ORDER BY %s %s,point.id ASC LIMIT $%d OFFSET $%d`, strings.Join(conditions, " AND "), order, direction, len(args)-1, len(args))
 	rows, err := r.pool.Query(ctx, query, args...)
@@ -291,10 +294,10 @@ func (r *CollectorRepository) CreatePointsBatch(ctx context.Context, params []Cr
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	rows, err := tx.Query(ctx, `WITH input AS (
-SELECT * FROM jsonb_to_recordset($1::jsonb) AS item(id uuid,project_id uuid,connection_id uuid,group_id uuid,code text,name text,description text,address jsonb,address_text text,address_schema_version integer,data_type text,element_count integer,read_options jsonb,acquisition jsonb,enabled boolean,sort_order integer,metadata jsonb,path text,refresh_interval_ms integer,status text,user_id uuid)
+SELECT * FROM jsonb_to_recordset($1::jsonb) AS item(id uuid,project_id uuid,connection_id uuid,group_id uuid,code text,name text,description text,address jsonb,address_text text,address_schema_version integer,data_type text,element_count integer,read_options jsonb,acquisition_mode text,acquisition_overrides jsonb,enabled boolean,sort_order integer,metadata jsonb,path text,refresh_interval_ms integer,status text,user_id uuid)
 ), inserted_points AS (
-INSERT INTO data_collector_points (id,project_id,connection_id,group_id,code,name,description,address,address_text,address_schema_version,data_type,element_count,read_options,acquisition,enabled,sort_order,metadata)
-SELECT id,project_id,connection_id,group_id,code,name,description,address,address_text,address_schema_version,data_type,element_count,read_options,acquisition,enabled,sort_order,metadata FROM input
+INSERT INTO data_collector_points (id,project_id,connection_id,group_id,code,name,description,address,address_text,address_schema_version,data_type,element_count,read_options,acquisition_mode,acquisition_overrides,enabled,sort_order,metadata)
+SELECT id,project_id,connection_id,group_id,code,name,description,address,address_text,address_schema_version,data_type,element_count,read_options,acquisition_mode,acquisition_overrides,enabled,sort_order,metadata FROM input
 ON CONFLICT DO NOTHING RETURNING id
 )
 INSERT INTO data_points (project_id,path,name,description,source_type,source_id,source_config,data_type,refresh_mode,refresh_interval_ms,status,display_order,created_by,updated_by)
@@ -318,6 +321,9 @@ RETURNING source_id::text`, string(payload))
 		return nil, wrapUnifiedCollectorRepositoryError("读取批量创建结果失败", err)
 	}
 	rows.Close()
+	if len(ids) != len(params) {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusConflict, "批量创建存在名称或地址冲突，未写入任何变量")
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, wrapUnifiedCollectorRepositoryError("提交批量创建采集点事务失败", err)
 	}
@@ -335,11 +341,23 @@ func (r *CollectorRepository) UpdatePointsBatch(ctx context.Context, params []Up
 	defer func() { _ = tx.Rollback(ctx) }()
 	ids := make([]string, 0, len(params))
 	for _, item := range params {
-		address, _ := json.Marshal(item.Address)
-		readOptions, _ := json.Marshal(item.ReadOptions)
-		acquisition, _ := json.Marshal(item.Acquisition)
-		metadata, _ := json.Marshal(item.Metadata)
-		tag, err := tx.Exec(ctx, `UPDATE data_collector_points SET group_id=$4,code=$5,name=$6,description=$7,address=$8::jsonb,address_text=$9,address_schema_version=$10,data_type=$11,element_count=$12,read_options=$13::jsonb,acquisition=$14::jsonb,enabled=$15,sort_order=$16,metadata=$17::jsonb,updated_at=now() WHERE id=$1 AND project_id=$2 AND connection_id=$3`, item.ID, item.ProjectID, item.ConnectionID, item.GroupID, item.Code, item.Name, item.Description, string(address), item.AddressText, item.AddressSchemaVersion, item.DataType, item.ElementCount, string(readOptions), string(acquisition), item.Enabled, item.SortOrder, string(metadata))
+		address, err := json.Marshal(collectorPointJSONMap(item.Address))
+		if err != nil {
+			return nil, badCollectorPayload("序列化采集点地址失败", err)
+		}
+		readOptions, err := json.Marshal(collectorPointJSONMap(item.ReadOptions))
+		if err != nil {
+			return nil, badCollectorPayload("序列化采集点读取参数失败", err)
+		}
+		acquisitionOverrides, err := json.Marshal(collectorPointJSONMap(item.AcquisitionOverrides))
+		if err != nil {
+			return nil, badCollectorPayload("序列化采集点采集覆盖失败", err)
+		}
+		metadata, err := json.Marshal(collectorPointJSONMap(item.Metadata))
+		if err != nil {
+			return nil, badCollectorPayload("序列化采集点元数据失败", err)
+		}
+		tag, err := tx.Exec(ctx, `UPDATE data_collector_points SET group_id=$4,code=$5,name=$6,description=$7,address=$8::jsonb,address_text=$9,address_schema_version=$10,data_type=$11,element_count=$12,read_options=$13::jsonb,acquisition_mode=$14,acquisition_overrides=$15::jsonb,enabled=$16,sort_order=$17,metadata=$18::jsonb,updated_at=now() WHERE id=$1 AND project_id=$2 AND connection_id=$3`, item.ID, item.ProjectID, item.ConnectionID, item.GroupID, item.Code, item.Name, item.Description, string(address), item.AddressText, item.AddressSchemaVersion, item.DataType, item.ElementCount, string(readOptions), collectorPointAcquisitionMode(item.AcquisitionMode), string(acquisitionOverrides), item.Enabled, item.SortOrder, string(metadata))
 		if err != nil {
 			return nil, translateCollectorWriteError("更新采集点失败", err)
 		}
@@ -368,8 +386,28 @@ func (r *CollectorRepository) DeletePointsBatch(ctx context.Context, projectID, 
 		return wrapUnifiedCollectorRepositoryError("开启批量删除采集点事务失败", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err = tx.Exec(ctx, `DELETE FROM data_points WHERE project_id=$1 AND source_type='collector.point' AND source_id=ANY($2::uuid[])`, projectID, pointIDs); err != nil {
-		return translateCollectorWriteError("删除采集点映射数据点失败", err)
+	if err := lockSourceProject(ctx, tx, projectID); err != nil {
+		return err
+	}
+	rows, err := tx.Query(ctx, `SELECT id FROM data_points WHERE project_id=$1 AND source_type='collector.point' AND source_id=ANY($2::uuid[]) FOR UPDATE`, projectID, pointIDs)
+	if err != nil {
+		return err
+	}
+	datapointIDs := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		datapointIDs = append(datapointIDs, id)
+	}
+	rows.Close()
+	if err := ensureNoDatapointBlockingUsagesTx(ctx, tx, projectID, datapointIDs); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE data_points SET status='invalid',updated_at=now() WHERE project_id=$1 AND id=ANY($2::uuid[])`, projectID, datapointIDs); err != nil {
+		return translateCollectorWriteError("标记采集点映射数据点失效失败", err)
 	}
 	tag, err := tx.Exec(ctx, `DELETE FROM data_collector_points WHERE project_id=$1 AND connection_id=$2 AND id=ANY($3::uuid[])`, projectID, connectionID, pointIDs)
 	if err != nil {
@@ -422,7 +460,8 @@ type collectorPointBatchInsertRow struct {
 	DataType             string         `json:"data_type"`
 	ElementCount         int            `json:"element_count"`
 	ReadOptions          map[string]any `json:"read_options"`
-	Acquisition          map[string]any `json:"acquisition"`
+	AcquisitionMode      string         `json:"acquisition_mode"`
+	AcquisitionOverrides map[string]any `json:"acquisition_overrides"`
 	Enabled              bool           `json:"enabled"`
 	SortOrder            int            `json:"sort_order"`
 	Metadata             map[string]any `json:"metadata"`
@@ -437,10 +476,11 @@ func buildCollectorPointBatchInsertRows(params []CreateCollectorPointParams) []c
 	for _, item := range params {
 		rows = append(rows, collectorPointBatchInsertRow{
 			ID: item.ID, ProjectID: item.ProjectID, ConnectionID: item.ConnectionID, GroupID: item.GroupID,
-			Code: item.Code, Name: item.Name, Description: item.Description, Address: item.Address,
+			Code: item.Code, Name: item.Name, Description: item.Description, Address: collectorPointJSONMap(item.Address),
 			AddressText: item.AddressText, AddressSchemaVersion: item.AddressSchemaVersion, DataType: item.DataType,
-			ElementCount: item.ElementCount, ReadOptions: item.ReadOptions, Acquisition: item.Acquisition,
-			Enabled: item.Enabled, SortOrder: item.SortOrder, Metadata: item.Metadata,
+			ElementCount: item.ElementCount, ReadOptions: collectorPointJSONMap(item.ReadOptions), AcquisitionMode: collectorPointAcquisitionMode(item.AcquisitionMode),
+			AcquisitionOverrides: collectorPointJSONMap(item.AcquisitionOverrides),
+			Enabled:              item.Enabled, SortOrder: item.SortOrder, Metadata: collectorPointJSONMap(item.Metadata),
 			Path: collectorPointPath(item.ConnectionCode, item.Code), RefreshIntervalMS: collectorRefreshInterval(item.Acquisition),
 			Status: collectorDataPointStatus(item.Enabled), UserID: item.UserID,
 		})
@@ -448,24 +488,38 @@ func buildCollectorPointBatchInsertRows(params []CreateCollectorPointParams) []c
 	return rows
 }
 
+func collectorPointJSONMap(value map[string]any) map[string]any {
+	if value == nil {
+		return map[string]any{}
+	}
+	return value
+}
+
+func collectorPointAcquisitionMode(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "inherit"
+	}
+	return strings.TrimSpace(value)
+}
+
 func insertCollectorPointAndDataPoint(ctx context.Context, tx pgx.Tx, item CreateCollectorPointParams) error {
-	address, err := json.Marshal(item.Address)
+	address, err := json.Marshal(collectorPointJSONMap(item.Address))
 	if err != nil {
 		return badCollectorPayload("序列化采集点地址失败", err)
 	}
-	readOptions, err := json.Marshal(item.ReadOptions)
+	readOptions, err := json.Marshal(collectorPointJSONMap(item.ReadOptions))
 	if err != nil {
 		return badCollectorPayload("序列化采集点读取参数失败", err)
 	}
-	acquisition, err := json.Marshal(item.Acquisition)
+	acquisitionOverrides, err := json.Marshal(collectorPointJSONMap(item.AcquisitionOverrides))
 	if err != nil {
 		return badCollectorPayload("序列化采集策略失败", err)
 	}
-	metadata, err := json.Marshal(item.Metadata)
+	metadata, err := json.Marshal(collectorPointJSONMap(item.Metadata))
 	if err != nil {
 		return badCollectorPayload("序列化采集点元数据失败", err)
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO data_collector_points (id,project_id,connection_id,group_id,code,name,description,address,address_text,address_schema_version,data_type,element_count,read_options,acquisition,enabled,sort_order,metadata) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13::jsonb,$14::jsonb,$15,$16,$17::jsonb)`, item.ID, item.ProjectID, item.ConnectionID, item.GroupID, item.Code, item.Name, item.Description, string(address), item.AddressText, item.AddressSchemaVersion, item.DataType, item.ElementCount, string(readOptions), string(acquisition), item.Enabled, item.SortOrder, string(metadata))
+	_, err = tx.Exec(ctx, `INSERT INTO data_collector_points (id,project_id,connection_id,group_id,code,name,description,address,address_text,address_schema_version,data_type,element_count,read_options,acquisition_mode,acquisition_overrides,enabled,sort_order,metadata) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13::jsonb,$14,$15::jsonb,$16,$17,$18::jsonb)`, item.ID, item.ProjectID, item.ConnectionID, item.GroupID, item.Code, item.Name, item.Description, string(address), item.AddressText, item.AddressSchemaVersion, item.DataType, item.ElementCount, string(readOptions), collectorPointAcquisitionMode(item.AcquisitionMode), string(acquisitionOverrides), item.Enabled, item.SortOrder, string(metadata))
 	if err != nil {
 		return translateCollectorWriteError("创建采集点失败", err)
 	}
@@ -479,7 +533,7 @@ func insertCollectorPointAndDataPoint(ctx context.Context, tx pgx.Tx, item Creat
 }
 
 func (r *CollectorRepository) listPointsByIDs(ctx context.Context, projectID, connectionID string, ids []string) ([]CollectorPointRecord, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id,project_id,connection_id,group_id,code,name,description,address,address_text,address_schema_version,data_type,element_count,read_options,acquisition,enabled,sort_order,metadata,created_at,updated_at FROM data_collector_points WHERE project_id=$1 AND connection_id=$2 AND id=ANY($3::uuid[]) ORDER BY sort_order,id`, projectID, connectionID, ids)
+	rows, err := r.pool.Query(ctx, `SELECT point.id,point.project_id,point.connection_id,point.group_id,point.code,point.name,point.description,point.address,point.address_text,point.address_schema_version,point.data_type,point.element_count,point.read_options,point.acquisition_mode,point.acquisition_overrides,connection.default_acquisition,point.enabled,point.sort_order,point.metadata,point.created_at,point.updated_at FROM data_collector_points point JOIN data_collector_connections connection ON connection.id=point.connection_id AND connection.project_id=point.project_id WHERE point.project_id=$1 AND point.connection_id=$2 AND point.id=ANY($3::uuid[]) ORDER BY point.sort_order,point.id`, projectID, connectionID, ids)
 	if err != nil {
 		return nil, wrapUnifiedCollectorRepositoryError("读取批量采集点结果失败", err)
 	}
@@ -504,7 +558,7 @@ func (r *CollectorRepository) GetPointsByIDs(ctx context.Context, projectID, con
 
 // GetPointByID 按项目和采集点主键解析所属连接，供数据点列表统一展示来源。
 func (r *CollectorRepository) GetPointByID(ctx context.Context, projectID, pointID string) (*CollectorPointRecord, error) {
-	record, err := scanCollectorPoint(r.pool.QueryRow(ctx, `SELECT id,project_id,connection_id,group_id,code,name,description,address,address_text,address_schema_version,data_type,element_count,read_options,acquisition,enabled,sort_order,metadata,created_at,updated_at FROM data_collector_points WHERE project_id=$1 AND id=$2`, projectID, pointID))
+	record, err := scanCollectorPoint(r.pool.QueryRow(ctx, `SELECT point.id,point.project_id,point.connection_id,point.group_id,point.code,point.name,point.description,point.address,point.address_text,point.address_schema_version,point.data_type,point.element_count,point.read_options,point.acquisition_mode,point.acquisition_overrides,connection.default_acquisition,point.enabled,point.sort_order,point.metadata,point.created_at,point.updated_at FROM data_collector_points point JOIN data_collector_connections connection ON connection.id=point.connection_id AND connection.project_id=point.project_id WHERE point.project_id=$1 AND point.id=$2`, projectID, pointID))
 	if err != nil {
 		return nil, wrapUnifiedCollectorRepositoryError("读取采集点失败", err)
 	}
@@ -527,8 +581,8 @@ func scanCollectorPointGroup(row unifiedCollectorPointRow) (CollectorPointGroupR
 }
 func scanCollectorPoint(row unifiedCollectorPointRow) (CollectorPointRecord, error) {
 	var record CollectorPointRecord
-	var address, readOptions, acquisition, metadata []byte
-	err := row.Scan(&record.ID, &record.ProjectID, &record.ConnectionID, &record.GroupID, &record.Code, &record.Name, &record.Description, &address, &record.AddressText, &record.AddressSchemaVersion, &record.DataType, &record.ElementCount, &readOptions, &acquisition, &record.Enabled, &record.SortOrder, &metadata, &record.CreatedAt, &record.UpdatedAt)
+	var address, readOptions, acquisitionOverrides, defaultAcquisition, metadata []byte
+	err := row.Scan(&record.ID, &record.ProjectID, &record.ConnectionID, &record.GroupID, &record.Code, &record.Name, &record.Description, &address, &record.AddressText, &record.AddressSchemaVersion, &record.DataType, &record.ElementCount, &readOptions, &record.AcquisitionMode, &acquisitionOverrides, &defaultAcquisition, &record.Enabled, &record.SortOrder, &metadata, &record.CreatedAt, &record.UpdatedAt)
 	if err != nil {
 		return record, err
 	}
@@ -538,9 +592,14 @@ func scanCollectorPoint(row unifiedCollectorPointRow) (CollectorPointRecord, err
 	if err := decodeCollectorPointJSON(readOptions, &record.ReadOptions); err != nil {
 		return record, err
 	}
-	if err := decodeCollectorPointJSON(acquisition, &record.Acquisition); err != nil {
+	if err := decodeCollectorPointJSON(acquisitionOverrides, &record.AcquisitionOverrides); err != nil {
 		return record, err
 	}
+	var defaults map[string]any
+	if err := decodeCollectorPointJSON(defaultAcquisition, &defaults); err != nil {
+		return record, err
+	}
+	record.Acquisition = mergeCollectorAcquisition(defaults, record.AcquisitionMode, record.AcquisitionOverrides)
 	if err := decodeCollectorPointJSON(metadata, &record.Metadata); err != nil {
 		return record, err
 	}
@@ -548,7 +607,7 @@ func scanCollectorPoint(row unifiedCollectorPointRow) (CollectorPointRecord, err
 }
 func scanCollectorPointWithTotal(row unifiedCollectorPointRow) (CollectorPointRecord, int, error) {
 	var record CollectorPointRecord
-	var address, readOptions, acquisition, metadata []byte
+	var address, readOptions, acquisitionOverrides, defaultAcquisition, metadata []byte
 	var snapshotPointID *string
 	var snapshotValue []byte
 	var snapshotValueText, snapshotDataType, snapshotQuality *string
@@ -557,7 +616,7 @@ func scanCollectorPointWithTotal(row unifiedCollectorPointRow) (CollectorPointRe
 	var total int
 	err := row.Scan(
 		&record.ID, &record.ProjectID, &record.ConnectionID, &record.GroupID, &record.Code, &record.Name, &record.Description,
-		&address, &record.AddressText, &record.AddressSchemaVersion, &record.DataType, &record.ElementCount, &readOptions, &acquisition,
+		&address, &record.AddressText, &record.AddressSchemaVersion, &record.DataType, &record.ElementCount, &readOptions, &record.AcquisitionMode, &acquisitionOverrides, &defaultAcquisition,
 		&record.Enabled, &record.SortOrder, &metadata, &record.CreatedAt, &record.UpdatedAt,
 		&snapshotPointID, &snapshotValue, &snapshotValueText, &snapshotDataType, &snapshotQuality, &sourceTimestamp, &serverTimestamp,
 		&readAt, &lastAttemptStatus, &lastAttemptAt, &lastErrorCode, &lastErrorMessage, &total,
@@ -571,9 +630,14 @@ func scanCollectorPointWithTotal(row unifiedCollectorPointRow) (CollectorPointRe
 	if err := decodeCollectorPointJSON(readOptions, &record.ReadOptions); err != nil {
 		return record, 0, err
 	}
-	if err := decodeCollectorPointJSON(acquisition, &record.Acquisition); err != nil {
+	if err := decodeCollectorPointJSON(acquisitionOverrides, &record.AcquisitionOverrides); err != nil {
 		return record, 0, err
 	}
+	var defaults map[string]any
+	if err := decodeCollectorPointJSON(defaultAcquisition, &defaults); err != nil {
+		return record, 0, err
+	}
+	record.Acquisition = mergeCollectorAcquisition(defaults, record.AcquisitionMode, record.AcquisitionOverrides)
 	if err := decodeCollectorPointJSON(metadata, &record.Metadata); err != nil {
 		return record, 0, err
 	}
@@ -599,6 +663,19 @@ func decodeCollectorPointJSON(payload []byte, target *map[string]any) error {
 		return wrapUnifiedCollectorRepositoryError("解析采集点 JSON 失败", err)
 	}
 	return nil
+}
+
+func mergeCollectorAcquisition(defaults map[string]any, mode string, overrides map[string]any) map[string]any {
+	result := make(map[string]any, len(defaults)+len(overrides))
+	for key, value := range defaults {
+		result[key] = value
+	}
+	if mode == "override" {
+		for key, value := range overrides {
+			result[key] = value
+		}
+	}
+	return result
 }
 
 func collectorPointPath(connectionCode, code string) string {

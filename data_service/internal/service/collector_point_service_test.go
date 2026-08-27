@@ -973,15 +973,15 @@ func TestCollectorPointServiceNormalizesYokogawaAddress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.List) != 1 || result.List[0].AddressText != "cpu=2;D100" {
-		t.Fatalf("合法横河地址未规范化: %+v", result)
+	if len(result.List) != 0 || len(store.created) != 0 {
+		t.Fatalf("同批次存在非法行时不得写入合法行: %+v", result)
 	}
 	if len(result.Failed) != 1 || !strings.Contains(result.Failed[0].Message, "必须使用继电器地址") {
 		t.Fatalf("非法横河类型组合未被拒绝: %+v", result)
 	}
 }
 
-func TestCollectorPointServiceCreatesValidRowsAndReturnsDuplicateFailures(t *testing.T) {
+func TestCollectorPointServiceRejectsWholeBatchWhenAnyRowConflicts(t *testing.T) {
 	store := &fakeCollectorPointStore{
 		connection:            repository.CollectorConnectionRecord{ID: "550e8400-e29b-41d4-a716-446655440002", ProjectID: "550e8400-e29b-41d4-a716-446655440000", DriverID: "opcua.standard", SchemaVersion: 1},
 		existingConflictNames: []string{"existing"},
@@ -996,7 +996,7 @@ func TestCollectorPointServiceCreatesValidRowsAndReturnsDuplicateFailures(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.List) != 2 || len(result.Failed) != 2 {
+	if len(result.List) != 0 || len(result.Failed) != 2 {
 		t.Fatalf("unexpected result: %#v", result)
 	}
 	if result.Failed[0].Index != 1 || result.Failed[0].Code != "DUPLICATE_NAME" || result.Failed[1].Index != 2 {
@@ -1004,7 +1004,7 @@ func TestCollectorPointServiceCreatesValidRowsAndReturnsDuplicateFailures(t *tes
 	}
 }
 
-func TestCollectorPointServiceAllowsLaterValidDuplicateNameCandidate(t *testing.T) {
+func TestCollectorPointServiceDoesNotCreateLaterRowsAfterConflict(t *testing.T) {
 	store := &fakeCollectorPointStore{
 		connection:                   repository.CollectorConnectionRecord{ID: "550e8400-e29b-41d4-a716-446655440002", ProjectID: "550e8400-e29b-41d4-a716-446655440000", DriverID: "opcua.standard", SchemaVersion: 1},
 		existingConflictAddressTexts: []string{"ns=2;s=ExistingAddress"},
@@ -1017,7 +1017,7 @@ func TestCollectorPointServiceAllowsLaterValidDuplicateNameCandidate(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.List) != 1 || result.List[0].AddressText != "ns=2;s=ValidAddress" {
+	if len(result.List) != 0 {
 		t.Fatalf("unexpected created points: %#v", result.List)
 	}
 	if len(result.Failed) != 1 || result.Failed[0].Index != 0 || result.Failed[0].Code != "DUPLICATE_ADDRESS" {

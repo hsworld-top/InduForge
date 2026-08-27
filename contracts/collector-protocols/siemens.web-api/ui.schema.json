@@ -1,1 +1,2 @@
-{"connection":{"order":["host","port","userName","password","useHttps","receiveTimeoutMs"]},"address":{"order":["tag"]}}
+{
+  "addressHelper": "siemens","connection":{"order":["host","port","userName","password","useHttps","receiveTimeoutMs"]},"address":{"order":["tag"]}}

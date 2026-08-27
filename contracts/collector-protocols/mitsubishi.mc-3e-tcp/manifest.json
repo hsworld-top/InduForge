@@ -1,9 +1,10 @@
 {
-  "protocolFamily": "mitsubishi",
+  "protocolFamily": "melsec",
   "driverId": "mitsubishi.mc-3e-tcp",
   "driverVersion": "1.0.0",
   "schemaVersion": 1,
   "displayName": "Mitsubishi MC 3E TCP",
+  "addressHelper": "melsec",
   "category": "plc",
   "transports": ["tcp"],
   "operations": [

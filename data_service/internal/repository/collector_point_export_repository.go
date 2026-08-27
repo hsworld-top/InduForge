@@ -85,13 +85,17 @@ SELECT id,parent_id,name,name::text AS path FROM data_collector_point_groups WHE
 UNION ALL
 SELECT child.id,child.parent_id,child.name,(parent.path || '/' || child.name) FROM data_collector_point_groups child JOIN group_tree parent ON child.parent_id=parent.id WHERE child.project_id=$1 AND child.connection_id=$2
 )%s, filtered AS (
-SELECT p.id,p.project_id,p.connection_id,p.group_id,p.code,p.name,p.description,p.address,p.address_text,p.address_schema_version,p.data_type,p.element_count,p.read_options,p.acquisition,p.enabled,p.sort_order,p.metadata,p.created_at,p.updated_at,COALESCE(group_tree.path,'') AS group_path
-FROM data_collector_points p LEFT JOIN group_tree ON group_tree.id=p.group_id
+SELECT p.id,p.project_id,p.connection_id,p.group_id,p.code,p.name,p.description,p.address,p.address_text,p.address_schema_version,p.data_type,p.element_count,p.read_options,p.acquisition_mode,p.acquisition_overrides,
+       (connection.default_acquisition || CASE WHEN p.acquisition_mode='override' THEN p.acquisition_overrides ELSE '{}'::jsonb END) AS acquisition,
+       p.enabled,p.sort_order,p.metadata,p.created_at,p.updated_at,COALESCE(group_tree.path,'') AS group_path
+FROM data_collector_points p
+JOIN data_collector_connections connection ON connection.id=p.connection_id AND connection.project_id=p.project_id
+LEFT JOIN group_tree ON group_tree.id=p.group_id
 WHERE %s
 ), ranked AS (
 SELECT filtered.*,row_number() OVER (ORDER BY %s %s,id ASC) AS row_num FROM filtered
 )
-SELECT id,project_id,connection_id,group_id,code,name,description,address,address_text,address_schema_version,data_type,element_count,read_options,acquisition,enabled,sort_order,metadata,created_at,updated_at,group_path
+SELECT id,project_id,connection_id,group_id,code,name,description,address,address_text,address_schema_version,data_type,element_count,read_options,acquisition_mode,acquisition_overrides,acquisition,enabled,sort_order,metadata,created_at,updated_at,group_path
 FROM ranked WHERE %s ORDER BY row_num`, groupCTE, strings.Join(conditions, " AND "), sortColumn, direction, pageCondition)
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -100,7 +104,7 @@ FROM ranked WHERE %s ORDER BY row_num`, groupCTE, strings.Join(conditions, " AND
 	defer rows.Close()
 	for rows.Next() {
 		var record CollectorPointExportRecord
-		if err := rows.Scan(&record.ID, &record.ProjectID, &record.ConnectionID, &record.GroupID, &record.Code, &record.Name, &record.Description, &record.Address, &record.AddressText, &record.AddressSchemaVersion, &record.DataType, &record.ElementCount, &record.ReadOptions, &record.Acquisition, &record.Enabled, &record.SortOrder, &record.Metadata, &record.CreatedAt, &record.UpdatedAt, &record.GroupPath); err != nil {
+		if err := rows.Scan(&record.ID, &record.ProjectID, &record.ConnectionID, &record.GroupID, &record.Code, &record.Name, &record.Description, &record.Address, &record.AddressText, &record.AddressSchemaVersion, &record.DataType, &record.ElementCount, &record.ReadOptions, &record.AcquisitionMode, &record.AcquisitionOverrides, &record.Acquisition, &record.Enabled, &record.SortOrder, &record.Metadata, &record.CreatedAt, &record.UpdatedAt, &record.GroupPath); err != nil {
 			return err
 		}
 		if err := visit(record); err != nil {

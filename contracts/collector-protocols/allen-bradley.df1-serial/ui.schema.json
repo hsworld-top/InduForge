@@ -1,1 +1,2 @@
-{"connection":{"order":["portName","baudRate","dataBits","parity","stopBits","station","destinationNode","sourceNode","checkType","receiveTimeoutMs","dataFormat"]},"address":{"order":["address"]}}
+{
+  "addressHelper": "allen_bradley","connection":{"order":["portName","baudRate","dataBits","parity","stopBits","station","destinationNode","sourceNode","checkType","receiveTimeoutMs","dataFormat"]},"address":{"order":["address"]}}

@@ -1,4 +1,5 @@
 {
+  "addressHelper": "modbus",
   "connection": {
     "order": ["portName", "baudRate", "dataBits", "parity", "stopBits", "timeoutMs", "dataFormat"]
   },

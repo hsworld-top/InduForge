@@ -4,6 +4,7 @@
   "driverVersion": "1.0.0",
   "schemaVersion": 1,
   "displayName": "Omron FINS TCP",
+  "addressHelper": "omron",
   "category": "plc",
   "transports": ["tcp"],
   "operations": [

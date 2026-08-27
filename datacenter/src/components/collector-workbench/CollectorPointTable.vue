@@ -186,6 +186,7 @@
       :project-id="projectId"
       :connection-id="connectionId"
       :driver-id="driverId"
+      :default-acquisition="defaultAcquisition"
       :point="currentPoint"
       :groups="groups"
       :default-group-id="createGroupId"
@@ -224,6 +225,7 @@ const props = defineProps<{
   connectionId: string
   connectionName: string
   driverId: string
+  defaultAcquisition: Record<string, unknown>
   groupId: string | null
   showElementCount: boolean
   supportsPointRead: boolean

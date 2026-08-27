@@ -1,5 +1,6 @@
 export type CollectorPointFormContext = {
   driverId: string
+  addressHelper?: string
   address: Record<string, unknown>
   dataType: string
   driverDataTypes: string[]
@@ -22,8 +23,13 @@ const s7WordAreas = new Set(['timer', 'counter'])
 export function resolveCollectorPointFormState(
   context: CollectorPointFormContext,
 ): CollectorPointFormState {
-  if (context.driverId.startsWith('modbus.')) return resolveModbusState(context)
-  if (context.driverId === 'siemens.s7-tcp') return resolveSiemensS7State(context)
+  // 地址助手由 Manifest 声明，前端不再通过驱动 ID 猜测协议族。
+  if (context.addressHelper === 'modbus') return resolveModbusState(context)
+  if (
+    context.addressHelper === 'siemens' &&
+    ('area' in context.address || 'byteOffset' in context.address)
+  )
+    return resolveSiemensS7State(context)
   return {
     visibleAddressFields: undefined,
     requiredAddressFields: undefined,

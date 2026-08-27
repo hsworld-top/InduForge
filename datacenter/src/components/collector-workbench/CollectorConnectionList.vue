@@ -138,7 +138,11 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { deleteCollectorConnection, listCollectorConnections } from '@/api/collector.api'
+import {
+  deleteCollectorConnection,
+  getCollectorConnectionDeleteImpact,
+  listCollectorConnections,
+} from '@/api/collector.api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { CollectorConnection } from '@/api/schemas/collector.schema'
 import {
@@ -213,9 +217,27 @@ async function removeConnection(item: CollectorConnection) {
     ElMessage.warning('请先断开调试长连接，再删除工业连接')
     return
   }
-  // 删除连接会级联删除该连接下的变量分组和变量，必须在执行前明确提示影响范围。
+  const impact = await getCollectorConnectionDeleteImpact(props.projectId, item.id)
+  if (!impact.canDelete) {
+    const blockers = impact.blockingUsages
+      .map(
+        (usage) =>
+          `${usage.label || usage.type} ${usage.count} 项${usage.examples.length ? `（${usage.examples.map((example) => example.name).join('、')}）` : ''}`,
+      )
+      .join('\n')
+    await ElMessageBox.alert(
+      `当前工业连接仍被以下配置引用，请先解除引用：\n${blockers}`,
+      '无法删除工业连接',
+      {
+        type: 'warning',
+        confirmButtonText: '知道了',
+      },
+    )
+    return
+  }
+  const owned = impact.ownedResources.reduce((sum, resource) => sum + resource.count, 0)
   await ElMessageBox.confirm(
-    `确认删除连接“${item.name}”？该连接下的变量分组和变量也会一并删除。`,
+    `确认删除连接“${item.name}”及 ${owned} 个来源内配置？${impact.generatedDatapoints.count} 个已生成数据点会保留并标记为无效。`,
     '删除工业连接',
     {
       type: 'warning',

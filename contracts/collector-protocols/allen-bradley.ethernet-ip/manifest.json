@@ -4,6 +4,7 @@
   "driverVersion": "1.0.0",
   "schemaVersion": 1,
   "displayName": "Allen-Bradley EtherNet/IP",
+  "addressHelper": "allen_bradley",
   "category": "plc",
   "transports": ["tcp"],
   "operations": [

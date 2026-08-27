@@ -40,7 +40,9 @@ export const CollectorConnectionSchema = z.object({
   projectId: z.string(),
   name: z.string(),
   code: z.string(),
-  status: z.string(),
+  configurationState: z.enum(['ready', 'incomplete']),
+  isEnabled: z.boolean().default(true),
+  defaultAcquisition: JsonObjectSchema.nullish().transform((value) => value ?? {}),
   lastTestStatus: z.string().nullable().optional(),
   lastTestedAt: z.string().nullable().optional(),
   displayOrder: z.number().int(),
@@ -48,9 +50,12 @@ export const CollectorConnectionSchema = z.object({
   driverId: z.string(),
   driverVersion: z.string(),
   schemaVersion: z.number().int().positive(),
-  config: JsonObjectSchema,
-  metadata: JsonObjectSchema,
-  secretStatus: z.record(z.string(), z.boolean()),
+  config: JsonObjectSchema.nullish().transform((value) => value ?? {}),
+  metadata: JsonObjectSchema.nullish().transform((value) => value ?? {}),
+  secretStatus: z
+    .record(z.string(), z.boolean())
+    .nullish()
+    .transform((value) => value ?? {}),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
@@ -112,10 +117,54 @@ export const CollectorPointSchema = z.object({
   elementCount: z.number().int().positive(),
   readOptions: JsonObjectSchema,
   acquisition: JsonObjectSchema,
+  acquisitionMode: z.enum(['inherit', 'override']).default('inherit'),
+  acquisitionOverrides: JsonObjectSchema.default({}),
   enabled: z.boolean(),
   sortOrder: z.number().int(),
   metadata: JsonObjectSchema,
   latestDebugSnapshot: CollectorPointDebugSnapshotSchema.nullable(),
+})
+
+export const CollectorAddressNormalizationSchema = z.object({
+  address: JsonObjectSchema,
+  addressText: z.string(),
+  allowedDataTypes: z.array(z.string()),
+  errors: z.array(z.object({ field: z.string(), message: z.string() })).default([]),
+})
+
+export const CollectorConnectionDiagnosticSchema = z.object({
+  agent: z.object({
+    id: z.string().optional(),
+    name: z.string().optional(),
+    version: z.string().optional(),
+    lastSeenAt: z.string().nullable().optional(),
+    ready: z.boolean(),
+    reason: z.string().default(''),
+  }),
+  lastTest: z.object({
+    status: z.string().default('not_tested'),
+    testedAt: z.string().nullable().optional(),
+    durationMs: z.number().nonnegative().default(0),
+    errorCode: z.string().default(''),
+    message: z.string().default(''),
+  }),
+  pointCount: z.number().int().nonnegative(),
+  attemptedPointCount: z.number().int().nonnegative(),
+  succeededPointCount: z.number().int().nonnegative(),
+  failedPointCount: z.number().int().nonnegative(),
+  recentReadSuccessRate: z.number().min(0).max(1).nullable(),
+  failedPoints: z
+    .array(
+      z.object({
+        pointId: z.string(),
+        name: z.string(),
+        addressText: z.string(),
+        errorCode: z.string().default(''),
+        errorMessage: z.string(),
+        attemptedAt: z.string(),
+      }),
+    )
+    .default([]),
 })
 
 export const CollectorPointPageSchema = z.object({
@@ -188,6 +237,8 @@ export type CollectorPointBatchFailure = z.infer<typeof CollectorPointBatchFailu
 export type CollectorPointBatchResult = z.infer<typeof CollectorPointBatchResultSchema>
 export type CollectorImportPreview = z.infer<typeof CollectorImportPreviewSchema>
 export type CollectorTask = z.infer<typeof CollectorTaskSchema>
+export type CollectorAddressNormalization = z.infer<typeof CollectorAddressNormalizationSchema>
+export type CollectorConnectionDiagnostic = z.infer<typeof CollectorConnectionDiagnosticSchema>
 export type CollectorProtocolCapability = z.infer<typeof CollectorProtocolCapabilitySchema>
 
 export type CollectorJsonSchemaProperty = {
@@ -209,6 +260,10 @@ export type CollectorJsonSchemaProperty = {
 export type CollectorJsonSchema = CollectorJsonSchemaProperty & {
   properties?: Record<string, CollectorJsonSchemaProperty>
   required?: string[]
+}
+
+export type CollectorUISchema = Record<string, unknown> & {
+  addressHelper?: 'siemens' | 'modbus' | 'mitsubishi' | 'omron' | 'allen-bradley'
 }
 
 export function splitCollectorFormValues(

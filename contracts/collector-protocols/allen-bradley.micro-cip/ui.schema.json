@@ -1,1 +1,2 @@
-{"connection":{"order":["host","port","slot","portSlot","connectTimeoutMs","receiveTimeoutMs","dataFormat"]},"address":{"order":["address"]}}
+{
+  "addressHelper": "allen_bradley","connection":{"order":["host","port","slot","portSlot","connectTimeoutMs","receiveTimeoutMs","dataFormat"]},"address":{"order":["address"]}}

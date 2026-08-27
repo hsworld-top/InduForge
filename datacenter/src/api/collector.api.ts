@@ -3,6 +3,8 @@ import type { AxiosError, AxiosRequestConfig } from 'axios'
 import { z } from 'zod'
 import {
   CollectorConnectionPageSchema,
+  CollectorConnectionDiagnosticSchema,
+  CollectorAddressNormalizationSchema,
   CollectorConnectionSchema,
   CollectorDriverDetailSchema,
   CollectorDriverPageSchema,
@@ -13,6 +15,8 @@ import {
   CollectorPointSchema,
   CollectorTaskSchema,
   type CollectorConnection,
+  type CollectorConnectionDiagnostic,
+  type CollectorAddressNormalization,
   type CollectorDriverDetail,
   type CollectorDriverSummary,
   type CollectorImportPreview,
@@ -21,6 +25,10 @@ import {
   type CollectorPointGroup,
   type CollectorTask,
 } from './schemas/collector.schema'
+import {
+  SourceDeleteImpactSchema,
+  type SourceDeleteImpact,
+} from './schemas/source-delete-impact.schema'
 
 export type PageResult<T> = {
   list: T[]
@@ -127,6 +135,18 @@ export async function deleteCollectorConnection(
   })
 }
 
+export async function getCollectorConnectionDeleteImpact(
+  projectId: string,
+  connectionId: string,
+): Promise<SourceDeleteImpact> {
+  return SourceDeleteImpactSchema.parse(
+    await requestData({
+      url: `/data/projects/${projectId}/collector/connections/${connectionId}/delete-impact`,
+      method: 'get',
+    }),
+  )
+}
+
 export async function listCollectorPointGroups(
   projectId: string,
   connectionId: string,
@@ -207,6 +227,40 @@ export async function checkCollectorPointAddresses(
     }),
   )
   return response.indexes
+}
+
+export async function normalizeCollectorPointAddress(
+  projectId: string,
+  connectionId: string,
+  data: { address: Record<string, unknown>; dataType: string; elementCount: number },
+): Promise<CollectorAddressNormalization> {
+  return CollectorAddressNormalizationSchema.parse(
+    await requestData({
+      url: `/data/projects/${projectId}/collector/connections/${connectionId}/points/normalize-address`,
+      method: 'post',
+      data,
+    }),
+  )
+}
+
+export async function getCollectorConnectionDiagnostic(
+  projectId: string,
+  connectionId: string,
+): Promise<CollectorConnectionDiagnostic> {
+  return CollectorConnectionDiagnosticSchema.parse(
+    await requestData({
+      url: `/data/projects/${projectId}/collector/connections/${connectionId}/diagnostic`,
+      method: 'get',
+    }),
+  )
+}
+
+export async function exportCollectorConnectionDiagnostic(projectId: string, connectionId: string) {
+  return (await request({
+    url: `/data/projects/${projectId}/collector/connections/${connectionId}/diagnostic/export`,
+    method: 'get',
+    responseType: 'blob',
+  })) as Blob
 }
 
 async function postPointBatch(

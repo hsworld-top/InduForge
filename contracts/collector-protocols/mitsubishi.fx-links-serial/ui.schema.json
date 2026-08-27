@@ -1,1 +1,2 @@
-{"connection":{"order":["portName","baudRate","dataBits","parity","stopBits","station","waitingTime","sumCheck","format","receiveTimeoutMs"]},"address":{"order":["address"]}}
+{
+  "addressHelper": "melsec","connection":{"order":["portName","baudRate","dataBits","parity","stopBits","station","waitingTime","sumCheck","format","receiveTimeoutMs"]},"address":{"order":["address"]}}

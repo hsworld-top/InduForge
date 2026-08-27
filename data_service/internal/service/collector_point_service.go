@@ -46,10 +46,13 @@ type CreateCollectorPointInput struct {
 	DataType     string         `json:"dataType"`
 	ElementCount int            `json:"elementCount"`
 	ReadOptions  map[string]any `json:"readOptions"`
-	Acquisition  map[string]any `json:"acquisition"`
-	Enabled      *bool          `json:"enabled"`
-	SortOrder    int            `json:"sortOrder"`
-	Metadata     map[string]any `json:"metadata"`
+	// Acquisition 仅作为旧表单提交的编辑值边界；持久化始终使用继承模式和差异覆盖。
+	Acquisition          map[string]any `json:"acquisition,omitempty"`
+	AcquisitionMode      string         `json:"acquisitionMode,omitempty"`
+	AcquisitionOverrides map[string]any `json:"acquisitionOverrides,omitempty"`
+	Enabled              *bool          `json:"enabled"`
+	SortOrder            int            `json:"sortOrder"`
+	Metadata             map[string]any `json:"metadata"`
 }
 
 type UpdateCollectorPointInput struct {
@@ -103,6 +106,8 @@ type CollectorPoint struct {
 	ElementCount         int                          `json:"elementCount"`
 	ReadOptions          map[string]any               `json:"readOptions"`
 	Acquisition          map[string]any               `json:"acquisition"`
+	AcquisitionMode      string                       `json:"acquisitionMode"`
+	AcquisitionOverrides map[string]any               `json:"acquisitionOverrides"`
 	Enabled              bool                         `json:"enabled"`
 	SortOrder            int                          `json:"sortOrder"`
 	Metadata             map[string]any               `json:"metadata"`
@@ -111,6 +116,13 @@ type CollectorPoint struct {
 type CollectorPointPage struct {
 	List       []CollectorPoint          `json:"list"`
 	Pagination CollectorDriverPagination `json:"pagination"`
+}
+
+type CollectorAddressNormalizationResult struct {
+	Address          map[string]any      `json:"address"`
+	AddressText      string              `json:"addressText"`
+	AllowedDataTypes []string            `json:"allowedDataTypes"`
+	Errors           []map[string]string `json:"errors"`
 }
 
 type CollectorPointService struct {
@@ -141,6 +153,33 @@ func NewCollectorPointService(store CollectorPointStore, catalog *collectorproto
 		}
 		result.addressSchemas[driver.Manifest.DriverID] = schema
 	}
+	return result, nil
+}
+
+func (s *CollectorPointService) NormalizeAddress(ctx context.Context, projectID, connectionID string, address map[string]any, dataType string, elementCount int) (*CollectorAddressNormalizationResult, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validateConnectionID(connectionID); err != nil {
+		return nil, err
+	}
+	connection, err := s.store.GetConnection(ctx, projectID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	driver, ok := s.catalog.Driver(connection.DriverID)
+	if !ok {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "采集驱动不存在")
+	}
+	result := &CollectorAddressNormalizationResult{Address: cloneCollectorMap(address), AllowedDataTypes: append([]string{}, driver.Manifest.DataTypes...), Errors: []map[string]string{}}
+	input := CreateCollectorPointInput{Name: "地址预览", Address: cloneCollectorMap(address), DataType: dataType, ElementCount: elementCount}
+	params, buildErr := s.buildPointParams(connection, uuid.Nil.String(), uuid.NewString(), "address_preview", input)
+	if buildErr != nil {
+		result.Errors = append(result.Errors, map[string]string{"field": "address", "message": buildErr.Error()})
+		return result, nil
+	}
+	result.Address = params.Address
+	result.AddressText = params.AddressText
 	return result, nil
 }
 
@@ -296,11 +335,7 @@ func (s *CollectorPointService) CreatePointsBatch(ctx context.Context, projectID
 	for _, code := range existingCodes {
 		usedCodes[code] = struct{}{}
 	}
-	type candidate struct {
-		index int
-		point repository.CreateCollectorPointParams
-	}
-	candidates := make([]candidate, 0, len(inputs))
+	candidates := make([]repository.CreateCollectorPointParams, 0, len(inputs))
 	for index, input := range inputs {
 		pointID := uuid.NewString()
 		value, buildErr := s.buildPointParams(connection, userID, pointID, allocateCollectorPointCode(input.Name, usedCodes), input)
@@ -308,17 +343,17 @@ func (s *CollectorPointService) CreatePointsBatch(ctx context.Context, projectID
 			result.Failed = append(result.Failed, CollectorPointBatchFailure{Index: index, Name: strings.TrimSpace(input.Name), Code: "VALIDATION_FAILED", Message: buildErr.Error()})
 			continue
 		}
-		candidates = append(candidates, candidate{index: index, point: value})
+		candidates = append(candidates, value)
 	}
-	if len(candidates) == 0 {
+	if len(result.Failed) > 0 {
 		sort.Slice(result.Failed, func(i, j int) bool { return result.Failed[i].Index < result.Failed[j].Index })
 		return result, nil
 	}
 	names := make([]string, 0, len(candidates))
 	addresses := make([]string, 0, len(candidates))
 	for _, item := range candidates {
-		names = append(names, strings.ToLower(item.point.Name))
-		addresses = append(addresses, item.point.AddressText)
+		names = append(names, strings.ToLower(item.Name))
+		addresses = append(addresses, item.AddressText)
 	}
 	conflicts, err := s.store.ListExistingPointConflicts(ctx, projectID, connectionID, names, addresses)
 	if err != nil {
@@ -332,49 +367,49 @@ func (s *CollectorPointService) CreatePointsBatch(ctx context.Context, projectID
 	for _, address := range conflicts.AddressTexts {
 		existingAddresses[address] = struct{}{}
 	}
-	valid := make([]candidate, 0, len(candidates))
 	params := make([]repository.CreateCollectorPointParams, 0, len(candidates))
 	seenNames := make(map[string]struct{}, len(candidates))
 	seenAddresses := make(map[string]struct{}, len(candidates))
-	for _, item := range candidates {
-		nameKey := strings.ToLower(item.point.Name)
+	for index, item := range candidates {
+		nameKey := strings.ToLower(item.Name)
 		if _, exists := existingNames[nameKey]; exists {
-			result.Failed = append(result.Failed, CollectorPointBatchFailure{Index: item.index, Name: item.point.Name, Code: "DUPLICATE_NAME", Message: "变量名称已存在：" + item.point.Name})
+			result.Failed = append(result.Failed, CollectorPointBatchFailure{Index: index, Name: item.Name, Code: "DUPLICATE_NAME", Message: "变量名称已存在：" + item.Name})
 			continue
 		}
-		if _, exists := existingAddresses[item.point.AddressText]; exists {
-			result.Failed = append(result.Failed, CollectorPointBatchFailure{Index: item.index, Name: item.point.Name, Code: "DUPLICATE_ADDRESS", Message: "变量地址已存在：" + item.point.AddressText})
+		if _, exists := existingAddresses[item.AddressText]; exists {
+			result.Failed = append(result.Failed, CollectorPointBatchFailure{Index: index, Name: item.Name, Code: "DUPLICATE_ADDRESS", Message: "变量地址已存在：" + item.AddressText})
 			continue
 		}
 		if _, exists := seenNames[nameKey]; exists {
-			result.Failed = append(result.Failed, CollectorPointBatchFailure{Index: item.index, Name: item.point.Name, Code: "DUPLICATE_NAME", Message: "变量名称已存在：" + item.point.Name})
+			result.Failed = append(result.Failed, CollectorPointBatchFailure{Index: index, Name: item.Name, Code: "DUPLICATE_NAME", Message: "变量名称已存在：" + item.Name})
 			continue
 		}
-		if _, exists := seenAddresses[item.point.AddressText]; exists {
-			result.Failed = append(result.Failed, CollectorPointBatchFailure{Index: item.index, Name: item.point.Name, Code: "DUPLICATE_ADDRESS", Message: "变量地址已存在：" + item.point.AddressText})
+		if _, exists := seenAddresses[item.AddressText]; exists {
+			result.Failed = append(result.Failed, CollectorPointBatchFailure{Index: index, Name: item.Name, Code: "DUPLICATE_ADDRESS", Message: "变量地址已存在：" + item.AddressText})
 			continue
 		}
 		seenNames[nameKey] = struct{}{}
-		seenAddresses[item.point.AddressText] = struct{}{}
-		valid = append(valid, item)
-		params = append(params, item.point)
+		seenAddresses[item.AddressText] = struct{}{}
+		params = append(params, item)
+	}
+	if len(result.Failed) > 0 {
+		sort.Slice(result.Failed, func(i, j int) bool { return result.Failed[i].Index < result.Failed[j].Index })
+		return result, nil
 	}
 	records, err := s.store.CreatePointsBatch(ctx, params)
 	if err != nil {
 		return CollectorPointBatchResult{}, err
 	}
 	result.List = mapCollectorPoints(records)
-	createdIDs := make(map[string]struct{}, len(records))
-	for _, record := range records {
-		createdIDs[record.ID] = struct{}{}
-	}
-	for _, item := range valid {
-		if _, created := createdIDs[item.point.ID]; !created {
-			result.Failed = append(result.Failed, CollectorPointBatchFailure{Index: item.index, Name: item.point.Name, Code: "CONFLICT", Message: "变量名称或地址已存在：" + item.point.Name})
-		}
-	}
-	sort.Slice(result.Failed, func(i, j int) bool { return result.Failed[i].Index < result.Failed[j].Index })
 	return result, nil
+}
+
+func formatCollectorBatchFailures(failures []CollectorPointBatchFailure) string {
+	parts := make([]string, 0, len(failures))
+	for _, failure := range failures {
+		parts = append(parts, fmt.Sprintf("第 %d 行 %s", failure.Index+1, failure.Message))
+	}
+	return "批量创建未写入任何变量：" + strings.Join(parts, "；")
 }
 func (s *CollectorPointService) UpdatePointsBatch(ctx context.Context, projectID, connectionID, userID string, inputs []UpdateCollectorPointInput) ([]CollectorPoint, error) {
 	connection, err := s.store.GetConnection(ctx, projectID, connectionID)
@@ -401,6 +436,10 @@ func (s *CollectorPointService) UpdatePointsBatch(ctx context.Context, projectID
 		current, exists := existingByID[input.ID]
 		if !exists {
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "采集点不存在")
+		}
+		if input.AcquisitionMode == "" && input.Acquisition == nil && input.AcquisitionOverrides == nil {
+			input.AcquisitionMode = current.AcquisitionMode
+			input.AcquisitionOverrides = cloneCollectorMap(current.AcquisitionOverrides)
 		}
 		value, err := s.buildPointParams(connection, userID, input.ID, current.Code, input.CreateCollectorPointInput)
 		if err != nil {
@@ -848,11 +887,50 @@ func (s *CollectorPointService) buildPointParams(connection *repository.Collecto
 	if input.Enabled != nil {
 		enabled = *input.Enabled
 	}
-	acquisition := cloneCollectorMap(input.Acquisition)
-	if len(acquisition) == 0 {
-		acquisition = map[string]any{"mode": "polling", "intervalMs": 1000, "timeoutMs": 3000, "deadband": nil, "changeOnly": false, "priority": "normal"}
+	mode := strings.TrimSpace(input.AcquisitionMode)
+	if mode == "" {
+		if input.Acquisition != nil || input.AcquisitionOverrides != nil {
+			mode = "override"
+		} else {
+			mode = "inherit"
+		}
 	}
-	return repository.CreateCollectorPointParams{ID: id, ProjectID: connection.ProjectID, ConnectionID: connection.ID, ConnectionCode: connection.Code, UserID: userID, GroupID: input.GroupID, Code: code, Name: name, Description: input.Description, Address: cloneCollectorMap(input.Address), AddressText: addressText, AddressSchemaVersion: connection.SchemaVersion, DataType: input.DataType, ElementCount: elementCount, ReadOptions: cloneCollectorMap(input.ReadOptions), Acquisition: acquisition, Enabled: enabled, SortOrder: input.SortOrder, Metadata: cloneCollectorMap(input.Metadata)}, nil
+	if mode != "inherit" && mode != "override" {
+		return repository.CreateCollectorPointParams{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "采集参数模式必须为 inherit 或 override")
+	}
+	overrides := cloneCollectorMap(input.AcquisitionOverrides)
+	if input.Acquisition != nil {
+		overrides = collectorAcquisitionDifferences(connection.DefaultAcquisition, input.Acquisition)
+	}
+	if mode == "inherit" {
+		overrides = map[string]any{}
+	}
+	effectiveAcquisition := mergeCollectorPointAcquisition(connection.DefaultAcquisition, mode, overrides)
+	if _, err := normalizeCollectorDefaultAcquisition(effectiveAcquisition); err != nil {
+		return repository.CreateCollectorPointParams{}, err
+	}
+	return repository.CreateCollectorPointParams{ID: id, ProjectID: connection.ProjectID, ConnectionID: connection.ID, ConnectionCode: connection.Code, UserID: userID, GroupID: input.GroupID, Code: code, Name: name, Description: input.Description, Address: cloneCollectorMap(input.Address), AddressText: addressText, AddressSchemaVersion: connection.SchemaVersion, DataType: input.DataType, ElementCount: elementCount, ReadOptions: cloneCollectorMap(input.ReadOptions), AcquisitionMode: mode, AcquisitionOverrides: overrides, Acquisition: effectiveAcquisition, Enabled: enabled, SortOrder: input.SortOrder, Metadata: cloneCollectorMap(input.Metadata)}, nil
+}
+
+func collectorAcquisitionDifferences(defaults, edited map[string]any) map[string]any {
+	result := map[string]any{}
+	for key, value := range edited {
+		defaultValue, exists := defaults[key]
+		if !exists || fmt.Sprint(defaultValue) != fmt.Sprint(value) {
+			result[key] = value
+		}
+	}
+	return result
+}
+
+func mergeCollectorPointAcquisition(defaults map[string]any, mode string, overrides map[string]any) map[string]any {
+	result := cloneCollectorMap(defaults)
+	if mode == "override" {
+		for key, value := range overrides {
+			result[key] = value
+		}
+	}
+	return result
 }
 
 // validateModbusPointAddress 校验 Modbus 区域、平台数据类型和寄存器位索引的组合，避免保存驱动无法读取的变量。
@@ -2178,7 +2256,7 @@ func mapCollectorPoints(records []repository.CollectorPointRecord) []CollectorPo
 	return result
 }
 func toCollectorPoint(record repository.CollectorPointRecord) CollectorPoint {
-	point := CollectorPoint{ID: record.ID, GroupID: record.GroupID, Code: record.Code, Name: record.Name, Description: record.Description, Address: record.Address, AddressText: record.AddressText, AddressSchemaVersion: record.AddressSchemaVersion, DataType: record.DataType, ElementCount: record.ElementCount, ReadOptions: record.ReadOptions, Acquisition: record.Acquisition, Enabled: record.Enabled, SortOrder: record.SortOrder, Metadata: record.Metadata}
+	point := CollectorPoint{ID: record.ID, GroupID: record.GroupID, Code: record.Code, Name: record.Name, Description: record.Description, Address: record.Address, AddressText: record.AddressText, AddressSchemaVersion: record.AddressSchemaVersion, DataType: record.DataType, ElementCount: record.ElementCount, ReadOptions: record.ReadOptions, Acquisition: record.Acquisition, AcquisitionMode: record.AcquisitionMode, AcquisitionOverrides: record.AcquisitionOverrides, Enabled: record.Enabled, SortOrder: record.SortOrder, Metadata: record.Metadata}
 	if snapshot := record.LatestDebugSnapshot; snapshot != nil {
 		point.LatestDebugSnapshot = &CollectorPointDebugSnapshot{
 			Value: snapshot.Value, ValueText: snapshot.ValueText, DataType: snapshot.DataType, Quality: snapshot.Quality,

@@ -121,7 +121,7 @@ func (p CollectorPointExportPlan) WriteCSV(ctx context.Context, output io.Writer
 	for _, name := range p.addressProperties {
 		headers = append(headers, "address."+name)
 	}
-	headers = append(headers, "readOptions", "acquisition", "metadata")
+	headers = append(headers, "readOptions", "acquisitionMode", "acquisitionOverrides", "metadata")
 	if err := writer.Write(headers); err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func (p CollectorPointExportPlan) WriteCSV(ctx context.Context, output io.Writer
 		for _, name := range p.addressProperties {
 			row = append(row, collectorExportCell(record.Address[name]))
 		}
-		row = append(row, collectorExportJSON(record.ReadOptions), collectorExportJSON(record.Acquisition), collectorExportJSON(record.Metadata))
+		row = append(row, collectorExportJSON(record.ReadOptions), record.AcquisitionMode, collectorExportJSON(record.AcquisitionOverrides), collectorExportJSON(record.Metadata))
 		return writer.Write(row)
 	})
 	writer.Flush()

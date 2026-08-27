@@ -127,12 +127,6 @@
           <el-form-item v-if="supportsElementCount" label="元素数量" required>
             <el-input-number v-model="draft.elementCount" :min="1" :max="65535" />
           </el-form-item>
-          <el-form-item label="采集周期">
-            <div class="collector-point-drawer__number-field">
-              <el-input-number v-model="draft.intervalMs" :min="100" :step="100" />
-              <span class="collector-point-drawer__unit">ms</span>
-            </div>
-          </el-form-item>
         </div>
         <el-form-item label="变量说明">
           <el-input v-model="draft.description" type="textarea" :rows="3" maxlength="500" />
@@ -140,8 +134,44 @@
       </section>
 
       <section class="collector-point-drawer__section">
+        <div class="collector-point-drawer__section-title"><span>采集参数</span></div>
+        <el-radio-group v-model="draft.acquisitionMode">
+          <el-radio-button value="inherit">继承连接默认</el-radio-button>
+          <el-radio-button value="override">单独覆盖</el-radio-button>
+        </el-radio-group>
+        <p class="collector-point-drawer__inherit-hint">
+          {{
+            draft.acquisitionMode === 'inherit'
+              ? `当前继承：${acquisitionSummary(defaultAcquisition)}`
+              : '只保存与连接默认不同的字段'
+          }}
+        </p>
+        <div v-if="draft.acquisitionMode === 'override'" class="collector-point-drawer__grid">
+          <el-form-item label="采集周期 (ms)"
+            ><el-input-number v-model="draft.intervalMs" :min="1"
+          /></el-form-item>
+          <el-form-item label="读取超时 (ms)"
+            ><el-input-number v-model="draft.timeoutMs" :min="1"
+          /></el-form-item>
+          <el-form-item label="失败重试"
+            ><el-input-number v-model="draft.retryCount" :min="0"
+          /></el-form-item>
+          <el-form-item label="数值死区"
+            ><el-input-number v-model="draft.deadband" :min="0"
+          /></el-form-item>
+          <el-form-item label="优先级"
+            ><el-input-number v-model="draft.priority" :min="0"
+          /></el-form-item>
+          <el-form-item label="仅变化时采集"><el-switch v-model="draft.changeOnly" /></el-form-item>
+        </div>
+      </section>
+
+      <section class="collector-point-drawer__section">
         <div class="collector-point-drawer__section-title">
           <span>协议地址</span>
+          <el-tag v-if="addressHelperLabel" size="small" type="primary">{{
+            addressHelperLabel
+          }}</el-tag>
           <el-tag v-if="sourceLocked" size="small" type="info">设备识别 · 只读</el-tag>
         </div>
         <CollectorSchemaForm
@@ -154,7 +184,19 @@
           :visible-field-names="pointFormState.visibleAddressFields"
           :required-field-names="pointFormState.requiredAddressFields"
         />
+        <CollectorAddressHelper
+          v-if="driver"
+          v-model="draft.address"
+          :helper="String(driver.uiSchema.addressHelper || '')"
+          :schema="driver.addressSchema"
+        />
         <el-skeleton v-else :rows="3" animated />
+        <div class="collector-point-drawer__address-check">
+          <el-button :loading="normalizing" @click="normalizeAddress">校验并规范化</el-button>
+          <span v-if="normalizedAddressText"
+            >规范地址：<code>{{ normalizedAddressText }}</code></span
+          >
+        </div>
       </section>
 
       <section class="collector-point-drawer__switch-row">
@@ -183,6 +225,7 @@ import { getApiErrorMessage } from '@/utils/request'
 import {
   createCollectorPointsBatch,
   getCollectorDriver,
+  normalizeCollectorPointAddress,
   updateCollectorPointsBatch,
 } from '@/api/collector.api'
 import type {
@@ -197,6 +240,7 @@ import {
 } from './collector-workbench-model'
 import CollectorSchemaForm from './CollectorSchemaForm.vue'
 import { resolveCollectorPointFormState } from './collector-point-form-rules'
+import CollectorAddressHelper from './CollectorAddressHelper.vue'
 import {
   collectorDebugFailureText,
   collectorDebugQualityLabel,
@@ -218,6 +262,7 @@ const props = defineProps<{
   point?: CollectorPoint | null
   groups: CollectorPointGroupNode[]
   defaultGroupId?: string | null
+  defaultAcquisition: Record<string, unknown>
   createDefaults?: CollectorPointCreateDefaults | null
   sourceLocked?: boolean
 }>()
@@ -229,6 +274,8 @@ const emit = defineEmits<{
 const mode = ref<DrawerMode>('create')
 const driver = ref<CollectorDriverDetail>()
 const saving = ref(false)
+const normalizing = ref(false)
+const normalizedAddressText = ref('')
 const draft = reactive({
   groupId: null as string | null,
   name: '',
@@ -236,6 +283,12 @@ const draft = reactive({
   dataType: 'float32',
   elementCount: 1,
   intervalMs: 1000,
+  timeoutMs: 3000,
+  retryCount: 0,
+  deadband: 0,
+  changeOnly: false,
+  priority: 0,
+  acquisitionMode: 'inherit' as 'inherit' | 'override',
   enabled: true,
   address: {} as Record<string, unknown>,
 })
@@ -246,6 +299,7 @@ const driverDataTypes = computed(() => driver.value?.dataTypes || [])
 const pointFormState = computed(() =>
   resolveCollectorPointFormState({
     driverId: props.driverId,
+    addressHelper: String(driver.value?.uiSchema.addressHelper || ''),
     address: draft.address,
     dataType: draft.dataType,
     driverDataTypes: driverDataTypes.value,
@@ -255,6 +309,21 @@ const dataTypes = computed(() => pointFormState.value.allowedDataTypes)
 const supportsElementCount = computed(() =>
   collectorDriverSupportsFeature(driver.value, collectorDriverFeatures.pointElementCount),
 )
+const defaultAcquisition = computed(() => props.defaultAcquisition || {})
+const addressHelperLabel = computed(() => {
+  const helper = String(driver.value?.uiSchema.addressHelper || '')
+  return (
+    (
+      {
+        siemens: '西门子地址助手',
+        modbus: 'Modbus 地址助手',
+        melsec: '三菱地址助手',
+        omron: '欧姆龙地址助手',
+        allen_bradley: '罗克韦尔标签助手',
+      } as Record<string, string>
+    )[helper] || ''
+  )
+})
 
 watch(
   pointFormState,
@@ -288,6 +357,14 @@ function resetDraft() {
     ? point?.elementCount || defaults?.elementCount || 1
     : 1
   draft.intervalMs = Number(point?.acquisition.intervalMs) || 1000
+  draft.timeoutMs =
+    Number(point?.acquisition.timeoutMs) || Number(defaultAcquisition.value.timeoutMs) || 3000
+  draft.retryCount = Number(point?.acquisition.retryCount) || 0
+  draft.deadband = Number(point?.acquisition.deadband) || 0
+  draft.changeOnly = Boolean(point?.acquisition.changeOnly)
+  draft.priority = Number(point?.acquisition.priority) || 0
+  draft.acquisitionMode = point?.acquisitionMode || 'inherit'
+  normalizedAddressText.value = point?.addressText || ''
   draft.enabled = point?.enabled ?? defaults?.enabled ?? true
   draft.address = point
     ? { ...point.address }
@@ -306,6 +383,17 @@ function defaultSchemaValues(schema: Record<string, unknown>) {
   )
 }
 function buildPayload() {
+  const candidate = {
+    intervalMs: draft.intervalMs,
+    timeoutMs: draft.timeoutMs,
+    retryCount: draft.retryCount,
+    deadband: draft.deadband,
+    changeOnly: draft.changeOnly,
+    priority: draft.priority,
+  }
+  const overrides = Object.fromEntries(
+    Object.entries(candidate).filter(([key, value]) => value !== defaultAcquisition.value[key]),
+  )
   return {
     groupId: draft.groupId,
     name: draft.name.trim(),
@@ -314,10 +402,36 @@ function buildPayload() {
     dataType: pointFormState.value.dataType,
     elementCount: supportsElementCount.value ? draft.elementCount : 1,
     readOptions: props.point?.readOptions || {},
-    acquisition: { ...(props.point?.acquisition || {}), intervalMs: draft.intervalMs },
+    acquisitionMode: draft.acquisitionMode,
+    acquisitionOverrides: draft.acquisitionMode === 'override' ? overrides : {},
     enabled: draft.enabled,
     sortOrder: props.point?.sortOrder || 0,
     metadata: props.point?.metadata || {},
+  }
+}
+function acquisitionSummary(value: Record<string, unknown>) {
+  return `周期 ${Number(value.intervalMs) || 1000} ms · 超时 ${Number(value.timeoutMs) || 3000} ms · 重试 ${Number(value.retryCount) || 0} 次`
+}
+async function normalizeAddress() {
+  normalizing.value = true
+  try {
+    const result = await normalizeCollectorPointAddress(props.projectId, props.connectionId, {
+      address: pointFormState.value.address,
+      dataType: pointFormState.value.dataType,
+      elementCount: supportsElementCount.value ? draft.elementCount : 1,
+    })
+    if (result.errors.length) {
+      ElMessage.warning(result.errors.map((item) => item.message).join('；'))
+      return false
+    }
+    draft.address = { ...result.address }
+    normalizedAddressText.value = result.addressText
+    return true
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '地址校验失败'))
+    return false
+  } finally {
+    normalizing.value = false
   }
 }
 async function save() {
@@ -331,6 +445,7 @@ async function save() {
   }
   saving.value = true
   try {
+    if (!(await normalizeAddress())) return
     const payload = buildPayload()
     if (mode.value === 'edit' && props.point) {
       await updateCollectorPointsBatch(props.projectId, props.connectionId, [
@@ -498,6 +613,19 @@ function formatJson(value: Record<string, unknown>) {
   margin-top: 20px;
   padding-top: 16px;
   border-top: 1px solid var(--dc-border);
+}
+.collector-point-drawer__inherit-hint {
+  margin: 10px 0 14px;
+  color: var(--dc-text-muted);
+  font-size: 12px;
+}
+.collector-point-drawer__address-check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  color: var(--dc-text-secondary);
+  font-size: 12px;
 }
 .collector-point-drawer__switch-row span {
   font-size: 14px;

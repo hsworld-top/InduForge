@@ -34,6 +34,7 @@ type Manifest struct {
 	DriverVersion    string              `json:"driverVersion"`
 	SchemaVersion    int                 `json:"schemaVersion"`
 	DisplayName      string              `json:"displayName"`
+	AddressHelper    string              `json:"addressHelper,omitempty"`
 	Category         string              `json:"category"`
 	Transports       []string            `json:"transports"`
 	Operations       []string            `json:"operations"`
@@ -123,6 +124,9 @@ func loadDriver(source fs.FS, directory string) (DriverDefinition, error) {
 	if err := validateJSONDocument(uiSchema, directory+"/ui.schema.json"); err != nil {
 		return DriverDefinition{}, err
 	}
+	if err := validateAddressHelper(manifest, uiSchema); err != nil {
+		return DriverDefinition{}, fmt.Errorf("驱动 %s UI Schema 无效: %w", directory, err)
+	}
 	return DriverDefinition{Manifest: manifest, ConnectionSchema: connectionSchema, AddressSchema: addressSchema, UISchema: uiSchema}, nil
 }
 
@@ -147,6 +151,24 @@ func validateManifest(manifest Manifest) error {
 		if _, ok := allowedDataTypes[dataType]; !ok {
 			return fmt.Errorf("不支持的数据类型: %s", dataType)
 		}
+	}
+	if manifest.AddressHelper != "" {
+		allowed := map[string]struct{}{"siemens": {}, "modbus": {}, "melsec": {}, "omron": {}, "allen_bradley": {}}
+		if _, ok := allowed[manifest.AddressHelper]; !ok {
+			return fmt.Errorf("不支持的地址助手: %s", manifest.AddressHelper)
+		}
+	}
+	return nil
+}
+
+func validateAddressHelper(manifest Manifest, payload []byte) error {
+	var document map[string]any
+	if err := json.Unmarshal(payload, &document); err != nil {
+		return err
+	}
+	uiHelper, _ := document["addressHelper"].(string)
+	if strings.TrimSpace(uiHelper) != strings.TrimSpace(manifest.AddressHelper) {
+		return fmt.Errorf("addressHelper 必须与 Manifest 一致")
 	}
 	return nil
 }

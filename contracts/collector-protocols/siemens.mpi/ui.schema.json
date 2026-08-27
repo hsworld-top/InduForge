@@ -1,1 +1,2 @@
-{"connection":{"order":["portName","baudRate","dataBits","parity","stopBits","station","handshakeCheck","receiveTimeoutMs"]},"address":{"order":["area","dbNumber","byteOffset","bitOffset"]}}
+{
+  "addressHelper": "siemens","connection":{"order":["portName","baudRate","dataBits","parity","stopBits","station","handshakeCheck","receiveTimeoutMs"]},"address":{"order":["area","dbNumber","byteOffset","bitOffset"]}}

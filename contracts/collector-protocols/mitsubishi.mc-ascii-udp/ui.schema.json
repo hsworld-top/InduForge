@@ -1,1 +1,2 @@
-{"connection":{"order":["host","port","networkNumber","networkStationNumber","targetIoStation","enableWriteBitToWordRegister","stringReverse","connectTimeoutMs","receiveTimeoutMs"]},"address":{"order":["address"]}}
+{
+  "addressHelper": "melsec","connection":{"order":["host","port","networkNumber","networkStationNumber","targetIoStation","enableWriteBitToWordRegister","stringReverse","connectTimeoutMs","receiveTimeoutMs"]},"address":{"order":["address"]}}

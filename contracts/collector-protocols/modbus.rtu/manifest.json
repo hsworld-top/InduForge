@@ -4,6 +4,7 @@
   "driverVersion": "1.0.0",
   "schemaVersion": 1,
   "displayName": "Modbus RTU",
+  "addressHelper": "modbus",
   "category": "fieldbus",
   "transports": ["serial"],
   "operations": [

@@ -151,6 +151,26 @@ func (h *CollectorPointHandler) CheckAddresses(w http.ResponseWriter, r *http.Re
 	return nil
 }
 
+func (h *CollectorPointHandler) NormalizeAddress(w http.ResponseWriter, r *http.Request) error {
+	if _, err := requireClaims(r); err != nil {
+		return err
+	}
+	var input struct {
+		Address      map[string]any `json:"address"`
+		DataType     string         `json:"dataType"`
+		ElementCount int            `json:"elementCount"`
+	}
+	if err := decodeJSONBody(r, &input); err != nil {
+		return err
+	}
+	result, err := h.service.NormalizeAddress(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), input.Address, input.DataType, input.ElementCount)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
 func (h *CollectorPointHandler) CreateBatch(w http.ResponseWriter, r *http.Request) error {
 	claims, err := requireClaims(r)
 	if err != nil {
