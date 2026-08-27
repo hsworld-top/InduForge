@@ -57,8 +57,10 @@ function createSilentLogger() {
 
 test('共享注册表会复用同一条连接，并对订阅做引用计数', () => {
   const sockets: ReturnType<typeof createFakeSocket>[] = []
+  let socketOptions: Record<string, unknown> | undefined
   const registry = createMqttSocketSharedRegistry({
-    ioFactory: () => {
+    ioFactory: (_url, options) => {
+      socketOptions = options
       const socket = createFakeSocket(`socket-${sockets.length + 1}`)
       sockets.push(socket)
       return socket
@@ -80,6 +82,10 @@ test('共享注册表会复用同一条连接，并对订阅做引用计数', ()
   assert.ok(second)
   assert.equal(first.key, second.key)
   assert.equal(sockets.length, 1)
+  assert.deepEqual(socketOptions?.auth, {
+    projectId: 'project-1',
+    previewSessionId: 'session-1',
+  })
 
   registry.subscribeSubscription(first.key, 'sub-1')
   registry.subscribeSubscription(first.key, 'sub-1')
@@ -164,7 +170,7 @@ test('共享注册表会使用传入的数据服务地址建立 socket 连接', 
   assert.equal(captured.length, 1)
   assert.equal(captured[0].url, 'http://localhost:19602')
   assert.equal(captured[0].options.path, '/socket.io/')
-  assert.deepEqual(captured[0].options.query, {
+  assert.deepEqual(captured[0].options.auth, {
     projectId: 'project-1',
     previewSessionId: 'session-1',
   })

@@ -364,10 +364,16 @@ async function connectDataSocket(): Promise<Socket> {
     path: '/socket.io',
     transports: ['websocket', 'polling'],
     withCredentials: true,
-    query: { projectId: props.projectId, previewSessionId: dataPreviewSessionId },
+    auth: { projectId: props.projectId, previewSessionId: dataPreviewSessionId },
   })
   dataSocket.on('datapoint:value', (payload: { path?: string }) => forwardDatapointValue(payload))
   dataSocket.on('datapoint:values', (values: Array<{ path?: string }>) => values.forEach(forwardDatapointValue))
+  dataSocket.on('connect', () => {
+    // 数据服务开发态重载或短暂断线后，Socket.IO 会重连，但服务端订阅状态需重新声明。
+    for (const path of new Set([...dataSubscriptions.keys(), ...pageDataSubscriptions.keys()])) {
+      void requestDataSocket(dataSocket!, 'datapoint:subscribe', path).catch(() => {})
+    }
+  })
   dataSocket.on('response', (payload: { requestId?: string; success?: boolean; result?: unknown; error?: string }) => {
     const pending = dataSocketRequests.get(String(payload.requestId || ''))
     if (!pending) return
@@ -383,11 +389,13 @@ async function connectDataSocket(): Promise<Socket> {
     }
     dataSocketRequests.clear()
   })
-  await new Promise<void>((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error('数据订阅连接超时')), 8000)
-    dataSocket?.once('connect', () => { clearTimeout(timer); resolve() })
-    dataSocket?.once('connect_error', (error) => { clearTimeout(timer); reject(error) })
-  })
+  if (!dataSocket.connected) {
+    await new Promise<void>((resolve, reject) => {
+      const timer = window.setTimeout(() => reject(new Error('数据订阅连接超时')), 8000)
+      dataSocket?.once('connect', () => { clearTimeout(timer); resolve() })
+      dataSocket?.once('connect_error', (error) => { clearTimeout(timer); reject(error) })
+    })
+  }
   return dataSocket
 }
 

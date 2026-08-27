@@ -379,7 +379,7 @@ describe('PreviewPanel', () => {
     expect(ioMock).toHaveBeenCalledWith(
       window.location.origin,
       expect.objectContaining({
-        query: { projectId: 'project-1', previewSessionId: 'preview-session-1' },
+        auth: { projectId: 'project-1', previewSessionId: 'preview-session-1' },
       }),
     )
     expect(socketEmitMock).toHaveBeenCalledWith(
