@@ -139,8 +139,8 @@
             />
           </div>
           <div class="ws-workbench__actions">
-            <span v-if="activeTab.draft.dataPointPath" class="ws-workbench__datapoint-path">
-              数据点：{{ activeTab.draft.dataPointPath }}
+            <span v-if="activeTab.draft.outputs.length" class="ws-workbench__datapoint-path">
+              {{ activeTab.draft.outputs.length }} 个输出数据点
             </span>
             <el-tooltip content="保存当前会话" placement="top" :show-after="400">
               <el-button
@@ -266,6 +266,15 @@
               </div>
             </div>
           </el-tab-pane>
+          <el-tab-pane label="输出映射" name="outputs">
+            <SourceOutputEditor
+              v-model="activeTab.draft.outputs"
+              title="消息输出"
+              :sample="latestIncomingPayload"
+              whole-data-type="object"
+              @change="markDirty"
+            />
+          </el-tab-pane>
           <el-tab-pane label="设置" name="settings">
             <el-form class="ws-workbench__form" label-position="top" size="small" @submit.prevent>
               <div class="ws-workbench__form-grid">
@@ -351,7 +360,7 @@
       <div v-else class="ws-workbench__blank">
         <IconTablerWebhook />
         <strong>选择或新建一个 WebSocket 会话</strong>
-        <span>WebSocket 工作台以连接会话为中心，一个会话同步一个 object 数据点。</span>
+        <span>每个会话可以把完整消息或样本字段映射为一个或多个强类型数据点。</span>
       </div>
     </main>
 
@@ -495,6 +504,7 @@ import {
   computed,
   defineComponent,
   h,
+  inject,
   onBeforeUnmount,
   onMounted,
   reactive,
@@ -531,6 +541,7 @@ import WorkbenchSourceHeader from '@/components/workbench/WorkbenchSourceHeader.
 import WorkbenchGroupDialog from '@/components/workbench/WorkbenchGroupDialog.vue'
 import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
+import SourceOutputEditor from '@/components/shared/SourceOutputEditor.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 import * as dataAPI from '@/api/data.api'
 import type {
@@ -541,7 +552,8 @@ import type {
   WebSocketSessionGroup,
   WebSocketSubscribeMessageRow,
 } from '@/api/schemas/websocket-workbench.schema'
-import { Storage } from '@/utils/storage'
+import type { SourceOutputInput } from '@/api/schemas/source-output.schema'
+import { createWholeSourceOutput } from '@/api/schemas/source-output.schema'
 import { getApiErrorMessage } from '@/utils/request'
 import { useWorkbenchBottomPanelResize } from '@/composables/useWorkbenchBottomPanelResize'
 
@@ -583,6 +595,7 @@ type SessionDraft = {
   sourceType?: string
   dataPointId: string
   dataPointPath: string
+  outputs: SourceOutputInput[]
   lastMessage?: unknown
   lastDiagnostic: string
   quality: 'good' | 'bad' | 'unknown' | string
@@ -641,6 +654,15 @@ const sessions = ref<WebSocketSession[]>([])
 const expandedGroups = ref(new Set<string>())
 const pagination = reactive({ page: 1, pageSize: 50, total: 0, totalPages: 0 })
 const tabs = ref<SessionTab[]>([])
+const registerDraftChecker =
+  inject<
+    (guard: {
+      isDirty: () => boolean
+      save: () => Promise<boolean>
+      discard: () => void
+    }) => () => void
+  >('registerDraftChecker')
+let unregisterDraftChecker: (() => void) | undefined
 const activeTabId = ref('')
 const groupDialog = reactive({ visible: false, id: '', name: '', parentId: '' })
 const groupDialogRef = ref<InstanceType<typeof WorkbenchGroupDialog> | null>(null)
@@ -673,6 +695,13 @@ const sourceMetaRows = computed(() => [
   { label: '连接数', value: `${pagination.total || sessions.value.length} 个` },
 ])
 const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId.value))
+const latestIncomingPayload = computed(() => {
+  const messages = activeTab.value?.streamMessages || []
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.direction === 'in') return messages[index]?.payload
+  }
+  return activeTab.value?.draft.lastMessage
+})
 const isActiveConnected = computed(() => activeTab.value?.streamStatus === 'connected')
 const connectButtonType = computed(() => {
   const status = activeTab.value?.streamStatus
@@ -749,6 +778,11 @@ const editingGroup = computed(() =>
 
 onMounted(() => {
   reloadWorkbench()
+  unregisterDraftChecker = registerDraftChecker?.({
+    isDirty: () => tabs.value.some((tab) => tab.dirty && !isPristineNewDraft(tab.draft)),
+    save: saveDirtyTabs,
+    discard: () => tabs.value.forEach((tab) => (tab.dirty = false)),
+  })
 })
 
 watch(search, () => {
@@ -757,6 +791,7 @@ watch(search, () => {
 })
 
 onBeforeUnmount(() => {
+  unregisterDraftChecker?.()
   window.clearTimeout(searchTimer)
   tabs.value.forEach(closeStream)
 })
@@ -919,6 +954,17 @@ async function saveActive() {
   } finally {
     saving.value = false
   }
+}
+
+async function saveDirtyTabs(): Promise<boolean> {
+  const dirtyIds = tabs.value
+    .filter((tab) => tab.dirty && !isPristineNewDraft(tab.draft))
+    .map((tab) => tab.id)
+  for (const id of dirtyIds) {
+    activeTabId.value = id
+    if (!(await saveActive())) return false
+  }
+  return true
 }
 
 async function connectActive() {
@@ -1394,6 +1440,9 @@ function normalizeDraft(input: Partial<WebSocketSession>): SessionDraft {
     sourceType: input.sourceType,
     dataPointId: input.dataPointId ? String(input.dataPointId) : '',
     dataPointPath: input.dataPointPath || '',
+    outputs: input.outputs?.length
+      ? input.outputs.map((output) => ({ ...output, selector: { ...output.selector } }))
+      : [createWholeSourceOutput('message', '完整消息', 'object')],
     lastMessage: input.lastMessage,
     lastDiagnostic: input.lastDiagnostic || '',
     quality: input.quality || 'unknown',
@@ -1469,6 +1518,7 @@ function buildPayload(draft: SessionDraft) {
     settings: draft.settings,
     enabled: draft.enabled,
     sortOrder: draft.sortOrder,
+    outputs: draft.outputs,
   }
 }
 

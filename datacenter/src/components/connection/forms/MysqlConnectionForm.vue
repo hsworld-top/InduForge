@@ -41,14 +41,21 @@
       </el-form-item>
 
       <el-form-item :label="t('connection.password')" prop="password">
-        <el-input
+        <SavedPasswordInput
           v-model="formData.password"
-          type="password"
           :placeholder="t('connection.password')"
-          show-password
+          :saved-password-configured="savedPasswordConfigured"
+          :loading="loadingSavedPassword"
+          @reveal-saved-password="$emit('reveal-saved-password')"
         />
       </el-form-item>
     </div>
+
+    <RelationalTlsFields
+      v-model="formData.sslConfig"
+      database-type="mysql"
+      :saved-secrets="savedTlsSecrets"
+    />
 
     <el-form-item :label="t('connection.queryTimeout')">
       <el-input v-model.number="formData.queryTimeout" inputmode="numeric" placeholder="30000">
@@ -62,6 +69,8 @@
 import { ref, watch, onMounted } from 'vue'
 import { getDefaultConfig } from '@/config/connectionTypes'
 import { t } from '@/i18n/runtime'
+import SavedPasswordInput from './SavedPasswordInput.vue'
+import RelationalTlsFields from './RelationalTlsFields.vue'
 
 const props = defineProps({
   modelValue: {
@@ -73,9 +82,12 @@ const props = defineProps({
     default: 'create', // 'create' | 'edit'
     validator: (value) => ['create', 'edit'].includes(value),
   },
+  savedPasswordConfigured: { type: Boolean, default: false },
+  loadingSavedPassword: { type: Boolean, default: false },
+  savedTlsSecrets: { type: Object, default: () => ({}) },
 })
 
-const emit = defineEmits(['update:modelValue', 'validate'])
+const emit = defineEmits(['update:modelValue', 'validate', 'reveal-saved-password'])
 
 const formRef = ref(null)
 const formData = ref({
@@ -86,6 +98,7 @@ const formData = ref({
   username: 'root',
   password: '',
   charset: 'utf8mb4',
+  sslConfig: { mode: 'disable', ca: '', cert: '', key: '' },
   queryTimeout: 30000,
 })
 

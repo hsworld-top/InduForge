@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { beforeEach, test, vi } from 'vitest'
 import assert from 'node:assert/strict'
 

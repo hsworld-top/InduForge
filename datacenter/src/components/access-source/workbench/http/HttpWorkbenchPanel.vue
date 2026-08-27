@@ -136,8 +136,8 @@
             />
           </div>
           <div class="http-workbench__actions">
-            <span v-if="activeTab.draft.dataPointPath" class="http-workbench__datapoint-path">
-              数据点：{{ activeTab.draft.dataPointPath }}
+            <span v-if="activeTab.draft.outputs.length" class="http-workbench__datapoint-path">
+              {{ activeTab.draft.outputs.length }} 个输出数据点
             </span>
             <el-tooltip content="保存当前接口" placement="top" :show-after="400">
               <el-button
@@ -277,6 +277,15 @@
             />
             <el-empty v-else description="该请求不发送 Body" />
           </el-tab-pane>
+          <el-tab-pane label="输出映射" name="outputs">
+            <SourceOutputEditor
+              v-model="activeTab.draft.outputs"
+              title="响应输出"
+              :sample="activeTab.response?.body"
+              whole-data-type="object"
+              @change="markDirty"
+            />
+          </el-tab-pane>
           <el-tab-pane label="设置" name="settings">
             <el-form class="http-workbench__form" label-position="top" size="small" @submit.prevent>
               <el-form-item label="超时（毫秒）">
@@ -345,7 +354,7 @@
       <div v-else class="http-workbench__placeholder">
         <IconTablerApiApp />
         <strong>选择或新建接口</strong>
-        <span>HTTP 工作台以接口请求为中心，一个接口同步一个 object 数据点。</span>
+        <span>每个接口可以把完整响应或样本字段映射为一个或多个强类型数据点。</span>
       </div>
     </main>
 
@@ -485,7 +494,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import {
+  computed,
+  defineComponent,
+  h,
+  inject,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import IconTablerApi from '~icons/tabler/api'
 import IconTablerApiApp from '~icons/tabler/api-app'
@@ -514,6 +533,9 @@ import type {
   HttpRequestGroup,
   HttpSendResponse,
 } from '@/api/schemas/http-workbench.schema'
+import type { SourceOutputInput } from '@/api/schemas/source-output.schema'
+import { createWholeSourceOutput } from '@/api/schemas/source-output.schema'
+import SourceOutputEditor from '@/components/shared/SourceOutputEditor.vue'
 import HttpKeyValueEditor from './HttpKeyValueEditor.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 import WorkbenchGroupDialog from '@/components/workbench/WorkbenchGroupDialog.vue'
@@ -545,6 +567,7 @@ type RequestDraft = {
   enabled: boolean
   sortOrder: number
   dataPointPath: string
+  outputs: SourceOutputInput[]
 }
 
 type HttpTab = {
@@ -591,6 +614,15 @@ const bodyEditorOptions = {
 const groups = ref<HttpRequestGroup[]>([])
 const requests = ref<HttpRequest[]>([])
 const tabs = ref<HttpTab[]>([])
+const registerDraftChecker =
+  inject<
+    (guard: {
+      isDirty: () => boolean
+      save: () => Promise<boolean>
+      discard: () => void
+    }) => () => void
+  >('registerDraftChecker')
+let unregisterDraftChecker: (() => void) | undefined
 const activeTabId = ref('')
 const activeConfigTab = ref('params')
 const activeResponseTab = ref('body')
@@ -714,6 +746,11 @@ const activeHttpScheme = computed({
 
 onMounted(() => {
   reloadWorkbench()
+  unregisterDraftChecker = registerDraftChecker?.({
+    isDirty: () => tabs.value.some((tab) => tab.dirty && !isPristineNewDraft(tab.draft)),
+    save: saveDirtyTabs,
+    discard: () => tabs.value.forEach((tab) => (tab.dirty = false)),
+  })
 })
 
 watch(search, () => {
@@ -721,7 +758,10 @@ watch(search, () => {
   searchTimer = window.setTimeout(() => loadRequests(1), 250)
 })
 
-onBeforeUnmount(() => window.clearTimeout(searchTimer))
+onBeforeUnmount(() => {
+  unregisterDraftChecker?.()
+  window.clearTimeout(searchTimer)
+})
 
 const reloadWorkbench = async () => {
   loading.value = true
@@ -871,6 +911,17 @@ const saveActive = async () => {
   } finally {
     saving.value = false
   }
+}
+
+const saveDirtyTabs = async (): Promise<boolean> => {
+  const dirtyIds = tabs.value
+    .filter((tab) => tab.dirty && !isPristineNewDraft(tab.draft))
+    .map((tab) => tab.id)
+  for (const id of dirtyIds) {
+    activeTabId.value = id
+    if (!(await saveActive())) return false
+  }
+  return true
 }
 
 const sendActive = async () => {
@@ -1220,6 +1271,8 @@ const createEmptyDraft = (name = 'New Request'): RequestDraft => ({
   settings: { timeoutMs: 5000, followRedirects: true, tlsVerify: true },
   enabled: true,
   sortOrder: 0,
+  dataPointPath: '',
+  outputs: [createWholeSourceOutput('body', '完整响应', 'object')],
 })
 
 // 生成新建接口的默认名称 "接口 N"：N 取所有 "接口 N" 形式名称中最大的编号 + 1，
@@ -1351,6 +1404,7 @@ const toDraft = (request: HttpRequest): RequestDraft => ({
   enabled: request.enabled,
   sortOrder: request.sortOrder || 0,
   dataPointPath: request.dataPointPath || '',
+  outputs: request.outputs.map((output) => ({ ...output, selector: { ...output.selector } })),
 })
 
 const cloneRows = (rows: HttpKeyValueRow[]) => rows.map((row) => ({ ...row }))
@@ -1368,6 +1422,7 @@ const toPayload = (draft: RequestDraft) => ({
   settings: draft.settings,
   enabled: draft.enabled,
   sortOrder: draft.sortOrder,
+  outputs: draft.outputs,
 })
 
 const HttpTreeNode = defineComponent({

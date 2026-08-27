@@ -92,5 +92,28 @@ export function useConfirm() {
     }
   }
 
-  return { confirm, confirmAndRun, confirmDraftAction }
+  /** 离开工作区前统一提供保存、放弃和继续编辑三种明确选择。 */
+  async function confirmSaveDraftAction(
+    options: { title?: string; message?: string } = {},
+  ): Promise<'save' | 'discard' | 'cancel'> {
+    try {
+      await ElMessageBox.confirm(
+        options.message || '当前有未保存的修改，离开前是否保存？',
+        options.title || '有未保存的修改',
+        {
+          confirmButtonText: '保存后离开',
+          cancelButtonText: '放弃修改并离开',
+          distinguishCancelAndClose: true,
+          type: 'warning',
+          closeOnClickModal: false,
+        },
+      )
+      return 'save'
+    } catch (action) {
+      if (action === 'cancel') return 'discard'
+      return 'cancel'
+    }
+  }
+
+  return { confirm, confirmAndRun, confirmDraftAction, confirmSaveDraftAction }
 }

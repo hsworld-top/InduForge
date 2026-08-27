@@ -1,5 +1,5 @@
-// @ts-nocheck
 import { ref } from 'vue'
+import { debugLogger } from '@/utils/debug'
 import { ElMessage } from 'element-plus'
 import dataAPI from '@/api/data.api'
 import { getApiErrorMessage } from '@/utils/request'
@@ -16,7 +16,7 @@ export function usePostgres(projectId, connectionId) {
    */
   const loadTables = async () => {
     if (!projectId.value || !connectionId.value) {
-      console.warn('projectId 或 connectionId 为空，无法加载表列表')
+      debugLogger.warn('projectId 或 connectionId 为空，无法加载表列表')
       return
     }
 

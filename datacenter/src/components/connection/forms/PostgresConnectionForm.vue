@@ -36,75 +36,21 @@
       </el-form-item>
 
       <el-form-item :label="t('connection.password')" prop="password">
-        <el-input
+        <SavedPasswordInput
           v-model="formData.password"
-          type="password"
           :placeholder="t('connection.password')"
-          show-password
+          :saved-password-configured="savedPasswordConfigured"
+          :loading="loadingSavedPassword"
+          @reveal-saved-password="$emit('reveal-saved-password')"
         />
       </el-form-item>
     </div>
 
-    <el-form-item :label="t('connection.sslConnection')">
-      <el-select
-        v-model="formData.sslMode"
-        :placeholder="t('connection.sslModePlaceholder')"
-        class="w-full"
-        @change="handleSslModeChange"
-      >
-        <el-option :label="t('connection.sslDisabled')" value="disable">
-          <span>{{ t('connection.sslDisabled') }}</span>
-          <span class="text-xs text-gray-400 ml-2">- {{ t('connection.sslDisabledHint') }}</span>
-        </el-option>
-        <el-option :label="t('connection.sslPrefer')" value="prefer">
-          <span>{{ t('connection.sslPrefer') }}</span>
-          <span class="text-xs text-gray-400 ml-2">- {{ t('connection.sslPreferHint') }}</span>
-        </el-option>
-        <el-option :label="t('connection.sslRequire')" value="require">
-          <span>{{ t('connection.sslRequire') }}</span>
-          <span class="text-xs text-gray-400 ml-2">- {{ t('connection.sslRequireHint') }}</span>
-        </el-option>
-        <el-option :label="t('connection.sslVerify')" value="verify-ca">
-          <span>{{ t('connection.sslVerify') }}</span>
-          <span class="text-xs text-gray-400 ml-2">- {{ t('connection.sslVerifyHint') }}</span>
-        </el-option>
-      </el-select>
-    </el-form-item>
-
-    <!-- SSL 证书配置（仅在 verify-ca 模式下显示） -->
-    <template v-if="needsCertificate">
-      <el-divider content-position="left">{{ t('connection.sslCertificateConfig') }}</el-divider>
-
-      <el-form-item :label="t('connection.caCertificate')">
-        <el-input
-          v-model="formData.sslCa"
-          type="textarea"
-          :rows="4"
-          placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
-        />
-        <span class="text-xs text-gray-500 ml-2">{{ t('connection.caCertificateHint') }}</span>
-      </el-form-item>
-
-      <el-form-item :label="t('connection.clientCertificate')">
-        <el-input
-          v-model="formData.sslCert"
-          type="textarea"
-          :rows="4"
-          placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
-        />
-        <span class="text-xs text-gray-500 ml-2">{{ t('connection.clientCertificateHint') }}</span>
-      </el-form-item>
-
-      <el-form-item :label="t('connection.clientKey')">
-        <el-input
-          v-model="formData.sslKey"
-          type="textarea"
-          :rows="4"
-          placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
-        />
-        <span class="text-xs text-gray-500 ml-2">{{ t('connection.clientKeyHint') }}</span>
-      </el-form-item>
-    </template>
+    <RelationalTlsFields
+      v-model="formData.sslConfig"
+      database-type="postgresql"
+      :saved-secrets="savedTlsSecrets"
+    />
 
     <div class="database-connection-form__grid">
       <el-form-item :label="t('connection.connectionTimeout')">
@@ -131,9 +77,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, computed } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { getDefaultConfig } from '@/config/connectionTypes'
 import { t } from '@/i18n/runtime'
+import SavedPasswordInput from './SavedPasswordInput.vue'
+import RelationalTlsFields from './RelationalTlsFields.vue'
 
 const props = defineProps({
   modelValue: {
@@ -145,9 +93,12 @@ const props = defineProps({
     default: 'create', // 'create' | 'edit'
     validator: (value) => ['create', 'edit'].includes(value),
   },
+  savedPasswordConfigured: { type: Boolean, default: false },
+  loadingSavedPassword: { type: Boolean, default: false },
+  savedTlsSecrets: { type: Object, default: () => ({}) },
 })
 
-const emit = defineEmits(['update:modelValue', 'validate'])
+const emit = defineEmits(['update:modelValue', 'validate', 'reveal-saved-password'])
 
 const formRef = ref(null)
 const formData = ref({
@@ -158,10 +109,7 @@ const formData = ref({
   username: 'postgres',
   password: '',
   schema: 'public',
-  sslMode: 'disable',
-  sslCa: '',
-  sslCert: '',
-  sslKey: '',
+  sslConfig: { mode: 'disable', ca: '', cert: '', key: '' },
   connectionTimeout: 3000,
   queryTimeout: 30000,
   maxConnections: 10,
@@ -169,11 +117,6 @@ const formData = ref({
 
 // 防止循环更新的标志
 const isUpdatingFromParent = ref(false)
-
-// 是否需要证书配置
-const needsCertificate = computed(() => {
-  return formData.value.sslMode === 'verify-ca'
-})
 
 const rules = {
   name: [
@@ -234,18 +177,6 @@ watch(
   },
   { deep: true },
 )
-
-/**
- * SSL 模式变化处理
- */
-const handleSslModeChange = (mode) => {
-  // 如果切换到不需要证书的模式，清空证书字段
-  if (mode !== 'verify-ca') {
-    formData.value.sslCa = ''
-    formData.value.sslCert = ''
-    formData.value.sslKey = ''
-  }
-}
 
 /**
  * 验证表单

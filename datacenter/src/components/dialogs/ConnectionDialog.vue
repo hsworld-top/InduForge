@@ -80,7 +80,11 @@
             ref="formRef"
             v-model="formData"
             :mode="mode"
+            :saved-password-configured="showSavedPassword"
+            :saved-tls-secrets="savedTlsSecrets"
+            :loading-saved-password="revealingPassword"
             @validate="handleValidate"
+            @reveal-saved-password="revealSavedPassword"
           />
 
           <el-form
@@ -92,10 +96,7 @@
             class="connection-dialog__protocol-form"
           >
             <el-form-item :label="isBuiltinStoreSelected ? '名称' : '连接名称'" prop="name">
-              <el-input
-                v-model="formData.name"
-                :placeholder="isBuiltinStoreSelected ? activeSource.label : '例如：产线 Kafka'"
-              />
+              <el-input v-model="formData.name" :placeholder="connectionNamePlaceholder" />
             </el-form-item>
 
             <template v-if="connectionType === 'kafka'">
@@ -329,55 +330,50 @@
             </template>
 
             <template v-else-if="connectionType === 'redis'">
-              <el-form-item label="部署模式">
+              <el-form-item label="连接方式">
                 <el-segmented v-model="formData.mode" :options="redisModeOptions" />
               </el-form-item>
-              <el-form-item label="地址" prop="address">
+              <el-form-item label="节点地址" prop="address">
                 <el-input
                   v-model="formData.address"
-                  placeholder="127.0.0.1:6379，多节点用英文逗号分隔"
+                  placeholder="127.0.0.1:6379；多个节点用英文逗号分隔"
                 />
               </el-form-item>
               <div class="connection-dialog__form-grid">
-                <el-form-item label="DB">
+                <el-form-item label="数据库编号">
                   <el-input v-model.number="formData.db" inputmode="numeric" placeholder="0" />
                 </el-form-item>
-                <el-form-item v-if="formData.mode === 'sentinel'" label="Master">
+                <el-form-item v-if="formData.mode === 'sentinel'" label="主节点名称">
                   <el-input v-model="formData.masterName" placeholder="mymaster" />
                 </el-form-item>
-                <el-form-item label="Key Pattern">
-                  <el-input v-model="formData.keyPattern" placeholder="device:*" />
+                <el-form-item label="Key 筛选规则">
+                  <el-input v-model="formData.keyPattern" placeholder="* 表示全部 Key" />
                 </el-form-item>
               </div>
               <div class="connection-dialog__form-grid">
-                <el-form-item label="用户名">
-                  <el-input v-model="formData.username" placeholder="可选" />
+                <el-form-item label="用户名（可选）">
+                  <el-input v-model="formData.username" placeholder="未配置时使用默认用户" />
                 </el-form-item>
-                <el-form-item label="密码">
-                  <el-input
+                <el-form-item label="密码（可选）">
+                  <SavedPasswordInput
                     v-model="formData.password"
-                    type="password"
-                    show-password
                     :placeholder="
                       mode === 'edit' && connection?.secretStatus?.password
                         ? '已保存，留空保持不变'
                         : '可选'
                     "
+                    :saved-password-configured="showSavedPassword"
+                    :loading="revealingPassword"
+                    @reveal-saved-password="revealSavedPassword"
                   />
                 </el-form-item>
               </div>
-              <el-form-item
-                v-if="mode === 'edit' && connection?.secretStatus?.password"
-                label="密码操作"
-              >
-                <el-checkbox v-model="formData.clearSecrets">清除已保存密码</el-checkbox>
-              </el-form-item>
             </template>
 
             <template v-else-if="connectionType === 'tdengine'">
               <div class="connection-dialog__form-grid">
                 <el-form-item label="协议">
-                  <el-segmented v-model="formData.protocol" :options="['ws', 'wss']" />
+                  <el-segmented v-model="formData.protocol" :options="tdengineProtocolOptions" />
                 </el-form-item>
                 <el-form-item label="主机" prop="host">
                   <el-input v-model="formData.host" placeholder="127.0.0.1" />
@@ -386,12 +382,28 @@
                   <el-input v-model.number="formData.port" inputmode="numeric" placeholder="6041" />
                 </el-form-item>
               </div>
+              <p class="connection-dialog__field-tip connection-dialog__tdengine-tip">
+                使用 taosAdapter WebSocket 接口，默认端口 6041；支持 TDengine Server 3.3.6.0
+                及以上版本。
+              </p>
               <div class="connection-dialog__form-grid">
                 <el-form-item label="Database" prop="database">
                   <el-input v-model="formData.database" placeholder="iot_data" />
                 </el-form-item>
                 <el-form-item label="时区">
-                  <el-input v-model="formData.timezone" placeholder="Asia/Shanghai" />
+                  <el-select
+                    v-model="formData.timezone"
+                    filterable
+                    class="w-full"
+                    placeholder="请选择时区"
+                  >
+                    <el-option
+                      v-for="timezone in timezoneOptions"
+                      :key="timezone"
+                      :label="timezone"
+                      :value="timezone"
+                    />
+                  </el-select>
                 </el-form-item>
               </div>
               <div class="connection-dialog__form-grid">
@@ -399,36 +411,24 @@
                   <el-input v-model="formData.username" placeholder="root" />
                 </el-form-item>
                 <el-form-item label="密码">
-                  <el-input
+                  <SavedPasswordInput
                     v-model="formData.password"
-                    type="password"
-                    show-password
                     :placeholder="
                       mode === 'edit' && connection?.secretStatus?.password
                         ? '已保存，留空保持不变'
                         : '请输入密码'
                     "
+                    :saved-password-configured="showSavedPassword"
+                    :loading="revealingPassword"
+                    @reveal-saved-password="revealSavedPassword"
                   />
                 </el-form-item>
               </div>
-              <el-form-item
-                v-if="mode === 'edit' && connection?.secretStatus?.password"
-                label="密码操作"
-              >
-                <el-checkbox v-model="formData.clearPassword">清除已保存密码</el-checkbox>
-              </el-form-item>
-              <el-form-item v-if="formData.protocol === 'wss'" label="TLS">
-                <el-checkbox v-model="formData.tlsSkipVerify"
-                  >跳过证书校验（仅开发测试）</el-checkbox
-                >
-              </el-form-item>
-              <el-form-item label="扩展参数">
-                <el-input
-                  v-model="formData.optionsText"
-                  type="textarea"
-                  :rows="4"
-                  placeholder='{"stable":"device_metrics"}'
-                />
+              <el-form-item v-if="formData.protocol === 'wss'" label="证书校验">
+                <el-radio-group v-model="formData.tlsSkipVerify">
+                  <el-radio-button :value="false">验证证书</el-radio-button>
+                  <el-radio-button :value="true">信任自签名证书</el-radio-button>
+                </el-radio-group>
               </el-form-item>
             </template>
 
@@ -545,6 +545,7 @@ import IconTablerTimeline from '~icons/tabler/timeline'
 import MysqlConnectionForm from '../connection/forms/MysqlConnectionForm.vue'
 import PostgresConnectionForm from '../connection/forms/PostgresConnectionForm.vue'
 import SqlServerConnectionForm from '../connection/forms/SqlServerConnectionForm.vue'
+import SavedPasswordInput from '../connection/forms/SavedPasswordInput.vue'
 import MqttConnectionForm from '../connection/forms/MqttConnectionForm.vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
 import {
@@ -608,6 +609,8 @@ const submitting = ref(false)
 const lastTestSignature = ref('')
 const emptyFormSignature = ref('')
 const kafkaActiveCollapse = ref([])
+const revealingPassword = ref(false)
+const revealedPassword = ref('')
 const testResult = ref({
   status: 'idle',
   title: '尚未测试',
@@ -677,7 +680,7 @@ const externalSourceOptions = [
   {
     value: 'redis',
     label: 'Redis',
-    description: 'Key 扫描与值样本',
+    description: '浏览、维护 Key 并生成数据点',
     icon: markRaw(IconTablerDatabase),
   },
   {
@@ -705,15 +708,38 @@ const kafkaSaslMechanismOptions = [
   { label: 'SCRAM-SHA-512', value: 'SCRAM-SHA-512' },
 ]
 const redisModeOptions = [
-  { label: 'Standalone', value: 'standalone' },
-  { label: 'Sentinel', value: 'sentinel' },
-  { label: 'Cluster', value: 'cluster' },
+  { label: '单机', value: 'standalone' },
+  { label: '哨兵', value: 'sentinel' },
+  { label: '集群', value: 'cluster' },
 ]
+const tdengineProtocolOptions = [
+  { label: 'WebSocket', value: 'ws' },
+  { label: 'WebSocket TLS', value: 'wss' },
+]
+const fallbackTimezoneOptions = [
+  'Asia/Shanghai',
+  'UTC',
+  'Asia/Tokyo',
+  'Asia/Singapore',
+  'Europe/London',
+  'Europe/Berlin',
+  'America/New_York',
+  'America/Los_Angeles',
+]
+const timezoneOptions = (() => {
+  const supportedValuesOf = (
+    Intl as typeof Intl & {
+      supportedValuesOf?: (key: 'timeZone') => string[]
+    }
+  ).supportedValuesOf
+  const values = supportedValuesOf ? supportedValuesOf('timeZone') : fallbackTimezoneOptions
+  return [...new Set(['Asia/Shanghai', 'UTC', ...values])]
+})()
 const protocolRules = {
   name: [{ required: true, message: '连接名称不能为空', trigger: 'blur' }],
   brokers: [{ required: true, message: '服务器地址不能为空', trigger: 'blur' }],
   url: [{ required: true, message: '连接地址不能为空', trigger: 'blur' }],
-  address: [{ required: true, message: 'Redis 地址不能为空', trigger: 'blur' }],
+  address: [{ required: true, message: 'Redis 节点地址不能为空', trigger: 'blur' }],
   ip: [{ required: true, message: 'IP 地址不能为空', trigger: 'blur' }],
   username: [{ required: true, message: '用户名不能为空', trigger: 'blur' }],
   serialPort: [{ required: true, message: '串口不能为空', trigger: 'blur' }],
@@ -734,7 +760,7 @@ const activeFormTitle = computed(() => {
   if (connectionType.value === 'kafka') return 'Kafka 接入源'
   if (connectionType.value === 'http') return 'HTTP Source'
   if (connectionType.value === 'websocket') return 'WebSocket Source'
-  if (connectionType.value === 'redis') return 'Redis Source'
+  if (connectionType.value === 'redis') return 'Redis 接入源'
   if (connectionType.value === 'tdengine') return 'TDengine 连接'
   return activeDatabase.value?.label || '数据库连接'
 })
@@ -755,6 +781,17 @@ const formComponent = computed(() => {
 })
 
 const isBuiltinStoreSelected = computed(() => isBuiltinStoreType(connectionType.value))
+const connectionNamePlaceholder = computed(() => {
+  if (isBuiltinStoreSelected.value) return activeSource.value.label
+  const examples: Record<string, string> = {
+    kafka: '例如：生产 Kafka',
+    http: '例如：设备接口',
+    websocket: '例如：实时消息',
+    redis: '例如：生产 Redis',
+    tdengine: '例如：生产时序库',
+  }
+  return examples[connectionType.value] || `例如：${activeSource.value.label} 接入源`
+})
 const isSimpleMetadataSource = computed(
   () => isBuiltinStoreSelected.value || ['http', 'websocket'].includes(connectionType.value),
 )
@@ -762,6 +799,20 @@ const showTestButton = computed(() => !isSimpleMetadataSource.value)
 const isKafkaSaslEnabled = computed(() =>
   String(formData.value.securityProtocol || '').includes('SASL'),
 )
+const savedPasswordKey = computed(() =>
+  connectionType.value === 'kafka' ? 'option.password' : 'password',
+)
+const showSavedPassword = computed(
+  () =>
+    props.mode === 'edit' &&
+    ['mysql', 'postgresql', 'sqlserver', 'redis', 'tdengine'].includes(connectionType.value) &&
+    Boolean(props.connection?.secretStatus?.[savedPasswordKey.value]),
+)
+const savedTlsSecrets = computed(() => ({
+  ca: Boolean(props.connection?.secretStatus?.['tls.ca']),
+  cert: Boolean(props.connection?.secretStatus?.['tls.cert']),
+  key: Boolean(props.connection?.secretStatus?.['tls.key']),
+}))
 
 const configSignature = computed(() => {
   return JSON.stringify({
@@ -817,6 +868,11 @@ const testState = computed(() => {
   }
 })
 
+const redisModeLabel = (mode: unknown) => {
+  const option = redisModeOptions.find((item) => item.value === String(mode || 'standalone'))
+  return option?.label || '单机'
+}
+
 const summaryRows = computed(() => {
   const data = formData.value || {}
   const rows = [
@@ -863,10 +919,10 @@ const summaryRows = computed(() => {
     rows.push({ label: '配置方式', value: '会话在工作台维护' })
   } else if (connectionType.value === 'redis') {
     rows.push(
-      { label: '模式', value: data.mode || 'standalone' },
-      { label: '地址', value: data.address || '未填写' },
-      { label: 'DB', value: String(data.db ?? 0) },
-      { label: 'Key', value: data.keyPattern || '*' },
+      { label: '连接方式', value: redisModeLabel(data.mode) },
+      { label: '节点地址', value: data.address || '未填写' },
+      { label: '数据库编号', value: String(data.db ?? 0) },
+      { label: 'Key 筛选规则', value: data.keyPattern || '*' },
     )
   } else if (connectionType.value === 'tdengine') {
     rows.push(
@@ -901,7 +957,7 @@ const checklist = computed(() => {
           : connectionType.value === 'redis'
             ? Boolean(data.address)
             : connectionType.value === 'tdengine'
-              ? Boolean(data.ip && data.port)
+              ? Boolean(data.host && data.port)
               : Boolean(data.host && data.port)
   const hasTarget = ['mqtt', 'kafka', 'http', 'websocket', 'redis'].includes(connectionType.value)
     ? true
@@ -1021,6 +1077,7 @@ const resetTestState = () => {
 
 const hydrateEditForm = (connection) => {
   if (!connection || props.mode !== 'edit') return
+  revealedPassword.value = ''
   connectionType.value = connection.type
   const protocolConfig = resolveConnectionConfigForForm(connection)
   if (isBuiltinStoreType(connection.type)) {
@@ -1033,7 +1090,7 @@ const hydrateEditForm = (connection) => {
     connectionType.value = dbType.value
     formData.value = {
       name: connection.name,
-      ...connection.relationalConfig,
+      ...normalizeRelationalFormConfig(connection.relationalConfig),
     }
   } else if (connection.type === 'mqtt' && connection.mqttConfig) {
     formData.value = {
@@ -1059,6 +1116,20 @@ const resolveConnectionConfigForForm = (connection) => {
   }
 
   return config
+}
+
+// 将已有关系库连接转换为统一 TLS 表单模型；仅用于开发期已有连接的编辑展示。
+const normalizeRelationalFormConfig = (config) => {
+  const normalized = { ...(config || {}) }
+  const source =
+    normalized.sslConfig && typeof normalized.sslConfig === 'object' ? normalized.sslConfig : {}
+  normalized.sslConfig = {
+    mode: source.mode || 'disable',
+    ca: source.ca || '',
+    cert: source.cert || '',
+    key: source.key || '',
+  }
+  return normalized
 }
 
 const handleValidate = () => undefined
@@ -1089,6 +1160,9 @@ const buildConnectionPayload = () => {
     normalizeBuiltinSubmitConfig(connectionType.value, config)
   } else if (relationalSourceTypes.includes(connectionType.value)) {
     config.dbType = dbType.value
+    normalizeRelationalTLSConfig(config)
+    // 编辑态未查看、未修改密码时不提交空值，避免误删已保存密钥。
+    if (props.mode === 'edit' && !String(config.password || '')) delete config.password
   } else if (specializedProtocolTypes.includes(connectionType.value)) {
     normalizeProtocolSubmitConfig(connectionType.value, config)
   }
@@ -1100,6 +1174,25 @@ const buildConnectionPayload = () => {
       : connectionType.value,
     config,
   }
+}
+
+// 统一关系库 TLS 提交结构；空证书字段不提交，编辑时即可保留已加密保存的证书。
+const normalizeRelationalTLSConfig = (config) => {
+  const source = config.sslConfig && typeof config.sslConfig === 'object' ? config.sslConfig : {}
+  const sslConfig = {
+    mode: source.mode || 'disable',
+  }
+  for (const key of ['ca', 'cert', 'key']) {
+    const value = String(source[key] || '').trim()
+    if (value) sslConfig[key] = value
+  }
+  config.sslConfig = sslConfig
+  delete config.sslMode
+  delete config.sslCa
+  delete config.sslCert
+  delete config.sslKey
+  delete config.encrypt
+  delete config.trustServerCertificate
 }
 
 const handleMqttConnectionTest = async () => {
@@ -1175,8 +1268,22 @@ const handleTest = async () => {
   try {
     const payload = buildConnectionPayload()
     const testConfig = { ...payload.config }
-    if (connectionType.value === 'tdengine') {
-      testConfig.password = String(formData.value.password || '')
+    let testPassword = String(formData.value.password || '')
+    if (
+      props.mode === 'edit' &&
+      !testPassword &&
+      props.connection?.secretStatus?.[savedPasswordKey.value]
+    ) {
+      testPassword = await fetchSavedPassword()
+    }
+    if (connectionType.value === 'kafka' && testPassword) {
+      testConfig.options = { ...(testConfig.options || {}), password: testPassword }
+    } else if (
+      ['mysql', 'postgresql', 'sqlserver', 'redis', 'tdengine'].includes(connectionType.value)
+    ) {
+      testConfig.password = testPassword
+    }
+    if (['redis', 'tdengine'].includes(connectionType.value)) {
       delete testConfig.secrets
       delete testConfig.clearSecretKeys
     }
@@ -1225,6 +1332,10 @@ const handleSubmit = async () => {
       name: payload.name,
       type: payload.type,
       config: payload.config,
+      tested:
+        testResult.value.status === 'success' &&
+        Boolean(lastTestSignature.value) &&
+        lastTestSignature.value === configSignature.value,
     })
   } finally {
     submitting.value = false
@@ -1244,6 +1355,7 @@ const closeSilently = () => {
 const handleClosed = () => {
   emptyFormSignature.value = ''
   silentClosing.value = false
+  revealedPassword.value = ''
   // 清空表单
   if (formRef.value) {
     formRef.value.clearValidate()
@@ -1251,6 +1363,33 @@ const handleClosed = () => {
   if (protocolFormRef.value) {
     protocolFormRef.value.clearValidate()
   }
+}
+
+const revealSavedPassword = async () => {
+  if (!props.projectId || !props.connection?.id || revealingPassword.value) return
+  const wasClean = formInputSignature.value === emptyFormSignature.value
+  revealingPassword.value = true
+  try {
+    revealedPassword.value = await fetchSavedPassword()
+    formData.value = { ...formData.value, password: revealedPassword.value }
+    if (wasClean) emptyFormSignature.value = formInputSignature.value
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '查看已保存密码失败'))
+  } finally {
+    revealingPassword.value = false
+  }
+}
+
+const fetchSavedPassword = async () => {
+  if (!props.projectId || !props.connection?.id) throw new Error('缺少接入源上下文')
+  const response = await dataAPI.revealConnectionSecret(
+    props.projectId,
+    props.connection.id,
+    savedPasswordKey.value,
+  )
+  const password = String(response?.data?.value ?? response?.value ?? '')
+  if (!password) throw new Error('已保存密码为空')
+  return password
 }
 
 defineExpose({ closeSilently })
@@ -1305,7 +1444,6 @@ const getProtocolDefaultConfig = (type) => {
       timezone: 'Asia/Shanghai',
       tlsSkipVerify: false,
       clearPassword: false,
-      optionsText: '{}',
     },
   }
   return { ...(defaults[type] || {}) }
@@ -1394,6 +1532,9 @@ const buildKafkaOptions = (config) => {
 
 const normalizeProtocolFormData = (type, config) => {
   const data = { ...getProtocolDefaultConfig(type), ...config }
+  if (type === 'tdengine' && !data.database && config.databaseName) {
+    data.database = config.databaseName
+  }
   if (type === 'kafka' && config.options && typeof config.options === 'object') {
     Object.assign(data, normalizeKafkaOptionsForForm(config.options))
   }
@@ -1401,7 +1542,9 @@ const normalizeProtocolFormData = (type, config) => {
     data.headersText = JSON.stringify(data.headers, null, 2)
   }
   if (data.options && typeof data.options === 'object') {
-    if (type !== 'kafka') data.optionsText = JSON.stringify(data.options, null, 2)
+    if (type !== 'kafka' && type !== 'tdengine') {
+      data.optionsText = JSON.stringify(data.options, null, 2)
+    }
     data.masterName = data.options.masterName || data.masterName
   }
   if (data.serialConfig && typeof data.serialConfig === 'object') {
@@ -1479,7 +1622,7 @@ const normalizeProtocolSubmitConfig = (type, config) => {
     return
   }
   if (type === 'tdengine') {
-    config.options = parseOptionalJsonObject(config.optionsText, '扩展参数')
+    config.options = {}
     config.databaseName = config.database
     const password = String(config.password || '')
     config.secrets = password ? { password } : {}
@@ -1490,20 +1633,6 @@ const normalizeProtocolSubmitConfig = (type, config) => {
     if (!config.timezone) delete config.timezone
     delete config.optionsText
   }
-}
-
-const parseOptionalJsonObject = (value, label) => {
-  const text = String(value || '').trim()
-  if (!text) return {}
-  try {
-    const parsed = JSON.parse(text)
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed
-    }
-  } catch {
-    // 统一在下方返回带字段名的可读错误。
-  }
-  throw new Error(`${label} 必须是 JSON 对象`)
 }
 
 const formatEndpoint = (host, port) => {
@@ -1793,6 +1922,11 @@ watch(
   overflow-y: scroll;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+}
+
+.connection-dialog__tdengine-tip {
+  margin-top: -8px;
+  margin-bottom: 14px;
 }
 
 .connection-dialog__form-heading {

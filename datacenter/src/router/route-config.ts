@@ -29,6 +29,10 @@ export const V2_MODULE_IDS: readonly V2ModuleId[] = [
 /** 默认模块 */
 export const DEFAULT_MODULE: V2ModuleId = MODULE_DATAPOINT
 
+/** 保留独立调试入口前缀，避免模块切换跳出 Vite 的 /datacenter/ base。 */
+export const resolveDatacenterRouteBase = (path: string) =>
+  path === '/debug' || path.startsWith('/debug/') ? '/debug' : ''
+
 const DEFAULT_DEBUG_ROUTE_ENABLED =
   typeof __DATACENTER_DEBUG_ROUTE_ENABLED__ !== 'undefined'
     ? __DATACENTER_DEBUG_ROUTE_ENABLED__
@@ -42,6 +46,16 @@ const DEFAULT_DEBUG_ROUTE_ENABLED =
  *   /datacenter/debug/:module(...)/:objectId?/:tab?
  *
  */
+interface DatacenterRouteRecord {
+  path: string
+  name?: string
+  redirect?:
+    | Record<string, unknown>
+    | ((to: { query?: Record<string, unknown> }) => Record<string, unknown>)
+  component?: unknown
+  meta?: Record<string, unknown>
+}
+
 export function createDatacenterRoutes({
   DataCenterComponent,
   enableDebugRoute = DEFAULT_DEBUG_ROUTE_ENABLED,
@@ -50,7 +64,7 @@ export function createDatacenterRoutes({
   enableDebugRoute?: boolean
 }) {
   // 正式入口路由（需要认证）
-  const routes: unknown[] = [
+  const routes: DatacenterRouteRecord[] = [
     // 根路径重定向到默认模块
     {
       path: '/',

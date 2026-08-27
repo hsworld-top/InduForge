@@ -1,10 +1,10 @@
-// @ts-nocheck
 /**
  * SQL 解析工具
  * 使用 node-sql-parser 处理不同 SQL 方言
  */
 
 import { Parser } from 'node-sql-parser'
+import { debugLogger } from './debug'
 
 // 创建不同方言的解析器
 const mysqlParser = new Parser()
@@ -194,7 +194,7 @@ export function formatSqlWithParser(sql, dialect = 'mysql') {
     const ast = parser.astify(sql, { database: dialect })
     return parser.sqlify(ast, { database: dialect })
   } catch (error) {
-    console.error('SQL 格式化失败:', error)
+    debugLogger.error('SQL 格式化失败:', error)
     return sql
   }
 }

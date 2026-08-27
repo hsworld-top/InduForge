@@ -1,8 +1,12 @@
-// @ts-nocheck
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
 
-import { createDatacenterRoutes } from '../src/router/route-config'
+import { createDatacenterRoutes, resolveDatacenterRouteBase } from '../src/router/route-config'
+
+test('模块切换保留 debug 路由前缀', () => {
+  assert.equal(resolveDatacenterRouteBase('/debug/access-source/source-1/workbench'), '/debug')
+  assert.equal(resolveDatacenterRouteBase('/access-source/source-1/workbench'), '')
+})
 
 test('生产态不会注册 datacenter debug 路由', () => {
   const DataCenterComponent = { name: 'DataCenterStub' }
@@ -17,7 +21,9 @@ test('生产态不会注册 datacenter debug 路由', () => {
   // 根路径 redirect
   assert.equal(routes[0].path, '/')
   assert.equal(typeof routes[0].redirect, 'function')
-  assert.deepEqual(routes[0].redirect({ query: { keyword: 'demo' } }), {
+  const redirect = routes[0].redirect
+  assert.equal(typeof redirect, 'function')
+  assert.deepEqual((redirect as Function)({ query: { keyword: 'demo' } }), {
     path: '/datapoint',
     query: { keyword: 'demo' },
   })

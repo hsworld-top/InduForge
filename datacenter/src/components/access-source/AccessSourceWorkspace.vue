@@ -3,7 +3,7 @@
     <section class="access-source-workspace__panel">
       <!-- 头部：单行 toolbar 撑满 -->
       <header class="access-source-workspace__head">
-        <div class="access-source-workspace__toolbar">
+        <FilterToolbar>
           <!-- 搜索框 -->
           <el-input
             v-model="searchInputValue"
@@ -80,124 +80,162 @@
             <span class="access-source-workspace__overview-text">共 {{ overviewTotal }}</span>
           </div>
 
-          <!-- 新增连接 -->
-          <button type="button" class="access-source-workspace__primary" @click="$emit('create')">
-            <IconTablerPlus class="access-source-workspace__action-icon" />
-            <span>新增连接</span>
-          </button>
-        </div>
+          <template #actions>
+            <button type="button" class="access-source-workspace__primary" @click="$emit('create')">
+              <IconTablerPlus class="access-source-workspace__action-icon" />
+              <span>新增连接</span>
+            </button>
+          </template>
+        </FilterToolbar>
       </header>
 
       <section class="access-source-workspace__content-panel">
-        <AccessSourceList
-          v-if="viewMode === 'card'"
-          v-loading="loading"
-          :connections="filteredConnections"
-          :selected-connection-id="activeConnectionId"
-          :draggable="canReorderConnections"
-          @open="handleOpen"
-          @edit="handleEdit"
-          @delete-connection="handleDeleteConnection"
-          @reorder="handleReorderConnections"
-          @create="$emit('create')"
-        />
+        <TableScroll>
+          <AccessSourceList
+            v-if="viewMode === 'card'"
+            v-loading="loading"
+            :connections="filteredConnections"
+            :selected-connection-id="activeConnectionId"
+            :testing-connection-id="testingConnectionId"
+            :draggable="canReorderConnections"
+            @open="handleOpen"
+            @edit="handleEdit"
+            @test="handleTestConnection"
+            @delete-connection="handleDeleteConnection"
+            @reorder="handleReorderConnections"
+            @create="$emit('create')"
+          />
 
-        <div v-else v-loading="loading" class="access-source-workspace__table-wrap">
-          <div class="access-source-workspace__table-shell">
-            <el-table
-              :data="filteredConnections"
-              row-key="id"
-              class="access-source-workspace__table"
-            >
-              <el-table-column label="名称" min-width="220">
-                <template #default="{ row }">
-                  <div class="access-source-workspace__source-identity">
+          <div v-else v-loading="loading" class="access-source-workspace__table-wrap">
+            <div class="access-source-workspace__table-shell">
+              <el-table
+                :data="filteredConnections"
+                row-key="id"
+                class="access-source-workspace__table"
+              >
+                <el-table-column label="名称" min-width="220">
+                  <template #default="{ row }">
+                    <div class="access-source-workspace__source-identity">
+                      <span
+                        class="access-source-workspace__source-icon"
+                        :class="`is-${resolveCategory(row)}`"
+                      >
+                        <component :is="resolveConnectionIcon(row)" />
+                      </span>
+                      <button
+                        type="button"
+                        class="access-source-workspace__name-button"
+                        @click="handleOpen(row)"
+                      >
+                        {{ row.name || '未命名连接' }}
+                      </button>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="类型" width="150">
+                  <template #default="{ row }">
                     <span
-                      class="access-source-workspace__source-icon"
+                      class="access-source-workspace__type-badge"
                       :class="`is-${resolveCategory(row)}`"
                     >
-                      <component :is="resolveConnectionIcon(row)" />
+                      {{ resolveConnectionTypeLabel(row) }}
                     </span>
-                    <button
-                      type="button"
-                      class="access-source-workspace__name-button"
-                      @click="handleOpen(row)"
+                  </template>
+                </el-table-column>
+                <el-table-column label="连接地址" min-width="260" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <span
+                      class="access-source-workspace__endpoint"
+                      :class="{ 'is-pending': isConnectionEndpointPending(row) }"
                     >
-                      {{ row.name || '未命名连接' }}
-                    </button>
-                  </div>
-                </template>
-              </el-table-column>
-              <el-table-column label="类型" width="150">
-                <template #default="{ row }">
-                  <span
-                    class="access-source-workspace__type-badge"
-                    :class="`is-${resolveCategory(row)}`"
-                  >
-                    {{ resolveConnectionTypeLabel(row) }}
-                  </span>
-                </template>
-              </el-table-column>
-              <el-table-column label="连接地址" min-width="260" show-overflow-tooltip>
-                <template #default="{ row }">
-                  <span
-                    class="access-source-workspace__endpoint"
-                    :class="{ 'is-pending': isConnectionEndpointPending(row) }"
-                  >
-                    {{ resolveConnectionEndpoint(row) }}
-                  </span>
-                </template>
-              </el-table-column>
-              <el-table-column label="数据点" width="92" align="center">
-                <template #default="{ row }">
-                  <span
-                    class="access-source-workspace__point-count"
-                    :class="{ 'is-empty': resolveDatapointCount(row) === 0 }"
-                  >
-                    {{ resolveDatapointCount(row) }}
-                  </span>
-                </template>
-              </el-table-column>
-              <el-table-column label="操作" width="148" align="right" fixed="right">
-                <template #default="{ row }">
-                  <div class="access-source-workspace__table-actions">
-                    <button type="button" class="is-workbench" @click="handleOpen(row)">
-                      <span>工作台</span>
-                      <IconTablerArrowRight />
-                    </button>
-                    <button
-                      type="button"
-                      class="is-icon"
-                      title="编辑"
-                      aria-label="编辑接入源"
-                      @click="handleEdit(row)"
+                      {{ resolveConnectionEndpoint(row) }}
+                    </span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="数据点" width="92" align="center">
+                  <template #default="{ row }">
+                    <span
+                      class="access-source-workspace__point-count"
+                      :class="{ 'is-empty': resolveDatapointCount(row) === 0 }"
                     >
-                      <IconTablerSettings />
-                    </button>
-                    <button
-                      type="button"
-                      class="is-icon is-danger"
-                      title="删除"
-                      aria-label="删除接入源"
-                      @click="handleDeleteConnection(row)"
+                      {{ resolveDatapointCount(row) }}
+                    </span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="状态" width="138">
+                  <template #default="{ row }">
+                    <span
+                      class="access-source-workspace__state"
+                      :class="`is-${resolveConnectionState(row).tone}`"
+                      :title="resolveConnectionState(row).detail"
                     >
-                      <IconTablerTrash />
-                    </button>
-                  </div>
-                </template>
-              </el-table-column>
-            </el-table>
+                      {{ resolveConnectionState(row).label }}
+                    </span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="184" align="right" fixed="right">
+                  <template #default="{ row }">
+                    <div class="access-source-workspace__table-actions">
+                      <button type="button" class="is-workbench" @click="handleOpen(row)">
+                        <span>工作台</span>
+                        <IconTablerArrowRight />
+                      </button>
+                      <button
+                        v-if="row.testCapability.status === 'supported'"
+                        type="button"
+                        class="is-icon"
+                        :disabled="testingConnectionId === row.id"
+                        title="测试已保存连接"
+                        aria-label="测试接入源"
+                        @click="handleTestConnection(row)"
+                      >
+                        <IconTablerLoader2
+                          v-if="testingConnectionId === row.id"
+                          class="is-spinning"
+                        />
+                        <IconTablerPlugConnected v-else />
+                      </button>
+                      <span
+                        v-else
+                        class="access-source-workspace__action-placeholder"
+                        aria-hidden="true"
+                      ></span>
+                      <button
+                        type="button"
+                        class="is-icon"
+                        title="编辑"
+                        aria-label="编辑接入源"
+                        @click="handleEdit(row)"
+                      >
+                        <IconTablerSettings />
+                      </button>
+                      <button
+                        type="button"
+                        class="is-icon is-danger"
+                        title="删除"
+                        aria-label="删除接入源"
+                        @click="handleDeleteConnection(row)"
+                      >
+                        <IconTablerTrash />
+                      </button>
+                    </div>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
           </div>
-        </div>
 
-        <DataCenterPagination
-          v-if="pagination.total > 0"
-          :page="pagination.page"
-          :page-size="pagination.pageSize"
-          :total="pagination.total"
-          :total-pages="pagination.totalPages"
-          @change="handlePaginationChange"
-        />
+          <template #pagination>
+            <DataCenterPagination
+              v-if="pagination.total > 0"
+              :page="pagination.page"
+              :page-size="pagination.pageSize"
+              :total="pagination.total"
+              :total-pages="pagination.totalPages"
+              @change="handlePaginationChange"
+            />
+          </template>
+        </TableScroll>
       </section>
     </section>
   </div>
@@ -206,7 +244,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerArrowRight from '~icons/tabler/arrow-right'
@@ -215,43 +253,23 @@ import IconTablerListDetails from '~icons/tabler/list-details'
 import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerSettings from '~icons/tabler/settings'
 import IconTablerTrash from '~icons/tabler/trash'
-import dataAPI from '@/api/data.api'
-import { deleteAccessSource, updateAccessSourceOrder } from '@/api/access-source.api'
+import IconTablerLoader2 from '~icons/tabler/loader-2'
+import IconTablerPlugConnected from '~icons/tabler/plug-connected'
+import { deleteConnection, getConnectionDeleteImpact, updateConnectionOrder } from '@/api/data.api'
+import { testSavedConnection } from '@/api/connection.api'
 import { useConfirm } from '@/composables/useConfirm'
 import { getApiErrorMessage } from '@/utils/request'
 import AccessSourceList from './AccessSourceList.vue'
 import PillButton from '@/components/shared/PillButton.vue'
 import DataCenterPagination from '@/components/shared/DataCenterPagination.vue'
+import FilterToolbar from '@/components/shared/FilterToolbar.vue'
+import TableScroll from '@/components/shared/TableScroll.vue'
 import { isBuiltinStoreType } from './workbench/builtin-store'
 import { resolveAccessSourceVisual } from './access-source-visual'
+import type { Connection as AccessSourceConnection } from '@/api/schemas/connection.schema'
 
 /* Search 图标赋值给变量，传给 el-input prefix-icon */
 const SearchIcon = Search
-
-type AccessSourceConnection = {
-  id: string
-  name?: string
-  type?: string
-  datapointCount?: number
-  dataPointCount?: number
-  variableCount?: number
-  relationalConfig?: {
-    dbType?: string
-    host?: string
-    port?: number | string
-    database?: string
-  }
-  mqttConfig?: {
-    protocol?: string
-    brokerUrl?: string
-    host?: string
-    port?: number | string
-    topic?: string
-    defaultTopic?: string
-  }
-  config?: Record<string, unknown>
-  category?: string
-}
 
 const props = defineProps<{
   connections: AccessSourceConnection[]
@@ -282,6 +300,7 @@ const overviewTotal = computed(() => props.pagination.total)
 const route = useRoute()
 const router = useRouter()
 const { confirm } = useConfirm()
+const testingConnectionId = ref('')
 
 /* ── URL 同步：从 query 读取初始筛选值 ── */
 const filterQ = ref(String(route.query.q || ''))
@@ -419,68 +438,41 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
   )
 }
 
-const resolveDatapointCount = (connection: AccessSourceConnection) =>
-  connection.variableCount ?? connection.datapointCount ?? connection.dataPointCount ?? 0
+const resolveDatapointCount = (connection: AccessSourceConnection) => connection.variableCount
+
+const resolveConnectionState = (connection: AccessSourceConnection) => {
+  if (!connection.enabled) return { label: '已停用', tone: 'muted', detail: '配置已停用' }
+  if (connection.configurationState === 'incomplete') {
+    return { label: '配置不完整', tone: 'warning', detail: '请补齐接入源必填配置' }
+  }
+  if (connection.testCapability.status === 'unsupported') {
+    return {
+      label: '正常',
+      tone: 'success',
+      detail: connection.testCapability.reason || '请在所属工作台测试具体请求或会话',
+    }
+  }
+  if (connection.lastTest.status === 'succeeded') {
+    return {
+      label: '正常',
+      tone: 'success',
+      detail: connection.lastTest.message || '最近测试成功',
+    }
+  }
+  if (connection.lastTest.status === 'failed') {
+    return {
+      label: '异常',
+      tone: 'danger',
+      detail: connection.lastTest.message || '最近测试失败',
+    }
+  }
+  return { label: '未测试', tone: 'muted', detail: '尚未测试已保存配置' }
+}
 
 const isConnectionEndpointPending = (connection: AccessSourceConnection) => {
   const endpoint = resolveConnectionEndpoint(connection)
   return endpoint.startsWith('等待') || endpoint.startsWith('未配置')
 }
-
-/* ── SQL 数据点数量本地加载（过渡期保留） ── */
-/* @deprecated A1 临时保留，后续随 A2/A3 移到 store */
-const localDatapointCounts = ref<Record<string, number>>({})
-
-const isSqlConnection = (connection: AccessSourceConnection) => {
-  if (connection.type === 'relational') return true
-  return ['mysql', 'postgresql', 'sqlserver', 'tdengine'].includes(connection.type || '')
-}
-
-const loadSqlDatapointCounts = async () => {
-  if (!props.projectId) {
-    localDatapointCounts.value = {}
-    return
-  }
-  const sqlConnections = props.connections.filter(isSqlConnection)
-  const nextCounts: Record<string, number> = {}
-  await Promise.all(
-    sqlConnections.map(async (connection) => {
-      try {
-        const queryResponse = await dataAPI.getQueries(props.projectId, {
-          connectionId: connection.id,
-          queryType: 'sql',
-          page: 1,
-          pageSize: 100,
-        })
-        const queries = queryResponse.data?.queries || queryResponse.data || []
-        const sourceIds = queries.map((query: { id?: string }) => query.id).filter(Boolean)
-        if (sourceIds.length === 0) {
-          nextCounts[connection.id] = 0
-          return
-        }
-        const pointResponse = await dataAPI.getDataPoints(props.projectId, {
-          type: 'db.query',
-          sourceIds: sourceIds.join(','),
-          page: 1,
-          pageSize: 200,
-        })
-        nextCounts[connection.id] = pointResponse.data?.datapoints?.length || 0
-      } catch {
-        const fallback = connection.datapointCount ?? connection.dataPointCount
-        if (typeof fallback === 'number') nextCounts[connection.id] = fallback
-      }
-    }),
-  )
-  localDatapointCounts.value = nextCounts
-}
-
-watch(
-  () => [props.projectId, props.connections.map((c) => c.id).join(',')],
-  () => {
-    void loadSqlDatapointCounts()
-  },
-  { immediate: true },
-)
 
 watch(
   () => props.connections.map((connection) => connection.id),
@@ -496,7 +488,7 @@ watch(
 
 /* ── 前端过滤（基于 props.connections）── */
 const filteredConnections = computed(() => {
-  let list = [...props.connections]
+  const list = [...props.connections]
   if (hasLocalConnectionOrder.value && connectionOrder.value.length > 0) {
     const orderMap = new Map(connectionOrder.value.map((id, index) => [id, index]))
     list.sort((left, right) => {
@@ -505,12 +497,6 @@ const filteredConnections = computed(() => {
       return leftOrder - rightOrder
     })
   }
-
-  list = list.map((connection) => {
-    const count = localDatapointCounts.value[connection.id]
-    if (typeof count !== 'number') return connection
-    return { ...connection, datapointCount: count, dataPointCount: count }
-  })
 
   return list
 })
@@ -530,6 +516,21 @@ const handleEdit = (connection: AccessSourceConnection) => {
   emit('edit', connection)
 }
 
+const handleTestConnection = async (connection: AccessSourceConnection) => {
+  if (!props.projectId || testingConnectionId.value) return
+  testingConnectionId.value = connection.id
+  try {
+    const result = await testSavedConnection(String(props.projectId), connection.id)
+    if (result.connected) ElMessage.success(result.message || '连接测试成功')
+    else ElMessage.warning(result.message || '连接测试未通过')
+    emit('refresh')
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '连接测试失败'))
+  } finally {
+    testingConnectionId.value = ''
+  }
+}
+
 const handleReorderConnections = async (connectionIds: string[]) => {
   if (!props.projectId || !canReorderConnections.value) return
   const previousOrder = [...connectionOrder.value]
@@ -537,7 +538,7 @@ const handleReorderConnections = async (connectionIds: string[]) => {
   connectionOrder.value = connectionIds
   hasLocalConnectionOrder.value = true
   try {
-    await updateAccessSourceOrder(String(props.projectId), connectionIds)
+    await updateConnectionOrder(String(props.projectId), connectionIds)
     ElMessage.success('接入源顺序已保存')
   } catch (err) {
     connectionOrder.value = previousOrder
@@ -549,13 +550,38 @@ const handleReorderConnections = async (connectionIds: string[]) => {
 /* 删除接入源：二次确认后调用 API，成功后通知父刷新 */
 const handleDeleteConnection = async (connection: AccessSourceConnection) => {
   if (!props.projectId) return
+  let impact
+  try {
+    impact = await getConnectionDeleteImpact(String(props.projectId), connection.id)
+  } catch (err) {
+    ElMessage.error(getApiErrorMessage(err, '读取删除影响失败'))
+    return
+  }
+  if (!impact.canDelete) {
+    const blockers = impact.blockingUsages
+      .map(
+        (item) =>
+          `${item.label || item.type} ${item.count} 项${item.examples.length ? `（${item.examples.map((example) => example.name).join('、')}）` : ''}`,
+      )
+      .join('\n')
+    await ElMessageBox.alert(
+      `当前接入源仍被以下配置引用，请先解除引用：\n${blockers}`,
+      '无法删除接入源',
+      {
+        type: 'warning',
+        confirmButtonText: '知道了',
+      },
+    )
+    return
+  }
+  const owned = impact.ownedResources.reduce((sum, item) => sum + item.count, 0)
   const ok = await confirm(
-    `将删除接入源「${connection.name || connection.id}」。后端引用检查未启用，相关数据点可能受影响。`,
+    `将删除接入源「${connection.name || connection.id}」及 ${owned} 个来源内配置；${impact.generatedDatapoints.count} 个已生成数据点会保留并标记为无效。`,
     { title: '删除接入源', confirmText: '删除', type: 'error' },
   )
   if (!ok) return
   try {
-    await deleteAccessSource(String(props.projectId), connection.id)
+    await deleteConnection(String(props.projectId), connection.id)
     ElMessage.success('接入源已删除')
     emit('refresh')
   } catch (err) {
@@ -905,6 +931,33 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
   color: var(--dc-text-muted);
 }
 
+.access-source-workspace__state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.access-source-workspace__state.is-success {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.access-source-workspace__state.is-warning {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.access-source-workspace__state.is-danger {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
 .access-source-workspace__table-actions {
   display: flex;
   align-items: center;
@@ -950,6 +1003,12 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
   width: 28px;
   min-width: 28px;
   padding: 0;
+}
+
+.access-source-workspace__action-placeholder {
+  width: 28px;
+  height: 28px;
+  flex: none;
 }
 
 .access-source-workspace__table-actions button.is-danger:hover {
@@ -1009,6 +1068,16 @@ const handleDeleteConnection = async (connection: AccessSourceConnection) => {
   background: var(--dc-primary-soft);
   color: var(--dc-primary);
   font-weight: 700;
+}
+
+.is-spinning {
+  animation: access-source-spin 0.8s linear infinite;
+}
+
+@keyframes access-source-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 760px) {

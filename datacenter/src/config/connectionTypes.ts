@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * 连接类型配置
  * 定义所有支持的连接类型及其特性
@@ -55,6 +54,7 @@ export const CONNECTION_TYPES = {
       username: 'root',
       password: '',
       charset: 'utf8mb4',
+      sslConfig: { mode: 'disable', ca: '', cert: '', key: '' },
       queryTimeout: 30000,
     },
   },
@@ -85,10 +85,7 @@ export const CONNECTION_TYPES = {
       username: 'postgres',
       password: '',
       schema: 'public',
-      sslMode: 'disable',
-      sslCa: '',
-      sslCert: '',
-      sslKey: '',
+      sslConfig: { mode: 'disable', ca: '', cert: '', key: '' },
       connectionTimeout: 3000,
       queryTimeout: 30000,
       maxConnections: 10,
@@ -123,8 +120,7 @@ export const CONNECTION_TYPES = {
       password: '',
       timeout: 60000,
       queryTimeout: 30000,
-      encrypt: false,
-      trustServerCertificate: true,
+      sslConfig: { mode: 'disable', ca: '', cert: '', key: '' },
     },
   },
 
@@ -180,7 +176,7 @@ export function getDatabaseTypes() {
     .map(([type, config]) => ({
       value: type,
       label: config.label,
-      defaultPort: config.defaultPort,
+      defaultPort: 'defaultPort' in config ? config.defaultPort : undefined,
     }))
 }
 

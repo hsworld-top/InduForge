@@ -1,4 +1,3 @@
-// @ts-nocheck
 const asNonEmptyString = (value) =>
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 
@@ -42,7 +41,7 @@ export async function resolveDatacenterDebugProjectMeta({
   try {
     defaultDebugProject = await resolveDefaultDebugProject()
   } catch (error) {
-    console.warn('解析默认调试工程失败，回退到本地调试工程:', error)
+    debugLogger.warn('解析默认调试工程失败，回退到本地调试工程:', error)
   }
 
   if (defaultDebugProject?.id) {
@@ -70,3 +69,4 @@ export async function resolveDatacenterDebugProjectMeta({
     tenantId: storedTenantId,
   }
 }
+import { debugLogger } from '@/utils/debug'

@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * SQL 自动补全配置
  * 为 Monaco Editor 提供 SQL 关键字、函数、表名、字段名的自动补全
@@ -852,5 +851,10 @@ export function unregisterSqlCompletionProvider() {
   if (window.__sqlCompletionDisposables) {
     window.__sqlCompletionDisposables.forEach((d) => d.dispose())
     window.__sqlCompletionDisposables = null
+  }
+}
+declare global {
+  interface Window {
+    __sqlCompletionDisposables?: Array<{ dispose: () => void }>
   }
 }

@@ -216,6 +216,7 @@
 
 <script setup lang="ts">
 import { ref, computed, inject, onMounted, onUnmounted } from 'vue'
+import { debugLogger } from '@/utils/debug'
 import IconTablerFileCheck from '~icons/tabler/file-check'
 import IconTablerPlayerPlay from '~icons/tabler/player-play'
 import IconTablerList from '~icons/tabler/list'
@@ -233,20 +234,16 @@ import {
 import * as monaco from 'monaco-editor'
 import DataPointInlineList from '@/components/datapoint/DataPointInlineList.vue'
 
-const props = defineProps({
-  tab: {
-    type: Object,
-    required: true,
-  },
-})
+// 查询页签由工作台持有，编辑器通过双向模型更新草稿状态。
+const tab = defineModel('tab', { type: Object, required: true })
 
 const emit = defineEmits(['execute', 'save', 'update:tab', 'connection-change'])
 
 const projectId = inject('projectId')
 const isDark = computed(() => document.documentElement.classList.contains('dark'))
 
-const localTab = computed(() => props.tab)
-const currentConnectionId = ref(props.tab.connectionId)
+const localTab = computed(() => tab.value)
+const currentConnectionId = ref(tab.value.connectionId)
 
 const { connections, loadConnections } = useConnection(projectId)
 
@@ -268,9 +265,8 @@ onMounted(async () => {
 
   try {
     registerSqlCompletionProvider(monaco)
-    console.log('SQL 自动补全已注册')
   } catch (error) {
-    console.error('注册 SQL 自动补全失败:', error)
+    debugLogger.error('注册 SQL 自动补全失败:', error)
   }
 })
 
@@ -286,46 +282,46 @@ const paginatedRows = computed(() => {
 })
 
 const handleConnectionChange = async (connectionId) => {
-  props.tab.connectionId = connectionId
-  props.tab.modified = true
+  tab.value.connectionId = connectionId
+  tab.value.modified = true
 
   await loadTables()
 
-  props.tab.table = ''
+  tab.value.table = ''
 
   emit('connection-change', connectionId)
 }
 
 const handleTableChange = (tableName) => {
   const sql = `SELECT * FROM [${tableName}] ORDER BY (SELECT NULL) OFFSET 0 ROWS FETCH NEXT 100 ROWS ONLY`
-  props.tab.sql = sql
-  props.tab.modified = true
+  tab.value.sql = sql
+  tab.value.modified = true
   updateParameters()
 }
 
 const handleFormat = () => {
-  if (!props.tab.sql.trim()) return
-  props.tab.sql = formatSql(props.tab.sql)
+  if (!tab.value.sql.trim()) return
+  tab.value.sql = formatSql(tab.value.sql)
 }
 
 const handleExecute = () => {
   updateParameters()
-  emit('execute', props.tab)
+  emit('execute', tab.value)
 }
 
 const handleSave = () => {
-  emit('save', props.tab)
+  emit('save', tab.value)
 }
 
 const handleSqlChange = (value) => {
-  props.tab.sql = value
-  props.tab.modified = true
+  tab.value.sql = value
+  tab.value.modified = true
   updateParameters()
 }
 
 const updateParameters = () => {
-  const newParams = extractSqlParameters(props.tab.sql)
-  const oldParams = props.tab.parameters || []
+  const newParams = extractSqlParameters(tab.value.sql)
+  const oldParams = tab.value.parameters || []
 
   const mergedParams = newParams.map((newParam) => {
     const oldParam = oldParams.find((p) => p.name === newParam.name)
@@ -335,11 +331,11 @@ const updateParameters = () => {
     }
   })
 
-  props.tab.parameters = mergedParams
+  tab.value.parameters = mergedParams
 }
 
 const clearResult = () => {
-  props.tab.result = null
-  props.tab.resultPage = 1
+  tab.value.result = null
+  tab.value.resultPage = 1
 }
 </script>

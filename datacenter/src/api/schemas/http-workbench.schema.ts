@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { IdSchema, TimeFieldSchema, listResponseSchema } from './common.schema'
+import { SourceOutputSchema } from './source-output.schema'
 
 const KeyValueRowSchema = z
   .object({
@@ -43,6 +44,7 @@ export const HttpRequestSchema = z
     sourceType: z.string().optional(),
     dataPointId: IdSchema.optional().or(z.literal('')),
     dataPointPath: z.string().optional(),
+    outputs: z.array(SourceOutputSchema).min(1),
     lastResponse: z.unknown().optional().nullable(),
     quality: z.enum(['good', 'bad', 'unknown']).default('unknown'),
     lastSentAt: TimeFieldSchema,

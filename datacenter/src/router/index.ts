@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { watch } from 'vue'
 import { debugProjectAPI } from '@/api/debug-project.api'
 import { Storage } from '@/utils/storage'
@@ -16,7 +15,7 @@ const routes = createDatacenterRoutes({
 
 const router = createRouter({
   history: createWebHistory('/datacenter/'),
-  routes,
+  routes: routes as RouteRecordRaw[],
 })
 
 export function registerDatacenterBeforeEachGuard(

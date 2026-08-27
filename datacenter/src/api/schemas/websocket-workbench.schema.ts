@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { IdSchema, TimeFieldSchema, listResponseSchema } from './common.schema'
+import { SourceOutputSchema } from './source-output.schema'
 
 const KeyValueRowSchema = z
   .object({
@@ -58,6 +59,7 @@ export const WebSocketSessionSchema = z
     sourceType: z.literal('websocket.session').or(z.string()).optional(),
     dataPointId: IdSchema.optional().or(z.literal('')),
     dataPointPath: z.string().optional(),
+    outputs: z.array(SourceOutputSchema).min(1),
     lastMessage: z.unknown().optional().nullable(),
     lastDiagnostic: z.string().default(''),
     quality: z.enum(['good', 'bad', 'unknown']).default('unknown'),

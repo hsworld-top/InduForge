@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { computed, ref } from 'vue'
 import enLocale from 'element-plus/es/locale/lang/en'
 import zhCnLocale from 'element-plus/es/locale/lang/zh-cn'
@@ -124,6 +123,11 @@ export const datacenterMessages = {
       sslRequireHint: '必须使用 SSL',
       sslVerify: '验证证书',
       sslVerifyHint: '验证服务器证书',
+      sslVerifyCA: '验证 CA',
+      sslVerifyCAHint: '验证证书链，不校验主机名',
+      sslVerifyFull: '完整验证',
+      sslVerifyFullHint: '验证证书链和主机名（推荐）',
+      savedCertificateHint: '已保存；留空将保持原证书，输入内容可替换',
       sslCertificateConfig: 'SSL 证书配置',
       caCertificate: 'CA 证书',
       caCertificateHint: '粘贴服务器 CA 证书内容（PEM 格式）',
@@ -544,6 +548,11 @@ export const datacenterMessages = {
       sslRequireHint: 'SSL is required',
       sslVerify: 'Verify Certificate',
       sslVerifyHint: 'Verify the server certificate',
+      sslVerifyCA: 'Verify CA',
+      sslVerifyCAHint: 'Verify the certificate chain without hostname validation',
+      sslVerifyFull: 'Verify Full',
+      sslVerifyFullHint: 'Verify the certificate chain and hostname (recommended)',
+      savedCertificateHint: 'Saved; leave empty to keep it, or enter a replacement',
       sslCertificateConfig: 'SSL Certificate Config',
       caCertificate: 'CA Certificate',
       caCertificateHint: 'Paste the server CA certificate in PEM format',
@@ -880,7 +889,7 @@ export const elementPlusLocale = computed(() =>
 )
 
 export const createDatacenterTranslator = (localeRef = datacenterLocale) => {
-  return (key, params) => {
+  return (key, params = {}) => {
     const locale = normalizeDatacenterLocale(localeRef.value)
     const segments = String(key).split('.')
     let value = datacenterMessages[locale]

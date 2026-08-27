@@ -74,9 +74,10 @@ const emit = defineEmits<{
 const closeConfirmed = ref(false)
 const closeConfirming = ref(false)
 const internalVisible = ref(props.modelValue)
-const dirtyWhileOpen = ref(false)
 
-const needsDirtyConfirm = () => props.dirty || dirtyWhileOpen.value
+// 关闭确认只取当前表单状态。保存成功或用户把内容改回初始值后，调用方会把
+// dirty 重置为 false，此时不能因为“本次打开期间曾经修改过”继续误报未保存。
+const needsDirtyConfirm = () => props.dirty
 
 const confirmDirtyClose = async () => {
   if (!props.confirmOnDirtyClose || !needsDirtyConfirm()) {
@@ -94,7 +95,6 @@ const confirmDirtyClose = async () => {
 
 const completeClose = (done?: () => void) => {
   closeConfirmed.value = true
-  dirtyWhileOpen.value = false
   // 程序化关闭时也要同步内部可见状态，避免父组件 modelValue 已关闭但 el-dialog 仍停留。
   internalVisible.value = false
 
@@ -148,21 +148,11 @@ const handleBeforeClose = (done: () => void) => {
 }
 
 watch(
-  () => props.dirty,
-  (dirty) => {
-    if (internalVisible.value && dirty) {
-      dirtyWhileOpen.value = true
-    }
-  },
-)
-
-watch(
   () => props.modelValue,
   (value, oldValue) => {
     if (value) {
       internalVisible.value = true
       closeConfirmed.value = false
-      dirtyWhileOpen.value = props.dirty
       return
     }
 
@@ -170,7 +160,6 @@ watch(
 
     if (closeConfirmed.value) {
       internalVisible.value = false
-      dirtyWhileOpen.value = false
       return
     }
 
@@ -188,7 +177,6 @@ watch(
     }
 
     internalVisible.value = false
-    dirtyWhileOpen.value = false
   },
   { immediate: true },
 )
@@ -196,7 +184,6 @@ watch(
 const handleClosed = () => {
   closeConfirmed.value = false
   closeConfirming.value = false
-  dirtyWhileOpen.value = false
   emit('close')
 }
 

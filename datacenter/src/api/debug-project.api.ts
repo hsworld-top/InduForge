@@ -1,4 +1,3 @@
-// @ts-nocheck
 import request from '@/utils/request'
 
 const DEFAULT_DEBUG_PROJECT_NAME = 'test'

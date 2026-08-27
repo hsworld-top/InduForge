@@ -6,6 +6,8 @@ export type MicroAppContext = {
   tenantId?: string | undefined
   theme?: 'light' | 'dark' | undefined
   locale?: 'zh' | 'en' | undefined
+  onRefreshAuth?: (() => Promise<boolean>) | undefined
+  onAuthExpired?: (() => void) | undefined
   onStateChange?: ((payload: { title?: string; dirty?: boolean }) => void) | undefined
 }
 
@@ -24,6 +26,14 @@ const normalizeContext = (value: unknown): MicroAppContext | null => {
     tenantId: typeof input.tenantId === 'string' ? input.tenantId : undefined,
     theme: input.theme === 'dark' ? 'dark' : 'light',
     locale: input.locale === 'en' ? 'en' : 'zh',
+    onRefreshAuth:
+      typeof input.onRefreshAuth === 'function'
+        ? (input.onRefreshAuth as MicroAppContext['onRefreshAuth'])
+        : undefined,
+    onAuthExpired:
+      typeof input.onAuthExpired === 'function'
+        ? (input.onAuthExpired as MicroAppContext['onAuthExpired'])
+        : undefined,
     onStateChange:
       typeof input.onStateChange === 'function'
         ? (input.onStateChange as MicroAppContext['onStateChange'])

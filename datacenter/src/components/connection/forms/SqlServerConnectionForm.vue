@@ -30,24 +30,21 @@
       </el-form-item>
 
       <el-form-item :label="t('connection.password')" prop="password">
-        <el-input
+        <SavedPasswordInput
           v-model="formData.password"
-          type="password"
           :placeholder="t('connection.password')"
-          show-password
+          :saved-password-configured="savedPasswordConfigured"
+          :loading="loadingSavedPassword"
+          @reveal-saved-password="$emit('reveal-saved-password')"
         />
       </el-form-item>
     </div>
 
-    <el-form-item :label="t('connection.encryption')">
-      <el-switch v-model="formData.encrypt" />
-      <span class="ml-2 text-sm text-gray-500">{{ t('connection.encryptionHint') }}</span>
-    </el-form-item>
-
-    <el-form-item :label="t('connection.trustCertificate')" v-if="formData.encrypt">
-      <el-switch v-model="formData.trustServerCertificate" />
-      <span class="ml-2 text-sm text-gray-500">{{ t('connection.trustCertificateHint') }}</span>
-    </el-form-item>
+    <RelationalTlsFields
+      v-model="formData.sslConfig"
+      database-type="sqlserver"
+      :saved-secrets="savedTlsSecrets"
+    />
 
     <el-form-item :label="t('connection.connectionTimeout')">
       <el-input v-model.number="formData.timeout" inputmode="numeric" placeholder="60000">
@@ -60,15 +57,21 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { t } from '@/i18n/runtime'
+import SavedPasswordInput from './SavedPasswordInput.vue'
+import RelationalTlsFields from './RelationalTlsFields.vue'
 
 const props = defineProps({
   modelValue: {
     type: Object,
     default: () => ({}),
   },
+  mode: { type: String, default: 'create' },
+  savedPasswordConfigured: { type: Boolean, default: false },
+  loadingSavedPassword: { type: Boolean, default: false },
+  savedTlsSecrets: { type: Object, default: () => ({}) },
 })
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'reveal-saved-password'])
 
 const formRef = ref(null)
 
@@ -79,11 +82,7 @@ const formData = ref({
   database: props.modelValue.database || '',
   username: props.modelValue.username || 'sa',
   password: props.modelValue.password || '',
-  encrypt: props.modelValue.encrypt !== undefined ? props.modelValue.encrypt : false,
-  trustServerCertificate:
-    props.modelValue.trustServerCertificate !== undefined
-      ? props.modelValue.trustServerCertificate
-      : true,
+  sslConfig: props.modelValue.sslConfig || { mode: 'disable', ca: '', cert: '', key: '' },
   timeout: props.modelValue.timeout || 60000,
 })
 
@@ -93,13 +92,26 @@ const rules = {
   port: [{ required: true, message: t('connection.port'), trigger: 'blur' }],
   database: [{ required: true, message: t('connection.database'), trigger: 'blur' }],
   username: [{ required: true, message: t('connection.username'), trigger: 'blur' }],
-  password: [{ required: true, message: t('connection.password'), trigger: 'blur' }],
+  password:
+    props.mode === 'create' || !props.savedPasswordConfigured
+      ? [{ required: true, message: t('connection.password'), trigger: 'blur' }]
+      : [],
 }
 
 watch(
   formData,
   (newVal) => {
     emit('update:modelValue', { ...newVal })
+  },
+  { deep: true },
+)
+
+watch(
+  () => props.modelValue,
+  (newValue) => {
+    if (newValue.password !== formData.value.password) {
+      formData.value.password = newValue.password || ''
+    }
   },
   { deep: true },
 )

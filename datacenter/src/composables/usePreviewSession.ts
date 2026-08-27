@@ -1,5 +1,5 @@
-// @ts-nocheck
 import { ref, watch, onBeforeUnmount, unref } from 'vue'
+import { debugLogger } from '@/utils/debug'
 import dayjs from 'dayjs'
 import { TIME_FORMAT } from '@/constants'
 import { createPreviewSession, heartbeatPreviewSession, deletePreviewSession } from '@/api/data.api'
@@ -27,7 +27,7 @@ const resolveValue = (value) => {
  * @param {import("vue").MaybeRefOrGetter<string | null | undefined>} projectIdSource
  * @param {{ autoStart?: boolean }} [options]
  */
-export function usePreviewSession(projectIdSource, options = {}) {
+export function usePreviewSession(projectIdSource, options: { autoStart?: boolean } = {}) {
   const autoStart = options.autoStart !== false
   const sessionId = ref('')
   const loading = ref(false)
@@ -66,7 +66,7 @@ export function usePreviewSession(projectIdSource, options = {}) {
       await heartbeatPreviewSession(currentSessionId)
       error.value = null
     } catch (heartbeatError) {
-      console.warn(
+      debugLogger.warn(
         '[PreviewSession] 心跳失败:',
         getApiErrorMessage(heartbeatError, '预览会话心跳失败'),
       )
@@ -104,7 +104,7 @@ export function usePreviewSession(projectIdSource, options = {}) {
 
     destroyPromise = deletePreviewSession(currentSessionId)
       .catch((destroyError) => {
-        console.warn('[PreviewSession] 销毁失败:', destroyError)
+        debugLogger.warn('[PreviewSession] 销毁失败:', destroyError)
       })
       .finally(() => {
         destroyPromise = null
@@ -116,7 +116,7 @@ export function usePreviewSession(projectIdSource, options = {}) {
   const ensureSession = async () => {
     const currentProjectId = readProjectId()
     if (!currentProjectId) {
-      console.warn('[PreviewSession] 缺少 projectId，跳过创建')
+      debugLogger.warn('[PreviewSession] 缺少 projectId，跳过创建')
       stopSession()
       return ''
     }
@@ -148,7 +148,7 @@ export function usePreviewSession(projectIdSource, options = {}) {
           readProjectId() !== currentProjectId
         ) {
           void deletePreviewSession(nextSessionId).catch((destroyError) => {
-            console.warn('[PreviewSession] 清理迟到 session 失败:', destroyError)
+            debugLogger.warn('[PreviewSession] 清理迟到 session 失败:', destroyError)
           })
           return ''
         }
@@ -163,7 +163,7 @@ export function usePreviewSession(projectIdSource, options = {}) {
         return nextSessionId
       })
       .catch((createError) => {
-        console.error(
+        debugLogger.error(
           '[PreviewSession] 创建失败:',
           getApiErrorMessage(createError, '预览会话创建失败'),
         )

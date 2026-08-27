@@ -13,12 +13,14 @@
         v-else
         :connection="item.connection"
         :active="selectedConnectionId === item.connection.id"
+        :testing="testingConnectionId === item.connection.id"
         :class="{ 'is-dragging': draggable && draggingConnectionId === item.connection.id }"
         @dragover.prevent="handleListDragOver"
         @drop.prevent="handleDrop"
         @dragend="clearDragState"
         @open="$emit('open', $event)"
         @edit="$emit('edit', $event)"
+        @test="$emit('test', $event)"
         @delete-connection="$emit('delete-connection', $event)"
       >
         <template #top-actions>
@@ -55,34 +57,12 @@ import { computed, ref } from 'vue'
 import AccessSourceCard from './AccessSourceCard.vue'
 import EmptyState from '@/components/shared/EmptyState.vue'
 import IconTablerGripVertical from '~icons/tabler/grip-vertical'
-
-type AccessSourceConnection = {
-  id: string
-  name?: string
-  type?: string
-  status?: string
-  datapointCount?: number
-  dataPointCount?: number
-  relationalConfig?: {
-    dbType?: string
-    host?: string
-    port?: number | string
-    database?: string
-  }
-  mqttConfig?: {
-    protocol?: string
-    brokerUrl?: string
-    host?: string
-    port?: number | string
-    topic?: string
-    defaultTopic?: string
-  }
-  config?: Record<string, unknown>
-}
+import type { Connection as AccessSourceConnection } from '@/api/schemas/connection.schema'
 
 const emit = defineEmits<{
   (event: 'open', connection: AccessSourceConnection): void
   (event: 'edit', connection: AccessSourceConnection): void
+  (event: 'test', connection: AccessSourceConnection): void
   (event: 'delete-connection', connection: AccessSourceConnection): void
   (event: 'create'): void
   (event: 'reorder', connectionIds: string[]): void
@@ -92,6 +72,7 @@ const props = defineProps<{
   connections: AccessSourceConnection[]
   selectedConnectionId?: string | null
   draggable?: boolean
+  testingConnectionId?: string
 }>()
 
 const draggingConnectionId = ref<string | null>(null)

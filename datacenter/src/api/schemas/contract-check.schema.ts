@@ -1,35 +1,69 @@
 import { z } from 'zod'
-import { IdSchema, TimeFieldSchema } from './common.schema'
+import { IdSchema } from './common.schema'
 
-// 契约检查状态
-export const ContractCheckStatusSchema = z.enum(['pending', 'running', 'passed', 'failed', 'error'])
-
+export const ContractCheckStatusSchema = z.enum(['passed', 'warning', 'pending', 'failed'])
 export type ContractCheckStatus = z.infer<typeof ContractCheckStatusSchema>
 
-// 单条检查项结果
+export const ContractCheckSummarySchema = z
+  .object({
+    passed: z.number().int().nonnegative().default(0),
+    warning: z.number().int().nonnegative().default(0),
+    pending: z.number().int().nonnegative().default(0),
+    failed: z.number().int().nonnegative().default(0),
+  })
+  .passthrough()
+
 export const ContractCheckItemSchema = z
   .object({
-    id: IdSchema.optional(),
-    name: z.string().optional(),
-    status: ContractCheckStatusSchema.or(z.string()).optional(),
-    message: z.string().optional().nullable(),
-    detail: z.unknown().optional(),
+    module: z.string(),
+    objectType: z.string(),
+    objectId: IdSchema.optional(),
+    status: ContractCheckStatusSchema,
+    title: z.string(),
+    detail: z.string().optional(),
+    action: z.string().optional(),
   })
   .passthrough()
 
-export type ContractCheckItem = z.infer<typeof ContractCheckItemSchema>
-
-// 一次契约检查结果
 export const ContractCheckResultSchema = z
   .object({
-    id: IdSchema.optional(),
-    status: ContractCheckStatusSchema.or(z.string()).optional(),
-    items: z.array(ContractCheckItemSchema).optional(),
-    passCount: z.number().optional(),
-    failCount: z.number().optional(),
-    createdAt: TimeFieldSchema,
-    finishedAt: TimeFieldSchema,
+    status: ContractCheckStatusSchema,
+    projectId: IdSchema,
+    scope: z.string(),
+    summary: ContractCheckSummarySchema,
+    list: z.array(ContractCheckItemSchema).default([]),
+    checkedAt: z.string(),
   })
   .passthrough()
 
+export const ContractCheckRunSchema = z
+  .object({
+    id: IdSchema,
+    projectId: IdSchema,
+    scope: z.string(),
+    objectType: z.string().optional().nullable(),
+    objectId: IdSchema.optional().nullable(),
+    status: ContractCheckStatusSchema,
+    summary: ContractCheckSummarySchema,
+    result: z.unknown().optional(),
+    createdBy: z.string().optional().nullable(),
+    createdAt: z.string(),
+  })
+  .passthrough()
+
+export const ContractCheckRunPageSchema = z.object({
+  list: z.array(ContractCheckRunSchema).default([]),
+  pagination: z
+    .object({
+      page: z.number().int().positive(),
+      pageSize: z.number().int().positive(),
+      total: z.number().int().nonnegative(),
+      totalPages: z.number().int().nonnegative(),
+    })
+    .passthrough(),
+})
+
+export type ContractCheckItem = z.infer<typeof ContractCheckItemSchema>
 export type ContractCheckResult = z.infer<typeof ContractCheckResultSchema>
+export type ContractCheckRun = z.infer<typeof ContractCheckRunSchema>
+export type ContractCheckRunPage = z.infer<typeof ContractCheckRunPageSchema>

@@ -1,5 +1,5 @@
-// @ts-nocheck
 import { STORAGE_KEYS } from '../constants/index'
+import { debugLogger } from './debug'
 
 const PROJECT_ID_STORAGE_KEY = STORAGE_KEYS.PROJECT_ID || 'project_id'
 
@@ -18,7 +18,7 @@ export class Storage {
       const item = localStorage.getItem(key)
       return item ? JSON.parse(item) : defaultValue
     } catch (error) {
-      console.warn(`Storage get error for key "${key}":`, error)
+      debugLogger.warn(`Storage get error for key "${key}":`, error)
       return defaultValue
     }
   }
@@ -32,7 +32,7 @@ export class Storage {
     try {
       localStorage.setItem(key, JSON.stringify(value))
     } catch (error) {
-      console.warn(`Storage set error for key "${key}":`, error)
+      debugLogger.warn(`Storage set error for key "${key}":`, error)
     }
   }
 
@@ -44,7 +44,7 @@ export class Storage {
     try {
       localStorage.removeItem(key)
     } catch (error) {
-      console.warn(`Storage remove error for key "${key}":`, error)
+      debugLogger.warn(`Storage remove error for key "${key}":`, error)
     }
   }
 
@@ -55,7 +55,7 @@ export class Storage {
     try {
       localStorage.clear()
     } catch (error) {
-      console.warn('Storage clear error:', error)
+      debugLogger.warn('Storage clear error:', error)
     }
   }
 

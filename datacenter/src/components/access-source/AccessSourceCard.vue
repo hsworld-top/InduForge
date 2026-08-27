@@ -28,6 +28,16 @@
           {{ resolveConnectionEndpoint(connection) }}
         </span>
       </div>
+      <div class="access-source-card__state-row">
+        <span
+          class="access-source-card__state"
+          :class="`is-${connectionState.tone}`"
+          :title="connectionState.detail"
+        >
+          {{ connectionState.label }}
+        </span>
+        <span>{{ connection.variableCount }} 个数据点</span>
+      </div>
     </div>
 
     <div class="access-source-card__bottom">
@@ -36,6 +46,18 @@
         <IconTablerArrowRight class="access-source-card__open-icon" />
       </button>
       <div class="access-source-card__actions">
+        <button
+          v-if="connection.testCapability.status === 'supported'"
+          type="button"
+          class="access-source-card__edit"
+          :disabled="testing"
+          :aria-label="`测试连接 ${connection.name || ''}`"
+          :title="`测试已保存连接 ${connection.name || ''}`"
+          @click="$emit('test', connection)"
+        >
+          <IconTablerLoader2 v-if="testing" class="is-spinning" />
+          <IconTablerPlugConnected v-else />
+        </button>
         <button
           type="button"
           class="access-source-card__edit"
@@ -61,39 +83,19 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import IconTablerArrowRight from '~icons/tabler/arrow-right'
 import IconTablerSettings from '~icons/tabler/settings'
 import IconTablerTrash from '~icons/tabler/trash'
+import IconTablerLoader2 from '~icons/tabler/loader-2'
+import IconTablerPlugConnected from '~icons/tabler/plug-connected'
 import { resolveAccessSourceVisual } from './access-source-visual'
+import type { Connection as AccessSourceConnection } from '@/api/schemas/connection.schema'
 
-type AccessSourceConnection = {
-  id: string
-  name?: string
-  type?: string
-  datapointCount?: number
-  dataPointCount?: number
-  variableCount?: number
-  issueCount?: number
-  relationalConfig?: {
-    dbType?: string
-    host?: string
-    port?: number | string
-    database?: string
-  }
-  mqttConfig?: {
-    protocol?: string
-    brokerUrl?: string
-    host?: string
-    port?: number | string
-    topic?: string
-    defaultTopic?: string
-  }
-  config?: Record<string, unknown>
-}
-
-defineProps<{
+const props = defineProps<{
   connection: AccessSourceConnection
   active: boolean
+  testing?: boolean
 }>()
 
 defineEmits<{
@@ -101,6 +103,7 @@ defineEmits<{
   (event: 'open', connection: AccessSourceConnection): void
   /** 单击编辑按钮 */
   (event: 'edit', connection: AccessSourceConnection): void
+  (event: 'test', connection: AccessSourceConnection): void
   /** 单击删除按钮 */
   (event: 'delete-connection', connection: AccessSourceConnection): void
 }>()
@@ -189,6 +192,36 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
   }
   return '等待接入配置'
 }
+
+const connectionState = computed(() => {
+  const connection = props.connection
+  if (!connection.enabled) return { label: '已停用', tone: 'muted', detail: '配置已停用' }
+  if (connection.configurationState === 'incomplete') {
+    return { label: '配置不完整', tone: 'warning', detail: '请补齐接入源必填配置' }
+  }
+  if (connection.testCapability.status === 'unsupported') {
+    return {
+      label: '正常',
+      tone: 'success',
+      detail: connection.testCapability.reason || '请在所属工作台测试具体请求或会话',
+    }
+  }
+  if (connection.lastTest.status === 'succeeded') {
+    return {
+      label: '正常',
+      tone: 'success',
+      detail: connection.lastTest.message || '最近测试成功',
+    }
+  }
+  if (connection.lastTest.status === 'failed') {
+    return {
+      label: '异常',
+      tone: 'danger',
+      detail: connection.lastTest.message || '最近测试失败',
+    }
+  }
+  return { label: '未测试', tone: 'muted', detail: '尚未测试已保存配置' }
+})
 </script>
 
 <style scoped>
@@ -327,6 +360,41 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
   white-space: nowrap;
 }
 
+.access-source-card__state-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--dc-text-muted);
+  font-size: 12px;
+}
+
+.access-source-card__state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--dc-surface-muted);
+  color: var(--dc-text-secondary);
+  white-space: nowrap;
+}
+
+.access-source-card__state.is-success {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.access-source-card__state.is-warning {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.access-source-card__state.is-danger {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
 .access-source-card__divider,
 .access-source-card__endpoint {
   color: var(--dc-text-secondary);
@@ -440,6 +508,16 @@ const resolveConnectionEndpoint = (connection: AccessSourceConnection) => {
   border-color: #fecaca;
   background: rgba(220, 38, 38, 0.08);
   color: var(--dc-danger, #dc2626);
+}
+
+.is-spinning {
+  animation: access-source-spin 0.8s linear infinite;
+}
+
+@keyframes access-source-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 760px) {

@@ -29,6 +29,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { debugLogger } from '@/utils/debug'
 import * as monaco from 'monaco-editor'
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
@@ -252,7 +253,7 @@ const getEditorOptions = () => {
 // 初始化编辑器
 const initEditor = () => {
   if (!editorContainerRef.value) {
-    console.warn('Monaco Editor: 容器元素不存在')
+    debugLogger.warn('Monaco Editor: 容器元素不存在')
     return
   }
 
@@ -261,7 +262,7 @@ const initEditor = () => {
     try {
       editorInstance.dispose()
     } catch (e) {
-      console.warn('销毁旧编辑器失败:', e)
+      debugLogger.warn('销毁旧编辑器失败:', e)
     }
     editorInstance = null
   }
@@ -269,22 +270,11 @@ const initEditor = () => {
   try {
     // 创建编辑器实例
     const options = getEditorOptions()
-    // 强制设置 readOnly 为 false，确保编辑器可编辑
-    options.readOnly = false
     editorInstance = monaco.editor.create(editorContainerRef.value, options)
 
     // 在编辑器聚焦时接管保存快捷键，避免浏览器触发“保存网页”。
     editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       emit('save')
-    })
-
-    console.log('Monaco Editor 创建成功', {
-      container: editorContainerRef.value,
-      containerHeight: editorContainerRef.value.offsetHeight,
-      containerClientHeight: editorContainerRef.value.clientHeight,
-      options: options,
-      readOnly: editorInstance.getOption(monaco.editor.EditorOption.readOnly),
-      editorInstance: editorInstance,
     })
 
     // 监听内容变化
@@ -333,7 +323,7 @@ const initEditor = () => {
       }
     }, 100)
   } catch (error) {
-    console.error('Monaco Editor 创建失败:', error)
+    debugLogger.error('Monaco Editor 创建失败:', error)
     throw error
   }
 }
@@ -497,25 +487,12 @@ onMounted(() => {
   window.addEventListener('mousedown', closeEditorContextMenu)
   window.addEventListener('blur', closeEditorContextMenu)
 
-  console.log('MonacoEditor onMounted 被调用', {
-    containerRef: editorContainerRef.value,
-    height: props.height,
-    containerExists: !!editorContainerRef.value,
-  })
-
   // 使用多个 nextTick 确保 DOM 完全渲染
   nextTick(() => {
     nextTick(() => {
-      console.log('MonacoEditor nextTick 执行', {
-        containerRef: editorContainerRef.value,
-        containerHeight: editorContainerRef.value?.offsetHeight,
-        containerClientHeight: editorContainerRef.value?.clientHeight,
-        containerExists: !!editorContainerRef.value,
-      })
-
       const checkAndInit = (retryCount = 0) => {
         if (retryCount > 30) {
-          console.error('Monaco Editor 初始化超时，已重试30次', {
+          debugLogger.error('Monaco Editor 初始化超时，已重试30次', {
             containerRef: editorContainerRef.value,
             containerExists: !!editorContainerRef.value,
           })
@@ -524,7 +501,7 @@ onMounted(() => {
 
         // 如果 ref 还没有绑定，等待一下
         if (!editorContainerRef.value) {
-          console.warn(`Monaco Editor 容器元素不存在，等待... (${retryCount + 1}/30)`)
+          debugLogger.warn(`Monaco Editor 容器元素不存在，等待... (${retryCount + 1}/30)`)
           setTimeout(() => checkAndInit(retryCount + 1), 100)
           return
         }
@@ -533,37 +510,18 @@ onMounted(() => {
         const containerHeight = container.offsetHeight
         const clientHeight = container.clientHeight
 
-        console.log(`Monaco Editor 检查初始化 (尝试 ${retryCount + 1})`, {
-          containerHeight,
-          clientHeight,
-          height: props.height,
-          hasHeight: containerHeight > 0 || clientHeight > 0,
-          container: container,
-          containerTagName: container.tagName,
-          containerClassName: container.className,
-        })
-
         // 如果容器有高度，或者已经重试多次，就初始化
         if (containerHeight > 0 || clientHeight > 0 || retryCount > 10) {
           try {
             initEditor()
-            console.log('Monaco Editor 初始化成功', {
-              containerHeight,
-              clientHeight,
-              height: props.height,
-              readOnly: getEditorOptions().readOnly,
-            })
-
-            // 确保编辑器可以聚焦和编辑
+            // 初始化后仅聚焦；只读状态始终遵循调用方配置。
             setTimeout(() => {
               if (editorInstance) {
-                editorInstance.updateOptions({ readOnly: false })
                 editorInstance.focus()
-                console.log('Monaco Editor 已设置为可编辑并聚焦')
               }
             }, 200)
           } catch (error) {
-            console.error('Monaco Editor 初始化失败:', error)
+            debugLogger.error('Monaco Editor 初始化失败:', error)
             // 如果初始化失败，等待一下再试
             setTimeout(() => checkAndInit(retryCount + 1), 100)
           }

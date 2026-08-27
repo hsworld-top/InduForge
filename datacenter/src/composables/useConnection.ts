@@ -1,40 +1,26 @@
-// @ts-nocheck
 /**
  * 连接管理 Composable
  * 处理连接的 CRUD 操作和状态管理
  */
 
-import { ref, computed } from 'vue'
+import { ref, computed, type Ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import dataAPI from '@/api/data.api'
+import {
+  createConnection as createConnectionRequest,
+  deleteConnection as deleteConnectionRequest,
+  listConnections,
+  testConnectionDraft,
+  updateConnection as updateConnectionRequest,
+} from '@/api/connection.api'
+import type { Connection, ConnectionPage } from '@/api/schemas/connection.schema'
 import { getApiErrorMessage } from '@/utils/request'
 
-/**
- * 兼容 data_service 当前返回的两类连接列表包络：
- * 1. { data: { connections: [...] } }：前端旧假设
- * 2. { data: [...] }：后端当前实际返回
- *
- * 这里统一收敛成数组，避免 debug 链路在接口成功时仍被误判为“暂无连接”。
- */
-export function normalizeConnectionsPayload(response) {
-  if (Array.isArray(response?.data?.list)) {
-    return response.data.list
-  }
-
-  if (Array.isArray(response?.data?.connections)) {
-    return response.data.connections
-  }
-
-  if (Array.isArray(response?.data)) {
-    return response.data
-  }
-
-  return []
-}
-
-export function useConnection(projectId, options = {}) {
-  const connections = ref([])
-  const selectedConnectionId = ref(null)
+export function useConnection(
+  projectId: Readonly<Ref<string | undefined>>,
+  options: { paginated?: boolean } = {},
+) {
+  const connections = ref<Connection[]>([])
+  const selectedConnectionId = ref<string | null>(null)
   const loading = ref(false)
   const paginated = options.paginated === true
   const connectionPagination = ref({ page: 1, pageSize: 10, total: 0, totalPages: 0 })
@@ -73,16 +59,11 @@ export function useConnection(projectId, options = {}) {
                 : connectionQuery.value.typeGroup,
           }
         : undefined
-      const response = await dataAPI.getConnections(projectId.value, params)
-      connections.value = normalizeConnectionsPayload(response)
+      const response = await listConnections(projectId.value, params)
       if (paginated) {
-        const pageInfo = response?.data?.pagination || {}
-        connectionPagination.value = {
-          page: Number(pageInfo.page ?? connectionPagination.value.page),
-          pageSize: Number(pageInfo.pageSize ?? connectionPagination.value.pageSize),
-          total: Number(pageInfo.total ?? connections.value.length),
-          totalPages: Number(pageInfo.totalPages ?? 0),
-        }
+        const page = response as ConnectionPage
+        connections.value = page.list
+        connectionPagination.value = page.pagination
         if (
           connectionPagination.value.totalPages > 0 &&
           connectionPagination.value.page > connectionPagination.value.totalPages
@@ -90,9 +71,8 @@ export function useConnection(projectId, options = {}) {
           connectionPagination.value.page = connectionPagination.value.totalPages
           return await loadConnections()
         }
-      }
+      } else connections.value = response as Connection[]
     } catch (error) {
-      console.error('加载连接列表失败:', error)
       ElMessage({
         type: 'error',
         message: '加载连接列表失败：' + getApiErrorMessage(error, '加载连接列表失败'),
@@ -116,7 +96,17 @@ export function useConnection(projectId, options = {}) {
     connectionQuery.value = { search: '', typeGroup: 'all' }
   }
 
-  const setConnectionQuery = async ({ page, pageSize, search, typeGroup }) => {
+  const setConnectionQuery = async ({
+    page,
+    pageSize,
+    search,
+    typeGroup,
+  }: {
+    page?: number
+    pageSize?: number
+    search?: string
+    typeGroup?: string
+  }) => {
     if (!paginated) return
     connectionPagination.value.page = Number(page || 1)
     connectionPagination.value.pageSize = Number(pageSize || connectionPagination.value.pageSize)
@@ -130,11 +120,11 @@ export function useConnection(projectId, options = {}) {
   /**
    * 创建连接
    */
-  const createConnection = async (data) => {
+  const createConnection = async (data: Record<string, unknown>) => {
     if (!projectId.value) return null
 
     try {
-      const response = await dataAPI.createConnection(projectId.value, data)
+      const response = await createConnectionRequest(projectId.value, data)
       ElMessage({
         type: 'success',
         message: '连接创建成功',
@@ -142,7 +132,7 @@ export function useConnection(projectId, options = {}) {
         duration: 3000,
       })
       await loadConnections()
-      return response.data
+      return response
     } catch (error) {
       ElMessage({
         type: 'error',
@@ -158,11 +148,11 @@ export function useConnection(projectId, options = {}) {
   /**
    * 更新连接
    */
-  const updateConnection = async (connectionId, data) => {
+  const updateConnection = async (connectionId: string, data: Record<string, unknown>) => {
     if (!projectId.value) return null
 
     try {
-      const response = await dataAPI.updateConnection(projectId.value, connectionId, data)
+      const response = await updateConnectionRequest(projectId.value, connectionId, data)
       ElMessage({
         type: 'success',
         message: '连接更新成功',
@@ -170,7 +160,7 @@ export function useConnection(projectId, options = {}) {
         duration: 3000,
       })
       await loadConnections()
-      return response.data
+      return response
     } catch (error) {
       ElMessage({
         type: 'error',
@@ -186,11 +176,11 @@ export function useConnection(projectId, options = {}) {
   /**
    * 删除连接
    */
-  const deleteConnection = async (connectionId) => {
+  const deleteConnection = async (connectionId: string) => {
     if (!projectId.value) return false
 
     try {
-      await dataAPI.deleteConnection(projectId.value, connectionId)
+      await deleteConnectionRequest(projectId.value, connectionId)
       ElMessage({
         type: 'success',
         message: '连接删除成功',
@@ -219,17 +209,17 @@ export function useConnection(projectId, options = {}) {
   /**
    * 测试连接
    */
-  const testConnection = async (type, config) => {
+  const testConnection = async (type: string, config: Record<string, unknown>) => {
     if (!projectId.value) return false
 
     try {
-      const response = await dataAPI.testConnection(projectId.value, {
+      const response = await testConnectionDraft(projectId.value, {
         type,
         config,
       })
       ElMessage({
         type: 'success',
-        message: response.msg || '连接测试成功',
+        message: response.message || '连接测试成功',
         offset: 60,
         duration: 3000,
       })
@@ -247,38 +237,16 @@ export function useConnection(projectId, options = {}) {
   }
 
   /**
-   * 更新连接状态
-   */
-  const updateConnectionStatus = async (connectionId, status) => {
-    if (!projectId.value) return null
-
-    try {
-      const response = await dataAPI.updateConnectionStatus(projectId.value, connectionId, status)
-      await loadConnections()
-      return response.data
-    } catch (error) {
-      ElMessage({
-        type: 'error',
-        message: '更新连接状态失败：' + getApiErrorMessage(error, '更新连接状态失败'),
-        offset: 60,
-        duration: 5000,
-        showClose: true,
-      })
-      throw error
-    }
-  }
-
-  /**
    * 选择连接
    */
-  const selectConnection = (connectionId) => {
+  const selectConnection = (connectionId: string | null) => {
     selectedConnectionId.value = connectionId
   }
 
   /**
    * 根据 ID 获取连接
    */
-  const getConnectionById = (connectionId) => {
+  const getConnectionById = (connectionId: string) => {
     return connections.value.find((c) => c.id === connectionId) || null
   }
 
@@ -297,7 +265,6 @@ export function useConnection(projectId, options = {}) {
     updateConnection,
     deleteConnection,
     testConnection,
-    updateConnectionStatus,
     selectConnection,
     getConnectionById,
   }

@@ -1,10 +1,10 @@
-// @ts-nocheck
 /**
  * MySQL 专用逻辑 Composable
  * 处理 MySQL 特定的功能和 SQL 方言
  */
 
 import { ref } from 'vue'
+import { debugLogger } from '@/utils/debug'
 import { ElMessage } from 'element-plus'
 import { format } from 'sql-formatter'
 import { validateSql, extractParameters, parseSql } from '@/utils/sqlParser'
@@ -148,7 +148,7 @@ export function useMysql(projectId, connectionId) {
         linesBetweenQueries: 2,
       })
     } catch (error) {
-      console.error('SQL 格式化失败:', error)
+      debugLogger.error('SQL 格式化失败:', error)
       return sql
     }
   }

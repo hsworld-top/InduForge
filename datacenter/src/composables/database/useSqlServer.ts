@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import dataAPI from '@/api/data.api'
