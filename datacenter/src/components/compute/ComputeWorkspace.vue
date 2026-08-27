@@ -3,19 +3,25 @@
     <ComputeTree
       :units="computeStore.list"
       :folders="computeStore.folders"
-      :total="computeStore.total"
-      :selected-unit-id="selectedUnitId"
+      :selected-unit-id="selectedComputeFolderId ? null : selectedUnitId"
       :dirty-unit-ids="dirtyUnitIds"
       :loading="computeStore.loading || computeStore.foldersLoading"
       :list-error="computeStore.listError"
       :folders-error="computeStore.foldersError"
-      :loading-more="loadingMore"
+      :loading-folder-ids="loadingFolderIds"
+      :folder-has-more-ids="folderHasMoreIds"
+      :root-folders-has-more="computeStore.hasMoreFolders(null)"
+      :root-folders-loading="computeStore.isFolderLoading(null)"
+      :selected-folder-id="selectedComputeFolderId"
       @select-unit="selectUnit"
       @create-unit="showCreateUnitDialog = true"
       @create-folder="showCreateFolderDialog = true"
+      @manage-dependencies="openDependencyManager"
       @refresh="loadWorkspace"
       @search="handleTreeSearch"
-      @load-more="loadMoreUnits"
+      @load-folder="loadFolderChildren"
+      @load-more-folder="loadMoreFolderChildren"
+      @select-folder="selectComputeFolder"
       @rename-unit="openRenameUnitDialog"
       @move-unit="openMoveUnitDialog"
       @delete-unit="handleDeleteUnitFromTree"
@@ -37,6 +43,7 @@
       :dependencies-loading="computeStore.dependenciesLoading"
       :dependencies-error="computeStore.dependenciesError"
       :capabilities="computeCapabilities"
+      :capabilities-loading="capabilitiesLoading"
       @activate-tab="activateTab"
       @close-tab="closeTab"
       @save="saveTab"
@@ -44,12 +51,21 @@
       @delete-unit="deleteUnit"
       @mark-dirty="markDirty"
       @refresh-dependencies="loadDependencies"
+      @manage-dependencies="openDependencyManager"
+      @retry-capabilities="retryComputeCapabilities"
+    />
+
+    <ComputeDependencyManager
+      v-model="showDependencyManagerDialog"
+      :project-id="String(projectId)"
+      @changed="loadDependencies"
     />
 
     <CreateComputeUnitDialog
       ref="createUnitDialogRef"
       v-model="showCreateUnitDialog"
       :folders="computeStore.folders"
+      :initial-folder-id="selectedComputeFolderId"
       :loading="computeStore.creating"
       :error="computeStore.createError"
       @submit="handleCreateUnit"
@@ -59,6 +75,7 @@
       ref="createFolderDialogRef"
       v-model="showCreateFolderDialog"
       :folders="computeStore.folders"
+      :initial-parent-id="selectedComputeFolderId"
       :loading="computeStore.creating"
       :error="computeStore.createError"
       @submit="handleCreateFolder"
@@ -97,8 +114,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type {
   ComputeUnit,
@@ -106,10 +123,11 @@ import type {
   ComputeUnitSave,
   ComputeCapabilities,
 } from '@/api/schemas/compute.schema'
-import { getComputeCapabilities } from '@/api/compute.api'
+import { getComputeCapabilities, getComputeFolders, getComputeUnits } from '@/api/compute.api'
 import { useComputeStore } from '@/stores/compute.store'
 import { getApiErrorMessage } from '@/utils/request'
 import ComputeEditorShell from './ComputeEditorShell.vue'
+import ComputeDependencyManager from './ComputeDependencyManager.vue'
 import ComputeTree from './ComputeTree.vue'
 import CreateComputeFolderDialog from './CreateComputeFolderDialog.vue'
 import CreateComputeUnitDialog from './CreateComputeUnitDialog.vue'
@@ -133,6 +151,14 @@ const props = defineProps<{
 const route = useRoute()
 const router = useRouter()
 const computeStore = useComputeStore()
+type DraftGuard = {
+  isDirty: () => boolean
+  save?: () => Promise<boolean>
+  discard?: () => void
+}
+const registerDraftChecker =
+  inject<(guard: DraftGuard | (() => boolean)) => () => void>('registerDraftChecker')
+let unregisterDraftChecker: (() => void) | undefined
 
 const showCreateUnitDialog = ref(false)
 const showCreateFolderDialog = ref(false)
@@ -142,11 +168,17 @@ const showRenameUnitDialog = ref(false)
 const showMoveUnitDialog = ref(false)
 const showRenameFolderDialog = ref(false)
 const showMoveFolderDialog = ref(false)
+const showDependencyManagerDialog = ref(false)
 const contextUnit = ref<ComputeUnit | null>(null)
 const contextFolder = ref<ComputeFolderTreeNode | null>(null)
 const drafts = ref<Record<string, ComputeDraft>>({})
 const activeTabId = ref<string | null>(null)
 const computeCapabilities = ref<ComputeCapabilities | null>(null)
+const capabilitiesLoading = ref(false)
+const capabilityRetryDelays = [3_000, 10_000, 30_000]
+let capabilityRetryAttempt = 0
+let capabilityRetryTimer: ReturnType<typeof window.setTimeout> | null = null
+let capabilityLoadVersion = 0
 
 const selectedUnitId = computed(() => props.selectedUnitId || null)
 
@@ -175,22 +207,50 @@ const dirtyUnitIds = computed(() =>
     .map((draft) => draft.id),
 )
 const computeSearch = ref('')
-const loadingMore = ref(false)
+const selectedComputeFolderId = ref<string | null>(null)
+const loadingFolderIds = computed(() =>
+  computeStore.folderLoadingKeys.filter((key) => key !== 'root' && !key.startsWith('search:')),
+)
+const folderHasMoreIds = computed(() =>
+  Object.entries(computeStore.folderPagination)
+    .filter(
+      ([key, value]) =>
+        key !== 'root' && !key.startsWith('search:') && value.page < value.totalPages,
+    )
+    .map(([key]) => key),
+)
 
 const computeListParams = (page = 1) => ({
   page,
-  pageSize: computeStore.pageSize || 50,
+  pageSize: 100,
   search: computeSearch.value || undefined,
 })
+let computeListLoadVersion = 0
+
+// 树区域不暴露分页：接口仍按页读取，前端顺序合并全部计算单元，避免大列表单次请求失控。
+async function loadAllComputeUnits() {
+  const version = ++computeListLoadVersion
+  const projectId = String(props.projectId)
+  const search = computeSearch.value || undefined
+  const params = (page: number) => ({ page, pageSize: 100, search })
+  await computeStore.fetchList(projectId, params(1))
+  if (version !== computeListLoadVersion) return
+  const totalPages = Math.ceil(computeStore.total / 100)
+  for (let page = 2; page <= totalPages; page += 1) {
+    await computeStore.fetchList(projectId, params(page), {
+      append: true,
+      silent: true,
+    })
+    if (version !== computeListLoadVersion) return
+  }
+}
 
 async function loadWorkspace() {
   const projectId = String(props.projectId)
   const results = await Promise.allSettled([
-    computeStore.fetchList(projectId, computeListParams(1)),
+    loadAllComputeUnits(),
     computeStore.fetchFolders(projectId),
-    getComputeCapabilities(projectId).then((value) => {
-      computeCapabilities.value = value
-    }),
+    loadComputeCapabilities(),
   ])
   const failed = results.find((result) => result.status === 'rejected')
   if (failed) {
@@ -198,23 +258,99 @@ async function loadWorkspace() {
   }
 }
 
-function handleTreeSearch(keyword: string) {
-  computeSearch.value = keyword
-  void computeStore.fetchList(String(props.projectId), computeListParams(1)).catch(() => undefined)
+function clearCapabilityRetry() {
+  if (capabilityRetryTimer) {
+    window.clearTimeout(capabilityRetryTimer)
+    capabilityRetryTimer = null
+  }
 }
 
-async function loadMoreUnits() {
-  if (loadingMore.value || computeStore.list.length >= computeStore.total) return
-  loadingMore.value = true
+function scheduleCapabilityRetry() {
+  clearCapabilityRetry()
+  const delay =
+    capabilityRetryDelays[Math.min(capabilityRetryAttempt, capabilityRetryDelays.length - 1)]
+  capabilityRetryAttempt += 1
+  capabilityRetryTimer = window.setTimeout(() => {
+    capabilityRetryTimer = null
+    void loadComputeCapabilities().catch(() => undefined)
+  }, delay)
+}
+
+// 沙箱可能晚于数据中心启动；不可用时退避重试，恢复后立即停止探测，避免页面永久保留旧状态。
+async function loadComputeCapabilities() {
+  if (capabilitiesLoading.value) return
+  clearCapabilityRetry()
+  const version = ++capabilityLoadVersion
+  const projectId = String(props.projectId)
+  let shouldRetry = false
+  capabilitiesLoading.value = true
   try {
-    await computeStore.fetchList(
-      String(props.projectId),
-      computeListParams(computeStore.page + 1),
-      { append: true, silent: true },
-    )
+    const value = await getComputeCapabilities(projectId)
+    if (version !== capabilityLoadVersion || projectId !== String(props.projectId)) return
+    computeCapabilities.value = value
+    if (value.sandboxStatus === 'available') {
+      capabilityRetryAttempt = 0
+    } else {
+      shouldRetry = true
+    }
+  } catch (error) {
+    if (version === capabilityLoadVersion && projectId === String(props.projectId)) {
+      shouldRetry = true
+    }
+    throw error
   } finally {
-    loadingMore.value = false
+    if (version === capabilityLoadVersion) {
+      capabilitiesLoading.value = false
+      if (shouldRetry) scheduleCapabilityRetry()
+    }
   }
+}
+
+function retryComputeCapabilities() {
+  capabilityRetryAttempt = 0
+  void loadComputeCapabilities().catch((error) => {
+    ElMessage.error(getApiErrorMessage(error, '重新检测计算沙箱失败'))
+  })
+}
+
+function retryCapabilitiesWhenVisible() {
+  if (
+    document.visibilityState === 'visible' &&
+    computeCapabilities.value?.sandboxStatus !== 'available'
+  ) {
+    retryComputeCapabilities()
+  }
+}
+
+function handleTreeSearch(keyword: string) {
+  computeSearch.value = keyword
+  void Promise.allSettled([
+    loadAllComputeUnits(),
+    computeStore.fetchFolders(String(props.projectId), keyword ? { search: keyword } : {}),
+  ])
+}
+
+function selectComputeFolder(folderId: string | null) {
+  selectedComputeFolderId.value = folderId
+}
+
+function loadFolderChildren(folderId: string) {
+  void computeStore
+    .fetchFolders(String(props.projectId), { parentId: folderId, page: 1 })
+    .catch(() => undefined)
+}
+
+function loadMoreFolderChildren(folderId: string | null) {
+  const key = folderId || 'root'
+  const pageInfo = computeStore.folderPagination[key]
+  if (!pageInfo || pageInfo.page >= pageInfo.totalPages) return
+  void computeStore
+    .fetchFolders(String(props.projectId), {
+      parentId: folderId,
+      page: pageInfo.page + 1,
+      append: true,
+    })
+    .catch(() => undefined)
 }
 
 function loadDependencies() {
@@ -222,6 +358,7 @@ function loadDependencies() {
 }
 
 function selectUnit(id: string) {
+  selectedComputeFolderId.value = null
   void router.push({
     path: `${computeBasePath.value}/${id}`,
     query: route.query,
@@ -255,7 +392,12 @@ async function openSelectedUnit(id: string | null) {
 
 function activateTab(id: string) {
   activeTabId.value = id
+  loadDependencies()
   selectUnit(id)
+}
+
+function openDependencyManager() {
+  showDependencyManagerDialog.value = true
 }
 
 async function closeTab(id: string) {
@@ -309,22 +451,59 @@ async function saveTab(id: string): Promise<boolean> {
 
 function refreshComputeTree() {
   const projectId = String(props.projectId)
-  return Promise.allSettled([
-    computeStore.fetchList(projectId, computeListParams(1)),
-    computeStore.fetchFolders(projectId),
-  ])
+  return Promise.allSettled([loadAllComputeUnits(), computeStore.fetchFolders(projectId)])
 }
 
 async function toggleEnabled(id: string, enabled: boolean) {
+  const draft = drafts.value[id]
+  let discardDraft = false
+  if (draft?.dirty) {
+    const action = await confirmDirtyToggle(draft.name, enabled)
+    if (action === 'cancel') return
+    if (action === 'save') {
+      const saved = await saveTab(id)
+      if (!saved) return
+    } else {
+      discardDraft = true
+    }
+  }
   try {
     const unit = await computeStore.setUnitEnabled(String(props.projectId), id, enabled)
+    const currentDraft = drafts.value[id]
     drafts.value = {
       ...drafts.value,
-      [id]: toComputeDraft(unit),
+      [id]:
+        discardDraft || !currentDraft
+          ? toComputeDraft(unit)
+          : {
+              ...currentDraft,
+              isEnabled: unit.isEnabled !== false,
+              status: String(unit.status || (unit.isEnabled === false ? 'disabled' : 'enabled')),
+            },
     }
     ElMessage.success(enabled ? '计算单元已启用' : '计算单元已停用')
   } catch (error) {
     ElMessage.error(getApiErrorMessage(error, '更新计算单元状态失败'))
+  }
+}
+
+async function confirmDirtyToggle(name: string, enabled: boolean) {
+  try {
+    await ElMessageBox.confirm(
+      `计算单元「${name}」有未保存修改，${enabled ? '启用' : '停用'}前是否先保存？`,
+      '切换计算单元状态',
+      {
+        confirmButtonText: '保存后切换',
+        cancelButtonText: '放弃修改并切换',
+        distinguishCancelAndClose: true,
+        closeOnClickModal: false,
+        type: 'warning',
+      },
+    )
+    return 'save' as const
+  } catch (action) {
+    if (action === 'cancel') return 'discard' as const
+    return 'cancel' as const
   }
 }
 
@@ -369,8 +548,15 @@ async function confirmAndDeleteUnit(id: string, name?: string) {
 }
 
 async function handleDeleteFolder(folder: ComputeFolderTreeNode) {
-  const childFolderCount = countComputeChildFolders(folder)
-  const unitCount = countComputeFolderUnits(folder)
+  let impact: { childFolderCount: number; unitIds: string[] }
+  try {
+    impact = await loadComputeFolderDeleteImpact(folder.id)
+  } catch (error) {
+    ElMessage.error(getApiErrorMessage(error, '读取分组删除影响失败'))
+    return
+  }
+  const childFolderCount = impact.childFolderCount
+  const unitCount = impact.unitIds.length
   const detail =
     childFolderCount > 0 || unitCount > 0
       ? `该分组包含 ${childFolderCount} 个子分组、${unitCount} 个计算单元。确认后会一起删除。`
@@ -388,8 +574,10 @@ async function handleDeleteFolder(folder: ComputeFolderTreeNode) {
     .catch(() => false)
   if (!ok) return
   try {
-    const removedIds = collectComputeFolderUnitIds(folder)
+    const removedIds = impact.unitIds
     await computeStore.removeFolder(String(props.projectId), folder.id, computeListParams(1))
+    if (selectedComputeFolderId.value === folder.id) selectedComputeFolderId.value = null
+    await loadAllComputeUnits()
     if (removedIds.length) {
       const removed = new Set(removedIds)
       const nextDrafts = { ...drafts.value }
@@ -413,22 +601,37 @@ async function handleDeleteFolder(folder: ComputeFolderTreeNode) {
   }
 }
 
-function countComputeChildFolders(folder: ComputeFolderTreeNode): number {
-  return folder.children.reduce((total, child) => total + 1 + countComputeChildFolders(child), 0)
-}
-
-function countComputeFolderUnits(folder: ComputeFolderTreeNode): number {
-  return (
-    folder.units.length +
-    folder.children.reduce((total, child) => total + countComputeFolderUnits(child), 0)
-  )
-}
-
-function collectComputeFolderUnitIds(folder: ComputeFolderTreeNode): string[] {
-  return [
-    ...folder.units.map((unit) => String(unit.id)),
-    ...folder.children.flatMap(collectComputeFolderUnitIds),
-  ]
+// 删除确认前按接口分页展开完整子树，避免懒加载目录导致影响数量被低估。
+async function loadComputeFolderDeleteImpact(rootFolderId: string) {
+  const pending = [rootFolderId]
+  const unitIds: string[] = []
+  let childFolderCount = 0
+  while (pending.length) {
+    const folderId = pending.shift()!
+    let loadedUnitCount = 0
+    for (let page = 1; ; page += 1) {
+      const result = await getComputeUnits(String(props.projectId), {
+        folderId,
+        page,
+        pageSize: 100,
+      })
+      unitIds.push(...result.list.map((unit) => String(unit.id)))
+      loadedUnitCount += result.list.length
+      const total = result.pagination?.total
+      if (result.list.length < 100 || (typeof total === 'number' && loadedUnitCount >= total)) break
+    }
+    for (let page = 1; ; page += 1) {
+      const result = await getComputeFolders(String(props.projectId), {
+        parentId: folderId,
+        page,
+        pageSize: 100,
+      })
+      childFolderCount += result.list.length
+      pending.push(...result.list.map((item) => String(item.id)))
+      if (page >= result.pagination.totalPages) break
+    }
+  }
+  return { childFolderCount, unitIds }
 }
 
 async function confirmDirtyClose(name: string) {
@@ -453,20 +656,18 @@ function handleBeforeUnload(event: BeforeUnloadEvent) {
   event.returnValue = ''
 }
 
-onBeforeRouteLeave(async () => {
-  if (!hasDirtyTabs.value) return true
-  return ElMessageBox.confirm(
-    '当前存在未保存的计算单元修改，离开后这些修改不会保存。',
-    '离开计算单元',
-    {
-      confirmButtonText: '离开',
-      cancelButtonText: '取消',
-      type: 'warning',
-    },
+async function saveDirtyTabs() {
+  for (const draft of Object.values(drafts.value)) {
+    if (draft.dirty && !(await saveTab(draft.id))) return false
+  }
+  return true
+}
+
+function discardDirtyTabs() {
+  drafts.value = Object.fromEntries(
+    Object.entries(drafts.value).map(([id, draft]) => [id, { ...draft, dirty: false }]),
   )
-    .then(() => true)
-    .catch(() => false)
-})
+}
 
 async function handleCreateUnit(data: ComputeUnitSave) {
   try {
@@ -604,6 +805,10 @@ async function handleCreateFolder(data: ComputeFolderSave) {
 watch(
   () => props.projectId,
   () => {
+    clearCapabilityRetry()
+    capabilityLoadVersion += 1
+    capabilityRetryAttempt = 0
+    computeCapabilities.value = null
     drafts.value = {}
     activeTabId.value = null
     computeSearch.value = ''
@@ -623,11 +828,23 @@ watch(
 onMounted(() => {
   void loadWorkspace()
   loadDependencies()
+  unregisterDraftChecker = registerDraftChecker?.({
+    isDirty: () => hasDirtyTabs.value,
+    save: saveDirtyTabs,
+    discard: discardDirtyTabs,
+  })
   window.addEventListener('beforeunload', handleBeforeUnload)
+  window.addEventListener('focus', retryCapabilitiesWhenVisible)
+  document.addEventListener('visibilitychange', retryCapabilitiesWhenVisible)
 })
 
 onBeforeUnmount(() => {
+  clearCapabilityRetry()
+  capabilityLoadVersion += 1
+  unregisterDraftChecker?.()
   window.removeEventListener('beforeunload', handleBeforeUnload)
+  window.removeEventListener('focus', retryCapabilitiesWhenVisible)
+  document.removeEventListener('visibilitychange', retryCapabilitiesWhenVisible)
 })
 </script>
 

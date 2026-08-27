@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -8,6 +10,8 @@ import (
 	"github.com/indu-forge/data_service/internal/http/response"
 	"github.com/indu-forge/data_service/internal/service"
 )
+
+const maxComputeDependencyArchiveSize = 64 << 20
 
 // ComputeHandler 负责承接 compute 领域 HTTP 请求。
 type ComputeHandler struct {
@@ -63,19 +67,19 @@ func (h *ComputeHandler) Create(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var request struct {
-		Name          string         `json:"name"`
-		Description   *string        `json:"description"`
-		Language      string         `json:"language"`
-		Lang          string         `json:"lang"`
-		ScriptCode    string         `json:"scriptCode"`
-		Code          string         `json:"code"`
-		FolderID      *string        `json:"folderId"`
-		TriggerType   string         `json:"triggerType"`
-		TriggerConfig map[string]any `json:"triggerConfig"`
-		InputBindings map[string]any `json:"inputBindings"`
-		OutputBinding map[string]any `json:"outputBindings"`
-		Dependencies  []any          `json:"dependencies"`
-		TimeoutMS     *int           `json:"timeoutMs"`
+		Name          string                       `json:"name"`
+		Description   *string                      `json:"description"`
+		Language      string                       `json:"language"`
+		Lang          string                       `json:"lang"`
+		ScriptCode    string                       `json:"scriptCode"`
+		Code          string                       `json:"code"`
+		FolderID      *string                      `json:"folderId"`
+		TriggerType   string                       `json:"triggerType"`
+		TriggerConfig map[string]any               `json:"triggerConfig"`
+		InputBindings map[string]any               `json:"inputBindings"`
+		Outputs       []service.ComputeOutputInput `json:"outputs"`
+		Dependencies  []any                        `json:"dependencies"`
+		TimeoutMS     *int                         `json:"timeoutMs"`
 	}
 	if err := decodeJSONBody(r, &request); err != nil {
 		return err
@@ -90,7 +94,7 @@ func (h *ComputeHandler) Create(w http.ResponseWriter, r *http.Request) error {
 		TriggerType:   request.TriggerType,
 		TriggerConfig: request.TriggerConfig,
 		InputBindings: request.InputBindings,
-		OutputBinding: request.OutputBinding,
+		Outputs:       request.Outputs,
 		Dependencies:  request.Dependencies,
 		TimeoutMS:     request.TimeoutMS,
 	})
@@ -115,6 +119,64 @@ func (h *ComputeHandler) Dependencies(w http.ResponseWriter, r *http.Request) er
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// InstallDependency 下载并安装一个工程级计算依赖。
+func (h *ComputeHandler) InstallDependency(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	var request service.InstallComputeDependencyInput
+	if err := decodeJSONBody(r, &request); err != nil {
+		return err
+	}
+	result, err := h.service.InstallComputeDependency(r.Context(), claims, r.PathValue("projectId"), request)
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// ImportDependency 从 npm tgz 或 Python wheel 离线导入工程依赖。
+func (h *ComputeHandler) ImportDependency(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxComputeDependencyArchiveSize+(1<<20))
+	if err := r.ParseMultipartForm(maxComputeDependencyArchiveSize); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "离线依赖文件超过 64MB 或表单格式无效", err)
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "请选择离线依赖文件", err)
+	}
+	defer file.Close()
+	content, err := io.ReadAll(io.LimitReader(file, maxComputeDependencyArchiveSize+1))
+	if err != nil || len(content) > maxComputeDependencyArchiveSize {
+		return apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "读取离线依赖文件失败或文件超过 64MB", err)
+	}
+	result, err := h.service.ImportComputeDependency(r.Context(), claims, r.PathValue("projectId"), service.ImportComputeDependencyInput{Language: r.FormValue("language"), Filename: header.Filename, Content: content})
+	if err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
+	return nil
+}
+
+// UninstallDependency 卸载未被计算单元引用的工程依赖。
+func (h *ComputeHandler) UninstallDependency(w http.ResponseWriter, r *http.Request) error {
+	claims, err := requireClaims(r)
+	if err != nil {
+		return err
+	}
+	if err := h.service.UninstallComputeDependency(r.Context(), claims, r.PathValue("projectId"), r.PathValue("dependencyId")); err != nil {
+		return normalizeRepresentativeHandlerError(err)
+	}
+	response.WriteSuccess(w, middleware.RequestID(r.Context()), map[string]any{"removed": true})
 	return nil
 }
 
@@ -188,13 +250,39 @@ func (h *ComputeHandler) ListFolders(w http.ResponseWriter, r *http.Request) err
 		return err
 	}
 
-	result, err := h.service.ListComputeFolders(r.Context(), claims, r.PathValue("projectId"))
+	filter, err := parseComputeFolderListFilter(r)
+	if err != nil {
+		return err
+	}
+	result, err := h.service.ListComputeFolders(r.Context(), claims, r.PathValue("projectId"), filter)
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}
 
 	response.WriteSuccess(w, middleware.RequestID(r.Context()), result)
 	return nil
+}
+
+func parseComputeFolderListFilter(r *http.Request) (service.ComputeFolderListFilter, error) {
+	query := r.URL.Query()
+	page, err := parseOptionalInt(query.Get("page"), 1, "page")
+	if err != nil {
+		return service.ComputeFolderListFilter{}, err
+	}
+	pageSize, err := parseOptionalInt(firstNonEmpty(query.Get("pageSize"), query.Get("limit")), 20, "pageSize")
+	if err != nil {
+		return service.ComputeFolderListFilter{}, err
+	}
+	var parentID *string
+	if value := query.Get("parentId"); value != "" {
+		parentID = &value
+	}
+	return service.ComputeFolderListFilter{
+		ParentID: parentID,
+		Search:   query.Get("search"),
+		Page:     page,
+		PageSize: pageSize,
+	}, nil
 }
 
 // CreateFolder 创建计算单元文件夹。
@@ -403,10 +491,15 @@ func parseComputeUnitListFilter(r *http.Request) (service.ComputeUnitListFilter,
 	if err != nil {
 		return service.ComputeUnitListFilter{}, err
 	}
+	var folderID *string
+	if value := query.Get("folderId"); value != "" {
+		folderID = &value
+	}
 	return service.ComputeUnitListFilter{
 		Language: query.Get("language"),
 		Enabled:  enabled,
 		Search:   query.Get("search"),
+		FolderID: folderID,
 		Page:     page,
 		PageSize: pageSize,
 	}, nil
@@ -495,11 +588,17 @@ func decodeUpdateComputeUnitInput(r *http.Request) (service.UpdateComputeUnitInp
 		input.InputBindings = value
 		input.HasInputBindings = true
 	}
-	if value, ok, err := optionalObjectField(raw, "outputBindings"); err != nil {
+	if value, ok, err := optionalArrayField(raw, "outputs"); err != nil {
 		return service.UpdateComputeUnitInput{}, err
 	} else if ok {
-		input.OutputBinding = value
-		input.HasOutputBinding = true
+		payload, marshalErr := json.Marshal(value)
+		if marshalErr != nil {
+			return service.UpdateComputeUnitInput{}, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "outputs 格式无效", marshalErr)
+		}
+		if unmarshalErr := json.Unmarshal(payload, &input.Outputs); unmarshalErr != nil {
+			return service.UpdateComputeUnitInput{}, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "outputs 格式无效", unmarshalErr)
+		}
+		input.HasOutputs = true
 	}
 	if value, ok, err := optionalArrayField(raw, "dependencies"); err != nil {
 		return service.UpdateComputeUnitInput{}, err

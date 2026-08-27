@@ -6,6 +6,7 @@ import {
   ComputeUnitSaveSchema,
   ComputeFolderSaveSchema,
   ComputeFolderSchema,
+  ComputeFolderPageSchema,
   ComputeDependencySchema,
   ComputeRunResultSchema,
   ComputeSyntaxCheckResultSchema,
@@ -15,6 +16,7 @@ import {
   type ComputeUnitSave,
   type ComputeFolderSave,
   type ComputeFolder,
+  type ComputeFolderPage,
   type ComputeDependency,
   type ComputeRunResult,
   type ComputeSyntaxCheckResult,
@@ -142,7 +144,52 @@ export async function getComputeDependencies(projectId: string): Promise<Compute
   )
 }
 
-/** 执行计算单元（data.api.ts 已有，这里提供类型化版本） */
+/** 下载并安装工程级计算依赖。 */
+export async function installComputeDependency(
+  projectId: string,
+  data: { language: 'js' | 'python'; packageName: string; version?: string },
+): Promise<ComputeDependency> {
+  const res = await request({
+    url: `/data/projects/${projectId}/compute-units/dependencies`,
+    method: 'post',
+    data,
+    timeout: 125000,
+  })
+  return ComputeDependencySchema.parse(unwrapData(res))
+}
+
+/** 从 npm tgz 或 Python wheel 离线导入工程级依赖。 */
+export async function importComputeDependency(
+  projectId: string,
+  language: 'js' | 'python',
+  file: File,
+): Promise<ComputeDependency> {
+  const data = new FormData()
+  data.append('language', language)
+  data.append('file', file)
+  const res = await request({
+    url: `/data/projects/${projectId}/compute-units/dependencies/import`,
+    method: 'post',
+    data,
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 125000,
+  })
+  return ComputeDependencySchema.parse(unwrapData(res))
+}
+
+/** 卸载未被计算单元引用的工程级依赖。 */
+export async function uninstallComputeDependency(
+  projectId: string,
+  dependencyId: string,
+): Promise<void> {
+  await request({
+    url: `/data/projects/${projectId}/compute-units/dependencies/${dependencyId}`,
+    method: 'delete',
+    timeout: 125000,
+  })
+}
+
+/** 执行计算单元 */
 export async function runComputeUnit(
   projectId: string,
   id: string,
@@ -156,17 +203,19 @@ export async function runComputeUnit(
   return ComputeRunResultSchema.parse(unwrapData(res))
 }
 
-/** 调试执行计算单元（data.api.ts 已有，这里提供类型化版本） */
+/** 调试执行计算单元 */
 export async function debugComputeUnit(
   projectId: string,
   id: string,
   input: Record<string, unknown> = {},
   dryRun = true,
+  signal?: AbortSignal,
 ): Promise<ComputeRunResult> {
   const res = await request({
     url: `/data/projects/${projectId}/compute-units/${id}/debug`,
     method: 'post',
     data: { input, dryRun },
+    signal,
   })
   return ComputeRunResultSchema.parse(unwrapData(res))
 }
@@ -175,11 +224,13 @@ export async function debugComputeUnit(
 export async function checkComputeSyntax(
   projectId: string,
   data: { lang?: string; language?: string; code?: string; scriptCode?: string },
+  signal?: AbortSignal,
 ): Promise<ComputeSyntaxCheckResult> {
   const res = await request({
     url: `/data/projects/${projectId}/compute-units/syntax-check`,
     method: 'post',
     data,
+    signal,
   })
   return ComputeSyntaxCheckResultSchema.parse(unwrapData(res))
 }
@@ -224,18 +275,17 @@ export async function previewComputeSchedule(
   }
 }
 
-/** 获取计算单元文件夹树 */
-export async function getComputeFolders(projectId: string): Promise<ComputeFolder[]> {
+/** 按父目录分页读取直接子目录；search 会在全目录树中按完整路径检索。 */
+export async function getComputeFolders(
+  projectId: string,
+  params: { parentId?: string; search?: string; page?: number; pageSize?: number } = {},
+): Promise<ComputeFolderPage> {
   const res = await request({
     url: `/data/projects/${projectId}/compute-units/folders`,
     method: 'get',
+    params,
   })
-  const payload = unwrapData(res)
-  if (Array.isArray(payload)) {
-    return ComputeFolderSchema.array().parse(payload)
-  }
-  const record = (payload || {}) as Record<string, unknown>
-  return ComputeFolderSchema.array().parse(record.list ?? record.items ?? record.folders ?? [])
+  return ComputeFolderPageSchema.parse(unwrapData(res))
 }
 
 /** 创建计算单元文件夹 */

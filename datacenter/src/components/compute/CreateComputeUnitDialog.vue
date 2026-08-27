@@ -33,7 +33,7 @@
           clearable
           placeholder="根目录"
         >
-          <el-option label="根目录" :value="null" />
+          <el-option label="根目录" value="" />
           <el-option
             v-for="folder in folderOptions"
             :key="folder.id"
@@ -77,12 +77,14 @@ const props = withDefaults(
   defineProps<{
     modelValue: boolean
     folders: ComputeFolder[]
+    initialFolderId?: string | null
     loading?: boolean
     error?: string
   }>(),
   {
     loading: false,
     error: '',
+    initialFolderId: null,
   },
 )
 
@@ -103,6 +105,7 @@ const form = reactive<ComputeUnitSave>({
   folderId: null,
   description: '',
   code: '',
+  outputs: [],
 })
 
 const canSubmit = computed(() => form.name.trim().length > 0 && !props.loading)
@@ -112,7 +115,7 @@ const isDirty = computed(
     (form.name.trim().length > 0 ||
       form.description.trim().length > 0 ||
       form.lang !== 'javascript' ||
-      Boolean(form.folderId) ||
+      (form.folderId || null) !== props.initialFolderId ||
       Boolean(form.code)),
 )
 
@@ -130,7 +133,7 @@ const folderOptions = computed(() => flattenFolders(props.folders))
 function resetForm() {
   form.name = ''
   form.lang = 'javascript'
-  form.folderId = null
+  form.folderId = props.initialFolderId
   form.description = ''
   form.code = ''
 }
@@ -143,6 +146,7 @@ function submit() {
     folderId: form.folderId || null,
     description: form.description || '',
     code: form.code || '',
+    outputs: form.outputs,
   })
 }
 

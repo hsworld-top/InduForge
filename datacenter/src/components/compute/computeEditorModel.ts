@@ -1,4 +1,8 @@
-import type { ComputeUnitDetail, ComputeUnitSave } from '@/api/schemas/compute.schema'
+import type {
+  ComputeOutputInput,
+  ComputeUnitDetail,
+  ComputeUnitSave,
+} from '@/api/schemas/compute.schema'
 
 export interface ComputeEditorTab {
   id: string
@@ -37,7 +41,7 @@ export interface ComputeDraft {
   triggerType: string
   triggerConfig: Record<string, unknown>
   inputBindings: Record<string, unknown>
-  outputBindings: Record<string, unknown>
+  outputs: ComputeOutputInput[]
   timeoutMs: number
   isEnabled: boolean
   dependencies: ComputeDependencyDraft[]
@@ -66,7 +70,17 @@ export function toComputeDraft(unit: ComputeUnitDetail): ComputeDraft {
     triggerType: String(unit.triggerType || 'manual'),
     triggerConfig: asRecord(unit.triggerConfig),
     inputBindings,
-    outputBindings: asRecord(unit.outputBindings),
+    outputs: unit.outputs.map((output) => ({
+      id: output.id,
+      key: output.key,
+      name: output.name,
+      path: output.path,
+      dataType: output.dataType,
+      unit: output.unit,
+      precisionNum: output.precisionNum,
+      nullPolicy: output.nullPolicy,
+      description: output.description,
+    })),
     timeoutMs: Number(unit.timeoutMs || 3000),
     isEnabled: unit.isEnabled !== false,
     dependencies: toDependencyDrafts(unit.dependencies),
@@ -85,22 +99,10 @@ export function draftToSavePayload(draft: ComputeDraft): Partial<ComputeUnitSave
     triggerType: draft.triggerType,
     triggerConfig: draft.triggerConfig,
     inputBindings: inputRowsToBindings(draft.parameterRows, draft.datapointVariableRows),
-    outputBindings: outputBindingsToSave(draft.outputBindings),
+    outputs: draft.outputs,
     timeoutMs: draft.timeoutMs,
     isEnabled: draft.isEnabled,
     dependencies: draft.dependencies.map((item) => ({ id: item.id })),
-  }
-}
-
-function outputBindingsToSave(bindings: Record<string, unknown>): Record<string, unknown> {
-  const outputBindings = asRecord(bindings)
-  const outputs = outputBindings.outputs
-  if (Array.isArray(outputs) && outputs.length > 0) {
-    return outputBindings
-  }
-  return {
-    ...outputBindings,
-    outputs: [{ name: 'result', dataType: 'object' }],
   }
 }
 

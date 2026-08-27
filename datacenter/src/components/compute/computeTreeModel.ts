@@ -6,6 +6,9 @@ export type ComputeFolderTreeNode = {
   parentId: string | null
   children: ComputeFolderTreeNode[]
   units: ComputeUnit[]
+  path?: string
+  hasChildren: boolean
+  unitCount: number
 }
 
 const toId = (value: unknown) =>
@@ -22,10 +25,16 @@ export function buildComputeFolderTree(folders: ComputeFolder[], units: ComputeU
       parentId: toId(folder.parentId) ?? parentId ?? null,
       children: [],
       units: [],
+      path: folder.path,
+      hasChildren: Boolean(folder.hasChildren),
+      unitCount: Number(folder.unitCount || 0),
     }
 
     node.name = folder.name
     node.parentId = toId(folder.parentId) ?? parentId ?? null
+    node.path = folder.path
+    node.hasChildren = Boolean(folder.hasChildren)
+    node.unitCount = Number(folder.unitCount || 0)
     folderMap.set(id, node)
 
     folder.children?.forEach((child) => visitFolder(child, id))

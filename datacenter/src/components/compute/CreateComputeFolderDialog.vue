@@ -54,12 +54,14 @@ const props = withDefaults(
   defineProps<{
     modelValue: boolean
     folders: ComputeFolder[]
+    initialParentId?: string | null
     loading?: boolean
     error?: string
   }>(),
   {
     loading: false,
     error: '',
+    initialParentId: null,
   },
 )
 
@@ -81,7 +83,9 @@ const form = reactive<ComputeFolderSave>({
 
 const canSubmit = computed(() => form.name.trim().length > 0 && !props.loading)
 const isDirty = computed(
-  () => visible.value && (form.name.trim().length > 0 || Boolean(form.parentId)),
+  () =>
+    visible.value &&
+    (form.name.trim().length > 0 || (form.parentId || null) !== props.initialParentId),
 )
 
 const flattenFolders = (
@@ -97,7 +101,7 @@ const folderOptions = computed(() => flattenFolders(props.folders))
 
 function resetForm() {
   form.name = ''
-  form.parentId = null
+  form.parentId = props.initialParentId
 }
 
 function submit() {

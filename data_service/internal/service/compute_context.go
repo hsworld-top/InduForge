@@ -2,10 +2,8 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	enginecompute "github.com/indu-forge/data_service/internal/engine/compute"
 	apperrors "github.com/indu-forge/data_service/internal/errors"
@@ -61,8 +59,8 @@ type computeDatapointVariableBinding struct {
 }
 
 func (s *ComputeService) readComputeSDKDatapoint(ctx context.Context, projectID, path string) (enginecompute.SDKDataPointValue, error) {
-	if s.datapoints == nil {
-		return enginecompute.SDKDataPointValue{}, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "compute SDK 数据点仓储未初始化")
+	if s.currentValues == nil || s.datapoints == nil {
+		return enginecompute.SDKDataPointValue{}, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "compute SDK 当前值解析器未初始化")
 	}
 	record, err := s.datapoints.GetByProjectAndPath(ctx, projectID, path)
 	if err != nil {
@@ -71,19 +69,19 @@ func (s *ComputeService) readComputeSDKDatapoint(ctx context.Context, projectID,
 	if record.Status != "active" {
 		return enginecompute.SDKDataPointValue{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "compute SDK 数据点不是 active 状态: "+path)
 	}
-	value := dataPointDefaultValue(*record)
-	if record.SourceType == "db.query" && record.SourceID != nil && s.queries != nil {
-		result, err := s.queries.ExecuteQueryForProject(ctx, projectID, *record.SourceID, ExecuteQueryInput{})
-		if err != nil {
-			return enginecompute.SDKDataPointValue{}, err
-		}
-		value = result.Data
+	resolved, err := s.currentValues.GetDataPointValue(ctx, projectID, path)
+	if err != nil {
+		return enginecompute.SDKDataPointValue{}, err
+	}
+	timestamp := resolved.Timestamp
+	if resolved.ObservedAt != nil {
+		timestamp = *resolved.ObservedAt
 	}
 	return enginecompute.SDKDataPointValue{
 		Path:       record.Path,
-		Value:      value,
-		Quality:    "good",
-		Timestamp:  time.Now().UTC().Format(time.RFC3339),
+		Value:      resolved.Value,
+		Quality:    resolved.Quality,
+		Timestamp:  timestamp.UTC().Format("2006-01-02T15:04:05Z07:00"),
 		Status:     record.Status,
 		Attributes: cloneStringMap(record.AttributeDefaults),
 	}, nil
@@ -210,31 +208,4 @@ func sqlBindingFromMap(input map[string]any) computeSQLBinding {
 		parameters = cloneMap(rawParams)
 	}
 	return computeSQLBinding{Key: key, QueryID: queryID, Parameters: parameters}
-}
-
-func dataPointDefaultValue(record repository.DataPointRecord) any {
-	if record.DefaultValue == nil {
-		return nil
-	}
-	raw := strings.TrimSpace(*record.DefaultValue)
-	switch record.DataType {
-	case "number", "float", "double":
-		var value float64
-		if _, err := fmt.Sscan(raw, &value); err == nil {
-			return value
-		}
-	case "integer", "int":
-		var value int64
-		if _, err := fmt.Sscan(raw, &value); err == nil {
-			return value
-		}
-	case "boolean", "bool":
-		switch strings.ToLower(raw) {
-		case "true", "1":
-			return true
-		case "false", "0":
-			return false
-		}
-	}
-	return raw
 }

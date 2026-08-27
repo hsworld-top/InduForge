@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strings"
@@ -52,11 +53,13 @@ func (r *SandboxRunner) Run(ctx context.Context, request ExecuteRequest) (Execut
 		DurationMS  int64  `json:"durationMs"`
 	}
 	err := r.client.call(ctx, http.MethodPost, "/v1/execute", map[string]any{
-		"language":   r.language,
-		"script":     request.Script,
-		"input":      request.Input,
-		"sdkContext": request.SDKContext,
-		"timeoutMs":  request.Timeout.Milliseconds(),
+		"projectId":    request.ProjectID,
+		"language":     r.language,
+		"script":       request.Script,
+		"input":        request.Input,
+		"sdkContext":   request.SDKContext,
+		"dependencies": request.Dependencies,
+		"timeoutMs":    request.Timeout.Milliseconds(),
 	}, &response)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -68,6 +71,45 @@ func (r *SandboxRunner) Run(ctx context.Context, request ExecuteRequest) (Execut
 		Output: response.Output, SideEffects: response.SideEffects, Stdout: response.Stdout,
 		Stderr: response.Stderr, Duration: time.Duration(response.DurationMS) * time.Millisecond,
 	}, nil
+}
+
+func (r *SandboxRunner) InstallDependency(ctx context.Context, request DependencyInstallRequest) (RuntimeDependency, error) {
+	if r == nil || r.client == nil {
+		return RuntimeDependency{}, fmt.Errorf("计算沙箱未配置")
+	}
+	var result RuntimeDependency
+	err := r.client.call(ctx, http.MethodPost, "/v1/dependencies/install", request, &result)
+	return result, err
+}
+
+func (r *SandboxRunner) ImportDependency(ctx context.Context, request DependencyImportRequest) (RuntimeDependency, error) {
+	if r == nil || r.client == nil {
+		return RuntimeDependency{}, fmt.Errorf("计算沙箱未配置")
+	}
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	_ = writer.WriteField("projectId", request.ProjectID)
+	_ = writer.WriteField("language", request.Language)
+	part, err := writer.CreateFormFile("file", request.Filename)
+	if err != nil {
+		return RuntimeDependency{}, fmt.Errorf("创建离线依赖上传请求失败: %w", err)
+	}
+	if _, err := part.Write(request.Content); err != nil {
+		return RuntimeDependency{}, fmt.Errorf("写入离线依赖上传请求失败: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return RuntimeDependency{}, fmt.Errorf("完成离线依赖上传请求失败: %w", err)
+	}
+	var result RuntimeDependency
+	err = r.client.callBody(ctx, http.MethodPost, "/v1/dependencies/import", &body, writer.FormDataContentType(), &result)
+	return result, err
+}
+
+func (r *SandboxRunner) UninstallDependency(ctx context.Context, request DependencyInstallRequest) error {
+	if r == nil || r.client == nil {
+		return fmt.Errorf("计算沙箱未配置")
+	}
+	return r.client.call(ctx, http.MethodPost, "/v1/dependencies/uninstall", request, nil)
 }
 
 func (r *SandboxRunner) CheckSyntax(ctx context.Context, request SyntaxCheckRequest) (SyntaxCheckResult, error) {
@@ -113,13 +155,27 @@ func (c *SandboxClient) call(ctx context.Context, method, path string, payload a
 		}
 		body = bytes.NewReader(encoded)
 	}
+	contentType := ""
+	if payload != nil {
+		contentType = "application/json"
+	}
+	return c.callBody(ctx, method, path, body, contentType, output)
+}
+
+func (c *SandboxClient) callBody(ctx context.Context, method, path string, body io.Reader, contentType string, output any) error {
+	if c == nil || c.baseURL == "" || c.token == "" {
+		return fmt.Errorf("计算沙箱未配置或内部令牌为空")
+	}
+	if _, err := url.ParseRequestURI(c.baseURL); err != nil {
+		return fmt.Errorf("计算沙箱地址无效: %w", err)
+	}
 	request, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 	if err != nil {
 		return fmt.Errorf("创建计算沙箱请求失败: %w", err)
 	}
 	request.Header.Set("Authorization", "Bearer "+c.token)
-	if payload != nil {
-		request.Header.Set("Content-Type", "application/json")
+	if contentType != "" {
+		request.Header.Set("Content-Type", contentType)
 	}
 	response, err := c.client.Do(request)
 	if err != nil {

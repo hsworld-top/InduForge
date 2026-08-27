@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"regexp"
 	"sort"
@@ -34,55 +35,94 @@ var allowedComputeTriggerTypes = map[string]struct{}{
 	"manual":           {},
 	"schedule":         {},
 	"datapoint_change": {},
+	"condition":        {},
 }
+
+var supportedComputeTriggerTypes = []string{"manual", "schedule", "datapoint_change", "condition"}
 
 var computeScheduleTimePattern = regexp.MustCompile(`^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$`)
 
 // ComputeUnit 表示返回给 HTTP 层的计算单元定义。
 type ComputeUnit struct {
-	ID            string         `json:"id"`
-	ProjectID     string         `json:"projectId"`
-	Name          string         `json:"name"`
-	Description   *string        `json:"description,omitempty"`
-	FolderID      *string        `json:"folderId,omitempty"`
-	Language      string         `json:"language"`
-	Lang          string         `json:"lang,omitempty"`
-	ScriptCode    string         `json:"scriptCode"`
-	Code          string         `json:"code,omitempty"`
-	TriggerType   string         `json:"triggerType"`
-	TriggerConfig map[string]any `json:"triggerConfig"`
-	InputBindings map[string]any `json:"inputBindings"`
-	OutputBinding map[string]any `json:"outputBindings"`
-	Dependencies  []any          `json:"dependencies"`
-	TimeoutMS     int            `json:"timeoutMs"`
-	IsEnabled     bool           `json:"isEnabled"`
-	Status        string         `json:"status"`
-	Path          string         `json:"path"`
-	OutputPath    string         `json:"outputPath"`
-	CreatedAt     time.Time      `json:"createdAt"`
-	UpdatedAt     time.Time      `json:"updatedAt"`
+	ID            string          `json:"id"`
+	ProjectID     string          `json:"projectId"`
+	Name          string          `json:"name"`
+	Description   *string         `json:"description,omitempty"`
+	FolderID      *string         `json:"folderId,omitempty"`
+	Language      string          `json:"language"`
+	Lang          string          `json:"lang,omitempty"`
+	ScriptCode    string          `json:"scriptCode"`
+	Code          string          `json:"code,omitempty"`
+	TriggerType   string          `json:"triggerType"`
+	TriggerConfig map[string]any  `json:"triggerConfig"`
+	InputBindings map[string]any  `json:"inputBindings"`
+	Outputs       []ComputeOutput `json:"outputs"`
+	Dependencies  []any           `json:"dependencies"`
+	TimeoutMS     int             `json:"timeoutMs"`
+	IsEnabled     bool            `json:"isEnabled"`
+	Status        string          `json:"status"`
+	Path          string          `json:"path"`
+	OutputPath    string          `json:"outputPath"`
+	CreatedAt     time.Time       `json:"createdAt"`
+	UpdatedAt     time.Time       `json:"updatedAt"`
+}
+
+type ComputeOutput struct {
+	ID           string  `json:"id"`
+	DatapointID  string  `json:"datapointId"`
+	Key          string  `json:"key"`
+	Name         string  `json:"name"`
+	Path         string  `json:"path"`
+	DataType     string  `json:"dataType"`
+	Unit         *string `json:"unit,omitempty"`
+	PrecisionNum *int    `json:"precisionNum,omitempty"`
+	NullPolicy   string  `json:"nullPolicy"`
+	Description  *string `json:"description,omitempty"`
+	SortOrder    int     `json:"sortOrder"`
+}
+
+type ComputeOutputInput struct {
+	ID           *string `json:"id,omitempty"`
+	Key          string  `json:"key"`
+	Name         string  `json:"name"`
+	Path         string  `json:"path"`
+	DataType     string  `json:"dataType"`
+	Unit         *string `json:"unit,omitempty"`
+	PrecisionNum *int    `json:"precisionNum,omitempty"`
+	NullPolicy   string  `json:"nullPolicy"`
+	Description  *string `json:"description,omitempty"`
 }
 
 // ComputeFolder 表示计算单元文件夹。
 type ComputeFolder struct {
-	ID        string           `json:"id"`
-	ProjectID string           `json:"projectId"`
-	Name      string           `json:"name"`
-	ParentID  *string          `json:"parentId,omitempty"`
-	Children  []*ComputeFolder `json:"children,omitempty"`
-	CreatedAt time.Time        `json:"createdAt"`
-	UpdatedAt time.Time        `json:"updatedAt"`
+	ID          string           `json:"id"`
+	ProjectID   string           `json:"projectId"`
+	Name        string           `json:"name"`
+	ParentID    *string          `json:"parentId,omitempty"`
+	Children    []*ComputeFolder `json:"children,omitempty"`
+	CreatedAt   time.Time        `json:"createdAt"`
+	UpdatedAt   time.Time        `json:"updatedAt"`
+	Path        string           `json:"path,omitempty"`
+	HasChildren bool             `json:"hasChildren"`
+	UnitCount   int              `json:"unitCount"`
+}
+
+// ComputeFolderListResult 表示目录的服务端分页结果。
+type ComputeFolderListResult struct {
+	List       []ComputeFolder       `json:"list"`
+	Pagination ComputeUnitPagination `json:"pagination"`
 }
 
 // ComputeDependency 表示计算单元可用依赖。
 type ComputeDependency struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Runtime     string `json:"runtime"`
-	Version     string `json:"version"`
-	Description string `json:"description"`
-	Status      string `json:"status"`
-	ImportName  string `json:"importName"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Runtime        string `json:"runtime"`
+	Version        string `json:"version"`
+	Description    string `json:"description"`
+	Status         string `json:"status"`
+	ImportName     string `json:"importName"`
+	ReferenceCount int    `json:"referenceCount"`
 }
 
 // ComputeDependencyListResult 表示依赖清单响应。
@@ -133,6 +173,7 @@ type ComputeRunResult struct {
 	Output       any       `json:"output"`
 	SideEffects  []any     `json:"sideEffects,omitempty"`
 	Logs         []string  `json:"logs,omitempty"`
+	Warnings     []string  `json:"warnings,omitempty"`
 	ErrorMessage string    `json:"errorMessage,omitempty"`
 	StartedAt    time.Time `json:"startedAt"`
 	FinishedAt   time.Time `json:"finishedAt"`
@@ -157,6 +198,7 @@ type ComputeSyntaxCheckResult struct {
 // ComputeCapabilities 返回独立沙箱声明的真实能力；Available=false 时前端必须禁用调试和语法检查。
 type ComputeCapabilities struct {
 	SandboxStatus    string                               `json:"sandboxStatus"`
+	SandboxReason    string                               `json:"sandboxReason"`
 	LanguageVersions []enginecompute.LanguageCapability   `json:"languages"`
 	SDK              []string                             `json:"sdk"`
 	Dependencies     []enginecompute.DependencyCapability `json:"dependencies"`
@@ -188,7 +230,7 @@ type CreateComputeUnitInput struct {
 	TriggerType   string
 	TriggerConfig map[string]any
 	InputBindings map[string]any
-	OutputBinding map[string]any
+	Outputs       []ComputeOutputInput
 	Dependencies  []any
 	TimeoutMS     *int
 }
@@ -220,8 +262,8 @@ type UpdateComputeUnitInput struct {
 	HasTriggerConfig bool
 	InputBindings    map[string]any
 	HasInputBindings bool
-	OutputBinding    map[string]any
-	HasOutputBinding bool
+	Outputs          []ComputeOutputInput
+	HasOutputs       bool
 	Dependencies     []any
 	HasDependencies  bool
 	TimeoutMS        *int
@@ -232,6 +274,15 @@ type UpdateComputeUnitInput struct {
 type ComputeUnitListFilter struct {
 	Language string
 	Enabled  *bool
+	Search   string
+	FolderID *string
+	Page     int
+	PageSize int
+}
+
+// ComputeFolderListFilter 描述目录按父级懒加载和全路径搜索。
+type ComputeFolderListFilter struct {
+	ParentID *string
 	Search   string
 	Page     int
 	PageSize int
@@ -260,11 +311,22 @@ type ComputeSyntaxCheckInput struct {
 
 // ComputeService 承载 compute 领域业务逻辑。
 type ComputeService struct {
-	repository   *repository.ComputeRepository
-	datapoints   *repository.DataPointRepository
-	queries      *QueryService
-	nodeRunner   enginecompute.Runner
-	pythonRunner enginecompute.Runner
+	repository    *repository.ComputeRepository
+	datapoints    *repository.DataPointRepository
+	queries       *QueryService
+	nodeRunner    enginecompute.Runner
+	pythonRunner  enginecompute.Runner
+	currentValues interface {
+		GetDataPointValue(context.Context, string, string) (*DataPointValue, error)
+	}
+}
+
+func (s *ComputeService) SetDataPointValueResolver(resolver interface {
+	GetDataPointValue(context.Context, string, string) (*DataPointValue, error)
+}) {
+	if s != nil {
+		s.currentValues = resolver
+	}
 }
 
 // NewComputeService 创建 compute 服务。
@@ -304,11 +366,22 @@ func (s *ComputeService) ListComputeUnits(ctx context.Context, claims *auth.Clai
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "language 仅支持 js/python")
 		}
 	}
+	if filter.FolderID != nil {
+		folderID, err := normalizeOptionalComputeFolderID(filter.FolderID)
+		if err != nil {
+			return nil, err
+		}
+		filter.FolderID = folderID
+		if err := s.ensureComputeFolderInProject(ctx, projectID, folderID); err != nil {
+			return nil, err
+		}
+	}
 
 	records, total, err := s.repository.ListUnits(ctx, projectID, repository.ComputeUnitListFilter{
 		Language: language,
 		Enabled:  filter.Enabled,
 		Search:   strings.TrimSpace(filter.Search),
+		FolderID: filter.FolderID,
 		Page:     filter.Page,
 		PageSize: filter.PageSize,
 	})
@@ -347,26 +420,22 @@ func (s *ComputeService) GetComputeUnit(ctx context.Context, claims *auth.Claims
 	return &unit, nil
 }
 
-// ListComputeDependencies 返回沙箱真实声明的依赖，不再展示宿主机或前端臆测的能力。
+// ListComputeDependencies 返回工程已安装依赖及其计算单元引用数。
 func (s *ComputeService) ListComputeDependencies(ctx context.Context, claims *auth.Claims, projectID string) (*ComputeDependencyListResult, error) {
 	if err := s.validateReadAccess(claims, projectID); err != nil {
 		return nil, err
 	}
-	capabilities, err := s.GetComputeCapabilities(ctx, claims, projectID)
+	records, err := s.repository.ListDependencies(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]ComputeDependency, 0, len(capabilities.Dependencies))
-	for _, dependency := range capabilities.Dependencies {
-		runtimeName := strings.TrimSpace(strings.ToLower(dependency.Language))
-		if runtimeName == "js" {
-			runtimeName = "javascript"
+	result := make([]ComputeDependency, 0, len(records))
+	for _, record := range records {
+		references, countErr := s.repository.CountDependencyReferences(ctx, projectID, record.ID)
+		if countErr != nil {
+			return nil, countErr
 		}
-		result = append(result, ComputeDependency{
-			ID: dependency.Language + ":" + dependency.Name, Name: dependency.Name,
-			Runtime: runtimeName, Version: dependency.Version, Description: "由独立计算沙箱提供。",
-			Status: "enabled", ImportName: dependency.Name,
-		})
+		result = append(result, computeDependencyFromRecord(record, references))
 	}
 	return &ComputeDependencyListResult{List: result}, nil
 }
@@ -378,15 +447,22 @@ func (s *ComputeService) GetComputeCapabilities(ctx context.Context, claims *aut
 	}
 	provider, ok := s.nodeRunner.(enginecompute.CapabilityProvider)
 	if !ok || provider == nil {
-		return &ComputeCapabilities{SandboxStatus: "unavailable", LanguageVersions: []enginecompute.LanguageCapability{}, SDK: []string{}, Dependencies: []enginecompute.DependencyCapability{}, TriggerTypes: []string{}}, nil
+		return &ComputeCapabilities{SandboxStatus: "unavailable", SandboxReason: "计算沙箱未配置", LanguageVersions: []enginecompute.LanguageCapability{}, SDK: []string{}, Dependencies: []enginecompute.DependencyCapability{}, TriggerTypes: append([]string{}, supportedComputeTriggerTypes...)}, nil
 	}
 	capabilities, err := provider.Capabilities(ctx)
 	if err != nil || !capabilities.Available {
-		return &ComputeCapabilities{SandboxStatus: "unavailable", LanguageVersions: []enginecompute.LanguageCapability{}, SDK: []string{}, Dependencies: []enginecompute.DependencyCapability{}, TriggerTypes: []string{}, Limits: capabilities.Limits}, nil
+		reason := strings.TrimSpace(capabilities.Reason)
+		if err != nil {
+			reason = err.Error()
+		}
+		if reason == "" {
+			reason = "隔离执行检查未通过"
+		}
+		return &ComputeCapabilities{SandboxStatus: "unavailable", SandboxReason: reason, LanguageVersions: []enginecompute.LanguageCapability{}, SDK: []string{}, Dependencies: []enginecompute.DependencyCapability{}, TriggerTypes: append([]string{}, supportedComputeTriggerTypes...), Limits: capabilities.Limits}, nil
 	}
 	return &ComputeCapabilities{
-		SandboxStatus: "available", LanguageVersions: capabilities.Languages, SDK: capabilities.SDK,
-		Dependencies: capabilities.Dependencies, TriggerTypes: capabilities.Triggers, Limits: capabilities.Limits,
+		SandboxStatus: "available", SandboxReason: "", LanguageVersions: capabilities.Languages, SDK: capabilities.SDK,
+		Dependencies: capabilities.Dependencies, TriggerTypes: append([]string{}, supportedComputeTriggerTypes...), Limits: capabilities.Limits,
 	}, nil
 }
 
@@ -418,9 +494,18 @@ func (s *ComputeService) PreviewComputeSchedule(ctx context.Context, claims *aut
 
 func computeScheduleValidationError(triggerType string, config map[string]any, validationErr error) ComputeScheduleFieldError {
 	field := "triggerConfig"
+	message := validationErr.Error()
 	if triggerType == "datapoint_change" {
 		field = "triggerConfig.datapointId"
+	} else if triggerType == "condition" {
+		field = "triggerConfig.expression"
 	} else if triggerType == "schedule" {
+		// 优先按校验消息定位公共字段，避免月/年规则掩盖执行窗口等错误。
+		for _, candidate := range []string{"startAt", "endAt", "maxRuns", "dayOfMonth", "weekOfMonth", "weekdays", "weekday", "dayRule", "month"} {
+			if strings.Contains(message, candidate) {
+				return ComputeScheduleFieldError{Field: "triggerConfig." + candidate, Message: message}
+			}
+		}
 		switch strings.ToLower(strings.TrimSpace(toString(config["kind"]))) {
 		case "interval":
 			if _, ok := positiveInteger(config["every"]); !ok {
@@ -428,25 +513,33 @@ func computeScheduleValidationError(triggerType string, config map[string]any, v
 			} else {
 				field = "triggerConfig.unit"
 			}
-		case "daily", "weekly":
+		case "daily", "weekly", "monthly", "yearly":
 			if !computeScheduleTimePattern.MatchString(strings.TrimSpace(toString(config["time"]))) {
 				field = "triggerConfig.time"
 			} else if timezone := strings.TrimSpace(toString(config["timezone"])); timezone == "" {
 				field = "triggerConfig.timezone"
 			} else if _, err := time.LoadLocation(timezone); err != nil {
 				field = "triggerConfig.timezone"
-			} else {
+			} else if kind := strings.ToLower(strings.TrimSpace(toString(config["kind"]))); kind == "weekly" {
 				field = "triggerConfig.weekdays"
+			} else if kind == "monthly" || kind == "yearly" {
+				field = "triggerConfig.dayRule"
 			}
 		default:
 			field = "triggerConfig.kind"
 		}
 	}
-	return ComputeScheduleFieldError{Field: field, Message: validationErr.Error()}
+	return ComputeScheduleFieldError{Field: field, Message: message}
 }
 
 func computeScheduleOccurrences(config map[string]any, now time.Time, count int) (string, []time.Time) {
 	kind := toString(config["kind"])
+	count = schedulePreviewCount(config, count)
+	if count <= 0 {
+		return scheduleSummary(kind), []time.Time{}
+	}
+	startAt, hasStart := optionalRFC3339(config["startAt"])
+	endAt, hasEnd := optionalRFC3339(config["endAt"])
 	if kind == "interval" {
 		every, _ := positiveInteger(config["every"])
 		unit := toString(config["unit"])
@@ -458,8 +551,20 @@ func computeScheduleOccurrences(config map[string]any, now time.Time, count int)
 			step = time.Duration(every) * time.Hour
 		}
 		result := make([]time.Time, 0, count)
-		for index := 1; index <= count; index++ {
-			result = append(result, now.Add(time.Duration(index)*step))
+		candidate := now.Add(step)
+		if hasStart {
+			candidate = startAt
+			if !candidate.After(now) {
+				elapsed := now.Sub(startAt)
+				candidate = startAt.Add((elapsed/step + 1) * step)
+			}
+		}
+		for len(result) < count {
+			if hasEnd && candidate.After(endAt) {
+				break
+			}
+			result = append(result, candidate.UTC())
+			candidate = candidate.Add(step)
 		}
 		return fmt.Sprintf("每 %d %s执行一次", every, map[string]string{"seconds": "秒", "minutes": "分钟", "hours": "小时"}[unit]), result
 	}
@@ -470,9 +575,12 @@ func computeScheduleOccurrences(config map[string]any, now time.Time, count int)
 	hour, minute, second := parseScheduleClock(toString(config["time"]))
 	localNow := now.In(location)
 	result := make([]time.Time, 0, count)
-	for offset := 0; len(result) < count && offset < 370; offset++ {
+	for offset := 0; len(result) < count && offset < 3700; offset++ {
 		day := localNow.AddDate(0, 0, offset)
 		if kind == "weekly" && !scheduleContainsWeekday(config["weekdays"], day.Weekday()) {
+			continue
+		}
+		if (kind == "monthly" || kind == "yearly") && !scheduleMatchesCalendarDate(config, day) {
 			continue
 		}
 		candidate := time.Date(day.Year(), day.Month(), day.Day(), hour, minute, second, 0, location)
@@ -484,12 +592,70 @@ func computeScheduleOccurrences(config map[string]any, now time.Time, count int)
 		if !candidate.After(localNow) {
 			continue
 		}
+		if hasStart && candidate.Before(startAt) {
+			continue
+		}
+		if hasEnd && candidate.After(endAt) {
+			break
+		}
 		result = append(result, candidate.UTC())
 	}
-	if kind == "weekly" {
-		return "每周指定日期定时执行", result
+	return scheduleSummary(kind), result
+}
+
+func scheduleSummary(kind string) string {
+	switch kind {
+	case "weekly":
+		return "每周指定日期定时执行"
+	case "monthly":
+		return "每月按指定规则定时执行"
+	case "yearly":
+		return "每年按指定规则定时执行"
+	default:
+		return "每天定时执行"
 	}
-	return "每天定时执行", result
+}
+
+func schedulePreviewCount(config map[string]any, count int) int {
+	if maxRuns, ok := positiveInteger(config["maxRuns"]); ok && maxRuns < count {
+		return maxRuns
+	}
+	return count
+}
+
+func optionalRFC3339(value any) (time.Time, bool) {
+	text := strings.TrimSpace(toString(value))
+	if text == "" {
+		return time.Time{}, false
+	}
+	parsed, err := time.Parse(time.RFC3339, text)
+	return parsed, err == nil
+}
+
+func scheduleMatchesCalendarDate(config map[string]any, day time.Time) bool {
+	if toString(config["kind"]) == "yearly" {
+		month, _ := positiveInteger(config["month"])
+		if int(day.Month()) != month {
+			return false
+		}
+	}
+	if toString(config["dayRule"]) == "weekday" {
+		weekday, _ := positiveInteger(config["weekday"])
+		isoWeekday := int(day.Weekday())
+		if isoWeekday == 0 {
+			isoWeekday = 7
+		}
+		if isoWeekday != weekday {
+			return false
+		}
+		weekOfMonth, _ := integerValue(config["weekOfMonth"])
+		if weekOfMonth == -1 {
+			return day.AddDate(0, 0, 7).Month() != day.Month()
+		}
+		return (day.Day()-1)/7+1 == weekOfMonth
+	}
+	dayOfMonth, _ := positiveInteger(config["dayOfMonth"])
+	return day.Day() == dayOfMonth
 }
 
 func parseScheduleClock(value string) (int, int, int) {
@@ -527,7 +693,14 @@ func (s *ComputeService) CreateComputeUnit(ctx context.Context, claims *auth.Cla
 	if err := s.validateAndNormalizeTrigger(ctx, projectID, &normalized); err != nil {
 		return nil, err
 	}
-
+	normalized.Dependencies, err = s.detectComputeDependencies(ctx, projectID, normalized.Language, normalized.ScriptCode)
+	if err != nil {
+		return nil, err
+	}
+	refs, err := s.buildComputeDatapointRefs(ctx, projectID, normalized)
+	if err != nil {
+		return nil, err
+	}
 	record, err := s.repository.CreateUnit(ctx, repository.CreateComputeUnitParams{
 		ProjectID:     projectID,
 		UserID:        claims.UserID,
@@ -539,14 +712,12 @@ func (s *ComputeService) CreateComputeUnit(ctx context.Context, claims *auth.Cla
 		TriggerType:   normalized.TriggerType,
 		TriggerConfig: normalized.TriggerConfig,
 		InputBindings: normalized.InputBindings,
-		OutputBinding: normalized.OutputBinding,
 		Dependencies:  normalized.Dependencies,
 		TimeoutMS:     normalized.TimeoutMS,
+		DatapointRefs: refs,
+		Outputs:       normalized.Outputs,
 	})
 	if err != nil {
-		return nil, err
-	}
-	if err := s.syncComputeOutputDataPoints(ctx, *record, claims.UserID); err != nil {
 		return nil, err
 	}
 
@@ -555,15 +726,42 @@ func (s *ComputeService) CreateComputeUnit(ctx context.Context, claims *auth.Cla
 }
 
 // ListComputeFolders 查询项目下计算文件夹。
-func (s *ComputeService) ListComputeFolders(ctx context.Context, claims *auth.Claims, projectID string) ([]*ComputeFolder, error) {
+func (s *ComputeService) ListComputeFolders(ctx context.Context, claims *auth.Claims, projectID string, filter ComputeFolderListFilter) (*ComputeFolderListResult, error) {
 	if err := s.validateReadAccess(claims, projectID); err != nil {
 		return nil, err
 	}
-	records, err := s.repository.ListFolders(ctx, projectID)
+	if filter.ParentID != nil {
+		parentID, err := normalizeOptionalComputeFolderID(filter.ParentID)
+		if err != nil {
+			return nil, err
+		}
+		filter.ParentID = parentID
+		if err := s.ensureComputeFolderInProject(ctx, projectID, parentID); err != nil {
+			return nil, err
+		}
+	}
+	records, total, err := s.repository.ListFolderPage(ctx, projectID, repository.ComputeFolderListFilter{
+		ParentID: filter.ParentID,
+		Search:   strings.TrimSpace(filter.Search),
+		Page:     filter.Page,
+		PageSize: filter.PageSize,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return toComputeFolderTree(records), nil
+	items := make([]ComputeFolder, 0, len(records))
+	for _, record := range records {
+		folder := toComputeFolder(record.ComputeFolderRecord)
+		folder.Path = record.Path
+		folder.HasChildren = record.HasChildren
+		folder.UnitCount = record.UnitCount
+		items = append(items, folder)
+	}
+	page, pageSize := normalizePageAndSize(filter.Page, filter.PageSize, 20, 100)
+	return &ComputeFolderListResult{
+		List:       items,
+		Pagination: ComputeUnitPagination{Page: page, PageSize: pageSize, Total: total, TotalPages: totalPages(total, pageSize)},
+	}, nil
 }
 
 // CreateComputeFolder 创建计算文件夹。
@@ -657,19 +855,7 @@ func (s *ComputeService) DeleteComputeFolder(ctx context.Context, claims *auth.C
 	if err := validateComputeFolderID(folderID); err != nil {
 		return err
 	}
-	unitIDs, err := s.repository.ListUnitIDsByFolderTree(ctx, projectID, folderID)
-	if err != nil {
-		return err
-	}
-	if err := s.repository.DeleteUnits(ctx, projectID, unitIDs); err != nil {
-		return err
-	}
-	if s.datapoints != nil {
-		for _, unitID := range unitIDs {
-			_, _ = s.datapoints.MarkInvalidBySource(ctx, projectID, "calc.output", unitID, &claims.UserID)
-		}
-	}
-	return s.repository.DeleteFolder(ctx, projectID, folderID)
+	return s.repository.DeleteFolderTreeWithOutputs(ctx, projectID, folderID, claims.UserID)
 }
 
 // UpdateComputeUnit 更新计算单元定义。
@@ -694,6 +880,17 @@ func (s *ComputeService) UpdateComputeUnit(ctx context.Context, claims *auth.Cla
 	if err := s.validateAndNormalizeTrigger(ctx, projectID, &normalized); err != nil {
 		return nil, err
 	}
+	normalized.Dependencies, err = s.detectComputeDependencies(ctx, projectID, normalized.Language, normalized.ScriptCode)
+	if err != nil {
+		return nil, err
+	}
+	refs, err := s.buildComputeDatapointRefs(ctx, projectID, normalized)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validateComputeDependencyCycles(ctx, projectID, current.ID, refs); err != nil {
+		return nil, err
+	}
 
 	record, err := s.repository.UpdateUnit(ctx, repository.UpdateComputeUnitParams{
 		ID:            current.ID,
@@ -707,15 +904,13 @@ func (s *ComputeService) UpdateComputeUnit(ctx context.Context, claims *auth.Cla
 		TriggerType:   normalized.TriggerType,
 		TriggerConfig: normalized.TriggerConfig,
 		InputBindings: normalized.InputBindings,
-		OutputBinding: normalized.OutputBinding,
 		Dependencies:  normalized.Dependencies,
 		TimeoutMS:     normalized.TimeoutMS,
 		IsEnabled:     normalized.IsEnabled,
+		DatapointRefs: refs,
+		Outputs:       normalized.Outputs,
 	})
 	if err != nil {
-		return nil, err
-	}
-	if err := s.syncComputeOutputDataPoints(ctx, *record, claims.UserID); err != nil {
 		return nil, err
 	}
 	unit := toComputeUnit(*record)
@@ -730,13 +925,7 @@ func (s *ComputeService) DeleteComputeUnit(ctx context.Context, claims *auth.Cla
 	if err := validateComputeUnitID(unitID); err != nil {
 		return err
 	}
-	if err := s.repository.DeleteUnit(ctx, projectID, unitID); err != nil {
-		return err
-	}
-	if s.datapoints != nil {
-		_, _ = s.datapoints.MarkInvalidBySource(ctx, projectID, "calc.output", unitID, &claims.UserID)
-	}
-	return nil
+	return s.repository.DeleteUnitWithOutputs(ctx, projectID, unitID, claims.UserID)
 }
 
 // ToggleComputeUnit 切换计算单元启用状态。
@@ -832,7 +1021,7 @@ func (s *ComputeService) CheckComputeSyntax(ctx context.Context, claims *auth.Cl
 		if errors.Is(err, enginecompute.ErrTimeout) {
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "语法检查超时")
 		}
-		return nil, err
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算沙箱语法检查失败："+err.Error(), err)
 	}
 	diagnostics := make([]ComputeSyntaxDiagnostic, 0, len(result.Diagnostics))
 	for _, item := range result.Diagnostics {
@@ -877,10 +1066,12 @@ func (s *ComputeService) executeComputeUnit(ctx context.Context, claims *auth.Cl
 
 	startedAt := time.Now().UTC()
 	request := enginecompute.ExecuteRequest{
-		Script:     unit.ScriptCode,
-		Input:      cloneMap(input.Input),
-		SDKContext: sdkContext,
-		Timeout:    time.Duration(unit.TimeoutMS) * time.Millisecond,
+		ProjectID:    projectID,
+		Script:       unit.ScriptCode,
+		Input:        cloneMap(input.Input),
+		SDKContext:   sdkContext,
+		Dependencies: runtimeDependenciesFromUnit(unit.Dependencies),
+		Timeout:      time.Duration(unit.TimeoutMS) * time.Millisecond,
 	}
 	executeResult, executeErr := runner.Run(ctx, request)
 	finishedAt := time.Now().UTC()
@@ -896,8 +1087,18 @@ func (s *ComputeService) executeComputeUnit(ctx context.Context, claims *auth.Cl
 			errorMessage = stringPointer(executeErr.Error())
 		}
 	}
-
-	saveErr := s.repository.SaveRun(ctx, repository.SaveComputeRunParams{
+	outputValues := []repository.ComputeRunOutputValueParam{}
+	outputWarnings := []string{}
+	var outputValidationErr error
+	if status == "success" && !dryRun {
+		outputValues, outputWarnings, err = computeRunOutputValues(*unit, executeResult.Output)
+		if err != nil {
+			outputValidationErr = err
+			status = "failed"
+			errorMessage = stringPointer(err.Error())
+		}
+	}
+	runParams := repository.SaveComputeRunParams{
 		ProjectID:     projectID,
 		ComputeUnitID: unit.ID,
 		TriggerMode:   triggerMode,
@@ -907,7 +1108,19 @@ func (s *ComputeService) executeComputeUnit(ctx context.Context, claims *auth.Cl
 		ErrorMessage:  errorMessage,
 		StartedAt:     startedAt,
 		FinishedAt:    finishedAt,
-	})
+		OutputValues:  outputValues,
+	}
+	saveErr := s.repository.SaveRun(ctx, runParams)
+	var outputWriteErr error
+	if saveErr != nil && len(outputValues) > 0 {
+		outputWriteErr = saveErr
+		status = "failed"
+		errorMessage = stringPointer("写入计算输出失败：" + saveErr.Error())
+		runParams.Status = status
+		runParams.ErrorMessage = errorMessage
+		runParams.OutputValues = nil
+		saveErr = s.repository.SaveRun(ctx, runParams)
+	}
 	if saveErr != nil {
 		return nil, saveErr
 	}
@@ -916,10 +1129,13 @@ func (s *ComputeService) executeComputeUnit(ctx context.Context, claims *auth.Cl
 		if errors.Is(executeErr, enginecompute.ErrTimeout) {
 			return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算执行超时", executeErr)
 		}
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算脚本执行失败", executeErr)
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算脚本执行失败："+executeErr.Error(), executeErr)
 	}
-	if status == "success" && !dryRun {
-		_ = s.writeComputeOutputValues(ctx, *unit, executeResult.Output, claims.UserID)
+	if outputValidationErr != nil {
+		return nil, outputValidationErr
+	}
+	if outputWriteErr != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "计算脚本已完成，但输出写入失败", outputWriteErr)
 	}
 
 	result := &ComputeRunResult{
@@ -929,6 +1145,7 @@ func (s *ComputeService) executeComputeUnit(ctx context.Context, claims *auth.Cl
 		Output:      executeResult.Output,
 		SideEffects: cloneJSONArray(executeResult.SideEffects),
 		Logs:        computeRunLogs(executeResult),
+		Warnings:    outputWarnings,
 		StartedAt:   startedAt,
 		FinishedAt:  finishedAt,
 	}
@@ -1080,7 +1297,7 @@ func toComputeUnit(record repository.ComputeUnitRecord) ComputeUnit {
 		TriggerType:   record.TriggerType,
 		TriggerConfig: cloneMap(record.TriggerConfig),
 		InputBindings: cloneMap(record.InputBindings),
-		OutputBinding: cloneMap(record.OutputBinding),
+		Outputs:       toComputeOutputs(record.Outputs),
 		Dependencies:  cloneJSONArray(record.Dependencies),
 		TimeoutMS:     record.TimeoutMS,
 		IsEnabled:     record.IsEnabled,
@@ -1090,6 +1307,14 @@ func toComputeUnit(record repository.ComputeUnitRecord) ComputeUnit {
 		CreatedAt:     record.CreatedAt,
 		UpdatedAt:     record.UpdatedAt,
 	}
+}
+
+func toComputeOutputs(records []repository.ComputeOutputRecord) []ComputeOutput {
+	result := make([]ComputeOutput, 0, len(records))
+	for _, item := range records {
+		result = append(result, ComputeOutput{ID: item.ID, DatapointID: item.DatapointID, Key: item.OutputKey, Name: item.Name, Path: item.Path, DataType: item.DataType, Unit: cloneOptionalString(item.Unit), PrecisionNum: cloneOptionalInt(item.PrecisionNum), NullPolicy: item.NullPolicy, Description: cloneOptionalString(item.Description), SortOrder: item.SortOrder})
+	}
+	return result
 }
 
 func computeLanguageForFrontend(language string) string {
@@ -1160,7 +1385,7 @@ type normalizedComputeUnitInput struct {
 	TriggerType   string
 	TriggerConfig map[string]any
 	InputBindings map[string]any
-	OutputBinding map[string]any
+	Outputs       []repository.ComputeOutputParam
 	Dependencies  []any
 	TimeoutMS     int
 	IsEnabled     bool
@@ -1191,6 +1416,10 @@ func normalizeCreateComputeInput(input CreateComputeUnitInput) (normalizedComput
 	if err != nil {
 		return normalizedComputeUnitInput{}, err
 	}
+	outputs, err := normalizeComputeOutputInputs(input.Outputs, name)
+	if err != nil {
+		return normalizedComputeUnitInput{}, err
+	}
 	return normalizedComputeUnitInput{
 		Name:          name,
 		Description:   normalizeOptionalText(input.Description),
@@ -1200,7 +1429,7 @@ func normalizeCreateComputeInput(input CreateComputeUnitInput) (normalizedComput
 		TriggerType:   triggerType,
 		TriggerConfig: cloneMap(input.TriggerConfig),
 		InputBindings: cloneMap(input.InputBindings),
-		OutputBinding: normalizeComputeOutputBinding(input.OutputBinding),
+		Outputs:       outputs,
 		Dependencies:  cloneJSONArray(input.Dependencies),
 		TimeoutMS:     timeoutMS,
 		IsEnabled:     true,
@@ -1209,7 +1438,7 @@ func normalizeCreateComputeInput(input CreateComputeUnitInput) (normalizedComput
 
 func mergeComputeUpdateInput(current repository.ComputeUnitRecord, input UpdateComputeUnitInput) (normalizedComputeUnitInput, error) {
 	if input.Name == nil && !input.HasDescription && input.Language == nil && input.ScriptCode == nil && input.TriggerType == nil &&
-		!input.HasFolderID && !input.HasTriggerConfig && !input.HasInputBindings && !input.HasOutputBinding && !input.HasDependencies && input.TimeoutMS == nil && input.IsEnabled == nil {
+		!input.HasFolderID && !input.HasTriggerConfig && !input.HasInputBindings && !input.HasOutputs && !input.HasDependencies && input.TimeoutMS == nil && input.IsEnabled == nil {
 		return normalizedComputeUnitInput{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "至少需要提供一个待更新字段")
 	}
 
@@ -1222,7 +1451,7 @@ func mergeComputeUpdateInput(current repository.ComputeUnitRecord, input UpdateC
 		TriggerType:   current.TriggerType,
 		TriggerConfig: cloneMap(current.TriggerConfig),
 		InputBindings: cloneMap(current.InputBindings),
-		OutputBinding: cloneMap(current.OutputBinding),
+		Outputs:       computeOutputParamsFromRecords(current.Outputs),
 		Dependencies:  cloneJSONArray(current.Dependencies),
 		TimeoutMS:     current.TimeoutMS,
 		IsEnabled:     current.IsEnabled,
@@ -1267,8 +1496,11 @@ func mergeComputeUpdateInput(current repository.ComputeUnitRecord, input UpdateC
 	if input.HasInputBindings {
 		result.InputBindings = cloneMap(input.InputBindings)
 	}
-	if input.HasOutputBinding {
-		result.OutputBinding = normalizeComputeOutputBinding(input.OutputBinding)
+	if input.HasOutputs {
+		result.Outputs, err = normalizeComputeOutputInputs(input.Outputs, result.Name)
+		if err != nil {
+			return normalizedComputeUnitInput{}, err
+		}
 	}
 	if input.HasDependencies {
 		result.Dependencies = cloneJSONArray(input.Dependencies)
@@ -1282,7 +1514,6 @@ func mergeComputeUpdateInput(current repository.ComputeUnitRecord, input UpdateC
 	if input.IsEnabled != nil {
 		result.IsEnabled = *input.IsEnabled
 	}
-	result.OutputBinding = normalizeComputeOutputBinding(result.OutputBinding)
 	return result, nil
 }
 
@@ -1365,7 +1596,42 @@ func (s *ComputeService) validateAndNormalizeTrigger(ctx context.Context, projec
 		if point == nil || !strings.EqualFold(point.Status, "active") {
 			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "变化触发数据点必须是有效数据点")
 		}
-		input.TriggerConfig = map[string]any{"datapointId": point.ID, "path": point.Path}
+		if !isComputeTriggerScalarType(point.DataType) {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "变化触发仅支持 bool、string 和数值数据点")
+		}
+		mode := strings.TrimSpace(strings.ToLower(toString(config["mode"])))
+		if mode == "" {
+			mode = "any"
+		}
+		if mode != "any" && mode != "value_change" && mode != "increase" && mode != "decrease" && mode != "rising_edge" && mode != "falling_edge" {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点变化 mode 不受支持")
+		}
+		if !isComputeTriggerModeCompatible(mode, point.DataType) {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "变化类型与数据点类型不兼容")
+		}
+		debounceMS, ok := nonNegativeInteger(config["debounceMs"])
+		if !ok || debounceMS > 3600000 {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点变化 debounceMs 必须为 0-3600000 的整数")
+		}
+		normalized := map[string]any{"datapointId": point.ID, "path": point.Path, "dataType": point.DataType, "mode": mode, "debounceMs": debounceMS}
+		if raw := strings.TrimSpace(toString(config["deadband"])); raw != "" {
+			if !isNumericDataPointType(point.DataType) || (mode != "value_change" && mode != "increase" && mode != "decrease") {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "变化死区仅适用于数值变化、增大或减小")
+			}
+			deadband, valid := optionalNonNegativeNumber(config["deadband"])
+			if !valid {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点变化 deadband 必须为非负数")
+			}
+			normalized["deadband"] = deadband
+		}
+		input.TriggerConfig = normalized
+		return nil
+	case "condition":
+		normalized, err := s.normalizeConditionTrigger(ctx, projectID, config, input.InputBindings)
+		if err != nil {
+			return err
+		}
+		input.TriggerConfig = normalized
 		return nil
 	case "schedule":
 		kind := strings.TrimSpace(strings.ToLower(toString(config["kind"])))
@@ -1379,7 +1645,11 @@ func (s *ComputeService) validateAndNormalizeTrigger(ctx context.Context, projec
 			if unit != "seconds" && unit != "minutes" && unit != "hours" {
 				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "周期执行 unit 仅支持 seconds/minutes/hours")
 			}
-			input.TriggerConfig = map[string]any{"kind": kind, "every": every, "unit": unit}
+			normalized := map[string]any{"kind": kind, "every": every, "unit": unit}
+			if err := normalizeScheduleWindow(config, normalized); err != nil {
+				return err
+			}
+			input.TriggerConfig = normalized
 			return nil
 		case "daily", "weekly":
 			timeOfDay := strings.TrimSpace(toString(config["time"]))
@@ -1405,13 +1675,266 @@ func (s *ComputeService) validateAndNormalizeTrigger(ctx context.Context, projec
 				normalized["weekdays"] = weekdays
 			}
 			input.TriggerConfig = normalized
+			if err := normalizeScheduleWindow(config, input.TriggerConfig); err != nil {
+				return err
+			}
+			return nil
+		case "monthly", "yearly":
+			timeOfDay := strings.TrimSpace(toString(config["time"]))
+			if !computeScheduleTimePattern.MatchString(timeOfDay) {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "定时执行 time 必须为 HH:mm:ss")
+			}
+			timezone := strings.TrimSpace(toString(config["timezone"]))
+			if _, err := time.LoadLocation(timezone); timezone == "" || err != nil {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "timezone 必须为有效 IANA 时区")
+			}
+			normalized := map[string]any{"kind": kind, "time": timeOfDay, "timezone": timezone}
+			if kind == "yearly" {
+				month, ok := positiveInteger(config["month"])
+				if !ok || month > 12 {
+					return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "每年定时 month 必须为 1-12")
+				}
+				normalized["month"] = month
+			}
+			dayRule := strings.TrimSpace(strings.ToLower(toString(config["dayRule"])))
+			if dayRule == "" {
+				dayRule = "day"
+			}
+			normalized["dayRule"] = dayRule
+			if dayRule == "day" {
+				day, ok := positiveInteger(config["dayOfMonth"])
+				if !ok || day > 31 {
+					return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "dayOfMonth 必须为 1-31")
+				}
+				normalized["dayOfMonth"] = day
+			} else if dayRule == "weekday" {
+				week, ok := integerValue(config["weekOfMonth"])
+				if !ok || (week != -1 && (week < 1 || week > 5)) {
+					return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "weekOfMonth 必须为 1-5 或 -1")
+				}
+				weekday, ok := positiveInteger(config["weekday"])
+				if !ok || weekday > 7 {
+					return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "weekday 必须为 ISO 1-7")
+				}
+				normalized["weekOfMonth"], normalized["weekday"] = week, weekday
+			} else {
+				return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "dayRule 仅支持 day/weekday")
+			}
+			if err := normalizeScheduleWindow(config, normalized); err != nil {
+				return err
+			}
+			input.TriggerConfig = normalized
 			return nil
 		default:
-			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "schedule.kind 仅支持 interval/daily/weekly")
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "schedule.kind 仅支持 interval/daily/weekly/monthly/yearly")
 		}
 	default:
 		return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "triggerType 不受支持")
 	}
+}
+
+// normalizeConditionTrigger 把开发态表达式收敛为节点可直接消费的条件契约。
+// 条件只引用计算单元已声明的标量数据点变量，避免节点执行任意取数或监听复杂对象。
+func (s *ComputeService) normalizeConditionTrigger(ctx context.Context, projectID string, config, inputBindings map[string]any) (map[string]any, error) {
+	expression := strings.TrimSpace(toString(config["expression"]))
+	if expression == "" || len([]rune(expression)) > 1000 {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "条件表达式长度必须为 1-1000 个字符")
+	}
+	phases, ok := normalizeConditionPhases(config["phases"])
+	if !ok || len(phases) == 0 {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "条件触发 phases 至少选择 entered/active/exited 中的一项")
+	}
+	debounceMS, ok := nonNegativeInteger(config["debounceMs"])
+	if !ok || debounceMS > 3600000 {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "条件触发 debounceMs 必须为 0-3600000 的整数")
+	}
+	if s.datapoints == nil {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "数据点仓储未初始化")
+	}
+	rawVariables, ok := inputBindings["datapointVariables"].([]any)
+	if !ok || len(rawVariables) == 0 {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "条件触发至少需要一个数据点变量")
+	}
+	variables := make([]any, 0, len(rawVariables))
+	for _, raw := range rawVariables {
+		mapped, ok := raw.(map[string]any)
+		if !ok {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "条件触发数据点变量格式无效")
+		}
+		alias := strings.TrimSpace(firstString(mapped, "alias", "name"))
+		if !isSafeComputeVariableAlias(alias) || !conditionExpressionUsesAlias(expression, alias) {
+			continue
+		}
+		id := strings.TrimSpace(firstString(mapped, "datapointId"))
+		if _, err := uuid.Parse(id); err != nil {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "条件触发变量必须使用有效 datapointId")
+		}
+		point, err := s.datapoints.GetByProjectAndID(ctx, projectID, id)
+		if err != nil {
+			return nil, err
+		}
+		if point == nil || !strings.EqualFold(point.Status, "active") {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "条件触发只能引用有效数据点")
+		}
+		if !isComputeTriggerScalarType(point.DataType) {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "条件表达式仅支持 bool、string 和数值数据点")
+		}
+		variables = append(variables, map[string]any{
+			"alias": alias, "datapointId": point.ID, "path": point.Path, "dataType": point.DataType,
+		})
+	}
+	if len(variables) == 0 {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "条件表达式必须引用至少一个标量数据点变量")
+	}
+	return map[string]any{
+		"expression": expression,
+		"phases":     phases,
+		"debounceMs": debounceMS,
+		"variables":  variables,
+	}, nil
+}
+
+func normalizeConditionPhases(value any) ([]string, bool) {
+	values := make([]string, 0, 3)
+	switch typed := value.(type) {
+	case []any:
+		for _, item := range typed {
+			values = append(values, strings.ToLower(strings.TrimSpace(toString(item))))
+		}
+	case []string:
+		for _, item := range typed {
+			values = append(values, strings.ToLower(strings.TrimSpace(item)))
+		}
+	default:
+		return nil, false
+	}
+	selected := make(map[string]struct{}, len(values))
+	for _, phase := range values {
+		if phase != "entered" && phase != "active" && phase != "exited" {
+			return nil, false
+		}
+		selected[phase] = struct{}{}
+	}
+	normalized := make([]string, 0, len(selected))
+	for _, phase := range []string{"entered", "active", "exited"} {
+		if _, ok := selected[phase]; ok {
+			normalized = append(normalized, phase)
+		}
+	}
+	return normalized, true
+}
+
+func conditionExpressionUsesAlias(expression, alias string) bool {
+	if alias == "" {
+		return false
+	}
+	pattern := regexp.MustCompile(`\b` + regexp.QuoteMeta(alias) + `\b`)
+	return pattern.MatchString(expression)
+}
+
+func isComputeTriggerScalarType(dataType string) bool {
+	dataType = strings.ToLower(strings.TrimSpace(dataType))
+	return dataType == "bool" || dataType == "string" || isNumericDataPointType(dataType)
+}
+
+func isNumericDataPointType(dataType string) bool {
+	switch strings.ToLower(strings.TrimSpace(dataType)) {
+	case "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float32", "float64", "decimal":
+		return true
+	default:
+		return false
+	}
+}
+
+func isComputeTriggerModeCompatible(mode, dataType string) bool {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "any", "value_change":
+		return isComputeTriggerScalarType(dataType)
+	case "increase", "decrease":
+		return isNumericDataPointType(dataType)
+	case "rising_edge", "falling_edge":
+		return strings.EqualFold(strings.TrimSpace(dataType), "bool")
+	default:
+		return false
+	}
+}
+
+func normalizeScheduleWindow(config, normalized map[string]any) error {
+	startText := strings.TrimSpace(toString(config["startAt"]))
+	endText := strings.TrimSpace(toString(config["endAt"]))
+	var start time.Time
+	if startText != "" {
+		parsed, err := time.Parse(time.RFC3339, startText)
+		if err != nil {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "startAt 必须为 RFC3339 时间")
+		}
+		start = parsed
+		normalized["startAt"] = parsed.UTC().Format(time.RFC3339)
+	}
+	if endText != "" {
+		parsed, err := time.Parse(time.RFC3339, endText)
+		if err != nil {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "endAt 必须为 RFC3339 时间")
+		}
+		if !start.IsZero() && !parsed.After(start) {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "endAt 必须晚于 startAt")
+		}
+		normalized["endAt"] = parsed.UTC().Format(time.RFC3339)
+	}
+	if raw := strings.TrimSpace(toString(config["maxRuns"])); raw != "" {
+		maxRuns, ok := positiveInteger(config["maxRuns"])
+		if !ok || maxRuns > 1000000 {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "maxRuns 必须为 1-1000000 的整数")
+		}
+		normalized["maxRuns"] = maxRuns
+	}
+	return nil
+}
+
+func integerValue(value any) (int, bool) {
+	switch typed := value.(type) {
+	case int:
+		return typed, true
+	case int64:
+		return int(typed), typed >= int64(-int(^uint(0)>>1)-1) && typed <= int64(^uint(0)>>1)
+	case float64:
+		return int(typed), typed == float64(int(typed))
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(typed))
+		return parsed, err == nil
+	default:
+		return 0, false
+	}
+}
+
+func nonNegativeInteger(value any) (int, bool) {
+	if value == nil || strings.TrimSpace(toString(value)) == "" {
+		return 0, true
+	}
+	result, ok := integerValue(value)
+	return result, ok && result >= 0
+}
+
+func optionalNonNegativeNumber(value any) (float64, bool) {
+	if value == nil || strings.TrimSpace(toString(value)) == "" {
+		return 0, false
+	}
+	var number float64
+	switch typed := value.(type) {
+	case float64:
+		number = typed
+	case int:
+		number = float64(typed)
+	case string:
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(typed), 64)
+		if err != nil {
+			return 0, false
+		}
+		number = parsed
+	default:
+		return 0, false
+	}
+	return number, number >= 0 && !math.IsInf(number, 0) && !math.IsNaN(number)
 }
 
 func positiveInteger(value any) (int, bool) {
@@ -1558,64 +2081,163 @@ func isDescendantComputeFolder(records []repository.ComputeFolderRecord, folderI
 	return false
 }
 
-type computeOutputBinding struct {
-	Name        string
-	Path        string
-	DataType    string
-	Unit        *string
-	Description *string
+func (s *ComputeService) buildComputeDatapointRefs(ctx context.Context, projectID string, input normalizedComputeUnitInput) ([]repository.ComputeDatapointRefParam, error) {
+	refs := make([]repository.ComputeDatapointRefParam, 0)
+	seenPoints := map[string]struct{}{}
+	seenAliases := map[string]struct{}{}
+	if raw, ok := input.InputBindings["datapointVariables"].([]any); ok {
+		for index, item := range raw {
+			mapped, ok := item.(map[string]any)
+			if !ok {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点变量格式无效")
+			}
+			id := strings.TrimSpace(firstString(mapped, "datapointId"))
+			alias := strings.TrimSpace(firstString(mapped, "alias", "name"))
+			if _, err := uuid.Parse(id); err != nil {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点变量必须使用有效 datapointId")
+			}
+			if !isSafeComputeVariableAlias(alias) {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "数据点变量别名格式无效")
+			}
+			if _, exists := seenPoints[id]; exists {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "同一计算单元不能重复引用数据点")
+			}
+			if _, exists := seenAliases[alias]; exists {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算数据点变量别名不能重复")
+			}
+			point, err := s.datapoints.GetByProjectAndID(ctx, projectID, id)
+			if err != nil {
+				return nil, err
+			}
+			if point.Status == "invalid" {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算输入数据点已失效")
+			}
+			mapped["path"] = point.Path
+			mapped["dataType"] = point.DataType
+			seenPoints[id] = struct{}{}
+			seenAliases[alias] = struct{}{}
+			aliasCopy := alias
+			refs = append(refs, repository.ComputeDatapointRefParam{DatapointID: id, Role: "input", Alias: &aliasCopy, SortOrder: index})
+		}
+	}
+	if input.TriggerType == "datapoint_change" {
+		id := strings.TrimSpace(firstString(input.TriggerConfig, "datapointId"))
+		refs = append(refs, repository.ComputeDatapointRefParam{DatapointID: id, Role: "trigger", SortOrder: 0})
+	}
+	return refs, nil
 }
 
-func (s *ComputeService) syncComputeOutputDataPoints(ctx context.Context, unit repository.ComputeUnitRecord, userID string) error {
-	if s == nil || s.datapoints == nil {
-		return nil
-	}
-	existingOutputs, err := s.datapoints.ListByProjectAndSource(ctx, unit.ProjectID, "calc.output", unit.ID)
-	if err != nil {
-		return err
-	}
-	existingByOutputName := make(map[string]repository.DataPointRecord, len(existingOutputs))
-	for _, existing := range existingOutputs {
-		outputName := strings.TrimSpace(firstString(existing.SourceConfig, "outputName"))
-		if outputName == "" {
-			outputName = datapointOutputNameFromPath(existing.Path)
+func (s *ComputeService) validateComputeDependencyCycles(ctx context.Context, projectID, unitID string, refs []repository.ComputeDatapointRefParam) error {
+	for _, ref := range refs {
+		if ref.Role != "input" {
+			continue
 		}
-		if outputName != "" {
-			existingByOutputName[outputName] = existing
-		}
-	}
-	_, _ = s.datapoints.MarkInvalidBySource(ctx, unit.ProjectID, "calc.output", unit.ID, &userID)
-	outputs := extractComputeOutputBindings(unit)
-	for _, output := range outputs {
-		path := output.Path
-		existingOutput, hasExistingOutput := existingByOutputName[output.Name]
-		if existing, err := s.datapoints.GetByProjectAndPath(ctx, unit.ProjectID, path); err == nil && existing != nil &&
-			existing.ID != existingOutput.ID &&
-			(existing.SourceID == nil || *existing.SourceID != unit.ID || existing.SourceType != "calc.output") {
-			path = path + "_" + unit.ID[:8]
-		}
-		params := repository.CreateDataPointParams{
-			ProjectID:    unit.ProjectID,
-			UserID:       &userID,
-			Path:         path,
-			Name:         unit.Name,
-			Description:  cloneOptionalString(output.Description),
-			SourceType:   "calc.output",
-			SourceID:     &unit.ID,
-			SourceConfig: map[string]any{"computeUnitId": unit.ID, "outputName": output.Name},
-			DataType:     output.DataType,
-			Unit:         cloneOptionalString(output.Unit),
-			Tags:         []any{},
-			RefreshMode:  "manual",
-			Status:       "active",
-		}
-		if hasExistingOutput {
-			_, err = s.datapoints.UpdateGeneratedOutput(ctx, existingOutput.ID, params)
-		} else {
-			_, err = s.datapoints.UpsertByPath(ctx, params)
-		}
+		point, err := s.datapoints.GetByProjectAndID(ctx, projectID, ref.DatapointID)
 		if err != nil {
 			return err
+		}
+		if point.SourceType != "calc.output" || point.SourceID == nil {
+			continue
+		}
+		upstream := strings.TrimSpace(*point.SourceID)
+		if upstream == unitID {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算单元不能引用自己的输出")
+		}
+		cycles, err := s.repository.HasComputeDependencyPath(ctx, projectID, upstream, unitID)
+		if err != nil {
+			return err
+		}
+		if cycles {
+			return apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算输入会形成间接依赖环")
+		}
+	}
+	return nil
+}
+
+func computeOutputParamsFromRecords(records []repository.ComputeOutputRecord) []repository.ComputeOutputParam {
+	result := make([]repository.ComputeOutputParam, 0, len(records))
+	for _, output := range records {
+		id := output.ID
+		result = append(result, repository.ComputeOutputParam{
+			ID: &id, OutputKey: output.OutputKey, Name: output.Name, Path: output.Path,
+			DataType: output.DataType, Unit: cloneOptionalString(output.Unit),
+			PrecisionNum: cloneOptionalInt(output.PrecisionNum), NullPolicy: output.NullPolicy,
+			Description: cloneOptionalString(output.Description),
+		})
+	}
+	return result
+}
+
+func computeRunOutputValues(unit repository.ComputeUnitRecord, output any) ([]repository.ComputeRunOutputValueParam, []string, error) {
+	outputs := unit.Outputs
+	if len(outputs) == 0 {
+		return []repository.ComputeRunOutputValueParam{}, []string{}, nil
+	}
+	outputMap, isMap := output.(map[string]any)
+	if len(outputs) > 1 && !isMap {
+		return nil, nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "多输出计算必须返回以输出键为字段的对象")
+	}
+	result := make([]repository.ComputeRunOutputValueParam, 0, len(outputs))
+	warnings := make([]string, 0)
+	for _, binding := range outputs {
+		value := output
+		found := true
+		if isMap {
+			value, found = outputMap[binding.OutputKey]
+		}
+		if !found || value == nil {
+			if binding.NullPolicy == "skip" {
+				warnings = append(warnings, "输出 "+binding.OutputKey+" 缺失或为空，已按 skip 保留旧值")
+				continue
+			}
+			return nil, nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "输出 "+binding.OutputKey+" 缺失或为空")
+		}
+		if err := validateComputeOutputValue(binding.DataType, value); err != nil {
+			return nil, nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "输出 "+binding.OutputKey+" 类型不匹配")
+		}
+		result = append(result, repository.ComputeRunOutputValueParam{Name: binding.OutputKey, Value: stringifyDataPointValue(value)})
+	}
+	return result, warnings, nil
+}
+
+func validateComputeOutputValue(dataType string, value any) error {
+	dataType, ok := canonicalDataPointType(dataType)
+	if !ok {
+		return errors.New("unsupported output type")
+	}
+	switch dataType {
+	case "bool":
+		if _, ok := value.(bool); !ok {
+			return errors.New("expected bool")
+		}
+	case "string", "bytes", "datetime":
+		if _, ok := value.(string); !ok {
+			return errors.New("expected string")
+		}
+	case "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64":
+		number, ok := runtimeNumber(value)
+		if !ok || math.Trunc(number) != number || (strings.HasPrefix(dataType, "uint") && number < 0) {
+			return errors.New("expected integer")
+		}
+		bounds := map[string][2]float64{"int8": {-128, 127}, "uint8": {0, 255}, "int16": {-32768, 32767}, "uint16": {0, 65535}, "int32": {-2147483648, 2147483647}, "uint32": {0, 4294967295}, "int64": {-9007199254740991, 9007199254740991}, "uint64": {0, 9007199254740991}}
+		if bound := bounds[dataType]; number < bound[0] || number > bound[1] {
+			return errors.New("integer out of range")
+		}
+	case "float32", "float64", "decimal":
+		number, ok := runtimeNumber(value)
+		if !ok {
+			return errors.New("expected number")
+		}
+		if dataType == "float32" && math.Abs(number) > math.MaxFloat32 {
+			return errors.New("float32 out of range")
+		}
+	case "object":
+		if _, ok := value.(map[string]any); !ok {
+			return errors.New("expected object")
+		}
+	case "array":
+		if _, ok := value.([]any); !ok {
+			return errors.New("expected array")
 		}
 	}
 	return nil
@@ -1633,133 +2255,84 @@ func datapointOutputNameFromPath(path string) string {
 	return strings.TrimSpace(path[index+1:])
 }
 
-func (s *ComputeService) writeComputeOutputValues(ctx context.Context, unit repository.ComputeUnitRecord, output any, userID string) error {
-	if s == nil || s.datapoints == nil {
-		return nil
+func normalizeComputeOutputInputs(inputs []ComputeOutputInput, unitName string) ([]repository.ComputeOutputParam, error) {
+	if len(inputs) == 0 {
+		inputs = []ComputeOutputInput{{Key: "result", Name: "result", DataType: "object", NullPolicy: "error"}}
 	}
-	outputs := extractComputeOutputBindings(unit)
-	if len(outputs) == 0 {
-		return nil
-	}
-	outputMap, _ := output.(map[string]any)
-	for _, binding := range outputs {
-		value := output
-		if outputMap != nil {
-			if namedValue, ok := outputMap[binding.Name]; ok {
-				value = namedValue
-			}
+	items := make([]repository.ComputeOutputParam, 0, len(inputs))
+	seen := map[string]struct{}{}
+	for _, input := range inputs {
+		key := strings.TrimSpace(input.Key)
+		if key == "" {
+			key = strings.TrimSpace(input.Name)
 		}
-		defaultValue := stringifyDataPointValue(value)
-		path := binding.Path
-		if existing, err := s.datapoints.GetByProjectAndPath(ctx, unit.ProjectID, path); err == nil && existing != nil {
-			_, _ = s.datapoints.UpsertByPath(ctx, repository.CreateDataPointParams{
-				ProjectID:    unit.ProjectID,
-				UserID:       &userID,
-				Path:         existing.Path,
-				Name:         existing.Name,
-				Description:  cloneOptionalString(existing.Description),
-				SourceType:   existing.SourceType,
-				SourceID:     cloneOptionalString(existing.SourceID),
-				SourceConfig: cloneMap(existing.SourceConfig),
-				DataType:     existing.DataType,
-				Unit:         cloneOptionalString(existing.Unit),
-				PrecisionNum: cloneOptionalInt(existing.PrecisionNum),
-				DefaultValue: &defaultValue,
-				MinValue:     cloneOptionalFloat64(existing.MinValue),
-				MaxValue:     cloneOptionalFloat64(existing.MaxValue),
-				AlarmLow:     cloneOptionalFloat64(existing.AlarmLow),
-				AlarmHigh:    cloneOptionalFloat64(existing.AlarmHigh),
-				Tags:         cloneJSONArray(existing.Tags),
-				RefreshMode:  existing.RefreshMode,
-				Status:       existing.Status,
-			})
+		if !isSafeComputeVariableAlias(key) {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算输出 key 格式无效")
 		}
-	}
-	return nil
-}
-
-func extractComputeOutputBindings(unit repository.ComputeUnitRecord) []computeOutputBinding {
-	outputs := make([]computeOutputBinding, 0)
-	rawOutputs, ok := unit.OutputBinding["outputs"]
-	if ok {
-		if list, ok := rawOutputs.([]any); ok {
-			for _, item := range list {
-				if mapped, ok := item.(map[string]any); ok {
-					if binding := outputBindingFromMap(unit, "", mapped); binding.Name != "" {
-						outputs = append(outputs, binding)
-					}
+		if _, exists := seen[key]; exists {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算输出 key 不能重复")
+		}
+		seen[key] = struct{}{}
+		dataType, ok := canonicalDataPointType(input.DataType)
+		if !ok {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算输出数据类型不受支持")
+		}
+		nullPolicy := strings.TrimSpace(input.NullPolicy)
+		if nullPolicy == "" {
+			nullPolicy = "error"
+		}
+		if nullPolicy != "error" && nullPolicy != "skip" {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算输出空值策略仅支持 error/skip")
+		}
+		name := strings.TrimSpace(input.Name)
+		if name == "" {
+			name = key
+		}
+		path := normalizeComputeOutputPath(unitName, key, input.Path)
+		var id *string
+		if input.ID != nil {
+			normalizedID := strings.TrimSpace(*input.ID)
+			if normalizedID != "" {
+				if _, err := uuid.Parse(normalizedID); err != nil {
+					return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算输出 id 格式无效")
 				}
-			}
-			return outputs
-		}
-	}
-
-	for key, raw := range unit.OutputBinding {
-		key = strings.TrimSpace(key)
-		if key == "" || key == "mode" || key == "schema" || key == "description" {
-			continue
-		}
-		switch typed := raw.(type) {
-		case string:
-			outputs = append(outputs, computeOutputBinding{
-				Name:     key,
-				Path:     normalizeComputeOutputPath(unit, key, typed),
-				DataType: "object",
-			})
-		case map[string]any:
-			if binding := outputBindingFromMap(unit, key, typed); binding.Name != "" {
-				outputs = append(outputs, binding)
+				id = &normalizedID
 			}
 		}
+		var unit *string
+		if input.Unit != nil {
+			value := strings.TrimSpace(*input.Unit)
+			if value != "" {
+				unit = &value
+			}
+		}
+		if input.PrecisionNum != nil {
+			if *input.PrecisionNum < 0 {
+				return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "计算输出精度不能为负数")
+			}
+		}
+		var description *string
+		if input.Description != nil {
+			value := strings.TrimSpace(*input.Description)
+			if value != "" {
+				description = &value
+			}
+		}
+		items = append(items, repository.ComputeOutputParam{
+			ID: id, OutputKey: key, Name: name, Path: path, DataType: dataType,
+			Unit: unit, PrecisionNum: cloneOptionalInt(input.PrecisionNum), NullPolicy: nullPolicy,
+			Description: description,
+		})
 	}
-	return outputs
+	return items, nil
 }
 
-func normalizeComputeOutputBinding(input map[string]any) map[string]any {
-	result := cloneMap(input)
-	if len(extractComputeOutputBindings(repository.ComputeUnitRecord{
-		Name:          "default",
-		OutputBinding: result,
-	})) > 0 {
-		return result
-	}
-	result["outputs"] = []any{map[string]any{
-		"name":     "result",
-		"dataType": "object",
-	}}
-	return result
-}
-
-func outputBindingFromMap(unit repository.ComputeUnitRecord, fallbackName string, input map[string]any) computeOutputBinding {
-	name := strings.TrimSpace(firstString(input, "name", "key", "outputName"))
-	if name == "" {
-		name = strings.TrimSpace(fallbackName)
-	}
-	if name == "" {
-		return computeOutputBinding{}
-	}
-	path := normalizeComputeOutputPath(unit, name, firstString(input, "path"))
-	dataType := strings.TrimSpace(firstString(input, "dataType", "type"))
-	if dataType == "" {
-		dataType = "object"
-	}
-	var unitText *string
-	if rawUnit := strings.TrimSpace(firstString(input, "unit")); rawUnit != "" {
-		unitText = &rawUnit
-	}
-	var description *string
-	if rawDescription := strings.TrimSpace(firstString(input, "description")); rawDescription != "" {
-		description = &rawDescription
-	}
-	return computeOutputBinding{Name: name, Path: path, DataType: dataType, Unit: unitText, Description: description}
-}
-
-func normalizeComputeOutputPath(unit repository.ComputeUnitRecord, outputName, configuredPath string) string {
+func normalizeComputeOutputPath(unitName, outputName, configuredPath string) string {
 	path := strings.TrimSpace(configuredPath)
 	if path != "" {
 		return path
 	}
-	return "calc." + normalizeDatapointSegment(unit.Name) + "." + normalizeDatapointSegment(outputName)
+	return "calc." + normalizeDatapointSegment(unitName) + "." + normalizeDatapointSegment(outputName)
 }
 
 func firstString(input map[string]any, keys ...string) string {

@@ -12,7 +12,7 @@ describe('compute sandbox capabilities', () => {
       ],
       sdk: ['ctx.datapoint.get', 'ctx.datapoint.meta', 'ctx.sql.query'],
       dependencies: [],
-      triggerTypes: ['manual', 'schedule', 'datapoint_change'],
+      triggerTypes: ['manual', 'schedule', 'datapoint_change', 'condition'],
       limits: {
         maxExecutionTimeMs: 120000,
         maxInputBytes: 1048576,
@@ -23,6 +23,7 @@ describe('compute sandbox capabilities', () => {
 
     expect(result.sdk).toEqual(['ctx.datapoint.get', 'ctx.datapoint.meta', 'ctx.sql.query'])
     expect(result.dependencies).toEqual([])
+    expect(result.triggerTypes).toContain('condition')
     expect(result.sdk).not.toContain('ctx.http.post')
     expect(result.sdk).not.toContain('ctx.mqtt.publish')
   })

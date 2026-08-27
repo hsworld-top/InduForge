@@ -51,7 +51,7 @@
             v-model="activeDraft.name"
             class="compute-editor__name-input"
             aria-label="计算单元名称"
-            @input="markDirty"
+            @input="syncAllOutputPaths"
           />
           <div class="compute-editor__subline">
             <span class="compute-editor__lang-pill">{{ langText(activeDraft.lang) }}</span>
@@ -108,7 +108,13 @@
       </div>
 
       <div v-if="!sandboxAvailable" class="compute-editor__sandbox-warning">
-        独立计算沙箱当前不可用，语法检查和开发态试运行已禁用；不会回退到 data_service 宿主执行。
+        <span v-if="capabilitiesLoading">正在检测独立计算沙箱…</span>
+        <span v-else>
+          独立计算沙箱当前不可用：{{ sandboxUnavailableReason }}。语法检查和开发态试运行已禁用。
+        </span>
+        <button type="button" :disabled="capabilitiesLoading" @click="$emit('retry-capabilities')">
+          {{ capabilitiesLoading ? '检测中' : '重新检测' }}
+        </button>
       </div>
 
       <main class="compute-editor__main">
@@ -200,7 +206,9 @@
             >
               <IconTablerX class="compute-editor__action-icon" />
             </button>
-            <div class="compute-editor__output-path">{{ previewOutputPath }}</div>
+            <div class="compute-editor__output-path">
+              {{ activeDraft.outputs.length }} 个输出数据点
+            </div>
           </div>
           <label class="compute-editor__field">
             <span>超时</span>
@@ -212,10 +220,70 @@
               @input="markDirty"
             />
           </label>
-          <label class="compute-editor__field">
-            <span>输出名</span>
-            <input v-model="outputName" placeholder="result" @input="updateOutputBindings" />
-          </label>
+          <section class="compute-editor__outputs">
+            <header>
+              <strong>强类型输出</strong>
+              <button type="button" class="compute-editor__secondary-action" @click="addOutput">
+                添加输出
+              </button>
+            </header>
+            <article
+              v-for="(output, index) in activeDraft.outputs"
+              :key="String(output.id || index)"
+              class="compute-editor__output-item"
+            >
+              <label class="compute-editor__field">
+                <span>输出 Key</span>
+                <input
+                  v-model="output.key"
+                  placeholder="result"
+                  @input="handleOutputKeyInput(output)"
+                />
+              </label>
+              <label class="compute-editor__field">
+                <span>显示名称</span>
+                <input v-model="output.name" placeholder="计算结果" @input="markDirty" />
+              </label>
+              <label class="compute-editor__field">
+                <span>数据类型</span>
+                <select v-model="output.dataType" @change="markDirty">
+                  <option v-for="option in outputTypeOptions" :key="option" :value="option">
+                    {{ option }}
+                  </option>
+                </select>
+              </label>
+              <label class="compute-editor__field">
+                <span>单位</span>
+                <input v-model="output.unit" placeholder="可选" @input="markDirty" />
+              </label>
+              <label class="compute-editor__field">
+                <span>精度</span>
+                <input
+                  v-model.number="output.precisionNum"
+                  type="number"
+                  min="0"
+                  placeholder="可选"
+                  @input="markDirty"
+                />
+              </label>
+              <label class="compute-editor__field">
+                <span>空值策略</span>
+                <select v-model="output.nullPolicy" @change="markDirty">
+                  <option value="error">本次运行失败</option>
+                  <option value="skip">跳过并保留旧值</option>
+                </select>
+              </label>
+              <small>{{ output.path }}</small>
+              <button
+                type="button"
+                class="compute-editor__remove-output"
+                :disabled="activeDraft.outputs.length <= 1"
+                @click="removeOutput(index)"
+              >
+                删除
+              </button>
+            </article>
+          </section>
         </section>
       </main>
 
@@ -496,9 +564,9 @@
                         v-model.number="activeDraft.triggerConfig.every"
                         type="number"
                         min="1"
-                        @input="markDirty"
+                        @input="markScheduleDirty"
                       />
-                      <select v-model="activeDraft.triggerConfig.unit" @change="markDirty">
+                      <select v-model="activeDraft.triggerConfig.unit" @change="markScheduleDirty">
                         <option value="seconds">秒</option>
                         <option value="minutes">分钟</option>
                         <option value="hours">小时</option>
@@ -509,8 +577,22 @@
                       v-model="activeDraft.triggerConfig.time"
                       type="time"
                       step="1"
-                      @input="markDirty"
+                      @input="markScheduleDirty"
                     />
+                    <small
+                      v-if="
+                        scheduleFieldError(
+                          activeDraft.triggerConfig.kind === 'interval' ? 'every' : 'time',
+                        )
+                      "
+                      class="compute-editor__field-error"
+                    >
+                      {{
+                        scheduleFieldError(
+                          activeDraft.triggerConfig.kind === 'interval' ? 'every' : 'time',
+                        )
+                      }}
+                    </small>
                   </label>
                   <label
                     v-if="activeDraft.triggerConfig.kind === 'weekly'"
@@ -523,12 +605,117 @@
                           v-model="activeDraft.triggerConfig.weekdays"
                           type="checkbox"
                           :value="day.value"
-                          @change="markDirty"
+                          @change="markScheduleDirty"
                         />
                         {{ day.label }}
                       </label>
                     </div>
+                    <small
+                      v-if="scheduleFieldError('weekdays')"
+                      class="compute-editor__field-error"
+                    >
+                      {{ scheduleFieldError('weekdays') }}
+                    </small>
                   </label>
+                  <div
+                    v-if="
+                      activeDraft.triggerConfig.kind === 'monthly' ||
+                      activeDraft.triggerConfig.kind === 'yearly'
+                    "
+                    class="compute-editor__schedule-rule"
+                  >
+                    <label
+                      v-if="activeDraft.triggerConfig.kind === 'yearly'"
+                      class="compute-editor__field"
+                    >
+                      <span>执行月份</span>
+                      <select
+                        v-model.number="activeDraft.triggerConfig.month"
+                        @change="markScheduleDirty"
+                      >
+                        <option v-for="month in 12" :key="month" :value="month">
+                          {{ month }} 月
+                        </option>
+                      </select>
+                      <small v-if="scheduleFieldError('month')" class="compute-editor__field-error">
+                        {{ scheduleFieldError('month') }}
+                      </small>
+                    </label>
+                    <label class="compute-editor__field">
+                      <span>日期规则</span>
+                      <select
+                        v-model="activeDraft.triggerConfig.dayRule"
+                        @change="markScheduleDirty"
+                      >
+                        <option value="day">指定日期</option>
+                        <option value="weekday">指定星期</option>
+                      </select>
+                      <small
+                        v-if="scheduleFieldError('dayRule')"
+                        class="compute-editor__field-error"
+                      >
+                        {{ scheduleFieldError('dayRule') }}
+                      </small>
+                    </label>
+                    <label
+                      v-if="activeDraft.triggerConfig.dayRule === 'day'"
+                      class="compute-editor__field"
+                    >
+                      <span>日期</span>
+                      <input
+                        v-model.number="activeDraft.triggerConfig.dayOfMonth"
+                        type="number"
+                        min="1"
+                        max="31"
+                        @input="markScheduleDirty"
+                      />
+                      <small
+                        v-if="scheduleFieldError('dayOfMonth')"
+                        class="compute-editor__field-error"
+                      >
+                        {{ scheduleFieldError('dayOfMonth') }}
+                      </small>
+                    </label>
+                    <template v-else>
+                      <label class="compute-editor__field">
+                        <span>第几周</span>
+                        <select
+                          v-model.number="activeDraft.triggerConfig.weekOfMonth"
+                          @change="markScheduleDirty"
+                        >
+                          <option :value="1">第一周</option>
+                          <option :value="2">第二周</option>
+                          <option :value="3">第三周</option>
+                          <option :value="4">第四周</option>
+                          <option :value="5">第五周</option>
+                          <option :value="-1">最后一周</option>
+                        </select>
+                        <small
+                          v-if="scheduleFieldError('weekOfMonth')"
+                          class="compute-editor__field-error"
+                        >
+                          {{ scheduleFieldError('weekOfMonth') }}
+                        </small>
+                      </label>
+                      <label class="compute-editor__field">
+                        <span>星期</span>
+                        <select
+                          v-model.number="activeDraft.triggerConfig.weekday"
+                          @change="markScheduleDirty"
+                        >
+                          <option v-for="day in weekdayOptions" :key="day.value" :value="day.value">
+                            星期{{ day.label }}
+                          </option>
+                        </select>
+                        <small
+                          v-if="scheduleFieldError('weekday')"
+                          class="compute-editor__field-error"
+                        >
+                          {{ scheduleFieldError('weekday') }}
+                        </small>
+                      </label>
+                    </template>
+                  </div>
                   <label
                     v-if="activeDraft.triggerConfig.kind !== 'interval'"
                     class="compute-editor__field"
@@ -536,46 +723,262 @@
                     <span>时区</span>
                     <input
                       v-model="activeDraft.triggerConfig.timezone"
+                      list="compute-timezones"
                       placeholder="Asia/Shanghai"
-                      @input="markDirty"
+                      autocomplete="off"
+                      @input="markScheduleDirty"
                     />
+                    <datalist id="compute-timezones">
+                      <option
+                        v-for="timezone in timezoneOptions"
+                        :key="timezone"
+                        :value="timezone"
+                      />
+                    </datalist>
+                    <small
+                      v-if="scheduleFieldError('timezone')"
+                      class="compute-editor__field-error"
+                    >
+                      {{ scheduleFieldError('timezone') }}
+                    </small>
                   </label>
+                  <div class="compute-editor__schedule-window">
+                    <label class="compute-editor__field">
+                      <span>开始时间</span>
+                      <input
+                        type="datetime-local"
+                        step="1"
+                        :value="scheduleDateTimeValue('startAt')"
+                        @input="updateScheduleDateTime('startAt', $event)"
+                      />
+                      <small
+                        v-if="scheduleFieldError('startAt')"
+                        class="compute-editor__field-error"
+                      >
+                        {{ scheduleFieldError('startAt') }}
+                      </small>
+                    </label>
+                    <label class="compute-editor__field">
+                      <span>结束时间</span>
+                      <input
+                        type="datetime-local"
+                        step="1"
+                        :value="scheduleDateTimeValue('endAt')"
+                        @input="updateScheduleDateTime('endAt', $event)"
+                      />
+                      <small v-if="scheduleFieldError('endAt')" class="compute-editor__field-error">
+                        {{ scheduleFieldError('endAt') }}
+                      </small>
+                    </label>
+                    <label class="compute-editor__field">
+                      <span>最多执行</span>
+                      <div class="compute-editor__field-inline">
+                        <input
+                          v-model.number="activeDraft.triggerConfig.maxRuns"
+                          type="number"
+                          min="1"
+                          max="1000000"
+                          placeholder="不限"
+                          @input="markScheduleDirty"
+                        />
+                        <span>次</span>
+                      </div>
+                      <small
+                        v-if="scheduleFieldError('maxRuns')"
+                        class="compute-editor__field-error"
+                      >
+                        {{ scheduleFieldError('maxRuns') }}
+                      </small>
+                    </label>
+                  </div>
                   <p class="compute-editor__trigger-note">
                     该计划由节点运行时执行；开发态不会自动运行。
                   </p>
                   <div class="compute-editor__trigger-preview">
                     <button
                       type="button"
-                      class="compute-editor__inline-icon"
+                      class="compute-editor__preview-button"
                       title="预览后续执行"
+                      :disabled="schedulePreviewLoading"
                       @click="previewSchedule"
                     >
-                      预览后续执行
+                      {{ schedulePreviewLoading ? '预览中…' : '预览后续执行' }}
                     </button>
-                    <span v-if="schedulePreviewText">{{ schedulePreviewText }}</span>
+                    <div
+                      v-if="schedulePreviewSummary"
+                      class="compute-editor__trigger-preview-result"
+                    >
+                      <strong>{{ schedulePreviewSummary }}</strong>
+                      <ol v-if="schedulePreviewRuns.length">
+                        <li v-for="(run, index) in schedulePreviewRuns" :key="run">
+                          第 {{ index + 1 }} 次：{{ formatScheduleRun(run) }}
+                        </li>
+                      </ol>
+                    </div>
+                    <ul v-if="schedulePreviewErrors.length" class="compute-editor__schedule-errors">
+                      <li
+                        v-for="item in schedulePreviewErrors"
+                        :key="`${item.field}:${item.message}`"
+                      >
+                        {{ item.message }}
+                      </li>
+                    </ul>
                   </div>
                 </div>
                 <div
                   v-else-if="activeDraft.triggerType === 'datapoint_change'"
-                  class="compute-editor__trigger-card"
+                  class="compute-editor__trigger-card is-datapoint-change"
                 >
+                  <div class="compute-editor__datapoint-trigger-source">
+                    <label class="compute-editor__field">
+                      <span>数据点</span>
+                      <input
+                        v-model="activeDraft.triggerConfig.path"
+                        placeholder="选择数据点"
+                        readonly
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      class="compute-editor__inline-icon"
+                      title="选择数据点"
+                      aria-label="选择数据点"
+                      @click="openDatapointPicker('trigger')"
+                    >
+                      <IconTablerDatabaseImport class="compute-editor__action-icon" />
+                    </button>
+                  </div>
                   <label class="compute-editor__field">
-                    <span>数据点</span>
+                    <span>变化类型</span>
+                    <select
+                      v-model="activeDraft.triggerConfig.mode"
+                      @change="handlePointChangeMode"
+                    >
+                      <option value="any">任意更新</option>
+                      <option value="value_change">值发生变化</option>
+                      <option value="increase" :disabled="!isPointChangeModeCompatible('increase')">
+                        数值增大
+                      </option>
+                      <option value="decrease" :disabled="!isPointChangeModeCompatible('decrease')">
+                        数值减小
+                      </option>
+                      <option
+                        value="rising_edge"
+                        :disabled="!isPointChangeModeCompatible('rising_edge')"
+                      >
+                        上升沿
+                      </option>
+                      <option
+                        value="falling_edge"
+                        :disabled="!isPointChangeModeCompatible('falling_edge')"
+                      >
+                        下降沿
+                      </option>
+                    </select>
+                  </label>
+                  <label class="compute-editor__field">
+                    <span>防抖时间</span>
+                    <div class="compute-editor__field-inline">
+                      <input
+                        v-model.number="activeDraft.triggerConfig.debounceMs"
+                        type="number"
+                        min="0"
+                        max="3600000"
+                        @input="markDirty"
+                      />
+                      <span>ms</span>
+                    </div>
+                  </label>
+                  <label class="compute-editor__field">
+                    <span>变化死区</span>
                     <input
-                      v-model="activeDraft.triggerConfig.path"
-                      placeholder="选择数据点"
-                      readonly
+                      v-model.number="activeDraft.triggerConfig.deadband"
+                      type="number"
+                      min="0"
+                      :disabled="!pointChangeDeadbandAvailable"
+                      placeholder="不限制"
+                      @input="markDirty"
                     />
                   </label>
-                  <button
-                    type="button"
-                    class="compute-editor__inline-icon"
-                    title="选择数据点"
-                    aria-label="选择数据点"
-                    @click="openDatapointPicker('trigger')"
-                  >
-                    <IconTablerDatabaseImport class="compute-editor__action-icon" />
-                  </button>
+                  <p class="compute-editor__trigger-note">
+                    触发条件由节点运行时判断；开发态仅保存配置。
+                  </p>
+                </div>
+                <div
+                  v-else-if="activeDraft.triggerType === 'condition'"
+                  class="compute-editor__trigger-card is-condition"
+                >
+                  <label class="compute-editor__field compute-editor__condition-expression">
+                    <span>条件表达式</span>
+                    <textarea
+                      v-model="activeDraft.triggerConfig.expression"
+                      rows="2"
+                      placeholder="例如：temperature > 80 && enabled"
+                      @input="markDirty"
+                    />
+                  </label>
+                  <div class="compute-editor__condition-variables">
+                    <span>可用变量</span>
+                    <div v-if="conditionVariableRows.length">
+                      <button
+                        v-for="row in conditionVariableRows"
+                        :key="row.uid"
+                        type="button"
+                        :title="`${row.path}（${row.dataType}）`"
+                        @click="appendConditionVariable(row.alias)"
+                      >
+                        {{ row.alias }}
+                      </button>
+                    </div>
+                    <small v-else>请先在“变量”中添加 bool、string 或数值数据点。</small>
+                  </div>
+                  <fieldset class="compute-editor__condition-phases">
+                    <legend>触发阶段</legend>
+                    <label>
+                      <input
+                        v-model="activeDraft.triggerConfig.phases"
+                        type="checkbox"
+                        value="entered"
+                        @change="ensureConditionPhase('entered')"
+                      />
+                      进入
+                    </label>
+                    <label>
+                      <input
+                        v-model="activeDraft.triggerConfig.phases"
+                        type="checkbox"
+                        value="active"
+                        @change="ensureConditionPhase('active')"
+                      />
+                      持续
+                    </label>
+                    <label>
+                      <input
+                        v-model="activeDraft.triggerConfig.phases"
+                        type="checkbox"
+                        value="exited"
+                        @change="ensureConditionPhase('exited')"
+                      />
+                      离开
+                    </label>
+                  </fieldset>
+                  <label class="compute-editor__field">
+                    <span>防抖时间</span>
+                    <div class="compute-editor__field-inline">
+                      <input
+                        v-model.number="activeDraft.triggerConfig.debounceMs"
+                        type="number"
+                        min="0"
+                        max="3600000"
+                        @input="markDirty"
+                      />
+                      <span>ms</span>
+                    </div>
+                  </label>
+                  <p class="compute-editor__trigger-note">
+                    进入、离开对应条件状态切换；持续在条件成立期间每次引用数据点变化时执行。节点通过
+                    ctx.trigger.phase 提供 entered、active 或 exited。
+                  </p>
                 </div>
                 <div v-else class="compute-editor__trigger-card is-note">
                   <strong>手动触发</strong>
@@ -603,11 +1006,11 @@
               <button
                 type="button"
                 class="compute-editor__tool-btn"
-                title="刷新依赖"
-                aria-label="刷新依赖"
-                @click="$emit('refresh-dependencies')"
+                title="管理工程依赖"
+                aria-label="管理工程依赖"
+                @click="$emit('manage-dependencies')"
               >
-                <IconTablerRefresh class="compute-editor__action-icon" />
+                <IconTablerSettings class="compute-editor__action-icon" />
               </button>
             </div>
             <div v-if="activeDraft.dependencies.length" class="compute-editor__dependency-chips">
@@ -615,11 +1018,10 @@
                 v-for="item in activeDraft.dependencies"
                 :key="item.id"
                 type="button"
-                :title="`取消依赖：${dependencyName(item.id)}`"
-                @click="toggleDependency(item.id)"
+                :title="dependencyName(item.id)"
+                disabled
               >
                 <span>{{ dependencyName(item.id) }}</span>
-                <IconTablerX class="compute-editor__chip-icon" />
               </button>
             </div>
             <div v-if="dependenciesError" class="compute-editor__empty">
@@ -629,21 +1031,16 @@
               当前语言无可用依赖
             </div>
             <div v-else class="compute-editor__dependency-table">
-              <label
+              <div
                 v-for="dep in filteredDependencies"
                 :key="dep.id"
                 class="compute-editor__dependency-row"
               >
-                <input
-                  type="checkbox"
-                  :checked="isDependencyChecked(dep.id)"
-                  @change="toggleDependency(dep.id)"
-                />
                 <strong>{{ dep.name }}</strong>
                 <code>{{ dep.importName || dep.name }}</code>
                 <span>{{ dep.version || '-' }}</span>
-                <em>{{ dep.description || '内置依赖' }}</em>
-              </label>
+                <em>{{ isDependencyChecked(dep.id) ? '当前代码已使用' : '工程已安装' }}</em>
+              </div>
             </div>
           </template>
 
@@ -796,163 +1193,17 @@
       </section>
     </template>
 
-    <DcDialog
+    <DatapointPickerDialog
       v-model="datapointPickerVisible"
-      title="数据点变量"
-      width="860px"
-      body-max-height="620px"
-    >
-      <div class="compute-editor__picker">
-        <div class="compute-editor__picker-toolbar">
-          <el-input
-            v-model="datapointPickerKeyword"
-            size="small"
-            clearable
-            placeholder="搜索名称或路径"
-            @keyup.enter="reloadPickerDatapoints"
-          />
-          <select
-            v-model="datapointPickerSource"
-            class="compute-editor__picker-select"
-            aria-label="来源类型"
-            @change="reloadPickerDatapoints"
-          >
-            <option value="">全部来源</option>
-            <option value="mqtt.subscription">MQTT</option>
-            <option value="db.query">数据库</option>
-            <option value="http">HTTP</option>
-            <option value="manual">手动</option>
-          </select>
-          <select
-            v-model="datapointPickerDataType"
-            class="compute-editor__picker-select"
-            aria-label="数据类型"
-            @change="reloadPickerDatapoints"
-          >
-            <option value="">全部类型</option>
-            <option value="object">object</option>
-            <option value="number">number</option>
-            <option value="string">string</option>
-            <option value="boolean">boolean</option>
-          </select>
-          <select
-            v-model="datapointPickerStatus"
-            class="compute-editor__picker-select"
-            aria-label="状态"
-            @change="reloadPickerDatapoints"
-          >
-            <option value="">全部状态</option>
-            <option value="active">正常</option>
-            <option value="inactive">停用</option>
-            <option value="error">异常</option>
-            <option value="unknown">未知</option>
-          </select>
-          <button type="button" class="compute-editor__small" @click="reloadPickerDatapoints">
-            搜索
-          </button>
-        </div>
-        <div v-if="datapointPickerLoading" class="compute-editor__picker-loading">
-          <el-skeleton :rows="5" animated />
-        </div>
-        <div v-else class="compute-editor__picker-table-wrap">
-          <table v-if="datapointPickerOptions.length" class="compute-editor__picker-table">
-            <thead>
-              <tr>
-                <th>名称</th>
-                <th>路径</th>
-                <th>类型</th>
-                <th>来源</th>
-                <th>状态</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="point in datapointPickerOptions"
-                :key="point.id"
-                :class="{ 'is-selected': selectedDatapointId === String(point.id) }"
-                @click="selectedDatapointId = String(point.id)"
-                @dblclick="confirmSelectedDatapoint(point)"
-              >
-                <td>
-                  <strong>{{ point.name }}</strong>
-                </td>
-                <td>
-                  <code>{{ point.path }}</code>
-                </td>
-                <td>{{ point.dataType || '-' }}</td>
-                <td>{{ sourceTypeText(point.sourceType) }}</td>
-                <td>
-                  <span
-                    class="compute-editor__picker-status"
-                    :class="`is-${point.status || 'unknown'}`"
-                  >
-                    {{ datapointStatusText(point.status) }}
-                  </span>
-                </td>
-                <td>
-                  <span
-                    class="compute-editor__picker-row-action"
-                    role="button"
-                    tabindex="0"
-                    @click.stop="confirmSelectedDatapoint(point)"
-                    @keydown.enter.stop.prevent="confirmSelectedDatapoint(point)"
-                  >
-                    {{ datapointPickerIntent === 'trigger' ? '选择' : '插入' }}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <div
-            v-if="datapointPickerOptions.length === 0"
-            class="compute-editor__empty compute-editor__picker-empty"
-          >
-            <strong>没有匹配的数据点</strong>
-            <span>换个关键词，或放宽来源、类型、状态筛选。</span>
-          </div>
-        </div>
-        <div class="compute-editor__picker-footer">
-          <div class="compute-editor__picker-count">
-            共 {{ datapointPickerTotal }} 条
-            <span v-if="selectedDatapoint">已选 {{ selectedDatapoint.name }}</span>
-          </div>
-          <label
-            v-if="selectedDatapoint && datapointPickerIntent === 'variable'"
-            class="compute-editor__alias-field"
-          >
-            <span>变量名</span>
-            <input v-model="selectedDatapointAlias" />
-          </label>
-          <div class="compute-editor__picker-pager">
-            <button
-              type="button"
-              :disabled="datapointPickerPage <= 1 || datapointPickerLoading"
-              @click="changePickerPage(datapointPickerPage - 1)"
-            >
-              上一页
-            </button>
-            <span>{{ datapointPickerPage }} / {{ datapointPickerTotalPages }}</span>
-            <button
-              type="button"
-              :disabled="datapointPickerPage >= datapointPickerTotalPages || datapointPickerLoading"
-              @click="changePickerPage(datapointPickerPage + 1)"
-            >
-              下一页
-            </button>
-            <button
-              type="button"
-              class="compute-editor__picker-confirm"
-              :disabled="!selectedDatapoint"
-              @click="confirmSelectedDatapoint()"
-              @mousedown.prevent="confirmSelectedDatapoint()"
-            >
-              {{ datapointPickerIntent === 'trigger' ? '选择' : '插入到光标' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </DcDialog>
+      :project-id="projectId"
+      :multiple="false"
+      :title="datapointPickerIntent === 'trigger' ? '选择变化触发数据点' : '选择数据点变量'"
+      :confirm-text="datapointPickerIntent === 'trigger' ? '选择' : '插入'"
+      :disabled-reason="
+        datapointPickerIntent === 'trigger' ? datapointTriggerDisabledReason : undefined
+      "
+      @apply="confirmSelectedDatapoint"
+    />
 
     <DcDialog
       v-model="templateDialogVisible"
@@ -1016,7 +1267,6 @@ import IconTablerTerminal2 from '~icons/tabler/terminal-2'
 import IconTablerTrash from '~icons/tabler/trash'
 import IconTablerClock from '~icons/tabler/clock'
 import IconTablerX from '~icons/tabler/x'
-import type { Datapoint } from '@/api/schemas/datapoint.schema'
 import type {
   ComputeDependency,
   ComputeCapabilities,
@@ -1025,10 +1275,12 @@ import type {
   ComputeSyntaxDiagnostic,
 } from '@/api/schemas/compute.schema'
 import { checkComputeSyntax, debugComputeUnit, previewComputeSchedule } from '@/api/compute.api'
-import { getDatapoints } from '@/api/datapoint.api'
 import { getApiErrorMessage } from '@/utils/request'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 import DcDialog from '@/components/shared/DcDialog.vue'
+import DatapointPickerDialog, {
+  type DatapointPickerSelection,
+} from '@/components/shared/DatapointPickerDialog.vue'
 import EmptyState from '@/components/shared/EmptyState.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
 import type { ComputeDraft, ComputeEditorTab } from './computeEditorModel'
@@ -1050,7 +1302,6 @@ const props = withDefaults(
     projectId: string
     tabs: ComputeEditorTab[]
     activeId: string | null
-    activeDraft: ComputeDraft | null
     loading?: boolean
     saving?: boolean
     deleting?: boolean
@@ -1059,6 +1310,7 @@ const props = withDefaults(
     dependenciesLoading?: boolean
     dependenciesError?: string
     capabilities?: ComputeCapabilities | null
+    capabilitiesLoading?: boolean
   }>(),
   {
     loading: false,
@@ -1069,8 +1321,12 @@ const props = withDefaults(
     dependenciesLoading: false,
     dependenciesError: '',
     capabilities: null,
+    capabilitiesLoading: false,
   },
 )
+
+// 编辑草稿由工作区持有，显式声明为双向模型，避免子组件绕过组件契约修改 props。
+const activeDraft = defineModel<ComputeDraft | null>('activeDraft', { required: true })
 
 const emit = defineEmits<{
   (event: 'activate-tab', id: string): void
@@ -1080,6 +1336,8 @@ const emit = defineEmits<{
   (event: 'delete-unit', id: string): void
   (event: 'mark-dirty', id: string): void
   (event: 'refresh-dependencies'): void
+  (event: 'manage-dependencies'): void
+  (event: 'retry-capabilities'): void
 }>()
 
 const panelDefaultHeight = 260
@@ -1092,17 +1350,6 @@ const inspectorOpen = ref(false)
 const monacoEditorRef = ref<MonacoEditorExpose | null>(null)
 const datapointPickerVisible = ref(false)
 const datapointPickerIntent = ref<'variable' | 'trigger'>('variable')
-const datapointPickerKeyword = ref('')
-const datapointPickerSource = ref('')
-const datapointPickerDataType = ref('')
-const datapointPickerStatus = ref('')
-const datapointPickerPage = ref(1)
-const datapointPickerPageSize = 12
-const datapointPickerTotal = ref(0)
-const datapointPickerOptions = ref<Datapoint[]>([])
-const datapointPickerLoading = ref(false)
-const selectedDatapointId = ref<string | null>(null)
-const selectedDatapointAlias = ref('')
 const debugArgvText = ref('[]')
 const debugDatapointText = ref('{}')
 const debugRunning = ref(false)
@@ -1113,9 +1360,16 @@ const syntaxDiagnostics = ref<ComputeSyntaxDiagnostic[]>([])
 const syntaxErrorText = ref('')
 let syntaxCheckTimer: ReturnType<typeof window.setTimeout> | null = null
 let syntaxCheckSeq = 0
+let syntaxCheckController: AbortController | null = null
+let debugController: AbortController | null = null
 const templateDialogVisible = ref(false)
 const activeTemplateId = ref('argv')
-const schedulePreviewText = ref('')
+type SchedulePreviewError = { field: string; message: string }
+const schedulePreviewSummary = ref('')
+const schedulePreviewRuns = ref<string[]>([])
+const schedulePreviewErrors = ref<SchedulePreviewError[]>([])
+const schedulePreviewLoading = ref(false)
+let schedulePreviewSeq = 0
 const activeDebugResultTab = ref('output')
 const cursorInfo = ref<EditorCursorInfo>({
   line: 1,
@@ -1139,20 +1393,44 @@ const debugResultTabs = [
 ]
 
 const sandboxAvailable = computed(() => props.capabilities?.sandboxStatus === 'available')
+const sandboxUnavailableReason = computed(
+  () => props.capabilities?.sandboxReason?.trim() || '隔离执行检查未通过',
+)
 
 const codeTemplates = computed(() => {
-  const lang = props.activeDraft?.lang === 'python' ? 'python' : 'javascript'
+  const lang = activeDraft.value?.lang === 'python' ? 'python' : 'javascript'
   const templates = lang === 'python' ? pythonTemplates : javascriptTemplates
   return templates
 })
 
-const triggerTypes = [
+const allTriggerTypes = [
   { id: 'manual', label: '手动' },
   { id: 'schedule_interval', label: '周期执行' },
   { id: 'schedule_daily', label: '每日定时' },
   { id: 'schedule_weekly', label: '每周定时' },
+  { id: 'schedule_monthly', label: '每月定时' },
+  { id: 'schedule_yearly', label: '每年定时' },
   { id: 'datapoint_change', label: '数据点变化' },
+  { id: 'condition', label: '条件触发' },
 ]
+
+const triggerTypes = computed(() => {
+  const supported = props.capabilities?.triggerTypes
+  if (!supported?.length) return allTriggerTypes
+  return allTriggerTypes.filter((item) => {
+    const capability = item.id.startsWith('schedule_') ? 'schedule' : item.id
+    return supported.includes(capability)
+  })
+})
+
+const timezoneOptions = computed(() => {
+  const current = String(activeDraft.value?.triggerConfig.timezone || '')
+  const intlWithValues = Intl as typeof Intl & {
+    supportedValuesOf?: (key: 'timeZone') => string[]
+  }
+  const supported = intlWithValues.supportedValuesOf?.('timeZone') || []
+  return Array.from(new Set(['Asia/Shanghai', current, ...supported].filter(Boolean)))
+})
 
 const weekdayOptions = [
   { value: 1, label: '一' },
@@ -1250,35 +1528,73 @@ const pythonTemplates: CodeTemplate[] = [
 ]
 
 const monacoLanguage = computed(() => {
-  if (props.activeDraft?.lang === 'python') return 'python'
+  if (activeDraft.value?.lang === 'python') return 'python'
   return 'javascript'
 })
 
-const previewOutputPath = computed(() => {
-  const name = props.activeDraft?.name?.trim() || 'unnamed'
-  return `calc.${name.replace(/\s+/g, '_')}.${outputName.value || 'result'}`
-})
+const outputTypeOptions = [
+  'bool',
+  'int8',
+  'uint8',
+  'int16',
+  'uint16',
+  'int32',
+  'uint32',
+  'int64',
+  'uint64',
+  'float32',
+  'float64',
+  'decimal',
+  'string',
+  'bytes',
+  'datetime',
+  'object',
+  'array',
+]
 
-const outputName = computed({
-  get() {
-    const outputs = props.activeDraft?.outputBindings.outputs
-    if (Array.isArray(outputs) && outputs[0]) {
-      const first = outputs[0] as Record<string, unknown>
-      return String(first.name || 'result')
-    }
-    return 'result'
-  },
-  set(value: string) {
-    if (!props.activeDraft) return
-    props.activeDraft.outputBindings = {
-      ...props.activeDraft.outputBindings,
-      outputs: [{ name: value || 'result', dataType: 'object' }],
-    }
-  },
-})
+const normalizedUnitPath = () =>
+  (activeDraft.value?.name?.trim() || 'unnamed').replace(/[^a-zA-Z0-9_\-\u4e00-\u9fa5]+/g, '_')
+
+const syncOutputPath = (output: { key: string; path: string }) => {
+  output.path = `calc.${normalizedUnitPath()}.${output.key.trim() || 'result'}`
+}
+
+const handleOutputKeyInput = (output: { key: string; path: string }) => {
+  syncOutputPath(output)
+  markDirty()
+}
+
+const syncAllOutputPaths = () => {
+  activeDraft.value?.outputs.forEach(syncOutputPath)
+  markDirty()
+}
+
+const addOutput = () => {
+  if (!activeDraft.value) return
+  const index = activeDraft.value.outputs.length + 1
+  const output = {
+    key: `output${index}`,
+    name: `输出 ${index}`,
+    path: '',
+    dataType: 'object' as const,
+    unit: null,
+    precisionNum: null,
+    nullPolicy: 'error' as const,
+    description: null,
+  }
+  syncOutputPath(output)
+  activeDraft.value.outputs.push(output)
+  markDirty()
+}
+
+const removeOutput = (index: number) => {
+  if (!activeDraft.value || activeDraft.value.outputs.length <= 1) return
+  activeDraft.value.outputs.splice(index, 1)
+  markDirty()
+}
 
 const filteredDependencies = computed(() => {
-  const runtime = props.activeDraft?.lang === 'python' ? 'python' : 'javascript'
+  const runtime = activeDraft.value?.lang === 'python' ? 'python' : 'javascript'
   return props.dependencies.filter((item) => item.runtime === runtime)
 })
 
@@ -1288,38 +1604,74 @@ const activeTemplate = computed(
     codeTemplates.value[0],
 )
 
-const parameterCount = computed(() => props.activeDraft?.parameterRows.length || 0)
-const datapointVariableCount = computed(() => props.activeDraft?.datapointVariableRows.length || 0)
+const parameterCount = computed(() => activeDraft.value?.parameterRows.length || 0)
+const datapointVariableCount = computed(() => activeDraft.value?.datapointVariableRows.length || 0)
+const numericDatapointTypes = new Set([
+  'int8',
+  'uint8',
+  'int16',
+  'uint16',
+  'int32',
+  'uint32',
+  'int64',
+  'uint64',
+  'float32',
+  'float64',
+  'decimal',
+])
+const conditionVariableRows = computed(
+  () =>
+    activeDraft.value?.datapointVariableRows.filter((row) => isTriggerScalarType(row.dataType)) ||
+    [],
+)
+const pointChangeDeadbandAvailable = computed(() => {
+  const config = activeDraft.value?.triggerConfig
+  if (!config || !numericDatapointTypes.has(String(config.dataType || ''))) return false
+  return ['value_change', 'increase', 'decrease'].includes(String(config.mode || ''))
+})
 const unusedDatapointVariableCount = computed(
   () =>
-    props.activeDraft?.datapointVariableRows.filter(
+    activeDraft.value?.datapointVariableRows.filter(
       (row) => !isDatapointVariableReferenced(row.alias),
     ).length || 0,
 )
-const dependencyCount = computed(() => props.activeDraft?.dependencies.length || 0)
+const dependencyCount = computed(() => activeDraft.value?.dependencies.length || 0)
 const triggerText = computed(() => {
-  const triggerType = props.activeDraft?.triggerType || 'manual'
+  const triggerType = activeDraft.value?.triggerType || 'manual'
   if (triggerType === 'schedule') {
-    const kind = String(props.activeDraft?.triggerConfig.kind || 'interval')
-    return kind === 'daily' ? '每日定时' : kind === 'weekly' ? '每周定时' : '周期执行'
+    const kind = String(activeDraft.value?.triggerConfig.kind || 'interval')
+    if (kind === 'daily') return '每日定时'
+    if (kind === 'weekly') return '每周定时'
+    if (kind === 'monthly') return '每月定时'
+    if (kind === 'yearly') return '每年定时'
+    return '周期执行'
   }
-  return triggerTypes.find((item) => item.id === triggerType)?.label || '手动'
+  return triggerTypes.value.find((item) => item.id === triggerType)?.label || '手动'
 })
 
 const triggerSummary = computed(() => {
-  if (!props.activeDraft) return '未选择计算单元'
-  if (props.activeDraft.triggerType === 'schedule') {
-    const config = props.activeDraft.triggerConfig
+  if (!activeDraft.value) return '未选择计算单元'
+  if (activeDraft.value.triggerType === 'schedule') {
+    const config = activeDraft.value.triggerConfig
     if (config.kind === 'daily')
       return `每天 ${config.time || '00:00:00'}（${config.timezone || '未设置时区'}）`
     if (config.kind === 'weekly')
       return `每周指定日期 ${config.time || '00:00:00'}（${config.timezone || '未设置时区'}）`
+    if (config.kind === 'monthly')
+      return `每月按日期规则 ${config.time || '00:00:00'}（${config.timezone || '未设置时区'}）`
+    if (config.kind === 'yearly')
+      return `每年按日期规则 ${config.time || '00:00:00'}（${config.timezone || '未设置时区'}）`
     return `每 ${config.every || 1} ${config.unit === 'hours' ? '小时' : config.unit === 'minutes' ? '分钟' : '秒'}执行一次`
   }
-  if (props.activeDraft.triggerType === 'datapoint_change') {
-    return props.activeDraft.triggerConfig.path
-      ? `数据点变化时执行：${props.activeDraft.triggerConfig.path}`
+  if (activeDraft.value.triggerType === 'datapoint_change') {
+    return activeDraft.value.triggerConfig.path
+      ? `数据点变化时执行：${activeDraft.value.triggerConfig.path}`
       : '选择一个数据点作为变化触发源'
+  }
+  if (activeDraft.value.triggerType === 'condition') {
+    return activeDraft.value.triggerConfig.expression
+      ? `条件成立状态变化时执行：${activeDraft.value.triggerConfig.expression}`
+      : '使用数据点变量配置条件表达式'
   }
   return '由调用方或调试动作主动执行'
 })
@@ -1338,7 +1690,7 @@ const debugStateText = computed(() => {
 
 const dryRunTooltip = computed(() => {
   if (!sandboxAvailable.value) return '独立计算沙箱不可用'
-  if (props.activeDraft?.dirty) return '请先保存后再试运行'
+  if (activeDraft.value?.dirty) return '请先保存后再试运行'
   if (debugRunning.value) return '正在试运行'
   return '试运行'
 })
@@ -1382,7 +1734,7 @@ const debugDatapointHintTone = computed(() =>
 
 const debugArgvHint = computed(() => {
   const parsed = debugArgvParsed.value
-  const expected = props.activeDraft?.parameterRows.length || 0
+  const expected = activeDraft.value?.parameterRows.length || 0
   if (!parsed.valid) return 'JSON 格式无效，试运行前需要修正。'
   if (!Array.isArray(parsed.value)) return '调用参数 JSON 必须是数组。'
   const actual = parsed.value.length
@@ -1392,7 +1744,7 @@ const debugArgvHint = computed(() => {
 
 const debugDatapointHint = computed(() => {
   const parsed = debugDatapointParsed.value
-  const expectedAliases = (props.activeDraft?.datapointVariableRows || [])
+  const expectedAliases = (activeDraft.value?.datapointVariableRows || [])
     .map((row) => row.alias.trim())
     .filter(Boolean)
   if (!parsed.valid) return 'JSON 格式无效，试运行前需要修正。'
@@ -1420,20 +1772,6 @@ const syntaxStatusText = computed(() => {
   return '未检查'
 })
 
-const selectedDatapoint = computed(() =>
-  datapointPickerOptions.value.find((point) => String(point.id) === selectedDatapointId.value),
-)
-
-const datapointPickerTotalPages = computed(() =>
-  Math.max(1, Math.ceil(datapointPickerTotal.value / datapointPickerPageSize)),
-)
-
-watch(selectedDatapoint, (point) => {
-  selectedDatapointAlias.value = point
-    ? uniqueDatapointAlias(point.name || point.path.split('.').pop() || 'tag')
-    : ''
-})
-
 watch(codeTemplates, (templates) => {
   if (!templates.some((item) => item.id === activeTemplateId.value)) {
     activeTemplateId.value = templates[0]?.id || 'argv'
@@ -1443,6 +1781,7 @@ watch(codeTemplates, (templates) => {
 watch(
   () => props.activeId,
   () => {
+    cancelSandboxRequests()
     activePanel.value = 'inputs'
     panelCollapsed.value = true
     panelHeight.value = panelDefaultHeight
@@ -1452,6 +1791,7 @@ watch(
     syntaxStatus.value = 'idle'
     syntaxDiagnostics.value = []
     syntaxErrorText.value = ''
+    clearSchedulePreview()
     monacoEditorRef.value?.setDiagnostics?.([])
     resetDebugArgvFromDefinition(false)
     resetDebugDatapointsFromDefinition(false)
@@ -1462,21 +1802,62 @@ watch(
 onBeforeUnmount(() => {
   stopPanelResize()
   clearSyntaxCheckTimer()
+  cancelSandboxRequests()
 })
 
 watch(
-  () => [props.activeDraft?.code, props.activeDraft?.lang],
+  () => [activeDraft.value?.code, activeDraft.value?.lang],
   () => {
-    if (!props.activeDraft) return
+    if (!activeDraft.value) return
     syntaxStatus.value = 'dirty'
     scheduleSyntaxCheck()
   },
 )
 
+watch(sandboxAvailable, (available, wasAvailable) => {
+  if (!available || wasAvailable || !activeDraft.value) return
+  syntaxStatus.value = 'dirty'
+  syntaxErrorText.value = ''
+  scheduleSyntaxCheck()
+})
+
 function markDirty() {
-  if (props.activeDraft) {
-    emit('mark-dirty', props.activeDraft.id)
+  if (activeDraft.value) {
+    emit('mark-dirty', activeDraft.value.id)
   }
+}
+
+function clearSchedulePreview() {
+  schedulePreviewSeq += 1
+  schedulePreviewLoading.value = false
+  schedulePreviewSummary.value = ''
+  schedulePreviewRuns.value = []
+  schedulePreviewErrors.value = []
+}
+
+function markScheduleDirty() {
+  markDirty()
+  clearSchedulePreview()
+}
+
+function scheduleDateTimeValue(field: 'startAt' | 'endAt') {
+  const value = String(activeDraft.value?.triggerConfig[field] || '')
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+  return local.toISOString().slice(0, 19)
+}
+
+function updateScheduleDateTime(field: 'startAt' | 'endAt', event: Event) {
+  if (!activeDraft.value) return
+  const value = (event.target as HTMLInputElement).value
+  activeDraft.value.triggerConfig[field] = value ? new Date(value).toISOString() : ''
+  markScheduleDirty()
+}
+
+function scheduleFieldError(field: string) {
+  return schedulePreviewErrors.value.find((item) => item.field.endsWith(field))?.message || ''
 }
 
 function clearSyntaxCheckTimer() {
@@ -1486,9 +1867,19 @@ function clearSyntaxCheckTimer() {
   }
 }
 
+// 标签切换、关闭或组件卸载时中止 HTTP 请求；取消会沿 Go 请求上下文传到沙箱并终止整个进程组。
+function cancelSandboxRequests() {
+  syntaxCheckSeq += 1
+  syntaxCheckController?.abort()
+  syntaxCheckController = null
+  debugController?.abort()
+  debugController = null
+  debugRunning.value = false
+}
+
 function scheduleSyntaxCheck() {
   clearSyntaxCheckTimer()
-  if (!props.activeDraft) return
+  if (!activeDraft.value) return
   syntaxCheckTimer = window.setTimeout(() => {
     void runSyntaxCheck()
   }, 600)
@@ -1500,28 +1891,38 @@ async function runSyntaxCheck() {
     syntaxErrorText.value = '独立计算沙箱不可用'
     return false
   }
-  if (!props.activeDraft) return false
+  if (!activeDraft.value) return false
   clearSyntaxCheckTimer()
   const seq = ++syntaxCheckSeq
+  syntaxCheckController?.abort()
+  const controller = new AbortController()
+  syntaxCheckController = controller
   syntaxStatus.value = 'checking'
   syntaxErrorText.value = ''
   try {
-    const result = await checkComputeSyntax(props.projectId, {
-      lang: props.activeDraft.lang,
-      code: props.activeDraft.code,
-    })
+    const result = await checkComputeSyntax(
+      props.projectId,
+      {
+        lang: activeDraft.value.lang,
+        code: activeDraft.value.code,
+      },
+      controller.signal,
+    )
     if (seq !== syntaxCheckSeq) return false
     syntaxDiagnostics.value = result.diagnostics || []
     syntaxStatus.value = syntaxDiagnostics.value.length ? 'failed' : 'clean'
     monacoEditorRef.value?.setDiagnostics?.(syntaxDiagnostics.value)
     return syntaxDiagnostics.value.length === 0
   } catch (error) {
+    if (controller.signal.aborted) return false
     if (seq !== syntaxCheckSeq) return false
     syntaxDiagnostics.value = []
     monacoEditorRef.value?.setDiagnostics?.([])
     syntaxStatus.value = 'failed'
     syntaxErrorText.value = getApiErrorMessage(error, '语法检查失败')
     return false
+  } finally {
+    if (syntaxCheckController === controller) syntaxCheckController = null
   }
 }
 
@@ -1546,14 +1947,15 @@ function revealDiagnostic(item: ComputeSyntaxDiagnostic) {
   monacoEditorRef.value?.revealPosition?.(item.line, item.column)
 }
 
-function updateOutputBindings() {
-  markDirty()
-}
-
 async function saveAfterSyntaxCheck() {
-  if (!props.activeDraft) return
+  if (!activeDraft.value) return
+  // 沙箱离线只影响开发态语法检查和试运行，不能阻断配置本身的保存。
+  if (!sandboxAvailable.value) {
+    emit('save', activeDraft.value.id)
+    return
+  }
   if (!(await ensureSyntaxClean())) return
-  emit('save', props.activeDraft.id)
+  emit('save', activeDraft.value.id)
 }
 
 function togglePanelCollapsed() {
@@ -1620,10 +2022,10 @@ function stopPanelResize() {
 }
 
 function addInput() {
-  if (!props.activeDraft) return
-  props.activeDraft.parameterRows.push({
+  if (!activeDraft.value) return
+  activeDraft.value.parameterRows.push({
     uid: crypto.randomUUID(),
-    name: `arg${props.activeDraft.parameterRows.length + 1}`,
+    name: `arg${activeDraft.value.parameterRows.length + 1}`,
     type: 'string',
     required: true,
     defaultValue: '',
@@ -1632,9 +2034,9 @@ function addInput() {
   markDirty()
 }
 
-function addDatapointVariable(point: Datapoint, alias: string) {
-  if (!props.activeDraft) return
-  props.activeDraft.datapointVariableRows.push({
+function addDatapointVariable(point: DatapointPickerSelection, alias: string) {
+  if (!activeDraft.value) return
+  activeDraft.value.datapointVariableRows.push({
     uid: crypto.randomUUID(),
     alias,
     path: point.path,
@@ -1645,20 +2047,20 @@ function addDatapointVariable(point: Datapoint, alias: string) {
 }
 
 function removeDatapointVariable(index: number) {
-  if (!props.activeDraft) return
-  props.activeDraft.datapointVariableRows.splice(index, 1)
+  if (!activeDraft.value) return
+  activeDraft.value.datapointVariableRows.splice(index, 1)
   markDirty()
 }
 
 function removeUnusedDatapointVariables() {
-  if (!props.activeDraft) return
-  const nextRows = props.activeDraft.datapointVariableRows.filter((row) =>
+  if (!activeDraft.value) return
+  const nextRows = activeDraft.value.datapointVariableRows.filter((row) =>
     isDatapointVariableReferenced(row.alias),
   )
-  if (nextRows.length === props.activeDraft.datapointVariableRows.length) return
-  props.activeDraft.datapointVariableRows.splice(
+  if (nextRows.length === activeDraft.value.datapointVariableRows.length) return
+  activeDraft.value.datapointVariableRows.splice(
     0,
-    props.activeDraft.datapointVariableRows.length,
+    activeDraft.value.datapointVariableRows.length,
     ...nextRows,
   )
   markDirty()
@@ -1666,81 +2068,77 @@ function removeUnusedDatapointVariables() {
 }
 
 function removeInput(index: number) {
-  if (!props.activeDraft) return
-  props.activeDraft.parameterRows.splice(index, 1)
+  if (!activeDraft.value) return
+  activeDraft.value.parameterRows.splice(index, 1)
   markDirty()
 }
 
-async function openDatapointPicker(intent: 'variable' | 'trigger') {
+function openDatapointPicker(intent: 'variable' | 'trigger') {
   datapointPickerIntent.value = intent
   datapointPickerVisible.value = true
-  selectedDatapointId.value = null
-  selectedDatapointAlias.value = ''
-  await reloadPickerDatapoints()
 }
 
-async function reloadPickerDatapoints() {
-  datapointPickerPage.value = 1
-  await loadPickerDatapoints()
+function isTriggerScalarType(dataType?: string) {
+  const normalized = String(dataType || '').toLowerCase()
+  return normalized === 'bool' || normalized === 'string' || numericDatapointTypes.has(normalized)
 }
 
-async function loadPickerDatapoints() {
-  if (!props.projectId) return
-  datapointPickerLoading.value = true
-  try {
-    const params: Record<string, unknown> = {
-      search: datapointPickerKeyword.value,
-      page: datapointPickerPage.value,
-      pageSize: datapointPickerPageSize,
-    }
-    if (datapointPickerSource.value) {
-      params.type = datapointPickerSource.value
-      params.sourceType = datapointPickerSource.value
-    }
-    if (datapointPickerDataType.value) {
-      params.dataType = datapointPickerDataType.value
-    }
-    if (datapointPickerStatus.value) {
-      params.status = datapointPickerStatus.value
-    }
-    const result = await getDatapoints(props.projectId, params)
-    datapointPickerOptions.value = result.list
-    datapointPickerTotal.value = Number(result.pagination?.total ?? result.list.length)
-    if (
-      selectedDatapointId.value &&
-      !result.list.some((point) => String(point.id) === selectedDatapointId.value)
-    ) {
-      selectedDatapointId.value = null
-    }
-  } finally {
-    datapointPickerLoading.value = false
+function datapointTriggerDisabledReason(point: DatapointPickerSelection) {
+  if (point.status && point.status !== 'active') return '变化触发只能选择状态正常的数据点'
+  if (!isTriggerScalarType(point.dataType)) return '变化触发仅支持 bool、string 和数值数据点'
+  return ''
+}
+
+function isPointChangeModeCompatible(mode: string) {
+  const dataType = String(activeDraft.value?.triggerConfig.dataType || '').toLowerCase()
+  if (!dataType) return true
+  if (mode === 'increase' || mode === 'decrease') return numericDatapointTypes.has(dataType)
+  if (mode === 'rising_edge' || mode === 'falling_edge') return dataType === 'bool'
+  return isTriggerScalarType(dataType)
+}
+
+function handlePointChangeMode() {
+  if (!activeDraft.value) return
+  if (!pointChangeDeadbandAvailable.value) delete activeDraft.value.triggerConfig.deadband
+  markDirty()
+}
+
+function appendConditionVariable(alias: string) {
+  if (!activeDraft.value) return
+  const current = String(activeDraft.value.triggerConfig.expression || '').trimEnd()
+  activeDraft.value.triggerConfig.expression = current ? `${current} ${alias}` : alias
+  markDirty()
+}
+
+function ensureConditionPhase(fallback: 'entered' | 'active' | 'exited') {
+  if (!activeDraft.value) return
+  const phases = activeDraft.value.triggerConfig.phases
+  if (!Array.isArray(phases) || phases.length === 0) {
+    activeDraft.value.triggerConfig.phases = [fallback]
+    ElMessage.warning('至少保留一个触发阶段')
   }
+  markDirty()
 }
 
-async function changePickerPage(page: number) {
-  const nextPage = Math.min(Math.max(1, page), datapointPickerTotalPages.value)
-  if (nextPage === datapointPickerPage.value) return
-  datapointPickerPage.value = nextPage
-  await loadPickerDatapoints()
-}
-
-function confirmSelectedDatapoint(point?: Datapoint) {
-  const target = point || selectedDatapoint.value
+function confirmSelectedDatapoint(points: DatapointPickerSelection[]) {
+  const target = points[0]
   if (!target) return
   if (datapointPickerIntent.value === 'trigger') {
-    if (props.activeDraft) {
-      props.activeDraft.triggerConfig = {
-        ...props.activeDraft.triggerConfig,
+    if (activeDraft.value) {
+      activeDraft.value.triggerConfig = {
+        ...activeDraft.value.triggerConfig,
         datapointId: target.id,
         path: target.path,
+        dataType: target.dataType,
+        mode: 'any',
       }
       markDirty()
     }
     datapointPickerVisible.value = false
     return
   }
-  const alias = selectedDatapointAlias.value.trim() || uniqueDatapointAlias(target.name)
-  if (!isValidVariableName(alias, props.activeDraft.lang)) {
+  const alias = uniqueDatapointAlias(target.name || target.path.split('.').pop() || 'tag')
+  if (!isValidVariableName(alias, activeDraft.value.lang)) {
     ElMessage.warning('变量名必须是当前脚本语言的合法变量名')
     return
   }
@@ -1767,8 +2165,8 @@ async function executeDebug() {
     debugError.value = '独立计算沙箱不可用'
     return
   }
-  if (!props.activeDraft) return
-  if (props.activeDraft.dirty) {
+  if (!activeDraft.value) return
+  if (activeDraft.value.dirty) {
     ElMessage.warning('请先保存后再试运行')
     return
   }
@@ -1784,15 +2182,28 @@ async function executeDebug() {
   debugRunning.value = true
   debugResult.value = null
   debugError.value = ''
+  debugController?.abort()
+  const controller = new AbortController()
+  debugController = controller
   try {
-    debugResult.value = await debugComputeUnit(props.projectId, props.activeDraft.id, input, true)
+    debugResult.value = await debugComputeUnit(
+      props.projectId,
+      activeDraft.value.id,
+      input,
+      true,
+      controller.signal,
+    )
     activeDebugResultTab.value = debugErrorText.value ? 'error' : 'output'
     ElMessage.success('试运行完成')
   } catch (error) {
+    if (controller.signal.aborted) return
     debugError.value = getApiErrorMessage(error, '试运行失败')
     activeDebugResultTab.value = 'error'
   } finally {
-    debugRunning.value = false
+    if (debugController === controller) {
+      debugController = null
+      debugRunning.value = false
+    }
   }
 }
 
@@ -1804,75 +2215,115 @@ async function quickDryRun() {
 }
 
 function setTriggerType(type: string) {
-  if (!props.activeDraft) return
+  if (!activeDraft.value) return
+  if (type.startsWith('schedule_')) {
+    panelHeight.value = Math.max(panelHeight.value, 340)
+  }
   if (type === 'schedule_interval') {
-    props.activeDraft.triggerType = 'schedule'
-    props.activeDraft.triggerConfig = {
+    activeDraft.value.triggerType = 'schedule'
+    activeDraft.value.triggerConfig = {
       kind: 'interval',
       every: 1,
       unit: 'minutes',
     }
   } else if (type === 'schedule_daily') {
-    props.activeDraft.triggerType = 'schedule'
-    props.activeDraft.triggerConfig = {
+    activeDraft.value.triggerType = 'schedule'
+    activeDraft.value.triggerConfig = {
       kind: 'daily',
       time: '00:00:00',
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai',
     }
   } else if (type === 'schedule_weekly') {
-    props.activeDraft.triggerType = 'schedule'
-    props.activeDraft.triggerConfig = {
+    activeDraft.value.triggerType = 'schedule'
+    activeDraft.value.triggerConfig = {
       kind: 'weekly',
       weekdays: [1],
       time: '00:00:00',
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai',
     }
+  } else if (type === 'schedule_monthly') {
+    activeDraft.value.triggerType = 'schedule'
+    activeDraft.value.triggerConfig = {
+      kind: 'monthly',
+      dayRule: 'day',
+      dayOfMonth: 1,
+      time: '00:00:00',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai',
+    }
+  } else if (type === 'schedule_yearly') {
+    activeDraft.value.triggerType = 'schedule'
+    activeDraft.value.triggerConfig = {
+      kind: 'yearly',
+      month: 1,
+      dayRule: 'day',
+      dayOfMonth: 1,
+      time: '00:00:00',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai',
+    }
   } else if (type === 'datapoint_change') {
-    props.activeDraft.triggerType = type
-    props.activeDraft.triggerConfig = {
+    activeDraft.value.triggerType = type
+    activeDraft.value.triggerConfig = {
       datapointId: '',
       path: '',
+      mode: 'any',
+      debounceMs: 0,
+    }
+  } else if (type === 'condition') {
+    activeDraft.value.triggerType = type
+    activeDraft.value.triggerConfig = {
+      expression: '',
+      phases: ['entered', 'active', 'exited'],
+      debounceMs: 0,
     }
   } else {
-    props.activeDraft.triggerType = 'manual'
-    props.activeDraft.triggerConfig = {}
+    activeDraft.value.triggerType = 'manual'
+    activeDraft.value.triggerConfig = {}
   }
   markDirty()
-  schedulePreviewText.value = ''
+  clearSchedulePreview()
 }
 
 async function previewSchedule() {
-  if (!props.activeDraft || props.activeDraft.triggerType !== 'schedule') return
+  if (!activeDraft.value || activeDraft.value.triggerType !== 'schedule') return
+  const seq = ++schedulePreviewSeq
+  schedulePreviewLoading.value = true
+  schedulePreviewSummary.value = ''
+  schedulePreviewRuns.value = []
+  schedulePreviewErrors.value = []
   try {
     const preview = await previewComputeSchedule(props.projectId, {
-      triggerType: props.activeDraft.triggerType,
-      triggerConfig: props.activeDraft.triggerConfig,
+      triggerType: activeDraft.value.triggerType,
+      triggerConfig: activeDraft.value.triggerConfig,
     })
-    if (preview.errors.length > 0) {
-      schedulePreviewText.value = preview.errors.map((item) => item.message).join('；')
-      return
-    }
-    const next = preview.nextRuns[0]
-      ? new Date(preview.nextRuns[0]).toLocaleString()
-      : '暂无后续执行时间'
-    schedulePreviewText.value = `${preview.summary}；下次：${next}`
+    if (seq !== schedulePreviewSeq) return
+    schedulePreviewSummary.value = preview.summary
+    schedulePreviewRuns.value = preview.nextRuns
+    schedulePreviewErrors.value = preview.errors
   } catch (error) {
-    schedulePreviewText.value = getApiErrorMessage(error, '定时配置无效')
+    if (seq !== schedulePreviewSeq) return
+    schedulePreviewErrors.value = [
+      { field: '', message: getApiErrorMessage(error, '定时配置无效') },
+    ]
+  } finally {
+    if (seq === schedulePreviewSeq) schedulePreviewLoading.value = false
+  }
+}
+
+function formatScheduleRun(value: string) {
+  const timezone = String(activeDraft.value?.triggerConfig.timezone || '')
+  try {
+    return new Intl.DateTimeFormat('zh-CN', {
+      dateStyle: 'medium',
+      timeStyle: 'medium',
+      ...(timezone ? { timeZone: timezone } : {}),
+    }).format(new Date(value))
+  } catch {
+    return new Date(value).toLocaleString()
   }
 }
 
 function isDependencyChecked(id: string) {
-  return props.activeDraft?.dependencies.some((item) => item.id === id) || false
-}
-
-function toggleDependency(id: string) {
-  if (!props.activeDraft) return
-  if (isDependencyChecked(id)) {
-    props.activeDraft.dependencies = props.activeDraft.dependencies.filter((item) => item.id !== id)
-  } else {
-    props.activeDraft.dependencies.push({ id })
-  }
-  markDirty()
+  return activeDraft.value?.dependencies.some((item) => item.id === id) || false
 }
 
 function dependencyName(id: string) {
@@ -1882,6 +2333,7 @@ function dependencyName(id: string) {
 function triggerIcon(id: string) {
   if (id.startsWith('schedule_')) return IconTablerClock
   if (id === 'datapoint_change') return IconTablerDatabaseImport
+  if (id === 'condition') return IconTablerGitFork
   return IconTablerManualGearbox
 }
 
@@ -1889,18 +2341,21 @@ function triggerDescription(id: string) {
   if (id === 'schedule_interval') return '每隔一段时间执行'
   if (id === 'schedule_daily') return '每天指定时间执行'
   if (id === 'schedule_weekly') return '每周指定日期执行'
+  if (id === 'schedule_monthly') return '每月按日期规则执行'
+  if (id === 'schedule_yearly') return '每年按日期规则执行'
   if (id === 'datapoint_change') return '数据点变化时执行'
+  if (id === 'condition') return '条件状态变化时执行'
   return '调用方主动执行'
 }
 
 function isTriggerOptionActive(id: string) {
-  if (!props.activeDraft) return false
+  if (!activeDraft.value) return false
   if (id.startsWith('schedule_'))
     return (
-      props.activeDraft.triggerType === 'schedule' &&
-      props.activeDraft.triggerConfig.kind === id.replace('schedule_', '')
+      activeDraft.value.triggerType === 'schedule' &&
+      activeDraft.value.triggerConfig.kind === id.replace('schedule_', '')
     )
-  return props.activeDraft.triggerType === id
+  return activeDraft.value.triggerType === id
 }
 
 function parseDebugInput(): Record<string, unknown> {
@@ -1954,7 +2409,7 @@ function resetDebugDatapointsFromDefinition(showMessage = true) {
 }
 
 function buildDefaultDebugArgv() {
-  const argv = (props.activeDraft?.parameterRows || []).map((row) =>
+  const argv = (activeDraft.value?.parameterRows || []).map((row) =>
     defaultValueByType(row.type, row.defaultValue),
   )
   return JSON.stringify(argv, null, 2)
@@ -1962,7 +2417,7 @@ function buildDefaultDebugArgv() {
 
 function buildDefaultDebugDatapoints() {
   const values = Object.fromEntries(
-    (props.activeDraft?.datapointVariableRows || [])
+    (activeDraft.value?.datapointVariableRows || [])
       .filter((row) => row.alias.trim())
       .map((row) => [row.alias.trim(), defaultValueByType(row.dataType || 'string', '')]),
   )
@@ -1990,8 +2445,8 @@ function defaultValueByType(type: string, defaultValue: string) {
 }
 
 function uniqueDatapointAlias(name: string) {
-  const base = normalizeVariableName(name, props.activeDraft?.lang)
-  const used = new Set((props.activeDraft?.datapointVariableRows || []).map((row) => row.alias))
+  const base = normalizeVariableName(name, activeDraft.value?.lang)
+  const used = new Set((activeDraft.value?.datapointVariableRows || []).map((row) => row.alias))
   if (!used.has(base)) return base
   let index = 2
   while (used.has(`${base}${index}`)) {
@@ -2117,18 +2572,18 @@ function isValidVariableName(name: string, lang?: ComputeLang | string) {
 }
 
 function isDatapointAliasUsed(name: string) {
-  return Boolean(props.activeDraft?.datapointVariableRows.some((row) => row.alias === name))
+  return Boolean(activeDraft.value?.datapointVariableRows.some((row) => row.alias === name))
 }
 
 function isDatapointVariableReferenced(alias: string) {
-  if (!props.activeDraft) return false
+  if (!activeDraft.value) return false
   const name = alias.trim()
   if (!name) return false
   const pattern = new RegExp(
     `(?<![\\p{ID_Continue}$])${escapeRegExp(name)}(?![\\p{ID_Continue}$])`,
     'u',
   )
-  return pattern.test(props.activeDraft.code || '')
+  return pattern.test(activeDraft.value.code || '')
 }
 
 function escapeRegExp(value: string) {
@@ -2166,26 +2621,6 @@ const statusText = (status?: string) => {
     disabled: '停用',
   }
   return map[status || ''] || '未知'
-}
-
-const datapointStatusText = (status?: string) => {
-  const map: Record<string, string> = {
-    active: '正常',
-    inactive: '停用',
-    error: '异常',
-    unknown: '未知',
-  }
-  return map[status || ''] || '未知'
-}
-
-const sourceTypeText = (sourceType?: string) => {
-  const map: Record<string, string> = {
-    'mqtt.subscription': 'MQTT',
-    'db.query': '数据库',
-    http: 'HTTP',
-    manual: '手动',
-  }
-  return map[sourceType || ''] || sourceType || '-'
 }
 
 const statusTone = (status?: string) => {
@@ -2290,12 +2725,37 @@ const statusTone = (status?: string) => {
 
 .compute-editor__sandbox-warning {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 8px 16px;
   color: var(--el-color-warning-dark-2);
   font-size: 12px;
   line-height: 20px;
   background: var(--el-color-warning-light-9);
   border-bottom: 1px solid var(--el-color-warning-light-7);
+}
+
+.compute-editor__sandbox-warning span {
+  min-width: 0;
+}
+
+.compute-editor__sandbox-warning button {
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--el-color-warning-light-5);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  color: var(--el-color-warning-dark-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.compute-editor__sandbox-warning button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .compute-editor__title-wrap {
@@ -2659,9 +3119,9 @@ const statusTone = (status?: string) => {
 }
 
 .compute-editor__field input,
+.compute-editor__field select,
 .compute-editor__mapping-row input,
-.compute-editor__mapping-row select,
-.compute-editor__alias-field input {
+.compute-editor__mapping-row select {
   height: 26px;
   min-width: 0;
   border: 1px solid var(--dc-border);
@@ -2670,6 +3130,50 @@ const statusTone = (status?: string) => {
   color: var(--dc-text);
   padding: 0 8px;
   font-size: 12px;
+}
+
+.compute-editor__outputs {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.compute-editor__outputs > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.compute-editor__output-item {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding: 9px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface);
+}
+
+.compute-editor__output-item > small {
+  overflow: hidden;
+  color: var(--dc-text-muted);
+  font-family: Consolas, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compute-editor__remove-output {
+  justify-self: end;
+  border: 0;
+  background: transparent;
+  color: var(--el-color-danger);
+  cursor: pointer;
+}
+
+.compute-editor__remove-output:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .compute-editor__inspector p,
@@ -3090,8 +3594,14 @@ const statusTone = (status?: string) => {
   margin-top: 12px;
 }
 
+.compute-editor__panel.is-trigger {
+  overflow: hidden;
+}
+
 .compute-editor__trigger-layout {
+  height: 100%;
   min-width: 0;
+  min-height: 0;
   display: grid;
   grid-template-columns: 210px minmax(0, 1fr);
   gap: 10px;
@@ -3099,15 +3609,22 @@ const statusTone = (status?: string) => {
 
 .compute-editor__trigger-rail {
   min-width: 0;
+  min-height: 0;
   display: grid;
+  grid-auto-rows: max-content;
   align-content: start;
   gap: 6px;
   padding-right: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   border-right: 1px solid var(--dc-border);
 }
 
 .compute-editor__trigger-rail button {
-  min-height: 34px;
+  width: 100%;
+  height: auto;
+  min-height: 50px;
   min-width: 0;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
@@ -3135,6 +3652,7 @@ const statusTone = (status?: string) => {
   overflow: hidden;
   font-size: 13px;
   font-weight: 800;
+  line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3143,12 +3661,26 @@ const statusTone = (status?: string) => {
   overflow: hidden;
   color: var(--dc-text-muted);
   font-size: 12px;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .compute-editor__trigger-config {
   min-width: 0;
+  min-height: 0;
+  padding-right: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.compute-editor__trigger-config > .compute-editor__panel-head {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  padding-bottom: 4px;
+  background: var(--dc-surface-raised);
 }
 
 .compute-editor__trigger-card {
@@ -3172,9 +3704,140 @@ const statusTone = (status?: string) => {
 }
 
 .compute-editor__trigger-card.is-schedule {
-  max-width: 620px;
+  width: 100%;
+  max-width: 760px;
   align-items: stretch;
   flex-direction: column;
+}
+
+.compute-editor__schedule-rule,
+.compute-editor__schedule-window {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.compute-editor__schedule-rule > .compute-editor__field,
+.compute-editor__schedule-window > .compute-editor__field {
+  min-width: 0;
+  margin: 0;
+}
+
+.compute-editor__trigger-card.is-datapoint-change {
+  width: 100%;
+  max-width: 760px;
+  display: grid;
+  grid-template-columns: minmax(260px, 1.5fr) minmax(180px, 1fr);
+  align-items: end;
+}
+
+.compute-editor__datapoint-trigger-source {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.compute-editor__datapoint-trigger-source > .compute-editor__field,
+.compute-editor__trigger-card.is-datapoint-change > .compute-editor__field {
+  min-width: 0;
+  margin: 0;
+}
+
+.compute-editor__trigger-card.is-datapoint-change > .compute-editor__trigger-note {
+  grid-column: 1 / -1;
+}
+
+.compute-editor__trigger-card.is-condition {
+  width: 100%;
+  max-width: 760px;
+  display: grid;
+  grid-template-columns: minmax(260px, 1.5fr) minmax(180px, 1fr);
+  align-items: end;
+}
+
+.compute-editor__condition-expression,
+.compute-editor__condition-variables,
+.compute-editor__trigger-card.is-condition > .compute-editor__trigger-note {
+  grid-column: 1 / -1;
+}
+
+.compute-editor__condition-expression textarea {
+  width: 100%;
+  min-height: 54px;
+  box-sizing: border-box;
+  padding: 7px 8px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface);
+  color: var(--dc-text);
+  font: inherit;
+  resize: vertical;
+}
+
+.compute-editor__condition-variables {
+  display: grid;
+  gap: 5px;
+}
+
+.compute-editor__condition-variables > span {
+  color: var(--dc-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.compute-editor__condition-variables > div {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.compute-editor__condition-variables button {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-muted);
+  color: var(--dc-primary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.compute-editor__condition-variables small {
+  color: var(--dc-text-muted);
+  font-size: 11px;
+}
+
+.compute-editor__condition-phases {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.compute-editor__condition-phases legend {
+  margin-bottom: 5px;
+  padding: 0;
+  color: var(--dc-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.compute-editor__condition-phases label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+}
+
+.compute-editor__condition-phases input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
 }
 
 .compute-editor__trigger-card > .compute-editor__field {
@@ -3217,11 +3880,79 @@ const statusTone = (status?: string) => {
   font-size: 12px;
 }
 
-.compute-editor__trigger-note,
-.compute-editor__trigger-preview span {
+.compute-editor__trigger-note {
   margin: 0;
   color: var(--dc-text-muted);
   font-size: 11px;
+}
+
+.compute-editor__trigger-preview {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: flex-start;
+  padding-top: 8px;
+  border-top: 1px solid var(--dc-border);
+}
+
+.compute-editor__preview-button {
+  min-width: 112px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in oklch, var(--dc-primary) 32%, var(--dc-border));
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-primary-soft);
+  color: var(--dc-primary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.compute-editor__preview-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.compute-editor__trigger-preview-result {
+  min-width: min(100%, 340px);
+  display: grid;
+  gap: 5px;
+  color: var(--dc-text-secondary);
+  font-size: 12px;
+}
+
+.compute-editor__trigger-preview-result ol,
+.compute-editor__schedule-errors {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.compute-editor__schedule-errors,
+.compute-editor__field-error {
+  color: var(--dc-danger);
+  font-size: 12px;
+}
+
+@media (max-width: 980px) {
+  .compute-editor__trigger-layout {
+    grid-template-columns: 180px minmax(0, 1fr);
+  }
+
+  .compute-editor__trigger-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .compute-editor__preview-button {
+    width: max-content;
+  }
+
+  .compute-editor__schedule-rule,
+  .compute-editor__schedule-window,
+  .compute-editor__trigger-card.is-datapoint-change,
+  .compute-editor__trigger-card.is-condition {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .compute-editor__trigger-card strong {
@@ -3613,238 +4344,7 @@ const statusTone = (status?: string) => {
   color: var(--dc-danger);
 }
 
-.compute-editor__picker {
-  display: grid;
-  gap: 10px;
-}
-
-.compute-editor__picker-toolbar {
-  display: grid;
-  grid-template-columns: minmax(200px, 1fr) 120px 112px 112px auto;
-  gap: 8px;
-  align-items: center;
-}
-
-.compute-editor__picker-select {
-  height: 30px;
-  min-width: 0;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface);
-  color: var(--dc-text-secondary);
-  padding: 0 8px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.compute-editor__picker-loading {
-  padding: 10px;
-}
-
-.compute-editor__picker-table-wrap {
-  min-height: 300px;
-  max-height: 390px;
-  overflow: auto;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface);
-}
-
-.compute-editor__picker-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-
-.compute-editor__picker-table th,
-.compute-editor__picker-table td {
-  min-width: 0;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--dc-border);
-  text-align: left;
-  vertical-align: middle;
-}
-
-.compute-editor__picker-table th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--dc-surface-raised);
-  color: var(--dc-text-muted);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.compute-editor__picker-table th:nth-child(1) {
-  width: 20%;
-}
-
-.compute-editor__picker-table th:nth-child(2) {
-  width: 32%;
-}
-
-.compute-editor__picker-table th:nth-child(3) {
-  width: 12%;
-}
-
-.compute-editor__picker-table th:nth-child(4) {
-  width: 14%;
-}
-
-.compute-editor__picker-table th:nth-child(5) {
-  width: 12%;
-}
-
-.compute-editor__picker-table th:nth-child(6) {
-  width: 10%;
-}
-
-.compute-editor__picker-table tbody tr {
-  cursor: pointer;
-}
-
-.compute-editor__picker-table tbody tr:hover,
-.compute-editor__picker-table tbody tr.is-selected {
-  background: var(--dc-primary-soft);
-}
-
-.compute-editor__picker-table strong,
-.compute-editor__picker-table code,
-.compute-editor__picker-table td {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.compute-editor__picker-table strong {
-  display: block;
-  color: var(--dc-text);
-  font-size: 13px;
-}
-
-.compute-editor__picker-table code {
-  display: block;
-  color: var(--dc-text-muted);
-  font-family: Consolas, 'Courier New', monospace;
-  font-size: 12px;
-}
-
-.compute-editor__picker-status {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: var(--dc-surface-muted);
-  color: var(--dc-text-muted);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.compute-editor__picker-status.is-active {
-  background: var(--dc-success-soft);
-  color: var(--dc-success);
-}
-
-.compute-editor__picker-status.is-error {
-  background: var(--dc-danger-soft);
-  color: var(--dc-danger);
-}
-
-.compute-editor__picker-status.is-inactive {
-  color: var(--dc-text-muted);
-}
-
-.compute-editor__picker-row-action {
-  height: 26px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 9px;
-  border: 1px solid rgba(29, 78, 216, 0.28);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-primary-soft);
-  color: var(--dc-primary);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.compute-editor__picker-empty {
-  margin: 10px;
-  display: grid;
-  gap: 5px;
-}
-
-.compute-editor__picker-empty strong {
-  color: var(--dc-text);
-}
-
-.compute-editor__picker-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.compute-editor__picker-count {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--dc-text-muted);
-  font-size: 12px;
-}
-
-.compute-editor__picker-count span {
-  max-width: 240px;
-  overflow: hidden;
-  color: var(--dc-primary);
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.compute-editor__alias-field {
-  display: inline-grid;
-  grid-template-columns: auto 120px;
-  align-items: center;
-  gap: 6px;
-  color: var(--dc-text-muted);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.compute-editor__picker-pager {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.compute-editor__picker-pager button {
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface);
-  color: var(--dc-text-secondary);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.compute-editor__picker-pager button:disabled {
-  cursor: not-allowed;
-  opacity: 0.48;
-}
-
-.compute-editor__picker-pager span {
-  color: var(--dc-text-muted);
-  font-size: 12px;
-}
-
-.compute-editor__picker-confirm,
-.compute-editor__picker-pager .compute-editor__picker-confirm {
+.compute-editor__picker-confirm {
   border-color: var(--dc-primary);
   background: var(--dc-primary);
   color: var(--dc-surface-raised);
@@ -3950,18 +4450,6 @@ const statusTone = (status?: string) => {
     grid-template-columns: 1fr;
   }
 
-  .compute-editor__trigger-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .compute-editor__trigger-rail {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    padding-right: 0;
-    padding-bottom: 8px;
-    border-right: 0;
-    border-bottom: 1px solid var(--dc-border);
-  }
-
   .compute-editor__dependency-row {
     grid-template-columns: 22px minmax(120px, 1fr) minmax(120px, 1fr);
   }
@@ -3979,14 +4467,20 @@ const statusTone = (status?: string) => {
   .compute-editor__template-dialog {
     grid-template-columns: 1fr;
   }
+}
 
-  .compute-editor__picker-toolbar {
-    grid-template-columns: 1fr 1fr;
+@media (max-width: 800px) {
+  .compute-editor__trigger-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(96px, 0.45fr) minmax(0, 1fr);
   }
 
-  .compute-editor__picker-footer {
-    align-items: flex-start;
-    flex-direction: column;
+  .compute-editor__trigger-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-right: 0;
+    padding-bottom: 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--dc-border);
   }
 }
 </style>

@@ -11,12 +11,40 @@ var ErrTimeout = errors.New("compute execution timeout")
 
 // ExecuteRequest 描述一次脚本执行请求。
 type ExecuteRequest struct {
+	ProjectID     string
 	Script        string
 	Input         map[string]any
 	SDKContext    SDKContext
+	Dependencies  []RuntimeDependency
 	Timeout       time.Duration
 	CallbackURL   string
 	CallbackToken string
+}
+
+// RuntimeDependency 是已在工程沙箱环境安装并允许当前脚本加载的依赖。
+type RuntimeDependency struct {
+	Language    string `json:"language"`
+	PackageName string `json:"packageName"`
+	ImportName  string `json:"importName"`
+	Version     string `json:"version"`
+}
+
+type DependencyInstallRequest struct {
+	ProjectID string `json:"projectId"`
+	RuntimeDependency
+}
+
+type DependencyImportRequest struct {
+	ProjectID string
+	Language  string
+	Filename  string
+	Content   []byte
+}
+
+type DependencyManager interface {
+	InstallDependency(ctx context.Context, request DependencyInstallRequest) (RuntimeDependency, error)
+	ImportDependency(ctx context.Context, request DependencyImportRequest) (RuntimeDependency, error)
+	UninstallDependency(ctx context.Context, request DependencyInstallRequest) error
 }
 
 // ExecuteResult 描述脚本执行结果。
@@ -53,6 +81,7 @@ type SyntaxCheckResult struct {
 // SandboxCapabilities 是独立计算沙箱声明的真实能力，data_service 不再维护硬编码能力表。
 type SandboxCapabilities struct {
 	Available      bool                   `json:"available"`
+	Reason         string                 `json:"reason"`
 	ServiceVersion string                 `json:"serviceVersion"`
 	Languages      []LanguageCapability   `json:"languages"`
 	SDK            []string               `json:"sdk"`

@@ -1,96 +1,124 @@
 <template>
-  <aside class="compute-tree">
-    <header class="compute-tree__head">
-      <div class="compute-tree__title">
-        <h2>计算单元</h2>
+  <TreePanel
+    class="compute-tree"
+    title="计算单元"
+    :search-text="keyword"
+    search-placeholder="搜索目录或计算单元"
+    all-label="根目录"
+    :all-active="!selectedFolderId"
+    :loading="loading && hasTreeData"
+    @update:search-text="updateKeyword"
+    @select-all="$emit('selectFolder', null)"
+  >
+    <template #actions>
+      <button
+        type="button"
+        class="is-primary"
+        title="新建单元"
+        aria-label="新建单元"
+        @click="$emit('createUnit')"
+      >
+        <IconTablerPlus class="compute-tree__button-icon" />
+      </button>
+      <button
+        type="button"
+        title="新建文件夹"
+        aria-label="新建文件夹"
+        @click="$emit('createFolder')"
+      >
+        <IconTablerFolderPlus class="compute-tree__button-icon" />
+      </button>
+      <button
+        type="button"
+        title="依赖管理"
+        aria-label="依赖管理"
+        @click="$emit('manageDependencies')"
+      >
+        <IconTablerPackage class="compute-tree__button-icon" />
+      </button>
+      <button type="button" title="刷新" aria-label="刷新" @click="$emit('refresh')">
+        <IconTablerRefresh class="compute-tree__button-icon" />
+      </button>
+    </template>
+
+    <template #notice>
+      <div v-if="listError" class="compute-tree__error">
+        <IconTablerAlertCircle class="compute-tree__error-icon" />
+        <span>{{ listError }}</span>
       </div>
-      <div class="compute-tree__actions">
-        <button
-          type="button"
-          class="compute-tree__primary"
-          title="新建单元"
-          aria-label="新建单元"
-          @click="$emit('createUnit')"
-        >
-          <IconTablerPlus class="compute-tree__button-icon" />
-        </button>
-        <button
-          type="button"
-          class="compute-tree__secondary"
-          title="新建文件夹"
-          aria-label="新建文件夹"
-          @click="$emit('createFolder')"
-        >
-          <IconTablerFolderPlus class="compute-tree__button-icon" />
-        </button>
-        <button
-          type="button"
-          class="compute-tree__secondary compute-tree__refresh"
-          title="刷新"
-          aria-label="刷新"
-          @click="$emit('refresh')"
-        >
-          <IconTablerRefresh class="compute-tree__button-icon" />
-        </button>
+      <div v-else-if="foldersError" class="compute-tree__warn">
+        <IconTablerAlertCircle class="compute-tree__error-icon" />
+        <span>{{ foldersError }}</span>
       </div>
-    </header>
+    </template>
 
-    <div class="compute-tree__searchbar">
-      <el-input
-        v-model="keyword"
-        class="compute-tree__search"
-        clearable
-        size="small"
-        placeholder="搜索计算单元"
-        :prefix-icon="SearchIcon"
-        @update:model-value="scheduleSearch"
-      />
-    </div>
-
-    <div v-if="listError" class="compute-tree__error">
-      <IconTablerAlertCircle class="compute-tree__error-icon" />
-      <span>{{ listError }}</span>
-    </div>
-    <div v-else-if="foldersError" class="compute-tree__warn">
-      <IconTablerAlertCircle class="compute-tree__error-icon" />
-      <span>{{ foldersError }}</span>
-    </div>
-
-    <div v-if="loading" class="compute-tree__loading">
+    <div v-if="loading && !hasTreeData" class="compute-tree__loading">
       <el-skeleton :rows="8" animated />
     </div>
 
-    <div v-else class="compute-tree__body">
-      <ComputeTreeBranch
-        v-for="folder in filteredFolders"
-        :key="folder.id"
-        :node="folder"
-        :selected-unit-id="selectedUnitId"
-        :dirty-unit-ids="dirtyUnitIds"
-        @select-unit="$emit('selectUnit', $event)"
-        @folder-contextmenu="openFolderMenu"
-        @unit-contextmenu="openUnitMenu"
-      />
-      <button
-        v-for="unit in filteredRootUnits"
-        :key="String(unit.id)"
-        type="button"
-        class="compute-tree__unit"
-        :class="{ 'is-active': String(unit.id) === selectedUnitId }"
-        @click="$emit('selectUnit', String(unit.id))"
-        @contextmenu.prevent.stop="openUnitMenu($event, unit)"
-      >
-        <IconTablerFileCode class="compute-tree__unit-icon" />
-        <span class="compute-tree__unit-main">
-          <span class="compute-tree__unit-name">{{ unit.name }}</span>
-        </span>
-        <span
-          class="compute-tree__unit-status"
-          :class="`is-${unitStatusTone(unit)}`"
-          :title="unitStatusText(unit)"
-          :aria-label="unitStatusText(unit)"
-        ></span>
-      </button>
+    <template v-else>
+      <span v-if="loading" class="compute-tree__updating">更新中…</span>
+      <div class="compute-tree__root" role="tree" aria-label="计算单元资源树">
+        <ComputeTreeBranch
+          v-for="folder in filteredFolders"
+          :key="folder.id"
+          :node="folder"
+          :selected-unit-id="selectedUnitId"
+          :dirty-unit-ids="dirtyUnitIds"
+          :loading-folder-ids="loadingFolderIds"
+          :folder-has-more-ids="folderHasMoreIds"
+          :selected-folder-id="selectedFolderId"
+          :search-active="Boolean(keyword)"
+          @select-unit="$emit('selectUnit', $event)"
+          @load-folder="$emit('loadFolder', $event)"
+          @load-more-folder="$emit('loadMoreFolder', $event)"
+          @select-folder="$emit('selectFolder', $event)"
+          @folder-contextmenu="openFolderMenu"
+          @unit-contextmenu="openUnitMenu"
+        />
+        <button
+          v-if="rootFoldersHasMore"
+          type="button"
+          class="compute-tree__load-more"
+          :disabled="rootFoldersLoading"
+          @click="$emit('loadMoreFolder', null)"
+        >
+          {{ rootFoldersLoading ? '加载中…' : '加载更多目录' }}
+        </button>
+        <div
+          v-for="unit in filteredRootUnits"
+          :key="String(unit.id)"
+          class="compute-tree__unit"
+          :class="{ 'is-active': String(unit.id) === selectedUnitId }"
+          role="treeitem"
+          @contextmenu.prevent.stop="openUnitMenu($event, unit)"
+        >
+          <button
+            type="button"
+            class="compute-tree__unit-main"
+            :title="unit.name"
+            @click="$emit('selectUnit', String(unit.id))"
+          >
+            <IconTablerFileCode class="compute-tree__unit-icon" />
+            <span class="compute-tree__unit-name">{{ unit.name }}</span>
+          </button>
+          <span
+            class="compute-tree__unit-status"
+            :class="`is-${unitStatusTone(unit)}`"
+            :title="unitStatusText(unit)"
+            :aria-label="unitStatusText(unit)"
+          ></span>
+          <button
+            type="button"
+            class="compute-tree__more"
+            :aria-label="`${unit.name}操作`"
+            title="计算单元操作"
+            @click.stop="openUnitMenu($event, unit)"
+          >
+            <IconTablerDots />
+          </button>
+        </div>
+      </div>
 
       <EmptyState
         v-if="filteredRootUnits.length === 0 && filteredFolders.length === 0"
@@ -98,18 +126,7 @@
         :title="keyword ? '没有匹配的计算单元' : '暂无计算单元'"
         :description="keyword ? '换个关键词再试。' : '新建计算单元后会显示在列表中。'"
       />
-      <button
-        v-if="hasMore && !loading"
-        type="button"
-        class="compute-tree__load-more"
-        :disabled="loadingMore"
-        @click="$emit('loadMore')"
-      >
-        {{ loadingMore ? '加载中...' : `加载更多（${units.length}/${total}）` }}
-      </button>
-    </div>
-
-    <footer class="compute-tree__foot">已加载 {{ units.length }} / 共 {{ total }} 个单元</footer>
+    </template>
 
     <Teleport to="body">
       <div
@@ -138,22 +155,24 @@
         </div>
       </div>
     </Teleport>
-  </aside>
+  </TreePanel>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
-import { Search } from '@element-plus/icons-vue'
 import IconTablerAlertCircle from '~icons/tabler/alert-circle'
+import IconTablerDots from '~icons/tabler/dots'
 import IconTablerFileCode from '~icons/tabler/file-code'
 import IconTablerFolderPlus from '~icons/tabler/folder-plus'
 import IconTablerFolderSymlink from '~icons/tabler/folder-symlink'
+import IconTablerPackage from '~icons/tabler/package'
 import IconTablerPencil from '~icons/tabler/pencil'
 import IconTablerPlus from '~icons/tabler/plus'
 import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerTrash from '~icons/tabler/trash'
 import type { ComputeFolder, ComputeUnit } from '@/api/schemas/compute.schema'
 import EmptyState from '@/components/shared/EmptyState.vue'
+import TreePanel from '@/components/shared/TreePanel.vue'
 import ComputeTreeBranch from './ComputeTreeBranch.vue'
 import {
   buildComputeFolderTree,
@@ -161,19 +180,20 @@ import {
   type ComputeFolderTreeNode,
 } from './computeTreeModel'
 
-const SearchIcon = Search
-
 const props = withDefaults(
   defineProps<{
     units: ComputeUnit[]
     folders: ComputeFolder[]
-    total?: number
     selectedUnitId?: string | null
     dirtyUnitIds?: string[]
     loading?: boolean
     listError?: string
     foldersError?: string
-    loadingMore?: boolean
+    selectedFolderId?: string | null
+    loadingFolderIds?: string[]
+    folderHasMoreIds?: string[]
+    rootFoldersHasMore?: boolean
+    rootFoldersLoading?: boolean
   }>(),
   {
     selectedUnitId: null,
@@ -181,8 +201,11 @@ const props = withDefaults(
     loading: false,
     listError: '',
     foldersError: '',
-    total: 0,
-    loadingMore: false,
+    loadingFolderIds: () => [],
+    folderHasMoreIds: () => [],
+    rootFoldersHasMore: false,
+    rootFoldersLoading: false,
+    selectedFolderId: null,
   },
 )
 
@@ -190,9 +213,12 @@ const emit = defineEmits<{
   (event: 'selectUnit', id: string): void
   (event: 'createUnit'): void
   (event: 'createFolder'): void
+  (event: 'manageDependencies'): void
   (event: 'refresh'): void
   (event: 'search', keyword: string): void
-  (event: 'loadMore'): void
+  (event: 'loadFolder', folderId: string): void
+  (event: 'loadMoreFolder', folderId: string | null): void
+  (event: 'selectFolder', folderId: string | null): void
   (event: 'renameUnit', unit: ComputeUnit): void
   (event: 'moveUnit', unit: ComputeUnit): void
   (event: 'deleteUnit', unit: ComputeUnit): void
@@ -219,13 +245,14 @@ const contextMenu = ref<{
 })
 
 let searchTimer: number | undefined
-const hasMore = computed(() => props.units.length < props.total)
 const tree = computed(() => buildComputeFolderTree(props.folders, props.units))
 const filteredTree = computed(() =>
   filterComputeTree(tree.value.rootFolders, tree.value.rootUnits, keyword.value),
 )
 const filteredFolders = computed(() => filteredTree.value.folders)
 const filteredRootUnits = computed(() => filteredTree.value.units)
+// 目录展开会触发按目录加载；保留现有树 DOM，避免加载态卸载分支后丢失展开状态。
+const hasTreeData = computed(() => props.folders.length > 0 || props.units.length > 0)
 const dirtyUnitIdSet = computed(() => new Set(props.dirtyUnitIds.map(String)))
 
 function scheduleSearch(value: string) {
@@ -233,28 +260,41 @@ function scheduleSearch(value: string) {
   searchTimer = window.setTimeout(() => emit('search', value.trim()), 250)
 }
 
+function updateKeyword(value: string) {
+  keyword.value = value
+  scheduleSearch(value)
+}
+
 onBeforeUnmount(() => window.clearTimeout(searchTimer))
 
 function openUnitMenu(event: MouseEvent, unit: ComputeUnit) {
+  const point = contextMenuPoint(event)
   contextMenu.value = {
     visible: true,
     type: 'unit',
-    x: Math.min(event.clientX, window.innerWidth - 180),
-    y: Math.min(event.clientY, window.innerHeight - 126),
+    x: Math.min(point.x, window.innerWidth - 180),
+    y: Math.min(point.y, window.innerHeight - 126),
     unit,
     folder: null,
   }
 }
 
 function openFolderMenu(event: MouseEvent, folder: ComputeFolderTreeNode) {
+  const point = contextMenuPoint(event)
   contextMenu.value = {
     visible: true,
     type: 'folder',
-    x: Math.min(event.clientX, window.innerWidth - 180),
-    y: Math.min(event.clientY, window.innerHeight - 126),
+    x: Math.min(point.x, window.innerWidth - 180),
+    y: Math.min(point.y, window.innerHeight - 126),
     unit: null,
     folder,
   }
+}
+
+function contextMenuPoint(event: MouseEvent) {
+  if (event.clientX || event.clientY) return { x: event.clientX, y: event.clientY }
+  const rect = (event.currentTarget as HTMLElement | null)?.getBoundingClientRect()
+  return { x: rect?.right || 0, y: rect?.bottom || 0 }
 }
 
 function closeContextMenu() {
@@ -318,95 +358,6 @@ const unitStatusTone = (unit: ComputeUnit) =>
 </script>
 
 <style scoped>
-.compute-tree {
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border-right: 1px solid var(--dc-border);
-  background: var(--dc-surface-raised);
-}
-
-.compute-tree__head {
-  min-height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 5px 10px;
-  border-bottom: 1px solid var(--dc-border);
-}
-
-.compute-tree__head h2 {
-  margin: 0;
-  color: var(--dc-text);
-  font-size: 14px;
-  font-weight: 800;
-  line-height: 1.3;
-}
-
-.compute-tree__title {
-  min-width: 0;
-}
-
-.compute-tree__actions {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex: 0 0 auto;
-}
-
-.compute-tree__searchbar {
-  padding: 8px;
-}
-
-.compute-tree__primary,
-.compute-tree__secondary {
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border-radius: var(--dc-radius-sm);
-  font-size: 13px;
-  font-weight: 700;
-  transition:
-    border-color 0.18s ease,
-    background-color 0.18s ease,
-    color 0.18s ease,
-    transform 0.18s ease;
-}
-
-.compute-tree__primary,
-.compute-tree__secondary {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-}
-
-.compute-tree__primary {
-  border: 1px solid var(--dc-primary);
-  background: var(--dc-primary);
-  color: var(--dc-surface-raised);
-}
-
-.compute-tree__secondary {
-  border: 1px solid var(--dc-border);
-  background: var(--dc-surface-raised);
-  color: var(--dc-text-secondary);
-}
-
-.compute-tree__primary:hover,
-.compute-tree__secondary:hover {
-  transform: translateY(-1px);
-}
-
-.compute-tree__secondary:hover {
-  border-color: rgba(29, 78, 216, 0.28);
-  color: var(--dc-primary);
-}
-
 .compute-tree__button-icon,
 .compute-tree__error-icon,
 .compute-tree__unit-icon {
@@ -414,18 +365,19 @@ const unitStatusTone = (unit: ComputeUnit) =>
   height: 16px;
 }
 
-.compute-tree__body {
-  min-height: 0;
-  flex: 1;
-  display: grid;
-  align-content: start;
-  gap: 2px;
-  padding: 6px;
-  overflow-y: auto;
+.compute-tree__updating {
+  padding: 3px 6px;
+  color: var(--dc-text-muted);
+  font-size: 11px;
 }
 
 .compute-tree__loading {
   padding: 12px;
+}
+
+.compute-tree__root {
+  display: grid;
+  gap: 2px;
 }
 
 .compute-tree__error,
@@ -461,6 +413,21 @@ const unitStatusTone = (unit: ComputeUnit) =>
   text-align: left;
 }
 
+.compute-tree__load-more {
+  min-height: 30px;
+  border: 1px dashed var(--dc-border);
+  border-radius: var(--dc-radius-sm);
+  background: var(--dc-surface-raised);
+  color: var(--dc-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.compute-tree__load-more:disabled {
+  cursor: wait;
+  color: var(--dc-text-muted);
+}
+
 .compute-tree__unit:hover {
   border-color: var(--dc-border);
   background: var(--dc-surface-muted);
@@ -468,12 +435,12 @@ const unitStatusTone = (unit: ComputeUnit) =>
 }
 
 .compute-tree__unit {
-  min-height: 30px;
+  min-height: 32px;
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 10px 26px;
   align-items: center;
-  gap: 6px;
-  padding: 3px 6px;
+  gap: 4px;
+  padding: 2px 3px 2px 6px;
 }
 
 .compute-tree__unit.is-active {
@@ -484,7 +451,17 @@ const unitStatusTone = (unit: ComputeUnit) =>
 
 .compute-tree__unit-main {
   min-width: 0;
-  display: block;
+  height: 28px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
 
 .compute-tree__unit-name {
@@ -528,35 +505,32 @@ const unitStatusTone = (unit: ComputeUnit) =>
   background: var(--dc-primary);
 }
 
-.compute-tree__foot {
-  flex: 0 0 auto;
-  padding: 7px 10px;
+.compute-tree__more {
+  width: 24px;
+  height: 26px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
   color: var(--dc-text-muted);
-  font-size: 12px;
-  line-height: 1.4;
+  opacity: 0;
 }
 
-.compute-tree__load-more {
-  width: calc(100% - 12px);
-  min-height: 30px;
-  margin: 8px 6px 2px;
-  border: 1px solid var(--dc-border);
-  border-radius: var(--dc-radius-sm);
-  background: var(--dc-surface);
+.compute-tree__unit:hover .compute-tree__more,
+.compute-tree__more:focus-visible {
+  opacity: 1;
+}
+
+.compute-tree__more:hover {
+  background: var(--dc-surface-raised);
   color: var(--dc-primary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
 }
 
-.compute-tree__load-more:hover:not(:disabled) {
-  border-color: var(--dc-primary);
-  background: var(--dc-primary-soft);
-}
-
-.compute-tree__load-more:disabled {
-  cursor: wait;
-  opacity: 0.65;
+.compute-tree__more svg {
+  width: 16px;
+  height: 16px;
 }
 
 .compute-tree__menu-mask {

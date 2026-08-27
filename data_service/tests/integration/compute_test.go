@@ -125,6 +125,9 @@ func TestComputeRunJSPython(t *testing.T) {
 		"language":   "js",
 		"scriptCode": "return (argv[0] || 0) + (argv[1] || 0);",
 		"timeoutMs":  3000,
+		"outputs": []map[string]any{{
+			"key": "result", "name": "结果", "dataType": "float64", "nullPolicy": "error",
+		}},
 	})
 	jsRun := mustRunComputeUnit(t, server.URL, token, projectID, jsUnit.ID, map[string]any{
 		"argv": []any{1, 2},
@@ -141,6 +144,9 @@ func TestComputeRunJSPython(t *testing.T) {
 		"language":   "python",
 		"scriptCode": "def main(argv, dp, ctx):\n    return (argv[0] or 0) + (argv[1] or 0)",
 		"timeoutMs":  3000,
+		"outputs": []map[string]any{{
+			"key": "result", "name": "结果", "dataType": "float64", "nullPolicy": "error",
+		}},
 	})
 	pythonRun := mustRunComputeUnit(t, server.URL, token, projectID, pythonUnit.ID, map[string]any{
 		"argv": []any{4, 5},
@@ -298,25 +304,11 @@ func TestComputeOutputDataPointGeneratedOnSave(t *testing.T) {
 	if createdOutputs.DataPoints[0].Path != "calc.output-default-unit.result" {
 		t.Fatalf("expected output datapoint path calc.output-default-unit.result, got %q", createdOutputs.DataPoints[0].Path)
 	}
-	if createdOutputs.DataPoints[0].Name != "output-default-unit" {
-		t.Fatalf("expected output datapoint name output-default-unit, got %q", createdOutputs.DataPoints[0].Name)
+	if createdOutputs.DataPoints[0].Name != "result" {
+		t.Fatalf("expected output datapoint name result, got %q", createdOutputs.DataPoints[0].Name)
 	}
 	if createdOutputs.DataPoints[0].SourceID == nil || *createdOutputs.DataPoints[0].SourceID != unit.ID {
 		t.Fatalf("expected output datapoint source id %q, got %#v", unit.ID, createdOutputs.DataPoints[0].SourceID)
-	}
-
-	if _, err := fixture.pool.Exec(ctx, `
-		UPDATE data_compute_units
-		SET output_bindings = '{}'::jsonb
-		WHERE project_id = $1 AND id = $2
-	`, projectID, unit.ID); err != nil {
-		t.Fatalf("reset compute output bindings failed: %v", err)
-	}
-	if _, err := fixture.pool.Exec(ctx, `
-		DELETE FROM data_points
-		WHERE project_id = $1 AND source_type = 'calc.output' AND source_id = $2
-	`, projectID, unit.ID); err != nil {
-		t.Fatalf("delete generated output datapoint failed: %v", err)
 	}
 
 	mustUpdateComputeUnit(t, server.URL, token, projectID, unit.ID, map[string]any{
@@ -330,8 +322,8 @@ func TestComputeOutputDataPointGeneratedOnSave(t *testing.T) {
 	if savedOutputs.DataPoints[0].Status != "active" {
 		t.Fatalf("expected saved output datapoint active, got %q", savedOutputs.DataPoints[0].Status)
 	}
-	if savedOutputs.DataPoints[0].Name != "output-default-unit" {
-		t.Fatalf("expected saved output datapoint name output-default-unit, got %q", savedOutputs.DataPoints[0].Name)
+	if savedOutputs.DataPoints[0].Name != "result" {
+		t.Fatalf("expected saved output datapoint name result, got %q", savedOutputs.DataPoints[0].Name)
 	}
 }
 
@@ -375,6 +367,33 @@ func TestComputeUnitRenameMoveUpdatesOutputDataPoint(t *testing.T) {
 	folder := mustCreateComputeFolder(t, server.URL, token, projectID, map[string]any{
 		"name": "目标分组",
 	})
+	childFolder := mustCreateComputeFolder(t, server.URL, token, projectID, map[string]any{
+		"name": "子分组", "parentId": folder.ID,
+	})
+	rootPageEnvelope := doJSONRequest(t, http.MethodGet, server.URL+"/api/v1/data/projects/"+projectID+"/compute-units/folders?page=1&pageSize=1", token, nil)
+	var rootPage struct {
+		List []struct {
+			ID          string `json:"id"`
+			HasChildren bool   `json:"hasChildren"`
+		} `json:"list"`
+		Pagination paginationPayload `json:"pagination"`
+	}
+	if err := json.Unmarshal(rootPageEnvelope.Data, &rootPage); err != nil {
+		t.Fatalf("decode compute folder page failed: %v", err)
+	}
+	if rootPage.Pagination.Total != 1 || len(rootPage.List) != 1 || rootPage.List[0].ID != folder.ID || !rootPage.List[0].HasChildren {
+		t.Fatalf("expected paged root folder with lazy child marker, got %#v", rootPage)
+	}
+	childPageEnvelope := doJSONRequest(t, http.MethodGet, server.URL+"/api/v1/data/projects/"+projectID+"/compute-units/folders?parentId="+folder.ID, token, nil)
+	var childPage struct {
+		List []computeFolderPayload `json:"list"`
+	}
+	if err := json.Unmarshal(childPageEnvelope.Data, &childPage); err != nil {
+		t.Fatalf("decode compute child folder page failed: %v", err)
+	}
+	if len(childPage.List) != 1 || childPage.List[0].ID != childFolder.ID {
+		t.Fatalf("expected direct child folder page, got %#v", childPage.List)
+	}
 	unit := mustCreateComputeUnit(t, server.URL, token, projectID, map[string]any{
 		"name":       "old-unit",
 		"language":   "js",
@@ -399,27 +418,28 @@ func TestComputeUnitRenameMoveUpdatesOutputDataPoint(t *testing.T) {
 		t.Fatalf("expected compute unit moved to folder %q, got %#v", folder.ID, updated.FolderID)
 	}
 
-	newOutputs := mustListDataPoints(t, server.URL, token, projectID, "type=calc.output&search=calc.new-unit.result")
+	// 计算输出路径是公开稳定身份；仅修改单元名称或目录不得隐式改写输出路径。
+	newOutputs := mustListDataPoints(t, server.URL, token, projectID, "type=calc.output&search=calc.old-unit.result")
 	if len(newOutputs.DataPoints) != 1 {
 		t.Fatalf("expected renamed output datapoint, got %d", len(newOutputs.DataPoints))
 	}
 	if newOutputs.DataPoints[0].ID != initialID {
 		t.Fatalf("expected output datapoint id unchanged, got %q want %q", newOutputs.DataPoints[0].ID, initialID)
 	}
-	if newOutputs.DataPoints[0].Name != "new-unit" {
-		t.Fatalf("expected output datapoint name new-unit, got %q", newOutputs.DataPoints[0].Name)
+	if newOutputs.DataPoints[0].Name != "result" {
+		t.Fatalf("expected output datapoint name result, got %q", newOutputs.DataPoints[0].Name)
 	}
 	if newOutputs.DataPoints[0].Status != "active" {
 		t.Fatalf("expected output datapoint active, got %q", newOutputs.DataPoints[0].Status)
 	}
 
-	oldOutputs := mustListDataPoints(t, server.URL, token, projectID, "type=calc.output&search=calc.old-unit.result")
-	if len(oldOutputs.DataPoints) != 0 {
-		t.Fatalf("expected old output datapoint path removed, got %d", len(oldOutputs.DataPoints))
+	renamedPathOutputs := mustListDataPoints(t, server.URL, token, projectID, "type=calc.output&search=calc.new-unit.result")
+	if len(renamedPathOutputs.DataPoints) != 0 {
+		t.Fatalf("expected unit rename not to create a second output datapoint, got %d", len(renamedPathOutputs.DataPoints))
 	}
 }
 
-func TestDataPointListRefreshMarksMismatchedGeneratedPointInvalid(t *testing.T) {
+func TestDataPointListDoesNotMutateValidityAfterRead(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -482,19 +502,18 @@ func TestDataPointListRefreshMarksMismatchedGeneratedPointInvalid(t *testing.T) 
 	if len(refreshed.DataPoints) != 1 {
 		t.Fatalf("expected mismatched output datapoint visible, got %d", len(refreshed.DataPoints))
 	}
-	if refreshed.DataPoints[0].Status != "invalid" {
-		t.Fatalf("expected mismatched output datapoint invalid, got %q", refreshed.DataPoints[0].Status)
+	if refreshed.DataPoints[0].Status != "active" {
+		t.Fatalf("list must not mutate persisted validity, got %q", refreshed.DataPoints[0].Status)
 	}
 	if refreshed.DataPoints[0].SourceID == nil || *refreshed.DataPoints[0].SourceID != unit.ID {
 		t.Fatalf("expected source id %q unchanged, got %#v", unit.ID, refreshed.DataPoints[0].SourceID)
 	}
-	expectedReason := "计算单元输出已失效：计算单元不存在，或输出名称、路径已变更"
-	if refreshed.DataPoints[0].InvalidReason == nil || *refreshed.DataPoints[0].InvalidReason != expectedReason {
-		t.Fatalf("expected invalid reason %q, got %#v", expectedReason, refreshed.DataPoints[0].InvalidReason)
+	if refreshed.DataPoints[0].InvalidReason != nil {
+		t.Fatalf("list must not synthesize invalid reason after pagination, got %#v", refreshed.DataPoints[0].InvalidReason)
 	}
 	detail := mustGetDataPoint(t, server.URL, token, projectID, refreshed.DataPoints[0].ID)
-	if detail.InvalidReason == nil || *detail.InvalidReason != expectedReason {
-		t.Fatalf("expected detail invalid reason %q, got %#v", expectedReason, detail.InvalidReason)
+	if detail.Status != "active" || detail.InvalidReason != nil {
+		t.Fatalf("detail must reflect persisted state without read-side writes, got status=%q reason=%#v", detail.Status, detail.InvalidReason)
 	}
 }
 

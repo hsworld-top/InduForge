@@ -44,6 +44,10 @@ export const useComputeStore = defineStore('compute', () => {
   const folders = ref<ComputeFolder[]>([])
   const foldersLoading = ref(false)
   const foldersError = ref('')
+  const folderLoadingKeys = ref<string[]>([])
+  const folderPagination = ref<
+    Record<string, { page: number; pageSize: number; total: number; totalPages: number }>
+  >({})
   // 当前正在编辑的计算单元
   const editing = ref<ComputeUnitDetail | null>(null)
   const detailLoading = ref(false)
@@ -94,18 +98,55 @@ export const useComputeStore = defineStore('compute', () => {
     }
   }
 
-  async function fetchFolders(projectId: string) {
-    foldersLoading.value = true
+  const folderPageKey = (parentId?: string | null, search = '') =>
+    search ? `search:${search}` : parentId || 'root'
+
+  async function fetchFolders(
+    projectId: string,
+    options: { parentId?: string | null; search?: string; page?: number; append?: boolean } = {},
+  ) {
+    const key = folderPageKey(options.parentId, options.search)
+    if (folderLoadingKeys.value.includes(key)) return
+    folderLoadingKeys.value = [...folderLoadingKeys.value, key]
+    if (key === 'root') foldersLoading.value = true
     foldersError.value = ''
     try {
-      folders.value = await getComputeFolders(projectId)
+      const result = await getComputeFolders(projectId, {
+        parentId: options.parentId || undefined,
+        search: options.search || undefined,
+        page: options.page || 1,
+        pageSize: 50,
+      })
+      folderPagination.value = { ...folderPagination.value, [key]: result.pagination }
+      if (options.search) {
+        folders.value = result.list.map((item) => ({ ...item, name: item.path || item.name }))
+      } else {
+        const parentKey = options.parentId || null
+        const retained = options.append
+          ? folders.value
+          : folders.value.filter((item) => (item.parentId || null) !== parentKey)
+        const merged = new Map(retained.map((item) => [String(item.id), item]))
+        result.list.forEach((item) => merged.set(String(item.id), item))
+        folders.value = Array.from(merged.values())
+      }
+      return result
     } catch (error) {
-      folders.value = []
+      if (key === 'root') folders.value = []
       foldersError.value = getApiErrorMessage(error, '文件夹能力未启用')
       throw error
     } finally {
-      foldersLoading.value = false
+      folderLoadingKeys.value = folderLoadingKeys.value.filter((item) => item !== key)
+      if (key === 'root') foldersLoading.value = false
     }
+  }
+
+  function hasMoreFolders(parentId?: string | null) {
+    const pageInfo = folderPagination.value[folderPageKey(parentId)]
+    return Boolean(pageInfo && pageInfo.page < pageInfo.totalPages)
+  }
+
+  function isFolderLoading(parentId?: string | null) {
+    return folderLoadingKeys.value.includes(folderPageKey(parentId))
   }
 
   async function openForEdit(projectId: string, id: string) {
@@ -151,7 +192,9 @@ export const useComputeStore = defineStore('compute', () => {
     try {
       const folder = await createComputeFolder(projectId, data)
       folders.value = [folder, ...folders.value.filter((item) => item.id !== folder.id)]
-      fetchFolders(projectId).catch(() => undefined)
+      fetchFolders(projectId, { parentId: data.parentId ? String(data.parentId) : null }).catch(
+        () => undefined,
+      )
       return folder
     } catch (error) {
       createError.value = getApiErrorMessage(error, '新建文件夹失败')
@@ -165,7 +208,9 @@ export const useComputeStore = defineStore('compute', () => {
     saving.value = true
     try {
       const folder = await updateComputeFolder(projectId, folderId, data)
-      fetchFolders(projectId).catch(() => undefined)
+      fetchFolders(projectId, { parentId: folder.parentId ? String(folder.parentId) : null }).catch(
+        () => undefined,
+      )
       return folder
     } finally {
       saving.value = false
@@ -265,6 +310,8 @@ export const useComputeStore = defineStore('compute', () => {
     folders,
     foldersLoading,
     foldersError,
+    folderLoadingKeys,
+    folderPagination,
     editing,
     detailLoading,
     detailError,
@@ -279,6 +326,8 @@ export const useComputeStore = defineStore('compute', () => {
     hasEditing,
     fetchList,
     fetchFolders,
+    hasMoreFolders,
+    isFolderLoading,
     openForEdit,
     closeEdit,
     createUnit,
