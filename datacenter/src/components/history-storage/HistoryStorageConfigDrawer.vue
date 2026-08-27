@@ -31,7 +31,7 @@
             @click="selectBehavior('off')"
           >
             <IconTablerHistoryOff />
-            <span><strong>不保存历史</strong><small>只保留当前值</small></span>
+            <span><strong>不保存历史</strong><small>停止新增历史记录</small></span>
           </button>
           <button
             v-for="mode in modeOptions"
@@ -181,6 +181,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { ElMessageBox } from 'element-plus'
 import IconTablerArrowBackUp from '~icons/tabler/arrow-back-up'
 import IconTablerArrowDown from '~icons/tabler/arrow-down'
 import IconTablerArrowUp from '~icons/tabler/arrow-up'
@@ -230,19 +231,42 @@ const emit = defineEmits<{
 
 const visible = computed({
   get: () => props.modelValue,
-  set: (value: boolean) => emit('update:modelValue', value),
+  set: (value: boolean) => {
+    if (value) emit('update:modelValue', true)
+    else void requestClose()
+  },
 })
 const draft = ref<HistoryStorageDraft>(
   createHistoryStorageDraft(props.behavior, props.configuration, props.targets),
 )
 const advancedVisible = ref(false)
 const errorMessage = ref('')
+const initialDraftSnapshot = ref('')
+const isDirty = computed(
+  () => props.modelValue && JSON.stringify(draft.value) !== initialDraftSnapshot.value,
+)
+
+async function requestClose() {
+  if (!isDirty.value) {
+    emit('update:modelValue', false)
+    return
+  }
+  const discard = await ElMessageBox.confirm(
+    '历史存储设置有未保存修改，确认放弃这些修改？',
+    '关闭历史存储设置',
+    { confirmButtonText: '放弃修改', cancelButtonText: '继续编辑', type: 'warning' },
+  )
+    .then(() => true)
+    .catch(() => false)
+  if (discard) emit('update:modelValue', false)
+}
 
 watch(
   () => [props.modelValue, props.behavior, props.configuration, props.targets] as const,
   () => {
     if (!props.modelValue) return
     draft.value = createHistoryStorageDraft(props.behavior, props.configuration, props.targets)
+    initialDraftSnapshot.value = JSON.stringify(draft.value)
     advancedVisible.value = false
     errorMessage.value = ''
   },
@@ -303,9 +327,9 @@ const selectedTargetOptions = computed(
 const riskMessage = computed(() => {
   if (draft.value.writeMode === 'every_sample') return '保存每次采样可能产生较大的历史数据量。'
   if (draft.value.targets.some((target) => target.retentionDays === null))
-    return '永久保留会持续占用存储空间。'
-  if (selectedTargetOptions.value.some((target) => target.status !== 'connected'))
-    return '所选目标当前未连接，保存后请在接入源中检查连接。'
+    return '永久保留会持续占用存储空间；以后关闭或删除配置，也不会立即删除目标库已有表和数据。'
+  if (selectedTargetOptions.value.some((target) => target.lastTestStatus !== 'succeeded'))
+    return '所选目标尚未通过最近连接测试；目标不可达时不会自动切换主备。'
   return ''
 })
 
@@ -322,7 +346,12 @@ function selectMode(mode: HistoryStorageWriteMode) {
 
 function targetLabel(target: HistoryStorageTargetOption) {
   const type = target.type === 'builtin.timeseries' ? 'IF时序库' : 'TDengine'
-  const status = target.status === 'connected' ? '' : ' · 未连接'
+  const status =
+    target.lastTestStatus === 'succeeded'
+      ? ' · 测试成功'
+      : target.lastTestStatus === 'failed'
+        ? ' · 测试失败'
+        : ' · 未测试'
   return `${target.name} · ${type}${status}`
 }
 

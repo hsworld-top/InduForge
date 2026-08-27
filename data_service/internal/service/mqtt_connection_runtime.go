@@ -97,6 +97,15 @@ func (m *MqttConnectionRuntimeManager) Disconnect(projectID, connectionID string
 	}
 }
 
+// IsConnected 只读取当前 data_service 进程内的开发态临时会话，不映射为持久化配置状态。
+func (m *MqttConnectionRuntimeManager) IsConnected(projectID, connectionID string) bool {
+	key := runtimeConnectionKey(projectID, connectionID)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	client := m.clients[key]
+	return client != nil && client.IsConnected()
+}
+
 func (m *MqttConnectionRuntimeManager) connect(ctx context.Context, key string, options *mqtt.ClientOptions, timeout time.Duration) error {
 	if timeout <= 0 {
 		timeout = 5 * time.Second

@@ -661,7 +661,6 @@ const contextPrimaryIcon = computed(() => {
   return IconTablerTags
 })
 
-const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId.value) || null)
 const hasActiveTab = computed(() =>
   Boolean(activeTabId.value && tabs.value.some((tab) => tab.id === activeTabId.value)),
 )

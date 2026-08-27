@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const historyStorageConfigColumns = `id, project_id, access_source_id, collector_connection_id, datapoint_id,
+const historyStorageConfigColumns = `id, project_id, access_source_id, collector_connection_id, compute_unit_id, datapoint_id,
        is_enabled, write_mode, interval_ms, deadband, max_silence_ms, offline_behavior,
        created_by, updated_by, created_at, updated_at`
 
@@ -26,7 +26,8 @@ const historyStorageDataPointOriginsCTE = `datapoint_origins AS (
            dp.name AS datapoint_name,
            dp.path AS datapoint_path,
            dp.data_type,
-           CASE WHEN dp.source_type = 'collector.point' THEN NULL
+           dp.status,
+           CASE WHEN dp.source_type IN ('collector.point','calc.output') THEN NULL
                 ELSE COALESCE(
                     NULLIF(BTRIM(dp.source_config->>'connectionId'), ''),
                     NULLIF(BTRIM(dp.source_config->>'sourceConnectionId'), ''),
@@ -35,7 +36,8 @@ const historyStorageDataPointOriginsCTE = `datapoint_origins AS (
                     tag_subscription.connection_id::text,
                     dp.source_id::text
                 ) END AS access_source_id,
-           CASE WHEN dp.source_type = 'collector.point' THEN collector_point.connection_id::text END AS collector_connection_id
+           CASE WHEN dp.source_type = 'collector.point' THEN collector_point.connection_id::text END AS collector_connection_id,
+           CASE WHEN dp.source_type = 'calc.output' THEN dp.source_id::text END AS compute_unit_id
     FROM data_points dp
     LEFT JOIN data_queries source_query
       ON dp.source_type = 'db.query' AND source_query.id = dp.source_id AND source_query.project_id = dp.project_id
@@ -64,6 +66,7 @@ type HistoryStorageConfigRecord struct {
 	ProjectID             string                       `json:"projectId"`
 	AccessSourceID        *string                      `json:"accessSourceId,omitempty"`
 	CollectorConnectionID *string                      `json:"collectorConnectionId,omitempty"`
+	ComputeUnitID         *string                      `json:"computeUnitId,omitempty"`
 	DatapointID           *string                      `json:"datapointId,omitempty"`
 	IsEnabled             bool                         `json:"isEnabled"`
 	WriteMode             string                       `json:"writeMode"`
@@ -79,18 +82,18 @@ type HistoryStorageConfigRecord struct {
 }
 
 type HistoryStorageTargetRecord struct {
-	ID               string    `json:"id"`
-	ProjectID        string    `json:"projectId"`
-	ConfigID         string    `json:"configId"`
-	ConnectionID     string    `json:"connectionId"`
-	ConnectionName   string    `json:"connectionName"`
-	ConnectionType   string    `json:"connectionType"`
-	ConnectionStatus string    `json:"connectionStatus"`
-	IsPrimary        bool      `json:"isPrimary"`
-	SortOrder        int       `json:"sortOrder"`
-	RetentionDays    *int64    `json:"retentionDays"`
-	CreatedAt        time.Time `json:"createdAt"`
-	UpdatedAt        time.Time `json:"updatedAt"`
+	ID             string    `json:"id"`
+	ProjectID      string    `json:"projectId"`
+	ConfigID       string    `json:"configId"`
+	ConnectionID   string    `json:"connectionId"`
+	ConnectionName string    `json:"connectionName"`
+	ConnectionType string    `json:"connectionType"`
+	LastTestStatus string    `json:"-"`
+	IsPrimary      bool      `json:"isPrimary"`
+	SortOrder      int       `json:"sortOrder"`
+	RetentionDays  *int64    `json:"retentionDays"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
 type HistoryStorageSourceRecord struct {
@@ -119,12 +122,12 @@ type HistoryStorageSourceListFilter struct {
 }
 
 type HistoryStorageTargetOptionRecord struct {
-	ID        string
-	Name      string
-	Type      string
-	Status    string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID             string
+	Name           string
+	Type           string
+	LastTestStatus string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 type HistoryStorageDataPointOriginRecord struct {
@@ -132,6 +135,7 @@ type HistoryStorageDataPointOriginRecord struct {
 	DatapointName   string
 	DatapointPath   string
 	DataType        string
+	Status          string
 	ScopeType       string
 	ScopeID         string
 	ScopeName       string
@@ -225,6 +229,25 @@ func (r *HistoryStorageRepository) ListSources(ctx context.Context, projectID st
     LEFT JOIN data_connections target_conn ON target_conn.id = target.connection_id
     WHERE collector.project_id = $1
     GROUP BY collector.id, collector.name, collector.protocol_family, collector.created_at, config.id, config.is_enabled, config.write_mode
+    UNION ALL
+    SELECT 'compute_unit'::text AS scope_type, compute.id::text AS scope_id,
+           compute.name AS source_name, 'compute'::text AS source_type,
+           COUNT(DISTINCT origin.datapoint_id)::int AS datapoint_count,
+           COUNT(DISTINCT point_config.id)::int AS point_override_count,
+           config.id::text AS config_id, COALESCE(config.is_enabled, false) AS is_enabled,
+           config.write_mode,
+           COUNT(DISTINCT target.id)::int AS target_count,
+           MAX(target_conn.name) FILTER (WHERE target.is_primary) AS primary_target_name,
+           MAX(target_conn.type) FILTER (WHERE target.is_primary) AS primary_target_type,
+           MAX(target.retention_days) FILTER (WHERE target.is_primary) AS retention_days
+    FROM data_compute_units compute
+    LEFT JOIN datapoint_origins origin ON origin.compute_unit_id = compute.id::text
+    LEFT JOIN data_history_storage_configs point_config ON point_config.project_id = compute.project_id AND point_config.datapoint_id = origin.datapoint_id
+    LEFT JOIN data_history_storage_configs config ON config.project_id = compute.project_id AND config.compute_unit_id = compute.id
+    LEFT JOIN data_history_storage_targets target ON target.config_id = config.id
+    LEFT JOIN data_connections target_conn ON target_conn.id = target.connection_id
+    WHERE compute.project_id = $1
+    GROUP BY compute.id, compute.name, compute.created_at, config.id, config.is_enabled, config.write_mode
 )
 SELECT scope_type, scope_id, source_name, source_type, datapoint_count, point_override_count,
        config_id, is_enabled, write_mode, target_count, primary_target_name, primary_target_type,
@@ -257,7 +280,9 @@ LIMIT $%d OFFSET $%d`, strings.Join(conditions, " AND "), len(args)-1, len(args)
 }
 
 func (r *HistoryStorageRepository) ListTargetOptions(ctx context.Context, projectID string) ([]HistoryStorageTargetOptionRecord, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id, name, type, status, created_at, updated_at
+	rows, err := r.pool.Query(ctx, `SELECT id, name, type,
+		COALESCE((SELECT test.status FROM data_connection_test_records test WHERE test.connection_id=data_connections.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),'not_tested'),
+		created_at, updated_at
         FROM data_connections WHERE project_id=$1 AND type IN ('builtin.timeseries','tdengine')
         ORDER BY CASE WHEN type='builtin.timeseries' THEN 0 ELSE 1 END, display_order, created_at, id`, projectID)
 	if err != nil {
@@ -267,7 +292,7 @@ func (r *HistoryStorageRepository) ListTargetOptions(ctx context.Context, projec
 	result := make([]HistoryStorageTargetOptionRecord, 0)
 	for rows.Next() {
 		var item HistoryStorageTargetOptionRecord
-		if err := rows.Scan(&item.ID, &item.Name, &item.Type, &item.Status, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.Name, &item.Type, &item.LastTestStatus, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, wrapHistoryStorageError("读取历史存储目标失败", err)
 		}
 		result = append(result, item)
@@ -276,7 +301,9 @@ func (r *HistoryStorageRepository) ListTargetOptions(ctx context.Context, projec
 }
 
 func (r *HistoryStorageRepository) GetTargetOptionsByIDs(ctx context.Context, projectID string, ids []string) ([]HistoryStorageTargetOptionRecord, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id, name, type, status, created_at, updated_at
+	rows, err := r.pool.Query(ctx, `SELECT id, name, type,
+		COALESCE((SELECT test.status FROM data_connection_test_records test WHERE test.connection_id=data_connections.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),'not_tested'),
+		created_at, updated_at
         FROM data_connections WHERE project_id=$1 AND id=ANY($2::uuid[]) AND type IN ('builtin.timeseries','tdengine')`, projectID, ids)
 	if err != nil {
 		return nil, wrapHistoryStorageError("校验历史存储目标失败", err)
@@ -285,7 +312,7 @@ func (r *HistoryStorageRepository) GetTargetOptionsByIDs(ctx context.Context, pr
 	result := make([]HistoryStorageTargetOptionRecord, 0, len(ids))
 	for rows.Next() {
 		var item HistoryStorageTargetOptionRecord
-		if err := rows.Scan(&item.ID, &item.Name, &item.Type, &item.Status, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.Name, &item.Type, &item.LastTestStatus, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
 		result = append(result, item)
@@ -340,6 +367,11 @@ func (r *HistoryStorageRepository) CountPointOverridesByScope(ctx context.Contex
           SELECT COUNT(*) FROM data_history_storage_configs config
           JOIN datapoint_origins origin ON origin.datapoint_id=config.datapoint_id AND origin.project_id=config.project_id
           WHERE config.project_id=$1 AND origin.collector_connection_id=$2`
+	case "compute_unit":
+		query = `WITH ` + historyStorageDataPointOriginsCTE + `
+          SELECT COUNT(*) FROM data_history_storage_configs config
+          JOIN datapoint_origins origin ON origin.datapoint_id=config.datapoint_id AND origin.project_id=config.project_id
+          WHERE config.project_id=$1 AND origin.compute_unit_id=$2`
 	default:
 		return 0, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "只有来源作用域可以统计单点例外")
 	}
@@ -353,19 +385,22 @@ func (r *HistoryStorageRepository) CountPointOverridesByScope(ctx context.Contex
 func (r *HistoryStorageRepository) GetDataPointOrigin(ctx context.Context, projectID, datapointID string) (*HistoryStorageDataPointOriginRecord, error) {
 	var item HistoryStorageDataPointOriginRecord
 	err := r.pool.QueryRow(ctx, `WITH `+historyStorageDataPointOriginsCTE+`
-	  SELECT origin.datapoint_id, origin.datapoint_name, origin.datapoint_path, origin.data_type,
+	  SELECT origin.datapoint_id, origin.datapoint_name, origin.datapoint_path, origin.data_type, origin.status,
 		CASE WHEN origin.collector_connection_id IS NOT NULL THEN 'collector_connection'
+			 WHEN origin.compute_unit_id IS NOT NULL THEN 'compute_unit'
 			 WHEN connection.id IS NOT NULL THEN 'access_source' ELSE '' END,
-		COALESCE(origin.collector_connection_id, connection.id::text, ''),
-		CASE WHEN origin.collector_connection_id IS NOT NULL THEN COALESCE(collector.name, '') ELSE COALESCE(connection.name, '') END,
-		CASE WHEN origin.collector_connection_id IS NOT NULL THEN COALESCE(collector.protocol_family, '') ELSE COALESCE(connection.type, '') END
+		COALESCE(origin.collector_connection_id, origin.compute_unit_id, connection.id::text, ''),
+		CASE WHEN origin.collector_connection_id IS NOT NULL THEN COALESCE(collector.name, '') WHEN origin.compute_unit_id IS NOT NULL THEN COALESCE(compute.name, '') ELSE COALESCE(connection.name, '') END,
+		CASE WHEN origin.collector_connection_id IS NOT NULL THEN COALESCE(collector.protocol_family, '') WHEN origin.compute_unit_id IS NOT NULL THEN 'compute' ELSE COALESCE(connection.type, '') END
 	  FROM datapoint_origins origin
 	  LEFT JOIN data_collector_connections collector
 		ON collector.project_id=origin.project_id AND collector.id::text=origin.collector_connection_id
 	  LEFT JOIN data_connections connection
 		ON connection.project_id=origin.project_id AND connection.id::text=origin.access_source_id
+	  LEFT JOIN data_compute_units compute
+		ON compute.project_id=origin.project_id AND compute.id::text=origin.compute_unit_id
 	  WHERE origin.datapoint_id=$2`, projectID, datapointID).Scan(
-		&item.DatapointID, &item.DatapointName, &item.DatapointPath, &item.DataType,
+		&item.DatapointID, &item.DatapointName, &item.DatapointPath, &item.DataType, &item.Status,
 		&item.ScopeType, &item.ScopeID, &item.ScopeName, &item.ScopeSourceType)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -421,7 +456,7 @@ func (r *HistoryStorageRepository) DeleteConfigByScope(ctx context.Context, proj
 
 func (r *HistoryStorageRepository) ResolveDataPointIDs(ctx context.Context, projectID string, ids []string, filter *DataPointListFilter) ([]string, error) {
 	if filter == nil {
-		rows, err := r.pool.Query(ctx, `SELECT id FROM data_points WHERE project_id=$1 AND id=ANY($2::uuid[]) ORDER BY id`, projectID, ids)
+		rows, err := r.pool.Query(ctx, `SELECT id FROM data_points WHERE project_id=$1 AND status<>'invalid' AND id=ANY($2::uuid[]) ORDER BY id`, projectID, ids)
 		if err != nil {
 			return nil, wrapHistoryStorageError("读取批量数据点失败", err)
 		}
@@ -432,7 +467,7 @@ func (r *HistoryStorageRepository) ResolveDataPointIDs(ctx context.Context, proj
 	if err != nil {
 		return nil, err
 	}
-	rows, err := r.pool.Query(ctx, `SELECT id FROM data_points WHERE `+whereSQL+` ORDER BY id`, args...)
+	rows, err := r.pool.Query(ctx, `SELECT id FROM data_points WHERE `+whereSQL+` AND status<>'invalid' ORDER BY id`, args...)
 	if err != nil {
 		return nil, wrapHistoryStorageError("按筛选读取批量数据点失败", err)
 	}
@@ -460,12 +495,13 @@ func (r *HistoryStorageRepository) SaveDataPointConfigsBatch(ctx context.Context
 		return int(tag.RowsAffected()), nil
 	}
 	if behavior == "off" {
-		if _, err := tx.Exec(ctx, `UPDATE data_history_storage_configs
+		updatedTag, err := tx.Exec(ctx, `UPDATE data_history_storage_configs
             SET is_enabled=false,updated_by=$3,updated_at=now()
-            WHERE project_id=$1 AND datapoint_id=ANY($2::uuid[])`, projectID, datapointIDs, userID); err != nil {
+			WHERE project_id=$1 AND datapoint_id=ANY($2::uuid[]) AND is_enabled=true`, projectID, datapointIDs, userID)
+		if err != nil {
 			return 0, translateHistoryStorageWriteError("批量关闭历史存储配置失败", err)
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO data_history_storage_configs
+		insertedTag, err := tx.Exec(ctx, `INSERT INTO data_history_storage_configs
             (project_id,datapoint_id,is_enabled,write_mode,deadband,max_silence_ms,offline_behavior,created_by,updated_by)
             SELECT $1,point.id,false,'on_change',0,3600000,'store_stale',$3,$3
             FROM data_points point
@@ -473,13 +509,14 @@ func (r *HistoryStorageRepository) SaveDataPointConfigsBatch(ctx context.Context
               AND NOT EXISTS (
                 SELECT 1 FROM data_history_storage_configs config
                 WHERE config.project_id=$1 AND config.datapoint_id=point.id
-              )`, projectID, datapointIDs, userID); err != nil {
+			  )`, projectID, datapointIDs, userID)
+		if err != nil {
 			return 0, translateHistoryStorageWriteError("批量创建关闭的历史存储配置失败", err)
 		}
 		if err := tx.Commit(ctx); err != nil {
 			return 0, wrapHistoryStorageError("提交批量关闭历史存储配置失败", err)
 		}
-		return len(datapointIDs), nil
+		return int(updatedTag.RowsAffected() + insertedTag.RowsAffected()), nil
 	}
 	for _, datapointID := range datapointIDs {
 		params := SaveHistoryStorageConfigParams{ProjectID: projectID, UserID: userID, Scope: HistoryStorageScope{Type: "datapoint", ID: datapointID}, IsEnabled: behavior == "custom", WriteMode: "on_change", Deadband: float64Pointer(0), MaxSilenceMS: int64Pointer(3600000), OfflineBehavior: "store_stale"}
@@ -531,18 +568,20 @@ func upsertHistoryStorageConfig(ctx context.Context, tx pgx.Tx, params SaveHisto
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return "", wrapHistoryStorageError("锁定历史存储配置失败", err)
 	}
-	var accessSourceID, collectorConnectionID, datapointID any
+	var accessSourceID, collectorConnectionID, computeUnitID, datapointID any
 	switch params.Scope.Type {
 	case "access_source":
 		accessSourceID = params.Scope.ID
 	case "collector_connection":
 		collectorConnectionID = params.Scope.ID
+	case "compute_unit":
+		computeUnitID = params.Scope.ID
 	case "datapoint":
 		datapointID = params.Scope.ID
 	}
 	err = tx.QueryRow(ctx, `INSERT INTO data_history_storage_configs
-      (project_id,access_source_id,collector_connection_id,datapoint_id,is_enabled,write_mode,interval_ms,deadband,max_silence_ms,offline_behavior,created_by,updated_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11) RETURNING id`, params.ProjectID, accessSourceID, collectorConnectionID, datapointID,
+	  (project_id,access_source_id,collector_connection_id,compute_unit_id,datapoint_id,is_enabled,write_mode,interval_ms,deadband,max_silence_ms,offline_behavior,created_by,updated_by)
+	  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12) RETURNING id`, params.ProjectID, accessSourceID, collectorConnectionID, computeUnitID, datapointID,
 		params.IsEnabled, params.WriteMode, params.IntervalMS, params.Deadband, params.MaxSilenceMS, params.OfflineBehavior, params.UserID).Scan(&id)
 	if err != nil {
 		return "", translateHistoryStorageWriteError("创建历史存储配置失败", err)
@@ -552,7 +591,9 @@ func upsertHistoryStorageConfig(ctx context.Context, tx pgx.Tx, params SaveHisto
 
 func (r *HistoryStorageRepository) listTargetsByConfig(ctx context.Context, projectID, configID string) ([]HistoryStorageTargetRecord, error) {
 	rows, err := r.pool.Query(ctx, `SELECT target.id,target.project_id,target.config_id,target.connection_id,
-        conn.name,conn.type,conn.status,target.is_primary,target.sort_order,target.retention_days,target.created_at,target.updated_at
+		conn.name,conn.type,
+		COALESCE((SELECT test.status FROM data_connection_test_records test WHERE test.connection_id=conn.id ORDER BY test.tested_at DESC,test.id DESC LIMIT 1),'not_tested'),
+		target.is_primary,target.sort_order,target.retention_days,target.created_at,target.updated_at
       FROM data_history_storage_targets target JOIN data_connections conn ON conn.id=target.connection_id
       WHERE target.project_id=$1 AND target.config_id=$2
       ORDER BY target.is_primary DESC,target.sort_order,target.id`, projectID, configID)
@@ -563,7 +604,7 @@ func (r *HistoryStorageRepository) listTargetsByConfig(ctx context.Context, proj
 	result := make([]HistoryStorageTargetRecord, 0)
 	for rows.Next() {
 		var item HistoryStorageTargetRecord
-		if err := rows.Scan(&item.ID, &item.ProjectID, &item.ConfigID, &item.ConnectionID, &item.ConnectionName, &item.ConnectionType, &item.ConnectionStatus, &item.IsPrimary, &item.SortOrder, &item.RetentionDays, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.ProjectID, &item.ConfigID, &item.ConnectionID, &item.ConnectionName, &item.ConnectionType, &item.LastTestStatus, &item.IsPrimary, &item.SortOrder, &item.RetentionDays, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
 		result = append(result, item)
@@ -577,6 +618,8 @@ func historyStorageScopeColumn(scopeType string) (string, error) {
 		return "access_source_id", nil
 	case "collector_connection":
 		return "collector_connection_id", nil
+	case "compute_unit":
+		return "compute_unit_id", nil
 	case "datapoint":
 		return "datapoint_id", nil
 	default:
@@ -590,6 +633,8 @@ func historyStorageScopeTable(scopeType string) (string, error) {
 		return "data_connections", nil
 	case "collector_connection":
 		return "data_collector_connections", nil
+	case "compute_unit":
+		return "data_compute_units", nil
 	case "datapoint":
 		return "data_points", nil
 	default:
@@ -601,7 +646,7 @@ type historyStorageScanner interface{ Scan(...any) error }
 
 func scanHistoryStorageConfig(row historyStorageScanner) (HistoryStorageConfigRecord, error) {
 	var item HistoryStorageConfigRecord
-	err := row.Scan(&item.ID, &item.ProjectID, &item.AccessSourceID, &item.CollectorConnectionID, &item.DatapointID, &item.IsEnabled, &item.WriteMode, &item.IntervalMS, &item.Deadband, &item.MaxSilenceMS, &item.OfflineBehavior, &item.CreatedBy, &item.UpdatedBy, &item.CreatedAt, &item.UpdatedAt)
+	err := row.Scan(&item.ID, &item.ProjectID, &item.AccessSourceID, &item.CollectorConnectionID, &item.ComputeUnitID, &item.DatapointID, &item.IsEnabled, &item.WriteMode, &item.IntervalMS, &item.Deadband, &item.MaxSilenceMS, &item.OfflineBehavior, &item.CreatedBy, &item.UpdatedBy, &item.CreatedAt, &item.UpdatedAt)
 	return item, err
 }
 

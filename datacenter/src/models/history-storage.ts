@@ -39,6 +39,10 @@ export function createHistoryStorageDraft(
 ): HistoryStorageDraft {
   const uniqueBuiltin = targets.filter((target) => target.type === 'builtin.timeseries')
   const defaultTargetId = uniqueBuiltin.length === 1 ? uniqueBuiltin[0].id : ''
+  const configuredTargets = configuration?.targets.map((target) => ({
+    connectionId: target.connectionId,
+    retentionDays: target.retentionDays,
+  }))
   return {
     behavior,
     writeMode: configuration?.writeMode || 'on_change',
@@ -47,10 +51,9 @@ export function createHistoryStorageDraft(
     maxSilenceMs:
       configuration?.maxSilenceMs === undefined ? 3_600_000 : configuration.maxSilenceMs,
     offlineBehavior: configuration?.offlineBehavior || 'store_stale',
-    targets: configuration?.targets.map((target) => ({
-      connectionId: target.connectionId,
-      retentionDays: target.retentionDays,
-    })) || [{ connectionId: defaultTargetId, retentionDays: 30 }],
+    targets: configuredTargets?.length
+      ? configuredTargets
+      : [{ connectionId: defaultTargetId, retentionDays: 30 }],
   }
 }
 

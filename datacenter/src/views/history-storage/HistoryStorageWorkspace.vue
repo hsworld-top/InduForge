@@ -2,7 +2,7 @@
   <div class="history-storage-workspace">
     <section class="history-storage-workspace__panel">
       <header class="history-storage-workspace__head">
-        <div class="history-storage-workspace__toolbar">
+        <FilterToolbar>
           <el-input
             v-model="search"
             class="history-storage-workspace__search"
@@ -57,79 +57,86 @@
           </button>
 
           <span class="history-storage-workspace__total">共 {{ pagination.total }}</span>
-        </div>
+        </FilterToolbar>
       </header>
 
       <section class="history-storage-workspace__content-panel">
-        <div v-loading="loading" class="history-storage-workspace__table-wrap">
-          <el-table
-            :data="sources"
-            row-key="scope.id"
-            height="100%"
-            class="history-storage-workspace__table"
-          >
-            <el-table-column label="来源" min-width="260">
-              <template #default="{ row }">
-                <div class="history-storage-workspace__identity">
-                  <span
-                    :class="
-                      row.scope.type === 'collector_connection' ? 'is-collector' : 'is-source'
-                    "
-                  >
-                    <IconTablerCpu v-if="row.scope.type === 'collector_connection'" />
-                    <IconTablerRouter v-else />
-                  </span>
-                  <div>
-                    <strong>{{ row.scope.name }}</strong>
-                    <small>{{ sourceTypeLabel(row) }}</small>
+        <TableScroll>
+          <div v-loading="loading" class="history-storage-workspace__table-wrap">
+            <el-table
+              :data="sources"
+              row-key="scope.id"
+              height="100%"
+              class="history-storage-workspace__table"
+            >
+              <el-table-column label="来源" min-width="260">
+                <template #default="{ row }">
+                  <div class="history-storage-workspace__identity">
+                    <span
+                      :class="
+                        row.scope.type === 'collector_connection' ? 'is-collector' : 'is-source'
+                      "
+                    >
+                      <IconTablerFunction v-if="row.scope.type === 'compute_unit'" />
+                      <IconTablerCpu v-else-if="row.scope.type === 'collector_connection'" />
+                      <IconTablerRouter v-else />
+                    </span>
+                    <div>
+                      <strong>{{ row.scope.name }}</strong>
+                      <small>{{ sourceTypeLabel(row) }}</small>
+                    </div>
                   </div>
-                </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="数据点" width="110" align="center">
+                <template #default="{ row }">
+                  <span class="history-storage-workspace__point-count">{{
+                    row.datapointCount
+                  }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="历史存储" min-width="300">
+                <template #default="{ row }">
+                  <div class="history-storage-workspace__summary">
+                    <StatusBadge
+                      :tone="row.historyState === 'enabled' ? 'success' : 'muted'"
+                      :text="historyStorageSummary(row)"
+                    />
+                    <small v-if="row.pointOverrideCount > 0">
+                      {{ row.pointOverrideCount }} 个数据点单独设置
+                    </small>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="88" align="right" fixed="right">
+                <template #default="{ row }">
+                  <button
+                    type="button"
+                    class="history-storage-workspace__settings"
+                    title="设置历史存储"
+                    :aria-label="`设置 ${row.scope.name} 的历史存储`"
+                    @click="openSettings(row)"
+                  >
+                    <IconTablerSettings />
+                  </button>
+                </template>
+              </el-table-column>
+              <template #empty>
+                <el-empty description="暂无匹配的来源" />
               </template>
-            </el-table-column>
-            <el-table-column label="数据点" width="110" align="center">
-              <template #default="{ row }">
-                <span class="history-storage-workspace__point-count">{{ row.datapointCount }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="历史存储" min-width="300">
-              <template #default="{ row }">
-                <div class="history-storage-workspace__summary">
-                  <StatusBadge
-                    :tone="row.historyState === 'enabled' ? 'success' : 'muted'"
-                    :text="historyStorageSummary(row)"
-                  />
-                  <small v-if="row.pointOverrideCount > 0">
-                    {{ row.pointOverrideCount }} 个数据点单独设置
-                  </small>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="88" align="right" fixed="right">
-              <template #default="{ row }">
-                <button
-                  type="button"
-                  class="history-storage-workspace__settings"
-                  title="设置历史存储"
-                  :aria-label="`设置 ${row.scope.name} 的历史存储`"
-                  @click="openSettings(row)"
-                >
-                  <IconTablerSettings />
-                </button>
-              </template>
-            </el-table-column>
-            <template #empty>
-              <el-empty description="暂无匹配的来源" />
-            </template>
-          </el-table>
-        </div>
+            </el-table>
+          </div>
 
-        <DataCenterPagination
-          :page="pagination.page"
-          :page-size="pagination.pageSize"
-          :total="pagination.total"
-          :total-pages="pagination.totalPages"
-          @change="handlePageChange"
-        />
+          <template #pagination>
+            <DataCenterPagination
+              :page="pagination.page"
+              :page-size="pagination.pageSize"
+              :total="pagination.total"
+              :total-pages="pagination.totalPages"
+              @change="handlePageChange"
+            />
+          </template>
+        </TableScroll>
       </section>
     </section>
 
@@ -150,12 +157,15 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import IconTablerCpu from '~icons/tabler/cpu'
+import IconTablerFunction from '~icons/tabler/function'
 import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerRouter from '~icons/tabler/router'
 import IconTablerSettings from '~icons/tabler/settings'
 import DataCenterPagination from '@/components/shared/DataCenterPagination.vue'
+import FilterToolbar from '@/components/shared/FilterToolbar.vue'
 import PillButton from '@/components/shared/PillButton.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
+import TableScroll from '@/components/shared/TableScroll.vue'
 import HistoryStorageConfigDrawer from '@/components/history-storage/HistoryStorageConfigDrawer.vue'
 import { formatCollectorProtocolFamily } from '@/components/collector-workbench/collector-workbench-model'
 import {
@@ -190,11 +200,14 @@ const editingRow = ref<HistoryStorageSourceItem | null>(null)
 const editingDetail = ref<HistoryStorageSourceDetail | null>(null)
 const { confirm } = useConfirm()
 let searchTimer: ReturnType<typeof setTimeout> | null = null
+let sourceRequestSeq = 0
+let settingsRequestSeq = 0
 
 const scopeTypeOptions: Array<{ label: string; value: HistoryStorageScopeType | '' }> = [
   { label: '全部来源', value: '' },
   { label: '接入源', value: 'access_source' },
   { label: '工业采集', value: 'collector_connection' },
+  { label: '计算单元', value: 'compute_unit' },
 ]
 const historyStateOptions: Array<{ label: string; value: 'enabled' | 'disabled' | '' }> = [
   { label: '全部状态', value: '' },
@@ -210,6 +223,7 @@ const historyStateLabel = computed(
 )
 
 async function loadSources() {
+  const seq = ++sourceRequestSeq
   loading.value = true
   try {
     const result = await listHistoryStorageSources(props.projectId, {
@@ -219,12 +233,14 @@ async function loadSources() {
       scopeType: scopeType.value,
       historyState: historyState.value,
     })
+    if (seq !== sourceRequestSeq) return
     sources.value = result.list
     Object.assign(pagination, result.pagination)
   } catch (error) {
+    if (seq !== sourceRequestSeq) return
     ElMessage.error(getApiErrorMessage(error, '加载历史存储来源失败'))
   } finally {
-    loading.value = false
+    if (seq === sourceRequestSeq) loading.value = false
   }
 }
 
@@ -234,16 +250,19 @@ async function ensureTargets() {
 }
 
 async function openSettings(row: HistoryStorageSourceItem) {
+  const seq = ++settingsRequestSeq
   try {
     const [detail] = await Promise.all([
       getHistoryStorageSource(props.projectId, row.scope.type, row.scope.id),
       ensureTargets(),
     ])
+    if (seq !== settingsRequestSeq) return
     editingRow.value = row
     editingDetail.value = detail
     drawerTitle.value = `${row.scope.name} · 历史存储`
     drawerVisible.value = true
   } catch (error) {
+    if (seq !== settingsRequestSeq) return
     ElMessage.error(getApiErrorMessage(error, '加载历史存储设置失败'))
   }
 }
@@ -279,12 +298,14 @@ function handlePageChange(value: { page: number; pageSize: number }) {
 }
 
 function sourceTypeLabel(row: HistoryStorageSourceItem) {
+  if (row.scope.type === 'compute_unit') return '计算单元'
   if (row.scope.type === 'collector_connection') {
     const protocol = row.scope.sourceType
       ? formatCollectorProtocolFamily(row.scope.sourceType)
       : '未知协议'
     return `工业采集 · ${protocol}`
   }
+  if (row.scope.type === 'compute_unit') return '计算单元'
   const labels: Record<string, string> = {
     relational: '数据库',
     mqtt: 'MQTT',

@@ -327,7 +327,7 @@ func normalizeRelativeJSONPath(rule string) string {
 
 func normalizeParsedValue(dataType string, value any) any {
 	switch strings.TrimSpace(strings.ToLower(dataType)) {
-	case "number":
+	case "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float32", "float64", "decimal":
 		switch typed := value.(type) {
 		case float64, float32, int, int32, int64, uint, uint32, uint64:
 			return typed
@@ -339,7 +339,7 @@ func normalizeParsedValue(dataType string, value any) any {
 		default:
 			return value
 		}
-	case "boolean":
+	case "bool":
 		switch typed := value.(type) {
 		case bool:
 			return typed

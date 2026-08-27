@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -76,8 +75,8 @@ type KafkaField struct {
 	TopicMappingID string     `json:"topicMappingId"`
 	GroupID        *string    `json:"groupId"`
 	Name           string     `json:"name"`
-	ValuePath      string     `json:"valuePath"`
-	KeyPath        string     `json:"keyPath"`
+	ValuePath      []any      `json:"valuePath"`
+	KeyPath        []any      `json:"keyPath"`
 	DataType       string     `json:"dataType"`
 	Enabled        bool       `json:"enabled"`
 	Description    string     `json:"description"`
@@ -133,6 +132,7 @@ type KafkaPreviewResult struct {
 	Diagnostics  map[string]any     `json:"diagnostics"`
 	DurationMS   int64              `json:"durationMs"`
 	Truncated    bool               `json:"truncated"`
+	Warnings     []string           `json:"warnings"`
 }
 
 // CreateKafkaTopicGroupInput 描述创建 Topic 分组的输入。
@@ -195,8 +195,8 @@ type UpdateKafkaTopicMappingInput struct {
 type CreateKafkaFieldInput struct {
 	GroupID     *string `json:"groupId"`
 	Name        string  `json:"name"`
-	ValuePath   string  `json:"valuePath"`
-	KeyPath     string  `json:"keyPath"`
+	ValuePath   []any   `json:"valuePath"`
+	KeyPath     []any   `json:"keyPath"`
 	DataType    string  `json:"dataType"`
 	Enabled     bool    `json:"enabled"`
 	Description string  `json:"description"`
@@ -208,8 +208,8 @@ type UpdateKafkaFieldInput struct {
 	GroupID     *string `json:"groupId"`
 	HasGroupID  bool    `json:"-"`
 	Name        string  `json:"name"`
-	ValuePath   string  `json:"valuePath"`
-	KeyPath     string  `json:"keyPath"`
+	ValuePath   []any   `json:"valuePath"`
+	KeyPath     []any   `json:"keyPath"`
 	DataType    string  `json:"dataType"`
 	Enabled     bool    `json:"enabled"`
 	Description string  `json:"description"`
@@ -586,16 +586,39 @@ func (s *KafkaWorkbenchService) CreateFieldsBatch(ctx context.Context, projectID
 	if len(inputs) == 0 {
 		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "字段映射不能为空")
 	}
-	result := make([]KafkaField, 0, len(inputs))
+	if err := validateProjectAndUser(projectID, userID); err != nil {
+		return nil, err
+	}
+	if err := validateUUIDText(mappingID, "mappingId 格式无效"); err != nil {
+		return nil, err
+	}
+	mapping, err := s.repository.GetTopicMapping(ctx, projectID, mappingID)
+	if err != nil {
+		return nil, err
+	}
+	params := make([]repository.CreateKafkaFieldParams, 0, len(inputs))
+	paths := make(map[string]struct{}, len(inputs))
 	for index, input := range inputs {
 		if input.SortOrder == 0 {
 			input.SortOrder = index
 		}
-		field, err := s.CreateField(ctx, projectID, mappingID, userID, input)
+		item, err := s.normalizeCreateField(ctx, projectID, userID, *mapping, input)
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, *field)
+		if _, exists := paths[item.DataPointPath]; exists {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusConflict, "批量字段映射生成了重复的数据点路径")
+		}
+		paths[item.DataPointPath] = struct{}{}
+		params = append(params, item)
+	}
+	records, err := s.repository.CreateFieldsWithDataPoints(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]KafkaField, 0, len(records))
+	for _, record := range records {
+		result = append(result, toKafkaField(record))
 	}
 	return result, nil
 }
@@ -670,7 +693,9 @@ func (s *KafkaWorkbenchService) PreviewConnection(ctx context.Context, projectID
 		return nil, err
 	}
 	result, previewErr := s.previewKafka(ctx, *connection, input, nil)
-	_ = s.recordKafkaPreview(ctx, connection.ProjectID, connection.ID, result, previewErr)
+	if recordErr := s.recordKafkaPreview(ctx, connection.ProjectID, connection.ID, result, previewErr); recordErr != nil && result != nil {
+		result.Warnings = append(result.Warnings, "预览结果已返回，但保存执行摘要失败")
+	}
 	return result, previewErr
 }
 
@@ -711,9 +736,13 @@ func (s *KafkaWorkbenchService) PreviewTopicMapping(ctx context.Context, project
 	}
 	result, previewErr := s.previewKafka(ctx, *connection, input, overrides)
 	if previewErr == nil {
-		_ = s.syncKafkaFieldLastValues(ctx, mapping.ProjectID, mapping.ID, result)
+		if syncErr := s.syncKafkaFieldLastValues(ctx, mapping.ProjectID, mapping.ID, result); syncErr != nil && result != nil {
+			result.Warnings = append(result.Warnings, "样本已返回，但字段最近值同步失败")
+		}
 	}
-	_ = s.recordKafkaPreview(ctx, mapping.ProjectID, mapping.ConnectionID, result, previewErr)
+	if recordErr := s.recordKafkaPreview(ctx, mapping.ProjectID, mapping.ConnectionID, result, previewErr); recordErr != nil && result != nil {
+		result.Warnings = append(result.Warnings, "预览结果已返回，但保存执行摘要失败")
+	}
 	return result, previewErr
 }
 
@@ -948,7 +977,11 @@ func (s *KafkaWorkbenchService) normalizeCreateField(ctx context.Context, projec
 	if err != nil {
 		return repository.CreateKafkaFieldParams{}, err
 	}
-	sourceConfig := kafkaFieldSourceConfig(mapping, valuePath, input.KeyPath)
+	keyPath, err := normalizeValuePathSegments(input.KeyPath, true)
+	if err != nil {
+		return repository.CreateKafkaFieldParams{}, err
+	}
+	sourceConfig := kafkaFieldSourceConfig(mapping, valuePath, keyPath)
 	if groupID != nil {
 		sourceConfig["groupId"] = *groupID
 	}
@@ -959,7 +992,7 @@ func (s *KafkaWorkbenchService) normalizeCreateField(ctx context.Context, projec
 		GroupID:        groupID,
 		Name:           name,
 		ValuePath:      valuePath,
-		KeyPath:        strings.TrimSpace(input.KeyPath),
+		KeyPath:        keyPath,
 		DataType:       dataType,
 		Enabled:        input.Enabled,
 		Description:    strings.TrimSpace(input.Description),
@@ -975,13 +1008,21 @@ func (s *KafkaWorkbenchService) normalizeUpdateField(ctx context.Context, projec
 	if err != nil {
 		return repository.UpdateKafkaFieldParams{}, err
 	}
-	name, valuePath, dataType, err := normalizeKafkaFieldCore(fallbackTrimmed(input.Name, current.Name), fallbackTrimmed(input.ValuePath, current.ValuePath), fallbackTrimmed(input.DataType, current.DataType))
+	valuePathInput := input.ValuePath
+	if len(valuePathInput) == 0 {
+		valuePathInput = current.ValuePath
+	}
+	name, valuePath, dataType, err := normalizeKafkaFieldCore(fallbackTrimmed(input.Name, current.Name), valuePathInput, fallbackTrimmed(input.DataType, current.DataType))
 	if err != nil {
 		return repository.UpdateKafkaFieldParams{}, err
 	}
 	keyPath := input.KeyPath
-	if strings.TrimSpace(keyPath) == "" {
+	if len(keyPath) == 0 {
 		keyPath = current.KeyPath
+	}
+	keyPath, err = normalizeValuePathSegments(keyPath, true)
+	if err != nil {
+		return repository.UpdateKafkaFieldParams{}, err
 	}
 	groupID := current.GroupID
 	if input.HasGroupID {
@@ -1000,7 +1041,7 @@ func (s *KafkaWorkbenchService) normalizeUpdateField(ctx context.Context, projec
 		GroupID:       groupID,
 		Name:          name,
 		ValuePath:     valuePath,
-		KeyPath:       strings.TrimSpace(keyPath),
+		KeyPath:       keyPath,
 		DataType:      dataType,
 		Enabled:       input.Enabled,
 		Description:   strings.TrimSpace(input.Description),
@@ -1247,30 +1288,33 @@ func normalizeKafkaPreviewLimits(input KafkaPreviewInput) (int, time.Duration) {
 	return limit, time.Duration(timeoutMS) * time.Millisecond
 }
 
-func normalizeKafkaFieldCore(name, valuePath, dataType string) (string, string, string, error) {
+func normalizeKafkaFieldCore(name string, valuePath []any, dataType string) (string, []any, string, error) {
 	normalizedName, err := normalizeKafkaRequiredText(name, 100, "字段名称不能为空")
 	if err != nil {
-		return "", "", "", err
+		return "", nil, "", err
 	}
-	normalizedPath, err := normalizeKafkaRequiredText(valuePath, 500, "字段路径不能为空")
+	normalizedPath, err := normalizeValuePathSegments(valuePath, false)
 	if err != nil {
-		return "", "", "", err
+		return "", nil, "", err
 	}
-	normalizedType := strings.ToLower(strings.TrimSpace(dataType))
+	normalizedType, ok := canonicalDataPointType(dataType)
+	if !ok && strings.TrimSpace(dataType) != "" {
+		return "", nil, "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka 字段数据类型不受支持")
+	}
 	if normalizedType == "" {
 		normalizedType = "string"
 	}
 	return normalizedName, normalizedPath, normalizedType, nil
 }
 
-func kafkaFieldSourceConfig(mapping repository.KafkaTopicMappingRecord, valuePath, keyPath string) map[string]any {
+func kafkaFieldSourceConfig(mapping repository.KafkaTopicMappingRecord, valuePath, keyPath []any) map[string]any {
 	// sourceConfig 描述运行态未来如何解析消息；当前工作台只写配置，不启动长期消费。
 	return map[string]any{
 		"connectionId":   mapping.ConnectionID,
 		"topicMappingId": mapping.ID,
 		"topic":          mapping.Topic,
 		"valuePath":      valuePath,
-		"keyPath":        strings.TrimSpace(keyPath),
+		"keyPath":        keyPath,
 		"decode":         mapping.Decode,
 		"partitionMode":  mapping.PartitionMode,
 		"partition":      mapping.Partition,
@@ -1300,35 +1344,9 @@ func buildKafkaRawDataPointPath(mappingName string) string {
 	return "kafka." + normalizeDatapointSegment(mappingName)
 }
 
-func extractKafkaFieldValue(sample any, valuePath string) (any, bool) {
+func extractKafkaFieldValue(sample any, valuePath []any) (any, bool) {
 	root := normalizeKafkaPreviewSampleValue(sample)
-	if strings.TrimSpace(valuePath) == "" {
-		return nil, false
-	}
-	current := root
-	for _, segment := range strings.Split(valuePath, ".") {
-		key := strings.TrimSpace(segment)
-		if key == "" {
-			return nil, false
-		}
-		switch typed := current.(type) {
-		case map[string]any:
-			next, ok := typed[key]
-			if !ok {
-				return nil, false
-			}
-			current = next
-		case []any:
-			index, err := strconv.Atoi(key)
-			if err != nil || index < 0 || index >= len(typed) {
-				return nil, false
-			}
-			current = typed[index]
-		default:
-			return nil, false
-		}
-	}
-	return current, true
+	return extractValueBySegments(root, valuePath)
 }
 
 func normalizeKafkaPreviewSampleValue(sample any) any {

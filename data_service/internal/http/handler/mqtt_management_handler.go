@@ -148,7 +148,7 @@ func (h *MqttHandler) UpdateConnection(w http.ResponseWriter, r *http.Request) e
 
 	var request struct {
 		Name             string            `json:"name"`
-		Status           string            `json:"status"`
+		Enabled          *bool             `json:"enabled"`
 		BrokerURL        string            `json:"brokerUrl"`
 		Protocol         string            `json:"protocol"`
 		Port             *int              `json:"port"`
@@ -171,7 +171,7 @@ func (h *MqttHandler) UpdateConnection(w http.ResponseWriter, r *http.Request) e
 
 	result, err := h.service.UpdateMqttConnection(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"), claims.UserID, service.CreateMqttConnectionInput{
 		Name:             request.Name,
-		Status:           request.Status,
+		Enabled:          request.Enabled,
 		BrokerURL:        request.BrokerURL,
 		Protocol:         request.Protocol,
 		Port:             request.Port,

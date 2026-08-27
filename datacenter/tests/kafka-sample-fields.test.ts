@@ -25,7 +25,7 @@ describe('kafkaSampleFields', () => {
       'temperature',
       'metrics.pressure',
     ])
-    expect(fields.find((field) => field.path === 'temperature')?.dataType).toBe('number')
+    expect(fields.find((field) => field.path === 'temperature')?.dataType).toBe('float64')
   })
 
   test('支持 value 为 JSON 字符串并标记已存在字段', () => {
@@ -35,7 +35,7 @@ describe('kafkaSampleFields', () => {
     )
 
     expect(fields.find((field) => field.path === 'deviceId')?.exists).toBe(true)
-    expect(fields.find((field) => field.path === 'running')?.dataType).toBe('boolean')
+    expect(fields.find((field) => field.path === 'running')?.dataType).toBe('bool')
   })
 
   test('数组按普通索引路径展开，不生成数组拆分规则', () => {
@@ -44,8 +44,19 @@ describe('kafkaSampleFields', () => {
       [],
     )
 
-    expect(fields.map((field) => field.path)).toContain('items.0.name')
-    expect(fields.map((field) => field.path)).toContain('items.0.value')
+    expect(fields.map((field) => field.path)).toContain('items[0].name')
+    expect(fields.map((field) => field.path)).toContain('items[0].value')
+    expect(fields.find((field) => field.path === 'items[0].value')?.segments).toEqual([
+      'items',
+      0,
+      'value',
+    ])
+  })
+
+  test('字段名包含点号时保持为单个路径片段', () => {
+    const fields = inferKafkaSampleFields([{ value: { 'sensor.value': 12 } }])
+    expect(fields[0]?.path).toBe('["sensor.value"]')
+    expect(fields[0]?.segments).toEqual(['sensor.value'])
   })
 
   test('编辑器文本格式化为 JSON 对象字符串', () => {

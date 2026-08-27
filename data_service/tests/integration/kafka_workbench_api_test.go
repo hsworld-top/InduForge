@@ -85,15 +85,15 @@ func TestKafkaWorkbenchLifecycle(t *testing.T) {
 
 	field := mustCreateKafkaField(t, server.URL, token, projectID, mapping.ID, map[string]any{
 		"name":      "temperature",
-		"valuePath": "temperature",
-		"dataType":  "number",
+		"valuePath": []any{"temperature"},
+		"dataType":  "float64",
 		"enabled":   true,
 		"groupId":   fieldGroup.ID,
 	})
 	mustCreateKafkaField(t, server.URL, token, projectID, mapping.ID, map[string]any{
 		"name":      "humidity",
-		"valuePath": "humidity",
-		"dataType":  "number",
+		"valuePath": []any{"humidity"},
+		"dataType":  "float64",
 		"enabled":   true,
 	})
 	groupedFields := mustListKafkaFields(t, server.URL, token, projectID, mapping.ID, "groupId="+url.QueryEscape(fieldGroup.ID)+"&page=1&pageSize=1")
@@ -112,7 +112,7 @@ func TestKafkaWorkbenchLifecycle(t *testing.T) {
 	}
 	field = mustUpdateKafkaField(t, server.URL, token, projectID, field.ID, map[string]any{
 		"name":      "temperature2",
-		"valuePath": "payload.temperature2",
+		"valuePath": []any{"payload", "temperature2"},
 		"dataType":  "string",
 		"enabled":   true,
 	})
@@ -127,6 +127,22 @@ func TestKafkaWorkbenchLifecycle(t *testing.T) {
 	datapoints := mustListDataPoints(t, server.URL, token, projectID, query.Encode())
 	if len(datapoints.DataPoints) != 1 {
 		t.Fatalf("expected one kafka.field datapoint after search filter, got %d", len(datapoints.DataPoints))
+	}
+
+	// 第二个字段在生成点路径阶段冲突，验证第一个字段和生成点也随事务回滚。
+	beforeBatch := mustListKafkaFields(t, server.URL, token, projectID, mapping.ID, "page=1&pageSize=20").Pagination.Total
+	_, batchStatus := doJSONRequestAllowStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/kafka/topic-mappings/"+mapping.ID+"/fields/batch", token, map[string]any{
+		"fields": []map[string]any{
+			{"name": "batch a", "valuePath": []any{"batchA"}, "dataType": "float64", "enabled": true},
+			{"name": "batch.a", "valuePath": []any{"batchB"}, "dataType": "float64", "enabled": true},
+		},
+	})
+	if batchStatus < 400 {
+		t.Fatalf("expected conflicting Kafka batch to fail, got status %d", batchStatus)
+	}
+	afterBatch := mustListKafkaFields(t, server.URL, token, projectID, mapping.ID, "page=1&pageSize=20").Pagination.Total
+	if afterBatch != beforeBatch {
+		t.Fatalf("Kafka batch must roll back all fields, before=%d after=%d", beforeBatch, afterBatch)
 	}
 
 	mustDeleteKafkaFieldGroup(t, server.URL, token, projectID, fieldGroup.ID)
@@ -170,7 +186,7 @@ type kafkaFieldPayload struct {
 	TopicMappingID string  `json:"topicMappingId"`
 	GroupID        *string `json:"groupId"`
 	Name           string  `json:"name"`
-	ValuePath      string  `json:"valuePath"`
+	ValuePath      []any   `json:"valuePath"`
 	DataType       string  `json:"dataType"`
 	Enabled        bool    `json:"enabled"`
 	SourceType     string  `json:"sourceType"`

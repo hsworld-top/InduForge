@@ -33,13 +33,13 @@ type HistoryStorageScopeRef struct {
 }
 
 type HistoryStorageTarget struct {
-	ConnectionID     string `json:"connectionId"`
-	ConnectionName   string `json:"connectionName"`
-	ConnectionType   string `json:"connectionType"`
-	ConnectionStatus string `json:"connectionStatus"`
-	IsPrimary        bool   `json:"isPrimary"`
-	SortOrder        int    `json:"sortOrder"`
-	RetentionDays    *int64 `json:"retentionDays"`
+	ConnectionID   string `json:"connectionId"`
+	ConnectionName string `json:"connectionName"`
+	ConnectionType string `json:"connectionType"`
+	LastTestStatus string `json:"lastTestStatus"`
+	IsPrimary      bool   `json:"isPrimary"`
+	SortOrder      int    `json:"sortOrder"`
+	RetentionDays  *int64 `json:"retentionDays"`
 }
 
 type HistoryStorageConfiguration struct {
@@ -102,12 +102,12 @@ type HistoryStorageDatapointDetail struct {
 }
 
 type HistoryStorageTargetOption struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Type      string    `json:"type"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	Type           string    `json:"type"`
+	LastTestStatus string    `json:"lastTestStatus"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
 type HistoryStorageTargetsResult struct {
@@ -149,7 +149,9 @@ type BatchSaveHistoryStorageInput struct {
 }
 
 type HistoryStorageBatchResult struct {
-	UpdatedCount int `json:"updatedCount"`
+	MatchedCount   int `json:"matchedCount"`
+	ChangedCount   int `json:"changedCount"`
+	UnchangedCount int `json:"unchangedCount"`
 }
 
 func NewHistoryStorageService(repo *repository.HistoryStorageRepository) *HistoryStorageService {
@@ -163,7 +165,7 @@ func (s *HistoryStorageService) ListSources(ctx context.Context, claims *auth.Cl
 	filter.Search = strings.TrimSpace(filter.Search)
 	filter.ScopeType = strings.TrimSpace(filter.ScopeType)
 	filter.HistoryState = strings.TrimSpace(filter.HistoryState)
-	if filter.ScopeType != "" && filter.ScopeType != "access_source" && filter.ScopeType != "collector_connection" {
+	if filter.ScopeType != "" && filter.ScopeType != "access_source" && filter.ScopeType != "collector_connection" && filter.ScopeType != "compute_unit" {
 		return nil, badHistoryStorageRequest("scopeType 不受支持")
 	}
 	if filter.HistoryState != "" && filter.HistoryState != "enabled" && filter.HistoryState != "disabled" {
@@ -260,7 +262,7 @@ func (s *HistoryStorageService) ListTargets(ctx context.Context, claims *auth.Cl
 	}
 	result := make([]HistoryStorageTargetOption, 0, len(records))
 	for _, record := range records {
-		result = append(result, HistoryStorageTargetOption{ID: record.ID, Name: record.Name, Type: record.Type, Status: record.Status, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt})
+		result = append(result, HistoryStorageTargetOption{ID: record.ID, Name: record.Name, Type: record.Type, LastTestStatus: record.LastTestStatus, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt})
 	}
 	return &HistoryStorageTargetsResult{Targets: result}, nil
 }
@@ -316,10 +318,14 @@ func (s *HistoryStorageService) SaveDatapoint(ctx context.Context, claims *auth.
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.repository.GetDataPointOrigin(ctx, projectID, datapointID); err != nil {
+	origin, err := s.repository.GetDataPointOrigin(ctx, projectID, datapointID)
+	if err != nil {
 		return nil, err
 	}
 	behavior := strings.TrimSpace(input.Behavior)
+	if origin.Status == "invalid" && behavior == "custom" {
+		return nil, badHistoryStorageRequest("失效数据点不能启用历史存储")
+	}
 	if behavior == "inherit" {
 		if err := s.repository.DeleteConfigByScope(ctx, projectID, scope); err != nil {
 			return nil, err
@@ -390,7 +396,11 @@ func (s *HistoryStorageService) BatchConfigure(ctx context.Context, claims *auth
 	if err != nil {
 		return nil, err
 	}
-	return &HistoryStorageBatchResult{UpdatedCount: updated}, nil
+	unchanged := len(ids) - updated
+	if unchanged < 0 {
+		unchanged = 0
+	}
+	return &HistoryStorageBatchResult{MatchedCount: len(ids), ChangedCount: updated, UnchangedCount: unchanged}, nil
 }
 
 func (s *HistoryStorageService) normalizeSaveInput(ctx context.Context, projectID, userID string, scope repository.HistoryStorageScope, input SaveHistoryStorageInput, allowInherit bool) (repository.SaveHistoryStorageConfigParams, error) {
@@ -541,7 +551,7 @@ func (s *HistoryStorageService) validateAccess(claims *auth.Claims, projectID st
 func normalizeHistoryStorageScope(scopeType, scopeID string, allowDatapoint bool) (repository.HistoryStorageScope, error) {
 	scopeType = strings.TrimSpace(scopeType)
 	scopeID = strings.TrimSpace(scopeID)
-	if scopeType != "access_source" && scopeType != "collector_connection" && !(allowDatapoint && scopeType == "datapoint") {
+	if scopeType != "access_source" && scopeType != "collector_connection" && scopeType != "compute_unit" && !(allowDatapoint && scopeType == "datapoint") {
 		return repository.HistoryStorageScope{}, badHistoryStorageRequest("scopeType 不受支持")
 	}
 	if _, err := uuid.Parse(scopeID); err != nil {
@@ -556,7 +566,7 @@ func toHistoryStorageConfiguration(config *repository.HistoryStorageConfigRecord
 	}
 	targets := make([]HistoryStorageTarget, 0, len(config.Targets))
 	for _, target := range config.Targets {
-		targets = append(targets, HistoryStorageTarget{ConnectionID: target.ConnectionID, ConnectionName: target.ConnectionName, ConnectionType: target.ConnectionType, ConnectionStatus: target.ConnectionStatus, IsPrimary: target.IsPrimary, SortOrder: target.SortOrder, RetentionDays: target.RetentionDays})
+		targets = append(targets, HistoryStorageTarget{ConnectionID: target.ConnectionID, ConnectionName: target.ConnectionName, ConnectionType: target.ConnectionType, LastTestStatus: target.LastTestStatus, IsPrimary: target.IsPrimary, SortOrder: target.SortOrder, RetentionDays: target.RetentionDays})
 	}
 	return &HistoryStorageConfiguration{WriteMode: config.WriteMode, IntervalMS: config.IntervalMS, Deadband: config.Deadband, MaxSilenceMS: config.MaxSilenceMS, OfflineBehavior: config.OfflineBehavior, Targets: targets}
 }

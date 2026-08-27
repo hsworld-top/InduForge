@@ -186,10 +186,6 @@ const mergeTagRows = (currentRows, nextRows) => {
   }))
 }
 
-const handleRefresh = async () => {
-  await fetchTags()
-}
-
 const setViewMode = (mode: 'list' | 'card') => {
   viewMode.value = mode
 }
@@ -223,7 +219,7 @@ const formatValue = (value, dataType) => {
       const parsed = typeof value === 'string' ? JSON.parse(value) : value
       return JSON.stringify(parsed, null, 2)
     }
-    if (dataType === 'number') {
+    if (dataType === 'float64') {
       const num = parseFloat(value)
       return Number.isNaN(num) ? value : num.toFixed(2)
     }
@@ -252,23 +248,12 @@ const formatTimestamp = (timestamp) => {
 const getDataTypeLabel = (dataType) => {
   const labels = {
     string: '字符串',
-    number: '数值',
-    boolean: '布尔',
+    float64: '数值',
+    bool: '布尔',
     object: '对象',
     array: '数组',
   }
   return labels[dataType] || dataType
-}
-
-const getParseTypeLabel = (parseType) => {
-  const labels = {
-    jsonpath: 'JSONPath',
-    regex: '正则',
-    script: '脚本',
-    fixed: '固定值',
-    batch_jsonpath: '批量映射',
-  }
-  return labels[parseType] || parseType
 }
 
 const getQualityLabel = (quality) => {

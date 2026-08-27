@@ -48,15 +48,16 @@ func TestProjectSnapshotHistoryStorageJSONRoundTrip(t *testing.T) {
 	}
 }
 
-func TestProjectArtifactExcludesDatapointHistoryStorage(t *testing.T) {
-	snapshot := &ProjectSnapshot{HistoryStorage: []HistoryStorageConfigRecord{{ID: "history-config-1"}}}
+func TestProjectArtifactIncludesEffectiveHistoryStorageConfiguration(t *testing.T) {
+	computeUnitID := "compute-1"
+	snapshot := &ProjectSnapshot{HistoryStorage: []HistoryStorageConfigRecord{{ID: "history-config-1", ComputeUnitID: &computeUnitID}}}
 	artifact := BuildProjectArtifactV1("project-1", snapshot, time.Now())
 	payload, err := json.Marshal(artifact)
 	if err != nil {
 		t.Fatalf("marshal artifact: %v", err)
 	}
-	if strings.Contains(string(payload), "history-config-1") {
-		t.Fatalf("发布 Artifact 不应包含数据点历史存储配置: %s", payload)
+	if !strings.Contains(string(payload), "history-config-1") || !strings.Contains(string(payload), "compute-1") {
+		t.Fatalf("发布 Artifact 应包含计算单元历史存储配置: %s", payload)
 	}
 	if !strings.Contains(string(payload), `"historyStorage":{"enabled":true,"retentionDays":30,"storeNotificationDeliveries":true}`) {
 		t.Fatalf("发布 Artifact 应包含报警历史默认设置: %s", payload)

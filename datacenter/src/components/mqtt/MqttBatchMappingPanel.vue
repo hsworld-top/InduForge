@@ -150,8 +150,8 @@
                 @visible-change="(visible) => !visible && stopEditingMappingCell()"
               >
                 <el-option label="字符串" value="string" />
-                <el-option label="数值" value="number" />
-                <el-option label="布尔" value="boolean" />
+                <el-option label="数值（float64）" value="float64" />
+                <el-option label="布尔" value="bool" />
                 <el-option label="对象" value="object" />
                 <el-option label="数组" value="array" />
               </el-select>
@@ -348,8 +348,8 @@
         <el-form-item label="数据类型">
           <el-select v-model="batchGenerateForm.dataType">
             <el-option label="字符串" value="string" />
-            <el-option label="数值" value="number" />
-            <el-option label="布尔" value="boolean" />
+            <el-option label="数值（float64）" value="float64" />
+            <el-option label="布尔" value="bool" />
             <el-option label="对象" value="object" />
             <el-option label="数组" value="array" />
           </el-select>
@@ -405,6 +405,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { debugLogger } from '@/utils/debug'
 import { useWindowSize } from '@vueuse/core'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -448,7 +449,7 @@ type BatchMappingRow = {
   matchName: string
   name: string
   code: string
-  dataType: 'string' | 'number' | 'boolean' | 'object' | 'array'
+  dataType: 'string' | 'float64' | 'bool' | 'object' | 'array'
   sampleValue: unknown
   sampleQuality: unknown
   sampleTime: unknown
@@ -526,7 +527,7 @@ const batchGenerateForm = reactive({
   prefix: 'tag',
   start: 1,
   end: 100,
-  dataType: 'number' as BatchMappingRow['dataType'],
+  dataType: 'float64' as BatchMappingRow['dataType'],
 })
 const ruleForm = reactive({
   arrayPath: '$',
@@ -547,7 +548,7 @@ const ruleDialogForm = reactive({
   tagId: '',
   name: '',
   code: '',
-  dataType: 'number' as BatchMappingRow['dataType'],
+  dataType: 'float64' as BatchMappingRow['dataType'],
   arrayPath: '$',
   namePath: 'N',
   matchName: '',
@@ -820,8 +821,8 @@ const normalizeBatchRuleObject = (
 const getDataTypeLabel = (dataType?: BatchMappingRow['dataType']) => {
   const labels = {
     string: '字符串',
-    number: '数值',
-    boolean: '布尔',
+    float64: '数值',
+    bool: '布尔',
     object: '对象',
     array: '数组',
   }
@@ -1087,7 +1088,7 @@ const resetRuleDialog = () => {
   ruleDialogForm.tagId = ''
   ruleDialogForm.name = ''
   ruleDialogForm.code = ''
-  ruleDialogForm.dataType = 'number'
+  ruleDialogForm.dataType = 'float64'
   ruleDialogForm.arrayPath = '$'
   ruleDialogForm.namePath = 'N'
   ruleDialogForm.matchName = ''
@@ -1172,7 +1173,7 @@ const saveRuleDialog = async () => {
 
 const createMappingRow = (
   matchName: string,
-  dataType: BatchMappingRow['dataType'] = 'number',
+  dataType: BatchMappingRow['dataType'] = 'float64',
   createdAt = new Date().toISOString(),
 ): BatchMappingRow => ({
   matchName,
@@ -1431,7 +1432,7 @@ const resetBatchGenerateForm = () => {
   batchGenerateForm.prefix = 'tag'
   batchGenerateForm.start = 1
   batchGenerateForm.end = 100
-  batchGenerateForm.dataType = 'number'
+  batchGenerateForm.dataType = 'float64'
 }
 
 const applyBatchGenerate = () => {
@@ -1526,7 +1527,7 @@ const loadMappingValues = async (tagIDs: string[], requestSeq = loadRequestSeq.v
       }
     })
   } catch (error) {
-    console.error('Failed to load batch mapping values:', error)
+    debugLogger.error('Failed to load batch mapping values:', error)
   }
 }
 
@@ -1549,7 +1550,7 @@ const loadMappingDatapoints = async (tagIDs: string[], requestSeq = loadRequestS
       row.datapointStatus = datapoint?.status || ''
     })
   } catch (error) {
-    console.error('Failed to load batch mapping datapoints:', error)
+    debugLogger.error('Failed to load batch mapping datapoints:', error)
   }
 }
 
@@ -1659,8 +1660,8 @@ const hashText = (value: string) => {
 const inferDataType = (value: unknown): BatchMappingRow['dataType'] => {
   if (Array.isArray(value)) return 'array'
   if (value !== null && typeof value === 'object') return 'object'
-  if (typeof value === 'number') return 'number'
-  if (typeof value === 'boolean') return 'boolean'
+  if (typeof value === 'number') return 'float64'
+  if (typeof value === 'boolean') return 'bool'
   return 'string'
 }
 
@@ -1686,17 +1687,11 @@ const normalizePath = (path: string) =>
     .map((item) => item.trim())
     .filter(Boolean)
 
-const formatValue = (value: unknown) => {
-  if (value === null || value === undefined || value === '') return '-'
-  if (typeof value === 'object') return JSON.stringify(value)
-  return String(value)
-}
-
 const formatLastValue = (row: BatchMappingRow) => {
   const raw = row.currentValue?.parsedValue ?? row.currentValue?.value
   if (raw === null || raw === undefined || raw === '') return '-'
   if (typeof raw === 'object') return JSON.stringify(raw)
-  if (row.dataType === 'number') {
+  if (row.dataType === 'float64') {
     const num = Number(raw)
     return Number.isFinite(num) ? String(Number(num.toFixed(4))) : String(raw)
   }

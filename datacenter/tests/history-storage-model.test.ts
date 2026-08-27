@@ -11,7 +11,12 @@ import {
 } from '../src/api/schemas/history-storage.schema'
 
 const targets = [
-  { id: 'if-ts-1', name: 'IF时序库', type: 'builtin.timeseries' as const, status: 'connected' },
+  {
+    id: 'if-ts-1',
+    name: 'IF时序库',
+    type: 'builtin.timeseries' as const,
+    lastTestStatus: 'succeeded' as const,
+  },
 ]
 
 describe('history storage model', () => {
@@ -26,10 +31,31 @@ describe('history storage model', () => {
   test('多个 IF 时序库时不替用户选择', () => {
     const draft = createHistoryStorageDraft('custom', null, [
       ...targets,
-      { id: 'if-ts-2', name: 'IF时序库2', type: 'builtin.timeseries', status: 'connected' },
+      {
+        id: 'if-ts-2',
+        name: 'IF时序库2',
+        type: 'builtin.timeseries',
+        lastTestStatus: 'succeeded',
+      },
     ])
     expect(draft.targets).toEqual([{ connectionId: '', retentionDays: 30 }])
     expect(validateHistoryStorageDraft(draft)).toBe('请选择主存储目标')
+  })
+
+  test('关闭配置返回空目标后重新启用仍提供默认主目标', () => {
+    const draft = createHistoryStorageDraft(
+      'off',
+      {
+        writeMode: 'on_change',
+        intervalMs: null,
+        deadband: null,
+        maxSilenceMs: null,
+        offlineBehavior: 'store_stale',
+        targets: [],
+      },
+      targets,
+    )
+    expect(draft.targets).toEqual([{ connectionId: 'if-ts-1', retentionDays: 30 }])
   })
 
   test('按模式只发送相关参数并生成唯一主目标', () => {
@@ -56,7 +82,7 @@ describe('history storage model', () => {
             connectionId: 'if-ts-1',
             connectionName: 'IF时序库',
             connectionType: 'builtin.timeseries',
-            connectionStatus: 'connected',
+            lastTestStatus: 'succeeded',
             isPrimary: true,
             sortOrder: 0,
             retentionDays: null,
@@ -79,7 +105,7 @@ describe('history storage model', () => {
             connectionId: 'mysql-1',
             connectionName: 'MySQL',
             connectionType: 'relational',
-            connectionStatus: 'connected',
+            lastTestStatus: 'succeeded',
             isPrimary: true,
             sortOrder: 0,
             retentionDays: 30,

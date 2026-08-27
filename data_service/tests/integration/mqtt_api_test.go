@@ -62,7 +62,7 @@ func TestMqttConnectionLifecycle(t *testing.T) {
 		"secrets":   map[string]string{"password": "mqtt-first-secret"},
 	})
 	updated := doJSONRequest(t, http.MethodPut, server.URL+"/api/v1/data/projects/"+projectID+"/mqtt/connections/"+connection.ID, token, map[string]any{
-		"name": "mqtt-main-updated", "status": "disconnected", "brokerUrl": "tcp://localhost:1883", "protocol": "mqtt", "port": 1883, "qos": 1,
+		"name": "mqtt-main-updated", "brokerUrl": "tcp://localhost:1883", "protocol": "mqtt", "port": 1883, "qos": 1,
 		"secrets": map[string]string{"password": "mqtt-second-secret"},
 	})
 	var updatedConnection mqttConnectionPayload
@@ -80,16 +80,10 @@ func TestMqttConnectionLifecycle(t *testing.T) {
 
 	subscriptionID := insertTestMqttSubscription(t, ctx, fixture, projectID, connection.ID, userID)
 
-	startResult := mustStartMqttConnection(t, server.URL, token, projectID, connection.ID)
-	if startResult.Status != "connected" {
-		t.Fatalf("expected start status connected, got %q", startResult.Status)
+	startFailure, _ := doJSONRequestAllowStatus(t, http.MethodPost, server.URL+"/api/v1/data/projects/"+projectID+"/mqtt/connections/"+connection.ID+"/start", token, nil)
+	if startFailure.Code == 0 {
+		t.Fatal("未启动 MQTT Broker 时不得伪造连接成功")
 	}
-
-	statusResult := mustGetMqttConnectionStatus(t, server.URL, token, projectID, connection.ID)
-	if statusResult.Status != "connected" {
-		t.Fatalf("expected status endpoint return connected, got %q", statusResult.Status)
-	}
-
 	insertTestMqttMessage(t, ctx, fixture, projectID, connection.ID, subscriptionID, "factory/line1/temp", `{"value": 88.5}`, 1)
 
 	messages := mustListMqttMessages(t, server.URL, token, projectID, subscriptionID, 10)
@@ -152,6 +146,7 @@ func TestMqttSubscriptionChineseNameDataPointStaysActive(t *testing.T) {
 		"name":             "撒大苏打",
 		"topic":            "aaaa",
 		"qos":              0,
+		"usageMode":        "raw_datapoint",
 		"messageRetention": 100,
 	})
 
@@ -163,8 +158,8 @@ func TestMqttSubscriptionChineseNameDataPointStaysActive(t *testing.T) {
 	if point.Name != "撒大苏打" {
 		t.Fatalf("expected datapoint name 撒大苏打, got %q", point.Name)
 	}
-	if point.Path != "mqtt.aaaa.aaaa" {
-		t.Fatalf("expected datapoint path mqtt.aaaa.aaaa, got %q", point.Path)
+	if point.Path != "mqtt.aaaa.撒大苏打" {
+		t.Fatalf("expected datapoint path mqtt.aaaa.撒大苏打, got %q", point.Path)
 	}
 	if point.Status != "active" {
 		t.Fatalf("expected datapoint active, got %q", point.Status)
@@ -185,8 +180,9 @@ func TestMqttSubscriptionChineseNameDataPointStaysActive(t *testing.T) {
 	if len(refreshed.DataPoints) != 1 {
 		t.Fatalf("expected refreshed mqtt subscription datapoint, got %d", len(refreshed.DataPoints))
 	}
-	if refreshed.DataPoints[0].Status != "active" {
-		t.Fatalf("expected refreshed datapoint active, got %q", refreshed.DataPoints[0].Status)
+	// 列表读取不应修复持久化状态；来源生命周期由保存/删除事务显式维护。
+	if refreshed.DataPoints[0].Status != "invalid" {
+		t.Fatalf("expected persisted invalid status after read, got %q", refreshed.DataPoints[0].Status)
 	}
 }
 
@@ -229,8 +225,8 @@ func TestMqttSubscriptionDataPointValidWithoutMqttConfig(t *testing.T) {
 
 	connectionID := uuid.NewString()
 	if _, err := fixture.pool.Exec(ctx, `
-		INSERT INTO data_connections (id, project_id, name, type, category, status, metadata, created_by, updated_by)
-		VALUES ($1, $2, 'aaaa', 'mqtt', 'protocol', 'unknown', '{}'::jsonb, $3, $3)
+		INSERT INTO data_connections (id, project_id, name, type, category, is_enabled, metadata, created_by, updated_by)
+		VALUES ($1, $2, 'aaaa', 'mqtt', 'protocol', true, '{}'::jsonb, $3, $3)
 	`, connectionID, projectID, userID); err != nil {
 		t.Fatalf("insert mqtt connection without config failed: %v", err)
 	}
@@ -239,6 +235,7 @@ func TestMqttSubscriptionDataPointValidWithoutMqttConfig(t *testing.T) {
 		"name":             "仅订阅测试",
 		"topic":            "only/subscription",
 		"qos":              0,
+		"usageMode":        "raw_datapoint",
 		"messageRetention": 100,
 	})
 	datapoints := mustListDataPoints(t, server.URL, token, projectID, "type=mqtt.subscription&search=仅订阅测试")
@@ -309,6 +306,55 @@ func TestMqttTagsListSupportsPaginationAndSearch(t *testing.T) {
 	filtered := mustListMqttTags(t, server.URL, token, projectID, subscriptionID, "search=tag_b&page=1&pageSize=20")
 	if filtered.Pagination.Total != 1 || len(filtered.List) != 1 || filtered.List[0].Code != "tag_b" {
 		t.Fatalf("expected searched mqtt tag, got %#v", filtered)
+	}
+}
+
+func TestMqttTagCreateRollsBackWhenGeneratedPointConflicts(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	fixture := setupTestDatabase(t, ctx)
+	if err := setupSchemaInitializer(t, fixture.pool).Ensure(ctx); err != nil {
+		t.Fatalf("schema initialization failed: %v", err)
+	}
+	projectID, userID := uuid.NewString(), uuid.NewString()
+	secret := "mqtt-tag-transaction-secret-01"
+	srv, err := app.NewServer(config.Config{
+		Addr: ":0", DatabaseURL: fixture.databaseURL, DatabaseSearchPath: fixture.schemaName, JWTSecret: secret,
+		ConnectionSecretKey: []byte("0123456789abcdef0123456789abcdef"), ConnectionSecretKeyVersion: "v1",
+	})
+	if err != nil {
+		t.Fatalf("create server failed: %v", err)
+	}
+	t.Cleanup(srv.Close)
+	server := httptest.NewServer(srv.Handler())
+	t.Cleanup(server.Close)
+	token := mustSignIntegrationJWT(t, secret, &auth.Claims{UserID: userID, TenantID: "tenant-mqtt-tx", ProjectIDs: []string{projectID}, Capabilities: []string{"project:read", "project:write"}})
+	connection := mustCreateMqttConnection(t, server.URL, token, projectID, map[string]any{
+		"name": "mqtt-tags", "brokerUrl": "tcp://localhost:1883", "protocol": "mqtt", "port": 1883,
+	})
+	subscriptionID := insertTestMqttSubscription(t, ctx, fixture, projectID, connection.ID, userID)
+	if _, err := fixture.pool.Exec(ctx, `
+		INSERT INTO data_points(project_id,path,name,source_type,source_config,data_type,tags,attribute_defaults,
+		 refresh_mode,status,runtime_permissions,created_by,updated_by)
+		VALUES($1,'mqtt.mqtt-tags.sub-temp.temperature','occupied','manual','{}'::jsonb,'float64','[]'::jsonb,
+		 '{}'::jsonb,'manual','active','{"write":{"inherit":true,"denyRoles":[],"allowRoles":[]}}'::jsonb,$2,$2)
+	`, projectID, userID); err != nil {
+		t.Fatalf("insert conflicting datapoint failed: %v", err)
+	}
+
+	response, status := doJSONRequestAllowStatus(t, http.MethodPost,
+		server.URL+"/api/v1/data/projects/"+projectID+"/mqtt/subscriptions/"+subscriptionID+"/tags", token,
+		map[string]any{"name": "temperature", "code": "temperature", "dataType": "float64", "parseType": "jsonpath", "parseRule": "$.value"})
+	if response.Code == 0 {
+		t.Fatalf("generated point conflict must reject MQTT tag create: status=%d response=%#v", status, response)
+	}
+	var count int
+	if err := fixture.pool.QueryRow(ctx, `SELECT COUNT(*) FROM data_mqtt_tags WHERE project_id=$1 AND code='temperature'`, projectID).Scan(&count); err != nil {
+		t.Fatalf("count MQTT tag failed: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("MQTT tag main record must roll back with datapoint failure, count=%d", count)
 	}
 }
 
@@ -484,7 +530,7 @@ func insertTestMqttTagWithName(t *testing.T, ctx context.Context, fixture *testD
 			created_by,
 			updated_by
 		)
-		VALUES ($1, $2, $3, $4, $5, 'number', 'jsonpath', '$.value', '{}'::jsonb, $6, $7, $7)
+		VALUES ($1, $2, $3, $4, $5, 'float64', 'jsonpath', '$.value', '{}'::jsonb, $6, $7, $7)
 	`, tagID, projectID, subscriptionID, name, code, order, userID)
 	if err != nil {
 		t.Fatalf("insert mqtt tag %s failed: %v", code, err)

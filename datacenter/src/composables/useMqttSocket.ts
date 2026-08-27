@@ -1,7 +1,5 @@
-// @ts-nocheck
-/* global __VITE_DATA_SERVICE_URL__ */
-
 import { ref, watch, unref, onBeforeUnmount } from 'vue'
+import { debugLogger } from '@/utils/debug'
 import { io } from 'socket.io-client'
 import { ElMessage } from 'element-plus'
 import { buildMqttSocketSharedKey, createMqttSocketSharedRegistry } from './mqtt-socket-shared'
@@ -265,7 +263,7 @@ export function useMqttSocket(projectIdSource, previewSessionIdSource = null) {
 
   const emit = (event, data) => {
     if (!currentConnectionKey) {
-      console.warn('[MqttSocket] Not connected, cannot emit:', event)
+      debugLogger.warn('[MqttSocket] Not connected, cannot emit:', event)
       return false
     }
 

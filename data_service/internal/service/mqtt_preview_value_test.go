@@ -27,7 +27,7 @@ func TestExtractMqttJSONPathValueRootArray(t *testing.T) {
 
 func TestExtractMqttBatchJSONPathValueRootArray(t *testing.T) {
 	tag := repository.MqttTagRecord{
-		DataType:  "number",
+		DataType:  "float64",
 		ParseType: "batch_jsonpath",
 		ParseRule: `{"arrayPath":"$","namePath":"N","matchName":"temperature","valuePath":"V","qualityPath":"Q","timePath":"T"}`,
 	}
@@ -45,7 +45,7 @@ func TestBuildMqttTagSnapshotFromBatchJSONPathKeepsBadQualityValue(t *testing.T)
 	tag := repository.MqttTagRecord{
 		ID:             "tag-1",
 		SubscriptionID: "sub-1",
-		DataType:       "number",
+		DataType:       "float64",
 		ParseType:      "batch_jsonpath",
 		ParseRule:      `{"arrayPath":"$","namePath":"N","matchName":"temperature","valuePath":"V","qualityPath":"Q"}`,
 	}
@@ -72,7 +72,7 @@ func TestBuildMqttTagSnapshotUpdateFromBatchJSONPathSkipsMissingName(t *testing.
 	tag := repository.MqttTagRecord{
 		ID:             "tag-982-id",
 		SubscriptionID: "sub-1",
-		DataType:       "number",
+		DataType:       "float64",
 		ParseType:      "batch_jsonpath",
 		ParseRule:      `{"arrayPath":"$","namePath":"N","matchName":"tag982","valuePath":"V","qualityPath":"Q"}`,
 	}
@@ -93,7 +93,7 @@ func TestBuildMqttTagSnapshotUpdateFromBatchJSONPathSkipsMissingArrayPath(t *tes
 	tag := repository.MqttTagRecord{
 		ID:             "nested-tag-id",
 		SubscriptionID: "sub-1",
-		DataType:       "number",
+		DataType:       "float64",
 		ParseType:      "batch_jsonpath",
 		ParseRule:      `{"arrayPath":"$.data.data","namePath":"N","matchName":"temperature","valuePath":"V","qualityPath":"Q"}`,
 	}
@@ -114,7 +114,7 @@ func TestBuildMqttTagSnapshotUpdateFromBatchJSONPathSkipsNonArrayPath(t *testing
 	tag := repository.MqttTagRecord{
 		ID:             "root-tag-id",
 		SubscriptionID: "sub-1",
-		DataType:       "number",
+		DataType:       "float64",
 		ParseType:      "batch_jsonpath",
 		ParseRule:      `{"arrayPath":"$","namePath":"N","matchName":"temperature","valuePath":"V","qualityPath":"Q"}`,
 	}

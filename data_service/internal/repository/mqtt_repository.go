@@ -21,7 +21,7 @@ type MqttConnectionRecord struct {
 	ProjectID string
 	Name      string
 	Type      string
-	Status    string
+	IsEnabled bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -62,7 +62,7 @@ type CreateMqttConnectionParams struct {
 	ProjectID        string
 	UserID           string
 	Name             string
-	Status           string
+	IsEnabled        *bool
 	BrokerURL        string
 	Protocol         string
 	Port             int
@@ -146,7 +146,7 @@ func (r *MqttRepository) CreateConnection(ctx context.Context, params CreateMqtt
 			name,
 			type,
 			category,
-			status,
+			is_enabled,
 			metadata,
 			display_order,
 			created_by,
@@ -155,13 +155,13 @@ func (r *MqttRepository) CreateConnection(ctx context.Context, params CreateMqtt
 		VALUES ($1, $2, 'mqtt', 'message', $3, $4::jsonb,
 			COALESCE((SELECT MAX(display_order) + 1 FROM data_connections WHERE project_id = $1), 0),
 			$5, $5)
-		RETURNING id, project_id, name, type, status, created_at, updated_at
-	`, params.ProjectID, params.Name, params.Status, string(metadataBytes), params.UserID).Scan(
+		RETURNING id, project_id, name, type, is_enabled, created_at, updated_at
+	`, params.ProjectID, params.Name, connectionEnabledValue(params.IsEnabled), string(metadataBytes), params.UserID).Scan(
 		&record.ID,
 		&record.ProjectID,
 		&record.Name,
 		&record.Type,
-		&record.Status,
+		&record.IsEnabled,
 		&record.CreatedAt,
 		&record.UpdatedAt,
 	)
@@ -213,21 +213,15 @@ func (r *MqttRepository) CreateConnection(ctx context.Context, params CreateMqtt
 	return &record, nil
 }
 
-// StartConnection 将 MQTT 连接状态切换为 connected。
-// 查询路径说明：按 (project_id, id, type='mqtt') 更新，避免跨项目误写。
+// StartConnection 只校验保存配置并返回本次临时会话状态，不把连接态写回配置主表。
 func (r *MqttRepository) StartConnection(ctx context.Context, projectID, connectionID string) (*MqttConnectionStatusRecord, error) {
-	var status string
+	var exists bool
 	err := r.pool.QueryRow(ctx, `
-		UPDATE data_connections
-		SET status = 'connected',
-			last_connected_at = now(),
-			last_error_message = NULL,
-			updated_at = now()
+		SELECT true FROM data_connections
 		WHERE project_id = $1
 		  AND id = $2
 		  AND type IN ('mqtt', 'builtin.message')
-		RETURNING status
-	`, projectID, connectionID).Scan(&status)
+	`, projectID, connectionID).Scan(&exists)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "MQTT 连接不存在")
@@ -235,28 +229,7 @@ func (r *MqttRepository) StartConnection(ctx context.Context, projectID, connect
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "启动 MQTT 连接失败", err)
 	}
 
-	return &MqttConnectionStatusRecord{Status: status}, nil
-}
-
-// GetConnectionStatus 读取 MQTT/IF消息库连接当前状态。
-// 查询路径说明：IF消息库复用 MQTT 工作台能力，因此状态查询也允许 builtin.message。
-func (r *MqttRepository) GetConnectionStatus(ctx context.Context, projectID, connectionID string) (*MqttConnectionStatusRecord, error) {
-	var status string
-	err := r.pool.QueryRow(ctx, `
-		SELECT status
-		FROM data_connections
-		WHERE project_id = $1
-		  AND id = $2
-		  AND type IN ('mqtt', 'builtin.message')
-	`, projectID, connectionID).Scan(&status)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "MQTT 连接不存在")
-		}
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "查询 MQTT 连接状态失败", err)
-	}
-
-	return &MqttConnectionStatusRecord{Status: status}, nil
+	return &MqttConnectionStatusRecord{Status: "connected"}, nil
 }
 
 // GetPublishConnection 按项目和连接读取 MQTT 发布测试需要的 broker 配置。
@@ -431,7 +404,12 @@ func (r *MqttRepository) CreatePublishedMessage(ctx context.Context, params Crea
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "序列化 MQTT 发布元数据失败", err)
 	}
-	rows, err := r.pool.Query(ctx, `
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 MQTT 发布记录事务失败", err)
+	}
+	defer rollbackTxQuietly(ctx, tx)
+	rows, err := tx.Query(ctx, `
 		WITH inserted AS (
 			INSERT INTO data_mqtt_messages (
 				project_id,
@@ -483,13 +461,17 @@ func (r *MqttRepository) CreatePublishedMessage(ctx context.Context, params Crea
 	if err := rows.Err(); err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 MQTT 发布消息失败", err)
 	}
+	rows.Close()
 	if firstRecord == nil {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 MQTT 发布记录事务失败", err)
+		}
 		return nil, nil
 	}
 
 	if params.RetentionLimit > 0 {
 		// 发布测试可能命中同 Topic 的多个订阅，需要按订阅分别保留最近消息。
-		_, _ = r.pool.Exec(ctx, `
+		if _, err := tx.Exec(ctx, `
 			DELETE FROM data_mqtt_messages
 			WHERE project_id = $1
 			  AND subscription_id::text = ANY($2)
@@ -504,7 +486,12 @@ func (r *MqttRepository) CreatePublishedMessage(ctx context.Context, params Crea
 				) ranked
 				WHERE rn <= $3
 			  )
-		`, params.ProjectID, subscriptionIDs, params.RetentionLimit)
+		`, params.ProjectID, subscriptionIDs, params.RetentionLimit); err != nil {
+			return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "裁剪 MQTT 发布预览记录失败", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 MQTT 发布记录事务失败", err)
 	}
 
 	return firstRecord, nil

@@ -1,6 +1,10 @@
 import { z } from 'zod'
 
-export const HistoryStorageScopeTypeSchema = z.enum(['access_source', 'collector_connection'])
+export const HistoryStorageScopeTypeSchema = z.enum([
+  'access_source',
+  'collector_connection',
+  'compute_unit',
+])
 export const HistoryStorageWriteModeSchema = z.enum([
   'every_sample',
   'interval_latest',
@@ -20,7 +24,7 @@ export const HistoryStorageTargetSchema = z.object({
   connectionId: z.string(),
   connectionName: z.string(),
   connectionType: z.enum(['builtin.timeseries', 'tdengine']),
-  connectionStatus: z.string(),
+  lastTestStatus: z.enum(['not_tested', 'succeeded', 'failed']),
   isPrimary: z.boolean(),
   sortOrder: z.number().int().nonnegative(),
   retentionDays: z.number().int().positive().nullable(),
@@ -81,7 +85,7 @@ export const HistoryStorageTargetOptionSchema = z.object({
   id: z.string(),
   name: z.string(),
   type: z.enum(['builtin.timeseries', 'tdengine']),
-  status: z.string(),
+  lastTestStatus: z.enum(['not_tested', 'succeeded', 'failed']),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 })
@@ -91,7 +95,9 @@ export const HistoryStorageTargetsSchema = z.object({
 })
 
 export const HistoryStorageBatchResultSchema = z.object({
-  updatedCount: z.number().int().nonnegative(),
+  matchedCount: z.number().int().nonnegative(),
+  changedCount: z.number().int().nonnegative(),
+  unchangedCount: z.number().int().nonnegative(),
 })
 
 export type HistoryStorageScopeType = z.infer<typeof HistoryStorageScopeTypeSchema>

@@ -29,7 +29,7 @@ func (h *MqttHandler) CreateConnection(w http.ResponseWriter, r *http.Request) e
 
 	var request struct {
 		Name             string            `json:"name"`
-		Status           string            `json:"status"`
+		Enabled          *bool             `json:"enabled"`
 		BrokerURL        string            `json:"brokerUrl"`
 		Protocol         string            `json:"protocol"`
 		Port             *int              `json:"port"`
@@ -52,7 +52,7 @@ func (h *MqttHandler) CreateConnection(w http.ResponseWriter, r *http.Request) e
 
 	connection, err := h.service.CreateConnection(r.Context(), r.PathValue("projectId"), claims.UserID, service.CreateMqttConnectionInput{
 		Name:             request.Name,
-		Status:           request.Status,
+		Enabled:          request.Enabled,
 		BrokerURL:        request.BrokerURL,
 		Protocol:         request.Protocol,
 		Port:             request.Port,
@@ -84,21 +84,6 @@ func (h *MqttHandler) StartConnection(w http.ResponseWriter, r *http.Request) er
 	}
 
 	status, err := h.service.StartConnection(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"))
-	if err != nil {
-		return normalizeRepresentativeHandlerError(err)
-	}
-
-	response.WriteSuccess(w, middleware.RequestID(r.Context()), status)
-	return nil
-}
-
-// GetConnectionStatus 读取 MQTT 连接状态。
-func (h *MqttHandler) GetConnectionStatus(w http.ResponseWriter, r *http.Request) error {
-	if _, err := requireClaims(r); err != nil {
-		return err
-	}
-
-	status, err := h.service.GetConnectionStatus(r.Context(), r.PathValue("projectId"), r.PathValue("connectionId"))
 	if err != nil {
 		return normalizeRepresentativeHandlerError(err)
 	}

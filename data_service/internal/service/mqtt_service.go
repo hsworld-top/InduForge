@@ -28,7 +28,7 @@ type MqttConnection struct {
 	ProjectID string    `json:"projectId"`
 	Name      string    `json:"name"`
 	Type      string    `json:"type"`
-	Status    string    `json:"status"`
+	Enabled   bool      `json:"enabled"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -61,14 +61,15 @@ type MqttPublishInput struct {
 }
 
 type MqttPublishResult struct {
-	Topic string `json:"topic"`
-	QOS   int    `json:"qos"`
+	Topic    string   `json:"topic"`
+	QOS      int      `json:"qos"`
+	Warnings []string `json:"warnings"`
 }
 
 // CreateMqttConnectionInput 表示创建 MQTT 连接的业务输入。
 type CreateMqttConnectionInput struct {
 	Name             string
-	Status           string
+	Enabled          *bool
 	BrokerURL        string
 	Protocol         string
 	Port             *int
@@ -87,7 +88,7 @@ type CreateMqttConnectionInput struct {
 }
 
 // MqttService 承载 MQTT 领域接口的输入校验和响应映射。
-// 说明：MQTT 是 Phase 1 的样板协议，配置、短时预览、Tag/Subscription 映射和 artifact
+// 说明：MQTT 是 开发态协议 的样板协议，配置、短时预览、Tag/Subscription 映射和 artifact
 // 都以它作为最完整的中心侧协议基线。
 type MqttService struct {
 	repository  *repository.MqttRepository
@@ -183,10 +184,6 @@ func (s *MqttService) CreateConnection(ctx context.Context, projectID, userID st
 	if err != nil {
 		return nil, err
 	}
-	status, err := normalizeMqttInitialStatus(input.Status)
-	if err != nil {
-		return nil, err
-	}
 	brokerURL, err := normalizeMqttBrokerURL(input.BrokerURL)
 	if err != nil {
 		return nil, err
@@ -226,7 +223,7 @@ func (s *MqttService) CreateConnection(ctx context.Context, projectID, userID st
 		ProjectID:        projectID,
 		UserID:           userID,
 		Name:             name,
-		Status:           status,
+		IsEnabled:        input.Enabled,
 		BrokerURL:        brokerURL,
 		Protocol:         protocol,
 		Port:             port,
@@ -290,22 +287,6 @@ func (s *MqttService) StartConnection(ctx context.Context, projectID, connection
 		return nil, err
 	}
 
-	return &MqttConnectionStatus{Status: record.Status}, nil
-}
-
-// GetConnectionStatus 查询指定 MQTT 连接状态。
-func (s *MqttService) GetConnectionStatus(ctx context.Context, projectID, connectionID string) (*MqttConnectionStatus, error) {
-	if err := validateProjectID(projectID); err != nil {
-		return nil, err
-	}
-	if err := validateConnectionID(connectionID); err != nil {
-		return nil, err
-	}
-
-	record, err := s.repository.GetConnectionStatus(ctx, projectID, connectionID)
-	if err != nil {
-		return nil, err
-	}
 	return &MqttConnectionStatus{Status: record.Status}, nil
 }
 
@@ -403,7 +384,8 @@ func (s *MqttService) PublishMessage(ctx context.Context, projectID, connectionI
 		return nil, err
 	}
 
-	_, _ = s.repository.CreatePublishedMessage(ctx, repository.CreateMqttMessageParams{
+	result := &MqttPublishResult{Topic: topic, QOS: qos, Warnings: []string{}}
+	if _, recordErr := s.repository.CreatePublishedMessage(ctx, repository.CreateMqttMessageParams{
 		ProjectID:      projectID,
 		ConnectionID:   connectionID,
 		Topic:          topic,
@@ -412,9 +394,11 @@ func (s *MqttService) PublishMessage(ctx context.Context, projectID, connectionI
 		ReceivedAt:     time.Now().UTC(),
 		Metadata:       map[string]any{"source": "workbench-publish"},
 		RetentionLimit: 100,
-	})
+	}); recordErr != nil {
+		result.Warnings = append(result.Warnings, "消息已发送，但保存开发态预览记录失败")
+	}
 
-	return &MqttPublishResult{Topic: topic, QOS: qos}, nil
+	return result, nil
 }
 
 func (s *MqttService) applyBuiltinMessagePublishConnection(connection *repository.MqttPublishConnectionRecord) error {
@@ -447,7 +431,7 @@ func toMqttConnection(record repository.MqttConnectionRecord) MqttConnection {
 		ProjectID: record.ProjectID,
 		Name:      record.Name,
 		Type:      record.Type,
-		Status:    record.Status,
+		Enabled:   record.IsEnabled,
 		CreatedAt: record.CreatedAt,
 		UpdatedAt: record.UpdatedAt,
 	}
@@ -505,17 +489,6 @@ func buildMqttPublishClientID(connection *repository.MqttPublishConnectionRecord
 		return "workbench-publish-" + connection.ID
 	}
 	return fmt.Sprintf("workbench-publish-%d", time.Now().UnixNano())
-}
-
-func normalizeMqttInitialStatus(status string) (string, error) {
-	status = strings.TrimSpace(strings.ToLower(status))
-	if status == "" {
-		return "disconnected", nil
-	}
-	if _, ok := allowedConnectionStatus[status]; !ok {
-		return "", apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "MQTT 连接状态不受支持")
-	}
-	return status, nil
 }
 
 func normalizeMqttBrokerURL(brokerURL string) (string, error) {

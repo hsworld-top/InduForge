@@ -1,5 +1,5 @@
-// @ts-nocheck
 import { ref } from 'vue'
+import { debugLogger } from '@/utils/debug'
 
 /**
  * MQTT Tag 同步管理
@@ -30,7 +30,6 @@ export function useMqttTagSync(subscriptionId) {
    */
   const subscribe = (callback) => {
     syncManager.listeners.add(callback)
-    console.log(`[TagSync] Subscribed to ${subscriptionId}, total: ${syncManager.listeners.size}`)
   }
 
   /**
@@ -39,9 +38,6 @@ export function useMqttTagSync(subscriptionId) {
    */
   const unsubscribe = (callback) => {
     syncManager.listeners.delete(callback)
-    console.log(
-      `[TagSync] Unsubscribed from ${subscriptionId}, remaining: ${syncManager.listeners.size}`,
-    )
   }
 
   /**
@@ -51,13 +47,11 @@ export function useMqttTagSync(subscriptionId) {
    */
   const notify = (type, data) => {
     syncManager.lastUpdate = Date.now()
-    console.log(`[TagSync] Notifying ${type} to ${syncManager.listeners.size} listeners`, data)
-
     syncManager.listeners.forEach((callback) => {
       try {
         callback({ type, data, timestamp: syncManager.lastUpdate })
       } catch (error) {
-        console.error('[TagSync] Error in listener callback:', error)
+        debugLogger.error('[TagSync] Error in listener callback:', error)
       }
     })
   }

@@ -1,4 +1,3 @@
-// @ts-nocheck
 const DEFAULT_SOCKET_URL = 'http://localhost:19601'
 const DEFAULT_SOCKET_PATH = '/socket.io/'
 
@@ -28,7 +27,16 @@ export function buildMqttSocketSharedKey({ projectId, previewSessionId }) {
  * }} options
  * @returns {object}
  */
-export function createMqttSocketSharedRegistry(options = {}) {
+interface MqttSocketRegistryOptions {
+  ioFactory: (...args: any[]) => any
+  getApiUrl?: (() => string) | string
+  notifier?:
+    | ((payload: { type: 'success' | 'warning' | 'info' | 'error'; message: string }) => void)
+    | null
+  logger?: Pick<typeof console, 'log' | 'warn' | 'error'>
+}
+
+export function createMqttSocketSharedRegistry(options: MqttSocketRegistryOptions) {
   const {
     ioFactory,
     getApiUrl = () => DEFAULT_SOCKET_URL,
@@ -42,7 +50,7 @@ export function createMqttSocketSharedRegistry(options = {}) {
 
   const entries = new Map()
 
-  const notify = (type, message) => {
+  const notify = (type: 'success' | 'warning' | 'info' | 'error', message) => {
     if (typeof notifier === 'function') {
       notifier({ type, message })
     }

@@ -25,12 +25,9 @@
       <div class="kafka-variable-panel__result">
         <el-table v-loading="loading" :data="fields" height="100%" empty-text="暂无字段映射">
           <el-table-column prop="name" label="映射名称" min-width="140" show-overflow-tooltip />
-          <el-table-column
-            prop="valuePath"
-            label="字段路径"
-            min-width="170"
-            show-overflow-tooltip
-          />
+          <el-table-column label="字段路径" min-width="170" show-overflow-tooltip>
+            <template #default="{ row }">{{ formatKafkaValuePath(row.valuePath) }}</template>
+          </el-table-column>
           <el-table-column prop="dataType" label="类型" width="92" />
           <el-table-column
             prop="dataPointPath"
@@ -103,19 +100,13 @@
             </template>
           </el-table-column>
         </el-table>
-        <div class="kafka-variable-panel__pagination">
-          <el-pagination
-            :current-page="pagination.page"
-            :page-size="pagination.pageSize"
-            :page-sizes="[20, 50, 100]"
-            :total="pagination.total"
-            background
-            layout="total, sizes, prev, pager, next, jumper"
-            small
-            @current-change="changePage"
-            @size-change="changePageSize"
-          />
-        </div>
+        <DataCenterPagination
+          :page="pagination.page"
+          :page-size="pagination.pageSize"
+          :total="pagination.total"
+          :total-pages="pagination.totalPages"
+          @change="handlePageChange"
+        />
       </div>
 
       <div v-if="sampleEditorVisible" class="kafka-variable-panel__editor">
@@ -142,14 +133,14 @@
           <el-input v-model="form.name" placeholder="temperature" />
         </el-form-item>
         <el-form-item label="字段路径">
-          <el-input v-model="form.valuePath" placeholder="temperature" />
+          <el-input :model-value="formatKafkaValuePath(form.valuePath)" readonly />
         </el-form-item>
         <div class="kafka-variable-panel__form-grid">
           <el-form-item label="类型">
             <el-select v-model="form.dataType">
               <el-option label="string" value="string" />
-              <el-option label="number" value="number" />
-              <el-option label="boolean" value="boolean" />
+              <el-option label="float64" value="float64" />
+              <el-option label="bool" value="bool" />
               <el-option label="object" value="object" />
               <el-option label="array" value="array" />
             </el-select>
@@ -237,11 +228,13 @@ import IconTablerRefresh from '~icons/tabler/refresh'
 import IconTablerTrash from '~icons/tabler/trash'
 import dataAPI from '@/api/data.api'
 import DcDialog from '@/components/shared/DcDialog.vue'
+import DataCenterPagination from '@/components/shared/DataCenterPagination.vue'
 import WorkbenchJsonSampleEditor from '@/components/workbench/WorkbenchJsonSampleEditor.vue'
 import WorkbenchStatusPill from '@/components/workbench/WorkbenchStatusPill.vue'
 import { TIME_FORMAT } from '@/constants'
 import { getApiErrorMessage } from '@/utils/request'
 import {
+  formatKafkaValuePath,
   inferKafkaSampleFields,
   normalizeKafkaSampleEditorText,
   type KafkaSampleFieldCandidate,
@@ -279,13 +272,13 @@ const candidateRows = ref<KafkaSampleFieldCandidate[]>([])
 
 const form = reactive({
   name: '',
-  valuePath: '',
+  valuePath: [] as Array<string | number>,
   dataType: 'string',
   enabled: true,
   description: '',
 })
 
-const canSubmit = computed(() => form.name.trim().length > 0 && form.valuePath.trim().length > 0)
+const canSubmit = computed(() => form.name.trim().length > 0 && form.valuePath.length > 0)
 const selectedCandidateCount = computed(() => selectedCandidatePaths.value.size)
 const sampleEditorStorageKey = computed(
   () => `datacenter:kafka-field-sample:${props.projectId}:${props.mapping.id}`,
@@ -335,16 +328,21 @@ const changePageSize = async (pageSize: number) => {
   await loadFields()
 }
 
+const handlePageChange = async (value: { page: number; pageSize: number }) => {
+  if (value.pageSize !== pagination.value.pageSize) {
+    await changePageSize(value.pageSize)
+    return
+  }
+  await changePage(value.page)
+}
+
 const openCreateDialog = () => {
-  editingField.value = null
-  Object.assign(form, {
-    name: '',
-    valuePath: '',
-    dataType: 'string',
-    enabled: true,
-    description: '',
-  })
-  dialogVisible.value = true
+  if (!sampleEditorText.value.trim()) {
+    sampleEditorVisible.value = true
+    ElMessage.info('请先填入或拉取 JSON 样例，再从字段候选中选择映射')
+    return
+  }
+  parseEditorFields()
 }
 
 const openEditDialog = (field: KafkaField) => {
@@ -366,7 +364,7 @@ const saveField = async () => {
     const payload = {
       groupId: null,
       name: form.name.trim(),
-      valuePath: form.valuePath.trim(),
+      valuePath: [...form.valuePath],
       dataType: form.dataType,
       enabled: form.enabled,
       description: form.description.trim(),
@@ -409,7 +407,7 @@ const createFromSamples = async () => {
       props.mapping.id,
       nextCandidates.map((candidate) => ({
         name: candidate.name,
-        valuePath: candidate.path,
+        valuePath: candidate.segments,
         dataType: candidate.dataType,
         enabled: true,
         groupId: null,

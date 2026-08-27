@@ -197,6 +197,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { debugLogger } from '@/utils/debug'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   deleteMqttTag,
@@ -300,7 +301,7 @@ const loadTags = async (options: { silent?: boolean } = {}) => {
     await Promise.all([loadTagDatapoints(tags.value), loadTagValues(tags.value)])
     await syncTagSelection()
   } catch (error) {
-    console.error('Failed to load tags:', error)
+    debugLogger.error('Failed to load tags:', error)
     ElMessage.error(getApiErrorMessage(error, '加载变量失败'))
   } finally {
     if (loadingTimer) {
@@ -346,7 +347,7 @@ const loadTagValues = async (tagList) => {
       if (value) tag.currentValue = normalizeTagValue(value)
     })
   } catch (error) {
-    console.error('Failed to load tag values:', error)
+    debugLogger.error('Failed to load tag values:', error)
   }
 }
 
@@ -366,7 +367,7 @@ const loadTagDatapoints = async (tagList) => {
       tag.datapointStatus = datapoint?.status || ''
     })
   } catch (error) {
-    console.error('Failed to load datapoints:', error)
+    debugLogger.error('Failed to load datapoints:', error)
   }
 }
 
@@ -512,7 +513,7 @@ const handleDeleteTag = async (tag) => {
     notifyTagChange('deleted', { tagId: tag.id })
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('Failed to delete tag:', error)
+      debugLogger.error('Failed to delete tag:', error)
       ElMessage.error(getApiErrorMessage(error, '删除失败'))
     }
   }
@@ -584,7 +585,7 @@ const handleBatchDeleteTags = async () => {
       notifyTagChange('deleted', { filtered: true, deletedCount })
     } catch (error) {
       if (error !== 'cancel') {
-        console.error('Failed to delete filtered tags:', error)
+        debugLogger.error('Failed to delete filtered tags:', error)
         ElMessage.error(getApiErrorMessage(error, '批量删除失败'))
       }
     }
@@ -607,7 +608,7 @@ const handleBatchDeleteTags = async () => {
     notifyTagChange('deleted', { tagIds })
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('Failed to delete selected tags:', error)
+      debugLogger.error('Failed to delete selected tags:', error)
       ElMessage.error(getApiErrorMessage(error, '批量删除失败'))
     }
   }
@@ -632,12 +633,6 @@ const normalizeTagValue = (value) => ({
   error: value?.error || '',
 })
 
-const hasReceivedTagValue = (value) => {
-  if (!value) return false
-  const raw = value.parsedValue ?? value.value
-  return raw !== null && raw !== undefined && raw !== ''
-}
-
 const applyTagValueUpdate = (value) => {
   const tagId = value?.tagId
   if (!tagId) return
@@ -649,8 +644,8 @@ const applyTagValueUpdate = (value) => {
 const getDataTypeLabel = (dataType) => {
   const labels = {
     string: '字符串',
-    number: '数值',
-    boolean: '布尔',
+    float64: '数值',
+    bool: '布尔',
     object: '对象',
     array: '数组',
   }
@@ -680,35 +675,13 @@ const formatLastValue = (tag) => {
   let text = ''
   if (typeof raw === 'object') {
     text = JSON.stringify(raw)
-  } else if (tag.dataType === 'number') {
+  } else if (tag.dataType === 'float64') {
     const num = Number(raw)
     text = Number.isFinite(num) ? String(Number(num.toFixed(4))) : String(raw)
   } else {
     text = String(raw)
   }
   return tag.unit && text !== '-' ? `${text} ${tag.unit}` : text
-}
-
-const formatQualityLabel = (tag) => {
-  if (!hasReceivedTagValue(tag.currentValue)) return '-'
-  const quality = tag.currentValue?.quality || 'unknown'
-  const labels = {
-    good: '良好',
-    bad: '错误',
-    uncertain: '不确定',
-    unknown: '未知',
-  }
-  const label = labels[quality] || quality
-  const qualityCode = tag.currentValue?.qualityCode
-  if (
-    quality === 'bad' &&
-    qualityCode !== null &&
-    qualityCode !== undefined &&
-    qualityCode !== ''
-  ) {
-    return `${label} ${qualityCode}`
-  }
-  return label
 }
 
 const formatTime = (value) => {

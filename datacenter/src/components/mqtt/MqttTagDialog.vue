@@ -25,8 +25,8 @@
       <el-form-item label="数据类型" prop="dataType">
         <el-select v-model="formData.dataType" placeholder="选择数据类型">
           <el-option label="字符串" value="string" />
-          <el-option label="数值" value="number" />
-          <el-option label="布尔" value="boolean" />
+          <el-option label="数值（float64）" value="float64" />
+          <el-option label="布尔" value="bool" />
           <el-option label="对象" value="object" />
           <el-option label="数组" value="array" />
         </el-select>

@@ -1,36 +1,37 @@
-// @ts-nocheck
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
 
 import { createMqttSocketSharedRegistry } from '../src/composables/mqtt-socket-shared'
 
-function createFakeSocket(id) {
-  const listeners = new Map()
-  const anyListeners = new Set()
+type SocketHandler = (...args: any[]) => void
+
+function createFakeSocket(id: string) {
+  const listeners = new Map<string, SocketHandler[]>()
+  const anyListeners = new Set<(event: string, ...args: any[]) => void>()
 
   const socket = {
     id,
     connected: false,
-    emitted: [],
+    emitted: [] as Array<{ event: string; payload: unknown }>,
     disconnectCalls: 0,
-    on(event, handler) {
+    on(event: string, handler: SocketHandler) {
       const handlers = listeners.get(event) || []
       handlers.push(handler)
       listeners.set(event, handlers)
       return socket
     },
-    onAny(handler) {
+    onAny(handler: (event: string, ...args: any[]) => void) {
       anyListeners.add(handler)
       return socket
     },
-    emit(event, payload) {
+    emit(event: string, payload: unknown) {
       socket.emitted.push({ event, payload })
     },
     disconnect() {
       socket.disconnectCalls += 1
       socket.connected = false
     },
-    trigger(event, ...args) {
+    trigger(event: string, ...args: any[]) {
       if (event === 'connect') {
         socket.connected = true
       }
@@ -55,7 +56,7 @@ function createSilentLogger() {
 }
 
 test('共享注册表会复用同一条连接，并对订阅做引用计数', () => {
-  const sockets = []
+  const sockets: ReturnType<typeof createFakeSocket>[] = []
   const registry = createMqttSocketSharedRegistry({
     ioFactory: () => {
       const socket = createFakeSocket(`socket-${sockets.length + 1}`)
@@ -144,7 +145,7 @@ test('共享注册表会复用同一条连接，并对订阅做引用计数', ()
 })
 
 test('共享注册表会使用传入的数据服务地址建立 socket 连接', () => {
-  const captured = []
+  const captured: Array<{ url: string; options: any }> = []
   const registry = createMqttSocketSharedRegistry({
     ioFactory: (url, options) => {
       captured.push({ url, options })

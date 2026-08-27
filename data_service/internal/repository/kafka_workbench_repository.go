@@ -60,8 +60,8 @@ type KafkaFieldRecord struct {
 	TopicMappingID string
 	GroupID        *string
 	Name           string
-	ValuePath      string
-	KeyPath        string
+	ValuePath      []any
+	KeyPath        []any
 	DataType       string
 	Enabled        bool
 	Description    string
@@ -166,8 +166,8 @@ type CreateKafkaFieldParams struct {
 	TopicMappingID string
 	GroupID        *string
 	Name           string
-	ValuePath      string
-	KeyPath        string
+	ValuePath      []any
+	KeyPath        []any
 	DataType       string
 	Enabled        bool
 	Description    string
@@ -183,8 +183,8 @@ type UpdateKafkaFieldParams struct {
 	ProjectID     string
 	GroupID       *string
 	Name          string
-	ValuePath     string
-	KeyPath       string
+	ValuePath     []any
+	KeyPath       []any
 	DataType      string
 	Enabled       bool
 	Description   string
@@ -800,7 +800,7 @@ func (r *KafkaWorkbenchRepository) ListFieldsPage(ctx context.Context, projectID
 	}
 	if keyword := strings.TrimSpace(search); keyword != "" {
 		args = append(args, "%"+keyword+"%")
-		where = append(where, fmt.Sprintf("(f.name ILIKE $%d OR f.value_path ILIKE $%d OR f.key_path ILIKE $%d)", len(args), len(args), len(args)))
+		where = append(where, fmt.Sprintf("(f.name ILIKE $%d OR f.value_path::text ILIKE $%d OR f.key_path::text ILIKE $%d)", len(args), len(args), len(args)))
 	}
 	whereSQL := strings.Join(where, " AND ")
 
@@ -872,6 +872,46 @@ func (r *KafkaWorkbenchRepository) CreateFieldWithDataPoint(ctx context.Context,
 	}
 	defer rollbackProtocolTxQuietly(ctx, tx)
 
+	record, err := createKafkaFieldWithDataPointTx(ctx, tx, params)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 Kafka 字段创建事务失败", err)
+	}
+	return record, nil
+}
+
+// CreateFieldsWithDataPoints 原子创建一组字段映射和生成点，任一项失败时整批回滚。
+func (r *KafkaWorkbenchRepository) CreateFieldsWithDataPoints(ctx context.Context, params []CreateKafkaFieldParams) ([]KafkaFieldRecord, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 Kafka 字段批量创建事务失败", err)
+	}
+	defer rollbackProtocolTxQuietly(ctx, tx)
+	records := make([]KafkaFieldRecord, 0, len(params))
+	for _, item := range params {
+		record, createErr := createKafkaFieldWithDataPointTx(ctx, tx, item)
+		if createErr != nil {
+			return nil, createErr
+		}
+		records = append(records, *record)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 Kafka 字段批量创建事务失败", err)
+	}
+	return records, nil
+}
+
+func createKafkaFieldWithDataPointTx(ctx context.Context, tx pgx.Tx, params CreateKafkaFieldParams) (*KafkaFieldRecord, error) {
+	valuePath, err := json.Marshal(params.ValuePath)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka 值路径格式无效", err)
+	}
+	keyPath, err := json.Marshal(params.KeyPath)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka 键路径格式无效", err)
+	}
 	record := KafkaFieldRecord{}
 	var lastValuePayload []byte
 	err = tx.QueryRow(ctx, `
@@ -879,11 +919,11 @@ func (r *KafkaWorkbenchRepository) CreateFieldWithDataPoint(ctx context.Context,
 			project_id, connection_id, topic_mapping_id, group_id, name, value_path, key_path,
 			data_type, enabled, description, sort_order, created_by, updated_by
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
+		VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11, $12, $12)
 		RETURNING id, project_id, connection_id, topic_mapping_id, group_id, name, value_path,
 		          key_path, data_type, enabled, description, sort_order,
 		          last_value, quality, last_updated_at, created_at, updated_at
-	`, params.ProjectID, params.ConnectionID, params.TopicMappingID, params.GroupID, params.Name, params.ValuePath, params.KeyPath, params.DataType, params.Enabled, params.Description, params.SortOrder, params.UserID).Scan(
+	`, params.ProjectID, params.ConnectionID, params.TopicMappingID, params.GroupID, params.Name, string(valuePath), string(keyPath), params.DataType, params.Enabled, params.Description, params.SortOrder, params.UserID).Scan(
 		&record.ID,
 		&record.ProjectID,
 		&record.ConnectionID,
@@ -916,14 +956,19 @@ func (r *KafkaWorkbenchRepository) CreateFieldWithDataPoint(ctx context.Context,
 	record.DataPointID = &dataPointID
 	record.DataPointPath = &dataPointPath
 
-	if err := tx.Commit(ctx); err != nil {
-		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 Kafka 字段创建事务失败", err)
-	}
 	return &record, nil
 }
 
 // UpdateFieldWithDataPoint 更新字段映射并同步数据点。
 func (r *KafkaWorkbenchRepository) UpdateFieldWithDataPoint(ctx context.Context, params UpdateKafkaFieldParams) (*KafkaFieldRecord, error) {
+	valuePath, err := json.Marshal(params.ValuePath)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka 值路径格式无效", err)
+	}
+	keyPath, err := json.Marshal(params.KeyPath)
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "Kafka 键路径格式无效", err)
+	}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 Kafka 字段更新事务失败", err)
@@ -936,8 +981,8 @@ func (r *KafkaWorkbenchRepository) UpdateFieldWithDataPoint(ctx context.Context,
 		UPDATE data_kafka_fields
 		SET group_id = $3,
 		    name = $4,
-		    value_path = $5,
-		    key_path = $6,
+		    value_path = $5::jsonb,
+		    key_path = $6::jsonb,
 		    data_type = $7,
 		    enabled = $8,
 		    description = $9,
@@ -948,7 +993,7 @@ func (r *KafkaWorkbenchRepository) UpdateFieldWithDataPoint(ctx context.Context,
 		RETURNING id, project_id, connection_id, topic_mapping_id, group_id, name, value_path,
 		          key_path, data_type, enabled, description, sort_order,
 		          last_value, quality, last_updated_at, created_at, updated_at
-	`, params.ProjectID, params.ID, params.GroupID, params.Name, params.ValuePath, params.KeyPath, params.DataType, params.Enabled, params.Description, params.SortOrder, params.UserID).Scan(
+	`, params.ProjectID, params.ID, params.GroupID, params.Name, string(valuePath), string(keyPath), params.DataType, params.Enabled, params.Description, params.SortOrder, params.UserID).Scan(
 		&record.ID,
 		&record.ProjectID,
 		&record.ConnectionID,

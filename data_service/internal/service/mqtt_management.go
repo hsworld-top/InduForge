@@ -16,7 +16,7 @@ import (
 	"github.com/indu-forge/data_service/internal/repository"
 )
 
-var datapointSegmentSanitizer = regexp.MustCompile(`[./\\\s]+|[^0-9A-Za-z_-]+`)
+var datapointSegmentSanitizer = regexp.MustCompile(`[./\\\s]+|[^\p{L}\p{N}_-]+`)
 
 const (
 	mqttSubscriptionUsageRawDatapoint   = "raw_datapoint"
@@ -38,8 +38,7 @@ type MqttConnectionDetail struct {
 	ProjectID           string            `json:"projectId"`
 	Name                string            `json:"name"`
 	Type                string            `json:"type"`
-	Status              string            `json:"status"`
-	IsEnabled           bool              `json:"isEnabled"`
+	Enabled             bool              `json:"enabled"`
 	RetryCount          int               `json:"retryCount"`
 	RetryInterval       int               `json:"retryInterval"`
 	HealthCheckInterval int               `json:"healthCheckInterval"`
@@ -181,6 +180,7 @@ func (s *MqttService) ListMqttConnections(ctx context.Context, projectID string,
 	}
 	for _, record := range records {
 		item := toMqttConnectionDetail(record)
+		s.applyMqttRuntimeStatus(&item)
 		item.SecretStatus = statuses[record.ID]
 		if item.SecretStatus == nil {
 			item.SecretStatus = map[string]bool{}
@@ -204,6 +204,7 @@ func (s *MqttService) GetMqttConnection(ctx context.Context, projectID, connecti
 		return nil, err
 	}
 	result := toMqttConnectionDetail(*record)
+	s.applyMqttRuntimeStatus(&result)
 	if s.secrets != nil {
 		result.SecretStatus, err = s.secrets.Status(ctx, connectionID)
 		if err != nil {
@@ -245,10 +246,6 @@ func (s *MqttService) UpdateMqttConnection(ctx context.Context, projectID, conne
 	if err != nil {
 		return nil, err
 	}
-	status, err := normalizeMqttInitialStatus(input.Status)
-	if err != nil {
-		return nil, err
-	}
 	brokerURL, err := normalizeMqttBrokerURL(input.BrokerURL)
 	if err != nil {
 		return nil, err
@@ -282,6 +279,10 @@ func (s *MqttService) UpdateMqttConnection(ctx context.Context, projectID, conne
 	if input.CleanSession != nil {
 		cleanSession = *input.CleanSession
 	}
+	isEnabled := current.IsEnabled
+	if input.Enabled != nil {
+		isEnabled = *input.Enabled
+	}
 
 	secrets, sslConfig := extractMqttSecrets(input)
 	record, err := s.repository.UpdateConnectionDetail(ctx, repository.UpdateMqttConnectionParams{
@@ -289,8 +290,7 @@ func (s *MqttService) UpdateMqttConnection(ctx context.Context, projectID, conne
 		ConnectionID:          connectionID,
 		UserID:                userID,
 		Name:                  name,
-		Status:                status,
-		IsEnabled:             current.IsEnabled,
+		IsEnabled:             isEnabled,
 		RetryCount:            current.RetryCount,
 		RetryIntervalMS:       current.RetryIntervalMS,
 		HealthCheckIntervalMS: current.HealthCheckIntervalMS,
@@ -314,6 +314,7 @@ func (s *MqttService) UpdateMqttConnection(ctx context.Context, projectID, conne
 	}
 
 	result := toMqttConnectionDetail(*record)
+	s.applyMqttRuntimeStatus(&result)
 	return &result, nil
 }
 
@@ -690,16 +691,7 @@ func (s *MqttService) UpdateSubscriptionDefaultBatchRule(ctx context.Context, pr
 
 // DeleteSubscription 删除订阅并标记其数据点失效。
 func (s *MqttService) DeleteSubscription(ctx context.Context, projectID, subscriptionID, userID string) error {
-	current, err := s.repository.GetSubscription(ctx, projectID, subscriptionID)
-	if err != nil {
-		return err
-	}
-	if err := s.repository.DeleteSubscription(ctx, projectID, subscriptionID); err != nil {
-		return err
-	}
-	_, _ = s.datapoints.MarkInvalidBySource(ctx, projectID, "mqtt.subscription", subscriptionID, stringPtr(userID))
-	_ = current
-	return nil
+	return s.repository.DeleteSubscription(ctx, projectID, subscriptionID, userID)
 }
 
 // ListSubscriptionGroups 查询连接下的订阅分组树。
@@ -865,23 +857,42 @@ func (s *MqttService) GetTag(ctx context.Context, projectID, tagID string) (*Mqt
 
 // CreateTag 创建变量并同步数据点。
 func (s *MqttService) CreateTag(ctx context.Context, projectID, subscriptionID, userID string, input repository.CreateMqttTagParams) (*MqttTag, error) {
-	params := normalizeMqttTagCreateParams(projectID, subscriptionID, userID, input)
-	if params.Name == "" || params.Code == "" || params.ParseRule == "" {
-		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "变量名称、标识和解析规则不能为空")
-	}
-
-	record, err := s.repository.CreateTag(ctx, params)
+	params, err := normalizeMqttTagCreateParams(projectID, subscriptionID, userID, input)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.syncTagDatapoint(ctx, *record, userID); err != nil {
+	if params.Name == "" || params.Code == "" || params.ParseRule == "" {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "变量名称、标识和解析规则不能为空")
+	}
+	subscription, err := s.repository.GetSubscription(ctx, projectID, subscriptionID)
+	if err != nil {
 		return nil, err
 	}
-	result := toMqttTag(*record)
+	connection, err := s.connections.GetByProjectAndID(ctx, projectID, subscription.ConnectionID)
+	if err != nil {
+		return nil, err
+	}
+	path := "mqtt." + normalizeDatapointSegment(connection.Name) + "." + mqttSubscriptionPathSegment(*subscription) + "." + normalizeDatapointSegment(params.Name)
+	records, err := s.repository.CreateTagsBatchWithDataPoints(ctx, []repository.BatchMqttTagDataPointParams{{
+		Tag: params, DataPath: path, DataName: params.Name, SourceType: "mqtt.tag",
+		SourceConfig: map[string]any{"connectionId": subscription.ConnectionID, "subscriptionId": subscriptionID},
+		RefreshMode:  "subscription", Status: "active",
+	}})
+	if err != nil {
+		return nil, err
+	}
+	if len(records) != 1 {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "MQTT 变量创建结果数量不一致")
+	}
+	result := toMqttTag(records[0])
 	return &result, nil
 }
 
-func normalizeMqttTagCreateParams(projectID, subscriptionID, userID string, input repository.CreateMqttTagParams) repository.CreateMqttTagParams {
+func normalizeMqttTagCreateParams(projectID, subscriptionID, userID string, input repository.CreateMqttTagParams) (repository.CreateMqttTagParams, error) {
+	dataType, ok := canonicalDataPointType(defaultString(strings.TrimSpace(input.DataType), "string"))
+	if !ok {
+		return repository.CreateMqttTagParams{}, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "MQTT 变量数据类型不受支持")
+	}
 	return repository.CreateMqttTagParams{
 		ProjectID:      projectID,
 		SubscriptionID: subscriptionID,
@@ -889,7 +900,7 @@ func normalizeMqttTagCreateParams(projectID, subscriptionID, userID string, inpu
 		Name:           strings.TrimSpace(input.Name),
 		Code:           strings.TrimSpace(input.Code),
 		Description:    trimOptionalString(input.Description),
-		DataType:       defaultString(strings.TrimSpace(input.DataType), "string"),
+		DataType:       dataType,
 		ParseType:      defaultString(strings.TrimSpace(input.ParseType), "jsonpath"),
 		ParseRule:      strings.TrimSpace(input.ParseRule),
 		DefaultValue:   trimOptionalString(input.DefaultValue),
@@ -897,7 +908,7 @@ func normalizeMqttTagCreateParams(projectID, subscriptionID, userID string, inpu
 		Transform:      trimOptionalString(input.Transform),
 		Validation:     cloneMap(input.Validation),
 		Order:          input.Order,
-	}
+	}, nil
 }
 
 // CreateTagsBatch 批量创建变量。
@@ -917,7 +928,10 @@ func (s *MqttService) CreateTagsBatch(ctx context.Context, projectID, subscripti
 		if input.Order == 0 {
 			input.Order = index
 		}
-		params := normalizeMqttTagCreateParams(projectID, subscriptionID, userID, input)
+		params, err := normalizeMqttTagCreateParams(projectID, subscriptionID, userID, input)
+		if err != nil {
+			return nil, err
+		}
 		if params.Name == "" || params.Code == "" || params.ParseRule == "" {
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "变量名称、标识和解析规则不能为空")
 		}
@@ -954,6 +968,10 @@ func (s *MqttService) UpdateTag(ctx context.Context, projectID, tagID, userID st
 		return nil, err
 	}
 
+	dataType, ok := canonicalDataPointType(defaultString(strings.TrimSpace(input.DataType), current.DataType))
+	if !ok {
+		return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusBadRequest, "MQTT 变量数据类型不受支持")
+	}
 	params := repository.UpdateMqttTagParams{
 		ProjectID:    projectID,
 		TagID:        tagID,
@@ -961,7 +979,7 @@ func (s *MqttService) UpdateTag(ctx context.Context, projectID, tagID, userID st
 		Name:         fallbackTrimmed(input.Name, current.Name),
 		Code:         fallbackTrimmed(input.Code, current.Code),
 		Description:  coalesceOptionalString(trimOptionalString(input.Description), current.Description),
-		DataType:     defaultString(strings.TrimSpace(input.DataType), current.DataType),
+		DataType:     dataType,
 		ParseType:    defaultString(strings.TrimSpace(input.ParseType), current.ParseType),
 		ParseRule:    defaultString(strings.TrimSpace(input.ParseRule), current.ParseRule),
 		DefaultValue: coalesceOptionalString(trimOptionalString(input.DefaultValue), current.DefaultValue),
@@ -977,11 +995,21 @@ func (s *MqttService) UpdateTag(ctx context.Context, projectID, tagID, userID st
 		params.Order = current.Order
 	}
 
-	record, err := s.repository.UpdateTag(ctx, params)
+	subscription, err := s.repository.GetSubscription(ctx, projectID, current.SubscriptionID)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.syncTagDatapoint(ctx, *record, userID); err != nil {
+	connection, err := s.connections.GetByProjectAndID(ctx, projectID, subscription.ConnectionID)
+	if err != nil {
+		return nil, err
+	}
+	path := "mqtt." + normalizeDatapointSegment(connection.Name) + "." + mqttSubscriptionPathSegment(*subscription) + "." + normalizeDatapointSegment(params.Name)
+	record, err := s.repository.UpdateTagWithDataPoint(ctx, repository.UpdateMqttTagDataPointParams{
+		Tag:          params,
+		DataPath:     path,
+		SourceConfig: map[string]any{"connectionId": subscription.ConnectionID, "subscriptionId": current.SubscriptionID, "tagId": tagID},
+	})
+	if err != nil {
 		return nil, err
 	}
 	result := toMqttTag(*record)
@@ -990,14 +1018,7 @@ func (s *MqttService) UpdateTag(ctx context.Context, projectID, tagID, userID st
 
 // DeleteTag 删除变量并标记数据点失效。
 func (s *MqttService) DeleteTag(ctx context.Context, projectID, tagID, userID string) error {
-	if _, err := s.repository.GetTag(ctx, projectID, tagID); err != nil {
-		return err
-	}
-	if err := s.repository.DeleteTag(ctx, projectID, tagID); err != nil {
-		return err
-	}
-	_, _ = s.datapoints.MarkInvalidBySource(ctx, projectID, "mqtt.tag", tagID, stringPtr(userID))
-	return nil
+	return s.repository.DeleteTag(ctx, projectID, tagID, userID)
 }
 
 // DeleteTagsBatch 批量删除变量，并沿用单变量删除的数据点失效处理。
@@ -1148,49 +1169,6 @@ func (s *MqttService) syncSubscriptionDatapoint(ctx context.Context, subscriptio
 	})
 }
 
-func (s *MqttService) syncTagDatapoint(ctx context.Context, tag repository.MqttTagRecord, userID string) error {
-	subscription, err := s.repository.GetSubscription(ctx, tag.ProjectID, tag.SubscriptionID)
-	if err != nil {
-		return err
-	}
-	connection, err := s.connections.GetByProjectAndID(ctx, tag.ProjectID, subscription.ConnectionID)
-	if err != nil {
-		return err
-	}
-
-	prefix := "mqtt." + normalizeDatapointSegment(connection.Name) + "." + mqttSubscriptionPathSegment(*subscription) + "."
-	return s.syncTagDatapointWithPrefix(ctx, tag, userID, prefix)
-}
-
-func (s *MqttService) syncTagDatapointWithPrefix(ctx context.Context, tag repository.MqttTagRecord, userID string, prefix string) error {
-	subscription, err := s.repository.GetSubscription(ctx, tag.ProjectID, tag.SubscriptionID)
-	if err != nil {
-		return err
-	}
-	basePath := prefix + normalizeDatapointSegment(tag.Name)
-	path := s.allocateDataPointPath(ctx, tag.ProjectID, basePath, tag.ID, "mqtt.tag")
-
-	return s.upsertMqttDataPoint(ctx, repository.CreateDataPointParams{
-		ProjectID:  tag.ProjectID,
-		UserID:     stringPtr(userID),
-		Path:       path,
-		Name:       tag.Name,
-		SourceType: "mqtt.tag",
-		SourceID:   &tag.ID,
-		SourceConfig: map[string]any{
-			"connectionId":   subscription.ConnectionID,
-			"subscriptionId": tag.SubscriptionID,
-		},
-		DataType:     tag.DataType,
-		Unit:         cloneOptionalString(tag.Unit),
-		DefaultValue: cloneOptionalString(tag.DefaultValue),
-		Tags:         []any{},
-		RefreshMode:  "subscription",
-		Status:       "active",
-		DisplayOrder: &tag.Order,
-	})
-}
-
 func (s *MqttService) upsertMqttDataPoint(ctx context.Context, input repository.CreateDataPointParams) error {
 	existing, err := s.datapoints.GetByProjectAndSource(ctx, input.ProjectID, input.SourceType, *input.SourceID)
 	if err == nil && existing != nil {
@@ -1258,8 +1236,7 @@ func toMqttConnectionDetail(record repository.MqttConnectionDetailRecord) MqttCo
 		ProjectID:           record.ProjectID,
 		Name:                record.Name,
 		Type:                record.Type,
-		Status:              record.Status,
-		IsEnabled:           record.IsEnabled,
+		Enabled:             record.IsEnabled,
 		RetryCount:          record.RetryCount,
 		RetryInterval:       record.RetryIntervalMS,
 		HealthCheckInterval: record.HealthCheckIntervalMS,
@@ -1275,14 +1252,18 @@ func toMqttConnectionDetail(record repository.MqttConnectionDetailRecord) MqttCo
 		ConnectTimeout:      record.ConnectTimeoutMS,
 		Will:                cloneMap(record.Will),
 		SSLConfig:           cloneMap(record.SSLConfig),
-		RuntimeStatus: MqttRuntimeStatus{
-			Connected:  record.Status == "connected",
-			Connecting: false,
-			Message:    record.Status,
-		},
-		CreatedAt: record.CreatedAt,
-		UpdatedAt: record.UpdatedAt,
+		RuntimeStatus:       MqttRuntimeStatus{Message: "idle"},
+		CreatedAt:           record.CreatedAt,
+		UpdatedAt:           record.UpdatedAt,
 	}
+}
+
+func (s *MqttService) applyMqttRuntimeStatus(item *MqttConnectionDetail) {
+	if item == nil || s.runtime == nil {
+		return
+	}
+	connected := s.runtime.IsConnected(item.ProjectID, item.ID)
+	item.RuntimeStatus = MqttRuntimeStatus{Connected: connected, Message: map[bool]string{true: "connected", false: "idle"}[connected]}
 }
 
 func toMqttSubscription(record repository.MqttSubscriptionRecord) MqttSubscription {

@@ -22,7 +22,6 @@ type MqttConnectionDetailRecord struct {
 	ProjectID             string
 	Name                  string
 	Type                  string
-	Status                string
 	IsEnabled             bool
 	RetryCount            int
 	RetryIntervalMS       int
@@ -51,7 +50,7 @@ type MqttConnectionSummaryRecord struct {
 	ProjectID string
 	Name      string
 	Type      string
-	Status    string
+	IsEnabled bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -111,7 +110,6 @@ type UpdateMqttConnectionParams struct {
 	ConnectionID          string
 	UserID                string
 	Name                  string
-	Status                string
 	IsEnabled             bool
 	RetryCount            int
 	RetryIntervalMS       int
@@ -236,6 +234,13 @@ type UpdateMqttTagParams struct {
 	Order        int
 }
 
+// UpdateMqttTagDataPointParams 描述 MQTT 变量与其生成数据点的原子更新。
+type UpdateMqttTagDataPointParams struct {
+	Tag          UpdateMqttTagParams
+	DataPath     string
+	SourceConfig map[string]any
+}
+
 // ListConnectionDetails 按项目分页查询 MQTT 连接详情。
 func (r *MqttRepository) ListConnectionDetails(ctx context.Context, projectID string, page, pageSize int) ([]MqttConnectionDetailRecord, int, error) {
 	page, pageSize = normalizePageAndSize(page, pageSize, 50, 200)
@@ -255,7 +260,6 @@ func (r *MqttRepository) ListConnectionDetails(ctx context.Context, projectID st
             conn.project_id,
             conn.name,
             conn.type,
-            conn.status,
             conn.is_enabled,
             conn.retry_count,
             conn.retry_interval_ms,
@@ -304,7 +308,7 @@ func (r *MqttRepository) ListConnectionDetails(ctx context.Context, projectID st
 // GetConnectionSummary 按项目与主键读取 MQTT 连接主表摘要。
 func (r *MqttRepository) GetConnectionSummary(ctx context.Context, projectID, connectionID string) (*MqttConnectionSummaryRecord, error) {
 	row := r.pool.QueryRow(ctx, `
-        SELECT id, project_id, name, type, status, created_at, updated_at
+		SELECT id, project_id, name, type, is_enabled, created_at, updated_at
         FROM data_connections
         WHERE project_id = $1
           AND id = $2
@@ -312,7 +316,7 @@ func (r *MqttRepository) GetConnectionSummary(ctx context.Context, projectID, co
     `, projectID, connectionID)
 
 	var record MqttConnectionSummaryRecord
-	if err := row.Scan(&record.ID, &record.ProjectID, &record.Name, &record.Type, &record.Status, &record.CreatedAt, &record.UpdatedAt); err != nil {
+	if err := row.Scan(&record.ID, &record.ProjectID, &record.Name, &record.Type, &record.IsEnabled, &record.CreatedAt, &record.UpdatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "MQTT 连接不存在")
 		}
@@ -330,7 +334,6 @@ func (r *MqttRepository) GetConnectionDetail(ctx context.Context, projectID, con
             conn.project_id,
             conn.name,
             conn.type,
-            conn.status,
             conn.is_enabled,
             conn.retry_count,
             conn.retry_interval_ms,
@@ -392,27 +395,25 @@ func (r *MqttRepository) UpdateConnectionDetail(ctx context.Context, params Upda
 	row := tx.QueryRow(ctx, `
         UPDATE data_connections
         SET name = $3,
-            status = $4,
-            is_enabled = $5,
-            retry_count = $6,
-            retry_interval_ms = $7,
-            health_check_interval_ms = $8,
-            metadata = $9::jsonb,
-            updated_by = $10,
+            is_enabled = $4,
+            retry_count = $5,
+            retry_interval_ms = $6,
+            health_check_interval_ms = $7,
+            metadata = $8::jsonb,
+            updated_by = $9,
             updated_at = now()
         WHERE project_id = $1
           AND id = $2
           AND type = 'mqtt'
-        RETURNING id, project_id, name, type, status, is_enabled, retry_count, retry_interval_ms, health_check_interval_ms,
+		RETURNING id, project_id, name, type, is_enabled, retry_count, retry_interval_ms, health_check_interval_ms,
                   created_at, updated_at
-    `, params.ProjectID, params.ConnectionID, params.Name, params.Status, params.IsEnabled, params.RetryCount, params.RetryIntervalMS, params.HealthCheckIntervalMS, string(metadataBytes), params.UserID)
+    `, params.ProjectID, params.ConnectionID, params.Name, params.IsEnabled, params.RetryCount, params.RetryIntervalMS, params.HealthCheckIntervalMS, string(metadataBytes), params.UserID)
 
 	var current struct {
 		ID                    string
 		ProjectID             string
 		Name                  string
 		Type                  string
-		Status                string
 		IsEnabled             bool
 		RetryCount            int
 		RetryIntervalMS       int
@@ -425,7 +426,6 @@ func (r *MqttRepository) UpdateConnectionDetail(ctx context.Context, params Upda
 		&current.ProjectID,
 		&current.Name,
 		&current.Type,
-		&current.Status,
 		&current.IsEnabled,
 		&current.RetryCount,
 		&current.RetryIntervalMS,
@@ -468,25 +468,22 @@ func (r *MqttRepository) UpdateConnectionDetail(ctx context.Context, params Upda
 	return r.GetConnectionDetail(ctx, params.ProjectID, params.ConnectionID)
 }
 
-// StopConnection 将 MQTT 连接状态切到 disconnected。
+// StopConnection 结束临时会话，不把连接态写回开发态配置。
 func (r *MqttRepository) StopConnection(ctx context.Context, projectID, connectionID string) (*MqttConnectionStatusRecord, error) {
-	var status string
+	var exists bool
 	err := r.pool.QueryRow(ctx, `
-        UPDATE data_connections
-        SET status = 'disconnected',
-            updated_at = now()
+        SELECT true FROM data_connections
         WHERE project_id = $1
           AND id = $2
           AND type IN ('mqtt', 'builtin.message')
-        RETURNING status
-    `, projectID, connectionID).Scan(&status)
+    `, projectID, connectionID).Scan(&exists)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "MQTT 连接不存在")
 		}
 		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "停止 MQTT 连接失败", err)
 	}
-	return &MqttConnectionStatusRecord{Status: status}, nil
+	return &MqttConnectionStatusRecord{Status: "disconnected"}, nil
 }
 
 // ListSubscriptions 按项目分页查询订阅。
@@ -611,8 +608,56 @@ func (r *MqttRepository) UpdateSubscriptionDefaultBatchRule(ctx context.Context,
 }
 
 // DeleteSubscription 删除订阅。
-func (r *MqttRepository) DeleteSubscription(ctx context.Context, projectID, subscriptionID string) error {
-	commandTag, err := r.pool.Exec(ctx, `
+func (r *MqttRepository) DeleteSubscription(ctx context.Context, projectID, subscriptionID, userID string) error {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 MQTT 订阅删除事务失败", err)
+	}
+	defer rollbackTxQuietly(ctx, tx)
+	if err := lockSourceProject(ctx, tx, projectID); err != nil {
+		return err
+	}
+
+	rows, err := tx.Query(ctx, `
+		SELECT id::text
+		FROM data_points
+		WHERE project_id = $1
+		  AND ((source_type = 'mqtt.subscription' AND source_id = $2)
+		       OR (source_type = 'mqtt.tag' AND source_id IN (
+		           SELECT id FROM data_mqtt_tags WHERE project_id = $1 AND subscription_id = $2
+		       )))
+		FOR UPDATE
+	`, projectID, subscriptionID)
+	if err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "锁定 MQTT 订阅数据点失败", err)
+	}
+	pointIDs := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 MQTT 订阅数据点失败", err)
+		}
+		pointIDs = append(pointIDs, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 MQTT 订阅数据点失败", err)
+	}
+	if err := ensureNoDatapointBlockingUsagesTx(ctx, tx, projectID, pointIDs); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE data_points SET status = 'invalid', updated_by = $3, updated_at = now()
+		WHERE project_id = $1
+		  AND ((source_type = 'mqtt.subscription' AND source_id = $2)
+		       OR (source_type = 'mqtt.tag' AND source_id IN (
+		           SELECT id FROM data_mqtt_tags WHERE project_id = $1 AND subscription_id = $2
+		       )))
+	`, projectID, subscriptionID, userID); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "标记 MQTT 订阅数据点失效失败", err)
+	}
+	commandTag, err := tx.Exec(ctx, `
         DELETE FROM data_mqtt_subscriptions
         WHERE project_id = $1 AND id = $2
     `, projectID, subscriptionID)
@@ -621,6 +666,9 @@ func (r *MqttRepository) DeleteSubscription(ctx context.Context, projectID, subs
 	}
 	if commandTag.RowsAffected() == 0 {
 		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "MQTT 订阅不存在")
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 MQTT 订阅删除事务失败", err)
 	}
 	return nil
 }
@@ -841,29 +889,6 @@ func (r *MqttRepository) GetTag(ctx context.Context, projectID, tagID string) (*
 	return &record, nil
 }
 
-// CreateTag 新建变量。
-func (r *MqttRepository) CreateTag(ctx context.Context, params CreateMqttTagParams) (*MqttTagRecord, error) {
-	validationBytes, err := marshalMqttJSONObject(params.Validation)
-	if err != nil {
-		return nil, err
-	}
-
-	row := r.pool.QueryRow(ctx, `
-        INSERT INTO data_mqtt_tags (
-            project_id, subscription_id, name, code, description, data_type, parse_type, parse_rule,
-            default_value, unit, transform, validation, display_order, created_by, updated_by
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, $14, $14)
-        RETURNING id, project_id, subscription_id, name, code, description, data_type, parse_type, parse_rule,
-                  default_value, unit, transform, validation, display_order, created_at, updated_at
-    `, params.ProjectID, params.SubscriptionID, params.Name, params.Code, params.Description, params.DataType, params.ParseType, params.ParseRule, params.DefaultValue, params.Unit, params.Transform, nullableMqttJSON(validationBytes), params.Order, params.UserID)
-	record, err := scanMqttTag(row)
-	if err != nil {
-		return nil, translateMqttWriteError("创建 MQTT 变量失败", err)
-	}
-	return &record, nil
-}
-
 // CreateTagsBatchWithDataPoints 在一个事务中批量创建 MQTT 变量并同步数据点。
 // 这里使用集合 SQL，避免 1000 条变量触发数千次数据库往返；唯一约束仍作为并发冲突的最终防线。
 func (r *MqttRepository) CreateTagsBatchWithDataPoints(ctx context.Context, params []BatchMqttTagDataPointParams) ([]MqttTagRecord, error) {
@@ -1025,7 +1050,9 @@ func upsertMqttTagDataPointsInTx(ctx context.Context, tx pgx.Tx, tags []MqttTagR
 		names = append(names, item.DataName)
 		sourceTypes = append(sourceTypes, item.SourceType)
 		sourceIDs = append(sourceIDs, tag.ID)
-		sourceConfigBytes, marshalErr := marshalMqttJSONObject(item.SourceConfig)
+		sourceConfig := cloneProtocolMap(item.SourceConfig)
+		sourceConfig["tagId"] = tag.ID
+		sourceConfigBytes, marshalErr := marshalMqttJSONObject(sourceConfig)
 		if marshalErr != nil {
 			return marshalErr
 		}
@@ -1092,49 +1119,92 @@ func upsertMqttTagDataPointsInTx(ctx context.Context, tx pgx.Tx, tags []MqttTagR
 	return nil
 }
 
-// UpdateTag 更新变量。
-func (r *MqttRepository) UpdateTag(ctx context.Context, params UpdateMqttTagParams) (*MqttTagRecord, error) {
-	validationBytes, err := marshalMqttJSONObject(params.Validation)
+// UpdateTagWithDataPoint 在同一事务中更新 MQTT 变量和稳定生成点。
+// 类型变更前会锁定生成点并检查报警、计算和历史引用，避免子配置成功而点位同步失败。
+func (r *MqttRepository) UpdateTagWithDataPoint(ctx context.Context, params UpdateMqttTagDataPointParams) (*MqttTagRecord, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 MQTT 变量更新事务失败", err)
+	}
+	defer rollbackTxQuietly(ctx, tx)
+
+	validationBytes, err := marshalMqttJSONObject(params.Tag.Validation)
+	if err != nil {
+		return nil, err
+	}
+	configBytes, err := marshalMqttJSONObject(params.SourceConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	row := r.pool.QueryRow(ctx, `
-        UPDATE data_mqtt_tags
-        SET name = $3,
-            code = $4,
-            description = $5,
-            data_type = $6,
-            parse_type = $7,
-            parse_rule = $8,
-            default_value = $9,
-            unit = $10,
-            transform = $11,
-            validation = $12::jsonb,
-            display_order = $13,
-            updated_by = $14,
-            updated_at = now()
-        WHERE project_id = $1 AND id = $2
-        RETURNING id, project_id, subscription_id, name, code, description, data_type, parse_type, parse_rule,
-                  default_value, unit, transform, validation, display_order, created_at, updated_at
-    `, params.ProjectID, params.TagID, params.Name, params.Code, params.Description, params.DataType, params.ParseType, params.ParseRule, params.DefaultValue, params.Unit, params.Transform, nullableMqttJSON(validationBytes), params.Order, params.UserID)
+	var pointID, currentType string
+	err = tx.QueryRow(ctx, `
+		SELECT id::text,data_type FROM data_points
+		WHERE project_id=$1 AND source_type='mqtt.tag' AND source_id=$2
+		FOR UPDATE
+	`, params.Tag.ProjectID, params.Tag.TagID).Scan(&pointID, &currentType)
+	if err != nil && err != pgx.ErrNoRows {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "锁定 MQTT 变量数据点失败", err)
+	}
+	if pointID != "" && currentType != params.Tag.DataType {
+		if err := ensureNoDatapointBlockingUsagesTx(ctx, tx, params.Tag.ProjectID, []string{pointID}); err != nil {
+			return nil, apperrors.NewAppError(apperrors.ErrorCodeBadRequest, http.StatusConflict, "MQTT 变量数据点已被引用，不能直接修改数据类型")
+		}
+	}
+
+	row := tx.QueryRow(ctx, `
+		UPDATE data_mqtt_tags
+		SET name=$3,code=$4,description=$5,data_type=$6,parse_type=$7,parse_rule=$8,
+		    default_value=$9,unit=$10,transform=$11,validation=$12::jsonb,display_order=$13,
+		    updated_by=$14,updated_at=now()
+		WHERE project_id=$1 AND id=$2
+		RETURNING id,project_id,subscription_id,name,code,description,data_type,parse_type,parse_rule,
+		          default_value,unit,transform,validation,display_order,created_at,updated_at
+	`, params.Tag.ProjectID, params.Tag.TagID, params.Tag.Name, params.Tag.Code, params.Tag.Description,
+		params.Tag.DataType, params.Tag.ParseType, params.Tag.ParseRule, params.Tag.DefaultValue, params.Tag.Unit,
+		params.Tag.Transform, nullableMqttJSON(validationBytes), params.Tag.Order, params.Tag.UserID)
 	record, err := scanMqttTag(row)
 	if err != nil {
 		return nil, translateMqttWriteError("更新 MQTT 变量失败", err)
+	}
+
+	allocatedPath, err := allocateGeneratedDataPointPath(ctx, tx, params.Tag.ProjectID, params.DataPath, "mqtt.tag", params.Tag.TagID)
+	if err != nil {
+		return nil, err
+	}
+	if pointID == "" {
+		err = tx.QueryRow(ctx, `
+			INSERT INTO data_points(project_id,path,name,source_type,source_id,source_config,data_type,unit,
+			 default_value,tags,refresh_mode,status,display_order,created_by,updated_by)
+			VALUES($1,$2,$3,'mqtt.tag',$4,$5::jsonb,$6,$7,$8,'[]'::jsonb,'subscription','active',$9,$10,$10)
+			RETURNING id::text
+		`, params.Tag.ProjectID, allocatedPath, record.Name, record.ID, string(configBytes), record.DataType,
+			record.Unit, record.DefaultValue, record.Order, params.Tag.UserID).Scan(&pointID)
+	} else {
+		_, err = tx.Exec(ctx, `
+			UPDATE data_points SET path=$3,name=$4,source_config=$5::jsonb,data_type=$6,unit=$7,
+			 default_value=$8,refresh_mode='subscription',status='active',display_order=$9,
+			 updated_by=$10,updated_at=now()
+			WHERE project_id=$1 AND id=$2
+		`, params.Tag.ProjectID, pointID, allocatedPath, record.Name, string(configBytes), record.DataType,
+			record.Unit, record.DefaultValue, record.Order, params.Tag.UserID)
+	}
+	if err != nil {
+		return nil, translateDataPointWriteError(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "提交 MQTT 变量更新事务失败", err)
 	}
 	return &record, nil
 }
 
 // DeleteTag 删除变量。
-func (r *MqttRepository) DeleteTag(ctx context.Context, projectID, tagID string) error {
-	commandTag, err := r.pool.Exec(ctx, `
-        DELETE FROM data_mqtt_tags
-        WHERE project_id = $1 AND id = $2
-    `, projectID, tagID)
+func (r *MqttRepository) DeleteTag(ctx context.Context, projectID, tagID, userID string) error {
+	deleted, err := r.DeleteTagsBatchWithDataPoints(ctx, projectID, []string{tagID}, userID)
 	if err != nil {
-		return apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "删除 MQTT 变量失败", err)
+		return err
 	}
-	if commandTag.RowsAffected() == 0 {
+	if deleted != 1 {
 		return apperrors.NewAppError(apperrors.ErrorCodeNotFound, http.StatusNotFound, "MQTT 变量不存在")
 	}
 	return nil
@@ -1151,6 +1221,34 @@ func (r *MqttRepository) DeleteTagsBatchWithDataPoints(ctx context.Context, proj
 		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "开启 MQTT 变量批量删除事务失败", err)
 	}
 	defer rollbackTxQuietly(ctx, tx)
+	if err := lockSourceProject(ctx, tx, projectID); err != nil {
+		return 0, err
+	}
+
+	rows, err := tx.Query(ctx, `
+		SELECT id::text FROM data_points
+		WHERE project_id = $1 AND source_type = 'mqtt.tag' AND source_id = ANY($2::uuid[])
+		FOR UPDATE
+	`, projectID, tagIDs)
+	if err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "锁定 MQTT 变量数据点失败", err)
+	}
+	pointIDs := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "读取 MQTT 变量数据点失败", err)
+		}
+		pointIDs = append(pointIDs, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, apperrors.WrapAppError(apperrors.ErrorCodeInternal, http.StatusInternalServerError, "遍历 MQTT 变量数据点失败", err)
+	}
+	if err := ensureNoDatapointBlockingUsagesTx(ctx, tx, projectID, pointIDs); err != nil {
+		return 0, err
+	}
 
 	commandTag, err := tx.Exec(ctx, `
         UPDATE data_points
@@ -1223,7 +1321,6 @@ func scanMqttConnectionDetail(row scannable) (MqttConnectionDetailRecord, error)
 		&record.ProjectID,
 		&record.Name,
 		&record.Type,
-		&record.Status,
 		&record.IsEnabled,
 		&record.RetryCount,
 		&record.RetryIntervalMS,
