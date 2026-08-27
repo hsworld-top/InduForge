@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/indu-forge/dev_core/internal/auth"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -98,20 +99,24 @@ func (r *PostgreSQLRepository) CreateScene(ctx context.Context, actor auth.User,
 	}
 	var scene Scene
 	contract, _ := json.Marshal(input.PublicContract)
+	managedContract := []byte(`{"description":"","parameters":[],"events":[],"commands":[]}`)
 	err = tx.QueryRow(ctx, `
 		INSERT INTO scene_documents (tenant_id, project_id, scene_id, kind, name, provider, entry_path,
-			public_contract, draft_version, created_by, updated_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,1,$9,$9)
+			public_contract, provider_contract, draft_version, created_by, updated_by)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,1,$10,$10)
 		RETURNING id::text, tenant_id::text, project_id::text, scene_id, kind, name, provider, entry_path,
-			public_contract, datapoint_refs, current_revision, draft_version, committed_draft_version, created_at, updated_at`,
-		actor.TenantID, input.ProjectID, input.SceneID, input.Kind, input.Name, provider, input.EntryPath, contract, actor.ID).
+			public_contract, provider_contract, datapoint_refs, current_revision, draft_version, committed_draft_version, created_at, updated_at`,
+		actor.TenantID, input.ProjectID, input.SceneID, input.Kind, input.Name, provider, input.EntryPath, contract, managedContract, actor.ID).
 		Scan(&scene.ID, &scene.TenantID, &scene.ProjectID, &scene.SceneID, &scene.Kind, &scene.Name, &scene.Provider,
-			&scene.EntryPath, &contract, &scene.DatapointRefs, &scene.CurrentRevision, &scene.DraftVersion,
+			&scene.EntryPath, &contract, &managedContract, &scene.DatapointRefs, &scene.CurrentRevision, &scene.DraftVersion,
 			&scene.CommittedDraftVersion, &scene.CreatedAt, &scene.UpdatedAt)
 	if err != nil {
 		return Scene{}, mapDatabaseError(err)
 	}
 	if err := json.Unmarshal(contract, &scene.PublicContract); err != nil {
+		return Scene{}, err
+	}
+	if err := json.Unmarshal(managedContract, &scene.ManagedContract); err != nil {
 		return Scene{}, err
 	}
 	if err := ensureDirectories(ctx, tx, actor, scene, input.EntryPath); err != nil {
@@ -129,6 +134,23 @@ func (r *PostgreSQLRepository) CreateScene(ctx context.Context, actor auth.User,
 		return Scene{}, err
 	}
 	return scene, nil
+}
+
+func (r *PostgreSQLRepository) ActiveSceneNameExists(ctx context.Context, tenantID, projectID, name, excludeSceneID string) (bool, error) {
+	query := `SELECT EXISTS (
+		SELECT 1 FROM scene_documents
+		WHERE tenant_id=$1 AND project_id=$2 AND lower(name)=lower($3) AND deleted_at IS NULL`
+	args := []any{tenantID, projectID, name}
+	if excludeSceneID != "" {
+		query += ` AND id<>$4`
+		args = append(args, excludeSceneID)
+	}
+	query += `)`
+	var exists bool
+	if err := r.pool.QueryRow(ctx, query, args...).Scan(&exists); err != nil {
+		return false, err
+	}
+	return exists, nil
 }
 
 func (r *PostgreSQLRepository) ListScenes(ctx context.Context, tenantID, projectID string, filter ListFilter) ([]Scene, int64, error) {
@@ -157,7 +179,7 @@ func (r *PostgreSQLRepository) ListScenes(ctx context.Context, tenantID, project
 	}
 	args = append(args, filter.Limit, (filter.Page-1)*filter.Limit)
 	query := `SELECT id::text, tenant_id::text, project_id::text, scene_id, kind, name, provider, entry_path,
-		public_contract, datapoint_refs, current_revision, draft_version, committed_draft_version, created_at, updated_at
+		public_contract, provider_contract, datapoint_refs, current_revision, draft_version, committed_draft_version, created_at, updated_at
 		FROM scene_documents WHERE ` + where + ` ORDER BY ` + sortColumn + ` ` + order + `, id LIMIT $` + fmt.Sprint(len(args)-1) + ` OFFSET $` + fmt.Sprint(len(args))
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -177,7 +199,7 @@ func (r *PostgreSQLRepository) ListScenes(ctx context.Context, tenantID, project
 
 func (r *PostgreSQLRepository) GetScene(ctx context.Context, tenantID, projectID, kind, sceneID string) (Scene, error) {
 	row := r.pool.QueryRow(ctx, `SELECT id::text, tenant_id::text, project_id::text, scene_id, kind, name, provider, entry_path,
-		public_contract, datapoint_refs, current_revision, draft_version, committed_draft_version, created_at, updated_at
+		public_contract, provider_contract, datapoint_refs, current_revision, draft_version, committed_draft_version, created_at, updated_at
 		FROM scene_documents WHERE tenant_id=$1 AND project_id=$2 AND kind=$3 AND scene_id=$4 AND deleted_at IS NULL`, tenantID, projectID, kind, sceneID)
 	scene, err := scanScene(row)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -187,25 +209,47 @@ func (r *PostgreSQLRepository) GetScene(ctx context.Context, tenantID, projectID
 }
 
 func (r *PostgreSQLRepository) UpdateScene(ctx context.Context, actor auth.User, scene Scene, patch ScenePatch) (Scene, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Scene{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var currentDraft int64
+	if err := tx.QueryRow(ctx, `SELECT draft_version FROM scene_documents WHERE id=$1 AND tenant_id=$2 AND deleted_at IS NULL FOR UPDATE`, scene.ID, actor.TenantID).Scan(&currentDraft); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Scene{}, ErrNotFound
+		}
+		return Scene{}, err
+	}
 	name := scene.Name
 	if patch.Name != nil {
 		name = strings.TrimSpace(*patch.Name)
 	}
 	contract := scene.PublicContract
 	if patch.PublicContract != nil {
+		if patch.BaseDraftVersion == nil || currentDraft != *patch.BaseDraftVersion {
+			return Scene{}, ErrDraftConflict
+		}
 		contract = *patch.PublicContract
+		currentDraft++
 	}
 	contractJSON, _ := json.Marshal(contract)
-	row := r.pool.QueryRow(ctx, `UPDATE scene_documents SET name=$1, public_contract=$2, updated_by=$3, updated_at=now()
-		WHERE id=$4 AND tenant_id=$5 AND deleted_at IS NULL
+	row := tx.QueryRow(ctx, `UPDATE scene_documents SET name=$1, public_contract=$2, draft_version=$3, updated_by=$4, updated_at=now()
+		WHERE id=$5 AND tenant_id=$6 AND deleted_at IS NULL
 		RETURNING id::text, tenant_id::text, project_id::text, scene_id, kind, name, provider, entry_path,
-		public_contract, datapoint_refs, current_revision, draft_version, committed_draft_version, created_at, updated_at`,
-		name, contractJSON, actor.ID, scene.ID, actor.TenantID)
+			public_contract, provider_contract, datapoint_refs, current_revision, draft_version, committed_draft_version, created_at, updated_at`,
+		name, contractJSON, currentDraft, actor.ID, scene.ID, actor.TenantID)
 	updated, err := scanScene(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Scene{}, ErrNotFound
 	}
-	return updated, err
+	if err != nil {
+		return Scene{}, mapDatabaseError(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Scene{}, err
+	}
+	return updated, nil
 }
 
 func (r *PostgreSQLRepository) DeleteScene(ctx context.Context, actor auth.User, scene Scene) error {
@@ -222,7 +266,8 @@ func (r *PostgreSQLRepository) DeleteScene(ctx context.Context, actor auth.User,
 	if command.RowsAffected() == 0 {
 		return ErrNotFound
 	}
-	if _, err := tx.Exec(ctx, `UPDATE scene_file_nodes SET deleted_at=now(), updated_by=$1, updated_at=now()
+	if _, err := tx.Exec(ctx, `UPDATE scene_file_nodes SET content_object_id=NULL, content_hash=NULL,
+		deleted_at=now(), updated_by=$1, updated_at=now()
 		WHERE scene_document_id=$2 AND deleted_at IS NULL`, actor.ID, scene.ID); err != nil {
 		return err
 	}
@@ -242,7 +287,7 @@ func (r *PostgreSQLRepository) FindContent(ctx context.Context, tenantID, provid
 	return item, err
 }
 
-func (r *PostgreSQLRepository) PutFile(ctx context.Context, actor auth.User, scene Scene, file FileWrite, content contentObject) (int64, error) {
+func (r *PostgreSQLRepository) PutFile(ctx context.Context, actor auth.User, scene Scene, file FileWrite, content contentObject, metadata *Analysis) (int64, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return 0, err
@@ -252,10 +297,16 @@ func (r *PostgreSQLRepository) PutFile(ctx context.Context, actor auth.User, sce
 	if err != nil {
 		return 0, err
 	}
+	var managedJSON, refsJSON []byte
+	if metadata != nil {
+		managedJSON, _ = json.Marshal(metadata.ManagedContract)
+		refsJSON, _ = json.Marshal(metadata.DatapointRefs)
+	}
 	var nextVersion int64
-	err = tx.QueryRow(ctx, `UPDATE scene_documents SET draft_version=draft_version+1, updated_by=$1, updated_at=now()
+	err = tx.QueryRow(ctx, `UPDATE scene_documents SET draft_version=draft_version+1,
+		provider_contract=COALESCE($5, provider_contract), datapoint_refs=COALESCE($6, datapoint_refs), updated_by=$1, updated_at=now()
 		WHERE id=$2 AND tenant_id=$3 AND deleted_at IS NULL AND draft_version=$4 RETURNING draft_version`,
-		actor.ID, scene.ID, actor.TenantID, file.BaseDraftVersion).Scan(&nextVersion)
+		actor.ID, scene.ID, actor.TenantID, file.BaseDraftVersion, managedJSON, refsJSON).Scan(&nextVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, ErrDraftConflict
 	}
@@ -285,23 +336,27 @@ func (r *PostgreSQLRepository) PutFile(ctx context.Context, actor auth.User, sce
 }
 
 // ReplaceDraftFiles 在一个事务中替换场景草稿文件，确保 ZIP 任一文件失败时草稿保持不变。
-func (r *PostgreSQLRepository) ReplaceDraftFiles(ctx context.Context, actor auth.User, scene Scene, baseDraft int64, files map[string]contentObject) (int64, error) {
+func (r *PostgreSQLRepository) ReplaceDraftFiles(ctx context.Context, actor auth.User, scene Scene, baseDraft int64, files map[string]contentObject, metadata Analysis) (int64, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	managedJSON, _ := json.Marshal(metadata.ManagedContract)
+	refsJSON, _ := json.Marshal(metadata.DatapointRefs)
 	var next int64
-	err = tx.QueryRow(ctx, `UPDATE scene_documents SET draft_version=draft_version+1, updated_by=$1, updated_at=now()
+	err = tx.QueryRow(ctx, `UPDATE scene_documents SET draft_version=draft_version+1, provider_contract=$5,
+		datapoint_refs=$6, updated_by=$1, updated_at=now()
 		WHERE id=$2 AND tenant_id=$3 AND deleted_at IS NULL AND draft_version=$4 RETURNING draft_version`,
-		actor.ID, scene.ID, actor.TenantID, baseDraft).Scan(&next)
+		actor.ID, scene.ID, actor.TenantID, baseDraft, managedJSON, refsJSON).Scan(&next)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, ErrDraftConflict
 	}
 	if err != nil {
 		return 0, err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE scene_file_nodes SET deleted_at=now(), updated_by=$1, updated_at=now()
+	if _, err := tx.Exec(ctx, `UPDATE scene_file_nodes SET content_object_id=NULL, content_hash=NULL,
+		deleted_at=now(), updated_by=$1, updated_at=now()
 		WHERE scene_document_id=$2 AND deleted_at IS NULL`, actor.ID, scene.ID); err != nil {
 		return 0, err
 	}
@@ -439,7 +494,49 @@ func (r *PostgreSQLRepository) LoadRevisionFiles(ctx context.Context, scene Scen
 	return files, rows.Err()
 }
 
-func (r *PostgreSQLRepository) Commit(ctx context.Context, actor auth.User, scene Scene, baseDraft int64, providerVersion, rootHash string, refs []string, dependencies []string) (Revision, error) {
+func (r *PostgreSQLRepository) GetCurrentRevision(ctx context.Context, scene Scene) (Revision, error) {
+	if scene.CurrentRevision == 0 {
+		return Revision{}, ErrSceneNotCommitted
+	}
+	var item Revision
+	var contractJSON, refsJSON []byte
+	err := r.pool.QueryRow(ctx, `SELECT id::text, revision, draft_version, provider, provider_version, entry_path,
+		public_contract, datapoint_refs, root_hash, created_at FROM scene_revisions
+		WHERE tenant_id=$1 AND scene_document_id=$2 AND revision=$3`, scene.TenantID, scene.ID, scene.CurrentRevision).
+		Scan(&item.ID, &item.Revision, &item.DraftVersion, &item.Provider, &item.ProviderVersion, &item.EntryPath,
+			&contractJSON, &refsJSON, &item.RootHash, &item.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Revision{}, ErrSceneNotCommitted
+	}
+	if err != nil {
+		return Revision{}, err
+	}
+	if err := json.Unmarshal(contractJSON, &item.PublicContract); err != nil {
+		return Revision{}, err
+	}
+	if err := json.Unmarshal(refsJSON, &item.DatapointRefs); err != nil {
+		return Revision{}, err
+	}
+	return item, nil
+}
+
+func (r *PostgreSQLRepository) GetRevisionFile(ctx context.Context, session ViewerSession, filename string) (contentObject, error) {
+	var item contentObject
+	var raw []byte
+	err := r.pool.QueryRow(ctx, `SELECT o.id::text, o.content_hash, o.content_size, o.content_type,
+		o.json_content, COALESCE(o.object_key,'') FROM scene_revision_files f
+		JOIN scene_content_objects o ON o.id=f.content_object_id
+		WHERE f.tenant_id=$1 AND f.scene_document_id=$2 AND f.revision_id=$3 AND f.logical_path=$4`,
+		session.TenantID, session.SceneDocumentID, session.RevisionID, filename).
+		Scan(&item.ID, &item.Hash, &item.Size, &item.ContentType, &raw, &item.ObjectKey)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return contentObject{}, ErrNotFound
+	}
+	item.JSON = raw
+	return item, err
+}
+
+func (r *PostgreSQLRepository) Commit(ctx context.Context, actor auth.User, scene Scene, baseDraft int64, providerVersion, rootHash string, contract map[string]any, refs []string, dependencies []string) (Revision, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return Revision{}, err
@@ -456,7 +553,7 @@ func (r *PostgreSQLRepository) Commit(ctx context.Context, actor auth.User, scen
 		return Revision{}, ErrDraftConflict
 	}
 	refJSON, _ := json.Marshal(refs)
-	contractJSON, _ := json.Marshal(scene.PublicContract)
+	contractJSON, _ := json.Marshal(contract)
 	revisionID := uuid.NewString()
 	nextRevision := currentRevision + 1
 	var created time.Time
@@ -495,7 +592,7 @@ func (r *PostgreSQLRepository) Commit(ctx context.Context, actor auth.User, scen
 	if err := tx.Commit(ctx); err != nil {
 		return Revision{}, err
 	}
-	return Revision{Revision: nextRevision, DraftVersion: currentDraft, Provider: scene.Provider, ProviderVersion: providerVersion, EntryPath: scene.EntryPath, RootHash: rootHash, CreatedAt: created}, nil
+	return Revision{Revision: nextRevision, DraftVersion: currentDraft, Provider: scene.Provider, ProviderVersion: providerVersion, EntryPath: scene.EntryPath, RootHash: rootHash, PublicContract: contract, DatapointRefs: refs, CreatedAt: created}, nil
 }
 
 func (r *PostgreSQLRepository) CountUncommitted(ctx context.Context, tenantID, projectID string) (int64, error) {
@@ -555,15 +652,18 @@ func (r *PostgreSQLRepository) releaseAssets(ctx context.Context, tenantID, proj
 	return items, rows.Err()
 }
 
+const contentObjectReferenceGuards = `
+	AND NOT EXISTS (SELECT 1 FROM scene_file_nodes n WHERE n.content_object_id=o.id)
+	AND NOT EXISTS (SELECT 1 FROM scene_revision_files f WHERE f.content_object_id=o.id)
+	AND NOT EXISTS (SELECT 1 FROM scene_asset_generation_files f WHERE f.content_object_id=o.id)
+	AND NOT EXISTS (SELECT 1 FROM scene_asset_draft_files f WHERE f.content_object_id=o.id)
+	AND NOT EXISTS (SELECT 1 FROM scene_asset_generations g WHERE g.thumbnail_content_object_id=o.id)`
+
 func (r *PostgreSQLRepository) OrphanCandidates(ctx context.Context, before time.Time, limit int) ([]contentObject, error) {
 	rows, err := r.pool.Query(ctx, `SELECT o.id::text, o.content_hash, o.content_size, o.content_type,
 		o.json_content, COALESCE(o.object_key,'') FROM scene_content_objects o
 		WHERE o.orphaned_at IS NOT NULL AND o.orphaned_at < $1
-		AND NOT EXISTS (SELECT 1 FROM scene_file_nodes n WHERE n.content_object_id=o.id AND n.deleted_at IS NULL)
-		AND NOT EXISTS (SELECT 1 FROM scene_revision_files f WHERE f.content_object_id=o.id)
-		AND NOT EXISTS (SELECT 1 FROM scene_asset_generation_files f WHERE f.content_object_id=o.id)
-		AND NOT EXISTS (SELECT 1 FROM scene_asset_draft_files f WHERE f.content_object_id=o.id)
-		AND NOT EXISTS (SELECT 1 FROM scene_asset_generations g WHERE g.thumbnail_content_object_id=o.id)
+		`+contentObjectReferenceGuards+`
 		ORDER BY o.orphaned_at LIMIT $2`, before, limit)
 	if err != nil {
 		return nil, err
@@ -582,11 +682,7 @@ func (r *PostgreSQLRepository) OrphanCandidates(ctx context.Context, before time
 
 func (r *PostgreSQLRepository) DeleteOrphan(ctx context.Context, id string) error {
 	_, err := r.pool.Exec(ctx, `DELETE FROM scene_content_objects o WHERE o.id=$1 AND o.orphaned_at IS NOT NULL
-		AND NOT EXISTS (SELECT 1 FROM scene_file_nodes n WHERE n.content_object_id=o.id AND n.deleted_at IS NULL)
-		AND NOT EXISTS (SELECT 1 FROM scene_revision_files f WHERE f.content_object_id=o.id)
-		AND NOT EXISTS (SELECT 1 FROM scene_asset_generation_files f WHERE f.content_object_id=o.id)
-		AND NOT EXISTS (SELECT 1 FROM scene_asset_draft_files f WHERE f.content_object_id=o.id)
-		AND NOT EXISTS (SELECT 1 FROM scene_asset_generations g WHERE g.thumbnail_content_object_id=o.id)`, id)
+		`+contentObjectReferenceGuards, id)
 	return err
 }
 
@@ -610,11 +706,7 @@ func putContentObject(ctx context.Context, tx pgx.Tx, actor auth.User, provider 
 func markUnreferencedObjects(ctx context.Context, tx pgx.Tx, tenantID, provider string) error {
 	_, err := tx.Exec(ctx, `UPDATE scene_content_objects o SET orphaned_at=COALESCE(orphaned_at, now()), updated_at=now()
 		WHERE o.tenant_id=$1 AND o.provider=$2
-		AND NOT EXISTS (SELECT 1 FROM scene_file_nodes n WHERE n.content_object_id=o.id AND n.deleted_at IS NULL)
-		AND NOT EXISTS (SELECT 1 FROM scene_revision_files f WHERE f.content_object_id=o.id)
-		AND NOT EXISTS (SELECT 1 FROM scene_asset_generation_files f WHERE f.content_object_id=o.id)
-		AND NOT EXISTS (SELECT 1 FROM scene_asset_draft_files f WHERE f.content_object_id=o.id)
-		AND NOT EXISTS (SELECT 1 FROM scene_asset_generations g WHERE g.thumbnail_content_object_id=o.id)`, tenantID, provider)
+		`+contentObjectReferenceGuards, tenantID, provider)
 	return err
 }
 
@@ -624,7 +716,8 @@ func ensureDirectories(ctx context.Context, tx pgx.Tx, actor auth.User, scene Sc
 		directory := strings.Join(parts[:index], "/")
 		if _, err := tx.Exec(ctx, `INSERT INTO scene_file_nodes (tenant_id, project_id, scene_document_id, provider, logical_path,
 			parent_path, node_type, created_by, updated_by) VALUES ($1,$2,$3,$4,$5,$6,'directory',$7,$7)
-			ON CONFLICT (scene_document_id, logical_path) DO UPDATE SET deleted_at=NULL,
+			ON CONFLICT (scene_document_id, logical_path) DO UPDATE SET node_type='directory',
+			content_object_id=NULL, content_hash=NULL, deleted_at=NULL,
 			updated_by=EXCLUDED.updated_by, updated_at=now()`, actor.TenantID, scene.ProjectID, scene.ID, scene.Provider,
 			directory, parentPath(directory), actor.ID); err != nil {
 			return err
@@ -637,9 +730,9 @@ type rowScanner interface{ Scan(...any) error }
 
 func scanScene(row rowScanner) (Scene, error) {
 	var scene Scene
-	var contractJSON, refsJSON []byte
+	var contractJSON, managedJSON, refsJSON []byte
 	err := row.Scan(&scene.ID, &scene.TenantID, &scene.ProjectID, &scene.SceneID, &scene.Kind, &scene.Name, &scene.Provider,
-		&scene.EntryPath, &contractJSON, &refsJSON, &scene.CurrentRevision, &scene.DraftVersion,
+		&scene.EntryPath, &contractJSON, &managedJSON, &refsJSON, &scene.CurrentRevision, &scene.DraftVersion,
 		&scene.CommittedDraftVersion, &scene.CreatedAt, &scene.UpdatedAt)
 	if err != nil {
 		return Scene{}, err
@@ -647,11 +740,17 @@ func scanScene(row rowScanner) (Scene, error) {
 	if len(contractJSON) > 0 {
 		_ = json.Unmarshal(contractJSON, &scene.PublicContract)
 	}
+	if len(managedJSON) > 0 {
+		_ = json.Unmarshal(managedJSON, &scene.ManagedContract)
+	}
 	if len(refsJSON) > 0 {
 		_ = json.Unmarshal(refsJSON, &scene.DatapointRefs)
 	}
 	if scene.PublicContract == nil {
 		scene.PublicContract = map[string]any{}
+	}
+	if scene.ManagedContract == nil {
+		scene.ManagedContract = emptyPublicContract()
 	}
 	if scene.DatapointRefs == nil {
 		scene.DatapointRefs = []string{}
@@ -668,9 +767,12 @@ func parentPath(filename string) string {
 }
 
 func mapDatabaseError(err error) error {
-	message := err.Error()
-	if strings.Contains(message, "unique") || strings.Contains(message, "duplicate") {
-		return fmt.Errorf("资源已存在: %w", err)
+	var pgError *pgconn.PgError
+	if errors.As(err, &pgError) && pgError.Code == "23505" {
+		if pgError.ConstraintName == "scene_documents_project_name_active_uidx" {
+			return ErrSceneNameConflict
+		}
+		return ErrSceneNameConflict
 	}
 	return err
 }

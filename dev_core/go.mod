@@ -11,6 +11,7 @@ require (
 	github.com/minio/minio-go/v7 v7.2.1
 	github.com/oapi-codegen/runtime v1.6.0
 	github.com/redis/go-redis/v9 v9.17.3
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/zishang520/socket.io/v2 v2.5.0
 	golang.org/x/crypto v0.54.0
 )
@@ -40,7 +41,6 @@ require (
 	github.com/quic-go/quic-go v0.53.0 // indirect
 	github.com/rogpeppe/go-internal v1.15.0 // indirect
 	github.com/rs/xid v1.6.0 // indirect
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/tinylib/msgp v1.6.1 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect

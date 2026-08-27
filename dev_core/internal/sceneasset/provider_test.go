@@ -2,10 +2,57 @@ package sceneasset
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"testing"
 )
+
+func TestHTProviderExtractsExplicitBindingsAndManagedContract(t *testing.T) {
+	provider := NewHTProvider()
+	payload := map[string]any{
+		"datas": []any{map[string]any{"a": map[string]any{
+			"induforge.bindings": map[string]any{"text": map[string]any{
+				"pointPath": "factory.line.temperature", "direction": "twoWay", "readMode": "subscribe", "valueType": "number",
+			}},
+			"induforge.interactions": map[string]any{
+				"events":   []any{map[string]any{"name": "deviceClicked", "trigger": "click"}},
+				"commands": []any{map[string]any{"name": "showDevice", "action": "show"}},
+			},
+		}}},
+	}
+	content, _ := json.Marshal(payload)
+	analysis, err := provider.ExtractMetadata(content)
+	if err != nil {
+		t.Fatalf("提取显式元数据失败: %v", err)
+	}
+	if len(analysis.DatapointRefs) != 1 || analysis.DatapointRefs[0] != "factory.line.temperature" {
+		t.Fatalf("数据点引用错误: %v", analysis.DatapointRefs)
+	}
+	if len(analysis.DatapointRequirements) != 1 {
+		t.Fatalf("数据点能力需求错误: %#v", analysis.DatapointRequirements)
+	}
+	requirement := analysis.DatapointRequirements[0]
+	if !requirement.Get || !requirement.Sub || !requirement.Set || requirement.ValueType != "number" {
+		t.Fatalf("双向订阅能力需求错误: %#v", requirement)
+	}
+	events, _ := analysis.ManagedContract["events"].([]any)
+	commands, _ := analysis.ManagedContract["commands"].([]any)
+	if len(events) != 1 || len(commands) != 1 {
+		t.Fatalf("管理契约提取错误: %#v", analysis.ManagedContract)
+	}
+}
+
+func TestHTProviderDoesNotTreatPrivateFieldsAsDatapoints(t *testing.T) {
+	provider := NewHTProvider()
+	analysis, err := provider.ExtractMetadata([]byte(`{"dataPoint":"legacy-id","property":"not-a-point"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(analysis.DatapointRefs) != 0 {
+		t.Fatalf("不应模糊提取私有字段: %v", analysis.DatapointRefs)
+	}
+}
 
 func TestHTProviderAnalyzeModelDependencies(t *testing.T) {
 	provider := NewHTProvider()
@@ -107,11 +154,11 @@ func TestHTProviderEditorURLContainsControlledEntry(t *testing.T) {
 		{kind: "3d", entryPath: "scenes/main scene.json", page: "/designer/scene-studio/index3d.html"},
 	}
 	for _, test := range tests {
-		result, err := url.Parse(provider.EditorURL(EditorSession{ID: "session-1", Kind: test.kind, EntryPath: test.entryPath}))
+		result, err := url.Parse(provider.EditorURL(EditorSession{ID: "session-1", SceneName: "主场景", Kind: test.kind, EntryPath: test.entryPath}))
 		if err != nil {
 			t.Fatalf("编辑器 URL 无效: %v", err)
 		}
-		if result.Path != test.page || result.Query().Get("sessionId") != "session-1" || result.Query().Get("open") != test.entryPath {
+		if result.Path != test.page || result.Query().Get("sessionId") != "session-1" || result.Query().Get("open") != test.entryPath || result.Query().Get("sceneName") != "主场景" {
 			t.Fatalf("编辑器 URL 未绑定固定入口: got %s", result.String())
 		}
 	}

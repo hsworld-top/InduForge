@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"net/url"
 	"os"
 	"path"
 	"sort"
@@ -138,6 +139,206 @@ func (s *Service) ImportSessionAsset(ctx context.Context, actor auth.User, sessi
 		return SceneAsset{}, err
 	}
 	return s.ImportAsset(ctx, actor, session.ProjectID, input)
+}
+
+// CreateAssetFromSelection 将画布选择转换为工程资源。图形模板主动剥离运行绑定，业务组件保留绑定用于重新映射。
+func (s *Service) CreateAssetFromSelection(ctx context.Context, actor auth.User, sessionID string, input AssetSelectionInput) (SceneAsset, error) {
+	session, scene, err := s.ResolveSession(ctx, actor, sessionID)
+	if err != nil {
+		return SceneAsset{}, err
+	}
+	input.Name = strings.TrimSpace(input.Name)
+	if input.Name == "" || len([]rune(input.Name)) > 200 {
+		return SceneAsset{}, ErrInvalidAssetName
+	}
+	if input.Type != AssetSymbol && input.Type != AssetComponent {
+		return SceneAsset{}, fmt.Errorf("%w: 选中内容只能保存为图形模板或业务组件", ErrInvalidAssetType)
+	}
+	if len(input.Selection) == 0 {
+		return SceneAsset{}, fmt.Errorf("%w: 选中内容不能为空", ErrInvalidArchive)
+	}
+	sanitized, err := sanitizeSelectedAssetValue(input.Selection, input.Type == AssetSymbol)
+	if err != nil {
+		return SceneAsset{}, err
+	}
+	draftFiles, err := s.repository.LoadRevisionFiles(ctx, scene)
+	if err != nil {
+		return SceneAsset{}, err
+	}
+	providerFiles, stored, err := buildSelectedAssetFiles(sanitized, draftFiles)
+	if err != nil {
+		return SceneAsset{}, err
+	}
+	provider, err := s.providers.Get(scene.Provider)
+	if err != nil {
+		return SceneAsset{}, err
+	}
+	analysis, err := provider.AnalyzeAsset(ctx, input.Type, providerFiles)
+	if err != nil {
+		return SceneAsset{}, err
+	}
+	analysis.Manifest["format"] = "induforge-selection-v1"
+	result, err := s.repository.CreateAsset(ctx, actor, session.ProjectID, scene.Provider, AssetImportInput{
+		Name: input.Name, Type: input.Type, Filename: "selection.json", ContentType: "application/json",
+	}, analysis, assetRootHash(providerFiles), stored)
+	if err != nil {
+		return SceneAsset{}, err
+	}
+	result.ThumbnailURL = "/api/v1/projects/" + session.ProjectID + "/scene-assets/" + result.ID + "/thumbnail"
+	return result, nil
+}
+
+// buildSelectedAssetFiles 将选择内容引用的场景文件复制为资源内部依赖路径；非 JSON 内容对象保持内容寻址复用。
+func buildSelectedAssetFiles(selection any, sceneFiles map[string]revisionFile) (map[string]ProviderFile, map[string]contentObject, error) {
+	providerFiles := map[string]ProviderFile{}
+	stored := map[string]contentObject{}
+	processing := map[string]bool{}
+	var rewrite func(any, string, string) (any, error)
+	var include func(string) (string, error)
+
+	include = func(sourcePath string) (string, error) {
+		targetPath := path.Join("dependencies", sourcePath)
+		if _, exists := providerFiles[targetPath]; exists || processing[sourcePath] {
+			return targetPath, nil
+		}
+		item, exists := sceneFiles[sourcePath]
+		if !exists {
+			return "", fmt.Errorf("%w: %s", ErrDependencyMissing, sourcePath)
+		}
+		processing[sourcePath] = true
+		defer delete(processing, sourcePath)
+		if strings.EqualFold(path.Ext(sourcePath), ".json") {
+			var value any
+			decoder := json.NewDecoder(bytes.NewReader(item.Content))
+			decoder.UseNumber()
+			if err := decoder.Decode(&value); err != nil {
+				return "", ErrInvalidJSON
+			}
+			rewritten, err := rewrite(value, path.Dir(sourcePath), "")
+			if err != nil {
+				return "", err
+			}
+			content, err := json.Marshal(rewritten)
+			if err != nil {
+				return "", ErrInvalidJSON
+			}
+			file := canonicalProviderFile(targetPath, content, item.Type)
+			providerFiles[targetPath] = file
+			stored[targetPath] = contentObject{Hash: file.Hash, Size: int64(len(file.Content)), ContentType: file.ContentType, JSON: file.Content}
+			return targetPath, nil
+		}
+		providerFiles[targetPath] = ProviderFile{Path: targetPath, ContentType: item.Type, Hash: item.Hash}
+		stored[targetPath] = contentObject{ID: item.ObjectID, Hash: item.Hash, Size: item.Size, ContentType: item.Type, ObjectKey: item.ObjectKey}
+		return targetPath, nil
+	}
+
+	rewrite = func(value any, base, key string) (any, error) {
+		switch typed := value.(type) {
+		case map[string]any:
+			result := make(map[string]any, len(typed))
+			for childKey, child := range typed {
+				rewritten, err := rewrite(child, base, childKey)
+				if err != nil {
+					return nil, err
+				}
+				result[childKey] = rewritten
+			}
+			return result, nil
+		case []any:
+			result := make([]any, 0, len(typed))
+			for _, child := range typed {
+				rewritten, err := rewrite(child, base, key)
+				if err != nil {
+					return nil, err
+				}
+				result = append(result, rewritten)
+			}
+			return result, nil
+		case string:
+			if !fileReferenceKeyPattern.MatchString(key) {
+				return typed, nil
+			}
+			candidate := strings.ReplaceAll(strings.TrimPrefix(strings.TrimSpace(typed), "./"), `\`, "/")
+			if candidate == "" || strings.Contains(candidate, "://") || strings.HasPrefix(candidate, "data:") {
+				return typed, nil
+			}
+			resolved, err := NormalizePath(candidate, false)
+			if err != nil {
+				return nil, err
+			}
+			if _, exists := sceneFiles[resolved]; !exists && base != "." {
+				resolved, err = NormalizePath(path.Join(base, candidate), false)
+				if err != nil {
+					return nil, err
+				}
+			}
+			if _, exists := sceneFiles[resolved]; !exists {
+				if _, supported := providerDependencyExtensions[strings.ToLower(path.Ext(resolved))]; supported {
+					return nil, fmt.Errorf("%w: %s", ErrDependencyMissing, resolved)
+				}
+				return typed, nil
+			}
+			return include(resolved)
+		default:
+			return value, nil
+		}
+	}
+
+	rewritten, err := rewrite(selection, ".", "")
+	if err != nil {
+		return nil, nil, err
+	}
+	content, err := json.Marshal(rewritten)
+	if err != nil {
+		return nil, nil, ErrInvalidJSON
+	}
+	entry := canonicalProviderFile("selection.json", content, "application/json")
+	providerFiles[entry.Path] = entry
+	stored[entry.Path] = contentObject{Hash: entry.Hash, Size: int64(len(entry.Content)), ContentType: entry.ContentType, JSON: entry.Content}
+	return providerFiles, stored, nil
+}
+
+func sanitizeSelectedAssetValue(value any, stripBindings bool) (any, error) {
+	switch typed := value.(type) {
+	case map[string]any:
+		result := make(map[string]any, len(typed))
+		for key, child := range typed {
+			normalizedKey := strings.ToLower(strings.TrimSpace(key))
+			if stripBindings && (key == "induforge.bindings" || key == "induforge.interactions") {
+				continue
+			}
+			if normalizedKey == "html" || normalizedKey == "webview" || normalizedKey == "sourceconfig" || normalizedKey == "datasource" {
+				return nil, fmt.Errorf("%w: 资源包含不允许的能力 %s", ErrInvalidArchive, key)
+			}
+			normalized, err := sanitizeSelectedAssetValue(child, stripBindings)
+			if err != nil {
+				return nil, err
+			}
+			result[key] = normalized
+		}
+		return result, nil
+	case []any:
+		result := make([]any, 0, len(typed))
+		for _, child := range typed {
+			normalized, err := sanitizeSelectedAssetValue(child, stripBindings)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, normalized)
+		}
+		return result, nil
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if strings.HasPrefix(strings.ToLower(trimmed), "javascript:") || strings.HasPrefix(strings.ToLower(trimmed), "data:text/html") {
+			return nil, fmt.Errorf("%w: 资源包含不安全内容", ErrInvalidArchive)
+		}
+		if parsed, err := url.Parse(trimmed); err == nil && parsed.IsAbs() && (parsed.Scheme == "http" || parsed.Scheme == "https" || parsed.Scheme == "file") {
+			return nil, fmt.Errorf("%w: 资源不能引用外部地址", ErrInvalidArchive)
+		}
+		return typed, nil
+	default:
+		return value, nil
+	}
 }
 
 func (s *Service) ReplaceSessionAsset(ctx context.Context, actor auth.User, sessionID, assetID string, input AssetImportInput) (SceneAsset, error) {

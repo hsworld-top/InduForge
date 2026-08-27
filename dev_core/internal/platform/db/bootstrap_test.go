@@ -43,6 +43,20 @@ func TestSceneDraftFilesAreScopedToOneScene(t *testing.T) {
 	}
 }
 
+func TestDeletedSceneFileNodesReleaseContentObjects(t *testing.T) {
+	expected := "deleted_at IS NOT NULL AND content_object_id IS NULL AND content_hash IS NULL"
+	if !strings.Contains(coreschema.CoreSQL, expected) {
+		t.Fatal("deleted scene file nodes must release their content object references")
+	}
+}
+
+func TestActiveSceneNamesAreUniqueWithinProject(t *testing.T) {
+	expected := "CREATE UNIQUE INDEX scene_documents_project_name_active_uidx ON scene_documents (project_id, lower(name)) WHERE deleted_at IS NULL"
+	if !strings.Contains(coreschema.CoreSQL, expected) {
+		t.Fatal("active scene names must be case-insensitively unique within a project")
+	}
+}
+
 func TestSchemaDoesNotContainRuntimeMigrationStatements(t *testing.T) {
 	upper := strings.ToUpper(coreschema.CoreSQL)
 	for _, statement := range []string{"ALTER TABLE", "DROP TABLE", "UPDATE ", "DELETE FROM"} {

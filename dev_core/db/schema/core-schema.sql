@@ -111,6 +111,7 @@ CREATE TABLE scene_documents (
   provider text NOT NULL CHECK (provider ~ '^[a-z][a-z0-9_-]{1,31}$'),
   entry_path text NOT NULL,
   public_contract jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(public_contract) = 'object'),
+  provider_contract jsonb NOT NULL DEFAULT '{"description":"","parameters":[],"events":[],"commands":[]}'::jsonb CHECK (jsonb_typeof(provider_contract) = 'object'),
   datapoint_refs jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(datapoint_refs) = 'array'),
   current_revision bigint NOT NULL DEFAULT 0 CHECK (current_revision >= 0),
   draft_version bigint NOT NULL DEFAULT 0 CHECK (draft_version >= 0),
@@ -127,6 +128,7 @@ CREATE TABLE scene_documents (
 );
 CREATE INDEX scene_documents_project_idx ON scene_documents (project_id, kind, updated_at DESC) WHERE deleted_at IS NULL;
 CREATE INDEX scene_documents_uncommitted_idx ON scene_documents (project_id) WHERE deleted_at IS NULL AND draft_version <> committed_draft_version;
+CREATE UNIQUE INDEX scene_documents_project_name_active_uidx ON scene_documents (project_id, lower(name)) WHERE deleted_at IS NULL;
 
 CREATE TABLE scene_content_objects (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -262,7 +264,9 @@ CREATE TABLE scene_file_nodes (
   FOREIGN KEY (content_object_id, tenant_id) REFERENCES scene_content_objects (id, tenant_id) ON DELETE RESTRICT,
   CHECK (logical_path <> '' AND logical_path !~ '(^|/)\.\.(/|$)' AND left(logical_path, 1) <> '/'),
   CHECK (parent_path = '' OR (parent_path !~ '(^|/)\.\.(/|$)' AND left(parent_path, 1) <> '/')),
-  CHECK ((node_type = 'directory' AND content_object_id IS NULL AND content_hash IS NULL) OR (node_type = 'file' AND content_object_id IS NOT NULL AND content_hash ~ '^[0-9a-f]{64}$'))
+  CHECK ((deleted_at IS NOT NULL AND content_object_id IS NULL AND content_hash IS NULL)
+    OR (deleted_at IS NULL AND node_type = 'directory' AND content_object_id IS NULL AND content_hash IS NULL)
+    OR (deleted_at IS NULL AND node_type = 'file' AND content_object_id IS NOT NULL AND content_hash ~ '^[0-9a-f]{64}$'))
 );
 CREATE INDEX scene_file_nodes_directory_idx ON scene_file_nodes (scene_document_id, parent_path, logical_path) WHERE deleted_at IS NULL;
 CREATE INDEX scene_file_nodes_content_idx ON scene_file_nodes (content_object_id) WHERE deleted_at IS NULL;

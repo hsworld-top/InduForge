@@ -36,8 +36,18 @@ type ProviderFile struct {
 }
 
 type Analysis struct {
-	Dependencies  []string
-	DatapointRefs []string
+	Dependencies          []string
+	DatapointRefs         []string
+	DatapointRequirements []DatapointRequirement
+	ManagedContract       map[string]any
+}
+
+type DatapointRequirement struct {
+	Path      string `json:"path"`
+	ValueType string `json:"valueType,omitempty"`
+	Get       bool   `json:"get"`
+	Sub       bool   `json:"sub"`
+	Set       bool   `json:"set"`
 }
 
 type SceneProvider interface {
@@ -47,12 +57,13 @@ type SceneProvider interface {
 	ValidateEntry(kind, entry string) error
 	ValidateFile(path string, content []byte) error
 	ValidateDraftFile(kind, entryPath, filename string, content []byte) error
+	ExtractMetadata(content []byte) (Analysis, error)
 	Analyze(ctx context.Context, kind, entry string, files map[string]ProviderFile) (Analysis, error)
 	AnalyzeAsset(ctx context.Context, assetType AssetType, files map[string]ProviderFile) (AssetAnalysis, error)
 	MountPath(asset SceneAsset) string
 	EditorURL(session EditorSession) string
 	AssetEditorURL(session AssetEditorSession) string
-	ViewerURL(scene Scene, revision Revision) string
+	ViewerURL(session ViewerSession) string
 }
 
 type Registry struct{ providers map[string]SceneProvider }
@@ -144,7 +155,220 @@ var providerDependencyExtensions = map[string]struct{}{
 	".woff": {}, ".woff2": {},
 }
 
-func (*HTProvider) Analyze(_ context.Context, kind, entry string, files map[string]ProviderFile) (Analysis, error) {
+type providerMetadataCollector struct {
+	refs          map[string]struct{}
+	events        []any
+	commands      []any
+	eventByName   map[string]map[string]any
+	commandByName map[string]map[string]any
+	requirements  map[string]*DatapointRequirement
+}
+
+func newProviderMetadataCollector() *providerMetadataCollector {
+	return &providerMetadataCollector{
+		refs: map[string]struct{}{}, eventByName: map[string]map[string]any{}, commandByName: map[string]map[string]any{},
+		requirements: map[string]*DatapointRequirement{},
+		events:       []any{}, commands: []any{},
+	}
+}
+
+func (collector *providerMetadataCollector) walk(value any) error {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			switch key {
+			case "induforge.bindings":
+				if err := collector.collectBindings(child); err != nil {
+					return err
+				}
+			case "induforge.interactions":
+				if err := collector.collectInteractions(child); err != nil {
+					return err
+				}
+			}
+			if err := collector.walk(child); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if err := collector.walk(child); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (collector *providerMetadataCollector) collectBindings(value any) error {
+	bindingMap, ok := value.(map[string]any)
+	if !ok {
+		return fmt.Errorf("%w: induforge.bindings 必须为对象", ErrContractInvalid)
+	}
+	for _, raw := range bindingMap {
+		binding, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if pointPath, ok := binding["pointPath"].(string); ok && strings.TrimSpace(pointPath) != "" {
+			pointPath = strings.TrimSpace(pointPath)
+			collector.refs[pointPath] = struct{}{}
+			requirement := collector.requirements[pointPath]
+			if requirement == nil {
+				requirement = &DatapointRequirement{Path: pointPath}
+				collector.requirements[pointPath] = requirement
+			}
+			direction, _ := binding["direction"].(string)
+			if direction == "" {
+				direction = "read"
+			}
+			readMode, _ := binding["readMode"].(string)
+			requirement.Get = requirement.Get || direction != "write"
+			requirement.Sub = requirement.Sub || (direction != "write" && readMode == "subscribe")
+			requirement.Set = requirement.Set || direction != "read"
+			valueType, _ := binding["valueType"].(string)
+			valueType = strings.ToLower(strings.TrimSpace(valueType))
+			if valueType != "" {
+				if requirement.ValueType != "" && requirement.ValueType != valueType {
+					return fmt.Errorf("%w: 数据点 %s 的绑定类型不一致", ErrContractInvalid, pointPath)
+				}
+				requirement.ValueType = valueType
+			}
+		}
+	}
+	return nil
+}
+
+func (collector *providerMetadataCollector) datapointRequirements() []DatapointRequirement {
+	paths := make([]string, 0, len(collector.requirements))
+	for pointPath := range collector.requirements {
+		paths = append(paths, pointPath)
+	}
+	sort.Strings(paths)
+	result := make([]DatapointRequirement, 0, len(paths))
+	for _, pointPath := range paths {
+		result = append(result, *collector.requirements[pointPath])
+	}
+	return result
+}
+
+func (collector *providerMetadataCollector) collectInteractions(value any) error {
+	interactions, ok := value.(map[string]any)
+	if !ok {
+		return fmt.Errorf("%w: induforge.interactions 必须为对象", ErrContractInvalid)
+	}
+	if values, ok := interactions["events"].([]any); ok {
+		for _, raw := range values {
+			mapping, ok := raw.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 事件映射必须为对象", ErrContractInvalid)
+			}
+			name, _ := mapping["name"].(string)
+			if strings.TrimSpace(name) == "" {
+				continue
+			}
+			member := map[string]any{
+				"name":        strings.TrimSpace(name),
+				"description": providerEventDescription(mapping),
+				"schema":      providerEventSchema(mapping),
+			}
+			if err := collector.addManagedMember("事件", member, collector.eventByName, &collector.events); err != nil {
+				return err
+			}
+		}
+	}
+	if values, ok := interactions["commands"].([]any); ok {
+		for _, raw := range values {
+			mapping, ok := raw.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 命令映射必须为对象", ErrContractInvalid)
+			}
+			name, _ := mapping["name"].(string)
+			if strings.TrimSpace(name) == "" {
+				continue
+			}
+			member := map[string]any{
+				"name":         strings.TrimSpace(name),
+				"description":  providerCommandDescription(mapping),
+				"inputSchema":  providerCommandInputSchema(mapping),
+				"outputSchema": map[string]any{"type": "null"},
+			}
+			if err := collector.addManagedMember("命令", member, collector.commandByName, &collector.commands); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (collector *providerMetadataCollector) addManagedMember(kind string, member map[string]any, existing map[string]map[string]any, target *[]any) error {
+	name := member["name"].(string)
+	if previous, ok := existing[name]; ok {
+		previousJSON, _ := json.Marshal(previous)
+		currentJSON, _ := json.Marshal(member)
+		if !bytes.Equal(previousJSON, currentJSON) {
+			return fmt.Errorf("%w: Provider %s %q 的 Schema 冲突", ErrContractInvalid, kind, name)
+		}
+		return nil
+	}
+	existing[name] = member
+	*target = append(*target, member)
+	return nil
+}
+
+func providerEventDescription(mapping map[string]any) string {
+	trigger, _ := mapping["trigger"].(string)
+	return "场景对象触发：" + strings.TrimSpace(trigger)
+}
+
+func providerEventSchema(mapping map[string]any) map[string]any {
+	trigger, _ := mapping["trigger"].(string)
+	switch strings.TrimSpace(trigger) {
+	case "change", "input":
+		valueType, _ := mapping["valueType"].(string)
+		if valueType != "string" && valueType != "number" && valueType != "integer" && valueType != "boolean" {
+			valueType = "string"
+		}
+		return map[string]any{"type": "object", "properties": map[string]any{"value": map[string]any{"type": valueType}}, "required": []any{"value"}, "additionalProperties": false}
+	case "flowStateChange":
+		return map[string]any{"type": "object", "properties": map[string]any{
+			"mode":    map[string]any{"type": "string", "enum": []any{"off", "continuous", "segment", "particle"}},
+			"running": map[string]any{"type": "boolean"}, "reverse": map[string]any{"type": "boolean"}, "speed": map[string]any{"type": "number"},
+		}, "required": []any{"mode", "running", "reverse", "speed"}, "additionalProperties": false}
+	default:
+		return map[string]any{"type": "object", "additionalProperties": false}
+	}
+}
+
+func providerCommandDescription(mapping map[string]any) string {
+	action, _ := mapping["action"].(string)
+	return "场景对象操作：" + strings.TrimSpace(action)
+}
+
+func providerCommandInputSchema(mapping map[string]any) map[string]any {
+	action, _ := mapping["action"].(string)
+	propertyType := "boolean"
+	propertyName := "value"
+	switch strings.TrimSpace(action) {
+	case "setValue":
+		propertyType = "number"
+		if valueType, ok := mapping["valueType"].(string); ok && (valueType == "string" || valueType == "number" || valueType == "integer" || valueType == "boolean") {
+			propertyType = valueType
+		}
+	case "setPipeState":
+		return map[string]any{"type": "object", "properties": map[string]any{
+			"mode":    map[string]any{"type": "string", "enum": []any{"off", "continuous", "segment", "particle"}},
+			"running": map[string]any{"type": "boolean"}, "reverse": map[string]any{"type": "boolean"}, "speed": map[string]any{"type": "number"},
+		}, "additionalProperties": false}
+	case "show", "hide", "enable", "disable", "focus", "highlight":
+		return map[string]any{"type": "object", "additionalProperties": false}
+	default:
+		propertyName = "value"
+	}
+	return map[string]any{"type": "object", "properties": map[string]any{propertyName: map[string]any{"type": propertyType}}, "required": []any{propertyName}, "additionalProperties": false}
+}
+
+func (provider *HTProvider) Analyze(_ context.Context, kind, entry string, files map[string]ProviderFile) (Analysis, error) {
 	if _, ok := files[entry]; !ok {
 		return Analysis{}, ErrEntryMissing
 	}
@@ -177,8 +401,33 @@ func (*HTProvider) Analyze(_ context.Context, kind, entry string, files map[stri
 		}
 	}
 	dependencyList := mapKeys(dependencies)
-	refList := mapKeys(refs)
-	return Analysis{Dependencies: dependencyList, DatapointRefs: refList}, nil
+	metadata, err := provider.ExtractMetadata(files[entry].Content)
+	if err != nil {
+		return Analysis{}, err
+	}
+	return Analysis{Dependencies: dependencyList, DatapointRefs: metadata.DatapointRefs,
+		DatapointRequirements: metadata.DatapointRequirements, ManagedContract: metadata.ManagedContract}, nil
+}
+
+// ExtractMetadata 仅识别平台定义的显式绑定和交互结构，避免把 HT 私有字段误判为数据点。
+func (*HTProvider) ExtractMetadata(content []byte) (Analysis, error) {
+	var value any
+	decoder := json.NewDecoder(bytes.NewReader(content))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
+		return Analysis{}, ErrInvalidJSON
+	}
+	collector := newProviderMetadataCollector()
+	if err := collector.walk(value); err != nil {
+		return Analysis{}, err
+	}
+	contract, err := validatePublicContract(map[string]any{
+		"description": "", "parameters": []any{}, "events": collector.events, "commands": collector.commands,
+	})
+	if err != nil {
+		return Analysis{}, err
+	}
+	return Analysis{DatapointRefs: mapKeys(collector.refs), DatapointRequirements: collector.datapointRequirements(), ManagedContract: contract}, nil
 }
 
 var htAssetExtensions = map[AssetType]map[string]struct{}{
@@ -217,6 +466,22 @@ func (*HTProvider) AnalyzeAsset(_ context.Context, assetType AssetType, files ma
 			return AssetAnalysis{}, ErrInvalidArchive
 		}
 		entry = paths[0]
+	} else if wanted == ".json" {
+		if _, generatedSelection := files["selection.json"]; generatedSelection {
+			entry = "selection.json"
+		}
+		for _, filename := range paths {
+			if entry == "selection.json" || !strings.EqualFold(path.Ext(filename), wanted) {
+				continue
+			}
+			if entry != "" {
+				return AssetAnalysis{}, fmt.Errorf("%w: 资源包只能包含一个入口文件", ErrInvalidArchive)
+			}
+			entry = filename
+		}
+		if entry == "" {
+			return AssetAnalysis{}, fmt.Errorf("%w: 缺少 %s 入口", ErrInvalidArchive, wanted)
+		}
 	} else {
 		for _, filename := range paths {
 			if strings.EqualFold(path.Ext(filename), wanted) {
@@ -392,6 +657,7 @@ func (*HTProvider) EditorURL(session EditorSession) string {
 	query := url.Values{}
 	query.Set("sessionId", session.ID)
 	query.Set("open", session.EntryPath)
+	query.Set("sceneName", session.SceneName)
 	return "/designer/scene-studio/" + entry + "?" + query.Encode()
 }
 
@@ -399,6 +665,12 @@ func (*HTProvider) AssetEditorURL(session AssetEditorSession) string {
 	return "/designer/scene-studio/index.html?assetSessionId=" + session.ID
 }
 
-func (*HTProvider) ViewerURL(scene Scene, revision Revision) string {
-	return fmt.Sprintf("/api/v1/projects/%s/scenes/%s/viewer?kind=%s&revision=%d", scene.ProjectID, scene.SceneID, scene.Kind, revision.Revision)
+func (*HTProvider) ViewerURL(session ViewerSession) string {
+	entry := "display.html"
+	if session.Kind == "3d" {
+		entry = "scene.html"
+	}
+	query := url.Values{}
+	query.Set("viewerSessionId", session.ID)
+	return "/designer/scene-studio/" + entry + "?" + query.Encode()
 }

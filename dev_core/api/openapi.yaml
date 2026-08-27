@@ -2057,6 +2057,18 @@ paths:
         - {$ref: '#/components/parameters/SceneKind'}
       responses:
         '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /projects/{projectId}/scenes/{sceneId}/viewer-session:
+    post:
+      operationId: createSceneViewerSession
+      tags: [scene]
+      x-client: designer
+      summary: 创建固定到当前已提交 revision 的只读 Viewer 会话
+      parameters:
+        - {$ref: '#/components/parameters/ProjectId'}
+        - {$ref: '#/components/parameters/SceneId'}
+        - {$ref: '#/components/parameters/SceneKind'}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
   /projects/{projectId}/scenes/{sceneId}/commit:
     post:
       operationId: commitScene
@@ -2086,6 +2098,38 @@ paths:
         - {$ref: '#/components/parameters/Limit'}
       responses:
         '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-viewer-sessions/{sessionId}:
+    get:
+      operationId: getSceneViewerSession
+      tags: [scene]
+      x-client: scene-viewer
+      summary: 使用只读能力凭证读取 Viewer 启动信息
+      security: []
+      parameters: [{$ref: '#/components/parameters/SessionId'}]
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-viewer-sessions/{sessionId}/heartbeat:
+    post:
+      operationId: heartbeatSceneViewerSession
+      tags: [scene]
+      x-client: scene-viewer
+      summary: 延长 Viewer 会话空闲有效期
+      security: []
+      parameters: [{$ref: '#/components/parameters/SessionId'}]
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-viewer-sessions/{sessionId}/files/content:
+    get:
+      operationId: getSceneViewerFileContent
+      tags: [scene]
+      x-client: scene-viewer
+      summary: 读取会话固定 revision 的文件
+      security: []
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+        - {name: path, in: query, required: true, schema: {type: string}}
+      responses:
+        '200': {description: 文件流, content: {application/octet-stream: {schema: {type: string, format: binary}}}}
   /scene-editor-sessions/{sessionId}/files/content:
     parameters:
       - {$ref: '#/components/parameters/SessionId'}
@@ -2154,6 +2198,19 @@ paths:
         - {$ref: '#/components/parameters/SessionId'}
         - {$ref: '#/components/parameters/Page'}
         - {$ref: '#/components/parameters/Limit'}
+      responses:
+        '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
+  /scene-editor-sessions/{sessionId}/assets/from-selection:
+    post:
+      operationId: createSceneAssetFromSelection
+      tags: [scene]
+      x-client: ht-editor
+      summary: 将画布选中内容保存为图形模板或业务组件
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SceneAssetFromSelectionRequest'}}}
       responses:
         '200': {description: 成功, content: {application/json: {schema: {$ref: '#/components/schemas/ApiResponse'}}}}
   /projects/{projectId}/scene-assets:
@@ -2502,17 +2559,52 @@ components:
       properties: {provider: {type: string, enum: [induforge]}}
     SceneCreateRequest:
       type: object
-      required: [sceneId, kind, name]
+      required: [kind, name]
       properties:
-        sceneId: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$'}
         kind: {type: string, enum: ['2d', '3d']}
-        name: {type: string, maxLength: 200}
-        publicContract: {type: object, additionalProperties: true}
+        name: {type: string, minLength: 1, maxLength: 200}
+        publicContract: {$ref: '#/components/schemas/ScenePublicContract'}
     SceneUpdateRequest:
       type: object
       properties:
         name: {type: string, maxLength: 200}
-        publicContract: {type: object, additionalProperties: true}
+        publicContract: {$ref: '#/components/schemas/ScenePublicContract'}
+        baseDraftVersion: {type: integer, format: int64, minimum: 0}
+    ScenePublicContract:
+      type: object
+      additionalProperties: false
+      required: [description, parameters, events, commands]
+      properties:
+        description: {type: string, maxLength: 2000}
+        parameters: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/SceneParameter'}}
+        events: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/SceneContractMember'}}
+        commands: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/SceneCommand'}}
+    SceneContractMember:
+      type: object
+      additionalProperties: false
+      required: [name, schema]
+      properties:
+        name: {type: string, pattern: '^[A-Za-z][A-Za-z0-9_.:-]{0,63}$'}
+        description: {type: string}
+        schema: {type: object, additionalProperties: true}
+    SceneParameter:
+      type: object
+      additionalProperties: false
+      required: [name, required, schema]
+      properties:
+        name: {type: string, pattern: '^[A-Za-z][A-Za-z0-9_.:-]{0,63}$'}
+        description: {type: string}
+        required: {type: boolean}
+        schema: {type: object, additionalProperties: true}
+    SceneCommand:
+      type: object
+      additionalProperties: false
+      required: [name, inputSchema, outputSchema]
+      properties:
+        name: {type: string, pattern: '^[A-Za-z][A-Za-z0-9_.:-]{0,63}$'}
+        description: {type: string}
+        inputSchema: {type: object, additionalProperties: true}
+        outputSchema: {type: object, additionalProperties: true}
     SceneCommitRequest:
       type: object
       required: [baseDraftVersion]
@@ -2529,6 +2621,15 @@ components:
         action: {type: string, enum: [attach, update, detach]}
         assetId: {type: string, format: uuid}
         baseDraftVersion: {type: integer, format: int64, minimum: 0}
+
+    SceneAssetFromSelectionRequest:
+      type: object
+      additionalProperties: false
+      required: [name, type, selection]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        type: {type: string, enum: [symbol, component]}
+        selection: {type: object, additionalProperties: true}
     ProjectImportRequest:
       type: object
       properties:

@@ -1,11 +1,15 @@
 package sceneasset
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	platformcache "github.com/indu-forge/dev_core/internal/platform/cache"
 )
 
 func TestSceneRoutesRequireAuthentication(t *testing.T) {
@@ -20,6 +24,7 @@ func TestSceneRoutesRequireAuthentication(t *testing.T) {
 	assertUnauthorized(t, router, http.MethodPut, "/api/v1/projects/00000000-0000-0000-0000-000000000001/scenes/main?kind=2d")
 	assertUnauthorized(t, router, http.MethodDelete, "/api/v1/projects/00000000-0000-0000-0000-000000000001/scenes/main?kind=2d")
 	assertUnauthorized(t, router, http.MethodPost, "/api/v1/projects/00000000-0000-0000-0000-000000000001/scenes/main/editor-session?kind=2d")
+	assertUnauthorized(t, router, http.MethodPost, "/api/v1/projects/00000000-0000-0000-0000-000000000001/scenes/main/viewer-session?kind=2d")
 	assertUnauthorized(t, router, http.MethodPost, "/api/v1/projects/00000000-0000-0000-0000-000000000001/scenes/main/commit?kind=2d")
 
 	assertUnauthorized(t, router, http.MethodGet, "/api/v1/projects/00000000-0000-0000-0000-000000000001/scene-assets")
@@ -59,4 +64,46 @@ func assertUnauthorized(t *testing.T, handler http.Handler, method, target strin
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("%s %s 未拒绝匿名请求: got %d", method, target, response.Code)
 	}
+}
+
+func TestViewerRoutesRejectExpiredCapabilitySession(t *testing.T) {
+	service := NewService(nil, nil, nil, missingSessionStore{}, nil)
+	router := chi.NewRouter()
+	router.Route("/api/v1", NewHandler(service, "").MountRoutes)
+
+	assertViewerSessionExpired(t, router, http.MethodGet, "/api/v1/scene-viewer-sessions/00000000-0000-0000-0000-000000000005")
+	assertViewerSessionExpired(t, router, http.MethodPost, "/api/v1/scene-viewer-sessions/00000000-0000-0000-0000-000000000005/heartbeat")
+	assertViewerSessionExpired(t, router, http.MethodGet, "/api/v1/scene-viewer-sessions/00000000-0000-0000-0000-000000000005/files/content?path=displays%2Fmain.json")
+}
+
+func assertViewerSessionExpired(t *testing.T, handler http.Handler, method, target string) {
+	t.Helper()
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(method, target, nil))
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("%s %s 未拒绝过期 Viewer 会话: got %d", method, target, response.Code)
+	}
+	var envelope struct {
+		Code int `json:"code"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("解析 Viewer 会话错误响应失败: %v", err)
+	}
+	if envelope.Code != 10003 {
+		t.Fatalf("Viewer 会话过期错误码错误: got %d, want 10003", envelope.Code)
+	}
+}
+
+type missingSessionStore struct{}
+
+func (missingSessionStore) PutSceneSession(context.Context, string, string, time.Duration) error {
+	return nil
+}
+
+func (missingSessionStore) GetSceneSession(context.Context, string) (string, error) {
+	return "", platformcache.ErrMiss
+}
+
+func (missingSessionStore) DeleteSceneSession(context.Context, string) error {
+	return nil
 }

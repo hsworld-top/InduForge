@@ -148,15 +148,22 @@ func buildFiles(item project.Project, roles []runtimeaccess.Role, points pointSn
 	}
 	files["points/manifest.json"] = pointManifest
 	sceneIndex := []string{"# 场景索引", ""}
+	sceneManifest := make([]scenecontract.Contract, 0, len(scenes.Contracts))
 	for _, scene := range scenes.Contracts {
 		path := fmt.Sprintf("%s/%s.md", scene.Kind, scene.ID)
 		sceneIndex = append(sceneIndex, "- [`"+scene.ID+"` · "+scene.Name+"](./"+path+")")
 		files["scenes/"+path] = []byte(sceneMarkdown(scene))
+		sceneManifest = append(sceneManifest, scene)
 	}
 	if len(scenes.Contracts) == 0 {
 		sceneIndex = append(sceneIndex, "当前工程尚未声明 2D 或 3D 场景公开契约。")
 	}
 	files["scenes/index.md"] = []byte(strings.Join(sceneIndex, "\n") + "\n")
+	sceneManifestJSON, err := json.MarshalIndent(map[string]any{"contractVersion": scenes.ContractVersion, "scenes": sceneManifest}, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	files["scenes/manifest.json"] = sceneManifestJSON
 	manifest, err := json.MarshalIndent(map[string]any{"projectId": item.ID, "generatedAt": time.Now().UTC().Format(time.RFC3339), "pointContractVersion": points.ContractVersion, "pointCount": len(points.DataPoints), "roleCount": len(roles), "pointChunkCount": chunkCount, "sceneContractVersion": scenes.ContractVersion, "sceneCount": len(scenes.Contracts)}, "", "  ")
 	if err != nil {
 		return nil, err
@@ -166,13 +173,34 @@ func buildFiles(item project.Project, roles []runtimeaccess.Role, points pointSn
 }
 
 func sceneMarkdown(scene scenecontract.Contract) string {
-	lines := []string{"# " + scene.Name, "", "- 场景 ID：`" + scene.ID + "`", "- 类型：`" + scene.Kind + "`", "- 嵌入方式：`" + scene.EmbedMode + "`", "- 契约版本：`" + scene.ContractVersion + "`"}
+	lines := []string{"# " + scene.Name, "", "- 场景 ID：`" + scene.ID + "`", "- 类型：`" + scene.Kind + "`", "- 契约版本：`" + scene.ContractVersion + "`"}
 	if scene.Description != "" {
 		lines = append(lines, "", scene.Description)
 	}
-	if scene.Route != "" {
-		lines = append(lines, "", "- 路由：`"+scene.Route+"`")
+	tag := "induforge-scene-2d"
+	if scene.Kind == "3d" {
+		tag = "induforge-scene-3d"
 	}
+	lines = append(lines, "", "## 页面使用", "", "~~~html", "<"+tag+" scene-id=\""+scene.ID+"\"></"+tag+">", "~~~")
+	selector := tag + "[scene-id=\\\"" + scene.ID + "\\\"]"
+	lines = append(lines, "", "~~~js", "import '@induforge/runtime-sdk/scene-elements'", "", "const scene = document.querySelector('"+selector+"')")
+	if len(scene.Parameters) > 0 {
+		params := make(map[string]any, len(scene.Parameters))
+		for _, parameter := range scene.Parameters {
+			params[parameter.Name] = schemaExample(parameter.Schema)
+		}
+		encoded, _ := json.MarshalIndent(params, "", "  ")
+		lines = append(lines, "await scene.setParams("+string(encoded)+")")
+	}
+	if len(scene.Events) > 0 {
+		lines = append(lines, "scene.addEventListener('scene-event', (event) => {", "  const { name, payload } = event.detail", "  console.log(name, payload)", "})")
+	}
+	if len(scene.Commands) > 0 {
+		command := scene.Commands[0]
+		input, _ := json.MarshalIndent(schemaExample(command.InputSchema), "", "  ")
+		lines = append(lines, "const result = await scene.invoke('"+command.Name+"', "+string(input)+")", "console.log(result)")
+	}
+	lines = append(lines, "~~~")
 	appendMembers := func(title string, members []scenecontract.Member) {
 		if len(members) == 0 {
 			return
@@ -190,17 +218,67 @@ func sceneMarkdown(scene scenecontract.Contract) string {
 			lines = append(lines, line)
 		}
 	}
-	appendMembers("输入", scene.Inputs)
+	parameters := make([]scenecontract.Member, 0, len(scene.Parameters))
+	for _, parameter := range scene.Parameters {
+		description := parameter.Description
+		if parameter.Required {
+			description = strings.TrimSpace(description + "（必填）")
+		}
+		parameters = append(parameters, scenecontract.Member{Name: parameter.Name, Description: description, Schema: parameter.Schema})
+	}
+	appendMembers("参数", parameters)
 	appendMembers("事件", scene.Events)
-	appendMembers("命令", scene.Commands)
-	appendMembers("公开对象", scene.PublicObjects)
+	if len(scene.Commands) > 0 {
+		lines = append(lines, "", "## 命令", "")
+		for _, command := range scene.Commands {
+			input, _ := json.Marshal(command.InputSchema)
+			output, _ := json.Marshal(command.OutputSchema)
+			line := "- `" + command.Name + "`"
+			if command.Description != "" {
+				line += "：" + command.Description
+			}
+			line += "，输入：`" + string(input) + "`，输出：`" + string(output) + "`"
+			lines = append(lines, line)
+		}
+	}
 	if len(scene.DatapointRefs) > 0 {
 		lines = append(lines, "", "## 数据点引用", "", "`"+strings.Join(scene.DatapointRefs, "`, `")+"`")
 	}
-	if len(scene.PermissionRefs) > 0 {
-		lines = append(lines, "", "## 权限引用", "", "`"+strings.Join(scene.PermissionRefs, "`, `")+"`")
-	}
 	return strings.Join(lines, "\n") + "\n"
+}
+
+func schemaExample(schema map[string]any) any {
+	if value, ok := schema["const"]; ok {
+		return value
+	}
+	if values, ok := schema["enum"].([]any); ok && len(values) > 0 {
+		return values[0]
+	}
+	switch schema["type"] {
+	case "string":
+		return "example"
+	case "integer", "number":
+		return 0
+	case "boolean":
+		return false
+	case "array":
+		if items, ok := schema["items"].(map[string]any); ok {
+			return []any{schemaExample(items)}
+		}
+		return []any{}
+	case "object":
+		result := map[string]any{}
+		if properties, ok := schema["properties"].(map[string]any); ok {
+			for name, value := range properties {
+				if property, ok := value.(map[string]any); ok {
+					result[name] = schemaExample(property)
+				}
+			}
+		}
+		return result
+	default:
+		return nil
+	}
 }
 
 func runtimeAPIMarkdown() string {
@@ -210,6 +288,7 @@ func runtimeAPIMarkdown() string {
 
 ~~~js
 import { points, access, scenes } from '@induforge/runtime-sdk'
+import '@induforge/runtime-sdk/scene-elements'
 
 const result = await points.production.orders.get({ workshopId: 'A01' })
 await points.production.command.set({ command: 'start' })
@@ -221,9 +300,19 @@ if (access.hasRole('operator')) {
 }
 ~~~
 
+页面内嵌已提交场景：
+
+~~~html
+<induforge-scene-2d scene-id="场景ID"></induforge-scene-2d>
+<induforge-scene-3d scene-id="场景ID"></induforge-scene-3d>
+~~~
+
+通过元素的 params / setParams() 传参，监听 scene-event，使用 invoke() 调用场景命令。具体名称和
+JSON 结构必须以 scenes/manifest.json 和对应场景文档为准。
+
 - 数据点路径以 points/catalog/ 中的稳定 ID 为准。
 - get、set、sub、pub 是否可用和参数结构以对应数据点契约为准。
-- 场景只通过 scenes.open2D()、scenes.open3D() 和场景公开契约使用，不读取 HT 私有文件。
+- 场景只通过 Web Components、scenes.open2D()、scenes.open3D() 和公开契约使用，不读取 Provider 私有文件。
 - 运行时仍执行真实权限、参数和数据校验；上下文文件只用于开发提示。
 `
 }

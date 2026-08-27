@@ -17,7 +17,9 @@ func TestBuildFilesIncludesSceneContractsWithoutPrivateCanvas(t *testing.T) {
 			ID:              "line-overview",
 			Kind:            "2d",
 			Name:            "产线总览",
-			EmbedMode:       "both",
+			Parameters:      []scenecontract.Parameter{{Name: "deviceId", Required: true, Schema: map[string]any{"type": "string"}}},
+			Events:          []scenecontract.Member{{Name: "device:selected", Schema: map[string]any{"type": "object"}}},
+			Commands:        []scenecontract.Command{{Name: "focusDevice", InputSchema: map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}}}, OutputSchema: map[string]any{"type": "boolean"}}},
 			DatapointRefs:   []string{"line.speed"},
 			ContractVersion: "contract-version",
 		}}},
@@ -32,5 +34,14 @@ func TestBuildFilesIncludesSceneContractsWithoutPrivateCanvas(t *testing.T) {
 	manifest := string(files["manifest.json"])
 	if !strings.Contains(manifest, `"sceneCount": 1`) || !strings.Contains(manifest, "scene-version") {
 		t.Fatalf("scene metadata missing from manifest: %s", manifest)
+	}
+	if !strings.Contains(string(files["scenes/manifest.json"]), `"deviceId"`) {
+		t.Fatal("machine-readable scene contract missing")
+	}
+	if !strings.Contains(content, `await scene.setParams({`) || !strings.Contains(content, `"deviceId": "example"`) {
+		t.Fatalf("scene parameter example missing: %s", content)
+	}
+	if !strings.Contains(content, `scene.addEventListener('scene-event'`) || !strings.Contains(content, `scene.invoke('focusDevice'`) {
+		t.Fatalf("scene event or command example missing: %s", content)
 	}
 }

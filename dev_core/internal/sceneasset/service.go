@@ -89,17 +89,26 @@ func (s *Service) CreateScene(ctx context.Context, actor auth.User, projectID st
 		return Scene{}, err
 	}
 	input.ProjectID = projectID
-	input.SceneID = strings.TrimSpace(input.SceneID)
+	// 场景 ID 是页面源码和运行工件使用的稳定内部标识，不接受用户输入。
+	input.SceneID = uuid.NewString()
 	input.Kind = strings.ToLower(strings.TrimSpace(input.Kind))
 	input.Name = strings.TrimSpace(input.Name)
-	if err := ValidateSceneID(input.SceneID); err != nil {
-		return Scene{}, err
-	}
 	if input.Kind != "2d" && input.Kind != "3d" {
 		return Scene{}, ErrInvalidKind
 	}
-	if input.Name == "" {
-		input.Name = input.SceneID
+	if err := validateSceneName(input.Name); err != nil {
+		return Scene{}, err
+	}
+	nameExists, err := s.repository.ActiveSceneNameExists(ctx, actor.TenantID, projectID, input.Name, "")
+	if err != nil {
+		return Scene{}, err
+	}
+	if nameExists {
+		return Scene{}, ErrSceneNameConflict
+	}
+	input.PublicContract, err = validatePublicContract(input.PublicContract)
+	if err != nil {
+		return Scene{}, err
 	}
 	entry, err := entryPath(input.Kind, input.SceneID, input.EntryPath)
 	if err != nil {
@@ -154,7 +163,38 @@ func (s *Service) UpdateScene(ctx context.Context, actor auth.User, projectID, k
 	if err != nil {
 		return Scene{}, err
 	}
+	if patch.Name != nil {
+		name := strings.TrimSpace(*patch.Name)
+		if err := validateSceneName(name); err != nil {
+			return Scene{}, err
+		}
+		nameExists, err := s.repository.ActiveSceneNameExists(ctx, actor.TenantID, projectID, name, scene.ID)
+		if err != nil {
+			return Scene{}, err
+		}
+		if nameExists {
+			return Scene{}, ErrSceneNameConflict
+		}
+		patch.Name = &name
+	}
+	if patch.PublicContract != nil {
+		if patch.BaseDraftVersion == nil || *patch.BaseDraftVersion < 0 {
+			return Scene{}, fmt.Errorf("%w: 修改交互契约必须提供 baseDraftVersion", ErrContractInvalid)
+		}
+		normalized, err := validatePublicContract(*patch.PublicContract)
+		if err != nil {
+			return Scene{}, err
+		}
+		patch.PublicContract = &normalized
+	}
 	return s.repository.UpdateScene(ctx, actor, scene, patch)
+}
+
+func validateSceneName(name string) error {
+	if name == "" || len([]rune(name)) > 200 {
+		return ErrInvalidSceneName
+	}
+	return nil
 }
 
 func (s *Service) DeleteScene(ctx context.Context, actor auth.User, projectID, kind, sceneID string) error {
@@ -182,12 +222,103 @@ func (s *Service) CreateEditorSession(ctx context.Context, actor auth.User, proj
 	}
 	now := time.Now().UTC()
 	session := EditorSession{ID: uuid.NewString(), UserID: actor.ID, TenantID: actor.TenantID, ProjectID: projectID,
-		SceneID: sceneID, Kind: kind, Provider: scene.Provider, EntryPath: scene.EntryPath, ExpiresAt: now.Add(SessionTTL)}
+		SceneID: sceneID, SceneName: scene.Name, Kind: kind, Provider: scene.Provider, EntryPath: scene.EntryPath, ExpiresAt: now.Add(SessionTTL)}
 	encoded, _ := json.Marshal(session)
 	if err := s.sessions.PutSceneSession(ctx, session.ID, string(encoded), SessionTTL); err != nil {
 		return EditorSessionResponse{}, err
 	}
-	return EditorSessionResponse{SessionID: session.ID, URL: provider.EditorURL(session), ExpiresAt: session.ExpiresAt}, nil
+	return EditorSessionResponse{SessionID: session.ID, SceneName: session.SceneName, URL: provider.EditorURL(session), ExpiresAt: session.ExpiresAt}, nil
+}
+
+func (s *Service) CreateViewerSession(ctx context.Context, actor auth.User, projectID, kind, sceneID string) (ViewerSessionResponse, error) {
+	if err := s.requireRead(ctx, actor, projectID); err != nil {
+		return ViewerSessionResponse{}, err
+	}
+	scene, err := s.repository.GetScene(ctx, actor.TenantID, projectID, kind, sceneID)
+	if err != nil {
+		return ViewerSessionResponse{}, err
+	}
+	revision, err := s.repository.GetCurrentRevision(ctx, scene)
+	if err != nil {
+		return ViewerSessionResponse{}, err
+	}
+	provider, err := s.providers.Get(revision.Provider)
+	if err != nil {
+		return ViewerSessionResponse{}, err
+	}
+	now := time.Now().UTC()
+	session := ViewerSession{
+		ID: uuid.NewString(), TenantID: actor.TenantID, ProjectID: projectID, SceneDocumentID: scene.ID,
+		SceneID: scene.SceneID, Kind: scene.Kind, Provider: revision.Provider, RevisionID: revision.ID,
+		Revision: revision.Revision, EntryPath: revision.EntryPath, Contract: revision.PublicContract, DatapointRefs: revision.DatapointRefs,
+		ExpiresAt: now.Add(ViewerSessionTTL), AbsoluteExpiresAt: now.Add(ViewerAbsoluteTTL),
+	}
+	encoded, _ := json.Marshal(session)
+	if err := s.sessions.PutSceneSession(ctx, session.ID, string(encoded), ViewerSessionTTL); err != nil {
+		return ViewerSessionResponse{}, err
+	}
+	return ViewerSessionResponse{SessionID: session.ID, URL: provider.ViewerURL(session), ExpiresAt: session.ExpiresAt,
+		SceneID: session.SceneID, Kind: session.Kind, Revision: session.Revision, Contract: session.Contract, DatapointRefs: session.DatapointRefs}, nil
+}
+
+func (s *Service) ResolveViewerSession(ctx context.Context, sessionID string) (ViewerSession, error) {
+	encoded, err := s.sessions.GetSceneSession(ctx, sessionID)
+	if errors.Is(err, platformcache.ErrMiss) {
+		return ViewerSession{}, ErrSessionExpired
+	}
+	if err != nil {
+		return ViewerSession{}, err
+	}
+	var session ViewerSession
+	if err := json.Unmarshal([]byte(encoded), &session); err != nil || session.ID != sessionID {
+		return ViewerSession{}, ErrSessionExpired
+	}
+	now := time.Now().UTC()
+	if now.After(session.ExpiresAt) || now.After(session.AbsoluteExpiresAt) {
+		_ = s.sessions.DeleteSceneSession(ctx, sessionID)
+		return ViewerSession{}, ErrSessionExpired
+	}
+	session.ExpiresAt = now.Add(ViewerSessionTTL)
+	if session.ExpiresAt.After(session.AbsoluteExpiresAt) {
+		session.ExpiresAt = session.AbsoluteExpiresAt
+	}
+	encodedSession, _ := json.Marshal(session)
+	if err := s.sessions.PutSceneSession(ctx, session.ID, string(encodedSession), time.Until(session.ExpiresAt)); err != nil {
+		return ViewerSession{}, err
+	}
+	return session, nil
+}
+
+func (s *Service) ViewerBootstrap(ctx context.Context, sessionID string) (ViewerBootstrap, error) {
+	session, err := s.ResolveViewerSession(ctx, sessionID)
+	if err != nil {
+		return ViewerBootstrap{}, err
+	}
+	return ViewerBootstrap{SceneID: session.SceneID, Kind: session.Kind, Revision: session.Revision,
+		EntryPath: session.EntryPath, ExpiresAt: session.ExpiresAt, DatapointRefs: session.DatapointRefs}, nil
+}
+
+func (s *Service) OpenViewerFile(ctx context.Context, sessionID, filename string) (FileContent, error) {
+	session, err := s.ResolveViewerSession(ctx, sessionID)
+	if err != nil {
+		return FileContent{}, err
+	}
+	filename, err = NormalizePath(filename, false)
+	if err != nil {
+		return FileContent{}, err
+	}
+	item, err := s.repository.GetRevisionFile(ctx, session, filename)
+	if err != nil {
+		return FileContent{}, err
+	}
+	if len(item.JSON) > 0 {
+		return FileContent{Bytes: item.JSON, Size: int64(len(item.JSON)), ContentType: item.ContentType, Hash: item.Hash}, nil
+	}
+	object, err := s.objects.Open(ctx, item.ObjectKey)
+	if err != nil {
+		return FileContent{}, err
+	}
+	return FileContent{Reader: object.Reader, Size: object.Size, ContentType: item.ContentType, Hash: item.Hash}, nil
 }
 
 func (s *Service) ResolveSession(ctx context.Context, actor auth.User, sessionID string) (EditorSession, Scene, error) {
@@ -305,14 +436,22 @@ func (s *Service) PutFile(ctx context.Context, actor auth.User, sessionID string
 		}
 	}
 	input.Content = nil
-	next, err := s.repository.PutFile(ctx, actor, scene, input, object)
+	var metadata *Analysis
+	if input.Path == scene.EntryPath {
+		extracted, extractErr := provider.ExtractMetadata(content)
+		if extractErr != nil {
+			return 0, extractErr
+		}
+		metadata = &extracted
+	}
+	next, err := s.repository.PutFile(ctx, actor, scene, input, object, metadata)
 	if err != nil && object.ObjectKey != "" {
 		s.cleanupUncommittedObjects(ctx, actor.TenantID, scene.Provider, []string{object.ObjectKey})
 	}
 	return next, err
 }
 
-func (s *Service) Commit(ctx context.Context, actor auth.User, projectID, kind, sceneID string, baseDraft int64) (Revision, error) {
+func (s *Service) Commit(ctx context.Context, actor auth.User, projectID, kind, sceneID string, baseDraft int64, validators ...func(Analysis) error) (Revision, error) {
 	if err := s.requireWrite(ctx, actor, projectID); err != nil {
 		return Revision{}, err
 	}
@@ -339,6 +478,13 @@ func (s *Service) Commit(ctx context.Context, actor auth.User, projectID, kind, 
 	if err != nil {
 		return Revision{}, err
 	}
+	for _, validate := range validators {
+		if validate != nil {
+			if err := validate(analysis); err != nil {
+				return Revision{}, err
+			}
+		}
+	}
 	hasher := sha256.New()
 	for _, filename := range analysis.Dependencies {
 		item, ok := stored[filename]
@@ -347,7 +493,11 @@ func (s *Service) Commit(ctx context.Context, actor auth.User, projectID, kind, 
 		}
 		_, _ = io.WriteString(hasher, filename+"\x00"+item.Hash+"\n")
 	}
-	return s.repository.Commit(ctx, actor, scene, baseDraft, provider.Version(), hex.EncodeToString(hasher.Sum(nil)), analysis.DatapointRefs, analysis.Dependencies)
+	effectiveContract, err := mergeSceneContracts(scene.PublicContract, analysis.ManagedContract)
+	if err != nil {
+		return Revision{}, err
+	}
+	return s.repository.Commit(ctx, actor, scene, baseDraft, provider.Version(), hex.EncodeToString(hasher.Sum(nil)), effectiveContract, analysis.DatapointRefs, analysis.Dependencies)
 }
 
 func (s *Service) Export(ctx context.Context, actor auth.User, sessionID string) ([]byte, error) {
@@ -445,7 +595,8 @@ func (s *Service) Import(ctx context.Context, actor auth.User, sessionID string,
 	if err := validateProviderFilePaths(files); err != nil {
 		return 0, err
 	}
-	if _, err := provider.Analyze(ctx, scene.Kind, scene.EntryPath, files); err != nil {
+	analysis, err := provider.Analyze(ctx, scene.Kind, scene.EntryPath, files)
+	if err != nil {
 		return 0, err
 	}
 	stored, uploaded, err := s.storeAssetFiles(ctx, actor, scene.Provider, files)
@@ -453,7 +604,7 @@ func (s *Service) Import(ctx context.Context, actor auth.User, sessionID string,
 		s.cleanupUncommittedObjects(ctx, actor.TenantID, scene.Provider, uploaded)
 		return 0, err
 	}
-	next, err := s.repository.ReplaceDraftFiles(ctx, actor, scene, baseDraft, stored)
+	next, err := s.repository.ReplaceDraftFiles(ctx, actor, scene, baseDraft, stored, analysis)
 	if err != nil {
 		s.cleanupUncommittedObjects(ctx, actor.TenantID, scene.Provider, uploaded)
 	}
@@ -518,26 +669,25 @@ func (s *Service) List(ctx context.Context, actor auth.User, projectID string) (
 	}
 	contracts := make([]scenecontract.Contract, 0, len(items))
 	for _, item := range items {
-		encoded, _ := json.Marshal(item.PublicContract)
+		if item.CurrentRevision == 0 {
+			continue
+		}
+		revision, err := s.repository.GetCurrentRevision(ctx, item)
+		if err != nil {
+			return scenecontract.Snapshot{}, err
+		}
+		encoded, _ := json.Marshal(revision.PublicContract)
 		var contract scenecontract.Contract
 		_ = json.Unmarshal(encoded, &contract)
 		contract.ID = item.SceneID
 		contract.Kind = item.Kind
 		contract.Name = item.Name
-		contract.DatapointRefs = append([]string(nil), item.DatapointRefs...)
-		contract.ContractVersion = itemContractVersion(item)
-		if contract.EmbedMode == "" {
-			contract.EmbedMode = "both"
-		}
+		contract.DatapointRefs = append([]string(nil), revision.DatapointRefs...)
+		contract.ContractVersion = fmt.Sprintf("%d-%s", revision.Revision, hashBytes(encoded))
 		contracts = append(contracts, contract)
 	}
 	encoded, _ := json.Marshal(contracts)
 	return scenecontract.Snapshot{ContractVersion: hashBytes(encoded), Contracts: contracts}, nil
-}
-
-func itemContractVersion(item Scene) string {
-	encoded, _ := json.Marshal(map[string]any{"sceneId": item.SceneID, "kind": item.Kind, "contract": item.PublicContract, "datapointRefs": item.DatapointRefs})
-	return hashBytes(encoded)
 }
 
 func (s *Service) requireRead(ctx context.Context, actor auth.User, projectID string) error {

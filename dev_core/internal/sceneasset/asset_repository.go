@@ -306,7 +306,8 @@ func (r *PostgreSQLRepository) ApplyAssetAction(ctx context.Context, actor auth.
 		if err != nil {
 			return 0, err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE scene_file_nodes SET deleted_at=now(), updated_by=$1, updated_at=now()
+		if _, err := tx.Exec(ctx, `UPDATE scene_file_nodes SET content_object_id=NULL, content_hash=NULL,
+			deleted_at=now(), updated_by=$1, updated_at=now()
 			WHERE scene_document_id=$2 AND deleted_at IS NULL AND (logical_path=$3 OR logical_path LIKE $3 || '/%')`,
 			actor.ID, scene.ID, existingMount); err != nil {
 			return 0, err
@@ -362,7 +363,8 @@ func (r *PostgreSQLRepository) ApplyAssetAction(ctx context.Context, actor auth.
 			return 0, err
 		}
 		mountPath = existingMount
-		if _, err := tx.Exec(ctx, `UPDATE scene_file_nodes SET deleted_at=now(), updated_by=$1, updated_at=now()
+		if _, err := tx.Exec(ctx, `UPDATE scene_file_nodes SET content_object_id=NULL, content_hash=NULL,
+			deleted_at=now(), updated_by=$1, updated_at=now()
 			WHERE scene_document_id=$2 AND deleted_at IS NULL AND (logical_path=$3 OR logical_path LIKE $3 || '/%')`,
 			actor.ID, scene.ID, mountPath); err != nil {
 			return 0, err

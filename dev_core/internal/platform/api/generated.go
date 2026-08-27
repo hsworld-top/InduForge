@@ -63,6 +63,24 @@ func (e SceneAssetActionRequestAction) Valid() bool {
 	}
 }
 
+// Defines values for SceneAssetFromSelectionRequestType.
+const (
+	SceneAssetFromSelectionRequestTypeComponent SceneAssetFromSelectionRequestType = "component"
+	SceneAssetFromSelectionRequestTypeSymbol    SceneAssetFromSelectionRequestType = "symbol"
+)
+
+// Valid indicates whether the value is a known member of the SceneAssetFromSelectionRequestType enum.
+func (e SceneAssetFromSelectionRequestType) Valid() bool {
+	switch e {
+	case SceneAssetFromSelectionRequestTypeComponent:
+		return true
+	case SceneAssetFromSelectionRequestTypeSymbol:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SceneCreateRequestKind.
 const (
 	SceneCreateRequestKindN2d SceneCreateRequestKind = "2d"
@@ -318,6 +336,24 @@ func (e CreateSceneEditorSessionParamsKind) Valid() bool {
 	}
 }
 
+// Defines values for CreateSceneViewerSessionParamsKind.
+const (
+	N2d CreateSceneViewerSessionParamsKind = "2d"
+	N3d CreateSceneViewerSessionParamsKind = "3d"
+)
+
+// Valid indicates whether the value is a known member of the CreateSceneViewerSessionParamsKind enum.
+func (e CreateSceneViewerSessionParamsKind) Valid() bool {
+	switch e {
+	case N2d:
+		return true
+	case N3d:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListSceneEditorAssetsParamsType.
 const (
 	ListSceneEditorAssetsParamsTypeComponent ListSceneEditorAssetsParamsType = "component"
@@ -392,28 +428,28 @@ func (e ListSceneEditorAssetsParamsOrder) Valid() bool {
 
 // Defines values for ImportSceneEditorAssetParamsType.
 const (
-	Component ImportSceneEditorAssetParamsType = "component"
-	Font      ImportSceneEditorAssetParamsType = "font"
-	Image     ImportSceneEditorAssetParamsType = "image"
-	Material  ImportSceneEditorAssetParamsType = "material"
-	Model     ImportSceneEditorAssetParamsType = "model"
-	Symbol    ImportSceneEditorAssetParamsType = "symbol"
+	ImportSceneEditorAssetParamsTypeComponent ImportSceneEditorAssetParamsType = "component"
+	ImportSceneEditorAssetParamsTypeFont      ImportSceneEditorAssetParamsType = "font"
+	ImportSceneEditorAssetParamsTypeImage     ImportSceneEditorAssetParamsType = "image"
+	ImportSceneEditorAssetParamsTypeMaterial  ImportSceneEditorAssetParamsType = "material"
+	ImportSceneEditorAssetParamsTypeModel     ImportSceneEditorAssetParamsType = "model"
+	ImportSceneEditorAssetParamsTypeSymbol    ImportSceneEditorAssetParamsType = "symbol"
 )
 
 // Valid indicates whether the value is a known member of the ImportSceneEditorAssetParamsType enum.
 func (e ImportSceneEditorAssetParamsType) Valid() bool {
 	switch e {
-	case Component:
+	case ImportSceneEditorAssetParamsTypeComponent:
 		return true
-	case Font:
+	case ImportSceneEditorAssetParamsTypeFont:
 		return true
-	case Image:
+	case ImportSceneEditorAssetParamsTypeImage:
 		return true
-	case Material:
+	case ImportSceneEditorAssetParamsTypeMaterial:
 		return true
-	case Model:
+	case ImportSceneEditorAssetParamsTypeModel:
 		return true
-	case Symbol:
+	case ImportSceneEditorAssetParamsTypeSymbol:
 		return true
 	default:
 		return false
@@ -557,9 +593,27 @@ type SceneAssetActionRequest struct {
 // SceneAssetActionRequestAction defines model for SceneAssetActionRequest.Action.
 type SceneAssetActionRequestAction string
 
+// SceneAssetFromSelectionRequest defines model for SceneAssetFromSelectionRequest.
+type SceneAssetFromSelectionRequest struct {
+	Name      string                             `json:"name"`
+	Selection map[string]interface{}             `json:"selection"`
+	Type      SceneAssetFromSelectionRequestType `json:"type"`
+}
+
+// SceneAssetFromSelectionRequestType defines model for SceneAssetFromSelectionRequest.Type.
+type SceneAssetFromSelectionRequestType string
+
 // SceneAssetUpdateRequest defines model for SceneAssetUpdateRequest.
 type SceneAssetUpdateRequest struct {
 	Name string `json:"name"`
+}
+
+// SceneCommand defines model for SceneCommand.
+type SceneCommand struct {
+	Description  *string                `json:"description,omitempty"`
+	InputSchema  map[string]interface{} `json:"inputSchema"`
+	Name         string                 `json:"name"`
+	OutputSchema map[string]interface{} `json:"outputSchema"`
 }
 
 // SceneCommitRequest defines model for SceneCommitRequest.
@@ -567,16 +621,30 @@ type SceneCommitRequest struct {
 	BaseDraftVersion int64 `json:"baseDraftVersion"`
 }
 
+// SceneContractMember defines model for SceneContractMember.
+type SceneContractMember struct {
+	Description *string                `json:"description,omitempty"`
+	Name        string                 `json:"name"`
+	Schema      map[string]interface{} `json:"schema"`
+}
+
 // SceneCreateRequest defines model for SceneCreateRequest.
 type SceneCreateRequest struct {
-	Kind           SceneCreateRequestKind  `json:"kind"`
-	Name           string                  `json:"name"`
-	PublicContract *map[string]interface{} `json:"publicContract,omitempty"`
-	SceneId        string                  `json:"sceneId"`
+	Kind           SceneCreateRequestKind `json:"kind"`
+	Name           string                 `json:"name"`
+	PublicContract *ScenePublicContract   `json:"publicContract,omitempty"`
 }
 
 // SceneCreateRequestKind defines model for SceneCreateRequest.Kind.
 type SceneCreateRequestKind string
+
+// SceneParameter defines model for SceneParameter.
+type SceneParameter struct {
+	Description *string                `json:"description,omitempty"`
+	Name        string                 `json:"name"`
+	Required    bool                   `json:"required"`
+	Schema      map[string]interface{} `json:"schema"`
+}
 
 // SceneProviderRequest defines model for SceneProviderRequest.
 type SceneProviderRequest struct {
@@ -586,10 +654,19 @@ type SceneProviderRequest struct {
 // SceneProviderRequestProvider defines model for SceneProviderRequest.Provider.
 type SceneProviderRequestProvider string
 
+// ScenePublicContract defines model for ScenePublicContract.
+type ScenePublicContract struct {
+	Commands    []SceneCommand        `json:"commands"`
+	Description string                `json:"description"`
+	Events      []SceneContractMember `json:"events"`
+	Parameters  []SceneParameter      `json:"parameters"`
+}
+
 // SceneUpdateRequest defines model for SceneUpdateRequest.
 type SceneUpdateRequest struct {
-	Name           *string                 `json:"name,omitempty"`
-	PublicContract *map[string]interface{} `json:"publicContract,omitempty"`
+	BaseDraftVersion *int64               `json:"baseDraftVersion,omitempty"`
+	Name             *string              `json:"name,omitempty"`
+	PublicContract   *ScenePublicContract `json:"publicContract,omitempty"`
 }
 
 // SetProjectGroupRequest defines model for SetProjectGroupRequest.
@@ -736,6 +813,14 @@ type CreateSceneEditorSessionParams struct {
 // CreateSceneEditorSessionParamsKind defines parameters for CreateSceneEditorSession.
 type CreateSceneEditorSessionParamsKind string
 
+// CreateSceneViewerSessionParams defines parameters for CreateSceneViewerSession.
+type CreateSceneViewerSessionParams struct {
+	Kind CreateSceneViewerSessionParamsKind `form:"kind" json:"kind"`
+}
+
+// CreateSceneViewerSessionParamsKind defines parameters for CreateSceneViewerSession.
+type CreateSceneViewerSessionParamsKind string
+
 // ListSceneAssetEditorFilesParams defines parameters for ListSceneAssetEditorFiles.
 type ListSceneAssetEditorFilesParams struct {
 	Directory *string `form:"directory,omitempty" json:"directory,omitempty"`
@@ -825,6 +910,11 @@ type PutSceneEditorFileContentParams struct {
 // ImportSceneEditorFilesParams defines parameters for ImportSceneEditorFiles.
 type ImportSceneEditorFilesParams struct {
 	BaseDraftVersion int64 `form:"baseDraftVersion" json:"baseDraftVersion"`
+}
+
+// GetSceneViewerFileContentParams defines parameters for GetSceneViewerFileContent.
+type GetSceneViewerFileContentParams struct {
+	Path string `form:"path" json:"path"`
 }
 
 // UploadTenantAssetMultipartBody defines parameters for UploadTenantAsset.
@@ -932,6 +1022,9 @@ type CommitSceneAssetEditorSessionJSONRequestBody = SceneCommitRequest
 
 // ExecuteSceneAssetActionJSONRequestBody defines body for ExecuteSceneAssetAction for application/json ContentType.
 type ExecuteSceneAssetActionJSONRequestBody = SceneAssetActionRequest
+
+// CreateSceneAssetFromSelectionJSONRequestBody defines body for CreateSceneAssetFromSelection for application/json ContentType.
+type CreateSceneAssetFromSelectionJSONRequestBody = SceneAssetFromSelectionRequest
 
 // CommitSceneEditorSessionJSONRequestBody defines body for CommitSceneEditorSession for application/json ContentType.
 type CommitSceneEditorSessionJSONRequestBody = SceneCommitRequest
@@ -1178,6 +1271,9 @@ type ServerInterface interface {
 	// 创建绑定用户和场景的短期编辑会话
 	// (POST /projects/{projectId}/scenes/{sceneId}/editor-session)
 	CreateSceneEditorSession(w http.ResponseWriter, r *http.Request, projectId ProjectId, sceneId SceneId, params CreateSceneEditorSessionParams)
+	// 创建固定到当前已提交 revision 的只读 Viewer 会话
+	// (POST /projects/{projectId}/scenes/{sceneId}/viewer-session)
+	CreateSceneViewerSession(w http.ResponseWriter, r *http.Request, projectId ProjectId, sceneId SceneId, params CreateSceneViewerSessionParams)
 	// replaceProjectTags
 	// (PUT /projects/{projectId}/tags)
 	ReplaceProjectTags(w http.ResponseWriter, r *http.Request, projectId string)
@@ -1211,6 +1307,9 @@ type ServerInterface interface {
 	// 挂载、更新或移除当前场景资源绑定
 	// (POST /scene-editor-sessions/{sessionId}/assets/actions)
 	ExecuteSceneAssetAction(w http.ResponseWriter, r *http.Request, sessionId SessionId)
+	// 将画布选中内容保存为图形模板或业务组件
+	// (POST /scene-editor-sessions/{sessionId}/assets/from-selection)
+	CreateSceneAssetFromSelection(w http.ResponseWriter, r *http.Request, sessionId SessionId)
 	// 从场景编辑器上传工程资源
 	// (POST /scene-editor-sessions/{sessionId}/assets/import)
 	ImportSceneEditorAsset(w http.ResponseWriter, r *http.Request, sessionId SessionId, params ImportSceneEditorAssetParams)
@@ -1253,6 +1352,15 @@ type ServerInterface interface {
 	// 切换平台场景 Provider（仅平台管理员且场景库为空）
 	// (PUT /scene-provider)
 	UpdateSceneProvider(w http.ResponseWriter, r *http.Request)
+	// 使用只读能力凭证读取 Viewer 启动信息
+	// (GET /scene-viewer-sessions/{sessionId})
+	GetSceneViewerSession(w http.ResponseWriter, r *http.Request, sessionId SessionId)
+	// 读取会话固定 revision 的文件
+	// (GET /scene-viewer-sessions/{sessionId}/files/content)
+	GetSceneViewerFileContent(w http.ResponseWriter, r *http.Request, sessionId SessionId, params GetSceneViewerFileContentParams)
+	// 延长 Viewer 会话空闲有效期
+	// (POST /scene-viewer-sessions/{sessionId}/heartbeat)
+	HeartbeatSceneViewerSession(w http.ResponseWriter, r *http.Request, sessionId SessionId)
 	// listTenants
 	// (GET /tenants)
 	ListTenants(w http.ResponseWriter, r *http.Request)
@@ -1739,6 +1847,12 @@ func (_ Unimplemented) CreateSceneEditorSession(w http.ResponseWriter, r *http.R
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// 创建固定到当前已提交 revision 的只读 Viewer 会话
+// (POST /projects/{projectId}/scenes/{sceneId}/viewer-session)
+func (_ Unimplemented) CreateSceneViewerSession(w http.ResponseWriter, r *http.Request, projectId ProjectId, sceneId SceneId, params CreateSceneViewerSessionParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // replaceProjectTags
 // (PUT /projects/{projectId}/tags)
 func (_ Unimplemented) ReplaceProjectTags(w http.ResponseWriter, r *http.Request, projectId string) {
@@ -1802,6 +1916,12 @@ func (_ Unimplemented) ListSceneEditorAssets(w http.ResponseWriter, r *http.Requ
 // 挂载、更新或移除当前场景资源绑定
 // (POST /scene-editor-sessions/{sessionId}/assets/actions)
 func (_ Unimplemented) ExecuteSceneAssetAction(w http.ResponseWriter, r *http.Request, sessionId SessionId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 将画布选中内容保存为图形模板或业务组件
+// (POST /scene-editor-sessions/{sessionId}/assets/from-selection)
+func (_ Unimplemented) CreateSceneAssetFromSelection(w http.ResponseWriter, r *http.Request, sessionId SessionId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1886,6 +2006,24 @@ func (_ Unimplemented) GetSceneProvider(w http.ResponseWriter, r *http.Request) 
 // 切换平台场景 Provider（仅平台管理员且场景库为空）
 // (PUT /scene-provider)
 func (_ Unimplemented) UpdateSceneProvider(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 使用只读能力凭证读取 Viewer 启动信息
+// (GET /scene-viewer-sessions/{sessionId})
+func (_ Unimplemented) GetSceneViewerSession(w http.ResponseWriter, r *http.Request, sessionId SessionId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 读取会话固定 revision 的文件
+// (GET /scene-viewer-sessions/{sessionId}/files/content)
+func (_ Unimplemented) GetSceneViewerFileContent(w http.ResponseWriter, r *http.Request, sessionId SessionId, params GetSceneViewerFileContentParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 延长 Viewer 会话空闲有效期
+// (POST /scene-viewer-sessions/{sessionId}/heartbeat)
+func (_ Unimplemented) HeartbeatSceneViewerSession(w http.ResponseWriter, r *http.Request, sessionId SessionId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4435,6 +4573,64 @@ func (siw *ServerInterfaceWrapper) CreateSceneEditorSession(w http.ResponseWrite
 	handler.ServeHTTP(w, r)
 }
 
+// CreateSceneViewerSession operation middleware
+func (siw *ServerInterfaceWrapper) CreateSceneViewerSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "sceneId" -------------
+	var sceneId SceneId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sceneId", chi.URLParam(r, "sceneId"), &sceneId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sceneId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateSceneViewerSessionParams
+
+	// ------------- Required query parameter "kind" -------------
+
+	if paramValue := r.URL.Query().Get("kind"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSceneViewerSession(w, r, projectId, sceneId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ReplaceProjectTags operation middleware
 func (siw *ServerInterfaceWrapper) ReplaceProjectTags(w http.ResponseWriter, r *http.Request) {
 
@@ -4904,6 +5100,37 @@ func (siw *ServerInterfaceWrapper) ExecuteSceneAssetAction(w http.ResponseWriter
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ExecuteSceneAssetAction(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateSceneAssetFromSelection operation middleware
+func (siw *ServerInterfaceWrapper) CreateSceneAssetFromSelection(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSceneAssetFromSelection(w, r, sessionId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5567,6 +5794,99 @@ func (siw *ServerInterfaceWrapper) UpdateSceneProvider(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateSceneProvider(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSceneViewerSession operation middleware
+func (siw *ServerInterfaceWrapper) GetSceneViewerSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSceneViewerSession(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSceneViewerFileContent operation middleware
+func (siw *ServerInterfaceWrapper) GetSceneViewerFileContent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSceneViewerFileContentParams
+
+	// ------------- Required query parameter "path" -------------
+
+	if paramValue := r.URL.Query().Get("path"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "path"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "path", r.URL.Query(), &params.Path, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "path", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSceneViewerFileContent(w, r, sessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// HeartbeatSceneViewerSession operation middleware
+func (siw *ServerInterfaceWrapper) HeartbeatSceneViewerSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.HeartbeatSceneViewerSession(w, r, sessionId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6374,6 +6694,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/scene-viewer-sessions/{sessionId}", wrapper.GetSceneViewerSession)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/scene-viewer-sessions/{sessionId}/files/content", wrapper.GetSceneViewerFileContent)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/scene-viewer-sessions/{sessionId}/heartbeat", wrapper.HeartbeatSceneViewerSession)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/tenants", wrapper.ListTenants)
 	})
 	r.Group(func(r chi.Router) {
@@ -6434,96 +6763,103 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"HwAA//92H7ktJPkAAA==",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

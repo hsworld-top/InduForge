@@ -16,6 +16,8 @@ const (
 	PublicVersion     = "1"
 	MaxFileSize       = int64(64 << 20)
 	SessionTTL        = 20 * time.Minute
+	ViewerSessionTTL  = 30 * time.Minute
+	ViewerAbsoluteTTL = 8 * time.Hour
 )
 
 var (
@@ -25,12 +27,16 @@ var (
 	ErrInvalidProvider   = errors.New("不支持的场景 Provider")
 	ErrInvalidKind       = errors.New("场景类型必须为 2d 或 3d")
 	ErrInvalidSceneID    = errors.New("场景 ID 格式无效")
+	ErrInvalidSceneName  = errors.New("场景名称不能为空且不能超过 200 个字符")
+	ErrSceneNameConflict = errors.New("场景名称已存在")
 	ErrInvalidPath       = errors.New("场景文件路径无效")
 	ErrProtectedPath     = errors.New("场景文件路径为系统保留路径")
 	ErrFileTooLarge      = errors.New("场景文件超过大小限制")
 	ErrInvalidJSON       = errors.New("JSON 场景文件格式无效")
 	ErrDraftConflict     = errors.New("草稿已被其他编辑会话修改")
 	ErrUncommittedDraft  = errors.New("存在未提交的场景草稿")
+	ErrSceneNotCommitted = errors.New("场景尚未提交，不能创建 Viewer")
+	ErrContractInvalid   = errors.New("场景交互契约无效")
 	ErrSessionExpired    = errors.New("编辑会话不存在或已过期")
 	ErrSessionForbidden  = errors.New("编辑会话与当前用户或场景不匹配")
 	ErrEntryMissing      = errors.New("场景入口文件不存在")
@@ -62,6 +68,7 @@ type Scene struct {
 	Provider              string         `json:"-"`
 	EntryPath             string         `json:"-"`
 	PublicContract        map[string]any `json:"publicContract"`
+	ManagedContract       map[string]any `json:"managedContract"`
 	DatapointRefs         []string       `json:"datapointRefs"`
 	CurrentRevision       int64          `json:"currentRevision"`
 	DraftVersion          int64          `json:"draftVersion"`
@@ -72,16 +79,17 @@ type Scene struct {
 
 type SceneInput struct {
 	ProjectID      string         `json:"-"`
-	SceneID        string         `json:"sceneId"`
+	SceneID        string         `json:"-"`
 	Kind           string         `json:"kind"`
 	Name           string         `json:"name"`
-	EntryPath      string         `json:"entryPath"`
+	EntryPath      string         `json:"-"`
 	PublicContract map[string]any `json:"publicContract"`
 }
 
 type ScenePatch struct {
-	Name           *string         `json:"name"`
-	PublicContract *map[string]any `json:"publicContract"`
+	Name             *string         `json:"name"`
+	PublicContract   *map[string]any `json:"publicContract"`
+	BaseDraftVersion *int64          `json:"baseDraftVersion"`
 }
 
 type FileNode struct {
@@ -122,6 +130,7 @@ type EditorSession struct {
 	TenantID  string    `json:"tenantId"`
 	ProjectID string    `json:"projectId"`
 	SceneID   string    `json:"sceneId"`
+	SceneName string    `json:"sceneName"`
 	Kind      string    `json:"kind"`
 	Provider  string    `json:"provider"`
 	EntryPath string    `json:"entryPath"`
@@ -130,6 +139,7 @@ type EditorSession struct {
 
 type EditorSessionResponse struct {
 	SessionID string    `json:"sessionId"`
+	SceneName string    `json:"sceneName"`
 	URL       string    `json:"url"`
 	ExpiresAt time.Time `json:"expiresAt"`
 }
@@ -139,13 +149,54 @@ type CommitInput struct {
 }
 
 type Revision struct {
-	Revision        int64     `json:"revision"`
-	DraftVersion    int64     `json:"draftVersion"`
-	Provider        string    `json:"-"`
-	ProviderVersion string    `json:"-"`
-	EntryPath       string    `json:"-"`
-	RootHash        string    `json:"-"`
-	CreatedAt       time.Time `json:"createdAt"`
+	ID              string         `json:"-"`
+	Revision        int64          `json:"revision"`
+	DraftVersion    int64          `json:"draftVersion"`
+	Provider        string         `json:"-"`
+	ProviderVersion string         `json:"-"`
+	EntryPath       string         `json:"-"`
+	RootHash        string         `json:"-"`
+	PublicContract  map[string]any `json:"-"`
+	DatapointRefs   []string       `json:"-"`
+	CreatedAt       time.Time      `json:"createdAt"`
+}
+
+// ViewerSession 是 revision 固定的只读能力凭证，不携带用户长期令牌。
+type ViewerSession struct {
+	ID                string         `json:"sessionId"`
+	TenantID          string         `json:"tenantId"`
+	ProjectID         string         `json:"projectId"`
+	SceneDocumentID   string         `json:"sceneDocumentId"`
+	SceneID           string         `json:"sceneId"`
+	Kind              string         `json:"kind"`
+	Provider          string         `json:"provider"`
+	RevisionID        string         `json:"revisionId"`
+	Revision          int64          `json:"revision"`
+	EntryPath         string         `json:"entryPath"`
+	Contract          map[string]any `json:"contract"`
+	DatapointRefs     []string       `json:"datapointRefs"`
+	ExpiresAt         time.Time      `json:"expiresAt"`
+	AbsoluteExpiresAt time.Time      `json:"absoluteExpiresAt"`
+}
+
+type ViewerSessionResponse struct {
+	SessionID     string         `json:"sessionId"`
+	URL           string         `json:"url"`
+	ExpiresAt     time.Time      `json:"expiresAt"`
+	SceneID       string         `json:"sceneId"`
+	Kind          string         `json:"kind"`
+	Revision      int64          `json:"revision"`
+	Contract      map[string]any `json:"contract"`
+	DatapointRefs []string       `json:"datapointRefs"`
+}
+
+type ViewerBootstrap struct {
+	SceneID       string    `json:"sceneId"`
+	Kind          string    `json:"kind"`
+	Revision      int64     `json:"revision"`
+	EntryPath     string    `json:"entryPath"`
+	ExpiresAt     time.Time `json:"expiresAt"`
+	DatapointRefs []string  `json:"datapointRefs"`
 }
 
 type ListFilter struct {
@@ -230,6 +281,12 @@ type AssetImportInput struct {
 	Filename    string
 	ContentType string
 	Content     []byte
+}
+
+type AssetSelectionInput struct {
+	Name      string         `json:"name"`
+	Type      AssetType      `json:"type"`
+	Selection map[string]any `json:"selection"`
 }
 
 type AssetListFilter struct {

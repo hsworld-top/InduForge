@@ -38,6 +38,7 @@ func (h *Handler) MountRoutes(router chi.Router) {
 			router.Put("/", h.updateScene)
 			router.Delete("/", h.deleteScene)
 			router.Post("/editor-session", h.createEditorSession)
+			router.Post("/viewer-session", h.createViewerSession)
 			router.Post("/commit", h.commit)
 		})
 	})
@@ -63,6 +64,7 @@ func (h *Handler) MountRoutes(router chi.Router) {
 		router.Get("/datapoints", h.listDatapoints)
 		router.Get("/assets", h.listSessionAssets)
 		router.Post("/assets/import", h.importSessionAsset)
+		router.Post("/assets/from-selection", h.createAssetFromSelection)
 		router.Post("/assets/actions", h.assetAction)
 		router.Post("/assets/{assetId}/replace", h.replaceSessionAsset)
 		router.Delete("/assets/{assetId}", h.archiveSessionAsset)
@@ -75,6 +77,29 @@ func (h *Handler) MountRoutes(router chi.Router) {
 		router.Put("/files/content", h.putAssetDraftFile)
 		router.Post("/commit", h.commitAssetDraft)
 	})
+	router.Route("/scene-viewer-sessions/{sessionId}", func(router chi.Router) {
+		router.Get("/", h.getViewerSession)
+		router.Post("/heartbeat", h.heartbeatViewerSession)
+		router.Get("/files/content", h.getViewerFileContent)
+	})
+}
+
+func (h *Handler) createAssetFromSelection(w http.ResponseWriter, r *http.Request) {
+	actor, ok := requireActor(w, r)
+	if !ok {
+		return
+	}
+	var input AssetSelectionInput
+	if err := decodeJSON(r, &input, MaxFileSize); err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	item, err := h.service.CreateAssetFromSelection(r.Context(), actor, chi.URLParam(r, "sessionId"), input)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	platformapi.WriteSuccess(w, r, item)
 }
 
 func (h *Handler) listAssets(w http.ResponseWriter, r *http.Request) {
@@ -391,7 +416,10 @@ func (h *Handler) commitSession(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, err)
 		return
 	}
-	result, err := h.service.Commit(r.Context(), actor, session.ProjectID, session.Kind, session.SceneID, input.BaseDraftVersion)
+	result, err := h.service.Commit(r.Context(), actor, session.ProjectID, session.Kind, session.SceneID, input.BaseDraftVersion,
+		func(analysis Analysis) error {
+			return h.validateDatapoints(r, session.ProjectID, analysis.DatapointRequirements)
+		})
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -528,6 +556,46 @@ func (h *Handler) createEditorSession(w http.ResponseWriter, r *http.Request) {
 	platformapi.WriteSuccess(w, r, result)
 }
 
+func (h *Handler) createViewerSession(w http.ResponseWriter, r *http.Request) {
+	actor, ok := requireActor(w, r)
+	if !ok {
+		return
+	}
+	result, err := h.service.CreateViewerSession(r.Context(), actor, chi.URLParam(r, "projectId"), sceneKind(r), chi.URLParam(r, "sceneId"))
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	platformapi.WriteSuccess(w, r, result)
+}
+
+func (h *Handler) getViewerSession(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.ViewerBootstrap(r.Context(), chi.URLParam(r, "sessionId"))
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	platformapi.WriteSuccess(w, r, result)
+}
+
+func (h *Handler) heartbeatViewerSession(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.ViewerBootstrap(r.Context(), chi.URLParam(r, "sessionId"))
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	platformapi.WriteSuccess(w, r, map[string]any{"expiresAt": result.ExpiresAt})
+}
+
+func (h *Handler) getViewerFileContent(w http.ResponseWriter, r *http.Request) {
+	content, err := h.service.OpenViewerFile(r.Context(), chi.URLParam(r, "sessionId"), r.URL.Query().Get("path"))
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	writeFileContent(w, content, "private, max-age=31536000, immutable")
+}
+
 func (h *Handler) commit(w http.ResponseWriter, r *http.Request) {
 	actor, ok := requireActor(w, r)
 	if !ok {
@@ -538,7 +606,11 @@ func (h *Handler) commit(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, err)
 		return
 	}
-	result, err := h.service.Commit(r.Context(), actor, chi.URLParam(r, "projectId"), sceneKind(r), chi.URLParam(r, "sceneId"), input.BaseDraftVersion)
+	projectID := chi.URLParam(r, "projectId")
+	result, err := h.service.Commit(r.Context(), actor, projectID, sceneKind(r), chi.URLParam(r, "sceneId"), input.BaseDraftVersion,
+		func(analysis Analysis) error {
+			return h.validateDatapoints(r, projectID, analysis.DatapointRequirements)
+		})
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -685,6 +757,109 @@ func (h *Handler) listDatapoints(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, response.Body)
 }
 
+type datapointValidationItem struct {
+	Path         string `json:"path"`
+	DataType     string `json:"dataType"`
+	Status       string `json:"status"`
+	Capabilities struct {
+		Get bool `json:"get"`
+		Sub bool `json:"sub"`
+		Set bool `json:"set"`
+	} `json:"capabilities"`
+}
+
+type datapointValidationEnvelope struct {
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
+	Data struct {
+		Datapoints []datapointValidationItem `json:"datapoints"`
+		Pagination struct {
+			TotalPages int `json:"totalPages"`
+		} `json:"pagination"`
+	} `json:"data"`
+}
+
+// validateDatapoints 在 revision 固化前验证显式绑定，避免把失效或能力不匹配的数据点带入 Viewer。
+func (h *Handler) validateDatapoints(r *http.Request, projectID string, requirements []DatapointRequirement) error {
+	if len(requirements) == 0 {
+		return nil
+	}
+	if h.dataServiceURL == "" {
+		return fmt.Errorf("%w: 数据服务地址未配置", ErrContractInvalid)
+	}
+	points := map[string]datapointValidationItem{}
+	for page := 1; ; page++ {
+		target, _ := url.Parse(h.dataServiceURL + "/api/v1/data/projects/" + url.PathEscape(projectID) + "/datapoints")
+		query := target.Query()
+		query.Set("page", strconv.Itoa(page))
+		query.Set("pageSize", "500")
+		target.RawQuery = query.Encode()
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target.String(), nil)
+		if err != nil {
+			return err
+		}
+		if authorization := auth.ForwardAuthorization(r); authorization != "" {
+			request.Header.Set("Authorization", authorization)
+		}
+		response, err := h.httpClient.Do(request)
+		if err != nil {
+			return fmt.Errorf("%w: 查询数据点失败: %v", ErrContractInvalid, err)
+		}
+		var payload datapointValidationEnvelope
+		decodeErr := json.NewDecoder(io.LimitReader(response.Body, 8<<20)).Decode(&payload)
+		_ = response.Body.Close()
+		if decodeErr != nil || response.StatusCode < 200 || response.StatusCode >= 300 || payload.Code != 0 {
+			message := payload.Msg
+			if message == "" {
+				message = "数据点列表响应无效"
+			}
+			return fmt.Errorf("%w: %s", ErrContractInvalid, message)
+		}
+		for _, point := range payload.Data.Datapoints {
+			points[point.Path] = point
+		}
+		if payload.Data.Pagination.TotalPages <= page {
+			break
+		}
+	}
+	for _, requirement := range requirements {
+		point, ok := points[requirement.Path]
+		if !ok {
+			return fmt.Errorf("%w: 数据点 %s 不存在", ErrContractInvalid, requirement.Path)
+		}
+		if point.Status != "active" {
+			return fmt.Errorf("%w: 数据点 %s 不是 active 状态", ErrContractInvalid, requirement.Path)
+		}
+		if requirement.Get && !point.Capabilities.Get || requirement.Sub && !point.Capabilities.Sub || requirement.Set && !point.Capabilities.Set {
+			return fmt.Errorf("%w: 数据点 %s 不满足场景所需的读写能力", ErrContractInvalid, requirement.Path)
+		}
+		if !datapointTypesCompatible(requirement.ValueType, point.DataType) {
+			return fmt.Errorf("%w: 数据点 %s 类型 %s 与绑定类型 %s 不匹配", ErrContractInvalid, requirement.Path, point.DataType, requirement.ValueType)
+		}
+	}
+	return nil
+}
+
+func datapointTypesCompatible(expected, actual string) bool {
+	expected = strings.ToLower(strings.TrimSpace(expected))
+	actual = strings.ToLower(strings.TrimSpace(actual))
+	if expected == "" || expected == actual || actual == "json" {
+		return true
+	}
+	switch expected {
+	case "boolean":
+		return actual == "bool"
+	case "string":
+		return actual == "text"
+	case "integer":
+		return actual == "int" || actual == "long" || actual == "int32" || actual == "int64"
+	case "number":
+		return actual == "int" || actual == "integer" || actual == "long" || actual == "int32" || actual == "int64" ||
+			actual == "float" || actual == "double" || actual == "float32" || actual == "float64" || actual == "decimal"
+	}
+	return false
+}
+
 func requireActor(w http.ResponseWriter, r *http.Request) (auth.User, bool) {
 	actor, ok := auth.UserFromContext(r.Context())
 	if !ok {
@@ -724,17 +899,21 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 		platformapi.WriteError(w, r, http.StatusNotFound, platformapi.ErrorCodeNotFound, err.Error())
 	case errors.Is(err, ErrAssetNotFound):
 		platformapi.WriteError(w, r, http.StatusNotFound, platformapi.ErrorCodeNotFound, err.Error())
-	case errors.Is(err, ErrDraftConflict), errors.Is(err, ErrAssetConflict), errors.Is(err, ErrAssetInUse):
+	case errors.Is(err, ErrDraftConflict), errors.Is(err, ErrSceneNameConflict), errors.Is(err, ErrAssetConflict), errors.Is(err, ErrAssetInUse):
 		platformapi.WriteError(w, r, http.StatusConflict, platformapi.ErrorCodeAlreadyExists, err.Error())
 	case errors.Is(err, ErrSessionExpired):
-		platformapi.WriteError(w, r, http.StatusUnauthorized, platformapi.ErrorCodeTokenInvalid, err.Error())
+		platformapi.WriteError(w, r, http.StatusUnauthorized, platformapi.ErrorCodeTokenExpired, err.Error())
 	case errors.Is(err, ErrSessionForbidden):
 		platformapi.WriteError(w, r, http.StatusForbidden, platformapi.ErrorCodePermissionDenied, err.Error())
-	case errors.Is(err, ErrProviderBusy), errors.Is(err, ErrInvalidProvider), errors.Is(err, ErrInvalidKind), errors.Is(err, ErrInvalidSceneID),
+	case errors.Is(err, ErrProviderBusy), errors.Is(err, ErrInvalidProvider), errors.Is(err, ErrInvalidKind), errors.Is(err, ErrInvalidSceneID), errors.Is(err, ErrInvalidSceneName),
 		errors.Is(err, ErrInvalidPath), errors.Is(err, ErrProtectedPath), errors.Is(err, ErrFileTooLarge), errors.Is(err, ErrInvalidJSON),
 		errors.Is(err, ErrInvalidAssetType), errors.Is(err, ErrInvalidAssetName), errors.Is(err, ErrAssetArchived),
 		errors.Is(err, ErrAssetNotEditable), errors.Is(err, ErrDuplicateFile), errors.Is(err, ErrInvalidArchive):
 		platformapi.WriteError(w, r, http.StatusBadRequest, platformapi.ErrorCodeInvalidRequest, err.Error())
+	case errors.Is(err, ErrSceneNotCommitted):
+		platformapi.WriteError(w, r, http.StatusConflict, platformapi.ErrorCodeSceneNotCommitted, err.Error())
+	case errors.Is(err, ErrContractInvalid):
+		platformapi.WriteError(w, r, http.StatusBadRequest, platformapi.ErrorCodeSceneContractInvalid, err.Error())
 	default:
 		platformapi.WriteError(w, r, http.StatusInternalServerError, platformapi.ErrorCodeInternal, "系统内部错误")
 	}
