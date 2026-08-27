@@ -238,8 +238,16 @@ func initializeDatabase(ctx context.Context, pool *pgxpool.Pool, cfg config.Conf
 		return fmt.Errorf("检查内置教程工程失败: %w", err)
 	}
 	if demoProjectActive {
-		if err := os.MkdirAll(demoWorkspacePath, 0o755); err != nil {
+		demoWorkspace, err := project.NewFileWorkspace(workspaceRoot)
+		if err != nil {
 			return fmt.Errorf("准备内置教程工程工作区失败: %w", err)
+		}
+		initializedPath, err := demoWorkspace.Initialize(platformdb.BuiltinDemoProjectID)
+		if err != nil {
+			return fmt.Errorf("初始化内置教程工程工作区失败: %w", err)
+		}
+		if filepath.Clean(initializedPath) != filepath.Clean(demoWorkspacePath) {
+			return fmt.Errorf("内置教程工程工作区路径不一致")
 		}
 	}
 	return nil
