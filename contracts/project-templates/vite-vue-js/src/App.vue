@@ -33,7 +33,11 @@ let unsubscribeLineEvents = null
 let unsubscribeAlarms = null
 
 const qualityClass = computed(() => {
-  const quality = String(temperature.value?.quality || '').toLowerCase()
+  const quality = String(
+    temperature.value && typeof temperature.value === 'object'
+      ? temperature.value.quality || ''
+      : '',
+  ).toLowerCase()
   if (quality === 'good') return 'is-good'
   if (quality === 'bad') return 'is-bad'
   return 'is-unknown'
@@ -45,6 +49,11 @@ function resultItems(data) {
   if (Array.isArray(data?.data)) return data.data
   if (Array.isArray(data?.rows)) return data.rows
   return []
+}
+
+function sampleValue(sample) {
+  if (sample && typeof sample === 'object' && Object.hasOwn(sample, 'value')) return sample.value
+  return sample
 }
 
 function showFailure(result, fallback) {
@@ -91,9 +100,12 @@ async function loadDashboard() {
 async function subscribeRuntimeChanges() {
   const pointResult = await lineEventsPoint.subscribe((sample) => {
     latestLineEvent.value = sample?.data ?? sample
+    if (message.value === '测试消息已发布，等待订阅回传') message.value = '已收到订阅回传'
   })
   if (pointResult.code === 0 && typeof pointResult.data === 'function') {
     unsubscribeLineEvents = pointResult.data
+  } else if (pointResult.code !== 0) {
+    message.value = pointResult.msg || '订阅一号线消息失败'
   }
 
   const alarmResult = await alarms.changes.subscribe(() => loadCurrentAlarms())
@@ -135,8 +147,8 @@ async function runCompute() {
   message.value = ''
   try {
     const result = await computes.byRef(COMPUTE_REF).run({
-      temperature: temperature.value?.value,
-      pressure: pressure.value?.value,
+      temperature: sampleValue(temperature.value),
+      pressure: sampleValue(pressure.value),
     })
     if (!showFailure(result, '运行计算失败')) computeResult.value = result.data
   } finally {
@@ -153,7 +165,7 @@ async function acknowledgeAlarm(alarm) {
 }
 
 function formatValue(sample, digits = 1) {
-  const value = Number(sample?.value)
+  const value = Number(sampleValue(sample))
   return Number.isFinite(value) ? value.toFixed(digits) : '--'
 }
 
